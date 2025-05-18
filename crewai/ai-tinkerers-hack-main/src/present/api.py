@@ -22,6 +22,11 @@ class YouTubeAnalysisRequest(BaseModel):
     topics: List[str]
     additional_info: Optional[Dict[str, Any]] = None
 
+class ProfileResearchRequest(BaseModel):
+    query: str
+    mode: Optional[str] = "concise"  # Default to concise mode
+    additional_info: Optional[Dict[str, Any]] = None
+
 class ApiResponse(BaseModel):
     results: Any
     status: str
@@ -111,6 +116,45 @@ async def analyze_youtube(request: YouTubeAnalysisRequest):
     except Exception as e:
         import traceback
         print(f"Error in analyze_youtube: {str(e)}")
+        print(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"An error occurred: {str(e)}")
+
+@app.post("/profile-research", response_model=ApiResponse)
+async def profile_research(request: ProfileResearchRequest):
+    """
+    Endpoint to perform deep research on a person or organization using Perplexity API
+    """
+    try:
+        print(f"Received request to research profile: {request.query}")
+        print(f"Research mode: {request.mode}")
+        
+        # Create a dedicated crew for profile research
+        present = Present()
+        research_crew = present.profile_research_crew()
+        
+        # Prepare inputs for the crew
+        inputs = {
+            "query": request.query,
+            "mode": request.mode
+        }
+        
+        print(f"Passing inputs to crew: {inputs}")
+        
+        # Add any additional info if provided
+        if request.additional_info:
+            inputs.update(request.additional_info)
+        
+        # Run the crew
+        results = research_crew.kickoff(inputs=inputs)
+        
+        # Return the results
+        return ApiResponse(
+            results=results,
+            status="success"
+        )
+    except Exception as e:
+        import traceback
+        print(f"Error in profile_research: {str(e)}")
         print(traceback.format_exc())
         raise HTTPException(status_code=500, detail=f"An error occurred: {str(e)}")
 
