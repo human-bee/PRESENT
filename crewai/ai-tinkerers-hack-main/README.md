@@ -12,12 +12,28 @@ First, if you haven't already, install uv:
 pip install uv
 ```
 
-Next, navigate to your project directory and install the dependencies:
+Next, navigate to your project directory and create a virtual environment:
 
-(Optional) Lock the dependencies and install them by using the CLI command:
 ```bash
-crewai install
+uv venv
 ```
+
+Activate the virtual environment:
+
+```bash
+source .venv/bin/activate
+```
+
+Install the dependencies (be sure to quote the package name to avoid shell issues):
+
+```bash
+uv pip install 'crewai[tools]'
+```
+
+If you encounter `zsh: no matches found: crewai[tools]`, make sure to use single quotes as shown above.
+
+If you see an error about no Python interpreters found in virtual environments, run `uv venv` first to create the virtual environment.
+
 ### Customizing
 
 **Add your `OPENAI_API_KEY` into the `.env` file**
@@ -35,15 +51,63 @@ OPENAI_API_KEY=
 SERPER_API_KEY=
 YOUTUBE_API_KEY=
 
-To kickstart your crew of AI agents and begin task execution, run this from the root folder of your project:
+To kickstart your crew of AI agents and begin task execution, **always run commands from inside the `crewai/ai-tinkerers-hack-main` directory** (where the `.venv` folder is located):
 
 ```bash
-$ crewai run
+cd crewai/ai-tinkerers-hack-main
+source .venv/bin/activate
+crewai run
 ```
 
 This command initializes the present Crew, assembling the agents and assigning them tasks as defined in your configuration.
 
-This example, unmodified, will run the create a `report.md` file with the output of a research on LLMs in the root folder.
+If you see `zsh: command not found: crewai`, make sure your virtual environment is activated (`source .venv/bin/activate`).
+
+This example, unmodified, will run and create a `report.md` file with the output of a research on LLMs in the root folder.
+
+### Running the API Server
+
+To run the API server (for programmatic access or integration), **make sure you are in the `crewai/ai-tinkerers-hack-main` directory** and run:
+
+```bash
+source .venv/bin/activate
+python run_api.py
+```
+
+Or, equivalently:
+
+```bash
+.venv/bin/python run_api.py
+```
+
+### Installing Additional Python Packages
+
+To install additional Python packages (such as `google-api-python-client` or `youtube-transcript-api`), always activate your virtual environment first:
+
+```bash
+cd crewai/ai-tinkerers-hack-main
+source .venv/bin/activate
+pip install <package-name>
+```
+
+Or, to be explicit:
+
+```bash
+.venv/bin/python -m pip install <package-name>
+```
+
+## Troubleshooting
+
+- **Error:** `zsh: no such file or directory: .venv/bin/python`
+  - **Solution:** Make sure you are in the `crewai/ai-tinkerers-hack-main` directory before running `.venv/bin/python ...` or activating the venv.
+
+- **Error:** `ModuleNotFoundError` for a package you installed
+  - **Solution:** Make sure you installed the package while the virtual environment was activated. If not, activate the venv and reinstall the package.
+
+- **Error:** `zsh: command not found: crewai`
+  - **Solution:** Activate the virtual environment with `source .venv/bin/activate`.
+
+- **General tip:** If you ever close your terminal, always `cd` back into `crewai/ai-tinkerers-hack-main` and `source .venv/bin/activate` before running any commands.
 
 ## Understanding Your Crew
 
