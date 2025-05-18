@@ -28,6 +28,12 @@ crewai install
 - Modify `src/present/main.py` to add custom inputs for your agents and tasks
 
 ## Running the Project
+In the root of this folder, add a .env file and add the API keys for the following:
+
+MODEL=
+OPENAI_API_KEY=
+SERPER_API_KEY=
+YOUTUBE_API_KEY=
 
 To kickstart your crew of AI agents and begin task execution, run this from the root folder of your project:
 
