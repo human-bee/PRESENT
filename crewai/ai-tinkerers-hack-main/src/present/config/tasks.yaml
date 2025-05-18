@@ -42,3 +42,28 @@ youtube_analysis_task:
     4. Direct links to jump to those timestamps in the video
     5. Analysis of patterns or notable findings
   agent: youtube_analyzer
+
+profile_research_task:
+  description: >
+    I need you to research and create a comprehensive profile for the following query: "{{query}}"
+    
+    Use the Perplexity Deep Research tool with the following format:
+    
+    Action: Perplexity Deep Research
+    Action Input: {"query": "{{query}}", "mode": "{{mode}}"}
+    
+    For mode, use "concise" for a quick overview or "detailed" for an in-depth analysis. The default is "concise".
+    
+    After you get the results, provide a comprehensive profile that includes:
+    1. Main facts and information about the subject
+    2. Background and context
+    3. Notable achievements or contributions
+    4. Any relevant connections or relationships
+    5. Sources used for the research
+    
+    Be thorough but avoid including speculation or unverified information. Cite your sources appropriately.
+  expected_output: >
+    A detailed profile report including factual information about the subject, properly organized sections covering 
+    background, achievements, and connections. All information should be properly sourced and presented in a 
+    professional, unbiased manner.
+  agent: profile_researcher
