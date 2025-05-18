@@ -67,3 +67,40 @@ profile_research_task:
     background, achievements, and connections. All information should be properly sourced and presented in a 
     professional, unbiased manner.
   agent: profile_researcher
+
+enhanced_youtube_search_task:
+  description: >
+    I need you to find and analyze YouTube videos about the following topic: "{{query}}"
+    
+    Use the Enhanced YouTube Analyzer tool with the following format:
+    
+    Action: Enhanced YouTube Analyzer
+    Action Input: {"query": "{{query}}", "topics": {{topics}}, "limit": {{limit}}, "mode": "{{mode}}"}
+    
+    Parameters:
+    - query: The search query or description of video content to find (required)
+    - topics: Specific topics to look for in the transcript (optional, will be extracted from query if not provided)
+    - limit: Maximum number of videos to analyze (default: 3)
+    - mode: "concise" for quick analysis or "detailed" for in-depth analysis (default: "concise")
+    
+    After you get the results, provide a comprehensive report that includes:
+    1. A summary of the search query and parameters
+    2. For each video found:
+       a. Basic video information (title, channel, URL)
+       b. A summary of the video content
+       c. Key findings for each specified topic
+       d. Relevant timestamps and quotes for each topic mention
+       e. Direct links to the specific moments in the video
+    3. Overall patterns or interesting findings across all videos
+    4. Recommendations for which video(s) best address the search query
+    
+    Be thorough but concise in your analysis.
+  expected_output: >
+    A comprehensive report on YouTube videos related to the search query, including:
+    1. Summary of search parameters and approach
+    2. Detailed analysis of each video found
+    3. Key mentions and timestamps for topics of interest
+    4. Patterns and findings across all videos
+    5. Direct links to relevant moments in the videos
+    6. Recommendations for most relevant content
+  agent: enhanced_youtube_analyzer

@@ -27,6 +27,13 @@ class ProfileResearchRequest(BaseModel):
     mode: Optional[str] = "concise"  # Default to concise mode
     additional_info: Optional[Dict[str, Any]] = None
 
+class EnhancedYouTubeRequest(BaseModel):
+    query: str
+    topics: Optional[List[str]] = None
+    limit: Optional[int] = 3
+    mode: Optional[str] = "concise"  # Default to concise mode
+    additional_info: Optional[Dict[str, Any]] = None
+
 class ApiResponse(BaseModel):
     results: Any
     status: str
@@ -73,22 +80,9 @@ async def analyze_youtube(request: YouTubeAnalysisRequest):
         print(f"Received request to analyze YouTube video: {request.video_url}")
         print(f"Topics to analyze: {request.topics}")
         
-        # Import necessary components
-        from crewai import Crew, Process
-        from present.crew import Present
-        
         # Create a dedicated crew for YouTube analysis
         present = Present()
-        youtube_analyzer = present.youtube_analyzer()
-        youtube_task = present.youtube_analysis_task()
-        
-        # Create a crew with just the YouTube analyzer and task
-        youtube_crew = Crew(
-            agents=[youtube_analyzer],
-            tasks=[youtube_task],
-            process=Process.sequential,
-            verbose=True,
-        )
+        youtube_crew = present.youtube_analysis_crew()
         
         # Format the topics list as a JSON string for proper template interpolation
         formatted_topics = json.dumps(request.topics)
@@ -155,6 +149,55 @@ async def profile_research(request: ProfileResearchRequest):
     except Exception as e:
         import traceback
         print(f"Error in profile_research: {str(e)}")
+        print(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"An error occurred: {str(e)}")
+
+@app.post("/enhanced-youtube-search", response_model=ApiResponse)
+async def enhanced_youtube_search(request: EnhancedYouTubeRequest):
+    """
+    Endpoint to find and analyze YouTube videos related to a specific topic using Perplexity for search
+    and transcript analysis for content
+    """
+    try:
+        print(f"Received request to find and analyze YouTube videos about: {request.query}")
+        print(f"Topics to analyze: {request.topics}")
+        print(f"Video limit: {request.limit}")
+        print(f"Research mode: {request.mode}")
+        
+        # Create a dedicated crew for enhanced YouTube search and analysis
+        present = Present()
+        enhanced_youtube_crew = present.enhanced_youtube_crew()
+        
+        # Format the topics list as a JSON string for proper template interpolation
+        formatted_topics = "null"
+        if request.topics:
+            formatted_topics = json.dumps(request.topics)
+        
+        # Prepare inputs for the crew
+        inputs = {
+            "query": request.query,
+            "topics": formatted_topics,
+            "limit": request.limit,
+            "mode": request.mode
+        }
+        
+        print(f"Passing inputs to crew: {inputs}")
+        
+        # Add any additional info if provided
+        if request.additional_info:
+            inputs.update(request.additional_info)
+        
+        # Run the crew
+        results = enhanced_youtube_crew.kickoff(inputs=inputs)
+        
+        # Return the results
+        return ApiResponse(
+            results=results,
+            status="success"
+        )
+    except Exception as e:
+        import traceback
+        print(f"Error in enhanced_youtube_search: {str(e)}")
         print(traceback.format_exc())
         raise HTTPException(status_code=500, detail=f"An error occurred: {str(e)}")
 
