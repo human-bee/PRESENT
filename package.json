@@ -13,7 +13,7 @@
     "@livekit/components-react": "^2.9.4",
     "@livekit/components-styles": "^1.1.5",
     "@tailwindcss/oxide": "^4.1.4",
-    "@tambo-ai/react": "^0.23.1",
+    "@tambo-ai/react": "^0.26.0",
     "class-variance-authority": "^0.7.1",
     "dompurify": "^3.0.6",
     "highlight.js": "^11.11.1",

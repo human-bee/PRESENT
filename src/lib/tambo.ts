@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/youtube-embed";
 import type { TamboComponent } from "@tambo-ai/react";
 import { TamboTool } from "@tambo-ai/react";
+import { Timer, timerSchema } from "@/components/ui/timer";
 
 /**
  * tools
@@ -42,6 +43,12 @@ export const components: TamboComponent[] = [
       "Use this to embed a YouTube video. Requires a video ID and optional start time in seconds.",
     component: YoutubeEmbed,
     propsSchema: youtubeEmbedSchema,
+  },
+  {
+    name: "Timer",
+    description: "A countdown timer that can be started for any number of minutes and seconds.",
+    component: Timer,
+    propsSchema: timerSchema,
   },
   // Add more components here
 ];

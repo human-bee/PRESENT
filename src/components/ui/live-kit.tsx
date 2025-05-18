@@ -108,7 +108,7 @@ export function LiveKitProvider({ children }: LiveKitProviderProps) {
   const params =
     typeof window !== "undefined" ? new URLSearchParams(location.search) : null;
   const roomName = useMemo(
-    () => params?.get("room") ?? "test-room-" + Math.random().toFixed(5),
+    () => params?.get("room") ?? "jopu-0wrd",
     []
   );
   const [shouldConnect, setShouldConnect] = useState(false);
