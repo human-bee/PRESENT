@@ -1,13 +1,12 @@
 from crewai import Agent, Crew, Process, Task
-from crewai.project import CrewBase, agent, crew, task
 from crewai_tools import SerperDevTool, FileReadTool
-from crewai.agents.agent_builder.base_agent import BaseAgent
 from typing import List, Dict, Any
 import os
 import yaml
 # Import the tools
 from present.tools.youtube_tool import YouTubeTranscriptTool
 from present.tools.perplexity_tool import PerplexityResearchTool
+from present.tools.enhanced_youtube_tool import EnhancedYouTubeTool
 
 # This function will help us load YAML files safely
 def load_yaml(file_path: str) -> Dict[str, Any]:
@@ -46,7 +45,7 @@ def load_yaml(file_path: str) -> Dict[str, Any]:
         print(f"Error loading YAML file {file_path}: {e}")
         return {}
 
-# Create a modified Present class without using CrewBase
+# Create a Present class without using CrewBase or decorators
 class Present:
     """Fact checker crew for verifying claims"""
     
@@ -107,6 +106,33 @@ Based on this analysis, I can now provide a comprehensive report.
             execution_template=execution_template
         )
     
+    def enhanced_youtube_analyzer(self) -> Agent:
+        """Create enhanced YouTube analyzer agent"""
+        # Create an instance of the enhanced YouTube tool
+        enhanced_youtube_tool = EnhancedYouTubeTool()
+        
+        # Define an execution template to guide the agent
+        execution_template = """
+I need to find and analyze YouTube videos about a specific topic.
+
+Thought: {thinking}
+Action: Enhanced YouTube Analyzer
+Action Input: {{"query": "{query}", "topics": {topics}, "limit": {limit}, "mode": "{mode}"}}
+Observation: {observation}
+
+Based on this research and analysis, I can now provide a comprehensive report on the videos.
+"""
+        
+        return Agent(
+            role=self.agents_config['enhanced_youtube_analyzer']['role'],
+            goal=self.agents_config['enhanced_youtube_analyzer']['goal'],
+            backstory=self.agents_config['enhanced_youtube_analyzer']['backstory'],
+            verbose=True,
+            tools=[enhanced_youtube_tool, SerperDevTool()],
+            llm_config={"temperature": 0.2},
+            execution_template=execution_template
+        )
+    
     def profile_researcher(self) -> Agent:
         """Create profile researcher agent"""
         # Create an instance of the Perplexity Research tool
@@ -158,6 +184,14 @@ Based on this research, I can now provide a well-sourced profile report.
             expected_output=self.tasks_config['youtube_analysis_task']['expected_output'],
             agent=self.youtube_analyzer()
         )
+    
+    def enhanced_youtube_search_task(self) -> Task:
+        """Create enhanced YouTube search and analysis task"""
+        return Task(
+            description=self.tasks_config['enhanced_youtube_search_task']['description'],
+            expected_output=self.tasks_config['enhanced_youtube_search_task']['expected_output'],
+            agent=self.enhanced_youtube_analyzer()
+        )
         
     def profile_research_task(self) -> Task:
         """Create profile research task"""
@@ -190,6 +224,15 @@ Based on this research, I can now provide a well-sourced profile report.
         return Crew(
             agents=[self.youtube_analyzer()],
             tasks=[self.youtube_analysis_task()],
+            process=Process.sequential,
+            verbose=True,
+        )
+        
+    def enhanced_youtube_crew(self) -> Crew:
+        """Creates a crew focused on enhanced YouTube search and analysis"""
+        return Crew(
+            agents=[self.enhanced_youtube_analyzer()],
+            tasks=[self.enhanced_youtube_search_task()],
             process=Process.sequential,
             verbose=True,
         )
