@@ -8,6 +8,10 @@ from livekit.plugins import (
     noise_cancellation,
     silero,
 )
+
+from livekit import rtc
+from livekit.agents import ModelSettings, stt, Agent
+from typing import AsyncIterable, Optional
 from livekit.plugins.turn_detector.multilingual import MultilingualModel
 from livekit.agents import function_tool # get_job_context is implicitly available via JobContext in entrypoint
 from typing import Any, List, cast
@@ -20,8 +24,10 @@ from collections.abc import AsyncGenerator, AsyncIterable, Coroutine
 
 load_dotenv(override=True)
 
-import os
+import os, asyncio
 import logging
+
+from chat_context import CHAT_CONTEXT
 
 # Configure logging for better insight during development and operation
 # logging.basicConfig(level=logging.DEBUG) # Use DEBUG for very verbose output
@@ -32,6 +38,8 @@ logger.setLevel(logging.INFO)
 
 class ConversationalAssistant(Agent): # Renamed for clarity
     def __init__(self) -> None: # Expect LLM to be passed for respond_with_voice context
+        chat_context = llm.ChatContext([llm.ChatMessage(role=c['role'], content=c['content']) for c in CHAT_CONTEXT])
+        logging.info(f"chat_context: {chat_context}")
         super().__init__(instructions="""
         You are an advanced AI assistant, silently participating in a multi-user voice conversation.
         Your primary directive is to meticulously listen to and understand the ongoing discussion.
@@ -70,13 +78,34 @@ class ConversationalAssistant(Agent): # Renamed for clarity
             addressed by dispatching a task to the frontend AI. Avoid chit-chat.
         5.  Do not proactively offer suggestions or interject unless a tool's specific purpose is to do so
             (and even then, it's by generating an 'action_plan' for the frontend AI, not by speaking yourself).
-        """)
+        """,
+        chat_ctx=chat_context
+        )
+
+    async def stt_node(
+        self, audio: AsyncIterable[rtc.AudioFrame], model_settings: ModelSettings
+    ) -> Optional[AsyncIterable[stt.SpeechEvent]]:
+        job_ctx = agents.get_job_context() # More robust way to get JobContext
+        logging.info(f"job_ctx: {job_ctx}")
+        room = job_ctx.room
+        participant_name = room.local_participant.name
+        if not participant_name or participant_name == "":
+            participant_name = room.local_participant.identity
+        logging.info(f"participant: {room.local_participant}")
+        async for event in Agent.default.stt_node(self, audio, model_settings):
+            # insert custom text postprocessing here 
+            logging.info(f"event: {event}")
+            logging.info(f"event type: {type(event)}")
+            if event.type == stt.SpeechEventType.FINAL_TRANSCRIPT:
+                event.alternatives[0].text = f"{event.alternatives[0].text}"
+            yield event
 
     async def llm_node(
         self, chat_ctx: ChatContext, tools: list[FunctionTool], model_settings: ModelSettings
     ):
         # not all LLMs support structured output, so we need to cast to the specific LLM type
         logger.info("llm_node called")
+
         tool_choice = "required"
         async with self.session.llm.chat(
             chat_ctx=chat_ctx,
@@ -95,8 +124,15 @@ class ConversationalAssistant(Agent): # Renamed for clarity
         The AgentSession's LLM will process `turn_ctx.history` (which includes `new_message`)
         and decide which function_tool to call based on the agent's system instructions.
         """
-        pass
+        
+        # get participant name and yield it as the first token in this LLM call
+        # job_ctx = agents.get_job_context() # More robust way to get JobContext
+        # room = job_ctx.room
+        # participant_name = room.local_participant.name
+        # turn_ctx.
+        # logging.info(f"chat context: {turn_ctx.to_dict()}")
         logger.info(f"User turn completed. Message: \"{new_message}\". Processing with LLM for tool call.")
+        
         # The main LLM processing loop in AgentSession will handle the tool calling.
 
     @function_tool()
@@ -155,6 +191,7 @@ class ConversationalAssistant(Agent): # Renamed for clarity
             return {"status": "ERROR", "message": "No remote participants to send the task to."}
 
         for destination_identity in room.remote_participants:
+            logging.info(f"destination_identity: {destination_identity}")
             payload = {
                 "task_type": task_type,
                 "task_prompt": task_prompt,
@@ -265,6 +302,10 @@ class ConversationalAssistant(Agent): # Renamed for clarity
             return result
 
 async def entrypoint(ctx: JobContext):
+    logging.info(f"ctx: {ctx}")
+    await ctx.connect()
+    participant = await ctx.wait_for_participant()
+    logging.info(f"participant: {participant}")
     session = AgentSession(
         llm=openai.LLM(
             model="gpt-4.1-nano",
@@ -278,9 +319,16 @@ async def entrypoint(ctx: JobContext):
             model="tts-1", # Standard OpenAI TTS model
         ),
         vad=silero.VAD.load(), # Voice Activity Detection
-        turn_detection=MultilingualModel(), # Turn detection
+        # turn_detection=MultilingualModel(), # Turn detection
         max_tool_steps=1,
     )
+    logging.info(f"session: {session}")
+    
+    # @ctx.room.on("participant_connected")
+    # def on_participant_connected(participant):
+    #     logging.info(f"participant connected: {participant}")
+    #     # logging.info(f"participants in room: {ctx.room.participant}")
+    #     logging.info(f"room participants: {ctx.room.remote_participants}")
 
     logger.info("creating ConversationalAssistant...")
     assistant = ConversationalAssistant()
@@ -296,16 +344,14 @@ async def entrypoint(ctx: JobContext):
         room_output_options=RoomOutputOptions(
             transcription_enabled=True,
             audio_enabled=True
-        ),
+        )
     )
     logger.info("AgentSession started")
 
-    await ctx.connect()
-
-    # await session.generate_reply("")
-    await session.generate_reply(
-        instructions="Greet the user and offer your assistance."
-    )
+    await session.say("")
+    # await session.generate_reply(
+    #     instructions="Greet the user and offer your assistance."
+    # )
 
 def prewarm(proc: agents.JobProcess):
     proc.userdata["vad"] = silero.VAD.load(
@@ -321,6 +367,8 @@ if __name__ == "__main__":
         agents.WorkerOptions(
             entrypoint_fnc=entrypoint,
             prewarm_fnc=prewarm,
-            shutdown_process_timeout=60 * 100,
+            shutdown_process_timeout=60 * 5 * 100,
+            # agent_name="Jaime AI",
+            # worker_type=agents.worker.WorkerType.PUBLISHER
         ),
     )
