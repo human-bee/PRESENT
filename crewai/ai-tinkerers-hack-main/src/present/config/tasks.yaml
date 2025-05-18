@@ -1,0 +1,44 @@
+# config/tasks.yaml
+context_task:
+  description: >
+    Provide relevant context and background information for the statement "{{statement}}".
+    Include sources and relevant facts that would help with verification.
+  expected_output: >
+    A comprehensive context report with relevant background information and sources.
+  agent: context_provider
+
+fact_check_task:
+  description: >
+    Analyze and fact-check the following statement: "{{statement}}".
+    Verify its accuracy using reliable sources and provide a detailed explanation.
+  expected_output: >
+    A detailed fact-check report including verification status (true, false, partly true, etc.),
+    evidence, sources, and explanation.
+  agent: fact_checker
+
+youtube_analysis_task:
+  description: >
+    I need you to analyze the YouTube video with the URL: "{{video_url}}"
+    
+    Specifically, search for mentions of these topics in the transcript: {{topics}}
+    
+    To accomplish this task, use the YouTube Transcript Analyzer tool with the following format:
+    
+    Action: YouTube Transcript Analyzer
+    Action Input: {"video_url": "{{video_url}}", "topics": {{topics}}}
+    
+    After you get the results, provide a comprehensive analysis that includes:
+    1. Summary of the video (title, channel, etc.)
+    2. For each topic, show the number of times it was mentioned
+    3. For each mention, provide the timestamp, the text containing the mention, and a direct link
+    4. Highlight any patterns or interesting findings
+    
+    Be thorough and precise in your analysis.
+  expected_output: >
+    A detailed analysis of the YouTube video transcript, including:
+    1. Video details (title, channel, etc.)
+    2. Count of mentions for each requested topic
+    3. List of all mentions with timestamps and text
+    4. Direct links to jump to those timestamps in the video
+    5. Analysis of patterns or notable findings
+  agent: youtube_analyzer
