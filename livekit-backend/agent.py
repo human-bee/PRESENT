@@ -10,7 +10,7 @@ from livekit.plugins import (
 )
 from livekit.plugins.turn_detector.multilingual import MultilingualModel
 from livekit.agents import function_tool # get_job_context is implicitly available via JobContext in entrypoint
-from typing import Any, List
+from typing import Any, List, cast
 import json
 from livekit.agents.llm import ChatContext, ChatMessage, LLM # Added LLM for type hint
 
@@ -72,54 +72,20 @@ class ConversationalAssistant(Agent): # Renamed for clarity
             (and even then, it's by generating an 'action_plan' for the frontend AI, not by speaking yourself).
         """)
 
-        # async def llm_node(
-        #     agent: Agent,
-        #     chat_ctx: llm.ChatContext,
-        #     tools: list[FunctionTool],
-        #     model_settings: ModelSettings,
-        # ) -> AsyncGenerator[llm.ChatChunk | str, None]:
-        #     """Default implementation for `Agent.llm_node`"""
-        #     logger.info("llm_node called")
-        #     activity = agent._get_activity_or_raise()
-        #     assert activity.llm is not None, "llm_node called but no LLM node is available"
-        #     assert isinstance(activity.llm, llm.LLM), (
-        #         "llm_node should only be used with LLM (non-multimodal/realtime APIs) nodes"
-        #     )
+    async def llm_node(
+        self, chat_ctx: ChatContext, tools: list[FunctionTool], model_settings: ModelSettings
+    ):
+        # not all LLMs support structured output, so we need to cast to the specific LLM type
+        logger.info("llm_node called")
+        tool_choice = "required"
+        async with self.session.llm.chat(
+            chat_ctx=chat_ctx,
+            tools=tools,
+            tool_choice=tool_choice,
 
-        #     tool_choice = model_settings.tool_choice if model_settings else NOT_GIVEN
-        #     activity_llm = activity.llm
-
-        #     async with activity_llm.chat(
-        #         chat_ctx=chat_ctx, tools=tools, tool_choice=tool_choice
-        #     ) as stream:
-        #         async for chunk in stream:
-        #             # yield chunk
-                    
-        #             is_text_response = False
-        #             if hasattr(chunk, 'delta') and chunk.delta and hasattr(chunk.delta, 'content') and chunk.delta.content:
-        #                 logger.info(f"LLM tried to respond with text, suppressing: '{getattr(chunk.delta, 'content', '')}'")
-        #                 is_text_response = True
-
-        #             # If your LLM might also put tool calls in `chunk.choices[0].delta.tool_calls`
-        #             is_tool_call_request = False
-        #             if hasattr(chunk, 'delta') and chunk.delta and hasattr(chunk.delta, 'tool_calls') and chunk.delta.tool_calls:
-        #                 logger.info(f"LLM tried to call a tool: '{getattr(chunk.delta, 'tool_calls', '')}'")
-        #                 is_tool_call_request = True
-        #             elif hasattr(chunk, 'choices') and chunk.choices and \
-        #                 hasattr(chunk.choices[0], 'delta') and chunk.choices[0].delta and \
-        #                 hasattr(chunk.choices[0].delta, 'tool_calls') and chunk.choices[0].delta.tool_calls:
-        #                 logger.info(f"LLM tried to call a tool: '{getattr(chunk.choices[0].delta, 'tool_calls', '')}'")
-        #                 is_tool_call_request = True
-
-
-        #             if is_text_response and not is_tool_call_request:
-        #                 # This is a textual response from the LLM. Suppress it by not yielding it.
-        #                 logger.info(f"LLM tried to respond with text, suppressing: '{getattr(chunk.delta, 'content', '')}'")
-        #                 pass # Do not yield this chunk
-        #             else:
-        #                 # This is likely a tool call request, or some other control message. Forward it.
-        #                 logger.info(f"LLM tried to call a tool: '{getattr(chunk.choices[0].delta, 'tool_calls', '')}'")
-        #                 yield chunk
+        ) as stream:
+            async for chunk in stream:
+                yield chunk
 
     async def on_user_turn_completed(
         self, turn_ctx: ChatContext, new_message: ChatMessage,
@@ -179,7 +145,7 @@ class ConversationalAssistant(Agent): # Renamed for clarity
             logger.error(f"Error in 'respond_with_voice' tool: {e}", exc_info=True)
             return {"status": "ERROR", "message": f"Could not process voice response: {str(e)}"}
 
-    async def _send_task_to_frontend(self, task_type: str, task_prompt: str, rpc_payload_extras: dict = None, method: str = "executeFrontendAITask") -> dict[str, Any]:
+    async def _send_task_to_frontend(self, task_type: str, task_prompt: str, method: str = "executeFrontendAITask") -> dict[str, Any]:
         """Helper function to dispatch tasks to the frontend AI via RPC."""
         job_ctx = agents.get_job_context() # More robust way to get JobContext
         room = job_ctx.room
@@ -188,34 +154,29 @@ class ConversationalAssistant(Agent): # Renamed for clarity
             logger.warning(f"Attempted to send '{task_type}' task, but no remote participants found.")
             return {"status": "ERROR", "message": "No remote participants to send the task to."}
 
-        # Determine destination: simplistic (first remote participant).
-        # In a real app, you'd identify the specific frontend participant.
-        destination_identity = next(iter(room.remote_participants)) # TODO: Make this configurable or more robust
+        for destination_identity in room.remote_participants:
+            payload = {
+                "task_type": task_type,
+                "task_prompt": task_prompt,
+            }
 
-        payload = {
-            "task_type": task_type,
-            "task_prompt": task_prompt,
-        }
-        if rpc_payload_extras:
-            payload.update(rpc_payload_extras)
-
-        logger.info(f"Dispatching task '{task_type}' to frontend participant '{destination_identity}'. Prompt: {task_prompt[:200]}...") # Log snippet
-        try:
-            # Assuming local_participant is this agent
-            response_from_frontend = await room.local_participant.perform_rpc(
-                destination_identity=destination_identity,
-                method=method, # Standardized RPC method name on the frontend
-                payload=json.dumps(payload),
-                response_timeout=60.0, # Increased timeout for potentially complex frontend tasks
-            )
-            logger.info(f"RPC response for task '{task_type}' from frontend: {response_from_frontend}")
-            return {"status": "SUCCESS", "message": f"Task '{task_type}' successfully dispatched.", "frontend_response": response_from_frontend}
-        except TimeoutError:
-            logger.error(f"Timeout waiting for RPC response for task '{task_type}' from '{destination_identity}'.")
-            return {"status": "ERROR", "message": f"RPC timeout for task '{task_type}'."}
-        except Exception as e:
-            logger.error(f"Error sending RPC for task '{task_type}' to '{destination_identity}': {e}", exc_info=True)
-            return {"status": "ERROR", "message": f"RPC error for task '{task_type}': {str(e)}"}
+            logger.info(f"Dispatching task '{task_type}' to frontend participant '{destination_identity}'. Prompt: {task_prompt[:200]}...") # Log snippet
+            try:
+                # Assuming local_participant is this agent
+                response_from_frontend = await room.local_participant.perform_rpc(
+                    destination_identity=destination_identity,
+                    method=method, # Standardized RPC method name on the frontend
+                    payload=json.dumps(payload),
+                    response_timeout=60.0, # Increased timeout for potentially complex frontend tasks
+                )
+                logger.info(f"RPC response for task '{task_type}' from frontend: {response_from_frontend}")
+                return {"status": "SUCCESS", "message": f"Task '{task_type}' successfully dispatched.", "frontend_response": response_from_frontend}
+            except TimeoutError:
+                logger.error(f"Timeout waiting for RPC response for task '{task_type}' from '{destination_identity}'.")
+                return {"status": "ERROR", "message": f"RPC timeout for task '{task_type}'."}
+            except Exception as e:
+                logger.error(f"Error sending RPC for task '{task_type}' to '{destination_identity}': {e}", exc_info=True)
+                return {"status": "ERROR", "message": f"RPC error for task '{task_type}': {str(e)}"}
 
     @function_tool()
     async def generate_Youtube_task_prompt(
@@ -293,7 +254,6 @@ class ConversationalAssistant(Agent): # Renamed for clarity
         frontend_task = asyncio.create_task(self._send_task_to_frontend(
             task_type="Youtube",  # This still helps categorize the task broadly
             task_prompt=action_plan,  # The LLM-generated action_plan is sent directly
-            rpc_payload_extras={}, # Potentially add generic info if needed, or keep empty
             method="youtubeSearch" # The frontend route that handles YouTube MCP interactions
         ))
         try:
@@ -319,6 +279,7 @@ async def entrypoint(ctx: JobContext):
         ),
         vad=silero.VAD.load(), # Voice Activity Detection
         turn_detection=MultilingualModel(), # Turn detection
+        max_tool_steps=1,
     )
 
     logger.info("creating ConversationalAssistant...")
