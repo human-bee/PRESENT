@@ -12,6 +12,10 @@ import {
   YoutubeEmbed,
   youtubeEmbedSchema,
 } from "@/components/ui/youtube-embed";
+import {
+  WeatherForecast,
+  weatherForecastSchema,
+} from "@/components/ui/weather-forecast";
 import type { TamboComponent } from "@tambo-ai/react";
 import { TamboTool } from "@tambo-ai/react";
 
@@ -42,6 +46,13 @@ export const components: TamboComponent[] = [
       "Use this to embed a YouTube video. Requires a video ID and optional start time in seconds.",
     component: YoutubeEmbed,
     propsSchema: youtubeEmbedSchema,
+  },
+  {
+    name: "WeatherForecast",
+    description: 
+      "Display weather forecast data with visuals. Requires JSON weather data in a specific format.",
+    component: WeatherForecast,
+    propsSchema: weatherForecastSchema,
   },
   // Add more components here
 ];
