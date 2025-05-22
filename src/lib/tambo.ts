@@ -16,6 +16,10 @@ import {
   WeatherForecast,
   weatherForecastSchema,
 } from "@/components/ui/weather-forecast";
+import {
+  RetroTimer,
+  retroTimerSchema,
+} from "@/components/ui/retro-timer";
 import type { TamboComponent } from "@tambo-ai/react";
 import { TamboTool } from "@tambo-ai/react";
 
@@ -53,6 +57,13 @@ export const components: TamboComponent[] = [
       "Display weather forecast data with visuals. Requires JSON weather data in a specific format.",
     component: WeatherForecast,
     propsSchema: weatherForecastSchema,
+  },
+  {
+    name: "RetroTimer",
+    description:
+      "A retro-styled countdown timer with preset options for 5, 10, and 20 minutes. Features start/pause and reset controls.",
+    component: RetroTimer,
+    propsSchema: retroTimerSchema,
   },
   // Add more components here
 ];
