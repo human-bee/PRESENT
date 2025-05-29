@@ -1,0 +1,783 @@
+# How to Create Tambo Component Tools
+
+A comprehensive guide to building generative UI components for Tambo AI applications.
+
+## Table of Contents
+
+1. [Overview](#overview)
+2. [Component Structure](#component-structure)
+3. [Schema Definition](#schema-definition)
+4. [State Management](#state-management)
+5. [Handling Streaming Content](#handling-streaming-content)
+6. [Registration Process](#registration-process)
+7. [Complete Examples](#complete-examples)
+8. [Best Practices](#best-practices)
+9. [Common Pitfalls](#common-pitfalls)
+10. [Advanced Patterns](#advanced-patterns)
+
+## Overview
+
+Tambo components are React components that can be dynamically generated and controlled by AI. They use Zod schemas to define their props structure and Tambo's state management hooks for reactive behavior.
+
+### Key Requirements
+
+- **Zod Schema**: Define component props with descriptions for AI understanding
+- **State Management**: Use `useTamboComponentState` for component state
+- **Stream Handling**: Handle content that arrives incrementally
+- **Registration**: Register components in the central configuration
+
+## Component Structure
+
+Every Tambo component follows this basic structure:
+
+```typescript
+"use client";
+
+import { cn } from "@/lib/utils";
+import { useTamboComponentState } from "@tambo-ai/react";
+import { z } from "zod";
+import { useEffect } from "react";
+
+// 1. Define the schema
+export const myComponentSchema = z.object({
+  // Props with descriptions
+});
+
+// 2. Create type from schema
+export type MyComponentProps = z.infer<typeof myComponentSchema>;
+
+// 3. Define component state type (if needed)
+type MyComponentState = {
+  // State properties
+};
+
+// 4. Create the component
+export function MyComponent({ prop1, prop2 }: MyComponentProps) {
+  // 5. Initialize state (if needed)
+  const [state, setState] = useTamboComponentState<MyComponentState>(
+    "unique-component-id",
+    { /* initial state */ }
+  );
+
+  // 6. Component logic and effects
+  
+  // 7. Return JSX
+  return (
+    <div>
+      {/* Component UI */}
+    </div>
+  );
+}
+
+// 8. Default export for convenience
+export default MyComponent;
+```
+
+## Schema Definition
+
+Schemas are crucial for AI understanding. They define what props your component accepts and how they should be used.
+
+### Basic Schema Patterns
+
+```typescript
+// Simple properties
+export const basicSchema = z.object({
+  title: z.string().describe("Title displayed at the top"),
+  content: z.string().describe("Main content to display"),
+  isVisible: z.boolean().optional().describe("Whether component is visible"),
+});
+
+// Arrays and objects
+export const complexSchema = z.object({
+  items: z.array(
+    z.object({
+      id: z.string().describe("Unique identifier"),
+      label: z.string().describe("Display text"),
+      value: z.string().describe("Associated value"),
+    })
+  ).describe("List of selectable items"),
+});
+
+// Enums for controlled values
+export const styledSchema = z.object({
+  variant: z.enum(["default", "primary", "secondary"])
+    .optional()
+    .describe("Visual style variant"),
+  size: z.enum(["sm", "md", "lg"])
+    .optional()
+    .describe("Component size"),
+});
+```
+
+### Schema Best Practices
+
+1. **Use descriptive descriptions**: Help the AI understand when and how to use each prop
+2. **Make optional props optional**: Use `.optional()` for non-required fields
+3. **Provide good defaults**: Set sensible default values in the component
+4. **Use enums for controlled values**: Limit choices to valid options
+
+## State Management
+
+Use `useTamboComponentState` for any state that needs to persist or be reactive.
+
+### Basic State Usage
+
+```typescript
+type ComponentState = {
+  isExpanded: boolean;
+  selectedItem: string | null;
+  counter: number;
+};
+
+export function MyComponent() {
+  const [state, setState] = useTamboComponentState<ComponentState>(
+    "my-component", // Unique identifier
+    {
+      isExpanded: false,
+      selectedItem: null,
+      counter: 0,
+    }
+  );
+
+  // Update state
+  const handleToggle = () => {
+    if (!state) return;
+    setState({ ...state, isExpanded: !state.isExpanded });
+  };
+
+  return (
+    <div>
+      <button onClick={handleToggle}>
+        {state?.isExpanded ? "Collapse" : "Expand"}
+      </button>
+    </div>
+  );
+}
+```
+
+### State Safety
+
+Always check if state exists before using it:
+
+```typescript
+// ✅ Good
+if (!state) return;
+setState({ ...state, newValue: value });
+
+// ✅ Also good
+const handleClick = () => {
+  if (!state) return;
+  // Use state safely
+};
+
+// ❌ Bad - can cause runtime errors
+setState({ ...state, newValue: value }); // state might be null
+```
+
+## Handling Streaming Content
+
+Tambo streams content to components incrementally. Handle this gracefully:
+
+### Content Validation
+
+```typescript
+export const streamingSchema = z.object({
+  title: z.string().describe("Title of the content"),
+  content: z.string().optional().describe("Content that streams in"),
+});
+
+export function StreamingComponent({ title, content = "" }: StreamingComponentProps) {
+  // Handle empty content gracefully
+  const processContent = () => {
+    if (!content || content.trim() === "") {
+      return "Loading content...";
+    }
+    return content;
+  };
+
+  return (
+    <div>
+      <h2>{title}</h2>
+      <div>{processContent()}</div>
+    </div>
+  );
+}
+```
+
+### Progressive Enhancement
+
+Show loading states and enhance as content arrives:
+
+```typescript
+export function ProgressiveComponent({ data }: Props) {
+  // Check if we have enough data to render
+  const isLoading = !data || data.length === 0;
+  
+  if (isLoading) {
+    return (
+      <div className="animate-pulse">
+        <div className="h-4 bg-gray-300 rounded mb-2"></div>
+        <div className="h-4 bg-gray-300 rounded mb-2"></div>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      {data.map((item, index) => (
+        <div key={index}>{item}</div>
+      ))}
+    </div>
+  );
+}
+```
+
+## Registration Process
+
+Register your component in `src/lib/tambo.ts`:
+
+### 1. Import the Component
+
+```typescript
+import {
+  MyComponent,
+  myComponentSchema,
+} from "@/components/ui/my-component";
+```
+
+### 2. Add to Components Array
+
+```typescript
+export const components: TamboComponent[] = [
+  // ... existing components
+  {
+    name: "MyComponent",
+    description: "Clear, descriptive explanation of what this component does and when to use it.",
+    component: MyComponent,
+    propsSchema: myComponentSchema,
+  },
+];
+```
+
+### Registration Best Practices
+
+- **Use PascalCase names**: Match your component's actual name
+- **Write clear descriptions**: Help the AI understand when to use your component
+- **Be specific about use cases**: Mention what kind of data or scenarios fit this component
+
+## Complete Examples
+
+### Example 1: Simple Data Display Component
+
+```typescript
+"use client";
+
+import { z } from "zod";
+
+export const userCardSchema = z.object({
+  name: z.string().describe("User's full name"),
+  email: z.string().describe("User's email address"),
+  role: z.string().optional().describe("User's role or title"),
+  avatar: z.string().optional().describe("URL to user's avatar image"),
+});
+
+export type UserCardProps = z.infer<typeof userCardSchema>;
+
+export function UserCard({ name, email, role, avatar }: UserCardProps) {
+  return (
+    <div className="bg-white rounded-lg shadow-md p-6">
+      <div className="flex items-center space-x-4">
+        {avatar && (
+          <img 
+            src={avatar} 
+            alt={name}
+            className="w-12 h-12 rounded-full"
+          />
+        )}
+        <div>
+          <h3 className="text-lg font-semibold">{name}</h3>
+          <p className="text-gray-600">{email}</p>
+          {role && <p className="text-sm text-gray-500">{role}</p>}
+        </div>
+      </div>
+    </div>
+  );
+}
+```
+
+### Example 2: Interactive Component with State
+
+```typescript
+"use client";
+
+import { useTamboComponentState } from "@tambo-ai/react";
+import { z } from "zod";
+
+export const counterSchema = z.object({
+  initialValue: z.number().optional().describe("Starting counter value (default: 0)"),
+  step: z.number().optional().describe("Increment/decrement step (default: 1)"),
+  maxValue: z.number().optional().describe("Maximum allowed value"),
+});
+
+export type CounterProps = z.infer<typeof counterSchema>;
+
+type CounterState = {
+  value: number;
+};
+
+export function Counter({ 
+  initialValue = 0, 
+  step = 1, 
+  maxValue 
+}: CounterProps) {
+  const [state, setState] = useTamboComponentState<CounterState>(
+    "counter",
+    { value: initialValue }
+  );
+
+  const increment = () => {
+    if (!state) return;
+    const newValue = state.value + step;
+    if (maxValue && newValue > maxValue) return;
+    setState({ value: newValue });
+  };
+
+  const decrement = () => {
+    if (!state) return;
+    setState({ value: state.value - step });
+  };
+
+  return (
+    <div className="flex items-center space-x-4">
+      <button 
+        onClick={decrement}
+        className="px-4 py-2 bg-red-500 text-white rounded"
+      >
+        -
+      </button>
+      <span className="text-2xl font-bold">
+        {state?.value ?? initialValue}
+      </span>
+      <button 
+        onClick={increment}
+        className="px-4 py-2 bg-green-500 text-white rounded"
+        disabled={maxValue ? (state?.value ?? 0) >= maxValue : false}
+      >
+        +
+      </button>
+    </div>
+  );
+}
+```
+
+### Example 3: Complex Component with Streaming (MarkdownViewer)
+
+```typescript
+"use client";
+
+import { cn } from "@/lib/utils";
+import { useTamboComponentState } from "@tambo-ai/react";
+import { useEffect } from "react";
+import { z } from "zod";
+
+export const markdownViewerSchema = z.object({
+  title: z.string().describe("Title of the document"),
+  content: z.string().optional().describe("Markdown content to display"),
+  previewLines: z.number().optional().describe("Number of lines to show in preview (default: 3)"),
+  tileHeight: z.string().optional().describe("Height of the tile in preview mode (default: '200px')"),
+});
+
+export type MarkdownViewerProps = z.infer<typeof markdownViewerSchema>;
+
+type MarkdownViewerState = {
+  isFullScreen: boolean;
+  isAnimating: boolean;
+};
+
+export function MarkdownViewer({
+  title,
+  content = "",
+  previewLines = 3,
+  tileHeight = "200px",
+}: MarkdownViewerProps) {
+  const [state, setState] = useTamboComponentState<MarkdownViewerState>(
+    "markdown-viewer",
+    {
+      isFullScreen: false,
+      isAnimating: false,
+    }
+  );
+
+  // Handle escape key
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && state?.isFullScreen) {
+        closeFullScreen();
+      }
+    };
+
+    if (state?.isFullScreen) {
+      document.addEventListener("keydown", handleEscape);
+      document.body.style.overflow = "hidden";
+    }
+
+    return () => {
+      document.removeEventListener("keydown", handleEscape);
+      document.body.style.overflow = "unset";
+    };
+  }, [state?.isFullScreen]);
+
+  const openFullScreen = () => {
+    if (!state) return;
+    setState({ ...state, isFullScreen: true, isAnimating: true });
+    setTimeout(() => {
+      if (state) {
+        setState({ ...state, isFullScreen: true, isAnimating: false });
+      }
+    }, 300);
+  };
+
+  const closeFullScreen = () => {
+    if (!state) return;
+    setState({ ...state, isAnimating: true });
+    setTimeout(() => {
+      setState({ isFullScreen: false, isAnimating: false });
+    }, 300);
+  };
+
+  const getPreviewContent = () => {
+    if (!content) {
+      return { preview: "", hasMore: false };
+    }
+    const lines = content.split("\n");
+    const preview = lines.slice(0, previewLines).join("\n");
+    const hasMore = lines.length > previewLines;
+    return { preview, hasMore };
+  };
+
+  const { preview, hasMore } = getPreviewContent();
+
+  const renderMarkdown = (text: string, isPreview = false) => {
+    if (!text || text.trim() === "") {
+      return isPreview ? (
+        <div className="text-gray-500 italic">Loading content...</div>
+      ) : (
+        <div className="text-gray-500 italic text-center">No content available</div>
+      );
+    }
+    
+    const lines = text.split("\n");
+    
+    return lines.map((line, index) => {
+      if (line.startsWith("# ")) {
+        return (
+          <h1 key={index} className={cn("font-bold mb-4", isPreview ? "text-2xl" : "text-4xl")}>
+            {line.substring(2)}
+          </h1>
+        );
+      }
+      if (line.startsWith("## ")) {
+        return (
+          <h2 key={index} className={cn("font-bold mb-3", isPreview ? "text-xl" : "text-3xl")}>
+            {line.substring(3)}
+          </h2>
+        );
+      }
+      if (line.startsWith("### ")) {
+        return (
+          <h3 key={index} className={cn("font-bold mb-2", isPreview ? "text-lg" : "text-2xl")}>
+            {line.substring(4)}
+          </h3>
+        );
+      }
+      if (line.startsWith("- ") || line.startsWith("* ")) {
+        return (
+          <li key={index} className="ml-6 mb-1 list-disc">
+            {line.substring(2)}
+          </li>
+        );
+      }
+      if (line.trim()) {
+        return (
+          <p key={index} className="mb-3">
+            {line}
+          </p>
+        );
+      }
+      return <br key={index} />;
+    });
+  };
+
+  return (
+    <>
+      {/* Preview Tile */}
+      <div
+        onClick={openFullScreen}
+        className={cn(
+          "relative overflow-hidden bg-black text-gray-100 rounded-lg shadow-lg cursor-pointer transition-all duration-300",
+          "hover:shadow-xl hover:scale-[1.02]",
+          state?.isFullScreen && "opacity-0 pointer-events-none"
+        )}
+        style={{
+          height: tileHeight,
+          fontFamily: "'PP Editorial New', 'Georgia', serif",
+        }}
+      >
+        <div className="p-6 h-full flex flex-col">
+          <h3 className="text-lg font-semibold mb-3 text-gray-200">
+            {title}
+          </h3>
+          <div className="flex-1 overflow-hidden text-sm text-gray-300 leading-relaxed">
+            {renderMarkdown(preview, true)}
+          </div>
+          {hasMore && (
+            <div className="absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-black to-transparent pointer-events-none" />
+          )}
+          <div className="absolute bottom-4 right-4 text-gray-400 text-xs flex items-center gap-1">
+            <span>Click to read</span>
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+            </svg>
+          </div>
+        </div>
+      </div>
+
+      {/* Full Screen Viewer */}
+      {state?.isFullScreen && (
+        <div
+          className={cn(
+            "fixed inset-0 z-50 bg-black",
+            state.isAnimating
+              ? state.isFullScreen
+                ? "animate-in fade-in-0 duration-300"
+                : "animate-out fade-out-0 duration-300"
+              : ""
+          )}
+          style={{ fontFamily: "'PP Editorial New', 'Georgia', serif" }}
+        >
+          <div className="sticky top-0 z-10 bg-black/90 backdrop-blur-sm border-b border-gray-800">
+            <div className="max-w-4xl mx-auto px-6 py-4 flex items-center justify-between">
+              <h1 className="text-2xl font-bold text-gray-100">{title}</h1>
+              <button
+                onClick={closeFullScreen}
+                className="p-2 rounded-lg hover:bg-gray-800 transition-colors text-gray-400 hover:text-gray-100"
+                aria-label="Close full screen"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          </div>
+          <div className="overflow-y-auto h-full pb-20">
+            <div className="max-w-4xl mx-auto px-6 py-8">
+              <div className="prose prose-invert prose-lg max-w-none">
+                <div className="text-gray-100 leading-relaxed">
+                  {renderMarkdown(content || "")}
+                </div>
+              </div>
+            </div>
+          </div>
+          <div className="fixed bottom-4 right-4 text-gray-500 text-sm">
+            Press ESC to close
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+export default MarkdownViewer;
+```
+
+## Best Practices
+
+### 1. Schema Design
+
+- **Use descriptive field names**: `userName` instead of `name`
+- **Add comprehensive descriptions**: Help the AI understand context
+- **Make optional what should be optional**: Don't require props that have sensible defaults
+- **Use enums for controlled values**: Prevent invalid prop values
+
+### 2. State Management
+
+- **Always check state exists**: Use `if (!state) return;` pattern
+- **Use meaningful state keys**: Group related state logically
+- **Initialize with sensible defaults**: Provide good initial state values
+
+### 3. Error Handling
+
+- **Handle loading states**: Show appropriate loading indicators
+- **Graceful degradation**: Work even with partial data
+- **Null checks everywhere**: Especially for streaming content
+
+### 4. Styling
+
+- **Use Tailwind classes**: Consistent with the project
+- **Support dark mode**: Use appropriate color schemes
+- **Responsive design**: Works on all screen sizes
+- **Accessible markup**: Use proper ARIA labels and semantic HTML
+
+### 5. Performance
+
+- **Memoize expensive calculations**: Use useMemo for complex operations
+- **Debounce state updates**: For frequently changing values
+- **Clean up effects**: Remove event listeners and intervals
+
+## Common Pitfalls
+
+### 1. Not Handling Undefined Content
+
+```typescript
+// ❌ Bad - will crash when content is undefined
+const lines = content.split("\n");
+
+// ✅ Good - handles undefined gracefully
+const lines = (content || "").split("\n");
+```
+
+### 2. Forgetting State Null Checks
+
+```typescript
+// ❌ Bad - state might be null
+setState({ ...state, newValue: value });
+
+// ✅ Good - check state first
+if (!state) return;
+setState({ ...state, newValue: value });
+```
+
+### 3. Not Cleaning Up Effects
+
+```typescript
+// ❌ Bad - memory leak
+useEffect(() => {
+  document.addEventListener("keydown", handleKeydown);
+}, []);
+
+// ✅ Good - cleanup
+useEffect(() => {
+  document.addEventListener("keydown", handleKeydown);
+  return () => {
+    document.removeEventListener("keydown", handleKeydown);
+  };
+}, []);
+```
+
+### 4. Poor Schema Descriptions
+
+```typescript
+// ❌ Bad - not helpful for AI
+title: z.string().describe("title"),
+
+// ✅ Good - descriptive and helpful
+title: z.string().describe("Main heading displayed at the top of the component"),
+```
+
+### 5. Not Making Props Optional
+
+```typescript
+// ❌ Bad - requires all props even if they have defaults
+export const schema = z.object({
+  title: z.string().describe("Title"),
+  showIcon: z.boolean().describe("Show icon"),
+});
+
+// ✅ Good - optional props with defaults
+export const schema = z.object({
+  title: z.string().describe("Title"),
+  showIcon: z.boolean().optional().describe("Show icon (default: true)"),
+});
+```
+
+## Advanced Patterns
+
+### 1. Conditional Rendering Based on Props
+
+```typescript
+export function ConditionalComponent({ variant, data }: Props) {
+  switch (variant) {
+    case "grid":
+      return <GridView data={data} />;
+    case "list":
+      return <ListView data={data} />;
+    default:
+      return <CardView data={data} />;
+  }
+}
+```
+
+### 2. Progressive Data Loading
+
+```typescript
+export function ProgressiveComponent({ items = [] }: Props) {
+  const [visibleCount, setVisibleCount] = useState(5);
+  
+  const showMore = () => {
+    setVisibleCount(prev => Math.min(prev + 5, items.length));
+  };
+  
+  return (
+    <div>
+      {items.slice(0, visibleCount).map((item, index) => (
+        <ItemComponent key={index} item={item} />
+      ))}
+      {visibleCount < items.length && (
+        <button onClick={showMore}>Show More</button>
+      )}
+    </div>
+  );
+}
+```
+
+### 3. Animation States
+
+```typescript
+type AnimationState = {
+  isAnimating: boolean;
+  animationType: "fadeIn" | "slideUp" | "scale" | null;
+};
+
+export function AnimatedComponent({ trigger }: Props) {
+  const [state, setState] = useTamboComponentState<AnimationState>(
+    "animated-component",
+    { isAnimating: false, animationType: null }
+  );
+
+  const animate = (type: "fadeIn" | "slideUp" | "scale") => {
+    if (!state) return;
+    setState({ isAnimating: true, animationType: type });
+    setTimeout(() => {
+      setState({ isAnimating: false, animationType: null });
+    }, 300);
+  };
+
+  return (
+    <div 
+      className={cn(
+        "transition-all duration-300",
+        state?.isAnimating && {
+          "animate-pulse": state.animationType === "fadeIn",
+          "transform translate-y-2": state.animationType === "slideUp",
+          "scale-105": state.animationType === "scale",
+        }
+      )}
+    >
+      {/* Component content */}
+    </div>
+  );
+}
+```
+
+## Summary
+
+Creating Tambo components involves:
+
+1. **Define a clear schema** with descriptive properties
+2. **Handle streaming content** gracefully with loading states
+3. **Use Tambo state management** for reactive behavior
+4. **Register the component** in the central configuration
+5. **Follow React best practices** for performance and accessibility
+6. **Test with various data states** including empty, partial, and complete data
+
+Remember that these components will be generated and controlled by AI, so clear schemas and robust error handling are essential for a good user experience. 

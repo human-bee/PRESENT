@@ -63,7 +63,20 @@ export function RetroTimer({
   
   // Create audio element on mount
   useEffect(() => {
-    audioRef.current = new Audio(soundUrl);
+    if (soundUrl) {
+      audioRef.current = new Audio();
+      audioRef.current.crossOrigin = "anonymous"; // Try to handle CORS
+      audioRef.current.src = soundUrl;
+      
+      // Preload the audio
+      audioRef.current.load();
+      
+      // Handle loading errors
+      audioRef.current.addEventListener('error', (e) => {
+        console.warn('Audio loading failed, will use fallback sound:', e);
+        audioRef.current = null; // Clear the failed audio element
+      });
+    }
     
     // Cleanup on unmount
     return () => {
@@ -135,6 +148,53 @@ export function RetroTimer({
     setIsBlinking(false);
   };
 
+  // Handle custom timer input
+  const setCustomTimer = () => {
+    const input = prompt("Enter custom time in minutes:");
+    if (input) {
+      const minutes = parseInt(input, 10);
+      if (!isNaN(minutes) && minutes > 0 && minutes <= 999) {
+        setTimer(minutes);
+      } else {
+        alert("Please enter a valid number between 1 and 999 minutes.");
+      }
+    }
+  };
+
+  // Fallback sound using Web Audio API
+  const playFallbackSound = () => {
+    try {
+      // Create a simple beep sound using Web Audio API
+      const AudioContextClass = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+      if (!AudioContextClass) {
+        throw new Error('Web Audio API not supported');
+      }
+      const audioContext = new AudioContextClass();
+      const oscillator = audioContext.createOscillator();
+      const gainNode = audioContext.createGain();
+      
+      oscillator.connect(gainNode);
+      gainNode.connect(audioContext.destination);
+      
+      // Configure the beep sound
+      oscillator.frequency.setValueAtTime(800, audioContext.currentTime); // 800 Hz frequency
+      gainNode.gain.setValueAtTime(0.3, audioContext.currentTime); // Volume
+      gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5); // Fade out
+      
+      oscillator.start();
+      oscillator.stop(audioContext.currentTime + 0.5);
+    } catch (e) {
+      console.warn("Fallback sound also failed:", e);
+      // As a last resort, try to show a visual notification
+      if ('Notification' in window && Notification.permission === 'granted') {
+        new Notification('Timer Complete!', {
+          body: 'Your timer has finished.',
+          icon: '/favicon.ico'
+        });
+      }
+    }
+  };
+
   // Timer tick effect
   useEffect(() => {
     if (!state) return;
@@ -148,9 +208,13 @@ export function RetroTimer({
           // Play notification sound
           if (audioRef.current) {
             audioRef.current.currentTime = 0;
-            audioRef.current.play().catch(e => 
-              console.error("Error playing notification sound:", e)
-            );
+            audioRef.current.play().catch(e => {
+              console.warn("Error playing notification sound, using fallback:", e);
+              playFallbackSound();
+            });
+          } else {
+            // Use fallback sound if audio element failed to load
+            playFallbackSound();
           }
           
           // Start blinking effect
@@ -231,24 +295,14 @@ export function RetroTimer({
         {showPresets && (
           <div className="grid grid-cols-3 gap-2 mb-6">
             <button
-              onClick={() => setTimer(5)}
-              aria-label="Set timer to 5 minutes"
+              onClick={() => setTimer(2)}
+              aria-label="Set timer to 2 minutes"
               className={cn(
                 "py-2 px-4 rounded-md border-2 border-gray-600 bg-gray-800 text-gray-300 hover:bg-gray-700 transition-colors",
-                state?.initialTime === 5 * 60 && "bg-gray-700 border-gray-500"
+                state?.initialTime === 2 * 60 && "bg-gray-700 border-gray-500"
               )}
             >
-              5 min
-            </button>
-            <button
-              onClick={() => setTimer(10)}
-              aria-label="Set timer to 10 minutes"
-              className={cn(
-                "py-2 px-4 rounded-md border-2 border-gray-600 bg-gray-800 text-gray-300 hover:bg-gray-700 transition-colors",
-                state?.initialTime === 10 * 60 && "bg-gray-700 border-gray-500"
-              )}
-            >
-              10 min
+              2 min
             </button>
             <button
               onClick={() => setTimer(20)}
@@ -259,6 +313,13 @@ export function RetroTimer({
               )}
             >
               20 min
+            </button>
+            <button
+              onClick={setCustomTimer}
+              aria-label="Set custom timer"
+              className="py-2 px-4 rounded-md border-2 border-blue-600 bg-blue-800 text-blue-300 hover:bg-blue-700 transition-colors"
+            >
+              Custom
             </button>
           </div>
         )}

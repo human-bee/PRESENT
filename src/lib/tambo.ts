@@ -20,6 +20,18 @@ import {
   RetroTimer,
   retroTimerSchema,
 } from "@/components/ui/retro-timer";
+import {
+  MarkdownViewer,
+  markdownViewerSchema,
+} from "@/components/ui/markdown-viewer";
+import {
+  ResearchPanel,
+  researchPanelSchema,
+} from "@/components/ui/research-panel";
+import {
+  ActionItemTracker,
+  actionItemTrackerSchema,
+} from "@/components/ui/action-item-tracker";
 import type { TamboComponent } from "@tambo-ai/react";
 import { TamboTool } from "@tambo-ai/react";
 
@@ -64,6 +76,27 @@ export const components: TamboComponent[] = [
       "A retro-styled countdown timer with preset options for 5, 10, and 20 minutes. Features start/pause and reset controls.",
     component: RetroTimer,
     propsSchema: retroTimerSchema,
+  },
+  {
+    name: "MarkdownViewer",
+    description:
+      "A markdown document viewer with tile preview and full-screen reading mode. Displays markdown content with PP Editorial New typography on a black background. Perfect for displaying documentation, articles, or any markdown content with an elegant reading experience.",
+    component: MarkdownViewer,
+    propsSchema: markdownViewerSchema,
+  },
+  {
+    name: "ResearchPanel",
+    description:
+      "A sophisticated research results display panel that shows real-time research findings from MCP tools. Features source credibility ratings, fact-checking status, filtering options, bookmarking, and beautiful card-based layout. Perfect for displaying Perplexity research results, fact-checking data, and contextual information during meetings or conversations.",
+    component: ResearchPanel,
+    propsSchema: researchPanelSchema,
+  },
+  {
+    name: "ActionItemTracker",
+    description:
+      "A comprehensive action item management system that tracks tasks, assignments, due dates, and progress. Can be initially created by AI with action items from meetings or conversations, then allows users to dynamically add, edit, complete, and manage items. Features priority levels, status tracking, assignee management, filtering, sorting, and persistent state. Perfect for meeting follow-ups, project management, and task coordination.",
+    component: ActionItemTracker,
+    propsSchema: actionItemTrackerSchema,
   },
   // Add more components here
 ];
