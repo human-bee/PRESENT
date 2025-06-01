@@ -11,7 +11,7 @@ module.exports = {
   transform: {
     '^.+\\.(ts|tsx)$': ['ts-jest', {
       tsconfig: 'tsconfig.json', // Ensure it uses the project's tsconfig
-      babelConfig: true, // Tell ts-jest to use babel.config.js for JSX
+      babelConfig: './babel.config.test.js', // Tell ts-jest to use babel.config.test.js for JSX
     }],
     '^.+\\.(js|jsx)$': 'babel-jest', // For JavaScript files
   },

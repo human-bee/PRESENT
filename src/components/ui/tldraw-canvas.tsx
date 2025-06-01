@@ -2,16 +2,37 @@ import { Tldraw, ShapeUtil, HTMLContainer, RecordProps, Geometry2d, T, TLShapeMa
 import 'tldraw/tldraw.css';
 import { ReactNode } from 'react';
 
-// Define the props for the Tambo shape
+// Define the props for the Tambo shape - using serializable data instead of React components
 export interface TamboShapeProps {
   w: number;
   h: number;
-  tamboComponent: ReactNode;
+  // Store component data instead of React components to avoid clone errors
+  componentData: {
+    type: string;
+    props: Record<string, any>;
+    messageId: string;
+  } | null;
   name: string;
 }
 
 // Create a type for the Tambo shape
 export type TamboShape = T.Shape<"tambo", TamboShapeProps>;
+
+// Store React components externally to avoid cloning issues
+const componentRegistry = new Map<string, ReactNode>();
+
+// Helper functions to manage the component registry
+export const registerComponent = (messageId: string, component: ReactNode) => {
+  componentRegistry.set(messageId, component);
+};
+
+export const getComponent = (messageId: string): ReactNode | null => {
+  return componentRegistry.get(messageId) || null;
+};
+
+export const unregisterComponent = (messageId: string) => {
+  componentRegistry.delete(messageId);
+};
 
 // Define the TamboShapeUtil class
 export class TamboShapeUtil extends BaseBoxShapeUtil<TamboShape> { // Extend BaseBoxShapeUtil for convenience
@@ -19,7 +40,12 @@ export class TamboShapeUtil extends BaseBoxShapeUtil<TamboShape> { // Extend Bas
   static override props = {
     w: T.number,
     h: T.number,
-    tamboComponent: T.any, // Using T.any for ReactNode as there's no direct Tldraw type for it
+    // Store serializable component data instead of React components
+    componentData: T.nullable(T.object({
+      type: T.string,
+      props: T.object({}),
+      messageId: T.string,
+    })),
     name: T.string,
   } satisfies RecordProps<TamboShape>;
 
@@ -28,13 +54,18 @@ export class TamboShapeUtil extends BaseBoxShapeUtil<TamboShape> { // Extend Bas
     return {
       w: 300, // Default width
       h: 200, // Default height
-      tamboComponent: null,
+      componentData: null,
       name: "Tambo Component"
     };
   }
 
   // Render method for the shape
   override component(shape: TamboShape): TLShapeMarkup {
+    // Get the React component from the registry using the messageId
+    const component = shape.props.componentData 
+      ? getComponent(shape.props.componentData.messageId)
+      : null;
+
     // Use HTMLContainer to embed React components or HTML
     return (
       <HTMLContainer
@@ -49,7 +80,7 @@ export class TamboShapeUtil extends BaseBoxShapeUtil<TamboShape> { // Extend Bas
           backgroundColor: 'var(--color-background)', // Optional: background
         }}
       >
-        {shape.props.tamboComponent ? shape.props.tamboComponent : <div style={{padding: '10px', color: 'var(--color-text-muted)'}}>No component loaded</div>}
+        {component ? component : <div style={{padding: '10px', color: 'var(--color-text-muted)'}}>No component loaded</div>}
       </HTMLContainer>
     );
   }

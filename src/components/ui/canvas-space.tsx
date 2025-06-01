@@ -5,7 +5,7 @@ import { useTamboThread } from "@tambo-ai/react";
 import { useEffect, useRef, useState, useCallback } from "react";
 import * as React from "react";
 import type { TamboThreadMessage } from "@tambo-ai/react";
-import { TldrawCanvas, TamboShapeUtil, TamboShape } from "./tldraw-canvas";
+import { TldrawCanvas, TamboShapeUtil, TamboShape, registerComponent, unregisterComponent } from "./tldraw-canvas";
 import type { Editor } from 'tldraw';
 import { nanoid } from 'nanoid';
 
@@ -52,10 +52,18 @@ export function CanvasSpace({ className }: CanvasSpaceProps) {
           editor.deleteShapes(allShapes.map(s => s.id));
         }
       }
+      
+      // Clear the component registry for the previous thread
+      if (previousThreadId.current) {
+        addedMessageIds.forEach(messageId => {
+          unregisterComponent(messageId);
+        });
+      }
+      
       setAddedMessageIds(new Set()); // Reset the set of added message IDs
     }
     previousThreadId.current = thread?.id ?? null;
-  }, [thread, editor]);
+  }, [thread, editor, addedMessageIds]);
 
   /**
    * Add a new component to the tldraw canvas
@@ -72,9 +80,12 @@ export function CanvasSpace({ className }: CanvasSpaceProps) {
       return;
     }
 
+    // Register the component in our external registry
+    registerComponent(messageId, component);
+
     // Get default properties for the Tambo shape
     const defaultShapeProps = new TamboShapeUtil().getDefaultProps();
-    const shapeId = `tambo-${nanoid()}`; // Generate a unique ID for the shape
+    const shapeId = `shape:tambo-${nanoid()}`; // Generate a unique ID for the shape with required "shape:" prefix
 
     // Attempt to get viewport center for positioning
     const viewport = editor.getViewportPageBounds();
@@ -88,7 +99,12 @@ export function CanvasSpace({ className }: CanvasSpaceProps) {
         x,
         y,
         props: {
-          tamboComponent: component,
+          // Store serializable component data instead of the React component
+          componentData: {
+            type: 'tambo-component',
+            props: {}, // Could store serializable props if needed
+            messageId: messageId,
+          },
           name: componentName || `Component ${messageId}`,
           w: defaultShapeProps.w,
           h: defaultShapeProps.h,
@@ -153,6 +169,18 @@ export function CanvasSpace({ className }: CanvasSpaceProps) {
       }
     }
   }, [thread?.messages, editor, addComponentToCanvas, addedMessageIds]);
+
+  /**
+   * Cleanup effect to unregister components when the component unmounts
+   */
+  useEffect(() => {
+    return () => {
+      // Clean up all registered components when the component unmounts
+      addedMessageIds.forEach(messageId => {
+        unregisterComponent(messageId);
+      });
+    };
+  }, [addedMessageIds]);
 
   return (
     <div

@@ -131,7 +131,11 @@ describe('CanvasSpace', () => {
           id: 'tambo-test-nanoid-id', // nanoid is mocked
           type: 'tambo',
           props: expect.objectContaining({
-            tamboComponent: expect.objectContaining({ props: expect.objectContaining({ 'data-testid': 'comp-1' }) }),
+            componentData: expect.objectContaining({
+              type: 'tambo-component',
+              messageId: 'msg-1',
+              props: {}
+            }),
             name: 'AI Response',
           }),
         }),
@@ -152,7 +156,11 @@ describe('CanvasSpace', () => {
         expect.objectContaining({
           type: 'tambo',
           props: expect.objectContaining({
-            tamboComponent: eventData.component,
+            componentData: expect.objectContaining({
+              type: 'tambo-component',
+              messageId: 'event-msg-1',
+              props: {}
+            }),
             name: 'Rendered Component',
           }),
         }),
