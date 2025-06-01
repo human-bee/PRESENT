@@ -1,38 +1,17 @@
-import { Tldraw, ShapeUtil, HTMLContainer, RecordProps, Geometry2d, T, TLShapeMarkup, Rectangle2d, Editor, BaseBoxShapeUtil } from 'tldraw';
+import { Tldraw, ShapeUtil, HTMLContainer, RecordProps, Geometry2d, T, TLShapeMarkup, Rectangle2d, Editor, BaseBoxShapeUtil, useEditor } from 'tldraw';
 import 'tldraw/tldraw.css';
-import { ReactNode } from 'react';
+import { ReactNode, useRef, useEffect } from 'react';
 
-// Define the props for the Tambo shape - using serializable data instead of React components
+// Define the props for the Tambo shape
 export interface TamboShapeProps {
   w: number;
   h: number;
-  // Store component data instead of React components to avoid clone errors
-  componentData: {
-    type: string;
-    props: Record<string, any>;
-    messageId: string;
-  } | null;
+  tamboComponent: ReactNode;
   name: string;
 }
 
 // Create a type for the Tambo shape
 export type TamboShape = T.Shape<"tambo", TamboShapeProps>;
-
-// Store React components externally to avoid cloning issues
-const componentRegistry = new Map<string, ReactNode>();
-
-// Helper functions to manage the component registry
-export const registerComponent = (messageId: string, component: ReactNode) => {
-  componentRegistry.set(messageId, component);
-};
-
-export const getComponent = (messageId: string): ReactNode | null => {
-  return componentRegistry.get(messageId) || null;
-};
-
-export const unregisterComponent = (messageId: string) => {
-  componentRegistry.delete(messageId);
-};
 
 // Define the TamboShapeUtil class
 export class TamboShapeUtil extends BaseBoxShapeUtil<TamboShape> { // Extend BaseBoxShapeUtil for convenience
@@ -40,12 +19,7 @@ export class TamboShapeUtil extends BaseBoxShapeUtil<TamboShape> { // Extend Bas
   static override props = {
     w: T.number,
     h: T.number,
-    // Store serializable component data instead of React components
-    componentData: T.nullable(T.object({
-      type: T.string,
-      props: T.object({}),
-      messageId: T.string,
-    })),
+    tamboComponent: T.any, // Using T.any for ReactNode as there's no direct Tldraw type for it
     name: T.string,
   } satisfies RecordProps<TamboShape>;
 
@@ -54,33 +28,85 @@ export class TamboShapeUtil extends BaseBoxShapeUtil<TamboShape> { // Extend Bas
     return {
       w: 300, // Default width
       h: 200, // Default height
-      componentData: null,
+      tamboComponent: null,
       name: "Tambo Component"
     };
   }
 
   // Render method for the shape
   override component(shape: TamboShape): TLShapeMarkup {
-    // Get the React component from the registry using the messageId
-    const component = shape.props.componentData 
-      ? getComponent(shape.props.componentData.messageId)
-      : null;
+    const contentRef = useRef<HTMLDivElement>(null);
+    // It's generally preferred to use the useEditor hook if inside a component context
+    // that tldraw provides, or ensure `this.editor` is correctly bound and available.
+    // For ShapeUtil methods, `this.editor` is the standard way.
+    const editor = this.editor;
 
-    // Use HTMLContainer to embed React components or HTML
+    useEffect(() => {
+      const element = contentRef.current;
+      if (!element || !editor) return;
+
+      let debounceTimer: NodeJS.Timeout;
+
+      const observer = new ResizeObserver(entries => {
+        for (const entry of entries) {
+          const { width, height } = entry.contentRect;
+
+          // Add a small buffer or use Math.round to prevent micro-updates if needed
+          const newWidth = Math.max(1, Math.round(width)); // Ensure at least 1px
+          const newHeight = Math.max(1, Math.round(height));
+
+          // Check if the size has actually changed by a meaningful amount (e.g., > 1px threshold)
+          if (Math.abs(newWidth - shape.props.w) > 1 || Math.abs(newHeight - shape.props.h) > 1) {
+            clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(() => {
+              editor.updateShapes<TamboShape>([
+                { id: shape.id, type: 'tambo', props: { w: newWidth, h: newHeight } },
+              ]);
+            }, 150); // Debounce for 150ms
+          }
+        }
+      });
+
+      observer.observe(element);
+
+      return () => {
+        clearTimeout(debounceTimer);
+        observer.disconnect();
+      };
+    }, [shape.id, shape.props.w, shape.props.h, editor]); // Dependencies for the effect
+
     return (
       <HTMLContainer
         id={shape.id}
         style={{
           display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          pointerEvents: 'all', // Allow interaction with the component
-          overflow: 'hidden', // Clip content to shape bounds
-          border: '1px solid var(--color-border)', // Optional: visual border
-          backgroundColor: 'var(--color-background)', // Optional: background
+          alignItems: 'center', // This will center the ref'd div if it's smaller
+          justifyContent: 'center', // This will center the ref'd div if it's smaller
+          overflow: 'hidden',
+          // backgroundColor: 'rgba(0,0,255,0.1)', // For debugging visual bounds
         }}
       >
-        {component ? component : <div style={{padding: '10px', color: 'var(--color-text-muted)'}}>No component loaded</div>}
+        <div
+          style={{
+            pointerEvents: 'all',
+            width: '100%', // The HTMLContainer will be sized by shape.props.w/h
+            height: '100%', // This inner div will fill the HTMLContainer
+            display: 'flex', // To allow contentRef to dictate its own size if smaller
+            alignItems: 'flex-start', // Align content to top-left of this div
+            justifyContent: 'flex-start', // Align content to top-left of this div
+          }}
+        >
+          <div ref={contentRef} style={{
+            minWidth: '1px',
+            minHeight: '1px',
+            // maxWidth: '100%', // If content shouldn't overflow this wrapper
+            // maxHeight: '100%',
+            // overflow: 'auto', // If content can be larger and scrollable
+            display: 'inline-block', // To make the div wrap its content's size
+          }}>
+            {shape.props.tamboComponent ? shape.props.tamboComponent : <div style={{padding: '10px', color: 'var(--color-text-muted)'}}>No component loaded</div>}
+          </div>
+        </div>
       </HTMLContainer>
     );
   }

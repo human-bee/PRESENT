@@ -5,7 +5,7 @@ import { useTamboThread } from "@tambo-ai/react";
 import { useEffect, useRef, useState, useCallback } from "react";
 import * as React from "react";
 import type { TamboThreadMessage } from "@tambo-ai/react";
-import { TldrawCanvas, TamboShapeUtil, TamboShape, registerComponent, unregisterComponent } from "./tldraw-canvas";
+import { TldrawCanvas, TamboShapeUtil, TamboShape } from "./tldraw-canvas";
 import type { Editor } from 'tldraw';
 import { nanoid } from 'nanoid';
 
@@ -33,12 +33,12 @@ export function CanvasSpace({ className }: CanvasSpaceProps) {
   const [editor, setEditor] = useState<Editor | null>(null);
   const previousThreadId = useRef<string | null>(null);
 
-  // Keep track of message IDs that have already been added to the canvas
-  const [addedMessageIds, setAddedMessageIds] = useState<Set<string>>(new Set());
+  // Map message IDs to tldraw shape IDs
+  const [messageIdToShapeIdMap, setMessageIdToShapeIdMap] = useState<Map<string, string>>(new Map());
 
 
   /**
-   * Effect to clear the canvas and reset added message IDs when switching between threads
+   * Effect to clear the canvas and reset messageIdToShapeIdMap when switching between threads
    */
   useEffect(() => {
     if (
@@ -52,70 +52,68 @@ export function CanvasSpace({ className }: CanvasSpaceProps) {
           editor.deleteShapes(allShapes.map(s => s.id));
         }
       }
-      
-      // Clear the component registry for the previous thread
-      if (previousThreadId.current) {
-        addedMessageIds.forEach(messageId => {
-          unregisterComponent(messageId);
-        });
-      }
-      
-      setAddedMessageIds(new Set()); // Reset the set of added message IDs
+      setMessageIdToShapeIdMap(new Map()); // Reset the map
     }
     previousThreadId.current = thread?.id ?? null;
-  }, [thread, editor, addedMessageIds]);
+  }, [thread, editor]);
 
   /**
-   * Add a new component to the tldraw canvas
+   * Add or update a component on the tldraw canvas
    */
   const addComponentToCanvas = useCallback((messageId: string, component: React.ReactNode, componentName?: string) => {
     if (!editor) {
-      console.warn("Editor not available, cannot add component to canvas.");
+      console.warn("Editor not available, cannot add or update component on canvas.");
       return;
     }
 
-    // Prevent adding the same component multiple times
-    if (addedMessageIds.has(messageId)) {
-      // console.log(`Component for message ${messageId} already on canvas.`);
-      return;
-    }
+    const existingShapeId = messageIdToShapeIdMap.get(messageId);
 
-    // Register the component in our external registry
-    registerComponent(messageId, component);
-
-    // Get default properties for the Tambo shape
-    const defaultShapeProps = new TamboShapeUtil().getDefaultProps();
-    const shapeId = `shape:tambo-${nanoid()}`; // Generate a unique ID for the shape with required "shape:" prefix
-
-    // Attempt to get viewport center for positioning
-    const viewport = editor.getViewportPageBounds();
-    const x = viewport ? viewport.midX - defaultShapeProps.w / 2 : Math.random() * 500;
-    const y = viewport ? viewport.midY - defaultShapeProps.h / 2 : Math.random() * 300;
-
-    editor.createShapes<TamboShape>([
-      {
-        id: shapeId,
-        type: 'tambo', // Ensure this matches TamboShapeUtil.type
-        x,
-        y,
-        props: {
-          // Store serializable component data instead of the React component
-          componentData: {
-            type: 'tambo-component',
-            props: {}, // Could store serializable props if needed
-            messageId: messageId,
+    if (existingShapeId) {
+      // Update existing shape
+      // Note: We need to ensure the props being updated are only those that change.
+      // If w/h or x/y can change based on new component, that logic would be here.
+      // For now, primarily updating tamboComponent and name.
+      editor.updateShapes<TamboShape>([
+        {
+          id: existingShapeId,
+          type: 'tambo',
+          props: {
+            tamboComponent: component,
+            name: componentName || `Component ${messageId}`,
+            // w, h could be updated if needed, potentially from component itself or new defaults
           },
-          name: componentName || `Component ${messageId}`,
-          w: defaultShapeProps.w,
-          h: defaultShapeProps.h,
+        }
+      ]);
+      // console.log(`Updated component for message ${messageId} with shape ID ${existingShapeId}`);
+    } else {
+      // Create new shape
+      const defaultShapeProps = new TamboShapeUtil().getDefaultProps();
+      const newShapeId = `tambo-${nanoid()}`; // Generate a unique ID for the new shape
+
+      const viewport = editor.getViewportPageBounds();
+      const x = viewport ? viewport.midX - defaultShapeProps.w / 2 : Math.random() * 500;
+      const y = viewport ? viewport.midY - defaultShapeProps.h / 2 : Math.random() * 300;
+
+      editor.createShapes<TamboShape>([
+        {
+          id: newShapeId,
+          type: 'tambo',
+          x,
+          y,
+          props: {
+            tamboComponent: component,
+            name: componentName || `Component ${messageId}`,
+            w: defaultShapeProps.w,
+            h: defaultShapeProps.h,
+          },
         },
-      },
-    ]);
+      ]);
 
-    // Add the messageId to the set to track it
-    setAddedMessageIds(prev => new Set(prev).add(messageId));
-
-  }, [editor, addedMessageIds]);
+      // Add the new messageId -> shapeId mapping
+      setMessageIdToShapeIdMap(prevMap => new Map(prevMap).set(messageId, newShapeId));
+      // console.log(`Created component for message ${messageId} with new shape ID ${newShapeId}`);
+    }
+  }, [editor, messageIdToShapeIdMap, setMessageIdToShapeIdMap]);
 
 
   /**
@@ -169,18 +167,6 @@ export function CanvasSpace({ className }: CanvasSpaceProps) {
       }
     }
   }, [thread?.messages, editor, addComponentToCanvas, addedMessageIds]);
-
-  /**
-   * Cleanup effect to unregister components when the component unmounts
-   */
-  useEffect(() => {
-    return () => {
-      // Clean up all registered components when the component unmounts
-      addedMessageIds.forEach(messageId => {
-        unregisterComponent(messageId);
-      });
-    };
-  }, [addedMessageIds]);
 
   return (
     <div
