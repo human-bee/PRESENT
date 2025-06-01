@@ -35,6 +35,12 @@ export function CanvasSpace({ className }: CanvasSpaceProps) {
 
   // Map message IDs to tldraw shape IDs
   const [messageIdToShapeIdMap, setMessageIdToShapeIdMap] = useState<Map<string, string>>(new Map());
+  
+  // Track which message IDs have been added to prevent duplicates
+  const [addedMessageIds, setAddedMessageIds] = useState<Set<string>>(new Set());
+  
+  // Store React components separately from tldraw shapes to avoid structuredClone issues
+  const componentStore = useRef<Map<string, React.ReactNode>>(new Map());
 
 
   /**
@@ -53,6 +59,8 @@ export function CanvasSpace({ className }: CanvasSpaceProps) {
         }
       }
       setMessageIdToShapeIdMap(new Map()); // Reset the map
+      setAddedMessageIds(new Set()); // Reset the added messages set
+      componentStore.current.clear(); // Clear the component store
     }
     previousThreadId.current = thread?.id ?? null;
   }, [thread, editor]);
@@ -66,19 +74,19 @@ export function CanvasSpace({ className }: CanvasSpaceProps) {
       return;
     }
 
+    // Store the component separately to avoid structuredClone issues
+    componentStore.current.set(messageId, component);
+    
     const existingShapeId = messageIdToShapeIdMap.get(messageId);
 
     if (existingShapeId) {
-      // Update existing shape
-      // Note: We need to ensure the props being updated are only those that change.
-      // If w/h or x/y can change based on new component, that logic would be here.
-      // For now, primarily updating tamboComponent and name.
+      // Update existing shape - only update non-component props to avoid cloning issues
       editor.updateShapes<TamboShape>([
         {
           id: existingShapeId,
           type: 'tambo',
           props: {
-            tamboComponent: component,
+            tamboComponent: messageId, // Store messageId as reference instead of component
             name: componentName || `Component ${messageId}`,
             // w, h could be updated if needed, potentially from component itself or new defaults
           },
@@ -88,7 +96,7 @@ export function CanvasSpace({ className }: CanvasSpaceProps) {
     } else {
       // Create new shape
       const defaultShapeProps = new TamboShapeUtil().getDefaultProps();
-      const newShapeId = `tambo-${nanoid()}`; // Generate a unique ID for the new shape
+      const newShapeId = `shape:tambo-${nanoid()}`; // Generate a unique ID for the new shape with required prefix
 
       const viewport = editor.getViewportPageBounds();
       const x = viewport ? viewport.midX - defaultShapeProps.w / 2 : Math.random() * 500;
@@ -101,7 +109,7 @@ export function CanvasSpace({ className }: CanvasSpaceProps) {
           x,
           y,
           props: {
-            tamboComponent: component,
+            tamboComponent: messageId, // Store messageId as reference instead of component
             name: componentName || `Component ${messageId}`,
             w: defaultShapeProps.w,
             h: defaultShapeProps.h,
@@ -111,6 +119,8 @@ export function CanvasSpace({ className }: CanvasSpaceProps) {
 
       // Add the new messageId -> shapeId mapping
       setMessageIdToShapeIdMap(prevMap => new Map(prevMap).set(messageId, newShapeId));
+      // Mark this message as added
+      setAddedMessageIds(prevSet => new Set(prevSet).add(messageId));
       // console.log(`Created component for message ${messageId} with new shape ID ${newShapeId}`);
     }
   }, [editor, messageIdToShapeIdMap, setMessageIdToShapeIdMap]);
@@ -179,6 +189,7 @@ export function CanvasSpace({ className }: CanvasSpaceProps) {
       <TldrawCanvas
         onMount={setEditor}
         shapeUtils={[TamboShapeUtil]}
+        componentStore={componentStore.current}
       />
       {/*
         The following is a placeholder for if you want to show some UI when the editor is not loaded

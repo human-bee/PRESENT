@@ -1,17 +1,20 @@
-import { Tldraw, ShapeUtil, HTMLContainer, RecordProps, Geometry2d, T, TLShapeMarkup, Rectangle2d, Editor, BaseBoxShapeUtil, useEditor } from 'tldraw';
+import { Tldraw, ShapeUtil, HTMLContainer, RecordProps, Geometry2d, T, Rectangle2d, Editor, BaseBoxShapeUtil, useEditor, TLBaseShape } from 'tldraw';
 import 'tldraw/tldraw.css';
-import { ReactNode, useRef, useEffect } from 'react';
+import { ReactNode, useRef, useEffect, createContext, useContext } from 'react';
+
+// Create context for component store
+const ComponentStoreContext = createContext<Map<string, ReactNode> | null>(null);
 
 // Define the props for the Tambo shape
 export interface TamboShapeProps {
   w: number;
   h: number;
-  tamboComponent: ReactNode;
+  tamboComponent: string; // Store message ID instead of ReactNode to avoid cloning issues
   name: string;
 }
 
 // Create a type for the Tambo shape
-export type TamboShape = T.Shape<"tambo", TamboShapeProps>;
+export type TamboShape = TLBaseShape<"tambo", TamboShapeProps>;
 
 // Define the TamboShapeUtil class
 export class TamboShapeUtil extends BaseBoxShapeUtil<TamboShape> { // Extend BaseBoxShapeUtil for convenience
@@ -28,18 +31,19 @@ export class TamboShapeUtil extends BaseBoxShapeUtil<TamboShape> { // Extend Bas
     return {
       w: 300, // Default width
       h: 200, // Default height
-      tamboComponent: null,
+      tamboComponent: "",
       name: "Tambo Component"
     };
   }
 
   // Render method for the shape
-  override component(shape: TamboShape): TLShapeMarkup {
+  override component(shape: TamboShape) {
     const contentRef = useRef<HTMLDivElement>(null);
     // It's generally preferred to use the useEditor hook if inside a component context
     // that tldraw provides, or ensure `this.editor` is correctly bound and available.
     // For ShapeUtil methods, `this.editor` is the standard way.
     const editor = this.editor;
+    const componentStore = useContext(ComponentStoreContext);
 
     useEffect(() => {
       const element = contentRef.current;
@@ -104,7 +108,9 @@ export class TamboShapeUtil extends BaseBoxShapeUtil<TamboShape> { // Extend Bas
             // overflow: 'auto', // If content can be larger and scrollable
             display: 'inline-block', // To make the div wrap its content's size
           }}>
-            {shape.props.tamboComponent ? shape.props.tamboComponent : <div style={{padding: '10px', color: 'var(--color-text-muted)'}}>No component loaded</div>}
+            {shape.props.tamboComponent && componentStore ? 
+              componentStore.get(shape.props.tamboComponent) || <div style={{padding: '10px', color: 'var(--color-text-muted)'}}>Component not found</div>
+              : <div style={{padding: '10px', color: 'var(--color-text-muted)'}}>No component loaded</div>}
           </div>
         </div>
       </HTMLContainer>
@@ -112,7 +118,7 @@ export class TamboShapeUtil extends BaseBoxShapeUtil<TamboShape> { // Extend Bas
   }
 
   // Indicator for selection, hover, etc.
-  override indicator(shape: TamboShape): TLShapeMarkup {
+  override indicator(shape: TamboShape) {
     return <rect width={shape.props.w} height={shape.props.h} fill="transparent" />;
   }
 }
@@ -120,17 +126,20 @@ export class TamboShapeUtil extends BaseBoxShapeUtil<TamboShape> { // Extend Bas
 export interface TldrawCanvasProps {
   onMount?: (editor: Editor) => void;
   shapeUtils?: readonly (typeof TamboShapeUtil)[]; // Allow passing custom shape utils
+  componentStore?: Map<string, ReactNode>; // Component store for Tambo shapes
   // Add any other props you might need to pass to Tldraw component
 }
 
-export function TldrawCanvas({ onMount, shapeUtils, ...rest }: TldrawCanvasProps) {
+export function TldrawCanvas({ onMount, shapeUtils, componentStore, ...rest }: TldrawCanvasProps) {
   return (
-    <div style={{ position: 'fixed', inset: 0 }}>
-      <Tldraw
-        onMount={onMount}
-        shapeUtils={shapeUtils || []} // Pass custom shape utils
-        {...rest}
-      />
-    </div>
+    <ComponentStoreContext.Provider value={componentStore || null}>
+      <div style={{ position: 'fixed', inset: 0 }}>
+        <Tldraw
+          onMount={onMount}
+          shapeUtils={shapeUtils || []} // Pass custom shape utils
+          {...rest}
+        />
+      </div>
+    </ComponentStoreContext.Provider>
   );
 }
