@@ -32,6 +32,18 @@ import {
   ActionItemTracker,
   actionItemTrackerSchema,
 } from "@/components/ui/action-item-tracker";
+import {
+  LivekitToolbar,
+  livekitToolbarSchema,
+} from "@/components/ui/livekit-toolbar";
+import {
+  LivekitParticipantTile,
+  livekitParticipantTileSchema,
+} from "@/components/ui/livekit-participant-tile";
+import {
+  LivekitRoomConnector,
+  livekitRoomConnectorSchema,
+} from "@/components/ui/livekit-room-connector";
 import type { TamboComponent } from "@tambo-ai/react";
 import { TamboTool } from "@tambo-ai/react";
 
@@ -97,6 +109,27 @@ export const components: TamboComponent[] = [
       "A comprehensive action item management system that tracks tasks, assignments, due dates, and progress. Can be initially created by AI with action items from meetings or conversations, then allows users to dynamically add, edit, complete, and manage items. Features priority levels, status tracking, assignee management, filtering, sorting, and persistent state. Perfect for meeting follow-ups, project management, and task coordination.",
     component: ActionItemTracker,
     propsSchema: actionItemTrackerSchema,
+  },
+  {
+    name: "LivekitRoomConnector",
+    description:
+      "Establishes a LiveKit room connection on the canvas. This is the FIRST component you need to create before using any other LiveKit components. It provides the necessary context for participant tiles and toolbars to function. Features room name configuration, connection status display, participant count, and invite link sharing. Once connected, you can spawn LivekitParticipantTile and LivekitToolbar components.",
+    component: LivekitRoomConnector,
+    propsSchema: livekitRoomConnectorSchema,
+  },
+  {
+    name: "LivekitToolbar",
+    description:
+      "A comprehensive video conferencing toolbar component designed for LiveKit applications. REQUIRES LivekitRoomConnector to be connected first. Features all standard controls including microphone, camera, screen sharing, chat, raise hand, participant management, settings, recording, layout switching, AI assistant integration, accessibility options, and connection quality indicators. Supports both minimal and verbose display modes with configurable control visibility.",
+    component: LivekitToolbar,
+    propsSchema: livekitToolbarSchema,
+  },
+  {
+    name: "LivekitParticipantTile",
+    description:
+      "Individual participant video/audio tile with real-time LiveKit integration. REQUIRES LivekitRoomConnector to be connected first. Shows participant video feed, audio controls, connection quality, speaking indicators, and individual toolbar controls. Automatically detects local vs remote participants and AI agents (with bot icons). Features minimize/expand functionality, audio level visualization, and drag-and-drop capability on the canvas.",
+    component: LivekitParticipantTile,
+    propsSchema: livekitParticipantTileSchema,
   },
   // Add more components here
 ];

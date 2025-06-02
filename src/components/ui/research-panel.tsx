@@ -2,7 +2,6 @@
 
 import { cn } from "@/lib/utils";
 import { useTamboComponentState } from "@tambo-ai/react";
-import { useState, useEffect } from "react";
 import { z } from "zod";
 import { ExternalLink, CheckCircle, AlertTriangle, Info, Bookmark, BookmarkCheck } from "lucide-react";
 
@@ -28,12 +27,12 @@ export const researchResultSchema = z.object({
 
 // Main component schema
 export const researchPanelSchema = z.object({
-  title: z.string().optional().default("Research Panel").describe("Title displayed at the top of the panel"),
+  title: z.string().optional().describe("Title displayed at the top of the panel"),
   results: z.array(researchResultSchema).describe("Array of research results to display"),
   currentTopic: z.string().optional().describe("Current topic being researched"),
-  isLive: z.boolean().optional().default(false).describe("Whether this is showing live research results"),
-  maxResults: z.number().optional().default(10).describe("Maximum number of results to show"),
-  showCredibilityFilter: z.boolean().optional().default(true).describe("Whether to show credibility filtering options"),
+  isLive: z.boolean().optional().describe("Whether this is showing live research results"),
+  maxResults: z.number().optional().describe("Maximum number of results to show"),
+  showCredibilityFilter: z.boolean().optional().describe("Whether to show credibility filtering options"),
 });
 
 export type ResearchPanelProps = z.infer<typeof researchPanelSchema>;
@@ -233,7 +232,7 @@ function ResearchResultCard({
 // Main ResearchPanel component
 export function ResearchPanel({
   title = "Research Panel",
-  results = [],
+  results = [] as ResearchResult[],
   currentTopic,
   isLive = false,
   maxResults = 10,

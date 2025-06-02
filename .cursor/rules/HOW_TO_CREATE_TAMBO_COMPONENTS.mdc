@@ -1,30 +1,57 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
 # How to Create Tambo Component Tools
 
 A comprehensive guide to building generative UI components for Tambo AI applications.
 
 ## Table of Contents
 
-1. [Overview](#overview)
-2. [Component Structure](#component-structure)
-3. [Schema Definition](#schema-definition)
-4. [State Management](#state-management)
-5. [Handling Streaming Content](#handling-streaming-content)
-6. [Registration Process](#registration-process)
-7. [Complete Examples](#complete-examples)
-8. [Best Practices](#best-practices)
-9. [Common Pitfalls](#common-pitfalls)
-10. [Advanced Patterns](#advanced-patterns)
+### **🔥 CORE FUNDAMENTALS (REQUIRED)**
+1. [Overview](mdc:#overview)
+2. [Component Structure](mdc:#component-structure)
+3. [Schema Definition](mdc:#schema-definition) **← FOUNDATION FOR AI**
+4. [State Management](mdc:#state-management)
+5. [Handling Streaming Content](mdc:#handling-streaming-content)
+6. [TLDraw Canvas Integration](mdc:#tldraw-canvas-integration) **← FINAL DESTINATION**
+7. [Registration Process](mdc:#registration-process)
+8. [Complete Examples](mdc:#complete-examples)
+
+### **📋 ESSENTIAL PRACTICES**
+9. [Best Practices](mdc:#best-practices)
+10. [Common Pitfalls](mdc:#common-pitfalls)
+
+### **🎨 ADVANCED TECHNIQUES**
+11. [Advanced Patterns](mdc:#advanced-patterns)
 
 ## Overview
 
-Tambo components are React components that can be dynamically generated and controlled by AI. They use Zod schemas to define their props structure and Tambo's state management hooks for reactive behavior.
+Tambo components are React components that can be dynamically generated and controlled by AI. They use Zod schemas to define their props structure, Tambo's state management hooks for reactive behavior, and appear as interactive shapes on the TLDraw canvas.
 
-### Key Requirements
+### ⚠️ **DUAL CORE REQUIREMENTS** ⚠️
 
-- **Zod Schema**: Define component props with descriptions for AI understanding
-- **State Management**: Use `useTamboComponentState` for component state
-- **Stream Handling**: Handle content that arrives incrementally
-- **Registration**: Register components in the central configuration
+**Tambo components must work in TWO equally critical environments:**
+
+- **🔴 AI UNDERSTANDING** (Schema Foundation): Without proper schemas, AI cannot create your component
+- **🔴 CANVAS INTEGRATION** (Final Destination): Without canvas integration, your component cannot function in its intended environment
+
+### 🎯 **Architecture Flow**
+
+1. **Chat Interface**: User communicates with AI about what they want
+2. **AI Agent**: Uses schemas to understand and create components  
+3. **TLDraw Canvas**: Where components actually live, function, and are manipulated
+
+### 📋 **Essential Requirements**
+
+- **🔴 Zod Schema with Descriptions**: Foundation for AI understanding
+- **🔴 Canvas Integration**: Components must work as TLDraw shapes
+- **🟡 State Management**: Use `useTamboComponentState` for reactive behavior  
+- **🟡 Stream Handling**: Handle content that arrives incrementally
+- **🟡 Registration**: Register components in the central configuration
+
+> **💡 Key Insight**: Chat is the creation interface, Canvas is the living environment. Both are essential!
 
 ## Component Structure
 
@@ -74,6 +101,8 @@ export default MyComponent;
 ```
 
 ## Schema Definition
+
+> **🔴 CRITICAL FOUNDATION**: This enables AI to understand and create your component. Without proper schemas with good descriptions, the AI cannot understand when or how to use your component. **This is equally critical to canvas integration - you need both.**
 
 Schemas are crucial for AI understanding. They define what props your component accepts and how they should be used.
 
@@ -227,6 +256,408 @@ export function ProgressiveComponent({ data }: Props) {
       {data.map((item, index) => (
         <div key={index}>{item}</div>
       ))}
+    </div>
+  );
+}
+```
+
+## TLDraw Canvas Integration
+
+> **🔴 CRITICAL CORE REQUIREMENT**: This is where Tambo components actually live and function. The canvas is not just a visualization - it's the primary environment where users interact with your components. Canvas integration is equally important to schema definition.
+
+Tambo components automatically appear as interactive custom shapes on the TLDraw canvas, providing a visual and manipulable representation of your AI-generated components. This integration enables two-way state synchronization between the component data and the canvas rendering.
+
+### How Canvas Integration Works
+
+1. **Automatic Shape Creation**: When a component is generated, it automatically appears as a custom TLDraw shape
+2. **Interactive Manipulation**: Users can drag, resize, and arrange components on the canvas
+3. **Two-Way State Sync**: Changes in component state reflect on the canvas, and canvas interactions can trigger component updates
+4. **Persistent Layout**: Component positions and sizes are maintained across sessions
+
+### Canvas-Aware Component Design
+
+#### 1. Canvas Event Dispatching
+
+Components can trigger their appearance on the canvas using the `tambo:showComponent` event:
+
+```typescript
+import { useEffect } from "react";
+
+export function CanvasAwareComponent({ data }: Props) {
+  const [state, setState] = useTamboComponentState<ComponentState>(
+    "canvas-aware",
+    { isVisible: true }
+  );
+
+  // Automatically show on canvas when component mounts or state changes
+  useEffect(() => {
+    if (state?.isVisible) {
+      window.dispatchEvent(
+        new CustomEvent("tambo:showComponent", {
+          detail: {
+            messageId: "canvas-aware-component",
+            component: <CanvasAwareComponent data={data} />
+          }
+        })
+      );
+    }
+  }, [state?.isVisible, data]);
+
+  return (
+    <div className="bg-white p-4 rounded-lg shadow-lg">
+      <h3>Canvas Component</h3>
+      <p>This component appears on the TLDraw canvas!</p>
+      <button 
+        onClick={() => setState({ ...state, isVisible: !state?.isVisible })}
+      >
+        {state?.isVisible ? "Hide from Canvas" : "Show on Canvas"}
+      </button>
+    </div>
+  );
+}
+```
+
+#### 2. Canvas State Synchronization
+
+For optimal canvas integration, design components that respond to external state changes:
+
+```typescript
+export const canvasSyncSchema = z.object({
+  title: z.string().describe("Component title"),
+  position: z.object({
+    x: z.number(),
+    y: z.number(),
+  }).optional().describe("Canvas position coordinates"),
+  size: z.object({
+    width: z.number(),
+    height: z.number(),
+  }).optional().describe("Canvas dimensions"),
+  isHighlighted: z.boolean().optional().describe("Whether component is highlighted on canvas"),
+});
+
+type CanvasSyncState = {
+  canvasInteractions: number;
+  lastUpdated: Date;
+  isActive: boolean;
+};
+
+export function CanvasSyncComponent({ 
+  title, 
+  position, 
+  size, 
+  isHighlighted = false 
+}: CanvasSyncProps) {
+  const [state, setState] = useTamboComponentState<CanvasSyncState>(
+    `canvas-sync-${title}`,
+    {
+      canvasInteractions: 0,
+      lastUpdated: new Date(),
+      isActive: false,
+    }
+  );
+
+  // Listen for canvas position changes
+  useEffect(() => {
+    const handleCanvasUpdate = (event: CustomEvent) => {
+      if (event.detail.componentId === `canvas-sync-${title}`) {
+        setState({
+          ...state,
+          canvasInteractions: (state?.canvasInteractions || 0) + 1,
+          lastUpdated: new Date(),
+          isActive: true,
+        });
+      }
+    };
+
+    window.addEventListener("canvas:componentMoved", handleCanvasUpdate as EventListener);
+    
+    return () => {
+      window.removeEventListener("canvas:componentMoved", handleCanvasUpdate as EventListener);
+    };
+  }, [title, state, setState]);
+
+  return (
+    <div 
+      className={cn(
+        "p-4 rounded-lg transition-all duration-200",
+        isHighlighted ? "bg-blue-100 border-2 border-blue-500" : "bg-white border border-gray-200",
+        state?.isActive && "shadow-lg"
+      )}
+      style={{
+        width: size?.width || "auto",
+        height: size?.height || "auto",
+      }}
+    >
+      <h3 className="font-bold text-lg">{title}</h3>
+      {position && (
+        <p className="text-sm text-gray-600">
+          Position: ({position.x}, {position.y})
+        </p>
+      )}
+      <p className="text-xs text-gray-500">
+        Canvas interactions: {state?.canvasInteractions || 0}
+      </p>
+      <p className="text-xs text-gray-500">
+        Last updated: {state?.lastUpdated?.toLocaleTimeString() || "Never"}
+      </p>
+    </div>
+  );
+}
+```
+
+#### 3. Real-Time Data Streaming on Canvas
+
+Components that handle streaming data need special consideration for canvas rendering:
+
+```typescript
+export const streamingCanvasSchema = z.object({
+  dataSource: z.string().describe("Source of streaming data"),
+  updateInterval: z.number().optional().describe("Update interval in milliseconds"),
+  maxDataPoints: z.number().optional().describe("Maximum data points to display"),
+});
+
+type StreamingCanvasState = {
+  dataPoints: Array<{ timestamp: Date; value: number }>;
+  isStreaming: boolean;
+  canvasSize: { width: number; height: number };
+};
+
+export function StreamingCanvasComponent({
+  dataSource,
+  updateInterval = 1000,
+  maxDataPoints = 50,
+}: StreamingCanvasProps) {
+  const [state, setState] = useTamboComponentState<StreamingCanvasState>(
+    `streaming-${dataSource}`,
+    {
+      dataPoints: [],
+      isStreaming: false,
+      canvasSize: { width: 300, height: 200 },
+    }
+  );
+
+  // Simulate streaming data
+  useEffect(() => {
+    if (!state?.isStreaming) return;
+
+    const interval = setInterval(() => {
+      setState(prevState => {
+        if (!prevState) return prevState;
+        
+        const newDataPoint = {
+          timestamp: new Date(),
+          value: Math.random() * 100,
+        };
+        
+        const updatedDataPoints = [...prevState.dataPoints, newDataPoint]
+          .slice(-maxDataPoints); // Keep only recent data points
+
+        // Notify canvas of data update
+        window.dispatchEvent(
+          new CustomEvent("tambo:componentDataUpdate", {
+            detail: {
+              componentId: `streaming-${dataSource}`,
+              dataPoints: updatedDataPoints,
+              canvasSize: prevState.canvasSize,
+            }
+          })
+        );
+
+        return {
+          ...prevState,
+          dataPoints: updatedDataPoints,
+        };
+      });
+    }, updateInterval);
+
+    return () => clearInterval(interval);
+  }, [state?.isStreaming, dataSource, updateInterval, maxDataPoints, setState]);
+
+  const toggleStreaming = () => {
+    setState(prevState => ({
+      ...prevState,
+      isStreaming: !prevState?.isStreaming,
+    }));
+  };
+
+  return (
+    <div 
+      className="bg-gradient-to-br from-indigo-50 to-blue-50 p-4 rounded-lg border"
+      style={{
+        width: state?.canvasSize.width || 300,
+        height: state?.canvasSize.height || 200,
+      }}
+    >
+      <div className="flex justify-between items-center mb-3">
+        <h4 className="font-semibold text-gray-800">
+          {dataSource} Stream
+        </h4>
+        <button
+          onClick={toggleStreaming}
+          className={cn(
+            "px-3 py-1 rounded text-sm font-medium transition-colors",
+            state?.isStreaming
+              ? "bg-red-500 text-white hover:bg-red-600"
+              : "bg-green-500 text-white hover:bg-green-600"
+          )}
+        >
+          {state?.isStreaming ? "Stop" : "Start"}
+        </button>
+      </div>
+      
+      <div className="bg-white rounded p-2 h-24 overflow-hidden">
+        {state?.dataPoints.length === 0 ? (
+          <div className="h-full flex items-center justify-center text-gray-500">
+            No data yet
+          </div>
+        ) : (
+          <div className="flex items-end h-full gap-1">
+            {state.dataPoints.map((point, index) => (
+              <div
+                key={index}
+                className="bg-blue-500 w-2 rounded-t transition-all duration-200"
+                style={{
+                  height: `${(point.value / 100) * 80}%`,
+                  opacity: 0.7 + (index / state.dataPoints.length) * 0.3,
+                }}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+      
+      <p className="text-xs text-gray-600 mt-2">
+        Data points: {state?.dataPoints.length || 0} / {maxDataPoints}
+      </p>
+    </div>
+  );
+}
+```
+
+### Canvas Integration Best Practices
+
+#### 1. Component Sizing
+
+Design components with flexible sizing that works well on the canvas:
+
+```typescript
+// ✅ Good - Responsive design with min/max constraints
+const componentStyle = {
+  minWidth: "200px",
+  maxWidth: "600px",
+  minHeight: "150px",
+  width: canvasSize?.width || "300px",
+  height: canvasSize?.height || "200px",
+};
+
+// ❌ Bad - Fixed sizing that doesn't adapt
+const componentStyle = {
+  width: "400px",
+  height: "300px",
+};
+```
+
+#### 2. Canvas Event Handling
+
+Properly manage canvas-specific events and cleanup:
+
+```typescript
+useEffect(() => {
+  const handleCanvasInteraction = (event: CustomEvent) => {
+    // Handle canvas interaction
+    setState(prevState => ({
+      ...prevState,
+      lastInteraction: event.detail,
+    }));
+  };
+
+  // Use namespaced event names to avoid conflicts
+  window.addEventListener("tambo:canvas:interaction", handleCanvasInteraction as EventListener);
+  
+  return () => {
+    window.removeEventListener("tambo:canvas:interaction", handleCanvasInteraction as EventListener);
+  };
+}, [setState]);
+```
+
+#### 3. Performance Optimization
+
+Optimize for canvas rendering performance:
+
+```typescript
+// ✅ Good - Debounce frequent updates
+const [debouncedData, setDebouncedData] = useState(data);
+
+useEffect(() => {
+  const timer = setTimeout(() => {
+    setDebouncedData(data);
+    
+    // Only update canvas when data has stabilized
+    window.dispatchEvent(
+      new CustomEvent("tambo:componentUpdate", {
+        detail: { componentId, data: debouncedData }
+      })
+    );
+  }, 300);
+
+  return () => clearTimeout(timer);
+}, [data, componentId, debouncedData]);
+
+// ❌ Bad - Update canvas on every data change
+useEffect(() => {
+  window.dispatchEvent(
+    new CustomEvent("tambo:componentUpdate", {
+      detail: { componentId, data }
+    })
+  );
+}, [data, componentId]); // This fires too frequently
+```
+
+#### 4. State Persistence
+
+Ensure component state persists across canvas operations:
+
+```typescript
+type CanvasPersistentState = {
+  userPreferences: Record<string, any>;
+  canvasPosition: { x: number; y: number };
+  canvasSize: { width: number; height: number };
+  isMinimized: boolean;
+};
+
+export function CanvasPersistentComponent() {
+  const [state, setState] = useTamboComponentState<CanvasPersistentState>(
+    "canvas-persistent",
+    {
+      userPreferences: {},
+      canvasPosition: { x: 0, y: 0 },
+      canvasSize: { width: 300, height: 200 },
+      isMinimized: false,
+    }
+  );
+
+  // Save state changes to canvas
+  useEffect(() => {
+    if (state) {
+      window.dispatchEvent(
+        new CustomEvent("tambo:canvas:saveState", {
+          detail: {
+            componentId: "canvas-persistent",
+            state: state,
+          }
+        })
+      );
+    }
+  }, [state]);
+
+  return (
+    <div 
+      className={cn(
+        "transition-all duration-200",
+        state?.isMinimized ? "h-8" : "h-auto"
+      )}
+    >
+      {/* Component content */}
     </div>
   );
 }
@@ -590,6 +1021,274 @@ export function MarkdownViewer({
 export default MarkdownViewer;
 ```
 
+### Example 4: Canvas-Integrated Interactive Dashboard
+
+```typescript
+"use client";
+
+import { cn } from "@/lib/utils";
+import { useTamboComponentState } from "@tambo-ai/react";
+import { useEffect, useState } from "react";
+import { z } from "zod";
+
+export const canvasDashboardSchema = z.object({
+  title: z.string().describe("Dashboard title"),
+  metrics: z.array(
+    z.object({
+      name: z.string().describe("Metric name"),
+      value: z.number().describe("Current metric value"),
+      unit: z.string().optional().describe("Unit of measurement"),
+      trend: z.enum(["up", "down", "neutral"]).optional().describe("Trend direction"),
+    })
+  ).describe("Array of metrics to display"),
+  refreshInterval: z.number().optional().describe("Auto-refresh interval in seconds (default: 30)"),
+  canvasPosition: z.object({
+    x: z.number(),
+    y: z.number(),
+  }).optional().describe("Position on canvas"),
+  canvasSize: z.object({
+    width: z.number(),
+    height: z.number(),
+  }).optional().describe("Size on canvas"),
+});
+
+export type CanvasDashboardProps = z.infer<typeof canvasDashboardSchema>;
+
+type DashboardState = {
+  isExpanded: boolean;
+  selectedMetric: string | null;
+  lastRefresh: Date;
+  canvasInteractions: number;
+  autoRefresh: boolean;
+};
+
+export function CanvasDashboard({
+  title,
+  metrics,
+  refreshInterval = 30,
+  canvasPosition,
+  canvasSize,
+}: CanvasDashboardProps) {
+  const [state, setState] = useTamboComponentState<DashboardState>(
+    `canvas-dashboard-${title}`,
+    {
+      isExpanded: false,
+      selectedMetric: null,
+      lastRefresh: new Date(),
+      canvasInteractions: 0,
+      autoRefresh: true,
+    }
+  );
+
+  // Auto-refresh logic
+  useEffect(() => {
+    if (!state?.autoRefresh) return;
+
+    const interval = setInterval(() => {
+      setState(prevState => {
+        if (!prevState) return prevState;
+        
+        // Simulate metric updates
+        const updatedMetrics = metrics.map(metric => ({
+          ...metric,
+          value: metric.value * (0.95 + Math.random() * 0.1), // ±5% variation
+        }));
+
+        // Notify canvas of data update
+        window.dispatchEvent(
+          new CustomEvent("tambo:componentDataUpdate", {
+            detail: {
+              componentId: `canvas-dashboard-${title}`,
+              metrics: updatedMetrics,
+              lastRefresh: new Date(),
+            }
+          })
+        );
+
+        return {
+          ...prevState,
+          lastRefresh: new Date(),
+        };
+      });
+    }, refreshInterval * 1000);
+
+    return () => clearInterval(interval);
+  }, [state?.autoRefresh, refreshInterval, metrics, title, setState]);
+
+  // Listen for canvas interactions
+  useEffect(() => {
+    const handleCanvasInteraction = (event: CustomEvent) => {
+      if (event.detail.componentId === `canvas-dashboard-${title}`) {
+        setState(prevState => {
+          if (!prevState) return prevState;
+          return {
+            ...prevState,
+            canvasInteractions: prevState.canvasInteractions + 1,
+          };
+        });
+      }
+    };
+
+    window.addEventListener("tambo:canvas:interaction", handleCanvasInteraction as EventListener);
+    
+    return () => {
+      window.removeEventListener("tambo:canvas:interaction", handleCanvasInteraction as EventListener);
+    };
+  }, [title, setState]);
+
+  // Show component on canvas when mounted
+  useEffect(() => {
+    window.dispatchEvent(
+      new CustomEvent("tambo:showComponent", {
+        detail: {
+          messageId: `canvas-dashboard-${title}`,
+          component: (
+            <CanvasDashboard
+              title={title}
+              metrics={metrics}
+              refreshInterval={refreshInterval}
+              canvasPosition={canvasPosition}
+              canvasSize={canvasSize}
+            />
+          )
+        }
+      })
+    );
+  }, [title, metrics, refreshInterval, canvasPosition, canvasSize]);
+
+  const toggleExpanded = () => {
+    setState(prevState => {
+      if (!prevState) return prevState;
+      return { ...prevState, isExpanded: !prevState.isExpanded };
+    });
+  };
+
+  const toggleAutoRefresh = () => {
+    setState(prevState => {
+      if (!prevState) return prevState;
+      return { ...prevState, autoRefresh: !prevState.autoRefresh };
+    });
+  };
+
+  const getTrendIcon = (trend: "up" | "down" | "neutral" | undefined) => {
+    switch (trend) {
+      case "up":
+        return <span className="text-green-500">↗</span>;
+      case "down":
+        return <span className="text-red-500">↘</span>;
+      default:
+        return <span className="text-gray-400">→</span>;
+    }
+  };
+
+  return (
+    <div
+      className={cn(
+        "bg-white border border-gray-200 rounded-lg shadow-lg transition-all duration-300",
+        state?.isExpanded ? "p-6" : "p-4"
+      )}
+      style={{
+        width: canvasSize?.width || (state?.isExpanded ? "500px" : "300px"),
+        height: canvasSize?.height || (state?.isExpanded ? "400px" : "200px"),
+        minWidth: "250px",
+        minHeight: "150px",
+      }}
+    >
+      {/* Header */}
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-lg font-bold text-gray-800">{title}</h3>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={toggleAutoRefresh}
+            className={cn(
+              "p-1 rounded text-xs",
+              state?.autoRefresh
+                ? "bg-green-100 text-green-600"
+                : "bg-gray-100 text-gray-600"
+            )}
+            title={`Auto-refresh ${state?.autoRefresh ? "ON" : "OFF"}`}
+          >
+            🔄
+          </button>
+          <button
+            onClick={toggleExpanded}
+            className="p-1 rounded text-xs bg-blue-100 text-blue-600"
+            title={state?.isExpanded ? "Collapse" : "Expand"}
+          >
+            {state?.isExpanded ? "📉" : "📊"}
+          </button>
+        </div>
+      </div>
+
+      {/* Metrics Grid */}
+      <div 
+        className={cn(
+          "grid gap-3",
+          state?.isExpanded ? "grid-cols-2" : "grid-cols-1"
+        )}
+      >
+        {metrics.slice(0, state?.isExpanded ? metrics.length : 3).map((metric, index) => (
+          <div
+            key={index}
+            className={cn(
+              "p-3 bg-gray-50 rounded cursor-pointer transition-colors",
+              state?.selectedMetric === metric.name && "bg-blue-50 border border-blue-200"
+            )}
+            onClick={() => setState(prevState => ({
+              ...prevState,
+              selectedMetric: prevState?.selectedMetric === metric.name ? null : metric.name,
+            }))}
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium text-gray-700">
+                {metric.name}
+              </span>
+              {getTrendIcon(metric.trend)}
+            </div>
+            <div className="mt-1">
+              <span className="text-2xl font-bold text-gray-900">
+                {metric.value.toFixed(1)}
+              </span>
+              {metric.unit && (
+                <span className="text-sm text-gray-500 ml-1">
+                  {metric.unit}
+                </span>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Footer Info */}
+      <div className="mt-4 pt-3 border-t border-gray-100 flex justify-between items-center text-xs text-gray-500">
+        <span>
+          Last updated: {state?.lastRefresh?.toLocaleTimeString() || "Never"}
+        </span>
+        {canvasPosition && (
+          <span>
+            Canvas interactions: {state?.canvasInteractions || 0}
+          </span>
+        )}
+      </div>
+
+      {/* Selected Metric Details */}
+      {state?.selectedMetric && state?.isExpanded && (
+        <div className="mt-4 p-3 bg-blue-50 rounded">
+          <h4 className="font-medium text-blue-800">
+            {state.selectedMetric} Details
+          </h4>
+          <p className="text-sm text-blue-600 mt-1">
+            Detailed view for {state.selectedMetric} metric would appear here.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default CanvasDashboard;
+```
+
 ## Best Practices
 
 ### 1. Schema Design
@@ -617,12 +1316,22 @@ export default MarkdownViewer;
 - **Support dark mode**: Use appropriate color schemes
 - **Responsive design**: Works on all screen sizes
 - **Accessible markup**: Use proper ARIA labels and semantic HTML
+- **Canvas-friendly dimensions**: Use min/max width/height constraints for flexible canvas sizing
 
 ### 5. Performance
 
 - **Memoize expensive calculations**: Use useMemo for complex operations
 - **Debounce state updates**: For frequently changing values
 - **Clean up effects**: Remove event listeners and intervals
+- **Optimize canvas updates**: Batch canvas events and debounce frequent updates
+
+### 6. Canvas Integration
+
+- **Event namespacing**: Use prefixed event names (e.g., `tambo:canvas:interaction`)
+- **State persistence**: Store canvas-related state (position, size) separately from component logic
+- **Responsive sizing**: Design components that adapt to canvas dimensions
+- **Two-way sync**: Ensure component changes reflect on canvas and vice versa
+- **Performance awareness**: Minimize canvas update frequency for streaming components
 
 ## Common Pitfalls
 
@@ -688,6 +1397,73 @@ export const schema = z.object({
   title: z.string().describe("Title"),
   showIcon: z.boolean().optional().describe("Show icon (default: true)"),
 });
+```
+
+### 6. Canvas Integration Pitfalls
+
+#### Not Handling Canvas Events Properly
+
+```typescript
+// ❌ Bad - no cleanup or namespace
+useEffect(() => {
+  window.addEventListener("click", handleClick);
+}, []);
+
+// ✅ Good - proper cleanup and namespacing
+useEffect(() => {
+  const handleCanvasClick = (event: CustomEvent) => {
+    // Handle canvas-specific click
+  };
+
+  window.addEventListener("tambo:canvas:click", handleCanvasClick as EventListener);
+  
+  return () => {
+    window.removeEventListener("tambo:canvas:click", handleCanvasClick as EventListener);
+  };
+}, []);
+```
+
+#### Over-updating Canvas State
+
+```typescript
+// ❌ Bad - updates canvas on every render
+useEffect(() => {
+  window.dispatchEvent(new CustomEvent("tambo:componentUpdate", {
+    detail: { componentId, data }
+  }));
+}, [data]); // Fires too frequently
+
+// ✅ Good - debounced updates
+useEffect(() => {
+  const timer = setTimeout(() => {
+    window.dispatchEvent(new CustomEvent("tambo:componentUpdate", {
+      detail: { componentId, data }
+    }));
+  }, 300);
+
+  return () => clearTimeout(timer);
+}, [data, componentId]);
+```
+
+#### Fixed Component Dimensions
+
+```typescript
+// ❌ Bad - rigid sizing that doesn't work on canvas
+<div style={{ width: "400px", height: "300px" }}>
+  Content
+</div>
+
+// ✅ Good - flexible sizing with constraints
+<div 
+  style={{
+    minWidth: "200px",
+    maxWidth: "600px",
+    width: canvasSize?.width || "300px",
+    height: canvasSize?.height || "auto",
+  }}
+>
+  Content
+</div>
 ```
 
 ## Advanced Patterns
@@ -771,13 +1547,41 @@ export function AnimatedComponent({ trigger }: Props) {
 
 ## Summary
 
-Creating Tambo components involves:
+### **🔥 DUAL CORE REQUIREMENTS (Both Essential)**
 
-1. **Define a clear schema** with descriptive properties
-2. **Handle streaming content** gracefully with loading states
-3. **Use Tambo state management** for reactive behavior
-4. **Register the component** in the central configuration
-5. **Follow React best practices** for performance and accessibility
-6. **Test with various data states** including empty, partial, and complete data
+1. **🔴 Define a clear schema with descriptive properties** ← Foundation for AI
+2. **🔴 Design for canvas integration with flexible sizing and event handling** ← Final destination
+3. **🔴 Implement two-way state synchronization** between component and canvas
 
-Remember that these components will be generated and controlled by AI, so clear schemas and robust error handling are essential for a good user experience. 
+### **🟡 SUPPORTING REQUIREMENTS**
+
+4. **🟡 Handle streaming content** gracefully with loading states
+5. **🟡 Use Tambo state management** for reactive behavior
+6. **🟡 Register the component** in the central configuration
+7. **🟡 Follow React best practices** for performance and accessibility
+8. **🟡 Test with various data states** including empty, partial, and complete data
+
+### **🎨 PERFORMANCE OPTIMIZATIONS**
+
+9. **🟢 Optimize for canvas performance** with debounced updates and proper event cleanup
+10. **🟢 Advanced patterns** for complex interactions
+
+### **Critical Success Factors**
+
+> **🔴 DUAL FOUNDATIONS**: Your component needs BOTH a perfect schema (for AI creation) AND perfect canvas integration (for user interaction). Neither is optional.
+
+### Canvas Integration Requirements
+
+- **Event-driven architecture**: Use `tambo:showComponent` events to display components on canvas
+- **Flexible dimensions**: Design components that adapt to canvas sizing constraints
+- **State persistence**: Maintain component state across canvas interactions
+- **Performance optimization**: Debounce canvas updates, especially for streaming data
+- **Two-way synchronization**: Ensure component changes reflect on canvas and vice versa
+
+### Architecture Flow
+
+1. **User** communicates intent via chat
+2. **AI** uses schemas to understand and create components
+3. **Canvas** is where components actually live and users interact with them
+
+**Remember**: Chat is the creation interface, Canvas is the living environment. Both schema foundation and canvas integration are equally critical. 

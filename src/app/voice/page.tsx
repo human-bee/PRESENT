@@ -6,6 +6,7 @@ import {
   LiveKitUI,
   RpcHandler,
 } from "@/components/ui/live-kit";
+import { LivekitParticipantSpawner } from "@/components/ui/livekit-participant-spawner";
 import { McpConfigButton } from "@/components/ui/mcp-config-button";
 import { Message, MessageContent } from "@/components/ui/message";
 import { ScrollableMessageContainer } from "@/components/ui/scrollable-message-container";
@@ -126,6 +127,11 @@ export default function Voice() {
                   </LiveKitProvider>
                 </div>
               </div>
+              
+              {/* LivekitParticipantSpawner moved inside TamboProvider context */}
+              <LiveKitProvider>
+                <LivekitParticipantSpawner />
+              </LiveKitProvider>
             </TamboMcpProvider>
           </TamboProvider>
         </div>
