@@ -304,8 +304,10 @@ class ConversationalAssistant(Agent): # Renamed for clarity
 async def entrypoint(ctx: JobContext):
     logging.info(f"ctx: {ctx}")
     await ctx.connect()
-    participant = await ctx.wait_for_participant()
-    logging.info(f"participant: {participant}")
+    
+    # Don't wait for participant - just join the room immediately
+    logging.info(f"Joining room: {ctx.room.name}")
+    
     session = AgentSession(
         llm=openai.LLM(
             model="gpt-4.1-nano",
@@ -369,6 +371,6 @@ if __name__ == "__main__":
             prewarm_fnc=prewarm,
             shutdown_process_timeout=60 * 5 * 100,
             # agent_name="Jaime AI",
-            # worker_type=agents.worker.WorkerType.PUBLISHER
+            worker_type=agents.worker.WorkerType.ROOM,  # Join all rooms automatically
         ),
     )

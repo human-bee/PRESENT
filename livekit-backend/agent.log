@@ -1,0 +1,12 @@
+2025-06-02 03:41:01,611 - [36mDEBUG[0m asyncio - Using selector: KqueueSelector [90m[0m
+2025-06-02 03:41:01,611 - [35mDEV [0m livekit.agents - Watching /Users/bsteinher/PRESENT/livekit-backend [90m[0m
+2025-06-02 03:41:02,340 - [36mDEBUG[0m asyncio - Using selector: KqueueSelector [90m[0m
+2025-06-02 03:41:02,345 - [32mINFO[0m livekit.agents - starting worker [90m{"version": "1.0.23", "rtc-version": "1.0.8"}[0m
+2025-06-02 03:41:02,345 - [32mINFO[0m livekit.agents - starting inference executor [90m[0m
+2025-06-02 03:41:02,351 - [32mINFO[0m livekit.agents - initializing process [90m{"pid": 37227, "inference": true}[0m
+2025-06-02 03:41:03,030 - [36mDEBUG[0m livekit.agents - initializing inference runner [90m{"runner": "lk_end_of_utterance_multilingual", "pid": 37227, "inference": true}[0m
+2025-06-02 03:41:07,154 - [36mDEBUG[0m livekit.agents - inference runner initialized [90m{"runner": "lk_end_of_utterance_multilingual", "elapsed_time": 4.1238342919969, "pid": 37227, "inference": true}[0m
+2025-06-02 03:41:07,154 - [36mDEBUG[0m asyncio - Using selector: KqueueSelector [90m{"pid": 37227, "inference": true}[0m
+2025-06-02 03:41:07,157 - [32mINFO[0m livekit.agents - process initialized [90m{"pid": 37227, "inference": true, "elapsed_time": 4.81}[0m
+2025-06-02 03:41:07,174 - [32mINFO[0m livekit.agents - [1msee tracing information at http://localhost:57375/debug[0m [90m[0m
+2025-06-02 03:41:07,428 - [32mINFO[0m livekit.agents - registered worker [90m{"id": "AW_ynziJqw3CVYb", "url": "wss://whiteboard-jamie-q02f56az.livekit.cloud", "region": "US West", "protocol": 16}[0m

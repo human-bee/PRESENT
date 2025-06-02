@@ -38,7 +38,7 @@ import { cn } from "@/lib/utils";
 import { useTamboComponentState } from "@tambo-ai/react";
 import { z } from "zod";
 import { useRoomContext, AudioConference } from "@livekit/components-react";
-import { ConnectionState, RoomEvent, DisconnectReason } from "livekit-client";
+import { ConnectionState, RoomEvent, DisconnectReason, Participant } from "livekit-client";
 import { 
   Wifi, 
   WifiOff, 
@@ -195,17 +195,43 @@ export function LivekitRoomConnector({
       }
     };
 
-    const handleParticipantConnected = () => {
+    const handleParticipantConnected = (participant: Participant) => {
       const count = room.numParticipants;
-      console.log(`👥 [LiveKitConnector-${roomName}] Participant connected, count:`, count);
+      const participants = Array.from(room.remoteParticipants.values());
+      console.log(`👥 [LiveKitConnector-${roomName}] Participant connected:`, {
+        newParticipant: {
+          identity: participant?.identity,
+          sid: participant?.sid,
+          name: participant?.name,
+          metadata: participant?.metadata,
+          isLocal: participant === room.localParticipant
+        },
+        totalCount: count,
+        allParticipants: participants.map(p => ({
+          identity: p.identity,
+          name: p.name,
+          isAgent: p.identity?.includes('agent') || p.metadata?.includes('agent')
+        })),
+        localParticipant: {
+          identity: room.localParticipant?.identity,
+          sid: room.localParticipant?.sid
+        }
+      });
       if (stateRef.current) {
         setState({ ...stateRef.current, participantCount: count });
       }
     };
 
-    const handleParticipantDisconnected = () => {
+    const handleParticipantDisconnected = (participant: Participant) => {
       const count = room.numParticipants;
-      console.log(`👥 [LiveKitConnector-${roomName}] Participant disconnected, count:`, count);
+      console.log(`👥 [LiveKitConnector-${roomName}] Participant disconnected:`, {
+        disconnectedParticipant: {
+          identity: participant?.identity,
+          sid: participant?.sid,
+          name: participant?.name
+        },
+        remainingCount: count
+      });
       if (stateRef.current) {
         setState({ ...stateRef.current, participantCount: count });
       }
@@ -324,6 +350,27 @@ export function LivekitRoomConnector({
                   await room.localParticipant.setCameraEnabled(true);
                   await room.localParticipant.setMicrophoneEnabled(true);
                   console.log(`✅ [LiveKitConnector-${roomName}] Camera and microphone enabled`);
+                  
+                  // Request the LiveKit agent to join the room
+                  console.log(`🤖 [LiveKitConnector-${roomName}] Requesting LiveKit agent to join`);
+                  try {
+                    // Send a data message to trigger agent join
+                    const agentRequest = {
+                      type: 'agent_request',
+                      action: 'join',
+                      timestamp: new Date().toISOString()
+                    };
+                    
+                    // Publish data message to request agent
+                    await room.localParticipant.publishData(
+                      new TextEncoder().encode(JSON.stringify(agentRequest)),
+                      { reliable: true }
+                    );
+                    
+                    console.log(`✅ [LiveKitConnector-${roomName}] Agent join request sent via data channel`);
+                  } catch (agentError) {
+                    console.error(`⚠️ [LiveKitConnector-${roomName}] Failed to request agent:`, agentError);
+                  }
                 } catch (error) {
                   console.error(`⚠️ [LiveKitConnector-${roomName}] Failed to enable camera/mic:`, error);
                   // Non-fatal error - user might have denied permissions
