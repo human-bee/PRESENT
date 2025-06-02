@@ -9,7 +9,7 @@ import { loadMcpServers } from "@/lib/mcp-utils";
 import { components } from "@/lib/tambo";
 import { TamboProvider } from "@tambo-ai/react";
 import { TamboMcpProvider } from "@tambo-ai/react/mcp";
-import { Room, ConnectionState, RoomEvent } from "livekit-client";
+import { Room, ConnectionState, RoomEvent, VideoPresets, RoomOptions } from "livekit-client";
 import { RoomContext } from "@livekit/components-react";
 
 export default function Canvas() {
@@ -17,14 +17,22 @@ export default function Canvas() {
   const mcpServers = loadMcpServers();
   const contextKey = "tambo-canvas";
   
-  // Create LiveKit room instance
-  const [room] = useState(() => new Room({
-    adaptiveStream: true,
-    dynacast: true,
-    videoCaptureDefaults: {
-      resolution: { width: 1280, height: 720, frameRate: 30 }
-    }
-  }));
+  // Create LiveKit room instance for the canvas
+  const [room] = useState(() => {
+    const roomOptions: RoomOptions = {
+      adaptiveStream: true,
+      dynacast: true,
+      videoCaptureDefaults: {
+        resolution: VideoPresets.h720.resolution,
+      },
+      publishDefaults: {
+        videoSimulcastLayers: [VideoPresets.h180, VideoPresets.h360, VideoPresets.h720],
+        videoCodec: 'vp8',
+      },
+    };
+    
+    return new Room(roomOptions);
+  });
   
   // Track room connection state for context
   const [roomState, setRoomState] = useState({

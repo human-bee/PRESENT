@@ -317,6 +317,17 @@ export function LivekitRoomConnector({
               console.log(`🔌 [LiveKitConnector-${roomName}] Connecting to room with new token`);
               room.connect(wsUrl, data.accessToken, {
                 autoSubscribe: true,
+              }).then(async () => {
+                // After connection, enable camera and microphone
+                try {
+                  console.log(`📹 [LiveKitConnector-${roomName}] Enabling camera and microphone`);
+                  await room.localParticipant.setCameraEnabled(true);
+                  await room.localParticipant.setMicrophoneEnabled(true);
+                  console.log(`✅ [LiveKitConnector-${roomName}] Camera and microphone enabled`);
+                } catch (error) {
+                  console.error(`⚠️ [LiveKitConnector-${roomName}] Failed to enable camera/mic:`, error);
+                  // Non-fatal error - user might have denied permissions
+                }
               }).catch(error => {
                 console.error(`❌ [LiveKitConnector-${roomName}] Room connection failed:`, error);
                 if (stateRef.current) {
