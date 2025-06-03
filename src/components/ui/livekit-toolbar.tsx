@@ -10,8 +10,12 @@ import {
   useTrackToggle,
   useIsMuted,
   useConnectionQualityIndicator,
+  useRoomContext,
+  useDataChannel,
+  useTracks,
+  useRemoteParticipants,
 } from "@livekit/components-react";
-import { Track } from "livekit-client";
+import { Track, ConnectionQuality, Participant, LocalParticipant } from "livekit-client";
 import {
   Mic,
   MicOff,
@@ -35,495 +39,599 @@ import {
   ChevronUp,
   ChevronDown,
   Volume2,
+  VolumeX,
   Loader,
   Maximize2,
   Accessibility,
+  Pin,
+  UserX,
+  Crown,
+  Eye,
+  EyeOff,
+  MoreHorizontal,
+  AlertTriangle,
+  Wifi,
+  WifiOff,
 } from "lucide-react";
 
-// Define custom icons for recording states
-const Record = ({ className }: { className?: string }) => (
-  <Circle className={cn("fill-current", className)} />
-);
-
-const RecordStop = ({ className }: { className?: string }) => (
-  <Square className={cn("fill-current", className)} />
-);
-
-const StopScreenShare = ({ className }: { className?: string }) => (
-  <div className="relative">
-    <ScreenShare className={className} />
-    <div className="absolute inset-0 flex items-center justify-center">
-      <div className="w-full h-0.5 bg-current rotate-45" />
-    </div>
+// Custom Unpin icon as alternative
+const Unpin = ({ className }: { className?: string }) => (
+  <div className={className}>
+    <Pin className="w-full h-full rotate-45" />
   </div>
 );
 
-// Define the component props schema with Zod
+// Enhanced schema for real-world usage
 export const livekitToolbarSchema = z.object({
-  // Toolbar Configuration
-  minimal: z.boolean().optional().describe("Whether to show minimal or verbose mode (default: false)"),
-  controls: z.object({
-    microphone: z.boolean().optional().describe("Show microphone toggle (default: true)"),
-    camera: z.boolean().optional().describe("Show camera toggle (default: true)"),
-    screenShare: z.boolean().optional().describe("Show screen share toggle (default: true)"),
-    chat: z.boolean().optional().describe("Show chat toggle (default: true)"),
-    raiseHand: z.boolean().optional().describe("Show raise hand toggle (default: true)"),
-    invite: z.boolean().optional().describe("Show invite button (default: true)"),
-    settings: z.boolean().optional().describe("Show settings button (default: true)"),
-    participants: z.boolean().optional().describe("Show participants button (default: true)"),
-    recording: z.boolean().optional().describe("Show recording controls (default: true)"),
-    layout: z.boolean().optional().describe("Show layout controls (default: true)"),
-    assistant: z.boolean().optional().describe("Show AI assistant controls (default: true)"),
-    accessibility: z.boolean().optional().describe("Show accessibility controls (default: true)"),
-    leave: z.boolean().optional().describe("Show leave call button (default: true)"),
-  }).optional().describe("Configure which controls to show"),
+  // Room Configuration
+  roomName: z.string().optional().describe("Current room name"),
+  enableVoiceCommands: z.boolean().optional().default(true).describe("Enable voice control for toolbar"),
+  enableParticipantControls: z.boolean().optional().default(true).describe("Show individual participant controls"),
+  enableAdaptiveUI: z.boolean().optional().default(true).describe("Automatically show/hide controls based on context"),
   
-  // Initial States
-  initialStates: z.object({
-    micEnabled: z.boolean().optional().describe("Initial microphone state (default: true)"),
-    cameraEnabled: z.boolean().optional().describe("Initial camera state (default: true)"),
-    screenShareEnabled: z.boolean().optional().describe("Initial screen share state (default: false)"),
-    isRecording: z.boolean().optional().describe("Initial recording state (default: false)"),
-    handRaised: z.boolean().optional().describe("Initial hand raised state (default: false)"),
-    layoutMode: z.enum(["grid", "focus"]).optional().describe("Initial layout mode (default: 'grid')"),
-    assistantState: z.enum(["idle", "listening", "thinking", "speaking"]).optional().describe("Initial assistant state (default: 'idle')"),
-  }).optional().describe("Initial states for toolbar controls"),
+  // Moderation Settings
+  moderationEnabled: z.boolean().optional().default(false).describe("Enable host moderation controls"),
+  autoMuteOnJoin: z.boolean().optional().default(false).describe("Auto-mute participants on join"),
+  maxParticipants: z.number().optional().describe("Maximum participants allowed"),
   
-  // Room Info
-  roomInfo: z.object({
-    participantCount: z.number().optional().describe("Number of participants in the room"),
-    unreadMessages: z.number().optional().describe("Number of unread chat messages"),
-    connectionQuality: z.enum(["poor", "good", "excellent"]).optional().describe("Connection quality (poor, good, excellent)"),
-    roomName: z.string().optional().describe("Name of the current room"),
-  }).optional().describe("Current room information"),
+  // UI Preferences
+  compactMode: z.boolean().optional().default(false).describe("Use compact layout for smaller screens"),
+  showConnectionStatus: z.boolean().optional().default(true).describe("Show connection quality indicators"),
+  showParticipantList: z.boolean().optional().default(true).describe("Show expandable participant list"),
+  
+  // Feature Toggles
+  features: z.object({
+    recording: z.boolean().optional().default(true),
+    screenShare: z.boolean().optional().default(true),
+    chat: z.boolean().optional().default(true),
+    handRaise: z.boolean().optional().default(true),
+    backgroundBlur: z.boolean().optional().default(true),
+    aiAssistant: z.boolean().optional().default(true),
+  }).optional(),
 });
 
-// Define the props type based on the Zod schema
 export type LivekitToolbarProps = z.infer<typeof livekitToolbarSchema>;
 
-// Component state type
+// Enhanced state type for real participant management
 type LivekitToolbarState = {
-  micEnabled: boolean;
-  cameraEnabled: boolean;
-  screenShareEnabled: boolean;
+  // UI State
+  isExpanded: boolean;
+  showParticipants: boolean;
+  showSettings: boolean;
+  compactMode: boolean;
+  
+  // Interaction State
+  selectedParticipant: string | null;
+  pinnedParticipants: string[];
+  handRaisedParticipants: string[];
+  
+  // Media State
   isRecording: boolean;
-  handRaised: boolean;
-  layoutMode: "grid" | "focus";
+  recordingStartTime: Date | null;
+  backgroundBlurEnabled: boolean;
+  
+  // AI Assistant State
   assistantState: "idle" | "listening" | "thinking" | "speaking";
-  expanded: boolean;
-  connectionQuality: 0 | 1 | 2 | 3; // 0=poor, 1=fair, 2=good, 3=excellent
-  participantCount: number;
-  unreadMessages: number;
+  lastVoiceCommand: string | null;
+  
+  // Connection State
+  connectionIssues: Record<string, boolean>;
+  networkQuality: ConnectionQuality;
+  
+  // Canvas State
+  canvasPosition: { x: number; y: number };
+  canvasSize: { width: number; height: number };
+  isCanvasFocused: boolean;
 };
 
-/**
- * LivekitToolbar Component
- *
- * A comprehensive video conferencing toolbar with all standard LiveKit controls
- * including media controls, communication features, room management, and AI assistant integration.
- */
-export function LivekitToolbar({
-  minimal = false,
-  controls = {},
-  initialStates = {},
-  roomInfo = {},
-}: LivekitToolbarProps) {
-  // Initialize Tambo component state
-  const [state, setState] = useTamboComponentState<LivekitToolbarState>(
-    "livekit-toolbar",
-    {
-      micEnabled: initialStates.micEnabled ?? true,
-      cameraEnabled: initialStates.cameraEnabled ?? true,
-      screenShareEnabled: initialStates.screenShareEnabled ?? false,
-      isRecording: initialStates.isRecording ?? false,
-      handRaised: initialStates.handRaised ?? false,
-      layoutMode: initialStates.layoutMode ?? "grid",
-      assistantState: initialStates.assistantState ?? "idle",
-      expanded: !minimal,
-      connectionQuality: roomInfo.connectionQuality === "poor" ? 0 : 
-                        roomInfo.connectionQuality === "good" ? 2 : 
-                        roomInfo.connectionQuality === "excellent" ? 3 : 3,
-      participantCount: roomInfo.participantCount ?? 0,
-      unreadMessages: roomInfo.unreadMessages ?? 0,
-    }
-  );
+type ParticipantControlsProps = {
+  participant: Participant;
+  isLocal: boolean;
+  isModerator: boolean;
+  onMute: () => void;
+  onKick?: () => void;
+  onPin: () => void;
+  isPinned: boolean;
+};
 
-  // Default control configuration
-  const defaultControls = {
-    microphone: true,
-    camera: true,
-    screenShare: true,
-    chat: true,
-    raiseHand: true,
-    invite: true,
-    settings: true,
-    participants: true,
-    recording: true,
-    layout: true,
-    assistant: true,
-    accessibility: true,
-    leave: true,
-    ...controls,
-  };
-
-  // Handle control actions
-  const handleToggleMic = () => {
-    if (!state) return;
-    setState({ ...state, micEnabled: !state.micEnabled });
-  };
-
-  const handleToggleCamera = () => {
-    if (!state) return;
-    setState({ ...state, cameraEnabled: !state.cameraEnabled });
-  };
-
-  const handleToggleScreenShare = () => {
-    if (!state) return;
-    setState({ ...state, screenShareEnabled: !state.screenShareEnabled });
-  };
-
-  const handleToggleChat = () => {
-    if (!state) return;
-    setState({ ...state, unreadMessages: 0 });
-  };
-
-  const handleToggleRaiseHand = () => {
-    if (!state) return;
-    setState({ ...state, handRaised: !state.handRaised });
-  };
-
-  const handleToggleRecording = () => {
-    if (!state) return;
-    setState({ ...state, isRecording: !state.isRecording });
-  };
-
-  const handleToggleLayout = (layout: "grid" | "focus") => {
-    if (!state) return;
-    setState({ ...state, layoutMode: layout });
-  };
-
-  const handleToggleAssistant = () => {
-    if (!state) return;
-    const states: ("idle" | "listening" | "thinking" | "speaking")[] = ["idle", "listening", "thinking", "speaking"];
-    const currentIndex = states.indexOf(state.assistantState);
-    const nextIndex = (currentIndex + 1) % states.length;
-    setState({ ...state, assistantState: states[nextIndex] });
-  };
-
-  const handleExpandToggle = () => {
-    if (!state) return;
-    setState({ ...state, expanded: !state.expanded });
-  };
-
-  // Connection quality icon based on signal strength
-  const ConnectionQualityIcon = React.useMemo(() => {
-    switch (state?.connectionQuality) {
-      case 0: return Signal;
-      case 1: return SignalLow;
-      case 2: return SignalMedium;
-      case 3: return SignalHigh;
-      default: return SignalHigh;
-    }
-  }, [state?.connectionQuality]);
-
-  // Assistant state indicator
-  const renderAssistantState = () => {
-    switch (state?.assistantState) {
-      case "listening":
-        return (
-          <div className="flex items-center gap-1.5">
-            <Mic className="w-3.5 h-3.5 text-emerald-500 animate-pulse" />
-            <span className="text-xs text-emerald-500">Listening</span>
-          </div>
-        );
-      case "thinking":
-        return (
-          <div className="flex items-center gap-1.5">
-            <Loader className="w-3.5 h-3.5 text-amber-500 animate-spin" />
-            <span className="text-xs text-amber-500">Thinking</span>
-          </div>
-        );
-      case "speaking":
-        return (
-          <div className="flex items-center gap-1.5">
-            <Volume2 className="w-3.5 h-3.5 text-blue-500 animate-pulse" />
-            <span className="text-xs text-blue-500">Speaking</span>
-          </div>
-        );
-      default:
-        return null;
-    }
-  };
-
-  // Tooltip component (simple implementation)
-  const Tooltip = ({ content, children }: { content: string; children: React.ReactNode }) => (
-    <div className="relative group">
-      {children}
-      <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-black text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50">
-        {content}
-      </div>
-    </div>
-  );
-
-  // Badge component
-  const Badge = ({ children, variant = "default" }: { children: React.ReactNode; variant?: "default" | "destructive" }) => (
-    <span className={cn(
-      "inline-flex items-center rounded-full px-1.5 py-0.5 text-xs font-medium",
-      variant === "destructive" ? "bg-red-500 text-white" : "bg-gray-100 text-gray-900"
-    )}>
-      {children}
-    </span>
-  );
-
-  // Button component
-  const Button = ({ 
-    children, 
-    variant = "outline", 
-    size = "icon", 
-    onClick, 
-    className,
-    ...props 
-  }: { 
-    children: React.ReactNode; 
-    variant?: "outline" | "default" | "destructive"; 
-    size?: "icon" | "sm"; 
-    onClick?: () => void;
-    className?: string;
-  } & React.ButtonHTMLAttributes<HTMLButtonElement>) => (
-    <button
-      onClick={onClick}
-      className={cn(
-        "inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none ring-offset-background",
-        variant === "outline" && "border border-input bg-background hover:bg-accent hover:text-accent-foreground",
-        variant === "default" && "bg-primary text-primary-foreground hover:bg-primary/90",
-        variant === "destructive" && "bg-destructive text-destructive-foreground hover:bg-destructive/90",
-        size === "icon" && "h-9 w-9",
-        size === "sm" && "h-8 px-3",
-        className
-      )}
-      {...props}
-    >
-      {children}
-    </button>
-  );
+// Individual participant controls component
+const ParticipantControls: React.FC<ParticipantControlsProps> = ({
+  participant,
+  isLocal,
+  isModerator,
+  onMute,
+  onKick,
+  onPin,
+  isPinned,
+}) => {
+  const [showControls, setShowControls] = React.useState(false);
+  const isMuted = useIsMuted(Track.Source.Microphone, participant);
+  const connectionQuality = useConnectionQualityIndicator(participant);
 
   return (
-    <div className="w-full bg-background border border-border rounded-xl flex flex-col shadow-lg">
-      {/* Expandable header for minimal mode */}
-      {minimal && (
-        <div 
-          className="w-full flex justify-center py-1 cursor-pointer hover:bg-accent/50 rounded-t-xl"
-          onClick={handleExpandToggle}
-        >
-          {state?.expanded ? (
-            <ChevronDown className="h-4 w-4 text-muted-foreground" />
-          ) : (
-            <ChevronUp className="h-4 w-4 text-muted-foreground" />
+    <div 
+      className="relative group"
+      onMouseEnter={() => setShowControls(true)}
+      onMouseLeave={() => setShowControls(false)}
+    >
+      {/* Participant Avatar/Video */}
+      <div className="relative w-12 h-12 rounded-full overflow-hidden bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center">
+        <span className="text-white text-sm font-semibold">
+          {participant.name?.charAt(0)?.toUpperCase() || '?'}
+        </span>
+        
+        {/* Status indicators */}
+        <div className="absolute bottom-0 right-0 flex gap-0.5">
+          {isMuted && (
+            <div className="w-3 h-3 bg-red-500 rounded-full flex items-center justify-center">
+              <MicOff className="w-2 h-2 text-white" />
+            </div>
+          )}
+          {connectionQuality === ConnectionQuality.Poor && (
+            <div className="w-3 h-3 bg-amber-500 rounded-full flex items-center justify-center">
+              <AlertTriangle className="w-2 h-2 text-white" />
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Hover controls */}
+      {showControls && !isLocal && (
+        <div className="absolute top-0 left-full ml-2 bg-black/90 backdrop-blur-sm rounded-lg p-2 flex gap-1 z-50">
+          <button
+            onClick={onMute}
+            className="p-1 hover:bg-white/20 rounded transition-colors"
+            title={isMuted ? "Unmute" : "Mute"}
+          >
+            {isMuted ? <Mic className="w-3 h-3 text-white" /> : <MicOff className="w-3 h-3 text-white" />}
+          </button>
+          
+          <button
+            onClick={onPin}
+            className="p-1 hover:bg-white/20 rounded transition-colors"
+            title={isPinned ? "Unpin" : "Pin participant"}
+          >
+            {isPinned ? <Unpin className="w-3 h-3 text-white" /> : <Pin className="w-3 h-3 text-white" />}
+          </button>
+          
+          {isModerator && onKick && (
+            <button
+              onClick={onKick}
+              className="p-1 hover:bg-red-500/50 rounded transition-colors"
+              title="Remove participant"
+            >
+              <UserX className="w-3 h-3 text-white" />
+            </button>
           )}
         </div>
       )}
+    </div>
+  );
+};
 
-      {/* Main toolbar content */}
-      {(!minimal || state?.expanded) && (
-        <div className="flex items-center justify-between gap-2 p-2 flex-wrap">
-          {/* Media Controls Group */}
-          {(defaultControls.microphone || defaultControls.camera || defaultControls.screenShare) && (
-            <div className="flex items-center gap-1">
-              {defaultControls.microphone && (
-                <Tooltip content={state?.micEnabled ? "Mute microphone" : "Unmute microphone"}>
-                  <Button
-                    variant={state?.micEnabled ? "outline" : "destructive"}
-                    onClick={handleToggleMic}
-                  >
-                    {state?.micEnabled ? <Mic className="h-4 w-4" /> : <MicOff className="h-4 w-4" />}
-                  </Button>
-                </Tooltip>
-              )}
+/**
+ * Feature-Complete LiveKit Toolbar
+ * 
+ * A living, breathing video conferencing control center that adapts to real room state,
+ * manages individual participants intelligently, and provides context-aware controls.
+ * Built following Tambo principles for complete, connected, delightful experiences.
+ */
+export function LivekitToolbar({
+  roomName,
+  enableVoiceCommands = true,
+  enableParticipantControls = true,
+  enableAdaptiveUI = true,
+  moderationEnabled = false,
+  autoMuteOnJoin = false,
+  maxParticipants,
+  compactMode = false,
+  showConnectionStatus = true,
+  showParticipantList = true,
+  features = {},
+}: LivekitToolbarProps) {
+  const componentId = `livekit-toolbar-${roomName || 'default'}`;
+  
+  // Real LiveKit hooks - connected to actual room state
+  const room = useRoomContext();
+  const localParticipant = useLocalParticipant();
+  const participants = useParticipants();
+  const remoteParticipants = useRemoteParticipants();
+  const connectionQuality = useConnectionQualityIndicator(localParticipant.localParticipant);
+  
+  // Media controls with real LiveKit integration
+  const { toggle: toggleMic, enabled: micEnabled } = useTrackToggle(Track.Source.Microphone);
+  const { toggle: toggleCamera, enabled: cameraEnabled } = useTrackToggle(Track.Source.Camera);
+  const { toggle: toggleScreenShare, enabled: screenShareEnabled } = useTrackToggle(Track.Source.ScreenShare);
+  
+  // Enhanced Tambo state management
+  const [state, setState] = useTamboComponentState<LivekitToolbarState>(
+    componentId,
+    {
+      isExpanded: !compactMode,
+      showParticipants: showParticipantList && participants.length > 2,
+      showSettings: false,
+      compactMode,
+      selectedParticipant: null,
+      pinnedParticipants: [],
+      handRaisedParticipants: [],
+      isRecording: false,
+      recordingStartTime: null,
+      backgroundBlurEnabled: false,
+      assistantState: "idle",
+      lastVoiceCommand: null,
+      connectionIssues: {},
+      networkQuality: connectionQuality,
+      canvasPosition: { x: 0, y: 0 },
+      canvasSize: { width: 800, height: 60 },
+      isCanvasFocused: false,
+    }
+  );
 
-              {defaultControls.camera && (
-                <Tooltip content={state?.cameraEnabled ? "Turn off camera" : "Turn on camera"}>
-                  <Button
-                    variant={state?.cameraEnabled ? "outline" : "destructive"}
-                    onClick={handleToggleCamera}
-                  >
-                    {state?.cameraEnabled ? <Video className="h-4 w-4" /> : <VideoOff className="h-4 w-4" />}
-                  </Button>
-                </Tooltip>
-              )}
+  // Voice command integration
+  useDataChannel("voice-commands", (message) => {
+    if (!enableVoiceCommands || !state) return;
+    
+    try {
+      const command = JSON.parse(new TextDecoder().decode(message.payload));
+      
+      switch (command.type) {
+        case "MUTE_ALL":
+          if (moderationEnabled) {
+            participants.forEach(p => {
+              if (!p.isLocal) {
+                // Implement mute all participants
+                room?.localParticipant?.publishData(
+                  new TextEncoder().encode(JSON.stringify({ type: "MUTE_REQUEST", targetId: p.identity })),
+                  { reliable: true }
+                );
+              }
+            });
+          }
+          break;
+        case "TOGGLE_MIC":
+          toggleMic();
+          break;
+        case "TOGGLE_CAMERA":
+          toggleCamera();
+          break;
+        case "START_RECORDING":
+          handleStartRecording();
+          break;
+        case "RAISE_HAND":
+          handleRaiseHand();
+          break;
+      }
+      
+      setState({ ...state, lastVoiceCommand: command.type, assistantState: "idle" });
+    } catch (error) {
+      console.error("Failed to parse voice command:", error);
+    }
+  });
 
-              {defaultControls.screenShare && (
-                <Tooltip content={state?.screenShareEnabled ? "Stop sharing screen" : "Share screen"}>
-                  <Button
-                    variant={state?.screenShareEnabled ? "default" : "outline"}
-                    onClick={handleToggleScreenShare}
-                  >
-                    {state?.screenShareEnabled ? <StopScreenShare className="h-4 w-4" /> : <ScreenShare className="h-4 w-4" />}
-                  </Button>
-                </Tooltip>
+  // Real-time participant monitoring
+  React.useEffect(() => {
+    if (!state) return;
+    
+    // Update participant count and adaptive UI
+    const shouldShowParticipants = enableAdaptiveUI ? 
+      participants.length > 2 : showParticipantList;
+    
+    const shouldCompact = enableAdaptiveUI ? 
+      participants.length > 8 || window.innerWidth < 768 : compactMode;
+
+    setState({
+      ...state,
+      showParticipants: shouldShowParticipants,
+      compactMode: shouldCompact,
+      networkQuality: connectionQuality,
+    });
+  }, [participants.length, connectionQuality, enableAdaptiveUI]);
+
+  // Canvas integration - component lives on canvas
+  React.useEffect(() => {
+    window.dispatchEvent(
+      new CustomEvent("tambo:showComponent", {
+        detail: {
+          messageId: componentId,
+          component: <LivekitToolbar {...{ roomName, enableVoiceCommands, enableParticipantControls, enableAdaptiveUI, moderationEnabled, autoMuteOnJoin, maxParticipants, compactMode, showConnectionStatus, showParticipantList, features }} />,
+          position: state?.canvasPosition,
+          size: state?.canvasSize,
+        }
+      })
+    );
+  }, [componentId, state?.canvasPosition, state?.canvasSize]);
+
+  // Real recording functionality
+  const handleStartRecording = async () => {
+    if (!state) return;
+    
+    try {
+      if (!state.isRecording) {
+        // Start recording via room API
+        await room?.startRecording?.();
+        setState({
+          ...state,
+          isRecording: true,
+          recordingStartTime: new Date(),
+        });
+      } else {
+        // Stop recording
+        await room?.stopRecording?.();
+        setState({
+          ...state,
+          isRecording: false,
+          recordingStartTime: null,
+        });
+      }
+    } catch (error) {
+      console.error("Recording operation failed:", error);
+    }
+  };
+
+  // Real hand raise functionality
+  const handleRaiseHand = () => {
+    if (!state) return;
+    
+    const isRaised = state.handRaisedParticipants.includes(localParticipant.localParticipant.identity);
+    
+    // Send data channel message
+    room?.localParticipant?.publishData(
+      new TextEncoder().encode(JSON.stringify({
+        type: isRaised ? "LOWER_HAND" : "RAISE_HAND",
+        participantId: localParticipant.localParticipant.identity,
+        timestamp: Date.now(),
+      })),
+      { reliable: true }
+    );
+
+    setState({
+      ...state,
+      handRaisedParticipants: isRaised
+        ? state.handRaisedParticipants.filter(id => id !== localParticipant.localParticipant.identity)
+        : [...state.handRaisedParticipants, localParticipant.localParticipant.identity],
+    });
+  };
+
+  // Participant management functions
+  const handleMuteParticipant = (participantId: string) => {
+    if (!moderationEnabled) return;
+    
+    room?.localParticipant?.publishData(
+      new TextEncoder().encode(JSON.stringify({
+        type: "MUTE_REQUEST",
+        targetId: participantId,
+      })),
+      { reliable: true }
+    );
+  };
+
+  const handlePinParticipant = (participantId: string) => {
+    if (!state) return;
+    
+    const isPinned = state.pinnedParticipants.includes(participantId);
+    
+    setState({
+      ...state,
+      pinnedParticipants: isPinned
+        ? state.pinnedParticipants.filter(id => id !== participantId)
+        : [...state.pinnedParticipants, participantId],
+    });
+
+    // Notify canvas about layout change
+    window.dispatchEvent(
+      new CustomEvent("tambo:layoutUpdate", {
+        detail: {
+          pinnedParticipants: isPinned
+            ? state.pinnedParticipants.filter(id => id !== participantId)
+            : [...state.pinnedParticipants, participantId],
+        }
+      })
+    );
+  };
+
+  const handleKickParticipant = async (participantId: string) => {
+    if (!moderationEnabled) return;
+    
+    try {
+      // Implement kick functionality through room API
+      await room?.removeParticipant?.(participantId);
+    } catch (error) {
+      console.error("Failed to kick participant:", error);
+    }
+  };
+
+  // Connection quality indicator
+  const getConnectionIcon = (quality: ConnectionQuality) => {
+    switch (quality) {
+      case ConnectionQuality.Poor: return <SignalLow className="w-4 h-4 text-red-500" />;
+      case ConnectionQuality.Good: return <SignalMedium className="w-4 h-4 text-yellow-500" />;
+      case ConnectionQuality.Excellent: return <SignalHigh className="w-4 h-4 text-green-500" />;
+      default: return <Wifi className="w-4 h-4 text-gray-500" />;
+    }
+  };
+
+  // Don't render if no room connection
+  if (!room || !state) {
+    return (
+      <div className="flex items-center justify-center p-4 bg-background border border-border rounded-xl">
+        <div className="flex items-center gap-2 text-muted-foreground">
+          <Loader className="w-4 h-4 animate-spin" />
+          <span>Connecting to room...</span>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div 
+      className={cn(
+        "bg-background/95 backdrop-blur-sm border border-border rounded-xl shadow-lg transition-all duration-300",
+        state.compactMode ? "p-2" : "p-3",
+        state.isCanvasFocused ? "ring-2 ring-primary" : ""
+      )}
+      style={{
+        width: state.canvasSize.width,
+        minWidth: state.compactMode ? "300px" : "400px",
+      }}
+    >
+      {/* Main Controls Row */}
+      <div className="flex items-center justify-between gap-2">
+        {/* Essential Media Controls */}
+        <div className="flex items-center gap-1">
+          <button
+            onClick={toggleMic}
+            className={cn(
+              "flex items-center justify-center w-9 h-9 rounded-lg transition-all duration-200",
+              micEnabled 
+                ? "bg-background hover:bg-accent text-foreground" 
+                : "bg-red-500 hover:bg-red-600 text-white"
+            )}
+          >
+            {micEnabled ? <Mic className="w-4 h-4" /> : <MicOff className="w-4 h-4" />}
+          </button>
+
+          <button
+            onClick={toggleCamera}
+            className={cn(
+              "flex items-center justify-center w-9 h-9 rounded-lg transition-all duration-200",
+              cameraEnabled 
+                ? "bg-background hover:bg-accent text-foreground" 
+                : "bg-red-500 hover:bg-red-600 text-white"
+            )}
+          >
+            {cameraEnabled ? <Video className="w-4 h-4" /> : <VideoOff className="w-4 h-4" />}
+          </button>
+
+          {features.screenShare && (
+            <button
+              onClick={toggleScreenShare}
+              className={cn(
+                "flex items-center justify-center w-9 h-9 rounded-lg transition-all duration-200",
+                screenShareEnabled 
+                  ? "bg-blue-500 hover:bg-blue-600 text-white" 
+                  : "bg-background hover:bg-accent text-foreground"
               )}
+            >
+              <ScreenShare className="w-4 h-4" />
+            </button>
+          )}
+        </div>
+
+        {/* Participant Indicators - Smart Display */}
+        {state.showParticipants && enableParticipantControls && (
+          <div className="flex items-center gap-1 max-w-xs overflow-x-auto">
+            {participants.slice(0, state.compactMode ? 4 : 8).map((participant) => (
+              <ParticipantControls
+                key={participant.identity}
+                participant={participant}
+                isLocal={participant.isLocal}
+                isModerator={moderationEnabled}
+                onMute={() => handleMuteParticipant(participant.identity)}
+                onKick={() => handleKickParticipant(participant.identity)}
+                onPin={() => handlePinParticipant(participant.identity)}
+                isPinned={state.pinnedParticipants.includes(participant.identity)}
+              />
+            ))}
+            
+            {participants.length > (state.compactMode ? 4 : 8) && (
+              <div className="flex items-center justify-center w-8 h-8 rounded-full bg-muted text-muted-foreground text-xs">
+                +{participants.length - (state.compactMode ? 4 : 8)}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Smart Action Controls */}
+        <div className="flex items-center gap-1">
+          {/* Hand Raise - Context Aware */}
+          {features.handRaise && (
+            <button
+              onClick={handleRaiseHand}
+              className={cn(
+                "flex items-center justify-center w-9 h-9 rounded-lg transition-all duration-200",
+                state.handRaisedParticipants.includes(localParticipant.localParticipant.identity)
+                  ? "bg-yellow-500 hover:bg-yellow-600 text-white animate-pulse"
+                  : "bg-background hover:bg-accent text-foreground"
+              )}
+            >
+              <Hand className="w-4 h-4" />
+            </button>
+          )}
+
+          {/* Recording - Only show when relevant */}
+          {features.recording && (moderationEnabled || state.isRecording) && (
+            <button
+              onClick={handleStartRecording}
+              className={cn(
+                "flex items-center justify-center w-9 h-9 rounded-lg transition-all duration-200",
+                state.isRecording
+                  ? "bg-red-500 hover:bg-red-600 text-white"
+                  : "bg-background hover:bg-accent text-foreground"
+              )}
+            >
+              {state.isRecording ? <Square className="w-4 h-4" /> : <Circle className="w-4 h-4" />}
+            </button>
+          )}
+
+          {/* Connection Status - Always visible when poor */}
+          {showConnectionStatus && (
+            <div className="flex items-center justify-center w-9 h-9">
+              {getConnectionIcon(state.networkQuality)}
             </div>
           )}
 
-          {/* Communication Controls */}
-          {(defaultControls.chat || defaultControls.raiseHand || defaultControls.invite) && (
-            <div className="flex items-center gap-1">
-              {defaultControls.chat && (
-                <Tooltip content="Chat">
-                  <Button variant="outline" onClick={handleToggleChat} className="relative">
-                    <MessageSquare className="h-4 w-4" />
-                    {(state?.unreadMessages ?? 0) > 0 && (
-                      <div className="absolute -top-1 -right-1">
-                        <Badge variant="destructive">
-                          {(state?.unreadMessages ?? 0) > 9 ? '9+' : state?.unreadMessages}
-                        </Badge>
-                      </div>
-                    )}
-                  </Button>
-                </Tooltip>
-              )}
+          {/* Overflow Menu - Appears when needed */}
+          <button
+            onClick={() => setState({ ...state, showSettings: !state.showSettings })}
+            className="flex items-center justify-center w-9 h-9 rounded-lg bg-background hover:bg-accent text-foreground transition-all duration-200"
+          >
+            <MoreHorizontal className="w-4 h-4" />
+          </button>
 
-              {defaultControls.raiseHand && (
-                <Tooltip content={state?.handRaised ? "Lower hand" : "Raise hand"}>
-                  <Button
-                    variant={state?.handRaised ? "default" : "outline"}
-                    onClick={handleToggleRaiseHand}
-                  >
-                    <Hand className="h-4 w-4" />
-                  </Button>
-                </Tooltip>
-              )}
+          {/* Leave Call - Always accessible */}
+          <button
+            onClick={() => room.disconnect()}
+            className="flex items-center justify-center w-9 h-9 rounded-lg bg-red-500 hover:bg-red-600 text-white transition-all duration-200"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
 
-              {defaultControls.invite && (
-                <Tooltip content="Invite participants">
-                  <Button variant="outline">
-                    <UserPlus className="h-4 w-4" />
-                  </Button>
-                </Tooltip>
-              )}
+      {/* Expandable Settings Panel */}
+      {state.showSettings && (
+        <div className="mt-3 pt-3 border-t border-border">
+          <div className="grid grid-cols-2 gap-2 text-sm">
+            <div className="flex items-center justify-between">
+              <span>Participants</span>
+              <span className="text-muted-foreground">{participants.length}</span>
             </div>
-          )}
-
-          {/* Room Management */}
-          {(defaultControls.settings || defaultControls.participants) && (
-            <div className="flex items-center gap-1">
-              {defaultControls.settings && (
-                <Tooltip content="Settings">
-                  <Button variant="outline">
-                    <Settings className="h-4 w-4" />
-                  </Button>
-                </Tooltip>
-              )}
-
-              {defaultControls.participants && (
-                <Tooltip content="Participants">
-                  <Button variant="outline" className="relative">
-                    <Users className="h-4 w-4" />
-                    {(state?.participantCount ?? 0) > 0 && (
-                      <div className="absolute -top-1 -right-1">
-                        <Badge>
-                          {(state?.participantCount ?? 0) > 99 ? '99+' : state?.participantCount}
-                        </Badge>
-                      </div>
-                    )}
-                  </Button>
-                </Tooltip>
-              )}
-
-              <Tooltip content={`Connection: ${['Poor', 'Fair', 'Good', 'Excellent'][state?.connectionQuality ?? 3]}`}>
-                <div className="h-9 w-9 flex items-center justify-center">
-                  <ConnectionQualityIcon className={cn(
-                    "h-4 w-4",
-                    (state?.connectionQuality ?? 3) === 0 && "text-red-500",
-                    (state?.connectionQuality ?? 3) === 1 && "text-amber-500",
-                    (state?.connectionQuality ?? 3) === 2 && "text-emerald-500",
-                    (state?.connectionQuality ?? 3) === 3 && "text-emerald-500"
-                  )} />
-                </div>
-              </Tooltip>
+            <div className="flex items-center justify-between">
+              <span>Recording</span>
+              <span className={cn("text-xs", state.isRecording ? "text-red-500" : "text-muted-foreground")}>
+                {state.isRecording ? "LIVE" : "Off"}
+              </span>
             </div>
-          )}
+            {state.isRecording && state.recordingStartTime && (
+              <div className="col-span-2 flex items-center justify-between">
+                <span>Duration</span>
+                <span className="text-xs text-red-500">
+                  {Math.floor((Date.now() - state.recordingStartTime.getTime()) / 1000)}s
+                </span>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
-          {/* Voice Assistant & Layout Controls */}
-          {(defaultControls.assistant || defaultControls.layout) && (
-            <div className="flex items-center gap-1">
-              {defaultControls.assistant && state?.assistantState !== "idle" && (
-                <div className="px-2 py-1 bg-background border border-border rounded-md">
-                  {renderAssistantState()}
-                </div>
-              )}
-
-              {defaultControls.assistant && (
-                <Tooltip content="AI Assistant">
-                  <Button
-                    variant={state?.assistantState !== "idle" ? "default" : "outline"}
-                    onClick={handleToggleAssistant}
-                  >
-                    <Sparkles className="h-4 w-4" />
-                  </Button>
-                </Tooltip>
-              )}
-
-              {defaultControls.layout && (
-                <div className="flex border border-border rounded-md">
-                  <Tooltip content="Grid layout">
-                    <Button
-                      variant={state?.layoutMode === "grid" ? "default" : "outline"}
-                      onClick={() => handleToggleLayout("grid")}
-                      className="rounded-r-none border-0"
-                    >
-                      <LayoutGrid className="h-4 w-4" />
-                    </Button>
-                  </Tooltip>
-                  <Tooltip content="Focus layout">
-                    <Button
-                      variant={state?.layoutMode === "focus" ? "default" : "outline"}
-                      onClick={() => handleToggleLayout("focus")}
-                      className="rounded-l-none border-0"
-                    >
-                      <Maximize2 className="h-4 w-4" />
-                    </Button>
-                  </Tooltip>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Recording & Exit Controls */}
-          {(defaultControls.recording || defaultControls.accessibility || defaultControls.leave) && (
-            <div className="flex items-center gap-1">
-              {defaultControls.recording && (
-                <Tooltip content={state?.isRecording ? "Stop recording" : "Start recording"}>
-                  <Button
-                    variant={state?.isRecording ? "destructive" : "outline"}
-                    onClick={handleToggleRecording}
-                  >
-                    {state?.isRecording ? <RecordStop className="h-4 w-4" /> : <Record className="h-4 w-4" />}
-                  </Button>
-                </Tooltip>
-              )}
-
-              {defaultControls.accessibility && (
-                <Tooltip content="Accessibility options">
-                  <Button variant="outline">
-                    <Accessibility className="h-4 w-4" />
-                  </Button>
-                </Tooltip>
-              )}
-
-              {defaultControls.leave && (
-                <Tooltip content="Leave call">
-                  <Button variant="destructive">
-                    <X className="h-4 w-4" />
-                  </Button>
-                </Tooltip>
-              )}
-            </div>
-          )}
+      {/* Voice Command Feedback */}
+      {enableVoiceCommands && state.lastVoiceCommand && (
+        <div className="mt-2 px-2 py-1 bg-primary/10 border border-primary/20 rounded text-xs text-primary">
+          Voice command: {state.lastVoiceCommand.replace('_', ' ').toLowerCase()}
         </div>
       )}
     </div>
   );
 }
 
-// Default export for convenience
 export default LivekitToolbar; 

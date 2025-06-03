@@ -97,7 +97,56 @@ class ConversationalAssistant(Agent): # Renamed for clarity
             logging.info(f"event: {event}")
             logging.info(f"event type: {type(event)}")
             if event.type == stt.SpeechEventType.FINAL_TRANSCRIPT:
-                event.alternatives[0].text = f"{event.alternatives[0].text}"
+                transcript_text = event.alternatives[0].text
+                event.alternatives[0].text = transcript_text
+                
+                # Send real-time transcription to all remote participants via data channel
+                transcription_data = {
+                    "type": "live_transcription",
+                    "text": transcript_text,
+                    "speaker": participant_name,
+                    "timestamp": asyncio.get_event_loop().time(),
+                    "is_final": True
+                }
+                
+                try:
+                    # Broadcast to all remote participants (frontend clients)
+                    if room.remote_participants:
+                        for participant_identity, participant in room.remote_participants.items():
+                            await room.local_participant.publish_data(
+                                data=json.dumps(transcription_data).encode('utf-8'),
+                                destination=[participant_identity],
+                                topic="transcription"
+                            )
+                            logging.info(f"Sent transcription to {participant_identity}: '{transcript_text[:50]}...'")
+                    else:
+                        logging.warning("No remote participants to send transcription to")
+                        
+                except Exception as e:
+                    logging.error(f"Error sending transcription data: {e}", exc_info=True)
+                    
+            elif event.type == stt.SpeechEventType.INTERIM_TRANSCRIPT:
+                # Also send interim transcripts for live feedback
+                interim_text = event.alternatives[0].text
+                transcription_data = {
+                    "type": "live_transcription",
+                    "text": interim_text,
+                    "speaker": participant_name,
+                    "timestamp": asyncio.get_event_loop().time(),
+                    "is_final": False
+                }
+                
+                try:
+                    if room.remote_participants:
+                        for participant_identity, participant in room.remote_participants.items():
+                            await room.local_participant.publish_data(
+                                data=json.dumps(transcription_data).encode('utf-8'),
+                                destination=[participant_identity],
+                                topic="transcription"
+                            )
+                except Exception as e:
+                    logging.error(f"Error sending interim transcription: {e}")
+                    
             yield event
 
     async def llm_node(
@@ -302,12 +351,50 @@ class ConversationalAssistant(Agent): # Renamed for clarity
             return result
 
 async def entrypoint(ctx: JobContext):
+    logging.info("=== AGENT ENTRYPOINT CALLED ===")
     logging.info(f"ctx: {ctx}")
     await ctx.connect()
     
-    # Don't wait for participant - just join the room immediately
-    logging.info(f"Joining room: {ctx.room.name}")
+    # Force the agent to join 'tambo-canvas-room' regardless of context
+    room_name = "tambo-canvas-room"
+    max_retries = 3
+    retry_delay = 2.0
     
+    # Enhanced room joining with retry logic
+    for attempt in range(max_retries):
+        try:
+            if ctx.room.name != room_name:
+                logging.info(f"Switching agent to join room: {room_name} (attempt {attempt + 1}/{max_retries})")
+                try:
+                    await ctx.client.create_room(room_name)
+                    logging.info(f"Room '{room_name}' created successfully")
+                except Exception as e:
+                    logging.warning(f"Room may already exist: {e}")
+                
+                try:
+                    logging.info(f"Attempting to join room: {room_name}")
+                    ctx.room = await ctx.client.join_room(room_name)
+                    logging.info(f"Successfully joined room: {ctx.room.name}")
+                    break  # Successfully joined, exit retry loop
+                except Exception as e:
+                    logging.error(f"Failed to join room (attempt {attempt + 1}): {e}")
+                    if attempt < max_retries - 1:
+                        logging.info(f"Retrying in {retry_delay} seconds...")
+                        await asyncio.sleep(retry_delay)
+                        retry_delay *= 1.5  # Exponential backoff
+                    else:
+                        raise  # Re-raise the last exception if all retries failed
+            else:
+                logging.info(f"Agent already in correct room: {ctx.room.name}")
+                break
+                
+        except Exception as e:
+            if attempt == max_retries - 1:
+                logging.error(f"Failed to join room after {max_retries} attempts: {e}")
+                raise
+            await asyncio.sleep(retry_delay)
+    
+    # Enhanced session configuration
     session = AgentSession(
         llm=openai.LLM(
             model="gpt-4.1-nano",
@@ -326,34 +413,152 @@ async def entrypoint(ctx: JobContext):
     )
     logging.info(f"session: {session}")
     
-    # @ctx.room.on("participant_connected")
-    # def on_participant_connected(participant):
-    #     logging.info(f"participant connected: {participant}")
-    #     # logging.info(f"participants in room: {ctx.room.participant}")
-    #     logging.info(f"room participants: {ctx.room.remote_participants}")
+    # Enhanced participant event handlers
+    participant_join_count = 0
+    
+    @ctx.room.on("participant_connected")
+    def on_participant_connected(participant):
+        nonlocal participant_join_count
+        participant_join_count += 1
+        
+        logging.info(f"=== PARTICIPANT CONNECTED EVENT ===")
+        logging.info(f"Participant: {participant.identity} (Name: {participant.name})")
+        logging.info(f"Participant SID: {participant.sid}")
+        logging.info(f"Total participants now: {len(ctx.room.remote_participants) + 1}")  # +1 for local
+        logging.info(f"Total join events: {participant_join_count}")
+        
+        # Check if this is a real user (not an agent)
+        is_real_user = not any(keyword in participant.identity.lower() for keyword in ['agent', 'bot', 'ai'])
+        
+        if is_real_user:
+            logging.info(f"🎉 Real user joined: {participant.identity}")
+            
+            # Log all current participants for context
+            all_participants = []
+            all_participants.append(f"Local: {ctx.room.local_participant.identity}")
+            for p_id, p in ctx.room.remote_participants.items():
+                all_participants.append(f"Remote: {p_id}")
+            
+            logging.info(f"Current room participants: {all_participants}")
+        else:
+            logging.info(f"🤖 Another agent/bot joined: {participant.identity}")
+
+    @ctx.room.on("participant_disconnected")
+    def on_participant_disconnected(participant):
+        logging.info(f"=== PARTICIPANT DISCONNECTED EVENT ===")
+        logging.info(f"Participant left: {participant.identity}")
+        logging.info(f"Remaining participants: {len(ctx.room.remote_participants)}")
+        
+        # If all real users leave, the agent could optionally leave too
+        remaining_real_users = [
+            p for p in ctx.room.remote_participants.values()
+            if not any(keyword in p.identity.lower() for keyword in ['agent', 'bot', 'ai'])
+        ]
+        
+        if len(remaining_real_users) == 0:
+            logging.info("ℹ️ No real users remaining in room")
+        else:
+            logging.info(f"👥 {len(remaining_real_users)} real users still in room")
+
+    @ctx.room.on("room_metadata_changed")
+    def on_room_metadata_changed(metadata):
+        logging.info(f"Room metadata changed: {metadata}")
+
+    # Enhanced connection monitoring
+    @ctx.room.on("disconnected")
+    def on_disconnected():
+        logging.warning("🔌 Agent disconnected from room!")
+
+    @ctx.room.on("reconnecting") 
+    def on_reconnecting():
+        logging.info("🔄 Agent reconnecting to room...")
+
+    @ctx.room.on("reconnected")
+    def on_reconnected():
+        logging.info("✅ Agent reconnected to room!")
 
     logger.info("creating ConversationalAssistant...")
     assistant = ConversationalAssistant()
     logger.info("Starting AgentSession...")
-    await session.start(
-        room=ctx.room,
-        agent=assistant,
-        room_input_options=RoomInputOptions(
-            text_enabled=True,
-            audio_enabled=True,
-            noise_cancellation=noise_cancellation.BVC(),
-        ),
-        room_output_options=RoomOutputOptions(
-            transcription_enabled=True,
-            audio_enabled=True
+    
+    # File-based trigger monitoring for development
+    async def monitor_trigger_file():
+        """Monitor for trigger file in development mode"""
+        trigger_file = '/tmp/agent-trigger.json'
+        last_check = 0
+        
+        while True:
+            try:
+                if os.path.exists(trigger_file):
+                    stat = os.stat(trigger_file)
+                    if stat.st_mtime > last_check:
+                        last_check = stat.st_mtime
+                        with open(trigger_file, 'r') as f:
+                            trigger_data = json.loads(f.read())
+                        
+                        logging.info(f"📁 [Agent] Trigger file detected: {trigger_data}")
+                        
+                        # Check if this trigger is for our room
+                        if trigger_data.get('roomName') == room_name and trigger_data.get('action') == 'join_room':
+                            logging.info(f"🎯 [Agent] Processing trigger for room: {room_name}")
+                            
+                            # The agent is already in the room, just log the trigger
+                            # In a more complex setup, you could implement additional logic here
+                            logging.info(f"✅ [Agent] Agent already active in room {room_name}")
+                            
+                            # Optionally remove the trigger file after processing
+                            try:
+                                os.remove(trigger_file)
+                                logging.info("🧹 [Agent] Cleaned up trigger file")
+                            except:
+                                pass
+                
+                await asyncio.sleep(2)  # Check every 2 seconds
+                
+            except Exception as e:
+                logging.debug(f"Trigger file monitoring error: {e}")
+                await asyncio.sleep(5)  # Longer delay on error
+    
+    try:
+        await session.start(
+            room=ctx.room,
+            agent=assistant,
+            room_input_options=RoomInputOptions(
+                text_enabled=True,
+                audio_enabled=True,
+                noise_cancellation=noise_cancellation.BVC(),
+            ),
+            room_output_options=RoomOutputOptions(
+                transcription_enabled=True,
+                audio_enabled=True
+            )
         )
-    )
-    logger.info("AgentSession started")
+        logger.info("✅ AgentSession started successfully")
+        
+        # Optional: Send a welcome message or status update
+        await session.say("")
+        
+        # Log initial room state
+        logging.info(f"🏠 Agent ready in room '{ctx.room.name}'")
+        logging.info(f"📊 Initial participant count: {len(ctx.room.remote_participants)}")
+        
+        # Start trigger file monitoring in development mode
+        if os.getenv('NODE_ENV') == 'development' or os.getenv('AGENT_DEV_MODE') == 'true':
+            logging.info("🔧 [Agent] Starting development trigger file monitoring...")
+            asyncio.create_task(monitor_trigger_file())
+        
+    except Exception as e:
+        logging.error(f"💥 Failed to start AgentSession: {e}", exc_info=True)
+        raise
 
-    await session.say("")
-    # await session.generate_reply(
-    #     instructions="Greet the user and offer your assistance."
-    # )
+    # Keep the session alive and handle any cleanup
+    try:
+        # The session will handle the main loop
+        # We can add any additional monitoring here if needed
+        pass
+    except Exception as e:
+        logging.error(f"💥 Error in agent main loop: {e}", exc_info=True)
+        raise
 
 def prewarm(proc: agents.JobProcess):
     proc.userdata["vad"] = silero.VAD.load(
@@ -370,7 +575,7 @@ if __name__ == "__main__":
             entrypoint_fnc=entrypoint,
             prewarm_fnc=prewarm,
             shutdown_process_timeout=60 * 5 * 100,
-            # agent_name="Jaime AI",
+            agent_name="Jaime AI",  # Explicitly set agent name to match dispatch API
             worker_type=agents.worker.WorkerType.ROOM,  # Join all rooms automatically
         ),
     )

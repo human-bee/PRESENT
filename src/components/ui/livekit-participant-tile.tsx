@@ -90,19 +90,12 @@ export function LivekitParticipantTile({
   const participants = useParticipants();
   const { localParticipant } = useLocalParticipant();
   
+  // Only log errors, not regular state changes
   React.useEffect(() => {
-    console.log(`🎬 [ParticipantTile-${participantIdentity || 'all'}] Component state:`, {
-      participantIdentity,
-      hasCanvasContext: !!canvasLiveKit,
-      isConnected: canvasLiveKit?.isConnected,
-      roomName: canvasLiveKit?.roomName,
-      hasRoom: !!room,
-      roomState: room?.state,
-      participantCount: participants.length,
-      localParticipantIdentity: localParticipant?.identity,
-      timestamp: new Date().toISOString()
-    });
-  }, [participantIdentity, canvasLiveKit, room, participants, localParticipant]);
+    if (!canvasLiveKit) {
+      console.warn(`[ParticipantTile-${participantIdentity || 'all'}] No canvas context found - participant tiles may not work`);
+    }
+  }, [participantIdentity, canvasLiveKit]);
 
   // If no room connector or not connected, show helpful message
   if (!canvasLiveKit || !canvasLiveKit.isConnected || !room) {

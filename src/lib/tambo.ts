@@ -44,6 +44,10 @@ import {
   LivekitRoomConnector,
   livekitRoomConnectorSchema,
 } from "@/components/ui/livekit-room-connector";
+import {
+  AIImageGenerator,
+  aiImageGeneratorSchema,
+} from "@/components/ui/ai-image-generator";
 import type { TamboComponent } from "@tambo-ai/react";
 import { TamboTool } from "@tambo-ai/react";
 
@@ -130,6 +134,13 @@ export const components: TamboComponent[] = [
       "Individual participant video/audio tile with real-time LiveKit integration. REQUIRES LivekitRoomConnector to be connected first. Shows participant video feed, audio controls, connection quality, speaking indicators, and individual toolbar controls. Automatically detects local vs remote participants and AI agents (with bot icons). Features minimize/expand functionality, audio level visualization, and drag-and-drop capability on the canvas.",
     component: LivekitParticipantTile,
     propsSchema: livekitParticipantTileSchema,
+  },
+  {
+    name: "AIImageGenerator",
+    description:
+      "A real-time AI image generator that creates images from text prompts using Together AI's FLUX model. Features include multiple art styles (pop art, minimal, cyberpunk, etc.), generation history, canvas integration, download capability, iterative mode for consistency, and speech-to-text integration for voice-driven image generation. Perfect for creative projects, visual brainstorming, concept art generation, and real-time visual content creation. Automatically debounces prompt changes and provides visual feedback during generation. Can be controlled via microphone for hands-free operation.",
+    component: AIImageGenerator,
+    propsSchema: aiImageGeneratorSchema,
   },
   // Add more components here
 ];

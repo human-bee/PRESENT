@@ -19,6 +19,27 @@ const nextConfig: NextConfig = {
     // Remove this line once TypeScript errors are fixed!
     ignoreBuildErrors: true,
   },
+  
+  // Fix tldraw multiple instances issue
+  webpack: (config, { isServer }) => {
+    // Ensure single instance of tldraw libraries
+    if (!isServer) {
+      config.resolve.alias = {
+        ...config.resolve.alias,
+        '@tldraw/utils': require.resolve('@tldraw/utils'),
+        '@tldraw/state': require.resolve('@tldraw/state'),
+        '@tldraw/state-react': require.resolve('@tldraw/state-react'),
+        '@tldraw/store': require.resolve('@tldraw/store'),
+        '@tldraw/validate': require.resolve('@tldraw/validate'),
+        '@tldraw/tlschema': require.resolve('@tldraw/tlschema'),
+        '@tldraw/editor': require.resolve('@tldraw/editor'),
+        'tldraw': require.resolve('tldraw'),
+      };
+    }
+    
+    return config;
+  },
+  
   /* config options here */
 };
 

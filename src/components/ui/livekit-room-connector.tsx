@@ -47,6 +47,8 @@ import {
   AlertCircle,
   Users,
   Copy,
+  Bot,
+  BotOff,
 } from "lucide-react";
 
 // Define the component props schema with Zod
@@ -68,6 +70,8 @@ type LivekitRoomConnectorState = {
   participantCount: number;
   errorMessage: string | null;
   token: string | null;
+  agentStatus: "not-requested" | "dispatching" | "joined" | "failed";
+  agentIdentity: string | null;
 };
 
 // Context to provide LiveKit room to child components on canvas
@@ -97,11 +101,13 @@ export function LivekitRoomConnector({
   const getInitialState = (): LivekitRoomConnectorState => {
     if (!room) {
       return {
-        connectionState: "disconnected",
-        isMinimized: false,
-        participantCount: 0,
-        errorMessage: null,
-        token: null,
+      connectionState: "disconnected",
+      isMinimized: false,
+      participantCount: 0,
+      errorMessage: null,
+      token: null,
+      agentStatus: "not-requested",
+      agentIdentity: null,
       };
     }
     
@@ -115,6 +121,8 @@ export function LivekitRoomConnector({
       participantCount: room.numParticipants,
       errorMessage: null,
       token: null, // We don't know the token from room state
+      agentStatus: "not-requested",
+      agentIdentity: null,
     };
   };
   
@@ -133,20 +141,6 @@ export function LivekitRoomConnector({
   
   // Component lifecycle tracking
   React.useEffect(() => {
-    console.log(`🔧 [LiveKitConnector-${roomName}] Component mounted with external room`, {
-      roomName,
-      userName,
-      serverUrl,
-      wsUrlFromEnv: process.env.NEXT_PUBLIC_LIVEKIT_URL,
-      lkServerUrlFromEnv: process.env.NEXT_PUBLIC_LK_SERVER_URL,
-      finalWsUrl: wsUrl,
-      audioOnly,
-      autoConnect,
-      hasRoom: !!room,
-      roomState: room?.state,
-      timestamp: new Date().toISOString()
-    });
-
     // Check for missing environment variables
     if (!wsUrl) {
       console.error(`❌ [LiveKitConnector-${roomName}] Missing LiveKit server URL!`, {
@@ -157,100 +151,177 @@ export function LivekitRoomConnector({
 
     // Return cleanup function for unmount logging
     return () => {
-      console.log(`🧹 [LiveKitConnector-${roomName}] Component unmounting`, {
-        timestamp: new Date().toISOString()
-      });
+      // Cleanup without excessive logging
     };
-  }, []); // Removed room, roomName, wsUrl from deps as they are stable after mount or derived
+  }, []);
 
-  // Track room connection state and attach/detach listeners
+  // Add agent dispatch functionality
+  const triggerAgentJoin = React.useCallback(async () => {
+    try {
+      console.log(`🤖 [LiveKitConnector-${roomName}] Triggering agent join...`);
+      
+      // Update state to show dispatching
+      setState(prev => prev ? { ...prev, agentStatus: "dispatching" } : { ...getInitialState(), agentStatus: "dispatching" });
+      
+      // Call API to trigger agent dispatch
+      const response = await fetch('/api/agent/dispatch', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          roomName,
+          trigger: 'participant_connected',
+          timestamp: Date.now(),
+        }),
+      });
+      
+      if (response.ok) {
+        const result = await response.json();
+        console.log(`✅ [LiveKitConnector-${roomName}] Agent dispatch triggered:`, result);
+        
+        // If dispatch was successful, wait a bit to see if agent actually joins
+        // Then timeout if no agent joins within reasonable time
+        setTimeout(() => {
+          if (stateRef.current?.agentStatus === "dispatching") {
+            console.warn(`⏰ [LiveKitConnector-${roomName}] Agent dispatch timeout - no agent joined within 30 seconds`);
+            setState(prev => prev ? { 
+              ...prev, 
+              agentStatus: "failed",
+              errorMessage: "Agent failed to join within timeout period"
+            } : { 
+              ...getInitialState(), 
+              agentStatus: "failed",
+              errorMessage: "Agent failed to join within timeout period" 
+            });
+          }
+        }, 30000); // 30 second timeout
+        
+      } else {
+        const errorData = await response.json().catch(() => ({}));
+        console.warn(`⚠️ [LiveKitConnector-${roomName}] Agent dispatch failed:`, response.status, errorData);
+        setState(prev => prev ? { 
+          ...prev, 
+          agentStatus: "failed",
+          errorMessage: `Dispatch failed: ${errorData.message || response.statusText}`
+        } : { 
+          ...getInitialState(), 
+          agentStatus: "failed",
+          errorMessage: `Dispatch failed: ${errorData.message || response.statusText}`
+        });
+      }
+    } catch (error) {
+      console.error(`❌ [LiveKitConnector-${roomName}] Agent dispatch error:`, error);
+      setState(prev => prev ? { 
+        ...prev, 
+        agentStatus: "failed",
+        errorMessage: error instanceof Error ? error.message : "Unknown dispatch error"
+      } : { 
+        ...getInitialState(), 
+        agentStatus: "failed",
+        errorMessage: error instanceof Error ? error.message : "Unknown dispatch error"
+      });
+    }
+  }, [roomName, setState]);
+
+  // Enhanced participant connection handler with agent triggering
   React.useEffect(() => {
-    if (!room) return;
+    if (!room) {
+      console.error(`❌ [LiveKitConnector-${roomName}] No room instance available`);
+      return;
+    }
 
+    // Event handlers for room state changes
     const handleConnected = () => {
-      console.log(`✅ [LiveKitConnector-${roomName}] Room connected`);
-      if (stateRef.current) {
-        setState({ ...stateRef.current, connectionState: "connected" });
+      if (stateRef.current?.connectionState !== "connected") {
+        console.log(`✅ [LiveKitConnector-${roomName}] User connected to room`);
+        setState(prev => prev ? { ...prev, connectionState: "connected", participantCount: room.numParticipants, errorMessage: null } : getInitialState());
+        
+        // Trigger agent join when first user connects successfully
+        // Only if we're the first real participant (excluding the agent)
+        const nonAgentParticipants = Array.from(room.remoteParticipants.values())
+          .filter(p => !p.identity.toLowerCase().includes('agent') && 
+                      !p.identity.toLowerCase().includes('bot') && 
+                      !p.identity.toLowerCase().includes('ai'));
+        
+        if (nonAgentParticipants.length === 0) {
+          console.log(`🤖 [LiveKitConnector-${roomName}] First participant connected, triggering agent...`);
+          // Small delay to ensure room is fully established
+          setTimeout(() => {
+            triggerAgentJoin();
+          }, 2000);
+        }
       }
     };
 
     const handleDisconnected = (reason?: DisconnectReason) => {
-      console.log(`❌ [LiveKitConnector-${roomName}] Room disconnected:`, reason);
-      if (stateRef.current) {
-        setState({ ...stateRef.current, connectionState: "disconnected", token: null, participantCount: 0 });
+      if (stateRef.current?.connectionState !== "disconnected") {
+        setState(prev => prev ? { ...prev, connectionState: "disconnected", participantCount: 0, errorMessage: reason ? `Disconnected: ${reason}` : null } : getInitialState());
       }
     };
 
     const handleReconnecting = () => {
-      console.log(`🔄 [LiveKitConnector-${roomName}] Room reconnecting`);
-      if (stateRef.current) {
-        setState({ ...stateRef.current, connectionState: "connecting" });
+      if (stateRef.current?.connectionState !== "connecting") {
+        setState(prev => prev ? { ...prev, connectionState: "connecting", errorMessage: "Reconnecting..." } : getInitialState());
       }
     };
 
     const handleReconnected = () => {
-      console.log(`✅ [LiveKitConnector-${roomName}] Room reconnected`);
-      if (stateRef.current) {
-        setState({ ...stateRef.current, connectionState: "connected" });
+      if (stateRef.current?.connectionState !== "connected") {
+        setState(prev => prev ? { ...prev, connectionState: "connected", participantCount: room.numParticipants, errorMessage: null } : getInitialState());
       }
     };
 
     const handleParticipantConnected = (participant: Participant) => {
-      const count = room.numParticipants;
-      const participants = Array.from(room.remoteParticipants.values());
-      console.log(`👥 [LiveKitConnector-${roomName}] Participant connected:`, {
-        newParticipant: {
-          identity: participant?.identity,
-          sid: participant?.sid,
-          name: participant?.name,
-          metadata: participant?.metadata,
-          isLocal: participant === room.localParticipant
-        },
-        totalCount: count,
-        allParticipants: participants.map(p => ({
-          identity: p.identity,
-          name: p.name,
-          isAgent: p.identity?.includes('agent') || p.metadata?.includes('agent')
-        })),
-        localParticipant: {
-          identity: room.localParticipant?.identity,
-          sid: room.localParticipant?.sid
-        }
-      });
-      if (stateRef.current) {
-        setState({ ...stateRef.current, participantCount: count });
+      console.log(`👥 [LiveKitConnector-${roomName}] Participant connected:`, participant.identity);
+      
+      // Check if this is an agent joining and update state accordingly
+      const isAgent = participant.identity.toLowerCase().includes('agent') || 
+                      participant.identity.toLowerCase().includes('bot') ||
+                      participant.identity.toLowerCase().includes('ai');
+      
+      if (isAgent) {
+        console.log(`🤖 [LiveKitConnector-${roomName}] AI Agent joined the room: ${participant.identity}`);
+        setState(prev => prev ? { 
+          ...prev, 
+          participantCount: room.numParticipants,
+          agentStatus: "joined",
+          agentIdentity: participant.identity
+        } : { ...getInitialState(), participantCount: room.numParticipants, agentStatus: "joined", agentIdentity: participant.identity });
+      } else {
+        setState(prev => prev ? { ...prev, participantCount: room.numParticipants } : getInitialState());
       }
     };
 
     const handleParticipantDisconnected = (participant: Participant) => {
-      const count = room.numParticipants;
-      console.log(`👥 [LiveKitConnector-${roomName}] Participant disconnected:`, {
-        disconnectedParticipant: {
-          identity: participant?.identity,
-          sid: participant?.sid,
-          name: participant?.name
-        },
-        remainingCount: count
-      });
-      if (stateRef.current) {
-        setState({ ...stateRef.current, participantCount: count });
+      console.log(`👥 [LiveKitConnector-${roomName}] Participant disconnected:`, participant.identity);
+      
+      // Check if this was an agent leaving
+      const isAgent = participant.identity.toLowerCase().includes('agent') || 
+                      participant.identity.toLowerCase().includes('bot') ||
+                      participant.identity.toLowerCase().includes('ai');
+      
+      if (isAgent && stateRef.current?.agentIdentity === participant.identity) {
+        console.log(`🤖 [LiveKitConnector-${roomName}] AI Agent left the room: ${participant.identity}`);
+        setState(prev => prev ? { 
+          ...prev, 
+          participantCount: room.numParticipants,
+          agentStatus: "not-requested",
+          agentIdentity: null
+        } : getInitialState());
+      } else {
+        setState(prev => prev ? { ...prev, participantCount: room.numParticipants } : getInitialState());
       }
     };
 
-    // Set initial connection state based on current room status, only if different
+    // Check initial state
     const newConnState = room.state === ConnectionState.Connected ? "connected" :
-                          room.state === ConnectionState.Connecting || room.state === ConnectionState.Reconnecting ? "connecting" :
-                          "disconnected";
+                        room.state === ConnectionState.Connecting || room.state === ConnectionState.Reconnecting ? "connecting" :
+                        "disconnected";
     const newParticipantCount = room.numParticipants;
 
     if (stateRef.current && (stateRef.current.connectionState !== newConnState || stateRef.current.participantCount !== newParticipantCount)) {
-      console.log(`📊 [LiveKitConnector-${roomName}] Updating initial state in effect:`, { 
-        prevConnectionState: stateRef.current?.connectionState, newConnectionState: newConnState,
-        prevParticipantCount: stateRef.current?.participantCount, newParticipantCount 
-      });
       setState({ ...stateRef.current, connectionState: newConnState, participantCount: newParticipantCount });
-    } else {
-      console.log(`📊 [LiveKitConnector-${roomName}] Initial state matches current room status, no update needed.`);
     }
 
     // Listen to room events
@@ -263,7 +334,6 @@ export function LivekitRoomConnector({
 
     // Cleanup listeners
     return () => {
-      console.log(`🧹 [LiveKitConnector-${roomName}] Cleaning up room event listeners`);
       room.off(RoomEvent.Connected, handleConnected);
       room.off(RoomEvent.Disconnected, handleDisconnected);
       room.off(RoomEvent.Reconnecting, handleReconnecting);
@@ -271,186 +341,102 @@ export function LivekitRoomConnector({
       room.off(RoomEvent.ParticipantConnected, handleParticipantConnected);
       room.off(RoomEvent.ParticipantDisconnected, handleParticipantDisconnected);
     };
-  }, [room, roomName, setState]); // setState from Tambo should be stable
+  }, [room, roomName, setState, triggerAgentJoin]); // Added triggerAgentJoin to dependencies
 
   // Track re-renders and token fetch state
   const renderCount = React.useRef(0);
   const tokenFetchInProgress = React.useRef(false);
   renderCount.current++;
 
-  // Generate or fetch token
+  // Token fetch and room connection effect
   React.useEffect(() => {
-    console.log(`🎯 [LiveKitConnector-${roomName}] Token fetch effect triggered`, {
-      connectionState: state?.connectionState,
-      hasToken: !!state?.token,
-      tokenFetchInProgress: tokenFetchInProgress.current,
-      roomName,
-      userName,
-      timestamp: new Date().toISOString()
-    });
+    if (!stateRef.current || !room) return;
 
-    if (state?.connectionState !== "connecting" || state?.token || tokenFetchInProgress.current) {
-      console.log(`🎯 [LiveKitConnector-${roomName}] Skipping token fetch`, {
-        reason: state?.connectionState !== "connecting" ? "not connecting" : 
-                state?.token ? "already have token" : "fetch in progress",
-        connectionState: state?.connectionState,
-        hasToken: !!state?.token,
-        tokenFetchInProgress: tokenFetchInProgress.current
-      });
-      return; // Don't fetch if not connecting, already have token, or fetch in progress
+    const shouldFetchToken = 
+      stateRef.current.connectionState === "connecting" && 
+      !stateRef.current.token && 
+      !tokenFetchInProgress.current;
+
+    if (!shouldFetchToken) {
+      return;
     }
 
-    let isActive = true; // Flag to prevent setting state if component unmounted
-
-    const fetchToken = async () => {
+    const fetchTokenAndConnect = async () => {
+      tokenFetchInProgress.current = true;
+      
       try {
-        tokenFetchInProgress.current = true;
-        console.log(`🔑 [LiveKitConnector-${roomName}] Starting token fetch`, {
-          url: `/api/token?room=${roomName}&username=${userName}`,
-          timestamp: new Date().toISOString()
-        });
-
-        const response = await fetch(`/api/token?room=${roomName}&username=${userName}`);
-        
-        console.log(`🔑 [LiveKitConnector-${roomName}] Token API response`, {
-          status: response.status,
-          statusText: response.statusText,
-          ok: response.ok,
-          url: response.url
-        });
+        console.log(`🎯 [LiveKitConnector-${roomName}] Fetching token...`);
+        const response = await fetch(`/api/token?roomName=${encodeURIComponent(roomName)}&username=${encodeURIComponent(userName)}`);
         
         if (!response.ok) {
-          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+          throw new Error(`Token fetch failed: ${response.status} ${response.statusText}`);
         }
         
         const data = await response.json();
+        const token = data.accessToken || data.token;
         
-        console.log(`🔑 [LiveKitConnector-${roomName}] Token received successfully`, {
-          hasToken: !!data.accessToken,
-          tokenLength: data.accessToken?.length || 0,
-          isActive,
-          currentConnectionState: state?.connectionState, // Log state at time of receiving token
-          responseData: data
-        });
+        if (!token) {
+          throw new Error('No token received from API');
+        }
         
-        // Only update state if component is still active and we're still connecting
-        if (isActive) {
-          if (stateRef.current && stateRef.current.connectionState === 'connecting') {
-            const updated = { ...stateRef.current, token: data.accessToken };
-            setState(updated);
-            // Connect to room with token
-            if (room && wsUrl && data.accessToken) {
-              console.log(`🔌 [LiveKitConnector-${roomName}] Connecting to room with new token`);
-              room.connect(wsUrl, data.accessToken, {
-                autoSubscribe: true,
-              }).then(async () => {
-                // After connection, enable camera and microphone
-                try {
-                  console.log(`📹 [LiveKitConnector-${roomName}] Enabling camera and microphone`);
-                  await room.localParticipant.setCameraEnabled(true);
-                  await room.localParticipant.setMicrophoneEnabled(true);
-                  console.log(`✅ [LiveKitConnector-${roomName}] Camera and microphone enabled`);
-                  
-                  // Request the LiveKit agent to join the room
-                  console.log(`🤖 [LiveKitConnector-${roomName}] Requesting LiveKit agent to join`);
-                  try {
-                    // Send a data message to trigger agent join
-                    const agentRequest = {
-                      type: 'agent_request',
-                      action: 'join',
-                      timestamp: new Date().toISOString()
-                    };
-                    
-                    // Publish data message to request agent
-                    await room.localParticipant.publishData(
-                      new TextEncoder().encode(JSON.stringify(agentRequest)),
-                      { reliable: true }
-                    );
-                    
-                    console.log(`✅ [LiveKitConnector-${roomName}] Agent join request sent via data channel`);
-                  } catch (agentError) {
-                    console.error(`⚠️ [LiveKitConnector-${roomName}] Failed to request agent:`, agentError);
-                  }
-                } catch (error) {
-                  console.error(`⚠️ [LiveKitConnector-${roomName}] Failed to enable camera/mic:`, error);
-                  // Non-fatal error - user might have denied permissions
-                }
-              }).catch(error => {
-                console.error(`❌ [LiveKitConnector-${roomName}] Room connection failed:`, error);
-                if (stateRef.current) {
-                  setState({
-                    ...stateRef.current, 
-                    connectionState: "error",
-                    errorMessage: `Failed to connect: ${error instanceof Error ? error.message : String(error)}`
-                  });
-                }
-              });
-            }
-          } else {
-            console.warn(`🔑 [LiveKitConnector-${roomName}] Token received but component inactive`);
-          }
+        console.log(`🔑 [LiveKitConnector-${roomName}] Token received, connecting to room...`);
+        
+        // Update state with token
+        setState(prev => prev ? { ...prev, token, errorMessage: null } : { ...getInitialState(), token });
+        
+        // Connect to the room using the token
+        if (wsUrl) {
+          console.log(`🔌 [LiveKitConnector-${roomName}] Calling room.connect() with URL: ${wsUrl}`);
+          await room.connect(wsUrl, token);
+          console.log(`✅ [LiveKitConnector-${roomName}] Room.connect() called successfully`);
         } else {
-          console.warn(`🔑 [LiveKitConnector-${roomName}] Token received but component inactive`);
+          throw new Error('Missing LiveKit server URL');
         }
-      } catch (error: unknown) {
-        console.error(`❌ [LiveKitConnector-${roomName}] Token fetch failed:`, error);
         
-        // Only update state if component is still active
-        if (isActive) {
-          console.log(`❌ [LiveKitConnector-${roomName}] Setting error state after fetch failure`);
-          if (stateRef.current) {
-            setState({
-              ...stateRef.current, 
-              connectionState: "error",
-              errorMessage: `Failed to get access token: ${error instanceof Error ? error.message : String(error)}`
-            });
-          }
-        }
+      } catch (error) {
+        console.error(`❌ [LiveKitConnector-${roomName}] Connection failed:`, error);
+        setState(prev => prev ? { 
+          ...prev, 
+          connectionState: "error", 
+          errorMessage: error instanceof Error ? error.message : 'Connection failed'
+        } : { ...getInitialState(), connectionState: "error", errorMessage: error instanceof Error ? error.message : 'Connection failed' });
       } finally {
         tokenFetchInProgress.current = false;
       }
     };
 
-    // Add a small delay to prevent rapid requests
-    const timer = setTimeout(() => {
-      if (isActive) {
-        console.log(`⏰ [LiveKitConnector-${roomName}] Token fetch timer triggered`);
-        fetchToken();
-      } else {
-        console.log(`⏰ [LiveKitConnector-${roomName}] Token fetch timer cancelled (component inactive)`);
-      }
-    }, 500);
+    fetchTokenAndConnect();
+  }, [stateRef.current?.connectionState, stateRef.current?.token, roomName, userName, setState, room, wsUrl]);
 
-    // Cleanup function
-    return () => {
-      console.log(`🧹 [LiveKitConnector-${roomName}] Token fetch effect cleanup`);
-      isActive = false;
-      clearTimeout(timer);
-    };
-  }, [state?.connectionState, state?.token, roomName, userName, setState, room, wsUrl]); // Removed full 'state' from deps
-
-  // Auto-connect on mount if requested - but only once
+  // Auto-connect effect (if enabled)
   React.useEffect(() => {
-    console.log(`🤖 [LiveKitConnector-${roomName}] Auto-connect effect triggered`, {
-      autoConnect,
-      connectionState: state?.connectionState,
-      timestamp: new Date().toISOString()
-    });
-
-    if (autoConnect && state?.connectionState === "disconnected") {
-      console.log(`🤖 [LiveKitConnector-${roomName}] Setting up auto-connect timer`);
-      // Add a delay to ensure component is fully mounted
-      const timer = setTimeout(() => {
-        console.log(`🤖 [LiveKitConnector-${roomName}] Auto-connect timer fired - calling handleConnect`);
-        handleConnect();
-      }, 1000);
-      
-      return () => {
-        console.log(`🧹 [LiveKitConnector-${roomName}] Auto-connect timer cleanup`);
-        clearTimeout(timer);
-      };
+    if (!autoConnect || !stateRef.current || stateRef.current.connectionState !== "disconnected") {
+      return;
     }
-  }, [autoConnect]); // Ensure correct dependency for autoConnect
+
+    const connectTimer = setTimeout(() => {
+      handleConnect();
+    }, 1000);
+
+    return () => clearTimeout(connectTimer);
+  }, [autoConnect, stateRef.current?.connectionState]);
+
+  // Listen for manual agent requests from UI
+  React.useEffect(() => {
+    const handleAgentRequest = (event: CustomEvent) => {
+      const { roomName: requestedRoom } = event.detail;
+      if (requestedRoom === roomName && stateRef.current?.connectionState === "connected") {
+        console.log(`🎯 [LiveKitConnector-${roomName}] Manual agent request received`);
+        triggerAgentJoin();
+      }
+    };
+
+    window.addEventListener('livekit:request-agent', handleAgentRequest as EventListener);
+    
+    return () => {
+      window.removeEventListener('livekit:request-agent', handleAgentRequest as EventListener);
+    };
+  }, [roomName, triggerAgentJoin]);
 
   // Handle connection toggle
   const handleConnect = () => {
@@ -470,25 +456,55 @@ export function LivekitRoomConnector({
     // Check for missing websocket URL
     if (!wsUrl && state.connectionState === "disconnected") {
       console.error(`🔌 [LiveKitConnector-${roomName}] Cannot connect: Missing LiveKit server URL`);
-      if (stateRef.current) {
-        setState({ 
-          ...stateRef.current, 
-          connectionState: "error", 
-          errorMessage: "Missing LiveKit server URL. Check your environment variables." 
-        });
-      }
+      setState(prev => prev ? { 
+        ...prev, 
+        connectionState: "error", 
+        errorMessage: "Missing LiveKit server URL. Check your environment variables." 
+      } : { ...getInitialState(), connectionState: "error", errorMessage: "Missing LiveKit server URL. Check your environment variables." });
       return;
     }
     
     if (state.connectionState === "disconnected") {
       console.log(`🔌 [LiveKitConnector-${roomName}] Setting state to connecting`);
-      if (stateRef.current) {
-        setState({ ...stateRef.current, connectionState: "connecting", errorMessage: null });
-      }
+      // Reset agent status when starting a new connection
+      setState(prev => prev ? { 
+        ...prev, 
+        connectionState: "connecting", 
+        errorMessage: null,
+        agentStatus: "not-requested",
+        agentIdentity: null
+      } : { 
+        ...getInitialState(), 
+        connectionState: "connecting",
+        agentStatus: "not-requested",
+        agentIdentity: null
+      });
     } else if (state.connectionState === "connected") {
       console.log(`🔌 [LiveKitConnector-${roomName}] Disconnecting from room`);
-      room.disconnect();
-      // State update for disconnection is handled by the room event listener
+      
+      // Clean disconnect with proper state cleanup
+      try {
+        room.disconnect();
+        
+        // Immediate state update for better UX
+        setState(prev => prev ? {
+          ...prev,
+          connectionState: "disconnected",
+          participantCount: 0,
+          agentStatus: "not-requested",
+          agentIdentity: null,
+          errorMessage: null
+        } : getInitialState());
+        
+        console.log(`✅ [LiveKitConnector-${roomName}] Clean disconnect completed`);
+      } catch (error) {
+        console.error(`❌ [LiveKitConnector-${roomName}] Error during disconnect:`, error);
+        setState(prev => prev ? {
+          ...prev,
+          connectionState: "error",
+          errorMessage: "Error during disconnect"
+        } : { ...getInitialState(), connectionState: "error", errorMessage: "Error during disconnect" });
+      }
     } else {
       console.log(`🔌 [LiveKitConnector-${roomName}] Connection attempt ignored - current state: ${state.connectionState}`);
     }
@@ -496,9 +512,7 @@ export function LivekitRoomConnector({
 
   // Handle minimize toggle
   const handleMinimize = () => {
-    if (stateRef.current) {
-      setState({ ...stateRef.current, isMinimized: !stateRef.current.isMinimized });
-    }
+    setState(prev => prev ? { ...prev, isMinimized: !prev.isMinimized } : { ...getInitialState(), isMinimized: true });
   };
 
   // Copy room link
@@ -516,24 +530,24 @@ export function LivekitRoomConnector({
     }
   }, [canvasContext, roomName]);
 
-  return (
+    return (
     <>
-      <RoomConnectorUI
+          <RoomConnectorUI
         state={state || null} // Pass state or null if not yet initialized
         setState={setState as (s: LivekitRoomConnectorState) => void} // Cast for UI component if needed
-        roomName={roomName}
-        onMinimize={handleMinimize}
+            roomName={roomName}
+            onMinimize={handleMinimize}
         onConnect={handleConnect}
         onDisconnect={handleConnect} // Disconnect also uses handleConnect logic now
-        onCopyLink={handleCopyLink}
-      />
-      
+            onCopyLink={handleCopyLink}
+          />
+          
       {/* Hidden audio conference for audio processing */}
       {state?.connectionState === "connected" && (
-        <div className="hidden">
-          <AudioConference />
-        </div>
-      )}
+            <div className="hidden">
+              <AudioConference />
+            </div>
+          )}
     </>
   );
 }
@@ -560,6 +574,8 @@ function RoomConnectorUI({
   const isMinimized = state?.isMinimized || false;
   const participantCount = state?.participantCount || 0;
   const errorMessage = state?.errorMessage || null;
+  const agentStatus = state?.agentStatus || "not-requested";
+  const agentIdentity = state?.agentIdentity || null;
 
   return (
     <div
@@ -613,17 +629,49 @@ function RoomConnectorUI({
             </div>
             
             {connectionState === "connected" && (
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-gray-600 select-none">Participants:</span>
-                <div className="flex items-center gap-1">
-                  <Users className="w-3.5 h-3.5" />
-                  <span className="select-none">{participantCount}</span>
+              <>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-gray-600 select-none">Participants:</span>
+                  <div className="flex items-center gap-1">
+                    <Users className="w-3.5 h-3.5" />
+                    <span className="select-none">{participantCount}</span>
+                  </div>
                 </div>
-              </div>
+                
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-gray-600 select-none">AI Agent:</span>
+                  <div className="flex items-center gap-1.5">
+                    {agentStatus === "joined" && (
+                      <>
+                        <Bot className="w-3.5 h-3.5 text-green-500" />
+                        <span className="text-green-600 text-xs select-none">Connected</span>
+                      </>
+                    )}
+                    {agentStatus === "dispatching" && (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 text-blue-500 animate-spin" />
+                        <span className="text-blue-600 text-xs select-none">Joining...</span>
+                      </>
+                    )}
+                    {agentStatus === "failed" && (
+                      <>
+                        <BotOff className="w-3.5 h-3.5 text-red-500" />
+                        <span className="text-red-600 text-xs select-none">Failed</span>
+                      </>
+                    )}
+                    {agentStatus === "not-requested" && (
+                      <>
+                        <BotOff className="w-3.5 h-3.5 text-gray-400" />
+                        <span className="text-gray-500 text-xs select-none">Not active</span>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </>
             )}
           </div>
 
-          {/* Status Message */}          
+          {/* Status Message */}
           {connectionState === "error" && errorMessage && (
             <div className="text-sm text-red-600 text-center select-none break-words">
               {errorMessage}
@@ -635,7 +683,7 @@ function RoomConnectorUI({
               Connecting to room...
             </div>
           )}
-
+          
           {connectionState === "connected" && !errorMessage && (
             <div className="text-sm text-green-600 text-center flex items-center justify-center gap-1 select-none">
               <CheckCircle className="w-3.5 h-3.5" />
@@ -643,7 +691,7 @@ function RoomConnectorUI({
             </div>
           )}
 
-          {/* Action Buttons */} 
+          {/* Action Buttons */}
           <div className="flex gap-2">
             <button
               onClick={connectionState === "connected" ? onDisconnect : onConnect}
@@ -674,8 +722,52 @@ function RoomConnectorUI({
               </button>
             )}
           </div>
+          
+          {/* Agent Control Button */}
+          {connectionState === "connected" && agentStatus !== "joined" && (
+            <div className="flex gap-2">
+              <button
+                onClick={() => {
+                  // Call the triggerAgentJoin function directly
+                  if (typeof window !== 'undefined') {
+                    // We'll add a custom event that the parent component can listen to
+                    window.dispatchEvent(new CustomEvent('livekit:request-agent', { 
+                      detail: { roomName } 
+                    }));
+                  }
+                }}
+                disabled={agentStatus === "dispatching"}
+                className={cn(
+                  "flex-1 px-3 py-2 rounded-md text-sm font-medium transition-colors cursor-pointer select-none flex items-center justify-center gap-2",
+                  agentStatus === "dispatching"
+                    ? "bg-gray-400 text-white cursor-not-allowed"
+                    : agentStatus === "failed"
+                    ? "bg-orange-500 text-white hover:bg-orange-600"
+                    : "bg-purple-500 text-white hover:bg-purple-600"
+                )}
+                style={{ pointerEvents: agentStatus === "dispatching" ? 'none' : 'all' }}
+              >
+                {agentStatus === "dispatching" ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Requesting Agent...
+                  </>
+                ) : agentStatus === "failed" ? (
+                  <>
+                    <Bot className="w-4 h-4" />
+                    Retry Agent
+                  </>
+                ) : (
+                  <>
+                    <Bot className="w-4 h-4" />
+                    Invite AI Agent
+                  </>
+                )}
+              </button>
+            </div>
+          )}
 
-          {/* Instructions */} 
+          {/* Instructions */}
           {(connectionState === "disconnected" || (connectionState === "error" && !errorMessage?.includes("Missing LiveKit server URL"))) && (
             <div className="text-xs text-gray-500 text-center select-none">
               Connect to enable LiveKit features on the canvas
@@ -684,7 +776,24 @@ function RoomConnectorUI({
           
           {connectionState === "connected" && (
             <div className="text-xs text-gray-500 text-center select-none">
-              You can now spawn participant tiles and toolbars
+              {agentStatus === "joined" 
+                ? `AI Agent "${agentIdentity}" is ready to assist` 
+                : agentStatus === "dispatching"
+                ? "Requesting AI agent to join..."
+                : agentStatus === "failed"
+                ? `Agent failed: ${state?.errorMessage || "Try the 'Retry Agent' button."}`
+                : "You can spawn participant tiles and toolbars, or invite an AI agent"}
+            </div>
+          )}
+
+          {/* Agent Error Details */}
+          {connectionState === "connected" && agentStatus === "failed" && state?.errorMessage && (
+            <div className="text-xs text-red-600 bg-red-50 border border-red-200 rounded p-2 select-none">
+              <div className="font-medium mb-1">Agent Connection Issue:</div>
+              <div>{state.errorMessage}</div>
+              <div className="mt-1 text-red-500">
+                Make sure your agent worker is running. Check the terminal for agent logs.
+              </div>
             </div>
           )}
         </div>

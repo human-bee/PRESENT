@@ -1,10 +1,14 @@
 "use client";
 import { McpConfigButton } from "@/components/ui/mcp-config-button";
 import { MessageThreadFull } from "@/components/ui/message-thread-full";
-import { loadMcpServers } from "@/lib/mcp-utils";
+import { loadMcpServers, suppressDevelopmentWarnings, suppressViolationWarnings } from "@/lib/mcp-utils";
 import { components } from "@/lib/tambo";
 import { TamboProvider } from "@tambo-ai/react";
 import { TamboMcpProvider } from "@tambo-ai/react/mcp";
+
+// Suppress development warnings for cleaner console
+suppressDevelopmentWarnings();
+suppressViolationWarnings();
 
 export default function Home() {
   // Load MCP server configurations
