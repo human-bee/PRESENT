@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Mic, Clock, User, Copy, Download, X, Maximize2 } from "lucide-react";
@@ -314,15 +314,25 @@ const LiveCaptions: React.FC<LiveCaptionsProps> = ({
 
   // Monitor room connection and participants
   useEffect(() => {
-    setState(prev => ({
-      ...prev,
-      isConnected: room?.state === "connected",
-      participantCount: participants.length
-    }));
-  }, [room?.state, participants.length, setState]);
+    const newConnected = room?.state === "connected";
+    const newParticipantCount = participants.length;
+    
+    setState(prev => {
+      // Ensure prev is not null and only update if values actually changed
+      if (prev && (prev.isConnected !== newConnected || prev.participantCount !== newParticipantCount)) {
+        return {
+          ...prev,
+          isConnected: newConnected,
+          participantCount: newParticipantCount
+        };
+      }
+      // If prev is null, or no changes, return prev or initial state if prev is null
+      return prev || initialState; 
+    });
+  }, [room?.state, participants.length]); // Remove setState from dependencies
 
-  // Auto-position calculation
-  const calculatePosition = (index: number) => {
+  // Auto-position calculation (memoized to prevent infinite loops)
+  const calculatePosition = useCallback((index: number) => {
     if (!canvasRef.current) return { x: 50, y: 50 };
     
     const canvasWidth = canvasRef.current.clientWidth - 350; // Account for speech bubble width
@@ -338,10 +348,10 @@ const LiveCaptions: React.FC<LiveCaptionsProps> = ({
       x: col * 300 + 20,
       y: row * 140 + 20
     };
-  };
+  }, []);
 
   // Handle speech bubble position updates
-  const handlePositionChange = (id: string, newPosition: { x: number; y: number }) => {
+  const handlePositionChange = useCallback((id: string, newPosition: { x: number; y: number }) => {
     setState(prev => ({
       ...prev,
       transcripts: prev.transcripts.map(transcript => 
@@ -350,10 +360,10 @@ const LiveCaptions: React.FC<LiveCaptionsProps> = ({
           : transcript
       )
     }));
-  };
+  }, []);
 
   // Export transcripts
-  const exportTranscripts = () => {
+  const exportTranscripts = useCallback(() => {
     const finalTranscripts = state.transcripts.filter(t => t.isFinal);
     
     let content = "";
@@ -394,20 +404,20 @@ const LiveCaptions: React.FC<LiveCaptionsProps> = ({
     a.download = filename;
     a.click();
     URL.revokeObjectURL(url);
-  };
+  }, [state.transcripts, state.settings.exportFormat]);
 
   // Clear all transcripts
-  const clearTranscripts = () => {
+  const clearTranscripts = useCallback(() => {
     setState(prev => ({
       ...prev,
       transcripts: []
     }));
-  };
+  }, []);
 
   // Copy transcript text
-  const handleCopy = (text: string) => {
+  const handleCopy = useCallback((text: string) => {
     navigator.clipboard.writeText(text);
-  };
+  }, []);
 
   // Canvas background styles
   const getCanvasBackground = () => {
@@ -431,13 +441,19 @@ const LiveCaptions: React.FC<LiveCaptionsProps> = ({
   useEffect(() => {
     if (canvasRef.current) {
       const updateCanvasSize = () => {
-        setState(prev => ({
-          ...prev,
-          canvasSize: {
-            width: canvasRef.current?.clientWidth || 800,
-            height: canvasRef.current?.clientHeight || 600
+        const newWidth = canvasRef.current?.clientWidth || 800;
+        const newHeight = canvasRef.current?.clientHeight || 600;
+        
+        setState(prev => {
+          // Only update if dimensions actually changed
+          if (prev.canvasSize.width !== newWidth || prev.canvasSize.height !== newHeight) {
+            return {
+              ...prev,
+              canvasSize: { width: newWidth, height: newHeight }
+            };
           }
-        }));
+          return prev;
+        });
       };
 
       updateCanvasSize();
@@ -446,7 +462,7 @@ const LiveCaptions: React.FC<LiveCaptionsProps> = ({
 
       return () => resizeObserver.disconnect();
     }
-  }, [setState]);
+  }, []); // Remove setState from dependencies
 
   return (
     <div className={cn("w-full h-full flex flex-col bg-background border rounded-lg overflow-hidden", className)}>

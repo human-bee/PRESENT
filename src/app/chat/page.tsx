@@ -1,19 +1,26 @@
 "use client";
 import { McpConfigButton } from "@/components/ui/mcp-config-button";
 import { McpStatusIndicator } from "@/components/ui/mcp-status-indicator";
+import { McpDebugPanel } from "@/components/ui/mcp-debug-panel";
 import { MessageThreadFull } from "@/components/ui/message-thread-full";
-import { loadMcpServers, suppressDevelopmentWarnings, suppressViolationWarnings } from "@/lib/mcp-utils";
+import { loadMcpServers, suppressDevelopmentWarnings, setupGlobalMcpErrorHandler } from "@/lib/mcp-utils";
 import { components } from "@/lib/tambo";
 import { TamboProvider } from "@tambo-ai/react";
 import { EnhancedMcpProvider } from "@/components/ui/enhanced-mcp-provider";
+import { useEffect } from "react";
 
 // Suppress development warnings for cleaner console
 suppressDevelopmentWarnings();
-suppressViolationWarnings();
 
 export default function Home() {
   // Load MCP server configurations
   const mcpServers = loadMcpServers();
+  
+  // Setup global MCP error handler
+  useEffect(() => {
+    const cleanup = setupGlobalMcpErrorHandler();
+    return cleanup;
+  }, []);
 
   return (
     <div className="h-screen flex flex-col overflow-hidden relative">
@@ -24,6 +31,9 @@ export default function Home() {
       <div className="absolute top-16 right-4 z-10">
         <McpStatusIndicator showDetails={false} />
       </div>
+
+      {/* MCP Debug Panel */}
+      <McpDebugPanel />
 
       <TamboProvider
         apiKey={process.env.NEXT_PUBLIC_TAMBO_API_KEY!}

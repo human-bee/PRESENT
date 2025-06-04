@@ -267,3 +267,79 @@ export function suppressViolationWarnings() {
     };
   }
 }
+
+/**
+ * Global MCP error handler
+ */
+export function setupGlobalMcpErrorHandler() {
+  if (typeof window === "undefined") return;
+
+  // Handle unhandled promise rejections related to MCP
+  const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
+    if (event.reason?.message?.includes('Transport is closed') || 
+        event.reason?.message?.includes('HTTP 400') ||
+        event.reason?.message?.includes('streamableHttp')) {
+      
+      console.warn('[MCP Global Handler] Transport error detected:', event.reason?.message);
+      
+      // Mark the failing server as temporarily disabled
+      const failedUrl = extractUrlFromError(event.reason?.message || '');
+      if (failedUrl) {
+        markMcpServerFailed(failedUrl, event.reason?.message || 'Transport closed');
+      }
+      
+      // Show user-friendly notification
+      showMcpErrorNotification('Connection to external services temporarily unavailable. Components will work with reduced functionality.');
+      
+      // Prevent the error from bubbling up and breaking the UI
+      event.preventDefault();
+    }
+  };
+
+  // Handle general errors that might be MCP-related
+  const handleError = (event: ErrorEvent) => {
+    if (event.message?.includes('Transport is closed') || 
+        event.message?.includes('streamableHttp')) {
+      
+      console.warn('[MCP Global Handler] Error detected:', event.message);
+      event.preventDefault();
+    }
+  };
+
+  window.addEventListener('unhandledrejection', handleUnhandledRejection);
+  window.addEventListener('error', handleError);
+
+  // Return cleanup function
+  return () => {
+    window.removeEventListener('unhandledrejection', handleUnhandledRejection);
+    window.removeEventListener('error', handleError);
+  };
+}
+
+/**
+ * Extract URL from error message
+ */
+function extractUrlFromError(errorMessage: string): string | null {
+  // Try to extract URL patterns from error messages
+  const urlMatch = errorMessage.match(/https?:\/\/[^\s]+/);
+  return urlMatch ? urlMatch[0] : null;
+}
+
+/**
+ * Show user-friendly MCP error notification
+ */
+function showMcpErrorNotification(message: string) {
+  // Check if we're in a browser environment and have a way to show notifications
+  if (typeof window !== "undefined") {
+    // Try to use toast notification if available
+    if (window.dispatchEvent) {
+      const toastEvent = new CustomEvent('mcp-error', { 
+        detail: { message, type: 'warning' }
+      });
+      window.dispatchEvent(toastEvent);
+    }
+    
+    // Fallback to console warning
+    console.warn(`[MCP] ${message}`);
+  }
+}
