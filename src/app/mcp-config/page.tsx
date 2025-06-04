@@ -1,6 +1,7 @@
 "use client";
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { McpStatusIndicator } from "@/components/ui/mcp-status-indicator";
 
 // Define MCP transport types
 export enum MCPTransport {
@@ -113,6 +114,11 @@ const McpConfigPage = () => {
             as tool providers in your chat.
           </p>
 
+          {/* MCP Status Indicator */}
+          <div className="mb-6">
+            <McpStatusIndicator showDetails={true} />
+          </div>
+
           <form onSubmit={addServer} className="mb-6">
             <div className="flex flex-col space-y-2">
               <label htmlFor="server-url" className="font-medium text-gray-700">
@@ -182,7 +188,10 @@ const McpConfigPage = () => {
 
           {mcpServers.length > 0 ? (
             <div>
-              <h3 className="font-semibold mb-2">Connected Servers:</h3>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-semibold">Connected Servers:</h3>
+                <McpStatusIndicator showDetails={false} className="text-sm" />
+              </div>
               <ul className="border rounded-md divide-y">
                 {mcpServers.map((server, index) => {
                   const serverInfo = getServerInfo(server);

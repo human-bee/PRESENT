@@ -8,7 +8,7 @@ import { LivekitRoomConnector, CanvasLiveKitContext } from "@/components/ui/live
 import { loadMcpServers, suppressDevelopmentWarnings, suppressViolationWarnings } from "@/lib/mcp-utils";
 import { components } from "@/lib/tambo";
 import { TamboProvider } from "@tambo-ai/react";
-import { TamboMcpProvider } from "@tambo-ai/react/mcp";
+import { EnhancedMcpProvider } from "@/components/ui/enhanced-mcp-provider";
 import { Room, ConnectionState, RoomEvent, VideoPresets, RoomOptions } from "livekit-client";
 import { RoomContext } from "@livekit/components-react";
 import { useRouter } from "next/navigation";
@@ -19,46 +19,6 @@ import { useAuth } from "@/hooks/use-auth";
 // Suppress development warnings for cleaner console
 suppressDevelopmentWarnings();
 suppressViolationWarnings();
-
-// Error boundary component for MCP provider
-class MCPErrorBoundary extends React.Component<
-  { children: React.ReactNode },
-  { hasError: boolean; error?: Error }
-> {
-  constructor(props: { children: React.ReactNode }) {
-    super(props);
-    this.state = { hasError: false };
-  }
-
-  static getDerivedStateFromError(error: Error) {
-    return { hasError: true, error };
-  }
-
-  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
-    console.error('MCP Provider Error:', error, errorInfo);
-  }
-
-  render() {
-    if (this.state.hasError) {
-      return (
-        <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
-          <h3 className="text-red-800 font-semibold">MCP Provider Error</h3>
-          <p className="text-red-600 text-sm mt-1">
-            There was an error with the MCP provider. The app will continue without MCP functionality.
-          </p>
-          <button 
-            onClick={() => this.setState({ hasError: false })}
-            className="mt-2 px-3 py-1 bg-red-600 text-white rounded text-sm"
-          >
-            Retry
-          </button>
-        </div>
-      );
-    }
-
-    return this.props.children;
-  }
-}
 
 export default function Canvas() {
   // Authentication check
@@ -84,6 +44,11 @@ export default function Canvas() {
       dynacast: true,
       videoCaptureDefaults: {
         resolution: VideoPresets.h720.resolution,
+        facingMode: 'user', // Prefer front-facing camera
+      },
+      audioCaptureDefaults: {
+        echoCancellation: true,
+        noiseSuppression: true,
       },
       publishDefaults: {
         videoSimulcastLayers: [VideoPresets.h180, VideoPresets.h360, VideoPresets.h720],
@@ -156,10 +121,7 @@ export default function Canvas() {
 
   return (
     <div className="h-screen w-screen relative overflow-hidden">
-      {/* MCP Config Button - positioned at top left */}
-      <McpConfigButton />
-
-      {/* User Navigation - positioned top right */}
+      {/* User Navigation - positioned top right, canvas persistence is in tldraw toolbar */}
       <div className="absolute top-4 right-4 z-50 flex items-center gap-2">
         <Link
           href="/canvases"
@@ -187,40 +149,43 @@ export default function Canvas() {
         </button>
       </div>
 
+      {/* MCP Config Button - positioned at top left */}
+      <div className="absolute top-4 left-4 z-50">
+        <McpConfigButton />
+      </div>
+
       {/* Tambo Provider Setup */}
       <TamboProvider
         apiKey={process.env.NEXT_PUBLIC_TAMBO_API_KEY!}
         components={components}
       >
-                 <MCPErrorBoundary>
-          <TamboMcpProvider mcpServers={mcpServers}>
-            {/* LiveKit Room Context Provider - wraps everything! */}
-            <RoomContext.Provider value={room}>
-              {/* Canvas LiveKit Context Provider - provides connection state to all canvas components */}
-              <CanvasLiveKitContext.Provider value={roomState}>
-                {/* Full-screen Canvas Space */}
-                <CanvasSpace className="absolute inset-0 w-full h-full" />
+        <EnhancedMcpProvider mcpServers={mcpServers}>
+          {/* LiveKit Room Context Provider - wraps everything! */}
+          <RoomContext.Provider value={room}>
+            {/* Canvas LiveKit Context Provider - provides connection state to all canvas components */}
+            <CanvasLiveKitContext.Provider value={roomState}>
+              {/* Full-screen Canvas Space */}
+              <CanvasSpace className="absolute inset-0 w-full h-full" />
 
-                {/* Direct LiveKit Room Connector - positioned below user nav */}
-                <div className="absolute top-16 right-4 z-50">
-                  <LivekitRoomConnector 
-                    roomName="tambo-canvas-room"
-                    userName={user.user_metadata?.full_name || "Canvas User"}
-                    autoConnect={false}
-                  />
-                </div>
-
-                {/* Collapsible Message Thread - positioned bottom right as overlay */}
-                <MessageThreadCollapsible
-                  contextKey={contextKey}
-                  defaultOpen={false}
-                  className="absolute bottom-4 right-4 z-50"
-                  variant="default"
+              {/* Direct LiveKit Room Connector - positioned bottom left to avoid overlap */}
+              <div className="absolute bottom-4 left-4 z-50">
+                <LivekitRoomConnector 
+                  roomName="tambo-canvas-room"
+                  userName={user.user_metadata?.full_name || "Canvas User"}
+                  autoConnect={false}
                 />
-              </CanvasLiveKitContext.Provider>
-            </RoomContext.Provider>
-          </TamboMcpProvider>
-                 </MCPErrorBoundary>
+              </div>
+
+              {/* Collapsible Message Thread - positioned bottom right as overlay */}
+              <MessageThreadCollapsible
+                contextKey={contextKey}
+                defaultOpen={false}
+                className="absolute bottom-4 right-4 z-50"
+                variant="default"
+              />
+            </CanvasLiveKitContext.Provider>
+          </RoomContext.Provider>
+        </EnhancedMcpProvider>
       </TamboProvider>
     </div>
   );

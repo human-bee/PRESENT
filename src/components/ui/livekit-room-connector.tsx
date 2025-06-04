@@ -389,6 +389,26 @@ export function LivekitRoomConnector({
           console.log(`🔌 [LiveKitConnector-${roomName}] Calling room.connect() with URL: ${wsUrl}`);
           await room.connect(wsUrl, token);
           console.log(`✅ [LiveKitConnector-${roomName}] Room.connect() called successfully`);
+          
+          // Enable camera and microphone after connecting (if not in audio-only mode)
+          try {
+            if (!audioOnly) {
+              console.log(`🎥 [LiveKitConnector-${roomName}] Enabling camera...`);
+              await room.localParticipant.enableCameraAndMicrophone();
+              console.log(`✅ [LiveKitConnector-${roomName}] Camera and microphone enabled`);
+            } else {
+              console.log(`🎤 [LiveKitConnector-${roomName}] Enabling microphone only (audio-only mode)...`);
+              await room.localParticipant.setMicrophoneEnabled(true);
+              console.log(`✅ [LiveKitConnector-${roomName}] Microphone enabled`);
+            }
+          } catch (mediaError) {
+            console.warn(`⚠️ [LiveKitConnector-${roomName}] Media device error:`, mediaError);
+            // Don't fail the connection, just log the media error
+            setState(prev => prev ? { 
+              ...prev, 
+              errorMessage: `Connected but media device error: ${mediaError instanceof Error ? mediaError.message : 'Unknown error'}`
+            } : getInitialState());
+          }
         } else {
           throw new Error('Missing LiveKit server URL');
         }

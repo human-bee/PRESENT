@@ -245,6 +245,17 @@ function SingleParticipantTile({
   
   const videoTrack = tracks.find(track => track.source === Track.Source.Camera);
   const audioTrack = tracks.find(track => track.source === Track.Source.Microphone);
+  
+  // Debug logging for video track status
+  React.useEffect(() => {
+    console.log(`[ParticipantTile] ${participant?.identity || 'unknown'} - Video track:`, {
+      hasVideoTrack: !!videoTrack,
+      isVideoEnabled: videoTrack?.publication?.isEnabled,
+      isVideoMuted: videoTrack?.publication?.isMuted,
+      trackState: videoTrack?.publication?.track?.readyState,
+      participantType: isLocal ? 'local' : 'remote'
+    });
+  }, [videoTrack, isLocal, participant?.identity]);
 
   // Handle minimize toggle
   const handleMinimizeToggle = () => {
@@ -266,14 +277,24 @@ function SingleParticipantTile({
       }}
     >
       {/* Video Container */}
-      {showVideo && !state?.isMinimized && videoTrack && (
+      {showVideo && !state?.isMinimized && videoTrack && !videoTrack.publication?.isMuted && (
         <VideoTrack 
           trackRef={videoTrack} 
           className="absolute inset-0 w-full h-full object-cover"
         />
       )}
 
-      {/* No video placeholder */}
+      {/* Video muted/disabled placeholder */}
+      {showVideo && !state?.isMinimized && videoTrack && videoTrack.publication?.isMuted && (
+        <div className="absolute inset-0 bg-gray-900 flex items-center justify-center">
+          <div className="text-center text-white">
+            <VideoOff className="w-12 h-12 mx-auto mb-2 opacity-75" />
+            <p className="text-sm opacity-75">Video disabled</p>
+          </div>
+        </div>
+      )}
+
+      {/* No video track placeholder */}
       {showVideo && !state?.isMinimized && !videoTrack && (
         <div className="absolute inset-0 bg-gray-800 flex items-center justify-center">
           <div className="text-center text-white">
@@ -282,7 +303,9 @@ function SingleParticipantTile({
             ) : (
               <User className="w-12 h-12 mx-auto mb-2 opacity-75" />
             )}
-            <p className="text-sm opacity-75">No video</p>
+            <p className="text-sm opacity-75">
+              {isLocal ? "Click camera to enable" : "No video"}
+            </p>
           </div>
         </div>
       )}

@@ -2,7 +2,7 @@ import { Tldraw, HTMLContainer, RecordProps, T, Editor, BaseBoxShapeUtil, TLBase
 import { ReactNode, useRef, useEffect, createContext, useContext, Component, ErrorInfo } from 'react';
 
 // Create context for component store
-const ComponentStoreContext = createContext<Map<string, ReactNode> | null>(null);
+export const ComponentStoreContext = createContext<Map<string, ReactNode> | null>(null);
 
 // Define the props for the Tambo shape
 export interface TamboShapeProps {

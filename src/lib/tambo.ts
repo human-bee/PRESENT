@@ -48,6 +48,10 @@ import {
   AIImageGenerator,
   aiImageGeneratorSchema,
 } from "@/components/ui/ai-image-generator";
+import {
+  PresentationDeck,
+  presentationDeckSchema,
+} from "@/components/ui/presentation-deck";
 import type { TamboComponent } from "@tambo-ai/react";
 import { TamboTool } from "@tambo-ai/react";
 
@@ -141,6 +145,13 @@ export const components: TamboComponent[] = [
       "A real-time AI image generator that creates images from text prompts using Together AI's FLUX model. Features include multiple art styles (pop art, minimal, cyberpunk, etc.), generation history, canvas integration, download capability, iterative mode for consistency, and speech-to-text integration for voice-driven image generation. Perfect for creative projects, visual brainstorming, concept art generation, and real-time visual content creation. Automatically debounces prompt changes and provides visual feedback during generation. Can be controlled via microphone for hands-free operation.",
     component: AIImageGenerator,
     propsSchema: aiImageGeneratorSchema,
+  },
+  {
+    name: "PresentationDeck",
+    description:
+      "A feature-complete presentation tool for displaying beautiful, almost full-screen PowerPoint, Google Slides, PDF, and image-based presentations. Features comprehensive hotkey controls (arrow keys, space, enter for play/pause, F for fullscreen), laser pointer mode, thumbnail navigation, speaker notes, auto-advance, progress tracking, bookmarking, and canvas integration. Supports multiple aspect ratios (16:9, 4:3, 16:10), dark/light themes, and persistent state management. Perfect for business presentations, lectures, demos, and any scenario requiring professional slide display with advanced navigation and control features.",
+    component: PresentationDeck,
+    propsSchema: presentationDeckSchema,
   },
   // Add more components here
 ];

@@ -6,11 +6,10 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import * as React from "react";
 import type { TamboThreadMessage } from "@tambo-ai/react";
 import { TldrawCanvas, TamboShapeUtil, TamboShape } from "./tldraw-canvas";
+import { TldrawWithPersistence } from "./tldraw-with-persistence";
 import type { Editor } from 'tldraw';
 import { nanoid } from 'nanoid';
-import { useCanvasPersistence } from "@/hooks/use-canvas-persistence";
 import { Toaster } from "react-hot-toast";
-import { Save, Download, FolderOpen, FileText } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 
 // Suppress development noise and repetitive warnings
@@ -77,15 +76,7 @@ export function CanvasSpace({ className }: CanvasSpaceProps) {
   // Store React components separately from tldraw shapes to avoid structuredClone issues
   const componentStore = useRef<Map<string, React.ReactNode>>(new Map());
 
-  // Use the canvas persistence hook
-  const { 
-    canvasId, 
-    canvasName, 
-    isSaving, 
-    lastSaved, 
-    saveCanvas, 
-    updateCanvasName 
-  } = useCanvasPersistence(editor);
+  // Canvas persistence is now handled by TldrawWithPersistence component
 
   /**
    * Effect to clear the canvas and reset messageIdToShapeIdMap when switching between threads
@@ -225,21 +216,7 @@ export function CanvasSpace({ className }: CanvasSpaceProps) {
     return () => clearTimeout(timeoutId);
   }, [thread?.messages, editor, addComponentToCanvas, addedMessageIds]);
 
-  // Handle export
-  const handleExport = useCallback(async () => {
-    if (!editor) return;
-    
-    // Export as PNG
-    const blob = await editor.getSvg(editor.getCurrentPageShapeIds());
-    if (blob) {
-      const url = URL.createObjectURL(new Blob([blob.outerHTML], { type: 'image/svg+xml' }));
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${canvasName}.svg`;
-      a.click();
-      URL.revokeObjectURL(url);
-    }
-  }, [editor, canvasName]);
+  // Export functionality is now handled by TldrawWithPersistence component
 
   return (
     <div
@@ -252,54 +229,12 @@ export function CanvasSpace({ className }: CanvasSpaceProps) {
       {/* Toast notifications */}
       <Toaster position="bottom-left" />
 
-      {/* Canvas Controls Bar */}
-      {user && (
-        <div className="absolute top-4 left-4 z-50 flex items-center gap-2 bg-white/90 backdrop-blur-sm rounded-lg shadow-md p-2">
-          {/* Canvas Name */}
-          <input
-            type="text"
-            value={canvasName}
-            onChange={(e) => updateCanvasName(e.target.value)}
-            className="px-3 py-1.5 bg-transparent border-none focus:outline-none font-medium text-gray-700 min-w-[150px]"
-            placeholder="Canvas name..."
-          />
-          
-          <div className="h-6 w-px bg-gray-300" />
-          
-          {/* Save Button */}
-          <button
-            onClick={saveCanvas}
-            disabled={isSaving}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-md transition-colors disabled:opacity-50"
-            title="Save canvas"
-          >
-            <Save className="w-4 h-4" />
-            {isSaving ? "Saving..." : "Save"}
-          </button>
-
-          {/* Export Button */}
-          <button
-            onClick={handleExport}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-md transition-colors"
-            title="Export as SVG"
-          >
-            <Download className="w-4 h-4" />
-            Export
-          </button>
-
-          {/* Last Saved Info */}
-          {lastSaved && (
-            <span className="text-xs text-gray-500 ml-2">
-              Last saved: {lastSaved.toLocaleTimeString()}
-            </span>
-          )}
-        </div>
-      )}
-
-      <TldrawCanvas
+      {/* Use integrated tldraw with persistence - no more overlapping menu bar */}
+      <TldrawWithPersistence
         onMount={setEditor}
         shapeUtils={[TamboShapeUtil]}
         componentStore={componentStore.current}
+        className="absolute inset-0"
       />
       {/*
         The following is a placeholder for if you want to show some UI when the editor is not loaded

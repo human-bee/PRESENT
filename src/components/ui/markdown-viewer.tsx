@@ -428,7 +428,10 @@ export function MarkdownViewer({
     <>
       {/* Premium Preview Tile */}
       <div
-        onClick={openFullScreen}
+        onClick={(e) => {
+          console.log('Preview tile clicked!', e);
+          openFullScreen();
+        }}
         className={cn(
           "group relative overflow-hidden bg-slate-900 text-slate-100 rounded-2xl border border-slate-700 cursor-pointer transition-all duration-500 hover:border-slate-600 hover:shadow-2xl hover:scale-[1.02]",
           state.isFullScreen && "opacity-0 pointer-events-none"

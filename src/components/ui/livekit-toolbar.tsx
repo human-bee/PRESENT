@@ -232,16 +232,43 @@ export function LivekitToolbar({
   const componentId = `livekit-toolbar-${roomName || 'default'}`;
   
   // Real LiveKit hooks - connected to actual room state
-  const room = useRoomContext();
-  const localParticipant = useLocalParticipant();
-  const participants = useParticipants();
-  const remoteParticipants = useRemoteParticipants();
-  const connectionQuality = useConnectionQualityIndicator(localParticipant.localParticipant);
-  
-  // Media controls with real LiveKit integration
-  const { toggle: toggleMic, enabled: micEnabled } = useTrackToggle(Track.Source.Microphone);
-  const { toggle: toggleCamera, enabled: cameraEnabled } = useTrackToggle(Track.Source.Camera);
-  const { toggle: toggleScreenShare, enabled: screenShareEnabled } = useTrackToggle(Track.Source.ScreenShare);
+  // Wrap in try-catch to handle context not available
+  let room = null;
+  let localParticipant = null;
+  let participants: any[] = [];
+  let remoteParticipants: any[] = [];
+  let connectionQuality = null;
+  let toggleMic = () => {};
+  let micEnabled = false;
+  let toggleCamera = () => {};
+  let cameraEnabled = false;
+  let toggleScreenShare = () => {};
+  let screenShareEnabled = false;
+
+  try {
+    room = useRoomContext();
+    const localParticipantData = useLocalParticipant();
+    localParticipant = localParticipantData.localParticipant;
+    participants = useParticipants();
+    remoteParticipants = useRemoteParticipants();
+    connectionQuality = useConnectionQualityIndicator(localParticipant);
+    
+    // Media controls with real LiveKit integration
+    const micToggle = useTrackToggle(Track.Source.Microphone);
+    toggleMic = micToggle.toggle;
+    micEnabled = micToggle.enabled;
+    
+    const cameraToggle = useTrackToggle(Track.Source.Camera);
+    toggleCamera = cameraToggle.toggle;
+    cameraEnabled = cameraToggle.enabled;
+    
+    const screenShareToggle = useTrackToggle(Track.Source.ScreenShare);
+    toggleScreenShare = screenShareToggle.toggle;
+    screenShareEnabled = screenShareToggle.enabled;
+     } catch (error) {
+     console.warn('[LivekitToolbar] LiveKit context not available:', error);
+     // Component will render with default values and show appropriate message
+   }
   
   // Enhanced Tambo state management
   const [state, setState] = useTamboComponentState<LivekitToolbarState>(
@@ -260,7 +287,7 @@ export function LivekitToolbar({
       assistantState: "idle",
       lastVoiceCommand: null,
       connectionIssues: {},
-      networkQuality: connectionQuality,
+      networkQuality: connectionQuality || ConnectionQuality.Unknown,
       canvasPosition: { x: 0, y: 0 },
       canvasSize: { width: 800, height: 60 },
       isCanvasFocused: false,
@@ -268,45 +295,49 @@ export function LivekitToolbar({
   );
 
   // Voice command integration
-  useDataChannel("voice-commands", (message) => {
-    if (!enableVoiceCommands || !state) return;
-    
-    try {
-      const command = JSON.parse(new TextDecoder().decode(message.payload));
+  try {
+    useDataChannel("voice-commands", (message) => {
+      if (!enableVoiceCommands || !state) return;
       
-      switch (command.type) {
-        case "MUTE_ALL":
-          if (moderationEnabled) {
-            participants.forEach(p => {
-              if (!p.isLocal) {
-                // Implement mute all participants
-                room?.localParticipant?.publishData(
-                  new TextEncoder().encode(JSON.stringify({ type: "MUTE_REQUEST", targetId: p.identity })),
-                  { reliable: true }
-                );
-              }
-            });
-          }
-          break;
-        case "TOGGLE_MIC":
-          toggleMic();
-          break;
-        case "TOGGLE_CAMERA":
-          toggleCamera();
-          break;
-        case "START_RECORDING":
-          handleStartRecording();
-          break;
-        case "RAISE_HAND":
-          handleRaiseHand();
-          break;
+      try {
+        const command = JSON.parse(new TextDecoder().decode(message.payload));
+        
+        switch (command.type) {
+          case "MUTE_ALL":
+            if (moderationEnabled) {
+              participants.forEach(p => {
+                if (!p.isLocal) {
+                  // Implement mute all participants
+                  room?.localParticipant?.publishData(
+                    new TextEncoder().encode(JSON.stringify({ type: "MUTE_REQUEST", targetId: p.identity })),
+                    { reliable: true }
+                  );
+                }
+              });
+            }
+            break;
+          case "TOGGLE_MIC":
+            toggleMic();
+            break;
+          case "TOGGLE_CAMERA":
+            toggleCamera();
+            break;
+          case "START_RECORDING":
+            handleStartRecording();
+            break;
+          case "RAISE_HAND":
+            handleRaiseHand();
+            break;
+        }
+        
+        setState({ ...state, lastVoiceCommand: command.type, assistantState: "idle" });
+      } catch (error) {
+        console.error("Failed to parse voice command:", error);
       }
-      
-      setState({ ...state, lastVoiceCommand: command.type, assistantState: "idle" });
-    } catch (error) {
-      console.error("Failed to parse voice command:", error);
-    }
-  });
+    });
+  } catch (error) {
+    // useDataChannel not available outside LiveKit context
+  }
 
   // Real-time participant monitoring
   React.useEffect(() => {
@@ -325,21 +356,23 @@ export function LivekitToolbar({
       compactMode: shouldCompact,
       networkQuality: connectionQuality,
     });
-  }, [participants.length, connectionQuality, enableAdaptiveUI]);
+  }, [participants.length, connectionQuality, enableAdaptiveUI, showParticipantList, compactMode, setState, state]);
 
   // Canvas integration - component lives on canvas
-  React.useEffect(() => {
-    window.dispatchEvent(
-      new CustomEvent("tambo:showComponent", {
-        detail: {
-          messageId: componentId,
-          component: <LivekitToolbar {...{ roomName, enableVoiceCommands, enableParticipantControls, enableAdaptiveUI, moderationEnabled, autoMuteOnJoin, maxParticipants, compactMode, showConnectionStatus, showParticipantList, features }} />,
-          position: state?.canvasPosition,
-          size: state?.canvasSize,
-        }
-      })
-    );
-  }, [componentId, state?.canvasPosition, state?.canvasSize]);
+  // This effect is disabled to prevent recursive rendering issues
+  // The component should be rendered directly by the user or AI in the proper LiveKit context
+  // React.useEffect(() => {
+  //   window.dispatchEvent(
+  //     new CustomEvent("tambo:showComponent", {
+  //       detail: {
+  //         messageId: componentId,
+  //         component: <LivekitToolbar {...{ roomName, enableVoiceCommands, enableParticipantControls, enableAdaptiveUI, moderationEnabled, autoMuteOnJoin, maxParticipants, compactMode, showConnectionStatus, showParticipantList, features }} />,
+  //         position: state?.canvasPosition,
+  //         size: state?.canvasSize,
+  //       }
+  //     })
+  //   );
+  // }, [componentId, state?.canvasPosition, state?.canvasSize]);
 
   // Real recording functionality
   const handleStartRecording = async () => {
@@ -372,13 +405,13 @@ export function LivekitToolbar({
   const handleRaiseHand = () => {
     if (!state) return;
     
-    const isRaised = state.handRaisedParticipants.includes(localParticipant.localParticipant.identity);
+    const isRaised = state.handRaisedParticipants.includes(localParticipant?.identity || '');
     
     // Send data channel message
     room?.localParticipant?.publishData(
       new TextEncoder().encode(JSON.stringify({
         type: isRaised ? "LOWER_HAND" : "RAISE_HAND",
-        participantId: localParticipant.localParticipant.identity,
+        participantId: localParticipant?.identity || '',
         timestamp: Date.now(),
       })),
       { reliable: true }
@@ -387,8 +420,8 @@ export function LivekitToolbar({
     setState({
       ...state,
       handRaisedParticipants: isRaised
-        ? state.handRaisedParticipants.filter(id => id !== localParticipant.localParticipant.identity)
-        : [...state.handRaisedParticipants, localParticipant.localParticipant.identity],
+        ? state.handRaisedParticipants.filter(id => id !== (localParticipant?.identity || ''))
+        : [...state.handRaisedParticipants, localParticipant?.identity || ''],
     });
   };
 
@@ -455,8 +488,11 @@ export function LivekitToolbar({
     return (
       <div className="flex items-center justify-center p-4 bg-background border border-border rounded-xl">
         <div className="flex items-center gap-2 text-muted-foreground">
-          <Loader className="w-4 h-4 animate-spin" />
-          <span>Connecting to room...</span>
+          <AlertTriangle className="w-4 h-4 text-amber-500" />
+          <span>
+            LiveKit toolbar requires a connected LiveKit room. 
+            Please create a LivekitRoomConnector component first.
+          </span>
         </div>
       </div>
     );
@@ -549,7 +585,7 @@ export function LivekitToolbar({
               onClick={handleRaiseHand}
               className={cn(
                 "flex items-center justify-center w-9 h-9 rounded-lg transition-all duration-200",
-                state.handRaisedParticipants.includes(localParticipant.localParticipant.identity)
+                state.handRaisedParticipants.includes(localParticipant?.identity || '')
                   ? "bg-yellow-500 hover:bg-yellow-600 text-white animate-pulse"
                   : "bg-background hover:bg-accent text-foreground"
               )}
