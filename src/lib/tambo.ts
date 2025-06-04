@@ -52,6 +52,9 @@ import {
   PresentationDeck,
   presentationDeckSchema,
 } from "@/components/ui/presentation-deck";
+import LiveCaptions, {
+  liveCaptionsSchema,
+} from "@/components/LiveCaptions";
 import type { TamboComponent } from "@tambo-ai/react";
 import { TamboTool } from "@tambo-ai/react";
 
@@ -152,6 +155,13 @@ export const components: TamboComponent[] = [
       "A feature-complete presentation tool for displaying beautiful, almost full-screen PowerPoint, Google Slides, PDF, and image-based presentations. Features comprehensive hotkey controls (arrow keys, space, enter for play/pause, F for fullscreen), laser pointer mode, thumbnail navigation, speaker notes, auto-advance, progress tracking, bookmarking, and canvas integration. Supports multiple aspect ratios (16:9, 4:3, 16:10), dark/light themes, and persistent state management. Perfect for business presentations, lectures, demos, and any scenario requiring professional slide display with advanced navigation and control features.",
     component: PresentationDeck,
     propsSchema: presentationDeckSchema,
+  },
+  {
+    name: "LiveCaptions",
+    description:
+      "A real-time live captions component that displays speech transcriptions in an interactive tldraw-style canvas with beautiful speech bubbles. REQUIRES LivekitRoomConnector to be connected first. Features real-time transcription from Groq Whisper via LiveKit data channels, draggable speech bubbles, speaker identification with avatars, timestamps, interim/final transcript states, export capabilities (TXT/JSON/SRT), customizable canvas themes (grid/dots/clean), auto-positioning, and persistent state management. Perfect for accessibility, meeting transcription, live events, educational content, and any scenario requiring real-time speech-to-text visualization with an engaging visual interface.",
+    component: LiveCaptions,
+    propsSchema: liveCaptionsSchema,
   },
   // Add more components here
 ];

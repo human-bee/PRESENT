@@ -24,6 +24,7 @@
     "@uidotdev/usehooks": "^2.4.1",
     "class-variance-authority": "^0.7.1",
     "dompurify": "^3.0.6",
+    "framer-motion": "^12.16.0",
     "highlight.js": "^11.11.1",
     "livekit-server-sdk": "^2.13.0",
     "lucide-react": "^0.484.0",
