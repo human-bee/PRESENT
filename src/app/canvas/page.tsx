@@ -1,5 +1,8 @@
 "use client";
 
+// Force client-side rendering to prevent SSG issues with Tambo hooks
+export const runtime = 'edge';
+
 import React, { useState, useEffect } from "react";
 import { CanvasSpace } from "@/components/ui/canvas-space";
 import { McpConfigButton } from "@/components/ui/mcp-config-button";

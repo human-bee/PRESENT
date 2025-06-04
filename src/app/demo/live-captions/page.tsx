@@ -7,6 +7,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Mic, Users, Settings } from "lucide-react";
 
+// Force client-side rendering to prevent SSG issues with Tambo hooks
+export const runtime = 'edge';
+
 export default function LiveCaptionsDemo() {
   const [roomName, setRoomName] = useState("live-captions-demo");
   const [token, setToken] = useState("");

@@ -20,6 +20,9 @@ const nextConfig: NextConfig = {
     ignoreBuildErrors: true,
   },
   
+  // Skip trailing slash redirect
+  skipTrailingSlashRedirect: true,
+  
   // Fix tldraw multiple instances issue
   webpack: (config, { isServer }) => {
     // Ensure single instance of tldraw libraries
