@@ -16,6 +16,7 @@
     "@dnd-kit/utilities": "^3.2.2",
     "@livekit/components-react": "^2.9.4",
     "@livekit/components-styles": "^1.1.5",
+    "@openai/agents": "^0.0.2",
     "@supabase/ssr": "^0.6.1",
     "@supabase/supabase-js": "^2.49.9",
     "@tailwindcss/oxide": "^4.1.4",

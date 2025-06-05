@@ -23,7 +23,7 @@ const nextConfig: NextConfig = {
   // Skip trailing slash redirect
   skipTrailingSlashRedirect: true,
   
-  // Fix tldraw multiple instances issue
+  // Enhanced webpack configuration for edge runtime compatibility
   webpack: (config, { isServer }) => {
     // Ensure single instance of tldraw libraries
     if (!isServer) {
@@ -39,6 +39,54 @@ const nextConfig: NextConfig = {
         'tldraw': require.resolve('tldraw'),
       };
     }
+    
+    // Exclude OpenAI agents from server bundles (Edge Runtime incompatible)
+    if (isServer) {
+      config.externals = config.externals || [];
+      config.externals.push('@openai/agents');
+    }
+    
+    // Improve chunk splitting and module resolution
+    config.optimization = {
+      ...config.optimization,
+      splitChunks: {
+        ...config.optimization.splitChunks,
+        chunks: 'all',
+        cacheGroups: {
+          ...config.optimization.splitChunks?.cacheGroups,
+          'parallel-tools': {
+            name: 'parallel-tools',
+            test: /[\\/]lib[\\/]parallel-tools[\\/]/,
+            chunks: 'all',
+            priority: 30,
+          },
+          'openai-agents': {
+            name: 'openai-agents',
+            test: /[\\/]node_modules[\\/]@openai[\\/]agents/,
+            chunks: 'all',
+            priority: 25,
+            enforce: true,
+          },
+        },
+      },
+    };
+    
+    // Handle missing modules gracefully
+    config.resolve.fallback = {
+      ...config.resolve.fallback,
+      fs: false,
+      net: false,
+      tls: false,
+      crypto: false,
+      stream: false,
+      url: false,
+      zlib: false,
+      http: false,
+      https: false,
+      assert: false,
+      os: false,
+      path: false,
+    };
     
     return config;
   },

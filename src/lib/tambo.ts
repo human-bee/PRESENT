@@ -58,6 +58,10 @@ import LiveCaptions, {
 import FactChecker, {
   factCheckerSchema,
 } from "@/components/FactChecker";
+import {
+  ParallelResearchPanel,
+  parallelResearchPanelSchema,
+} from "@/components/ui/parallel-research-panel";
 import type { TamboComponent } from "@tambo-ai/react";
 import { TamboTool } from "@tambo-ai/react";
 
@@ -172,6 +176,13 @@ export const components: TamboComponent[] = [
       "A real-time fact-checking component that listens to speaker claims, displays them, and allows for manual or automated verification. Features include speaker identification, claim status (pending, true, false, disputed, verifying), and source tracking. Interactive and responsive UI for live events and presentations.",
     component: FactChecker,
     propsSchema: factCheckerSchema,
+  },
+  {
+    name: "ParallelResearchPanel",
+    description:
+      "A powerful research panel that executes multiple research tools in parallel with automatic dependency detection. Features include real-time progress tracking, execution metrics showing speedup achieved through parallelization, approval workflow for sensitive operations, error handling with retry logic, and execution history. Perfect for complex research tasks, multi-topic analysis, data gathering from multiple sources, and any scenario where parallel tool execution can significantly reduce total execution time. Integrates seamlessly with canvas and maintains state across sessions.",
+    component: ParallelResearchPanel,
+    propsSchema: parallelResearchPanelSchema,
   },
   // Add more components here
 ];
