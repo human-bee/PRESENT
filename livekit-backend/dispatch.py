@@ -5,8 +5,8 @@ from dotenv import load_dotenv
 
 load_dotenv(override=True)
 
-room_name = "vaea-z4sh"
-agent_name = "Jaime AI"
+room_name = "ROOM" # Placeholder - please update to reflect room used in current directory setup
+agent_name = "Jaime AI" # Placeholder - please update to reflect agent used in current directory setup
 
 async def create_explicit_dispatch():
     lkapi = api.LiveKitAPI()

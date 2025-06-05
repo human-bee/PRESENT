@@ -6,7 +6,7 @@ from livekit import agents, rtc
 from livekit.agents import stt, ModelSettings
 
 logger = logging.getLogger("livekit.assistant.transcription")
-
+# This transcription handler is templated - PLEASE update to optimise for your use case
 class TranscriptionHandler:
     """Handles real-time transcription and broadcasting to participants"""
     

@@ -48,6 +48,7 @@ Key Responsibilities:
 5.  Do not proactively offer suggestions or interject unless a tool's specific purpose is to do so
     (and even then, it's by generating an 'action_plan' for the frontend AI, not by speaking yourself).
 """
+# This chat context is templated - PLEASE update to optimise for your use case
     },
     {
         "role": "assistant", 

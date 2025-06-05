@@ -8,7 +8,7 @@ LIVEKIT_API_SECRET=your-livekit-api-secret
 # =============================================================================
 # REQUIRED: AI Service API Keys
 # =============================================================================
-# OpenAI (for LLM and TTS)
+# OpenAI (for LLM and Speech to Speech Responses API and openai Agent SDK)
 OPENAI_API_KEY=sk-your-openai-api-key
 
 # Groq (for fast STT - Speech-to-Text)

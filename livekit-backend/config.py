@@ -39,6 +39,7 @@ You help users by:
 - Creating visualizations and interfaces
 - Facilitating productive conversations
 """
+# These system instructions and configurations are templated - PLEASE update to optimise for your use case
 
 def load_config() -> Dict[str, Any]:
     """Load configuration from environment variables and defaults"""
