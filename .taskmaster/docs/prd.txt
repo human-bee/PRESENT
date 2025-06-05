@@ -1,0 +1,24 @@
+# PRD: LiveKit + OpenAI Agent-JS + Tambo UI Agent (MVP)
+
+## Goal
+Build a minimal, robust agent that connects to a LiveKit room, receives real-time audio from participants, uses OpenAI Agent-JS SDK (with the Responses API) to transcribe and process speech, and can surface a Tambo UI component/tool in response to a simple voice command. The system should be easy to test and iteratively enhance, always working at each step.
+
+## MVP Features
+- User joins a LiveKit room via the Tambo UI (LivekitRoomConnector).
+- Agent joins the same room and receives audio from participants.
+- Agent transcribes speech (using OpenAI Responses API or Groq Whisper, whichever is easiest to start).
+- Agent listens for a simple trigger phrase (e.g., "show timer") and, when detected, surfaces a Tambo UI component (e.g., RetroTimer) in the UI.
+- All components and flows should be testable and work end-to-end before adding more features.
+
+## Stretch/Next Steps (for future tasks)
+- Add support for more complex tool calls and Tambo UI components.
+- Enable context-aware tool selection based on conversation history.
+- Support streaming, multi-turn conversations, and more advanced agent behaviors.
+- Integrate MCP context and advanced Tambo features.
+
+## Constraints
+- Always start simple, test each step, and only add complexity once the basics work.
+- Use Tambo's recommended patterns for tool/component invocation and context.
+- Use LiveKit's recommended patterns for room connection and agent join.
+- Use OpenAI Agent-JS SDK and Responses API for agent orchestration and STT if possible.
+- Document each step and ensure the system is easy to debug and extend. 
