@@ -1,3 +1,5 @@
+"use client";
+
 import { Tldraw, HTMLContainer as TldrawHTMLContainer, RecordProps, T, Editor, BaseBoxShapeUtil, TLBaseShape, TLExternalContentProps, TLExternalContentSource } from 'tldraw';
 import { ReactNode, useRef, useEffect, createContext, useContext, Component, ErrorInfo } from 'react';
 

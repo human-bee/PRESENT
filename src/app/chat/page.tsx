@@ -1,7 +1,7 @@
 "use client";
 
 // Force client-side rendering to prevent SSG issues with Tambo hooks
-export const runtime = 'edge';
+
 
 import { McpConfigButton } from "@/components/ui/mcp-config-button";
 import { McpStatusIndicator } from "@/components/ui/mcp-status-indicator";

@@ -42,4 +42,7 @@ AGENT_SHUTDOWN_TIMEOUT=300
 # =============================================================================
 # Uncomment for verbose logging during development
 # LIVEKIT_DEBUG=true
-# AGENT_LOG_LEVEL=DEBUG 
+# AGENT_LOG_LEVEL=DEBUG
+
+# LiveKit WebSocket URL for frontend (must start with wss://)
+NEXT_PUBLIC_LK_SERVER_URL=wss://your-livekit-server.com 

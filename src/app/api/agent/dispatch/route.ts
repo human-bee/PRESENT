@@ -1,194 +1,189 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { RoomServiceClient } from 'livekit-server-sdk';
+import { createLiveKitAgentBridge, LiveKitAgentBridge } from "@/lib/livekit-agent-bridge";
+import { AccessToken } from "livekit-server-sdk";
+export const runtime = "nodejs";
 
-export async function POST(request: NextRequest) {
+// Store active agent instances (in production, use a proper state management solution)
+const activeAgents = new Map<string, LiveKitAgentBridge>();
+
+/**
+ * POST /api/agent/dispatch
+ * 
+ * Triggers an OpenAI agent to join a LiveKit room
+ * 
+ * Request body:
+ * - roomName: string - The name of the room to join
+ * - trigger: string - What triggered the request (e.g., 'participant_connected')
+ * - timestamp: number - When the trigger occurred
+ */
+export async function POST(req: NextRequest) {
   try {
-    console.log('🤖 [Agent Dispatch API] Request received');
+    const { roomName, trigger, timestamp } = await req.json();
     
-    const body = await request.json();
-    const { roomName, trigger, timestamp } = body;
+    if (!roomName) {
+      return NextResponse.json(
+        { error: "Missing required parameter: roomName" },
+        { status: 400 }
+      );
+    }
     
-    console.log('📊 [Agent Dispatch API] Request details:', {
-      roomName,
-      trigger,
-      timestamp,
-      userAgent: request.headers.get('user-agent')?.slice(0, 50),
-    });
-
-    // Validate required environment variables
-    const livekitUrl = process.env.LIVEKIT_URL || process.env.NEXT_PUBLIC_LK_SERVER_URL;
+    // Check if agent is already in this room
+    if (activeAgents.has(roomName)) {
+      console.log(`🤖 Agent already active in room: ${roomName}`);
+      return NextResponse.json({
+        success: true,
+        message: "Agent already active in room",
+        roomName,
+        agentIdentity: "tambo-voice-agent",
+      });
+    }
+    
+    // Check for required environment variables
     const apiKey = process.env.LIVEKIT_API_KEY;
     const apiSecret = process.env.LIVEKIT_API_SECRET;
-
-    if (!livekitUrl || !apiKey || !apiSecret) {
-      console.error('❌ [Agent Dispatch API] Missing required environment variables:', {
-        hasLivekitUrl: !!livekitUrl,
-        hasApiKey: !!apiKey,
-        hasApiSecret: !!apiSecret,
+    const wsUrl = process.env.LIVEKIT_URL || process.env.NEXT_PUBLIC_LK_SERVER_URL;
+    const openaiApiKey = process.env.OPENAI_API_KEY;
+    
+    if (!apiKey || !apiSecret) {
+      return NextResponse.json(
+        { error: "Server misconfigured: missing LIVEKIT_API_KEY or LIVEKIT_API_SECRET" },
+        { status: 500 }
+      );
+    }
+    
+    if (!wsUrl) {
+      return NextResponse.json(
+        { error: "Server misconfigured: missing LIVEKIT_URL" },
+        { status: 500 }
+      );
+    }
+    
+    if (!openaiApiKey) {
+      return NextResponse.json(
+        { error: "Server misconfigured: missing OPENAI_API_KEY" },
+        { status: 500 }
+      );
+    }
+    
+    console.log(`🤖 Dispatching agent to room: ${roomName}`);
+    console.log(`🎯 Trigger: ${trigger} at ${new Date(timestamp).toISOString()}`);
+    
+    // Generate agent token for LiveKit
+    const agentIdentity = "tambo-voice-agent";
+    const agentName = "Tambo Voice Agent";
+    
+    const at = new AccessToken(apiKey, apiSecret, {
+      identity: agentIdentity,
+      name: agentName,
+      metadata: JSON.stringify({
+        type: "agent",
+        model: "openai-realtime",
+        trigger,
+        dispatchTime: Date.now(),
+      }),
+    });
+    
+    at.addGrant({
+      roomJoin: true,
+      room: roomName,
+      canPublish: true,
+      canPublishData: true,
+      canSubscribe: true,
+      canUpdateOwnMetadata: true,
+    });
+    
+    const token = await at.toJwt();
+    
+    // Create and connect the agent bridge
+    try {
+      const bridge = await createLiveKitAgentBridge({
+        roomUrl: wsUrl,
+        token,
+        agentName,
+        openaiApiKey,
       });
       
+      // Store the active agent
+      activeAgents.set(roomName, bridge);
+      
+      // Set up cleanup when agent disconnects
+      const checkDisconnection = setInterval(() => {
+        const status = bridge.getStatus();
+        if (!status.livekit.connected) {
+          console.log(`🤖 Agent disconnected from room: ${roomName}`);
+          activeAgents.delete(roomName);
+          clearInterval(checkDisconnection);
+        }
+      }, 5000); // Check every 5 seconds
+      
+      console.log(`✅ Agent successfully dispatched to room: ${roomName}`);
+      
+      return NextResponse.json({
+        success: true,
+        message: "Agent dispatched successfully",
+        roomName,
+        agentIdentity,
+        status: bridge.getStatus(),
+      });
+      
+    } catch (error) {
+      console.error(`❌ Failed to dispatch agent:`, error);
       return NextResponse.json(
         { 
-          error: 'Server configuration error',
-          details: 'Missing required LiveKit environment variables'
+          error: "Failed to dispatch agent",
+          details: error instanceof Error ? error.message : "Unknown error",
         },
         { status: 500 }
       );
     }
-
-    if (!roomName) {
-      return NextResponse.json(
-        { error: 'Room name is required' },
-        { status: 400 }
-      );
-    }
-
-    console.log(`🚀 [Agent Dispatch API] Dispatching agent to room: ${roomName}`);
     
-    // Create a dispatch log entry
-    const dispatchInfo = {
-      roomName,
-      trigger,
-      timestamp: timestamp || Date.now(),
-      status: 'triggered',
-      agentType: 'conversational-assistant',
-    };
-
-    try {
-      // Try to use LiveKit's room service to check if room exists
-      const roomService = new RoomServiceClient(livekitUrl, apiKey, apiSecret);
-      
-      console.log('🔧 [Agent Dispatch API] Checking room status...');
-      
-      // List rooms to see if our target room exists
-      const rooms = await roomService.listRooms();
-      const targetRoom = rooms.find(room => room.name === roomName);
-      
-      if (targetRoom) {
-        console.log('✅ [Agent Dispatch API] Room found:', {
-          name: targetRoom.name,
-          numParticipants: targetRoom.numParticipants,
-          creationTime: targetRoom.creationTime
-        });
-        
-        // For now, we'll rely on the agent's WorkerType.ROOM to auto-join
-        // The agent should automatically detect the room and join
-        console.log('ℹ️ [Agent Dispatch API] Agent should auto-join via WorkerType.ROOM');
-        
-        return NextResponse.json({
-          success: true,
-          message: 'Room verified - agent should auto-join',
-          dispatch: {
-            ...dispatchInfo,
-            method: 'worker-auto-join',
-            roomInfo: {
-              name: targetRoom.name,
-              numParticipants: targetRoom.numParticipants
-            }
-          },
-          recommendation: 'Make sure your agent worker is running with WorkerType.ROOM'
-        });
-        
-      } else {
-        console.log('⚠️ [Agent Dispatch API] Room not found, may be created when user connects');
-      }
-
-    } catch (roomServiceError) {
-      console.warn('⚠️ [Agent Dispatch API] Room service failed, falling back to webhook trigger:', roomServiceError);
-    }
-    
-    // Fallback: Try to trigger via webhook or direct notification
-    try {
-      // Option 1: Try to make a webhook call to trigger your agent worker
-      const webhookUrl = process.env.AGENT_WEBHOOK_URL;
-      if (webhookUrl) {
-        console.log('🪝 [Agent Dispatch API] Triggering via webhook...');
-        const webhookResponse = await fetch(webhookUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            action: 'join_room',
-            roomName,
-            trigger,
-            timestamp
-          })
-        });
-        
-        if (webhookResponse.ok) {
-          console.log('✅ [Agent Dispatch API] Webhook trigger successful');
-          return NextResponse.json({
-            success: true,
-            message: 'Agent triggered via webhook',
-            dispatch: { ...dispatchInfo, method: 'webhook' }
-          });
-        }
-      }
-      
-      // Option 2: File-based trigger (for local development)
-      const fs = await import('fs').catch(() => null);
-      if (fs && process.env.NODE_ENV === 'development') {
-        const triggerFile = '/tmp/agent-trigger.json';
-        const triggerData = {
-          roomName,
-          trigger,
-          timestamp: Date.now(),
-          action: 'join_room'
-        };
-        
-        try {
-          fs.writeFileSync(triggerFile, JSON.stringify(triggerData, null, 2));
-          console.log('📁 [Agent Dispatch API] Created trigger file for development');
-        } catch (fileError) {
-          console.warn('⚠️ [Agent Dispatch API] Could not create trigger file:', fileError);
-        }
-      }
-      
-      // Return success even if we just logged the request
-      console.log('ℹ️ [Agent Dispatch API] Dispatch logged - agent should auto-join via WorkerType.ROOM');
-      
-      return NextResponse.json({
-        success: true,
-        message: 'Agent dispatch logged successfully',
-        dispatch: { ...dispatchInfo, method: 'logged' },
-        recommendation: 'Make sure your agent worker is running with WorkerType.ROOM. The agent should automatically join when it detects room activity.'
-      });
-      
-    } catch (fallbackError) {
-      console.error('❌ [Agent Dispatch API] All dispatch methods failed:', fallbackError);
-      
-      return NextResponse.json({
-        success: false,
-        message: 'Agent dispatch failed',
-        error: fallbackError instanceof Error ? fallbackError.message : 'Unknown error',
-        dispatch: { ...dispatchInfo, status: 'failed' },
-        recommendation: 'Check your agent worker configuration and ensure it\'s running'
-      }, { status: 500 });
-    }
-
   } catch (error) {
-    console.error('💥 [Agent Dispatch API] Error processing request:', error);
-    
+    console.error("❌ Agent dispatch error:", error);
     return NextResponse.json(
       { 
-        error: 'Internal server error',
-        message: error instanceof Error ? error.message : 'Unknown error'
+        error: "Internal server error",
+        details: error instanceof Error ? error.message : "Unknown error",
       },
       { status: 500 }
     );
   }
 }
 
-export async function GET() {
+/**
+ * GET /api/agent/dispatch?roomName=ROOM
+ * 
+ * Check agent status for a specific room
+ */
+export async function GET(req: NextRequest) {
+  const { searchParams } = new URL(req.url);
+  const roomName = searchParams.get("roomName");
+  
+  if (!roomName) {
+    // Return all active agents
+    const activeRooms = Array.from(activeAgents.entries()).map(([room, bridge]) => ({
+      roomName: room,
+      status: bridge.getStatus(),
+    }));
+    
+    return NextResponse.json({
+      activeAgents: activeRooms,
+      count: activeRooms.length,
+    });
+  }
+  
+  // Check specific room
+  const bridge = activeAgents.get(roomName);
+  if (!bridge) {
+    return NextResponse.json({
+      roomName,
+      agentActive: false,
+      message: "No agent in room",
+    });
+  }
+  
   return NextResponse.json({
-    message: 'Agent dispatch endpoint is active',
-    methods: ['POST'],
-    usage: 'POST with { roomName, trigger, timestamp } to trigger agent dispatch',
-    environment: {
-      hasLivekitUrl: !!(process.env.LIVEKIT_URL || process.env.NEXT_PUBLIC_LK_SERVER_URL),
-      hasApiKey: !!process.env.LIVEKIT_API_KEY,
-      hasApiSecret: !!process.env.LIVEKIT_API_SECRET,
-      hasWebhookUrl: !!process.env.AGENT_WEBHOOK_URL,
-      nodeEnv: process.env.NODE_ENV
-    }
+    roomName,
+    agentActive: true,
+    status: bridge.getStatus(),
   });
 } 

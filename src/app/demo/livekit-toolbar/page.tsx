@@ -4,7 +4,7 @@ import React from 'react';
 import { LivekitToolbarDemo } from '@/components/ui/livekit-toolbar-demo';
 
 // Force client-side rendering to prevent SSG issues with Tambo hooks
-export const runtime = 'edge';
+
 
 /**
  * LiveKit Toolbar Demo Page

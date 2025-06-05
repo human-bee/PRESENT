@@ -3,7 +3,7 @@
 import { PresentationDeck } from "@/components/ui/presentation-deck";
 
 // Force client-side rendering to prevent SSG issues with Tambo hooks
-export const runtime = 'edge';
+
 
 const sampleSlides = [
   {

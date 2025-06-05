@@ -1,7 +1,6 @@
 "use client";
 
 // Force client-side rendering to prevent SSG issues with Tambo hooks
-export const runtime = 'edge';
 
 import { CanvasSpace } from "@/components/ui/canvas-space";
 import {
