@@ -1,8 +1,8 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useRoomContext, useRemoteParticipants, useLocalParticipant } from '@livekit/components-react';
-import { Track, RemoteParticipant, LocalParticipant, TrackEvent } from 'livekit-client';
+import { RemoteParticipant } from 'livekit-client';
 import { Mic, MicOff, Loader2, AudioLines } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -12,252 +12,277 @@ interface Transcription {
   text: string;
   timestamp: number;
   isFinal: boolean;
+  source: 'agent' | 'user';
 }
 
-export function SpeechTranscription() {
+interface SpeechTranscriptionProps {
+  className?: string;
+  maxTranscriptions?: number;
+  showInterimResults?: boolean;
+  onTranscription?: (transcription: Transcription) => void;
+}
+
+export function SpeechTranscription({
+  className,
+  maxTranscriptions = 50,
+  showInterimResults = true,
+  onTranscription,
+}: SpeechTranscriptionProps) {
   const room = useRoomContext();
-  const localParticipant = useLocalParticipant();
   const remoteParticipants = useRemoteParticipants();
-  
-  const [isTranscribing, setIsTranscribing] = useState(false);
+  const localParticipant = useLocalParticipant();
+
   const [transcriptions, setTranscriptions] = useState<Transcription[]>([]);
-  const [isProcessing, setIsProcessing] = useState(false);
+  const [isListening, setIsListening] = useState(false);
+  const [connectionStatus, setConnectionStatus] = useState<'disconnected' | 'connecting' | 'connected'>('disconnected');
+  const [agentStatus, setAgentStatus] = useState<'waiting' | 'active' | 'error'>('waiting');
   
-  // Audio processing state
-  const audioContextRef = useRef<AudioContext | null>(null);
-  const audioProcessorRef = useRef<ScriptProcessorNode | null>(null);
-  const audioBufferRef = useRef<Float32Array[]>([]);
-  const lastProcessTimeRef = useRef<number>(0);
-  
-  // Initialize audio context
+  const transcriptionContainerRef = useRef<HTMLDivElement>(null);
+
+  // Check for agent presence
+  const agentParticipant = remoteParticipants.find(p => 
+    p.identity === 'tambo-voice-agent' || 
+    p.metadata?.includes('agent') ||
+    p.name?.toLowerCase().includes('agent')
+  );
+
   useEffect(() => {
-    if (typeof window !== 'undefined' && !audioContextRef.current) {
-      audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
-    }
-    
-    return () => {
-      if (audioProcessorRef.current) {
-        audioProcessorRef.current.disconnect();
-      }
-      if (audioContextRef.current) {
-        audioContextRef.current.close();
-      }
-    };
-  }, []);
-  
-  // Process audio chunks and send to Responses API
-  const processAudioChunk = async (audioData: Float32Array, speakerName: string) => {
-    const now = Date.now();
-    // Process every 1 second
-    if (now - lastProcessTimeRef.current < 1000) {
-      audioBufferRef.current.push(audioData);
-      return;
-    }
-    
-    lastProcessTimeRef.current = now;
-    const combinedBuffer = combineAudioBuffers(audioBufferRef.current);
-    audioBufferRef.current = [];
-    
-    if (combinedBuffer.length === 0) return;
-    
-    setIsProcessing(true);
-    
-    try {
-      // Convert Float32Array to base64 for transmission
-      const base64Audio = float32ArrayToBase64(combinedBuffer);
+    if (room) {
+      setConnectionStatus('connected');
       
-      const response = await fetch('/api/transcribe', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          audio: base64Audio,
-          speaker: speakerName,
-          sampleRate: audioContextRef.current?.sampleRate || 48000,
-        }),
-      });
-      
-      if (!response.ok) throw new Error('Transcription failed');
-      
-      const data = await response.json();
-      
-      if (data.transcription) {
-        const newTranscription: Transcription = {
-          id: `${Date.now()}-${Math.random()}`,
-          speaker: speakerName,
-          text: data.transcription,
-          timestamp: Date.now(),
-          isFinal: true,
-        };
-        
-        setTranscriptions(prev => [...prev, newTranscription].slice(-20)); // Keep last 20
-      }
-    } catch (error) {
-      console.error('Transcription error:', error);
-    } finally {
-      setIsProcessing(false);
-    }
-  };
-  
-  // Monitor audio tracks
-  useEffect(() => {
-    if (!room || !isTranscribing) return;
-    
-    const processParticipantAudio = (participant: RemoteParticipant | LocalParticipant) => {
-      const audioTrack = participant.getTrackPublication(Track.Source.Microphone);
-      
-      if (audioTrack?.track && audioTrack.track.mediaStreamTrack) {
-        const mediaStream = new MediaStream([audioTrack.track.mediaStreamTrack]);
-        const source = audioContextRef.current?.createMediaStreamSource(mediaStream);
-        
-        if (source && audioContextRef.current) {
-          const processor = audioContextRef.current.createScriptProcessor(4096, 1, 1);
+      // Listen for data messages from the agent
+      const handleDataReceived = (payload: Uint8Array, participant?: RemoteParticipant) => {
+        try {
+          const data = new TextDecoder().decode(payload);
+          const parsed = JSON.parse(data);
           
-          processor.onaudioprocess = (e) => {
-            const inputData = e.inputBuffer.getChannelData(0);
-            const audioData = new Float32Array(inputData);
-            processAudioChunk(audioData, participant.name || participant.identity);
-          };
-          
-          source.connect(processor);
-          processor.connect(audioContextRef.current.destination);
-          
-          // Store processor for cleanup
-          audioProcessorRef.current = processor;
+          // Handle transcription data from agent
+          if (parsed.type === 'live_transcription') {
+            const transcription: Transcription = {
+              id: `${Date.now()}-${Math.random()}`,
+              speaker: parsed.speaker || participant?.identity || 'Unknown',
+              text: parsed.text,
+              timestamp: parsed.timestamp || Date.now(),
+              isFinal: parsed.is_final || false,
+              source: participant?.identity === 'tambo-voice-agent' ? 'agent' : 'user',
+            };
+            
+            addTranscription(transcription);
+            onTranscription?.(transcription);
+          }
+        } catch (error) {
+          console.warn('Failed to parse transcription data:', error);
         }
-      }
-    };
-    
-    // Process local participant
-    if (localParticipant.localParticipant) {
-      processParticipantAudio(localParticipant.localParticipant);
-    }
-    
-    // Process remote participants
-    remoteParticipants.forEach(participant => {
-      processParticipantAudio(participant);
-    });
-    
-    return () => {
-      if (audioProcessorRef.current) {
-        audioProcessorRef.current.disconnect();
-        audioProcessorRef.current = null;
-      }
-    };
-  }, [room, isTranscribing, localParticipant, remoteParticipants]);
-  
-  const toggleTranscription = () => {
-    setIsTranscribing(!isTranscribing);
-    if (!isTranscribing) {
-      setTranscriptions([]); // Clear when starting
-    }
-  };
-  
-  return (
-    <div className="bg-white rounded-lg shadow-lg p-4 w-96 max-h-96 flex flex-col">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-4 pb-2 border-b">
-        <h3 className="font-semibold flex items-center gap-2">
-          <AudioLines className="w-4 h-4" />
-          Speech Transcription
-        </h3>
-        
-        <button
-          onClick={toggleTranscription}
-          className={cn(
-            "flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-colors",
-            isTranscribing
-              ? "bg-red-100 text-red-700 hover:bg-red-200"
-              : "bg-blue-100 text-blue-700 hover:bg-blue-200"
-          )}
-        >
-          {isTranscribing ? (
-            <>
-              <MicOff className="w-3.5 h-3.5" />
-              Stop
-            </>
-          ) : (
-            <>
-              <Mic className="w-3.5 h-3.5" />
-              Start
-            </>
-          )}
-        </button>
-      </div>
+      };
+
+      room.on('dataReceived', handleDataReceived);
       
+      return () => {
+        room.off('dataReceived', handleDataReceived);
+      };
+    }
+  }, [room, onTranscription]);
+
+  // Monitor agent status
+  useEffect(() => {
+    if (agentParticipant) {
+      setAgentStatus('active');
+    } else {
+      setAgentStatus('waiting');
+    }
+  }, [agentParticipant]);
+
+  const addTranscription = useCallback((transcription: Transcription) => {
+    setTranscriptions(prev => {
+      const updated = [...prev];
+      
+      // Remove old interim results from same speaker
+      if (!transcription.isFinal) {
+        const filteredPrev = updated.filter(t => 
+          !(t.speaker === transcription.speaker && !t.isFinal)
+        );
+        filteredPrev.push(transcription);
+        return filteredPrev.slice(-maxTranscriptions);
+      }
+      
+      // For final results, replace any interim result from same speaker
+      const filteredPrev = updated.filter(t => 
+        !(t.speaker === transcription.speaker && !t.isFinal)
+      );
+      filteredPrev.push(transcription);
+      
+      return filteredPrev.slice(-maxTranscriptions);
+    });
+  }, [maxTranscriptions]);
+
+  // Auto-scroll to bottom when new transcriptions arrive
+  useEffect(() => {
+    if (transcriptionContainerRef.current) {
+      transcriptionContainerRef.current.scrollTop = transcriptionContainerRef.current.scrollHeight;
+    }
+  }, [transcriptions]);
+
+  const handleStartListening = useCallback(() => {
+    if (!room || !localParticipant) return;
+    
+    setIsListening(true);
+    console.log('🎤 Started listening for agent transcriptions');
+  }, [room, localParticipant]);
+
+  const handleStopListening = useCallback(() => {
+    setIsListening(false);
+    console.log('🎤 Stopped listening for agent transcriptions');
+  }, []);
+
+  const clearTranscriptions = () => {
+    setTranscriptions([]);
+  };
+
+  const formatTime = (timestamp: number) => {
+    return new Date(timestamp).toLocaleTimeString('en-US', {
+      hour12: false,
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+    });
+  };
+
+  const getStatusColor = () => {
+    if (agentStatus === 'active' && isListening) return 'text-green-500';
+    if (agentStatus === 'waiting') return 'text-yellow-500';
+    if (agentStatus === 'error') return 'text-red-500';
+    return 'text-gray-500';
+  };
+
+  const getStatusText = () => {
+    if (agentStatus === 'active' && isListening) return 'Agent Active & Listening';
+    if (agentStatus === 'active') return 'Agent Ready';
+    if (agentStatus === 'waiting') return 'Waiting for Agent';
+    if (agentStatus === 'error') return 'Agent Error';
+    return 'Not Connected';
+  };
+
+  return (
+    <div className={cn('flex flex-col space-y-4 p-4 bg-white dark:bg-gray-900 rounded-lg border', className)}>
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center space-x-2">
+          <AudioLines className="h-5 w-5 text-blue-500" />
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+            Speech Transcription
+          </h3>
+        </div>
+        
+        <div className="flex items-center space-x-2">
+          <button
+            onClick={clearTranscriptions}
+            className="text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+          >
+            Clear
+          </button>
+        </div>
+      </div>
+
       {/* Status */}
-      {isTranscribing && (
-        <div className="text-sm text-gray-600 mb-2 flex items-center gap-2">
-          {isProcessing ? (
-            <>
-              <Loader2 className="w-3 h-3 animate-spin" />
-              Processing audio...
-            </>
-          ) : (
-            <>
-              <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
-              Listening...
-            </>
+      <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-md">
+        <div className="flex items-center space-x-3">
+          <div className={cn('w-2 h-2 rounded-full', getStatusColor())} />
+          <span className={cn('text-sm font-medium', getStatusColor())}>
+            {getStatusText()}
+          </span>
+        </div>
+        
+        <div className="flex items-center space-x-2">
+          {connectionStatus === 'connected' && (
+            <span className="text-xs text-green-600 dark:text-green-400">
+              Room Connected
+            </span>
+          )}
+          {agentParticipant && (
+            <span className="text-xs text-blue-600 dark:text-blue-400">
+              Agent: {agentParticipant.identity}
+            </span>
           )}
         </div>
+      </div>
+
+      {/* Controls */}
+      <div className="flex items-center justify-center space-x-4">
+        {!isListening ? (
+          <button
+            onClick={handleStartListening}
+            disabled={!room || !agentParticipant}
+            className="flex items-center space-x-2 px-6 py-3 bg-blue-500 hover:bg-blue-600 disabled:bg-gray-300 disabled:cursor-not-allowed text-white rounded-lg font-medium transition-colors"
+          >
+            <Mic className="h-5 w-5" />
+            <span>Start Listening</span>
+          </button>
+        ) : (
+          <button
+            onClick={handleStopListening}
+            className="flex items-center space-x-2 px-6 py-3 bg-red-500 hover:bg-red-600 text-white rounded-lg font-medium transition-colors"
+          >
+            <MicOff className="h-5 w-5" />
+            <span>Stop Listening</span>
+          </button>
+        )}
+      </div>
+
+      {/* Agent Status Message */}
+      {!agentParticipant && (
+        <div className="p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-md">
+          <div className="flex items-center space-x-2">
+            <Loader2 className="h-4 w-4 text-yellow-600 animate-spin" />
+            <span className="text-sm text-yellow-800 dark:text-yellow-200">
+              Waiting for LiveKit agent to join the room...
+            </span>
+          </div>
+        </div>
       )}
-      
+
       {/* Transcriptions */}
-      <div className="flex-1 overflow-y-auto space-y-2 min-h-0">
+      <div 
+        ref={transcriptionContainerRef}
+        className="flex-1 space-y-2 max-h-96 overflow-y-auto p-3 bg-gray-50 dark:bg-gray-800 rounded-md"
+      >
         {transcriptions.length === 0 ? (
-          <div className="text-center text-gray-400 py-8">
-            {isTranscribing ? "Waiting for speech..." : "Click Start to begin transcription"}
+          <div className="text-center text-gray-500 dark:text-gray-400 py-8">
+            {isListening ? 'Listening for speech...' : 'No transcriptions yet'}
           </div>
         ) : (
-          transcriptions.map((trans) => (
-            <div
-              key={trans.id}
-              className="p-2 bg-gray-50 rounded-md text-sm"
-            >
-              <div className="font-medium text-gray-700 mb-0.5">
-                {trans.speaker}
+          transcriptions
+            .filter(t => showInterimResults || t.isFinal)
+            .map((transcription) => (
+              <div
+                key={transcription.id}
+                className={cn(
+                  'p-2 rounded border-l-4 transition-opacity',
+                  transcription.source === 'agent' 
+                    ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-400' 
+                    : 'bg-green-50 dark:bg-green-900/20 border-green-400',
+                  !transcription.isFinal && 'opacity-60 italic'
+                )}
+              >
+                <div className="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400 mb-1">
+                  <span className="font-medium">{transcription.speaker}</span>
+                  <div className="flex items-center space-x-2">
+                    <span>{transcription.source}</span>
+                    {!transcription.isFinal && <span>(interim)</span>}
+                    <span>{formatTime(transcription.timestamp)}</span>
+                  </div>
+                </div>
+                <div className="text-sm text-gray-900 dark:text-gray-100">
+                  {transcription.text}
+                </div>
               </div>
-              <div className="text-gray-900">{trans.text}</div>
-              <div className="text-xs text-gray-400 mt-1">
-                {new Date(trans.timestamp).toLocaleTimeString()}
-              </div>
-            </div>
-          ))
+            ))
         )}
+      </div>
+
+      {/* Info */}
+      <div className="text-xs text-gray-500 dark:text-gray-400 text-center">
+        Using LiveKit TypeScript Agent with OpenAI Realtime API
       </div>
     </div>
   );
-}
-
-// Helper functions
-function combineAudioBuffers(buffers: Float32Array[]): Float32Array {
-  const totalLength = buffers.reduce((acc, buf) => acc + buf.length, 0);
-  const result = new Float32Array(totalLength);
-  let offset = 0;
-  
-  for (const buffer of buffers) {
-    result.set(buffer, offset);
-    offset += buffer.length;
-  }
-  
-  return result;
-}
-
-function float32ArrayToBase64(float32Array: Float32Array): string {
-  const buffer = new ArrayBuffer(float32Array.length * 2); // 2 bytes per sample
-  const view = new DataView(buffer);
-  
-  // Convert float32 to int16
-  for (let i = 0; i < float32Array.length; i++) {
-    const sample = Math.max(-1, Math.min(1, float32Array[i]));
-    view.setInt16(i * 2, sample * 0x7FFF, true); // true = little endian
-  }
-  
-  // Convert to base64
-  const uint8Array = new Uint8Array(buffer);
-  let binary = '';
-  for (let i = 0; i < uint8Array.byteLength; i++) {
-    binary += String.fromCharCode(uint8Array[i]);
-  }
-  
-  return btoa(binary);
 } 

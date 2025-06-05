@@ -1,15 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createLiveKitAgentBridge, LiveKitAgentBridge } from "@/lib/livekit-agent-bridge";
 import { AccessToken } from "livekit-server-sdk";
-export const runtime = "nodejs";
 
-// Store active agent instances (in production, use a proper state management solution)
-const activeAgents = new Map<string, LiveKitAgentBridge>();
+export const runtime = "nodejs";
 
 /**
  * POST /api/agent/dispatch
  * 
- * Triggers an OpenAI agent to join a LiveKit room
+ * Creates a token for an agent to join a LiveKit room.
+ * The actual agent runs as a separate Node.js process.
  * 
  * Request body:
  * - roomName: string - The name of the room to join
@@ -25,17 +23,6 @@ export async function POST(req: NextRequest) {
         { error: "Missing required parameter: roomName" },
         { status: 400 }
       );
-    }
-    
-    // Check if agent is already in this room
-    if (activeAgents.has(roomName)) {
-      console.log(`🤖 Agent already active in room: ${roomName}`);
-      return NextResponse.json({
-        success: true,
-        message: "Agent already active in room",
-        roomName,
-        agentIdentity: "tambo-voice-agent",
-      });
     }
     
     // Check for required environment variables
@@ -65,7 +52,7 @@ export async function POST(req: NextRequest) {
       );
     }
     
-    console.log(`🤖 Dispatching agent to room: ${roomName}`);
+    console.log(`🤖 Creating agent token for room: ${roomName}`);
     console.log(`🎯 Trigger: ${trigger} at ${new Date(timestamp).toISOString()}`);
     
     // Generate agent token for LiveKit
@@ -94,54 +81,25 @@ export async function POST(req: NextRequest) {
     
     const token = await at.toJwt();
     
-    // Create and connect the agent bridge
-    try {
-      const bridge = await createLiveKitAgentBridge({
-        roomUrl: wsUrl,
-        token,
-        agentName,
-        openaiApiKey,
-      });
-      
-      // Store the active agent
-      activeAgents.set(roomName, bridge);
-      
-      // Set up cleanup when agent disconnects
-      const checkDisconnection = setInterval(() => {
-        const status = bridge.getStatus();
-        if (!status.livekit.connected) {
-          console.log(`🤖 Agent disconnected from room: ${roomName}`);
-          activeAgents.delete(roomName);
-          clearInterval(checkDisconnection);
-        }
-      }, 5000); // Check every 5 seconds
-      
-      console.log(`✅ Agent successfully dispatched to room: ${roomName}`);
-      
-      return NextResponse.json({
-        success: true,
-        message: "Agent dispatched successfully",
-        roomName,
-        agentIdentity,
-        status: bridge.getStatus(),
-      });
-      
-    } catch (error) {
-      console.error(`❌ Failed to dispatch agent:`, error);
-      return NextResponse.json(
-        { 
-          error: "Failed to dispatch agent",
-          details: error instanceof Error ? error.message : "Unknown error",
-        },
-        { status: 500 }
-      );
-    }
+    // Return success with agent info
+    // The actual agent should be running separately and will use this token
+    console.log(`✅ Agent token created for room: ${roomName}`);
+    
+    return NextResponse.json({
+      success: true,
+      message: "Agent token created successfully",
+      roomName,
+      agentIdentity,
+      token, // Include token for debugging/manual agent connection
+      wsUrl,
+      note: "The agent should be running as a separate process. See TYPESCRIPT_AGENT_SETUP.md for instructions.",
+    });
     
   } catch (error) {
-    console.error("❌ Agent dispatch error:", error);
+    console.error(`❌ Failed to create agent token:`, error);
     return NextResponse.json(
       { 
-        error: "Internal server error",
+        error: "Failed to create agent token",
         details: error instanceof Error ? error.message : "Unknown error",
       },
       { status: 500 }
@@ -150,40 +108,14 @@ export async function POST(req: NextRequest) {
 }
 
 /**
- * GET /api/agent/dispatch?roomName=ROOM
+ * GET /api/agent/dispatch
  * 
- * Check agent status for a specific room
+ * Health check endpoint
  */
 export async function GET(req: NextRequest) {
-  const { searchParams } = new URL(req.url);
-  const roomName = searchParams.get("roomName");
-  
-  if (!roomName) {
-    // Return all active agents
-    const activeRooms = Array.from(activeAgents.entries()).map(([room, bridge]) => ({
-      roomName: room,
-      status: bridge.getStatus(),
-    }));
-    
-    return NextResponse.json({
-      activeAgents: activeRooms,
-      count: activeRooms.length,
-    });
-  }
-  
-  // Check specific room
-  const bridge = activeAgents.get(roomName);
-  if (!bridge) {
-    return NextResponse.json({
-      roomName,
-      agentActive: false,
-      message: "No agent in room",
-    });
-  }
-  
   return NextResponse.json({
-    roomName,
-    agentActive: true,
-    status: bridge.getStatus(),
+    status: "ok",
+    message: "Agent dispatch API is running",
+    note: "Use POST to create agent tokens. The agent should run as a separate process.",
   });
 } 
