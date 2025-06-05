@@ -1,4 +1,4 @@
-import { Tldraw, HTMLContainer, RecordProps, T, Editor, BaseBoxShapeUtil, TLBaseShape, TLExternalContentProps, TLExternalContentSource } from 'tldraw';
+import { Tldraw, HTMLContainer as TldrawHTMLContainer, RecordProps, T, Editor, BaseBoxShapeUtil, TLBaseShape, TLExternalContentProps, TLExternalContentSource } from 'tldraw';
 import { ReactNode, useRef, useEffect, createContext, useContext, Component, ErrorInfo } from 'react';
 
 // Create context for component store
@@ -150,7 +150,7 @@ export class TamboShapeUtil extends BaseBoxShapeUtil<TamboShape> {
   // Render method for the shape
   override component(shape: TamboShape) {
     return (
-      <HTMLContainer
+      <TldrawHTMLContainer
         id={shape.id}
         style={{
           display: 'flex',
@@ -163,7 +163,7 @@ export class TamboShapeUtil extends BaseBoxShapeUtil<TamboShape> {
         }}
       >
         <TamboShapeComponent shape={shape} />
-      </HTMLContainer>
+      </TldrawHTMLContainer>
     );
   }
 
