@@ -4,7 +4,9 @@ This is a starter NextJS app with tambo-ai for generative UI and MCP.
 
 [![Watch the tutorial here](https://img.youtube.com/vi/6zDDPfr7Aoo/0.jpg)](https://youtu.be/6zDDPfr7Aoo)
 
-## Get Started
+## 🎯 Features
+
+## 🚀 Getting Started
 
 1. Run `npm create-tambo@latest my-tambo-app` for a new project
 
@@ -66,3 +68,16 @@ const components: TamboComponent[] = [
 ```
 
 You can find more information about the options [here](https://tambo.co/docs/concepts/registering-components)
+
+## 🎙️ Transcription Service
+
+Due to compatibility issues between LiveKit agents TypeScript library and Next.js, we use a standalone transcription service:
+
+### Quick Start
+1. Start the main app: `npm run dev`
+2. In a new terminal: `npm run transcription`
+3. The service will connect to your LiveKit room and provide transcriptions
+
+See [TRANSCRIPTION_SERVICE_SETUP.md](TRANSCRIPTION_SERVICE_SETUP.md) for detailed setup instructions.
+
+## 🏗️ Architecture

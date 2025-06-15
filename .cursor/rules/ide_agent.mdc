@@ -1,7 +1,7 @@
 ---
 description: 
 globs: 
-alwaysApply: true
+alwaysApply: false
 ---
 # IDE Agent Rule: LiveKit + Agent-JS + Tambo UI Project
 

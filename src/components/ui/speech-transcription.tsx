@@ -39,12 +39,35 @@ export function SpeechTranscription({
   
   const transcriptionContainerRef = useRef<HTMLDivElement>(null);
 
-  // Check for agent presence
+  // Check for agent presence with detailed logging
   const agentParticipant = remoteParticipants.find(p => 
     p.identity === 'tambo-voice-agent' || 
+    p.identity.startsWith('tambo-voice-agent') ||
     p.metadata?.includes('agent') ||
-    p.name?.toLowerCase().includes('agent')
+    p.metadata?.includes('type":"agent') ||
+    p.name?.toLowerCase().includes('agent') ||
+    p.identity.toLowerCase().includes('agent')
   );
+
+  // Log all participants for debugging
+  useEffect(() => {
+    console.log('🔍 [SpeechTranscription] Current participants:', {
+      total: remoteParticipants.length,
+      participants: remoteParticipants.map(p => ({
+        identity: p.identity,
+        name: p.name,
+        metadata: p.metadata,
+        isAgent: p.identity === 'tambo-voice-agent' || 
+                 p.identity.startsWith('tambo-voice-agent') ||
+                 p.metadata?.includes('agent') ||
+                 p.metadata?.includes('type":"agent') ||
+                 p.name?.toLowerCase().includes('agent') ||
+                 p.identity.toLowerCase().includes('agent')
+      })),
+      agentFound: !!agentParticipant,
+      agentIdentity: agentParticipant?.identity || 'none'
+    });
+  }, [remoteParticipants, agentParticipant]);
 
   useEffect(() => {
     if (room) {
@@ -231,11 +254,21 @@ export function SpeechTranscription({
       {/* Agent Status Message */}
       {!agentParticipant && (
         <div className="p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-md">
-          <div className="flex items-center space-x-2">
+          <div className="flex items-center space-x-2 mb-2">
             <Loader2 className="h-4 w-4 text-yellow-600 animate-spin" />
             <span className="text-sm text-yellow-800 dark:text-yellow-200">
               Waiting for LiveKit agent to join the room...
             </span>
+          </div>
+          <div className="text-xs text-yellow-700 dark:text-yellow-300 border-t border-yellow-200 dark:border-yellow-700 pt-2">
+            <div className="font-medium mb-1">💡 Agent Worker Required:</div>
+            <div>Make sure to run the agent worker in a separate terminal:</div>
+            <code className="block bg-yellow-100 dark:bg-yellow-800/50 p-1 rounded mt-1 text-xs">
+              npm run agent:dev
+            </code>
+            <div className="mt-1">
+              The agent dispatch API only creates tokens - the actual worker must be running separately.
+            </div>
           </div>
         </div>
       )}

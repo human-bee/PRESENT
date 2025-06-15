@@ -13,7 +13,8 @@
     "test:agent": "DISABLE_PYTHON_AGENT=true npm run dev",
     "agent:build": "tsc -p tsconfig.agent.json",
     "agent:run": "DISABLE_PYTHON_AGENT=true node dist/agent/livekit-agent-worker.js start",
-    "agent:dev": "DISABLE_PYTHON_AGENT=true tsx src/lib/livekit-agent-worker.ts dev"
+    "agent:dev": "DISABLE_PYTHON_AGENT=true node --import tsx/esm src/lib/livekit-agent-worker.ts dev",
+    "agent:clean": "DISABLE_PYTHON_AGENT=true node --import tsx/esm src/lib/clean-agent.ts dev"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

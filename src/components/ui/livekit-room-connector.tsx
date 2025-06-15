@@ -273,15 +273,35 @@ export function LivekitRoomConnector({
     };
 
     const handleParticipantConnected = (participant: Participant) => {
-      console.log(`👥 [LiveKitConnector-${roomName}] Participant connected:`, participant.identity);
+      console.log(`👥 [LiveKitConnector-${roomName}] Participant connected:`, {
+        identity: participant.identity,
+        name: participant.name,
+        metadata: participant.metadata,
+        isSpeaking: participant.isSpeaking,
+        audioTrackCount: participant.audioTrackPublications.size,
+        videoTrackCount: participant.videoTrackPublications.size,
+        allParticipants: Array.from(room.remoteParticipants.values()).map(p => ({
+          identity: p.identity,
+          name: p.name,
+          metadata: p.metadata
+        }))
+      });
       
       // Check if this is an agent joining and update state accordingly
       const isAgent = participant.identity.toLowerCase().includes('agent') || 
                       participant.identity.toLowerCase().includes('bot') ||
-                      participant.identity.toLowerCase().includes('ai');
+                      participant.identity.toLowerCase().includes('ai') ||
+                      participant.identity.startsWith('tambo-voice-agent') ||
+                      participant.metadata?.includes('agent') ||
+                      participant.metadata?.includes('type":"agent');
       
       if (isAgent) {
-        console.log(`🤖 [LiveKitConnector-${roomName}] AI Agent joined the room: ${participant.identity}`);
+        console.log(`🎉 [LiveKitConnector-${roomName}] 🤖 AI AGENT SUCCESSFULLY JOINED THE ROOM! 🎉`, {
+          identity: participant.identity,
+          name: participant.name,
+          metadata: participant.metadata,
+          totalParticipants: room.numParticipants
+        });
         setState(prev => prev ? { 
           ...prev, 
           participantCount: room.numParticipants,
@@ -289,20 +309,29 @@ export function LivekitRoomConnector({
           agentIdentity: participant.identity
         } : { ...getInitialState(), participantCount: room.numParticipants, agentStatus: "joined", agentIdentity: participant.identity });
       } else {
+        console.log(`👤 [LiveKitConnector-${roomName}] Human participant connected: ${participant.identity}`);
         setState(prev => prev ? { ...prev, participantCount: room.numParticipants } : getInitialState());
       }
     };
 
     const handleParticipantDisconnected = (participant: Participant) => {
-      console.log(`👥 [LiveKitConnector-${roomName}] Participant disconnected:`, participant.identity);
+      console.log(`👥 [LiveKitConnector-${roomName}] Participant disconnected:`, {
+        identity: participant.identity,
+        name: participant.name,
+        metadata: participant.metadata,
+        remainingParticipants: room.numParticipants - 1
+      });
       
       // Check if this was an agent leaving
       const isAgent = participant.identity.toLowerCase().includes('agent') || 
                       participant.identity.toLowerCase().includes('bot') ||
-                      participant.identity.toLowerCase().includes('ai');
+                      participant.identity.toLowerCase().includes('ai') ||
+                      participant.identity.startsWith('tambo-voice-agent') ||
+                      participant.metadata?.includes('agent') ||
+                      participant.metadata?.includes('type":"agent');
       
       if (isAgent && stateRef.current?.agentIdentity === participant.identity) {
-        console.log(`🤖 [LiveKitConnector-${roomName}] AI Agent left the room: ${participant.identity}`);
+        console.log(`😔 [LiveKitConnector-${roomName}] AI Agent left the room: ${participant.identity}`);
         setState(prev => prev ? { 
           ...prev, 
           participantCount: room.numParticipants,
@@ -809,10 +838,30 @@ function RoomConnectorUI({
           {/* Agent Error Details */}
           {connectionState === "connected" && agentStatus === "failed" && state?.errorMessage && (
             <div className="text-xs text-red-600 bg-red-50 border border-red-200 rounded p-2 select-none">
-              <div className="font-medium mb-1">Agent Connection Issue:</div>
+              <div className="font-medium mb-1">🔧 Agent Connection Issue:</div>
               <div>{state.errorMessage}</div>
-              <div className="mt-1 text-red-500">
-                Make sure your agent worker is running. Check the terminal for agent logs.
+              <div className="mt-2 text-red-500 border-t border-red-200 pt-2">
+                <div className="font-medium">🚨 Make sure your agent worker is running:</div>
+                <code className="block bg-red-100 border border-red-300 p-1 rounded mt-1 text-xs">
+                  npm run agent:dev
+                </code>
+                <div className="mt-1">
+                  Agent dispatch only creates tokens. The actual worker connects to the room.
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Agent Timeout Warning */}
+          {connectionState === "connected" && agentStatus === "dispatching" && (
+            <div className="text-xs text-blue-600 bg-blue-50 border border-blue-200 rounded p-2 select-none">
+              <div className="font-medium mb-1">⏰ Agent Dispatching...</div>
+              <div>Waiting for agent to join the room (timeout in 30s)</div>
+              <div className="mt-2 text-blue-500 border-t border-blue-200 pt-2">
+                <div className="font-medium">💡 If this takes too long:</div>
+                <div>1. Check if agent worker is running: <code className="bg-blue-100 px-1 rounded">npm run agent:dev</code></div>
+                <div>2. Check the terminal for agent connection logs</div>
+                <div>3. Verify your .env.local has all LiveKit credentials</div>
               </div>
             </div>
           )}

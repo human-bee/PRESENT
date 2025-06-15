@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 /**
- * LiveKit Agent Worker
+ * Tambo Voice Agent - LiveKit Agent JS Implementation
  *
- * This is a standalone Node.js worker that runs the LiveKit agent.
- * It should be run as a separate process, not imported by Next.js.
+ * Based on LiveKit Agent JS documentation patterns
+ * Replaces the Python agent with TypeScript equivalent
  */
-declare const _default: any;
+declare const _default: import("@livekit/agents").Agent;
 export default _default;
 //# sourceMappingURL=livekit-agent-worker.d.ts.map
