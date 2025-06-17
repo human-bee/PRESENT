@@ -55,9 +55,6 @@ import {
 import LiveCaptions, {
   liveCaptionsSchema,
 } from "@/components/LiveCaptions";
-import FactChecker, {
-  factCheckerSchema,
-} from "@/components/FactChecker";
 import type { TamboComponent } from "@tambo-ai/react";
 import { TamboTool } from "@tambo-ai/react";
 
@@ -165,13 +162,6 @@ export const components: TamboComponent[] = [
       "A real-time live captions component that displays speech transcriptions in an interactive tldraw-style canvas with beautiful speech bubbles. REQUIRES LivekitRoomConnector to be connected first. Features real-time transcription from Groq Whisper via LiveKit data channels, draggable speech bubbles, speaker identification with avatars, timestamps, interim/final transcript states, export capabilities (TXT/JSON/SRT), customizable canvas themes (grid/dots/clean), auto-positioning, and persistent state management. Perfect for accessibility, meeting transcription, live events, educational content, and any scenario requiring real-time speech-to-text visualization with an engaging visual interface.",
     component: LiveCaptions,
     propsSchema: liveCaptionsSchema,
-  },
-  {
-    name: "FactChecker",
-    description:
-      "A real-time fact-checking component that listens to speaker claims, displays them, and allows for manual or automated verification. Features include speaker identification, claim status (pending, true, false, disputed, verifying), and source tracking. Interactive and responsive UI for live events and presentations.",
-    component: FactChecker,
-    propsSchema: factCheckerSchema,
   },
   // Add more components here
 ];

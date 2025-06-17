@@ -1,6 +1,6 @@
 "use client";
 
-import { Tldraw, HTMLContainer as TldrawHTMLContainer, RecordProps, T, Editor, BaseBoxShapeUtil, TLBaseShape, TLExternalContentProps, TLExternalContentSource } from 'tldraw';
+import { Tldraw, HTMLContainer as TldrawHTMLContainer, RecordProps, T, Editor, BaseBoxShapeUtil, TLBaseShape } from 'tldraw';
 import { ReactNode, useRef, useEffect, createContext, useContext, Component, ErrorInfo } from 'react';
 
 // Create context for component store
@@ -191,92 +191,7 @@ export interface TldrawCanvasProps {
   // Add any other props you might need to pass to Tldraw component
 }
 
-// Custom external content handlers to fix image drop validation errors
-const customExternalContentHandlers = {
-  // Handle text content
-  text: async ({ point, sources, editor }: TLExternalContentProps) => {
-    const textContent = sources.find((source) => source.type === 'text')?.data;
-    if (textContent) {
-      editor.createShapes([
-        {
-          id: editor.createShapeId(),
-          type: 'text',
-          x: point.x,
-          y: point.y,
-          props: {
-            text: textContent,
-          },
-        },
-      ]);
-    }
-  },
 
-  // Handle URL content - prevent bookmark creation with data URLs
-  url: async ({ point, sources, editor }: TLExternalContentProps) => {
-    const urlSource = sources.find((source) => source.type === 'url') as TLExternalContentSource & { type: 'url' };
-    if (urlSource?.data) {
-      const url = urlSource.data;
-      
-      // Skip data URLs to prevent validation errors
-      if (url.startsWith('data:')) {
-        console.warn('Skipping data URL for bookmark creation:', url.substring(0, 50) + '...');
-        return;
-      }
-      
-      // Only create bookmarks for valid HTTP/HTTPS URLs
-      if (url.startsWith('http://') || url.startsWith('https://')) {
-        editor.createShapes([
-          {
-            id: editor.createShapeId(),
-            type: 'bookmark',
-            x: point.x,
-            y: point.y,
-            props: {
-              url: url,
-            },
-          },
-        ]);
-      }
-    }
-  },
-
-  // Handle files including images
-  files: async ({ point, sources, editor }: TLExternalContentProps) => {
-    const fileSource = sources.find((source) => source.type === 'file') as TLExternalContentSource & { type: 'file' };
-    if (fileSource?.data) {
-      const file = fileSource.data;
-      
-      // Handle image files
-      if (file.type.startsWith('image/')) {
-        try {
-          const reader = new FileReader();
-          reader.onload = (e) => {
-            const result = e.target?.result;
-            if (typeof result === 'string') {
-              // Create an image shape instead of a bookmark
-              editor.createShapes([
-                {
-                  id: editor.createShapeId(),
-                  type: 'image',
-                  x: point.x,
-                  y: point.y,
-                  props: {
-                    url: result, // data URL is valid for image shapes
-                    w: 300,
-                    h: 200,
-                  },
-                },
-              ]);
-            }
-          };
-          reader.readAsDataURL(file);
-        } catch (error) {
-          console.error('Error processing dropped image:', error);
-        }
-      }
-    }
-  },
-};
 
 // Error boundary for tldraw canvas
 interface TldrawErrorBoundaryState {
@@ -331,6 +246,8 @@ class TldrawErrorBoundary extends Component<{ children: ReactNode }, TldrawError
   }
 }
 
+
+
 export function TldrawCanvas({ onMount, shapeUtils, componentStore, ...rest }: TldrawCanvasProps) {
   return (
     <TldrawErrorBoundary>
@@ -339,7 +256,6 @@ export function TldrawCanvas({ onMount, shapeUtils, componentStore, ...rest }: T
           <Tldraw
             onMount={onMount}
             shapeUtils={shapeUtils || []}
-            externalContentHandlers={customExternalContentHandlers}
             {...rest}
           />
         </div>
