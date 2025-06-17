@@ -1,3 +1,10 @@
+/**
+ * CanvasTopZone Component
+ * 
+ * This component serves as the top zone of the canvas, containing
+ * the MCP configuration button and status indicator.
+ */
+
 "use client";
 
 import { McpConfigButton } from "./mcp-config-button";

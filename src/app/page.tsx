@@ -1,3 +1,14 @@
+/**
+ * Home page component for the Next.js application.
+ * 
+ * This component serves as the main landing page for the application.
+ * It includes:
+ * - A logo and title section
+ * - A setup checklist section
+ * - A how it works section
+ * - A footer section
+ */
+
 import { ApiKeyCheck } from "@/components/ApiKeyCheck";
 import Image from "next/image";
 

@@ -1,3 +1,9 @@
+/**
+ * Card component for the Next.js application.
+ * 
+ * This component serves as a card display.
+ */
+
 "use client";
 
 import * as React from "react";

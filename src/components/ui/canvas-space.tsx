@@ -1,3 +1,41 @@
+/**
+ * CanvasSpace Component
+ * 
+ * This is the main canvas component that displays the Tldraw canvas and handles
+ * the creation and management of Tambo shapes.
+ * 
+ * DEVELOPER NOTES:
+ * - Uses TldrawWithPersistence for persistent canvas state
+ * - Handles Tambo shape creation and updates
+ * - Manages message-to-shape mapping for persistent rendering
+ * - Handles component addition and deletion
+ * - Implements debounced component addition for performance
+ * - Manages component state with optimistic updates
+ * - Handles custom 'tambo:showComponent' events
+ * - Manages component store for persistent rendering
+ * - Handles thread state changes and resets
+ * 
+ * FEATURES:
+ * - Dynamic masonry layout for responsive rendering
+ * - Drag-and-drop functionality for component reordering
+ * - Persistent rendering of components across thread state changes
+ * - Optimized component addition with debouncing
+ * - Toast notifications for UI feedback
+ * 
+ * DEPENDENCIES:
+ * - @tambo-ai/react: Tambo thread context
+ * - @/hooks/use-auth: Authentication state
+ * - tldraw: Canvas editor
+ * - react-hot-toast: Toast notifications
+ * - nanoid: Unique ID generation
+ * 
+ * STYLING:
+ * - Uses Tailwind CSS for styling
+ * - Implements responsive design with flexbox
+ * - Uses gradient background for modern aesthetic
+ * - Handles overflow with relative positioning
+ */
+
 "use client";
 
 import { cn } from "@/lib/utils";

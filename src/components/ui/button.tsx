@@ -1,3 +1,9 @@
+/**
+ * Button component for the Next.js application.
+ * 
+ * This component serves as a button display.
+ */
+
 "use client";
 
 import * as React from "react";

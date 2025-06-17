@@ -6,6 +6,8 @@ import { LiveKitRoom } from "@livekit/components-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Mic, Users, Settings } from "lucide-react";
+import { TamboProvider } from "@tambo-ai/react";
+import { components } from "@/lib/tambo";
 
 // Force client-side rendering to prevent SSG issues with Tambo hooks
 
@@ -18,24 +20,23 @@ export default function LiveCaptionsDemo() {
 
   const connectToRoom = async () => {
     try {
-      // Get token from your API
-      const response = await fetch("/api/token", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          room: roomName,
-          username: `user-${Math.random().toString(36).substring(7)}`,
-        }),
+      // Get token from your API using GET with query parameters
+      const username = `user-${Math.random().toString(36).substring(7)}`;
+      const params = new URLSearchParams({
+        roomName: roomName,
+        identity: username,
+        name: username
       });
+      
+      const response = await fetch(`/api/token?${params.toString()}`);
 
       if (response.ok) {
         const data = await response.json();
-        setToken(data.token);
+        setToken(data.accessToken);
         setIsConnected(true);
       } else {
-        console.error("Failed to get token");
+        const errorText = await response.text();
+        console.error("Failed to get token:", response.status, errorText);
       }
     } catch (error) {
       console.error("Error connecting to room:", error);
@@ -132,7 +133,7 @@ export default function LiveCaptionsDemo() {
     <div className="min-h-screen bg-background">
       <LiveKitRoom
         token={token}
-        serverUrl={process.env.NEXT_PUBLIC_LIVEKIT_URL || "wss://present-livekit-server.livekit.cloud"}
+        serverUrl={process.env.NEXT_PUBLIC_LK_SERVER_URL || "wss://localhost:7880"}
         connect={true}
         audio={true}
         video={false}
@@ -185,15 +186,20 @@ export default function LiveCaptionsDemo() {
 
           {/* Live Captions Component */}
           <div className="flex-1">
-            <LiveCaptions
-              showSpeakerAvatars={true}
-              showTimestamps={true}
-              enableDragAndDrop={true}
-              maxTranscripts={50}
-              autoPosition={true}
-              exportFormat="txt"
-              canvasTheme="dots"
-            />
+            <TamboProvider
+              apiKey={process.env.NEXT_PUBLIC_TAMBO_API_KEY!}
+              components={components}
+            >
+              <LiveCaptions
+                showSpeakerAvatars={true}
+                showTimestamps={true}
+                enableDragAndDrop={true}
+                maxTranscripts={50}
+                autoPosition={true}
+                exportFormat="txt"
+                canvasTheme="dots"
+              />
+            </TamboProvider>
           </div>
         </div>
       </LiveKitRoom>

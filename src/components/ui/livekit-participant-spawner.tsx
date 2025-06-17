@@ -1,3 +1,10 @@
+/**
+ * LivekitParticipantSpawner Component
+ * 
+ * Automatically spawns LivekitParticipantTile components on the canvas 
+ * when participants join or leave the LiveKit room.
+*/
+
 "use client";
 
 import * as React from "react";

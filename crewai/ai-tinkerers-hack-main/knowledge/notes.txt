@@ -1,2 +1,0 @@
-I started using CrewAI in my projects this year. 
-It seems to be a relatively new framework.

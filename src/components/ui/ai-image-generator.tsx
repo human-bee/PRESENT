@@ -1,3 +1,14 @@
+/**
+ * AI Image Generator component for the Next.js application.
+ * 
+ * This component serves as a generative image generator using AI.
+ * It includes:
+ * - A form for entering a prompt
+ * - A list of image styles
+ * - A live transcription display
+ * - A main image display
+ */
+
 "use client";
 
 import { cn } from "@/lib/utils";

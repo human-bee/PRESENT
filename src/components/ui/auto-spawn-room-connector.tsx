@@ -1,5 +1,11 @@
 "use client";
 
+/**
+ * AutoSpawnRoomConnector Component
+ * 
+ * Automatically spawns a LiveKit room connector when the canvas loads
+ * 
+ * DEVELOPER NOTES:
 /*
  * DEBUGGING ENHANCEMENT: Added comprehensive console logging to track auto-spawn behavior
  * Look for these log prefixes:

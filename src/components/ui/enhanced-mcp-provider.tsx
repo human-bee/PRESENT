@@ -1,3 +1,23 @@
+/**
+ * Enhanced MCP Provider with smart error handling and connection management
+ * 
+ * This component provides enhanced MCP (Model Context Protocol) functionality
+ * with smart error handling and connection management.
+ * 
+ * DEVELOPER NOTES:
+ * - Handles MCP server connection statuses
+ * - Implements automatic retry logic for failed connections
+ * - Provides connection status callbacks
+ * - Handles manual connection retries
+ * - Logs connection events in development mode 
+ * 
+ * FEATURES:
+ * - Automatic retry logic for failed connections
+ * - Connection status callbacks
+ * - Manual connection retries
+ * - Connection status logging
+ */
+
 "use client";
 
 import React, { useEffect, useState, useCallback } from 'react';

@@ -1,3 +1,19 @@
+/**
+ * Root layout component for the Next.js application.
+ * 
+ * This file serves as the main layout wrapper for all pages in the application.
+ * It includes:
+ * - Font configuration using Geist Sans and Geist Mono from Google Fonts
+ * - Global CSS imports including Tailwind CSS and tldraw styles
+ * - Development-specific console warning suppression for performance violations
+ * - HTML structure with proper lang attribute and hydration warning suppression
+ * - Provider components wrapper for global state management
+ * 
+ * The layout is configured to handle both client and server-side rendering
+ * while maintaining proper SEO metadata and accessibility standards.
+ */
+
+
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";

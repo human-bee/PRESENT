@@ -1,3 +1,12 @@
+/**
+ * Avatar component for the Next.js application.
+ * 
+ * This component serves as a user avatar display.
+ * It includes:
+ * - A profile image
+ * - A fallback display for when no image is available
+ */
+
 "use client";
 
 import * as React from "react";

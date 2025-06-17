@@ -1,7 +1,13 @@
+/**
+ * CanvasPage
+ * 
+ * Core collaborative workspace for authenticated users. 
+ * Handles authentication redirect, initializes LiveKit for real-time audio/video and data sync, loads MCP server configs, and composes the main canvas UI with chat, controls, and agent integrations.
+ */
+
 "use client";
 
 // Force client-side rendering to prevent SSG issues with Tambo hooks
-
 import React, { useState, useEffect } from "react";
 import { CanvasSpace } from "@/components/ui/canvas-space";
 import { McpConfigButton } from "@/components/ui/mcp-config-button";

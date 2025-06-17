@@ -1,3 +1,17 @@
+/**
+ * LivekitParticipantTile Component
+ * 
+ * Shows video/audio for LiveKit participants in the room.
+ * Can show a specific participant or all participants.
+ * 
+ * CONTROLS:
+ * - Click the video icon to toggle video on/off
+ * - Click the microphone icon to toggle audio mute/unmute
+ * - Use showVideo/showAudio props to control initial visibility
+ * - Local participant can control their own video/audio
+ * - Remote participants' controls depend on room permissions
+ */
+
 "use client";
 
 import * as React from "react";

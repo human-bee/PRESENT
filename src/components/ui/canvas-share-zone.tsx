@@ -1,3 +1,13 @@
+/**
+ * Canvas Share Zone component for the Next.js application.
+ * 
+ * This component serves as a share zone for the canvas.
+ * It includes:
+ * - A link to the my canvases page
+ * - A user info display
+ * - A sign out button
+ */
+
 "use client";
 
 import { useAuth } from "@/hooks/use-auth";

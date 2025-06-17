@@ -1,3 +1,16 @@
+/**
+ * McpConfigPage
+ * 
+ * Configure MCP (Model Context Protocol) servers for the canvas workspace.
+ * 
+ * Storage: Configs stored in localStorage as "mcp-servers" JSON, loaded by loadMcpServers()
+ * Integration: Canvas loads configs for AI agent integrations via EnhancedMcpProvider
+ * 
+ * Config Format:
+ * - Simple: ["http://localhost:3001/mcp"]
+ * - Advanced: [{ url: "http://localhost:3001/mcp", transport: "http", name: "Local Server" }]
+ */
+
 "use client";
 import Link from "next/link";
 import { useEffect, useState } from "react";

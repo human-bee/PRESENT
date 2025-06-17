@@ -229,24 +229,27 @@ const LiveCaptions: React.FC<LiveCaptionsProps> = ({
   const room = useRoomContext();
   const participants = useParticipants();
 
+  // Define initial state
+  const initialState: LiveCaptionsState = {
+    transcripts: [],
+    isConnected: false,
+    participantCount: 0,
+    canvasSize: { width: 800, height: 600 },
+    settings: {
+      showSpeakerAvatars,
+      showTimestamps,
+      enableDragAndDrop,
+      maxTranscripts,
+      autoPosition,
+      exportFormat,
+      canvasTheme,
+    },
+  };
+
   // Tambo state management
   const [state, setState] = useTamboComponentState<LiveCaptionsState>(
     `live-captions-${room?.name || 'default'}`,
-    {
-      transcripts: [],
-      isConnected: false,
-      participantCount: 0,
-      canvasSize: { width: 800, height: 600 },
-      settings: {
-        showSpeakerAvatars,
-        showTimestamps,
-        enableDragAndDrop,
-        maxTranscripts,
-        autoPosition,
-        exportFormat,
-        canvasTheme,
-      },
-    }
+    initialState
   );
 
   if (!state) {

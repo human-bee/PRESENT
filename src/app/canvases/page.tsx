@@ -1,3 +1,14 @@
+/**
+ * CanvasesPage
+ * 
+ * This page displays a list of canvases belonging to the authenticated user.
+ * It handles authentication checks, fetches the user's canvases from Supabase,
+ * and provides UI for viewing, creating, and managing canvases.
+ * 
+ * Redirects to the sign-in page if the user is not authenticated.
+ */
+
+
 "use client";
 
 import { useEffect, useState } from "react";

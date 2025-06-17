@@ -1,2 +1,0 @@
-livekit-agents[openai,groq,noise-cancellation,silero,turn_detector]==1.0.22
-python-dotenv>=1.0.0
