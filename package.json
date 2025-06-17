@@ -10,11 +10,11 @@
     "init": "npx tambo init",
     "test": "jest",
     "test:watch": "jest --watch",
-    "test:agent": "DISABLE_PYTHON_AGENT=true npm run dev",
+    "test:agent": "npm run dev",
     "agent:build": "tsc -p tsconfig.agent.json",
-    "agent:run": "DISABLE_PYTHON_AGENT=true node dist/agent/livekit-agent-worker.js start",
-    "agent:dev": "DISABLE_PYTHON_AGENT=true node --import tsx/esm src/lib/livekit-agent-worker.ts dev",
-    "agent:clean": "DISABLE_PYTHON_AGENT=true node --import tsx/esm src/lib/clean-agent.ts dev"
+    "agent:run": "node dist/agent/livekit-agent-worker.js start",
+    "agent:dev": "node --import tsx/esm src/lib/livekit-agent-worker.ts dev",
+    "agent:clean": "node --import tsx/esm src/lib/clean-agent.ts dev"
   },
   "dependencies": {
     "@livekit/agents": "^0.7.6",

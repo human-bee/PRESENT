@@ -1,17 +1,24 @@
 # AGENTS.md
 
 ## Project Overview
-This repo is a Next.js (TypeScript) app with Tambo AI for generative UI, LiveKit for real-time audio/video, and an OpenAI-powered agent. The agent logic runs as a separate Node.js process. The project supports both web UI and voice/agent-driven workflows.
+This repo is a Next.js (TypeScript) app with Tambo AI for generative UI, LiveKit for real-time audio/video, and an OpenAI-powered voice agent. The agent logic runs as a separate Node.js process using the LiveKit Agents framework with automatic dispatch to all rooms.
+
+## Agent Architecture
+- **Primary Agent**: `src/lib/livekit-agent-worker.ts` - TypeScript agent using @livekit/agents framework
+- **Voice Model**: OpenAI Realtime API (gpt-4o-realtime-preview)
+- **Dispatch Mode**: Automatic dispatch (agent joins all rooms automatically)
+- **Tools**: Extensible tool system in `src/lib/livekit-agent-tools.ts`
+- **Alternative Agents**: Archived in `src/lib/archived-agents/` for reference
 
 ## Key Folders & Files
 - `src/app/` — Next.js app routes and API endpoints
 - `src/components/` — React UI components (Tambo, LiveKit, etc.)
 - `src/lib/livekit-agent-worker.ts` — Main agent worker (runs as a separate process)
+- `src/lib/livekit-agent-tools.ts` — Agent tool implementations
 - `example.env.local` — Example environment variables (copy to `.env.local` and fill in keys)
 - `package.json` — Scripts for build, test, lint, agent, etc.
 - `TYPESCRIPT_AGENT_SETUP.md` — Detailed agent setup and architecture
 - `README.md` — General project setup and usage
-- `.taskmaster/` — Task Master AI-driven workflow (optional, see dev_workflow rule)
 
 ## Environment Setup
 - Copy `example.env.local` to `.env.local` if not present
@@ -27,13 +34,12 @@ npm run build         # Build Next.js app
 
 ## Running the Project
 - **Full dev mode (recommended):**
-  - Terminal 1: `npm run dev`         # Next.js app (localhost:3000)
-  - Terminal 2: `npm run agent:dev`   # Agent worker (hot reload)
+  - Terminal 1: `npm run agent:dev`   # Agent worker (start FIRST!)
+  - Terminal 2: `npm run dev`         # Next.js app (localhost:3000)
 - **Production:**
-  - Terminal 1: `npm run start`
-  - Terminal 2: `npm run agent:run`
-- **Simplest mode:**
-  - `npm run dev` (runs only the Next.js app, no agent worker)
+  - Terminal 1: `npm run agent:run`
+  - Terminal 2: `npm run start`
+- **Important:** Always start the agent before the web app for proper connection
 
 ## Test & Lint
 - Run all tests: `npm test`
@@ -41,27 +47,27 @@ npm run build         # Build Next.js app
 - Lint code: `npm run lint`
 
 ## Validation Checklist
-- All tests must pass (`npm test`)
-- Lint must pass (`npm run lint`)
-- Both the app and agent worker must start and connect (see logs in both terminals)
-- For UI/voice features, verify agent logs and UI status (see TYPESCRIPT_AGENT_SETUP.md)
+- [ ] Environment variables are set in `.env.local`
+- [ ] Agent starts successfully (`registered worker` in logs)
+- [ ] Web app connects to LiveKit room
+- [ ] Agent joins room automatically (see `Job received!` in agent logs)
+- [ ] Voice interactions work (speak and hear responses)
+- [ ] All tests pass (`npm test`)
+- [ ] Lint passes (`npm run lint`)
 
 ## Contribution & PR Guidelines
 - Use clear, descriptive commit messages
 - Leave your worktree clean (no uncommitted changes)
 - Run all tests and lint before submitting a PR
-- Follow code style and patterns in the codebase
-- See AGENTS.md and project docs for any special instructions
-
-## Task Management (Optional)
-- This repo supports Task Master for AI-driven, task-based workflows (see `.taskmaster/` and dev_workflow rule)
-- Use Task Master CLI or MCP server for advanced task tracking and breakdown
+- Follow existing code patterns and TypeScript conventions
+- Test both voice and UI features before submitting
 
 ## More Documentation
 - See `README.md` for general setup and usage
-- See `TYPESCRIPT_AGENT_SETUP.md` for agent-specific details
-- See `LIVEKIT_TOOLBAR_TESTING.md` and `TRANSCRIPTION_SERVICE_SETUP.md` for integration/testing
+- See `TYPESCRIPT_AGENT_SETUP.md` for agent-specific implementation details
+- See `LIVEKIT_TOOLBAR_TESTING.md` for UI component testing
 - For Tambo AI, see [tambo.co/docs](https://tambo.co/docs)
+- For LiveKit, see [docs.livekit.io](https://docs.livekit.io)
 
 ---
-**For Codex:** Always run tests and lint after making changes. For agent-related work, ensure both the app and agent worker are running and connected. If in doubt, check the logs in both terminals and review the docs above. 
+**For Codex:** Always run tests and lint after making changes. For agent-related work, ensure both the app and agent worker are running (agent first!) and connected. Check logs in both terminals for connection status. The agent uses automatic dispatch, so it will join all rooms created in your LiveKit project. 

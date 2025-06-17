@@ -1,7 +1,7 @@
 {
   "compilerOptions": {
     "target": "ES2020",
-    "module": "commonjs",
+    "module": "ES2020",
     "lib": ["ES2020"],
     "outDir": "./dist/agent",
     "rootDir": "./src/lib",
@@ -14,10 +14,12 @@
     "allowSyntheticDefaultImports": true,
     "declaration": true,
     "declarationMap": true,
-    "sourceMap": true
+    "sourceMap": true,
+    "types": ["node"]
   },
   "include": [
-    "src/lib/livekit-agent-worker.ts"
+    "src/lib/livekit-agent-worker.ts",
+    "src/lib/livekit-agent-tools.ts"
   ],
   "exclude": [
     "node_modules",

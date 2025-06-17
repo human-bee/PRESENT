@@ -2,8 +2,8 @@
 /**
  * Tambo Voice Agent - LiveKit Agent JS Implementation
  * 
- * Based on LiveKit Agent JS documentation patterns
- * Replaces the Python agent with TypeScript equivalent
+ * A voice-enabled AI agent using LiveKit's real-time communication
+ * infrastructure and OpenAI's Realtime API for natural conversations.
  */
 
 import { config } from 'dotenv';
@@ -12,8 +12,8 @@ import { join } from 'path';
 // Load environment variables from .env.local
 config({ path: join(process.cwd(), '.env.local') });
 
-import { defineAgent, JobContext, cli, WorkerOptions } from '@livekit/agents';
-// import { STT, LLM, TTS } from '@livekit/agents-plugin-openai';
+import { defineAgent, JobContext, cli, WorkerOptions, llm, stt, tts, multimodal } from '@livekit/agents';
+import * as openai from '@livekit/agents-plugin-openai';
 import { executeTool, ToolName, AVAILABLE_TOOLS } from './livekit-agent-tools';
 
 console.log('🚀 Starting Tambo Voice Agent Worker...');
@@ -22,137 +22,106 @@ console.log(`  - OpenAI API Key: ${process.env.OPENAI_API_KEY ? '✅ Present' : 
 console.log(`  - LiveKit API Key: ${process.env.LIVEKIT_API_KEY ? '✅ Present' : '❌ Missing'}`);
 console.log(`  - LiveKit URL: ${process.env.LIVEKIT_URL || process.env.NEXT_PUBLIC_LK_SERVER_URL || '❌ Missing'}`);
 
-// Add manual dispatch polling system
-async function checkForManualDispatch() {
-  try {
-    const fs = await import('fs/promises');
-    const path = await import('path');
-    
-    const dispatchFile = path.join(process.cwd(), '.next/agent-dispatch.json');
-    
-    try {
-      const dispatchData = JSON.parse(await fs.readFile(dispatchFile, 'utf-8'));
-      
-      if (dispatchData.status === 'pending') {
-        console.log('🎯 [Agent] Manual dispatch request found, connecting directly...');
-        
-        // Mark as processing
-        dispatchData.status = 'processing';
-        await fs.writeFile(dispatchFile, JSON.stringify(dispatchData, null, 2));
-        
-        // Connect directly using the token
-        await connectAgentDirectly(dispatchData);
-        
-        // Mark as completed
-        dispatchData.status = 'completed';
-        await fs.writeFile(dispatchFile, JSON.stringify(dispatchData, null, 2));
-      }
-    } catch (error) {
-      if ((error as any).code !== 'ENOENT') {
-        console.warn('⚠️ [Agent] Error checking dispatch file:', error);
-      }
-    }
-  } catch (error) {
-    console.warn('⚠️ [Agent] Manual dispatch check error:', error);
-  }
-}
-
-// Direct agent connection function
-async function connectAgentDirectly(dispatchData: any) {
-  try {
-    console.log(`🤖 [Agent] Connecting directly to room: ${dispatchData.roomName}`);
-    
-    // Create a mock job context for direct connection
-    const mockJobContext = {
-      room: null as any,
-      connect: async () => {
-        console.log('🔌 [Agent] Creating direct room connection...');
-        
-        // Import LiveKit room client
-        const { Room } = await import('livekit-client');
-        const room = new Room();
-        
-        // Set up event handlers
-        room.on('connected', () => {
-          console.log(`✅ [Agent] Direct connection successful to room: ${dispatchData.roomName}`);
-          
-          // Send welcome message
-          const welcomeData = JSON.stringify({
-            type: 'live_transcription',
-            text: '🤖 Tambo Voice Agent connected directly with tools: ' + AVAILABLE_TOOLS.join(', '),
-            speaker: 'tambo-voice-agent',
-            timestamp: Date.now(),
-            is_final: true,
-          });
-          
-          room.localParticipant?.publishData(
-            new TextEncoder().encode(welcomeData),
-            { reliable: true, topic: 'transcription' }
-          );
-        });
-        
-        room.on('participantConnected', (participant) => {
-          console.log(`👤 [Agent] Direct: Participant joined: ${participant.identity}`);
-        });
-        
-        room.on('disconnected', () => {
-          console.log(`🔌 [Agent] Direct: Disconnected from room: ${dispatchData.roomName}`);
-        });
-        
-        // Connect using the token
-        await room.connect(dispatchData.serverUrl, dispatchData.agentToken);
-        console.log(`🎉 [Agent] Successfully connected directly to room: ${dispatchData.roomName}`);
-        
-        // Store room reference
-        mockJobContext.room = room;
-        
-        return room;
-      }
-    };
-    
-    // Connect to the room
-    await mockJobContext.connect();
-    
-    console.log(`✅ [Agent] Direct connection completed for room: ${dispatchData.roomName}`);
-    
-  } catch (error) {
-    console.error('❌ [Agent] Direct connection failed:', error);
-    throw error;
-  }
-}
-
-// Start polling for manual dispatch requests
-setInterval(checkForManualDispatch, 5000); // Check every 5 seconds
-console.log('🔄 [Agent] Manual dispatch polling started');
-
 export default defineAgent({
   entry: async (job: JobContext) => {
-    console.log(`🎉 [Agent] 🚨 AGENT DISPATCH RECEIVED! 🚨 Joining room: ${job.room.name}`);
-    console.log(`🔍 [Agent] Room details:`, {
+    console.log(`🎉 [Agent] Job received! Joining room: ${job.room.name}`);
+    console.log(`📊 [Agent] Room details:`, {
       roomName: job.room.name,
       remoteParticipantsCount: job.room.remoteParticipants.size,
-      timestamp: new Date().toISOString()
-    });
-    
-    // Add detailed job context logging
-    console.log(`📊 [Agent] Job Context:`, {
-      room: {
-        name: job.room.name,
-        metadata: job.room.metadata || 'none'
-      },
+      metadata: job.room.metadata || 'none',
       timestamp: new Date().toISOString()
     });
     
     await job.connect();
     console.log('✅ [Agent] Successfully connected to room!');
     
-    // Initialize AI components (will be used for actual STT/LLM/TTS processing)
-    // const stt = new STT({ model: 'whisper-1' });
-    // const llm = new LLM({ model: 'gpt-4o-mini' });
-    // const tts = new TTS({ model: 'tts-1', voice: 'alloy' });
+    console.log('🧠 [Agent] Initializing OpenAI Realtime model...');
     
-    console.log('🧠 [Agent] AI components ready (STT/LLM/TTS initialized when needed)');
-    console.log('🔧 [Agent] Available tools:', AVAILABLE_TOOLS);
+    // Create the multimodal agent using OpenAI Realtime API
+    const model = new openai.realtime.RealtimeModel({
+      instructions: `You are Tambo Voice Agent, a helpful AI assistant.
+        You have access to the following tools: ${AVAILABLE_TOOLS.join(', ')}.
+        Listen carefully to the user and provide helpful responses.
+        When appropriate, use your tools to assist the user.`,
+      voice: 'alloy',
+      model: 'gpt-4o-realtime-preview-2024-12-17',
+    });
+    
+    console.log('🎙️ [Agent] Starting multimodal agent...');
+    
+    const agent = new multimodal.MultimodalAgent({ 
+      model 
+    });
+    
+    // Start the agent session
+    const session = await agent
+      .start(job.room)
+      .then(session => {
+        console.log('✅ [Agent] Multimodal agent started successfully!');
+        
+        // Send welcome message after agent is ready
+        setTimeout(() => {
+          const welcomeData = JSON.stringify({
+            type: 'live_transcription',
+            text: '🤖 Tambo Voice Agent connected! I can hear you and respond naturally. Just speak!',
+            speaker: 'tambo-voice-agent',
+            timestamp: Date.now(),
+            is_final: true,
+          });
+          
+          job.room.localParticipant?.publishData(
+            new TextEncoder().encode(welcomeData),
+            { reliable: true, topic: 'transcription' }
+          );
+          console.log('📤 [Agent] Welcome message sent');
+        }, 1000);
+        
+        return session;
+      })
+      .catch(error => {
+        console.error('❌ [Agent] Failed to start multimodal agent:', error);
+        throw error;
+      });
+    
+    // Subscribe to transcription events for logging and frontend display
+    session.on('input_speech_transcription_completed', (evt: any) => {
+      console.log(`👤 [Agent] User said: "${evt.text}"`);
+      
+      // Send transcription to frontend
+      const transcriptionData = JSON.stringify({
+        type: 'live_transcription',
+        text: evt.text,
+        speaker: 'user',
+        timestamp: Date.now(),
+        is_final: true,
+      });
+      
+      job.room.localParticipant?.publishData(
+        new TextEncoder().encode(transcriptionData),
+        { reliable: true, topic: 'transcription' }
+      );
+    });
+    
+    // Log when agent responds
+    session.on('response_content_completed', (evt: any) => {
+      if (evt.content_type === 'text') {
+        console.log(`🤖 [Agent] Assistant said: "${evt.text}"`);
+        
+        // Send agent response to frontend  
+        const responseData = JSON.stringify({
+          type: 'live_transcription',
+          text: evt.text,
+          speaker: 'tambo-voice-agent',
+          timestamp: Date.now(),
+          is_final: true,
+        });
+        
+        job.room.localParticipant?.publishData(
+          new TextEncoder().encode(responseData),
+          { reliable: true, topic: 'transcription' }
+        );
+      }
+    });
     
     // Set up RPC method for tool calls from frontend
     job.room.localParticipant?.registerRpcMethod('agent_tool_call', async (data) => {
@@ -161,7 +130,6 @@ export default defineAgent({
         console.log('🔧 [Agent] Received tool call:', {
           tool: request.tool_name,
           hasParams: !!request.params,
-          participantCount: job.room.remoteParticipants.size
         });
         
         // Validate tool name
@@ -181,10 +149,7 @@ export default defineAgent({
           request.params || {}
         );
         
-        console.log(`✅ [Agent] Tool ${request.tool_name} executed:`, {
-          status: result.status,
-          message: result.message.substring(0, 100)
-        });
+        console.log(`✅ [Agent] Tool ${request.tool_name} executed successfully`);
         
         return JSON.stringify(result);
       } catch (error) {
@@ -196,123 +161,13 @@ export default defineAgent({
       }
     });
     
-    // Set up RPC method for receiving frontend AI task responses  
-    job.room.localParticipant?.registerRpcMethod('frontend_task_response', async (data) => {
-      try {
-        const response = JSON.parse(data.payload);
-        console.log('📨 [Agent] Received frontend task response:', {
-          taskType: response.task_type,
-          status: response.status,
-          hasResult: !!response.result
-        });
-        
-        // You could store this response or forward it to other systems
-        // For now, just acknowledge receipt
-        return JSON.stringify({
-          status: 'SUCCESS',
-          message: 'Frontend task response received'
-        });
-      } catch (error) {
-        console.error('❌ [Agent] Error handling frontend task response:', error);
-        return JSON.stringify({
-          status: 'ERROR',
-          message: `Error processing task response: ${error}`
-        });
-      }
-    });
-    
-    // Send welcome message after a delay
-    setTimeout(() => {
-      const welcomeData = JSON.stringify({
-        type: 'live_transcription',
-        text: '🤖 Tambo Voice Agent connected with tools: ' + AVAILABLE_TOOLS.join(', '),
-        speaker: 'tambo-voice-agent',
-        timestamp: Date.now(),
-        is_final: true,
-      });
-      
-      job.room.localParticipant?.publishData(
-        new TextEncoder().encode(welcomeData),
-        { reliable: true, topic: 'transcription' }
-      );
-      console.log('📤 [Agent] Welcome message sent');
-    }, 2000);
-    
     // Handle participant events
     job.room.on('participantConnected', (participant) => {
       console.log(`👤 [Agent] Participant joined: ${participant.identity}`);
-      
-      const welcomeMsg = JSON.stringify({
-        type: 'live_transcription',
-        text: `Welcome ${participant.identity}! I'm equipped with tools and ready to assist.`,
-        speaker: 'tambo-voice-agent',
-        timestamp: Date.now(),
-        is_final: true,
-      });
-      
-      job.room.localParticipant?.publishData(
-        new TextEncoder().encode(welcomeMsg),
-        { reliable: true, topic: 'transcription' }
-      );
     });
     
     job.room.on('participantDisconnected', (participant) => {
       console.log(`👋 [Agent] Participant left: ${participant.identity}`);
-    });
-    
-    // Handle audio tracks for transcription
-    job.room.on('trackSubscribed', (track, publication, participant) => {
-      if (track.kind && track.kind.toString() === 'audio') {
-        console.log(`🎤 [Agent] Audio track from ${participant.identity}`);
-        
-        // Send audio detection confirmation
-        const audioData = JSON.stringify({
-          type: 'live_transcription',
-          text: `🎤 Now listening to audio from ${participant.identity}`,
-          speaker: 'tambo-voice-agent',
-          timestamp: Date.now(),
-          is_final: true,
-        });
-        
-        job.room.localParticipant?.publishData(
-          new TextEncoder().encode(audioData),
-          { reliable: true, topic: 'transcription' }
-        );
-        
-        // TODO: Implement real STT processing here
-        // For now, simulate transcription with tool demonstration
-        let count = 0;
-        const interval = setInterval(async () => {
-          count++;
-          
-          // Demonstrate tool usage every few transcriptions
-          if (count === 3) {
-            console.log('🔧 [Agent] Demonstrating do_nothing tool...');
-            await executeTool('do_nothing', job);
-          }
-          
-          const transcriptionData = JSON.stringify({
-            type: 'live_transcription',
-            text: `Transcription ${count} from ${participant.identity} - Agent ready with ${AVAILABLE_TOOLS.length} tools`,
-            speaker: participant.identity,
-            timestamp: Date.now(),
-            is_final: count % 3 === 0,
-          });
-          
-          job.room.localParticipant?.publishData(
-            new TextEncoder().encode(transcriptionData),
-            { reliable: true, topic: 'transcription' }
-          );
-        }, 5000);
-        
-        // Cleanup on disconnect
-        job.room.on('participantDisconnected', (p) => {
-          if (p.identity === participant.identity) {
-            clearInterval(interval);
-            console.log(`🔇 [Agent] Stopped transcription for ${participant.identity}`);
-          }
-        });
-      }
     });
     
     // Handle data messages from frontend
@@ -324,16 +179,15 @@ export default defineAgent({
           hasContent: !!message.content || !!message.text
         });
         
-        // Handle different types of data messages
+        // Handle text-based messages (voice is handled by the multimodal agent)
         if (message.type === 'user_message' || message.type === 'chat_message') {
-          // This is where you'd integrate with LLM for conversation
-          console.log(`💬 [Agent] User message: "${message.content || message.text}"`);
+          console.log(`💬 [Agent] User text message: "${message.content || message.text}"`);
           
-          // Example: Echo back with tool suggestion
+          // For text messages, we acknowledge but remind user this is a voice agent
           const responseData = JSON.stringify({
             type: 'live_transcription',
-            text: `I heard: "${message.content || message.text}". I can help with YouTube searches and more!`,
-            speaker: 'tambo-voice-agent',
+            text: `I received your text: "${message.content || message.text}". For the best experience, try speaking to me!`,
+            speaker: 'tambo-voice-agent', 
             timestamp: Date.now(),
             is_final: true,
           });
@@ -348,28 +202,23 @@ export default defineAgent({
       }
     });
     
-    console.log('🎯 [Agent] Fully initialized with tools and RPC communication');
+    console.log('🎯 [Agent] Fully initialized with voice processing and tools');
   },
 });
 
-// Use the CLI runner which properly handles process forking
-// Check if this file is being run directly
+// Use the CLI runner if this file is being run directly
 if (import.meta.url.startsWith('file:') && process.argv[1].endsWith('livekit-agent-worker.ts')) {
-  console.log('🎬 [Agent] Starting...');
+  console.log('🎬 [Agent] Starting worker...');
   
-  // Configure worker options with the path to this agent file
+  // Configure worker options WITHOUT agent name for automatic dispatch
   const workerOptions = new WorkerOptions({ 
-    agent: process.argv[1] // Path to this agent file
+    agent: process.argv[1], // Path to this agent file
+    // Removed agentName to enable automatic dispatch
   });
   
-  console.log('🔧 [Agent] Worker configured for automatic room dispatch');
-  console.log('📡 [Agent] Waiting for room events from LiveKit server...');
-  console.log('💡 [Agent] When a participant joins a room, LiveKit will dispatch this agent automatically');
-  console.log('🌐 [Agent] LiveKit URL:', process.env.LIVEKIT_URL);
-  console.log('🔑 [Agent] API Key present:', !!process.env.LIVEKIT_API_KEY);
-  
-  // Add worker lifecycle logging
-  console.log('🚀 [Agent] Starting worker registration with LiveKit Cloud...');
+  console.log('🔧 [Agent] Worker configured for automatic dispatch');
+  console.log('📡 [Agent] Connecting to LiveKit Cloud...');
+  console.log('🌐 [Agent] LiveKit URL:', process.env.LIVEKIT_URL || process.env.NEXT_PUBLIC_LK_SERVER_URL);
   
   cli.runApp(workerOptions);
 } 

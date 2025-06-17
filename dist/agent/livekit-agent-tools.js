@@ -1,25 +1,17 @@
-"use strict";
 /**
  * LiveKit Agent Tools - TypeScript Implementation
  *
  * Ported from Python livekit-backend/tools.py
  * Provides tool functions for the Tambo Voice Agent
  */
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.AVAILABLE_TOOLS = void 0;
-exports.doNothing = doNothing;
-exports.respondWithVoice = respondWithVoice;
-exports.sendTaskToFrontend = sendTaskToFrontend;
-exports.generateYoutubeTaskPrompt = generateYoutubeTaskPrompt;
-exports.executeTool = executeTool;
-const agents_plugin_openai_1 = require("@livekit/agents-plugin-openai");
+import { TTS } from '@livekit/agents-plugin-openai';
 /**
  * Call this essential tool if, after analyzing the latest user turn and the overall conversation,
  * you determine that no other specific action, information retrieval, or task generation
  * is necessary or would meaningfully contribute to the conversation at this precise moment.
  * This is your default 'no-op' action.
  */
-async function doNothing() {
+export async function doNothing() {
     console.log('🔄 [Agent] Tool "do_nothing" called - no action required');
     return {
         status: 'SUCCESS',
@@ -32,11 +24,11 @@ async function doNothing() {
  * a question or makes a request that requires a spoken response that cannot be handled
  * by dispatching a task to the frontend AI.
  */
-async function respondWithVoice(job, spokenMessage, justificationForSpeaking) {
+export async function respondWithVoice(job, spokenMessage, justificationForSpeaking) {
     console.log(`🗣️ [Agent] Tool "respond_with_voice" called: "${spokenMessage.substring(0, 100)}..."`);
     try {
         // Initialize TTS for voice response
-        const tts = new agents_plugin_openai_1.TTS({
+        const tts = new TTS({
             model: 'tts-1',
             voice: 'alloy',
         });
@@ -68,7 +60,7 @@ async function respondWithVoice(job, spokenMessage, justificationForSpeaking) {
 /**
  * Helper function to dispatch tasks to the frontend AI via RPC.
  */
-async function sendTaskToFrontend(job, taskType, taskPrompt, method = 'executeFrontendAITask') {
+export async function sendTaskToFrontend(job, taskType, taskPrompt, method = 'executeFrontendAITask') {
     const remoteParticipants = Array.from(job.room.remoteParticipants.values());
     if (remoteParticipants.length === 0) {
         console.warn(`⚠️ [Agent] Attempted to send '${taskType}' task, but no remote participants found.`);
@@ -124,7 +116,7 @@ async function sendTaskToFrontend(job, taskType, taskPrompt, method = 'executeFr
  * You must formulate a comprehensive 'action_plan' (as a natural language, multi-step text string)
  * based on the conversation and your knowledge of how the frontend's YouTube MCP server works.
  */
-async function generateYoutubeTaskPrompt(job, actionPlan) {
+export async function generateYoutubeTaskPrompt(job, actionPlan) {
     console.log('🎥 [Agent] Tool "generate_youtube_task_prompt" called. Dispatching action plan to frontend.');
     try {
         const result = await sendTaskToFrontend(job, 'Youtube', actionPlan, 'youtubeSearch');
@@ -141,7 +133,7 @@ async function generateYoutubeTaskPrompt(job, actionPlan) {
 /**
  * Tool registry for easy management
  */
-exports.AVAILABLE_TOOLS = [
+export const AVAILABLE_TOOLS = [
     'do_nothing',
     'respond_with_voice',
     'generate_youtube_task_prompt',
@@ -149,7 +141,7 @@ exports.AVAILABLE_TOOLS = [
 /**
  * Execute a tool by name with parameters
  */
-async function executeTool(toolName, job, params = {}) {
+export async function executeTool(toolName, job, params = {}) {
     console.log(`🔧 [Agent] Executing tool: ${toolName} with params:`, params);
     switch (toolName) {
         case 'do_nothing':

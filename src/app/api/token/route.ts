@@ -96,6 +96,7 @@ export async function GET(req: NextRequest) {
       canUpdateOwnMetadata: true,
     };
 
+    // Create token for the participant
     const token = await createToken(
       {
         identity,
@@ -105,8 +106,14 @@ export async function GET(req: NextRequest) {
       grant
     );
 
+    console.log(`✅ Token created for ${identity} in room ${roomName}`);
+    console.log('🤖 Agent will automatically join via automatic dispatch');
+
     return NextResponse.json(
-      { identity, accessToken: token },
+      { 
+        identity, 
+        accessToken: token,
+      },
       { headers: { "Cache-Control": "no-store" } }
     );
   } catch (e) {

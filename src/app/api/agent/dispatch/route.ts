@@ -4,15 +4,15 @@ import { AccessToken } from 'livekit-server-sdk';
 export const runtime = "nodejs";
 
 /**
- * Clean Agent Dispatch API - Back to First Principles
+ * Agent Dispatch API - Manually dispatch agent to room
  * 
- * For manual testing only. The real solution is automatic dispatch from LiveKit Cloud.
+ * Uses LiveKit's Agent Dispatch Service to explicitly request an agent join a room
  */
 export async function POST(request: NextRequest) {
   try {
     const { roomName } = await request.json();
     
-    console.log('📥 Manual agent dispatch request:', { roomName });
+    console.log('📥 Agent dispatch request:', { roomName });
 
     const apiKey = process.env.LIVEKIT_API_KEY;
     const apiSecret = process.env.LIVEKIT_API_SECRET;
@@ -32,36 +32,103 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Create agent token (for manual testing only)
-    const token = new AccessToken(apiKey, apiSecret, {
-      identity: `test-agent-${Date.now()}`,
-      name: 'Test Agent'
-    });
+    try {
+      // Create agent dispatch using LiveKit's Agent Dispatch Service
+      const agentDispatchUrl = serverUrl.replace('wss://', 'https://').replace('ws://', 'http://');
+      const dispatchUrl = `${agentDispatchUrl}/twirp/livekit.AgentDispatchService/CreateDispatch`;
+      
+      // Create admin token for the dispatch request with all necessary permissions
+      const adminToken = new AccessToken(apiKey, apiSecret, {
+        identity: 'system-admin',
+        name: 'System Admin'
+      });
+      
+      // Add comprehensive grants for agent dispatch
+      adminToken.addGrant({
+        room: roomName,
+        roomJoin: true,
+        roomAdmin: true,
+        roomCreate: true,
+        roomList: true,
+        roomRecord: true,
+        canPublish: true,
+        canPublishData: true,
+        canSubscribe: true,
+        canUpdateOwnMetadata: true,
+        ingressAdmin: true,
+      });
 
-    token.addGrant({
-      room: roomName,
-      roomJoin: true,
-      canPublish: true,
-      canSubscribe: true,
-      canPublishData: true
-    });
+      const token = await adminToken.toJwt();
 
-    const agentToken = await token.toJwt();
+      console.log('🚀 Dispatching agent to room:', roomName);
+      console.log('📍 Dispatch URL:', dispatchUrl);
+      
+      const dispatchResponse = await fetch(dispatchUrl, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          agentName: 'tambo-voice-agent', // Changed from agent_name to agentName (camelCase)
+          room: roomName,
+          metadata: JSON.stringify({
+            dispatchedAt: Date.now(),
+            reason: 'manual_dispatch'
+          })
+        }),
+      });
 
-    console.log('✅ Manual agent token created for testing');
+      if (!dispatchResponse.ok) {
+        const errorText = await dispatchResponse.text();
+        console.error('❌ Agent dispatch failed:', dispatchResponse.status, errorText);
+        
+        // Check if it's an authentication error
+        if (dispatchResponse.status === 401) {
+          console.error('🔐 Authentication failed - checking token permissions');
+          console.log('Token grants:', {
+            room: roomName,
+            identity: 'system-admin'
+          });
+        }
+        
+        return NextResponse.json(
+          { 
+            error: 'Agent dispatch failed',
+            details: errorText,
+            status: dispatchResponse.status
+          },
+          { status: 500 }
+        );
+      }
 
-    return NextResponse.json({
-      success: true,
-      message: 'Manual dispatch token created (for testing only)',
-      note: 'Real solution: automatic dispatch should work without this API',
-      token: agentToken,
-      serverUrl
-    });
+      const dispatchResult = await dispatchResponse.json();
+      console.log('✅ Agent dispatch successful:', dispatchResult);
+
+      return NextResponse.json({
+        success: true,
+        message: 'Agent dispatched successfully',
+        dispatch: dispatchResult,
+        agentName: 'tambo-voice-agent',
+        room: roomName
+      });
+
+    } catch (dispatchError) {
+      console.error('❌ Agent dispatch error:', dispatchError);
+      
+      return NextResponse.json(
+        { 
+          error: 'Failed to dispatch agent',
+          details: dispatchError instanceof Error ? dispatchError.message : 'Unknown error'
+        },
+        { status: 500 }
+      );
+    }
 
   } catch (error) {
-    console.error('❌ Manual dispatch error:', error);
+    console.error('❌ Dispatch API error:', error);
     return NextResponse.json(
-      { error: 'Failed to create manual dispatch token' },
+      { error: 'Internal server error' },
       { status: 500 }
     );
   }
