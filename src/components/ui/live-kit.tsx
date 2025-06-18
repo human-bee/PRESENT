@@ -1,3 +1,12 @@
+/*
+ * LiveKit UI component with audio/video controls and RPC handling.
+ * 
+ * DEVELOPMENT NOTES:
+ * - RPC methods must be registered in useEffect with proper cleanup to avoid memory leaks
+ * - Use refs to prevent duplicate registrations and concurrent RPC processing
+ * - Always handle MediaDeviceFailure and RpcError exceptions for robust error handling
+ */
+
 "use client";
 
 import {

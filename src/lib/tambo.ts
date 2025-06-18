@@ -32,6 +32,29 @@ import {
   ActionItemTracker,
   actionItemTrackerSchema,
 } from "@/components/ui/action-item-tracker";
+import {
+  LivekitToolbar,
+  livekitToolbarSchema,
+} from "@/components/ui/livekit-toolbar";
+import {
+  LivekitParticipantTile,
+  livekitParticipantTileSchema,
+} from "@/components/ui/livekit-participant-tile";
+import {
+  LivekitRoomConnector,
+  livekitRoomConnectorSchema,
+} from "@/components/ui/livekit-room-connector";
+import {
+  AIImageGenerator,
+  aiImageGeneratorSchema,
+} from "@/components/ui/ai-image-generator";
+import {
+  PresentationDeck,
+  presentationDeckSchema,
+} from "@/components/ui/presentation-deck";
+import LiveCaptions, {
+  liveCaptionsSchema,
+} from "@/components/LiveCaptions";
 import type { TamboComponent } from "@tambo-ai/react";
 import { TamboTool } from "@tambo-ai/react";
 
@@ -97,6 +120,48 @@ export const components: TamboComponent[] = [
       "A comprehensive action item management system that tracks tasks, assignments, due dates, and progress. Can be initially created by AI with action items from meetings or conversations, then allows users to dynamically add, edit, complete, and manage items. Features priority levels, status tracking, assignee management, filtering, sorting, and persistent state. Perfect for meeting follow-ups, project management, and task coordination.",
     component: ActionItemTracker,
     propsSchema: actionItemTrackerSchema,
+  },
+  {
+    name: "LivekitRoomConnector",
+    description:
+      "Establishes a LiveKit room connection on the canvas. This is the FIRST component you need to create before using any other LiveKit components. It provides the necessary context for participant tiles and toolbars to function. Features room name configuration, connection status display, participant count, and invite link sharing. Once connected, you can spawn LivekitParticipantTile and LivekitToolbar components.",
+    component: LivekitRoomConnector,
+    propsSchema: livekitRoomConnectorSchema,
+  },
+  {
+    name: "LivekitToolbar",
+    description:
+      "A comprehensive video conferencing toolbar component designed for LiveKit applications. REQUIRES LivekitRoomConnector to be connected first. Features all standard controls including microphone, camera, screen sharing, chat, raise hand, participant management, settings, recording, layout switching, AI assistant integration, accessibility options, and connection quality indicators. Supports both minimal and verbose display modes with configurable control visibility.",
+    component: LivekitToolbar,
+    propsSchema: livekitToolbarSchema,
+  },
+  {
+    name: "LivekitParticipantTile",
+    description:
+      "Individual participant video/audio tile with real-time LiveKit integration. REQUIRES LivekitRoomConnector to be connected first. Shows participant video feed, audio controls, connection quality, speaking indicators, and individual toolbar controls. Automatically detects local vs remote participants and AI agents (with bot icons). Features minimize/expand functionality, audio level visualization, and drag-and-drop capability on the canvas.",
+    component: LivekitParticipantTile,
+    propsSchema: livekitParticipantTileSchema,
+  },
+  {
+    name: "AIImageGenerator",
+    description:
+      "A real-time AI image generator that creates images from text prompts using Together AI's FLUX model. Features include multiple art styles (pop art, minimal, cyberpunk, etc.), generation history, canvas integration, download capability, iterative mode for consistency, and speech-to-text integration for voice-driven image generation. Perfect for creative projects, visual brainstorming, concept art generation, and real-time visual content creation. Automatically debounces prompt changes and provides visual feedback during generation. Can be controlled via microphone for hands-free operation.",
+    component: AIImageGenerator,
+    propsSchema: aiImageGeneratorSchema,
+  },
+  {
+    name: "PresentationDeck",
+    description:
+      "A feature-complete presentation tool for displaying beautiful, almost full-screen PowerPoint, Google Slides, PDF, and image-based presentations. Features comprehensive hotkey controls (arrow keys, space, enter for play/pause, F for fullscreen), laser pointer mode, thumbnail navigation, speaker notes, auto-advance, progress tracking, bookmarking, and canvas integration. Supports multiple aspect ratios (16:9, 4:3, 16:10), dark/light themes, and persistent state management. Perfect for business presentations, lectures, demos, and any scenario requiring professional slide display with advanced navigation and control features.",
+    component: PresentationDeck,
+    propsSchema: presentationDeckSchema,
+  },
+  {
+    name: "LiveCaptions",
+    description:
+      "A real-time live captions component that displays speech transcriptions in an interactive tldraw-style canvas with beautiful speech bubbles. REQUIRES LivekitRoomConnector to be connected first. Features real-time transcription from Groq Whisper via LiveKit data channels, draggable speech bubbles, speaker identification with avatars, timestamps, interim/final transcript states, export capabilities (TXT/JSON/SRT), customizable canvas themes (grid/dots/clean), auto-positioning, and persistent state management. Perfect for accessibility, meeting transcription, live events, educational content, and any scenario requiring real-time speech-to-text visualization with an engaging visual interface.",
+    component: LiveCaptions,
+    propsSchema: liveCaptionsSchema,
   },
   // Add more components here
 ];

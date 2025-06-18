@@ -1,3 +1,15 @@
+/**
+ * ESLint configuration for the Next.js application.
+ * 
+ * This configuration file sets up ESLint with the following features:
+ * - Next.js core web vitals rules
+ * - TypeScript support
+ * - React hooks rules
+ * - React best practices
+ * - React performance best practices
+ * - React accessibility best practices
+ */
+
 import { dirname } from "path";
 import { fileURLToPath } from "url";
 import { FlatCompat } from "@eslint/eslintrc";

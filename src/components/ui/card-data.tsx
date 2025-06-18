@@ -1,3 +1,10 @@
+/**
+ * DataCard Component
+ * 
+ * A component that displays options as clickable cards with links and summaries
+ * with the ability to select multiple items.
+ */
+
 "use client";
 
 import { cn } from "@/lib/utils";

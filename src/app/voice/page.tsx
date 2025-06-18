@@ -1,21 +1,29 @@
 "use client";
 
+// Force client-side rendering to prevent SSG issues with Tambo hooks
+
 import { CanvasSpace } from "@/components/ui/canvas-space";
 import {
   LiveKitProvider,
   LiveKitUI,
   RpcHandler,
 } from "@/components/ui/live-kit";
+import { LivekitParticipantSpawner } from "@/components/ui/livekit-participant-spawner";
 import { McpConfigButton } from "@/components/ui/mcp-config-button";
+import { McpStatusIndicator } from "@/components/ui/mcp-status-indicator";
 import { Message, MessageContent } from "@/components/ui/message";
 import { ScrollableMessageContainer } from "@/components/ui/scrollable-message-container";
 import { ThreadContainer } from "@/components/ui/thread-container";
 import { ThreadContent } from "@/components/ui/thread-content";
-import { loadMcpServers } from "@/lib/mcp-utils";
+import { loadMcpServers, suppressDevelopmentWarnings, suppressViolationWarnings } from "@/lib/mcp-utils";
 import { components } from "@/lib/tambo";
 import { TamboProvider, useTamboThread } from "@tambo-ai/react";
-import { TamboMcpProvider } from "@tambo-ai/react/mcp";
+import { EnhancedMcpProvider } from "@/components/ui/enhanced-mcp-provider";
 import React from "react";
+
+// Suppress development warnings for cleaner console
+suppressDevelopmentWarnings();
+suppressViolationWarnings();
 
 // Component to add "Show in Canvas" button to thread messages with components
 interface ShowInCanvasButtonProps {
@@ -92,6 +100,11 @@ export default function Voice() {
         {/* MCP Config Button */}
         <McpConfigButton />
 
+        {/* MCP Status Indicator */}
+        <div className="absolute top-16 right-4 z-10">
+          <McpStatusIndicator showDetails={false} />
+        </div>
+
         {/* Main content section */}
         <div className="w-full h-full relative">
           <div className="p-6 max-w-full mx-auto">
@@ -103,7 +116,7 @@ export default function Voice() {
             apiKey={process.env.NEXT_PUBLIC_TAMBO_API_KEY!}
             components={components}
           >
-            <TamboMcpProvider mcpServers={mcpServers}>
+            <EnhancedMcpProvider mcpServers={mcpServers}>
               {/* Split view layout with canvas on left and thread on right */}
               <div className="flex h-[calc(100vh-200px)]">
                 {/* Canvas Space on the left */}
@@ -126,7 +139,12 @@ export default function Voice() {
                   </LiveKitProvider>
                 </div>
               </div>
-            </TamboMcpProvider>
+              
+              {/* LivekitParticipantSpawner moved inside TamboProvider context */}
+              <LiveKitProvider>
+                <LivekitParticipantSpawner />
+              </LiveKitProvider>
+            </EnhancedMcpProvider>
           </TamboProvider>
         </div>
       </div>

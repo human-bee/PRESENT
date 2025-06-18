@@ -1,6 +1,18 @@
 import type { AccessTokenOptions, VideoGrant } from "livekit-server-sdk";
 import { AccessToken } from "livekit-server-sdk";
 import { NextRequest, NextResponse } from "next/server";
+export const runtime = "nodejs";
+
+/**
+ * GET /api/token?roomName=ROOM&username=NAME
+ *
+ * Generates a signed LiveKit JWT that allows the client to join the requested room.
+ *
+ * Expects the following environment variables to be set (see `.env.local.example`):
+ *   LIVEKIT_API_KEY
+ *   LIVEKIT_API_SECRET
+ *   LIVEKIT_URL (optional – returned so the client knows which URL to connect to)
+ */
 
 // Do not cache endpoint result
 export const revalidate = 0;
@@ -84,6 +96,7 @@ export async function GET(req: NextRequest) {
       canUpdateOwnMetadata: true,
     };
 
+    // Create token for the participant
     const token = await createToken(
       {
         identity,
@@ -93,8 +106,14 @@ export async function GET(req: NextRequest) {
       grant
     );
 
+    console.log(`✅ Token created for ${identity} in room ${roomName}`);
+    console.log('🤖 Agent will automatically join via automatic dispatch');
+
     return NextResponse.json(
-      { identity, accessToken: token },
+      { 
+        identity, 
+        accessToken: token,
+      },
       { headers: { "Cache-Control": "no-store" } }
     );
   } catch (e) {

@@ -1,3 +1,9 @@
+/**
+ * Graph component for the Next.js application.
+ * 
+ * This component serves as a graph display.
+ */
+
 "use client";
 
 import { cn } from "@/lib/utils";

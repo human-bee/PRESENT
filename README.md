@@ -1,24 +1,98 @@
-# Tambo MCP Template
+# Tambo Voice AI Application
 
-This is a starter NextJS app with tambo-ai for generative UI and MCP.
+A sophisticated Next.js application that combines Tambo AI's generative UI capabilities with LiveKit's real-time voice agents and Model Context Protocol (MCP) integration.
 
-[![Watch the tutorial here](https://img.youtube.com/vi/6zDDPfr7Aoo/0.jpg)](https://youtu.be/6zDDPfr7Aoo)
+## 🎯 Features
 
-## Get Started
+- **Voice-Enabled AI Agent**: Real-time voice interactions powered by LiveKit and OpenAI
+- **Generative UI Components**: Dynamic UI generation through Tambo AI
+- **MCP Integration**: Connect to various AI tools and services via Model Context Protocol
+- **Multi-Modal Interactions**: Support for both chat and voice interfaces
+- **Canvas Collaboration**: Interactive canvas with AI-generated components
+- **Demo Showcases**: Live captions, presentation deck, and toolbar demonstrations
 
-1. Run `npm create-tambo@latest my-tambo-app` for a new project
+## 🚀 Getting Started
 
-2. `npm install`
+### Prerequisites
+- Node.js 18+ 
+- Valid API keys for:
+  - Tambo AI
+  - LiveKit (Cloud or self-hosted)
+  - OpenAI
+  - Supabase (for auth/storage)
 
-3. `npx tambo init`
+### Installation
 
-- or rename `example.env.local` to `.env.local` and add your tambo API key you can get for free [here](https://tambo.co/dashboard).
+1. **Clone the repository**
+```bash
+git clone <your-repo-url>
+cd PRESENT
+```
 
-4. Run `npm run dev` and go to `localhost:3000` to use the app!
+2. **Install dependencies**
+```bash
+npm install
+```
+
+3. **Set up environment variables**
+- Copy `example.env.local` to `.env.local`
+- Fill in all required API keys:
+  ```
+  NEXT_PUBLIC_TAMBO_API_KEY=
+  LIVEKIT_API_KEY=
+  LIVEKIT_API_SECRET=
+  LIVEKIT_URL=
+  OPENAI_API_KEY=
+  NEXT_PUBLIC_SUPABASE_URL=
+  NEXT_PUBLIC_SUPABASE_ANON_KEY=
+  ```
+
+4. **Build the agent (TypeScript)**
+```bash
+npm run agent:build
+```
+
+### Running the Application
+
+#### Development Mode (Recommended)
+Run in two terminals:
+
+**Terminal 1 - Voice Agent (start first):**
+```bash
+npm run agent:dev
+```
+
+**Terminal 2 - Next.js App:**
+```bash
+npm run dev
+```
+
+Visit `http://localhost:3000`
+
+> **Important**: Always start the agent before the web app to ensure proper connection.
+
+#### Production Mode
+```bash
+npm run build
+npm run agent:build
+npm start          # Terminal 1
+npm run agent:run  # Terminal 2
+```
+
+## 📱 Key Features & Pages
+
+- **`/`** - Landing page with setup checklist
+- **`/chat`** - Tambo AI chat interface with MCP integration
+- **`/voice`** - Voice assistant with speech-to-text display
+- **`/canvas`** - Interactive canvas with voice agent integration
+- **`/mcp-config`** - Configure MCP servers
+- **`/demo/live-captions`** - Real-time transcription demo
+- **`/demo/presentation-deck`** - Interactive presentation system
+- **`/demo/livekit-toolbar`** - LiveKit UI components testing
 
 ### Configure Model Context Protocol (MCP) Servers
 
-You can go to https://localhost:3000/mcp-config to add MCP servers.
+Navigate to `http://localhost:3000/mcp-config` to add MCP servers.
 
 For the demo above we used smithery.ai's [brave-search-mcp](https://smithery.ai/server/@mikechao/brave-search-mcp)
 
@@ -66,3 +140,16 @@ const components: TamboComponent[] = [
 ```
 
 You can find more information about the options [here](https://tambo.co/docs/concepts/registering-components)
+
+## 🎙️ Voice Agent Architecture
+
+The voice agent runs as a separate Node.js process using the LiveKit Agents framework:
+
+- **Agent Worker**: `src/lib/livekit-agent-worker.ts` - TypeScript-based agent using OpenAI Realtime API
+- **Automatic Dispatch**: Agent automatically joins any room created in your LiveKit project
+- **Real-time Transcription**: Live speech-to-text displayed in the UI
+- **Tool Support**: Extensible tool system in `src/lib/livekit-agent-tools.ts`
+
+The agent connects via WebRTC for low-latency voice interactions and publishes transcriptions back to the room.
+
+## 🏗️ Architecture

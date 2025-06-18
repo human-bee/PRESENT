@@ -1,3 +1,32 @@
+/**
+ * Action Item Tracker - Tambo AI Generative UI Component
+ * 
+ * Complex stateful component demonstrating Tambo AI's generative UI capabilities.
+ * Uses useTamboComponentState hook for AI-driven state management and real-time updates.
+ * 
+ * DEVELOPER NOTES:
+ * - Zod schemas for type safety and AI model validation
+ * - Tambo component state system integration for AI interactions
+ * - shadcn/ui + Tailwind CSS for consistent styling
+ * - CRUD operations with optimistic updates
+ * 
+ * KEY INTEGRATIONS:
+ * - @tambo-ai/react: useTamboComponentState hook for AI state management
+ * - Zod schemas: actionItemSchema/actionItemTrackerSchema for validation
+ * - Lucide React icons, Next.js client-side component
+ * 
+ * WHEN MODIFYING:
+ * - Update schemas if changing data structure
+ * - Maintain Tambo state hook for AI functionality
+ * - Follow Tailwind utility patterns for styling consistency
+ * - Consider AI model's ability to understand/manipulate data
+ * 
+ * CONNECTIONS:
+ * - Used in MCP (Model Context Protocol) configurations
+ * - Designed for Tambo's generative UI system
+ * - Extensible with AI features like smart prioritization
+ */
+
 "use client";
 
 import { cn } from "@/lib/utils";
