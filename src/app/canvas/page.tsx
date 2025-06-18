@@ -177,9 +177,11 @@ export default function Canvas() {
               <CanvasSpace className="absolute inset-0 w-full h-full" />
 
               {/* Speech Transcription Component - Bottom Right */}
+              {/* Temporarily disabled - moving to MessageThreadCollapsible tabs
               <div className="absolute bottom-20 right-8 z-[99999999999] pointer-events-auto">
                 <SpeechTranscription />
               </div>
+              */}
 
               {/* Direct LiveKit Room Connector - positioned bottom left to avoid overlap */}
               <div className="absolute bottom-4 left-4 z-50">
