@@ -3,7 +3,18 @@
 // Force dynamic rendering to prevent build errors
 export const dynamic = 'force-dynamic';
 
-import { PresentationDeck } from "@/components/ui/presentation-deck";
+import nextDynamic from 'next/dynamic';
+
+// Dynamically import PresentationDeck to prevent SSR issues
+const PresentationDeck = nextDynamic(
+  () => import("@/components/ui/presentation-deck").then(mod => ({ default: mod.PresentationDeck })),
+  { 
+    ssr: false,
+    loading: () => <div className="flex items-center justify-center h-96">
+      <div className="text-lg text-slate-600">Loading presentation...</div>
+    </div>
+  }
+);
 
 // Force client-side rendering to prevent SSG issues with Tambo hooks
 
@@ -33,7 +44,8 @@ const sampleSlides = [
       </div>
     `,
     notes: "Welcome your audience with an overview of the presentation features. Highlight the key capabilities of this presentation tool.",
-    duration: 45
+    duration: 45,
+    transition: "fade" as const
   },
   {
     id: "slide-2",
@@ -82,7 +94,8 @@ const sampleSlides = [
       </div>
     `,
     notes: "Detail the comprehensive feature set. Press 'L' to activate laser pointer and demonstrate interactive capabilities.",
-    duration: 60
+    duration: 60,
+    transition: "slide" as const
   },
   {
     id: "slide-3",
@@ -123,7 +136,8 @@ const sampleSlides = [
       </div>
     `,
     notes: "This is a great time to demonstrate the keyboard shortcuts. Press 'T' to show thumbnails, 'S' to toggle these notes, and 'L' for laser pointer mode.",
-    duration: 90
+    duration: 90,
+    transition: "zoom" as const
   },
   {
     id: "slide-4",
@@ -161,7 +175,8 @@ const sampleSlides = [
       </div>
     `,
     notes: "Perfect slide for demonstrating the laser pointer. Press 'L' to activate it and move your mouse to point at different elements. The red dot will follow your cursor!",
-    duration: 120
+    duration: 120,
+    transition: "flip" as const
   },
   {
     id: "slide-5",
@@ -183,7 +198,8 @@ const sampleSlides = [
       </div>
     `,
     notes: "Conclude the presentation by highlighting the key takeaways. This slide demonstrates the bookmark feature - press 'B' to bookmark it!",
-    duration: 30
+    duration: 30,
+    transition: "fade" as const
   }
 ];
 
@@ -204,6 +220,7 @@ export default function PresentationDeckDemo() {
             title="Sample Business Presentation"
             author="Tambo Demo"
             slides={sampleSlides}
+            sourceType="html"
             aspectRatio="16:9"
             theme="dark"
             showControls={true}
