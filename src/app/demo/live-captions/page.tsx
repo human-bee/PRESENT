@@ -1,5 +1,8 @@
 "use client";
 
+// Force dynamic rendering to prevent build errors
+export const dynamic = 'force-dynamic';
+
 import { useState } from "react";
 import LiveCaptions from "@/components/LiveCaptions";
 import { LiveKitRoom } from "@livekit/components-react";

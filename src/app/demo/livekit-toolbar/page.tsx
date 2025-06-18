@@ -1,5 +1,8 @@
 "use client";
 
+// Force dynamic rendering to prevent build errors
+export const dynamic = 'force-dynamic';
+
 import React from 'react';
 import { LivekitToolbarDemo } from '@/components/ui/livekit-toolbar-demo';
 

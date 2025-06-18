@@ -1,5 +1,8 @@
 "use client";
 
+// Force dynamic rendering to prevent build errors
+export const dynamic = 'force-dynamic';
+
 import { PresentationDeck } from "@/components/ui/presentation-deck";
 
 // Force client-side rendering to prevent SSG issues with Tambo hooks
