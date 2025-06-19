@@ -110,10 +110,10 @@ const McpConfigPage = () => {
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-2xl font-bold">MCP Server Configuration</h1>
           <Link
-            href="/chat"
+            href="/canvas"
             className="px-4 py-2 rounded-md bg-black text-white hover:bg-black/80"
           >
-            Back to Chat
+            Back to Canvas
           </Link>
         </div>
 

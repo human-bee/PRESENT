@@ -111,38 +111,46 @@ export interface MessageInputProps
  */
 const MessageInput = React.forwardRef<HTMLFormElement, MessageInputProps>(
   ({ children, className, contextKey, variant, ...props }, ref) => {
-    const { value, setValue, submit, isPending, error } =
-      useTamboThreadInput(contextKey);
-    const [displayValue, setDisplayValue] = React.useState("");
+    const {
+      value: externalValue,
+      setValue: setExternalValue,
+      submit,
+      isPending,
+      error,
+    } = useTamboThreadInput(contextKey);
+
+    const [inputValue, setInputValue] = React.useState<string>(externalValue);
     const [submitError, setSubmitError] = React.useState<string | null>(null);
     const textareaRef = React.useRef<HTMLTextAreaElement>(null);
 
+    // Sync external value (e.g., suggestions) into local input when it changes
     React.useEffect(() => {
-      setDisplayValue(value);
-      if (value && textareaRef.current) {
-        textareaRef.current.focus();
-      }
-    }, [value]);
+      setInputValue(externalValue);
+    }, [externalValue]);
 
     const handleSubmit = React.useCallback(
       async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!value.trim()) return;
+        if (!inputValue.trim()) return;
 
         setSubmitError(null);
-        setDisplayValue("");
         try {
+          // First, set the message content in Tambo state
+          setExternalValue(inputValue);
+          
+          // Then submit the message
           await submit({
             contextKey,
             streamResponse: true,
           });
-          setValue("");
+          
+          // Clear both states after successful submission
+          setInputValue("");
           setTimeout(() => {
             textareaRef.current?.focus();
           }, 0);
         } catch (error) {
           console.error("Failed to submit message:", error);
-          setDisplayValue(value);
           setSubmitError(
             error instanceof Error
               ? error.message
@@ -150,16 +158,13 @@ const MessageInput = React.forwardRef<HTMLFormElement, MessageInputProps>(
           );
         }
       },
-      [value, submit, contextKey, setValue, setDisplayValue, setSubmitError],
+      [inputValue, contextKey, submit, setExternalValue],
     );
 
     const contextValue = React.useMemo(
       () => ({
-        value: displayValue,
-        setValue: (newValue: string) => {
-          setValue(newValue);
-          setDisplayValue(newValue);
-        },
+        value: inputValue,
+        setValue: setInputValue,
         submit,
         handleSubmit,
         isPending,
@@ -170,8 +175,8 @@ const MessageInput = React.forwardRef<HTMLFormElement, MessageInputProps>(
         setSubmitError,
       }),
       [
-        displayValue,
-        setValue,
+        inputValue,
+        setInputValue,
         submit,
         handleSubmit,
         isPending,

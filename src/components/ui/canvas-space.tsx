@@ -87,6 +87,8 @@ if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
 interface CanvasSpaceProps {
   /** Optional CSS class name for custom styling */
   className?: string;
+  /** Optional callback to toggle transcript panel */
+  onTranscriptToggle?: () => void;
 }
 
 /**
@@ -98,7 +100,7 @@ interface CanvasSpaceProps {
  * <CanvasSpace className="custom-styles" />
  * ```
  */
-export function CanvasSpace({ className }: CanvasSpaceProps) {
+export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps) {
   // Access the current Tambo thread context
   const { thread } = useTamboThread();
   const { user } = useAuth();
@@ -194,7 +196,7 @@ export function CanvasSpace({ className }: CanvasSpaceProps) {
       // Mark this message as added
       setAddedMessageIds(prevSet => new Set(prevSet).add(messageId));
     }
-  }, [editor, messageIdToShapeIdMap, setMessageIdToShapeIdMap]);
+  }, [editor, messageIdToShapeIdMap]);
 
 
   /**
@@ -273,6 +275,7 @@ export function CanvasSpace({ className }: CanvasSpaceProps) {
         shapeUtils={[TamboShapeUtil]}
         componentStore={componentStore.current}
         className="absolute inset-0"
+        onTranscriptToggle={onTranscriptToggle}
       />
       {/*
         The following is a placeholder for if you want to show some UI when the editor is not loaded

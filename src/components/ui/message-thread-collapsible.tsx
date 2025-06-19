@@ -20,8 +20,7 @@ import {
 import { ThreadDropdown } from "@/components/ui/thread-dropdown";
 import { ScrollableMessageContainer } from "@/components/ui/scrollable-message-container";
 import { cn } from "@/lib/utils";
-import { Collapsible } from "radix-ui";
-import { XIcon, MessageSquare, FileText } from "lucide-react";
+import { MessageSquare, FileText } from "lucide-react";
 import * as React from "react";
 import { type VariantProps } from "class-variance-authority";
 import type { Suggestion } from "@tambo-ai/react";
@@ -95,118 +94,11 @@ const useCollapsibleState = (defaultOpen = false) => {
   return { isOpen, setIsOpen, shortcutText };
 };
 
-/**
- * Props for the CollapsibleContainer component
- */
-interface CollapsibleContainerProps
-  extends React.HTMLAttributes<HTMLDivElement> {
-  isOpen: boolean;
-  onOpenChange: (open: boolean) => void;
-  children: React.ReactNode;
-}
-
-/**
- * Container component for the collapsible panel
- */
-const CollapsibleContainer = React.forwardRef<
-  HTMLDivElement,
-  CollapsibleContainerProps
->(({ className, isOpen, onOpenChange, children, ...props }, ref) => (
-  <Collapsible.Root
-    ref={ref}
-    open={isOpen}
-    onOpenChange={onOpenChange}
-    className={cn(
-      "fixed bottom-4 right-4 w-full max-w-sm sm:max-w-md md:max-w-lg rounded-lg shadow-lg transition-all duration-200 bg-background border border-gray-200",
-      className,
-    )}
-    {...props}
-  >
-    {children}
-  </Collapsible.Root>
-));
-CollapsibleContainer.displayName = "CollapsibleContainer";
-
-/**
- * Props for the CollapsibleTrigger component
- */
-interface CollapsibleTriggerProps {
-  isOpen: boolean;
-  shortcutText: string;
-  onClose: () => void;
-  contextKey?: string;
-  onThreadChange: () => void;
-  config: {
-    labels: {
-      openState: string;
-      closedState: string;
-    };
-  };
-}
-
-/**
- * Trigger component for the collapsible panel
- */
-const CollapsibleTrigger = ({
-  isOpen,
-  shortcutText,
-  onClose,
-  contextKey,
-  onThreadChange,
-  config,
-}: CollapsibleTriggerProps) => (
-  <Collapsible.Trigger asChild>
-    <button
-      className={cn(
-        "flex items-center justify-between w-full p-4",
-        "hover:bg-muted/50 transition-colors",
-        isOpen,
-      )}
-      aria-expanded={isOpen}
-      aria-controls="message-thread-content"
-    >
-      <div className="flex items-center gap-2">
-        <span>
-          {isOpen ? config.labels.openState : config.labels.closedState}
-        </span>
-        {isOpen && (
-          <ThreadDropdown
-            contextKey={contextKey}
-            onThreadChange={onThreadChange}
-          />
-        )}
-      </div>
-      <div className="flex items-center gap-2">
-        <span
-          className="text-xs text-muted-foreground pl-8"
-          suppressHydrationWarning
-        >
-          {isOpen ? "" : `(${shortcutText})`}
-        </span>
-        {isOpen && (
-          <div
-            role="button"
-            className="p-1 rounded-full hover:bg-muted/70 transition-colors cursor-pointer"
-            onClick={(e) => {
-              e.stopPropagation();
-              onClose();
-            }}
-            aria-label="Close"
-          >
-            <XIcon className="h-4 w-4" />
-          </div>
-        )}
-      </div>
-    </button>
-  </Collapsible.Trigger>
-);
-CollapsibleTrigger.displayName = "CollapsibleTrigger";
-
 export const MessageThreadCollapsible = React.forwardRef<
   HTMLDivElement,
   MessageThreadCollapsibleProps
 >(({ className, contextKey, defaultOpen = false, variant, onTranscriptChange, ...props }, ref) => {
-  const { isOpen, setIsOpen, shortcutText } = useCollapsibleState(defaultOpen);
+  const { isOpen: keyboardOpen, setIsOpen: setKeyboardOpen, shortcutText } = useCollapsibleState(defaultOpen);
   const [activeTab, setActiveTab] = React.useState<'conversations' | 'transcript'>('conversations');
   const [transcriptions, setTranscriptions] = React.useState<Array<{
     id: string;
@@ -300,18 +192,8 @@ export const MessageThreadCollapsible = React.forwardRef<
   }, []);
 
   const handleThreadChange = React.useCallback(() => {
-    setIsOpen(true);
-  }, [setIsOpen]);
-
-  /**
-   * Configuration for the MessageThreadCollapsible component
-   */
-  const THREAD_CONFIG = {
-    labels: {
-      openState: activeTab === 'conversations' ? "Conversations" : "Transcript",
-      closedState: "Start chatting with tambo",
-    },
-  };
+    // No longer needed for collapsible behavior
+  }, []);
 
   const defaultSuggestions: Suggestion[] = [
     {
@@ -345,31 +227,38 @@ export const MessageThreadCollapsible = React.forwardRef<
   };
 
   React.useEffect(() => {
-    if (onTranscriptChange) {
+    if (onTranscriptChange && transcriptions.length > 0) {
       onTranscriptChange(transcriptions);
     }
   }, [transcriptions, onTranscriptChange]);
 
   return (
-    <CollapsibleContainer
+    <div
       ref={ref}
-      isOpen={isOpen}
-      onOpenChange={setIsOpen}
-      className={className}
+      className={cn(
+        "bg-background border-l border-gray-200 shadow-lg h-full overflow-hidden flex flex-col",
+        className,
+      )}
       {...props}
     >
-      <CollapsibleTrigger
-        isOpen={isOpen}
-        shortcutText={shortcutText}
-        onClose={() => setIsOpen(false)}
+      <div className="h-full flex flex-col">
+        {/* Header with title and close button */}
+        <div className="flex items-center justify-between p-4 border-b border-gray-200">
+          <div className="flex items-center gap-2">
+            <span className="font-medium">
+              {activeTab === 'conversations' ? "Conversations" : "Transcript"}
+            </span>
+            <ThreadDropdown
         contextKey={contextKey}
         onThreadChange={handleThreadChange}
-        config={THREAD_CONFIG}
       />
-      <Collapsible.Content>
-        <div className="h-[700px] flex flex-col">
+          </div>
+          <span className="text-xs text-muted-foreground">
+            {shortcutText} to toggle
+          </span>
+        </div>
+
           {/* Tab Navigation */}
-          {isOpen && (
             <div className="flex border-b border-gray-200">
               <button
                 onClick={() => setActiveTab('conversations')}
@@ -396,7 +285,6 @@ export const MessageThreadCollapsible = React.forwardRef<
                 Transcript
               </button>
             </div>
-          )}
 
           {/* Tab Content */}
           {activeTab === 'conversations' ? (
@@ -497,8 +385,7 @@ export const MessageThreadCollapsible = React.forwardRef<
             </>
           )}
         </div>
-      </Collapsible.Content>
-    </CollapsibleContainer>
+    </div>
   );
 });
 MessageThreadCollapsible.displayName = "MessageThreadCollapsible";
