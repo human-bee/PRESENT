@@ -35,8 +35,6 @@ export interface MessageThreadCollapsibleProps
   extends React.HTMLAttributes<HTMLDivElement> {
   /** Optional context key for the thread */
   contextKey?: string;
-  /** Whether the collapsible should be open by default (default: false) */
-  defaultOpen?: boolean;
   /**
    * Controls the visual styling of messages in the thread.
    * Possible values include: "default", "compact", etc.
@@ -63,42 +61,16 @@ export interface MessageThreadCollapsibleProps
  * ```tsx
  * <MessageThreadCollapsible
  *   contextKey="my-thread"
- *   defaultOpen={false}
  *   className="left-4" // Position on the left instead of right
  *   variant="default"
  * />
  * ```
  */
 
-/**
- * Custom hook for managing collapsible state with keyboard shortcuts
- */
-const useCollapsibleState = (defaultOpen = false) => {
-  const [isOpen, setIsOpen] = React.useState(defaultOpen);
-  const isMac =
-    typeof navigator !== "undefined" && navigator.platform.startsWith("Mac");
-  const shortcutText = isMac ? "⌘K" : "Ctrl+K";
-
-  React.useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if ((event.metaKey || event.ctrlKey) && event.key === "k") {
-        event.preventDefault();
-        setIsOpen((prev) => !prev);
-      }
-    };
-
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, []);
-
-  return { isOpen, setIsOpen, shortcutText };
-};
-
 export const MessageThreadCollapsible = React.forwardRef<
   HTMLDivElement,
   MessageThreadCollapsibleProps
->(({ className, contextKey, defaultOpen = false, variant, onTranscriptChange, ...props }, ref) => {
-  const { isOpen: keyboardOpen, setIsOpen: setKeyboardOpen, shortcutText } = useCollapsibleState(defaultOpen);
+>(({ className, contextKey, variant, onTranscriptChange, ...props }, ref) => {
   const [activeTab, setActiveTab] = React.useState<'conversations' | 'transcript'>('conversations');
   const [transcriptions, setTranscriptions] = React.useState<Array<{
     id: string;
@@ -128,7 +100,7 @@ export const MessageThreadCollapsible = React.forwardRef<
           text: data.text,
           timestamp: data.timestamp || Date.now(),
           isFinal: data.is_final || false,
-          source: data.speaker === 'tambo-voice-agent' ? 'agent' : 'user' as const,
+          source: (data.speaker === 'tambo-voice-agent' ? 'agent' : 'user') as 'agent' | 'user',
           type: 'speech' as const,
         };
         
@@ -156,7 +128,7 @@ export const MessageThreadCollapsible = React.forwardRef<
   // Listen for Tambo system calls
   React.useEffect(() => {
     const handleTamboComponent = (event: CustomEvent) => {
-      const { messageId, component } = event.detail;
+      const { messageId } = event.detail;
       
       // Add system call to transcript
       const systemCall = {
@@ -253,9 +225,6 @@ export const MessageThreadCollapsible = React.forwardRef<
         onThreadChange={handleThreadChange}
       />
           </div>
-          <span className="text-xs text-muted-foreground">
-            {shortcutText} to toggle
-          </span>
         </div>
 
           {/* Tab Navigation */}

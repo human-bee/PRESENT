@@ -24,6 +24,7 @@ import { RoomContext } from "@livekit/components-react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/use-auth";
 import { SpeechTranscription } from '@/components/ui/speech-transcription';
+import { ToolDispatcher } from '@/components/tool-dispatcher';
 
 // Suppress development warnings for cleaner console
 suppressDevelopmentWarnings();
@@ -142,8 +143,10 @@ export default function Canvas() {
         <EnhancedMcpProvider mcpServers={mcpServers}>
           {/* LiveKit Room Context Provider - wraps everything! */}
           <RoomContext.Provider value={room}>
-            {/* Canvas LiveKit Context Provider - provides connection state to all canvas components */}
-            <CanvasLiveKitContext.Provider value={roomState}>
+            {/* Tool Dispatcher - handles voice agent tool calls */}
+            <ToolDispatcher contextKey={contextKey} enableLogging={true}>
+              {/* Canvas LiveKit Context Provider - provides connection state to all canvas components */}
+              <CanvasLiveKitContext.Provider value={roomState}>
               {/* Full-screen Canvas Space */}
               <CanvasSpace 
                 className="absolute inset-0 w-full h-full" 
@@ -175,7 +178,8 @@ export default function Canvas() {
                 variant="default"
               />
               )}
-            </CanvasLiveKitContext.Provider>
+              </CanvasLiveKitContext.Provider>
+            </ToolDispatcher>
           </RoomContext.Provider>
         </EnhancedMcpProvider>
       </TamboProvider>
