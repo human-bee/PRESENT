@@ -7,6 +7,9 @@
 
 "use client";
 
+// Force dynamic rendering to prevent build errors
+export const dynamic = 'force-dynamic';
+
 // Force client-side rendering to prevent SSG issues with Tambo hooks
 import React, { useState, useEffect, useCallback } from "react";
 import { CanvasSpace } from "@/components/ui/canvas-space";
