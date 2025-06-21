@@ -2,7 +2,7 @@ import { movieScriptContent } from "./doc-contents";
 
 // Diff word type
 export type DiffWord = {
-  type: "unchanged" | "added" | "removed";
+  type: "added" | "removed";
   content: string;
   lineNumber: number;
   wordIndex: number;
@@ -19,7 +19,7 @@ export type Document = {
   lastModified?: Date;
 };
 
-// Word-level diff algorithm
+// Improved word-level diff algorithm that only tracks actual changes
 const generateWordDiff = (original: string, modified: string): DiffWord[] => {
   const originalLines = original.split("\n");
   const modifiedLines = modified.split("\n");
@@ -33,6 +33,9 @@ const generateWordDiff = (original: string, modified: string): DiffWord[] => {
   ) {
     const originalLine = originalLines[lineIndex] || "";
     const modifiedLine = modifiedLines[lineIndex] || "";
+
+    // If lines are identical, skip
+    if (originalLine === modifiedLine) continue;
 
     // Split lines into words (preserving whitespace)
     const originalWords = originalLine.split(/(\s+)/);
@@ -48,15 +51,10 @@ const generateWordDiff = (original: string, modified: string): DiffWord[] => {
         j < modifiedWords.length &&
         originalWords[i] === modifiedWords[j]
       ) {
-        // Unchanged word
-        diffs.push({
-          type: "unchanged",
-          content: originalWords[i],
-          lineNumber: lineIndex + 1,
-          wordIndex: wordIndex++,
-        });
+        // Unchanged word - skip it
         i++;
         j++;
+        wordIndex++;
       } else if (
         j < modifiedWords.length &&
         (i >= originalWords.length || originalWords[i] !== modifiedWords[j])
@@ -126,9 +124,7 @@ export const documentState: {
       const diffs = generateWordDiff(originalContent, content);
 
       // Only store diffs if there are actual changes
-      const hasChanges = diffs.some(
-        (diff) => diff.type === "added" || diff.type === "removed"
-      );
+      const hasChanges = diffs.length > 0;
 
       documentState.documents[docIndex] = {
         ...documentState.documents[docIndex],

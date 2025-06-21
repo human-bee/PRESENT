@@ -27,7 +27,7 @@ export const markdownViewerEditableSchema = z.object({
   diffs: z
     .array(
       z.object({
-        type: z.enum(["unchanged", "added", "removed"]),
+        type: z.enum(["added", "removed"]),
         content: z.string(),
         lineNumber: z.number(),
         wordIndex: z.number(),
@@ -165,12 +165,7 @@ export function MarkdownViewerEditable({
 
   // Render diff view with word-level changes
   const renderDiffView = (diffWords: DiffWord[]) => {
-    // Filter to only show changed words
-    const changedWords = diffWords.filter(
-      (word) => word.type === "added" || word.type === "removed"
-    );
-
-    if (changedWords.length === 0) {
+    if (diffWords.length === 0) {
       return (
         <div className="text-slate-400 italic text-center py-4">
           No changes detected
@@ -179,7 +174,7 @@ export function MarkdownViewerEditable({
     }
 
     // Group changes by line for better readability
-    const changesByLine = changedWords.reduce((acc, word) => {
+    const changesByLine = diffWords.reduce((acc, word) => {
       if (!acc[word.lineNumber]) {
         acc[word.lineNumber] = [];
       }
