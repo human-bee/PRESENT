@@ -6,7 +6,6 @@ import {
   BookOpen,
   Clock,
   Image as ImageIcon,
-  Search,
   Type,
   X,
   ZoomIn,
@@ -34,8 +33,6 @@ type MarkdownViewerEditableState = {
   fontSize: number;
   readingProgress: number;
   showTOC: boolean;
-  searchTerm: string;
-  isSearching: boolean;
   currentHeading: string;
 };
 
@@ -65,54 +62,12 @@ export function MarkdownViewerEditable({
     fontSize: 16,
     readingProgress: 0,
     showTOC: false,
-    searchTerm: "",
-    isSearching: false,
     currentHeading: "",
   });
 
   const [toc, setTOC] = useState<TOCItem[]>([]);
   const contentRef = useRef<HTMLDivElement>(null);
   const [imageModal, setImageModal] = useState<string | null>(null);
-
-  // Handle keyboard shortcuts
-  useEffect(() => {
-    const handleKeyboard = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        if (imageModal) {
-          setImageModal(null);
-        }
-      }
-
-      if (e.metaKey || e.ctrlKey) {
-        switch (e.key) {
-          case "f":
-            e.preventDefault();
-            setState((prev) => ({ ...prev, isSearching: !prev.isSearching }));
-            break;
-          case "+":
-          case "=":
-            e.preventDefault();
-            setState((prev) => ({
-              ...prev,
-              fontSize: Math.min(prev.fontSize + 2, 24),
-            }));
-            break;
-          case "-":
-            e.preventDefault();
-            setState((prev) => ({
-              ...prev,
-              fontSize: Math.max(prev.fontSize - 2, 12),
-            }));
-            break;
-        }
-      }
-    };
-
-    document.addEventListener("keydown", handleKeyboard);
-    return () => {
-      document.removeEventListener("keydown", handleKeyboard);
-    };
-  }, [imageModal]);
 
   // Reading progress tracking
   useEffect(() => {
@@ -199,15 +154,6 @@ export function MarkdownViewerEditable({
     let codeContent: string[] = [];
 
     lines.forEach((line, index) => {
-      // Handle search highlighting
-      const highlightedLine =
-        state?.searchTerm && state.searchTerm.length > 2
-          ? line.replace(
-              new RegExp(`(${state.searchTerm})`, "gi"),
-              '<mark class="bg-yellow-300 text-black px-1 rounded">$1</mark>'
-            )
-          : line;
-
       // Code blocks
       if (line.startsWith("```")) {
         if (inCodeBlock) {
@@ -279,8 +225,9 @@ export function MarkdownViewerEditable({
             key={`h1-${index}`}
             id={id}
             className="font-bold text-white scroll-mt-20 text-4xl mb-6 mt-8"
-            dangerouslySetInnerHTML={{ __html: highlightedLine.substring(2) }}
-          />
+          >
+            {text}
+          </h1>
         );
         return;
       }
@@ -293,8 +240,9 @@ export function MarkdownViewerEditable({
             key={`h2-${index}`}
             id={id}
             className="font-bold text-white scroll-mt-20 text-3xl mb-4 mt-6"
-            dangerouslySetInnerHTML={{ __html: highlightedLine.substring(3) }}
-          />
+          >
+            {text}
+          </h2>
         );
         return;
       }
@@ -307,8 +255,9 @@ export function MarkdownViewerEditable({
             key={`h3-${index}`}
             id={id}
             className="font-semibold text-white scroll-mt-20 text-2xl mb-3 mt-5"
-            dangerouslySetInnerHTML={{ __html: highlightedLine.substring(4) }}
-          />
+          >
+            {text}
+          </h3>
         );
         return;
       }
@@ -316,7 +265,7 @@ export function MarkdownViewerEditable({
       // Links
       const linkMatch = line.match(/\[([^\]]+)\]\(([^)]+)\)/g);
       if (linkMatch) {
-        let processedLine = highlightedLine;
+        let processedLine = line;
         linkMatch.forEach((match) => {
           const [, text, url] = match.match(/\[([^\]]+)\]\(([^)]+)\)/) || [];
           if (text && url) {
@@ -342,8 +291,9 @@ export function MarkdownViewerEditable({
           <li
             key={`li-${index}`}
             className="ml-6 mb-2 list-disc text-slate-300 leading-relaxed"
-            dangerouslySetInnerHTML={{ __html: highlightedLine.substring(2) }}
-          />
+          >
+            {line.substring(2)}
+          </li>
         );
         return;
       }
@@ -355,9 +305,7 @@ export function MarkdownViewerEditable({
             key={`quote-${index}`}
             className="border-l-4 border-blue-500 pl-4 my-4 italic text-slate-400 bg-slate-800/30 py-2 rounded-r-lg"
           >
-            <span
-              dangerouslySetInnerHTML={{ __html: highlightedLine.substring(2) }}
-            />
+            {line.substring(2)}
           </blockquote>
         );
         return;
@@ -366,11 +314,9 @@ export function MarkdownViewerEditable({
       // Regular paragraph
       if (line.trim()) {
         elements.push(
-          <p
-            key={`p-${index}`}
-            className="mb-4 leading-relaxed text-slate-300"
-            dangerouslySetInnerHTML={{ __html: highlightedLine }}
-          />
+          <p key={`p-${index}`} className="mb-4 leading-relaxed text-slate-300">
+            {line}
+          </p>
         );
         return;
       }
@@ -390,7 +336,7 @@ export function MarkdownViewerEditable({
   const estimatedReadTime = readTime || Math.ceil(wordCount / 200);
 
   return (
-    <div className="max-h-screen bg-slate-950 text-slate-100 rounded-2xl overflow-hidden flex flex-col">
+    <div className="max-h-screen bg-slate-950 text-slate-100 rounded-2xl overflow-hidden flex flex-col min-w-[700px]">
       {/* Reading progress bar */}
       <div className="sticky top-0 left-0 right-0 h-1 bg-slate-800 z-50">
         <div
@@ -461,45 +407,8 @@ export function MarkdownViewerEditable({
                   <BookOpen size={16} />
                 </button>
               )}
-
-              {/* Search */}
-              <button
-                onClick={() =>
-                  setState((prev) => ({
-                    ...prev,
-                    isSearching: !prev.isSearching,
-                  }))
-                }
-                className={cn(
-                  "p-2 rounded-lg transition-colors",
-                  state.isSearching
-                    ? "bg-slate-700 text-white"
-                    : "hover:bg-slate-800 text-slate-400 hover:text-slate-300"
-                )}
-              >
-                <Search size={16} />
-              </button>
             </div>
           </div>
-
-          {/* Search bar */}
-          {state.isSearching && (
-            <div className="mt-4 animate-in slide-in-from-top-2 duration-300">
-              <input
-                type="text"
-                placeholder="Search in document..."
-                value={state.searchTerm}
-                onChange={(e) =>
-                  setState((prev) => ({
-                    ...prev,
-                    searchTerm: e.target.value,
-                  }))
-                }
-                className="w-full max-w-md px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:border-blue-500 transition-colors"
-                autoFocus
-              />
-            </div>
-          )}
         </div>
       </div>
 
@@ -587,12 +496,6 @@ export function MarkdownViewerEditable({
             </div>
           </article>
         </div>
-      </div>
-
-      {/* Keyboard shortcuts hint */}
-      <div className="fixed bottom-4 right-4 text-slate-500 text-xs space-y-1">
-        <div>⌘F Search • ⌘+/- Font size</div>
-        <div>ESC Close images</div>
       </div>
 
       {/* Image modal */}
