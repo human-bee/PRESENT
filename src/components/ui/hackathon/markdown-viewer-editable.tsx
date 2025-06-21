@@ -84,12 +84,13 @@ export function MarkdownViewerEditable({
     readingProgress: 0,
     showTOC: false,
     currentHeading: "",
-    showDiffs: true,
+    showDiffs: false,
   });
 
   const [toc, setTOC] = useState<TOCItem[]>([]);
   const contentRef = useRef<HTMLDivElement>(null);
   const [imageModal, setImageModal] = useState<string | null>(null);
+  const hasAutoScrolledOnMount = useRef(false);
 
   // Reading progress tracking
   useEffect(() => {
@@ -150,6 +151,73 @@ export function MarkdownViewerEditable({
     setTOC(tocItems);
   }, [content]);
 
+  // Auto-scroll to first diff when diffs are available
+  useEffect(() => {
+    if (
+      diffs &&
+      diffs.length > 0 &&
+      contentRef.current &&
+      !hasAutoScrolledOnMount.current
+    ) {
+      // Find the first diff line number
+      const firstDiffLine = Math.min(...diffs.map((diff) => diff.lineNumber));
+
+      // Wait for the content to render, then scroll to the actual line
+      setTimeout(() => {
+        // Find the element with the exact line number
+        const targetElement = contentRef.current?.querySelector(
+          `[data-line="${firstDiffLine}"]`
+        ) as HTMLElement;
+
+        // If not found, try to find elements within a code block that spans the line
+        const codeBlockElement = contentRef.current?.querySelector(
+          `[data-line-start][data-line-end]`
+        ) as HTMLElement;
+
+        let elementToScroll: HTMLElement | null = targetElement;
+
+        if (!elementToScroll && codeBlockElement) {
+          const startLine = parseInt(
+            codeBlockElement.getAttribute("data-line-start") || "0"
+          );
+          const endLine = parseInt(
+            codeBlockElement.getAttribute("data-line-end") || "0"
+          );
+
+          if (firstDiffLine >= startLine && firstDiffLine <= endLine) {
+            elementToScroll = codeBlockElement;
+          }
+        }
+
+        if (elementToScroll) {
+          elementToScroll.scrollIntoView({
+            behavior: "smooth",
+            block: "center",
+          });
+
+          // Add a temporary highlight effect to the actual content line
+          elementToScroll.classList.add(
+            "ring-2",
+            "ring-yellow-500",
+            "ring-opacity-50",
+            "bg-yellow-500/10"
+          );
+          setTimeout(() => {
+            elementToScroll?.classList.remove(
+              "ring-2",
+              "ring-yellow-500",
+              "ring-opacity-50",
+              "bg-yellow-500/10"
+            );
+          }, 3000);
+        }
+
+        // Mark that we've auto-scrolled on mount
+        hasAutoScrolledOnMount.current = true;
+      }, 200);
+    }
+  }, [diffs]);
+
   // Scroll to heading
   const scrollToHeading = (id: string) => {
     if (!contentRef.current) return;
@@ -190,7 +258,11 @@ export function MarkdownViewerEditable({
     return (
       <div className="space-y-3">
         {Object.entries(changesByLine).map(([lineNum, words]) => (
-          <div key={lineNum} className="bg-slate-800/50 rounded-lg p-3">
+          <div
+            key={lineNum}
+            className="bg-slate-800/50 rounded-lg p-3"
+            data-diff-line={lineNum}
+          >
             <div className="text-xs text-slate-500 mb-2">Line {lineNum}</div>
             <div className="flex flex-wrap gap-1">
               {words.map((word, index) => (
@@ -228,8 +300,11 @@ export function MarkdownViewerEditable({
     const elements: React.JSX.Element[] = [];
     let inCodeBlock = false;
     let codeContent: string[] = [];
+    let codeBlockStartLine = 0;
 
     lines.forEach((line, index) => {
+      const lineNumber = index + 1;
+
       // Code blocks
       if (line.startsWith("```")) {
         if (inCodeBlock) {
@@ -238,6 +313,8 @@ export function MarkdownViewerEditable({
             <div
               key={`code-${index}`}
               className="my-6 rounded-xl overflow-hidden bg-slate-900 border border-slate-700"
+              data-line-start={codeBlockStartLine}
+              data-line-end={lineNumber}
             >
               <div className="bg-slate-800 px-4 py-2 text-xs text-slate-400 font-mono">
                 Code
@@ -254,6 +331,7 @@ export function MarkdownViewerEditable({
         } else {
           // Start code block
           inCodeBlock = true;
+          codeBlockStartLine = lineNumber;
         }
         return;
       }
@@ -268,7 +346,11 @@ export function MarkdownViewerEditable({
       if (imageMatch) {
         const [, alt, src] = imageMatch;
         elements.push(
-          <div key={`img-${index}`} className="my-8 text-center">
+          <div
+            key={`img-${index}`}
+            className="my-8 text-center"
+            data-line={lineNumber}
+          >
             <div
               className="inline-block cursor-pointer group transition-all duration-300 hover:scale-105"
               onClick={() => setImageModal(src)}
@@ -301,6 +383,7 @@ export function MarkdownViewerEditable({
             key={`h1-${index}`}
             id={id}
             className="font-bold text-white scroll-mt-20 text-4xl mb-6 mt-8"
+            data-line={lineNumber}
           >
             {text}
           </h1>
@@ -316,6 +399,7 @@ export function MarkdownViewerEditable({
             key={`h2-${index}`}
             id={id}
             className="font-bold text-white scroll-mt-20 text-3xl mb-4 mt-6"
+            data-line={lineNumber}
           >
             {text}
           </h2>
@@ -331,6 +415,7 @@ export function MarkdownViewerEditable({
             key={`h3-${index}`}
             id={id}
             className="font-semibold text-white scroll-mt-20 text-2xl mb-3 mt-5"
+            data-line={lineNumber}
           >
             {text}
           </h3>
@@ -355,6 +440,7 @@ export function MarkdownViewerEditable({
           <p
             key={`link-${index}`}
             className="mb-4 leading-relaxed text-slate-300"
+            data-line={lineNumber}
             dangerouslySetInnerHTML={{ __html: processedLine }}
           />
         );
@@ -367,6 +453,7 @@ export function MarkdownViewerEditable({
           <li
             key={`li-${index}`}
             className="ml-6 mb-2 list-disc text-slate-300 leading-relaxed"
+            data-line={lineNumber}
           >
             {line.substring(2)}
           </li>
@@ -380,6 +467,7 @@ export function MarkdownViewerEditable({
           <blockquote
             key={`quote-${index}`}
             className="border-l-4 border-blue-500 pl-4 my-4 italic text-slate-400 bg-slate-800/30 py-2 rounded-r-lg"
+            data-line={lineNumber}
           >
             {line.substring(2)}
           </blockquote>
@@ -390,7 +478,11 @@ export function MarkdownViewerEditable({
       // Regular paragraph
       if (line.trim()) {
         elements.push(
-          <p key={`p-${index}`} className="mb-4 leading-relaxed text-slate-300">
+          <p
+            key={`p-${index}`}
+            className="mb-4 leading-relaxed text-slate-300"
+            data-line={lineNumber}
+          >
             {line}
           </p>
         );
