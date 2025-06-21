@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
 
 // Force client-side rendering to prevent SSG issues with Tambo hooks
 import { ToolDispatcher } from "@/components/tool-dispatcher";
-import { CanvasSpace } from "@/components/ui/canvas-space";
+import CanvasSpaceSingleComponent from "@/components/ui/hackathon/canvas-space-single-component";
 import { CanvasLiveKitContext } from "@/components/ui/livekit-room-connector";
 import { MessageThreadCollapsible } from "@/components/ui/message-thread-collapsible";
 import {
@@ -134,7 +134,7 @@ export default function Canvas() {
             {/* Canvas LiveKit Context Provider - provides connection state to all canvas components */}
             <CanvasLiveKitContext.Provider value={roomState}>
               {/* Full-screen Canvas Space */}
-              <CanvasSpace
+              <CanvasSpaceSingleComponent
                 className="absolute inset-0 w-full h-full"
                 onTranscriptToggle={toggleTranscript}
               />

@@ -14,10 +14,11 @@
  * - Handles custom 'tambo:showComponent' events
  * - Manages component store for persistent rendering
  * - Handles thread state changes and resets
+ * - Shows only the latest component by walking back from the last message
  *
  * FEATURES:
- * - Dynamic masonry layout for responsive rendering
- * - Drag-and-drop functionality for component reordering
+ * - Single component display - shows only the most recent component
+ * - Automatic component replacement when new components are available
  * - Persistent rendering of components across thread state changes
  * - Optimized component addition with debouncing
  * - Toast notifications for UI feedback
@@ -96,15 +97,15 @@ interface CanvasSpaceSingleComponentProps {
 }
 
 /**
- * A canvas space component that displays multiple persistent rendered components
- * from chat messages with dynamic masonry layout and drag-and-drop functionality.
+ * A canvas space component that displays the latest persistent rendered component
+ * from chat messages by walking back from the last message in the thread.
  * @component
  * @example
  * ```tsx
- * <CanvasSpace className="custom-styles" />
+ * <CanvasSpaceSingleComponent className="custom-styles" />
  * ```
  */
-export function CanvasSpaceSingleComponent({
+export default function CanvasSpaceSingleComponent({
   className,
   onTranscriptToggle,
 }: CanvasSpaceSingleComponentProps) {
@@ -172,7 +173,7 @@ export function CanvasSpaceSingleComponent({
         // Update existing shape - only update non-component props to avoid cloning issues
         editor.updateShapes<TamboShape>([
           {
-            id: existingShapeId,
+            id: existingShapeId as any, // Type assertion for TLShapeId
             type: "tambo",
             props: {
               tamboComponent: messageId, // Store messageId as reference instead of component
@@ -183,8 +184,13 @@ export function CanvasSpaceSingleComponent({
         ]);
       } else {
         // Create new shape
-        const defaultShapeProps = new TamboShapeUtil().getDefaultProps();
-        const newShapeId = `shape:tambo-${nanoid()}`; // Generate a unique ID for the new shape with required prefix
+        const defaultShapeProps = {
+          w: 300,
+          h: 200,
+          tamboComponent: "",
+          name: "Tambo Component",
+        };
+        const newShapeId = `shape:tambo-${nanoid()}` as any; // Type assertion for TLShapeId
 
         const viewport = editor.getViewportPageBounds();
         const x = viewport
@@ -262,31 +268,59 @@ export function CanvasSpaceSingleComponent({
 
     // Debounce component addition to prevent excessive rendering
     const timeoutId = setTimeout(() => {
-      const messagesWithComponents = thread.messages.filter(
-        (msg: TamboThreadMessage) => msg.renderedComponent
-      );
+      // Walk backwards from the last message to find the most recent component
+      const messages = [...thread.messages]; // Create a copy to avoid mutating
+      let latestComponentMessage: TamboThreadMessage | null = null;
 
-      if (messagesWithComponents.length > 0) {
-        const latestMessage =
-          messagesWithComponents[messagesWithComponents.length - 1];
+      // Find the most recent message with a rendered component
+      for (let i = messages.length - 1; i >= 0; i--) {
+        const message = messages[i];
+        if (message.renderedComponent) {
+          latestComponentMessage = message;
+          break;
+        }
+      }
 
-        const messageId = latestMessage.id || `msg-${Date.now()}`;
-        // Check using addedMessageIds state
-        if (
-          !addedMessageIds.has(messageId) &&
-          latestMessage.renderedComponent
-        ) {
+      if (latestComponentMessage) {
+        const messageId = latestComponentMessage.id || `msg-${Date.now()}`;
+
+        // Check if this is the same component we're already showing
+        const currentShapeId = messageIdToShapeIdMap.get(messageId);
+        const isAlreadyShowing =
+          currentShapeId && addedMessageIds.has(messageId);
+
+        if (!isAlreadyShowing) {
+          // Only clear existing shapes if we're showing a different component
+          const allShapes = editor.getCurrentPageShapes();
+          if (allShapes.length > 0) {
+            editor.deleteShapes(allShapes.map((s) => s.id));
+          }
+
+          // Reset the maps since we're only showing one component
+          setMessageIdToShapeIdMap(new Map());
+          setAddedMessageIds(new Set());
+          componentStore.current.clear();
+
+          // Add the latest component to the canvas
           addComponentToCanvas(
             messageId,
-            latestMessage.renderedComponent,
-            latestMessage.role === "assistant" ? "AI Response" : "User Input"
+            latestComponentMessage.renderedComponent,
+            latestComponentMessage.role === "assistant"
+              ? "AI Response"
+              : "User Input"
           );
         }
       }
     }, 100); // 100ms debounce
 
     return () => clearTimeout(timeoutId);
-  }, [thread?.messages, editor, addComponentToCanvas, addedMessageIds]);
+  }, [
+    thread?.messages,
+    editor,
+    addComponentToCanvas,
+    messageIdToShapeIdMap,
+    addedMessageIds,
+  ]);
 
   // Export functionality is now handled by TldrawWithPersistence component
 
