@@ -20,7 +20,7 @@ import { useEffect, useRef, useState } from "react";
 import { z } from "zod";
 
 // Define the component props schema with Zod
-export const markdownViewerSchema = z.object({
+export const markdownViewerEditableSchema = z.object({
   title: z.string().describe("Title of the document"),
   content: z.string().optional().describe("Markdown content to display"),
   previewLines: z
@@ -43,10 +43,12 @@ export const markdownViewerSchema = z.object({
 });
 
 // Define the props type based on the Zod schema
-export type MarkdownViewerProps = z.infer<typeof markdownViewerSchema>;
+export type MarkdownViewerEditableProps = z.infer<
+  typeof markdownViewerEditableSchema
+>;
 
 // Component state type
-type MarkdownViewerState = {
+type MarkdownViewerEditableState = {
   isFullScreen: boolean;
   isAnimating: boolean;
   fontSize: number;
@@ -71,7 +73,7 @@ type TOCItem = {
  * A beautifully designed markdown viewer with editorial typography,
  * interactive features, and smooth animations.
  */
-export function MarkdownViewer({
+export function MarkdownViewerEditable({
   title,
   content = "",
   previewLines = 3,
@@ -80,9 +82,9 @@ export function MarkdownViewer({
   author,
   readTime,
   publishDate,
-}: MarkdownViewerProps) {
+}: MarkdownViewerEditableProps) {
   // State management - using regular React state for debugging
-  const [state, setState] = useState<MarkdownViewerState>({
+  const [state, setState] = useState<MarkdownViewerEditableState>({
     isFullScreen: false,
     isAnimating: false,
     fontSize: 16,
@@ -801,4 +803,4 @@ export function MarkdownViewer({
 }
 
 // Default export for convenience
-export default MarkdownViewer;
+export default MarkdownViewerEditable;
