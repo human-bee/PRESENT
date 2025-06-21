@@ -1,7 +1,7 @@
 import { TamboComponent, TamboTool } from "@tambo-ai/react";
 import { z } from "zod";
-import { documentState } from "./document-state";
-import DocumentViewerWrapper from "./document-viewer-wrapper";
+import DocumentViewerWrapper from "../../components/ui/hackathon/document-viewer-wrapper";
+import { documentState } from "./documents/document-state";
 
 export const testComponents: TamboComponent[] = [
   {

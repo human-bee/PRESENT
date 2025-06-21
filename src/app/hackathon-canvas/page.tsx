@@ -30,7 +30,7 @@ import {
   VideoPresets,
 } from "livekit-client";
 import React, { useCallback, useState } from "react";
-import { tamboTools, testComponents } from "../milsttest/test-tambo-setup";
+import { tamboTools, testComponents } from "./test-tambo-setup";
 
 // Suppress development warnings for cleaner console
 suppressDevelopmentWarnings();

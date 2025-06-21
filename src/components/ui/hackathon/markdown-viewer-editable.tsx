@@ -1,6 +1,6 @@
 "use client";
 
-import { DiffWord } from "@/app/milsttest/document-state";
+import { DiffWord } from "@/app/hackathon-canvas/documents/document-state";
 import { cn } from "@/lib/utils";
 import {
   ArrowUp,
