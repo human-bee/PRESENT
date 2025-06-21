@@ -185,8 +185,8 @@ export default function CanvasSpaceSingleComponent({
       } else {
         // Create new shape
         const defaultShapeProps = {
-          w: 300,
-          h: 200,
+          w: 700,
+          h: 900,
           tamboComponent: "",
           name: "Tambo Component",
         };
@@ -221,6 +221,31 @@ export default function CanvasSpaceSingleComponent({
         );
         // Mark this message as added
         setAddedMessageIds((prevSet) => new Set(prevSet).add(messageId));
+
+        // Auto zoom to fit the new component
+        setTimeout(() => {
+          try {
+            // Try different zoom-to-fit methods available in tldraw v3
+            if (editor.zoomToFit) {
+              editor.zoomToFit();
+            } else if (editor.zoomToBounds) {
+              // Get the bounds of the new shape and zoom to fit
+              const shape = editor.getShape(newShapeId);
+              if (shape && shape.type === "tambo") {
+                const tamboShape = shape as TamboShape;
+                const bounds = {
+                  x: tamboShape.x,
+                  y: tamboShape.y,
+                  w: tamboShape.props.w,
+                  h: tamboShape.props.h,
+                };
+                editor.zoomToBounds(bounds);
+              }
+            }
+          } catch (error) {
+            console.warn("Failed to auto-zoom to fit new component:", error);
+          }
+        }, 100); // Small delay to ensure the shape is fully rendered
       }
     },
     [editor, messageIdToShapeIdMap]
@@ -309,6 +334,34 @@ export default function CanvasSpaceSingleComponent({
               ? "AI Response"
               : "User Input"
           );
+
+          // Auto zoom to fit the new component after a short delay
+          setTimeout(() => {
+            try {
+              if (editor.zoomToFit) {
+                editor.zoomToFit();
+              } else if (editor.zoomToBounds) {
+                // Get all shapes and zoom to fit them
+                const allShapes = editor.getCurrentPageShapes();
+                if (allShapes.length > 0) {
+                  const bounds = editor.getCurrentPageBounds();
+                  if (bounds) {
+                    editor.zoomToBounds(bounds);
+                  }
+                }
+              } else if (editor.zoomToSelection) {
+                // Select all shapes and zoom to selection
+                const allShapes = editor.getCurrentPageShapes();
+                if (allShapes.length > 0) {
+                  const shapeIds = allShapes.map((s) => s.id);
+                  editor.select(shapeIds);
+                  editor.zoomToSelection();
+                }
+              }
+            } catch (error) {
+              console.warn("Failed to auto-zoom to fit component:", error);
+            }
+          }, 150); // Slightly longer delay for thread-based component addition
         }
       }
     }, 100); // 100ms debounce

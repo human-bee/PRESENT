@@ -407,7 +407,7 @@ export function MarkdownViewerEditable({
   const estimatedReadTime = readTime || Math.ceil(wordCount / 200);
 
   return (
-    <div className="max-h-screen bg-slate-950 text-slate-100 rounded-2xl overflow-hidden flex flex-col min-w-[700px]">
+    <div className="h-[900px] bg-slate-950 text-slate-100 rounded-2xl overflow-hidden flex flex-col w-[700px]">
       {/* Reading progress bar */}
       <div className="sticky top-0 left-0 right-0 h-1 bg-slate-800 z-50">
         <div
