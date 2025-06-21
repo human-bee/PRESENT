@@ -239,7 +239,10 @@ export function MarkdownViewerEditable({
         }
 
         if (elementToScroll) {
-          elementToScroll.scrollIntoView();
+          elementToScroll.scrollIntoView({
+            behavior: "smooth",
+            block: "center",
+          });
 
           // Add a temporary highlight effect to the actual content line
           elementToScroll.classList.add(

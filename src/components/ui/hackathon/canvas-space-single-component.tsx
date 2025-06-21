@@ -14,11 +14,11 @@
  * - Handles custom 'tambo:showComponent' events
  * - Manages component store for persistent rendering
  * - Handles thread state changes and resets
- * - Shows only the latest component by walking back from the last message
+ * - Shows only the first component by walking forward from the first message
  *
  * FEATURES:
- * - Single component display - shows only the most recent component
- * - Automatic component replacement when new components are available
+ * - First component display - shows only the first component that appears
+ * - Persistent component display - once a component is shown, it stays there
  * - Persistent rendering of components across thread state changes
  * - Optimized component addition with debouncing
  * - Toast notifications for UI feedback
@@ -97,8 +97,9 @@ interface CanvasSpaceSingleComponentProps {
 }
 
 /**
- * A canvas space component that displays the latest persistent rendered component
- * from chat messages by walking back from the last message in the thread.
+ * A canvas space component that displays the first persistent rendered component
+ * from chat messages by walking forward from the first message in the thread.
+ * Once a component is shown, it stays there forever.
  * @component
  * @example
  * ```tsx
@@ -114,6 +115,9 @@ export default function CanvasSpaceSingleComponent({
   const { user } = useAuth();
   const [editor, setEditor] = useState<Editor | null>(null);
   const previousThreadId = useRef<string | null>(null);
+
+  // Track if we've already shown a component for this thread
+  const [hasShownComponent, setHasShownComponent] = useState<boolean>(false);
 
   // Map message IDs to tldraw shape IDs
   const [messageIdToShapeIdMap, setMessageIdToShapeIdMap] = useState<
@@ -131,7 +135,7 @@ export default function CanvasSpaceSingleComponent({
   // Canvas persistence is now handled by TldrawWithPersistence component
 
   /**
-   * Effect to clear the canvas and reset messageIdToShapeIdMap when switching between threads
+   * Effect to clear the canvas and reset state when switching between threads
    */
   useEffect(() => {
     if (
@@ -148,6 +152,7 @@ export default function CanvasSpaceSingleComponent({
       setMessageIdToShapeIdMap(new Map()); // Reset the map
       setAddedMessageIds(new Set()); // Reset the added messages set
       componentStore.current.clear(); // Clear the component store
+      setHasShownComponent(false); // Reset the component shown flag
     }
     previousThreadId.current = thread?.id ?? null;
   }, [thread, editor]);
@@ -259,12 +264,15 @@ export default function CanvasSpaceSingleComponent({
       event: CustomEvent<{ messageId: string; component: React.ReactNode }>
     ) => {
       try {
-        // Pass a name for the component based on the event if available, or a default
-        addComponentToCanvas(
-          event.detail.messageId,
-          event.detail.component,
-          "Rendered Component"
-        );
+        // Only show component if we haven't shown one yet for this thread
+        if (!hasShownComponent) {
+          addComponentToCanvas(
+            event.detail.messageId,
+            event.detail.component,
+            "Rendered Component"
+          );
+          setHasShownComponent(true);
+        }
       } catch (error) {
         console.error("Failed to add component to canvas from event:", error);
       }
@@ -281,33 +289,33 @@ export default function CanvasSpaceSingleComponent({
         handleShowComponent as EventListener
       );
     };
-  }, [addComponentToCanvas]);
+  }, [addComponentToCanvas, hasShownComponent]);
 
   /**
-   * Effect to automatically add the latest component from thread messages (optimized with debouncing)
+   * Effect to automatically add the first component from thread messages (optimized with debouncing)
    */
   useEffect(() => {
-    if (!thread?.messages || !editor) {
+    if (!thread?.messages || !editor || hasShownComponent) {
       return;
     }
 
     // Debounce component addition to prevent excessive rendering
     const timeoutId = setTimeout(() => {
-      // Walk backwards from the last message to find the most recent component
+      // Walk forward from the first message to find the first component
       const messages = [...thread.messages]; // Create a copy to avoid mutating
-      let latestComponentMessage: TamboThreadMessage | null = null;
+      let firstComponentMessage: TamboThreadMessage | null = null;
 
-      // Find the most recent message with a rendered component
-      for (let i = messages.length - 1; i >= 0; i--) {
+      // Find the first message with a rendered component
+      for (let i = 0; i < messages.length; i++) {
         const message = messages[i];
         if (message.renderedComponent) {
-          latestComponentMessage = message;
+          firstComponentMessage = message;
           break;
         }
       }
 
-      if (latestComponentMessage) {
-        const messageId = latestComponentMessage.id || `msg-${Date.now()}`;
+      if (firstComponentMessage) {
+        const messageId = firstComponentMessage.id || `msg-${Date.now()}`;
 
         // Check if this is the same component we're already showing
         const currentShapeId = messageIdToShapeIdMap.get(messageId);
@@ -326,14 +334,17 @@ export default function CanvasSpaceSingleComponent({
           setAddedMessageIds(new Set());
           componentStore.current.clear();
 
-          // Add the latest component to the canvas
+          // Add the first component to the canvas
           addComponentToCanvas(
             messageId,
-            latestComponentMessage.renderedComponent,
-            latestComponentMessage.role === "assistant"
+            firstComponentMessage.renderedComponent,
+            firstComponentMessage.role === "assistant"
               ? "AI Response"
               : "User Input"
           );
+
+          // Mark that we've shown a component
+          setHasShownComponent(true);
 
           // Auto zoom to fit the new component after a short delay
           setTimeout(() => {
@@ -373,6 +384,7 @@ export default function CanvasSpaceSingleComponent({
     addComponentToCanvas,
     messageIdToShapeIdMap,
     addedMessageIds,
+    hasShownComponent,
   ]);
 
   // Export functionality is now handled by TldrawWithPersistence component
