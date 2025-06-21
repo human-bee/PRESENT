@@ -39,31 +39,9 @@ export function CurrentComponentSpace() {
     : "Unknown time";
 
   return (
-    <div className="p-4 space-y-4 h-full overflow-y-auto">
-      <div className="border-b pb-2">
-        <h3 className="text-lg font-medium">Latest Component</h3>
-        <p className="text-sm text-muted-foreground">
-          From message: {latestComponentMessage.id || "Unknown"}
-        </p>
-        <p className="text-xs text-muted-foreground">Created: {messageTime}</p>
-      </div>
-
-      {/* Show the message content that led to this component */}
-      {messageContent && (
-        <div className="space-y-2">
-          <h4 className="text-sm font-medium">Message Content:</h4>
-          <div className="text-sm p-3 bg-muted rounded-md">
-            {typeof messageContent === "string"
-              ? messageContent
-              : "Component content"}
-          </div>
-        </div>
-      )}
-
-      {/* Show the rendered component */}
+    <div className="p-4 space-y-4 h-full max-h-full">
       <div className="space-y-2">
-        <h4 className="text-sm font-medium">Rendered Component:</h4>
-        <div className="border rounded-lg p-4 bg-background min-h-[200px]">
+        <div className="min-h-[200px]">
           {latestComponentMessage.renderedComponent}
         </div>
       </div>
