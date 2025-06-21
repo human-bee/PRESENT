@@ -249,27 +249,24 @@ function SingleParticipantTile({
   state: LivekitParticipantTileState | undefined;
   setState: (state: LivekitParticipantTileState) => void;
 }) {
-  // Get video and audio tracks
-  const tracks = useTracks(
-    [
-      { source: Track.Source.Camera, withPlaceholder: true, participant },
-      { source: Track.Source.Microphone, withPlaceholder: true, participant },
-    ]
+  // Fetch all track publications for this participant (works for both local & remote)
+  const participantTracks = participant ? participant.getTrackPublications() : [];
+  
+  // Find video and audio publications for this participant
+  const videoPublication = participantTracks.find(
+    (pub) => pub.source === Track.Source.Camera
+  );
+  const audioPublication = participantTracks.find(
+    (pub) => pub.source === Track.Source.Microphone
   );
   
-  const videoTrack = tracks.find(track => track.source === Track.Source.Camera);
-  const audioTrack = tracks.find(track => track.source === Track.Source.Microphone);
-  
-  // Debug logging for video track status
-  React.useEffect(() => {
-    console.log(`[ParticipantTile] ${participant?.identity || 'unknown'} - Video track:`, {
-      hasVideoTrack: !!videoTrack,
-      isVideoEnabled: videoTrack?.publication?.isEnabled,
-      isVideoMuted: videoTrack?.publication?.isMuted,
-      trackState: videoTrack?.publication?.track?.readyState,
-      participantType: isLocal ? 'local' : 'remote'
-    });
-  }, [videoTrack, isLocal, participant?.identity]);
+  // Build TrackReference objects expected by <VideoTrack> / <AudioTrack>
+  const videoTrackRef = videoPublication
+    ? { participant, publication: videoPublication, source: Track.Source.Camera }
+    : undefined;
+  const audioTrackRef = audioPublication
+    ? { participant, publication: audioPublication, source: Track.Source.Microphone }
+    : undefined;
 
   // Handle minimize toggle
   const handleMinimizeToggle = () => {
@@ -291,15 +288,15 @@ function SingleParticipantTile({
       }}
     >
       {/* Video Container */}
-      {showVideo && !state?.isMinimized && videoTrack && !videoTrack.publication?.isMuted && (
+      {showVideo && !state?.isMinimized && videoTrackRef && !videoPublication?.isMuted && (
         <VideoTrack 
-          trackRef={videoTrack} 
+          trackRef={videoTrackRef}
           className="absolute inset-0 w-full h-full object-cover"
         />
       )}
 
       {/* Video muted/disabled placeholder */}
-      {showVideo && !state?.isMinimized && videoTrack && videoTrack.publication?.isMuted && (
+      {showVideo && !state?.isMinimized && videoPublication && videoPublication.isMuted && (
         <div className="absolute inset-0 bg-gray-900 flex items-center justify-center">
           <div className="text-center text-white">
             <VideoOff className="w-12 h-12 mx-auto mb-2 opacity-75" />
@@ -309,7 +306,7 @@ function SingleParticipantTile({
       )}
 
       {/* No video track placeholder */}
-      {showVideo && !state?.isMinimized && !videoTrack && (
+      {showVideo && !state?.isMinimized && !videoPublication && (
         <div className="absolute inset-0 bg-gray-800 flex items-center justify-center">
           <div className="text-center text-white">
             {isAgent ? (
@@ -325,8 +322,10 @@ function SingleParticipantTile({
       )}
 
       {/* Audio Track */}
-      {showAudio && audioTrack && (
-        <AudioTrack trackRef={audioTrack} />
+      {showAudio && audioTrackRef && !audioPublication?.isMuted && (
+        <AudioTrack 
+          trackRef={audioTrackRef}
+        />
       )}
 
       {/* Participant Name Overlay */}
@@ -369,12 +368,12 @@ function SingleParticipantTile({
           {/* Mute indicators */}
           {isLocal && (
             <>
-              {audioTrack?.publication?.isMuted && (
+              {audioPublication && audioPublication.isMuted && (
                 <div className="bg-red-500/80 backdrop-blur-sm rounded-md p-1.5">
                   <MicOff className="w-3 h-3 text-white" />
                 </div>
               )}
-              {videoTrack?.publication?.isMuted && (
+              {videoPublication && videoPublication.isMuted && (
                 <div className="bg-red-500/80 backdrop-blur-sm rounded-md p-1.5">
                   <VideoOff className="w-3 h-3 text-white" />
                 </div>
