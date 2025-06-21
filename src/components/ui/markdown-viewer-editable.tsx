@@ -390,7 +390,7 @@ export function MarkdownViewerEditable({
   const estimatedReadTime = readTime || Math.ceil(wordCount / 200);
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 rounded-2xl overflow-hidden">
+    <div className="max-h-screen bg-slate-950 text-slate-100 rounded-2xl overflow-hidden flex flex-col">
       {/* Reading progress bar */}
       <div className="sticky top-0 left-0 right-0 h-1 bg-slate-800 z-50">
         <div
@@ -400,7 +400,7 @@ export function MarkdownViewerEditable({
       </div>
 
       {/* Header */}
-      <div className="sticky top-1 z-40 bg-slate-950/90 backdrop-blur-xl border-b border-slate-800">
+      <div className="sticky top-1 z-40 bg-slate-950/90 backdrop-blur-xl border-b border-slate-800 flex-shrink-0">
         <div className="max-w-5xl mx-auto px-6 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-4">
@@ -504,10 +504,10 @@ export function MarkdownViewerEditable({
       </div>
 
       {/* Main content area */}
-      <div className="flex h-full pt-1">
+      <div className="flex flex-1 overflow-hidden pt-1">
         {/* Table of Contents Sidebar */}
         {state.showTOC && toc.length > 0 && (
-          <div className="w-80 bg-slate-900 border-r border-slate-800 p-6 overflow-y-auto animate-in slide-in-from-left-2 duration-300">
+          <div className="w-80 bg-slate-900 border-r border-slate-800 p-6 overflow-y-auto animate-in slide-in-from-left-2 duration-300 flex-shrink-0">
             <h3 className="text-lg font-semibold text-white mb-4">
               Table of Contents
             </h3>

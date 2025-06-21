@@ -1,5 +1,11 @@
 "use client";
-import { MessageThreadFull } from "@/components/ui/message-thread-full";
+import {
+  MessageInput,
+  MessageInputError,
+  MessageInputSubmitButton,
+  MessageInputTextarea,
+  MessageInputToolbar,
+} from "@/components/ui/message-input";
 import { TamboProvider } from "@tambo-ai/react";
 import { CurrentComponentSpace } from "./current-component-space";
 import { tamboTools, testComponents } from "./test-tambo-setup";
@@ -13,15 +19,21 @@ export default function MilstTest() {
         tools={tamboTools}
         tamboUrl={process.env.NEXT_PUBLIC_TAMBO_URL}
       >
-        <div className="flex h-full">
-          {/* Message Thread on the left */}
-          <div className="w-2/3 border-r">
-            <MessageThreadFull contextKey="tambo-template" />
+        <div className="flex flex-col h-full max-w-2xl mx-auto w-full">
+          {/* Current Component Space on top */}
+          <div className="flex-1 p-4 max-h-[60vh] overflow-y-auto">
+            <CurrentComponentSpace />
           </div>
 
-          {/* Current Component Space on the right */}
-          <div className="w-1/3 p-4">
-            <CurrentComponentSpace />
+          {/* Message Thread on the bottom */}
+          <div className="p-4 flex-shrink-0">
+            <MessageInput contextKey="tambo-template">
+              <MessageInputTextarea />
+              <MessageInputToolbar>
+                <MessageInputSubmitButton />
+              </MessageInputToolbar>
+              <MessageInputError />
+            </MessageInput>
           </div>
         </div>
       </TamboProvider>
