@@ -1,6 +1,4 @@
 "use client";
-
-import { getSafeContent } from "@/lib/thread-hooks";
 import { useTambo } from "@tambo-ai/react";
 import React from "react";
 
@@ -32,12 +30,6 @@ export function CurrentComponentSpace() {
       </div>
     );
   }
-
-  const messageContent = getSafeContent(latestComponentMessage.content);
-  const messageTime = latestComponentMessage.createdAt
-    ? new Date(latestComponentMessage.createdAt).toLocaleTimeString()
-    : "Unknown time";
-
   return (
     <div className="p-4 space-y-4 h-full max-h-full">
       <div className="space-y-2">
