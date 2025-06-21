@@ -1,15 +1,15 @@
+import {
+  MarkdownViewer,
+  markdownViewerSchema,
+} from "@/components/ui/markdown-viewer";
 import { TamboComponent } from "@tambo-ai/react";
-import { z } from "zod";
-import { TestComponent } from "./test-component";
 
 export const testComponents: TamboComponent[] = [
   {
-    name: "TestComponent",
-    description: "A text editing component with title and content",
-    component: TestComponent,
-    propsSchema: z.object({
-      title: z.string().describe("The title of the text content"),
-      content: z.string().describe("The content text to display and edit"),
-    }),
+    name: "MarkdownViewer",
+    description:
+      "A markdown document viewer with tile preview and full-screen reading mode. Displays markdown content with PP Editorial New typography on a black background. Perfect for displaying documentation, articles, or any markdown content with an elegant reading experience.",
+    component: MarkdownViewer,
+    propsSchema: markdownViewerSchema,
   },
 ];
