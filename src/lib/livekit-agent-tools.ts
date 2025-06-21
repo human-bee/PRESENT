@@ -46,13 +46,13 @@ export async function respondWithVoice(
   console.log(`🗣️ [Agent] Tool "respond_with_voice" called: "${spokenMessage.substring(0, 100)}..."`);
   
   try {
-    // Initialize TTS for voice response
-    const tts = new TTS({
-      model: 'tts-1',
-      voice: 'alloy',
-    });
+    // Comment out or remove the TTS initialization to disable voice
+    // const tts = new TTS({
+    //   model: 'tts-1',
+    //   voice: 'alloy',
+    // });
     
-    // Send voice response as data message (in a real implementation, we'd use TTS to generate audio)
+    // Send voice response as data message (text only, no audio generation)
     const responseData = JSON.stringify({
       type: 'agent_voice_response',
       text: spokenMessage,
@@ -60,24 +60,24 @@ export async function respondWithVoice(
       timestamp: Date.now(),
       justification: justificationForSpeaking
     });
-    
+
     job.room.localParticipant?.publishData(
       new TextEncoder().encode(responseData),
       { reliable: true, topic: 'agent_response' }
     );
     
-    console.log('✅ [Agent] Voice response sent successfully');
+    console.log('✅ [Agent] Text response sent successfully (voice disabled)');
     return {
       status: 'SUCCESS',
-      message: 'Voice response sent',
+      message: 'Text response sent (voice disabled)',
       spoken_message: spokenMessage,
       justification: justificationForSpeaking
     };
   } catch (error) {
-    console.error('❌ [Agent] Error sending voice response:', error);
+    console.error('❌ [Agent] Error sending response:', error);
     return {
       status: 'ERROR',
-      message: `Failed to send voice response: ${error}`
+      message: `Failed to send response: ${error}`
     };
   }
 }
