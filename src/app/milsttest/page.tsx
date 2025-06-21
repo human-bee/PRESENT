@@ -2,7 +2,7 @@
 import { MessageThreadFull } from "@/components/ui/message-thread-full";
 import { TamboProvider } from "@tambo-ai/react";
 import { CurrentComponentSpace } from "./current-component-space";
-import { testComponents } from "./test-tambo-setup";
+import { tamboTools, testComponents } from "./test-tambo-setup";
 
 export default function MilstTest() {
   return (
@@ -10,7 +10,7 @@ export default function MilstTest() {
       <TamboProvider
         apiKey={process.env.NEXT_PUBLIC_TAMBO_API_KEY!}
         components={testComponents}
-        // tools={tools}
+        tools={tamboTools}
         tamboUrl={process.env.NEXT_PUBLIC_TAMBO_URL}
       >
         <div className="flex h-full">
