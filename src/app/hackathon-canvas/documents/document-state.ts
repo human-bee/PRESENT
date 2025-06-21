@@ -120,10 +120,8 @@ export const documentState: {
       (doc: Document) => doc.id === id
     );
     if (docIndex !== -1) {
-      const originalContent =
-        documentState.documents[docIndex].originalContent ||
-        documentState.documents[docIndex].content;
-      const diffs = generateWordDiff(originalContent, content);
+      const currentContent = documentState.documents[docIndex].content;
+      const diffs = generateWordDiff(currentContent, content);
 
       // Only store diffs if there are actual changes
       const hasChanges = diffs.length > 0;

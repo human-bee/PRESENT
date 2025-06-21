@@ -90,7 +90,56 @@ export function MarkdownViewerEditable({
   const [toc, setTOC] = useState<TOCItem[]>([]);
   const contentRef = useRef<HTMLDivElement>(null);
   const [imageModal, setImageModal] = useState<string | null>(null);
-  const hasAutoScrolledOnMount = useRef(false);
+  const lastAutoScrolledDiffs = useRef<string>("");
+
+  // Event handlers to prevent tldraw canvas interaction
+  const handleMouseDown = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    e.stopPropagation();
+  };
+
+  const handleMouseUp = (e: React.MouseEvent) => {
+    e.stopPropagation();
+  };
+
+  const handleClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+  };
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    e.stopPropagation();
+  };
+
+  const handleWheel = (e: React.WheelEvent) => {
+    e.stopPropagation();
+  };
+
+  // Additional handler for drag events
+  const handleDragStart = (e: React.DragEvent) => {
+    e.stopPropagation();
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.stopPropagation();
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.stopPropagation();
+  };
 
   // Reading progress tracking
   useEffect(() => {
@@ -157,7 +206,7 @@ export function MarkdownViewerEditable({
       diffs &&
       diffs.length > 0 &&
       contentRef.current &&
-      !hasAutoScrolledOnMount.current
+      lastAutoScrolledDiffs.current !== JSON.stringify(diffs)
     ) {
       // Find the first diff line number
       const firstDiffLine = Math.min(...diffs.map((diff) => diff.lineNumber));
@@ -213,7 +262,7 @@ export function MarkdownViewerEditable({
         }
 
         // Mark that we've auto-scrolled on mount
-        hasAutoScrolledOnMount.current = true;
+        lastAutoScrolledDiffs.current = JSON.stringify(diffs);
       }, 200);
     }
   }, [diffs]);
@@ -504,7 +553,21 @@ export function MarkdownViewerEditable({
   const estimatedReadTime = readTime || Math.ceil(wordCount / 200);
 
   return (
-    <div className="h-[1100px] bg-slate-950 text-slate-100 rounded-2xl overflow-hidden flex flex-col w-[700px]">
+    <div
+      className="h-[1100px] bg-slate-950 text-slate-100 rounded-2xl overflow-hidden flex flex-col w-[700px]"
+      style={{ pointerEvents: "auto" }}
+      onMouseDown={handleMouseDown}
+      onMouseMove={handleMouseMove}
+      onMouseUp={handleMouseUp}
+      onClick={handleClick}
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+      onWheel={handleWheel}
+      onDragStart={handleDragStart}
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
+    >
       {/* Reading progress bar */}
       <div className="sticky top-0 left-0 right-0 h-1 bg-slate-800 z-50">
         <div
@@ -514,7 +577,17 @@ export function MarkdownViewerEditable({
       </div>
 
       {/* Header */}
-      <div className="sticky top-1 z-40 bg-slate-950/90 backdrop-blur-xl border-b border-slate-800 flex-shrink-0">
+      <div
+        className="sticky top-1 z-40 bg-slate-950/90 backdrop-blur-xl border-b border-slate-800 flex-shrink-0"
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
+        onClick={handleClick}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        onWheel={handleWheel}
+      >
         <div className="max-w-5xl mx-auto px-6 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-4">
@@ -602,10 +675,30 @@ export function MarkdownViewerEditable({
       </div>
 
       {/* Main content area */}
-      <div className="flex flex-1 overflow-hidden pt-1">
+      <div
+        className="flex flex-1 overflow-hidden pt-1"
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
+        onClick={handleClick}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        onWheel={handleWheel}
+      >
         {/* Table of Contents Sidebar */}
         {state.showTOC && toc.length > 0 && (
-          <div className="w-80 bg-slate-900 border-r border-slate-800 p-6 overflow-y-auto animate-in slide-in-from-left-2 duration-300 flex-shrink-0">
+          <div
+            className="w-80 bg-slate-900 border-r border-slate-800 p-6 overflow-y-auto animate-in slide-in-from-left-2 duration-300 flex-shrink-0"
+            onMouseDown={handleMouseDown}
+            onMouseMove={handleMouseMove}
+            onMouseUp={handleMouseUp}
+            onClick={handleClick}
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
+            onWheel={handleWheel}
+          >
             <h3 className="text-lg font-semibold text-white mb-4">
               Table of Contents
             </h3>
@@ -629,7 +722,18 @@ export function MarkdownViewerEditable({
         )}
 
         {/* Document content */}
-        <div ref={contentRef} className="flex-1 overflow-y-auto">
+        <div
+          ref={contentRef}
+          className="flex-1 overflow-y-auto"
+          onMouseDown={handleMouseDown}
+          onMouseMove={handleMouseMove}
+          onMouseUp={handleMouseUp}
+          onClick={handleClick}
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
+          onWheel={handleWheel}
+        >
           <article className="max-w-4xl mx-auto px-8 py-12">
             {/* Article header */}
             <header className="mb-12 pb-8 border-b border-slate-800">
@@ -727,6 +831,13 @@ export function MarkdownViewerEditable({
         <div
           className="fixed inset-0 z-60 bg-black/90 flex items-center justify-center p-4"
           onClick={() => setImageModal(null)}
+          onMouseDown={handleMouseDown}
+          onMouseMove={handleMouseMove}
+          onMouseUp={handleMouseUp}
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
+          onWheel={handleWheel}
         >
           <div className="relative max-w-full max-h-full">
             <img
