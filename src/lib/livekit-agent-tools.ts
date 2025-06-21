@@ -1,18 +1,22 @@
 /**
  * LiveKit Agent Tools - TypeScript Implementation
- * 
- * Ported from Python livekit-backend/tools.py
- * Provides tool functions for the Tambo Voice Agent
+ *
+ * Updated to use data channel events instead of RPC for better reliability
+ * and integration with the ToolDispatcher system.
  */
 
 import { JobContext } from '@livekit/agents';
 import { TTS } from '@livekit/agents-plugin-openai';
 
-interface ToolResult {
+// Tool result interface
+export interface ToolResult {
   status: 'SUCCESS' | 'ERROR';
   message: string;
   [key: string]: any;
 }
+
+// Tool names enum
+export type ToolName = 'do_nothing' | 'respond_with_voice' | 'generate_ui_component' | 'youtube_search' | 'mcp_tool';
 
 /**
  * Call this essential tool if, after analyzing the latest user turn and the overall conversation,
@@ -79,96 +83,94 @@ export async function respondWithVoice(
 }
 
 /**
- * Helper function to dispatch tasks to the frontend AI via RPC.
+ * Helper function to dispatch tool calls to the frontend via data channel.
+ * This replaces the old RPC approach with a more reliable event-driven system.
  */
-export async function sendTaskToFrontend(
+export async function dispatchToolCall(
   job: JobContext,
-  taskType: string,
-  taskPrompt: string,
-  method: string = 'executeFrontendAITask'
+  toolName: string,
+  params: Record<string, unknown> = {},
 ): Promise<ToolResult> {
-  const remoteParticipants = Array.from(job.room.remoteParticipants.values());
-  
-  if (remoteParticipants.length === 0) {
-    console.warn(`⚠️ [Agent] Attempted to send '${taskType}' task, but no remote participants found.`);
+  try {
+    const toolCallEvent = {
+      id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      roomId: job.room.name,
+      type: 'tool_call',
+      payload: {
+        tool: toolName,
+        params,
+      },
+      timestamp: Date.now(),
+      source: 'voice' as const,
+    };
+    
+    console.log(`📤 [Agent] Dispatching tool call: ${toolName}`, params);
+    
+    // Publish tool call event
+    await job.room.localParticipant?.publishData(
+      new TextEncoder().encode(JSON.stringify(toolCallEvent)),
+      { reliable: true, topic: 'tool_call' }
+    );
+    
+    // Note: The actual execution happens in the frontend ToolDispatcher
+    // We'll receive results via tool_result events if needed
+    
+    console.log(`✅ [Agent] Tool call dispatched: ${toolName}`);
+    return {
+      status: 'SUCCESS',
+      message: `Tool '${toolName}' dispatched successfully`,
+      toolCallId: toolCallEvent.id,
+    };
+  } catch (error) {
+    console.error(`❌ [Agent] Error dispatching tool call:`, error);
     return {
       status: 'ERROR',
-      message: 'No remote participants to send the task to.'
+      message: `Failed to dispatch tool: ${error}`,
     };
   }
+}
 
-  for (const participant of remoteParticipants) {
-    const payload = {
-      task_type: taskType,
-      task_prompt: taskPrompt,
-    };
-
-    console.log(`📤 [Agent] Dispatching task '${taskType}' to participant '${participant.identity}'. Prompt: ${taskPrompt.substring(0, 100)}...`);
-    
-    try {
-      const response = await job.room.localParticipant?.performRpc({
-        destinationIdentity: participant.identity,
-        method: method,
-        payload: JSON.stringify(payload),
-        responseTimeout: 60000
-      });
-      
-      console.log(`✅ [Agent] RPC response for task '${taskType}' from frontend:`, response);
-      return {
-        status: 'SUCCESS',
-        message: `Task '${taskType}' successfully dispatched.`,
-        frontend_response: response
-      };
-    } catch (error) {
-      if (error instanceof Error && error.name === 'TimeoutError') {
-        console.error(`⏰ [Agent] Timeout waiting for RPC response for task '${taskType}' from '${participant.identity}'.`);
-        return {
-          status: 'ERROR',
-          message: `RPC timeout for task '${taskType}'.`
-        };
-      } else {
-        console.error(`❌ [Agent] Error sending RPC for task '${taskType}' to '${participant.identity}':`, error);
-        return {
-          status: 'ERROR',
-          message: `RPC error for task '${taskType}': ${error}`
-        };
-      }
-    }
-  }
-
-  return {
-    status: 'ERROR',
-    message: 'Failed to send task to any participant'
-  };
+/**
+ * Generate a UI component using Tambo's generative UI system
+ */
+export async function generateUIComponent(
+  job: JobContext,
+  componentType: string = 'auto',
+  prompt: string,
+): Promise<ToolResult> {
+  console.log(`🎨 [Agent] Tool "generate_ui_component" called for ${componentType}`);
+  
+  return dispatchToolCall(job, 'generate_ui_component', {
+    componentType,
+    prompt,
+  });
 }
 
 /**
  * Call this tool when the conversation indicates a YouTube-related task is needed.
- * You must formulate a comprehensive 'action_plan' (as a natural language, multi-step text string)
- * based on the conversation and your knowledge of how the frontend's YouTube MCP server works.
  */
-export async function generateYoutubeTaskPrompt(
+export async function youtubeSearch(
   job: JobContext,
-  actionPlan: string,
+  query: string,
 ): Promise<ToolResult> {
-  console.log('🎥 [Agent] Tool "generate_youtube_task_prompt" called. Dispatching action plan to frontend.');
+  console.log('🎥 [Agent] Tool "youtube_search" called');
   
-  try {
-    const result = await sendTaskToFrontend(
-      job,
-      'Youtube',
-      actionPlan,
-      'youtubeSearch'
-    );
-    
-    return result;
-  } catch (error) {
-    console.error('❌ [Agent] Error in generateYoutubeTaskPrompt:', error);
-    return {
-      status: 'ERROR',
-      message: `Youtube task cancelled or failed: ${error}`
-    };
-  }
+  return dispatchToolCall(job, 'youtube_search', {
+    query,
+  });
+}
+
+/**
+ * Call an MCP (Model Context Protocol) tool
+ */
+export async function callMcpTool(
+  job: JobContext,
+  toolName: string,
+  params: Record<string, unknown> = {},
+): Promise<ToolResult> {
+  console.log(`🔌 [Agent] Tool "mcp_tool" called: ${toolName}`);
+  
+  return dispatchToolCall(job, `mcp_${toolName}`, params);
 }
 
 /**
@@ -177,10 +179,10 @@ export async function generateYoutubeTaskPrompt(
 export const AVAILABLE_TOOLS = [
   'do_nothing',
   'respond_with_voice', 
-  'generate_youtube_task_prompt',
+  'generate_ui_component',
+  'youtube_search',
+  'mcp_tool',
 ] as const;
-
-export type ToolName = typeof AVAILABLE_TOOLS[number];
 
 /**
  * Execute a tool by name with parameters
@@ -203,10 +205,24 @@ export async function executeTool(
         params.justification_for_speaking || params.justificationForSpeaking
       );
       
-    case 'generate_youtube_task_prompt':
-      return await generateYoutubeTaskPrompt(
+    case 'generate_ui_component':
+      return await generateUIComponent(
         job,
-        params.action_plan || params.actionPlan
+        params.component_type || params.componentType,
+        params.prompt
+      );
+      
+    case 'youtube_search':
+      return await youtubeSearch(
+        job,
+        params.query || params.task_prompt
+      );
+      
+    case 'mcp_tool':
+      return await callMcpTool(
+        job,
+        params.tool_name || params.toolName,
+        params.params || {}
       );
       
     default:
@@ -215,4 +231,8 @@ export async function executeTool(
         message: `Unknown tool: ${toolName}`
       };
   }
-} 
+}
+
+// For backward compatibility, export the old function names
+export const generateYoutubeTaskPrompt = youtubeSearch;
+export const sendTaskToFrontend = dispatchToolCall; 

@@ -222,7 +222,7 @@ export function LivekitRoomConnector({
         errorMessage: error instanceof Error ? error.message : "Unknown dispatch error"
       });
     }
-  }, [roomName, setState]);
+  }, [roomName]);
 
   // Enhanced participant connection handler with agent triggering
   React.useEffect(() => {
@@ -370,7 +370,7 @@ export function LivekitRoomConnector({
       room.off(RoomEvent.ParticipantConnected, handleParticipantConnected);
       room.off(RoomEvent.ParticipantDisconnected, handleParticipantDisconnected);
     };
-  }, [room, roomName, setState, triggerAgentJoin]); // Added triggerAgentJoin to dependencies
+  }, [room, roomName, triggerAgentJoin]); // Added triggerAgentJoin to dependencies
 
   // Track re-renders and token fetch state
   const renderCount = React.useRef(0);
@@ -455,7 +455,7 @@ export function LivekitRoomConnector({
     };
 
     fetchTokenAndConnect();
-  }, [stateRef.current?.connectionState, stateRef.current?.token, roomName, userName, setState, room, wsUrl]);
+  }, [stateRef.current?.connectionState, stateRef.current?.token, roomName, userName, room, wsUrl]);
 
   // Auto-connect effect (if enabled)
   React.useEffect(() => {

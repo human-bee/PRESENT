@@ -41,22 +41,22 @@ export async function POST(request: NextRequest) {
       const adminToken = new AccessToken(apiKey, apiSecret, {
         identity: 'system-admin',
         name: 'System Admin'
-      });
-      
+    });
+
       // Add comprehensive grants for agent dispatch
       adminToken.addGrant({
-        room: roomName,
-        roomJoin: true,
+      room: roomName,
+      roomJoin: true,
         roomAdmin: true,
         roomCreate: true,
         roomList: true,
         roomRecord: true,
-        canPublish: true,
+      canPublish: true,
         canPublishData: true,
-        canSubscribe: true,
+      canSubscribe: true,
         canUpdateOwnMetadata: true,
         ingressAdmin: true,
-      });
+    });
 
       const token = await adminToken.toJwt();
 
@@ -105,8 +105,8 @@ export async function POST(request: NextRequest) {
       const dispatchResult = await dispatchResponse.json();
       console.log('✅ Agent dispatch successful:', dispatchResult);
 
-      return NextResponse.json({
-        success: true,
+    return NextResponse.json({
+      success: true,
         message: 'Agent dispatched successfully',
         dispatch: dispatchResult,
         agentName: 'tambo-voice-agent',

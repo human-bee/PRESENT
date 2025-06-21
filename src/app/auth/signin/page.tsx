@@ -1,5 +1,8 @@
 "use client";
 
+// Force dynamic rendering to prevent build errors
+export const dynamic = 'force-dynamic';
+
 import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";

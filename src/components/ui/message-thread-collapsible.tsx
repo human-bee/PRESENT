@@ -20,11 +20,11 @@ import {
 import { ThreadDropdown } from "@/components/ui/thread-dropdown";
 import { ScrollableMessageContainer } from "@/components/ui/scrollable-message-container";
 import { cn } from "@/lib/utils";
-import { Collapsible } from "radix-ui";
-import { XIcon } from "lucide-react";
+import { MessageSquare, FileText } from "lucide-react";
 import * as React from "react";
 import { type VariantProps } from "class-variance-authority";
 import type { Suggestion } from "@tambo-ai/react";
+import { useRoomContext, useDataChannel } from '@livekit/components-react';
 
 /**
  * Props for the MessageThreadCollapsible component
@@ -35,8 +35,6 @@ export interface MessageThreadCollapsibleProps
   extends React.HTMLAttributes<HTMLDivElement> {
   /** Optional context key for the thread */
   contextKey?: string;
-  /** Whether the collapsible should be open by default (default: false) */
-  defaultOpen?: boolean;
   /**
    * Controls the visual styling of messages in the thread.
    * Possible values include: "default", "compact", etc.
@@ -44,6 +42,16 @@ export interface MessageThreadCollapsibleProps
    * @example variant="compact"
    */
   variant?: VariantProps<typeof messageVariants>["variant"];
+  /** Callback when transcript data changes - for persistence */
+  onTranscriptChange?: (transcripts: Array<{
+    id: string;
+    speaker: string;
+    text: string;
+    timestamp: number;
+    isFinal: boolean;
+    source: 'agent' | 'user' | 'system';
+    type?: 'speech' | 'system_call';
+  }>) => void;
 }
 
 /**
@@ -53,163 +61,111 @@ export interface MessageThreadCollapsibleProps
  * ```tsx
  * <MessageThreadCollapsible
  *   contextKey="my-thread"
- *   defaultOpen={false}
  *   className="left-4" // Position on the left instead of right
  *   variant="default"
  * />
  * ```
  */
 
-/**
- * Custom hook for managing collapsible state with keyboard shortcuts
- */
-const useCollapsibleState = (defaultOpen = false) => {
-  const [isOpen, setIsOpen] = React.useState(defaultOpen);
-  const isMac =
-    typeof navigator !== "undefined" && navigator.platform.startsWith("Mac");
-  const shortcutText = isMac ? "⌘K" : "Ctrl+K";
-
-  React.useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if ((event.metaKey || event.ctrlKey) && event.key === "k") {
-        event.preventDefault();
-        setIsOpen((prev) => !prev);
-      }
-    };
-
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, []);
-
-  return { isOpen, setIsOpen, shortcutText };
-};
-
-/**
- * Props for the CollapsibleContainer component
- */
-interface CollapsibleContainerProps
-  extends React.HTMLAttributes<HTMLDivElement> {
-  isOpen: boolean;
-  onOpenChange: (open: boolean) => void;
-  children: React.ReactNode;
-}
-
-/**
- * Container component for the collapsible panel
- */
-const CollapsibleContainer = React.forwardRef<
-  HTMLDivElement,
-  CollapsibleContainerProps
->(({ className, isOpen, onOpenChange, children, ...props }, ref) => (
-  <Collapsible.Root
-    ref={ref}
-    open={isOpen}
-    onOpenChange={onOpenChange}
-    className={cn(
-      "fixed bottom-4 right-4 w-full max-w-sm sm:max-w-md md:max-w-lg rounded-lg shadow-lg transition-all duration-200 bg-background border border-gray-200",
-      className,
-    )}
-    {...props}
-  >
-    {children}
-  </Collapsible.Root>
-));
-CollapsibleContainer.displayName = "CollapsibleContainer";
-
-/**
- * Props for the CollapsibleTrigger component
- */
-interface CollapsibleTriggerProps {
-  isOpen: boolean;
-  shortcutText: string;
-  onClose: () => void;
-  contextKey?: string;
-  onThreadChange: () => void;
-  config: {
-    labels: {
-      openState: string;
-      closedState: string;
-    };
-  };
-}
-
-/**
- * Trigger component for the collapsible panel
- */
-const CollapsibleTrigger = ({
-  isOpen,
-  shortcutText,
-  onClose,
-  contextKey,
-  onThreadChange,
-  config,
-}: CollapsibleTriggerProps) => (
-  <Collapsible.Trigger asChild>
-    <button
-      className={cn(
-        "flex items-center justify-between w-full p-4",
-        "hover:bg-muted/50 transition-colors",
-        isOpen,
-      )}
-      aria-expanded={isOpen}
-      aria-controls="message-thread-content"
-    >
-      <div className="flex items-center gap-2">
-        <span>
-          {isOpen ? config.labels.openState : config.labels.closedState}
-        </span>
-        {isOpen && (
-          <ThreadDropdown
-            contextKey={contextKey}
-            onThreadChange={onThreadChange}
-          />
-        )}
-      </div>
-      <div className="flex items-center gap-2">
-        <span
-          className="text-xs text-muted-foreground pl-8"
-          suppressHydrationWarning
-        >
-          {isOpen ? "" : `(${shortcutText})`}
-        </span>
-        {isOpen && (
-          <div
-            role="button"
-            className="p-1 rounded-full hover:bg-muted/70 transition-colors cursor-pointer"
-            onClick={(e) => {
-              e.stopPropagation();
-              onClose();
-            }}
-            aria-label="Close"
-          >
-            <XIcon className="h-4 w-4" />
-          </div>
-        )}
-      </div>
-    </button>
-  </Collapsible.Trigger>
-);
-CollapsibleTrigger.displayName = "CollapsibleTrigger";
-
 export const MessageThreadCollapsible = React.forwardRef<
   HTMLDivElement,
   MessageThreadCollapsibleProps
->(({ className, contextKey, defaultOpen = false, variant, ...props }, ref) => {
-  const { isOpen, setIsOpen, shortcutText } = useCollapsibleState(defaultOpen);
+>(({ className, contextKey, variant, onTranscriptChange, ...props }, ref) => {
+  const [activeTab, setActiveTab] = React.useState<'conversations' | 'transcript'>('conversations');
+  const [transcriptions, setTranscriptions] = React.useState<Array<{
+    id: string;
+    speaker: string;
+    text: string;
+    timestamp: number;
+    isFinal: boolean;
+    source: 'agent' | 'user' | 'system';
+    type?: 'speech' | 'system_call';
+  }>>([]);
+
+  // Ref for auto-scroll
+  const transcriptContainerRef = React.useRef<HTMLDivElement>(null);
+
+  // LiveKit room context for transcript functionality
+  const room = useRoomContext();
+
+  // Listen for transcription data from LiveKit data channel
+  useDataChannel("transcription", (message) => {
+    try {
+      const data = JSON.parse(new TextDecoder().decode(message.payload));
+      
+      if (data.type === "live_transcription") {
+        const transcription = {
+          id: `${Date.now()}-${Math.random()}`,
+          speaker: data.speaker || "Unknown",
+          text: data.text,
+          timestamp: data.timestamp || Date.now(),
+          isFinal: data.is_final || false,
+          source: (data.speaker === 'tambo-voice-agent' ? 'agent' : 'user') as 'agent' | 'user',
+          type: 'speech' as const,
+        };
+        
+        setTranscriptions(prev => {
+          // Remove old interim results from same speaker if this is final
+          if (transcription.isFinal) {
+            const filtered = prev.filter(t => 
+              !(t.speaker === transcription.speaker && !t.isFinal && t.type === 'speech')
+            );
+            return [...filtered, transcription];
+          }
+          
+          // For interim results, replace existing interim from same speaker
+          const filtered = prev.filter(t => 
+            !(t.speaker === transcription.speaker && !t.isFinal && t.type === 'speech')
+          );
+          return [...filtered, transcription];
+        });
+      }
+    } catch (error) {
+      console.error("Error processing transcription data:", error);
+    }
+  });
+
+  // Listen for Tambo system calls
+  React.useEffect(() => {
+    const handleTamboComponent = (event: CustomEvent) => {
+      const { messageId } = event.detail;
+      
+      // Add system call to transcript
+      const systemCall = {
+        id: `system-${Date.now()}-${Math.random()}`,
+        speaker: 'tambo-voice-agent',
+        text: `Generated component: ${messageId || 'Unknown component'}`,
+        timestamp: Date.now(),
+        isFinal: true,
+        source: 'system' as const,
+        type: 'system_call' as const,
+      };
+      
+      setTranscriptions(prev => [...prev, systemCall]);
+    };
+
+    window.addEventListener('tambo:showComponent', handleTamboComponent as EventListener);
+    
+    return () => {
+      window.removeEventListener('tambo:showComponent', handleTamboComponent as EventListener);
+    };
+  }, []);
+
+  // Auto-scroll transcript when new entries are added
+  React.useEffect(() => {
+    if (transcriptContainerRef.current && activeTab === 'transcript') {
+      transcriptContainerRef.current.scrollTop = transcriptContainerRef.current.scrollHeight;
+    }
+  }, [transcriptions, activeTab]);
+
+  // Clear transcriptions
+  const clearTranscriptions = React.useCallback(() => {
+    setTranscriptions([]);
+  }, []);
 
   const handleThreadChange = React.useCallback(() => {
-    setIsOpen(true);
-  }, [setIsOpen]);
-
-  /**
-   * Configuration for the MessageThreadCollapsible component
-   */
-  const THREAD_CONFIG = {
-    labels: {
-      openState: "Conversations",
-      closedState: "Start chatting with tambo",
-    },
-  };
+    // No longer needed for collapsible behavior
+  }, []);
 
   const defaultSuggestions: Suggestion[] = [
     {
@@ -232,54 +188,173 @@ export const MessageThreadCollapsible = React.forwardRef<
     },
   ];
 
+  // Format timestamp for display
+  const formatTime = (timestamp: number) => {
+    return new Date(timestamp).toLocaleTimeString('en-US', {
+      hour12: false,
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+    });
+  };
+
+  React.useEffect(() => {
+    if (onTranscriptChange && transcriptions.length > 0) {
+      onTranscriptChange(transcriptions);
+    }
+  }, [transcriptions, onTranscriptChange]);
+
   return (
-    <CollapsibleContainer
+    <div
       ref={ref}
-      isOpen={isOpen}
-      onOpenChange={setIsOpen}
-      className={className}
+      className={cn(
+        "bg-background border-l border-gray-200 shadow-lg h-full overflow-hidden flex flex-col",
+        className,
+      )}
       {...props}
     >
-      <CollapsibleTrigger
-        isOpen={isOpen}
-        shortcutText={shortcutText}
-        onClose={() => setIsOpen(false)}
+      <div className="h-full flex flex-col">
+        {/* Header with title and close button */}
+        <div className="flex items-center justify-between p-4 border-b border-gray-200">
+          <div className="flex items-center gap-2">
+            <span className="font-medium">
+              {activeTab === 'conversations' ? "Conversations" : "Transcript"}
+            </span>
+            <ThreadDropdown
         contextKey={contextKey}
         onThreadChange={handleThreadChange}
-        config={THREAD_CONFIG}
       />
-      <Collapsible.Content>
-        <div className="h-[700px] flex flex-col">
-          {/* Message thread content */}
-          <ScrollableMessageContainer className="p-4">
-            <ThreadContent variant={variant}>
-              <ThreadContentMessages />
-            </ThreadContent>
-          </ScrollableMessageContainer>
-
-          {/* Message Suggestions Status */}
-          <MessageSuggestions>
-            <MessageSuggestionsStatus />
-          </MessageSuggestions>
-
-          {/* Message input */}
-          <div className="p-4">
-            <MessageInput contextKey={contextKey}>
-              <MessageInputTextarea />
-              <MessageInputToolbar>
-                <MessageInputSubmitButton />
-              </MessageInputToolbar>
-              <MessageInputError />
-            </MessageInput>
           </div>
-
-          {/* Message suggestions */}
-          <MessageSuggestions initialSuggestions={defaultSuggestions}>
-            <MessageSuggestionsList />
-          </MessageSuggestions>
         </div>
-      </Collapsible.Content>
-    </CollapsibleContainer>
+
+          {/* Tab Navigation */}
+            <div className="flex border-b border-gray-200">
+              <button
+                onClick={() => setActiveTab('conversations')}
+                className={cn(
+                  "flex items-center gap-2 px-4 py-2 text-sm font-medium transition-colors",
+                  activeTab === 'conversations'
+                    ? "text-foreground border-b-2 border-primary"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                <MessageSquare className="h-4 w-4" />
+                Conversations
+              </button>
+              <button
+                onClick={() => setActiveTab('transcript')}
+                className={cn(
+                  "flex items-center gap-2 px-4 py-2 text-sm font-medium transition-colors",
+                  activeTab === 'transcript'
+                    ? "text-foreground border-b-2 border-primary"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                <FileText className="h-4 w-4" />
+                Transcript
+              </button>
+            </div>
+
+          {/* Tab Content */}
+          {activeTab === 'conversations' ? (
+            <>
+              {/* Original Conversations Content */}
+              <ScrollableMessageContainer className="p-4">
+                <ThreadContent variant={variant}>
+                  <ThreadContentMessages />
+                </ThreadContent>
+              </ScrollableMessageContainer>
+
+              {/* Message Suggestions Status */}
+              <MessageSuggestions>
+                <MessageSuggestionsStatus />
+              </MessageSuggestions>
+
+              {/* Message input */}
+              <div className="p-4">
+                <MessageInput contextKey={contextKey}>
+                  <MessageInputTextarea />
+                  <MessageInputToolbar>
+                    <MessageInputSubmitButton />
+                  </MessageInputToolbar>
+                  <MessageInputError />
+                </MessageInput>
+              </div>
+
+              {/* Message suggestions */}
+              <MessageSuggestions initialSuggestions={defaultSuggestions}>
+                <MessageSuggestionsList />
+              </MessageSuggestions>
+            </>
+          ) : (
+            <>
+              {/* Transcript Content */}
+              <ScrollableMessageContainer className="flex-1 p-4" ref={transcriptContainerRef}>
+                <div className="space-y-2">
+                  {transcriptions.length === 0 ? (
+                    <div className="text-center text-muted-foreground py-8">
+                      <FileText className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                      <p>No transcriptions yet</p>
+                      <p className="text-sm mt-1">Voice conversations will appear here</p>
+                    </div>
+                  ) : (
+                    transcriptions.map((transcription) => (
+                      <div
+                        key={transcription.id}
+                        className={cn(
+                          "p-3 rounded-lg border transition-opacity",
+                          transcription.source === 'agent' 
+                            ? "bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800"
+                            : transcription.source === 'system'
+                            ? "bg-purple-50 dark:bg-purple-900/20 border-purple-200 dark:border-purple-800"
+                            : "bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800",
+                          !transcription.isFinal && "opacity-60 italic"
+                        )}
+                      >
+                        <div className="flex items-center justify-between text-xs mb-1">
+                          <span className="font-medium">
+                            {transcription.speaker}
+                            {transcription.type === 'system_call' && ' → Tambo System'}
+                          </span>
+                          <div className="flex items-center gap-2 text-muted-foreground">
+                            {!transcription.isFinal && <span>(interim)</span>}
+                            <span>{formatTime(transcription.timestamp)}</span>
+                          </div>
+                        </div>
+                        <div className="text-sm">
+                          {transcription.text}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </ScrollableMessageContainer>
+
+              {/* Transcript Info */}
+              <div className="p-4 border-t border-gray-200">
+                <div className="flex items-center justify-between text-xs text-muted-foreground">
+                  <span>Live voice transcription with Tambo</span>
+                  <div className="flex items-center gap-3">
+                    {transcriptions.length > 0 && (
+                      <button
+                        onClick={clearTranscriptions}
+                        className="text-xs hover:text-foreground transition-colors"
+                      >
+                        Clear
+                      </button>
+                    )}
+                    {room && (
+                      <span className="text-green-600 dark:text-green-400">
+                        Connected
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+    </div>
   );
 });
 MessageThreadCollapsible.displayName = "MessageThreadCollapsible";
