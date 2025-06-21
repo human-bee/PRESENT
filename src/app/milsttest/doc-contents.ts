@@ -1,4 +1,4 @@
-export const docContents = `
+export const movieScriptContent = `
 Movie ScriptTitle: “Matrix Break: Awakening Protocol”
 FADE IN:
 INT. CONTROL ROOM - NIGHT

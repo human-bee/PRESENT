@@ -1,28 +1,48 @@
-import {
-  MarkdownViewerEditable,
-  markdownViewerEditableSchema,
-} from "@/components/ui/markdown-viewer-editable";
 import { TamboComponent, TamboTool } from "@tambo-ai/react";
 import { z } from "zod";
-import { docContents } from "./doc-contents";
+import { movieScriptContent } from "./doc-contents";
+import DocumentViewerWrapper from "./document-viewer-wrapper";
 
 export const testComponents: TamboComponent[] = [
   {
-    name: "EditableMarkdownViewer",
+    name: "DocumentEditor",
     description:
-      "A markdown document viewer with tile preview and full-screen reading mode. Displays markdown content with PP Editorial New typography on a black background. Perfect for displaying documentation, articles, or any markdown content with an elegant reading experience.",
-    component: MarkdownViewerEditable,
-    propsSchema: markdownViewerEditableSchema,
+      "A markdown document editor. Allows the user to edit the contents of a document.",
+    component: DocumentViewerWrapper,
+    propsSchema: z.object({
+      documentId: z.string().describe("The id of the document to edit."),
+    }),
   },
 ];
 
 export const tamboTools: TamboTool[] = [
   {
-    name: "get_document_contents",
-    description: "Get the contents of a document",
-    tool: async (input: string) => {
-      return docContents;
+    name: "get_available_docs",
+    description: "Get a list of all the available documents.",
+    tool: async () => {
+      return availableDocs;
     },
-    toolSchema: z.function().args(z.string()).returns(z.string()),
+    toolSchema: z
+      .function()
+      .args()
+      .returns(
+        z.array(
+          z.object({
+            id: z.string(),
+            name: z.string(),
+            description: z.string(),
+            content: z.string(),
+          })
+        )
+      ),
+  },
+];
+
+export const availableDocs = [
+  {
+    id: "movie-script",
+    name: "movie script",
+    description: "A movie script",
+    content: movieScriptContent,
   },
 ];
