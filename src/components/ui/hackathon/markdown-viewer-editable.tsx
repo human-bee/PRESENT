@@ -1,10 +1,13 @@
 "use client";
 
+import { DiffWord } from "@/app/milsttest/document-state";
 import { cn } from "@/lib/utils";
 import {
   ArrowUp,
   BookOpen,
   Clock,
+  Eye,
+  EyeOff,
   Image as ImageIcon,
   Type,
   X,
@@ -21,6 +24,17 @@ export const markdownViewerEditableSchema = z.object({
   author: z.string().optional().describe("Document author"),
   readTime: z.number().optional().describe("Estimated read time in minutes"),
   publishDate: z.string().optional().describe("Publish date"),
+  diffs: z
+    .array(
+      z.object({
+        type: z.enum(["unchanged", "added", "removed"]),
+        content: z.string(),
+        lineNumber: z.number(),
+        wordIndex: z.number(),
+      })
+    )
+    .optional()
+    .describe("Diff information to display"),
 });
 
 // Define the props type based on the Zod schema
@@ -34,6 +48,7 @@ type MarkdownViewerEditableState = {
   readingProgress: number;
   showTOC: boolean;
   currentHeading: string;
+  showDiffs: boolean;
 };
 
 // Table of contents item type
@@ -48,7 +63,7 @@ type TOCItem = {
  * Premium MarkdownViewer Component
  *
  * A beautifully designed markdown viewer with editorial typography,
- * interactive features, and smooth animations.
+ * interactive features, smooth animations, and diff visualization.
  */
 export function MarkdownViewerEditable({
   title,
@@ -56,6 +71,7 @@ export function MarkdownViewerEditable({
   author,
   readTime,
   publishDate,
+  diffs,
 }: MarkdownViewerEditableProps) {
   // State management
   const [state, setState] = useState<MarkdownViewerEditableState>({
@@ -63,6 +79,7 @@ export function MarkdownViewerEditable({
     readingProgress: 0,
     showTOC: false,
     currentHeading: "",
+    showDiffs: true,
   });
 
   const [toc, setTOC] = useState<TOCItem[]>([]);
@@ -136,6 +153,65 @@ export function MarkdownViewerEditable({
       element.scrollIntoView({ behavior: "smooth", block: "start" });
       setState((prev) => ({ ...prev, showTOC: false }));
     }
+  };
+
+  // Toggle diff view
+  const toggleDiffView = () => {
+    setState((prev) => ({
+      ...prev,
+      showDiffs: !prev.showDiffs,
+    }));
+  };
+
+  // Render diff view with word-level changes
+  const renderDiffView = (diffWords: DiffWord[]) => {
+    // Filter to only show changed words
+    const changedWords = diffWords.filter(
+      (word) => word.type === "added" || word.type === "removed"
+    );
+
+    if (changedWords.length === 0) {
+      return (
+        <div className="text-slate-400 italic text-center py-4">
+          No changes detected
+        </div>
+      );
+    }
+
+    // Group changes by line for better readability
+    const changesByLine = changedWords.reduce((acc, word) => {
+      if (!acc[word.lineNumber]) {
+        acc[word.lineNumber] = [];
+      }
+      acc[word.lineNumber].push(word);
+      return acc;
+    }, {} as Record<number, DiffWord[]>);
+
+    return (
+      <div className="space-y-3">
+        {Object.entries(changesByLine).map(([lineNum, words]) => (
+          <div key={lineNum} className="bg-slate-800/50 rounded-lg p-3">
+            <div className="text-xs text-slate-500 mb-2">Line {lineNum}</div>
+            <div className="flex flex-wrap gap-1">
+              {words.map((word, index) => (
+                <span
+                  key={`${lineNum}-${index}`}
+                  className={cn(
+                    "px-2 py-1 rounded text-sm font-mono",
+                    word.type === "added" &&
+                      "bg-green-900/50 text-green-300 border border-green-500/30",
+                    word.type === "removed" &&
+                      "bg-red-900/50 text-red-300 border border-red-500/30 line-through"
+                  )}
+                >
+                  {word.content}
+                </span>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    );
   };
 
   // Enhanced markdown rendering with image support
@@ -358,9 +434,30 @@ export function MarkdownViewerEditable({
                   / {state.currentHeading}
                 </span>
               )}
+              {diffs && diffs.length > 0 && (
+                <span className="text-sm text-yellow-400 hidden md:block">
+                  Has recent changes
+                </span>
+              )}
             </div>
 
             <div className="flex items-center space-x-2">
+              {/* Diff toggle */}
+              {diffs && diffs.length > 0 && (
+                <button
+                  onClick={toggleDiffView}
+                  className={cn(
+                    "p-2 rounded-lg transition-colors",
+                    state.showDiffs
+                      ? "bg-blue-700 text-white"
+                      : "hover:bg-slate-800 text-slate-400 hover:text-slate-300"
+                  )}
+                  title={state.showDiffs ? "Hide diff view" : "Show diff view"}
+                >
+                  {state.showDiffs ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              )}
+
               {/* Font size controls */}
               <button
                 onClick={() =>
@@ -468,6 +565,16 @@ export function MarkdownViewerEditable({
                 </span>
               </div>
             </header>
+
+            {/* Diff view */}
+            {state.showDiffs && diffs && diffs.length > 0 && (
+              <div className="mb-8 p-6 bg-slate-900 border border-slate-700 rounded-lg">
+                <h2 className="text-xl font-semibold text-white mb-4">
+                  Recent Changes
+                </h2>
+                <div className="overflow-x-auto">{renderDiffView(diffs)}</div>
+              </div>
+            )}
 
             {/* Article content */}
             <div
