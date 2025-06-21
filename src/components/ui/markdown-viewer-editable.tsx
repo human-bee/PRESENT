@@ -4,11 +4,7 @@ import { cn } from "@/lib/utils";
 import {
   ArrowUp,
   BookOpen,
-  ChevronRight,
   Clock,
-  ExternalLink,
-  Eye,
-  FileText,
   Image as ImageIcon,
   Search,
   Type,
@@ -16,27 +12,13 @@ import {
   ZoomIn,
   ZoomOut,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { z } from "zod";
 
 // Define the component props schema with Zod
 export const markdownViewerEditableSchema = z.object({
   title: z.string().describe("Title of the document"),
   content: z.string().optional().describe("Markdown content to display"),
-  previewLines: z
-    .number()
-    .optional()
-    .describe("Number of lines to show in preview (default: 3)"),
-  showFullPreview: z
-    .boolean()
-    .optional()
-    .describe(
-      "Show full content in preview, ignoring previewLines (default: false)"
-    ),
-  tileHeight: z
-    .string()
-    .optional()
-    .describe("Height of the tile in preview mode (default: '200px')"),
   author: z.string().optional().describe("Document author"),
   readTime: z.number().optional().describe("Estimated read time in minutes"),
   publishDate: z.string().optional().describe("Publish date"),
@@ -49,8 +31,6 @@ export type MarkdownViewerEditableProps = z.infer<
 
 // Component state type
 type MarkdownViewerEditableState = {
-  isFullScreen: boolean;
-  isAnimating: boolean;
   fontSize: number;
   readingProgress: number;
   showTOC: boolean;
@@ -76,17 +56,12 @@ type TOCItem = {
 export function MarkdownViewerEditable({
   title,
   content = "",
-  previewLines = 3,
-  showFullPreview = false,
-  tileHeight = "240px",
   author,
   readTime,
   publishDate,
 }: MarkdownViewerEditableProps) {
-  // State management - using regular React state for debugging
+  // State management
   const [state, setState] = useState<MarkdownViewerEditableState>({
-    isFullScreen: false,
-    isAnimating: false,
     fontSize: 16,
     readingProgress: 0,
     showTOC: false,
@@ -99,14 +74,12 @@ export function MarkdownViewerEditable({
   const contentRef = useRef<HTMLDivElement>(null);
   const [imageModal, setImageModal] = useState<string | null>(null);
 
-  // Handle escape key and shortcuts
+  // Handle keyboard shortcuts
   useEffect(() => {
     const handleKeyboard = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         if (imageModal) {
           setImageModal(null);
-        } else if (state.isFullScreen) {
-          closeFullScreen();
         }
       }
 
@@ -135,20 +108,15 @@ export function MarkdownViewerEditable({
       }
     };
 
-    if (state.isFullScreen) {
-      document.addEventListener("keydown", handleKeyboard);
-      document.body.style.overflow = "hidden";
-    }
-
+    document.addEventListener("keydown", handleKeyboard);
     return () => {
       document.removeEventListener("keydown", handleKeyboard);
-      document.body.style.overflow = "unset";
     };
-  }, [state.isFullScreen, imageModal]);
+  }, [imageModal]);
 
   // Reading progress tracking
   useEffect(() => {
-    if (!state.isFullScreen || !contentRef.current) return;
+    if (!contentRef.current) return;
 
     const handleScroll = () => {
       const element = contentRef.current;
@@ -180,11 +148,11 @@ export function MarkdownViewerEditable({
     const element = contentRef.current;
     element.addEventListener("scroll", handleScroll);
     return () => element.removeEventListener("scroll", handleScroll);
-  }, [state.isFullScreen]);
+  }, []);
 
   // Generate table of contents
   useEffect(() => {
-    if (!content || !state.isFullScreen) return;
+    if (!content) return;
 
     const headingRegex = /^(#{1,6})\s+(.+)$/gm;
     const tocItems: TOCItem[] = [];
@@ -203,31 +171,7 @@ export function MarkdownViewerEditable({
     }
 
     setTOC(tocItems);
-  }, [content, state.isFullScreen]);
-
-  // Smooth open animation
-  const openFullScreen = () => {
-    console.log("openFullScreen called!", state);
-    setState((prev) => ({ ...prev, isFullScreen: true, isAnimating: true }));
-    setTimeout(() => {
-      setState((prev) => ({ ...prev, isAnimating: false }));
-    }, 500);
-  };
-
-  // Smooth close animation
-  const closeFullScreen = () => {
-    setState((prev) => ({ ...prev, isAnimating: true }));
-    setTimeout(() => {
-      setState((prev) => ({
-        ...prev,
-        isFullScreen: false,
-        isAnimating: false,
-        showTOC: false,
-        isSearching: false,
-        searchTerm: "",
-      }));
-    }, 300);
-  };
+  }, [content]);
 
   // Scroll to heading
   const scrollToHeading = (id: string) => {
@@ -239,34 +183,10 @@ export function MarkdownViewerEditable({
     }
   };
 
-  // Process content for preview
-  const getPreviewContent = () => {
-    if (!content) {
-      return { preview: "", hasMore: false, wordCount: 0 };
-    }
-
-    const wordCount = content
-      .split(/\s+/)
-      .filter((word) => word.length > 0).length;
-
-    if (showFullPreview) {
-      return { preview: content, hasMore: false, wordCount };
-    }
-
-    const lines = content.split("\n");
-    const preview = lines.slice(0, previewLines).join("\n");
-    const hasMore = lines.length > previewLines;
-    return { preview, hasMore, wordCount };
-  };
-
-  const { preview, hasMore, wordCount } = getPreviewContent();
-
   // Enhanced markdown rendering with image support
-  const renderMarkdown = (text: string, isPreview = false) => {
+  const renderMarkdown = (text: string) => {
     if (!text || text.trim() === "") {
-      return isPreview ? (
-        <div className="text-slate-500 italic">Loading content...</div>
-      ) : (
+      return (
         <div className="text-slate-500 italic text-center">
           No content available
         </div>
@@ -274,7 +194,7 @@ export function MarkdownViewerEditable({
     }
 
     const lines = text.split("\n");
-    const elements: JSX.Element[] = [];
+    const elements: React.JSX.Element[] = [];
     let inCodeBlock = false;
     let codeContent: string[] = [];
 
@@ -329,7 +249,7 @@ export function MarkdownViewerEditable({
           <div key={`img-${index}`} className="my-8 text-center">
             <div
               className="inline-block cursor-pointer group transition-all duration-300 hover:scale-105"
-              onClick={() => !isPreview && setImageModal(src)}
+              onClick={() => setImageModal(src)}
             >
               <img
                 src={src}
@@ -337,14 +257,12 @@ export function MarkdownViewerEditable({
                 className="max-w-full h-auto rounded-xl shadow-lg"
                 loading="lazy"
               />
-              {!isPreview && (
-                <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-300 mt-2">
-                  <span className="text-xs text-slate-400 flex items-center justify-center gap-1">
-                    <ImageIcon size={12} />
-                    Click to expand
-                  </span>
-                </div>
-              )}
+              <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-300 mt-2">
+                <span className="text-xs text-slate-400 flex items-center justify-center gap-1">
+                  <ImageIcon size={12} />
+                  Click to expand
+                </span>
+              </div>
             </div>
             {alt && <p className="text-sm text-slate-500 mt-2 italic">{alt}</p>}
           </div>
@@ -360,10 +278,7 @@ export function MarkdownViewerEditable({
           <h1
             key={`h1-${index}`}
             id={id}
-            className={cn(
-              "font-bold text-white scroll-mt-20",
-              isPreview ? "text-2xl mb-3" : "text-4xl mb-6 mt-8"
-            )}
+            className="font-bold text-white scroll-mt-20 text-4xl mb-6 mt-8"
             dangerouslySetInnerHTML={{ __html: highlightedLine.substring(2) }}
           />
         );
@@ -377,10 +292,7 @@ export function MarkdownViewerEditable({
           <h2
             key={`h2-${index}`}
             id={id}
-            className={cn(
-              "font-bold text-white scroll-mt-20",
-              isPreview ? "text-xl mb-2" : "text-3xl mb-4 mt-6"
-            )}
+            className="font-bold text-white scroll-mt-20 text-3xl mb-4 mt-6"
             dangerouslySetInnerHTML={{ __html: highlightedLine.substring(3) }}
           />
         );
@@ -394,10 +306,7 @@ export function MarkdownViewerEditable({
           <h3
             key={`h3-${index}`}
             id={id}
-            className={cn(
-              "font-semibold text-white scroll-mt-20",
-              isPreview ? "text-lg mb-2" : "text-2xl mb-3 mt-5"
-            )}
+            className="font-semibold text-white scroll-mt-20 text-2xl mb-3 mt-5"
             dangerouslySetInnerHTML={{ __html: highlightedLine.substring(4) }}
           />
         );
@@ -475,307 +384,216 @@ export function MarkdownViewerEditable({
     return elements;
   };
 
+  const wordCount = content
+    .split(/\s+/)
+    .filter((word) => word.length > 0).length;
   const estimatedReadTime = readTime || Math.ceil(wordCount / 200);
 
   return (
-    <>
-      {/* Premium Preview Tile */}
-      <div
-        onClick={(e) => {
-          console.log("Preview tile clicked!", e);
-          openFullScreen();
-        }}
-        className={cn(
-          "group relative overflow-hidden bg-slate-900 text-slate-100 rounded-2xl border border-slate-700 cursor-pointer transition-all duration-500 hover:border-slate-600 hover:shadow-2xl hover:scale-[1.02]",
-          state.isFullScreen && "opacity-0 pointer-events-none"
-        )}
-        style={{ height: tileHeight }}
-      >
-        {/* Gradient overlay */}
-        <div className="absolute inset-0 bg-gradient-to-br from-slate-800 to-slate-900 opacity-50" />
+    <div className="min-h-screen bg-slate-950 text-slate-100 rounded-2xl overflow-hidden">
+      {/* Reading progress bar */}
+      <div className="sticky top-0 left-0 right-0 h-1 bg-slate-800 z-50">
+        <div
+          className="h-full bg-gradient-to-r from-blue-500 to-purple-500 transition-all duration-300 ease-out"
+          style={{ width: `${state.readingProgress}%` }}
+        />
+      </div>
 
-        <div className="relative p-6 h-full flex flex-col">
-          {/* Header */}
-          <div className="flex items-start justify-between mb-4">
+      {/* Header */}
+      <div className="sticky top-1 z-40 bg-slate-950/90 backdrop-blur-xl border-b border-slate-800">
+        <div className="max-w-5xl mx-auto px-6 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-4">
+              <h1 className="text-xl font-bold text-white truncate max-w-md">
+                {title}
+              </h1>
+              {state.currentHeading && (
+                <span className="text-sm text-slate-400 hidden md:block">
+                  / {state.currentHeading}
+                </span>
+              )}
+            </div>
+
             <div className="flex items-center space-x-2">
-              <FileText size={20} className="text-blue-400" />
-              <span className="text-xs text-slate-400 font-medium">
-                Document
+              {/* Font size controls */}
+              <button
+                onClick={() =>
+                  setState((prev) => ({
+                    ...prev,
+                    fontSize: Math.max(prev.fontSize - 2, 12),
+                  }))
+                }
+                className="p-2 rounded-lg hover:bg-slate-800 transition-colors text-slate-400 hover:text-slate-300"
+              >
+                <ZoomOut size={16} />
+              </button>
+              <span className="text-xs text-slate-500 w-8 text-center">
+                {state.fontSize}
               </span>
+              <button
+                onClick={() =>
+                  setState((prev) => ({
+                    ...prev,
+                    fontSize: Math.min(prev.fontSize + 2, 24),
+                  }))
+                }
+                className="p-2 rounded-lg hover:bg-slate-800 transition-colors text-slate-400 hover:text-slate-300"
+              >
+                <ZoomIn size={16} />
+              </button>
+
+              {/* Table of contents */}
+              {toc.length > 0 && (
+                <button
+                  onClick={() =>
+                    setState((prev) => ({
+                      ...prev,
+                      showTOC: !prev.showTOC,
+                    }))
+                  }
+                  className={cn(
+                    "p-2 rounded-lg transition-colors",
+                    state.showTOC
+                      ? "bg-slate-700 text-white"
+                      : "hover:bg-slate-800 text-slate-400 hover:text-slate-300"
+                  )}
+                >
+                  <BookOpen size={16} />
+                </button>
+              )}
+
+              {/* Search */}
+              <button
+                onClick={() =>
+                  setState((prev) => ({
+                    ...prev,
+                    isSearching: !prev.isSearching,
+                  }))
+                }
+                className={cn(
+                  "p-2 rounded-lg transition-colors",
+                  state.isSearching
+                    ? "bg-slate-700 text-white"
+                    : "hover:bg-slate-800 text-slate-400 hover:text-slate-300"
+                )}
+              >
+                <Search size={16} />
+              </button>
             </div>
-            <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-              <ExternalLink size={16} className="text-slate-400" />
+          </div>
+
+          {/* Search bar */}
+          {state.isSearching && (
+            <div className="mt-4 animate-in slide-in-from-top-2 duration-300">
+              <input
+                type="text"
+                placeholder="Search in document..."
+                value={state.searchTerm}
+                onChange={(e) =>
+                  setState((prev) => ({
+                    ...prev,
+                    searchTerm: e.target.value,
+                  }))
+                }
+                className="w-full max-w-md px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:border-blue-500 transition-colors"
+                autoFocus
+              />
             </div>
-          </div>
-
-          {/* Title */}
-          <h3 className="text-xl font-bold mb-3 text-white line-clamp-2 leading-tight">
-            {title}
-          </h3>
-
-          {/* Metadata */}
-          <div className="flex items-center space-x-4 mb-4 text-xs text-slate-400">
-            {author && (
-              <span className="flex items-center space-x-1">
-                <span>by</span>
-                <span className="text-slate-300 font-medium">{author}</span>
-              </span>
-            )}
-            <span className="flex items-center space-x-1">
-              <Clock size={12} />
-              <span>{estimatedReadTime} min read</span>
-            </span>
-            <span className="flex items-center space-x-1">
-              <Eye size={12} />
-              <span>{wordCount} words</span>
-            </span>
-          </div>
-
-          {/* Preview Content */}
-          <div className="flex-1 overflow-hidden text-sm text-slate-300 leading-relaxed">
-            {renderMarkdown(preview, true)}
-          </div>
-
-          {/* Gradient fade */}
-          {hasMore && !showFullPreview && (
-            <div className="absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-slate-900 to-transparent pointer-events-none" />
           )}
-
-          {/* Read indicator */}
-          <div className="absolute bottom-4 right-4 flex items-center space-x-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-            <span className="text-slate-400 text-xs">
-              {showFullPreview ? "Open for full view" : "Open to read"}
-            </span>
-            <ChevronRight size={16} className="text-slate-400" />
-          </div>
         </div>
       </div>
 
-      {/* Premium Full Screen Viewer */}
-      {state.isFullScreen && (
-        <div
-          className={cn(
-            "fixed inset-0 z-50 bg-slate-950",
-            state.isAnimating
-              ? "animate-in fade-in-0 zoom-in-95 duration-500"
-              : ""
-          )}
-        >
-          {/* Reading progress bar */}
-          <div className="fixed top-0 left-0 right-0 h-1 bg-slate-800 z-50">
-            <div
-              className="h-full bg-gradient-to-r from-blue-500 to-purple-500 transition-all duration-300 ease-out"
-              style={{ width: `${state.readingProgress}%` }}
-            />
-          </div>
-
-          {/* Header */}
-          <div className="sticky top-1 z-40 bg-slate-950/90 backdrop-blur-xl border-b border-slate-800">
-            <div className="max-w-5xl mx-auto px-6 py-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-4">
-                  <h1 className="text-xl font-bold text-white truncate max-w-md">
-                    {title}
-                  </h1>
-                  {state.currentHeading && (
-                    <span className="text-sm text-slate-400 hidden md:block">
-                      / {state.currentHeading}
-                    </span>
+      {/* Main content area */}
+      <div className="flex h-full pt-1">
+        {/* Table of Contents Sidebar */}
+        {state.showTOC && toc.length > 0 && (
+          <div className="w-80 bg-slate-900 border-r border-slate-800 p-6 overflow-y-auto animate-in slide-in-from-left-2 duration-300">
+            <h3 className="text-lg font-semibold text-white mb-4">
+              Table of Contents
+            </h3>
+            <nav className="space-y-1">
+              {toc.map((item, index) => (
+                <button
+                  key={index}
+                  onClick={() => scrollToHeading(item.id)}
+                  className={cn(
+                    "block w-full text-left px-3 py-2 rounded-lg text-sm transition-colors hover:bg-slate-800",
+                    item.level === 1 && "font-semibold text-white",
+                    item.level === 2 && "text-slate-300 ml-2",
+                    item.level >= 3 && "text-slate-400 ml-4"
                   )}
-                </div>
-
-                <div className="flex items-center space-x-2">
-                  {/* Font size controls */}
-                  <button
-                    onClick={() =>
-                      setState((prev) => ({
-                        ...prev,
-                        fontSize: Math.max(prev.fontSize - 2, 12),
-                      }))
-                    }
-                    className="p-2 rounded-lg hover:bg-slate-800 transition-colors text-slate-400 hover:text-slate-300"
-                  >
-                    <ZoomOut size={16} />
-                  </button>
-                  <span className="text-xs text-slate-500 w-8 text-center">
-                    {state.fontSize}
-                  </span>
-                  <button
-                    onClick={() =>
-                      setState((prev) => ({
-                        ...prev,
-                        fontSize: Math.min(prev.fontSize + 2, 24),
-                      }))
-                    }
-                    className="p-2 rounded-lg hover:bg-slate-800 transition-colors text-slate-400 hover:text-slate-300"
-                  >
-                    <ZoomIn size={16} />
-                  </button>
-
-                  {/* Table of contents */}
-                  {toc.length > 0 && (
-                    <button
-                      onClick={() =>
-                        setState((prev) => ({
-                          ...prev,
-                          showTOC: !prev.showTOC,
-                        }))
-                      }
-                      className={cn(
-                        "p-2 rounded-lg transition-colors",
-                        state.showTOC
-                          ? "bg-slate-700 text-white"
-                          : "hover:bg-slate-800 text-slate-400 hover:text-slate-300"
-                      )}
-                    >
-                      <BookOpen size={16} />
-                    </button>
-                  )}
-
-                  {/* Search */}
-                  <button
-                    onClick={() =>
-                      setState((prev) => ({
-                        ...prev,
-                        isSearching: !prev.isSearching,
-                      }))
-                    }
-                    className={cn(
-                      "p-2 rounded-lg transition-colors",
-                      state.isSearching
-                        ? "bg-slate-700 text-white"
-                        : "hover:bg-slate-800 text-slate-400 hover:text-slate-300"
-                    )}
-                  >
-                    <Search size={16} />
-                  </button>
-
-                  {/* Close */}
-                  <button
-                    onClick={closeFullScreen}
-                    className="p-2 rounded-lg hover:bg-slate-800 transition-colors text-slate-400 hover:text-slate-300"
-                  >
-                    <X size={16} />
-                  </button>
-                </div>
-              </div>
-
-              {/* Search bar */}
-              {state.isSearching && (
-                <div className="mt-4 animate-in slide-in-from-top-2 duration-300">
-                  <input
-                    type="text"
-                    placeholder="Search in document..."
-                    value={state.searchTerm}
-                    onChange={(e) =>
-                      setState((prev) => ({
-                        ...prev,
-                        searchTerm: e.target.value,
-                      }))
-                    }
-                    className="w-full max-w-md px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:border-blue-500 transition-colors"
-                    autoFocus
-                  />
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Main content area */}
-          <div className="flex h-full pt-1">
-            {/* Table of Contents Sidebar */}
-            {state.showTOC && toc.length > 0 && (
-              <div className="w-80 bg-slate-900 border-r border-slate-800 p-6 overflow-y-auto animate-in slide-in-from-left-2 duration-300">
-                <h3 className="text-lg font-semibold text-white mb-4">
-                  Table of Contents
-                </h3>
-                <nav className="space-y-1">
-                  {toc.map((item, index) => (
-                    <button
-                      key={index}
-                      onClick={() => scrollToHeading(item.id)}
-                      className={cn(
-                        "block w-full text-left px-3 py-2 rounded-lg text-sm transition-colors hover:bg-slate-800",
-                        item.level === 1 && "font-semibold text-white",
-                        item.level === 2 && "text-slate-300 ml-2",
-                        item.level >= 3 && "text-slate-400 ml-4"
-                      )}
-                    >
-                      {item.title}
-                    </button>
-                  ))}
-                </nav>
-              </div>
-            )}
-
-            {/* Document content */}
-            <div ref={contentRef} className="flex-1 overflow-y-auto">
-              <article className="max-w-4xl mx-auto px-8 py-12">
-                {/* Article header */}
-                <header className="mb-12 pb-8 border-b border-slate-800">
-                  <h1 className="text-4xl font-bold text-white mb-6 leading-tight">
-                    {title}
-                  </h1>
-
-                  <div className="flex flex-wrap items-center gap-6 text-sm text-slate-400">
-                    {author && (
-                      <span className="flex items-center space-x-2">
-                        <span>By</span>
-                        <span className="text-slate-300 font-medium">
-                          {author}
-                        </span>
-                      </span>
-                    )}
-                    {publishDate && (
-                      <span>{new Date(publishDate).toLocaleDateString()}</span>
-                    )}
-                    <span className="flex items-center space-x-1">
-                      <Clock size={14} />
-                      <span>{estimatedReadTime} minute read</span>
-                    </span>
-                    <span className="flex items-center space-x-1">
-                      <Type size={14} />
-                      <span>{wordCount} words</span>
-                    </span>
-                  </div>
-                </header>
-
-                {/* Article content */}
-                <div
-                  className="prose prose-invert prose-lg max-w-none"
-                  style={{ fontSize: `${state.fontSize}px` }}
                 >
-                  <div className="text-slate-300 leading-relaxed">
-                    {renderMarkdown(content || "")}
-                  </div>
-                </div>
+                  {item.title}
+                </button>
+              ))}
+            </nav>
+          </div>
+        )}
 
-                {/* Back to top */}
-                <div className="mt-16 pt-8 border-t border-slate-800 text-center">
-                  <button
-                    onClick={() =>
-                      contentRef.current?.scrollTo({
-                        top: 0,
-                        behavior: "smooth",
-                      })
-                    }
-                    className="inline-flex items-center space-x-2 px-6 py-3 bg-slate-800 hover:bg-slate-700 rounded-lg text-slate-300 hover:text-white transition-colors"
-                  >
-                    <ArrowUp size={16} />
-                    <span>Back to top</span>
-                  </button>
-                </div>
-              </article>
+        {/* Document content */}
+        <div ref={contentRef} className="flex-1 overflow-y-auto">
+          <article className="max-w-4xl mx-auto px-8 py-12">
+            {/* Article header */}
+            <header className="mb-12 pb-8 border-b border-slate-800">
+              <h1 className="text-4xl font-bold text-white mb-6 leading-tight">
+                {title}
+              </h1>
+
+              <div className="flex flex-wrap items-center gap-6 text-sm text-slate-400">
+                {author && (
+                  <span className="flex items-center space-x-2">
+                    <span>By</span>
+                    <span className="text-slate-300 font-medium">{author}</span>
+                  </span>
+                )}
+                {publishDate && (
+                  <span>{new Date(publishDate).toLocaleDateString()}</span>
+                )}
+                <span className="flex items-center space-x-1">
+                  <Clock size={14} />
+                  <span>{estimatedReadTime} minute read</span>
+                </span>
+                <span className="flex items-center space-x-1">
+                  <Type size={14} />
+                  <span>{wordCount} words</span>
+                </span>
+              </div>
+            </header>
+
+            {/* Article content */}
+            <div
+              className="prose prose-invert prose-lg max-w-none"
+              style={{ fontSize: `${state.fontSize}px` }}
+            >
+              <div className="text-slate-300 leading-relaxed">
+                {renderMarkdown(content || "")}
+              </div>
             </div>
-          </div>
 
-          {/* Keyboard shortcuts hint */}
-          <div className="fixed bottom-4 right-4 text-slate-500 text-xs space-y-1">
-            <div>⌘F Search • ⌘+/- Font size</div>
-            <div>ESC Close</div>
-          </div>
+            {/* Back to top */}
+            <div className="mt-16 pt-8 border-t border-slate-800 text-center">
+              <button
+                onClick={() =>
+                  contentRef.current?.scrollTo({
+                    top: 0,
+                    behavior: "smooth",
+                  })
+                }
+                className="inline-flex items-center space-x-2 px-6 py-3 bg-slate-800 hover:bg-slate-700 rounded-lg text-slate-300 hover:text-white transition-colors"
+              >
+                <ArrowUp size={16} />
+                <span>Back to top</span>
+              </button>
+            </div>
+          </article>
         </div>
-      )}
+      </div>
+
+      {/* Keyboard shortcuts hint */}
+      <div className="fixed bottom-4 right-4 text-slate-500 text-xs space-y-1">
+        <div>⌘F Search • ⌘+/- Font size</div>
+        <div>ESC Close images</div>
+      </div>
 
       {/* Image modal */}
       {imageModal && (
@@ -798,7 +616,7 @@ export function MarkdownViewerEditable({
           </div>
         </div>
       )}
-    </>
+    </div>
   );
 }
 
