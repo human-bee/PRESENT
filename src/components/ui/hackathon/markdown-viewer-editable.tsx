@@ -21,6 +21,10 @@ import { z } from "zod";
 export const markdownViewerEditableSchema = z.object({
   title: z.string().describe("Title of the document"),
   content: z.string().optional().describe("Markdown content to display"),
+  titleImage: z
+    .string()
+    .optional()
+    .describe("URL of the title image to display at the top"),
   author: z.string().optional().describe("Document author"),
   readTime: z.number().optional().describe("Estimated read time in minutes"),
   publishDate: z.string().optional().describe("Publish date"),
@@ -68,6 +72,7 @@ type TOCItem = {
 export function MarkdownViewerEditable({
   title,
   content = "",
+  titleImage,
   author,
   readTime,
   publishDate,
@@ -407,7 +412,7 @@ export function MarkdownViewerEditable({
   const estimatedReadTime = readTime || Math.ceil(wordCount / 200);
 
   return (
-    <div className="h-[900px] bg-slate-950 text-slate-100 rounded-2xl overflow-hidden flex flex-col w-[700px]">
+    <div className="h-[1100px] bg-slate-950 text-slate-100 rounded-2xl overflow-hidden flex flex-col w-[700px]">
       {/* Reading progress bar */}
       <div className="sticky top-0 left-0 right-0 h-1 bg-slate-800 z-50">
         <div
@@ -536,6 +541,31 @@ export function MarkdownViewerEditable({
           <article className="max-w-4xl mx-auto px-8 py-12">
             {/* Article header */}
             <header className="mb-12 pb-8 border-b border-slate-800">
+              {/* Title Image */}
+              {titleImage && (
+                <div className="mb-8">
+                  <div
+                    className="relative w-full rounded-xl overflow-hidden cursor-pointer group transition-all duration-300 hover:scale-[1.02]"
+                    onClick={() => setImageModal(titleImage)}
+                  >
+                    <img
+                      src={titleImage}
+                      alt={`${title} cover image`}
+                      className="w-full object-contain"
+                      loading="lazy"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-end">
+                      <div className="p-4 text-white">
+                        <span className="text-sm flex items-center gap-1">
+                          <ImageIcon size={14} />
+                          Click to expand
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <h1 className="text-4xl font-bold text-white mb-6 leading-tight">
                 {title}
               </h1>

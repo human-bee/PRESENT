@@ -186,7 +186,7 @@ export default function CanvasSpaceSingleComponent({
         // Create new shape
         const defaultShapeProps = {
           w: 700,
-          h: 900,
+          h: 1100,
           tamboComponent: "",
           name: "Tambo Component",
         };

@@ -44,6 +44,7 @@ export default function DocumentViewerWrapper({
     <MarkdownViewerEditable
       content={document?.content || ""}
       title={document?.name || ""}
+      titleImage={document?.titleImage}
       diffs={document?.diffs}
     />
   );

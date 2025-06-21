@@ -14,6 +14,7 @@ export type Document = {
   name: string;
   description: string;
   content: string;
+  titleImage?: string; // URL of the title image
   originalContent?: string; // Baseline content for diff comparison
   diffs?: DiffWord[];
   lastModified?: Date;
@@ -98,6 +99,7 @@ export const documentState: {
       id: "movie-script-containment-breach",
       name: "Containment Breach",
       description: "A movie script for the movie 'Containment Breach'",
+      titleImage: "/containment-breach.png",
       content: movieScriptContent,
       originalContent: movieScriptContent, // Set initial original content
       diffs: [],
