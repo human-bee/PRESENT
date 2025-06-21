@@ -18,7 +18,7 @@
 
 import { createContext, useContext, useEffect, useRef, useState, useCallback } from 'react';
 import { useDataChannel, useRoomContext } from '@livekit/components-react';
-import { useTamboThreadInput } from '@tambo-ai/react';
+import { useTamboThread } from '@tambo-ai/react';
 
 // Generate unique IDs without external dependency
 const generateId = () => `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
@@ -41,9 +41,13 @@ interface ToolCallEvent {
     tool: string;
     params: Record<string, unknown>;
     context?: {
+      source?: string;
+      timestamp?: number;
       transcript?: string;
-      confidence?: number;
+      summary?: string;
       speaker?: string;
+      confidence?: number;
+      reason?: string;
     };
   };
   timestamp: number;
@@ -107,7 +111,7 @@ export function ToolDispatcher({
   contextKey = 'canvas'
 }: ToolDispatcherProps) {
   const room = useRoomContext();
-  const { setValue, submit } = useTamboThreadInput(contextKey); // Use thread input to send messages
+  const { sendThreadMessage } = useTamboThread(); // Use thread to send messages programmatically
   const pendingById = useRef(new Map<string, PendingTool>());
   const [isProcessing, setIsProcessing] = useState(false);
   
@@ -161,12 +165,15 @@ export function ToolDispatcher({
 
   // Helper to send message through Tambo
   const sendTamboMessage = useCallback(async (message: string) => {
-    setValue(message);
-    await submit({
+    log('📤 [ToolDispatcher] Sending message to Tambo:', message);
+    
+    await sendThreadMessage(message, {
       contextKey,
       streamResponse: true,
     });
-  }, [setValue, submit, contextKey]);
+    
+    log('✅ [ToolDispatcher] Message sent successfully');
+  }, [sendThreadMessage, contextKey, log]);
 
   // Execute tool call
   const executeToolCall = useCallback(async (event: ToolCallEvent) => {
@@ -201,18 +208,54 @@ export function ToolDispatcher({
         const params = payload.params as { componentType?: string; prompt?: string; task_prompt?: string };
         const { componentType = 'auto', prompt, task_prompt } = params;
         
-        // Get the prompt text from various possible fields
-        const userPrompt = prompt || task_prompt || `Generate a ${componentType} component`;
+        // Extract context information first
+        const context = payload.context;
+        const aiSummary = context?.summary; // AI-generated summary from decision engine
+        const originalTranscript = context?.transcript; // Full original transcript
+        const speaker = context?.speaker || 'user';
+        const confidence = context?.confidence;
+        const reason = context?.reason;
+        
+        // Use AI summary if available, otherwise fall back to params
+        const summary = aiSummary || prompt || task_prompt || `Generate a ${componentType} component`;
+        
+        // Build comprehensive message with both summary and transcript context
+        let tamboMessage = summary;
+        
+        if (originalTranscript && originalTranscript !== summary) {
+          tamboMessage = `${summary}
+
+Additional Context:
+• Speaker: ${speaker}
+• Original transcript: "${originalTranscript}"
+
+Please consider both the processed summary above and the original transcript context for the most accurate generation.`;
+        }
+        
+        log('📤 [ToolDispatcher] Sending comprehensive message to Tambo:', {
+          summary,
+          aiSummary,
+          originalTranscript,
+          speaker,
+          confidence,
+          reason,
+          messageLength: tamboMessage.length,
+          hasTranscriptContext: !!originalTranscript && originalTranscript !== summary
+        });
         
         // Send message through Tambo thread which will generate appropriate UI
-        // Tambo already knows about all components including timers, charts, etc.
-        await sendTamboMessage(userPrompt);
+        await sendTamboMessage(tamboMessage);
         
         result = {
           status: 'SUCCESS',
           message: 'UI component generation initiated',
           componentType,
-          prompt: userPrompt,
+          prompt: summary,
+          context: {
+            transcript: originalTranscript,
+            speaker,
+            confidence
+          }
         };
         
       } else if (payload.tool.startsWith('mcp_')) {

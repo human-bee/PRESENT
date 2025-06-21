@@ -14,6 +14,7 @@ config({ path: join(process.cwd(), '.env.local') });
 
 import { defineAgent, JobContext, cli, WorkerOptions, multimodal } from '@livekit/agents';
 import * as openai from '@livekit/agents-plugin-openai';
+import { DecisionEngine } from './decision-engine';
 
 console.log('🚀 Starting Tambo Voice Agent Worker...');
 console.log('🔧 Environment Check:');
@@ -56,11 +57,15 @@ export default defineAgent({
         - Confirming actions that YOU perform
         
         DO NOT use voice to repeat UI requests like "Create a timer" or "Show me a chart" - these are handled automatically by the system.`,
-      voice: 'alloy',
       model: 'gpt-4o-realtime-preview',
+      modalities: ['text'],
     });
     
     console.log('🎙️ [Agent] Starting multimodal agent...');
+    
+    // Initialize Decision Engine
+    const decisionEngine = new DecisionEngine(process.env.OPENAI_API_KEY || '');
+    console.log('🧠 [Agent] Decision Engine initialized');
     
     // Configure agent to accept text responses when using tools
     const agent = new multimodal.MultimodalAgent({ 
@@ -184,15 +189,93 @@ export default defineAgent({
       }
     });
     
-    // Subscribe to transcription events for logging and frontend display
-    session.on('input_speech_transcription_completed', (evt: { transcript: string }) => {
-      console.log(`👤 [Agent] User said: "${evt.transcript}"`);
+    // Set up decision engine callback to handle Tambo forwarding
+    decisionEngine.onDecision(async (decision, participantId, originalText) => {
+      if (!decision.should_send) {
+        console.log(`⏸️ [Agent] Filtered out: "${originalText}" (confidence: ${decision.confidence}%)`);
+        return;
+      }
+
+      console.log(`✅ [Agent] Sending to Tambo: "${decision.summary}" (confidence: ${decision.confidence}%)`);
       
-      // Send transcription to frontend
+      // Ensure we have a valid prompt - fallback to original text if summary is empty
+      const prompt = decision.summary && decision.summary.trim() ? decision.summary : originalText;
+      
+      // Final safety check - should never happen but just in case
+      if (!prompt || prompt.trim() === '') {
+        console.error(`❌ [Agent] Empty prompt detected! Decision:`, decision, `OriginalText: "${originalText}"`);
+        return;
+      }
+      
+      console.log(`🔍 [Agent] Debug - prompt: "${prompt}", originalText: "${originalText}"`);
+      
+      // Forward the summary to Tambo
+      const toolCallEvent = {
+        id: `smart-speech-${Date.now()}`,
+        roomId: job.room.name || 'unknown',
+        type: 'tool_call',
+        payload: {
+          tool: 'generate_ui_component',
+          params: {
+            prompt: prompt,
+            task_prompt: prompt
+          },
+          context: {
+            source: 'voice',
+            timestamp: Date.now(),
+            transcript: originalText,
+            summary: decision.summary,
+            speaker: participantId,
+            confidence: decision.confidence,
+            reason: decision.reason
+          }
+        },
+        timestamp: Date.now(),
+        source: 'voice' as const,
+      };
+
+      console.log(`📤 [Agent] Tool call event:`, JSON.stringify(toolCallEvent, null, 2));
+
+      job.room.localParticipant?.publishData(
+        new TextEncoder().encode(JSON.stringify(toolCallEvent)),
+        { reliable: true, topic: 'tool_call' }
+      );
+    });
+
+    // Track participant rotation for better attribution
+    let participantRotationIndex = 0;
+
+    // Subscribe to transcription events from all participants
+    session.on('input_speech_transcription_completed', async (evt: { transcript: string }) => {
+      console.log(`👤 [Agent] Speech transcribed: "${evt.transcript}"`);
+      
+      // Try to identify the speaking participant
+      // Note: OpenAI Realtime should capture all audio in the room
+      let speakerId = 'unknown-speaker';
+      
+      // If there are remote participants, try to identify the speaker
+      if (job.room.remoteParticipants.size > 0) {
+        const participants = Array.from(job.room.remoteParticipants.values());
+        
+        // Simple heuristic: if we have multiple participants, rotate through them
+        // This helps when multiple people are speaking in sequence
+        if (participants.length > 1) {
+          // Use a simple rotation to distribute transcripts among participants
+          speakerId = participants[participantRotationIndex % participants.length]?.identity || 'participant-1';
+          participantRotationIndex++;
+        } else {
+          // Single participant case
+          speakerId = participants[0]?.identity || 'participant-1';
+        }
+        
+                 console.log(`🗣️ [Agent] Attributed speech to: ${speakerId} (${participants.length} total participants)`);
+      }
+      
+      // Send transcription to frontend for display
       const transcriptionData = JSON.stringify({
         type: 'live_transcription',
         text: evt.transcript,
-        speaker: 'user',
+        speaker: speakerId,
         timestamp: Date.now(),
         is_final: true,
       });
@@ -202,35 +285,17 @@ export default defineAgent({
         { reliable: true, topic: 'transcription' }
       );
       
-      // NEW: Send user's speech to Tambo as a tool call
-      const toolCallEvent = {
-        id: `user-speech-${Date.now()}`,
-        roomId: job.room.name || 'unknown',
-        type: 'tool_call',
-        payload: {
-          tool: 'generate_ui_component',
-          params: {
-            prompt: evt.transcript,
-            task_prompt: evt.transcript
-          },
-          context: {
-            source: 'voice',
-            timestamp: Date.now(),
-            transcript: evt.transcript,
-            speaker: 'user'
-          }
-        },
-        timestamp: Date.now(),
-        source: 'voice' as const,
-      };
-      
-      // Send user's speech to ToolDispatcher which will route to Tambo
-      job.room.localParticipant?.publishData(
-        new TextEncoder().encode(JSON.stringify(toolCallEvent)),
-        { reliable: true, topic: 'tool_call' }
-      );
-      
-      console.log(`✅ [Agent] User speech sent to Tambo: "${evt.transcript}"`);
+      // Process through decision engine with participant ID
+      await decisionEngine.processTranscript(evt.transcript, speakerId);
+    });
+
+    // Log participant connections for audio tracking
+    job.room.on('participantConnected', (participant) => {
+      console.log(`👤 [Agent] Participant joined: ${participant.identity} - will capture their audio via OpenAI Realtime`);
+    });
+    
+    job.room.on('participantDisconnected', (participant) => {
+      console.log(`👋 [Agent] Participant left: ${participant.identity}`);
     });
     
     // Log when agent responds
@@ -286,14 +351,7 @@ export default defineAgent({
     // Subscribe to tool result topics
     job.room.on('dataReceived', handleDataReceived);
     
-    // Handle participant events
-    job.room.on('participantConnected', (participant) => {
-      console.log(`👤 [Agent] Participant joined: ${participant.identity}`);
-    });
-    
-    job.room.on('participantDisconnected', (participant) => {
-      console.log(`👋 [Agent] Participant left: ${participant.identity}`);
-    });
+
     
     // Handle data messages from frontend
     job.room.on('dataReceived', (data, participant) => {
@@ -327,7 +385,13 @@ export default defineAgent({
       }
     });
     
-    console.log('🎯 [Agent] Fully initialized with voice processing and tools');
+    // Clean up decision engine on disconnect
+    job.room.on('disconnected', () => {
+      console.log('🧹 [Agent] Cleaning up decision engine...');
+      decisionEngine.clearAllBuffers();
+    });
+    
+    console.log('🎯 [Agent] Fully initialized with smart decision engine');
   },
 });
 
