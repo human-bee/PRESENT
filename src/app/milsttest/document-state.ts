@@ -18,9 +18,9 @@ export const documentState: {
 } = {
   documents: [
     {
-      id: "movie-script",
-      name: "movie script",
-      description: "A movie script",
+      id: "movie-script-containment-breach",
+      name: "Containment Breach",
+      description: "A movie script for the movie 'Containment Breach'",
       content: movieScriptContent,
     },
   ],
