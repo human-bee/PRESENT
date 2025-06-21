@@ -1,6 +1,7 @@
 "use client";
 import { MessageThreadFull } from "@/components/ui/message-thread-full";
 import { TamboProvider } from "@tambo-ai/react";
+import { CurrentComponentSpace } from "./current-component-space";
 import { testComponents } from "./test-tambo-setup";
 
 export default function MilstTest() {
@@ -12,8 +13,16 @@ export default function MilstTest() {
         // tools={tools}
         tamboUrl={process.env.NEXT_PUBLIC_TAMBO_URL}
       >
-        <div className="w-full max-w-4xl mx-auto">
-          <MessageThreadFull contextKey="tambo-template" />
+        <div className="flex h-full">
+          {/* Message Thread on the left */}
+          <div className="w-2/3 border-r">
+            <MessageThreadFull contextKey="tambo-template" />
+          </div>
+
+          {/* Current Component Space on the right */}
+          <div className="w-1/3 p-4">
+            <CurrentComponentSpace />
+          </div>
         </div>
       </TamboProvider>
     </div>
