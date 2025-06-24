@@ -1,7 +1,7 @@
 "use client";
 
 import { Tldraw, HTMLContainer as TldrawHTMLContainer, RecordProps, T, Editor, BaseBoxShapeUtil, TLBaseShape } from 'tldraw';
-import { ReactNode, useRef, useEffect, createContext, useContext, Component, ErrorInfo } from 'react';
+import { ReactNode, useRef, useEffect, createContext, useContext, Component, ErrorInfo, useState } from 'react';
 
 // Create context for component store
 export const ComponentStoreContext = createContext<Map<string, ReactNode> | null>(null);
@@ -249,6 +249,20 @@ class TldrawErrorBoundary extends Component<{ children: ReactNode }, TldrawError
 
 
 export function TldrawCanvas({ onMount, shapeUtils, componentStore, ...rest }: TldrawCanvasProps) {
+  const [isClient, setIsClient] = useState(false);
+
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
+
+  if (!isClient) {
+    return (
+      <div style={{ position: 'fixed', inset: 0 }} className="flex items-center justify-center bg-gray-50">
+        <div className="text-gray-500">Loading canvas...</div>
+      </div>
+    );
+  }
+
   return (
     <TldrawErrorBoundary>
       <ComponentStoreContext.Provider value={componentStore || null}>

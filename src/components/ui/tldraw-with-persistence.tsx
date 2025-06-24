@@ -1,7 +1,7 @@
 "use client";
 
 import { Tldraw, TLUiOverrides, DefaultToolbar, DefaultToolbarContent, TldrawUiMenuItem, useEditor, TLComponents, DefaultMainMenu, DefaultMainMenuContent, TldrawUiMenuGroup } from 'tldraw';
-import { ReactNode, createContext, useState, useCallback } from 'react';
+import { ReactNode, createContext, useState, useCallback, useEffect } from 'react';
 import { User } from 'lucide-react';
 import { useCanvasPersistence } from '@/hooks/use-canvas-persistence';
 import { useAuth } from '@/hooks/use-auth';
@@ -230,11 +230,26 @@ export function TldrawWithPersistence({
   onTranscriptToggle
 }: TldrawWithPersistenceProps) {
   const [editor, setEditor] = useState<Editor | null>(null);
+  const [isClient, setIsClient] = useState(false);
+
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
 
   const handleMount = useCallback((mountedEditor: Editor) => {
     setEditor(mountedEditor);
     onMount?.(mountedEditor);
   }, [onMount]);
+
+  if (!isClient) {
+    return (
+      <div className={className} style={{ position: 'absolute', inset: 0 }}>
+        <div className="flex items-center justify-center h-full bg-gray-50">
+          <div className="text-gray-500">Loading canvas...</div>
+        </div>
+      </div>
+    );
+  }
 
   // Create the overrides with the transcript toggle function
   const overrides = React.useMemo(
