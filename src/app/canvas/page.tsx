@@ -25,6 +25,10 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/use-auth";
 import { SpeechTranscription } from '@/components/ui/speech-transcription';
 import { ToolDispatcher } from '@/components/tool-dispatcher';
+// TODO: Investigate best way to "go back" to CanvasSpace once we have a better way to handle adding/updating/managing the state of multiple components on the canvas simultaneously
+import CanvasSpaceSingleComponent from "@/components/ui/hackathon/canvas-space-single-component";
+import { tamboTools, testComponents } from "../hackathon-canvas/test-tambo-setup";
+import tamboAgent from "@/lib/archived-agents/clean-agent";
 
 // Suppress development warnings for cleaner console
 suppressDevelopmentWarnings();
@@ -138,7 +142,10 @@ export default function Canvas() {
       {/* Tambo Provider Setup */}
       <TamboProvider
         apiKey={process.env.NEXT_PUBLIC_TAMBO_API_KEY!}
-        components={components}
+        // TODO: go back to {components} once we have a better way to handle updating the components on the canvas
+        components={testComponents}
+        // Investigate if we shold leave this here or move it to the ToolDispatcher
+        tools={tamboTools}
       >
         <EnhancedMcpProvider mcpServers={mcpServers}>
           {/* LiveKit Room Context Provider - wraps everything! */}
@@ -148,7 +155,8 @@ export default function Canvas() {
               {/* Canvas LiveKit Context Provider - provides connection state to all canvas components */}
               <CanvasLiveKitContext.Provider value={roomState}>
               {/* Full-screen Canvas Space */}
-              <CanvasSpace 
+              {/* TODO: go back to CanvasSpace once we have a better way to handle adding/updating/managing the state of multiple components on the canvas simultaneously */}
+              <CanvasSpaceSingleComponent
                 className="absolute inset-0 w-full h-full" 
                 onTranscriptToggle={toggleTranscript}
               />

@@ -301,7 +301,13 @@ Analyze the current speaker's statement in full conversational context.`;
       throw new Error(`OpenAI API error: ${response.status}`);
     }
 
-    const data = await response.json();
+    const data = await response.json() as {
+      choices: Array<{
+        message: {
+          content: string;
+        };
+      }>;
+    };
     const decision = JSON.parse(data.choices[0].message.content);
     
     // Validate and return
