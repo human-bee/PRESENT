@@ -34,6 +34,14 @@ export default defineAgent({
     
     await job.connect();
     console.log('✅ [Agent] Successfully connected to room!');
+
+    // Track the most recently active speaker in the room
+    let lastActiveSpeaker: string | null = null;
+    job.room.on('activeSpeakersChanged', (speakers) => {
+      if (speakers.length > 0) {
+        lastActiveSpeaker = speakers[0].identity;
+      }
+    });
     
     console.log('🧠 [Agent] Initializing OpenAI Realtime model...');
     
@@ -248,28 +256,21 @@ export default defineAgent({
     // Subscribe to transcription events from all participants
     session.on('input_speech_transcription_completed', async (evt: { transcript: string }) => {
       console.log(`👤 [Agent] Speech transcribed: "${evt.transcript}"`);
-      
-      // Try to identify the speaking participant
-      // Note: OpenAI Realtime should capture all audio in the room
-      let speakerId = 'unknown-speaker';
-      
-      // If there are remote participants, try to identify the speaker
-      if (job.room.remoteParticipants.size > 0) {
+
+      // Determine the speaker using LiveKit's active speaker info if available
+      let speakerId = lastActiveSpeaker || 'unknown-speaker';
+
+      if (!lastActiveSpeaker && job.room.remoteParticipants.size > 0) {
         const participants = Array.from(job.room.remoteParticipants.values());
-        
-        // Simple heuristic: if we have multiple participants, rotate through them
-        // This helps when multiple people are speaking in sequence
         if (participants.length > 1) {
-          // Use a simple rotation to distribute transcripts among participants
           speakerId = participants[participantRotationIndex % participants.length]?.identity || 'participant-1';
           participantRotationIndex++;
         } else {
-          // Single participant case
           speakerId = participants[0]?.identity || 'participant-1';
         }
-        
-                 console.log(`🗣️ [Agent] Attributed speech to: ${speakerId} (${participants.length} total participants)`);
       }
+
+      console.log(`🗣️ [Agent] Attributed speech to: ${speakerId}`);
       
       // Send transcription to frontend for display
       const transcriptionData = JSON.stringify({

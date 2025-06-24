@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
 
 // Force client-side rendering to prevent SSG issues with Tambo hooks
 import { ToolDispatcher } from "@/components/tool-dispatcher";
-import CanvasSpaceSingleComponent from "@/components/ui/hackathon/canvas-space-single-component";
+import { CanvasSpace } from "@/components/ui/canvas-space";
 import { CanvasLiveKitContext } from "@/components/ui/livekit-room-connector";
 import { MessageThreadCollapsible } from "@/components/ui/message-thread-collapsible";
 import {
@@ -30,7 +30,8 @@ import {
   VideoPresets,
 } from "livekit-client";
 import React, { useCallback, useState } from "react";
-import { tamboTools, testComponents } from "./test-tambo-setup";
+import { tamboTools } from "./test-tambo-setup";
+import { components } from "@/lib/tambo";
 
 // Suppress development warnings for cleaner console
 suppressDevelopmentWarnings();
@@ -122,7 +123,7 @@ export default function Canvas() {
       {/* Tambo Provider Setup */}
       <TamboProvider
         apiKey={process.env.NEXT_PUBLIC_TAMBO_API_KEY!}
-        components={testComponents}
+        components={components}
         tools={tamboTools}
         tamboUrl={process.env.NEXT_PUBLIC_TAMBO_URL}
       >
@@ -134,7 +135,7 @@ export default function Canvas() {
             {/* Canvas LiveKit Context Provider - provides connection state to all canvas components */}
             <CanvasLiveKitContext.Provider value={roomState}>
               {/* Full-screen Canvas Space */}
-              <CanvasSpaceSingleComponent
+              <CanvasSpace
                 className="absolute inset-0 w-full h-full"
                 onTranscriptToggle={toggleTranscript}
               />
