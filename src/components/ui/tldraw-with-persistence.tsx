@@ -230,26 +230,14 @@ export function TldrawWithPersistence({
   onTranscriptToggle
 }: TldrawWithPersistenceProps) {
   const [editor, setEditor] = useState<Editor | null>(null);
-  const [isClient, setIsClient] = useState(false);
-
-  useEffect(() => {
-    setIsClient(true);
-  }, []);
 
   const handleMount = useCallback((mountedEditor: Editor) => {
     setEditor(mountedEditor);
     onMount?.(mountedEditor);
   }, [onMount]);
 
-  if (!isClient) {
-    return (
-      <div className={className} style={{ position: 'absolute', inset: 0 }}>
-        <div className="flex items-center justify-center h-full bg-gray-50">
-          <div className="text-gray-500">Loading canvas...</div>
-        </div>
-      </div>
-    );
-  }
+  // Render a lightweight placeholder until the TLDraw editor instance is ready.
+  const isEditorReady = Boolean(editor);
 
   // Create the overrides with the transcript toggle function
   const overrides = React.useMemo(
@@ -274,6 +262,7 @@ export function TldrawWithPersistence({
 
   return (
     <div className={className} style={{ position: 'absolute', inset: 0 }}>
+      {/* Always render Tldraw so that onMount fires and the editor becomes ready */}
       <ComponentStoreContext.Provider value={componentStore || null}>
         <Tldraw
           onMount={handleMount}
@@ -283,6 +272,13 @@ export function TldrawWithPersistence({
           forceMobile={true}
         />
       </ComponentStoreContext.Provider>
+
+      {/* Overlay a simple loading state until the editor instance is available */}
+      {!isEditorReady && (
+        <div className="absolute inset-0 flex items-center justify-center bg-gray-50 z-10 pointer-events-none select-none">
+          <div className="text-gray-500">Loading canvas...</div>
+        </div>
+      )}
     </div>
   );
 }
