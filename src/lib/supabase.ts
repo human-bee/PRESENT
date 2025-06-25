@@ -1,17 +1,28 @@
 import { createClient } from '@supabase/supabase-js'
 
-// Use fallback values during build time to prevent errors
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co'
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder-key'
-
-// Runtime check for proper configuration (only when window is available)
-if (typeof window !== 'undefined') {
-  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
-    console.error('Missing Supabase environment variables. Please check your .env.local file.')
+// Create a function to get Supabase config that works at runtime
+function getSupabaseConfig() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  
+  // If we're in the browser and missing vars, log the issue
+  if (typeof window !== 'undefined') {
+    if (!url || !key) {
+      console.error('❌ Missing Supabase environment variables!')
+      console.error('NEXT_PUBLIC_SUPABASE_URL:', url || 'MISSING')
+      console.error('NEXT_PUBLIC_SUPABASE_ANON_KEY:', key ? 'SET' : 'MISSING')
+    }
+  }
+  
+  // Use safe fallbacks that won't break the build
+  return {
+    url: url || 'https://placeholder.supabase.co',
+    key: key || 'placeholder-key'
   }
 }
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+const config = getSupabaseConfig()
+export const supabase = createClient(config.url, config.key)
 
 export type Canvas = {
   id: string
