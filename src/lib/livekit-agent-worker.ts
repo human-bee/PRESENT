@@ -54,9 +54,9 @@ export default defineAgent({
       console.log('');
     };
     
-    // Check immediately and then every 10 seconds
+    // Check immediately and then every 30 seconds (instead of 10)
     setTimeout(checkRoomState, 1000);
-    setInterval(checkRoomState, 10000);
+    setInterval(checkRoomState, 30000);
     // ----------------------------------------------------------------
 
     // 1️⃣  every time a participant connects/disconnects
@@ -342,22 +342,36 @@ export default defineAgent({
         allParticipants: participants.map(p => p.identity)
       });
       
-      // Send transcription to frontend for display
-      const transcriptionData = JSON.stringify({
-        type: 'live_transcription',
-        text: evt.transcript,
-        speaker: speakerId,
-        timestamp: Date.now(),
-        is_final: true,
-      });
+      // Create a unique key to check for duplicates
+      const transcriptionKey = `${evt.transcript}-${Math.floor(Date.now() / 1000)}`;
       
-      job.room.localParticipant?.publishData(
-        new TextEncoder().encode(transcriptionData),
-        { reliable: true, topic: 'transcription' }
-      );
-      
-      // Process through decision engine with participant ID
-      await decisionEngine.processTranscript(evt.transcript, speakerId);
+      // Only process if this transcription hasn't been processed recently
+      if (!processedTranscriptions.has(transcriptionKey)) {
+        processedTranscriptions.add(transcriptionKey);
+        
+        // Clean up old entries after 5 seconds
+        setTimeout(() => processedTranscriptions.delete(transcriptionKey), 5000);
+        
+        // Send transcription to frontend for display
+        const transcriptionData = JSON.stringify({
+          type: 'live_transcription',
+          text: evt.transcript,
+          speaker: speakerId,
+          timestamp: Date.now(),
+          is_final: true,
+          agentId: job.room.localParticipant?.identity // Include agent ID for debugging
+        });
+        
+        job.room.localParticipant?.publishData(
+          new TextEncoder().encode(transcriptionData),
+          { reliable: true, topic: 'transcription' }
+        );
+        
+        // Process through decision engine with participant ID
+        await decisionEngine.processTranscript(evt.transcript, speakerId);
+      } else {
+        console.log(`⏭️ [Agent] Skipping duplicate transcription: "${evt.transcript}"`);
+      }
     });
 
     // Log participant connections for audio tracking
@@ -390,6 +404,9 @@ export default defineAgent({
       }
     });
     
+    // Track processed transcriptions to avoid duplicates
+    const processedTranscriptions = new Set<string>();
+    
     // Listen for tool results from the frontend ToolDispatcher
     // This replaces the old RPC approach with data channel events
     const handleDataReceived = (data: Uint8Array, participant?: unknown, kind?: unknown, topic?: string) => {
@@ -413,6 +430,12 @@ export default defineAgent({
             error: message.error
           });
           // Agent can handle tool errors if needed
+        }
+        
+        // Check for transcriptions from other agents to avoid duplicates
+        if (topic === 'transcription' && message.type === 'live_transcription' && message.speaker?.startsWith('agent-')) {
+          const transcriptionKey = `${message.text}-${message.timestamp}`;
+          processedTranscriptions.add(transcriptionKey);
         }
       } catch {
         // Not all data messages are JSON, so this is expected sometimes
