@@ -80,11 +80,21 @@ export default defineAgent({
       }
     });
     
-    // Track the most recently active speaker in the room
+    // Track the most recently active speaker in the room with enhanced debugging
     let lastActiveSpeaker: string | null = null;
     job.room.on('activeSpeakersChanged', (speakers) => {
+      console.log(`🗣️ [Agent] Active speakers changed:`, {
+        count: speakers.length,
+        identities: speakers.map(s => s.identity),
+        audioLevels: speakers.map(s => ({ identity: s.identity, level: (s as any).audioLevel || 0 }))
+      });
+      
       if (speakers.length > 0) {
+        const previousSpeaker = lastActiveSpeaker;
         lastActiveSpeaker = speakers[0].identity;
+        console.log(`🎯 [Agent] Primary speaker changed: ${previousSpeaker} → ${lastActiveSpeaker}`);
+      } else {
+        console.log(`🔇 [Agent] No active speakers detected`);
       }
     });
     
@@ -295,27 +305,42 @@ export default defineAgent({
       );
     });
 
-    // Track participant rotation for better attribution
-    let participantRotationIndex = 0;
+    // Track participant rotation for better attribution (now using time-based rotation)
 
     // Subscribe to transcription events from all participants
     session.on('input_speech_transcription_completed', async (evt: { transcript: string }) => {
       console.log(`👤 [Agent] Speech transcribed: "${evt.transcript}"`);
+      
+      // Debug current room state
+      const participants = Array.from(job.room.remoteParticipants.values());
+      console.log(`🔍 [Agent] Room state during transcription:`, {
+        totalParticipants: participants.length,
+        participantIdentities: participants.map(p => p.identity),
+        lastActiveSpeaker: lastActiveSpeaker
+      });
 
       // Determine the speaker using LiveKit's active speaker info if available
       let speakerId = lastActiveSpeaker || 'unknown-speaker';
+      let attributionMethod = 'active-speaker';
 
       if (!lastActiveSpeaker && job.room.remoteParticipants.size > 0) {
-        const participants = Array.from(job.room.remoteParticipants.values());
         if (participants.length > 1) {
-          speakerId = participants[participantRotationIndex % participants.length]?.identity || 'participant-1';
-          participantRotationIndex++;
+          // Slower rotation - change every 10 seconds instead of every transcription
+          const slowRotationIndex = Math.floor(Date.now() / 10000) % participants.length;
+          speakerId = participants[slowRotationIndex]?.identity || 'participant-1';
+          attributionMethod = 'slow-rotation';
         } else {
           speakerId = participants[0]?.identity || 'participant-1';
+          attributionMethod = 'single-participant';
         }
       }
 
-      console.log(`🗣️ [Agent] Attributed speech to: ${speakerId}`);
+      console.log(`🗣️ [Agent] Speech attribution:`, {
+        transcript: evt.transcript,
+        attributedTo: speakerId,
+        method: attributionMethod,
+        allParticipants: participants.map(p => p.identity)
+      });
       
       // Send transcription to frontend for display
       const transcriptionData = JSON.stringify({

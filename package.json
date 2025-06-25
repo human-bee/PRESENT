@@ -13,11 +13,12 @@
     "test:agent": "npm run dev",
     "agent:build": "tsc -p tsconfig.agent.json",
     "agent:run": "node dist/agent/livekit-agent-worker.js start",
-    "agent:dev": "npx tsx src/lib/livekit-agent-worker.ts",
+    "agent:dev": "npx tsx src/lib/livekit-agent-worker.ts dev",
     "agent:clean": "node --import tsx/esm src/lib/clean-agent.ts dev",
-    "agent:enhanced": "npx tsx src/lib/livekit-agent-worker-enhanced.ts",
-    "agent:multi": "npx tsx src/lib/livekit-agent-worker-multi-session.ts",
-    "agent:whisper": "npx tsx src/lib/livekit-agent-worker-whisper.ts"
+    "agent:enhanced": "npx tsx src/lib/livekit-agent-worker-enhanced.ts dev",
+    "agent:multi": "npx tsx src/lib/livekit-agent-worker-multi-session.ts dev",
+    "agent:whisper": "npx tsx src/lib/livekit-agent-worker-whisper.ts dev",
+    "agent:fixed": "npx tsx src/lib/livekit-agent-worker-fixed.ts dev"
   },
   "dependencies": {
     "@livekit/agents": "^0.7.6",
