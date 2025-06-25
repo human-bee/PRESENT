@@ -10,9 +10,9 @@ import { join } from 'path';
 // Load environment variables from .env.local
 config({ path: join(process.cwd(), '.env.local') });
 import { defineAgent, cli, WorkerOptions, multimodal } from '@livekit/agents';
-import { RoomEvent, Track } from 'livekit-client';
-import * as openai from '@livekit/agents-plugin-openai';
+import { RoomEvent } from 'livekit-client';
 import { DecisionEngine } from './decision-engine';
+import { MultiTrackRealtimeModel, wireRoomTracks } from './openai-multi-track';
 console.log('🚀 Starting Tambo Voice Agent Worker...');
 console.log('🔧 Environment Check:');
 console.log(`  - OpenAI API Key: ${process.env.OPENAI_API_KEY ? '✅ Present' : '❌ Missing'}`);
@@ -44,27 +44,15 @@ export default defineAgent({
             }
             console.log('');
         };
-        // Check immediately and then every 10 seconds
+        // Check immediately and then every 30 seconds (reduced for cleaner logs)
         setTimeout(checkRoomState, 1000);
-        setInterval(checkRoomState, 10000);
+        setInterval(checkRoomState, 30000);
         // ----------------------------------------------------------------
         // 1️⃣  every time a participant connects/disconnects
         job.room
             .on(RoomEvent.ParticipantConnected, p => console.log('[TRACE] participant connected', p.identity))
             .on(RoomEvent.ParticipantDisconnected, p => console.log('[TRACE] participant disconnected', p.identity));
-        // 2️⃣  every time a remote audio publication appears
-        job.room.on(RoomEvent.TrackPublished, async (pub, p) => {
-            console.log('[TRACE] trackPublished', p.identity, pub.name || pub.trackName, pub.kind);
-            if (pub.kind === Track.Kind.Audio || pub.kind === 'audio') {
-                try {
-                    await pub.setSubscribed(true);
-                    console.log(`[SUCCESS] subscribed to ${p.identity}'s audio track`);
-                }
-                catch (err) {
-                    console.error('[ERROR] could not subscribe to', p.identity, err);
-                }
-            }
-        });
+        // Track publishing is now handled by wireRoomTracks()
         // Track the most recently active speaker in the room with enhanced debugging
         let lastActiveSpeaker = null;
         job.room.on('activeSpeakersChanged', (speakers) => {
@@ -82,9 +70,9 @@ export default defineAgent({
                 console.log(`🔇 [Agent] No active speakers detected`);
             }
         });
-        console.log('🧠 [Agent] Initializing OpenAI Realtime model...');
-        // Create the multimodal agent using OpenAI Realtime API
-        const model = new openai.realtime.RealtimeModel({
+        console.log('🧠 [Agent] Initializing Multi-Track OpenAI Realtime model...');
+        // Create the multimodal agent using our Multi-Track OpenAI Realtime API
+        const model = new MultiTrackRealtimeModel({
             instructions: `You are Tambo Voice Agent, a helpful AI assistant integrated with a powerful UI generation system.
         
         IMPORTANT: When users ask for UI components, timers, or visual elements, DO NOT repeat their request back as text. The UI generation is handled automatically when they speak.
@@ -106,6 +94,8 @@ export default defineAgent({
             model: 'gpt-4o-realtime-preview',
             modalities: ['text'],
         });
+        // Wire up all room tracks to the multi-track model
+        wireRoomTracks(job.room, model);
         console.log('🎙️ [Agent] Starting multimodal agent...');
         // Initialize Decision Engine
         const decisionEngine = new DecisionEngine(process.env.OPENAI_API_KEY || '');
@@ -372,27 +362,7 @@ export default defineAgent({
             console.log('🧹 [Agent] Cleaning up decision engine...');
             decisionEngine.clearAllBuffers();
         });
-        console.log('🎯 [Agent] Fully initialized with smart decision engine');
-        // Ensure we receive audio from every participant
-        const subscribeToAudio = async (publication, participant) => {
-            if (publication.kind === Track.Kind.Audio || publication.kind === 'audio') {
-                try {
-                    await publication.setSubscribed(true);
-                    console.log(`🔊 [Agent] Subscribed to ${participant.identity}'s audio track`);
-                }
-                catch (err) {
-                    console.error(`❌ [Agent] Failed to subscribe to ${participant.identity}'s audio track:`, err);
-                }
-            }
-        };
-        // Subscribe to future tracks
-        job.room.on(RoomEvent.TrackPublished, subscribeToAudio);
-        // Subscribe to already-published tracks
-        for (const participant of job.room.remoteParticipants.values()) {
-            for (const publication of participant.trackPublications.values()) {
-                await subscribeToAudio(publication, participant);
-            }
-        }
+        console.log('🎯 [Agent] Fully initialized with smart decision engine and multi-track audio');
     },
 });
 // Use the CLI runner if this file is being run directly
