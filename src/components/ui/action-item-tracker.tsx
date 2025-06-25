@@ -31,7 +31,7 @@
 
 import { cn } from "@/lib/utils";
 import { useTamboComponentState } from "@tambo-ai/react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useId } from "react";
 import { z } from "zod";
 import { 
   Plus, 
@@ -475,9 +475,12 @@ export function ActionItemTracker({
   ...props
 }: ActionItemTrackerProps & React.HTMLAttributes<HTMLDivElement>) {
   
+  // Generate a stable unique ID that is consistent between server and client renders
+  const instanceId = useId();
+
   // Initialize Tambo component state
   const [state, setState] = useTamboComponentState<ActionItemTrackerState>(
-    `action-tracker-${Date.now()}`, // Unique instance ID
+    instanceId,
     {
       items: initialItems,
       filter: {

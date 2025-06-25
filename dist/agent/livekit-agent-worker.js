@@ -10,6 +10,7 @@ import { join } from 'path';
 // Load environment variables from .env.local
 config({ path: join(process.cwd(), '.env.local') });
 import { defineAgent, cli, WorkerOptions, multimodal } from '@livekit/agents';
+import { RoomEvent, Track } from 'livekit-client';
 import * as openai from '@livekit/agents-plugin-openai';
 import { DecisionEngine } from './decision-engine';
 console.log('🚀 Starting Tambo Voice Agent Worker...');
@@ -28,6 +29,42 @@ export default defineAgent({
         });
         await job.connect();
         console.log('✅ [Agent] Successfully connected to room!');
+        // --- AUDIO DEBUG: Enhanced participant tracking ---------------------
+        console.log('[TRACE] 👥 Participants when agent joined:', [...job.room.remoteParticipants.values()].map(p => p.identity));
+        // Check room state every few seconds to see who's really there
+        const checkRoomState = () => {
+            console.log('\n[TRACE] 🔍 Current room state:');
+            console.log(`  📊 Total participants: ${job.room.remoteParticipants.size}`);
+            for (const participant of job.room.remoteParticipants.values()) {
+                console.log(`  👤 ${participant.identity}:`);
+                console.log(`     - Track publications: ${participant.trackPublications.size}`);
+                for (const pub of participant.trackPublications.values()) {
+                    console.log(`     - ${pub.kind} track`);
+                }
+            }
+            console.log('');
+        };
+        // Check immediately and then every 10 seconds
+        setTimeout(checkRoomState, 1000);
+        setInterval(checkRoomState, 10000);
+        // ----------------------------------------------------------------
+        // 1️⃣  every time a participant connects/disconnects
+        job.room
+            .on(RoomEvent.ParticipantConnected, p => console.log('[TRACE] participant connected', p.identity))
+            .on(RoomEvent.ParticipantDisconnected, p => console.log('[TRACE] participant disconnected', p.identity));
+        // 2️⃣  every time a remote audio publication appears
+        job.room.on(RoomEvent.TrackPublished, async (pub, p) => {
+            console.log('[TRACE] trackPublished', p.identity, pub.name || pub.trackName, pub.kind);
+            if (pub.kind === Track.Kind.Audio || pub.kind === 'audio') {
+                try {
+                    await pub.setSubscribed(true);
+                    console.log(`[SUCCESS] subscribed to ${p.identity}'s audio track`);
+                }
+                catch (err) {
+                    console.error('[ERROR] could not subscribe to', p.identity, err);
+                }
+            }
+        });
         // Track the most recently active speaker in the room
         let lastActiveSpeaker = null;
         job.room.on('activeSpeakersChanged', (speakers) => {
@@ -312,6 +349,26 @@ export default defineAgent({
             decisionEngine.clearAllBuffers();
         });
         console.log('🎯 [Agent] Fully initialized with smart decision engine');
+        // Ensure we receive audio from every participant
+        const subscribeToAudio = async (publication, participant) => {
+            if (publication.kind === Track.Kind.Audio || publication.kind === 'audio') {
+                try {
+                    await publication.setSubscribed(true);
+                    console.log(`🔊 [Agent] Subscribed to ${participant.identity}'s audio track`);
+                }
+                catch (err) {
+                    console.error(`❌ [Agent] Failed to subscribe to ${participant.identity}'s audio track:`, err);
+                }
+            }
+        };
+        // Subscribe to future tracks
+        job.room.on(RoomEvent.TrackPublished, subscribeToAudio);
+        // Subscribe to already-published tracks
+        for (const participant of job.room.remoteParticipants.values()) {
+            for (const publication of participant.trackPublications.values()) {
+                await subscribeToAudio(publication, participant);
+            }
+        }
     },
 });
 // Use the CLI runner if this file is being run directly
