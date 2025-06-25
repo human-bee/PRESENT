@@ -174,12 +174,11 @@ export default function Canvas() {
 
               {/* Collapsible Message Thread - now slides from right and controlled by toolbar */}
               {isTranscriptOpen && (
-              <MessageThreadCollapsible
-                contextKey={contextKey}
-                  defaultOpen={true}
+                <MessageThreadCollapsible
+                  contextKey={contextKey}
                   className="fixed right-0 top-0 h-full z-50 transform transition-transform duration-300 w-full max-w-sm sm:max-w-md md:max-w-lg"
-                variant="default"
-              />
+                  variant="default"
+                />
               )}
               </CanvasLiveKitContext.Provider>
             </ToolDispatcher>
