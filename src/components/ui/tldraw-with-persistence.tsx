@@ -33,8 +33,7 @@ const createPersistenceOverrides = (): TLUiOverrides => ({
   // Empty overrides for now - transcript button will be outside toolbar
 });
 
-// Custom main menu component that includes user navigation
-function CustomMainMenu() {
+function CustomMainMenu({ readOnly = false }: { readOnly?: boolean } & any) {
   const { user, signOut } = useAuth();
   const router = useRouter();
   const editor = useEditor();
@@ -44,7 +43,10 @@ function CustomMainMenu() {
     lastSaved, 
     saveCanvas, 
     updateCanvasName 
-  } = useCanvasPersistence(editor);
+  } = useCanvasPersistence(editor, !readOnly);
+
+  // Helper to disable or no-op in read-only mode
+  const disabled = readOnly;
 
   const handleSignOut = async () => {
     try {
@@ -66,6 +68,7 @@ function CustomMainMenu() {
 
   const handleExport = async () => {
     if (!editor) return;
+    if (disabled) return;
     
     try {
       const svg = await editor.getSvg(Array.from(editor.getCurrentPageShapeIds()));
@@ -86,10 +89,16 @@ function CustomMainMenu() {
   };
 
   const handleRenameCanvas = () => {
+    if (disabled) return;
     const newName = window.prompt("Enter canvas name:", canvasName || "Untitled Canvas");
     if (newName !== null && newName.trim()) {
       updateCanvasName(newName.trim());
     }
+  };
+
+  const handleSaveCanvas = () => {
+    if (disabled) return;
+    saveCanvas();
   };
 
   return (
@@ -116,6 +125,7 @@ function CustomMainMenu() {
           id="rename-canvas"
           label="Rename Canvas"
           icon="text"
+          disabled={disabled}
           onSelect={handleRenameCanvas}
         />
         
@@ -123,14 +133,15 @@ function CustomMainMenu() {
           id="save-canvas"
           label={isSaving ? "Saving..." : "Save Canvas"}
           icon="save"
-          disabled={isSaving}
-          onSelect={saveCanvas}
+          disabled={disabled || isSaving}
+          onSelect={handleSaveCanvas}
         />
         
         <TldrawUiMenuItem
           id="export-canvas"
           label="Export as SVG"
           icon="external-link"
+          disabled={disabled}
           onSelect={handleExport}
         />
       </TldrawUiMenuGroup>

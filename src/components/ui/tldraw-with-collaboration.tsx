@@ -15,6 +15,8 @@ import { useSyncDemo } from "@tldraw/sync";
 import { CanvasLiveKitContext } from "./livekit-room-connector";
 import { ComponentStoreContext } from "./tldraw-canvas";
 import type { TamboShapeUtil } from "./tldraw-canvas";
+import { useRoomContext } from "@livekit/components-react";
+import { RoomEvent } from "livekit-client";
 
 interface TldrawWithCollaborationProps {
   onMount?: (editor: Editor) => void;
@@ -41,10 +43,42 @@ export function TldrawWithCollaboration({
   const livekitCtx = useContext(CanvasLiveKitContext);
   const roomName = livekitCtx?.roomName ?? "default-room";
 
+  // Detect role from LiveKit token metadata
+  const room = useRoomContext();
+  const [role, setRole] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!room) return;
+
+    const updateRole = () => {
+      const meta = room.localParticipant?.metadata;
+      if (meta) {
+        try {
+          const parsed = JSON.parse(meta);
+          if (parsed && typeof parsed.role === "string") {
+            setRole(parsed.role);
+          }
+        } catch {
+          // ignore parse errors
+        }
+      }
+    };
+
+    updateRole();
+    room.on(RoomEvent.LocalTrackPublished, updateRole);
+    // No specific metadata changed event for local participant, but re-check on publish events.
+
+    return () => {
+      room.off(RoomEvent.LocalTrackPublished, updateRole);
+    };
+  }, [room]);
+
+  const computedReadOnly = readOnly || role === "viewer" || role === "readOnly";
+
   // Store from sync demo – phase-1 implementation
   const store = useSyncDemo({
     roomId: roomName,
-    readOnly,
+    readOnly: computedReadOnly,
   } as any);
 
   // Maintain reference to mounted editor
@@ -60,6 +94,10 @@ export function TldrawWithCollaboration({
 
   // Create memoised overrides & components
   const overrides = useMemo(() => createCollaborationOverrides(), []);
+  const MainMenuWithPermissions = (props: any) => (
+    <CustomMainMenu {...props} readOnly={computedReadOnly} />
+  );
+
   const components: TLComponents = useMemo(
     () => ({
       Toolbar: (props) => (
@@ -68,9 +106,9 @@ export function TldrawWithCollaboration({
           onTranscriptToggle={onTranscriptToggle}
         />
       ),
-      MainMenu: CustomMainMenu,
+      MainMenu: MainMenuWithPermissions,
     }),
-    [onTranscriptToggle]
+    [onTranscriptToggle, computedReadOnly]
   );
 
   // Keyboard shortcut for transcript
