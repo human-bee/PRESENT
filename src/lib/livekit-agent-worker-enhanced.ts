@@ -21,10 +21,7 @@ import WebSocket from 'ws';
 // Internal imports – not exported publicly, so we suppress type checking
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore
-import { ClientWebSocketAdapter } from '@tldraw/sync-core/dist-cjs/lib/ClientWebSocketAdapter.js';
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore
-import { TLSyncClient } from '@tldraw/sync-core/dist-cjs/lib/TLSyncClient.js';
+import { ClientWebSocketAdapter, TLSyncClient } from '@tldraw/sync-core';
 import { createTLStore, defaultShapeUtils, defaultBindingUtils } from 'tldraw';
 
 console.log('🚀 Starting Enhanced Tambo Voice Agent Worker...');

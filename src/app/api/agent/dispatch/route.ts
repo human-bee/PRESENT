@@ -70,7 +70,7 @@ export async function POST(request: NextRequest) {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          agentName: 'tambo-voice-agent', // Changed from agent_name to agentName (camelCase)
+          agentName: 'tambo-voice-agent', // Changed to tambo-voice-agent-enhanced to experiment with Agentic Canvas Control
           room: roomName,
           metadata: JSON.stringify({
             dispatchedAt: Date.now(),

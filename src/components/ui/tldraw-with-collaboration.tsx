@@ -41,7 +41,7 @@ export function TldrawWithCollaboration({
   readOnly = false,
 }: TldrawWithCollaborationProps) {
   const livekitCtx = useContext(CanvasLiveKitContext);
-  const roomName = livekitCtx?.roomName ?? "default-room";
+  const roomName = livekitCtx?.roomName ?? "tambo-canvas-room";
 
   // Detect role from LiveKit token metadata
   const room = useRoomContext();
@@ -80,6 +80,28 @@ export function TldrawWithCollaboration({
     roomId: roomName,
     readOnly: computedReadOnly,
   } as any);
+
+  // Debug logging for sync verification
+  useEffect(() => {
+    console.log('🔄 [TldrawSync-Frontend] Attempting to sync to room:', roomName, {
+      readOnly: computedReadOnly,
+      role: role,
+      hasStore: !!store,
+      livekitConnected: !!room
+    });
+    
+    // Check if store is connected after a short delay
+    const checkConnection = setTimeout(() => {
+      if (store) {
+        console.log('✅ [TldrawSync-Frontend] Store created, sync should be active');
+        // You can add more detailed checks here if needed
+      } else {
+        console.log('❌ [TldrawSync-Frontend] Store not created, sync may have failed');
+      }
+    }, 2000);
+    
+    return () => clearTimeout(checkConnection);
+  }, [roomName, computedReadOnly, role, store, room]);
 
   // Maintain reference to mounted editor
   const [editor, setEditor] = useState<Editor | null>(null);

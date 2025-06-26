@@ -508,6 +508,55 @@ export default defineAgent({
         await subscribeToAudio(publication, participant);
       }
     }
+
+    // Add auto-cleanup logic after participant connection/disconnection handlers
+    // Disconnect the agent if no human participants remain in the room for >10 s
+    const isHuman = (p: { identity: string; metadata?: string }) => {
+      const id = p.identity.toLowerCase();
+      const meta = (p.metadata || '').toLowerCase();
+      return !(
+        id.includes('agent') ||
+        id.includes('bot') ||
+        id.includes('ai') ||
+        id.startsWith('tambo-voice-agent') ||
+        meta.includes('agent') ||
+        meta.includes('type":"agent')
+      );
+    };
+
+    let disconnectTimer: NodeJS.Timeout | null = null;
+
+    const scheduleOrCancelDisconnect = () => {
+      const humanParticipants = Array.from(job.room.remoteParticipants.values()).filter(isHuman);
+
+      if (humanParticipants.length === 0) {
+        if (!disconnectTimer) {
+          console.log('🧹 [Agent] Room is empty of humans. Scheduling disconnect in 10 s…');
+          disconnectTimer = setTimeout(() => {
+            console.log('🔌 [Agent] Disconnecting – no human participants remained for 10 s');
+            // Cleanly disconnect the agent and exit the process so the worker shuts down
+            try {
+              job.room.disconnect();
+            } catch (err) {
+              console.error('⚠️ [Agent] Error during disconnect:', err);
+            }
+            process.exit(0);
+          }, 10000);
+        }
+      } else if (disconnectTimer) {
+        // Humans have (re)joined → cancel pending shutdown
+        clearTimeout(disconnectTimer);
+        disconnectTimer = null;
+        console.log('🔄 [Agent] Human participant detected – canceling pending disconnect');
+      }
+    };
+
+    // Monitor participant changes to trigger the above logic
+    job.room.on(RoomEvent.ParticipantConnected, scheduleOrCancelDisconnect);
+    job.room.on(RoomEvent.ParticipantDisconnected, scheduleOrCancelDisconnect);
+
+    // Run at start in case the agent was dispatched into an already-empty room
+    scheduleOrCancelDisconnect();
   },
 });
 

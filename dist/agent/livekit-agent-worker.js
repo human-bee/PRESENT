@@ -44,9 +44,9 @@ export default defineAgent({
             }
             console.log('');
         };
-        // Check immediately and then every 10 seconds
+        // Check immediately and then every 30 seconds (instead of 10)
         setTimeout(checkRoomState, 1000);
-        setInterval(checkRoomState, 10000);
+        setInterval(checkRoomState, 30000);
         // ----------------------------------------------------------------
         // 1️⃣  every time a participant connects/disconnects
         job.room
@@ -278,17 +278,29 @@ export default defineAgent({
                 method: attributionMethod,
                 allParticipants: participants.map(p => p.identity)
             });
-            // Send transcription to frontend for display
-            const transcriptionData = JSON.stringify({
-                type: 'live_transcription',
-                text: evt.transcript,
-                speaker: speakerId,
-                timestamp: Date.now(),
-                is_final: true,
-            });
-            job.room.localParticipant?.publishData(new TextEncoder().encode(transcriptionData), { reliable: true, topic: 'transcription' });
-            // Process through decision engine with participant ID
-            await decisionEngine.processTranscript(evt.transcript, speakerId);
+            // Create a unique key to check for duplicates
+            const transcriptionKey = `${evt.transcript}-${Math.floor(Date.now() / 1000)}`;
+            // Only process if this transcription hasn't been processed recently
+            if (!processedTranscriptions.has(transcriptionKey)) {
+                processedTranscriptions.add(transcriptionKey);
+                // Clean up old entries after 5 seconds
+                setTimeout(() => processedTranscriptions.delete(transcriptionKey), 5000);
+                // Send transcription to frontend for display
+                const transcriptionData = JSON.stringify({
+                    type: 'live_transcription',
+                    text: evt.transcript,
+                    speaker: speakerId,
+                    timestamp: Date.now(),
+                    is_final: true,
+                    agentId: job.room.localParticipant?.identity // Include agent ID for debugging
+                });
+                job.room.localParticipant?.publishData(new TextEncoder().encode(transcriptionData), { reliable: true, topic: 'transcription' });
+                // Process through decision engine with participant ID
+                await decisionEngine.processTranscript(evt.transcript, speakerId);
+            }
+            else {
+                console.log(`⏭️ [Agent] Skipping duplicate transcription: "${evt.transcript}"`);
+            }
         });
         // Log participant connections for audio tracking
         job.room.on('participantConnected', (participant) => {
@@ -312,6 +324,8 @@ export default defineAgent({
                 job.room.localParticipant?.publishData(new TextEncoder().encode(responseData), { reliable: true, topic: 'transcription' });
             }
         });
+        // Track processed transcriptions to avoid duplicates
+        const processedTranscriptions = new Set();
         // Listen for tool results from the frontend ToolDispatcher
         // This replaces the old RPC approach with data channel events
         const handleDataReceived = (data, participant, kind, topic) => {
@@ -333,6 +347,11 @@ export default defineAgent({
                         error: message.error
                     });
                     // Agent can handle tool errors if needed
+                }
+                // Check for transcriptions from other agents to avoid duplicates
+                if (topic === 'transcription' && message.type === 'live_transcription' && message.speaker?.startsWith('agent-')) {
+                    const transcriptionKey = `${message.text}-${message.timestamp}`;
+                    processedTranscriptions.add(transcriptionKey);
                 }
             }
             catch {
@@ -393,6 +412,49 @@ export default defineAgent({
                 await subscribeToAudio(publication, participant);
             }
         }
+        // Add auto-cleanup logic after participant connection/disconnection handlers
+        // Disconnect the agent if no human participants remain in the room for >10 s
+        const isHuman = (p) => {
+            const id = p.identity.toLowerCase();
+            const meta = (p.metadata || '').toLowerCase();
+            return !(id.includes('agent') ||
+                id.includes('bot') ||
+                id.includes('ai') ||
+                id.startsWith('tambo-voice-agent') ||
+                meta.includes('agent') ||
+                meta.includes('type":"agent'));
+        };
+        let disconnectTimer = null;
+        const scheduleOrCancelDisconnect = () => {
+            const humanParticipants = Array.from(job.room.remoteParticipants.values()).filter(isHuman);
+            if (humanParticipants.length === 0) {
+                if (!disconnectTimer) {
+                    console.log('🧹 [Agent] Room is empty of humans. Scheduling disconnect in 10 s…');
+                    disconnectTimer = setTimeout(() => {
+                        console.log('🔌 [Agent] Disconnecting – no human participants remained for 10 s');
+                        // Cleanly disconnect the agent and exit the process so the worker shuts down
+                        try {
+                            job.room.disconnect();
+                        }
+                        catch (err) {
+                            console.error('⚠️ [Agent] Error during disconnect:', err);
+                        }
+                        process.exit(0);
+                    }, 10000);
+                }
+            }
+            else if (disconnectTimer) {
+                // Humans have (re)joined → cancel pending shutdown
+                clearTimeout(disconnectTimer);
+                disconnectTimer = null;
+                console.log('🔄 [Agent] Human participant detected – canceling pending disconnect');
+            }
+        };
+        // Monitor participant changes to trigger the above logic
+        job.room.on(RoomEvent.ParticipantConnected, scheduleOrCancelDisconnect);
+        job.room.on(RoomEvent.ParticipantDisconnected, scheduleOrCancelDisconnect);
+        // Run at start in case the agent was dispatched into an already-empty room
+        scheduleOrCancelDisconnect();
     },
 });
 // Use the CLI runner if this file is being run directly

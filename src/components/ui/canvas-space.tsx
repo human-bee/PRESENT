@@ -45,6 +45,7 @@ import * as React from "react";
 import type { TamboThreadMessage } from "@tambo-ai/react";
 import { TldrawCanvas, TamboShapeUtil, TamboShape } from "./tldraw-canvas";
 import { TldrawWithPersistence } from "./tldraw-with-persistence";
+import { TldrawWithCollaboration } from "./tldraw-with-collaboration";
 import type { Editor } from 'tldraw';
 import { nanoid } from 'nanoid';
 import { Toaster } from "react-hot-toast";
@@ -269,13 +270,14 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
       {/* Toast notifications */}
       <Toaster position="bottom-left" />
 
-      {/* Use integrated tldraw with persistence - no more overlapping menu bar */}
-      <TldrawWithPersistence
+      {/* Use tldraw with collaboration for sync support */}
+      <TldrawWithCollaboration
         onMount={setEditor}
         shapeUtils={[TamboShapeUtil]}
         componentStore={componentStore.current}
         className="absolute inset-0"
         onTranscriptToggle={onTranscriptToggle}
+        readOnly={false}
       />
       {/*
         The following is a placeholder for if you want to show some UI when the editor is not loaded
