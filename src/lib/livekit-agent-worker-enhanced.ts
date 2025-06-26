@@ -426,14 +426,18 @@ export default defineAgent({
           y: Math.random() * 300,
           rotation: 0,
           props: {
-            text: (decision.summary || originalText) as string,
+            text: (decision.summary ?? originalText) as string,
+            w: 160,
+            h: 160,
+            color: 'yellow',
+            size: 'm',
           },
         } as any;
 
         canvasStore.put([noteShape]);
-        console.log('📝 [EnhancedAgent] Note shape created');
+        console.log('📝 [EnhancedAgent] Note shape created:', noteId);
       } catch (err) {
-        console.error('⚠️  [EnhancedAgent] Error creating note shape:', err);
+        console.error('⚠️  [EnhancedAgent] Error creating note shape:', err as Error);
       }
     });
     
