@@ -80,6 +80,7 @@ export function TldrawWithCollaboration({
   // Use useSyncDemo for development - it handles the connection properly
   const store = useSyncDemo({
     roomId: roomName,
+    shapeUtils: shapeUtils || [],
   });
 
   // Debug logging for sync verification

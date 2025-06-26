@@ -40,7 +40,7 @@
 
 import { cn } from "@/lib/utils";
 import { useTamboThread } from "@tambo-ai/react";
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import * as React from "react";
 import type { TamboThreadMessage } from "@tambo-ai/react";
 import { TldrawCanvas, TamboShapeUtil, TamboShape } from "./tldraw-canvas";
@@ -116,6 +116,9 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
   
   // Store React components separately from tldraw shapes to avoid structuredClone issues
   const componentStore = useRef<Map<string, React.ReactNode>>(new Map());
+
+  // Memoize shapeUtils array to prevent re-renders
+  const customShapeUtils = useMemo(() => [TamboShapeUtil], []);
 
   // Canvas persistence is now handled by TldrawWithPersistence component
 
@@ -273,7 +276,7 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
       {/* Use tldraw with collaboration for sync support */}
       <TldrawWithCollaboration
         onMount={setEditor}
-        shapeUtils={[TamboShapeUtil]}
+        shapeUtils={customShapeUtils}
         componentStore={componentStore.current}
         className="absolute inset-0"
         onTranscriptToggle={onTranscriptToggle}
