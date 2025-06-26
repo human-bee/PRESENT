@@ -106,7 +106,7 @@ export default defineAgent({
     
     // Enhanced speaker tracking with audio levels
     job.room.on('activeSpeakersChanged', (speakers) => {
-      console.log(`🗣️ [EnhancedAgent] Active speakers changed:`, speakers.map(s => s.identity));
+      console.log(`🗣️ [EnhancedAgent] Active speakers changed:`, speakers.map((s: any) => s.identity));
       
       allActiveSpeakers = speakers.map(s => s.identity);
       if (speakers.length > 0) {
@@ -115,10 +115,11 @@ export default defineAgent({
       }
       
       // Update audio levels for all speakers
-      speakers.forEach(speaker => {
+      speakers.forEach((speaker: any) => {
         const state = participantAudioState.get(speaker.identity);
         if (state) {
-          state.audioLevel = speaker.audioLevel || 0;
+          const level = typeof speaker.audioLevel === 'number' ? speaker.audioLevel : 0;
+          state.audioLevel = level;
           state.lastSeen = Date.now();
         }
       });
@@ -243,7 +244,8 @@ export default defineAgent({
     console.log('🧠 [EnhancedAgent] Decision Engine initialized');
     
     // Connect to tldraw sync once room is connected
-    const { store: canvasStore } = await connectCanvasSync(job.room.name);
+    const roomNameForSync = job.room.name || 'tambo-shared-canvas';
+    const { store: canvasStore } = await connectCanvasSync(roomNameForSync);
 
     // Forward agent-initiated canvas changes to LiveKit participants via data channel
     const broadcastCanvasUpdate = (snapshot: any) => {
