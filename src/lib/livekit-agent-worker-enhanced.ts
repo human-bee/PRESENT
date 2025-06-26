@@ -17,7 +17,13 @@ import { RoomEvent, Track } from 'livekit-client';
 import * as openai from '@livekit/agents-plugin-openai';
 import { DecisionEngine } from './decision-engine';
 import WebSocket from 'ws';
-import { ClientWebSocketAdapter, TLSyncClient } from '@tldraw/sync-core';
+// Internal imports – not exported publicly, so we suppress type checking
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore
+import { ClientWebSocketAdapter } from '@tldraw/sync-core/dist-cjs/lib/ClientWebSocketAdapter.js';
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore
+import { TLSyncClient } from '@tldraw/sync-core/dist-cjs/lib/TLSyncClient.js';
 import { createTLStore, defaultShapeUtils, defaultBindingUtils } from 'tldraw';
 
 console.log('🚀 Starting Enhanced Tambo Voice Agent Worker...');
@@ -52,15 +58,9 @@ async function connectCanvasSync(roomName: string): Promise<CanvasSyncConnection
   const uri = `${syncHost}/${encodeURIComponent(roomName)}`;
 
   // Adapter expects global.WebSocket, but we'll pass factory that uses ws package
-  const socketAdapter = new ClientWebSocketAdapter(() => uri);
-
-  // Monkey-patch adapter to use node ws
-  (socketAdapter as any)._setNewSocket = function (ws: any) {
-    // no-op – we'll create ws ourselves below
-  };
-
-  // Create WS and hand over to adapter
+  const socketAdapter: any = new ClientWebSocketAdapter(() => uri);
   const ws = new WebSocket(uri);
+  // Attach the Node WebSocket instance to the adapter (private API)
   (socketAdapter as any)._setNewSocket(ws);
 
   const store = createTLStore({
@@ -77,7 +77,7 @@ async function connectCanvasSync(roomName: string): Promise<CanvasSyncConnection
         console.log('🖥️  [AgentSync] Connected to tldraw sync server');
         resolve({ store, client });
       },
-      onSyncError: (reason) => {
+      onSyncError: (reason: unknown) => {
         console.error('❌ [AgentSync] Sync error:', reason);
       },
       presence: undefined as any,
@@ -412,24 +412,7 @@ export default defineAgent({
         { reliable: true, topic: 'tool_call' }
       );
 
-      // Very simple demo: create a note shape on the canvas when agent responds
-      try {
-        const defaultId = `shape:agent-note-${Date.now()}`;
-        const { TLNoteShapeUtil } = await import('tldraw');
-        const noteShape: any = {
-          id: defaultId,
-          type: 'note',
-          x: Math.random() * 400,
-          y: Math.random() * 300,
-          props: {
-            text: decision.summary || originalText,
-          },
-        };
-        canvasStore.create(noteShape as any);
-        console.log('📝 [EnhancedAgent] Added note to canvas');
-      } catch (err) {
-        console.error('⚠️  [EnhancedAgent] Could not create note shape:', err);
-      }
+      // TODO: implement shape creation via canvasStore.updateStore when design is final
     });
     
     // Clean up on disconnect
