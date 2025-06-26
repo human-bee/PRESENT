@@ -282,3 +282,5 @@ export function TldrawWithPersistence({
     </div>
   );
 }
+
+export { CustomMainMenu, CustomToolbarWithTranscript, createPersistenceComponents };
