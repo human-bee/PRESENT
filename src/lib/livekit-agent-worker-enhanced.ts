@@ -8,6 +8,7 @@
 
 import { config } from 'dotenv';
 import { join } from 'path';
+import { nanoid } from 'nanoid';
 
 // Load environment variables from .env.local
 config({ path: join(process.cwd(), '.env.local') });
@@ -16,8 +17,74 @@ import { defineAgent, JobContext, cli, WorkerOptions, multimodal } from '@liveki
 import { RoomEvent, Track } from 'livekit-client';
 import * as openai from '@livekit/agents-plugin-openai';
 import { DecisionEngine } from './decision-engine';
+import WebSocket from 'ws';
+// Internal imports – not exported publicly, so we suppress type checking
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore
+import { ClientWebSocketAdapter } from '@tldraw/sync-core/dist-cjs/lib/ClientWebSocketAdapter.js';
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore
+import { TLSyncClient } from '@tldraw/sync-core/dist-cjs/lib/TLSyncClient.js';
+import { createTLStore, defaultShapeUtils, defaultBindingUtils } from 'tldraw';
 
 console.log('🚀 Starting Enhanced Tambo Voice Agent Worker...');
+
+// Polyfill minimal DOM globals for ClientWebSocketAdapter in Node.js
+// These are no-ops just to satisfy event listeners used by the reconnection logic
+if (typeof (global as any).window === 'undefined') {
+  (global as any).window = {
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    __tldraw_socket_debug: false,
+  } as any;
+}
+if (typeof (global as any).document === 'undefined') {
+  (global as any).document = {
+    hidden: false,
+    addEventListener: () => {},
+    removeEventListener: () => {},
+  } as any;
+}
+if (typeof (global as any).navigator === 'undefined') {
+  (global as any).navigator = {} as any;
+}
+
+type CanvasSyncConnection = {
+  store: ReturnType<typeof createTLStore>;
+  client: TLSyncClient;
+};
+
+async function connectCanvasSync(roomName: string): Promise<CanvasSyncConnection> {
+  const syncHost = process.env.TLDRAW_SYNC_URL || 'wss://tldraw-sync-demo.tldraw.com/connect';
+  const uri = `${syncHost}/${encodeURIComponent(roomName)}`;
+
+  // Adapter expects global.WebSocket, but we'll pass factory that uses ws package
+  const socketAdapter: any = new ClientWebSocketAdapter(() => uri);
+  const ws = new WebSocket(uri);
+  // Attach the Node WebSocket instance to the adapter (private API)
+  (socketAdapter as any)._setNewSocket(ws);
+
+  const store = createTLStore({
+    shapeUtils: [...defaultShapeUtils],
+    bindingUtils: [...defaultBindingUtils],
+  });
+
+  return await new Promise((resolve) => {
+    const client = new TLSyncClient({
+      store,
+      socket: socketAdapter as any,
+      didCancel: () => false,
+      onLoad: () => {
+        console.log('🖥️  [AgentSync] Connected to tldraw sync server');
+        resolve({ store, client });
+      },
+      onSyncError: (reason: unknown) => {
+        console.error('❌ [AgentSync] Sync error:', reason);
+      },
+      presence: undefined as any,
+    });
+  });
+}
 
 export default defineAgent({
   entry: async (job: JobContext) => {
@@ -39,7 +106,7 @@ export default defineAgent({
     
     // Enhanced speaker tracking with audio levels
     job.room.on('activeSpeakersChanged', (speakers) => {
-      console.log(`🗣️ [EnhancedAgent] Active speakers changed:`, speakers.map(s => s.identity));
+      console.log(`🗣️ [EnhancedAgent] Active speakers changed:`, speakers.map((s: any) => s.identity));
       
       allActiveSpeakers = speakers.map(s => s.identity);
       if (speakers.length > 0) {
@@ -48,10 +115,11 @@ export default defineAgent({
       }
       
       // Update audio levels for all speakers
-      speakers.forEach(speaker => {
+      speakers.forEach((speaker: any) => {
         const state = participantAudioState.get(speaker.identity);
         if (state) {
-          state.audioLevel = speaker.audioLevel || 0;
+          const level = typeof speaker.audioLevel === 'number' ? speaker.audioLevel : 0;
+          state.audioLevel = level;
           state.lastSeen = Date.now();
         }
       });
@@ -174,6 +242,34 @@ export default defineAgent({
     // Initialize Decision Engine
     const decisionEngine = new DecisionEngine(process.env.OPENAI_API_KEY || '');
     console.log('🧠 [EnhancedAgent] Decision Engine initialized');
+    
+    // Connect to tldraw sync once room is connected
+    const roomNameForSync = job.room.name || 'tambo-shared-canvas';
+    const { store: canvasStore } = await connectCanvasSync(roomNameForSync);
+
+    // Forward agent-initiated canvas changes to LiveKit participants via data channel
+    const broadcastCanvasUpdate = (snapshot: any) => {
+      try {
+        job.room.localParticipant?.publishData(
+          new TextEncoder().encode(
+            JSON.stringify({ type: 'tldraw_snapshot', data: snapshot, timestamp: Date.now() })
+          ),
+          { reliable: true, topic: 'tldraw' }
+        );
+      } catch (err) {
+        console.error('❌ [EnhancedAgent] Failed to broadcast canvas state:', err);
+      }
+    };
+
+    // Throttle snapshot broadcast to once every second when agent mutates store
+    let lastBroadcast = 0;
+    canvasStore.listen(() => {
+      const now = Date.now();
+      if (now - lastBroadcast < 1000) return;
+      lastBroadcast = now;
+      const snapshot = canvasStore.getSnapshot();
+      broadcastCanvasUpdate(snapshot);
+    }, { scope: 'document' });
     
     // Configure agent with enhanced settings
     const agent = new multimodal.MultimodalAgent({ 
@@ -318,6 +414,33 @@ export default defineAgent({
         new TextEncoder().encode(JSON.stringify(toolCallEvent)),
         { reliable: true, topic: 'tool_call' }
       );
+
+      // TODO: implement shape creation via canvasStore.updateStore when design is final
+      try {
+        const noteId = `shape:${nanoid()}`;
+        const noteShape = {
+          id: noteId,
+          typeName: 'shape',
+          type: 'note',
+          parentId: 'page:page',
+          childIndex: 1,
+          x: Math.random() * 400,
+          y: Math.random() * 300,
+          rotation: 0,
+          props: {
+            text: (decision.summary ?? originalText) as string,
+            w: 160,
+            h: 160,
+            color: 'yellow',
+            size: 'm',
+          },
+        } as any;
+
+        canvasStore.put([noteShape]);
+        console.log('📝 [EnhancedAgent] Note shape created:', noteId);
+      } catch (err) {
+        console.error('⚠️  [EnhancedAgent] Error creating note shape:', err as Error);
+      }
     });
     
     // Clean up on disconnect

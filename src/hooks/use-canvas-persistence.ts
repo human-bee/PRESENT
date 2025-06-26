@@ -6,7 +6,7 @@ import { toast } from "react-hot-toast";
 import { supabase, type Canvas } from "@/lib/supabase";
 import { useAuth } from "./use-auth";
 
-export function useCanvasPersistence(editor: Editor | null) {
+export function useCanvasPersistence(editor: Editor | null, enabled: boolean = true) {
   const { user } = useAuth();
   const router = useRouter();
   const { thread } = useTamboThread();
@@ -58,6 +58,7 @@ export function useCanvasPersistence(editor: Editor | null) {
 
   // Auto-save functionality
   const saveCanvas = useCallback(async () => {
+    if (!enabled) return;
     if (!editor || !user?.id || isSaving) return;
 
     setIsSaving(true);
@@ -112,11 +113,12 @@ export function useCanvasPersistence(editor: Editor | null) {
     } finally {
       setIsSaving(false);
     }
-  }, [editor, user, canvasId, canvasName, thread, isSaving]);
+  }, [editor, user, canvasId, canvasName, thread, isSaving, enabled]);
 
   // Set up auto-save on editor changes
   useEffect(() => {
     if (!editor) return;
+    if (!enabled) return;
 
     const handleChange = () => {
       // Clear existing timeout
@@ -139,16 +141,17 @@ export function useCanvasPersistence(editor: Editor | null) {
         clearTimeout(saveTimeoutRef.current);
       }
     };
-  }, [editor, saveCanvas]);
+  }, [editor, saveCanvas, enabled]);
 
   // Manual save function
   const manualSave = useCallback(async () => {
+    if (!enabled) return;
     if (saveTimeoutRef.current) {
       clearTimeout(saveTimeoutRef.current);
     }
     await saveCanvas();
     toast.success("Canvas saved!");
-  }, [saveCanvas]);
+  }, [saveCanvas, enabled]);
 
   // Update canvas name
   const updateCanvasName = useCallback(async (newName: string) => {
