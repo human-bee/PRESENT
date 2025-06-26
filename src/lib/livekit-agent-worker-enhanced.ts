@@ -8,6 +8,7 @@
 
 import { config } from 'dotenv';
 import { join } from 'path';
+import { nanoid } from 'nanoid';
 
 // Load environment variables from .env.local
 config({ path: join(process.cwd(), '.env.local') });
@@ -413,6 +414,27 @@ export default defineAgent({
       );
 
       // TODO: implement shape creation via canvasStore.updateStore when design is final
+      try {
+        const noteId = `shape:${nanoid()}`;
+        const noteShape = {
+          id: noteId,
+          typeName: 'shape',
+          type: 'note',
+          parentId: 'page:page',
+          childIndex: 1,
+          x: Math.random() * 400,
+          y: Math.random() * 300,
+          rotation: 0,
+          props: {
+            text: (decision.summary || originalText) as string,
+          },
+        } as any;
+
+        canvasStore.put([noteShape]);
+        console.log('📝 [EnhancedAgent] Note shape created');
+      } catch (err) {
+        console.error('⚠️  [EnhancedAgent] Error creating note shape:', err);
+      }
     });
     
     // Clean up on disconnect
