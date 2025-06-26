@@ -1,5 +1,7 @@
 "use client";
 
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
 import {
   Tldraw,
   TLUiOverrides,
@@ -75,11 +77,10 @@ export function TldrawWithCollaboration({
 
   const computedReadOnly = readOnly || role === "viewer" || role === "readOnly";
 
-  // Store from sync demo – phase-1 implementation
+  // Use useSyncDemo for development - it handles the connection properly
   const store = useSyncDemo({
     roomId: roomName,
-    readOnly: computedReadOnly,
-  } as any);
+  });
 
   // Debug logging for sync verification
   useEffect(() => {
@@ -87,28 +88,27 @@ export function TldrawWithCollaboration({
       readOnly: computedReadOnly,
       role: role,
       hasStore: !!store,
+      syncHost: process.env.NEXT_PUBLIC_TLDRAW_SYNC_URL || 'https://ws.tldraw.dev/r',
       livekitConnected: !!room
     });
     
     // Check if store is connected after a short delay
     const checkConnection = setTimeout(() => {
-      if (store) {
-        console.log('✅ [TldrawSync-Frontend] Store created, sync should be active');
-        // You can add more detailed checks here if needed
+      if (store && (store as any).status !== 'loading') {
+        console.log('✅ [TldrawSync-Frontend] Store synced and ready');
+      } else if (store && (store as any).status === 'error') {
+        console.error('❌ [TldrawSync-Frontend] Sync failed - check network/firewall settings');
+        console.log('💡 [TldrawSync-Frontend] Try setting NEXT_PUBLIC_TLDRAW_SYNC_URL to a different endpoint');
       } else {
-        console.log('❌ [TldrawSync-Frontend] Store not created, sync may have failed');
+        console.log('⏳ [TldrawSync-Frontend] Still connecting to sync server...');
       }
     }, 2000);
     
     return () => clearTimeout(checkConnection);
   }, [roomName, computedReadOnly, role, store, room]);
 
-  // Maintain reference to mounted editor
-  const [editor, setEditor] = useState<Editor | null>(null);
-
   const handleMount = useCallback(
     (mountedEditor: Editor) => {
-      setEditor(mountedEditor);
       if (onMount) onMount(mountedEditor);
     },
     [onMount]
@@ -116,8 +116,12 @@ export function TldrawWithCollaboration({
 
   // Create memoised overrides & components
   const overrides = useMemo(() => createCollaborationOverrides(), []);
-  const MainMenuWithPermissions = (props: any) => (
-    <CustomMainMenu {...props} readOnly={computedReadOnly} />
+  const MainMenuWithPermissions = useCallback(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (props: Record<string, unknown>) => (
+      <CustomMainMenu {...(props as any)} readOnly={computedReadOnly} />
+    ),
+    [computedReadOnly]
   );
 
   const components: TLComponents = useMemo(
@@ -128,9 +132,9 @@ export function TldrawWithCollaboration({
           onTranscriptToggle={onTranscriptToggle}
         />
       ),
-      MainMenu: MainMenuWithPermissions,
+      MainMenu: MainMenuWithPermissions as any,
     }),
-    [onTranscriptToggle, computedReadOnly]
+    [onTranscriptToggle, MainMenuWithPermissions]
   );
 
   // Keyboard shortcut for transcript
@@ -146,8 +150,9 @@ export function TldrawWithCollaboration({
     return () => document.removeEventListener("keydown", handler);
   }, [onTranscriptToggle]);
 
-  // Ready flag
-  const isStoreReady = Boolean(store);
+  // Ready flag: hide overlay once sync store reports ready (status !== 'loading')
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const isStoreReady = !!store && (store as any).status !== 'loading';
 
   return (
     <div className={className} style={{ position: "absolute", inset: 0 }}>
