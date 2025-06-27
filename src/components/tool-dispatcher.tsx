@@ -16,9 +16,11 @@
 
 "use client";
 
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
 import { createContext, useContext, useEffect, useRef, useState, useCallback } from 'react';
 import { useDataChannel, useRoomContext } from '@livekit/components-react';
-import { useTamboThread } from '@tambo-ai/react';
+import { useTamboThread, useTambo } from '@tambo-ai/react';
 
 // Generate unique IDs without external dependency
 const generateId = () => `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
@@ -119,7 +121,8 @@ export function ToolDispatcher({
   contextKey
 }: ToolDispatcherProps) {
   const room = useRoomContext();
-  const { sendThreadMessage } = useTamboThread(); // Use thread to send messages programmatically
+  const { sendThreadMessage } = useTamboThread();
+  const { toolRegistry } = useTambo();
   const pendingById = useRef(new Map<string, PendingTool>());
   const [isProcessing, setIsProcessing] = useState(false);
   
@@ -188,7 +191,7 @@ export function ToolDispatcher({
 
   // Smart YouTube search helper
   const runYoutubeSmartSearch = useCallback(async (
-    query: string, 
+    query: string,
     flags: {
       wantsLatest?: boolean;
       wantsOfficial?: boolean;
@@ -197,55 +200,78 @@ export function ToolDispatcher({
     } = {}
   ) => {
     log('🎥 [ToolDispatcher] Running smart YouTube search:', { query, flags });
-    
+
     try {
-      // Step 1: Build search parameters
+      // 1. Build search parameters for the MCP `searchVideos` tool
       const searchParams: Record<string, unknown> = {
-        query: query,
-        maxResults: 10
+        query,
+        maxResults: 10,
       };
-      
-      // Add smart parameters based on flags
+
       if (flags.wantsLatest) {
         searchParams.order = 'date';
-        // Last 7 days
         const lastWeek = new Date();
         lastWeek.setDate(lastWeek.getDate() - 7);
         searchParams.publishedAfter = lastWeek.toISOString();
       }
-      
+
       if (flags.contentType === 'music') {
         searchParams.videoCategoryId = '10'; // Music category
       }
-      
-      // Step 2: Execute search via MCP tool message
-      const searchMessage = `Use the YouTube searchVideos MCP tool with these parameters: ${JSON.stringify(searchParams, null, 2)}
 
-After you get the results, pick the best video based on:
-${flags.wantsLatest ? '- Prioritize newest uploads (last 7 days)' : ''}
-${flags.wantsOfficial ? '- Prefer official/verified channels (containing "Official", "VEVO", or verified badges)' : ''}
-${flags.artist ? `- Look specifically for videos from "${flags.artist}" official channel` : ''}
-- High engagement (good like/view ratio)
-- Avoid re-uploads or low quality content
+      log('🔧 [ToolDispatcher] Calling MCP searchVideos with params:', searchParams);
 
-Once you pick the best video, create a YoutubeEmbed component with:
-- videoId: the chosen video's ID
-- title: the video's title
-- startTime: 0`;
+      // 2. Execute the MCP tool directly
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const searchVideosTool: any = toolRegistry.get?.("searchVideos");
+      if (!searchVideosTool) {
+        throw new Error('searchVideos tool is not registered in Tambo');
+      }
 
-      await sendTamboMessage(searchMessage);
-      
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const searchResults: any = await searchVideosTool.execute(searchParams);
+
+      // 3. Choose the best video – simple heuristic
+      const bestVideo = (() => {
+        const items = searchResults?.items || [];
+        if (items.length === 0) return null;
+
+        // If wantsOfficial, prioritise official channels
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const scored = items.map((item: any) => {
+          const channelTitle: string = item.snippet?.channelTitle || '';
+          const officialScore = flags.wantsOfficial && /official|vevo/i.test(channelTitle) ? 1000 : 0;
+          const viewScore = Number(item.statistics?.viewCount || 0);
+          return { item, score: officialScore + viewScore };
+        });
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        scored.sort((a: any, b: any) => b.score - a.score);
+        return scored[0].item;
+      })();
+
+      if (!bestVideo) {
+        throw new Error('No suitable video found');
+      }
+
+      const videoId = bestVideo.id?.videoId || bestVideo.id;
+      const videoTitle = bestVideo.snippet?.title || bestVideo.title || 'Selected Video';
+
+      // 4. Send a message that directly instantiates YoutubeEmbed
+      const embedMsg = `<<component name=\"YoutubeEmbed\" videoId=\"${videoId}\" title=\"${videoTitle.replace(/\"/g, '\\\"')}\" startTime={0} >>`;
+      await sendTamboMessage(embedMsg);
+
       return {
         status: 'SUCCESS',
-        message: 'Smart YouTube search executed',
-        searchParams,
-        flags
+        message: 'YoutubeEmbed component created',
+        videoId,
+        videoTitle,
       };
     } catch (error) {
       log('❌ [ToolDispatcher] Smart YouTube search failed:', error);
       throw error;
     }
-  }, [sendTamboMessage, log]);
+  }, [log, toolRegistry, sendTamboMessage]);
 
   // Execute tool call
   const executeToolCall = useCallback(async (event: ToolCallEvent) => {
