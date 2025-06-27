@@ -242,7 +242,7 @@ export function useComponentList(contextKey?: string) {
     const unsubscribe = componentStore.subscribe(() => {
       forceUpdate();
     });
-    return unsubscribe;
+    return () => unsubscribe();
   }, []);
 
   return ComponentRegistry.list(contextKey);

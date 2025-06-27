@@ -128,6 +128,7 @@ export function ToolDispatcher({
   const { toolRegistry = {} } = useTambo() as any;
   const pendingById = useRef(new Map<string, PendingTool>());
   const [isProcessing, setIsProcessing] = useState(false);
+  const completedSignaturesRef = useRef(new Map<string, number>()); // Track completed tool+param combos to prevent post-success loops
   
   // Use room name as context key to ensure thread/canvas sync
   const effectiveContextKey = propContextKey || roomContextKey || room?.name || 'canvas';
@@ -272,9 +273,28 @@ export function ToolDispatcher({
   const executeToolCall = useCallback(async (event: ToolCallEvent) => {
     const { id, payload } = event;
     
-    // Check for duplicate
+    // Check for duplicate by ID
     if (pendingById.current.has(id)) {
       log('⚠️ Duplicate tool call ignored:', id);
+      return;
+    }
+    
+    // ALSO check for duplicate by tool + params combination (fixes multiple AI assistant messages)
+    const toolSignature = JSON.stringify({ tool: payload.tool, params: payload.params });
+    const existingCall = Array.from(pendingById.current.values()).find(
+      pending => JSON.stringify({ tool: pending.tool, params: pending.params }) === toolSignature &&
+      (Date.now() - pending.timestamp) < 3000 // Within 3 seconds
+    );
+    
+    if (existingCall) {
+      log('🚫 Duplicate tool+params combination ignored:', payload.tool, 'within 3 seconds');
+      return;
+    }
+    
+    // BEFORE executing new tool call, add after duplicate signature check ->
+    const completedTimestamp = completedSignaturesRef.current.get(toolSignature);
+    if (completedTimestamp && (Date.now() - completedTimestamp) < 30000) { // 30s freeze window
+      log('🛑 Rejected repeating COMPLETED tool call within 30s window:', payload.tool);
       return;
     }
     
@@ -353,6 +373,15 @@ export function ToolDispatcher({
             if (payload.tool === 'ui_update') {
               const componentId = payload.params.componentId || payload.params.param1;
               const patch = payload.params.patch || payload.params.param2;
+              
+              log('🔍 [ToolDispatcher] Direct UI Update Parameters:', {
+                originalParams: payload.params,
+                extractedComponentId: componentId,
+                extractedPatch: patch,
+                patchType: typeof patch,
+                patchKeys: patch ? Object.keys(patch) : 'no patch'
+              });
+              
               result = await directTool.tool(componentId, patch);
               
               // If successful, also send the update via bus for UI sync
@@ -367,6 +396,8 @@ export function ToolDispatcher({
             
             pendingTool.status = 'completed';
             await publishToolResult(id, result);
+            // ✅ Mark signature as completed to block further repeats
+            completedSignaturesRef.current.set(toolSignature, Date.now());
             return;
           }
           
@@ -374,6 +405,14 @@ export function ToolDispatcher({
           if (payload.tool === 'ui_update') {
             const componentId = payload.params.componentId || payload.params.param1;
             const patch = payload.params.patch || payload.params.param2;
+            
+            log('🔍 [ToolDispatcher] UI Update Parameters:', {
+              originalParams: payload.params,
+              extractedComponentId: componentId,
+              extractedPatch: patch,
+              patchType: typeof patch,
+              patchKeys: patch ? Object.keys(patch) : 'no patch'
+            });
             
             // Call the actual Tambo tool - it will throw detailed errors!
             result = await tamboTool.tool(componentId, patch);
@@ -392,6 +431,8 @@ export function ToolDispatcher({
           
           pendingTool.status = 'completed';
           await publishToolResult(id, result);
+          // ✅ Mark signature as completed to block further repeats
+          completedSignaturesRef.current.set(toolSignature, Date.now());
           return;
           
         } catch (error) {
@@ -419,6 +460,8 @@ export function ToolDispatcher({
 
           pendingTool.status = 'completed';
           await publishToolResult(id, result);
+          // ✅ Mark signature as completed to block further repeats
+          completedSignaturesRef.current.set(toolSignature, Date.now());
           return; // ✅ Finished – no further custom handling required
         } catch (err) {
           log('❌ Registry tool execution failed:', err);

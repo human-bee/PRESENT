@@ -80,51 +80,91 @@ import { ComponentRegistry, type ComponentInfo } from "./component-registry";
 const updateCooldowns = new Map<string, number>();
 const COOLDOWN_DURATION = 5000; // 5 seconds
 
+// 🚫 AGGRESSIVE DUPLICATE PREVENTION: Track ALL recent calls to prevent multiple executions
+const allRecentCalls = new Map<string, number>();
+const AGGRESSIVE_DUPLICATE_PREVENTION = 1000; // 1 second - very aggressive
+
 // Direct component update tool - no complex bus system needed!
 export const uiUpdateTool: TamboTool = {
-  name: 'ui_update',
-  description: `🚨 CRITICAL: ALWAYS INCLUDE THE PATCH! 🚨
+  name: 'ui_update', 
+  description: `Update a UI component with new props. This tool is SMART - it can extract parameters from user messages automatically!
 
-Step 1: Call list_components FIRST
-Step 2: Use the EXACT messageId from response  
-Step 3: Include SPECIFIC patch values!
+SMART USAGE (Recommended):
+- ui_update("timer-id", "make it 7 minutes") → Extracts {"initialMinutes": 7}
+- ui_update("timer-id", "change to 10 minutes") → Extracts {"initialMinutes": 10}
+- ui_update("card-id", "set title to Dashboard") → Extracts {"title": "Dashboard"}
 
-FOR TIMER UPDATES - MATCH USER'S EXACT REQUEST:
-- User: "6 minutes" → ui_update("timer-id", {"initialMinutes": 6})
-- User: "10 minutes" → ui_update("timer-id", {"initialMinutes": 10})
-- User: "15 minutes" → ui_update("timer-id", {"initialMinutes": 15})
+MANUAL USAGE:
+- ui_update("timer-id", {"initialMinutes": 7})
+- ui_update("card-id", {"title": "New Title"})
 
-❌ NEVER: ui_update("timer-id", {})
-✅ ALWAYS: ui_update("timer-id", {"initialMinutes": 6})
+The tool will automatically:
+1. Get component IDs if not provided
+2. Extract parameters from natural language
+3. Apply updates with proper error handling
+4. Prevent infinite loops with cooldowns
 
-IMPORTANT: Extract the exact number the user said!
-- "make it 6 minutes" = 6
-- "change to 7 minutes" = 7  
-- "update to 8 minutes" = 8
-
-The patch MUST contain the specific update!
-
-🛑 STOP AFTER SUCCESS! When you get "TASK COMPLETE" - DO NOT call ui_update again!`,
+NEVER call with empty patch: ui_update("id", {}) ❌
+ALWAYS provide updates: ui_update("id", "your instruction") ✅`,
   tool: async (componentIdOrFirstArg: string | Record<string, unknown>, patchOrSecondArg?: Record<string, unknown>) => {
-    // 🔧 STRICT PARAMETER VALIDATION: Only accept proper calling pattern
-    // 🔧 SMART PARAMETER DETECTION: Handle both proper and legacy calling patterns with smart inference
+    // 🚫 AGGRESSIVE DUPLICATE PREVENTION: Block any call within 1 second
+    const callSignature = JSON.stringify({ componentIdOrFirstArg, patchOrSecondArg });
+    const currentTimestamp = Date.now();
+    const lastCall = allRecentCalls.get(callSignature);
+    
+    if (lastCall && (currentTimestamp - lastCall) < AGGRESSIVE_DUPLICATE_PREVENTION) {
+      console.log('🚫 [uiUpdateTool] AGGRESSIVE BLOCK - identical call within 1 second');
+      return {
+        status: 'SUCCESS',
+        message: '🚫 BLOCKED: Identical call within 1 second. Timer already updated.',
+        __stop_indicator: true,
+        __task_complete: true,
+        blockReason: 'AGGRESSIVE_DUPLICATE_PREVENTION'
+      };
+    }
+    
+    // Register this call immediately
+    allRecentCalls.set(callSignature, currentTimestamp);
+    
+    // Clean up old entries 
+    allRecentCalls.forEach((timestamp, signature) => {
+      if (currentTimestamp - timestamp > AGGRESSIVE_DUPLICATE_PREVENTION) {
+        allRecentCalls.delete(signature);
+      }
+    });
+    
+    // 🚫 SIMPLIFIED APPROACH: Let the tool work normally but with more aggressive messaging
+    
+    // 🔧 SMART PARAMETER EXTRACTION: Handle multiple calling patterns
     let componentId: string;
     let patch: Record<string, unknown>;
-    let userContext: string = '';
     
     if (typeof componentIdOrFirstArg === 'string') {
-      // Proper call: ui_update("component-id", {patch})
       componentId = componentIdOrFirstArg;
-      patch = patchOrSecondArg || {};
+      
+      // Check if second argument is a string (natural language) or object (patch)
+      if (typeof patchOrSecondArg === 'string') {
+        // SMART MODE: Extract parameters from natural language
+        console.log('🧠 [uiUpdateTool] SMART MODE: Extracting parameters from natural language:', patchOrSecondArg);
+        patch = extractParametersWithAI(patchOrSecondArg);
+        console.log('🧠 [uiUpdateTool] Extracted parameters:', patch);
+      } else {
+        // Manual mode: use provided patch object
+        patch = patchOrSecondArg || {};
+      }
     } else if (typeof componentIdOrFirstArg === 'object' && componentIdOrFirstArg !== null) {
       // Legacy call: ui_update({param1: "component-id", param2: {patch}})
       const params = componentIdOrFirstArg as Record<string, unknown>;
       componentId = String(params.componentId || params.param1 || '');
-      patch = (params.patch || params.param2 || {}) as Record<string, unknown>;
       
-      // Extract user context if available
-      if (params.userContext && typeof params.userContext === 'string') {
-        userContext = params.userContext;
+      // Check if param2 is a string (natural language) or object (patch)
+      if (typeof params.param2 === 'string') {
+        // SMART MODE: Extract parameters from natural language
+        console.log('🧠 [uiUpdateTool] SMART MODE (legacy): Extracting parameters from natural language:', params.param2);
+        patch = extractParametersWithAI(params.param2);
+        console.log('🧠 [uiUpdateTool] Extracted parameters:', patch);
+      } else {
+        patch = (params.patch || params.param2 || {}) as Record<string, unknown>;
       }
       
       console.log('🔄 [uiUpdateTool] Auto-corrected legacy parameter format:', {
@@ -136,7 +176,7 @@ The patch MUST contain the specific update!
       // Invalid call format
       return {
         status: 'ERROR',
-        message: `🚨 INVALID PARAMETERS! 🚨\n\nExpected: ui_update("component-id", {"initialMinutes": 10})\nReceived: ui_update(${typeof componentIdOrFirstArg}, ${typeof patchOrSecondArg})\n\nPlease call list_components first to get the component ID, then:\nui_update("timer-retro-timer-xyz", {"initialMinutes": 10})`,
+        message: `🚨 INVALID PARAMETERS! 🚨\n\nExpected: ui_update("component-id", {"initialMinutes": 10})\nOr: ui_update("component-id", "make it 10 minutes")\nReceived: ui_update(${typeof componentIdOrFirstArg}, ${typeof patchOrSecondArg})\n\nPlease call list_components first to get the component ID, then:\nui_update("timer-retro-timer-xyz", {"initialMinutes": 10})`,
         error: 'INVALID_PARAMETER_FORMAT',
         __stop_indicator: true,
         __task_complete: true
@@ -167,221 +207,65 @@ The patch MUST contain the specific update!
       };
     }
 
-    // Validate componentId exists in registry
+    // SMART COMPONENT FINDING: Auto-find components if ID is invalid or empty
     const availableComponents = ComponentRegistry.list();
     const availableIds = availableComponents.map((c: ComponentInfo) => c.messageId);
     
     if (!componentId || !availableIds.includes(componentId)) {
-      const errorMsg = availableIds.length > 0 
-        ? `🚨 INVALID COMPONENT ID! 🚨
-
-Component "${componentId}" not found. 
-
-AVAILABLE COMPONENTS: ${availableIds.join(', ')}
-
-🔴 YOU MUST:
-1. Call list_components FIRST
-2. Use the exact messageId from the response
-3. Never use old/cached IDs!
-
-Current available IDs: ${availableIds.join(', ')}`
-        : `🚨 NO COMPONENTS FOUND! 🚨
-
-Component "${componentId}" not found because no components are currently available.
-
-🔴 SOLUTION:
-1. Create a component first (e.g., RetroTimer)
-2. Then call list_components to get its ID
-3. Then call ui_update with that ID`;
+      console.log('🔍 [uiUpdateTool] Component ID invalid or empty, attempting auto-find:', {
+        providedId: componentId,
+        availableIds,
+        availableComponents: availableComponents.map(c => ({ id: c.messageId, type: c.componentType }))
+      });
       
-      return {
-        status: 'ERROR',
-        message: errorMsg,
-        error: 'INVALID_COMPONENT_ID',
-        availableComponents: availableIds,
-        guidance: 'Call list_components first to get valid component IDs'
-      };
-    }
-    
-    // 🛑 REQUIRE EXPLICIT PATCH: Prevent loops caused by empty patches
-    if (!patch || Object.keys(patch).length === 0) {
-      console.log('🔍 [uiUpdateTool] Empty patch detected, attempting smart inference...');
-      
-      // Get component info to understand what we're working with
-      const component = availableComponents.find(c => c.messageId === componentId);
-      if (component && component.componentType.toLowerCase().includes('timer')) {
-        // Smart timer duration inference - check multiple sources
-        console.log('🔍 [uiUpdateTool] Looking for timer duration in context...');
-        
-        // Build context string from multiple sources
-        let contextString = userContext || '';
-        
-        // Try to get recent user messages first (highest priority)
-        const recentMessages = document.querySelectorAll('[data-role="user"], .user-message, [data-message-type="user"], .bg-blue-50, .message-user');
-        const recentMessageTexts = Array.from(recentMessages)
-          .slice(-5) // Last 5 messages only
-          .map(el => el.textContent?.trim())
-          .filter(text => text && text.length > 0)
-          .join(' ');
-        
-        if (recentMessageTexts) {
-          contextString = recentMessageTexts + ' ' + contextString;
-          console.log('📱 [uiUpdateTool] Recent messages:', recentMessageTexts);
-        } else {
-          // Fallback: try to find any element containing "minute" that's not the timer display
-          const allTextElements = Array.from(document.querySelectorAll('*'))
-            .map(el => el.textContent?.trim() || '')
-            .filter(text => text.includes('minute') && !text.includes('Minute Timer') && text.length < 100)
-            .slice(-3); // Get last 3 relevant texts
-          
-          if (allTextElements.length > 0) {
-            contextString = allTextElements.join(' ') + ' ' + contextString;
-            console.log('🔍 [uiUpdateTool] Fallback text search:', allTextElements);
-          }
-        }
-        
-        // Add document title and any global context
-        contextString += ' ' + (document.title || '');
-        
-        // Add page content as LOWEST priority (to avoid reading current timer state)
-        const pageContent = document.body.textContent?.slice(0, 500) || '';
-        
-        console.log('🔎 [uiUpdateTool] Searching for duration in context:', contextString.slice(0, 200) + '...');
-        
-        // Comprehensive duration patterns
-        const durationPatterns = [
-          /(\d+)\s*-?\s*(min|minute|minutes)/gi,
-          /(\d+)\s*(m|mins)/gi,
-          /(\d+)\s*(hour|hours|hr|hrs)/gi,
-          /(\d+)\s*(second|seconds|sec|secs)/gi,
-          /(six|6)\s*(min|minute|minutes)/gi,
-          /(five|5)\s*(min|minute|minutes)/gi,
-          /(ten|10)\s*(min|minute|minutes)/gi,
-          /to\s+(\d+)/gi, // "to 6", "to 10"
-          /make.*?(\d+)/gi, // "make it 6"
-          /instead.*?(\d+)/gi, // "six minutes instead"
-        ];
-        
-        let foundDuration: number | null = null;
-        let foundUnit = 'minutes';
-        
-        // First, search in user context (messages, etc.) - HIGHEST PRIORITY
-        for (const pattern of durationPatterns) {
-          pattern.lastIndex = 0; // Reset regex state
-          const matches = Array.from(contextString.matchAll(pattern));
-          console.log(`🔍 [uiUpdateTool] Pattern ${pattern} found ${matches.length} matches in user context`);
-          
-          if (matches.length > 0) {
-            // Use the LAST match (most recent mention)
-            const lastMatch = matches[matches.length - 1];
-            const numberStr = lastMatch[1];
-            const unit = lastMatch[2]?.toLowerCase() || 'minutes';
-            
-            // Convert word numbers to digits
-            let number: number;
-            if (numberStr === 'six') {
-              number = 6;
-            } else if (numberStr === 'five') {
-              number = 5;
-            } else if (numberStr === 'ten') {
-              number = 10;
-            } else {
-              number = parseInt(numberStr, 10);
-            }
-            
-            console.log(`🔢 [uiUpdateTool] Extracted number: ${number} from match: "${lastMatch[0]}"`);
-            
-            if (!isNaN(number) && number > 0) {
-              foundDuration = number;
-              if (unit.includes('hour') || unit.includes('hr')) {
-                foundDuration = number * 60; // Convert to minutes
-                foundUnit = 'hours';
-              } else if (unit.includes('sec')) {
-                foundDuration = Math.ceil(number / 60); // Convert to minutes
-                foundUnit = 'seconds';
-              } else {
-                foundUnit = 'minutes';
-              }
-              
-              console.log(`✨ [uiUpdateTool] Found duration: ${number} ${unit} via pattern: ${pattern.source}`);
-              break; // Stop at first match in user context
-            }
-          }
-        }
-        
-        // Only if no duration found in user context, search page content
-        if (!foundDuration) {
-          console.log('🔍 [uiUpdateTool] No duration in user context, searching page content...');
-          const fullContextString = contextString + ' ' + pageContent;
-          
-          for (const pattern of durationPatterns) {
-            pattern.lastIndex = 0;
-            const matches = Array.from(fullContextString.matchAll(pattern));
-            console.log(`🔍 [uiUpdateTool] Pattern ${pattern} found ${matches.length} matches in page content`);
-            
-            if (matches.length > 0) {
-              const lastMatch = matches[matches.length - 1];
-              const numberStr = lastMatch[1];
-              const unit = lastMatch[2]?.toLowerCase() || 'minutes';
-              
-              // Convert word numbers to digits
-              let number: number;
-              if (numberStr === 'six') {
-                number = 6;
-              } else if (numberStr === 'five') {
-                number = 5;
-              } else if (numberStr === 'ten') {
-                number = 10;
-              } else {
-                number = parseInt(numberStr, 10);
-              }
-              
-              console.log(`🔢 [uiUpdateTool] Extracted number: ${number} from match: "${lastMatch[0]}"`);
-              
-              if (!isNaN(number) && number > 0) {
-                foundDuration = number;
-                if (unit.includes('hour') || unit.includes('hr')) {
-                  foundDuration = number * 60;
-                  foundUnit = 'hours';
-                } else if (unit.includes('sec')) {
-                  foundDuration = Math.ceil(number / 60);
-                  foundUnit = 'seconds';
-                } else {
-                  foundUnit = 'minutes';
-                }
-                
-                console.log(`✨ [uiUpdateTool] Found duration: ${number} ${unit} via pattern: ${pattern.source}`);
-                break;
-              }
-            }
-          }
-        }
-        
-        // Apply the found duration
-        if (foundDuration) {
-          if (foundUnit.startsWith('hour')) {
-            patch = { initialMinutes: foundDuration * 60 };
-            console.log(`✨ [uiUpdateTool] Smart inference: ${foundDuration} hours = ${foundDuration * 60} minutes`);
-          } else {
-            patch = { initialMinutes: foundDuration };
-            console.log(`✨ [uiUpdateTool] Smart inference: ${foundDuration} minutes`);
-          }
-        } else {
-          console.log('🤔 [uiUpdateTool] No duration found in context');
-        }
-      }
-      
-      // If still no patch after inference, return error
-      if (!patch || Object.keys(patch).length === 0) {
+      if (availableIds.length === 0) {
         return {
           status: 'ERROR',
-          message: `🚨 EMPTY PATCH! 🚨\n\nYou must specify what to update. Example: {"initialMinutes": 6}`,
-          error: 'EMPTY_PATCH',
-          guidance: 'Call ui_update with a non-empty patch object, e.g., {"initialMinutes": 6}',
-          __stop_indicator: true,
-          __task_complete: true
+          message: `🚨 NO COMPONENTS FOUND! 🚨\n\nNo components are currently available for updates.\n\n🔴 SOLUTION:\n1. Create a component first (e.g., RetroTimer)\n2. Then it will be available for updates`,
+          error: 'NO_COMPONENTS_AVAILABLE',
+          guidance: 'Create a component first, then it will be automatically available for updates'
         };
       }
+      
+      // AUTO-FIND: If there's only one component, use it
+      if (availableIds.length === 1) {
+        componentId = availableIds[0];
+        console.log('🎯 [uiUpdateTool] Auto-selected single available component:', componentId);
+      } 
+      // AUTO-FIND: Look for timer components if patch suggests timer update
+      else if (patch.initialMinutes || patch.initialSeconds || Object.keys(patch).some(k => k.includes('timer') || k.includes('minute'))) {
+        const timerComponent = availableComponents.find(c => 
+          c.componentType.toLowerCase().includes('timer') || 
+          c.messageId.toLowerCase().includes('timer')
+        );
+        if (timerComponent) {
+          componentId = timerComponent.messageId;
+          console.log('🎯 [uiUpdateTool] Auto-selected timer component:', componentId);
+        }
+      }
+      
+      // If still no valid ID, return helpful error
+      if (!componentId || !availableIds.includes(componentId)) {
+        return {
+          status: 'ERROR',
+          message: `🚨 INVALID COMPONENT ID! 🚨\n\nComponent "${componentId}" not found.\n\nAVAILABLE COMPONENTS: ${availableIds.join(', ')}\n\n💡 TIP: You can call ui_update without specifying the ID:\nui_update("", "make it 7 minutes") and I'll find the right component!`,
+          error: 'INVALID_COMPONENT_ID',
+          availableComponents: availableIds,
+          guidance: 'Try ui_update("", "your instruction") for auto-component-finding'
+        };
+      }
+    }
+    
+    // 🛑 REQUIRE EXPLICIT PATCH: No more regex madness - let Tambo AI handle this properly!
+    if (!patch || Object.keys(patch).length === 0) {
+      return {
+        status: 'ERROR',
+        message: `🚨 EMPTY PATCH! 🚨\n\nYou must specify what to update. Use the extract_update_params tool first to get proper parameters from user intent.\n\nExample: {"initialMinutes": 6}`,
+        error: 'EMPTY_PATCH',
+        guidance: 'Call extract_update_params first, then ui_update with the extracted params',
+        __stop_indicator: true,
+        __task_complete: true
+      };
     }
     
     // Direct update via component registry
@@ -423,24 +307,28 @@ Component "${componentId}" not found because no components are currently availab
     // Return success with clear indication to stop
     return { 
       status: 'SUCCESS',
-      message: `✅ TASK COMPLETE! Successfully updated ${componentId} with ${JSON.stringify(patch)}. Timer is now ${patch.initialMinutes || 'unknown'} minutes. NO FURTHER ACTION NEEDED.`,
+      message: `🚫 STOP! UPDATE COMPLETE! Successfully updated ${componentId} with ${JSON.stringify(patch)}. Timer is now ${patch.initialMinutes || 'unknown'} minutes. DO NOT CALL ui_update AGAIN!`,
       componentId,
       patch,
       __stop_indicator: true, 
       __task_complete: true,
       result: `✅ DONE: Timer updated to ${patch.initialMinutes} minutes`,
-      instruction: 'STOP - Update successful, task complete'
+      instruction: '🚫 STOP IMMEDIATELY - Update successful, no more calls needed',
+      final_status: 'COMPLETE_DO_NOT_RETRY'
     };
   },
   toolSchema: z
     .function()
     .args(
       z.string().describe('Component ID from list_components (e.g., "timer-retro-timer")'),
-      z.record(z.union([z.string(), z.number(), z.boolean(), z.null()]))
-        .refine(obj => Object.keys(obj).length > 0, {
-          message: "Patch object cannot be empty. Example: {\"initialMinutes\": 6}"
-        })
-        .describe('Update object: {"initialMinutes": 6} for timer. If user says "6 minutes", use {"initialMinutes": 6}')
+      z.union([
+        z.string().describe('Natural language update instruction (e.g., "make it 7 minutes", "change title to Dashboard")'),
+        z.record(z.union([z.string(), z.number(), z.boolean(), z.null()]))
+          .refine(obj => Object.keys(obj).length > 0, {
+            message: "Patch object cannot be empty. Example: {\"initialMinutes\": 6}"
+          })
+          .describe('Manual update object: {"initialMinutes": 6} for timer')
+      ]).describe('Either natural language instruction OR update object. Natural language is preferred!')
     )
     .returns(
       z.object({
@@ -458,7 +346,7 @@ Component "${componentId}" not found because no components are currently availab
 // Direct component listing tool - no bus system needed!
 export const listComponentsTool: TamboTool = {
   name: 'list_components',
-  description: '🔴 MANDATORY FIRST STEP! 🔴 Call this BEFORE any ui_update! Gets current component IDs - NEVER use old cached IDs!',
+  description: 'Get current component IDs and information. Call this to see what components are available for updates. The ui_update tool can also auto-find components if needed.',
   toolSchema: z
     .function()
     .args()
@@ -507,22 +395,23 @@ export const listComponentsTool: TamboTool = {
 // AI-powered parameter extraction tool - leverages LLM intelligence instead of regex patterns
 export const extractUpdateParamsTool: TamboTool = {
   name: 'extract_update_params',
-  description: `🧠 AI-POWERED PARAMETER EXTRACTION 🧠
+  description: `Extract component update parameters from natural language user requests.
 
-Use this FIRST when user wants to update a component but doesn't specify exact parameters.
-This tool uses AI intelligence to understand user intent and extract proper update parameters.
-
-Examples:
-- "make it 6 minutes" → {"initialMinutes": 6}
-- "change title to 'My Timer'" → {"title": "My Timer"}  
+Use this to convert user intent into proper component props:
+- "make it 7 minutes" → {"initialMinutes": 7}
+- "change title to 'Dashboard'" → {"title": "Dashboard"}
 - "add task: Review PR" → {"newTask": "Review PR"}
-- "mark first item complete" → {"itemIndex": 0, "completed": true}
+- "make it red" → {"color": "red"}
 
-Works for ANY component type - timers, todo lists, action trackers, etc.
-Much more elegant than hard-coded regex patterns!`,
+Works for ANY component type and understands natural language including:
+- Numbers: "7", "seven", "7.5"
+- Time units: "minutes", "hours", "seconds"  
+- Colors, text, boolean values, etc.
+
+Always call this BEFORE ui_update when user wants to change something!`,
   tool: async (userMessage: string, componentType: string) => {
     // Use AI's natural language understanding to extract parameters
-    const result = extractParametersWithAI(userMessage, componentType);
+    const result = extractParametersWithAI(userMessage);
     
     return {
       status: 'SUCCESS',
@@ -549,87 +438,50 @@ Much more elegant than hard-coded regex patterns!`,
     ),
 };
 
-// AI-powered parameter extraction using natural language understanding
-function extractParametersWithAI(userMessage: string, componentType: string): Record<string, unknown> {
+// AI-powered parameter extraction using natural language understanding  
+function extractParametersWithAI(userMessage: string): Record<string, unknown> {
+  // Let Tambo's AI handle the heavy lifting! This is just a fallback for simple cases.
   const message = userMessage.toLowerCase();
   
-  // For timers - much more flexible patterns
-  if (componentType.toLowerCase().includes('timer')) {
-    // Look for any time-related updates
-    const timePatterns = [
-      // Numbers + time units
-      /(\d+)\s*(min|minute|minutes|hour|hours|second|seconds|m|h|s)/i,
-      // Word numbers + time units  
-      /(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|fifteen|twenty|thirty)\s*(min|minute|minutes|hour|hours)/i,
-      // "to X" patterns
-      /to\s+(\d+)/i,
-      // "make it X" patterns
-      /make.*?(\d+)/i,
-      // "change to X" patterns
-      /change.*?to.*?(\d+)/i,
-    ];
-    
-    for (const pattern of timePatterns) {
-      const match = message.match(pattern);
-      if (match) {
-        let number = parseInt(match[1], 10);
-        
-        // Handle word numbers
-        if (isNaN(number)) {
-          const wordToNumber: Record<string, number> = {
-            one: 1, two: 2, three: 3, four: 4, five: 5, six: 6,
-            seven: 7, eight: 8, nine: 9, ten: 10, eleven: 11,
-            twelve: 12, fifteen: 15, twenty: 20, thirty: 30
-          };
-          number = wordToNumber[match[1].toLowerCase()] || 0;
-        }
-        
-        if (number > 0) {
-          // Handle unit conversion
-          const unit = match[2]?.toLowerCase() || 'minutes';
-          if (unit.includes('hour') || unit === 'h') {
-            return { initialMinutes: number * 60 };
-          } else if (unit.includes('second') || unit === 's') {
-            return { initialMinutes: Math.max(1, Math.ceil(number / 60)) };
-          } else {
-            return { initialMinutes: number };
-          }
-        }
+  // Simple pattern matching for common cases - but AI should handle most of this
+  const patterns = [
+    // Numbers with units (very general)
+    { regex: /(\d+(?:\.\d+)?)\s*(min|minute|minutes|hour|hours|second|seconds)/i, 
+      handler: (match: RegExpMatchArray) => {
+        const num = parseFloat(match[1]);
+        const unit = match[2].toLowerCase();
+        if (unit.includes('hour')) return { initialMinutes: num * 60 };
+        if (unit.includes('second')) return { initialMinutes: Math.max(1, Math.ceil(num / 60)) };
+        return { initialMinutes: num };
       }
+    },
+    // Simple word numbers
+    { regex: /\b(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|fifteen|twenty|thirty)\s*(min|minute|minutes)/i,
+      handler: (match: RegExpMatchArray) => {
+        const wordToNumber: Record<string, number> = {
+          one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, 
+          eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12, fifteen: 15, 
+          twenty: 20, thirty: 30
+        };
+        const num = wordToNumber[match[1].toLowerCase()];
+        return num ? { initialMinutes: num } : {};
+      }
+    },
+    // Title changes
+    { regex: /(?:title|name)\s*(?:to|is)?\s*["\']?([^"']+)["\']?/i,
+      handler: (match: RegExpMatchArray) => ({ title: match[1].trim() })
+    }
+  ];
+  
+  for (const { regex, handler } of patterns) {
+    const match = message.match(regex);
+    if (match) {
+      const result = handler(match);
+      if (Object.keys(result).length > 0) return result;
     }
   }
   
-  // For action items / todo lists
-  if (componentType.toLowerCase().includes('action') || componentType.toLowerCase().includes('todo')) {
-    if (message.includes('add') || message.includes('create') || message.includes('new')) {
-      // Extract task text after "add", "create", etc.
-      const taskMatch = message.match(/(?:add|create|new)\s*(?:task|item)?:?\s*(.+)/i);
-      if (taskMatch) {
-        return { newTask: taskMatch[1].trim() };
-      }
-    }
-    
-    if (message.includes('complete') || message.includes('done') || message.includes('finish')) {
-      // Look for item references
-      const indexMatch = message.match(/(?:first|1st|\b1\b)/i) ? 0 :
-                        message.match(/(?:second|2nd|\b2\b)/i) ? 1 :
-                        message.match(/(?:third|3rd|\b3\b)/i) ? 2 : null;
-      
-      if (indexMatch !== null) {
-        return { itemIndex: indexMatch, completed: true };
-      }
-    }
-  }
-  
-  // For title/name changes
-  if (message.includes('title') || message.includes('name')) {
-    const titleMatch = message.match(/(?:title|name)\s*(?:to|is)?\s*["\']?([^"']+)["\']?/i);
-    if (titleMatch) {
-      return { title: titleMatch[1].trim() };
-    }
-  }
-  
-  // Return empty if no clear intent found
+  // Return empty - let Tambo's AI figure it out!
   return {};
 }
 
@@ -638,7 +490,7 @@ export const tools: TamboTool[] = [
   // Add non MCP tools here
   listComponentsTool,
   uiUpdateTool,
-  extractUpdateParamsTool,
+  // extractUpdateParamsTool, // No longer needed - ui_update handles natural language directly
 ];
 
 /**

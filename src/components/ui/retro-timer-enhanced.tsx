@@ -68,11 +68,12 @@ export function RetroTimerEnhanced({
       return __tambo_message_id;
     }
     
-    // Fallback: create a stable ID based on componentId
-    const fallbackId = `timer-${componentId}`;
+    // Fallback: create a stable ID based on componentId and initial settings
+    // Include initialMinutes to ensure different timers get different IDs
+    const fallbackId = `timer-${componentId}-${initialMinutes}min`;
     console.log(`[RetroTimerEnhanced] Using fallback message ID: ${fallbackId}`);
     return fallbackId;
-  }, [__tambo_message_id, componentId]);
+  }, [__tambo_message_id, componentId, initialMinutes]);
 
   // Stable props object to prevent re-registration loops
   const stableProps = React.useMemo(() => ({
@@ -86,12 +87,14 @@ export function RetroTimerEnhanced({
 
   // Handle AI updates via the new component registry - stable callback
   const handleAIUpdate = React.useCallback((patch: Record<string, unknown>) => {
-    console.log(`[RetroTimerEnhanced] Received AI update:`, patch);
+    console.log(`[RetroTimerEnhanced] ✅ AI UPDATE RECEIVED:`, patch);
     
     // Handle initialMinutes update
     if ('initialMinutes' in patch && typeof patch.initialMinutes === 'number') {
       const patchSeconds = (patch.initialSeconds as number) || 0;
       const newTimeInSeconds = patch.initialMinutes * 60 + patchSeconds;
+      console.log(`[RetroTimerEnhanced] 🔄 Updating timer: ${patch.initialMinutes} minutes (${newTimeInSeconds} seconds)`);
+      
       setState(prev => prev ? {
         ...prev,
         timeLeft: newTimeInSeconds,
@@ -106,6 +109,7 @@ export function RetroTimerEnhanced({
     
     // Handle other updates
     if ('autoStart' in patch && patch.autoStart === true) {
+      console.log(`[RetroTimerEnhanced] 🚀 Auto-starting timer`);
       setState(prev => {
         const currentInitialTime = initialMinutes * 60 + initialSeconds;
         return prev ? { ...prev, isRunning: true } : { 
