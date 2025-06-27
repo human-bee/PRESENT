@@ -9,6 +9,14 @@ export interface Decision {
     summary: string;
     confidence: number;
     reason?: string;
+    intent?: 'youtube_search' | 'ui_component' | 'general';
+    structuredContext?: {
+        rawQuery?: string;
+        wantsLatest?: boolean;
+        wantsOfficial?: boolean;
+        contentType?: string;
+        artist?: string;
+    };
 }
 export interface ConversationBuffer {
     texts: string[];
@@ -57,6 +65,10 @@ export declare class DecisionEngine {
      * Analyze buffered text and make AI decision with meeting context
      */
     private analyzeAndDecide;
+    /**
+     * Detect intent and extract structured context from transcript
+     */
+    private detectIntent;
     /**
      * Let AI make the decision
      */

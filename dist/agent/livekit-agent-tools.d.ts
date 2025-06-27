@@ -8,7 +8,7 @@ import { JobContext } from '@livekit/agents';
 export interface ToolResult {
     status: 'SUCCESS' | 'ERROR';
     message: string;
-    [key: string]: any;
+    [key: string]: unknown;
 }
 export type ToolName = 'do_nothing' | 'respond_with_voice' | 'generate_ui_component' | 'youtube_search' | 'mcp_tool';
 /**
@@ -35,6 +35,17 @@ export declare function dispatchToolCall(job: JobContext, toolName: string, para
 export declare function generateUIComponent(job: JobContext, componentType: string | undefined, prompt: string): Promise<ToolResult>;
 /**
  * Call this tool when the conversation indicates a YouTube-related task is needed.
+ *
+ * This tool now includes smart search capabilities:
+ * - Detects "latest/newest" keywords and prioritizes recent uploads
+ * - Recognizes "official" requests and filters for verified channels
+ * - Automatically picks the best video and creates a YoutubeEmbed component
+ * - Special handling for known artists (e.g., PinkPantheress)
+ *
+ * Examples:
+ * - "Show me the latest React tutorial" → Finds newest tutorial from verified channels
+ * - "Play Pink Pantheress latest video" → Finds newest official video from her channel
+ * - "Find official Taylor Swift music video" → Filters for VEVO/official channels only
  */
 export declare function youtubeSearch(job: JobContext, query: string): Promise<ToolResult>;
 /**
@@ -48,7 +59,7 @@ export declare const AVAILABLE_TOOLS: readonly ["do_nothing", "respond_with_voic
 /**
  * Execute a tool by name with parameters
  */
-export declare function executeTool(toolName: ToolName, job: JobContext, params?: Record<string, any>): Promise<ToolResult>;
+export declare function executeTool(toolName: ToolName, job: JobContext, params?: Record<string, unknown>): Promise<ToolResult>;
 export declare const generateYoutubeTaskPrompt: typeof youtubeSearch;
 export declare const sendTaskToFrontend: typeof dispatchToolCall;
 //# sourceMappingURL=livekit-agent-tools.d.ts.map

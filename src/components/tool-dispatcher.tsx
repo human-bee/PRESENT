@@ -48,6 +48,14 @@ interface ToolCallEvent {
       speaker?: string;
       confidence?: number;
       reason?: string;
+      intent?: 'youtube_search' | 'ui_component' | 'general';
+      structuredContext?: {
+        rawQuery?: string;
+        wantsLatest?: boolean;
+        wantsOfficial?: boolean;
+        contentType?: string;
+        artist?: string;
+      };
     };
   };
   timestamp: number;
@@ -108,12 +116,15 @@ export function ToolDispatcher({
   children, 
   enableLogging = true,
   maxPendingAge = 30000, // 30 seconds
-  contextKey = 'canvas'
+  contextKey
 }: ToolDispatcherProps) {
   const room = useRoomContext();
   const { sendThreadMessage } = useTamboThread(); // Use thread to send messages programmatically
   const pendingById = useRef(new Map<string, PendingTool>());
   const [isProcessing, setIsProcessing] = useState(false);
+  
+  // Use room name as context key to ensure thread/canvas sync
+  const effectiveContextKey = contextKey || room?.name || 'canvas';
   
   // Log helper with proper typing
   const log = useCallback((...args: unknown[]) => {
@@ -168,12 +179,73 @@ export function ToolDispatcher({
     log('📤 [ToolDispatcher] Sending message to Tambo:', message);
     
     await sendThreadMessage(message, {
-      contextKey,
+      contextKey: effectiveContextKey,
       streamResponse: true,
     });
     
     log('✅ [ToolDispatcher] Message sent successfully');
-  }, [sendThreadMessage, contextKey, log]);
+  }, [sendThreadMessage, effectiveContextKey, log]);
+
+  // Smart YouTube search helper
+  const runYoutubeSmartSearch = useCallback(async (
+    query: string, 
+    flags: {
+      wantsLatest?: boolean;
+      wantsOfficial?: boolean;
+      contentType?: string;
+      artist?: string;
+    } = {}
+  ) => {
+    log('🎥 [ToolDispatcher] Running smart YouTube search:', { query, flags });
+    
+    try {
+      // Step 1: Build search parameters
+      const searchParams: Record<string, unknown> = {
+        query: query,
+        maxResults: 10
+      };
+      
+      // Add smart parameters based on flags
+      if (flags.wantsLatest) {
+        searchParams.order = 'date';
+        // Last 7 days
+        const lastWeek = new Date();
+        lastWeek.setDate(lastWeek.getDate() - 7);
+        searchParams.publishedAfter = lastWeek.toISOString();
+      }
+      
+      if (flags.contentType === 'music') {
+        searchParams.videoCategoryId = '10'; // Music category
+      }
+      
+      // Step 2: Execute search via MCP tool message
+      const searchMessage = `Use the YouTube searchVideos MCP tool with these parameters: ${JSON.stringify(searchParams, null, 2)}
+
+After you get the results, pick the best video based on:
+${flags.wantsLatest ? '- Prioritize newest uploads (last 7 days)' : ''}
+${flags.wantsOfficial ? '- Prefer official/verified channels (containing "Official", "VEVO", or verified badges)' : ''}
+${flags.artist ? `- Look specifically for videos from "${flags.artist}" official channel` : ''}
+- High engagement (good like/view ratio)
+- Avoid re-uploads or low quality content
+
+Once you pick the best video, create a YoutubeEmbed component with:
+- videoId: the chosen video's ID
+- title: the video's title
+- startTime: 0`;
+
+      await sendTamboMessage(searchMessage);
+      
+      return {
+        status: 'SUCCESS',
+        message: 'Smart YouTube search executed',
+        searchParams,
+        flags
+      };
+    } catch (error) {
+      log('❌ [ToolDispatcher] Smart YouTube search failed:', error);
+      throw error;
+    }
+  }, [sendTamboMessage, log]);
 
   // Execute tool call
   const executeToolCall = useCallback(async (event: ToolCallEvent) => {
@@ -277,57 +349,40 @@ Please consider both the processed summary above and the original transcript con
         // Handle YouTube search with smart filtering
         const params = payload.params as { query?: string; task_prompt?: string };
         const query = params.query || params.task_prompt || '';
+        const context = payload.context;
         
-        // Smart search interpretation
-        const queryLower = query.toLowerCase();
-        const wantsLatest = queryLower.includes('latest') || queryLower.includes('newest') || 
-                           queryLower.includes('recent') || queryLower.includes('new');
-        const wantsOfficial = queryLower.includes('official') || queryLower.includes('vevo');
+        // Use structured context if available, otherwise fall back to query parsing
+        let searchFlags: {
+          wantsLatest?: boolean;
+          wantsOfficial?: boolean;
+          contentType?: string;
+          artist?: string;
+        } = {};
         
-        // Build enhanced search message
-        let searchMessage = `Use the YouTube MCP tool to search for: "${query}"`;
-        
-        // Add smart parameters
-        if (wantsLatest) {
-          searchMessage += `\n- Sort by upload date (newest first)`;
-          searchMessage += `\n- Prioritize videos from the last 7 days`;
+        if (context?.structuredContext) {
+          // Use the enhanced context from Decision Engine
+          searchFlags = {
+            wantsLatest: context.structuredContext.wantsLatest,
+            wantsOfficial: context.structuredContext.wantsOfficial,
+            contentType: context.structuredContext.contentType,
+            artist: context.structuredContext.artist
+          };
+          log('🎯 [ToolDispatcher] Using structured context for YouTube search:', searchFlags);
+        } else {
+          // Fall back to query parsing
+          const queryLower = query.toLowerCase();
+          searchFlags = {
+            wantsLatest: queryLower.includes('latest') || queryLower.includes('newest') || 
+                        queryLower.includes('recent') || queryLower.includes('new'),
+            wantsOfficial: queryLower.includes('official') || queryLower.includes('vevo'),
+            contentType: queryLower.includes('music') ? 'music' : 'video',
+            artist: queryLower.includes('pinkpantheress') ? 'PinkPantheress' : ''
+          };
+          log('⚠️ [ToolDispatcher] No structured context, using query parsing:', searchFlags);
         }
         
-        if (wantsOfficial) {
-          searchMessage += `\n- Prefer official/verified channels`;
-          searchMessage += `\n- Look for channel names containing "Official", "VEVO", or verified badges`;
-        }
-        
-        searchMessage += `\n- Get at least 5 results to choose from`;
-        searchMessage += `\n\nAfter getting results:`;
-        searchMessage += `\n1. Pick the most relevant video (considering recency and channel authority)`;
-        searchMessage += `\n2. Create a YoutubeEmbed component with that video`;
-        searchMessage += `\n3. Set the title to the video's title`;
-        
-        // Special handling for specific artists/channels
-        if (queryLower.includes('pinkpantheress') || queryLower.includes('pink pantheress')) {
-          searchMessage += `\n\nNote: Look for videos from the official "Pinkpantheress" channel`;
-        }
-        
-        log('🎥 [ToolDispatcher] Enhanced YouTube search:', {
-          originalQuery: query,
-          wantsLatest,
-          wantsOfficial,
-          enhancedMessage: searchMessage
-        });
-        
-        // Send enhanced search message to Tambo
-        await sendTamboMessage(searchMessage);
-        
-        result = {
-          status: 'SUCCESS',
-          message: 'Smart YouTube search initiated',
-          searchParams: {
-            query,
-            wantsLatest,
-            wantsOfficial
-          }
-        };
+        // Use the smart search helper
+        result = await runYoutubeSmartSearch(query, searchFlags);
         
       } else if (payload.tool === 'respond_with_voice' || payload.tool === 'do_nothing') {
         // These are no-op tools for the agent

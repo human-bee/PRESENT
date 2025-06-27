@@ -186,6 +186,8 @@ Analyze the current speaker's statement in full conversational context.`;
                 confidence: decision.confidence,
                 summary: decision.summary,
                 reason: decision.reason,
+                intent: decision.intent,
+                structuredContext: decision.structuredContext,
                 hadMeetingContext: contextualInput !== combined
             });
             // Update meeting context if decision was made
@@ -221,9 +223,78 @@ Analyze the current speaker's statement in full conversational context.`;
         }
     }
     /**
+     * Detect intent and extract structured context from transcript
+     */
+    detectIntent(transcript) {
+        const lowerTranscript = transcript.toLowerCase();
+        // YouTube search detection
+        const youtubeKeywords = [
+            'youtube', 'video', 'music video', 'song', 'artist', 'channel',
+            'search for', 'find', 'show me', 'play', 'watch', 'latest', 'newest'
+        ];
+        const hasYoutubeIntent = youtubeKeywords.some(keyword => lowerTranscript.includes(keyword)) || /\b(show|find|search|play)\b.*\b(video|song|music|artist)\b/.test(lowerTranscript);
+        if (hasYoutubeIntent) {
+            const wantsLatest = /\b(latest|newest|recent|new|today|this week)\b/.test(lowerTranscript);
+            const wantsOfficial = /\b(official|vevo|verified)\b/.test(lowerTranscript);
+            // Extract potential artist names or search terms
+            let rawQuery = transcript;
+            const searchMatch = transcript.match(/(?:search for|find|show me|play)\s+"?([^"]+)"?/i);
+            if (searchMatch) {
+                rawQuery = searchMatch[1];
+            }
+            // Detect known artists
+            let artist = '';
+            if (lowerTranscript.includes('pinkpantheress') || lowerTranscript.includes('pink pantheress')) {
+                artist = 'PinkPantheress';
+            }
+            // Detect content type
+            let contentType = 'video';
+            if (lowerTranscript.includes('music video') || lowerTranscript.includes('song')) {
+                contentType = 'music';
+            }
+            else if (lowerTranscript.includes('tutorial')) {
+                contentType = 'tutorial';
+            }
+            return {
+                intent: 'youtube_search',
+                structuredContext: {
+                    rawQuery,
+                    wantsLatest,
+                    wantsOfficial,
+                    contentType,
+                    artist
+                }
+            };
+        }
+        // UI component detection
+        const uiKeywords = [
+            'component', 'timer', 'chart', 'button', 'form', 'create', 'generate',
+            'display', 'show', 'make', 'add', 'build'
+        ];
+        const hasUIIntent = uiKeywords.some(keyword => lowerTranscript.includes(keyword));
+        if (hasUIIntent) {
+            return { intent: 'ui_component' };
+        }
+        return { intent: 'general' };
+    }
+    /**
      * Let AI make the decision
      */
     async makeAIDecision(transcript) {
+        // First detect intent locally for speed and reliability
+        const intentAnalysis = this.detectIntent(transcript);
+        // For single-word utterances, be more conservative
+        const wordCount = transcript.trim().split(/\s+/).length;
+        if (wordCount <= 2 && !['search', 'find', 'play', 'show'].some(w => transcript.toLowerCase().includes(w))) {
+            return {
+                should_send: false,
+                summary: transcript,
+                confidence: 25,
+                reason: 'Single word utterance without actionable keyword',
+                intent: intentAnalysis.intent,
+                structuredContext: intentAnalysis.structuredContext
+            };
+        }
         const response = await fetch('https://api.openai.com/v1/chat/completions', {
             method: 'POST',
             headers: {
@@ -245,12 +316,14 @@ Analyze the current speaker's statement in full conversational context.`;
         }
         const data = await response.json();
         const decision = JSON.parse(data.choices[0].message.content);
-        // Validate and return
+        // Validate and return with enhanced context
         return {
             should_send: Boolean(decision.should_send),
             summary: String(decision.summary || transcript).trim(),
             confidence: Number(decision.confidence || 50),
-            reason: String(decision.reason || 'AI decision')
+            reason: String(decision.reason || 'AI decision'),
+            intent: intentAnalysis.intent,
+            structuredContext: intentAnalysis.structuredContext
         };
     }
     /**

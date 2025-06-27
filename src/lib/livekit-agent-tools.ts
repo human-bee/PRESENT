@@ -6,13 +6,12 @@
  */
 
 import { JobContext } from '@livekit/agents';
-import { TTS } from '@livekit/agents-plugin-openai';
 
 // Tool result interface
 export interface ToolResult {
   status: 'SUCCESS' | 'ERROR';
   message: string;
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 // Tool names enum
@@ -201,7 +200,7 @@ export const AVAILABLE_TOOLS = [
 export async function executeTool(
   toolName: ToolName,
   job: JobContext,
-  params: Record<string, any> = {}
+  params: Record<string, unknown> = {}
 ): Promise<ToolResult> {
   console.log(`🔧 [Agent] Executing tool: ${toolName} with params:`, params);
   
@@ -212,28 +211,28 @@ export async function executeTool(
     case 'respond_with_voice':
       return await respondWithVoice(
         job,
-        params.spoken_message || params.spokenMessage,
-        params.justification_for_speaking || params.justificationForSpeaking
+        String(params.spoken_message || params.spokenMessage || ''),
+        String(params.justification_for_speaking || params.justificationForSpeaking || '')
       );
       
     case 'generate_ui_component':
       return await generateUIComponent(
         job,
-        params.component_type || params.componentType,
-        params.prompt
+        String(params.component_type || params.componentType || 'auto'),
+        String(params.prompt || '')
       );
       
     case 'youtube_search':
       return await youtubeSearch(
         job,
-        params.query || params.task_prompt
+        String(params.query || params.task_prompt || '')
       );
       
     case 'mcp_tool':
       return await callMcpTool(
         job,
-        params.tool_name || params.toolName,
-        params.params || {}
+        String(params.tool_name || params.toolName || ''),
+        (params.params as Record<string, unknown>) || {}
       );
       
     default:

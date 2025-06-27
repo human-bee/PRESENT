@@ -219,16 +219,19 @@ export default defineAgent({
                 return;
             }
             console.log(`🔍 [Agent] Debug - prompt: "${prompt}", originalText: "${originalText}"`);
-            // Forward the summary to Tambo
+            // Determine the appropriate tool based on intent
+            const tool = decision.intent === 'youtube_search' ? 'youtube_search' : 'generate_ui_component';
+            // Forward the summary to Tambo with enhanced context
             const toolCallEvent = {
                 id: `smart-speech-${Date.now()}`,
                 roomId: job.room.name || 'unknown',
                 type: 'tool_call',
                 payload: {
-                    tool: 'generate_ui_component',
+                    tool: tool,
                     params: {
                         prompt: prompt,
-                        task_prompt: prompt
+                        task_prompt: prompt,
+                        query: decision.intent === 'youtube_search' ? (decision.structuredContext?.rawQuery || prompt) : undefined
                     },
                     context: {
                         source: 'voice',
@@ -237,7 +240,9 @@ export default defineAgent({
                         summary: decision.summary,
                         speaker: participantId,
                         confidence: decision.confidence,
-                        reason: decision.reason
+                        reason: decision.reason,
+                        intent: decision.intent,
+                        structuredContext: decision.structuredContext
                     }
                 },
                 timestamp: Date.now(),

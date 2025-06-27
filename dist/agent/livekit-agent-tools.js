@@ -105,9 +105,20 @@ export async function generateUIComponent(job, componentType = 'auto', prompt) {
 }
 /**
  * Call this tool when the conversation indicates a YouTube-related task is needed.
+ *
+ * This tool now includes smart search capabilities:
+ * - Detects "latest/newest" keywords and prioritizes recent uploads
+ * - Recognizes "official" requests and filters for verified channels
+ * - Automatically picks the best video and creates a YoutubeEmbed component
+ * - Special handling for known artists (e.g., PinkPantheress)
+ *
+ * Examples:
+ * - "Show me the latest React tutorial" → Finds newest tutorial from verified channels
+ * - "Play Pink Pantheress latest video" → Finds newest official video from her channel
+ * - "Find official Taylor Swift music video" → Filters for VEVO/official channels only
  */
 export async function youtubeSearch(job, query) {
-    console.log('🎥 [Agent] Tool "youtube_search" called');
+    console.log('🎥 [Agent] Tool "youtube_search" called with query:', query);
     return dispatchToolCall(job, 'youtube_search', {
         query,
     });
@@ -138,13 +149,13 @@ export async function executeTool(toolName, job, params = {}) {
         case 'do_nothing':
             return await doNothing();
         case 'respond_with_voice':
-            return await respondWithVoice(job, params.spoken_message || params.spokenMessage, params.justification_for_speaking || params.justificationForSpeaking);
+            return await respondWithVoice(job, String(params.spoken_message || params.spokenMessage || ''), String(params.justification_for_speaking || params.justificationForSpeaking || ''));
         case 'generate_ui_component':
-            return await generateUIComponent(job, params.component_type || params.componentType, params.prompt);
+            return await generateUIComponent(job, String(params.component_type || params.componentType || 'auto'), String(params.prompt || ''));
         case 'youtube_search':
-            return await youtubeSearch(job, params.query || params.task_prompt);
+            return await youtubeSearch(job, String(params.query || params.task_prompt || ''));
         case 'mcp_tool':
-            return await callMcpTool(job, params.tool_name || params.toolName, params.params || {});
+            return await callMcpTool(job, String(params.tool_name || params.toolName || ''), params.params || {});
         default:
             return {
                 status: 'ERROR',
