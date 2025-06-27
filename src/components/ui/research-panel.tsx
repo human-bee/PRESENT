@@ -3,9 +3,13 @@
 import { cn } from "@/lib/utils";
 import { useTamboComponentState } from "@tambo-ai/react";
 import { z } from "zod";
-import { ExternalLink, CheckCircle, AlertTriangle, Info, Bookmark, BookmarkCheck } from "lucide-react";
+import { ExternalLink, CheckCircle, AlertTriangle, Info, Bookmark, BookmarkCheck, GripVertical, Upload } from "lucide-react";
 import { getRendererForResult } from "./research-renderers";
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
+import { DndContext, PointerSensor, useSensor, useSensors, closestCenter } from "@dnd-kit/core";
+import { arrayMove, SortableContext, verticalListSortingStrategy, useSortable } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import { useDropzone } from "react-dropzone";
 
 // Define the research result type
 export const researchResultSchema = z.object({
@@ -259,6 +263,42 @@ export function ResearchPanel({
   const [customResults, setCustomResults] = useState<ResearchResult[]>([]);
   const [isDragOver, setIsDragOver] = useState(false);
 
+  // Order state for drag-reorder (local for now – can be persisted via Tambo later)
+  const [order, setOrder] = useState<string[]>([]);
+
+  // Synchronise order when result list changes (add new ids at the end)
+  useEffect(() => {
+    const ids = [...customResults, ...results].map((r) => r.id);
+    setOrder((prev) => {
+      const next = [...prev];
+      ids.forEach((id) => {
+        if (!next.includes(id)) next.push(id);
+      });
+      return next.filter((id) => ids.includes(id)); // prune removed
+    });
+  }, [customResults.length, results.length]);
+
+  // DnD sensors
+  const sensors = useSensors(useSensor(PointerSensor));
+
+  const handleDragEnd = (event: any) => {
+    const { active, over } = event;
+    if (active?.id && over?.id && active.id !== over.id) {
+      setOrder((items) => {
+        const oldIndex = items.indexOf(active.id);
+        const newIndex = items.indexOf(over.id);
+        return arrayMove(items, oldIndex, newIndex);
+      });
+    }
+  };
+
+  // Dropzone for files (react-dropzone takes care of drag events throttling)
+  const onDrop = useCallback((acceptedFiles: File[], _rejects, evt) => {
+    handleDrop(evt as unknown as React.DragEvent<HTMLDivElement>);
+  }, []);
+
+  const { getRootProps, getInputProps, isDragActive, open: openFileDialog } = useDropzone({ onDrop, noKeyboard: true, noClick: true });
+
   const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     setIsDragOver(false);
@@ -324,8 +364,13 @@ export function ResearchPanel({
   // Combine custom dropped results with supplied ones (custom appear first)
   const combinedResults = [...customResults, ...results];
 
+  // Apply ordering from dnd
+  const orderedResults = order
+    .map((id) => combinedResults.find((r) => r.id === id))
+    .filter(Boolean) as ResearchResult[];
+
   // Filter and sort results
-  const filteredResults = combinedResults
+  const filteredResults = orderedResults
     .filter(result => {
       // Credibility filter
       if (state?.selectedCredibility && state.selectedCredibility !== "all") {
@@ -413,8 +458,14 @@ export function ResearchPanel({
             )}
           </div>
           
-          <div className="text-sm text-gray-500">
-            {filteredResults.length} of {combinedResults.length} results
+          <div className="flex items-center gap-4 text-sm text-gray-500">
+            <span>{filteredResults.length} of {combinedResults.length} results</span>
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); openFileDialog(); }}
+              className="flex items-center gap-1 text-blue-600 hover:text-blue-800">
+              <Upload className="w-4 h-4" /> Upload
+            </button>
           </div>
         </div>
 
@@ -461,11 +512,12 @@ export function ResearchPanel({
 
       {/* Results */}
       <div
-        className={cn("space-y-4 relative", isDragOver && "ring-2 ring-blue-400 ring-offset-2")}
+        {...getRootProps()}
+        className={cn("space-y-4 relative", (isDragOver || isDragActive) && "ring-2 ring-blue-400 ring-offset-2")}
         onDragOver={handleDragOver}
-        onDrop={handleDrop}
         onDragLeave={handleDragLeave}
       >
+        <input {...getInputProps()} />
         {isDragOver && (
           <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/70 pointer-events-none">
             <p className="text-lg font-medium text-blue-600">Drop files or links to add</p>
@@ -485,19 +537,24 @@ export function ResearchPanel({
             </p>
           </div>
         ) : (
-          filteredResults.map((result) => {
-            const Renderer = getRendererForResult(result);
-            return (
-              <Renderer
-                key={result.id}
-                result={result}
-                isBookmarked={state?.bookmarkedResults.includes(result.id) || false}
-                isExpanded={state?.expandedResults.includes(result.id) || false}
-                onToggleBookmark={() => toggleBookmark(result.id)}
-                onToggleExpanded={() => toggleExpanded(result.id)}
-              />
-            );
-          })
+          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+            <SortableContext items={filteredResults.map((r) => r.id)} strategy={verticalListSortingStrategy}>
+              {filteredResults.map((result) => {
+                const Renderer = getRendererForResult(result);
+                return (
+                  <SortableItem key={result.id} id={result.id}>
+                    <Renderer
+                      result={result}
+                      isBookmarked={state?.bookmarkedResults.includes(result.id) || false}
+                      isExpanded={state?.expandedResults.includes(result.id) || false}
+                      onToggleBookmark={() => toggleBookmark(result.id)}
+                      onToggleExpanded={() => toggleExpanded(result.id)}
+                    />
+                  </SortableItem>
+                );
+              })}
+            </SortableContext>
+          </DndContext>
         )}
       </div>
 
@@ -513,4 +570,40 @@ export function ResearchPanel({
   );
 }
 
-export default ResearchPanel; 
+export default ResearchPanel;
+
+// SortableItem component
+function SortableItem({ id, children }: { id: string; children: React.ReactNode }) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    setActivatorNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id });
+
+  const style: React.CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : undefined,
+  };
+
+  return (
+    <div ref={setNodeRef} style={style} className="relative">
+      {/* Drag handle */}
+      <button
+        ref={setActivatorNodeRef as unknown as React.Ref<HTMLButtonElement>}
+        {...attributes}
+        {...listeners}
+        className="absolute -left-2 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600 cursor-grab"
+        onClick={(e) => e.stopPropagation()}
+        title="Drag to reorder"
+      >
+        <GripVertical className="w-4 h-4" />
+      </button>
+      {children}
+    </div>
+  );
+} 

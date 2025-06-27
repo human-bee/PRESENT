@@ -2,6 +2,7 @@
 
 import { Tldraw, HTMLContainer as TldrawHTMLContainer, RecordProps, T, Editor, BaseBoxShapeUtil, TLBaseShape } from 'tldraw';
 import { ReactNode, useRef, useEffect, createContext, useContext, Component, ErrorInfo, useState } from 'react';
+import { CanvasSyncAdapter } from '../CanvasSyncAdapter';
 
 // Create context for component store
 export const ComponentStoreContext = createContext<Map<string, ReactNode> | null>(null);
@@ -188,10 +189,9 @@ export interface TldrawCanvasProps {
   onMount?: (editor: Editor) => void;
   shapeUtils?: readonly (typeof TamboShapeUtil)[]; // Allow passing custom shape utils
   componentStore?: Map<string, ReactNode>; // Component store for Tambo shapes
+  componentId?: string;
   // Add any other props you might need to pass to Tldraw component
 }
-
-
 
 // Error boundary for tldraw canvas
 interface TldrawErrorBoundaryState {
@@ -246,14 +246,26 @@ class TldrawErrorBoundary extends Component<{ children: ReactNode }, TldrawError
   }
 }
 
-
-
-export function TldrawCanvas({ onMount, shapeUtils, componentStore, ...rest }: TldrawCanvasProps) {
+export function TldrawCanvas({ onMount, shapeUtils, componentStore, componentId: propId, ...rest }: TldrawCanvasProps) {
   const [isClient, setIsClient] = useState(false);
+  const editorRef = useRef<Editor | null>(null);
+
+  const componentId = propId || 'tldraw-canvas';
 
   useEffect(() => {
     setIsClient(true);
   }, []);
+
+  const handleMount = (editor: Editor) => {
+    editorRef.current = editor;
+    onMount?.(editor);
+  };
+
+  const getItemCount = () => {
+    const ed = editorRef.current;
+    if (!ed) return 0;
+    return Object.keys(ed.store?.getSnapshot().document?.pages || {}).length;
+  };
 
   if (!isClient) {
     return (
@@ -264,16 +276,18 @@ export function TldrawCanvas({ onMount, shapeUtils, componentStore, ...rest }: T
   }
 
   return (
-    <TldrawErrorBoundary>
-      <ComponentStoreContext.Provider value={componentStore || null}>
-        <div style={{ position: 'fixed', inset: 0 }}>
-          <Tldraw
-            onMount={onMount}
-            shapeUtils={shapeUtils || []}
-            {...rest}
-          />
-        </div>
-      </ComponentStoreContext.Provider>
-    </TldrawErrorBoundary>
+    <CanvasSyncAdapter componentId={componentId} getItemCount={getItemCount}>
+      <TldrawErrorBoundary>
+        <ComponentStoreContext.Provider value={componentStore || null}>
+          <div style={{ position: 'fixed', inset: 0 }}>
+            <Tldraw
+              onMount={handleMount}
+              shapeUtils={shapeUtils || []}
+              {...rest}
+            />
+          </div>
+        </ComponentStoreContext.Provider>
+      </TldrawErrorBoundary>
+    </CanvasSyncAdapter>
   );
 }

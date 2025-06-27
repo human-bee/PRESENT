@@ -21,6 +21,9 @@
     "agent:fixed": "npx tsx src/lib/livekit-agent-worker-fixed.ts dev"
   },
   "dependencies": {
+    "@dnd-kit/core": "^6.3.1",
+    "@dnd-kit/sortable": "^10.0.0",
+    "@dnd-kit/utilities": "^3.2.2",
     "@livekit/agents": "^0.7.6",
     "@livekit/agents-plugin-openai": "^0.9.1",
     "@livekit/components-react": "^2.9.4",
@@ -46,6 +49,7 @@
     "radix-ui": "^1.1.3",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "react-dropzone": "^14.3.8",
     "react-hot-toast": "^2.5.2",
     "react-markdown": "^10.1.0",
     "recharts": "^2.15.3",

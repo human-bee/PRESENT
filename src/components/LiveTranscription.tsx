@@ -22,6 +22,7 @@ export function LiveTranscription({ room, onTranscription }: LiveTranscriptionPr
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const bus = createLiveKitBus(room);
+  const linesRef = useRef<number>(0);
 
   useEffect(() => {
     if (!room) return;
@@ -95,11 +96,27 @@ export function LiveTranscription({ room, onTranscription }: LiveTranscriptionPr
   useEffect(() => {
     const off = bus.on('transcription', (data: any) => {
       if (typeof data?.text === 'string') {
+        linesRef.current += 1;
         onTranscription?.(data as TranscriptionData);
       }
     });
     return off;
   }, [bus, onTranscription]);
+
+  // Reply to heartbeat with transcription metrics
+  useEffect(() => {
+    const offPing = bus.on('state_ping', (msg: any) => {
+      if (msg?.type === 'state_ping') {
+        bus.send('state_pong', {
+          type: 'state_pong',
+          source: 'transcription',
+          lineCount: linesRef.current,
+          timestamp: Date.now(),
+        });
+      }
+    });
+    return offPing;
+  }, [bus]);
 
   // Browser-based audio processing (for future real implementation)
   const startAudioProcessing = async (audioTrack: RemoteAudioTrack) => {

@@ -22,6 +22,7 @@ import { createContext, useContext, useEffect, useRef, useState, useCallback } f
 import { useRoomContext } from '@livekit/components-react';
 import { useTamboThread, useTambo } from '@tambo-ai/react';
 import { createLiveKitBus } from '../lib/livekit-bus';
+import { useContextKey } from './RoomScopedProviders';
 
 // Generate unique IDs without external dependency
 const generateId = () => `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
@@ -119,18 +120,17 @@ export function ToolDispatcher({
   children, 
   enableLogging = true,
   maxPendingAge = 30000, // 30 seconds
-  contextKey
+  contextKey: propContextKey
 }: ToolDispatcherProps) {
   const room = useRoomContext();
   const { sendThreadMessage } = useTamboThread();
-  // Access toolRegistry via type cast to avoid TS property error when using older SDK versions
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-explicit-any
+  const roomContextKey = useContextKey();
   const { toolRegistry = {} } = useTambo() as any;
   const pendingById = useRef(new Map<string, PendingTool>());
   const [isProcessing, setIsProcessing] = useState(false);
   
   // Use room name as context key to ensure thread/canvas sync
-  const effectiveContextKey = contextKey || room?.name || 'canvas';
+  const effectiveContextKey = propContextKey || roomContextKey || room?.name || 'canvas';
   
   // Log helper with proper typing
   const log = useCallback((...args: unknown[]) => {
