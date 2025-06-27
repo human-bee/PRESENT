@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useRef } from 'react';
 import { Room, RoomEvent, RemoteTrack, RemoteAudioTrack, LocalAudioTrack, createLocalAudioTrack } from 'livekit-client';
+import { createLiveKitBus } from '../lib/livekit-bus';
 
 interface TranscriptionData {
   participantId: string;
@@ -20,6 +21,7 @@ export function LiveTranscription({ room, onTranscription }: LiveTranscriptionPr
   const audioContextRef = useRef<AudioContext | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
+  const bus = createLiveKitBus(room);
 
   useEffect(() => {
     if (!room) return;
@@ -44,14 +46,11 @@ export function LiveTranscription({ room, onTranscription }: LiveTranscriptionPr
             timestamp: Date.now()
           };
           
-          // Send via data channel
-          const encoder = new TextEncoder();
-          const data = encoder.encode(JSON.stringify({
+          // Send via shared bus
+          bus.send('transcription', {
             type: 'transcription',
-            ...transcriptionData
-          }));
-          
-          room.localParticipant.publishData(data, { reliable: true });
+            ...transcriptionData,
+          });
           
           // Also notify via callback
           onTranscription?.(transcriptionData);
@@ -92,6 +91,15 @@ export function LiveTranscription({ room, onTranscription }: LiveTranscriptionPr
       room.off(RoomEvent.TrackUnsubscribed, handleTrackUnsubscribed);
     };
   }, [room, onTranscription]);
+
+  useEffect(() => {
+    const off = bus.on('transcription', (data: any) => {
+      if (typeof data?.text === 'string') {
+        onTranscription?.(data as TranscriptionData);
+      }
+    });
+    return off;
+  }, [bus, onTranscription]);
 
   // Browser-based audio processing (for future real implementation)
   const startAudioProcessing = async (audioTrack: RemoteAudioTrack) => {

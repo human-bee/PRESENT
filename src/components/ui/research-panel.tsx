@@ -4,6 +4,8 @@ import { cn } from "@/lib/utils";
 import { useTamboComponentState } from "@tambo-ai/react";
 import { z } from "zod";
 import { ExternalLink, CheckCircle, AlertTriangle, Info, Bookmark, BookmarkCheck } from "lucide-react";
+import { getRendererForResult } from "./research-renderers";
+import { useState } from "react";
 
 // Define the research result type
 export const researchResultSchema = z.object({
@@ -253,8 +255,77 @@ export function ResearchPanel({
     }
   );
 
+  // Local state for items added via drag-and-drop
+  const [customResults, setCustomResults] = useState<ResearchResult[]>([]);
+  const [isDragOver, setIsDragOver] = useState(false);
+
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDragOver(false);
+
+    const newResults: ResearchResult[] = [];
+
+    // 1. Files dropped
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      Array.from(e.dataTransfer.files).forEach((file) => {
+        const objectUrl = URL.createObjectURL(file);
+        newResults.push({
+          id: crypto.randomUUID(),
+          title: file.name,
+          content: objectUrl,
+          source: {
+            name: "Local File",
+            url: objectUrl,
+            credibility: "high",
+            type: "other",
+          },
+          relevance: 0,
+          timestamp: new Date().toISOString(),
+          tags: [file.type.split("/")[0] || "file"],
+        } as ResearchResult);
+      });
+    }
+
+    // 2. Links / text dropped
+    const uriList = e.dataTransfer.getData("text/uri-list") || e.dataTransfer.getData("text/plain");
+    if (uriList) {
+      uriList.split(/\n/).forEach((uri) => {
+        const trimmed = uri.trim();
+        if (trimmed) {
+          newResults.push({
+            id: crypto.randomUUID(),
+            title: trimmed,
+            content: trimmed,
+            source: {
+              name: "Dropped Link",
+              url: trimmed,
+              credibility: "medium",
+              type: /youtube|youtu\.be/.test(trimmed) ? "video" : "other",
+            },
+            relevance: 0,
+            timestamp: new Date().toISOString(),
+          } as ResearchResult);
+        }
+      });
+    }
+
+    if (newResults.length) {
+      setCustomResults((prev) => [...newResults, ...prev]);
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    if (!isDragOver) setIsDragOver(true);
+  };
+
+  const handleDragLeave = () => setIsDragOver(false);
+
+  // Combine custom dropped results with supplied ones (custom appear first)
+  const combinedResults = [...customResults, ...results];
+
   // Filter and sort results
-  const filteredResults = results
+  const filteredResults = combinedResults
     .filter(result => {
       // Credibility filter
       if (state?.selectedCredibility && state.selectedCredibility !== "all") {
@@ -343,7 +414,7 @@ export function ResearchPanel({
           </div>
           
           <div className="text-sm text-gray-500">
-            {filteredResults.length} of {results.length} results
+            {filteredResults.length} of {combinedResults.length} results
           </div>
         </div>
 
@@ -389,7 +460,17 @@ export function ResearchPanel({
       </div>
 
       {/* Results */}
-      <div className="space-y-4">
+      <div
+        className={cn("space-y-4 relative", isDragOver && "ring-2 ring-blue-400 ring-offset-2")}
+        onDragOver={handleDragOver}
+        onDrop={handleDrop}
+        onDragLeave={handleDragLeave}
+      >
+        {isDragOver && (
+          <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/70 pointer-events-none">
+            <p className="text-lg font-medium text-blue-600">Drop files or links to add</p>
+          </div>
+        )}
         {filteredResults.length === 0 ? (
           <div className="text-center py-12">
             <div className="text-gray-400 mb-2">
@@ -404,16 +485,19 @@ export function ResearchPanel({
             </p>
           </div>
         ) : (
-          filteredResults.map((result) => (
-            <ResearchResultCard
-              key={result.id}
-              result={result}
-              isBookmarked={state?.bookmarkedResults.includes(result.id) || false}
-              isExpanded={state?.expandedResults.includes(result.id) || false}
-              onToggleBookmark={() => toggleBookmark(result.id)}
-              onToggleExpanded={() => toggleExpanded(result.id)}
-            />
-          ))
+          filteredResults.map((result) => {
+            const Renderer = getRendererForResult(result);
+            return (
+              <Renderer
+                key={result.id}
+                result={result}
+                isBookmarked={state?.bookmarkedResults.includes(result.id) || false}
+                isExpanded={state?.expandedResults.includes(result.id) || false}
+                onToggleBookmark={() => toggleBookmark(result.id)}
+                onToggleExpanded={() => toggleExpanded(result.id)}
+              />
+            );
+          })
         )}
       </div>
 

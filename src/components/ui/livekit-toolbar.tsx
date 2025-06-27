@@ -11,7 +11,6 @@ import {
   useIsMuted,
   useConnectionQualityIndicator,
   useRoomContext,
-  useDataChannel,
   useTracks,
   useRemoteParticipants,
 } from "@livekit/components-react";
@@ -53,6 +52,7 @@ import {
   Wifi,
   WifiOff,
 } from "lucide-react";
+import { createLiveKitBus } from '../../lib/livekit-bus';
 
 // Custom Unpin icon as alternative
 const Unpin = ({ className }: { className?: string }) => (
@@ -231,8 +231,10 @@ export function LivekitToolbar({
 }: LivekitToolbarProps) {
   const componentId = `livekit-toolbar-${roomName || 'default'}`;
   
+  const roomContext = useRoomContext();
+  const bus = createLiveKitBus(roomContext);
+  
   // Real LiveKit hooks - connected to actual room state
-  // Wrap in try-catch to handle context not available
   let room = null;
   let localParticipant = null;
   let participants: any[] = [];
@@ -265,10 +267,10 @@ export function LivekitToolbar({
     const screenShareToggle = useTrackToggle(Track.Source.ScreenShare);
     toggleScreenShare = screenShareToggle.toggle;
     screenShareEnabled = screenShareToggle.enabled;
-     } catch (error) {
-     console.warn('[LivekitToolbar] LiveKit context not available:', error);
-     // Component will render with default values and show appropriate message
-   }
+  } catch (error) {
+    console.warn('[LivekitToolbar] LiveKit context not available:', error);
+    // Component will render with default values and show appropriate message
+  }
   
   // Enhanced Tambo state management
   const [state, setState] = useTamboComponentState<LivekitToolbarState>(
@@ -295,12 +297,11 @@ export function LivekitToolbar({
   );
 
   // Voice command integration
-  try {
-    useDataChannel("voice-commands", (message) => {
+  React.useEffect(() => {
+    const off = bus.on("voice-commands", (commandRaw) => {
       if (!enableVoiceCommands || !state) return;
-      
       try {
-        const command = JSON.parse(new TextDecoder().decode(message.payload));
+        const command = commandRaw as { type: string };
         
         switch (command.type) {
           case "MUTE_ALL":
@@ -335,9 +336,8 @@ export function LivekitToolbar({
         console.error("Failed to parse voice command:", error);
       }
     });
-  } catch (error) {
-    // useDataChannel not available outside LiveKit context
-  }
+    return off;
+  }, [bus, enableVoiceCommands, moderationEnabled, participants, room?.localParticipant, setState, toggleMic, toggleCamera, handleStartRecording, handleRaiseHand]);
 
   // Real-time participant monitoring
   React.useEffect(() => {
@@ -408,14 +408,11 @@ export function LivekitToolbar({
     const isRaised = state.handRaisedParticipants.includes(localParticipant?.identity || '');
     
     // Send data channel message
-    room?.localParticipant?.publishData(
-      new TextEncoder().encode(JSON.stringify({
-        type: isRaised ? "LOWER_HAND" : "RAISE_HAND",
-        participantId: localParticipant?.identity || '',
-        timestamp: Date.now(),
-      })),
-      { reliable: true }
-    );
+    bus.send('hand_raise', {
+      type: isRaised ? 'LOWER_HAND' : 'RAISE_HAND',
+      participantId: localParticipant?.identity || '',
+      timestamp: Date.now(),
+    });
 
     setState({
       ...state,
@@ -429,13 +426,7 @@ export function LivekitToolbar({
   const handleMuteParticipant = (participantId: string) => {
     if (!moderationEnabled) return;
     
-    room?.localParticipant?.publishData(
-      new TextEncoder().encode(JSON.stringify({
-        type: "MUTE_REQUEST",
-        targetId: participantId,
-      })),
-      { reliable: true }
-    );
+    bus.send('moderation', { type: 'MUTE_REQUEST', targetId: participantId });
   };
 
   const handlePinParticipant = (participantId: string) => {

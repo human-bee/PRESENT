@@ -19,8 +19,9 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 import { createContext, useContext, useEffect, useRef, useState, useCallback } from 'react';
-import { useDataChannel, useRoomContext } from '@livekit/components-react';
+import { useRoomContext } from '@livekit/components-react';
 import { useTamboThread, useTambo } from '@tambo-ai/react';
+import { createLiveKitBus } from '../lib/livekit-bus';
 
 // Generate unique IDs without external dependency
 const generateId = () => `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
@@ -138,10 +139,10 @@ export function ToolDispatcher({
     }
   }, [enableLogging]);
 
+  const bus = createLiveKitBus(room);
+
   // Publish tool result back to agent
   const publishToolResult = useCallback(async (toolCallId: string, result: unknown) => {
-    if (!room) return;
-    
     const resultEvent: ToolResultEvent = {
       id: generateId(),
       toolCallId,
@@ -150,19 +151,14 @@ export function ToolDispatcher({
       timestamp: Date.now(),
       executionTime: Date.now() - (pendingById.current.get(toolCallId)?.timestamp || Date.now()),
     };
-    
-    await room.localParticipant?.publishData(
-      new TextEncoder().encode(JSON.stringify(resultEvent)),
-      { reliable: true, topic: TOOL_TOPICS.TOOL_RESULT }
-    );
-    
+
+    bus.send(TOOL_TOPICS.TOOL_RESULT, resultEvent);
+
     log('📤 Published tool result:', { toolCallId, executionTime: resultEvent.executionTime });
-  }, [room, log]);
+  }, [bus, log]);
 
   // Publish tool error back to agent
   const publishToolError = useCallback(async (toolCallId: string, error: Error | string) => {
-    if (!room) return;
-    
     const errorEvent: ToolErrorEvent = {
       id: generateId(),
       toolCallId,
@@ -170,14 +166,11 @@ export function ToolDispatcher({
       error: error instanceof Error ? error.message : error,
       timestamp: Date.now(),
     };
-    
-    await room.localParticipant?.publishData(
-      new TextEncoder().encode(JSON.stringify(errorEvent)),
-      { reliable: true, topic: TOOL_TOPICS.TOOL_ERROR }
-    );
-    
+
+    bus.send(TOOL_TOPICS.TOOL_ERROR, errorEvent);
+
     log('❌ Published tool error:', { toolCallId, error: errorEvent.error });
-  }, [room, log]);
+  }, [bus, log]);
 
   // Helper to send message through Tambo
   const sendTamboMessage = useCallback(async (message: string) => {
@@ -303,6 +296,45 @@ export function ToolDispatcher({
       // Route to appropriate handler
       let result: unknown;
       
+      // 0️⃣  Generic registry lookup – enables automatic execution of tools
+      // discovered at runtime (e.g. via new MCP servers). If the tool exists in
+      // Tambo's registry we execute it directly and publish the result without
+      // needing a bespoke branch below.
+      // Skip built-in tools that we still want custom handling for.
+      const builtIns = new Set([
+        'generate_ui_component',
+        'youtube_search',
+        'respond_with_voice',
+        'do_nothing',
+      ]);
+
+      const registryTool = (() => {
+        // Handle both Map-style (toolRegistry.get) and plain object registries
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const reg: any = toolRegistry;
+        if (typeof reg?.get === 'function') return reg.get(payload.tool);
+        return reg?.[payload.tool];
+      })();
+
+      if (registryTool && !builtIns.has(payload.tool)) {
+        try {
+          // The execute signature can vary, so we forward params verbatim.
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          result = await (registryTool as any).execute?.(payload.params) ?? null;
+
+          pendingTool.status = 'completed';
+          await publishToolResult(id, result);
+          return; // ✅ Finished – no further custom handling required
+        } catch (err) {
+          log('❌ Registry tool execution failed:', err);
+          pendingTool.status = 'failed';
+          await publishToolError(id, err as Error);
+          return;
+        }
+      }
+
+      // 1️⃣ Built-in handlers ---------------------------------------------------
+
       if (payload.tool === 'generate_ui_component') {
         // Use Tambo thread system for UI generation
         const params = payload.params as { componentType?: string; prompt?: string; task_prompt?: string };
@@ -436,16 +468,19 @@ Please consider both the processed summary above and the original transcript con
     }
   }, [sendTamboMessage, publishToolResult, publishToolError, log]);
 
-  // Subscribe to tool_call events
-  useDataChannel(TOOL_TOPICS.TOOL_CALL, async (message) => {
-    try {
-      const event: ToolCallEvent = JSON.parse(new TextDecoder().decode(message.payload));
-      log('📨 Received tool call:', event);
-      await executeToolCall(event);
-    } catch (error) {
-      log('❌ Error processing tool call:', error);
-    }
-  });
+  // Subscribe via bus to tool_call events
+  useEffect(() => {
+    const off = bus.on(TOOL_TOPICS.TOOL_CALL, async (raw) => {
+      try {
+        const event = raw as ToolCallEvent;
+        log('📨 Received tool call:', event);
+        await executeToolCall(event);
+      } catch (error) {
+        log('❌ Error processing tool call:', error);
+      }
+    });
+    return off;
+  }, [bus, executeToolCall, log]);
 
   // Clean up old pending tools
   useEffect(() => {
@@ -467,6 +502,35 @@ Please consider both the processed summary above and the original transcript con
     log('🚀 ToolDispatcher initialized');
     return () => log('👋 ToolDispatcher unmounted');
   }, [log]);
+
+  // ──────────────────────────────────────────────
+  // Heartbeat / state reconciliation (optional)
+  // ──────────────────────────────────────────────
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const payload = {
+        type: 'state_ping',
+        pendingToolCount: pendingById.current.size,
+        timestamp: Date.now(),
+      };
+      bus.send('state_ping', payload);
+    }, 15000);
+
+    // Listen for peer pings and log discrepancies
+    const off = bus.on('state_ping', (msg: any) => {
+      if (msg?.type === 'state_ping') {
+        const delta = Math.abs((pendingById.current.size || 0) - (msg.pendingToolCount || 0));
+        if (delta > 1) {
+          log('⚠️ State mismatch (pending tools delta):', delta);
+        }
+      }
+    });
+
+    return () => {
+      clearInterval(interval);
+      off();
+    };
+  }, [bus, log]);
 
   const contextValue: ToolDispatcherContextValue = {
     pendingTools: pendingById.current,
