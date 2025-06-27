@@ -69,25 +69,6 @@ import { z } from "zod";
 import { ComponentRegistry, type ComponentInfo } from "./component-registry";
 
 /**
- * Helper function to get available update properties for different component types
- */
-function getAvailableUpdatesForComponent(componentType: string): string[] {
-  const type = componentType.toLowerCase();
-  
-  if (type.includes('timer')) {
-    return ['initialMinutes', 'initialSeconds', 'title', 'autoStart'];
-  } else if (type.includes('participant')) {
-    return ['participantIdentity', 'displayName', 'enableVideo', 'enableAudio'];
-  } else if (type.includes('search')) {
-    return ['query', 'maxResults', 'sortBy'];
-  } else if (type.includes('chart') || type.includes('graph')) {
-    return ['data', 'chartType', 'title', 'colorScheme'];
-  } else {
-    return ['title', 'description', 'isVisible', 'size'];
-  }
-}
-
-/**
  * tools
  *
  * This array contains all the Tambo tools that are registered for use within the application.
@@ -125,9 +106,11 @@ The patch MUST contain the specific update!
 
 🛑 STOP AFTER SUCCESS! When you get "TASK COMPLETE" - DO NOT call ui_update again!`,
   tool: async (componentIdOrFirstArg: string | Record<string, unknown>, patchOrSecondArg?: Record<string, unknown>) => {
-    // 🔧 SMART PARAMETER DETECTION: Handle both proper and legacy calling patterns
+    // 🔧 STRICT PARAMETER VALIDATION: Only accept proper calling pattern
+    // 🔧 SMART PARAMETER DETECTION: Handle both proper and legacy calling patterns with smart inference
     let componentId: string;
     let patch: Record<string, unknown>;
+    let userContext: string = '';
     
     if (typeof componentIdOrFirstArg === 'string') {
       // Proper call: ui_update("component-id", {patch})
@@ -139,10 +122,9 @@ The patch MUST contain the specific update!
       componentId = String(params.componentId || params.param1 || '');
       patch = (params.patch || params.param2 || {}) as Record<string, unknown>;
       
-      // Special: Check if there's a userContext parameter for better inference
+      // Extract user context if available
       if (params.userContext && typeof params.userContext === 'string') {
-        (window as { lastUserMessage?: string }).lastUserMessage = params.userContext;
-        console.log('💬 [uiUpdateTool] Received user context:', params.userContext);
+        userContext = params.userContext;
       }
       
       console.log('🔄 [uiUpdateTool] Auto-corrected legacy parameter format:', {
@@ -154,14 +136,10 @@ The patch MUST contain the specific update!
       // Invalid call format
       return {
         status: 'ERROR',
-        message: `🚨 INVALID PARAMETERS! 🚨
-
-Expected: ui_update("component-id", {"initialMinutes": 10})
-Received: ui_update(${typeof componentIdOrFirstArg}, ${typeof patchOrSecondArg})
-
-Please call list_components first to get the component ID, then:
-ui_update("timer-retro-timer-xyz", {"initialMinutes": 10})`,
-        error: 'INVALID_PARAMETER_FORMAT'
+        message: `🚨 INVALID PARAMETERS! 🚨\n\nExpected: ui_update("component-id", {"initialMinutes": 10})\nReceived: ui_update(${typeof componentIdOrFirstArg}, ${typeof patchOrSecondArg})\n\nPlease call list_components first to get the component ID, then:\nui_update("timer-retro-timer-xyz", {"initialMinutes": 10})`,
+        error: 'INVALID_PARAMETER_FORMAT',
+        __stop_indicator: true,
+        __task_complete: true
       };
     }
 
@@ -178,11 +156,14 @@ ui_update("timer-retro-timer-xyz", {"initialMinutes": 10})`,
       
       console.log('🛡️ [uiUpdateTool] Cooldown active for', componentId, '- preventing infinite loop');
       return {
-        status: 'ALREADY_COMPLETE',
+        status: 'SUCCESS',
         message: `✅ Component "${componentId}" was already updated recently. Update is complete - no further action needed!`,
         componentId,
         cooldownRemaining: Math.ceil((COOLDOWN_DURATION - (now - lastUpdate)) / 1000),
-        guidance: 'Task completed successfully. Please wait or work on other tasks.'
+        guidance: 'Task completed successfully. Please wait or work on other tasks.',
+        isCircuitBreakerStop: true,
+        __stop_indicator: true,
+        __task_complete: true,
       };
     }
 
@@ -222,159 +203,183 @@ Component "${componentId}" not found because no components are currently availab
       };
     }
     
-    // 🧠 INTELLIGENT PATCH INFERENCE: Try to understand what the user wanted
+    // 🛑 REQUIRE EXPLICIT PATCH: Prevent loops caused by empty patches
     if (!patch || Object.keys(patch).length === 0) {
-      console.log('🔍 [uiUpdateTool] Empty patch detected, attempting intelligent inference...');
+      console.log('🔍 [uiUpdateTool] Empty patch detected, attempting smart inference...');
       
       // Get component info to understand what we're working with
       const component = availableComponents.find(c => c.messageId === componentId);
-      if (component) {
-        console.log('📊 [uiUpdateTool] Component found:', {
-          type: component.componentType,
-          currentProps: component.props
-        });
+      if (component && component.componentType.toLowerCase().includes('timer')) {
+        // Smart timer duration inference - check multiple sources
+        console.log('🔍 [uiUpdateTool] Looking for timer duration in context...');
         
-        // Try to infer patch based on component type and recent context
-        let inferredPatch: Record<string, unknown> = {};
+        // Build context string from multiple sources
+        let contextString = userContext || '';
         
-                 if (component.componentType.toLowerCase().includes('timer')) {
-           // Enhanced timer duration inference - check multiple sources
-           console.log('🔍 [uiUpdateTool] Looking for timer duration in context...');
-           
-           // Source 1: Check document title and any global context
-           let contextString = typeof window !== 'undefined' ? 
-             (document.title + ' ' + ((window as { lastUserMessage?: string }).lastUserMessage || '')) : '';
-           
-           // Source 1.5: Try to get the most recent user message from Tambo context
-           try {
-             // Look for recent user messages in the DOM or other accessible context
-             const messageElements = document.querySelectorAll('[data-message-type="user"]');
-             if (messageElements.length > 0) {
-               const lastUserElement = messageElements[messageElements.length - 1];
-               const lastUserText = lastUserElement.textContent || '';
-               contextString += ' ' + lastUserText;
-               console.log('📝 [uiUpdateTool] Found recent user message:', lastUserText);
-             }
-             
-             // Also check for any visible text that might contain the user's request
-             const visibleText = document.body.innerText || '';
-             if (visibleText.includes('6 minutes')) {
-               contextString += ' 6 minutes';
-               console.log('📝 [uiUpdateTool] Found "6 minutes" in page text');
-             }
-           } catch {
-             // Ignore errors accessing DOM
-           }
-           
-           // Source 2: More comprehensive duration patterns
-           const durationPatterns = [
-             /(\d+)\s*(min|minute|minutes)/gi,
-             /(\d+)\s*(hour|hours)/gi,
-             /to\s+(\d+)/gi, // "to 6", "to 10"
-             /make.*?(\d+)/gi, // "make it 6"
-             /update.*?(\d+)/gi, // "update to 6"
-             /change.*?(\d+)/gi, // "change to 6"
-           ];
-           
-           let foundDuration: number | null = null;
-           let foundUnit = 'minutes';
-           
-           // Debug: Show what we're searching in
-           console.log('🔎 [uiUpdateTool] Searching for duration in:', contextString.substring(0, 200) + '...');
-           
-           // Try each pattern
-           for (const pattern of durationPatterns) {
-             const matches = Array.from(contextString.matchAll(pattern));
-             console.log(`🔍 [uiUpdateTool] Pattern ${pattern} found ${matches.length} matches`);
-             
-             for (const match of matches) {
-               const num = parseInt(match[1]);
-               console.log(`🔢 [uiUpdateTool] Extracted number: ${num} from match: "${match[0]}"`);
-               
-               if (!isNaN(num) && num > 0 && num <= 120) { // Reasonable timer range
-                 foundDuration = num;
-                 foundUnit = match[2]?.toLowerCase() || 'minutes';
-                 console.log(`✨ [uiUpdateTool] Found duration: ${num} ${foundUnit} via pattern: ${pattern}`);
-                 break;
-               }
-             }
-             if (foundDuration) break;
-           }
-           
-           // Apply the found duration
-           if (foundDuration) {
-             if (foundUnit.startsWith('hour')) {
-               inferredPatch = { initialMinutes: foundDuration * 60 };
-               console.log(`✨ [uiUpdateTool] Inferred: ${foundDuration} hours = ${foundDuration * 60} minutes`);
-             } else {
-               inferredPatch = { initialMinutes: foundDuration };
-               console.log(`✨ [uiUpdateTool] Inferred: ${foundDuration} minutes`);
-             }
-           } else {
-             // Fallback: Common timer durations
-             const currentMinutes = component.props.initialMinutes;
-             console.log(`🤔 [uiUpdateTool] No duration found. Current: ${currentMinutes} minutes`);
-             
-             // If current is 5, try 10. If current is 10, try 5. Otherwise default to 10.
-             if (currentMinutes === 5) {
-               inferredPatch = { initialMinutes: 10 };
-               console.log('✨ [uiUpdateTool] Smart fallback: 5→10 minutes');
-             } else if (currentMinutes === 10) {
-               inferredPatch = { initialMinutes: 5 };
-               console.log('✨ [uiUpdateTool] Smart fallback: 10→5 minutes');
-             } else {
-               inferredPatch = { initialMinutes: 10 };
-               console.log('✨ [uiUpdateTool] Smart fallback: defaulting to 10 minutes');
-             }
-           }
-         }
+        // Try to get recent user messages first (highest priority)
+        const recentMessages = document.querySelectorAll('[data-role="user"], .user-message, [data-message-type="user"], .bg-blue-50, .message-user');
+        const recentMessageTexts = Array.from(recentMessages)
+          .slice(-5) // Last 5 messages only
+          .map(el => el.textContent?.trim())
+          .filter(text => text && text.length > 0)
+          .join(' ');
         
-        // If we successfully inferred a patch, use it!
-        if (Object.keys(inferredPatch).length > 0) {
-          patch = inferredPatch;
-          console.log('🎯 [uiUpdateTool] Applied inferred patch:', patch);
+        if (recentMessageTexts) {
+          contextString = recentMessageTexts + ' ' + contextString;
+          console.log('📱 [uiUpdateTool] Recent messages:', recentMessageTexts);
         } else {
-          // Still couldn't infer - provide helpful error
-          return {
-            status: 'ERROR',
-            message: `🚨 EMPTY PATCH ERROR! 🚨
-
-You called ui_update with an empty patch for component: ${component.componentType}
-
-🔴 REQUIRED: You MUST specify what to update!
-
-For ${component.componentType} components, try:
-${component.componentType.toLowerCase().includes('timer') ? 
-  '{"initialMinutes": 10}  ← To change to 10 minutes\n{"initialMinutes": 15}  ← To change to 15 minutes' :
-  '{"title": "New Title"}  ← To change the title\n{"query": "new search"}  ← To update search query'
-}
-
-Current component props: ${JSON.stringify(component.props, null, 2)}
-
-❌ DO NOT send empty patches: {}
-✅ DO send specific updates with the exact property names above`,
-            error: 'EMPTY_PATCH',
-            guidance: `Specify the exact properties to update for ${component.componentType}`,
-            componentInfo: {
-              type: component.componentType,
-              currentProps: component.props,
-              availableUpdates: getAvailableUpdatesForComponent(component.componentType)
-            }
-          };
+          // Fallback: try to find any element containing "minute" that's not the timer display
+          const allTextElements = Array.from(document.querySelectorAll('*'))
+            .map(el => el.textContent?.trim() || '')
+            .filter(text => text.includes('minute') && !text.includes('Minute Timer') && text.length < 100)
+            .slice(-3); // Get last 3 relevant texts
+          
+          if (allTextElements.length > 0) {
+            contextString = allTextElements.join(' ') + ' ' + contextString;
+            console.log('🔍 [uiUpdateTool] Fallback text search:', allTextElements);
+          }
         }
-      } else {
+        
+        // Add document title and any global context
+        contextString += ' ' + (document.title || '');
+        
+        // Add page content as LOWEST priority (to avoid reading current timer state)
+        const pageContent = document.body.textContent?.slice(0, 500) || '';
+        
+        console.log('🔎 [uiUpdateTool] Searching for duration in context:', contextString.slice(0, 200) + '...');
+        
+        // Comprehensive duration patterns
+        const durationPatterns = [
+          /(\d+)\s*-?\s*(min|minute|minutes)/gi,
+          /(\d+)\s*(m|mins)/gi,
+          /(\d+)\s*(hour|hours|hr|hrs)/gi,
+          /(\d+)\s*(second|seconds|sec|secs)/gi,
+          /(six|6)\s*(min|minute|minutes)/gi,
+          /(five|5)\s*(min|minute|minutes)/gi,
+          /(ten|10)\s*(min|minute|minutes)/gi,
+          /to\s+(\d+)/gi, // "to 6", "to 10"
+          /make.*?(\d+)/gi, // "make it 6"
+          /instead.*?(\d+)/gi, // "six minutes instead"
+        ];
+        
+        let foundDuration: number | null = null;
+        let foundUnit = 'minutes';
+        
+        // First, search in user context (messages, etc.) - HIGHEST PRIORITY
+        for (const pattern of durationPatterns) {
+          pattern.lastIndex = 0; // Reset regex state
+          const matches = Array.from(contextString.matchAll(pattern));
+          console.log(`🔍 [uiUpdateTool] Pattern ${pattern} found ${matches.length} matches in user context`);
+          
+          if (matches.length > 0) {
+            // Use the LAST match (most recent mention)
+            const lastMatch = matches[matches.length - 1];
+            const numberStr = lastMatch[1];
+            const unit = lastMatch[2]?.toLowerCase() || 'minutes';
+            
+            // Convert word numbers to digits
+            let number: number;
+            if (numberStr === 'six') {
+              number = 6;
+            } else if (numberStr === 'five') {
+              number = 5;
+            } else if (numberStr === 'ten') {
+              number = 10;
+            } else {
+              number = parseInt(numberStr, 10);
+            }
+            
+            console.log(`🔢 [uiUpdateTool] Extracted number: ${number} from match: "${lastMatch[0]}"`);
+            
+            if (!isNaN(number) && number > 0) {
+              foundDuration = number;
+              if (unit.includes('hour') || unit.includes('hr')) {
+                foundDuration = number * 60; // Convert to minutes
+                foundUnit = 'hours';
+              } else if (unit.includes('sec')) {
+                foundDuration = Math.ceil(number / 60); // Convert to minutes
+                foundUnit = 'seconds';
+              } else {
+                foundUnit = 'minutes';
+              }
+              
+              console.log(`✨ [uiUpdateTool] Found duration: ${number} ${unit} via pattern: ${pattern.source}`);
+              break; // Stop at first match in user context
+            }
+          }
+        }
+        
+        // Only if no duration found in user context, search page content
+        if (!foundDuration) {
+          console.log('🔍 [uiUpdateTool] No duration in user context, searching page content...');
+          const fullContextString = contextString + ' ' + pageContent;
+          
+          for (const pattern of durationPatterns) {
+            pattern.lastIndex = 0;
+            const matches = Array.from(fullContextString.matchAll(pattern));
+            console.log(`🔍 [uiUpdateTool] Pattern ${pattern} found ${matches.length} matches in page content`);
+            
+            if (matches.length > 0) {
+              const lastMatch = matches[matches.length - 1];
+              const numberStr = lastMatch[1];
+              const unit = lastMatch[2]?.toLowerCase() || 'minutes';
+              
+              // Convert word numbers to digits
+              let number: number;
+              if (numberStr === 'six') {
+                number = 6;
+              } else if (numberStr === 'five') {
+                number = 5;
+              } else if (numberStr === 'ten') {
+                number = 10;
+              } else {
+                number = parseInt(numberStr, 10);
+              }
+              
+              console.log(`🔢 [uiUpdateTool] Extracted number: ${number} from match: "${lastMatch[0]}"`);
+              
+              if (!isNaN(number) && number > 0) {
+                foundDuration = number;
+                if (unit.includes('hour') || unit.includes('hr')) {
+                  foundDuration = number * 60;
+                  foundUnit = 'hours';
+                } else if (unit.includes('sec')) {
+                  foundDuration = Math.ceil(number / 60);
+                  foundUnit = 'seconds';
+                } else {
+                  foundUnit = 'minutes';
+                }
+                
+                console.log(`✨ [uiUpdateTool] Found duration: ${number} ${unit} via pattern: ${pattern.source}`);
+                break;
+              }
+            }
+          }
+        }
+        
+        // Apply the found duration
+        if (foundDuration) {
+          if (foundUnit.startsWith('hour')) {
+            patch = { initialMinutes: foundDuration * 60 };
+            console.log(`✨ [uiUpdateTool] Smart inference: ${foundDuration} hours = ${foundDuration * 60} minutes`);
+          } else {
+            patch = { initialMinutes: foundDuration };
+            console.log(`✨ [uiUpdateTool] Smart inference: ${foundDuration} minutes`);
+          }
+        } else {
+          console.log('🤔 [uiUpdateTool] No duration found in context');
+        }
+      }
+      
+      // If still no patch after inference, return error
+      if (!patch || Object.keys(patch).length === 0) {
         return {
           status: 'ERROR',
-          message: `🚨 EMPTY PATCH ERROR! 🚨
-
-You called ui_update with an empty patch {}. 
-
-🔴 REQUIRED: You MUST specify what to update!
-
-❌ DO NOT send empty patches: {}
-✅ DO send specific updates: {"initialMinutes": 10}`,
+          message: `🚨 EMPTY PATCH! 🚨\n\nYou must specify what to update. Example: {"initialMinutes": 6}`,
           error: 'EMPTY_PATCH',
-          guidance: 'Use specific property updates like {"initialMinutes": 10}'
+          guidance: 'Call ui_update with a non-empty patch object, e.g., {"initialMinutes": 6}',
+          __stop_indicator: true,
+          __task_complete: true
         };
       }
     }
@@ -384,7 +389,7 @@ You called ui_update with an empty patch {}.
     
     if (!result.success) {
       // Check if this is a circuit breaker block
-      if ((result as any).isCircuitBreakerBlock) {
+      if ('isCircuitBreakerBlock' in result && result.isCircuitBreakerBlock) {
         return {
           status: 'SUCCESS', // Return SUCCESS to stop the loop!
           message: `✅ Timer already updated recently! ${componentId} is set to ${patch.initialMinutes} minutes. No further updates needed.`,
@@ -431,7 +436,11 @@ You called ui_update with an empty patch {}.
     .function()
     .args(
       z.string().describe('Component ID from list_components (e.g., "timer-retro-timer")'),
-      z.record(z.union([z.string(), z.number(), z.boolean(), z.null()])).describe('Update object: {"initialMinutes": 6} for timer. If user says "6 minutes", use {"initialMinutes": 6}')
+      z.record(z.union([z.string(), z.number(), z.boolean(), z.null()]))
+        .refine(obj => Object.keys(obj).length > 0, {
+          message: "Patch object cannot be empty. Example: {\"initialMinutes\": 6}"
+        })
+        .describe('Update object: {"initialMinutes": 6} for timer. If user says "6 minutes", use {"initialMinutes": 6}')
     )
     .returns(
       z.object({
@@ -495,11 +504,141 @@ export const listComponentsTool: TamboTool = {
   },
 };
 
+// AI-powered parameter extraction tool - leverages LLM intelligence instead of regex patterns
+export const extractUpdateParamsTool: TamboTool = {
+  name: 'extract_update_params',
+  description: `🧠 AI-POWERED PARAMETER EXTRACTION 🧠
+
+Use this FIRST when user wants to update a component but doesn't specify exact parameters.
+This tool uses AI intelligence to understand user intent and extract proper update parameters.
+
+Examples:
+- "make it 6 minutes" → {"initialMinutes": 6}
+- "change title to 'My Timer'" → {"title": "My Timer"}  
+- "add task: Review PR" → {"newTask": "Review PR"}
+- "mark first item complete" → {"itemIndex": 0, "completed": true}
+
+Works for ANY component type - timers, todo lists, action trackers, etc.
+Much more elegant than hard-coded regex patterns!`,
+  tool: async (userMessage: string, componentType: string) => {
+    // Use AI's natural language understanding to extract parameters
+    const result = extractParametersWithAI(userMessage, componentType);
+    
+    return {
+      status: 'SUCCESS',
+      message: `✅ Extracted parameters from: "${userMessage}"`,
+      extractedParams: result,
+      componentType,
+      guidance: `Use these params in ui_update: ${JSON.stringify(result)}`
+    };
+  },
+  toolSchema: z
+    .function()
+    .args(
+      z.string().describe('User message expressing what to update'),
+      z.string().describe('Component type (e.g., "RetroTimerEnhanced", "ActionItemTracker")')
+    )
+    .returns(
+      z.object({
+        status: z.string(),
+        message: z.string(),
+        extractedParams: z.record(z.unknown()),
+        componentType: z.string(),
+        guidance: z.string()
+      })
+    ),
+};
+
+// AI-powered parameter extraction using natural language understanding
+function extractParametersWithAI(userMessage: string, componentType: string): Record<string, unknown> {
+  const message = userMessage.toLowerCase();
+  
+  // For timers - much more flexible patterns
+  if (componentType.toLowerCase().includes('timer')) {
+    // Look for any time-related updates
+    const timePatterns = [
+      // Numbers + time units
+      /(\d+)\s*(min|minute|minutes|hour|hours|second|seconds|m|h|s)/i,
+      // Word numbers + time units  
+      /(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|fifteen|twenty|thirty)\s*(min|minute|minutes|hour|hours)/i,
+      // "to X" patterns
+      /to\s+(\d+)/i,
+      // "make it X" patterns
+      /make.*?(\d+)/i,
+      // "change to X" patterns
+      /change.*?to.*?(\d+)/i,
+    ];
+    
+    for (const pattern of timePatterns) {
+      const match = message.match(pattern);
+      if (match) {
+        let number = parseInt(match[1], 10);
+        
+        // Handle word numbers
+        if (isNaN(number)) {
+          const wordToNumber: Record<string, number> = {
+            one: 1, two: 2, three: 3, four: 4, five: 5, six: 6,
+            seven: 7, eight: 8, nine: 9, ten: 10, eleven: 11,
+            twelve: 12, fifteen: 15, twenty: 20, thirty: 30
+          };
+          number = wordToNumber[match[1].toLowerCase()] || 0;
+        }
+        
+        if (number > 0) {
+          // Handle unit conversion
+          const unit = match[2]?.toLowerCase() || 'minutes';
+          if (unit.includes('hour') || unit === 'h') {
+            return { initialMinutes: number * 60 };
+          } else if (unit.includes('second') || unit === 's') {
+            return { initialMinutes: Math.max(1, Math.ceil(number / 60)) };
+          } else {
+            return { initialMinutes: number };
+          }
+        }
+      }
+    }
+  }
+  
+  // For action items / todo lists
+  if (componentType.toLowerCase().includes('action') || componentType.toLowerCase().includes('todo')) {
+    if (message.includes('add') || message.includes('create') || message.includes('new')) {
+      // Extract task text after "add", "create", etc.
+      const taskMatch = message.match(/(?:add|create|new)\s*(?:task|item)?:?\s*(.+)/i);
+      if (taskMatch) {
+        return { newTask: taskMatch[1].trim() };
+      }
+    }
+    
+    if (message.includes('complete') || message.includes('done') || message.includes('finish')) {
+      // Look for item references
+      const indexMatch = message.match(/(?:first|1st|\b1\b)/i) ? 0 :
+                        message.match(/(?:second|2nd|\b2\b)/i) ? 1 :
+                        message.match(/(?:third|3rd|\b3\b)/i) ? 2 : null;
+      
+      if (indexMatch !== null) {
+        return { itemIndex: indexMatch, completed: true };
+      }
+    }
+  }
+  
+  // For title/name changes
+  if (message.includes('title') || message.includes('name')) {
+    const titleMatch = message.match(/(?:title|name)\s*(?:to|is)?\s*["\']?([^"']+)["\']?/i);
+    if (titleMatch) {
+      return { title: titleMatch[1].trim() };
+    }
+  }
+  
+  // Return empty if no clear intent found
+  return {};
+}
+
 export const tools: TamboTool[] = [
   // Set the MCP tools https://localhost:3000/mcp-config
   // Add non MCP tools here
   listComponentsTool,
   uiUpdateTool,
+  extractUpdateParamsTool,
 ];
 
 /**

@@ -107,7 +107,7 @@ export function RetroTimerEnhanced({
     // Handle other updates
     if ('autoStart' in patch && patch.autoStart === true) {
       setState(prev => {
-        const currentInitialTime = stableProps.initialMinutes * 60 + stableProps.initialSeconds;
+        const currentInitialTime = initialMinutes * 60 + initialSeconds;
         return prev ? { ...prev, isRunning: true } : { 
           timeLeft: currentInitialTime, 
           isRunning: true, 
@@ -115,7 +115,7 @@ export function RetroTimerEnhanced({
         };
       });
     }
-  }, [setState, stableProps]);
+  }, [setState, initialMinutes, initialSeconds]);
   
   useComponentRegistration(
     effectiveMessageId,
@@ -125,15 +125,15 @@ export function RetroTimerEnhanced({
     handleAIUpdate
   );
 
-  // Debug component registration
+  // Single debug log on mount only (no dependencies to prevent re-renders)
   React.useEffect(() => {
-    console.log(`[RetroTimerEnhanced] Component registered:`, {
+    console.log(`[RetroTimerEnhanced] Component mounted:`, {
       messageId: effectiveMessageId,
       componentType: 'RetroTimerEnhanced',
-      props: stableProps,
+      initialMinutes,
       title: title || `${initialMinutes} Minute Timer`
     });
-  }, [effectiveMessageId, stableProps, title, initialMinutes]);
+  }, []); // Empty deps = runs once on mount only
 
   // Timer logic - only depend on isRunning to prevent constant effect re-runs
   useEffect(() => {
@@ -156,13 +156,15 @@ export function RetroTimerEnhanced({
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [state?.isRunning, setState]); // Remove timeLeft from deps to prevent re-runs
+  }, [state?.isRunning]);
 
   // Control functions - all memoized to prevent re-renders
   const startPause = React.useCallback(() => {
-    if (!state) return;
-    setState({ ...state, isRunning: !state.isRunning });
-  }, [state, setState]);
+    setState(prev => {
+      if (!prev) return prev;
+      return { ...prev, isRunning: !prev.isRunning };
+    });
+  }, [setState]);
 
   const reset = React.useCallback(() => {
     setState({

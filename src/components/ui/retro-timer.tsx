@@ -69,8 +69,16 @@ export function RetroTimer({
   // Reference for interval ID
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   
+  // Reference to track current state values in interval
+  const stateRef = useRef<RetroTimerState | null>(null);
+  
   // Reference for audio element
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  
+  // Update state ref whenever state changes
+  useEffect(() => {
+    stateRef.current = state || null;
+  }, [state]);
   
   // Create audio element on mount
   useEffect(() => {
@@ -212,10 +220,11 @@ export function RetroTimer({
 
     if (state.isRunning) {
       intervalRef.current = setInterval(() => {
-        if (state.timeRemaining <= 0) {
+        const currentState = stateRef.current;
+        if (!currentState) return;
+        
+        if (currentState.timeRemaining <= 0) {
           // Time's up - play sound and stop timer
-          setState({ ...state, isRunning: false, isCompleted: true });
-          
           // Play notification sound
           if (audioRef.current) {
             audioRef.current.currentTime = 0;
@@ -231,14 +240,21 @@ export function RetroTimer({
           // Start blinking effect
           setIsBlinking(true);
           
+          setState({
+            ...currentState,
+            isRunning: false,
+            isCompleted: true,
+            timeRemaining: 0
+          });
+          
           if (intervalRef.current) {
             clearInterval(intervalRef.current);
             intervalRef.current = null;
           }
         } else {
           setState({
-            ...state,
-            timeRemaining: state.timeRemaining - 1,
+            ...currentState,
+            timeRemaining: currentState.timeRemaining - 1,
           });
         }
       }, 1000);
@@ -254,7 +270,7 @@ export function RetroTimer({
         intervalRef.current = null;
       }
     };
-  }, [state?.isRunning, state?.timeRemaining]);
+  }, [state?.isRunning]);
 
   // Blinking effect timeout
   useEffect(() => {

@@ -30,6 +30,21 @@ class ComponentStore {
     this.notifyListeners();
   }
 
+  // Silent update that doesn't log registration message (for props updates)
+  updatePropsOnly(messageId: string, props: Record<string, unknown>, updateCallback?: (patch: Record<string, unknown>) => void) {
+    const component = this.components.get(messageId);
+    if (component) {
+      const updatedComponent = {
+        ...component,
+        props,
+        updateCallback: updateCallback || component.updateCallback,
+        timestamp: Date.now(),
+      };
+      this.components.set(messageId, updatedComponent);
+      // Don't call notifyListeners() to avoid re-renders during props updates
+    }
+  }
+
   async update(messageId: string, patch: Record<string, unknown>) {
     const component = this.components.get(messageId);
     
@@ -213,18 +228,9 @@ export function useComponentRegistration(
     };
   }, [messageId, componentType, contextKey]); // Remove updateCallback from deps to prevent loops
   
-  // Update props and callback when they change without re-registering
+  // Update props and callback when they change using silent update (no re-registration logs)
   React.useEffect(() => {
-    const component = ComponentRegistry.list().find(c => c.messageId === messageId);
-    if (component) {
-      const updatedComponent = {
-        ...component,
-        props,
-        updateCallback: stableUpdateCallback,
-        timestamp: Date.now(),
-      };
-      ComponentRegistry.register(updatedComponent);
-    }
+    componentStore.updatePropsOnly(messageId, props, stableUpdateCallback);
   }, [props, stableUpdateCallback, messageId]);
 }
 
