@@ -7,6 +7,7 @@ import { useCanvasPersistence } from '@/hooks/use-canvas-persistence';
 import { useAuth } from '@/hooks/use-auth';
 import { toast } from 'react-hot-toast';
 import { TamboShapeUtil, ComponentStoreContext } from './tldraw-canvas';
+import type { TamboShape } from './tldraw-canvas';
 import type { Editor } from 'tldraw';
 import { useRouter } from 'next/navigation';
 import * as React from 'react';
@@ -28,10 +29,62 @@ export const TranscriptPanelContext = createContext<{
   toggle: () => {},
 });
 
-// Simplified overrides to avoid potential API issues
-const createPersistenceOverrides = (): TLUiOverrides => ({
-  // Empty overrides for now - transcript button will be outside toolbar
-});
+const createPersistenceOverrides = (): TLUiOverrides => {
+  return {
+    contextMenu: (_editor, contextMenu, { onlySelectedShape }) => {
+      if (onlySelectedShape && onlySelectedShape.type === 'tambo') {
+        const isPinned = (onlySelectedShape as TamboShape).props.pinned ?? false;
+        
+        const pinItem = {
+          id: 'pin-to-viewport',
+          type: 'item' as const,
+          label: isPinned ? 'Unpin from Window' : 'Pin to Window',
+          onSelect: () => {
+            const editor = _editor;
+            const shape = onlySelectedShape as TamboShape;
+            
+            if (!isPinned) {
+              // Calculate relative position when pinning
+              const viewport = editor.getViewportScreenBounds();
+              const bounds = editor.getShapePageBounds(shape.id);
+              if (bounds) {
+                // Convert page bounds to screen coordinates
+                const screenPoint = editor.pageToScreen({ x: bounds.x + bounds.w / 2, y: bounds.y + bounds.h / 2 });
+                const pinnedX = screenPoint.x / viewport.width;
+                const pinnedY = screenPoint.y / viewport.height;
+                
+                editor.updateShapes([{
+                  id: shape.id,
+                  type: 'tambo',
+                  props: {
+                    pinned: true,
+                    pinnedX: Math.max(0, Math.min(1, pinnedX)),
+                    pinnedY: Math.max(0, Math.min(1, pinnedY)),
+                  }
+                }]);
+              }
+            } else {
+              // Unpin the shape
+              editor.updateShapes([{
+                id: shape.id,
+                type: 'tambo',
+                props: {
+                  pinned: false,
+                }
+              }]);
+            }
+          }
+        };
+        
+        // Add separator and pin item at the end
+        contextMenu.push({ type: 'separator' as const });
+        contextMenu.push(pinItem);
+      }
+      
+      return contextMenu;
+    }
+  };
+};
 
 function CustomMainMenu({ readOnly = false }: { readOnly?: boolean } & any) {
   const { user, signOut } = useAuth();
@@ -144,6 +197,8 @@ function CustomMainMenu({ readOnly = false }: { readOnly?: boolean } & any) {
           disabled={disabled}
           onSelect={handleExport}
         />
+        
+
       </TldrawUiMenuGroup>
       
       {/* Add separator before our custom items */}
@@ -251,10 +306,7 @@ export function TldrawWithPersistence({
   const isEditorReady = Boolean(editor);
 
   // Create the overrides with the transcript toggle function
-  const overrides = React.useMemo(
-    () => createPersistenceOverrides(),
-    []
-  );
+  const overrides = React.useMemo(() => createPersistenceOverrides(), []);
 
   // Handle keyboard shortcut for transcript
   React.useEffect(() => {
