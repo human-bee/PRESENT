@@ -21,6 +21,14 @@ export const retroTimerSchema = z.object({
     .string()
     .optional()
     .describe("URL to a sound file to play when timer completes"),
+  initialSeconds: z
+    .number()
+    .optional()
+    .describe("Initial timer value in seconds (alternative to initialMinutes)"),
+  componentId: z
+    .string()
+    .optional()
+    .describe("Unique component identifier"),
 });
 
 // Define the props type based on the Zod schema
@@ -272,7 +280,8 @@ export function RetroTimer({
       componentId={componentId}
       onRemotePatch={(patch) => {
         if (typeof patch.seconds === 'number') setTimer(patch.seconds / 60);
-        if (typeof patch.isRunning === 'boolean') setState({ ...state, isRunning: patch.isRunning });
+        if (typeof patch.initialMinutes === 'number') setTimer(patch.initialMinutes);
+        if (typeof patch.isRunning === 'boolean' && state) setState({ ...state, isRunning: patch.isRunning });
       }}
     >
       <div className="w-full max-w-md mx-auto">

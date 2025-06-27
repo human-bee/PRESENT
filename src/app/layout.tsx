@@ -17,6 +17,10 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+
+// Component registry tests disabled to prevent infinite loops
+// To manually test: import { testComponentRegistry } from '@/lib/test-component-registry'; 
+// then call testComponentRegistry() in browser console
 import "tldraw/tldraw.css";
 import Providers from "@/components/providers";
 

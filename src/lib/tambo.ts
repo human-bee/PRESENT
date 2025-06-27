@@ -21,9 +21,13 @@ import {
   weatherForecastSchema,
 } from "@/components/ui/weather-forecast";
 import {
-  RetroTimer,
+  RetroTimerRegistry,
   retroTimerSchema,
-} from "@/components/ui/retro-timer";
+} from "@/components/ui/retro-timer-registry";
+import {
+  RetroTimerEnhanced,
+  retroTimerEnhancedSchema,
+} from "@/components/ui/retro-timer-enhanced";
 import {
   MarkdownViewer,
   markdownViewerSchema,
@@ -61,6 +65,8 @@ import LiveCaptions, {
 } from "@/components/LiveCaptions";
 import type { TamboComponent } from "@tambo-ai/react";
 import { TamboTool } from "@tambo-ai/react";
+import { z } from "zod";
+import { ComponentRegistry, type ComponentInfo } from "./component-registry";
 
 /**
  * tools
@@ -70,9 +76,106 @@ import { TamboTool } from "@tambo-ai/react";
  * can be controlled by AI to dynamically fetch data based on user interactions.
  */
 
+// Direct component update tool - no complex bus system needed!
+export const uiUpdateTool: TamboTool = {
+  name: 'ui_update',
+  description: `⚠️  STEP 1: Call list_components first! ⚠️
+  
+Update an existing UI component instead of creating a new one.
+
+STEP BY STEP:
+1. Call list_components to see available components with their IDs and current props
+2. Use the exact messageId from the response
+3. Specify what to update in the patch object
+
+EXAMPLES:
+- To change timer to 10 minutes: componentId="retrotimer-1751017248126", patch={"initialMinutes": 10}
+- To change participant name: componentId="participant-tile-456", patch={"participantIdentity": "Ben"}
+
+This tool works DIRECTLY - no complex routing needed!`,
+  tool: async (componentId: string, patch: Record<string, unknown>) => {
+    // Validate componentId exists in registry
+    const availableComponents = ComponentRegistry.list();
+    const availableIds = availableComponents.map((c: ComponentInfo) => c.messageId);
+    
+    if (!componentId || !availableIds.includes(componentId)) {
+      throw new Error(`Component "${componentId}" not found. Available components: ${availableIds.join(', ') || 'none'}`);
+    }
+    
+    // Validate patch is not empty
+    if (!patch || Object.keys(patch).length === 0) {
+      throw new Error(`Empty patch {}. You must specify what to update. Examples: {"initialMinutes": 10} for timer, {"participantIdentity": "Ben"} for participant`);
+    }
+    
+    // Direct update via component registry
+    const result = await ComponentRegistry.update(componentId, patch);
+    
+    if (!result.success) {
+      throw new Error(result.error || 'Update failed');
+    }
+    
+    return { 
+      status: 'SUCCESS',
+      message: `Updated component ${componentId}`,
+      componentId,
+      patch 
+    };
+  },
+  toolSchema: z
+    .function()
+    .args(
+      z.string().describe('Component ID from list_components (e.g., "retrotimer-1751017248126")'),
+      z.record(z.union([z.string(), z.number(), z.boolean(), z.null()])).describe('Update object: {"initialMinutes": 10} for timer')
+    )
+    .returns(
+      z.object({
+        status: z.string(),
+        message: z.string(),
+        componentId: z.string(),
+        patch: z.record(z.unknown())
+      })
+    ),
+};
+
+// Direct component listing tool - no bus system needed!
+export const listComponentsTool: TamboTool = {
+  name: 'list_components',
+  description: '🚨 ALWAYS CALL THIS FIRST before ui_update! 🚨 Lists all available UI components with their message IDs and current props.',
+  toolSchema: z
+    .function()
+    .args()
+    .returns(z.object({
+      status: z.string(),
+      message: z.string(),
+      components: z.array(z.object({
+        messageId: z.string(),
+        componentType: z.string(),
+        props: z.record(z.unknown()),
+        contextKey: z.string()
+      }))
+    })),
+  tool: async () => {
+    // Direct access to component registry
+    const components = ComponentRegistry.list();
+    
+    return {
+      status: 'SUCCESS',
+      message: `Found ${components.length} components`,
+      components: components.map((c: ComponentInfo) => ({
+        messageId: c.messageId,
+        componentType: c.componentType,
+        props: c.props,
+        contextKey: c.contextKey
+      }))
+    };
+  },
+};
+
 export const tools: TamboTool[] = [
   // Set the MCP tools https://localhost:3000/mcp-config
   // Add non MCP tools here
+  listComponentsTool,
+  uiUpdateTool,
 ];
 
 /**
@@ -107,9 +210,16 @@ export const components: TamboComponent[] = [
   {
     name: "RetroTimer",
     description:
-      "A retro-styled countdown timer with preset options for 5, 10, and 20 minutes. Features start/pause and reset controls.",
-    component: RetroTimer,
+      "A retro-styled countdown timer with preset options for 5, 10, and 20 minutes. Features start/pause and reset controls. Now with AI update capabilities!",
+    component: RetroTimerRegistry,
     propsSchema: retroTimerSchema,
+  },
+  {
+    name: "RetroTimerEnhanced",
+    description:
+      "An enhanced retro-styled countdown timer with AI update capabilities and new simplified component registry. Features direct AI updates, auto-registration, better state management, and preset options for 5, 10, and 20 minutes. Demonstrates the new simplified architecture without complex bus systems. Perfect for testing AI component updates!",
+    component: RetroTimerEnhanced,
+    propsSchema: retroTimerEnhancedSchema,
   },
   {
     name: "MarkdownViewer",

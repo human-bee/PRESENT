@@ -1,3 +1,5 @@
+"use client";
+
 import { useTamboComponentState } from "@tambo-ai/react";
 import { z } from "zod";
 import React, { useEffect, useRef } from 'react';

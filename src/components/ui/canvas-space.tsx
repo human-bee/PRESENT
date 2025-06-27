@@ -156,6 +156,34 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
     // Store the component separately to avoid structuredClone issues
     componentStore.current.set(messageId, component);
     
+    // Note: ComponentRegistry integration temporarily disabled to prevent infinite loops
+    // Will be re-enabled once tldraw stability issues are resolved
+    
+    /*
+    // Register with the new ComponentRegistry system
+    if (component && React.isValidElement(component)) {
+      const componentType = typeof component.type === 'function' 
+        ? (component.type as { displayName?: string; name?: string }).displayName || 
+          (component.type as { displayName?: string; name?: string }).name || 'CanvasComponent'
+        : 'CanvasComponent';
+      
+      // Import ComponentRegistry dynamically to avoid circular imports
+      import('@/lib/component-registry').then(({ ComponentRegistry }) => {
+        ComponentRegistry.register({
+          messageId,
+          componentType,
+          props: (component.props || {}) as Record<string, unknown>,
+          contextKey: 'canvas', // Canvas context
+          timestamp: Date.now(),
+          updateCallback: (patch) => {
+            console.log(`[Canvas] Component ${messageId} received update:`, patch);
+            // The component should handle its own updates via the registry wrapper
+          }
+        });
+      });
+    }
+    */
+    
     const existingShapeId = messageIdToShapeIdMap.get(messageId);
 
     if (existingShapeId) {

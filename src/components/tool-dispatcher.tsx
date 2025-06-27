@@ -89,7 +89,7 @@ interface ToolErrorEvent {
 interface PendingTool {
   id: string;
   timestamp: number;
-  status: 'pending' | 'executing' | 'completed' | 'failed';
+  status: 'pending' | 'executing' | 'completed' | 'failed' | 'error';
   tool: string;
   params: Record<string, unknown>;
 }
@@ -315,6 +315,77 @@ export function ToolDispatcher({
         if (typeof reg?.get === 'function') return reg.get(payload.tool);
         return reg?.[payload.tool];
       })();
+
+      if (payload.tool === 'ui_update') {
+        // Forward directly to bus so CanvasSyncAdapters can handle it
+        log('🔧 [ToolDispatcher] ui_update received:', payload.params);
+        
+        // Extract parameters from either named params or param1/param2 structure
+        const componentId = payload.params.componentId || payload.params.param1;
+        const patch = payload.params.patch || payload.params.param2;
+        
+        // Validate componentId format before forwarding
+        if (!componentId || typeof componentId !== 'string' || !componentId.startsWith('msg_')) {
+          pendingTool.status = 'error';
+          await publishToolResult(id, { 
+            status: 'ERROR',
+            error: `STOP! Invalid componentId "${componentId}". You MUST call list_components first to get valid message IDs like "msg_JYzYoEUx.503746"` 
+          });
+          return;
+        }
+        
+        // Validate patch is not empty
+        if (!patch || typeof patch !== 'object' || Object.keys(patch).length === 0) {
+          pendingTool.status = 'error';
+          await publishToolResult(id, { 
+            status: 'ERROR',
+            error: `Empty patch {}. You must specify what to update. Examples: {"initialMinutes": 10} for timer, {"participantIdentity": "Ben"} for participant` 
+          });
+          return;
+        }
+        
+        // Forward with proper parameter names
+        bus.send('ui_update', { 
+          componentId, 
+          patch, 
+          timestamp: Date.now() 
+        });
+        pendingTool.status = 'completed';
+        await publishToolResult(id, { status: 'SUCCESS', forwarded: true });
+        return;
+      }
+
+      if (payload.tool === 'list_components') {
+        // Request component list from frontend via bus
+        log('🔧 [ToolDispatcher] Requesting component list...');
+        bus.send('component_list_request', { timestamp: Date.now() });
+        
+        // Wait for response from component store
+        const componentListPromise = new Promise((resolve) => {
+          const timeout = setTimeout(() => {
+            resolve({
+              status: 'SUCCESS',
+              message: 'Component list request timed out. Check conversation history for messageIds like "msg_zOSjNf8.a3fa7f"',
+              components: []
+            });
+          }, 2000);
+          
+          const off = bus.on('component_list_response', (response: any) => {
+            clearTimeout(timeout);
+            off();
+            resolve({
+              status: 'SUCCESS',
+              message: `Found ${response.components.length} components in context "${response.contextKey}"`,
+              components: response.components
+            });
+          });
+        });
+        
+        result = await componentListPromise;
+        pendingTool.status = 'completed';
+        await publishToolResult(id, result);
+        return;
+      }
 
       if (registryTool && !builtIns.has(payload.tool)) {
         try {

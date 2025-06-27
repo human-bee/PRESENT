@@ -24,7 +24,9 @@ import { MessageSquare, FileText } from "lucide-react";
 import * as React from "react";
 import { type VariantProps } from "class-variance-authority";
 import type { Suggestion } from "@tambo-ai/react";
-import { useRoomContext, useDataChannel } from '@livekit/components-react';
+import { useRoomContext } from '@livekit/components-react';
+import { createLiveKitBus } from '../../lib/livekit-bus';
+import { useContextKey } from '../RoomScopedProviders';
 
 /**
  * Props for the MessageThreadCollapsible component
@@ -72,6 +74,7 @@ export const MessageThreadCollapsible = React.forwardRef<
   MessageThreadCollapsibleProps
 >(({ className, contextKey, variant, onTranscriptChange, ...props }, ref) => {
   const [activeTab, setActiveTab] = React.useState<'conversations' | 'transcript'>('conversations');
+  const [componentStore, setComponentStore] = React.useState(new Map<string, {component: React.ReactNode, contextKey: string}>());
   const [transcriptions, setTranscriptions] = React.useState<Array<{
     id: string;
     speaker: string;
@@ -85,22 +88,24 @@ export const MessageThreadCollapsible = React.forwardRef<
   // Ref for auto-scroll
   const transcriptContainerRef = React.useRef<HTMLDivElement>(null);
 
-  // LiveKit room context for transcript functionality
+  // LiveKit room context and bus for transcript functionality
   const room = useRoomContext();
+  const bus = createLiveKitBus(room);
+  const roomContextKey = useContextKey();
+  const effectiveContextKey = contextKey || roomContextKey;
 
-  // Listen for transcription data from LiveKit data channel
-  useDataChannel("transcription", (message) => {
-    try {
-      const data = JSON.parse(new TextDecoder().decode(message.payload));
-      
-      if (data.type === "live_transcription") {
+  // Listen for transcription data via bus
+  React.useEffect(() => {
+    const off = bus.on('transcription', (data: unknown) => {
+      const transcriptionData = data as { type?: string; speaker?: string; text?: string; timestamp?: number; is_final?: boolean };
+      if (transcriptionData.type === "live_transcription" && transcriptionData.text) {
         const transcription = {
           id: `${Date.now()}-${Math.random()}`,
-          speaker: data.speaker || "Unknown",
-          text: data.text,
-          timestamp: data.timestamp || Date.now(),
-          isFinal: data.is_final || false,
-          source: (data.speaker === 'tambo-voice-agent' ? 'agent' : 'user') as 'agent' | 'user',
+          speaker: transcriptionData.speaker || "Unknown",
+          text: transcriptionData.text,
+          timestamp: transcriptionData.timestamp || Date.now(),
+          isFinal: transcriptionData.is_final || false,
+          source: (transcriptionData.speaker === 'tambo-voice-agent' ? 'agent' : 'user') as 'agent' | 'user',
           type: 'speech' as const,
         };
         
@@ -120,36 +125,70 @@ export const MessageThreadCollapsible = React.forwardRef<
           return [...filtered, transcription];
         });
       }
-    } catch (error) {
-      console.error("Error processing transcription data:", error);
+    });
+    return off;
+  }, [bus]);
+
+  // Listen for Tambo component creation - register with new system
+  const handleTamboComponent = React.useCallback((event: CustomEvent) => {
+    const { messageId, component } = event.detail;
+    
+    // Store the component for this thread/context (for transcript display)
+    setComponentStore(prev => {
+      const updated = new Map(prev);
+      updated.set(messageId, { component, contextKey: effectiveContextKey || 'default' });
+      return updated;
+    });
+    
+    // Note: ComponentRegistry integration temporarily disabled to prevent infinite loops
+    // Will be re-enabled once tldraw stability issues are resolved
+    
+    /*
+    // Register with the new ComponentRegistry system
+    if (component && React.isValidElement(component)) {
+      const componentType = typeof component.type === 'function' 
+        ? (component.type as { displayName?: string; name?: string }).displayName || 
+          (component.type as { displayName?: string; name?: string }).name || 'UnknownComponent'
+        : 'UnknownComponent';
+      
+      // Import ComponentRegistry dynamically to avoid circular imports
+      import('@/lib/component-registry').then(({ ComponentRegistry }) => {
+        ComponentRegistry.register({
+          messageId,
+          componentType,
+          props: (component.props || {}) as Record<string, unknown>,
+          contextKey: effectiveContextKey || 'default',
+          timestamp: Date.now(),
+          updateCallback: (patch) => {
+            console.log(`[MessageThread] Component ${messageId} received update:`, patch);
+            // The component should handle its own updates via the registry wrapper
+          }
+        });
+      });
     }
-  });
-
-  // Listen for Tambo system calls
-  React.useEffect(() => {
-    const handleTamboComponent = (event: CustomEvent) => {
-      const { messageId } = event.detail;
-      
-      // Add system call to transcript
-      const systemCall = {
-        id: `system-${Date.now()}-${Math.random()}`,
-        speaker: 'tambo-voice-agent',
-        text: `Generated component: ${messageId || 'Unknown component'}`,
-        timestamp: Date.now(),
-        isFinal: true,
-        source: 'system' as const,
-        type: 'system_call' as const,
-      };
-      
-      setTranscriptions(prev => [...prev, systemCall]);
+    */
+    
+    // Also add system call to transcript
+    const systemCall = {
+      id: `system-${Date.now()}-${Math.random()}`,
+      speaker: 'tambo-voice-agent',
+      text: `Generated component: ${messageId || 'Unknown component'}`,
+      timestamp: Date.now(),
+      isFinal: true,
+      source: 'system' as const,
+      type: 'system_call' as const,
     };
+    
+    setTranscriptions(prev => [...prev, systemCall]);
+  }, [effectiveContextKey]);
 
+  React.useEffect(() => {
     window.addEventListener('tambo:showComponent', handleTamboComponent as EventListener);
     
     return () => {
       window.removeEventListener('tambo:showComponent', handleTamboComponent as EventListener);
     };
-  }, []);
+  }, [handleTamboComponent]);
 
   // Auto-scroll transcript when new entries are added
   React.useEffect(() => {
@@ -204,6 +243,9 @@ export const MessageThreadCollapsible = React.forwardRef<
     }
   }, [transcriptions, onTranscriptChange]);
 
+  // Note: Component list requests are now handled directly by ComponentRegistry
+  // Old bus-based system removed in favor of direct tool access
+
   return (
     <div
       ref={ref}
@@ -221,7 +263,7 @@ export const MessageThreadCollapsible = React.forwardRef<
               {activeTab === 'conversations' ? "Conversations" : "Transcript"}
             </span>
             <ThreadDropdown
-        contextKey={contextKey}
+        contextKey={effectiveContextKey}
         onThreadChange={handleThreadChange}
       />
           </div>
@@ -272,7 +314,7 @@ export const MessageThreadCollapsible = React.forwardRef<
 
               {/* Message input */}
               <div className="p-4">
-                <MessageInput contextKey={contextKey}>
+                <MessageInput contextKey={effectiveContextKey}>
                   <MessageInputTextarea />
                   <MessageInputToolbar>
                     <MessageInputSubmitButton />
@@ -291,42 +333,62 @@ export const MessageThreadCollapsible = React.forwardRef<
               {/* Transcript Content */}
               <ScrollableMessageContainer className="flex-1 p-4" ref={transcriptContainerRef}>
                 <div className="space-y-2">
-                  {transcriptions.length === 0 ? (
-                    <div className="text-center text-muted-foreground py-8">
-                      <FileText className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                      <p>No transcriptions yet</p>
-                      <p className="text-sm mt-1">Voice conversations will appear here</p>
-                    </div>
-                  ) : (
-                    transcriptions.map((transcription) => (
-                      <div
-                        key={transcription.id}
-                        className={cn(
-                          "p-3 rounded-lg border transition-opacity",
-                          transcription.source === 'agent' 
-                            ? "bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800"
-                            : transcription.source === 'system'
-                            ? "bg-purple-50 dark:bg-purple-900/20 border-purple-200 dark:border-purple-800"
-                            : "bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800",
-                          !transcription.isFinal && "opacity-60 italic"
-                        )}
-                      >
-                        <div className="flex items-center justify-between text-xs mb-1">
-                          <span className="font-medium">
-                            {transcription.speaker}
-                            {transcription.type === 'system_call' && ' → Tambo System'}
-                          </span>
-                          <div className="flex items-center gap-2 text-muted-foreground">
-                            {!transcription.isFinal && <span>(interim)</span>}
-                            <span>{formatTime(transcription.timestamp)}</span>
-                          </div>
-                        </div>
-                        <div className="text-sm">
-                          {transcription.text}
-                        </div>
+                  {/* Filter components for current context */}
+                  {(() => {
+                    const contextComponents = Array.from(componentStore.entries())
+                      .filter(([, data]) => data.contextKey === effectiveContextKey);
+                    
+                    return contextComponents.length === 0 && transcriptions.length === 0 ? (
+                      <div className="text-center text-muted-foreground py-8">
+                        <FileText className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                        <p>No activity yet</p>
+                        <p className="text-sm mt-1">Voice conversations and components will appear here</p>
                       </div>
-                    ))
-                  )}
+                    ) : (
+                      <>
+                        {/* Show generated components first */}
+                        {contextComponents.map(([messageId, data]) => (
+                          <div key={messageId} className="mb-4 p-3 rounded-lg border bg-purple-50 dark:bg-purple-900/20 border-purple-200 dark:border-purple-800">
+                            <div className="text-xs text-purple-600 dark:text-purple-400 mb-2">
+                              Component: {messageId}
+                            </div>
+                            <div className="bg-white dark:bg-gray-800 rounded border">
+                              {data.component}
+                            </div>
+                          </div>
+                        ))}
+                        {/* Then show transcriptions */}
+                        {transcriptions.map((transcription) => (
+                          <div
+                            key={transcription.id}
+                            className={cn(
+                              "p-3 rounded-lg border transition-opacity",
+                              transcription.source === 'agent' 
+                                ? "bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800"
+                                : transcription.source === 'system'
+                                ? "bg-purple-50 dark:bg-purple-900/20 border-purple-200 dark:border-purple-800"
+                                : "bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800",
+                              !transcription.isFinal && "opacity-60 italic"
+                            )}
+                          >
+                            <div className="flex items-center justify-between text-xs mb-1">
+                              <span className="font-medium">
+                                {transcription.speaker}
+                                {transcription.type === 'system_call' && ' → Tambo System'}
+                              </span>
+                              <div className="flex items-center gap-2 text-muted-foreground">
+                                {!transcription.isFinal && <span>(interim)</span>}
+                                <span>{formatTime(transcription.timestamp)}</span>
+                              </div>
+                            </div>
+                            <div className="text-sm">
+                              {transcription.text}
+                            </div>
+                          </div>
+                        ))}
+                      </>
+                    );
+                  })()}
                 </div>
               </ScrollableMessageContainer>
 
