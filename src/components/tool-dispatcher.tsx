@@ -274,13 +274,59 @@ Please consider both the processed summary above and the original transcript con
         };
         
       } else if (payload.tool === 'youtube_search') {
-        // Handle YouTube search
+        // Handle YouTube search with smart filtering
         const params = payload.params as { query?: string; task_prompt?: string };
-        await sendTamboMessage(params.query || params.task_prompt || 'Search YouTube');
+        const query = params.query || params.task_prompt || '';
+        
+        // Smart search interpretation
+        const queryLower = query.toLowerCase();
+        const wantsLatest = queryLower.includes('latest') || queryLower.includes('newest') || 
+                           queryLower.includes('recent') || queryLower.includes('new');
+        const wantsOfficial = queryLower.includes('official') || queryLower.includes('vevo');
+        
+        // Build enhanced search message
+        let searchMessage = `Use the YouTube MCP tool to search for: "${query}"`;
+        
+        // Add smart parameters
+        if (wantsLatest) {
+          searchMessage += `\n- Sort by upload date (newest first)`;
+          searchMessage += `\n- Prioritize videos from the last 7 days`;
+        }
+        
+        if (wantsOfficial) {
+          searchMessage += `\n- Prefer official/verified channels`;
+          searchMessage += `\n- Look for channel names containing "Official", "VEVO", or verified badges`;
+        }
+        
+        searchMessage += `\n- Get at least 5 results to choose from`;
+        searchMessage += `\n\nAfter getting results:`;
+        searchMessage += `\n1. Pick the most relevant video (considering recency and channel authority)`;
+        searchMessage += `\n2. Create a YoutubeEmbed component with that video`;
+        searchMessage += `\n3. Set the title to the video's title`;
+        
+        // Special handling for specific artists/channels
+        if (queryLower.includes('pinkpantheress') || queryLower.includes('pink pantheress')) {
+          searchMessage += `\n\nNote: Look for videos from the official "Pinkpantheress" channel`;
+        }
+        
+        log('🎥 [ToolDispatcher] Enhanced YouTube search:', {
+          originalQuery: query,
+          wantsLatest,
+          wantsOfficial,
+          enhancedMessage: searchMessage
+        });
+        
+        // Send enhanced search message to Tambo
+        await sendTamboMessage(searchMessage);
         
         result = {
           status: 'SUCCESS',
-          message: 'YouTube search initiated',
+          message: 'Smart YouTube search initiated',
+          searchParams: {
+            query,
+            wantsLatest,
+            wantsOfficial
+          }
         };
         
       } else if (payload.tool === 'respond_with_voice' || payload.tool === 'do_nothing') {

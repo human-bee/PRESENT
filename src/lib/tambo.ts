@@ -12,6 +12,10 @@ import {
   YoutubeEmbed,
   youtubeEmbedSchema,
 } from "@/components/ui/youtube-embed";
+// import {
+//   YoutubeSearchEnhanced,
+//   youtubeSearchEnhancedSchema,
+// } from "@/components/ui/youtube-search-enhanced";
 import {
   WeatherForecast,
   weatherForecastSchema,
@@ -32,10 +36,10 @@ import {
   ActionItemTracker,
   actionItemTrackerSchema,
 } from "@/components/ui/action-item-tracker";
-import {
-  LivekitToolbar,
-  livekitToolbarSchema,
-} from "@/components/ui/livekit-toolbar";
+// import {
+//  LivekitToolbar,
+//  livekitToolbarSchema,
+// } from "@/components/ui/livekit-toolbar";
 import {
   LivekitParticipantTile,
   livekitParticipantTileSchema,
@@ -48,10 +52,10 @@ import {
   AIImageGenerator,
   aiImageGeneratorSchema,
 } from "@/components/ui/ai-image-generator";
-import {
-  PresentationDeck,
-  presentationDeckSchema,
-} from "@/components/ui/presentation-deck";
+// import {
+//   PresentationDeck,
+//   presentationDeckSchema,
+// } from "@/components/ui/presentation-deck";
 import LiveCaptions, {
   liveCaptionsSchema,
 } from "@/components/LiveCaptions";
@@ -86,6 +90,13 @@ export const components: TamboComponent[] = [
     component: YoutubeEmbed,
     propsSchema: youtubeEmbedSchema,
   },
+  // {
+  //   name: "YoutubeSearchEnhanced",
+  //   description:
+  //     "Advanced YouTube search interface with intelligent filtering, transcript navigation, and quality detection. Features include: search by date ranges (today/week/month/year), sort by newest/views/rating, filter by video duration, identify official/verified channels, view trending videos, read and navigate transcripts with timestamps, and smart quality scoring. Perfect for finding the latest high-quality content and navigating to specific moments in videos. Automatically filters out low-quality content and prioritizes official sources.",
+  //   component: YoutubeSearchEnhanced,
+  //   propsSchema: youtubeSearchEnhancedSchema,
+  // },
   {
     name: "WeatherForecast",
     description: 
@@ -128,13 +139,13 @@ export const components: TamboComponent[] = [
     component: LivekitRoomConnector,
     propsSchema: livekitRoomConnectorSchema,
   },
-  {
-    name: "LivekitToolbar",
-    description:
-      "A comprehensive video conferencing toolbar component designed for LiveKit applications. REQUIRES LivekitRoomConnector to be connected first. Features all standard controls including microphone, camera, screen sharing, chat, raise hand, participant management, settings, recording, layout switching, AI assistant integration, accessibility options, and connection quality indicators. Supports both minimal and verbose display modes with configurable control visibility.",
-    component: LivekitToolbar,
-    propsSchema: livekitToolbarSchema,
-  },
+// {
+//   name: "LivekitToolbar",
+//   description:
+//     "A comprehensive video conferencing toolbar component designed for LiveKit applications. REQUIRES LivekitRoomConnector to be connected first. Features all standard controls including microphone, camera, screen sharing, chat, raise hand, participant management, settings, recording, layout switching, AI assistant integration, accessibility options, and connection quality indicators. Supports both minimal and verbose display modes with configurable control visibility.",
+//   component: LivekitToolbar,
+//   propsSchema: livekitToolbarSchema,
+// },
   {
     name: "LivekitParticipantTile",
     description:
@@ -149,13 +160,13 @@ export const components: TamboComponent[] = [
     component: AIImageGenerator,
     propsSchema: aiImageGeneratorSchema,
   },
-  {
-    name: "PresentationDeck",
-    description:
-      "A feature-complete presentation tool for displaying beautiful, almost full-screen PowerPoint, Google Slides, PDF, and image-based presentations. Features comprehensive hotkey controls (arrow keys, space, enter for play/pause, F for fullscreen), laser pointer mode, thumbnail navigation, speaker notes, auto-advance, progress tracking, bookmarking, and canvas integration. Supports multiple aspect ratios (16:9, 4:3, 16:10), dark/light themes, and persistent state management. Perfect for business presentations, lectures, demos, and any scenario requiring professional slide display with advanced navigation and control features.",
-    component: PresentationDeck,
-    propsSchema: presentationDeckSchema,
-  },
+ // {
+ //   name: "PresentationDeck",
+ //   description:
+ //     "A feature-complete presentation tool for displaying beautiful, almost full-screen PowerPoint, Google Slides, PDF, and image-based presentations. Features comprehensive hotkey controls (arrow keys, space, enter for play/pause, F for fullscreen), laser pointer mode, thumbnail navigation, speaker notes, auto-advance, progress tracking, bookmarking, and canvas integration. Supports multiple aspect ratios (16:9, 4:3, 16:10), dark/light themes, and persistent state management. Perfect for business presentations, lectures, demos, and any scenario requiring professional slide display with advanced navigation and control features.",
+ //   component: PresentationDeck,
+ //   propsSchema: presentationDeckSchema,
+ // },
   {
     name: "LiveCaptions",
     description:

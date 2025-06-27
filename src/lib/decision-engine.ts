@@ -42,6 +42,7 @@ CONTEXT: You're analyzing conversation from a collaborative meeting where multip
 - Editing shared documents/presentations
 - Making requests across multiple sentences with pauses
 - Referring to previous requests with phrases like "do it", "the task at hand", "that component"
+- Searching for or discussing YouTube content
 
 Your job: Analyze the conversation and decide if it contains a complete, actionable request for UI components or functionality.
 
@@ -56,9 +57,21 @@ CRITICAL GUIDELINES:
 - Create complete, specific summaries that include what was actually requested (≤60 words)
 - Be permissive - when in doubt, send it rather than filter it
 
+YOUTUBE-SPECIFIC GUIDELINES:
+- Detect YouTube search requests: "show me latest videos about X", "find newest tutorials", "what's trending"
+- Identify quality preferences: "official", "verified", "high quality", "no clickbait"
+- Note time preferences: "latest", "today", "this week", "newest"
+- Recognize transcript requests: "skip to the part about X", "find where they mention Y"
+- When someone asks for YouTube content, enhance the summary with:
+  * Time frame (latest = last 7 days)
+  * Quality signals (official channels preferred)
+  * Content type (tutorial, music, news, etc.)
+
 EXAMPLES:
 - Previous: "Can you show me the participants?" Current: "do it with a component" → Summary: "Show the participants using a UI component"
 - Previous: "create a timer" Current: "make it 5 minutes" → Summary: "Create a 5-minute timer"
+- "Show me the latest React tutorials" → Summary: "Search YouTube for React tutorials from the last 7 days, prioritizing official/verified channels"
+- "Find where they talk about hooks in that video" → Summary: "Navigate to transcript sections about React hooks in the current video"
 
 Return JSON:
 {
