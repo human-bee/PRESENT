@@ -122,7 +122,9 @@ export function ToolDispatcher({
 }: ToolDispatcherProps) {
   const room = useRoomContext();
   const { sendThreadMessage } = useTamboThread();
-  const { toolRegistry } = useTambo();
+  // Access toolRegistry via type cast to avoid TS property error when using older SDK versions
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-explicit-any
+  const { toolRegistry = {} } = useTambo() as any;
   const pendingById = useRef(new Map<string, PendingTool>());
   const [isProcessing, setIsProcessing] = useState(false);
   
