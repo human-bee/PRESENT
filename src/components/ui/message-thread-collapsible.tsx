@@ -140,10 +140,7 @@ export const MessageThreadCollapsible = React.forwardRef<
       return updated;
     });
     
-    // Note: ComponentRegistry integration temporarily disabled to prevent infinite loops
-    // Will be re-enabled once tldraw stability issues are resolved
-    
-    /*
+    // ✅ ComponentRegistry integration re-enabled with enhanced stability
     // Register with the new ComponentRegistry system
     if (component && React.isValidElement(component)) {
       const componentType = typeof component.type === 'function' 
@@ -153,20 +150,26 @@ export const MessageThreadCollapsible = React.forwardRef<
       
       // Import ComponentRegistry dynamically to avoid circular imports
       import('@/lib/component-registry').then(({ ComponentRegistry }) => {
-        ComponentRegistry.register({
-          messageId,
-          componentType,
-          props: (component.props || {}) as Record<string, unknown>,
-          contextKey: effectiveContextKey || 'default',
-          timestamp: Date.now(),
-          updateCallback: (patch) => {
-            console.log(`[MessageThread] Component ${messageId} received update:`, patch);
-            // The component should handle its own updates via the registry wrapper
-          }
-        });
+        try {
+          ComponentRegistry.register({
+            messageId,
+            componentType,
+            props: (component.props || {}) as Record<string, unknown>,
+            contextKey: effectiveContextKey || 'default',
+            timestamp: Date.now(),
+            updateCallback: (patch) => {
+              console.log(`✅ [MessageThread] Component ${messageId} received update:`, patch);
+              // The component should handle its own updates via the registry wrapper
+            }
+          });
+          console.log(`✅ [MessageThread] Successfully registered component: ${messageId}`);
+        } catch (error) {
+          console.warn(`⚠️ [MessageThread] Failed to register component ${messageId}:`, error);
+        }
+      }).catch(error => {
+        console.warn(`⚠️ [MessageThread] Failed to import ComponentRegistry:`, error);
       });
     }
-    */
     
     // Also add system call to transcript
     const systemCall = {

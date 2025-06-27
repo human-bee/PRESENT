@@ -110,6 +110,8 @@ export default defineAgent({
         - generate_ui_component: Create ANY UI component (timers, charts, buttons, forms, etc.) - Tambo knows about all available components
         - youtube_search: Search and display YouTube videos
         - mcp_tool: Access external tools via Model Context Protocol
+        - ui_update: Update existing UI components (MUST call list_components first!)
+        - list_components: List all current UI components to get their IDs
         - respond_with_voice: Speak responses when appropriate
         - do_nothing: When no action is needed
         
@@ -122,6 +124,109 @@ export default defineAgent({
         DO NOT use voice to repeat UI requests like "Create a timer" or "Show me a chart" - these are handled automatically by the system.`,
       model: 'gpt-4o-realtime-preview',
       modalities: ['text'],
+      tools: [
+        {
+          type: 'function',
+          name: 'ui_update',
+          description: '🚨 MANDATORY: Call list_components first! 🚨 Update an existing UI component. CRITICAL WORKFLOW: 1) Call list_components 2) Use exact messageId 3) Call ui_update with specific patch object',
+          parameters: {
+            type: 'object',
+            properties: {
+              componentId: {
+                type: 'string',
+                description: 'Component ID from list_components (e.g., "timer-retro-timer-b9h1rhno6")'
+              },
+              patch: {
+                type: 'object',
+                description: 'Update object with specific properties. Examples: {"initialMinutes": 10} for timer, {"participantIdentity": "Ben"} for participant',
+                properties: {
+                  initialMinutes: { type: 'number', description: 'Timer minutes' },
+                  initialSeconds: { type: 'number', description: 'Timer seconds' },
+                  title: { type: 'string', description: 'Component title' },
+                  participantIdentity: { type: 'string', description: 'Participant name' },
+                  query: { type: 'string', description: 'Search query' }
+                },
+                additionalProperties: true
+              }
+            },
+            required: ['componentId', 'patch']
+          }
+        },
+        {
+          type: 'function',
+          name: 'list_components',
+          description: '🔴 MANDATORY FIRST STEP! Call this BEFORE any ui_update! Gets current component IDs - NEVER use old cached IDs!',
+          parameters: {
+            type: 'object',
+            properties: {},
+            additionalProperties: false
+          }
+        },
+        {
+          type: 'function',
+          name: 'generate_ui_component',
+          description: 'Create a new UI component (timer, chart, etc.)',
+          parameters: {
+            type: 'object',
+            properties: {
+              componentType: {
+                type: 'string',
+                description: 'Type of component to create',
+                default: 'auto'
+              },
+              prompt: {
+                type: 'string',
+                description: 'Description of what to create'
+              }
+            },
+            required: ['prompt']
+          }
+        },
+        {
+          type: 'function',
+          name: 'youtube_search',
+          description: 'Search and display YouTube videos',
+          parameters: {
+            type: 'object',
+            properties: {
+              query: {
+                type: 'string',
+                description: 'Search query for YouTube videos'
+              }
+            },
+            required: ['query']
+          }
+        },
+        {
+          type: 'function',
+          name: 'respond_with_voice',
+          description: 'Speak a response to the user',
+          parameters: {
+            type: 'object',
+            properties: {
+              spokenMessage: {
+                type: 'string',
+                description: 'Message to speak'
+              },
+              justificationForSpeaking: {
+                type: 'string',
+                description: 'Reason for speaking'
+              }
+            },
+            required: ['spokenMessage']
+          }
+        },
+        {
+          type: 'function',
+          name: 'do_nothing',
+          description: 'Take no action when no response is needed',
+          parameters: {
+            type: 'object',
+            properties: {},
+            additionalProperties: false
+          }
+        }
+      ]
     });
     
     console.log('🎙️ [Agent] Starting multimodal agent...');

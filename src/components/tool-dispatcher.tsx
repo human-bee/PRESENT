@@ -316,75 +316,99 @@ export function ToolDispatcher({
         return reg?.[payload.tool];
       })();
 
-      if (payload.tool === 'ui_update') {
-        // Forward directly to bus so CanvasSyncAdapters can handle it
-        log('🔧 [ToolDispatcher] ui_update received:', payload.params);
-        
-        // Extract parameters from either named params or param1/param2 structure
-        const componentId = payload.params.componentId || payload.params.param1;
-        const patch = payload.params.patch || payload.params.param2;
-        
-        // Validate componentId format before forwarding
-        if (!componentId || typeof componentId !== 'string' || !componentId.startsWith('msg_')) {
-          pendingTool.status = 'error';
-          await publishToolResult(id, { 
-            status: 'ERROR',
-            error: `STOP! Invalid componentId "${componentId}". You MUST call list_components first to get valid message IDs like "msg_JYzYoEUx.503746"` 
-          });
-          return;
-        }
-        
-        // Validate patch is not empty
-        if (!patch || typeof patch !== 'object' || Object.keys(patch).length === 0) {
-          pendingTool.status = 'error';
-          await publishToolResult(id, { 
-            status: 'ERROR',
-            error: `Empty patch {}. You must specify what to update. Examples: {"initialMinutes": 10} for timer, {"participantIdentity": "Ben"} for participant` 
-          });
-          return;
-        }
-        
-        // Forward with proper parameter names
-        bus.send('ui_update', { 
-          componentId, 
-          patch, 
-          timestamp: Date.now() 
-        });
-        pendingTool.status = 'completed';
-        await publishToolResult(id, { status: 'SUCCESS', forwarded: true });
-        return;
-      }
+      // Check if tool is available in Tambo registry (including ui_update and list_components)
+      const tamboTool = (() => {
+        // Handle both Map-style (toolRegistry.get) and plain object registries
+        const reg: any = toolRegistry;
+        if (typeof reg?.get === 'function') return reg.get(payload.tool);
+        return reg?.[payload.tool];
+      })();
 
-      if (payload.tool === 'list_components') {
-        // Request component list from frontend via bus
-        log('🔧 [ToolDispatcher] Requesting component list...');
-        bus.send('component_list_request', { timestamp: Date.now() });
-        
-        // Wait for response from component store
-        const componentListPromise = new Promise((resolve) => {
-          const timeout = setTimeout(() => {
-            resolve({
-              status: 'SUCCESS',
-              message: 'Component list request timed out. Check conversation history for messageIds like "msg_zOSjNf8.a3fa7f"',
-              components: []
-            });
-          }, 2000);
-          
-          const off = bus.on('component_list_response', (response: any) => {
-            clearTimeout(timeout);
-            off();
-            resolve({
-              status: 'SUCCESS',
-              message: `Found ${response.components.length} components in context "${response.contextKey}"`,
-              components: response.components
-            });
-          });
+      if (payload.tool === 'ui_update' || payload.tool === 'list_components') {
+        // Call the actual Tambo tools to get proper error messages!
+        log('🔧 [ToolDispatcher] Calling Tambo tool:', payload.tool);
+        log('🔍 [ToolDispatcher] Tool registry structure:', {
+          registryType: typeof toolRegistry,
+          hasGet: typeof toolRegistry?.get === 'function',
+          keys: toolRegistry ? Object.keys(toolRegistry) : 'no registry',
+          registryKeys: toolRegistry instanceof Map ? Array.from(toolRegistry.keys()) : 'not a Map'
         });
+        log('🔍 [ToolDispatcher] Looking for tool:', payload.tool, 'found:', !!tamboTool);
         
-        result = await componentListPromise;
-        pendingTool.status = 'completed';
-        await publishToolResult(id, result);
-        return;
+        try {
+          if (!tamboTool) {
+            // Try to import the tools directly as fallback
+            log('🔧 [ToolDispatcher] Tool not found in registry, trying direct import...');
+            const { uiUpdateTool, listComponentsTool } = await import('@/lib/tambo');
+            
+            const directTool = payload.tool === 'ui_update' ? uiUpdateTool : listComponentsTool;
+            
+            if (!directTool) {
+              throw new Error(`Tool ${payload.tool} not found in registry or direct import. Available registry tools: ${toolRegistry ? Object.keys(toolRegistry).join(', ') : 'none'}`);
+            }
+            
+            log('✅ [ToolDispatcher] Found tool via direct import');
+            
+            // Use the directly imported tool
+            if (payload.tool === 'ui_update') {
+              const componentId = payload.params.componentId || payload.params.param1;
+              const patch = payload.params.patch || payload.params.param2;
+              result = await directTool.tool(componentId, patch);
+              
+              // If successful, also send the update via bus for UI sync
+              bus.send('ui_update', { 
+                componentId, 
+                patch, 
+                timestamp: Date.now() 
+              });
+            } else {
+              result = await directTool.tool();
+            }
+            
+            pendingTool.status = 'completed';
+            await publishToolResult(id, result);
+            return;
+          }
+          
+          // Extract parameters for ui_update
+          if (payload.tool === 'ui_update') {
+            const componentId = payload.params.componentId || payload.params.param1;
+            const patch = payload.params.patch || payload.params.param2;
+            
+            // Call the actual Tambo tool - it will throw detailed errors!
+            result = await tamboTool.tool(componentId, patch);
+            
+            // If successful, also send the update via bus for UI sync
+            bus.send('ui_update', { 
+              componentId, 
+              patch, 
+              timestamp: Date.now() 
+            });
+            
+          } else {
+            // list_components has no parameters
+            result = await tamboTool.tool();
+          }
+          
+          pendingTool.status = 'completed';
+          await publishToolResult(id, result);
+          return;
+          
+        } catch (error) {
+          // The Tambo tool threw an error with detailed guidance!
+          pendingTool.status = 'error';
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          
+          // Send the FULL educational error back to the AI!
+          await publishToolResult(id, { 
+            status: 'ERROR',
+            error: errorMessage,
+            detailedError: errorMessage // Include full error for AI learning
+          });
+          
+          log('📚 [ToolDispatcher] Tambo tool error (educational):', errorMessage);
+          return;
+        }
       }
 
       if (registryTool && !builtIns.has(payload.tool)) {

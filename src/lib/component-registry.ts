@@ -106,8 +106,37 @@ class ComponentStore {
   }
 }
 
+// Circuit breaker to prevent infinite update loops
+class UpdateCircuitBreaker {
+  private recentUpdates = new Map<string, number>();
+  private readonly COOLDOWN_MS = 3000; // 3 seconds
+  
+  canUpdate(componentId: string, patch: Record<string, unknown>): boolean {
+    const key = `${componentId}-${JSON.stringify(patch)}`;
+    const lastUpdate = this.recentUpdates.get(key);
+    const now = Date.now();
+    
+    if (lastUpdate && (now - lastUpdate) < this.COOLDOWN_MS) {
+      console.log(`🛑 [CircuitBreaker] Preventing duplicate update for ${componentId} (last update ${now - lastUpdate}ms ago)`);
+      return false;
+    }
+    
+    this.recentUpdates.set(key, now);
+    
+    // Clean up old entries
+    for (const [updateKey, timestamp] of this.recentUpdates) {
+      if ((now - timestamp) > this.COOLDOWN_MS) {
+        this.recentUpdates.delete(updateKey);
+      }
+    }
+    
+    return true;
+  }
+}
+
 // Global store instance
 const componentStore = new ComponentStore();
+const updateCircuitBreaker = new UpdateCircuitBreaker();
 
 // Global registry instance for tools to use
 export class ComponentRegistry {
@@ -116,6 +145,15 @@ export class ComponentRegistry {
   }
 
   static async update(messageId: string, patch: Record<string, unknown>) {
+    // Check circuit breaker
+    if (!updateCircuitBreaker.canUpdate(messageId, patch)) {
+      return {
+        success: false,
+        error: '🛑 Update blocked by circuit breaker - identical update too recent. Wait 3 seconds.',
+        isCircuitBreakerBlock: true
+      };
+    }
+    
     return componentStore.update(messageId, patch);
   }
 
@@ -141,6 +179,12 @@ export function useComponentRegistration(
   updateCallback?: (patch: Record<string, unknown>) => void
 ) {
   const [, forceUpdate] = React.useReducer(x => x + 1, 0);
+  
+  // Stabilize the updateCallback to prevent infinite loops
+  const stableUpdateCallback = React.useCallback(
+    updateCallback || (() => {}), 
+    [updateCallback]
+  );
 
   React.useEffect(() => {
     // Register the component
@@ -150,19 +194,38 @@ export function useComponentRegistration(
       props,
       contextKey,
       timestamp: Date.now(),
-      updateCallback,
+      updateCallback: stableUpdateCallback,
     });
 
-    // Subscribe to changes
+    // Subscribe to changes, but filter out changes for this component to prevent loops
     const unsubscribe = componentStore.subscribe(() => {
-      forceUpdate();
+      // Only trigger re-render if this component is still registered
+      const component = ComponentRegistry.list().find(c => c.messageId === messageId);
+      if (component) {
+        forceUpdate();
+      }
     });
 
     return () => {
+      // Remove component and unsubscribe
       ComponentRegistry.remove(messageId);
       unsubscribe();
     };
-  }, [messageId, componentType, contextKey, updateCallback]);
+  }, [messageId, componentType, contextKey]); // Remove updateCallback from deps to prevent loops
+  
+  // Update props and callback when they change without re-registering
+  React.useEffect(() => {
+    const component = ComponentRegistry.list().find(c => c.messageId === messageId);
+    if (component) {
+      const updatedComponent = {
+        ...component,
+        props,
+        updateCallback: stableUpdateCallback,
+        timestamp: Date.now(),
+      };
+      ComponentRegistry.register(updatedComponent);
+    }
+  }, [props, stableUpdateCallback, messageId]);
 }
 
 // Simple hook to list components and rerender when they change

@@ -45,23 +45,53 @@ export function RetroTimerEnhanced({
   componentId = "retro-timer",
   __tambo_message_id,
 }: RetroTimerEnhancedProps) {
-  // Calculate initial time in seconds
-  const initialTimeInSeconds = initialMinutes * 60 + initialSeconds;
+  // Calculate initial time in seconds - memoized to prevent recalculation
+  const initialTimeInSeconds = React.useMemo(() => 
+    initialMinutes * 60 + initialSeconds, 
+    [initialMinutes, initialSeconds]
+  );
   
-  // Local timer state
-  const [state, setState] = useTamboComponentState<TimerState>(componentId, {
+  // Stable initial state object
+  const initialState = React.useMemo(() => ({
     timeLeft: initialTimeInSeconds,
     isRunning: autoStart,
     isFinished: false,
-  });
+  }), [initialTimeInSeconds, autoStart]);
+  
+  // Local timer state
+  const [state, setState] = useTamboComponentState<TimerState>(componentId, initialState);
 
-  // Handle AI updates via the new component registry
-  const handleAIUpdate = useCallback((patch: Record<string, unknown>) => {
+  // Use the exact Tambo message ID if provided, otherwise create a stable one
+  const effectiveMessageId = React.useMemo(() => {
+    if (__tambo_message_id) {
+      console.log(`[RetroTimerEnhanced] Using provided Tambo message ID: ${__tambo_message_id}`);
+      return __tambo_message_id;
+    }
+    
+    // Fallback: create a stable ID based on componentId
+    const fallbackId = `timer-${componentId}`;
+    console.log(`[RetroTimerEnhanced] Using fallback message ID: ${fallbackId}`);
+    return fallbackId;
+  }, [__tambo_message_id, componentId]);
+
+  // Stable props object to prevent re-registration loops
+  const stableProps = React.useMemo(() => ({
+    initialMinutes, 
+    initialSeconds, 
+    title, 
+    autoStart, 
+    showPresets, 
+    componentId
+  }), [initialMinutes, initialSeconds, title, autoStart, showPresets, componentId]);
+
+  // Handle AI updates via the new component registry - stable callback
+  const handleAIUpdate = React.useCallback((patch: Record<string, unknown>) => {
     console.log(`[RetroTimerEnhanced] Received AI update:`, patch);
     
     // Handle initialMinutes update
     if ('initialMinutes' in patch && typeof patch.initialMinutes === 'number') {
-      const newTimeInSeconds = patch.initialMinutes * 60 + (patch.initialSeconds as number || 0);
+      const patchSeconds = (patch.initialSeconds as number) || 0;
+      const newTimeInSeconds = patch.initialMinutes * 60 + patchSeconds;
       setState(prev => prev ? {
         ...prev,
         timeLeft: newTimeInSeconds,
@@ -76,24 +106,38 @@ export function RetroTimerEnhanced({
     
     // Handle other updates
     if ('autoStart' in patch && patch.autoStart === true) {
-      setState(prev => prev ? { ...prev, isRunning: true } : { timeLeft: initialTimeInSeconds, isRunning: true, isFinished: false });
+      setState(prev => {
+        const currentInitialTime = stableProps.initialMinutes * 60 + stableProps.initialSeconds;
+        return prev ? { ...prev, isRunning: true } : { 
+          timeLeft: currentInitialTime, 
+          isRunning: true, 
+          isFinished: false 
+        };
+      });
     }
-  }, [setState, initialSeconds, initialTimeInSeconds]);
-
-  // Register with ComponentRegistry using Tambo message ID or fallback
-  const effectiveMessageId = __tambo_message_id || `timer-${componentId}-${Date.now()}`;
+  }, [setState, stableProps]);
   
   useComponentRegistration(
     effectiveMessageId,
     'RetroTimerEnhanced',
-    { initialMinutes, initialSeconds, title, autoStart, showPresets, componentId },
+    stableProps,
     'default', // context key
     handleAIUpdate
   );
 
-  // Timer logic
+  // Debug component registration
+  React.useEffect(() => {
+    console.log(`[RetroTimerEnhanced] Component registered:`, {
+      messageId: effectiveMessageId,
+      componentType: 'RetroTimerEnhanced',
+      props: stableProps,
+      title: title || `${initialMinutes} Minute Timer`
+    });
+  }, [effectiveMessageId, stableProps, title, initialMinutes]);
+
+  // Timer logic - only depend on isRunning to prevent constant effect re-runs
   useEffect(() => {
-    if (!state?.isRunning || state.timeLeft <= 0) return;
+    if (!state?.isRunning) return;
 
     const interval = setInterval(() => {
       setState(prev => {
@@ -112,29 +156,29 @@ export function RetroTimerEnhanced({
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [state?.isRunning, state?.timeLeft, setState]);
+  }, [state?.isRunning, setState]); // Remove timeLeft from deps to prevent re-runs
 
-  // Control functions
-  const startPause = () => {
+  // Control functions - all memoized to prevent re-renders
+  const startPause = React.useCallback(() => {
     if (!state) return;
     setState({ ...state, isRunning: !state.isRunning });
-  };
+  }, [state, setState]);
 
-  const reset = () => {
+  const reset = React.useCallback(() => {
     setState({
       timeLeft: initialTimeInSeconds,
       isRunning: false,
       isFinished: false,
     });
-  };
+  }, [setState, initialTimeInSeconds]);
 
-  const setPresetTime = (minutes: number) => {
+  const setPresetTime = React.useCallback((minutes: number) => {
     setState({
       timeLeft: minutes * 60,
       isRunning: false,
       isFinished: false,
     });
-  };
+  }, [setState]);
 
   if (!state) {
     return <div className="p-4">Loading timer...</div>;

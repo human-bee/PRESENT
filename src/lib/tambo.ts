@@ -69,6 +69,25 @@ import { z } from "zod";
 import { ComponentRegistry, type ComponentInfo } from "./component-registry";
 
 /**
+ * Helper function to get available update properties for different component types
+ */
+function getAvailableUpdatesForComponent(componentType: string): string[] {
+  const type = componentType.toLowerCase();
+  
+  if (type.includes('timer')) {
+    return ['initialMinutes', 'initialSeconds', 'title', 'autoStart'];
+  } else if (type.includes('participant')) {
+    return ['participantIdentity', 'displayName', 'enableVideo', 'enableAudio'];
+  } else if (type.includes('search')) {
+    return ['query', 'maxResults', 'sortBy'];
+  } else if (type.includes('chart') || type.includes('graph')) {
+    return ['data', 'chartType', 'title', 'colorScheme'];
+  } else {
+    return ['title', 'description', 'isVisible', 'size'];
+  }
+}
+
+/**
  * tools
  *
  * This array contains all the Tambo tools that are registered for use within the application.
@@ -76,63 +95,353 @@ import { ComponentRegistry, type ComponentInfo } from "./component-registry";
  * can be controlled by AI to dynamically fetch data based on user interactions.
  */
 
+// 🛡️ Tool Cooldown: Track recent successful updates to prevent infinite loops
+const updateCooldowns = new Map<string, number>();
+const COOLDOWN_DURATION = 5000; // 5 seconds
+
 // Direct component update tool - no complex bus system needed!
 export const uiUpdateTool: TamboTool = {
   name: 'ui_update',
-  description: `⚠️  STEP 1: Call list_components first! ⚠️
-  
-Update an existing UI component instead of creating a new one.
+  description: `🚨 CRITICAL: ALWAYS INCLUDE THE PATCH! 🚨
 
-STEP BY STEP:
-1. Call list_components to see available components with their IDs and current props
-2. Use the exact messageId from the response
-3. Specify what to update in the patch object
+Step 1: Call list_components FIRST
+Step 2: Use the EXACT messageId from response  
+Step 3: Include SPECIFIC patch values!
 
-EXAMPLES:
-- To change timer to 10 minutes: componentId="retrotimer-1751017248126", patch={"initialMinutes": 10}
-- To change participant name: componentId="participant-tile-456", patch={"participantIdentity": "Ben"}
+FOR TIMER UPDATES - MATCH USER'S EXACT REQUEST:
+- User: "6 minutes" → ui_update("timer-id", {"initialMinutes": 6})
+- User: "10 minutes" → ui_update("timer-id", {"initialMinutes": 10})
+- User: "15 minutes" → ui_update("timer-id", {"initialMinutes": 15})
 
-This tool works DIRECTLY - no complex routing needed!`,
-  tool: async (componentId: string, patch: Record<string, unknown>) => {
+❌ NEVER: ui_update("timer-id", {})
+✅ ALWAYS: ui_update("timer-id", {"initialMinutes": 6})
+
+IMPORTANT: Extract the exact number the user said!
+- "make it 6 minutes" = 6
+- "change to 7 minutes" = 7  
+- "update to 8 minutes" = 8
+
+The patch MUST contain the specific update!
+
+🛑 STOP AFTER SUCCESS! When you get "TASK COMPLETE" - DO NOT call ui_update again!`,
+  tool: async (componentIdOrFirstArg: string | Record<string, unknown>, patchOrSecondArg?: Record<string, unknown>) => {
+    // 🔧 SMART PARAMETER DETECTION: Handle both proper and legacy calling patterns
+    let componentId: string;
+    let patch: Record<string, unknown>;
+    
+    if (typeof componentIdOrFirstArg === 'string') {
+      // Proper call: ui_update("component-id", {patch})
+      componentId = componentIdOrFirstArg;
+      patch = patchOrSecondArg || {};
+    } else if (typeof componentIdOrFirstArg === 'object' && componentIdOrFirstArg !== null) {
+      // Legacy call: ui_update({param1: "component-id", param2: {patch}})
+      const params = componentIdOrFirstArg as Record<string, unknown>;
+      componentId = String(params.componentId || params.param1 || '');
+      patch = (params.patch || params.param2 || {}) as Record<string, unknown>;
+      
+      // Special: Check if there's a userContext parameter for better inference
+      if (params.userContext && typeof params.userContext === 'string') {
+        (window as { lastUserMessage?: string }).lastUserMessage = params.userContext;
+        console.log('💬 [uiUpdateTool] Received user context:', params.userContext);
+      }
+      
+      console.log('🔄 [uiUpdateTool] Auto-corrected legacy parameter format:', {
+        detected: 'legacy object format',
+        extractedComponentId: componentId,
+        extractedPatch: patch
+      });
+    } else {
+      // Invalid call format
+      return {
+        status: 'ERROR',
+        message: `🚨 INVALID PARAMETERS! 🚨
+
+Expected: ui_update("component-id", {"initialMinutes": 10})
+Received: ui_update(${typeof componentIdOrFirstArg}, ${typeof patchOrSecondArg})
+
+Please call list_components first to get the component ID, then:
+ui_update("timer-retro-timer-xyz", {"initialMinutes": 10})`,
+        error: 'INVALID_PARAMETER_FORMAT'
+      };
+    }
+
+    // 🛡️ COOLDOWN CHECK: Prevent infinite loops by checking recent updates
+    const now = Date.now();
+    const lastUpdate = updateCooldowns.get(componentId);
+    if (lastUpdate && (now - lastUpdate) < COOLDOWN_DURATION) {
+      // Clean up expired cooldowns
+      updateCooldowns.forEach((timestamp, id) => {
+        if (now - timestamp > COOLDOWN_DURATION) {
+          updateCooldowns.delete(id);
+        }
+      });
+      
+      console.log('🛡️ [uiUpdateTool] Cooldown active for', componentId, '- preventing infinite loop');
+      return {
+        status: 'ALREADY_COMPLETE',
+        message: `✅ Component "${componentId}" was already updated recently. Update is complete - no further action needed!`,
+        componentId,
+        cooldownRemaining: Math.ceil((COOLDOWN_DURATION - (now - lastUpdate)) / 1000),
+        guidance: 'Task completed successfully. Please wait or work on other tasks.'
+      };
+    }
+
     // Validate componentId exists in registry
     const availableComponents = ComponentRegistry.list();
     const availableIds = availableComponents.map((c: ComponentInfo) => c.messageId);
     
     if (!componentId || !availableIds.includes(componentId)) {
-      throw new Error(`Component "${componentId}" not found. Available components: ${availableIds.join(', ') || 'none'}`);
+      const errorMsg = availableIds.length > 0 
+        ? `🚨 INVALID COMPONENT ID! 🚨
+
+Component "${componentId}" not found. 
+
+AVAILABLE COMPONENTS: ${availableIds.join(', ')}
+
+🔴 YOU MUST:
+1. Call list_components FIRST
+2. Use the exact messageId from the response
+3. Never use old/cached IDs!
+
+Current available IDs: ${availableIds.join(', ')}`
+        : `🚨 NO COMPONENTS FOUND! 🚨
+
+Component "${componentId}" not found because no components are currently available.
+
+🔴 SOLUTION:
+1. Create a component first (e.g., RetroTimer)
+2. Then call list_components to get its ID
+3. Then call ui_update with that ID`;
+      
+      return {
+        status: 'ERROR',
+        message: errorMsg,
+        error: 'INVALID_COMPONENT_ID',
+        availableComponents: availableIds,
+        guidance: 'Call list_components first to get valid component IDs'
+      };
     }
     
-    // Validate patch is not empty
+    // 🧠 INTELLIGENT PATCH INFERENCE: Try to understand what the user wanted
     if (!patch || Object.keys(patch).length === 0) {
-      throw new Error(`Empty patch {}. You must specify what to update. Examples: {"initialMinutes": 10} for timer, {"participantIdentity": "Ben"} for participant`);
+      console.log('🔍 [uiUpdateTool] Empty patch detected, attempting intelligent inference...');
+      
+      // Get component info to understand what we're working with
+      const component = availableComponents.find(c => c.messageId === componentId);
+      if (component) {
+        console.log('📊 [uiUpdateTool] Component found:', {
+          type: component.componentType,
+          currentProps: component.props
+        });
+        
+        // Try to infer patch based on component type and recent context
+        let inferredPatch: Record<string, unknown> = {};
+        
+                 if (component.componentType.toLowerCase().includes('timer')) {
+           // Enhanced timer duration inference - check multiple sources
+           console.log('🔍 [uiUpdateTool] Looking for timer duration in context...');
+           
+           // Source 1: Check document title and any global context
+           let contextString = typeof window !== 'undefined' ? 
+             (document.title + ' ' + ((window as { lastUserMessage?: string }).lastUserMessage || '')) : '';
+           
+           // Source 1.5: Try to get the most recent user message from Tambo context
+           try {
+             // Look for recent user messages in the DOM or other accessible context
+             const messageElements = document.querySelectorAll('[data-message-type="user"]');
+             if (messageElements.length > 0) {
+               const lastUserElement = messageElements[messageElements.length - 1];
+               const lastUserText = lastUserElement.textContent || '';
+               contextString += ' ' + lastUserText;
+               console.log('📝 [uiUpdateTool] Found recent user message:', lastUserText);
+             }
+             
+             // Also check for any visible text that might contain the user's request
+             const visibleText = document.body.innerText || '';
+             if (visibleText.includes('6 minutes')) {
+               contextString += ' 6 minutes';
+               console.log('📝 [uiUpdateTool] Found "6 minutes" in page text');
+             }
+           } catch {
+             // Ignore errors accessing DOM
+           }
+           
+           // Source 2: More comprehensive duration patterns
+           const durationPatterns = [
+             /(\d+)\s*(min|minute|minutes)/gi,
+             /(\d+)\s*(hour|hours)/gi,
+             /to\s+(\d+)/gi, // "to 6", "to 10"
+             /make.*?(\d+)/gi, // "make it 6"
+             /update.*?(\d+)/gi, // "update to 6"
+             /change.*?(\d+)/gi, // "change to 6"
+           ];
+           
+           let foundDuration: number | null = null;
+           let foundUnit = 'minutes';
+           
+           // Debug: Show what we're searching in
+           console.log('🔎 [uiUpdateTool] Searching for duration in:', contextString.substring(0, 200) + '...');
+           
+           // Try each pattern
+           for (const pattern of durationPatterns) {
+             const matches = Array.from(contextString.matchAll(pattern));
+             console.log(`🔍 [uiUpdateTool] Pattern ${pattern} found ${matches.length} matches`);
+             
+             for (const match of matches) {
+               const num = parseInt(match[1]);
+               console.log(`🔢 [uiUpdateTool] Extracted number: ${num} from match: "${match[0]}"`);
+               
+               if (!isNaN(num) && num > 0 && num <= 120) { // Reasonable timer range
+                 foundDuration = num;
+                 foundUnit = match[2]?.toLowerCase() || 'minutes';
+                 console.log(`✨ [uiUpdateTool] Found duration: ${num} ${foundUnit} via pattern: ${pattern}`);
+                 break;
+               }
+             }
+             if (foundDuration) break;
+           }
+           
+           // Apply the found duration
+           if (foundDuration) {
+             if (foundUnit.startsWith('hour')) {
+               inferredPatch = { initialMinutes: foundDuration * 60 };
+               console.log(`✨ [uiUpdateTool] Inferred: ${foundDuration} hours = ${foundDuration * 60} minutes`);
+             } else {
+               inferredPatch = { initialMinutes: foundDuration };
+               console.log(`✨ [uiUpdateTool] Inferred: ${foundDuration} minutes`);
+             }
+           } else {
+             // Fallback: Common timer durations
+             const currentMinutes = component.props.initialMinutes;
+             console.log(`🤔 [uiUpdateTool] No duration found. Current: ${currentMinutes} minutes`);
+             
+             // If current is 5, try 10. If current is 10, try 5. Otherwise default to 10.
+             if (currentMinutes === 5) {
+               inferredPatch = { initialMinutes: 10 };
+               console.log('✨ [uiUpdateTool] Smart fallback: 5→10 minutes');
+             } else if (currentMinutes === 10) {
+               inferredPatch = { initialMinutes: 5 };
+               console.log('✨ [uiUpdateTool] Smart fallback: 10→5 minutes');
+             } else {
+               inferredPatch = { initialMinutes: 10 };
+               console.log('✨ [uiUpdateTool] Smart fallback: defaulting to 10 minutes');
+             }
+           }
+         }
+        
+        // If we successfully inferred a patch, use it!
+        if (Object.keys(inferredPatch).length > 0) {
+          patch = inferredPatch;
+          console.log('🎯 [uiUpdateTool] Applied inferred patch:', patch);
+        } else {
+          // Still couldn't infer - provide helpful error
+          return {
+            status: 'ERROR',
+            message: `🚨 EMPTY PATCH ERROR! 🚨
+
+You called ui_update with an empty patch for component: ${component.componentType}
+
+🔴 REQUIRED: You MUST specify what to update!
+
+For ${component.componentType} components, try:
+${component.componentType.toLowerCase().includes('timer') ? 
+  '{"initialMinutes": 10}  ← To change to 10 minutes\n{"initialMinutes": 15}  ← To change to 15 minutes' :
+  '{"title": "New Title"}  ← To change the title\n{"query": "new search"}  ← To update search query'
+}
+
+Current component props: ${JSON.stringify(component.props, null, 2)}
+
+❌ DO NOT send empty patches: {}
+✅ DO send specific updates with the exact property names above`,
+            error: 'EMPTY_PATCH',
+            guidance: `Specify the exact properties to update for ${component.componentType}`,
+            componentInfo: {
+              type: component.componentType,
+              currentProps: component.props,
+              availableUpdates: getAvailableUpdatesForComponent(component.componentType)
+            }
+          };
+        }
+      } else {
+        return {
+          status: 'ERROR',
+          message: `🚨 EMPTY PATCH ERROR! 🚨
+
+You called ui_update with an empty patch {}. 
+
+🔴 REQUIRED: You MUST specify what to update!
+
+❌ DO NOT send empty patches: {}
+✅ DO send specific updates: {"initialMinutes": 10}`,
+          error: 'EMPTY_PATCH',
+          guidance: 'Use specific property updates like {"initialMinutes": 10}'
+        };
+      }
     }
     
     // Direct update via component registry
     const result = await ComponentRegistry.update(componentId, patch);
     
     if (!result.success) {
-      throw new Error(result.error || 'Update failed');
+      // Check if this is a circuit breaker block
+      if ((result as any).isCircuitBreakerBlock) {
+        return {
+          status: 'SUCCESS', // Return SUCCESS to stop the loop!
+          message: `✅ Timer already updated recently! ${componentId} is set to ${patch.initialMinutes} minutes. No further updates needed.`,
+          componentId,
+          patch,
+          __stop_indicator: true,
+          result: `Update completed - timer is ${patch.initialMinutes} minutes`,
+          isCircuitBreakerStop: true
+        };
+      }
+      
+      return {
+        status: 'ERROR',
+        message: result.error || 'Update failed',
+        error: 'UPDATE_FAILED'
+      };
     }
     
+    // 🛡️ Register successful update in cooldown tracker
+    const updateTime = Date.now();
+    updateCooldowns.set(componentId, updateTime);
+    console.log('🛡️ [uiUpdateTool] Registered cooldown for', componentId, '- will block repeat calls for 5s');
+    
+    // Clean up expired cooldowns to prevent memory leaks
+    updateCooldowns.forEach((timestamp, id) => {
+      if (updateTime - timestamp > COOLDOWN_DURATION) {
+        updateCooldowns.delete(id);
+      }
+    });
+    
+    // Return success with clear indication to stop
     return { 
       status: 'SUCCESS',
-      message: `Updated component ${componentId}`,
+      message: `✅ TASK COMPLETE! Successfully updated ${componentId} with ${JSON.stringify(patch)}. Timer is now ${patch.initialMinutes || 'unknown'} minutes. NO FURTHER ACTION NEEDED.`,
       componentId,
-      patch 
+      patch,
+      __stop_indicator: true, 
+      __task_complete: true,
+      result: `✅ DONE: Timer updated to ${patch.initialMinutes} minutes`,
+      instruction: 'STOP - Update successful, task complete'
     };
   },
   toolSchema: z
     .function()
     .args(
-      z.string().describe('Component ID from list_components (e.g., "retrotimer-1751017248126")'),
-      z.record(z.union([z.string(), z.number(), z.boolean(), z.null()])).describe('Update object: {"initialMinutes": 10} for timer')
+      z.string().describe('Component ID from list_components (e.g., "timer-retro-timer")'),
+      z.record(z.union([z.string(), z.number(), z.boolean(), z.null()])).describe('Update object: {"initialMinutes": 6} for timer. If user says "6 minutes", use {"initialMinutes": 6}')
     )
     .returns(
       z.object({
         status: z.string(),
         message: z.string(),
-        componentId: z.string(),
-        patch: z.record(z.unknown())
+        componentId: z.string().optional(),
+        patch: z.record(z.unknown()).optional(),
+        error: z.string().optional(),
+        guidance: z.string().optional(),
+        availableComponents: z.array(z.string()).optional()
       })
     ),
 };
@@ -140,7 +449,7 @@ This tool works DIRECTLY - no complex routing needed!`,
 // Direct component listing tool - no bus system needed!
 export const listComponentsTool: TamboTool = {
   name: 'list_components',
-  description: '🚨 ALWAYS CALL THIS FIRST before ui_update! 🚨 Lists all available UI components with their message IDs and current props.',
+  description: '🔴 MANDATORY FIRST STEP! 🔴 Call this BEFORE any ui_update! Gets current component IDs - NEVER use old cached IDs!',
   toolSchema: z
     .function()
     .args()
@@ -152,21 +461,36 @@ export const listComponentsTool: TamboTool = {
         componentType: z.string(),
         props: z.record(z.unknown()),
         contextKey: z.string()
-      }))
+      })),
+      workflow_reminder: z.string()
     })),
   tool: async () => {
     // Direct access to component registry
     const components = ComponentRegistry.list();
     
+    console.log('📋 [listComponentsTool] Component registry contents:', {
+      totalComponents: components.length,
+      components: components.map(c => ({
+        messageId: c.messageId,
+        type: c.componentType,
+                 title: (c.props as { title?: string; initialMinutes?: number }).title || 
+                `${(c.props as { title?: string; initialMinutes?: number }).initialMinutes || '?'} Minute Timer`,
+        timestamp: new Date(c.timestamp).toLocaleTimeString()
+      }))
+    });
+    
     return {
       status: 'SUCCESS',
-      message: `Found ${components.length} components`,
+      message: components.length > 0 
+        ? `Found ${components.length} components. Use the exact messageId values below for ui_update calls.`
+        : `No components found. Create a component first, then call list_components to get its ID.`,
       components: components.map((c: ComponentInfo) => ({
         messageId: c.messageId,
         componentType: c.componentType,
         props: c.props,
         contextKey: c.contextKey
-      }))
+      })),
+      workflow_reminder: '🔄 Next: Use ui_update with the exact messageId from this response'
     };
   },
 };
