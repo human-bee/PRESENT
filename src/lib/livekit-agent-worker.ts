@@ -101,6 +101,7 @@ export default defineAgent({
     console.log('🧠 [Agent] Initializing OpenAI Realtime model...');
     
     // Create the multimodal agent using OpenAI Realtime API
+    // Note: Tools will be handled through OpenAI's native function calling mechanism
     const model = new openai.realtime.RealtimeModel({
       instructions: `You are Tambo Voice Agent, a helpful AI assistant integrated with a powerful UI generation system.
         
@@ -123,110 +124,7 @@ export default defineAgent({
         
         DO NOT use voice to repeat UI requests like "Create a timer" or "Show me a chart" - these are handled automatically by the system.`,
       model: 'gpt-4o-realtime-preview',
-      modalities: ['text'],
-      tools: [
-        {
-          type: 'function',
-          name: 'ui_update',
-          description: '🚨 MANDATORY: Call list_components first! 🚨 Update an existing UI component. CRITICAL WORKFLOW: 1) Call list_components 2) Use exact messageId 3) Call ui_update with specific patch object',
-          parameters: {
-            type: 'object',
-            properties: {
-              componentId: {
-                type: 'string',
-                description: 'Component ID from list_components (e.g., "timer-retro-timer-b9h1rhno6")'
-              },
-              patch: {
-                type: 'object',
-                description: 'Update object with specific properties. Examples: {"initialMinutes": 10} for timer, {"participantIdentity": "Ben"} for participant',
-                properties: {
-                  initialMinutes: { type: 'number', description: 'Timer minutes' },
-                  initialSeconds: { type: 'number', description: 'Timer seconds' },
-                  title: { type: 'string', description: 'Component title' },
-                  participantIdentity: { type: 'string', description: 'Participant name' },
-                  query: { type: 'string', description: 'Search query' }
-                },
-                additionalProperties: true
-              }
-            },
-            required: ['componentId', 'patch']
-          }
-        },
-        {
-          type: 'function',
-          name: 'list_components',
-          description: '🔴 MANDATORY FIRST STEP! Call this BEFORE any ui_update! Gets current component IDs - NEVER use old cached IDs!',
-          parameters: {
-            type: 'object',
-            properties: {},
-            additionalProperties: false
-          }
-        },
-        {
-          type: 'function',
-          name: 'generate_ui_component',
-          description: 'Create a new UI component (timer, chart, etc.)',
-          parameters: {
-            type: 'object',
-            properties: {
-              componentType: {
-                type: 'string',
-                description: 'Type of component to create',
-                default: 'auto'
-              },
-              prompt: {
-                type: 'string',
-                description: 'Description of what to create'
-              }
-            },
-            required: ['prompt']
-          }
-        },
-        {
-          type: 'function',
-          name: 'youtube_search',
-          description: 'Search and display YouTube videos',
-          parameters: {
-            type: 'object',
-            properties: {
-              query: {
-                type: 'string',
-                description: 'Search query for YouTube videos'
-              }
-            },
-            required: ['query']
-          }
-        },
-        {
-          type: 'function',
-          name: 'respond_with_voice',
-          description: 'Speak a response to the user',
-          parameters: {
-            type: 'object',
-            properties: {
-              spokenMessage: {
-                type: 'string',
-                description: 'Message to speak'
-              },
-              justificationForSpeaking: {
-                type: 'string',
-                description: 'Reason for speaking'
-              }
-            },
-            required: ['spokenMessage']
-          }
-        },
-        {
-          type: 'function',
-          name: 'do_nothing',
-          description: 'Take no action when no response is needed',
-          parameters: {
-            type: 'object',
-            properties: {},
-            additionalProperties: false
-          }
-        }
-      ]
+      modalities: ['text']
     });
     
     console.log('🎙️ [Agent] Starting multimodal agent...');
@@ -247,6 +145,10 @@ export default defineAgent({
       .start(job.room)
       .then(session => {
         console.log('✅ [Agent] Multimodal agent started successfully!');
+        
+        // Note: Tools are configured through OpenAI Realtime API's native function calling
+        // The session.on('response_function_call_completed') handler below processes tool calls
+        console.log('🔧 [Agent] Using OpenAI Realtime API native function calling');
         
         // Send welcome message after agent is ready
         setTimeout(() => {

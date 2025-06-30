@@ -33,20 +33,26 @@ export function createLiveKitBus(room: Room | null | undefined) {
      */
     on(topic: string, handler: (payload: unknown) => void) {
       if (!room) return () => {};
-      const listener = (data: Uint8Array) => {
-        try {
-          const msg = JSON.parse(new TextDecoder().decode(data));
-          handler(msg);
-        } catch (err) {
-          // eslint-disable-next-line no-console
-          console.error('[LiveKitBus] Failed to decode', err);
+      
+      // Create the actual listener that will be registered
+      const dataReceivedHandler = (data: Uint8Array, _p: any, _k: any, t: any) => {
+        if (t === topic) {
+          try {
+            const msg = JSON.parse(new TextDecoder().decode(data));
+            handler(msg);
+          } catch (err) {
+            // eslint-disable-next-line no-console
+            console.error('[LiveKitBus] Failed to decode', err);
+          }
         }
       };
-      room.on('dataReceived', (data, _p, _k, t) => {
-        if (t === topic) listener(data);
-      });
+      
+      // Register the handler
+      room.on('dataReceived', dataReceivedHandler);
+      
+      // Return cleanup function that removes the exact same handler
       return () => {
-        room.off('dataReceived', listener as any);
+        room.off('dataReceived', dataReceivedHandler);
       };
     },
   } as const;

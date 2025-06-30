@@ -12,10 +12,6 @@ import {
   YoutubeEmbed,
   youtubeEmbedSchema,
 } from "@/components/ui/youtube-embed";
-// import {
-//   YoutubeSearchEnhanced,
-//   youtubeSearchEnhancedSchema,
-// } from "@/components/ui/youtube-search-enhanced";
 import {
   WeatherForecast,
   weatherForecastSchema,
@@ -40,10 +36,6 @@ import {
   ActionItemTracker,
   actionItemTrackerSchema,
 } from "@/components/ui/action-item-tracker";
-// import {
-//  LivekitToolbar,
-//  livekitToolbarSchema,
-// } from "@/components/ui/livekit-toolbar";
 import {
   LivekitParticipantTile,
   livekitParticipantTileSchema,
@@ -56,10 +48,6 @@ import {
   AIImageGenerator,
   aiImageGeneratorSchema,
 } from "@/components/ui/ai-image-generator";
-// import {
-//   PresentationDeck,
-//   presentationDeckSchema,
-// } from "@/components/ui/presentation-deck";
 import LiveCaptions, {
   liveCaptionsSchema,
 } from "@/components/LiveCaptions";
@@ -67,6 +55,16 @@ import type { TamboComponent } from "@tambo-ai/react";
 import { TamboTool } from "@tambo-ai/react";
 import { z } from "zod";
 import { ComponentRegistry, type ComponentInfo } from "./component-registry";
+import { extractParametersWithAI } from "./nlp";
+import { createLogger } from "./utils";
+import { CircuitBreaker } from "./circuit-breaker";
+
+const logger = createLogger('tambo');
+const circuitBreaker = new CircuitBreaker({
+  duplicateWindow: 1000,    // 1 second for aggressive duplicate prevention
+  completedWindow: 30000,   // 30 seconds for completed calls
+  cooldownWindow: 5000      // 5 seconds for component cooldowns
+});
 
 /**
  * tools
@@ -76,13 +74,7 @@ import { ComponentRegistry, type ComponentInfo } from "./component-registry";
  * can be controlled by AI to dynamically fetch data based on user interactions.
  */
 
-// 🛡️ Tool Cooldown: Track recent successful updates to prevent infinite loops
-const updateCooldowns = new Map<string, number>();
-const COOLDOWN_DURATION = 5000; // 5 seconds
-
-// 🚫 AGGRESSIVE DUPLICATE PREVENTION: Track ALL recent calls to prevent multiple executions
-const allRecentCalls = new Map<string, number>();
-const AGGRESSIVE_DUPLICATE_PREVENTION = 1000; // 1 second - very aggressive
+// Circuit breaker now handles all duplicate/cooldown tracking
 
 // Direct component update tool - no complex bus system needed!
 export const uiUpdateTool: TamboTool = {
@@ -107,13 +99,11 @@ The tool will automatically:
 NEVER call with empty patch: ui_update("id", {}) ❌
 ALWAYS provide updates: ui_update("id", "your instruction") ✅`,
   tool: async (componentIdOrFirstArg: string | Record<string, unknown>, patchOrSecondArg?: Record<string, unknown>) => {
-    // 🚫 AGGRESSIVE DUPLICATE PREVENTION: Block any call within 1 second
+    // 🚫 AGGRESSIVE DUPLICATE PREVENTION using circuit breaker
     const callSignature = JSON.stringify({ componentIdOrFirstArg, patchOrSecondArg });
-    const currentTimestamp = Date.now();
-    const lastCall = allRecentCalls.get(callSignature);
     
-    if (lastCall && (currentTimestamp - lastCall) < AGGRESSIVE_DUPLICATE_PREVENTION) {
-      console.log('🚫 [uiUpdateTool] AGGRESSIVE BLOCK - identical call within 1 second');
+    if (circuitBreaker.isDuplicate(callSignature)) {
+      logger.log('🚫 [uiUpdateTool] AGGRESSIVE BLOCK - identical call within 1 second');
       return {
         status: 'SUCCESS',
         message: '🚫 BLOCKED: Identical call within 1 second. Timer already updated.',
@@ -122,18 +112,6 @@ ALWAYS provide updates: ui_update("id", "your instruction") ✅`,
         blockReason: 'AGGRESSIVE_DUPLICATE_PREVENTION'
       };
     }
-    
-    // Register this call immediately
-    allRecentCalls.set(callSignature, currentTimestamp);
-    
-    // Clean up old entries 
-    allRecentCalls.forEach((timestamp, signature) => {
-      if (currentTimestamp - timestamp > AGGRESSIVE_DUPLICATE_PREVENTION) {
-        allRecentCalls.delete(signature);
-      }
-    });
-    
-    // 🚫 SIMPLIFIED APPROACH: Let the tool work normally but with more aggressive messaging
     
     // 🔧 SMART PARAMETER EXTRACTION: Handle multiple calling patterns
     let componentId: string;
@@ -145,9 +123,9 @@ ALWAYS provide updates: ui_update("id", "your instruction") ✅`,
       // Check if second argument is a string (natural language) or object (patch)
       if (typeof patchOrSecondArg === 'string') {
         // SMART MODE: Extract parameters from natural language
-        console.log('🧠 [uiUpdateTool] SMART MODE: Extracting parameters from natural language:', patchOrSecondArg);
+        logger.log('🧠 [uiUpdateTool] SMART MODE: Extracting parameters from natural language:', patchOrSecondArg);
         patch = extractParametersWithAI(patchOrSecondArg);
-        console.log('🧠 [uiUpdateTool] Extracted parameters:', patch);
+        logger.log('🧠 [uiUpdateTool] Extracted parameters:', patch);
       } else {
         // Manual mode: use provided patch object
         patch = patchOrSecondArg || {};
@@ -160,14 +138,14 @@ ALWAYS provide updates: ui_update("id", "your instruction") ✅`,
       // Check if param2 is a string (natural language) or object (patch)
       if (typeof params.param2 === 'string') {
         // SMART MODE: Extract parameters from natural language
-        console.log('🧠 [uiUpdateTool] SMART MODE (legacy): Extracting parameters from natural language:', params.param2);
+        logger.log('🧠 [uiUpdateTool] SMART MODE (legacy): Extracting parameters from natural language:', params.param2);
         patch = extractParametersWithAI(params.param2);
-        console.log('🧠 [uiUpdateTool] Extracted parameters:', patch);
+        logger.log('🧠 [uiUpdateTool] Extracted parameters:', patch);
       } else {
         patch = (params.patch || params.param2 || {}) as Record<string, unknown>;
       }
       
-      console.log('🔄 [uiUpdateTool] Auto-corrected legacy parameter format:', {
+      logger.log('🔄 [uiUpdateTool] Auto-corrected legacy parameter format:', {
         detected: 'legacy object format',
         extractedComponentId: componentId,
         extractedPatch: patch
@@ -184,22 +162,13 @@ ALWAYS provide updates: ui_update("id", "your instruction") ✅`,
     }
 
     // 🛡️ COOLDOWN CHECK: Prevent infinite loops by checking recent updates
-    const now = Date.now();
-    const lastUpdate = updateCooldowns.get(componentId);
-    if (lastUpdate && (now - lastUpdate) < COOLDOWN_DURATION) {
-      // Clean up expired cooldowns
-      updateCooldowns.forEach((timestamp, id) => {
-        if (now - timestamp > COOLDOWN_DURATION) {
-          updateCooldowns.delete(id);
-        }
-      });
-      
-      console.log('🛡️ [uiUpdateTool] Cooldown active for', componentId, '- preventing infinite loop');
+    if (circuitBreaker.isInCooldown(componentId)) {
+      logger.log('🛡️ [uiUpdateTool] Cooldown active for', componentId, '- preventing infinite loop');
       return {
         status: 'SUCCESS',
         message: `✅ Component "${componentId}" was already updated recently. Update is complete - no further action needed!`,
         componentId,
-        cooldownRemaining: Math.ceil((COOLDOWN_DURATION - (now - lastUpdate)) / 1000),
+        cooldownRemaining: circuitBreaker.getCooldownRemaining(componentId),
         guidance: 'Task completed successfully. Please wait or work on other tasks.',
         isCircuitBreakerStop: true,
         __stop_indicator: true,
@@ -212,7 +181,7 @@ ALWAYS provide updates: ui_update("id", "your instruction") ✅`,
     const availableIds = availableComponents.map((c: ComponentInfo) => c.messageId);
     
     if (!componentId || !availableIds.includes(componentId)) {
-      console.log('🔍 [uiUpdateTool] Component ID invalid or empty, attempting auto-find:', {
+      logger.log('🔍 [uiUpdateTool] Component ID invalid or empty, attempting auto-find:', {
         providedId: componentId,
         availableIds,
         availableComponents: availableComponents.map(c => ({ id: c.messageId, type: c.componentType }))
@@ -230,7 +199,7 @@ ALWAYS provide updates: ui_update("id", "your instruction") ✅`,
       // AUTO-FIND: If there's only one component, use it
       if (availableIds.length === 1) {
         componentId = availableIds[0];
-        console.log('🎯 [uiUpdateTool] Auto-selected single available component:', componentId);
+        logger.log('🎯 [uiUpdateTool] Auto-selected single available component:', componentId);
       } 
       // AUTO-FIND: Look for timer components if patch suggests timer update
       else if (patch.initialMinutes || patch.initialSeconds || Object.keys(patch).some(k => k.includes('timer') || k.includes('minute'))) {
@@ -240,7 +209,7 @@ ALWAYS provide updates: ui_update("id", "your instruction") ✅`,
         );
         if (timerComponent) {
           componentId = timerComponent.messageId;
-          console.log('🎯 [uiUpdateTool] Auto-selected timer component:', componentId);
+          logger.log('🎯 [uiUpdateTool] Auto-selected timer component:', componentId);
         }
       }
       
@@ -293,16 +262,8 @@ ALWAYS provide updates: ui_update("id", "your instruction") ✅`,
     }
     
     // 🛡️ Register successful update in cooldown tracker
-    const updateTime = Date.now();
-    updateCooldowns.set(componentId, updateTime);
-    console.log('🛡️ [uiUpdateTool] Registered cooldown for', componentId, '- will block repeat calls for 5s');
-    
-    // Clean up expired cooldowns to prevent memory leaks
-    updateCooldowns.forEach((timestamp, id) => {
-      if (updateTime - timestamp > COOLDOWN_DURATION) {
-        updateCooldowns.delete(id);
-      }
-    });
+    circuitBreaker.registerCooldown(componentId);
+    logger.log('🛡️ [uiUpdateTool] Registered cooldown for', componentId, '- will block repeat calls for 5s');
     
     // Return success with clear indication to stop
     return { 
@@ -365,7 +326,7 @@ export const listComponentsTool: TamboTool = {
     // Direct access to component registry
     const components = ComponentRegistry.list();
     
-    console.log('📋 [listComponentsTool] Component registry contents:', {
+    logger.log('📋 [listComponentsTool] Component registry contents:', {
       totalComponents: components.length,
       components: components.map(c => ({
         messageId: c.messageId,
@@ -392,98 +353,9 @@ export const listComponentsTool: TamboTool = {
   },
 };
 
-// AI-powered parameter extraction tool - leverages LLM intelligence instead of regex patterns
-export const extractUpdateParamsTool: TamboTool = {
-  name: 'extract_update_params',
-  description: `Extract component update parameters from natural language user requests.
+// extractUpdateParamsTool removed - ui_update now handles natural language directly
 
-Use this to convert user intent into proper component props:
-- "make it 7 minutes" → {"initialMinutes": 7}
-- "change title to 'Dashboard'" → {"title": "Dashboard"}
-- "add task: Review PR" → {"newTask": "Review PR"}
-- "make it red" → {"color": "red"}
-
-Works for ANY component type and understands natural language including:
-- Numbers: "7", "seven", "7.5"
-- Time units: "minutes", "hours", "seconds"  
-- Colors, text, boolean values, etc.
-
-Always call this BEFORE ui_update when user wants to change something!`,
-  tool: async (userMessage: string, componentType: string) => {
-    // Use AI's natural language understanding to extract parameters
-    const result = extractParametersWithAI(userMessage);
-    
-    return {
-      status: 'SUCCESS',
-      message: `✅ Extracted parameters from: "${userMessage}"`,
-      extractedParams: result,
-      componentType,
-      guidance: `Use these params in ui_update: ${JSON.stringify(result)}`
-    };
-  },
-  toolSchema: z
-    .function()
-    .args(
-      z.string().describe('User message expressing what to update'),
-      z.string().describe('Component type (e.g., "RetroTimerEnhanced", "ActionItemTracker")')
-    )
-    .returns(
-      z.object({
-        status: z.string(),
-        message: z.string(),
-        extractedParams: z.record(z.unknown()),
-        componentType: z.string(),
-        guidance: z.string()
-      })
-    ),
-};
-
-// AI-powered parameter extraction using natural language understanding  
-function extractParametersWithAI(userMessage: string): Record<string, unknown> {
-  // Let Tambo's AI handle the heavy lifting! This is just a fallback for simple cases.
-  const message = userMessage.toLowerCase();
-  
-  // Simple pattern matching for common cases - but AI should handle most of this
-  const patterns = [
-    // Numbers with units (very general)
-    { regex: /(\d+(?:\.\d+)?)\s*(min|minute|minutes|hour|hours|second|seconds)/i, 
-      handler: (match: RegExpMatchArray) => {
-        const num = parseFloat(match[1]);
-        const unit = match[2].toLowerCase();
-        if (unit.includes('hour')) return { initialMinutes: num * 60 };
-        if (unit.includes('second')) return { initialMinutes: Math.max(1, Math.ceil(num / 60)) };
-        return { initialMinutes: num };
-      }
-    },
-    // Simple word numbers
-    { regex: /\b(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|fifteen|twenty|thirty)\s*(min|minute|minutes)/i,
-      handler: (match: RegExpMatchArray) => {
-        const wordToNumber: Record<string, number> = {
-          one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, 
-          eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12, fifteen: 15, 
-          twenty: 20, thirty: 30
-        };
-        const num = wordToNumber[match[1].toLowerCase()];
-        return num ? { initialMinutes: num } : {};
-      }
-    },
-    // Title changes
-    { regex: /(?:title|name)\s*(?:to|is)?\s*["\']?([^"']+)["\']?/i,
-      handler: (match: RegExpMatchArray) => ({ title: match[1].trim() })
-    }
-  ];
-  
-  for (const { regex, handler } of patterns) {
-    const match = message.match(regex);
-    if (match) {
-      const result = handler(match);
-      if (Object.keys(result).length > 0) return result;
-    }
-  }
-  
-  // Return empty - let Tambo's AI figure it out!
-  return {};
-}
+// extractParametersWithAI is now imported from "./nlp"
 
 export const tools: TamboTool[] = [
   // Set the MCP tools https://localhost:3000/mcp-config
@@ -508,13 +380,6 @@ export const components: TamboComponent[] = [
     component: YoutubeEmbed,
     propsSchema: youtubeEmbedSchema,
   },
-  // {
-  //   name: "YoutubeSearchEnhanced",
-  //   description:
-  //     "Advanced YouTube search interface with intelligent filtering, transcript navigation, and quality detection. Features include: search by date ranges (today/week/month/year), sort by newest/views/rating, filter by video duration, identify official/verified channels, view trending videos, read and navigate transcripts with timestamps, and smart quality scoring. Perfect for finding the latest high-quality content and navigating to specific moments in videos. Automatically filters out low-quality content and prioritizes official sources.",
-  //   component: YoutubeSearchEnhanced,
-  //   propsSchema: youtubeSearchEnhancedSchema,
-  // },
   {
     name: "WeatherForecast",
     description: 
@@ -564,13 +429,6 @@ export const components: TamboComponent[] = [
     component: LivekitRoomConnector,
     propsSchema: livekitRoomConnectorSchema,
   },
-// {
-//   name: "LivekitToolbar",
-//   description:
-//     "A comprehensive video conferencing toolbar component designed for LiveKit applications. REQUIRES LivekitRoomConnector to be connected first. Features all standard controls including microphone, camera, screen sharing, chat, raise hand, participant management, settings, recording, layout switching, AI assistant integration, accessibility options, and connection quality indicators. Supports both minimal and verbose display modes with configurable control visibility.",
-//   component: LivekitToolbar,
-//   propsSchema: livekitToolbarSchema,
-// },
   {
     name: "LivekitParticipantTile",
     description:
@@ -585,13 +443,6 @@ export const components: TamboComponent[] = [
     component: AIImageGenerator,
     propsSchema: aiImageGeneratorSchema,
   },
- // {
- //   name: "PresentationDeck",
- //   description:
- //     "A feature-complete presentation tool for displaying beautiful, almost full-screen PowerPoint, Google Slides, PDF, and image-based presentations. Features comprehensive hotkey controls (arrow keys, space, enter for play/pause, F for fullscreen), laser pointer mode, thumbnail navigation, speaker notes, auto-advance, progress tracking, bookmarking, and canvas integration. Supports multiple aspect ratios (16:9, 4:3, 16:10), dark/light themes, and persistent state management. Perfect for business presentations, lectures, demos, and any scenario requiring professional slide display with advanced navigation and control features.",
- //   component: PresentationDeck,
- //   propsSchema: presentationDeckSchema,
- // },
   {
     name: "LiveCaptions",
     description:

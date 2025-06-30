@@ -23,9 +23,14 @@ import { useRoomContext } from '@livekit/components-react';
 import { useTamboThread, useTambo } from '@tambo-ai/react';
 import { createLiveKitBus } from '../lib/livekit-bus';
 import { useContextKey } from './RoomScopedProviders';
+import { createLogger } from '../lib/utils';
+import { CircuitBreaker } from '../lib/circuit-breaker';
 
 // Generate unique IDs without external dependency
 const generateId = () => `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
+// Create logger for consistent logging
+const logger = createLogger('ToolDispatcher');
 
 // Event types for the unified system
 export const TOOL_TOPICS = {
@@ -128,15 +133,21 @@ export function ToolDispatcher({
   const { toolRegistry = {} } = useTambo() as any;
   const pendingById = useRef(new Map<string, PendingTool>());
   const [isProcessing, setIsProcessing] = useState(false);
-  const completedSignaturesRef = useRef(new Map<string, number>()); // Track completed tool+param combos to prevent post-success loops
+  
+  // Use circuit breaker for duplicate detection
+  const circuitBreaker = useRef(new CircuitBreaker({
+    duplicateWindow: 3000,     // 3 seconds for duplicate tool calls
+    completedWindow: 30000,    // 30 seconds for completed calls
+    cooldownWindow: 5000       // 5 seconds general cooldown
+  }));
   
   // Use room name as context key to ensure thread/canvas sync
   const effectiveContextKey = propContextKey || roomContextKey || room?.name || 'canvas';
   
-  // Log helper with proper typing
+  // Log helper using centralized logger
   const log = useCallback((...args: unknown[]) => {
     if (enableLogging) {
-      console.log('[ToolDispatcher]', ...args);
+      logger.log(...args);
     }
   }, [enableLogging]);
 
@@ -291,9 +302,8 @@ export function ToolDispatcher({
       return;
     }
     
-    // BEFORE executing new tool call, add after duplicate signature check ->
-    const completedTimestamp = completedSignaturesRef.current.get(toolSignature);
-    if (completedTimestamp && (Date.now() - completedTimestamp) < 30000) { // 30s freeze window
+    // Check if this exact call was recently completed
+    if (circuitBreaker.current.isRecentlyCompleted(toolSignature)) {
       log('🛑 Rejected repeating COMPLETED tool call within 30s window:', payload.tool);
       return;
     }
@@ -397,7 +407,7 @@ export function ToolDispatcher({
             pendingTool.status = 'completed';
             await publishToolResult(id, result);
             // ✅ Mark signature as completed to block further repeats
-            completedSignaturesRef.current.set(toolSignature, Date.now());
+            circuitBreaker.current.markCompleted(toolSignature);
             return;
           }
           
@@ -432,7 +442,7 @@ export function ToolDispatcher({
           pendingTool.status = 'completed';
           await publishToolResult(id, result);
           // ✅ Mark signature as completed to block further repeats
-          completedSignaturesRef.current.set(toolSignature, Date.now());
+          circuitBreaker.current.markCompleted(toolSignature);
           return;
           
         } catch (error) {
@@ -461,7 +471,7 @@ export function ToolDispatcher({
           pendingTool.status = 'completed';
           await publishToolResult(id, result);
           // ✅ Mark signature as completed to block further repeats
-          completedSignaturesRef.current.set(toolSignature, Date.now());
+          circuitBreaker.current.markCompleted(toolSignature);
           return; // ✅ Finished – no further custom handling required
         } catch (err) {
           log('❌ Registry tool execution failed:', err);

@@ -84,6 +84,7 @@ export default defineAgent({
         });
         console.log('🧠 [Agent] Initializing OpenAI Realtime model...');
         // Create the multimodal agent using OpenAI Realtime API
+        // Note: Tools will be handled through OpenAI's native function calling mechanism
         const model = new openai.realtime.RealtimeModel({
             instructions: `You are Tambo Voice Agent, a helpful AI assistant integrated with a powerful UI generation system.
         
@@ -93,6 +94,8 @@ export default defineAgent({
         - generate_ui_component: Create ANY UI component (timers, charts, buttons, forms, etc.) - Tambo knows about all available components
         - youtube_search: Search and display YouTube videos
         - mcp_tool: Access external tools via Model Context Protocol
+        - ui_update: Update existing UI components (MUST call list_components first!)
+        - list_components: List all current UI components to get their IDs
         - respond_with_voice: Speak responses when appropriate
         - do_nothing: When no action is needed
         
@@ -104,7 +107,7 @@ export default defineAgent({
         
         DO NOT use voice to repeat UI requests like "Create a timer" or "Show me a chart" - these are handled automatically by the system.`,
             model: 'gpt-4o-realtime-preview',
-            modalities: ['text'],
+            modalities: ['text']
         });
         console.log('🎙️ [Agent] Starting multimodal agent...');
         // Initialize Decision Engine
@@ -121,6 +124,9 @@ export default defineAgent({
             .start(job.room)
             .then(session => {
             console.log('✅ [Agent] Multimodal agent started successfully!');
+            // Note: Tools are configured through OpenAI Realtime API's native function calling
+            // The session.on('response_function_call_completed') handler below processes tool calls
+            console.log('🔧 [Agent] Using OpenAI Realtime API native function calling');
             // Send welcome message after agent is ready
             setTimeout(() => {
                 const welcomeData = JSON.stringify({
