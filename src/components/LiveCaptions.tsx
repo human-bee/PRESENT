@@ -4,7 +4,7 @@ import * as React from "react";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Mic, Clock, User, Copy, Download, X, Maximize2 } from "lucide-react";
+import { Mic, Clock, User, Copy, Download, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useRoomContext, useDataChannel, useParticipants } from "@livekit/components-react";
 import { useTamboComponentState } from "@tambo-ai/react";
@@ -252,88 +252,6 @@ const LiveCaptions: React.FC<LiveCaptionsProps> = ({
     initialState
   );
 
-  if (!state) {
-    return (
-      <div className="w-full h-full flex items-center justify-center">
-        <div className="text-muted-foreground">Loading...</div>
-      </div>
-    );
-  }
-
-  // LiveKit data channel for transcription
-  useDataChannel("transcription", (message) => {
-    try {
-      const data = JSON.parse(new TextDecoder().decode(message.payload));
-      
-      if (data.type === "live_transcription") {
-        const transcriptId = `${data.speaker}-${data.timestamp}`;
-        
-        setState(prevState => {
-          const prevTranscripts = prevState.transcripts;
-          // Check if this is an update to an existing interim transcript
-          const existingIndex = prevTranscripts.findIndex(t => 
-            t.speaker === data.speaker && !t.isFinal && 
-            Math.abs(new Date(t.timestamp).getTime() - new Date(data.timestamp).getTime()) < 5000
-          );
-          
-          const newTranscript: Transcript = {
-            id: transcriptId,
-            text: data.text,
-            speaker: data.speaker,
-            timestamp: new Date(data.timestamp),
-            isFinal: data.is_final,
-            position: state.settings.autoPosition ? calculatePosition(prevTranscripts.length) : undefined
-          };
-
-          let updatedTranscripts;
-          if (existingIndex >= 0) {
-            // Update existing interim transcript
-            updatedTranscripts = [...prevTranscripts];
-            updatedTranscripts[existingIndex] = {
-              ...updatedTranscripts[existingIndex],
-              text: data.text,
-              isFinal: data.is_final
-            };
-          } else {
-            // Add new transcript
-            updatedTranscripts = [...prevTranscripts, newTranscript];
-          }
-
-          // Limit the number of transcripts
-          if (updatedTranscripts.length > state.settings.maxTranscripts) {
-            updatedTranscripts = updatedTranscripts.slice(-state.settings.maxTranscripts);
-          }
-          
-          return {
-            ...prevState,
-            transcripts: updatedTranscripts
-          };
-        });
-      }
-    } catch (error) {
-      console.error("Error parsing transcription data:", error);
-    }
-  });
-
-  // Monitor room connection and participants
-  useEffect(() => {
-    const newConnected = room?.state === "connected";
-    const newParticipantCount = participants.length;
-    
-    setState(prev => {
-      // Ensure prev is not null and only update if values actually changed
-      if (prev && (prev.isConnected !== newConnected || prev.participantCount !== newParticipantCount)) {
-        return {
-          ...prev,
-          isConnected: newConnected,
-          participantCount: newParticipantCount
-        };
-      }
-      // If prev is null, or no changes, return prev or initial state if prev is null
-      return prev || initialState; 
-    });
-  }, [room?.state, participants.length]); // Remove setState from dependencies
-
   // Auto-position calculation (memoized to prevent infinite loops)
   const calculatePosition = useCallback((index: number) => {
     if (!canvasRef.current) return { x: 50, y: 50 };
@@ -363,10 +281,12 @@ const LiveCaptions: React.FC<LiveCaptionsProps> = ({
           : transcript
       )
     }));
-  }, []);
+  }, [setState]);
 
   // Export transcripts
   const exportTranscripts = useCallback(() => {
+    if (!state) return;
+    
     const finalTranscripts = state.transcripts.filter(t => t.isFinal);
     
     let content = "";
@@ -407,7 +327,7 @@ const LiveCaptions: React.FC<LiveCaptionsProps> = ({
     a.download = filename;
     a.click();
     URL.revokeObjectURL(url);
-  }, [state.transcripts, state.settings.exportFormat]);
+  }, [state]);
 
   // Clear all transcripts
   const clearTranscripts = useCallback(() => {
@@ -415,30 +335,88 @@ const LiveCaptions: React.FC<LiveCaptionsProps> = ({
       ...prev,
       transcripts: []
     }));
-  }, []);
+  }, [setState]);
 
   // Copy transcript text
   const handleCopy = useCallback((text: string) => {
     navigator.clipboard.writeText(text);
   }, []);
 
-  // Canvas background styles
-  const getCanvasBackground = () => {
-    switch (state.settings.canvasTheme) {
-      case "grid":
-        return {
-          backgroundImage: "linear-gradient(rgba(0,0,0,0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(0,0,0,0.05) 1px, transparent 1px)",
-          backgroundSize: "20px 20px"
-        };
-      case "dots":
-        return {
-          backgroundImage: "radial-gradient(circle, rgba(0,0,0,0.1) 1px, transparent 1px)",
-          backgroundSize: "24px 24px"
-        };
-      default:
-        return {};
+  // LiveKit data channel for transcription
+  useDataChannel("transcription", (message) => {
+    try {
+      const data = JSON.parse(new TextDecoder().decode(message.payload));
+      
+      if (data.type === "live_transcription") {
+        const transcriptId = `${data.speaker}-${data.timestamp}`;
+        
+        setState(prevState => {
+          if (!prevState) return prevState;
+          
+          const prevTranscripts = prevState.transcripts;
+          // Check if this is an update to an existing interim transcript
+          const existingIndex = prevTranscripts.findIndex(t => 
+            t.speaker === data.speaker && !t.isFinal && 
+            Math.abs(new Date(t.timestamp).getTime() - new Date(data.timestamp).getTime()) < 5000
+          );
+          
+          const newTranscript: Transcript = {
+            id: transcriptId,
+            text: data.text,
+            speaker: data.speaker,
+            timestamp: new Date(data.timestamp),
+            isFinal: data.is_final,
+            position: prevState.settings.autoPosition ? calculatePosition(prevTranscripts.length) : undefined
+          };
+
+          let updatedTranscripts;
+          if (existingIndex >= 0) {
+            // Update existing interim transcript
+            updatedTranscripts = [...prevTranscripts];
+            updatedTranscripts[existingIndex] = {
+              ...updatedTranscripts[existingIndex],
+              text: data.text,
+              isFinal: data.is_final
+            };
+          } else {
+            // Add new transcript
+            updatedTranscripts = [...prevTranscripts, newTranscript];
+          }
+
+          // Limit the number of transcripts
+          if (updatedTranscripts.length > prevState.settings.maxTranscripts) {
+            updatedTranscripts = updatedTranscripts.slice(-prevState.settings.maxTranscripts);
+          }
+          
+          return {
+            ...prevState,
+            transcripts: updatedTranscripts
+          };
+        });
+      }
+    } catch (error) {
+      console.error("Error parsing transcription data:", error);
     }
-  };
+  });
+
+  // Monitor room connection and participants
+  useEffect(() => {
+    const newConnected = room?.state === "connected";
+    const newParticipantCount = participants.length;
+    
+    setState(prev => {
+      // Ensure prev is not null and only update if values actually changed
+      if (prev && (prev.isConnected !== newConnected || prev.participantCount !== newParticipantCount)) {
+        return {
+          ...prev,
+          isConnected: newConnected,
+          participantCount: newParticipantCount
+        };
+      }
+      // If prev is null, or no changes, return prev or initial state if prev is null
+      return prev || initialState; 
+    });
+  }, [room?.state, participants.length, initialState, setState]);
 
   // Update canvas size when ref changes
   useEffect(() => {
@@ -448,6 +426,7 @@ const LiveCaptions: React.FC<LiveCaptionsProps> = ({
         const newHeight = canvasRef.current?.clientHeight || 600;
         
         setState(prev => {
+          if (!prev) return prev;
           // Only update if dimensions actually changed
           if (prev.canvasSize.width !== newWidth || prev.canvasSize.height !== newHeight) {
             return {
@@ -465,7 +444,36 @@ const LiveCaptions: React.FC<LiveCaptionsProps> = ({
 
       return () => resizeObserver.disconnect();
     }
-  }, []); // Remove setState from dependencies
+  }, [setState]);
+
+  // Canvas background styles
+  const getCanvasBackground = () => {
+    if (!state) return {};
+    
+    switch (state.settings.canvasTheme) {
+      case "grid":
+        return {
+          backgroundImage: "linear-gradient(rgba(0,0,0,0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(0,0,0,0.05) 1px, transparent 1px)",
+          backgroundSize: "20px 20px"
+        };
+      case "dots":
+        return {
+          backgroundImage: "radial-gradient(circle, rgba(0,0,0,0.1) 1px, transparent 1px)",
+          backgroundSize: "24px 24px"
+        };
+      default:
+        return {};
+    }
+  };
+
+  // EARLY RETURN MOVED TO AFTER ALL HOOKS
+  if (!state) {
+    return (
+      <div className="w-full h-full flex items-center justify-center">
+        <div className="text-muted-foreground">Loading...</div>
+      </div>
+    );
+  }
 
   return (
     <div className={cn("w-full h-full flex flex-col bg-background border rounded-lg overflow-hidden", className)}>
@@ -474,22 +482,22 @@ const LiveCaptions: React.FC<LiveCaptionsProps> = ({
         <div className="flex items-center gap-3">
           <h2 className="text-lg font-semibold">Live Captions</h2>
           <div className="flex items-center gap-2">
-                         <div className={cn(
-               "w-2 h-2 rounded-full",
-               state.isConnected ? "bg-green-500 animate-pulse" : "bg-red-500"
-             )} />
-                         <span className="text-sm text-muted-foreground">
-               {state.isConnected ? `Connected (${state.participantCount} participants)` : "Disconnected"}
-             </span>
+            <div className={cn(
+              "w-2 h-2 rounded-full",
+              state.isConnected ? "bg-green-500 animate-pulse" : "bg-red-500"
+            )} />
+            <span className="text-sm text-muted-foreground">
+              {state.isConnected ? `Connected (${state.participantCount} participants)` : "Disconnected"}
+            </span>
           </div>
         </div>
         
         <div className="flex items-center gap-2">
-                     <span className="text-sm text-muted-foreground">
-             {state.transcripts.filter(t => t.isFinal).length} captions
-           </span>
-           
-           {state.transcripts.length > 0 && (
+          <span className="text-sm text-muted-foreground">
+            {state.transcripts.filter(t => t.isFinal).length} captions
+          </span>
+          
+          {state.transcripts.length > 0 && (
             <>
               <button
                 onClick={exportTranscripts}
@@ -522,37 +530,37 @@ const LiveCaptions: React.FC<LiveCaptionsProps> = ({
           ...getCanvasBackground()
         }}
       >
-                 <AnimatePresence mode="popLayout">
-           {state.transcripts.map((transcript, index) => {
-             const position = transcript.position || calculatePosition(index);
-             
-             return (
-               <SpeechBubble
-                 key={transcript.id}
-                 transcript={transcript}
-                 position={position}
-                 showAvatar={state.settings.showSpeakerAvatars}
-                 showTimestamp={state.settings.showTimestamps}
-                 enableDrag={state.settings.enableDragAndDrop}
-                 onPositionChange={handlePositionChange}
-                 onCopy={handleCopy}
-               />
-             );
-           })}
-         </AnimatePresence>
-         
-         {/* Empty state */}
-         {state.transcripts.length === 0 && (
+        <AnimatePresence mode="popLayout">
+          {state.transcripts.map((transcript, index) => {
+            const position = transcript.position || calculatePosition(index);
+            
+            return (
+              <SpeechBubble
+                key={transcript.id}
+                transcript={transcript}
+                position={position}
+                showAvatar={state.settings.showSpeakerAvatars}
+                showTimestamp={state.settings.showTimestamps}
+                enableDrag={state.settings.enableDragAndDrop}
+                onPositionChange={handlePositionChange}
+                onCopy={handleCopy}
+              />
+            );
+          })}
+        </AnimatePresence>
+        
+        {/* Empty state */}
+        {state.transcripts.length === 0 && (
           <div className="absolute inset-0 flex items-center justify-center">
             <div className="text-center text-muted-foreground">
               <Mic className="h-12 w-12 mx-auto mb-3 opacity-50" />
               <p className="text-lg font-medium mb-1">Waiting for speech...</p>
-                             <p className="text-sm">
-                 {state.isConnected 
-                   ? "Start speaking to see live captions appear" 
-                   : "Connect to a LiveKit room to begin"
-                 }
-               </p>
+              <p className="text-sm">
+                {state.isConnected 
+                  ? "Start speaking to see live captions appear" 
+                  : "Connect to a LiveKit room to begin"
+                }
+              </p>
             </div>
           </div>
         )}

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useRef } from 'react';
-import { Room, RoomEvent, RemoteTrack, RemoteAudioTrack, LocalAudioTrack, createLocalAudioTrack } from 'livekit-client';
+import { Room, RoomEvent, RemoteTrack } from 'livekit-client';
 import { createLiveKitBus } from '../lib/livekit-bus';
 
 interface TranscriptionData {
@@ -16,11 +16,8 @@ interface LiveTranscriptionProps {
 }
 
 export function LiveTranscription({ room, onTranscription }: LiveTranscriptionProps) {
-  const [isProcessing, setIsProcessing] = useState(false);
+  const [isProcessing] = useState(false);
   const [status, setStatus] = useState<string>('Waiting for room connection...');
-  const audioContextRef = useRef<AudioContext | null>(null);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const audioChunksRef = useRef<Blob[]>([]);
   const bus = createLiveKitBus(room);
   const linesRef = useRef<number>(0);
 
@@ -118,51 +115,7 @@ export function LiveTranscription({ room, onTranscription }: LiveTranscriptionPr
     return offPing;
   }, [bus]);
 
-  // Browser-based audio processing (for future real implementation)
-  const startAudioProcessing = async (audioTrack: RemoteAudioTrack) => {
-    try {
-      if (!audioContextRef.current) {
-        audioContextRef.current = new AudioContext();
-      }
 
-      // Get the media stream from the track
-      const stream = audioTrack.mediaStream;
-      if (!stream) return;
-
-      // Create media recorder for capturing audio
-      mediaRecorderRef.current = new MediaRecorder(stream, {
-        mimeType: 'audio/webm'
-      });
-
-      mediaRecorderRef.current.ondataavailable = (event) => {
-        if (event.data.size > 0) {
-          audioChunksRef.current.push(event.data);
-        }
-      };
-
-      mediaRecorderRef.current.onstop = async () => {
-        // Process accumulated audio
-        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-        audioChunksRef.current = [];
-        
-        // Here you would send audioBlob to your API endpoint
-        // that forwards it to OpenAI Whisper
-        console.log('Audio blob ready for transcription:', audioBlob.size, 'bytes');
-      };
-
-      // Start recording in 5-second chunks
-      mediaRecorderRef.current.start();
-      setInterval(() => {
-        if (mediaRecorderRef.current?.state === 'recording') {
-          mediaRecorderRef.current.stop();
-          mediaRecorderRef.current.start();
-        }
-      }, 5000);
-
-    } catch (error) {
-      console.error('Error starting audio processing:', error);
-    }
-  };
 
   return (
     <div className="text-xs text-gray-500 p-2 bg-gray-50 rounded">

@@ -1,20 +1,15 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   LiveKitRoom as LivekitRoom,
-  VideoConference,
   RoomAudioRenderer,
   ControlBar,
-  useTracks,
   useDataChannel,
-  AudioConference,
-  TrackToggle,
   AudioPresets,
-  useLocalParticipant,
   useRoomContext
 } from '@livekit/components-react';
-import { Track, Room, RoomEvent, DataPacket_Kind } from 'livekit-client';
+import { Room } from 'livekit-client';
 import { motion, AnimatePresence } from 'framer-motion';
 import { LiveTranscription } from './LiveTranscription';
 
@@ -98,7 +93,7 @@ export function SpeechTranscription({ roomName, username }: SpeechTranscriptionP
 
   // DataChannel component to receive transcriptions
   function TranscriptionReceiver() {
-    const { message } = useDataChannel((msg) => {
+    useDataChannel((msg) => {
       if (typeof msg.payload === 'string') {
         try {
           const data = JSON.parse(msg.payload);
