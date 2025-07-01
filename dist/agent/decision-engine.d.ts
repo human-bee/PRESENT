@@ -1,8 +1,30 @@
 /**
  * Simple AI-Powered Decision Engine for Tambo Voice Agent
  *
- * Uses OpenAI to intelligently decide when to send transcripts to Tambo
- * and summarizes them. No complex hard-coded rules - just smart AI decisions.
+ * AGENT #2 of 3 in the Tambo Architecture
+ * =======================================
+ * This is the DECISION ENGINE that runs embedded within the Voice Agent.
+ *
+ * Responsibilities:
+ * - Analyze transcriptions to detect actionable requests
+ * - Maintain conversation context across multiple speakers
+ * - Handle meeting scenarios with collaborative requests
+ * - Use GPT-4 to intelligently summarize and filter
+ * - Extract intent (YouTube search, UI component, general)
+ *
+ * Data Flow:
+ * 1. Receives transcriptions from Voice Agent
+ * 2. Analyzes with 30-second context window
+ * 3. Makes AI decision on whether to forward
+ * 4. Returns decision with summary & confidence
+ * 5. Voice Agent acts on positive decisions
+ *
+ * Key Features:
+ * - Handles "do it" references to previous requests
+ * - Detects fragmented requests across speakers
+ * - Dynamic configuration from SystemRegistry
+ *
+ * See docs/THREE_AGENT_ARCHITECTURE.md for complete details.
  */
 export interface Decision {
     should_send: boolean;

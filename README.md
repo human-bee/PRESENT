@@ -153,3 +153,54 @@ The voice agent runs as a separate Node.js process using the LiveKit Agents fram
 The agent connects via WebRTC for low-latency voice interactions and publishes transcriptions back to the room.
 
 ## 🏗️ Architecture
+
+### Three-Agent System
+
+Tambo uses a sophisticated **3-agent architecture** for intelligent voice-driven UI generation:
+
+1. **🎙️ LiveKit Voice Agent** (`livekit-agent-worker.ts`)
+   - Captures and transcribes voice input
+   - Manages conversation flow
+   - Queries available tools/components dynamically
+   - Publishes tool calls to the browser
+
+2. **🧠 Decision Engine** (`decision-engine.ts`)
+   - Embedded within the Voice Agent
+   - Analyzes transcriptions for actionable requests
+   - Maintains 30-second conversation context
+   - Uses GPT-4 for intelligent filtering
+   - Detects intent (YouTube search, UI component, etc.)
+
+3. **🔧 Tool Dispatcher** (`tool-dispatcher.tsx`)
+   - Runs in the browser as a React component
+   - Routes tool calls to appropriate handlers
+   - Executes via Tambo UI, MCP tools, or built-in functions
+   - Syncs available tools to SystemRegistry
+   - Returns results to Voice Agent
+
+All three agents stay synchronized through the **SystemRegistry** - a single source of truth for available capabilities. When you add new MCP tools or Tambo components, all agents automatically discover and can use them without code changes.
+
+For detailed architecture documentation, see [docs/THREE_AGENT_ARCHITECTURE.md](docs/THREE_AGENT_ARCHITECTURE.md).
+
+### Project Structure
+
+```
+src/
+├── lib/
+│   ├── livekit-agent-worker.ts  # Voice Agent (Agent #1)
+│   ├── decision-engine.ts       # Decision Engine (Agent #2)
+│   ├── system-registry.ts       # Single source of truth
+│   └── shared-state.ts          # State synchronization types
+├── components/
+│   ├── tool-dispatcher.tsx      # Tool Dispatcher (Agent #3)
+│   └── ui/                      # Tambo components
+└── app/                         # Next.js pages
+```
+
+## 🤝 Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development guidelines.
+
+## 📄 License
+
+This project is licensed under the MIT License.

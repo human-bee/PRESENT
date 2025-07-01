@@ -2,8 +2,25 @@
 /**
  * Tambo Voice Agent - LiveKit Agent JS Implementation
  * 
- * A voice-enabled AI agent using LiveKit's real-time communication
- * infrastructure and OpenAI's Realtime API for natural conversations.
+ * AGENT #1 of 3 in the Tambo Architecture
+ * =======================================
+ * This is the VOICE AGENT that runs as a Node.js worker process.
+ * 
+ * Responsibilities:
+ * - Capture voice input from users in LiveKit rooms
+ * - Transcribe speech using OpenAI Realtime API
+ * - Forward transcriptions to the Decision Engine (Agent #2)
+ * - Publish tool calls to the Tool Dispatcher (Agent #3)
+ * - Respond to users with text/voice based on results
+ * 
+ * Data Flow:
+ * 1. User speaks → This agent transcribes
+ * 2. Transcription → Decision Engine (embedded)
+ * 3. Filtered request → Tool call event
+ * 4. Tool Dispatcher executes → Results come back
+ * 5. Agent responds to user
+ * 
+ * See docs/THREE_AGENT_ARCHITECTURE.md for complete details.
  */
 
 import { config } from 'dotenv';
@@ -97,6 +114,77 @@ export default defineAgent({
     // Query capabilities
     await queryCapabilities();
     
+    // Phase 4: Set up state synchronization
+    // Define StateEnvelope inline to avoid import issues in Node worker
+    interface StateEnvelope {
+      id: string;
+      kind: string;
+      payload: unknown;
+      version: number;
+      ts: number;
+      origin: 'browser' | 'agent' | 'system' | string;
+    }
+    
+    interface StateSnapshot {
+      snapshot: Array<StateEnvelope>;
+      timestamp: number;
+    }
+    
+    let stateSnapshot: StateSnapshot | null = null;
+    
+    // Query initial state snapshot from browser
+    const queryStateSnapshot = async (): Promise<void> => {
+      try {
+        const apiUrl = process.env.NEXT_PUBLIC_VERCEL_URL || 'http://localhost:3000';
+        const response = await fetch(`${apiUrl}/api/registry/snapshot`);
+        if (response.ok) {
+          stateSnapshot = (await response.json()) as StateSnapshot;
+          console.log('✅ [Agent] Received state snapshot:', {
+            stateCount: stateSnapshot?.snapshot.length || 0,
+            timestamp: new Date(stateSnapshot?.timestamp || 0).toISOString()
+          });
+        }
+      } catch (error) {
+        console.log('⚠️ [Agent] Failed to query state snapshot:', error);
+      }
+    };
+    
+    // Query state on startup
+    await queryStateSnapshot();
+    
+    // Listen for state updates via data channel
+    const handleStateUpdate = (data: Uint8Array) => {
+      try {
+        const message = JSON.parse(new TextDecoder().decode(data));
+        if (message.kind && message.version !== undefined) {
+          // This looks like a StateEnvelope
+          console.log('📥 [Agent] State update received:', {
+            kind: message.kind,
+            id: message.id,
+            version: message.version
+          });
+          
+          // Update local snapshot (simplified - in production, use proper state management)
+          if (stateSnapshot) {
+            const existingIndex = stateSnapshot.snapshot.findIndex(s => s.id === message.id);
+            if (existingIndex >= 0) {
+              // Update if newer version
+              if (stateSnapshot.snapshot[existingIndex].version < message.version) {
+                stateSnapshot.snapshot[existingIndex] = message;
+              }
+            } else {
+              // Add new state
+              stateSnapshot.snapshot.push(message);
+            }
+          }
+        }
+      } catch {
+        // Ignore non-JSON or non-state messages
+      }
+    };
+    
+    job.room.on('dataReceived', handleStateUpdate);
+    
     // Set up periodic capability refresh (every 30 seconds)
     const capabilityRefreshInterval = setInterval(async () => {
       console.log('🔄 [Agent] Refreshing capabilities...');
@@ -182,12 +270,23 @@ export default defineAgent({
     const buildInstructions = () => {
       const baseInstructions = `You are Tambo Voice Agent, a helpful AI assistant integrated with a powerful UI generation system.
         
+      ARCHITECTURE AWARENESS:
+      You are Agent #1 in a 3-agent system:
+      - YOU (Voice Agent): Handle voice interactions and initiate tool calls
+      - Decision Engine: Filters your transcriptions for actionable requests (embedded with you)
+      - Tool Dispatcher: Executes tools in the browser and returns results
+      
+      Your tool calls are sent to the Tool Dispatcher in the browser, which has access to:
+      - Tambo UI components for generating visual elements
+      - MCP (Model Context Protocol) tools for external integrations
+      - Direct browser APIs and canvas manipulation
+        
         CRITICAL: Always respond with TEXT ONLY. Never use audio responses. All your responses should be in text format.
         
         IMPORTANT: When users ask for UI components, timers, or visual elements, DO NOT repeat their request back as text. The UI generation is handled automatically when they speak.`;
       
       // Add available tools from capabilities
-      let toolSection = '\n\nYou have access to these tools:';
+      let toolSection = `\n\nYou have access to ${systemCapabilities?.tools?.length || 7} tools:`;
       if (systemCapabilities?.tools) {
         systemCapabilities.tools.forEach(tool => {
           toolSection += `\n- ${tool.name}: ${tool.description}`;
@@ -195,6 +294,14 @@ export default defineAgent({
             toolSection += `\n  Examples: ${tool.examples.slice(0, 2).join(', ')}`;
           }
         });
+        
+        // Add summary of tool categories
+        const mcpTools = systemCapabilities.tools.filter(t => t.name.startsWith('mcp_') || t.name.includes('search'));
+        const uiTools = systemCapabilities.tools.filter(t => t.name.includes('component') || t.name.includes('update'));
+        toolSection += `\n\nTool Categories:`;
+        toolSection += `\n- UI Generation: ${uiTools.length} tools`;
+        toolSection += `\n- MCP/External: ${mcpTools.length} tools`;
+        toolSection += `\n- Total Available: ${systemCapabilities.tools.length} tools`;
       } else {
         // Fallback to default tools
         toolSection += `
@@ -439,6 +546,9 @@ export default defineAgent({
     });
 
     // Track participant rotation for better attribution (now using time-based rotation)
+    
+    // Track processed transcriptions to avoid duplicates
+    const processedTranscriptions = new Set<string>();
 
     // Subscribe to transcription events from all participants
     session.on('input_speech_transcription_completed', async (evt: { transcript: string }) => {
@@ -536,176 +646,18 @@ export default defineAgent({
         );
       }
     });
-    
-    // Track processed transcriptions to avoid duplicates
-    const processedTranscriptions = new Set<string>();
-    
-    // Listen for tool results from the frontend ToolDispatcher
-    // This replaces the old RPC approach with data channel events
-    const handleDataReceived = (data: Uint8Array, participant?: unknown, kind?: unknown, topic?: string) => {
-      try {
-        const message = JSON.parse(new TextDecoder().decode(data));
-        
-        // Handle tool results
-        if (topic === 'tool_result' && message.type === 'tool_result') {
-          console.log(`✅ [Agent] Tool result received:`, {
-            toolCallId: message.toolCallId,
-            executionTime: message.executionTime,
-            hasResult: !!message.result
-          });
-          // Agent can process tool results if needed
-        }
-        
-        // Handle tool errors
-        if (topic === 'tool_error' && message.type === 'tool_error') {
-          console.error(`❌ [Agent] Tool error received:`, {
-            toolCallId: message.toolCallId,
-            error: message.error
-          });
-          // Agent can handle tool errors if needed
-        }
-        
-        // Check for transcriptions from other agents to avoid duplicates
-        if (topic === 'transcription' && message.type === 'live_transcription' && message.speaker?.startsWith('agent-')) {
-          const transcriptionKey = `${message.text}-${message.timestamp}`;
-          processedTranscriptions.add(transcriptionKey);
-        }
-      } catch {
-        // Not all data messages are JSON, so this is expected sometimes
-      }
-    };
-    
-    // Subscribe to tool result topics
-    job.room.on('dataReceived', handleDataReceived);
-    
-
-    
-    // Handle data messages from frontend
-    job.room.on('dataReceived', (data, participant) => {
-      try {
-        const message = JSON.parse(new TextDecoder().decode(data));
-        console.log(`📨 [Agent] Data received from ${participant?.identity}:`, {
-          type: message.type,
-          hasContent: !!message.content || !!message.text
-        });
-        
-        // Handle text-based messages (voice is handled by the multimodal agent)
-        if (message.type === 'user_message' || message.type === 'chat_message') {
-          console.log(`💬 [Agent] User text message: "${message.content || message.text}"`);
-          
-          // For text messages, we acknowledge but remind user this is a voice agent
-          const responseData = JSON.stringify({
-            type: 'live_transcription',
-            text: `I received your text: "${message.content || message.text}". For the best experience, try speaking to me!`,
-            speaker: 'tambo-voice-agent', 
-            timestamp: Date.now(),
-            is_final: true,
-          });
-          
-          job.room.localParticipant?.publishData(
-            new TextEncoder().encode(responseData),
-            { reliable: true, topic: 'transcription' }
-          );
-        }
-      } catch (error) {
-        console.error('❌ [Agent] Error processing data message:', error);
-      }
-    });
-    
-    // Clean up decision engine on disconnect
-    job.room.on('disconnected', () => {
-      console.log('🧹 [Agent] Cleaning up decision engine...');
-      decisionEngine.clearAllBuffers();
-    });
-    
-    console.log('🎯 [Agent] Fully initialized with smart decision engine');
-
-    // Ensure we receive audio from every participant
-    const subscribeToAudio = async (publication: any, participant: any) => {
-      if (publication.kind === Track.Kind.Audio || publication.kind === 'audio') {
-        try {
-          await publication.setSubscribed(true);
-          console.log(`🔊 [Agent] Subscribed to ${participant.identity}'s audio track`);
-        } catch (err) {
-          console.error(`❌ [Agent] Failed to subscribe to ${participant.identity}'s audio track:`, err);
-        }
-      }
-    };
-
-    // Subscribe to future tracks
-    job.room.on(RoomEvent.TrackPublished, subscribeToAudio as any);
-
-    // Subscribe to already-published tracks
-    for (const participant of job.room.remoteParticipants.values()) {
-      for (const publication of participant.trackPublications.values()) {
-        await subscribeToAudio(publication, participant);
-      }
-    }
-
-    // Add auto-cleanup logic after participant connection/disconnection handlers
-    // Disconnect the agent if no human participants remain in the room for >10 s
-    const isHuman = (p: { identity: string; metadata?: string }) => {
-      const id = p.identity.toLowerCase();
-      const meta = (p.metadata || '').toLowerCase();
-      return !(
-        id.includes('agent') ||
-        id.includes('bot') ||
-        id.includes('ai') ||
-        id.startsWith('tambo-voice-agent') ||
-        meta.includes('agent') ||
-        meta.includes('type":"agent')
-      );
-    };
-
-    let disconnectTimer: NodeJS.Timeout | null = null;
-
-    const scheduleOrCancelDisconnect = () => {
-      const humanParticipants = Array.from(job.room.remoteParticipants.values()).filter(isHuman);
-
-      if (humanParticipants.length === 0) {
-        if (!disconnectTimer) {
-          console.log('🧹 [Agent] Room is empty of humans. Scheduling disconnect in 10 s…');
-          disconnectTimer = setTimeout(() => {
-            console.log('🔌 [Agent] Disconnecting – no human participants remained for 10 s');
-            // Cleanly disconnect the agent and exit the process so the worker shuts down
-            try {
-              job.room.disconnect();
-            } catch (err) {
-              console.error('⚠️ [Agent] Error during disconnect:', err);
-            }
-            process.exit(0);
-          }, 10000);
-        }
-      } else if (disconnectTimer) {
-        // Humans have (re)joined → cancel pending shutdown
-        clearTimeout(disconnectTimer);
-        disconnectTimer = null;
-        console.log('🔄 [Agent] Human participant detected – canceling pending disconnect');
-      }
-    };
-
-    // Monitor participant changes to trigger the above logic
-    job.room.on(RoomEvent.ParticipantConnected, scheduleOrCancelDisconnect);
-    job.room.on(RoomEvent.ParticipantDisconnected, scheduleOrCancelDisconnect);
-
-    // Run at start in case the agent was dispatched into an already-empty room
-    scheduleOrCancelDisconnect();
-  },
+  }
 });
 
-// Use the CLI runner if this file is being run directly
+// CLI runner  
 if (import.meta.url.startsWith('file:') && process.argv[1].endsWith('livekit-agent-worker.ts')) {
-  console.log('🎬 [Agent] Starting worker...');
+  console.log('🎬 [Agent] Starting agent worker...');
   
-  // Configure worker options WITH agent name for automatic dispatch
   const workerOptions = new WorkerOptions({ 
-    agent: process.argv[1], // Path to this agent file
-    agentName: 'tambo-voice-agent', // Register under this name so dispatcher can find it
+    agent: process.argv[1],
+    agentName: 'tambo-voice-agent', 
   });
   
-  console.log('🔧 [Agent] Worker configured for automatic dispatch');
-  console.log('📡 [Agent] Connecting to LiveKit Cloud...');
-  console.log('🌐 [Agent] LiveKit URL:', process.env.LIVEKIT_URL || process.env.NEXT_PUBLIC_LK_SERVER_URL);
-  
+  console.log('🔧 [Agent] Worker configured');
   cli.runApp(workerOptions);
-} 
+}

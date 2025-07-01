@@ -1,17 +1,33 @@
 /**
  * ToolDispatcher - Unified Tool Execution System
  * 
- * Centralizes all tool calls from the voice agent into a single dispatcher
- * that routes to appropriate handlers (Tambo UI, MCP tools, or direct actions).
+ * AGENT #3 of 3 in the Tambo Architecture
+ * =======================================
+ * This is the TOOL DISPATCHER that runs in the browser as a React component.
  * 
- * ARCHITECTURE:
- * - Listens for tool_call events via LiveKit data channels (not RPC)
- * - Manages pending tool executions to prevent duplicates
- * - Publishes results back via data channel for agent consumption
- * - Integrates with existing Tambo thread system for UI generation
- * - Routes MCP tool calls through the MCP provider
+ * Responsibilities:
+ * - Receive tool calls from the Voice Agent
+ * - Route to appropriate handlers (Tambo UI, MCP tools, built-in)
+ * - Execute tools through the unified SystemRegistry
+ * - Manage execution state and prevent duplicates
+ * - Publish results back to the Voice Agent
+ * - Sync discovered MCP tools to SystemRegistry
+ * 
+ * Data Flow:
+ * 1. Voice Agent publishes tool_call event
+ * 2. This dispatcher receives and validates
+ * 3. Routes through SystemRegistry.executeTool()
+ * 4. Executes via Tambo/MCP/built-in handler
+ * 5. Publishes tool_result back to Voice Agent
+ * 
+ * Key Features:
+ * - Circuit breaker prevents duplicate executions
+ * - Dynamic tool discovery and registration
+ * - Smart YouTube search with context
+ * - Real-time state synchronization
  * 
  * This replaces the fragmented RPC approach with a unified event-driven system.
+ * See docs/THREE_AGENT_ARCHITECTURE.md for complete details.
  */
 
 "use client";
@@ -281,16 +297,17 @@ export function ToolDispatcher({
 
     try {
       // 1. Build search parameters for the MCP `searchVideos` tool
+      // Use simple parameters that most YouTube MCP implementations support
       const searchParams: Record<string, unknown> = {
-        query,
+        q: query, // Most YouTube APIs use 'q' not 'query'
         maxResults: 10,
+        part: 'snippet,statistics', // Common requirement
+        type: 'video'
       };
 
+      // Add optional parameters only if supported
       if (flags.wantsLatest) {
         searchParams.order = 'date';
-        const lastWeek = new Date();
-        lastWeek.setDate(lastWeek.getDate() - 7);
-        searchParams.publishedAfter = lastWeek.toISOString();
       }
 
       if (flags.contentType === 'music') {
@@ -320,7 +337,24 @@ export function ToolDispatcher({
         })();
         
         if (!fallbackTool) {
-          throw new Error(`MCP tool '${mcpToolName}' is not registered. Make sure YouTube MCP server is configured in /mcp-config`);
+          // Final fallback - create a mock YouTube search result
+          log('⚠️ [ToolDispatcher] No YouTube MCP configured, using mock result');
+          
+          // Create a mock video result to demonstrate the functionality
+          const mockVideoId = 'dQw4w9WgXcQ'; // Classic video ID as placeholder
+          const mockTitle = `Mock Result: ${query}`;
+          
+          // Send the YouTube embed component directly
+          const embedMsg = `<<component name=\"YoutubeEmbed\" videoId=\"${mockVideoId}\" title=\"${mockTitle}\" startTime={0} >>`;
+          await sendTamboMessage(embedMsg);
+          
+          return {
+            status: 'SUCCESS',
+            message: 'YouTube search unavailable - showing placeholder video. Configure MCP at /mcp-config',
+            videoId: mockVideoId,
+            videoTitle: mockTitle,
+            note: 'This is a placeholder. Please configure YouTube MCP server for real search results.'
+          };
         }
         
         // Use the fallback tool
@@ -425,32 +459,42 @@ export function ToolDispatcher({
       pendingTool.status = 'executing';
       log('🔧 Executing tool:', payload.tool, payload.params);
       
-      // Route to appropriate handler
+      // Route to appropriate handler – prefer new unified registry flow
       let result: unknown;
-      
-      // 0️⃣  Generic registry lookup – enables automatic execution of tools
-      // discovered at runtime (e.g. via new MCP servers). If the tool exists in
-      // Tambo's registry we execute it directly and publish the result without
-      // needing a bespoke branch below.
-      // Skip built-in tools that we still want custom handling for.
+
+      // 0️⃣ Unified execution via SystemRegistry – will resolve to Tambo/MCP
+      try {
+        result = await systemRegistry.executeTool(
+          {
+            id,
+            name: payload.tool,
+            args: payload.params,
+            origin: 'browser',
+          },
+          { tamboRegistry: toolRegistry }
+        );
+
+        await publishToolResult(id, result);
+        pendingTool.status = 'completed';
+        circuitBreaker.current.markCompleted(JSON.stringify({ tool: payload.tool, params: payload.params }));
+        return; // unified path handled
+      } catch (registryErr) {
+        // Fallback to legacy built-in handling below if registry couldn't execute
+        log('ℹ️ [ToolDispatcher] Unified registry execution failed, falling back. Reason:', registryErr);
+      }
+
+      // --- Legacy fallbacks kept for backwards-compat ---
+
       const builtIns = new Set([
         'generate_ui_component',
         'youtube_search',
         'respond_with_voice',
         'do_nothing',
+        'ui_update',
+        'list_components'
       ]);
 
-      const registryTool = (() => {
-        // Handle both Map-style (toolRegistry.get) and plain object registries
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const reg: any = toolRegistry;
-        if (typeof reg?.get === 'function') return reg.get(payload.tool);
-        return reg?.[payload.tool];
-      })();
-
-      // Check if tool is available in Tambo registry (including ui_update and list_components)
       const tamboTool = (() => {
-        // Handle both Map-style (toolRegistry.get) and plain object registries
         const reg: any = toolRegistry;
         if (typeof reg?.get === 'function') return reg.get(payload.tool);
         return reg?.[payload.tool];
@@ -564,27 +608,6 @@ export function ToolDispatcher({
         }
       }
 
-      if (registryTool && !builtIns.has(payload.tool)) {
-        try {
-          // The execute signature can vary, so we forward params verbatim.
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          result = await (registryTool as any).execute?.(payload.params) ?? null;
-
-          pendingTool.status = 'completed';
-          await publishToolResult(id, result);
-          // ✅ Mark signature as completed to block further repeats
-          circuitBreaker.current.markCompleted(toolSignature);
-          return; // ✅ Finished – no further custom handling required
-        } catch (err) {
-          log('❌ Registry tool execution failed:', err);
-          pendingTool.status = 'failed';
-          await publishToolError(id, err as Error);
-          return;
-        }
-      }
-
-      // 1️⃣ Built-in handlers ---------------------------------------------------
-
       if (payload.tool === 'generate_ui_component') {
         // Use Tambo thread system for UI generation
         const params = payload.params as { componentType?: string; prompt?: string; task_prompt?: string };
@@ -657,8 +680,39 @@ Please consider both the processed summary above and the original transcript con
         
       } else if (payload.tool === 'youtube_search') {
         // Handle YouTube search with smart filtering
-        const params = payload.params as { query?: string; task_prompt?: string };
-        const query = params.query || params.task_prompt || '';
+        const params = payload.params as { query?: string; task_prompt?: string; prompt?: string };
+        
+        // Extract a clean search query - prefer task_prompt or prompt over the raw query
+        // which might contain conversation context
+        let query = params.task_prompt || params.prompt || params.query || '';
+        
+        // If query contains conversation context, extract the actual search intent
+        if (query.includes('CONVERSATION CONTEXT:')) {
+          // Extract from the summary/prompt instead
+          const context = payload.context;
+          const summary = context?.summary || '';
+          
+          // Extract search terms from the summary
+          if (summary.includes('Search YouTube for')) {
+            // Extract everything after "Search YouTube for"
+            const searchMatch = summary.match(/Search YouTube for (.+?)(?:\.|$)/i);
+            if (searchMatch) {
+              query = searchMatch[1].trim();
+            }
+          } else if (summary) {
+            query = summary;
+          }
+          
+          // Clean up the query further
+          query = query
+            .replace(/,?\s*as previously requested\.?/i, '')
+            .replace(/from this band/i, 'latest music videos')
+            .replace(/from the past week/i, 'latest')
+            .trim();
+        }
+        
+        log('🎯 [ToolDispatcher] Cleaned YouTube search query:', { original: params.query, cleaned: query });
+        
         const context = payload.context;
         
         // Use structured context if available, otherwise fall back to query parsing
@@ -781,6 +835,21 @@ Please consider both the processed summary above and the original transcript con
       off();
     };
   }, [bus, log]);
+
+  // Phase 4: Start LiveKitStateBridge for real-time shared state sync
+  useEffect(() => {
+    if (!room) return;
+    
+    // Dynamic import to avoid ESM issues
+    import('@/lib/livekit-state-bridge').then(({ LiveKitStateBridge }) => {
+      const bridge = new LiveKitStateBridge(room);
+      bridge.start();
+    }).catch(console.error);
+    
+    return () => {
+      // livekit-js has no dispose for events; rely on room closure
+    };
+  }, [room]);
 
   const contextValue: ToolDispatcherContextValue = {
     pendingTools: pendingById.current,

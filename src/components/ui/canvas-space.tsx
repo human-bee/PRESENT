@@ -50,6 +50,8 @@ import type { Editor } from 'tldraw';
 import { nanoid } from 'nanoid';
 import { Toaster } from "react-hot-toast";
 import { useAuth } from "@/hooks/use-auth";
+import { systemRegistry } from "@/lib/system-registry";
+import type { StateEnvelope } from "@/lib/shared-state";
 
 // Suppress development noise and repetitive warnings
 if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
@@ -199,6 +201,22 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
           },
         }
       ]);
+      
+      // Phase 4: Emit component update state
+      const existingState = systemRegistry.getState(messageId);
+      const stateEnvelope: StateEnvelope = {
+        id: messageId,
+        kind: 'component_updated',
+        payload: {
+          componentName: componentName || `Component ${messageId}`,
+          shapeId: existingShapeId,
+          canvasId: editor.store.id || 'default-canvas'
+        },
+        version: (existingState?.version || 0) + 1,
+        ts: Date.now(),
+        origin: 'browser'
+      };
+      systemRegistry.ingestState(stateEnvelope);
     } else {
       // Create new shape
       const defaultShapeProps = new TamboShapeUtil().getDefaultProps();
@@ -227,6 +245,23 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
       setMessageIdToShapeIdMap(prevMap => new Map(prevMap).set(messageId, newShapeId));
       // Mark this message as added
       setAddedMessageIds(prevSet => new Set(prevSet).add(messageId));
+      
+      // Phase 4: Emit component creation state
+      const stateEnvelope: StateEnvelope = {
+        id: messageId,
+        kind: 'component_created',
+        payload: {
+          componentName: componentName || `Component ${messageId}`,
+          shapeId: newShapeId,
+          canvasId: editor.store.id || 'default-canvas',
+          position: { x, y },
+          size: { w: defaultShapeProps.w, h: defaultShapeProps.h }
+        },
+        version: 1,
+        ts: Date.now(),
+        origin: 'browser'
+      };
+      systemRegistry.ingestState(stateEnvelope);
     }
   }, [editor, messageIdToShapeIdMap]);
 

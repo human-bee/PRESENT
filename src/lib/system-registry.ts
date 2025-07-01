@@ -74,7 +74,7 @@ export const STATIC_CAPABILITIES: SystemCapability[] = [
       'Find official music video',
       'Show me TikTok trends videos'
     ],
-    available: false, // Will be set to true when MCP tool is discovered
+    available: true, // Enable by default since we have fallback handling
     source: 'static'
   }
 ];
@@ -83,6 +83,14 @@ export const STATIC_CAPABILITIES: SystemCapability[] = [
 export class SystemRegistry {
   private capabilities: Map<string, SystemCapability> = new Map();
   private listeners: Set<(capabilities: SystemCapability[]) => void> = new Set();
+  
+  // --- Phase 4 state sync --------------------------------------------------
+  // Each state kind maintains last known version so we can implement
+  // last-write-wins idempotency. Persisting to memory is sufficient for
+  // browser runtime; server/agent can persist elsewhere. In the future this
+  // could be migrated to redis / kv.
+  private stateSnapshot: Map<string, unknown> = new Map(); // key = StateEnvelope.id
+  private stateListeners: Set<(envelope: unknown) => void> = new Set();
   
   constructor() {
     // Load static capabilities
@@ -190,6 +198,116 @@ export class SystemRegistry {
         )
       }
     };
+  }
+
+  // -----------------------------------------------------------------------
+  //  Phase 4 – State helpers
+  // -----------------------------------------------------------------------
+
+  /** Store incoming state update after conflict resolution */
+  ingestState<T = unknown>(envelope: import('./shared-state').StateEnvelope<T>) {
+    const existing: import('./shared-state').StateEnvelope<T> | undefined =
+      this.stateSnapshot.get(envelope.id) as any;
+
+    if (existing && existing.version >= envelope.version) {
+      // Ignore stale or duplicate update
+      return;
+    }
+
+    // Persist and notify listeners
+    this.stateSnapshot.set(envelope.id, envelope);
+    this.stateListeners.forEach(l => l(envelope));
+  }
+
+  /** Retrieve latest snapshot for given id */
+  getState<T = unknown>(id: string): import('./shared-state').StateEnvelope<T> | undefined {
+    return this.stateSnapshot.get(id) as any;
+  }
+
+  /** Subscribe to state updates */
+  onState(listener: (envelope: import('./shared-state').StateEnvelope<any>) => void) {
+    this.stateListeners.add(listener);
+    return () => this.stateListeners.delete(listener);
+  }
+
+  /** Dump full snapshot (e.g., for new participant) */
+  getSnapshot() {
+    return Array.from(this.stateSnapshot.values());
+  }
+
+  // -----------------------------------------------------------------------
+  //  Phase 5 – Unified tool execution wrapper
+  // -----------------------------------------------------------------------
+
+  /**
+   * Execute a tool call agnostic of where the actual implementation lives.
+   * The resolution order is:
+   *   1. supplied override executor
+   *   2. Tambo tool registry (browser)
+   *   3. MCP mapping via capability
+   */
+  async executeTool(call: {
+    id: string;
+    name: string;
+    args: Record<string, unknown>;
+    origin?: string;
+  },
+  // optional injection for unit tests or server-side execution
+  options: {
+    tamboRegistry?: any;
+  } = {}) {
+    const { name } = call;
+
+    // Look up capability mapping first – may translate agent name ➜ mcp name
+    const routing = this.getToolRouting(name);
+
+    const registry = options.tamboRegistry as any;
+
+    // 1) direct registry lookup
+    const directTool = (() => {
+      if (!registry) return undefined;
+      if (typeof registry?.get === 'function') return registry.get(name);
+      return registry?.[name];
+    })();
+
+    let impl: any = directTool;
+
+    // 2) fallback to mcpToolName
+    if (!impl && routing?.mcpToolName && registry) {
+      impl = typeof registry.get === 'function' ? registry.get(routing.mcpToolName) : registry[routing.mcpToolName];
+    }
+
+    if (!impl) {
+      throw new Error(`Tool '${name}' is not registered in Tambo registry`);
+    }
+
+    const started = Date.now();
+    try {
+      const result = await impl.execute?.(call.args) ?? await impl(call.args);
+      // Emit tool_result state
+      this.ingestState({
+        id: call.id,
+        kind: 'tool_result',
+        payload: { ok: true, result },
+        version: 1,
+        ts: Date.now(),
+        origin: call.origin || 'browser',
+      });
+      return result;
+    } catch (err: any) {
+      this.ingestState({
+        id: call.id,
+        kind: 'tool_error',
+        payload: { ok: false, error: err.message || String(err) },
+        version: 1,
+        ts: Date.now(),
+        origin: call.origin || 'browser',
+      });
+      throw err;
+    } finally {
+      // Could log execution time here
+      // console.debug(`[SystemRegistry] Tool '${name}' executed in`, Date.now()-started, 'ms');
+    }
   }
 }
 

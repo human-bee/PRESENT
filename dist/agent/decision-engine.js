@@ -1,10 +1,41 @@
 /**
  * Simple AI-Powered Decision Engine for Tambo Voice Agent
  *
- * Uses OpenAI to intelligently decide when to send transcripts to Tambo
- * and summarizes them. No complex hard-coded rules - just smart AI decisions.
+ * AGENT #2 of 3 in the Tambo Architecture
+ * =======================================
+ * This is the DECISION ENGINE that runs embedded within the Voice Agent.
+ *
+ * Responsibilities:
+ * - Analyze transcriptions to detect actionable requests
+ * - Maintain conversation context across multiple speakers
+ * - Handle meeting scenarios with collaborative requests
+ * - Use GPT-4 to intelligently summarize and filter
+ * - Extract intent (YouTube search, UI component, general)
+ *
+ * Data Flow:
+ * 1. Receives transcriptions from Voice Agent
+ * 2. Analyzes with 30-second context window
+ * 3. Makes AI decision on whether to forward
+ * 4. Returns decision with summary & confidence
+ * 5. Voice Agent acts on positive decisions
+ *
+ * Key Features:
+ * - Handles "do it" references to previous requests
+ * - Detects fragmented requests across speakers
+ * - Dynamic configuration from SystemRegistry
+ *
+ * See docs/THREE_AGENT_ARCHITECTURE.md for complete details.
  */
-const SYSTEM_PROMPT = `You are an AI assistant that decides when to send voice transcripts to a UI generation system called Tambo.
+// Build dynamic system prompt based on available capabilities
+const buildSystemPrompt = (config) => {
+    const basePrompt = `You are the Decision Engine (Agent #2) in Tambo's 3-agent architecture.
+
+ARCHITECTURE AWARENESS:
+- Voice Agent (Agent #1): Captures and transcribes speech, forwards to you
+- YOU (Decision Engine #2): Filter transcriptions for actionable requests
+- Tool Dispatcher (Agent #3): Executes tools in the browser
+
+You decide when to send voice transcripts to the UI generation system.
 
 CONTEXT: You're analyzing conversation from a collaborative meeting where multiple people might be:
 - Building on each other's ideas
@@ -42,6 +73,22 @@ EXAMPLES:
 - "Show me the latest React tutorials" → Summary: "Search YouTube for React tutorials from the last 7 days, prioritizing official/verified channels"
 - "Find where they talk about hooks in that video" → Summary: "Navigate to transcript sections about React hooks in the current video"
 
+`;
+    // Add dynamic intents if available
+    let dynamicSection = '';
+    if (config.intents && Object.keys(config.intents).length > 0) {
+        dynamicSection += '\n\nAVAILABLE INTENTS:\n';
+        Object.entries(config.intents).forEach(([tool, intents]) => {
+            dynamicSection += `- ${tool}: ${intents.join(', ')}\n`;
+        });
+    }
+    if (config.keywords && Object.keys(config.keywords).length > 0) {
+        dynamicSection += '\n\nTRIGGER KEYWORDS:\n';
+        Object.entries(config.keywords).forEach(([tool, keywords]) => {
+            dynamicSection += `- ${tool}: ${keywords.slice(0, 5).join(', ')}${keywords.length > 5 ? '...' : ''}\n`;
+        });
+    }
+    const endPrompt = `
 Return JSON:
 {
   "should_send": boolean,
@@ -49,6 +96,8 @@ Return JSON:
   "confidence": number (0-100),
   "reason": "brief explanation"
 }`;
+    return basePrompt + dynamicSection + endPrompt;
+};
 export class DecisionEngine {
     constructor(apiKey, config = {}) {
         this.buffers = new Map();
@@ -307,7 +356,7 @@ Analyze the current speaker's statement in full conversational context.`;
                 temperature: 0.1,
                 response_format: { type: 'json_object' },
                 messages: [
-                    { role: 'system', content: SYSTEM_PROMPT },
+                    { role: 'system', content: buildSystemPrompt(this.config) },
                     { role: 'user', content: transcript }
                 ]
             })
