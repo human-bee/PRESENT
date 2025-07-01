@@ -15,7 +15,7 @@ config({ path: join(process.cwd(), '.env.local') });
 import { defineAgent, JobContext, cli, WorkerOptions, multimodal } from '@livekit/agents';
 import { RoomEvent, Track } from 'livekit-client';
 import * as openai from '@livekit/agents-plugin-openai';
-import { DecisionEngine } from './decision-engine';
+import { DecisionEngine, DecisionEngineConfig } from './decision-engine';
 
 console.log('🚀 Starting Tambo Voice Agent Worker...');
 console.log('🔧 Environment Check:');
@@ -35,6 +35,84 @@ export default defineAgent({
     
     await job.connect();
     console.log('✅ [Agent] Successfully connected to room!');
+    
+    // Query system capabilities from the browser
+    interface SystemCapabilities {
+      tools: Array<{ name: string; description: string; examples?: string[] }>;
+      decisionEngine: {
+        intents: Record<string, string[]>;
+        keywords: Record<string, string[]>;
+      };
+    }
+    
+    let systemCapabilities: SystemCapabilities | null = null;
+    
+    const queryCapabilities = async (): Promise<void> => {
+      return new Promise((resolve) => {
+        console.log('🔍 [Agent] Querying system capabilities...');
+        
+        // Set up one-time listener for response
+        const handleCapabilityResponse = (data: Uint8Array) => {
+          try {
+            const message = JSON.parse(new TextDecoder().decode(data));
+            if (message.type === 'capability_list') {
+              systemCapabilities = message.capabilities;
+              console.log('✅ [Agent] Received capabilities:', {
+                tools: systemCapabilities?.tools.length || 0,
+                intents: Object.keys(systemCapabilities?.decisionEngine.intents || {}).length,
+                keywords: Object.keys(systemCapabilities?.decisionEngine.keywords || {}).length
+              });
+              job.room.off('dataReceived', handleCapabilityResponse);
+              resolve();
+            }
+          } catch {
+            // Ignore non-JSON messages
+          }
+        };
+        
+        job.room.on('dataReceived', handleCapabilityResponse);
+        
+        // Send capability query
+        const queryMessage = JSON.stringify({
+          type: 'capability_query',
+          timestamp: Date.now()
+        });
+        
+        job.room.localParticipant?.publishData(
+          new TextEncoder().encode(queryMessage),
+          { reliable: true, topic: 'capability_query' }
+        );
+        
+        // Timeout after 5 seconds and continue with defaults
+        setTimeout(() => {
+          if (!systemCapabilities) {
+            console.log('⚠️ [Agent] Capability query timed out, using defaults');
+            job.room.off('dataReceived', handleCapabilityResponse);
+            resolve();
+          }
+        }, 5000);
+      });
+    };
+    
+    // Query capabilities
+    await queryCapabilities();
+    
+    // Set up periodic capability refresh (every 30 seconds)
+    const capabilityRefreshInterval = setInterval(async () => {
+      console.log('🔄 [Agent] Refreshing capabilities...');
+      await queryCapabilities();
+      
+      // Update decision engine if capabilities changed
+      if (systemCapabilities) {
+        console.log('🔧 [Agent] New capabilities available, would update decision engine');
+        // TODO: Add update method to DecisionEngine to reconfigure at runtime
+      }
+    }, 30000);
+    
+    // Clean up interval on disconnect
+    job.room.once('disconnected', () => {
+      clearInterval(capabilityRefreshInterval);
+    });
     
     // --- AUDIO DEBUG: Enhanced participant tracking ---------------------
     console.log('[TRACE] 👥 Participants when agent joined:',
@@ -100,23 +178,36 @@ export default defineAgent({
     
     console.log('🧠 [Agent] Initializing OpenAI Realtime model...');
     
-    // Create the multimodal agent using OpenAI Realtime API
-    // Note: Tools will be handled through OpenAI's native function calling mechanism
-    const model = new openai.realtime.RealtimeModel({
-      instructions: `You are Tambo Voice Agent, a helpful AI assistant integrated with a powerful UI generation system.
+    // Build dynamic instructions based on available capabilities
+    const buildInstructions = () => {
+      const baseInstructions = `You are Tambo Voice Agent, a helpful AI assistant integrated with a powerful UI generation system.
         
         CRITICAL: Always respond with TEXT ONLY. Never use audio responses. All your responses should be in text format.
         
-        IMPORTANT: When users ask for UI components, timers, or visual elements, DO NOT repeat their request back as text. The UI generation is handled automatically when they speak.
-        
-        You have access to these tools:
-        - generate_ui_component: Create ANY UI component (timers, charts, buttons, forms, etc.) - Tambo knows about all available components
+        IMPORTANT: When users ask for UI components, timers, or visual elements, DO NOT repeat their request back as text. The UI generation is handled automatically when they speak.`;
+      
+      // Add available tools from capabilities
+      let toolSection = '\n\nYou have access to these tools:';
+      if (systemCapabilities?.tools) {
+        systemCapabilities.tools.forEach(tool => {
+          toolSection += `\n- ${tool.name}: ${tool.description}`;
+          if (tool.examples && tool.examples.length > 0) {
+            toolSection += `\n  Examples: ${tool.examples.slice(0, 2).join(', ')}`;
+          }
+        });
+      } else {
+        // Fallback to default tools
+        toolSection += `
+        - generate_ui_component: Create ANY UI component (timers, charts, buttons, forms, etc.)
         - youtube_search: Search and display YouTube videos
         - mcp_tool: Access external tools via Model Context Protocol
         - ui_update: Update existing UI components (MUST call list_components first!)
         - list_components: List all current UI components to get their IDs
         - respond_with_voice: Speak responses when appropriate
-        - do_nothing: When no action is needed
+        - do_nothing: When no action is needed`;
+      }
+      
+      const endInstructions = `
         
         Always respond with text for:
         - Answering questions
@@ -126,16 +217,41 @@ export default defineAgent({
         
         DO NOT use voice to repeat UI requests like "Create a timer" or "Show me a chart" - these are handled automatically by the system.
         
-        Remember: TEXT RESPONSES ONLY, even though you can hear audio input.`,
+        Remember: TEXT RESPONSES ONLY, even though you can hear audio input.`;
+      
+      return baseInstructions + toolSection + endInstructions;
+    };
+    
+    // Create the multimodal agent using OpenAI Realtime API
+    // Note: Tools will be handled through OpenAI's native function calling mechanism
+    const model = new openai.realtime.RealtimeModel({
+      instructions: buildInstructions(),
       model: 'gpt-4o-realtime-preview',
-      modalities: ['text']
+      modalities: ['text'] //add Audio input for Agent audio output, text only for transcription only
     });
     
     console.log('🎙️ [Agent] Starting multimodal agent...');
     
-    // Initialize Decision Engine
-    const decisionEngine = new DecisionEngine(process.env.OPENAI_API_KEY || '');
-    console.log('🧠 [Agent] Decision Engine initialized');
+    // Initialize Decision Engine with dynamic configuration  
+    const decisionEngineConfig: DecisionEngineConfig = (systemCapabilities as SystemCapabilities | null)?.decisionEngine 
+      ? {
+          intents: (systemCapabilities as unknown as SystemCapabilities).decisionEngine.intents || {},
+          keywords: (systemCapabilities as unknown as SystemCapabilities).decisionEngine.keywords || {}
+        }
+      : {
+          intents: {},
+          keywords: {}
+        };
+    
+    const decisionEngine = new DecisionEngine(
+      process.env.OPENAI_API_KEY || '',
+      decisionEngineConfig
+    );
+    
+    console.log('🧠 [Agent] Decision Engine initialized with:', {
+      intents: Object.keys(decisionEngineConfig.intents || {}).length,
+      keywords: Object.keys(decisionEngineConfig.keywords || {}).length
+    });
     
     // Configure agent to accept text responses when using tools
     const agent = new multimodal.MultimodalAgent({ 

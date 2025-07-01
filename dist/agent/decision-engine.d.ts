@@ -39,8 +39,13 @@ export interface MeetingContext {
     lastDecisionTime: number;
     pendingCollaborativeRequest?: string;
 }
+export interface DecisionEngineConfig {
+    intents?: Record<string, string[]>;
+    keywords?: Record<string, string[]>;
+}
 export declare class DecisionEngine {
     private apiKey;
+    private config;
     private buffers;
     private meetingContext;
     private decisionCallback?;
@@ -48,7 +53,7 @@ export declare class DecisionEngine {
     private readonly MAX_BUFFER_CHARS;
     private readonly MEETING_CONTEXT_WINDOW_MS;
     private readonly MAX_RECENT_TRANSCRIPTS;
-    constructor(apiKey: string);
+    constructor(apiKey: string, config?: DecisionEngineConfig);
     /**
      * Process incoming transcript from a participant
      */

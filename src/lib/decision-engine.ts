@@ -89,8 +89,14 @@ Return JSON:
   "reason": "brief explanation"
 }`;
 
+export interface DecisionEngineConfig {
+  intents?: Record<string, string[]>;
+  keywords?: Record<string, string[]>;
+}
+
 export class DecisionEngine {
   private apiKey: string;
+  private config: DecisionEngineConfig;
   private buffers = new Map<string, ConversationBuffer>();
   private meetingContext: MeetingContext = {
     recentTranscripts: [],
@@ -106,8 +112,9 @@ export class DecisionEngine {
   private readonly MEETING_CONTEXT_WINDOW_MS = 30000; // 30 seconds of context
   private readonly MAX_RECENT_TRANSCRIPTS = 10; // Keep last 10 transcripts for context
   
-  constructor(apiKey: string) {
+  constructor(apiKey: string, config: DecisionEngineConfig = {}) {
     this.apiKey = apiKey;
+    this.config = config;
   }
 
   /**
@@ -314,8 +321,8 @@ Analyze the current speaker's statement in full conversational context.`;
   } {
     const lowerTranscript = transcript.toLowerCase();
     
-    // YouTube search detection
-    const youtubeKeywords = [
+    // Use dynamic keywords if available, otherwise fallback to defaults
+    const youtubeKeywords = this.config.keywords?.youtube_search || [
       'youtube', 'video', 'music video', 'song', 'artist', 'channel',
       'search for', 'find', 'show me', 'play', 'watch', 'latest', 'newest'
     ];
@@ -362,7 +369,7 @@ Analyze the current speaker's statement in full conversational context.`;
     }
     
     // UI component detection
-    const uiKeywords = [
+    const uiKeywords = this.config.keywords?.generate_ui_component || [
       'component', 'timer', 'chart', 'button', 'form', 'create', 'generate',
       'display', 'show', 'make', 'add', 'build'
     ];

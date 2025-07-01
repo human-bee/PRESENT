@@ -50,7 +50,7 @@ Return JSON:
   "reason": "brief explanation"
 }`;
 export class DecisionEngine {
-    constructor(apiKey) {
+    constructor(apiKey, config = {}) {
         this.buffers = new Map();
         this.meetingContext = {
             recentTranscripts: [],
@@ -64,6 +64,7 @@ export class DecisionEngine {
         this.MEETING_CONTEXT_WINDOW_MS = 30000; // 30 seconds of context
         this.MAX_RECENT_TRANSCRIPTS = 10; // Keep last 10 transcripts for context
         this.apiKey = apiKey;
+        this.config = config;
     }
     /**
      * Process incoming transcript from a participant
@@ -227,8 +228,8 @@ Analyze the current speaker's statement in full conversational context.`;
      */
     detectIntent(transcript) {
         const lowerTranscript = transcript.toLowerCase();
-        // YouTube search detection
-        const youtubeKeywords = [
+        // Use dynamic keywords if available, otherwise fallback to defaults
+        const youtubeKeywords = this.config.keywords?.youtube_search || [
             'youtube', 'video', 'music video', 'song', 'artist', 'channel',
             'search for', 'find', 'show me', 'play', 'watch', 'latest', 'newest'
         ];
@@ -267,7 +268,7 @@ Analyze the current speaker's statement in full conversational context.`;
             };
         }
         // UI component detection
-        const uiKeywords = [
+        const uiKeywords = this.config.keywords?.generate_ui_component || [
             'component', 'timer', 'chart', 'button', 'form', 'create', 'generate',
             'display', 'show', 'make', 'add', 'build'
         ];

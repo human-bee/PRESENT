@@ -25,6 +25,7 @@ import { createLiveKitBus } from '../lib/livekit-bus';
 import { useContextKey } from './RoomScopedProviders';
 import { createLogger } from '../lib/utils';
 import { CircuitBreaker } from '../lib/circuit-breaker';
+import { systemRegistry, syncMcpToolsToRegistry } from '../lib/system-registry';
 
 // Generate unique IDs without external dependency
 const generateId = () => `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
@@ -134,6 +135,46 @@ export function ToolDispatcher({
   const pendingById = useRef(new Map<string, PendingTool>());
   const [isProcessing, setIsProcessing] = useState(false);
   
+  // Log helper using centralized logger - moved before useEffect
+  const log = useCallback((...args: unknown[]) => {
+    if (enableLogging) {
+      logger.log(...args);
+    }
+  }, [enableLogging]);
+  
+  // Sync MCP tools to system registry when they change
+  useEffect(() => {
+    if (!toolRegistry) return;
+    
+    // Extract all tools from registry
+    const allTools: Array<{name: string, description: string}> = [];
+    
+    // Handle both Map-style and object registries
+    if (toolRegistry instanceof Map) {
+      // Map-style registry
+      toolRegistry.forEach((tool: any, name: string) => {
+        allTools.push({ 
+          name, 
+          description: tool.description || tool.name || name 
+        });
+      });
+    } else if (typeof toolRegistry === 'object') {
+      // Object-style registry
+      Object.entries(toolRegistry).forEach(([name, tool]: [string, any]) => {
+        allTools.push({ 
+          name, 
+          description: tool.description || tool.name || name 
+        });
+      });
+    }
+    
+    // Sync to system registry
+    if (allTools.length > 0) {
+      log('🔄 [ToolDispatcher] Syncing tools to system registry:', allTools.length, 'tools');
+      syncMcpToolsToRegistry(allTools);
+    }
+  }, [toolRegistry, log]);
+  
   // Use circuit breaker for duplicate detection
   const circuitBreaker = useRef(new CircuitBreaker({
     duplicateWindow: 3000,     // 3 seconds for duplicate tool calls
@@ -143,15 +184,45 @@ export function ToolDispatcher({
   
   // Use room name as context key to ensure thread/canvas sync
   const effectiveContextKey = propContextKey || roomContextKey || room?.name || 'canvas';
-  
-  // Log helper using centralized logger
-  const log = useCallback((...args: unknown[]) => {
-    if (enableLogging) {
-      logger.log(...args);
-    }
-  }, [enableLogging]);
 
   const bus = createLiveKitBus(room);
+  
+  // Expose system capabilities via data channel for agent to query
+  useEffect(() => {
+    if (!room || !bus) return;
+    
+    const handleCapabilityQuery = (data: Uint8Array) => {
+      try {
+        const message = JSON.parse(new TextDecoder().decode(data));
+        
+        if (message.type === 'capability_query') {
+          log('📊 [ToolDispatcher] Agent requesting capability list');
+          
+          // Get current capabilities from system registry
+          const capabilities = systemRegistry.exportForAgent();
+          
+          // Send back via data channel
+          const response = {
+            type: 'capability_list',
+            capabilities,
+            timestamp: Date.now()
+          };
+          
+          bus.send('capability_list', response);
+          log('✅ [ToolDispatcher] Sent capability list to agent:', capabilities.tools.length, 'tools');
+        }
+      } catch (error) {
+        // Ignore non-JSON messages
+      }
+    };
+    
+    // Listen for capability queries
+    room.on('dataReceived', handleCapabilityQuery);
+    
+    return () => {
+      room.off('dataReceived', handleCapabilityQuery);
+    };
+  }, [room, bus, log]);
 
   // Publish tool result back to agent
   const publishToolResult = useCallback(async (toolCallId: string, result: unknown) => {
@@ -228,14 +299,36 @@ export function ToolDispatcher({
 
       log('🔧 [ToolDispatcher] Calling MCP searchVideos with params:', searchParams);
 
-      // 2. Execute the MCP tool directly
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const searchVideosTool: any = toolRegistry.get?.("searchVideos");
+      // 2. Route to the actual MCP tool using system registry mapping
+      const routing = systemRegistry.getToolRouting('youtube_search');
+      const mcpToolName = routing?.mcpToolName || 'searchVideos'; // Default fallback
+      
+      // Check if MCP tool is available in Tambo's registry
+      const searchVideosTool = (() => {
+        // Handle both Map-style (toolRegistry.get) and plain object registries
+        const reg: any = toolRegistry;
+        if (typeof reg?.get === 'function') return reg.get(mcpToolName);
+        return reg?.[mcpToolName];
+      })();
+      
       if (!searchVideosTool) {
-        throw new Error('searchVideos tool is not registered in Tambo');
+        // Fallback: try the direct youtube_search name
+        const fallbackTool = (() => {
+          const reg: any = toolRegistry;
+          if (typeof reg?.get === 'function') return reg.get('youtube_search');
+          return reg?.['youtube_search'];
+        })();
+        
+        if (!fallbackTool) {
+          throw new Error(`MCP tool '${mcpToolName}' is not registered. Make sure YouTube MCP server is configured in /mcp-config`);
+        }
+        
+        // Use the fallback tool
+        const searchResults: any = await fallbackTool.execute(searchParams);
+        return searchResults;
       }
-
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      
+      // Execute the MCP tool
       const searchResults: any = await searchVideosTool.execute(searchParams);
 
       // 3. Choose the best video – simple heuristic
@@ -274,8 +367,17 @@ export function ToolDispatcher({
         videoId,
         videoTitle,
       };
-    } catch (error) {
+    } catch (error: any) {
       log('❌ [ToolDispatcher] Smart YouTube search failed:', error);
+      
+      // Provide helpful error messages
+      if (error.message?.includes('not registered')) {
+        throw new Error(
+          'YouTube search requires MCP configuration. ' +
+          'Please go to /mcp-config and add a YouTube MCP server URL.'
+        );
+      }
+      
       throw error;
     }
   }, [log, toolRegistry, sendTamboMessage]);
