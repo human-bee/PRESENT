@@ -316,6 +316,12 @@ export default defineAgent({
       
       const endInstructions = `
         
+        IMPORTANT TOOL SELECTION RULES:
+        - For ANY YouTube-related request (search, play, find videos), you MUST use the "youtube_search" tool
+        - Do NOT use "web_search_exa" or any other web search tool for YouTube content
+        - When users say "search youtube", "find video", "play video", "show video" - use "youtube_search"
+        - For general web searches that are NOT about YouTube, you may use other search tools
+        
         Always respond with text for:
         - Answering questions
         - Providing explanations
@@ -438,13 +444,35 @@ export default defineAgent({
       try {
         const args = JSON.parse(evt.arguments);
         
+        // Remap function calls if needed
+        let toolName = evt.name;
+        
+        // If OpenAI calls web_search_exa for YouTube content, remap to youtube_search
+        if (toolName === 'web_search_exa') {
+          const query = args.query || args.search || args.q || '';
+          const queryLower = query.toLowerCase();
+          
+          // Check if this is actually a YouTube search
+          if (queryLower.includes('youtube') || 
+              queryLower.includes('video') ||
+              queryLower.includes('ronaldo') || // Common YouTube searches
+              queryLower.includes('music') ||
+              queryLower.includes('tutorial')) {
+            console.log(`🔄 [Agent] Remapping web_search_exa → youtube_search for query: "${query}"`);
+            toolName = 'youtube_search';
+            // Remap args to match youtube_search expected format
+            args.query = query;
+            delete args.numResults; // Remove web_search_exa specific params
+          }
+        }
+        
         // Instead of executing directly, send to ToolDispatcher
         const toolCallEvent = {
           id: evt.call_id,
           roomId: job.room.name || 'unknown',
           type: 'tool_call',
           payload: {
-            tool: evt.name,
+            tool: toolName,
             params: args,
             context: {
               source: 'voice',
@@ -461,7 +489,12 @@ export default defineAgent({
           { reliable: true, topic: 'tool_call' }
         );
         
-        console.log(`✅ [Agent] Tool call dispatched:`, evt.name);
+        console.log(`✅ [Agent] Tool call dispatched:`, {
+          originalName: evt.name,
+          remappedName: toolName,
+          wasRemapped: evt.name !== toolName,
+          params: args
+        });
         
         // For now, return a placeholder result to keep the session going
         // The actual result will come from the tool dispatcher

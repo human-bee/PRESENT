@@ -121,8 +121,10 @@ export function loadMcpServers(): McpServer[] {
       })
       .map((server: McpServer) => {
         // Add default timeout and retry settings if not specified
+        let processedServer: McpServer;
+        
         if (typeof server === "string") {
-          return {
+          processedServer = {
             url: server,
             transport: "sse" as const,
             timeout: 10000, // 10 seconds
@@ -130,13 +132,36 @@ export function loadMcpServers(): McpServer[] {
             enabled: true
           };
         } else {
-          return {
+          processedServer = {
             ...server,
             timeout: server.timeout || 10000,
             retryAttempts: server.retryAttempts || 2,
             enabled: server.enabled !== false
           };
         }
+        
+        // Proxy external MCP servers to avoid CORS issues
+        const url = typeof processedServer === "string" ? processedServer : processedServer.url;
+        
+        // Check if this is an external URL that needs proxying
+        if (url && !url.startsWith('http://localhost') && !url.startsWith('http://127.0.0.1') && !url.startsWith('/')) {
+          if (process.env.NODE_ENV === 'development') {
+            console.log(`[MCP] Proxying external server: ${url}`);
+          }
+          
+          // Update the URL to use our proxy
+          const proxiedUrl = `/api/mcp-proxy?target=${encodeURIComponent(url)}`;
+          
+          if (typeof processedServer === "string") {
+            processedServer = proxiedUrl;
+          } else {
+            processedServer.url = proxiedUrl;
+            // Keep original transport type - our proxy supports both SSE and HTTP
+            // processedServer.transport remains unchanged
+          }
+        }
+        
+        return processedServer;
       });
     
     // Log loading info in development

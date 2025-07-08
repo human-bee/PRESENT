@@ -15,7 +15,29 @@ export function createLiveKitBus(room: Room | null | undefined) {
   return {
     /** Publish a JSON-serialisable payload under the given topic */
     send(topic: string, payload: unknown) {
+      // Guard against stale or disconnected rooms. Calling publishData when
+      // the underlying PeerConnection is already closed will throw
+      // `UnexpectedConnectionState: PC manager is closed` inside livekit-client.
+      // See https://github.com/livekit/components-js/issues/XXX (example) for details.
+
+      // 1. Room reference must exist.
       if (!room) return;
+
+      // 2. Only attempt to publish when the room is fully connected. The room
+      //    state is managed internally by livekit-client and will be one of
+      //    'connected' | 'connecting' | 'reconnecting' | 'disconnected'. We
+      //    publish ONLY when connected to avoid race-conditions during
+      //    teardown.
+      //    Ref: https://docs.livekit.io/client-sdk-js/interfaces/Room.html#state
+      if (room.state !== 'connected') {
+        // eslint-disable-next-line no-console
+        console.warn('[LiveKitBus] Skipping publishData – room not connected.', {
+          topic,
+          currentState: room.state,
+        });
+        return;
+      }
+
       try {
         room.localParticipant?.publishData(
           new TextEncoder().encode(JSON.stringify(payload)),
