@@ -398,11 +398,37 @@ export default defineAgent({
             componentSection += `\n- "Edit this document" → Uses DocumentEditor`;
             const endInstructions = `
         
+        AVAILABLE FUNCTION CALLS:
+        You have access to these function calls (use EXACT function names and parameter structures):
+        
+        1. generate_ui_component(prompt: string)
+           - Create any UI component from the Tambo library
+           - Example: generate_ui_component("Create a 5 minute timer")
+           
+        2. ui_update(componentId: string, patch: string)
+           - Update existing UI components
+           - componentId: Use empty string "" for auto-detection or exact ID from list_components
+           - patch: Natural language instruction
+           - Example: ui_update("", "change timer to 10 minutes")
+           
+        3. list_components()
+           - List all current UI components and their IDs
+           - No parameters needed
+           
+        4. get_documents()
+           - Retrieve list of available documents
+           - No parameters needed
+           
+        5. youtube_search(query: string)
+           - Search and display YouTube videos
+           - Example: youtube_search("React tutorials")
+        
         IMPORTANT TOOL SELECTION RULES:
         - For ANY YouTube-related request (search, play, find videos), you MUST use the "youtube_search" tool
-        - Do NOT use "web_search_exa" or any other web search tool for YouTube content
-        - When users say "search youtube", "find video", "play video", "show video" - use "youtube_search"
-        - For general web searches that are NOT about YouTube, you may use other search tools
+        - For document UPDATES (edit, change, add to): use "ui_update" tool
+        - For document RETRIEVAL (show, list): use "get_documents" tool
+        - For creating NEW components: use "generate_ui_component" tool
+        - For updating EXISTING components: use "ui_update" tool
         
         Always respond with text for:
         - Answering questions
@@ -415,6 +441,73 @@ export default defineAgent({
         Remember: TEXT RESPONSES ONLY, even though you can hear audio input.`;
             return baseInstructions + toolSection + componentSection + endInstructions;
         };
+        // Define OpenAI function schemas for tool calling
+        const openAIFunctions = [
+            {
+                name: 'generate_ui_component',
+                description: 'Generate any UI component from the Tambo component library',
+                parameters: {
+                    type: 'object',
+                    properties: {
+                        prompt: {
+                            type: 'string',
+                            description: 'Natural language prompt describing the UI component to generate with any parameters'
+                        }
+                    },
+                    required: ['prompt']
+                }
+            },
+            {
+                name: 'ui_update',
+                description: 'Update existing UI components',
+                parameters: {
+                    type: 'object',
+                    properties: {
+                        componentId: {
+                            type: 'string',
+                            description: 'Component ID from list_components (e.g., "timer-retro-timer")'
+                        },
+                        patch: {
+                            type: 'string',
+                            description: 'Natural language update instruction (e.g., "make it 7 minutes", "change title to Dashboard")'
+                        }
+                    },
+                    required: ['componentId', 'patch']
+                }
+            },
+            {
+                name: 'list_components',
+                description: 'List all current UI components and their IDs',
+                parameters: {
+                    type: 'object',
+                    properties: {},
+                    required: []
+                }
+            },
+            {
+                name: 'get_documents',
+                description: 'Retrieve list of all available documents from the document store',
+                parameters: {
+                    type: 'object',
+                    properties: {},
+                    required: []
+                }
+            },
+            {
+                name: 'youtube_search',
+                description: 'Search and display YouTube videos',
+                parameters: {
+                    type: 'object',
+                    properties: {
+                        query: {
+                            type: 'string',
+                            description: 'Search query for YouTube videos'
+                        }
+                    },
+                    required: ['query']
+                }
+            }
+        ];
         // Create the multimodal agent using OpenAI Realtime API
         // Note: Tools will be handled through OpenAI's native function calling mechanism
         const model = new openai.realtime.RealtimeModel({
@@ -433,7 +526,8 @@ export default defineAgent({
                 'research': ['research', 'findings', 'results', 'analysis'],
                 'action_items': ['todo', 'task', 'action item', 'checklist'],
                 'image_generation': ['image', 'picture', 'illustration', 'generate image'],
-                'captions': ['captions', 'subtitles', 'transcription', 'live text']
+                'captions': ['captions', 'subtitles', 'transcription', 'live text'],
+                'document_retrieval': ['document', 'script', 'containment breach', 'files', 'documents']
             },
             keywords: {
                 'timer_related': ['timer', 'countdown', 'minutes', 'seconds', 'alarm'],
@@ -441,7 +535,8 @@ export default defineAgent({
                 'weather_related': ['weather', 'forecast', 'temperature', 'rain', 'sunny'],
                 'ui_related': ['create', 'make', 'show', 'display', 'component'],
                 'research_related': ['research', 'study', 'analysis', 'findings'],
-                'task_related': ['todo', 'task', 'action', 'checklist', 'manage']
+                'task_related': ['todo', 'task', 'action', 'checklist', 'manage'],
+                'document_related': ['document', 'script', 'containment breach', 'files', 'show document']
             }
         };
         const decisionEngineConfig = {
@@ -453,6 +548,60 @@ export default defineAgent({
             intents: Object.keys(decisionEngineConfig.intents || {}).length,
             keywords: Object.keys(decisionEngineConfig.keywords || {}).length
         });
+        // Enhanced decision handling with parallel tool calls
+        const handleEnhancedDecision = async (transcript, participantId) => {
+            try {
+                // Use enhanced analysis if available, otherwise fallback to regular
+                const result = await decisionEngine.analyzeTranscriptEnhanced?.(transcript) || {
+                    hasActionableRequest: false,
+                    intent: 'general_conversation',
+                    toolCalls: [],
+                    reasoning: 'Fallback to regular analysis',
+                    confidence: 0.5
+                };
+                if (result.hasActionableRequest && result.toolCalls.length > 0) {
+                    console.log('🔧 [Agent] Enhanced decision:', result.intent, `${result.toolCalls.length} tools`);
+                    // Execute tool calls in parallel based on priority
+                    const sortedTools = result.toolCalls.sort((a, b) => a.priority - b.priority);
+                    for (const toolCall of sortedTools) {
+                        const enhancedParams = {
+                            ...toolCall.params,
+                            request: transcript, // Include the original transcript as a request parameter
+                            transcript: transcript // Also include as transcript for backward compatibility
+                        };
+                        const toolCallEvent = {
+                            id: `enhanced-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+                            roomId: job.room.name || 'unknown',
+                            type: 'tool_call',
+                            payload: {
+                                tool: toolCall.tool,
+                                params: enhancedParams,
+                                context: {
+                                    source: 'voice-enhanced',
+                                    timestamp: Date.now(),
+                                    intent: result.intent,
+                                    reasoning: result.reasoning,
+                                    priority: toolCall.priority,
+                                    transcript: transcript, // Include transcript in context too
+                                    speaker: participantId
+                                }
+                            },
+                            timestamp: Date.now(),
+                            source: 'voice',
+                        };
+                        // Publish to tool dispatcher
+                        await job.room.localParticipant?.publishData(new TextEncoder().encode(JSON.stringify(toolCallEvent)), { reliable: true, topic: 'tool_call' });
+                        console.log(`✅ [Agent] Dispatched: ${toolCall.tool} (${transcript.substring(0, 30)}...)`);
+                    }
+                    return true; // Handled by enhanced pipeline
+                }
+                return false; // No actionable request
+            }
+            catch (error) {
+                console.error('❌ [Agent] Enhanced decision error:', error);
+                return false;
+            }
+        };
         // Log available components for debugging
         console.log('🎨 [Agent] Available Tambo UI Components:', {
             total: defaultTamboComponents.length,
@@ -469,6 +618,9 @@ export default defineAgent({
             .start(job.room)
             .then(session => {
             console.log('✅ [Agent] Multimodal agent started successfully!');
+            // Note: OpenAI Realtime API tools are configured through instructions
+            // The session will handle function calls based on the model's instructions
+            console.log(`🔧 [Agent] Function calling configured via instructions (${openAIFunctions.length} tools available)`);
             // Note: Tools are configured through OpenAI Realtime API's native function calling
             // The session.on('response_function_call_completed') handler below processes tool calls
             console.log('🔧 [Agent] Using OpenAI Realtime API native function calling');
@@ -579,52 +731,41 @@ export default defineAgent({
                 });
             }
         });
-        // Set up decision engine callback to handle Tambo forwarding
+        // Set up decision engine callback
         decisionEngine.onDecision(async (decision, participantId, originalText) => {
-            if (!decision.should_send) {
-                console.log(`⏸️ [Agent] Filtered out: "${originalText}" (confidence: ${decision.confidence}%)`);
-                return;
-            }
-            console.log(`✅ [Agent] Sending to Tambo: "${decision.summary}" (confidence: ${decision.confidence}%)`);
-            // Ensure we have a valid prompt - fallback to original text if summary is empty
-            const prompt = decision.summary && decision.summary.trim() ? decision.summary : originalText;
-            // Final safety check - should never happen but just in case
-            if (!prompt || prompt.trim() === '') {
-                console.error(`❌ [Agent] Empty prompt detected! Decision:`, decision, `OriginalText: "${originalText}"`);
-                return;
-            }
-            console.log(`🔍 [Agent] Debug - prompt: "${prompt}", originalText: "${originalText}"`);
-            // Determine the appropriate tool based on intent
-            const tool = decision.intent === 'youtube_search' ? 'youtube_search' : 'generate_ui_component';
-            // Forward the summary to Tambo with enhanced context
-            const toolCallEvent = {
-                id: `smart-speech-${Date.now()}`,
-                roomId: job.room.name || 'unknown',
-                type: 'tool_call',
-                payload: {
-                    tool: tool,
-                    params: {
-                        prompt: prompt,
-                        task_prompt: prompt,
-                        query: decision.intent === 'youtube_search' ? (decision.structuredContext?.rawQuery || prompt) : undefined
+            console.log(`📊 [Agent] ${participantId}: ${decision.should_send ? '✅' : '❌'} (${decision.confidence}%)`);
+            if (decision.should_send) {
+                // Try enhanced decision handling first
+                const enhancedHandled = await handleEnhancedDecision(originalText, participantId);
+                if (enhancedHandled) {
+                    console.log('🚀 [Agent] Request handled by enhanced pipeline');
+                    return;
+                }
+                // Fallback to regular decision handling
+                console.log('🎯 [Agent] Forwarding actionable request to tool dispatcher');
+                // Send the decision to the tool dispatcher
+                const toolDispatchEvent = {
+                    id: `decision-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+                    roomId: job.room.name || 'unknown',
+                    type: 'decision',
+                    payload: {
+                        decision,
+                        participantId,
+                        originalText,
+                        context: {
+                            source: 'voice-decision',
+                            timestamp: Date.now(),
+                        }
                     },
-                    context: {
-                        source: 'voice',
-                        timestamp: Date.now(),
-                        transcript: originalText,
-                        summary: decision.summary,
-                        speaker: participantId,
-                        confidence: decision.confidence,
-                        reason: decision.reason,
-                        intent: decision.intent,
-                        structuredContext: decision.structuredContext
-                    }
-                },
-                timestamp: Date.now(),
-                source: 'voice',
-            };
-            console.log(`📤 [Agent] Tool call event:`, JSON.stringify(toolCallEvent, null, 2));
-            job.room.localParticipant?.publishData(new TextEncoder().encode(JSON.stringify(toolCallEvent)), { reliable: true, topic: 'tool_call' });
+                    timestamp: Date.now(),
+                    source: 'voice',
+                };
+                await job.room.localParticipant?.publishData(new TextEncoder().encode(JSON.stringify(toolDispatchEvent)), { reliable: true, topic: 'decision' });
+                console.log(`✅ [Agent] Decision dispatched to tool dispatcher`);
+            }
+            else {
+                console.log(`📝 [Agent] Decision not actionable: ${decision.reason}`);
+            }
         });
         // Track participant rotation for better attribution (now using time-based rotation)
         // Track processed transcriptions to avoid duplicates
@@ -634,32 +775,19 @@ export default defineAgent({
             console.log(`👤 [Agent] Speech transcribed: "${evt.transcript}"`);
             // Debug current room state
             const participants = Array.from(job.room.remoteParticipants.values());
-            console.log(`🔍 [Agent] Room state during transcription:`, {
-                totalParticipants: participants.length,
-                participantIdentities: participants.map(p => p.identity),
-                lastActiveSpeaker: lastActiveSpeaker
-            });
             // Determine the speaker using LiveKit's active speaker info if available
             let speakerId = lastActiveSpeaker || 'unknown-speaker';
-            let attributionMethod = 'active-speaker';
             if (!lastActiveSpeaker && job.room.remoteParticipants.size > 0) {
                 if (participants.length > 1) {
                     // Slower rotation - change every 10 seconds instead of every transcription
                     const slowRotationIndex = Math.floor(Date.now() / 10000) % participants.length;
                     speakerId = participants[slowRotationIndex]?.identity || 'participant-1';
-                    attributionMethod = 'slow-rotation';
                 }
                 else {
                     speakerId = participants[0]?.identity || 'participant-1';
-                    attributionMethod = 'single-participant';
                 }
             }
-            console.log(`🗣️ [Agent] Speech attribution:`, {
-                transcript: evt.transcript,
-                attributedTo: speakerId,
-                method: attributionMethod,
-                allParticipants: participants.map(p => p.identity)
-            });
+            console.log(`🗣️ [Agent] ${speakerId}: "${evt.transcript}"`);
             // Create a unique key to check for duplicates
             const transcriptionKey = `${evt.transcript}-${Math.floor(Date.now() / 1000)}`;
             // Only process if this transcription hasn't been processed recently

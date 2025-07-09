@@ -55,7 +55,6 @@ import type { TamboComponent } from "@tambo-ai/react";
 import { TamboTool } from "@tambo-ai/react";
 import { z } from "zod";
 import { ComponentRegistry, type ComponentInfo } from "./component-registry";
-import { extractParametersWithAI } from "./nlp";
 import { createLogger } from "./utils";
 import { CircuitBreaker } from "./circuit-breaker";
 import { documentState } from "@/app/hackathon-canvas/documents/document-state";
@@ -81,25 +80,19 @@ const circuitBreaker = new CircuitBreaker({
 // Direct component update tool - no complex bus system needed!
 export const uiUpdateTool: TamboTool = {
   name: 'ui_update', 
-  description: `Update a UI component with new props. This tool is SMART - it can extract parameters from user messages automatically!
+  description: `Update a UI component with new props. 
 
-SMART USAGE (Recommended):
-- ui_update("timer-id", "make it 7 minutes") → Extracts {"initialMinutes": 7}
-- ui_update("timer-id", "change to 10 minutes") → Extracts {"initialMinutes": 10}
-- ui_update("card-id", "set title to Dashboard") → Extracts {"title": "Dashboard"}
-
-MANUAL USAGE:
-- ui_update("timer-id", {"initialMinutes": 7})
-- ui_update("card-id", {"title": "New Title"})
+USAGE:
+- ui_update("timer-id", {"initialMinutes": 7}) - Direct prop update
+- ui_update("card-id", {"title": "New Title"}) - Update any prop
 
 The tool will automatically:
 1. Get component IDs if not provided
-2. Extract parameters from natural language
-3. Apply updates with proper error handling
-4. Prevent infinite loops with cooldowns
+2. Apply updates with proper error handling
+3. Prevent infinite loops with cooldowns
 
 NEVER call with empty patch: ui_update("id", {}) ❌
-ALWAYS provide updates: ui_update("id", "your instruction") ✅`,
+ALWAYS provide specific updates: ui_update("id", {"prop": "value"}) ✅`,
   tool: async (componentIdOrFirstArg: string | Record<string, unknown>, patchOrSecondArg?: Record<string, unknown>) => {
     // 🚫 AGGRESSIVE DUPLICATE PREVENTION using circuit breaker
     const callSignature = JSON.stringify({ componentIdOrFirstArg, patchOrSecondArg });
@@ -115,37 +108,18 @@ ALWAYS provide updates: ui_update("id", "your instruction") ✅`,
       };
     }
     
-    // 🔧 SMART PARAMETER EXTRACTION: Handle multiple calling patterns
+    // 🔧 SIMPLIFIED PARAMETER EXTRACTION: Handle multiple calling patterns
     let componentId: string;
     let patch: Record<string, unknown>;
     
     if (typeof componentIdOrFirstArg === 'string') {
       componentId = componentIdOrFirstArg;
-      
-      // Check if second argument is a string (natural language) or object (patch)
-      if (typeof patchOrSecondArg === 'string') {
-        // SMART MODE: Extract parameters from natural language
-        logger.log('🧠 [uiUpdateTool] SMART MODE: Extracting parameters from natural language:', patchOrSecondArg);
-        patch = extractParametersWithAI(patchOrSecondArg);
-        logger.log('🧠 [uiUpdateTool] Extracted parameters:', patch);
-      } else {
-        // Manual mode: use provided patch object
-        patch = patchOrSecondArg || {};
-      }
+      patch = patchOrSecondArg || {};
     } else if (typeof componentIdOrFirstArg === 'object' && componentIdOrFirstArg !== null) {
       // Legacy call: ui_update({param1: "component-id", param2: {patch}})
       const params = componentIdOrFirstArg as Record<string, unknown>;
       componentId = String(params.componentId || params.param1 || '');
-      
-      // Check if param2 is a string (natural language) or object (patch)
-      if (typeof params.param2 === 'string') {
-        // SMART MODE: Extract parameters from natural language
-        logger.log('🧠 [uiUpdateTool] SMART MODE (legacy): Extracting parameters from natural language:', params.param2);
-        patch = extractParametersWithAI(params.param2);
-        logger.log('🧠 [uiUpdateTool] Extracted parameters:', patch);
-      } else {
-        patch = (params.patch || params.param2 || {}) as Record<string, unknown>;
-      }
+      patch = (params.patch || params.param2 || {}) as Record<string, unknown>;
       
       logger.log('🔄 [uiUpdateTool] Auto-corrected legacy parameter format:', {
         detected: 'legacy object format',
@@ -156,7 +130,7 @@ ALWAYS provide updates: ui_update("id", "your instruction") ✅`,
       // Invalid call format
       return {
         status: 'ERROR',
-        message: `🚨 INVALID PARAMETERS! 🚨\n\nExpected: ui_update("component-id", {"initialMinutes": 10})\nOr: ui_update("component-id", "make it 10 minutes")\nReceived: ui_update(${typeof componentIdOrFirstArg}, ${typeof patchOrSecondArg})\n\nPlease call list_components first to get the component ID, then:\nui_update("timer-retro-timer-xyz", {"initialMinutes": 10})`,
+        message: `🚨 INVALID PARAMETERS! 🚨\n\nExpected: ui_update("component-id", {"initialMinutes": 10})\nReceived: ui_update(${typeof componentIdOrFirstArg}, ${typeof patchOrSecondArg})\n\nPlease call list_components first to get the component ID, then:\nui_update("timer-retro-timer-xyz", {"initialMinutes": 10})`,
         error: 'INVALID_PARAMETER_FORMAT',
         __stop_indicator: true,
         __task_complete: true
@@ -382,26 +356,171 @@ export const getDocumentsTool: TamboTool = {
 export const generateUiComponentTool: TamboTool = {
   name: "generate_ui_component",
   description:
-    "Generate a UI component from free-form prompt. Uses simple heuristics to map prompt to component type and props, then registers/dispatches it so it appears on the canvas.",
+    "Generate a UI component from free-form prompt with intelligent parameter extraction. This tool consolidates all NLP processing for component generation and handles complex natural language requests.",
   tool: async (prompt: string) => {
     const lower = prompt.toLowerCase();
     let componentType = "";
     let props: Record<string, unknown> = {};
 
-    // Very lightweight heuristics – can be replaced by smarter NLP later
-    if (lower.includes("containment breach")) {
+    // Enhanced NLP-based component detection and parameter extraction
+    
+    // Document-related requests
+    if (lower.includes("containment breach") || lower.includes("script")) {
       componentType = "DocumentEditor";
       props = { documentId: "movie-script-containment-breach" };
-    } else if (lower.includes("timer")) {
+    }
+    
+    // Timer-related requests with intelligent parameter extraction
+    else if (lower.includes("timer") || lower.includes("countdown")) {
       componentType = "RetroTimerEnhanced";
-      const minutesMatch = lower.match(/(\d+)\s*minute/);
-      if (minutesMatch) props.initialMinutes = Number(minutesMatch[1]);
-    } else if (lower.includes("weather")) {
+      
+      // Extract time parameters using multiple patterns
+      const timePatterns = [
+        // Numbers with units: "5 minutes", "10 mins", "1 hour"
+        /(\d+(?:\.\d+)?)\s*(min|minute|minutes|hour|hours|second|seconds)/i,
+        // Word numbers: "five minutes", "ten seconds"
+        /\b(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|fifteen|twenty|thirty|forty|fifty|sixty)\s*(min|minute|minutes|hour|hours|second|seconds)/i,
+        // Just numbers: "timer for 5", "5 minute timer"
+        /(?:timer|countdown).*?(\d+)/i,
+        // Duration context: "5 minute timer", "timer for 10 minutes"
+        /(?:for|set|make|create).*?(\d+)/i
+      ];
+      
+      for (const pattern of timePatterns) {
+        const match = prompt.match(pattern);
+        if (match) {
+          let minutes = 0;
+          const value = match[1];
+          const unit = match[2];
+          
+          // Handle word numbers
+          if (isNaN(Number(value))) {
+            const wordToNumber: Record<string, number> = {
+              one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, 
+              eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12, fifteen: 15, 
+              twenty: 20, thirty: 30, forty: 40, fifty: 50, sixty: 60
+            };
+            minutes = wordToNumber[value.toLowerCase()] || 5;
+          } else {
+            minutes = Number(value);
+            
+            // Convert units to minutes
+            if (unit) {
+              if (unit.toLowerCase().includes('hour')) {
+                minutes *= 60;
+              } else if (unit.toLowerCase().includes('second')) {
+                minutes = Math.max(1, Math.ceil(minutes / 60));
+              }
+            }
+          }
+          
+          props.initialMinutes = minutes;
+          break;
+        }
+      }
+      
+      // Default if no time found
+      if (!props.initialMinutes) {
+        props.initialMinutes = 5;
+      }
+    }
+    
+    // Weather-related requests
+    else if (lower.includes("weather") || lower.includes("forecast")) {
       componentType = "WeatherForecast";
+      
+      // Extract location if mentioned
+      const locationMatch = prompt.match(/weather.*?(?:for|in|at)\s+([a-zA-Z\s]+)/i);
+      if (locationMatch) {
+        props.location = locationMatch[1].trim();
+      }
+    }
+    
+    // YouTube/video requests
+    else if (lower.includes("youtube") || lower.includes("video")) {
+      componentType = "YoutubeEmbed";
+      
+      // Extract video ID or search query
+      const videoIdMatch = prompt.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]+)/);
+      if (videoIdMatch) {
+        props.videoId = videoIdMatch[1];
+      } else {
+        // Extract search query
+        const searchMatch = prompt.match(/(?:search|find|show).*?(?:for|about)\s+([^.!?]+)/i);
+        if (searchMatch) {
+          props.searchQuery = searchMatch[1].trim();
+        }
+      }
+    }
+    
+    // Image generation requests
+    else if (lower.includes("image") || lower.includes("picture") || lower.includes("generate")) {
+      componentType = "AIImageGenerator";
+      
+      // Extract prompt for image generation
+      const imagePromptMatch = prompt.match(/(?:generate|create|make).*?(?:image|picture).*?(?:of|about|with)\s+([^.!?]+)/i);
+      if (imagePromptMatch) {
+        props.prompt = imagePromptMatch[1].trim();
+      }
+    }
+    
+    // Action items/todo requests
+    else if (lower.includes("todo") || lower.includes("task") || lower.includes("action")) {
+      componentType = "ActionItemTracker";
+      
+      // Extract initial items if mentioned
+      const itemsMatch = prompt.match(/(?:tasks?|items?|todos?).*?[:]\s*([^.!?]+)/i);
+      if (itemsMatch) {
+        const items = itemsMatch[1].split(',').map(item => item.trim());
+        props.initialItems = items;
+      }
+    }
+    
+    // Research panel requests
+    else if (lower.includes("research") || lower.includes("findings")) {
+      componentType = "ResearchPanel";
+      
+      // Extract research topic
+      const topicMatch = prompt.match(/research.*?(?:about|on|for)\s+([^.!?]+)/i);
+      if (topicMatch) {
+        props.topic = topicMatch[1].trim();
+      }
+    }
+    
+    // LiveKit room requests
+    else if (lower.includes("room") || lower.includes("connect") || lower.includes("video call")) {
+      componentType = "LivekitRoomConnector";
+      
+      // Extract room name if mentioned
+      const roomMatch = prompt.match(/room.*?(?:named|called)\s+([a-zA-Z0-9_-]+)/i);
+      if (roomMatch) {
+        props.roomName = roomMatch[1];
+      }
+    }
+    
+    // Participant tile requests
+    else if (lower.includes("participant") || lower.includes("video feed")) {
+      componentType = "LivekitParticipantTile";
+    }
+    
+    // Live captions requests
+    else if (lower.includes("caption") || lower.includes("subtitle") || lower.includes("transcription")) {
+      componentType = "LiveCaptions";
     }
 
+    // Fallback - try to infer from common UI terms
+    else if (lower.includes("button") || lower.includes("click")) {
+      componentType = "RetroTimerEnhanced"; // Default to timer as most common interactive component
+      props.initialMinutes = 5;
+    }
+    
+    // No matching component found
     if (!componentType) {
-      return { success: false, error: "UNSUPPORTED_PROMPT" };
+      return { 
+        success: false, 
+        error: "UNSUPPORTED_PROMPT",
+        message: `Could not determine component type from prompt: "${prompt}". Supported components: DocumentEditor, RetroTimerEnhanced, WeatherForecast, YoutubeEmbed, AIImageGenerator, ActionItemTracker, ResearchPanel, LivekitRoomConnector, LivekitParticipantTile, LiveCaptions.`
+      };
     }
 
     // Create unique messageId
@@ -428,18 +547,27 @@ export const generateUiComponentTool: TamboTool = {
       );
     }
 
-    return { success: true, componentType, messageId, props };
+    return { 
+      success: true, 
+      componentType, 
+      messageId, 
+      props,
+      extractedParameters: Object.keys(props).length > 0 ? props : undefined,
+      message: `Created ${componentType} component with ID: ${messageId}${Object.keys(props).length > 0 ? ` and parameters: ${JSON.stringify(props)}` : ''}`
+    };
   },
   toolSchema: z
     .function()
-    .args(z.string().describe("Prompt describing the UI component to generate"))
+    .args(z.string().describe("Natural language prompt describing the UI component to generate with any parameters"))
     .returns(
       z.object({
         success: z.boolean(),
         componentType: z.string().optional(),
         messageId: z.string().optional(),
         props: z.record(z.unknown()).optional(),
+        extractedParameters: z.record(z.unknown()).optional(),
         error: z.string().optional(),
+        message: z.string().optional(),
       })
     ),
 };

@@ -60,6 +60,22 @@ export const STATIC_CAPABILITIES: SystemCapability[] = [
     source: 'static'
   },
   {
+    id: 'get_documents',
+    type: 'tool',
+    name: 'Get Documents',
+    description: 'Retrieve list of all available documents from the document store',
+    agentToolName: 'get_documents',
+    intents: ['document_retrieval', 'list_documents'],
+    keywords: ['documents', 'scripts', 'files', 'containment breach', 'show document', 'get document'],
+    examples: [
+      'Show me available documents',
+      'Get the containment breach script',
+      'What documents are available?'
+    ],
+    available: true,
+    source: 'static'
+  },
+  {
     id: 'youtube_search',
     type: 'tool', 
     name: 'YouTube Search',

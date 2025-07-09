@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import {
   Document,
   documentState,
@@ -19,12 +19,11 @@ export const documentEditorSchema = z.object({
   documentId: z.string().describe("ID of the document to edit"),
 });
 
-// Internal state stored via Tambo hook so AI can update via ui_update
-type EditorState = {
+interface EditorState {
   content: string;
   originalContent: string;
-  diffs: Document["diffs"];
-};
+  diffs?: Array<{ type: 'added' | 'removed'; content: string; lineNumber: number; wordIndex: number }>;
+}
 
 export function DocumentEditor({
   documentId,
@@ -32,6 +31,9 @@ export function DocumentEditor({
 }: DocumentEditorProps) {
   // Generate effective message ID
   const effectiveMessageId = __tambo_message_id || `document-editor-${documentId}`;
+  
+  // Flag to prevent circular updates
+  const isUpdatingFromDocumentState = useRef(false);
   
   // Fetch initial document
   const initialDoc = documentState
@@ -60,6 +62,9 @@ export function DocumentEditor({
     const unsubscribe = documentState.subscribe((docs) => {
       const updated = docs.find((d) => d.id === documentId);
       if (updated) {
+        // Set flag to prevent circular update
+        isUpdatingFromDocumentState.current = true;
+        
         setState((prev) =>
           prev
             ? {
@@ -70,15 +75,26 @@ export function DocumentEditor({
               }
             : prev
         );
+        
+        // Reset flag after state update
+        setTimeout(() => {
+          isUpdatingFromDocumentState.current = false;
+        }, 0);
       }
     });
     return unsubscribe;
   }, [documentId, setState]);
 
   // Whenever our state.content changes (e.g., AI update), update global documentState
+  // BUT ONLY if the change didn't originate from documentState itself
   useEffect(() => {
-    if (!state) return;
-    documentState.updateDocument(documentId, state.content);
+    if (!state || isUpdatingFromDocumentState.current) return;
+    
+    // Only update if there's an actual change to prevent unnecessary updates
+    const currentDoc = documentState.getDocuments().find(d => d.id === documentId);
+    if (currentDoc && currentDoc.content !== state.content) {
+      documentState.updateDocument(documentId, state.content);
+    }
   }, [state?.content, documentId]);
 
   // AI update handler

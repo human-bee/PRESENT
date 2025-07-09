@@ -34,7 +34,7 @@
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-import { createContext, useContext, useEffect, useRef, useState, useCallback } from 'react';
+import { createContext, useContext, useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { useRoomContext } from '@livekit/components-react';
 import { useTamboThread, useTambo } from '@tambo-ai/react';
 import { createLiveKitBus } from '../lib/livekit-bus';
@@ -42,6 +42,7 @@ import { useContextKey } from './RoomScopedProviders';
 import { createLogger } from '../lib/utils';
 import { CircuitBreaker } from '../lib/circuit-breaker';
 import { systemRegistry, syncMcpToolsToRegistry } from '../lib/system-registry';
+import { createObservabilityBridge } from '@/lib/observability-bridge';
 
 // Generate unique IDs without external dependency
 const generateId = () => `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
@@ -158,6 +159,23 @@ export function ToolDispatcher({
     }
   }, [enableLogging]);
   
+  // Initialize observability bridge
+  const observabilityBridge = useMemo(() => {
+    return room ? createObservabilityBridge(room) : null;
+  }, [room]);
+  
+  // Set up enhanced observability logging
+  useEffect(() => {
+    if (!observabilityBridge) return;
+    
+    // Log observability summary every 30 seconds
+    const interval = setInterval(() => {
+      observabilityBridge.logSummary();
+    }, 30000);
+    
+    return () => clearInterval(interval);
+  }, [observabilityBridge]);
+  
   // Sync MCP tools to system registry when they change
   useEffect(() => {
     if (!toolRegistry) return;
@@ -227,7 +245,7 @@ export function ToolDispatcher({
           bus.send('capability_list', response);
           log('✅ [ToolDispatcher] Sent capability list to agent:', capabilities.tools.length, 'tools');
         }
-      } catch (error) {
+      } catch {
         // Ignore non-JSON messages
       }
     };
@@ -282,6 +300,257 @@ export function ToolDispatcher({
     
     log('✅ [ToolDispatcher] Message sent successfully');
   }, [sendThreadMessage, effectiveContextKey, log]);
+
+  // Helper to analyze conversation context for richer CAR messages
+  const analyzeConversationContext = useCallback((transcript: string, speaker: string): string => {
+    const lowerTranscript = transcript.toLowerCase();
+    
+    // Look for common conversation patterns that indicate specific needs
+    if (lowerTranscript.includes('can you see me') || lowerTranscript.includes('can you hear me')) {
+      return `This appears to be a video/audio troubleshooting request. ${speaker} is checking if they are visible/audible to others.`;
+    }
+    
+    if (lowerTranscript.includes('not yet') || lowerTranscript.includes('no') || lowerTranscript.includes('can\'t see')) {
+      return `This indicates a negative response to visibility/audio, suggesting technical issues need to be resolved.`;
+    }
+    
+    if (lowerTranscript.includes('let me') || lowerTranscript.includes('i need to') || lowerTranscript.includes('i want to')) {
+      return `This suggests ${speaker} is expressing intent to perform an action or needs assistance with a task.`;
+    }
+    
+    if (lowerTranscript.includes('show me') || lowerTranscript.includes('display') || lowerTranscript.includes('can i see')) {
+      return `This is a request to display or show something to ${speaker}.`;
+    }
+    
+    return `Standard request from ${speaker} for component functionality.`;
+  }, []);
+
+  // Helper to generate specific component messages based on component type
+  const generateComponentMessage = useCallback((componentType: string, transcript: string, speaker: string): string => {
+    const lowerType = componentType.toLowerCase();
+    const conversationContext = analyzeConversationContext(transcript, speaker);
+    
+    // Handle specific component types with more context
+    if (lowerType.includes('livekitparticipanttile') || lowerType.includes('participant')) {
+      return `**Component Action Request (CAR)**
+
+**Relevant transcript section:**
+${speaker}: "${transcript}"
+
+**Conversation context analysis:**
+${conversationContext}
+
+**Assumed action request:**
+Add the video participant tile for livekit room participant: ${speaker}
+
+**Additional info:**
+- Assume the livekit room is already connected
+- User wants to see their own participant tile or be visible to others
+- Component should show participant's name, video feed (if available), and audio/mute status
+- This is likely for troubleshooting video/audio visibility issues
+- May be response to visibility concerns in the conversation
+
+**Technical implementation:**
+Generate a LivekitParticipantTile component configured for participant "${speaker}"`;
+    }
+    
+    if (lowerType.includes('timer') || lowerType.includes('retrotimer')) {
+      return `**Component Action Request (CAR)**
+
+**Relevant transcript section:**
+${speaker}: "${transcript}"
+
+**Conversation context analysis:**
+${conversationContext}
+
+**Assumed action request:**
+Add a timer component for ${speaker} (likely needs countdown functionality)
+
+**Additional info:**
+- User wants to track time for a specific duration
+- Should be a RetroTimer or RetroTimerEnhanced component
+- May need to parse duration from transcript (e.g., "5 minutes", "30 seconds")
+- Should be prominently displayed for easy monitoring
+
+**Technical implementation:**
+Generate a RetroTimer component with appropriate duration settings`;
+    }
+    
+    if (lowerType.includes('weather')) {
+      return `**Component Action Request (CAR)**
+
+**Relevant transcript section:**
+${speaker}: "${transcript}"
+
+**Conversation context analysis:**
+${conversationContext}
+
+**Assumed action request:**
+Add a weather forecast component for ${speaker}'s location
+
+**Additional info:**
+- User wants current weather conditions and forecast
+- Should show temperature, conditions, and relevant weather data
+- May need to detect location from context or use default location
+- Should be visually clear and easy to read
+
+**Technical implementation:**
+Generate a WeatherForecast component with appropriate location settings`;
+    }
+    
+    if (lowerType.includes('youtube')) {
+      return `**Component Action Request (CAR)**
+
+**Relevant transcript section:**
+${speaker}: "${transcript}"
+
+**Conversation context analysis:**
+${conversationContext}
+
+**Assumed action request:**
+Add a YouTube video player component for ${speaker}
+
+**Additional info:**
+- User wants to embed and play YouTube videos
+- Should support video playback controls
+- May need to extract video ID from transcript or search terms
+- Should be properly sized for the canvas
+
+**Technical implementation:**
+Generate a YoutubeEmbed component with appropriate video settings`;
+    }
+    
+    if (lowerType.includes('document') || lowerType.includes('editor') || lowerType.includes('display_document')) {
+      return `**Component Action Request (CAR)**
+
+**Relevant transcript section:**
+${speaker}: "${transcript}"
+
+**Conversation context analysis:**
+${conversationContext}
+
+**Assumed action request:**
+Add a document editor component for ${speaker} to view/edit documents
+
+**Additional info:**
+- User wants to view or edit documents collaboratively
+- Should use DocumentEditor component for full functionality
+- May need to load specific document mentioned in transcript
+- Should support real-time collaboration features
+
+**Technical implementation:**
+Generate a DocumentEditor component with appropriate document settings`;
+    }
+    
+    if (lowerType.includes('research')) {
+      return `**Component Action Request (CAR)**
+
+**Relevant transcript section:**
+${speaker}: "${transcript}"
+
+**Conversation context analysis:**
+${conversationContext}
+
+**Assumed action request:**
+Add a research panel component for ${speaker} to display research results
+
+**Additional info:**
+- User wants to display research results and findings
+- Should show structured research data in an organized format
+- May need to load specific research data mentioned in transcript
+- Should be easy to read and navigate
+
+**Technical implementation:**
+Generate a ResearchPanel component with appropriate data settings`;
+    }
+    
+    if (lowerType.includes('image') || lowerType.includes('aiimagegenerator')) {
+      return `**Component Action Request (CAR)**
+
+**Relevant transcript section:**
+${speaker}: "${transcript}"
+
+**Conversation context analysis:**
+${conversationContext}
+
+**Assumed action request:**
+Add an AI image generator component for ${speaker} to create images
+
+**Additional info:**
+- User wants to generate images based on text descriptions
+- Should provide text input for image prompts
+- May need to extract image description from transcript
+- Should display generated images clearly
+
+**Technical implementation:**
+Generate an AIImageGenerator component with appropriate prompt settings`;
+    }
+    
+    if (lowerType.includes('captions') || lowerType.includes('livecaptions')) {
+      return `**Component Action Request (CAR)**
+
+**Relevant transcript section:**
+${speaker}: "${transcript}"
+
+**Conversation context analysis:**
+${conversationContext}
+
+**Assumed action request:**
+Add a live captions component for ${speaker} to show real-time transcription
+
+**Additional info:**
+- User wants real-time speech transcription and captions
+- Should display live text of spoken conversation
+- Should be clearly visible and readable
+- May be needed for accessibility or record-keeping
+
+**Technical implementation:**
+Generate a LiveCaptions component with appropriate transcription settings`;
+    }
+    
+    if (lowerType.includes('actionitem')) {
+      return `**Component Action Request (CAR)**
+
+**Relevant transcript section:**
+${speaker}: "${transcript}"
+
+**Conversation context analysis:**
+${conversationContext}
+
+**Assumed action request:**
+Add an action item tracker component for ${speaker} to manage tasks
+
+**Additional info:**
+- User wants to track and manage tasks and action items
+- Should allow adding, editing, and completing tasks
+- May need to extract specific tasks from transcript
+- Should be organized and easy to use
+
+**Technical implementation:**
+Generate an ActionItemTracker component with appropriate task management settings`;
+    }
+    
+    // Generic fallback with the original transcript
+    return `**Component Action Request (CAR)**
+
+**Relevant transcript section:**
+${speaker}: "${transcript}"
+
+**Conversation context analysis:**
+${conversationContext}
+
+**Assumed action request:**
+Add a ${componentType} component for ${speaker}
+
+**Additional info:**
+- User requested a specific component type: ${componentType}
+- Should implement the functionality implied by the component type
+- May need to parse specific parameters from the transcript
+- Should be properly configured for the user's needs
+
+**Technical implementation:**
+Generate a ${componentType} component based on the transcript content and component type`;
+  }, []);
 
   // Smart YouTube search helper
   const runYoutubeSmartSearch = useCallback(async (
@@ -485,15 +754,6 @@ export function ToolDispatcher({
 
       // --- Legacy fallbacks kept for backwards-compat ---
 
-      const builtIns = new Set([
-        'generate_ui_component',
-        'youtube_search',
-        'respond_with_voice',
-        'do_nothing',
-        'ui_update',
-        'list_components'
-      ]);
-
       const tamboTool = (() => {
         const reg: any = toolRegistry;
         if (typeof reg?.get === 'function') return reg.get(payload.tool);
@@ -512,77 +772,84 @@ export function ToolDispatcher({
         log('🔍 [ToolDispatcher] Looking for tool:', payload.tool, 'found:', !!tamboTool);
         
         try {
-          if (!tamboTool) {
-            // Try to import the tools directly as fallback
-            log('🔧 [ToolDispatcher] Tool not found in registry, trying direct import...');
-            const { uiUpdateTool, listComponentsTool } = await import('@/lib/tambo');
-            
-            const directTool = payload.tool === 'ui_update' ? uiUpdateTool : listComponentsTool;
-            
-            if (!directTool) {
-              throw new Error(`Tool ${payload.tool} not found in registry or direct import. Available registry tools: ${toolRegistry ? Object.keys(toolRegistry).join(', ') : 'none'}`);
-            }
-            
-            log('✅ [ToolDispatcher] Found tool via direct import');
-            
-            // Use the directly imported tool
-            if (payload.tool === 'ui_update') {
-              const componentId = payload.params.componentId || payload.params.param1;
-              const patch = payload.params.patch || payload.params.param2;
-              
-              log('🔍 [ToolDispatcher] Direct UI Update Parameters:', {
-                originalParams: payload.params,
-                extractedComponentId: componentId,
-                extractedPatch: patch,
-                patchType: typeof patch,
-                patchKeys: patch ? Object.keys(patch) : 'no patch'
-              });
-              
-              result = await directTool.tool(componentId, patch);
-              
-              // If successful, also send the update via bus for UI sync
-              bus.send('ui_update', { 
-                componentId, 
-                patch, 
-                timestamp: Date.now() 
-              });
-            } else {
-              result = await directTool.tool();
-            }
-            
-            pendingTool.status = 'completed';
-            await publishToolResult(id, result);
-            // ✅ Mark signature as completed to block further repeats
-            circuitBreaker.current.markCompleted(toolSignature);
-            return;
+          // Import tools directly as fallback
+          const { uiUpdateTool, listComponentsTool } = await import('@/lib/tambo');
+          
+          const directTool = payload.tool === 'ui_update' ? uiUpdateTool : listComponentsTool;
+          
+          if (!directTool) {
+            throw new Error(`Tool ${payload.tool} not found in registry or direct import. Available registry tools: ${toolRegistry ? Object.keys(toolRegistry).join(', ') : 'none'}`);
           }
           
-          // Extract parameters for ui_update
+          log('✅ [ToolDispatcher] Found tool via direct import');
+          
+          // Extract and convert parameters BEFORE calling the tool
           if (payload.tool === 'ui_update') {
-            const componentId = payload.params.componentId || payload.params.param1;
-            const patch = payload.params.patch || payload.params.param2;
+            // Voice agent sends: {component, description, request, transcript}
+            // uiUpdateTool expects: (componentId, patch)
+            
+            const params = payload.params as {
+              component?: string;
+              componentId?: string; 
+              description?: string;
+              patch?: any;
+              request?: string;
+              transcript?: string;
+            };
+            
+            // Extract component identifier - try multiple parameter names
+            let componentId = params.componentId || params.component;
+            
+                         // Extract the update content - prioritize patch, then description, then request
+             const patch = params.patch || params.description || params.request || params.transcript;
+            
+            // If component is a partial name like 'containment_breach', try to find the full component ID
+            if (componentId && !componentId.includes('-')) {
+              // Get available components to find a match
+              const { listComponentsTool } = await import('@/lib/tambo');
+              try {
+                const componentsList = await listComponentsTool.tool();
+                if (componentsList.status === 'SUCCESS' && componentsList.components) {
+                  // Look for component that matches the partial name
+                  const matchingComponent = componentsList.components.find((comp: any) => 
+                    comp.messageId.toLowerCase().includes(componentId!.toLowerCase()) ||
+                    comp.componentType.toLowerCase().includes(componentId!.toLowerCase()) ||
+                    (comp.props?.documentId && comp.props.documentId.toLowerCase().includes(componentId!.toLowerCase()))
+                  );
+                  
+                  if (matchingComponent) {
+                    componentId = matchingComponent.messageId;
+                    log('🎯 [ToolDispatcher] Mapped component name to ID:', params.component, '→', componentId);
+                  }
+                }
+              } catch (listError) {
+                log('⚠️ [ToolDispatcher] Failed to list components for ID mapping:', listError);
+              }
+            }
             
             log('🔍 [ToolDispatcher] UI Update Parameters:', {
               originalParams: payload.params,
               extractedComponentId: componentId,
               extractedPatch: patch,
               patchType: typeof patch,
-              patchKeys: patch ? Object.keys(patch) : 'no patch'
+              mappedFromPartialName: params.component !== componentId
             });
             
-            // Call the actual Tambo tool - it will throw detailed errors!
-            result = await tamboTool.tool(componentId, patch);
+            // Call the uiUpdateTool with proper parameters
+            result = await directTool.tool(componentId, patch);
             
             // If successful, also send the update via bus for UI sync
-            bus.send('ui_update', { 
-              componentId, 
-              patch, 
-              timestamp: Date.now() 
-            });
+            if (result && (result as any).status === 'SUCCESS') {
+              bus.send('ui_update', { 
+                componentId, 
+                patch, 
+                timestamp: Date.now() 
+              });
+            }
             
           } else {
             // list_components has no parameters
-            result = await tamboTool.tool();
+            result = await directTool.tool();
           }
           
           pendingTool.status = 'completed';
@@ -608,62 +875,103 @@ export function ToolDispatcher({
         }
       }
 
-      if (payload.tool === 'generate_ui_component') {
-        // Use Tambo thread system for UI generation
-        const params = payload.params as { componentType?: string; prompt?: string; task_prompt?: string };
-        const { componentType = 'auto', prompt, task_prompt } = params;
+      if (payload.tool === 'get_documents' || payload.tool === 'generate_ui_component') {
+        // Handle built-in Tambo tools that aren't in the MCP registry
+        log('🔧 [ToolDispatcher] Calling built-in Tambo tool:', payload.tool);
         
-        // Extract context information first
-        const context = payload.context;
-        const aiSummary = context?.summary; // AI-generated summary from decision engine
-        const originalTranscript = context?.transcript; // Full original transcript
-        const speaker = context?.speaker || 'user';
-        const confidence = context?.confidence;
-        const reason = context?.reason;
-        
-        // Use AI summary if available, otherwise fall back to params
-        const summary = aiSummary || prompt || task_prompt || `Generate a ${componentType} component`;
-        
-        // Build comprehensive message with both summary and transcript context
-        let tamboMessage = summary;
-        
-        if (originalTranscript && originalTranscript !== summary) {
-          tamboMessage = `${summary}
+        try {
+          // Import tools directly from tambo.ts
+          const { getDocumentsTool, generateUiComponentTool } = await import('@/lib/tambo');
+          
+          const directTool = payload.tool === 'get_documents' ? getDocumentsTool : generateUiComponentTool;
+          
+          if (!directTool) {
+            throw new Error(`Built-in tool ${payload.tool} not found in tambo.ts`);
+          }
+          
+          log('✅ [ToolDispatcher] Found built-in tool, executing...');
+          
+                     // Execute the tool with the right parameters
+           if (payload.tool === 'get_documents') {
+             // get_documents takes no parameters
+             result = await directTool.tool();
+           } else if (payload.tool === 'generate_ui_component') {
+             // Use enhanced context processing for UI generation
+             const params = payload.params as { 
+               componentType?: string; 
+               prompt?: string; 
+               task_prompt?: string;
+               request?: string;
+               component_type?: string;
+               transcript?: string;
+             };
+             const { componentType, prompt, task_prompt, request, component_type, transcript } = params;
+             
+             // Extract context information
+             const context = payload.context;
+             const aiSummary = context?.summary;
+             const originalTranscript = transcript || context?.transcript;
+             const speaker = context?.speaker || 'user';
+             const actualComponentType = componentType || component_type || 'auto';
+             
+             // Build enhanced message with CAR system
+             let finalPrompt: string;
+             
+             if (aiSummary) {
+               // Use AI summary if available (highest priority)
+               finalPrompt = aiSummary;
+             } else if (actualComponentType && actualComponentType !== 'auto') {
+               // Use enhanced CAR message for specific component types
+               finalPrompt = generateComponentMessage(actualComponentType, originalTranscript || '', speaker);
+             } else {
+               // Use basic prompt/request
+               finalPrompt = request || prompt || task_prompt || originalTranscript || 'Generate a UI component';
+             }
+             
+             // Enhance with additional context if available
+             if (originalTranscript && originalTranscript !== finalPrompt && originalTranscript.length > 0) {
+               finalPrompt = `${finalPrompt}
 
 Additional Context:
 • Speaker: ${speaker}
 • Original transcript: "${originalTranscript}"
+• Requested component: ${actualComponentType}
 
 Please consider both the processed summary above and the original transcript context for the most accurate generation.`;
+             }
+             
+             log('📤 [ToolDispatcher] Enhanced UI generation with CAR:', {
+               component: actualComponentType,
+               messageType: aiSummary ? 'AI_SUMMARY' : actualComponentType !== 'auto' ? 'CAR_MESSAGE' : 'BASIC',
+               messageLength: finalPrompt.length
+             });
+             
+             // Use the enhanced prompt instead of basic one
+             result = await directTool.tool(finalPrompt);
+           }
+          
+          pendingTool.status = 'completed';
+          await publishToolResult(id, result);
+          circuitBreaker.current.markCompleted(JSON.stringify({ tool: payload.tool, params: payload.params }));
+          return;
+          
+        } catch (error) {
+          pendingTool.status = 'error';
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          
+          await publishToolResult(id, { 
+            status: 'ERROR',
+            error: errorMessage,
+            detailedError: errorMessage
+          });
+          
+          log('❌ [ToolDispatcher] Built-in Tambo tool error:', errorMessage);
+          return;
         }
-        
-        log('📤 [ToolDispatcher] Sending comprehensive message to Tambo:', {
-          summary,
-          aiSummary,
-          originalTranscript,
-          speaker,
-          confidence,
-          reason,
-          messageLength: tamboMessage.length,
-          hasTranscriptContext: !!originalTranscript && originalTranscript !== summary
-        });
-        
-        // Send message through Tambo thread which will generate appropriate UI
-        await sendTamboMessage(tamboMessage);
-        
-        result = {
-          status: 'SUCCESS',
-          message: 'UI component generation initiated',
-          componentType,
-          prompt: summary,
-          context: {
-            transcript: originalTranscript,
-            speaker,
-            confidence
-          }
-        };
-        
-      } else if (payload.tool.startsWith('mcp_')) {
+      }
+
+      // NOTE: generate_ui_component is now handled above in the built-in tools section
+      else if (payload.tool.startsWith('mcp_')) {
         // Route to MCP provider through Tambo's registered tools
         // The MCP tools are registered with Tambo, so we send as a message
         const toolName = payload.tool;
@@ -777,7 +1085,7 @@ Please consider both the processed summary above and the original transcript con
     const off = bus.on(TOOL_TOPICS.TOOL_CALL, async (raw) => {
       try {
         const event = raw as ToolCallEvent;
-        log('📨 Received tool call:', event);
+        log('📨 Tool call:', event.payload.tool, 'from', event.source);
         await executeToolCall(event);
       } catch (error) {
         log('❌ Error processing tool call:', error);

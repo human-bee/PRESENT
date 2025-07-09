@@ -40,6 +40,17 @@ export interface Decision {
         artist?: string;
     };
 }
+export interface EnhancedDecisionResult {
+    hasActionableRequest: boolean;
+    intent: 'document_retrieval' | 'ui_generation' | 'ui_update' | 'youtube_search' | 'list_components' | 'general_conversation';
+    toolCalls: Array<{
+        tool: string;
+        params: Record<string, unknown>;
+        priority: number;
+    }>;
+    reasoning: string;
+    confidence: number;
+}
 export interface ConversationBuffer {
     texts: string[];
     lastSpoke: number;
@@ -92,6 +103,10 @@ export declare class DecisionEngine {
      * Analyze buffered text and make AI decision with meeting context
      */
     private analyzeAndDecide;
+    /**
+     * Enhanced decision analysis that supports parallel tool calls
+     */
+    analyzeTranscriptEnhanced(transcript: string): Promise<EnhancedDecisionResult>;
     /**
      * Detect intent and extract structured context from transcript
      */

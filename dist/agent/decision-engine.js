@@ -205,12 +205,7 @@ IMPORTANT:
 - Look for actionable requests marked with [ACTIONABLE REQUEST] to understand what "it" or "that" refers to
 
 Analyze the current speaker's statement in full conversational context.`;
-        console.log(`🔗 [DecisionEngine] Enhanced meeting context:`, {
-            conversationContext: !!conversationContext,
-            recentContext: !!recentContext,
-            currentText,
-            contextLength: contextualInput.length
-        });
+        console.log(`🔗 [DecisionEngine] Context: ${contextualInput.length} chars`);
         return contextualInput;
     }
     /**
@@ -231,15 +226,7 @@ Analyze the current speaker's statement in full conversational context.`;
             // Build contextual input with meeting awareness
             const contextualInput = this.buildMeetingContext(participantId, combined);
             const decision = await this.makeAIDecision(contextualInput);
-            console.log(`🎯 [DecisionEngine] Decision:`, {
-                should_send: decision.should_send,
-                confidence: decision.confidence,
-                summary: decision.summary,
-                reason: decision.reason,
-                intent: decision.intent,
-                structuredContext: decision.structuredContext,
-                hadMeetingContext: contextualInput !== combined
-            });
+            console.log(`🎯 [DecisionEngine] ${decision.should_send ? '✅ SEND' : '❌ SKIP'} (${decision.confidence}%): ${decision.reason}`);
             // Update meeting context if decision was made
             if (decision.should_send) {
                 this.meetingContext.lastDecisionTime = Date.now();
@@ -270,6 +257,151 @@ Analyze the current speaker's statement in full conversational context.`;
             if (this.decisionCallback) {
                 this.decisionCallback(fallbackDecision, participantId, combined);
             }
+        }
+    }
+    /**
+     * Enhanced decision analysis that supports parallel tool calls
+     */
+    async analyzeTranscriptEnhanced(transcript) {
+        try {
+            const prompt = `Analyze this transcript for actionable requests and determine the appropriate tools to call.
+
+TRANSCRIPT: "${transcript}"
+
+AVAILABLE TOOLS:
+- get_documents: Retrieve list of available documents (use for: "show documents", "what documents", "list available documents")
+- generate_ui_component: Create NEW UI components (use for: "show timer", "create weather widget", "display document", "show participant tile", "create participant tile")
+- ui_update: Update EXISTING components (use for: "change timer", "update weather", "edit document", "update containment breach", "add to document", "modify document")
+- youtube_search: Search YouTube (use for: "youtube", "video", "play")
+- list_components: List current components (use for: "what components", "show components")
+
+RESPONSE FORMAT:
+{
+  "hasActionableRequest": boolean,
+  "intent": "document_retrieval|ui_generation|ui_update|youtube_search|list_components|general_conversation",
+  "toolCalls": [
+    {
+      "tool": "tool_name",
+      "params": {},
+      "priority": 1
+    }
+  ],
+  "reasoning": "explanation of why these tools were chosen",
+  "confidence": 85
+}
+
+RULES:
+1. For document RETRIEVAL (show, display, list): get_documents first, then optionally generate_ui_component
+2. For document UPDATES (edit, update, change, add to, modify): use ui_update ONLY (not get_documents)
+3. For participant tile requests: generate_ui_component with component type "LivekitParticipantTile" 
+4. For creating NEW components: generate_ui_component
+5. For updating EXISTING components: ui_update
+6. General conversation (no tools needed): hasActionableRequest: false
+
+Examples:
+- "Show me the containment breach script" → get_documents (priority 1) + generate_ui_component (priority 2)
+- "What documents are available?" → get_documents (priority 1)
+- "Update the containment breach script" → ui_update (priority 1) with {"componentId": "document-editor-movie-script-containment-breach", "patch": "update the script"} 
+- "Add more description to the control room" → ui_update (priority 1) with {"componentId": "document-editor-movie-script-containment-breach", "patch": "add more description to the control room"}
+- "Edit the document" → ui_update (priority 1) with {"componentId": "document-editor-movie-script-containment-breach", "patch": "edit the document"}
+- "Create a 5 minute timer" → generate_ui_component (priority 1) with {"prompt": "Create a 5 minute timer"}
+- "Can I see my participant tile?" → generate_ui_component (priority 1) with {"prompt": "show participant tile"}
+- "Change the timer to 10 minutes" → ui_update (priority 1) with {"componentId": "", "patch": "change timer to 10 minutes"}
+- "How are you doing?" → hasActionableRequest: false
+
+PARAMETER REQUIREMENTS:
+- ui_update: MUST include "componentId" (use "" for auto-detection) and "patch" (natural language instruction)
+- generate_ui_component: MUST include "prompt" (natural language description)
+- get_documents: no parameters needed
+- list_components: no parameters needed
+- youtube_search: MUST include "query" (search terms)`;
+            const requestBody = {
+                model: 'gpt-4o-mini',
+                temperature: 0.1,
+                messages: [{ role: 'user', content: prompt }]
+            };
+            console.log('🔍 [DecisionEngine] Enhanced analysis:', transcript.substring(0, 50) + '...');
+            const response = await fetch('https://api.openai.com/v1/chat/completions', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${this.apiKey}`
+                },
+                body: JSON.stringify(requestBody)
+            });
+            if (!response.ok) {
+                const errorText = await response.text();
+                console.error('❌ [DecisionEngine] OpenAI API error details:', {
+                    status: response.status,
+                    statusText: response.statusText,
+                    body: errorText
+                });
+                throw new Error(`OpenAI API error: ${response.status} - ${errorText}`);
+            }
+            const data = await response.json();
+            const content = data.choices[0].message.content || '{}';
+            let result;
+            try {
+                result = JSON.parse(content);
+            }
+            catch (parseError) {
+                console.error('❌ [DecisionEngine] Failed to parse OpenAI response:', parseError);
+                console.error('❌ [DecisionEngine] Raw content:', content);
+                // Fallback: try to extract meaningful info from the response
+                const hasActionable = /participant.*tile|show.*tile|display.*tile|create.*component|generate.*component/i.test(transcript);
+                return {
+                    hasActionableRequest: hasActionable,
+                    intent: hasActionable ? 'ui_generation' : 'general_conversation',
+                    toolCalls: hasActionable ? [{
+                            tool: 'generate_ui_component',
+                            params: {
+                                component_type: 'LivekitParticipantTile',
+                                request: transcript
+                            },
+                            priority: 1
+                        }] : [],
+                    reasoning: 'Fallback analysis due to JSON parsing error',
+                    confidence: hasActionable ? 75 : 25
+                };
+            }
+            // Validate and enhance the result
+            return {
+                hasActionableRequest: result.hasActionableRequest || false,
+                intent: result.intent || 'general_conversation',
+                toolCalls: result.toolCalls || [],
+                reasoning: result.reasoning || 'No reasoning provided',
+                confidence: result.confidence || 0.5
+            };
+        }
+        catch (error) {
+            console.error('❌ [DecisionEngine] Error analyzing transcript:', error);
+            // Improved fallback for participant tile requests
+            const lowerTranscript = transcript.toLowerCase();
+            const isParticipantTileRequest = lowerTranscript.includes('participant') && lowerTranscript.includes('tile');
+            const isComponentRequest = /\b(show|display|create|generate)\b.*\b(component|tile|timer|weather|chart)\b/i.test(transcript);
+            if (isParticipantTileRequest || isComponentRequest) {
+                return {
+                    hasActionableRequest: true,
+                    intent: 'ui_generation',
+                    toolCalls: [{
+                            tool: 'generate_ui_component',
+                            params: {
+                                component_type: isParticipantTileRequest ? 'LivekitParticipantTile' : 'unknown',
+                                request: transcript
+                            },
+                            priority: 1
+                        }],
+                    reasoning: 'Fallback analysis detected component request',
+                    confidence: 70
+                };
+            }
+            return {
+                hasActionableRequest: false,
+                intent: 'general_conversation',
+                toolCalls: [],
+                reasoning: 'Error occurred during analysis',
+                confidence: 0.0
+            };
         }
     }
     /**
