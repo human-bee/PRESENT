@@ -25,9 +25,9 @@ import {
   retroTimerEnhancedSchema,
 } from "@/components/ui/retro-timer-enhanced";
 import {
-  MarkdownViewer,
-  markdownViewerSchema,
-} from "@/components/ui/markdown-viewer";
+  DocumentEditor,
+  documentEditorSchema,
+} from "@/components/ui/hackathon/document-editor";
 import {
   ResearchPanel,
   researchPanelSchema,
@@ -58,6 +58,8 @@ import { ComponentRegistry, type ComponentInfo } from "./component-registry";
 import { extractParametersWithAI } from "./nlp";
 import { createLogger } from "./utils";
 import { CircuitBreaker } from "./circuit-breaker";
+import { documentState } from "@/app/hackathon-canvas/documents/document-state";
+import { nanoid } from "nanoid";
 
 const logger = createLogger('tambo');
 const circuitBreaker = new CircuitBreaker({
@@ -353,6 +355,95 @@ export const listComponentsTool: TamboTool = {
   },
 };
 
+export const getDocumentsTool: TamboTool = {
+  name: "get_documents",
+  description: "Return a list of all documents available in the hackathon canvas document store.",
+  tool: async () => {
+    return documentState.getDocuments();
+  },
+  toolSchema: z
+    .function()
+    .args()
+    .returns(
+      z.array(
+        z.object({
+          id: z.string(),
+          name: z.string(),
+          description: z.string(),
+          content: z.string(),
+          originalContent: z.string().optional(),
+          diffs: z.any().optional(),
+          lastModified: z.date().optional(),
+        })
+      )
+    ),
+};
+
+export const generateUiComponentTool: TamboTool = {
+  name: "generate_ui_component",
+  description:
+    "Generate a UI component from free-form prompt. Uses simple heuristics to map prompt to component type and props, then registers/dispatches it so it appears on the canvas.",
+  tool: async (prompt: string) => {
+    const lower = prompt.toLowerCase();
+    let componentType = "";
+    let props: Record<string, unknown> = {};
+
+    // Very lightweight heuristics – can be replaced by smarter NLP later
+    if (lower.includes("containment breach")) {
+      componentType = "DocumentEditor";
+      props = { documentId: "movie-script-containment-breach" };
+    } else if (lower.includes("timer")) {
+      componentType = "RetroTimerEnhanced";
+      const minutesMatch = lower.match(/(\d+)\s*minute/);
+      if (minutesMatch) props.initialMinutes = Number(minutesMatch[1]);
+    } else if (lower.includes("weather")) {
+      componentType = "WeatherForecast";
+    }
+
+    if (!componentType) {
+      return { success: false, error: "UNSUPPORTED_PROMPT" };
+    }
+
+    // Create unique messageId
+    const messageId = `${componentType.toLowerCase()}-${nanoid(6)}`;
+
+    // Register component for AI updates; it will render when CanvasSpace receives showComponent event
+    ComponentRegistry.register({
+      messageId,
+      componentType,
+      props,
+      contextKey: "default",
+      timestamp: Date.now(),
+    });
+
+    // Dispatch event for CanvasSpace to render immediately
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(
+        new CustomEvent("tambo:showComponent", {
+          detail: {
+            messageId,
+            component: { type: componentType, props },
+          },
+        })
+      );
+    }
+
+    return { success: true, componentType, messageId, props };
+  },
+  toolSchema: z
+    .function()
+    .args(z.string().describe("Prompt describing the UI component to generate"))
+    .returns(
+      z.object({
+        success: z.boolean(),
+        componentType: z.string().optional(),
+        messageId: z.string().optional(),
+        props: z.record(z.unknown()).optional(),
+        error: z.string().optional(),
+      })
+    ),
+};
+
 // extractUpdateParamsTool removed - ui_update now handles natural language directly
 
 // extractParametersWithAI is now imported from "./nlp"
@@ -362,6 +453,8 @@ export const tools: TamboTool[] = [
   // Add non MCP tools here
   listComponentsTool,
   uiUpdateTool,
+  getDocumentsTool,
+  generateUiComponentTool,
   // extractUpdateParamsTool, // No longer needed - ui_update handles natural language directly
 ];
 
@@ -402,11 +495,11 @@ export const components: TamboComponent[] = [
     propsSchema: retroTimerEnhancedSchema,
   },
   {
-    name: "MarkdownViewer",
+    name: "DocumentEditor",
     description:
-      "A markdown document viewer with tile preview and full-screen reading mode. Displays markdown content with PP Editorial New typography on a black background. Perfect for displaying documentation, articles, or any markdown content with an elegant reading experience.",
-    component: MarkdownViewer,
-    propsSchema: markdownViewerSchema,
+      "An advanced collaborative document editor with AI-powered editing capabilities. Features real-time word-level diff tracking, beautiful visual change highlighting, persistent state management, and seamless AI update integration. Perfect for collaborative document editing, AI-assisted writing, content revision workflows, and scenarios requiring detailed change tracking and visual diff displays.",
+    component: DocumentEditor,
+    propsSchema: documentEditorSchema,
   },
   {
     name: "ResearchPanel",

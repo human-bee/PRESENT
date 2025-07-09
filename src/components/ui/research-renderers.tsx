@@ -1,7 +1,6 @@
 import React from "react";
 import { ResearchResult } from "./research-panel";
 import { YoutubeEmbed } from "./youtube-embed";
-import { MarkdownViewer } from "./markdown-viewer";
 import { cn } from "@/lib/utils";
 import { ExternalLink, CheckCircle, AlertTriangle, Info, Bookmark, BookmarkCheck, MessageCircle, FileText, Layout } from "lucide-react";
 import { useToolDispatcher } from "../tool-dispatcher";
@@ -80,7 +79,7 @@ function SourceTypeBadge({ type, className }: { type: string; className?: string
     <span
       className={cn(
         "inline-flex items-center px-2 py-1 rounded-md text-xs font-medium",
-        //@ts-ignore – fallback guard
+        //@ts-expect-error – fallback guard
         colors[type as keyof typeof colors] || colors.other,
         className,
       )}
@@ -239,7 +238,9 @@ function YouTubeResearchRenderer({ result }: BaseRendererProps) {
 function MarkdownResearchRenderer({ result }: BaseRendererProps) {
   return (
     <div className="bg-white rounded-lg border border-gray-200 p-4">
-      <MarkdownViewer markdown={result.content} />
+      <div className="prose prose-sm max-w-none">
+        <pre className="whitespace-pre-wrap text-sm text-gray-700">{result.content}</pre>
+      </div>
     </div>
   );
 }

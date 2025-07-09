@@ -47,6 +47,125 @@ export default defineAgent({
         await job.connect();
         console.log('✅ [Agent] Successfully connected to room!');
         let systemCapabilities = null;
+        // Define default Tambo UI components for fallback
+        const defaultTamboComponents = [
+            {
+                name: 'YoutubeEmbed',
+                description: 'Embed a YouTube video with a specific video ID and optional start time',
+                examples: ['show me a video about react', 'play youtube video', 'embed this youtube link']
+            },
+            {
+                name: 'WeatherForecast',
+                description: 'Display weather forecast data with visuals',
+                examples: ['show weather forecast', 'what\'s the weather like', 'weather for today']
+            },
+            {
+                name: 'RetroTimer',
+                description: 'A retro-styled countdown timer with preset options',
+                examples: ['set a timer for 5 minutes', 'create a countdown timer', 'start a timer']
+            },
+            {
+                name: 'RetroTimerEnhanced',
+                description: 'An enhanced retro-styled countdown timer with AI update capabilities',
+                examples: ['advanced timer with updates', 'smart countdown timer', 'enhanced timer']
+            },
+            {
+                name: 'DocumentEditor',
+                description: 'An advanced collaborative document editor with AI-powered editing capabilities',
+                examples: ['edit this document', 'create a new document', 'collaborative writing']
+            },
+            {
+                name: 'ResearchPanel',
+                description: 'A sophisticated research results display panel',
+                examples: ['show research results', 'display findings', 'research summary']
+            },
+            {
+                name: 'ActionItemTracker',
+                description: 'A comprehensive action item management system',
+                examples: ['track action items', 'manage tasks', 'create todo list']
+            },
+            {
+                name: 'LivekitRoomConnector',
+                description: 'Establishes a LiveKit room connection',
+                examples: ['connect to room', 'join video call', 'start meeting']
+            },
+            {
+                name: 'LivekitParticipantTile',
+                description: 'Individual participant video/audio tile',
+                examples: ['show participant video', 'participant tile', 'user video feed']
+            },
+            {
+                name: 'AIImageGenerator',
+                description: 'A real-time AI image generator',
+                examples: ['generate an image', 'create picture', 'make an illustration']
+            },
+            {
+                name: 'LiveCaptions',
+                description: 'A real-time live captions component',
+                examples: ['show live captions', 'enable subtitles', 'display transcription']
+            }
+        ];
+        // Define default capabilities with comprehensive tool list
+        const defaultCapabilities = {
+            tools: [
+                {
+                    name: 'generate_ui_component',
+                    description: 'Generate any UI component from the Tambo component library',
+                    examples: ['create a timer', 'show weather', 'make a chart', 'generate youtube embed']
+                },
+                {
+                    name: 'youtube_search',
+                    description: 'Search and display YouTube videos',
+                    examples: ['search youtube for cats', 'find video about react', 'show youtube results']
+                },
+                {
+                    name: 'mcp_tool',
+                    description: 'Access external tools via Model Context Protocol',
+                    examples: ['use external tool', 'call mcp function', 'access external service']
+                },
+                {
+                    name: 'ui_update',
+                    description: 'Update existing UI components',
+                    examples: ['update timer', 'change weather location', 'modify component']
+                },
+                {
+                    name: 'list_components',
+                    description: 'List all current UI components and their IDs',
+                    examples: ['show current components', 'list active elements', 'what components exist']
+                },
+                {
+                    name: 'web_search',
+                    description: 'Search the web for information',
+                    examples: ['search for information', 'find recent news', 'look up facts']
+                },
+                {
+                    name: 'respond_with_voice',
+                    description: 'Provide voice responses when appropriate',
+                    examples: ['speak response', 'voice reply', 'audio answer']
+                }
+            ],
+            components: defaultTamboComponents,
+            decisionEngine: {
+                intents: {
+                    'ui_generation': ['create', 'make', 'generate', 'show', 'display', 'build'],
+                    'youtube_search': ['youtube', 'video', 'play', 'watch', 'search youtube'],
+                    'timer': ['timer', 'countdown', 'alarm', 'stopwatch', 'time'],
+                    'weather': ['weather', 'forecast', 'temperature', 'climate'],
+                    'research': ['research', 'findings', 'results', 'analysis'],
+                    'action_items': ['todo', 'task', 'action item', 'checklist'],
+                    'image_generation': ['image', 'picture', 'illustration', 'generate image'],
+                    'captions': ['captions', 'subtitles', 'transcription', 'live text']
+                },
+                keywords: {
+                    'timer_related': ['timer', 'countdown', 'minutes', 'seconds', 'alarm'],
+                    'youtube_related': ['youtube', 'video', 'play', 'watch', 'embed'],
+                    'weather_related': ['weather', 'forecast', 'temperature', 'rain', 'sunny'],
+                    'ui_related': ['create', 'make', 'show', 'display', 'component'],
+                    'research_related': ['research', 'study', 'analysis', 'findings'],
+                    'task_related': ['todo', 'task', 'action', 'checklist', 'manage']
+                }
+            }
+        };
         const queryCapabilities = async () => {
             return new Promise((resolve) => {
                 console.log('🔍 [Agent] Querying system capabilities...');
@@ -79,7 +198,8 @@ export default defineAgent({
                 // Timeout after 5 seconds and continue with defaults
                 setTimeout(() => {
                     if (!systemCapabilities) {
-                        console.log('⚠️ [Agent] Capability query timed out, using defaults');
+                        console.log('⚠️ [Agent] Capability query timed out, using comprehensive defaults');
+                        systemCapabilities = defaultCapabilities;
                         job.room.off('dataReceived', handleCapabilityResponse);
                         resolve();
                     }
@@ -179,14 +299,16 @@ export default defineAgent({
             .on(RoomEvent.ParticipantDisconnected, p => console.log('[TRACE] participant disconnected', p.identity));
         // 2️⃣  every time a remote audio publication appears
         job.room.on(RoomEvent.TrackPublished, async (pub, p) => {
-            console.log('[TRACE] trackPublished', p.identity, pub.name || pub.trackName, pub.kind);
-            if (pub.kind === Track.Kind.Audio || pub.kind === 'audio') {
+            const pubObj = pub;
+            const pObj = p;
+            console.log('[TRACE] trackPublished', pObj.identity, pubObj.name || pubObj.trackName, pubObj.kind);
+            if (pubObj.kind === Track.Kind.Audio || pubObj.kind === 'audio') {
                 try {
-                    await pub.setSubscribed(true);
-                    console.log(`[SUCCESS] subscribed to ${p.identity}'s audio track`);
+                    await pubObj.setSubscribed(true);
+                    console.log(`[SUCCESS] subscribed to ${pObj.identity}'s audio track`);
                 }
                 catch (err) {
-                    console.error('[ERROR] could not subscribe to', p.identity, err);
+                    console.error('[ERROR] could not subscribe to', pObj.identity, err);
                 }
             }
         });
@@ -243,17 +365,37 @@ export default defineAgent({
                 toolSection += `\n- MCP/External: ${mcpTools.length} tools`;
                 toolSection += `\n- Total Available: ${systemCapabilities.tools.length} tools`;
             }
-            else {
-                // Fallback to default tools
-                toolSection += `
-        - generate_ui_component: Create ANY UI component (timers, charts, buttons, forms, etc.)
-        - youtube_search: Search and display YouTube videos
-        - mcp_tool: Access external tools via Model Context Protocol
-        - ui_update: Update existing UI components (MUST call list_components first!)
-        - list_components: List all current UI components to get their IDs
-        - respond_with_voice: Speak responses when appropriate
-        - do_nothing: When no action is needed`;
-            }
+            // Add available Tambo UI components
+            let componentSection = `\n\nTAMBO UI COMPONENTS AVAILABLE:`;
+            const components = systemCapabilities?.components || defaultTamboComponents;
+            componentSection += `\nYou can generate any of these ${components.length} UI components:`;
+            components.forEach(component => {
+                componentSection += `\n- ${component.name}: ${component.description}`;
+                if (component.examples && component.examples.length > 0) {
+                    componentSection += `\n  Voice triggers: "${component.examples.slice(0, 2).join('", "')}"`;
+                }
+            });
+            // Add component categories
+            const timerComponents = components.filter(c => c.name.toLowerCase().includes('timer'));
+            const mediaComponents = components.filter(c => c.name.toLowerCase().includes('youtube') || c.name.toLowerCase().includes('image'));
+            const utilityComponents = components.filter(c => c.name.toLowerCase().includes('weather') || c.name.toLowerCase().includes('research') || c.name.toLowerCase().includes('action'));
+            const livekitComponents = components.filter(c => c.name.toLowerCase().includes('livekit') || c.name.toLowerCase().includes('captions'));
+            componentSection += `\n\nComponent Categories:`;
+            componentSection += `\n- Timers: ${timerComponents.map(c => c.name).join(', ')}`;
+            componentSection += `\n- Media: ${mediaComponents.map(c => c.name).join(', ')}`;
+            componentSection += `\n- Utilities: ${utilityComponents.map(c => c.name).join(', ')}`;
+            componentSection += `\n- LiveKit: ${livekitComponents.map(c => c.name).join(', ')}`;
+            componentSection += `\n- Total Components: ${components.length}`;
+            // Add enhanced component usage examples
+            componentSection += `\n\nCOMPONENT USAGE EXAMPLES:`;
+            componentSection += `\n- "Set a timer for 10 minutes" → Uses RetroTimer or RetroTimerEnhanced`;
+            componentSection += `\n- "Show me weather for today" → Uses WeatherForecast`;
+            componentSection += `\n- "Search youtube for cats" → Uses YoutubeEmbed via youtube_search`;
+            componentSection += `\n- "Generate an image of a sunset" → Uses AIImageGenerator`;
+            componentSection += `\n- "Show live captions" → Uses LiveCaptions`;
+            componentSection += `\n- "Track these action items" → Uses ActionItemTracker`;
+            componentSection += `\n- "Display research results" → Uses ResearchPanel`;
+            componentSection += `\n- "Edit this document" → Uses DocumentEditor`;
             const endInstructions = `
         
         IMPORTANT TOOL SELECTION RULES:
@@ -271,7 +413,7 @@ export default defineAgent({
         DO NOT use voice to repeat UI requests like "Create a timer" or "Show me a chart" - these are handled automatically by the system.
         
         Remember: TEXT RESPONSES ONLY, even though you can hear audio input.`;
-            return baseInstructions + toolSection + endInstructions;
+            return baseInstructions + toolSection + componentSection + endInstructions;
         };
         // Create the multimodal agent using OpenAI Realtime API
         // Note: Tools will be handled through OpenAI's native function calling mechanism
@@ -282,19 +424,39 @@ export default defineAgent({
         });
         console.log('🎙️ [Agent] Starting multimodal agent...');
         // Initialize Decision Engine with dynamic configuration  
-        const decisionEngineConfig = systemCapabilities?.decisionEngine
-            ? {
-                intents: systemCapabilities.decisionEngine.intents || {},
-                keywords: systemCapabilities.decisionEngine.keywords || {}
+        const defaultDecisionEngine = {
+            intents: {
+                'ui_generation': ['create', 'make', 'generate', 'show', 'display', 'build'],
+                'youtube_search': ['youtube', 'video', 'play', 'watch', 'search youtube'],
+                'timer': ['timer', 'countdown', 'alarm', 'stopwatch', 'time'],
+                'weather': ['weather', 'forecast', 'temperature', 'climate'],
+                'research': ['research', 'findings', 'results', 'analysis'],
+                'action_items': ['todo', 'task', 'action item', 'checklist'],
+                'image_generation': ['image', 'picture', 'illustration', 'generate image'],
+                'captions': ['captions', 'subtitles', 'transcription', 'live text']
+            },
+            keywords: {
+                'timer_related': ['timer', 'countdown', 'minutes', 'seconds', 'alarm'],
+                'youtube_related': ['youtube', 'video', 'play', 'watch', 'embed'],
+                'weather_related': ['weather', 'forecast', 'temperature', 'rain', 'sunny'],
+                'ui_related': ['create', 'make', 'show', 'display', 'component'],
+                'research_related': ['research', 'study', 'analysis', 'findings'],
+                'task_related': ['todo', 'task', 'action', 'checklist', 'manage']
             }
-            : {
-                intents: {},
-                keywords: {}
-            };
+        };
+        const decisionEngineConfig = {
+            intents: systemCapabilities?.decisionEngine?.intents || defaultDecisionEngine.intents,
+            keywords: systemCapabilities?.decisionEngine?.keywords || defaultDecisionEngine.keywords
+        };
         const decisionEngine = new DecisionEngine(process.env.OPENAI_API_KEY || '', decisionEngineConfig);
         console.log('🧠 [Agent] Decision Engine initialized with:', {
             intents: Object.keys(decisionEngineConfig.intents || {}).length,
             keywords: Object.keys(decisionEngineConfig.keywords || {}).length
+        });
+        // Log available components for debugging
+        console.log('🎨 [Agent] Available Tambo UI Components:', {
+            total: defaultTamboComponents.length,
+            components: defaultTamboComponents.map(c => c.name).join(', ')
         });
         // Configure agent to accept text responses when using tools
         const agent = new multimodal.MultimodalAgent({

@@ -21,7 +21,10 @@ export type Document = {
 };
 
 // Improved word-level diff algorithm that only tracks actual changes
-const generateWordDiff = (original: string, modified: string): DiffWord[] => {
+export const generateWordDiff = (
+  original: string,
+  modified: string
+): DiffWord[] => {
   const originalLines = original.split("\n");
   const modifiedLines = modified.split("\n");
   const diffs: DiffWord[] = [];

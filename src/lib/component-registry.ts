@@ -14,6 +14,32 @@ export interface ComponentInfo {
   contextKey: string;
   timestamp: number;
   updateCallback?: (patch: Record<string, unknown>) => void;
+  // Track the very first props so we can diff later
+  originalProps?: Record<string, unknown>;
+  // History of diffs for visualisation
+  diffHistory?: PropertyDiff[];
+}
+
+// Simple property-level diff description
+export type PropertyDiff = {
+  key: string;
+  previous: unknown;
+  next: unknown;
+  ts: number;
+};
+
+// Utility to compute shallow diff of two objects
+function diffProps(oldProps: Record<string, unknown>, newProps: Record<string, unknown>): PropertyDiff[] {
+  const diffs: PropertyDiff[] = [];
+  const allKeys = new Set([...Object.keys(oldProps), ...Object.keys(newProps)]);
+  for (const key of allKeys) {
+    const prev = oldProps[key];
+    const next = newProps[key];
+    if (prev !== next) {
+      diffs.push({ key, previous: prev, next, ts: Date.now() });
+    }
+  }
+  return diffs;
 }
 
 // Simple global component store using Map
@@ -55,12 +81,18 @@ class ComponentStore {
       };
     }
 
-    // Update the stored props
+    const mergedProps = { ...component.props, ...patch };
+
+    // Compute diffs
+    const propDiffs = diffProps(component.props, mergedProps);
+
     const updatedComponent = {
       ...component,
-      props: { ...component.props, ...patch },
+      props: mergedProps,
       timestamp: Date.now(),
-    };
+      originalProps: component.originalProps || component.props,
+      diffHistory: [...(component.diffHistory || []), ...propDiffs],
+    } as ComponentInfo;
     this.components.set(messageId, updatedComponent);
 
     // Call the component's update callback if available
