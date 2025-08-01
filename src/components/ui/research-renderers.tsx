@@ -1,9 +1,15 @@
 import React from "react";
+import dynamic from "next/dynamic";
 import { ResearchResult } from "./research-panel";
-import { YoutubeEmbed } from "./youtube-embed";
 import { cn } from "@/lib/utils";
 import { ExternalLink, CheckCircle, AlertTriangle, Info, Bookmark, BookmarkCheck, MessageCircle, FileText, Layout } from "lucide-react";
 import { useToolDispatcher } from "../tool-dispatcher";
+
+// Dynamic import for YouTube embed - only load when needed
+const YoutubeEmbed = dynamic(() => import("./youtube-embed").then(mod => ({ default: mod.YoutubeEmbed })), {
+  ssr: false,
+  loading: () => <div className="flex items-center justify-center p-4 bg-gray-50 rounded">Loading video...</div>
+});
 
 /* -------------------------------------------------------------------------- */
 /*                                Base types                                  */

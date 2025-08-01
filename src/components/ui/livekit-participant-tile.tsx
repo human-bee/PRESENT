@@ -76,7 +76,7 @@ type LivekitParticipantTileState = {
  * Shows video/audio for LiveKit participants in the room.
  * Can show a specific participant or all participants.
  */
-export function LivekitParticipantTile({
+export const LivekitParticipantTile = React.memo(function LivekitParticipantTile({
   participantIdentity,
   showToolbar = true,
   showVideo = true,
@@ -219,7 +219,7 @@ export function LivekitParticipantTile({
       ))}
     </div>
   );
-}
+});
 
 // Single participant tile component
 function SingleParticipantTile({

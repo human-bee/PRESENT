@@ -24,7 +24,7 @@ const nextConfig: NextConfig = {
   skipTrailingSlashRedirect: true,
   
   // Fix tldraw multiple instances issue
-  webpack: (config, { isServer }) => {
+  webpack: (config, { dev, isServer }) => {
     // Ensure single instance of tldraw libraries
     if (!isServer) {
       config.resolve.alias = {

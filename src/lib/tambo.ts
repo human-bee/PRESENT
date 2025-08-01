@@ -51,6 +51,9 @@ import {
 import LiveCaptions, {
   liveCaptionsSchema,
 } from "@/components/LiveCaptions";
+import LinearKanbanBoard, {
+  linearKanbanSchema,
+} from "@/components/ui/linear-kanban-board";
 import type { TamboComponent } from "@tambo-ai/react";
 import { TamboTool } from "@tambo-ai/react";
 import { z } from "zod";
@@ -59,6 +62,7 @@ import { createLogger } from "./utils";
 import { CircuitBreaker } from "./circuit-breaker";
 import { documentState } from "@/app/hackathon-canvas/documents/document-state";
 import { nanoid } from "nanoid";
+import { callMcpTool } from "@/lib/livekit-agent-tools";
 
 const logger = createLogger('tambo');
 const circuitBreaker = new CircuitBreaker({
@@ -507,6 +511,18 @@ export const generateUiComponentTool: TamboTool = {
     else if (lower.includes("caption") || lower.includes("subtitle") || lower.includes("transcription")) {
       componentType = "LiveCaptions";
     }
+    
+    // Linear/Kanban board requests
+    else if (lower.includes("linear") || lower.includes("kanban") || lower.includes("board") || 
+             lower.includes("issues") || lower.includes("sprint") || lower.includes("project management")) {
+      componentType = "LinearKanbanBoard";
+      
+      // Extract title if mentioned
+      const titleMatch = prompt.match(/(?:board|kanban).*?(?:called|named|titled)\s+([^.!?]+)/i);
+      if (titleMatch) {
+        props.title = titleMatch[1].trim();
+      }
+    }
 
     // Fallback - try to infer from common UI terms
     else if (lower.includes("button") || lower.includes("click")) {
@@ -519,7 +535,7 @@ export const generateUiComponentTool: TamboTool = {
       return { 
         success: false, 
         error: "UNSUPPORTED_PROMPT",
-        message: `Could not determine component type from prompt: "${prompt}". Supported components: DocumentEditor, RetroTimerEnhanced, WeatherForecast, YoutubeEmbed, AIImageGenerator, ActionItemTracker, ResearchPanel, LivekitRoomConnector, LivekitParticipantTile, LiveCaptions.`
+        message: `Could not determine component type from prompt: "${prompt}". Supported components: DocumentEditor, RetroTimerEnhanced, WeatherForecast, YoutubeEmbed, AIImageGenerator, ActionItemTracker, ResearchPanel, LivekitRoomConnector, LivekitParticipantTile, LiveCaptions, LinearKanbanBoard.`
       };
     }
 
@@ -576,6 +592,96 @@ export const generateUiComponentTool: TamboTool = {
 
 // extractParametersWithAI is now imported from "./nlp"
 
+// ----------------------------------------------------------------------------
+// Linear board refresh helper – pulls fresh data from Linear MCP and patches the
+// existing LinearKanbanBoard via ui_update. Keeps UI in sync with source-of-truth.
+// ----------------------------------------------------------------------------
+
+export const refreshLinearBoardTool: TamboTool = {
+  name: "refresh_linear_board",
+  description:
+    "Refresh a LinearKanbanBoard by fetching latest issues & statuses from Linear via MCP and applying them with ui_update.",
+  toolSchema: z
+    .function()
+    .args(z.string().describe("messageId of the LinearKanbanBoard component"))
+    .returns(
+      z.object({
+        status: z.string(),
+        message: z.string(),
+        issuesCount: z.number().optional(),
+      })
+    ),
+  tool: async (boardId: string) => {
+    // 1. Locate the board
+    const board = ComponentRegistry.list().find(
+      (c) => c.messageId === boardId && c.componentType === "LinearKanbanBoard"
+    );
+
+    if (!board) {
+      return {
+        status: "ERROR",
+        message: `Board ${boardId} not found. Call list_components to get a valid id.`,
+      };
+    }
+
+    // teamId may live in props. Fallback to defaultTeamId in config if provided.
+    const boardProps = board.props as {
+      teams?: { id: string; name: string }[];
+      selectedTeam?: string;
+    };
+
+    const teamId =
+      boardProps.selectedTeam || boardProps.teams?.[0]?.id || "";
+
+    if (!teamId) {
+      return {
+        status: "ERROR",
+        message:
+          "Board does not have a teamId. Ensure it was initialised with teams array.",
+      };
+    }
+
+    // 2. Fetch fresh issues & statuses
+    let issues: any[] = [];
+    let statuses: any[] = [];
+
+    try {
+      const listIssuesRes: any = await callMcpTool(
+        undefined as any,
+        "list_issues",
+        { teamId, first: 250 }
+      );
+      issues = listIssuesRes.content || listIssuesRes || [];
+
+      const rawStatuses: any = await callMcpTool(
+        undefined as any,
+        "list_issue_statuses",
+        { teamId }
+      );
+      statuses = (Array.isArray(rawStatuses) ? rawStatuses : rawStatuses?.content) || [];
+    } catch (err: any) {
+      return {
+        status: "ERROR",
+        message: `Failed MCP fetch: ${err.message || err}`,
+      };
+    }
+
+    // 3. Patch board via ComponentRegistry (same effect as ui_update)
+    const patch = { issues, statuses };
+    const result = await ComponentRegistry.update(boardId, patch);
+
+    if (!result.success) {
+      return { status: "ERROR", message: result.error ?? "Update failed" };
+    }
+
+    return {
+      status: "SUCCESS",
+      message: `Refreshed board with ${issues.length} issues`,
+      issuesCount: issues.length,
+    };
+  },
+};
+
 export const tools: TamboTool[] = [
   // Set the MCP tools https://localhost:3000/mcp-config
   // Add non MCP tools here
@@ -583,6 +689,7 @@ export const tools: TamboTool[] = [
   uiUpdateTool,
   getDocumentsTool,
   generateUiComponentTool,
+  refreshLinearBoardTool,
   // extractUpdateParamsTool, // No longer needed - ui_update handles natural language directly
 ];
 
@@ -670,6 +777,13 @@ export const components: TamboComponent[] = [
       "A real-time live captions component that displays speech transcriptions in an interactive tldraw-style canvas with beautiful speech bubbles. REQUIRES LivekitRoomConnector to be connected first. Features real-time transcription from Groq Whisper via LiveKit data channels, draggable speech bubbles, speaker identification with avatars, timestamps, interim/final transcript states, export capabilities (TXT/JSON/SRT), customizable canvas themes (grid/dots/clean), auto-positioning, and persistent state management. Perfect for accessibility, meeting transcription, live events, educational content, and any scenario requiring real-time speech-to-text visualization with an engaging visual interface.",
     component: LiveCaptions,
     propsSchema: liveCaptionsSchema,
+  },
+  {
+    name: "LinearKanbanBoard",
+    description:
+      "A comprehensive Linear project management kanban board with drag-and-drop functionality and MCP integration. Features multiple team support, customizable status columns (Backlog, Todo, In Progress, Delegate to Agent, Blocked, Review Required, Done), issue priority visualization with color coding, assignee management, project categorization, and pending update queue system. Supports optimistic UI updates with drag-and-drop issue movement between columns, clipboard export of pending changes, and hybrid sync workflow for reliable Linear API integration. Perfect for agile project management, sprint planning, issue tracking, and team collaboration workflows. Can be populated with real Linear data via MCP or used with demo data.",
+    component: LinearKanbanBoard,
+    propsSchema: linearKanbanSchema,
   },
   // Add more components here
 ];

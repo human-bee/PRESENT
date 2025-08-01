@@ -152,6 +152,9 @@ export function ToolDispatcher({
   const pendingById = useRef(new Map<string, PendingTool>());
   const [isProcessing, setIsProcessing] = useState(false);
   
+  // Runtime flag: enable fast cadences only when debugging
+  const IS_DEBUG = process.env.NEXT_PUBLIC_TAMBO_DEBUG === 'true';
+  
   // Log helper using centralized logger - moved before useEffect
   const log = useCallback((...args: unknown[]) => {
     if (enableLogging) {
@@ -1104,7 +1107,7 @@ Please consider both the processed summary above and the original transcript con
           pendingById.current.delete(id);
         }
       }
-    }, 5000); // Check every 5 seconds
+    }, IS_DEBUG ? 5000 : 30000); // Fast cleanup in debug, otherwise 30 s
     
     return () => clearInterval(interval);
   }, [maxPendingAge, log]);
@@ -1119,6 +1122,9 @@ Please consider both the processed summary above and the original transcript con
   // Heartbeat / state reconciliation (optional)
   // ──────────────────────────────────────────────
   useEffect(() => {
+    // Skip frequent heartbeat unless in debug mode
+    if (!IS_DEBUG) return;
+
     const interval = setInterval(() => {
       const payload = {
         type: 'state_ping',
@@ -1126,7 +1132,7 @@ Please consider both the processed summary above and the original transcript con
         timestamp: Date.now(),
       };
       bus.send('state_ping', payload);
-    }, 15000);
+    }, 15000); // 15 s heartbeat only during debug
 
     // Listen for peer pings and log discrepancies
     const off = bus.on('state_ping', (msg: any) => {

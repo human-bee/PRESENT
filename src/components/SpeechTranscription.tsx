@@ -1,14 +1,17 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { 
-  LiveKitRoom as LivekitRoom,
-  RoomAudioRenderer,
-  ControlBar,
-  useDataChannel,
-  AudioPresets,
-  useRoomContext
-} from '@livekit/components-react';
+import dynamic from 'next/dynamic';
+const LivekitRoom = dynamic(() => import('@livekit/components-react').then(m => m.LiveKitRoom), { ssr: false });
+const RoomAudioRenderer = dynamic(() => import('@livekit/components-react').then(m => m.RoomAudioRenderer), { ssr: false });
+const ControlBar = dynamic(() => import('@livekit/components-react').then(m => m.ControlBar), { ssr: false });
+const useDataChannel = (...args: any[]) => {
+  // lazy hook accessor
+  const mod = require('@livekit/components-react');
+  return mod.useDataChannel(...args as any);
+};
+const AudioPresets = require('@livekit/components-react').AudioPresets;
+const useRoomContext = require('@livekit/components-react').useRoomContext;
 import { Room } from 'livekit-client';
 import { motion, AnimatePresence } from 'framer-motion';
 import { LiveTranscription } from './LiveTranscription';

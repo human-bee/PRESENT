@@ -42,16 +42,33 @@ import { cn } from "@/lib/utils";
 import { useTamboThread } from "@tambo-ai/react";
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import * as React from "react";
+import dynamic from "next/dynamic";
 import type { TamboThreadMessage } from "@tambo-ai/react";
-import { TldrawCanvas, TamboShapeUtil, TamboShape } from "./tldraw-canvas";
-import { TldrawWithPersistence } from "./tldraw-with-persistence";
-import { TldrawWithCollaboration } from "./tldraw-with-collaboration";
 import type { Editor } from 'tldraw';
 import { nanoid } from 'nanoid';
 import { Toaster } from "react-hot-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { systemRegistry } from "@/lib/system-registry";
 import type { StateEnvelope } from "@/lib/shared-state";
+
+// Dynamic imports for heavy tldraw components - only load when needed
+const TldrawCanvas = dynamic(() => import("./tldraw-canvas").then(mod => ({ default: mod.TldrawCanvas })), {
+  ssr: false,
+  loading: () => <div className="flex items-center justify-center h-full w-full">Loading canvas...</div>
+});
+
+const TldrawWithPersistence = dynamic(() => import("./tldraw-with-persistence").then(mod => ({ default: mod.TldrawWithPersistence })), {
+  ssr: false,
+  loading: () => <div className="flex items-center justify-center h-full w-full">Loading canvas...</div>
+});
+
+const TldrawWithCollaboration = dynamic(() => import("./tldraw-with-collaboration").then(mod => ({ default: mod.TldrawWithCollaboration })), {
+  ssr: false,
+  loading: () => <div className="flex items-center justify-center h-full w-full">Loading canvas...</div>
+});
+
+// Import types statically (they don't add to bundle size)
+import type { TamboShapeUtil, TamboShape } from "./tldraw-canvas";
 
 // Suppress development noise and repetitive warnings
 if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
@@ -119,8 +136,22 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
   // Store React components separately from tldraw shapes to avoid structuredClone issues
   const componentStore = useRef<Map<string, React.ReactNode>>(new Map());
 
-  // Memoize shapeUtils array to prevent re-renders
-  const customShapeUtils = useMemo(() => [TamboShapeUtil], []);
+  // Memoize shapeUtils array to prevent re-renders (only on client side to avoid SSR issues)
+  const customShapeUtils = useMemo(() => {
+    // Only import TamboShapeUtil on client side to avoid SSR issues
+    if (typeof window === 'undefined') return [];
+    
+    // Import TamboShapeUtil dynamically to avoid SSR issues with dynamic imports
+    const { TamboShapeUtil } = require('./tldraw-canvas');
+    return [TamboShapeUtil];
+  }, []);
+
+  // Dynamically load the runtime class for use on the client (type-only import above is erased at runtime)
+  let RuntimeTamboShapeUtil: typeof import('./tldraw-canvas').TamboShapeUtil | undefined;
+  if (typeof window !== 'undefined') {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    RuntimeTamboShapeUtil = require('./tldraw-canvas').TamboShapeUtil;
+  }
 
   // Canvas persistence is now handled by TldrawWithPersistence component
 
@@ -219,7 +250,9 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
       systemRegistry.ingestState(stateEnvelope);
     } else {
       // Create new shape
-      const defaultShapeProps = new TamboShapeUtil().getDefaultProps();
+      const defaultShapeProps = RuntimeTamboShapeUtil
+        ? new RuntimeTamboShapeUtil().getDefaultProps()
+        : { w: 300, h: 200 }; // sensible fallback to prevent crash
       const newShapeId = `shape:tambo-${nanoid()}`; // Generate a unique ID for the new shape with required prefix
 
       const viewport = editor.getViewportPageBounds();

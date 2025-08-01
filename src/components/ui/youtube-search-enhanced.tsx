@@ -1,8 +1,14 @@
 import { useTamboComponentState } from "@tambo-ai/react";
 import { z } from "zod";
 import { useState, useEffect, useCallback } from "react";
-import { YoutubeEmbed } from "./youtube-embed";
+import dynamic from "next/dynamic";
 import { debounce } from "lodash";
+
+// Dynamic import for YouTube embed - only load when actually playing a video
+const YoutubeEmbed = dynamic(() => import("./youtube-embed").then(mod => ({ default: mod.YoutubeEmbed })), {
+  ssr: false,
+  loading: () => <div className="flex items-center justify-center p-8 bg-gray-50 rounded">Loading video player...</div>
+});
 
 // Enhanced search parameters schema
 export const youtubeSearchEnhancedSchema = z.object({

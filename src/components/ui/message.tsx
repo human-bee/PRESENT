@@ -100,7 +100,7 @@ export interface MessageProps
  * </Message>
  * ```
  */
-const Message = React.forwardRef<HTMLDivElement, MessageProps>(
+const Message = React.memo(React.forwardRef<HTMLDivElement, MessageProps>(
   (
     { children, className, role, variant, isLoading, message, ...props },
     ref,
@@ -124,7 +124,7 @@ const Message = React.forwardRef<HTMLDivElement, MessageProps>(
       </MessageContext.Provider>
     );
   },
-);
+));
 Message.displayName = "Message";
 
 /**

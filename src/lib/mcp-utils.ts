@@ -89,6 +89,25 @@ function updateServerStatus(url: string, success: boolean, error?: string) {
 }
 
 /**
+ * Simple URL validation utility. Accepts absolute URLs (http/https) and
+ * application-relative paths that start with "/". Returns `true` if the input
+ * can be successfully resolved to a valid URL, otherwise `false`.
+ */
+function isValidMcpUrl(raw: string): boolean {
+  if (!raw || typeof raw !== "string") return false;
+  // Allow relative API routes ("/api/…") which the runtime will prepend with the current origin.
+  if (raw.startsWith("/")) return true;
+
+  try {
+    // Will throw for invalid absolute URLs (e.g. empty string, missing protocol, etc.)
+    new URL(raw);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Load and process MCP server configurations from localStorage
  */
 export function loadMcpServers(): McpServer[] {
@@ -105,6 +124,15 @@ export function loadMcpServers(): McpServer[] {
     const deduplicatedServers = servers
       .filter((server: McpServer) => {
         const url = typeof server === "string" ? server : server.url;
+
+        // Skip obviously invalid entries early to avoid runtime failures later.
+        if (!isValidMcpUrl(url)) {
+          if (process.env.NODE_ENV === 'development') {
+            console.warn(`[MCP] Invalid MCP server URL detected, skipping: "${url}"`);
+          }
+          return false;
+        }
+
         if (uniqueUrls.has(url)) {
           if (process.env.NODE_ENV === 'development') {
             console.warn(`[MCP] Duplicate server URL found, skipping: ${url}`);

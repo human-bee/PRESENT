@@ -8,6 +8,8 @@
 import { Room } from 'livekit-client';
 import { systemRegistry } from './system-registry';
 import { createLogger } from './utils';
+// Debug flag (use NEXT_PUBLIC_TAMBO_DEBUG=true to enable verbose logging)
+const DEBUG_OBSERVABILITY = process.env.NEXT_PUBLIC_TAMBO_DEBUG === 'true';
 
 export interface ToolCallEvent {
   id: string;
@@ -51,31 +53,30 @@ export class ObservabilityBridge {
   private maxEvents = 100; // Keep last 100 events in memory
   private listeners: Set<(event: ToolCallEvent) => void> = new Set();
   private pendingToolCalls = new Map<string, { startTime: number; event: ToolCallEvent }>();
+  // Queue incoming packets to avoid per-packet JSON.parse on busy rooms
+  private dataQueue: Uint8Array[] = [];
+  private queueTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(room: Room) {
     this.room = room;
     this.setupEventListeners();
-    this.setupConsoleLogging();
+    // Only enable verbose console logging when debug flag is on
+    if (DEBUG_OBSERVABILITY) {
+      this.setupConsoleLogging();
+    }
   }
 
   private setupEventListeners() {
-    // Listen for LiveKit data channel events
-    this.room.on('dataReceived', (data, participant) => {
-      try {
-        const message = JSON.parse(new TextDecoder().decode(data));
-        
-        // Track tool call events
-        if (message.type === 'tool_call') {
-          this.trackToolCall(message);
-        } else if (message.type === 'tool_result') {
-          this.trackToolResult(message);
-        } else if (message.type === 'tool_error') {
-          this.trackToolError(message);
-        } else if (message.type === 'decision') {
-          this.trackDecision(message);
-        }
-      } catch (error) {
-        // Ignore non-JSON messages
+    // Listen for LiveKit data channel events (batched)
+    this.room.on('dataReceived', (data) => {
+      this.dataQueue.push(data);
+      if (!this.queueTimer) {
+        this.queueTimer = setTimeout(() => {
+          const packets = this.dataQueue;
+          this.dataQueue = [];
+          this.queueTimer = null;
+          packets.forEach((pkt) => this.processDataPacket(pkt));
+        }, DEBUG_OBSERVABILITY ? 20 : 100); // quicker flush when debugging
       }
     });
 
@@ -339,6 +340,33 @@ export class ObservabilityBridge {
     };
     this.pendingToolCalls.clear();
     this.logger.log('📊 Observability data cleared');
+  }
+
+  // ──────────────────────────────────────────────
+  // Helper: process a single data packet
+  // ──────────────────────────────────────────────
+  private processDataPacket(data: Uint8Array) {
+    try {
+      const message = JSON.parse(new TextDecoder().decode(data));
+      switch (message.type) {
+        case 'tool_call':
+          this.trackToolCall(message);
+          break;
+        case 'tool_result':
+          this.trackToolResult(message);
+          break;
+        case 'tool_error':
+          this.trackToolError(message);
+          break;
+        case 'decision':
+          this.trackDecision(message);
+          break;
+        default:
+          break;
+      }
+    } catch {
+      // Non-JSON or malformed – ignore
+    }
   }
 }
 

@@ -5,6 +5,8 @@
  * to make Tambo smarter at finding, analyzing, and presenting YouTube content.
  */
 
+import { getPrompt } from './prompt-loader';
+
 export const YOUTUBE_SEARCH_PROMPTS = {
   // Smart search interpretation
   searchInterpretation: (userQuery: string) => `
@@ -28,32 +30,7 @@ Return a structured search strategy.
 `,
 
   // Quality analysis
-  videoQualityAnalysis: `
-When analyzing YouTube videos, score them based on:
-
-1. Channel Authority (0-3 points):
-   - Official/VEVO channel: +3
-   - Verified channel (100k+ subs): +2
-   - Established channel (10k+ subs): +1
-
-2. Engagement Quality (0-3 points):
-   - Like ratio > 5%: +2
-   - Comment count > 100: +1
-   - View velocity (views/days since upload): +1 if high
-
-3. Content Freshness (0-2 points):
-   - Uploaded today: +2
-   - Uploaded this week: +1
-   - Matches trending topics: +1
-
-4. Red Flags (negative points):
-   - Title in ALL CAPS: -1
-   - Excessive emojis in title: -1
-   - "Re-upload" in title/description: -2
-   - Very low like ratio: -1
-
-Only show videos with a total score >= 3.
-`,
+  videoQualityAnalysis: async () => await getPrompt('videoQualityAnalysis'),
 
   // Transcript navigation
   transcriptAnalysis: (transcript: string, userIntent: string) => `

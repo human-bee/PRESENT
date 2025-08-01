@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "analyze": "ANALYZE=true next build",
     "start": "next start",
     "lint": "next lint",
     "init": "npx tambo init",
@@ -69,6 +70,7 @@
     "@types/react-dom": "^19",
     "@types/recharts": "^1.8.29",
     "autoprefixer": "^10.4.21",
+    "babel-plugin-transform-remove-console": "^6.9.4",
     "clsx": "^2.1.1",
     "depcheck": "^1.4.7",
     "dotenv": "^16.5.0",
