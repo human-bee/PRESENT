@@ -28,6 +28,32 @@ export interface TamboShapeProps {
 // Create a type for the Tambo shape
 export type TamboShape = TLBaseShape<"tambo", TamboShapeProps>;
 
+// Error boundary for component rendering
+class ComponentErrorBoundary extends Component<
+  { children: ReactNode; fallback: ReactNode },
+  { hasError: boolean }
+> {
+  constructor(props: any) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    console.error('Component render error:', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return this.props.fallback;
+    }
+    return this.props.children;
+  }
+}
+
 // Component wrapper to handle hooks inside the shape
 function TamboShapeComponent({ shape }: { shape: TamboShape }) {
     const contentRef = useRef<HTMLDivElement>(null);
@@ -135,9 +161,19 @@ function TamboShapeComponent({ shape }: { shape: TamboShape }) {
         width: '100%',
         height: '100%',
           }}>
-            {shape.props.tamboComponent && componentStore ? 
-              componentStore.get(shape.props.tamboComponent) || <div style={{padding: '10px', color: 'var(--color-text-muted)'}}>Component not found</div>
-              : <div style={{padding: '10px', color: 'var(--color-text-muted)'}}>No component loaded</div>}
+            <ComponentErrorBoundary
+              fallback={<div style={{padding: '10px', color: 'var(--color-text-muted)'}}>Component error</div>}
+            >
+              {shape.props.tamboComponent && componentStore ? (
+                (() => {
+                  const component = componentStore.get(shape.props.tamboComponent);
+                  // Component store contains React elements, which are already valid React children
+                  return component || <div style={{padding: '10px', color: 'var(--color-text-muted)'}}>Component not found</div>;
+                })()
+              ) : (
+                <div style={{padding: '10px', color: 'var(--color-text-muted)'}}>No component loaded</div>
+              )}
+            </ComponentErrorBoundary>
           </div>
         </div>
   );

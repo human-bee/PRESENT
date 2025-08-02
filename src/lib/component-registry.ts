@@ -204,6 +204,10 @@ export class ComponentRegistry {
     return componentStore.update(messageId, patch);
   }
 
+  static get(messageId: string): ComponentInfo | undefined {
+    return componentStore.list().find(c => c.messageId === messageId);
+  }
+
   static list(contextKey?: string) {
     return componentStore.list(contextKey);
   }

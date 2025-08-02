@@ -16,6 +16,8 @@ import { useComponentRegistration } from '@/lib/component-registry';
 import { z } from 'zod';
 import { cn } from '@/lib/utils';
 import { Play, Pause, RotateCcw, Clock } from 'lucide-react';
+import { useComponentProgressiveLoading, LoadingState } from "@/lib/with-progressive-loading";
+import { LoadingWrapper, SkeletonPatterns } from "@/components/ui/loading-states";
 
 // Enhanced schema with better defaults + Tambo message ID support
 export const retroTimerEnhancedSchema = z.object({
@@ -58,6 +60,33 @@ export function RetroTimerEnhanced({
     isFinished: false,
   }), [initialTimeInSeconds, autoStart]);
   
+  // Use sub-agent for progressive data loading with error boundary
+  const [subAgentError, setSubAgentError] = useState<Error | null>(null);
+  
+  let subAgent;
+  try {
+    // Timer doesn't need MCP data enrichment, so minimal sub-agent
+    subAgent = {
+      loadingState: LoadingState.COMPLETE,
+      context: null,
+      enrichedData: {},
+      errors: {},
+      mcpActivity: {},
+    };
+  } catch (error) {
+    console.error('SubAgent initialization failed:', error);
+    setSubAgentError(error as Error);
+    subAgent = {
+      loadingState: LoadingState.COMPLETE,
+      context: null,
+      enrichedData: {},
+      errors: {},
+      mcpActivity: {},
+    };
+  }
+  
+  const loadingState = subAgent.loadingState;
+  
   // Local timer state
   const [state, setState] = useTamboComponentState<TimerState>(componentId, initialState);
 
@@ -74,6 +103,8 @@ export function RetroTimerEnhanced({
     console.log(`[RetroTimerEnhanced] Using fallback message ID: ${fallbackId}`);
     return fallbackId;
   }, [__tambo_message_id, componentId, initialMinutes]);
+  
+
 
   // Stable props object to prevent re-registration loops
   const stableProps = React.useMemo(() => ({
@@ -198,11 +229,31 @@ export function RetroTimerEnhanced({
   };
 
   return (
-    <div className={cn(
-      "bg-gradient-to-br from-gray-900 to-gray-800 rounded-xl p-6 text-white shadow-2xl",
-      "border border-gray-700 max-w-sm mx-auto",
-      state.isFinished && "ring-2 ring-red-500 ring-opacity-50"
-    )}>
+    <LoadingWrapper
+      state={loadingState}
+      skeleton={SkeletonPatterns.timer}
+      showLoadingIndicator={true}
+      loadingProgress={{
+        state: loadingState,
+        progress: 
+          loadingState === LoadingState.SKELETON ? 33 :
+          loadingState === LoadingState.PARTIAL ? 66 :
+          100,
+        message:
+          loadingState === LoadingState.SKELETON ? "Loading timer..." :
+          loadingState === LoadingState.PARTIAL ? "Initializing..." :
+          "Ready!",
+        eta:
+          loadingState === LoadingState.SKELETON ? 250 :
+          loadingState === LoadingState.PARTIAL ? 100 :
+          0,
+      }}
+    >
+      <div className={cn(
+        "bg-gradient-to-br from-gray-900 to-gray-800 rounded-xl p-6 text-white shadow-2xl",
+        "border border-gray-700 max-w-sm mx-auto",
+        state.isFinished && "ring-2 ring-red-500 ring-opacity-50"
+      )}>
       {/* Header */}
       <div className="text-center mb-6">
         <div className="flex items-center justify-center gap-2 mb-2">
@@ -289,5 +340,6 @@ export function RetroTimerEnhanced({
         {state.isRunning && ' • AI can update while running'}
       </div>
     </div>
+    </LoadingWrapper>
   );
 } 

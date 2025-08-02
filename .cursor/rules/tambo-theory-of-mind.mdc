@@ -1,6 +1,5 @@
 ---
 alwaysApply: false
-description: Full theory-of-mind, design intent, and implementation guide for Tambo PRE-99 to PRE-113 issues. Use as a reference for architecture, UX, and workflow when working on Tambo's advanced features and demo components.
 ---
 # Tambo Theory of Mind & Issue Implementation Guide (PRE-99 to PRE-113)
 

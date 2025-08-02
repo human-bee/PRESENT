@@ -94,16 +94,18 @@ export const uiUpdateTool: TamboTool = {
   description: `Update a UI component with new props. 
 
 USAGE:
-- ui_update("timer-id", {"initialMinutes": 7}) - Direct prop update
-- ui_update("card-id", {"title": "New Title"}) - Update any prop
+- ui_update("timer-id", {"initialMinutes": 7}) - Update timer duration
+- ui_update("weather-id", {"tideData": {...}}) - Add tide data to weather
+- ui_update("board-id", {"selectedTeam": "team-id"}) - Change kanban team
 
-The tool will automatically:
-1. Get component IDs if not provided
-2. Apply updates with proper error handling
-3. Prevent infinite loops with cooldowns
+EXAMPLES BY COMPONENT:
+• WeatherForecast: {"tideData": {"nextHigh": {"time": "6:45 AM", "height": "11.2 ft"}}}
+• Timer: {"initialMinutes": 10, "title": "New Name"}
+• ActionItemTracker: {"title": "Updated List"}
+• LinearKanbanBoard: {"selectedTeam": "team-id"}
 
 NEVER call with empty patch: ui_update("id", {}) ❌
-ALWAYS provide specific updates: ui_update("id", {"prop": "value"}) ✅`,
+ALWAYS provide the actual data: ui_update("id", {"tideData": {...}}) ✅`,
   tool: async (componentIdOrFirstArg: string | Record<string, unknown>, patchOrSecondArg?: Record<string, unknown>) => {
     // 🚫 AGGRESSIVE DUPLICATE PREVENTION using circuit breaker
     const callSignature = JSON.stringify({ componentIdOrFirstArg, patchOrSecondArg });
@@ -214,11 +216,34 @@ ALWAYS provide specific updates: ui_update("id", {"prop": "value"}) ✅`,
     
     // 🛑 REQUIRE EXPLICIT PATCH: No more regex madness - let Tambo AI handle this properly!
     if (!patch || Object.keys(patch).length === 0) {
+      // Try to help with component-specific examples
+      const component = ComponentRegistry.get(componentId);
+      let examples = "";
+      
+      if (component) {
+        switch (component.componentType) {
+          case "WeatherForecast":
+            examples = `\n\nFor WeatherForecast, try:\n{"tideData": {"nextHigh": {"time": "6:45 AM", "height": "11.2 ft"}, "nextLow": {"time": "1:30 PM", "height": "2.1 ft"}}}\n{"moonPhase": {"phase": "Waxing Crescent", "illumination": 23}}\n{"alerts": [{"type": "weather", "title": "High Wind Warning", "severity": "moderate"}]}`;
+            break;
+          case "RetroTimer":
+          case "RetroTimerEnhanced":
+            examples = `\n\nFor Timer, try:\n{"initialMinutes": 10}\n{"title": "New Timer Name"}\n{"autoStart": true}`;
+            break;
+          case "ActionItemTracker":
+            examples = `\n\nFor ActionItemTracker, try:\n{"title": "Updated Task List"}\n{"items": [{"text": "New task", "priority": "high"}]}`;
+            break;
+          case "LinearKanbanBoard":
+            examples = `\n\nFor LinearKanbanBoard, try:\n{"title": "Updated Board"}\n{"selectedTeam": "team-id"}`;
+            break;
+        }
+      }
+      
       return {
         status: 'ERROR',
-        message: `🚨 EMPTY PATCH! 🚨\n\nYou must specify what to update. Use the extract_update_params tool first to get proper parameters from user intent.\n\nExample: {"initialMinutes": 6}`,
+        message: `🚨 EMPTY PATCH! 🚨\n\nYou must specify what to update. The patch object cannot be empty.${examples}\n\nProvide the actual data you want to update in the component.`,
         error: 'EMPTY_PATCH',
-        guidance: 'Call extract_update_params first, then ui_update with the extracted params',
+        guidance: 'Provide specific update data based on what the user requested',
+        componentType: component?.componentType,
         __stop_indicator: true,
         __task_complete: true
       };

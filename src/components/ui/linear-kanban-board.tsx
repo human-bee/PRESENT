@@ -2,9 +2,12 @@
 
 import { z } from "zod";
 import { useTamboComponentState } from "@tambo-ai/react";
-import { useCallback, useEffect, useId, useState } from "react";
+import { useCallback, useEffect, useId, useState, useMemo } from "react";
 import { useComponentRegistration } from "@/lib/component-registry";
 import { cn } from "@/lib/utils";
+import { LoadingState } from "@/lib/with-progressive-loading";
+import { LoadingWrapper, SkeletonPatterns, Skeleton } from "@/components/ui/loading-states";
+import { useComponentSubAgent, SubAgentPresets } from "@/lib/component-subagent";
 
 /* --------------------------------------------------------------------------
  * Schema
@@ -105,7 +108,7 @@ const fallbackColumns = [
   "Blocked",
   "Review Required",
   "Done",
-].map((c) => ({ id: c, title: c }));
+].map((c, index) => ({ id: c, title: c, key: `fallback-${index}-${c}` }));
 
 /* --------------------------------------------------------------------------
  * Helper functions
@@ -153,10 +156,54 @@ export default function LinearKanbanBoard({
   // Derive a STABLE messageId that remains identical for this component tree
   const messageId = __tambo_message_id || instanceId;
 
-  /* 2. Persistent component state via Tambo */
+  /* Progressive Loading with Sub-Agent */
+  const [subAgentError, setSubAgentError] = useState<Error | null>(null);
+  
+  // Memoize sub-agent config to prevent re-creation
+  const subAgentConfig = useMemo(() => ({
+    ...SubAgentPresets.kanban,
+    dataEnricher: (context: any, tools: any) => {
+      // If we already have initial issues, skip MCP calls
+      if (initialIssues && initialIssues.length > 0) {
+        return [];
+      }
+      
+      // Otherwise, fetch data via MCP
+      return [
+        tools.linear?.execute({ 
+          action: "list_issues",
+          teamName: context.requestedTeam,
+          includeCompleted: context.showCompleted,
+        }),
+      ];
+    },
+  }), [initialIssues]);
+  
+  let subAgent;
+  try {
+    subAgent = useComponentSubAgent(subAgentConfig);
+  } catch (error) {
+    console.error('SubAgent initialization failed:', error);
+    setSubAgentError(error as Error);
+    subAgent = {
+      loadingState: LoadingState.COMPLETE,
+      context: null,
+      enrichedData: {},
+      errors: {},
+      mcpActivity: {},
+    };
+  }
+  
+  const loadingState = subAgent.loadingState;
+
+  /* 2. Use enriched data from sub-agent if available */
+  const linearData = subAgent.enrichedData.linear || {};
+  const enrichedIssues = linearData.issues || initialIssues || [];
+
+  /* 3. Persistent component state via Tambo */
   const [state, setState] = useTamboComponentState<KanbanState>(instanceId, {
     selectedTeam: teams[0]?.id ?? "",
-    issues: initialIssues ?? [],
+    issues: enrichedIssues,
     draggedIssue: null,
     pendingUpdates: [],
     updateMessage: "",
@@ -209,9 +256,9 @@ export default function LinearKanbanBoard({
 
   /* Derived helpers */
   // Build columns dynamically from statuses if provided; otherwise use fallback
-  const columns = (statuses?.length ? statuses : fallbackColumns).map((s: any) => {
-    if (typeof s === "string") return { id: s, title: s };
-    return { id: s.name, title: s.name };
+  const columns = (statuses?.length ? statuses : fallbackColumns).map((s: any, index: number) => {
+    if (typeof s === "string") return { id: s, title: s, key: `col-${index}-${s}` };
+    return { id: s.name || s.id, title: s.name || s.id, key: `col-${index}-${s.id || s.name}` };
   });
 
   // Normalise status comparison to handle slight variations (spaces, case)
@@ -284,9 +331,59 @@ export default function LinearKanbanBoard({
     setTimeout(() => setState((s) => (s ? { ...s, updateMessage: "" } : s)), 2000);
   };
 
+  /* Custom Kanban Skeleton */
+  const kanbanSkeleton = (
+    <div className="p-6 bg-gray-50">
+      <div className="mb-6">
+        <Skeleton className="h-10 w-64 mb-4" />
+        <Skeleton className="h-8 w-32" />
+      </div>
+      <div className="flex gap-6 overflow-x-auto pb-4">
+        {[1, 2, 3, 4].map((i) => (
+          <div key={i} className="flex-shrink-0 w-80">
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+              <div className="p-4 border-b border-gray-200 bg-gray-50 rounded-t-lg">
+                <Skeleton className="h-5 w-24" />
+              </div>
+              <div className="p-4 space-y-3">
+                <Skeleton className="h-24" />
+                <Skeleton className="h-24" />
+                <Skeleton className="h-24" />
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+
   /* UI */
   return (
-    <div className={cn("p-6 bg-gray-50", className)}>
+    <LoadingWrapper
+      state={loadingState}
+      skeleton={kanbanSkeleton}
+      showLoadingIndicator={true}
+      loadingProgress={{
+        state: loadingState,
+        progress: 
+          loadingState === LoadingState.SKELETON ? 33 :
+          loadingState === LoadingState.PARTIAL ? 66 :
+          100,
+        message:
+          subAgentError ? "Using offline data..." :
+          loadingState === LoadingState.SKELETON ? "Connecting to Linear..." :
+          loadingState === LoadingState.PARTIAL ? (
+            subAgent.mcpActivity?.linear ? "Fetching issues..." :
+            "Processing data..."
+          ) :
+          "Ready!",
+        eta:
+          loadingState === LoadingState.SKELETON ? 400 :
+          loadingState === LoadingState.PARTIAL ? 200 :
+          0,
+      }}
+    >
+      <div className={cn("p-6 bg-gray-50", className)}>
       {/* Header */}
       <div className="mb-6">
         <h1 className="text-3xl font-bold text-gray-900 mb-4">{title}</h1>
@@ -357,7 +454,7 @@ export default function LinearKanbanBoard({
         {columns.map((column) => {
           const columnIssues = getIssuesForColumn(column.id);
           return (
-            <div key={column.id} className="flex-shrink-0 w-80">
+            <div key={column.key} className="flex-shrink-0 w-80">
               <div className="bg-white rounded-lg shadow-sm border border-gray-200 h-fit">
                 <div className="p-4 border-b border-gray-200 bg-gray-50 rounded-t-lg">
                   <h2 className="font-semibold text-gray-900 text-sm flex items-center justify-between">
@@ -402,9 +499,9 @@ export default function LinearKanbanBoard({
                       <h3 className="font-medium text-gray-900 text-sm mb-3 leading-tight">{issue.title}</h3>
                       {issue.labels && issue.labels.length > 0 && (
                         <div className="flex flex-wrap gap-1 mb-2">
-                          {issue.labels.map((label) => (
+                          {issue.labels.map((label, labelIndex) => (
                             <span
-                              key={label}
+                              key={`${issue.id}-label-${labelIndex}-${label}`}
                               className={`px-2 py-1 rounded text-xs font-medium ${getLabelColor(label)}`}
                             >
                               {label}
@@ -459,5 +556,6 @@ export default function LinearKanbanBoard({
         <p className="mt-1">This approach provides smooth UI with reliable backend sync</p>
       </div>
     </div>
+    </LoadingWrapper>
   );
 } 

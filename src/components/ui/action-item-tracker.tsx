@@ -31,7 +31,7 @@
 
 import { cn } from "@/lib/utils";
 import { useTamboComponentState } from "@tambo-ai/react";
-import { useState, useEffect, useId } from "react";
+import { useState, useEffect, useId, useMemo } from "react";
 import { z } from "zod";
 import { 
   Plus, 
@@ -48,6 +48,9 @@ import {
   Save,
   X
 } from "lucide-react";
+import { LoadingState } from "@/lib/with-progressive-loading";
+import { LoadingWrapper, SkeletonPatterns } from "@/components/ui/loading-states";
+import { useComponentSubAgent, SubAgentPresets } from "@/lib/component-subagent";
 
 // Define priority levels
 export const priorityLevels = ["low", "medium", "high", "urgent"] as const;
@@ -477,6 +480,43 @@ export function ActionItemTracker({
   
   // Generate a stable unique ID that is consistent between server and client renders
   const instanceId = useId();
+  
+  // Use sub-agent for progressive data loading with error boundary
+  const [subAgentError, setSubAgentError] = useState<Error | null>(null);
+  
+  // Memoize sub-agent config to prevent re-creation
+  const subAgentConfig = useMemo(() => ({
+    ...SubAgentPresets.actionItems,
+    dataEnricher: (context: any, tools: any) => {
+      // If we already have initial items, skip MCP calls
+      if (initialItems && initialItems.length > 0) {
+        return [];
+      }
+      
+      // Otherwise, fetch data via MCP
+      return [
+        tools.linear?.execute({ action: "list_issues" }),
+        tools.github?.execute({ action: "list_issues" }),
+      ];
+    },
+  }), [initialItems]);
+  
+  let subAgent;
+  try {
+    subAgent = useComponentSubAgent(subAgentConfig);
+  } catch (error) {
+    console.error('SubAgent initialization failed:', error);
+    setSubAgentError(error as Error);
+    subAgent = {
+      loadingState: LoadingState.COMPLETE,
+      context: null,
+      enrichedData: {},
+      errors: {},
+      mcpActivity: {},
+    };
+  }
+  
+  const loadingState = subAgent.loadingState;
 
   // Initialize Tambo component state
   const [state, setState] = useTamboComponentState<ActionItemTrackerState>(
@@ -493,6 +533,8 @@ export function ActionItemTracker({
       showAddForm: false,
     }
   );
+  
+
 
   // Generate new ID
   const generateId = () => `ai-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
@@ -607,7 +649,32 @@ export function ActionItemTracker({
   const totalCount = state?.items.length || 0;
 
   return (
-    <div className={cn("w-full max-w-4xl mx-auto", className)} {...props}>
+    <LoadingWrapper
+      state={loadingState}
+      skeleton={SkeletonPatterns.list(5)}
+      showLoadingIndicator={true}
+      loadingProgress={{
+        state: loadingState,
+        progress: 
+          loadingState === LoadingState.SKELETON ? 33 :
+          loadingState === LoadingState.PARTIAL ? 66 :
+          100,
+        message:
+          subAgentError ? "Using offline data..." :
+          loadingState === LoadingState.SKELETON ? "Loading items..." :
+          loadingState === LoadingState.PARTIAL ? (
+            subAgent.mcpActivity?.linear ? "Fetching Linear issues..." :
+            subAgent.mcpActivity?.github ? "Loading GitHub issues..." :
+            "Organizing tasks..."
+          ) :
+          "Ready!",
+        eta:
+          loadingState === LoadingState.SKELETON ? 300 :
+          loadingState === LoadingState.PARTIAL ? 150 :
+          0,
+      }}
+    >
+      <div className={cn("w-full max-w-4xl mx-auto", className)} {...props}>
       {/* Header */}
       <div className="mb-6">
         <div className="flex items-center justify-between mb-4">
@@ -771,6 +838,7 @@ export function ActionItemTracker({
         )}
       </div>
     </div>
+    </LoadingWrapper>
   );
 }
 
