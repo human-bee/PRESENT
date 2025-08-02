@@ -28,6 +28,8 @@ interface TldrawWithCollaborationProps {
   componentStore?: Map<string, ReactNode>;
   className?: string;
   onTranscriptToggle?: () => void;
+  onHelpClick?: () => void;
+  onComponentToolboxToggle?: () => void;
   readOnly?: boolean;
 }
 
@@ -112,6 +114,8 @@ export function TldrawWithCollaboration({
   componentStore,
   className,
   onTranscriptToggle,
+  onHelpClick,
+  onComponentToolboxToggle,
   readOnly = false,
 }: TldrawWithCollaborationProps) {
   const livekitCtx = useContext(CanvasLiveKitContext);
@@ -160,7 +164,7 @@ export function TldrawWithCollaboration({
   // Create memoised overrides & components
   const overrides = useMemo(() => createCollaborationOverrides(), []);
   const MainMenuWithPermissions = useCallback(
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     (props: Record<string, unknown>) => (
       <CustomMainMenu {...(props as any)} readOnly={computedReadOnly} />
     ),
@@ -173,11 +177,13 @@ export function TldrawWithCollaboration({
         <CustomToolbarWithTranscript
           {...props}
           onTranscriptToggle={onTranscriptToggle}
+          onHelpClick={onHelpClick}
+          onComponentToolboxToggle={onComponentToolboxToggle}
         />
       ),
       MainMenu: MainMenuWithPermissions as any,
     }),
-    [onTranscriptToggle, MainMenuWithPermissions]
+    [onTranscriptToggle, onHelpClick, onComponentToolboxToggle, MainMenuWithPermissions]
   );
 
   const handleMount = useCallback(
@@ -271,7 +277,7 @@ export function TldrawWithCollaboration({
   }, [onTranscriptToggle]);
 
   // Ready flag: hide overlay once sync store reports ready (status !== 'loading')
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   const isStoreReady = !!store && (store as any).status !== 'loading';
 
   return (

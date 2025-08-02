@@ -30,7 +30,7 @@ export function createLiveKitBus(room: Room | null | undefined) {
       //    teardown.
       //    Ref: https://docs.livekit.io/client-sdk-js/interfaces/Room.html#state
       if (room.state !== 'connected') {
-        // eslint-disable-next-line no-console
+         
         console.warn('[LiveKitBus] Skipping publishData – room not connected.', {
           topic,
           currentState: room.state,
@@ -44,7 +44,7 @@ export function createLiveKitBus(room: Room | null | undefined) {
           { reliable: true, topic }
         );
       } catch (err) {
-        // eslint-disable-next-line no-console
+         
         console.error('[LiveKitBus] Failed to send', topic, err);
       }
     },
@@ -63,7 +63,7 @@ export function createLiveKitBus(room: Room | null | undefined) {
             const msg = JSON.parse(new TextDecoder().decode(data));
             handler(msg);
           } catch (err) {
-            // eslint-disable-next-line no-console
+             
             console.error('[LiveKitBus] Failed to decode', err);
           }
         }

@@ -54,6 +54,10 @@ import LiveCaptions, {
 import LinearKanbanBoard, {
   linearKanbanSchema,
 } from "@/components/ui/linear-kanban-board";
+import {
+  OnboardingGuide,
+  onboardingGuideSchema,
+} from "@/components/ui/onboarding-guide";
 import type { TamboComponent } from "@tambo-ai/react";
 import { TamboTool } from "@tambo-ai/react";
 import { z } from "zod";
@@ -525,6 +529,20 @@ export const generateUiComponentTool: TamboTool = {
     }
 
     // Fallback - try to infer from common UI terms
+    else if (lower.includes("help") || lower.includes("onboarding") || lower.includes("getting started") || 
+             lower.includes("how do i") || lower.includes("guide") || lower.includes("tutorial")) {
+      componentType = "OnboardingGuide";
+      
+      // Determine context based on current page or other indicators
+      if (lower.includes("canvas")) {
+        props.context = "canvas";
+      } else if (lower.includes("voice") || lower.includes("chat")) {
+        props.context = "voice";  
+      } else {
+        props.context = "general";
+      }
+      props.autoStart = true;
+    }
     else if (lower.includes("button") || lower.includes("click")) {
       componentType = "RetroTimerEnhanced"; // Default to timer as most common interactive component
       props.initialMinutes = 5;
@@ -535,7 +553,7 @@ export const generateUiComponentTool: TamboTool = {
       return { 
         success: false, 
         error: "UNSUPPORTED_PROMPT",
-        message: `Could not determine component type from prompt: "${prompt}". Supported components: DocumentEditor, RetroTimerEnhanced, WeatherForecast, YoutubeEmbed, AIImageGenerator, ActionItemTracker, ResearchPanel, LivekitRoomConnector, LivekitParticipantTile, LiveCaptions, LinearKanbanBoard.`
+        message: `Could not determine component type from prompt: "${prompt}". Supported components: DocumentEditor, RetroTimerEnhanced, WeatherForecast, YoutubeEmbed, AIImageGenerator, ActionItemTracker, ResearchPanel, LivekitRoomConnector, LivekitParticipantTile, LiveCaptions, LinearKanbanBoard, OnboardingGuide.`
       };
     }
 
@@ -784,6 +802,13 @@ export const components: TamboComponent[] = [
       "A comprehensive Linear project management kanban board with drag-and-drop functionality and MCP integration. Features multiple team support, customizable status columns (Backlog, Todo, In Progress, Delegate to Agent, Blocked, Review Required, Done), issue priority visualization with color coding, assignee management, project categorization, and pending update queue system. Supports optimistic UI updates with drag-and-drop issue movement between columns, clipboard export of pending changes, and hybrid sync workflow for reliable Linear API integration. Perfect for agile project management, sprint planning, issue tracking, and team collaboration workflows. Can be populated with real Linear data via MCP or used with demo data.",
     component: LinearKanbanBoard,
     propsSchema: linearKanbanSchema,
+  },
+  {
+    name: "OnboardingGuide", 
+    description:
+      "Interactive onboarding guide that teaches users how to use voice commands, create components, and navigate the canvas. Context-aware for different pages (canvas vs voice). Responds to 'show help', 'how do I', 'getting started', or 'onboarding'. Perfect for new user orientation and feature discovery.",
+    component: OnboardingGuide,
+    propsSchema: onboardingGuideSchema,
   },
   // Add more components here
 ];

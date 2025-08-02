@@ -18,6 +18,8 @@ interface TldrawWithPersistenceProps {
   componentStore?: Map<string, ReactNode>;
   className?: string;
   onTranscriptToggle?: () => void;
+  onHelpClick?: () => void;
+  onComponentToolboxToggle?: () => void;
 }
 
 // Create a context for transcript panel state
@@ -245,8 +247,16 @@ function CustomMainMenu({ readOnly = false }: { readOnly?: boolean } & any) {
   );
 }
 
-// Custom toolbar with transcript button
-function CustomToolbarWithTranscript({ onTranscriptToggle }: { onTranscriptToggle?: () => void }) {
+// Custom toolbar with transcript, help, and component toolbox buttons
+function CustomToolbarWithTranscript({ 
+  onTranscriptToggle, 
+  onHelpClick,
+  onComponentToolboxToggle
+}: { 
+  onTranscriptToggle?: () => void;
+  onHelpClick?: () => void;
+  onComponentToolboxToggle?: () => void;
+}) {
   const { user } = useAuth();
 
   if (!user) {
@@ -259,8 +269,28 @@ function CustomToolbarWithTranscript({ onTranscriptToggle }: { onTranscriptToggl
   return (
     <DefaultToolbar>
       <DefaultToolbarContent />
-      {onTranscriptToggle && (
-        <div className="tlui-toolbar__tools">
+      <div className="tlui-toolbar__tools">
+        {/* Component Toolbox button */}
+        {onComponentToolboxToggle && (
+          <button
+            className="tlui-button tlui-button__tool"
+            onClick={onComponentToolboxToggle}
+            title="Component Toolbox - Browse and add components"
+            style={{
+              color: 'rgb(29, 29, 29)',
+            }}
+          >
+            <div 
+              className="tlui-icon tlui-button__icon"
+              style={{
+                mask: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='13.5' cy='6.5' r='.5'%3E%3C/circle%3E%3Ccircle cx='17.5' cy='10.5' r='.5'%3E%3C/circle%3E%3Ccircle cx='8.5' cy='7.5' r='.5'%3E%3C/circle%3E%3Ccircle cx='6.5' cy='12.5' r='.5'%3E%3C/circle%3E%3Cpath d='M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z'%3E%3C/path%3E%3C/svg%3E") center 100% / 100% no-repeat`
+              }}
+            />
+          </button>
+        )}
+
+        {/* Transcript button */}
+        {onTranscriptToggle && (
           <button
             className="tlui-button tlui-button__tool"
             onClick={onTranscriptToggle}
@@ -276,15 +306,38 @@ function CustomToolbarWithTranscript({ onTranscriptToggle }: { onTranscriptToggl
               }}
             />
           </button>
-        </div>
-      )}
+        )}
+        
+        {/* Help button */}
+        {onHelpClick && (
+          <button
+            className="tlui-button tlui-button__tool"
+            onClick={onHelpClick}
+            title="Show help and onboarding"
+            style={{
+              color: 'rgb(29, 29, 29)',
+            }}
+          >
+            <div 
+              className="tlui-icon tlui-button__icon"
+              style={{
+                mask: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='10'%3E%3C/circle%3E%3Cpath d='M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3'%3E%3C/path%3E%3Cpath d='M12 17h.01'%3E%3C/path%3E%3C/svg%3E") center 100% / 100% no-repeat`
+              }}
+            />
+          </button>
+        )}
+      </div>
     </DefaultToolbar>
   );
 }
 
 // Custom components with persistence toolbar only (simplify for now)
-const createPersistenceComponents = (onTranscriptToggle?: () => void): TLComponents => ({
-  Toolbar: (props) => <CustomToolbarWithTranscript {...props} onTranscriptToggle={onTranscriptToggle} />,
+const createPersistenceComponents = (
+  onTranscriptToggle?: () => void, 
+  onHelpClick?: () => void,
+  onComponentToolboxToggle?: () => void
+): TLComponents => ({
+  Toolbar: (props) => <CustomToolbarWithTranscript {...props} onTranscriptToggle={onTranscriptToggle} onHelpClick={onHelpClick} onComponentToolboxToggle={onComponentToolboxToggle} />,
   MainMenu: CustomMainMenu,
 });
 
@@ -293,7 +346,9 @@ export function TldrawWithPersistence({
   shapeUtils, 
   componentStore, 
   className,
-  onTranscriptToggle
+  onTranscriptToggle,
+  onHelpClick,
+  onComponentToolboxToggle
 }: TldrawWithPersistenceProps) {
   const [editor, setEditor] = useState<Editor | null>(null);
 
@@ -330,7 +385,7 @@ export function TldrawWithPersistence({
         <Tldraw
           onMount={handleMount}
           shapeUtils={shapeUtils || []}
-          components={createPersistenceComponents(onTranscriptToggle)}
+          components={createPersistenceComponents(onTranscriptToggle, onHelpClick, onComponentToolboxToggle)}
           overrides={overrides}
           forceMobile={true}
         />

@@ -50,6 +50,7 @@ import { Toaster } from "react-hot-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { systemRegistry } from "@/lib/system-registry";
 import type { StateEnvelope } from "@/lib/shared-state";
+import { ComponentToolbox } from "./component-toolbox";
 
 // Dynamic imports for heavy tldraw components - only load when needed
 const TldrawCanvas = dynamic(() => import("./tldraw-canvas").then(mod => ({ default: mod.TldrawCanvas })), {
@@ -126,6 +127,13 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
   const { user } = useAuth();
   const [editor, setEditor] = useState<Editor | null>(null);
   const previousThreadId = useRef<string | null>(null);
+  
+  // Component toolbox state
+  const [isComponentToolboxOpen, setIsComponentToolboxOpen] = useState(false);
+  
+  const toggleComponentToolbox = useCallback(() => {
+    setIsComponentToolboxOpen(prev => !prev);
+  }, []);
 
   // Map message IDs to tldraw shape IDs
   const [messageIdToShapeIdMap, setMessageIdToShapeIdMap] = useState<Map<string, string>>(new Map());
@@ -149,7 +157,7 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
   // Dynamically load the runtime class for use on the client (type-only import above is erased at runtime)
   let RuntimeTamboShapeUtil: typeof import('./tldraw-canvas').TamboShapeUtil | undefined;
   if (typeof window !== 'undefined') {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
+     
     RuntimeTamboShapeUtil = require('./tldraw-canvas').TamboShapeUtil;
   }
 
@@ -356,6 +364,40 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
     return () => clearTimeout(timeoutId);
   }, [thread?.messages, editor, addComponentToCanvas, addedMessageIds]);
 
+  // Helper function to show onboarding
+  const showOnboarding = useCallback(() => {
+    console.log('🆘 [CanvasSpace] Help button clicked - dispatching tambo:toolCall event');
+    
+    // Use the Tambo generate_ui_component tool instead
+    window.dispatchEvent(
+      new CustomEvent("tambo:toolCall", {
+        detail: {
+          tool: "generate_ui_component",
+          args: ["show onboarding guide for canvas"]
+        }
+      })
+    );
+    
+    console.log('✅ [CanvasSpace] tambo:toolCall event dispatched successfully');
+  }, []);
+
+  // Component creation handler for the toolbox
+  const handleComponentCreate = useCallback((componentType: string) => {
+    console.log('🔧 [ComponentToolbox] Creating component:', componentType);
+    
+    // Use the Tambo generate_ui_component tool to create the component
+    window.dispatchEvent(
+      new CustomEvent("tambo:toolCall", {
+        detail: {
+          tool: "generate_ui_component",
+          args: [`create ${componentType} component`]
+        }
+      })
+    );
+    
+    console.log('✅ [ComponentToolbox] Component creation event dispatched successfully');
+  }, []);
+
   // Export functionality is now handled by TldrawWithPersistence component
 
   return (
@@ -376,7 +418,16 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
         componentStore={componentStore.current}
         className="absolute inset-0"
         onTranscriptToggle={onTranscriptToggle}
+        onHelpClick={showOnboarding}
+        onComponentToolboxToggle={toggleComponentToolbox}
         readOnly={false}
+      />
+      
+      {/* Component Toolbox */}
+      <ComponentToolbox
+        isOpen={isComponentToolboxOpen}
+        onToggle={toggleComponentToolbox}
+        onComponentCreate={handleComponentCreate}
       />
       {/*
         The following is a placeholder for if you want to show some UI when the editor is not loaded

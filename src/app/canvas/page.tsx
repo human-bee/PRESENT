@@ -23,7 +23,6 @@ import { Room, ConnectionState, RoomEvent, VideoPresets, RoomOptions } from "liv
 import { RoomContext } from "@livekit/components-react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/use-auth";
-import { SpeechTranscription } from '@/components/ui/speech-transcription';
 import { ToolDispatcher } from '@/components/tool-dispatcher';
 import { SystemRegistrySync } from '@/components/ui/system-registry-sync';
 // TODO: Investigate best way to "go back" to CanvasSpace once we have a better way to handle adding/updating/managing the state of multiple components on the canvas simultaneously

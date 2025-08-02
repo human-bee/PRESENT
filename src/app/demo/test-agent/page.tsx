@@ -117,7 +117,7 @@ export default function TestAgent() {
       addLog(`🔒 Secure context: ${isSecure} (${window.location.protocol}//${window.location.host})`);
       
       // Try different RTCPeerConnection constructors
-      let RTCPeerConnectionConstructor = window.RTCPeerConnection || 
+      const RTCPeerConnectionConstructor = window.RTCPeerConnection || 
                                         (window as any).webkitRTCPeerConnection || 
                                         (window as any).mozRTCPeerConnection;
                                         

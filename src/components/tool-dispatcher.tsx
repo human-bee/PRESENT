@@ -643,7 +643,7 @@ Generate a ${componentType} component based on the transcript content and compon
         if (items.length === 0) return null;
 
         // If wantsOfficial, prioritise official channels
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+         
         const scored = items.map((item: any) => {
           const channelTitle: string = item.snippet?.channelTitle || '';
           const officialScore = flags.wantsOfficial && /official|vevo/i.test(channelTitle) ? 1000 : 0;
@@ -651,7 +651,7 @@ Generate a ${componentType} component based on the transcript content and compon
           return { item, score: officialScore + viewScore };
         });
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+         
         scored.sort((a: any, b: any) => b.score - a.score);
         return scored[0].item;
       })();
@@ -1111,6 +1111,48 @@ Please consider both the processed summary above and the original transcript con
     
     return () => clearInterval(interval);
   }, [maxPendingAge, log]);
+
+  // Bridge DOM tambo:toolCall events to LiveKit bus events
+  useEffect(() => {
+    const handleDomToolCall = (event: CustomEvent) => {
+      log('🌉 [ToolDispatcher] Bridging DOM tambo:toolCall to LiveKit bus:', event.detail);
+      
+      try {
+        const { tool, args } = event.detail;
+        
+        // Convert DOM event to ToolCallEvent format
+        const toolCallEvent: ToolCallEvent = {
+          id: generateId(),
+          roomId: room?.name || 'default',
+          type: 'tool_call',
+          payload: {
+            tool: tool,
+            params: Array.isArray(args) && args.length > 0 ? { prompt: args[0] } : { prompt: '' },
+            context: {
+              source: 'dom_event',
+              timestamp: Date.now(),
+              intent: 'ui_component'
+            }
+          },
+          timestamp: Date.now(),
+          source: 'system'
+        };
+        
+        // Execute the tool call directly (no need to go through LiveKit bus for local events)
+        executeToolCall(toolCallEvent);
+        
+      } catch (error) {
+        log('❌ [ToolDispatcher] Failed to bridge DOM event:', error);
+      }
+    };
+
+    // Listen for DOM tambo:toolCall events
+    window.addEventListener('tambo:toolCall', handleDomToolCall as EventListener);
+    
+    return () => {
+      window.removeEventListener('tambo:toolCall', handleDomToolCall as EventListener);
+    };
+  }, [log, room, executeToolCall]);
 
   // Log dispatcher status
   useEffect(() => {
