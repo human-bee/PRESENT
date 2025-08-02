@@ -1,8 +1,12 @@
 "use client";
 
-import { Tldraw, HTMLContainer as TldrawHTMLContainer, RecordProps, T, Editor, BaseBoxShapeUtil, TLBaseShape } from 'tldraw';
+import { Tldraw, HTMLContainer as TldrawHTMLContainer, RecordProps, T, Editor, BaseBoxShapeUtil, TLBaseShape, createShapeId, useEditor } from 'tldraw';
 import { ReactNode, useRef, useEffect, createContext, useContext, Component, ErrorInfo, useState } from 'react';
+import React from "react";
 import { CanvasSyncAdapter } from '../CanvasSyncAdapter';
+import { nanoid } from 'nanoid';
+// 1. Import ComponentToolbox
+import { ComponentToolbox } from './component-toolbox';
 
 // Create context for component store
 export const ComponentStoreContext = createContext<Map<string, ReactNode> | null>(null);
@@ -202,6 +206,119 @@ export class TamboShapeUtil extends BaseBoxShapeUtil<TamboShape> {
   // Prevent moving pinned shapes
   override canBind = ({ fromShapeType }: { fromShapeType: string }) => {
     return fromShapeType !== 'tambo';
+  };
+}
+
+// Component wrapper for Toolbox inside shape
+function ToolboxShapeComponent({ shape }: { shape: TamboShape }) {
+  // Use TLDraw's built-in hook to get the editor instead of context
+  const editor = useEditor();
+  const componentStore = useContext(ComponentStoreContext);
+  
+  const handleComponentCreate = (componentType: string) => {
+    console.log('🔧 Creating component from toolbox:', componentType);
+    
+    if (!editor || !componentStore) {
+      console.error('Editor or component store not available', { editor: !!editor, componentStore: !!componentStore });
+      return;
+    }
+    
+    // Import components from tambo
+    const { components } = require('@/lib/tambo');
+    const Component = components.find((c: any) => c.name === componentType)?.component;
+    if (!Component) {
+      console.error('Component not found:', componentType);
+      return;
+    }
+    
+    const shapeId = createShapeId(nanoid());
+    const componentInstance = React.createElement(Component, { __tambo_message_id: shapeId });
+    componentStore.set(shapeId, componentInstance);
+    
+    const viewport = editor.getViewportPageBounds();
+    const x = viewport ? viewport.midX - 150 : 0;
+    const y = viewport ? viewport.midY - 100 : 0;
+    
+    editor.createShape({
+      id: shapeId,
+      type: 'tambo',
+      x,
+      y,
+      props: {
+        w: 300,
+        h: 200,
+        tamboComponent: shapeId,
+        name: componentType,
+      }
+    });
+    
+    console.log('✅ Component created successfully:', componentType);
+  };
+  
+  return (
+    <div
+      style={{
+        width: '100%',
+        height: '100%',
+        border: '2px solid var(--color-accent)',
+        borderRadius: '12px',
+        background: 'var(--color-panel)',
+        boxShadow: '0 2px 16px 0 rgba(0,0,0,0.10)',
+        overflow: 'hidden',
+        display: 'flex',
+        flexDirection: 'column',
+      }}
+    >
+      <ComponentToolbox onComponentCreate={handleComponentCreate} />
+    </div>
+  );
+}
+
+// 2. Add ToolboxShapeUtil
+export class ToolboxShapeUtil extends BaseBoxShapeUtil<TamboShape> {
+  static override type = "toolbox" as const;
+  static override props = {
+    w: T.number,
+    h: T.number,
+    name: T.string,
+  } satisfies RecordProps<TamboShape>;
+
+  override getDefaultProps(): TamboShape['props'] {
+    return {
+      w: 340,
+      h: 320,
+      name: "Component Toolbox",
+    };
+  }
+
+  override component(shape: TamboShape) {
+    return (
+      <TldrawHTMLContainer
+        id={shape.id}
+        style={{
+          display: 'flex',
+          alignItems: 'flex-start',
+          justifyContent: 'flex-start',
+          overflow: 'visible',
+          pointerEvents: 'all',
+          position: 'relative',
+          zIndex: 1000,
+        }}
+      >
+        <ToolboxShapeComponent shape={shape} />
+      </TldrawHTMLContainer>
+    );
+  }
+
+  override indicator(shape: TamboShape) {
+    return <rect width={shape.props.w} height={shape.props.h} fill="transparent" />;
+  }
+
+  override canEdit = () => false;
+  override canResize = () => true;
+  override isAspectRatioLocked = () => false;
+  override canBind = ({ fromShapeType }: { fromShapeType: string }) => {
+    return fromShapeType !== 'toolbox';
   };
 }
 

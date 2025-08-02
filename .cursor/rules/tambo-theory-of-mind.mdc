@@ -1,0 +1,58 @@
+---
+alwaysApply: false
+description: Full theory-of-mind, design intent, and implementation guide for Tambo PRE-99 to PRE-113 issues. Use as a reference for architecture, UX, and workflow when working on Tambo's advanced features and demo components.
+---
+# Tambo Theory of Mind & Issue Implementation Guide (PRE-99 to PRE-113)
+
+## Foundational Principles (PRE-99+)
+- **Every component must ship with meaningful, interactive defaults**: No empty states; always pre-fill with demo data, context, or a quick-setup wizard.
+- **Configuration UIs are required**: All components must expose settings for key parameters, with context detection and guided setup where possible.
+- **Demo mode is non-negotiable**: Components must be immediately useful and showcase their capabilities out of the box.
+- **No skeleton components**: Never ship "just UI"—always connect to real data, backend, or context from day one.
+- **Canvas-first thinking**: Components are designed for interactive, persistent, collaborative canvas use from the start.
+- **State is sacred**: Use Tambo state management for all important data; avoid local-only state.
+- **Fail gracefully**: Always provide fallbacks, skeletons, and helpful error states.
+- **Delight by default**: Animations, transitions, and micro-interactions are required for every component.
+
+## TLDraw & Canvas Integration (PRE-100, PRE-101, PRE-105, PRE-106, PRE-107)
+- **Custom shapes must match perimeter and be resizable**: Shape bounds, resize handles, and transforms must be in sync with TLDraw's native system.
+- **No visual interference**: The blue perimeter must not obscure or move independently of custom shapes.
+- **Agent board control**: Tambo agents must be able to move the camera, lock shapes, create notes, change themes, and orchestrate the board via voice or AI.
+- **Spatial awareness**: Agents must understand canvas state, component positions, and user focus for context-aware actions and suggestions.
+- **Full sync across users**: Canvas, thread, and transcript state must persist and sync in real-time for all participants, using Supabase as the source of truth.
+
+## Fact Checking, Topic Tracking, and Personalization (PRE-102, PRE-103, PRE-104)
+- **Fact checker components must run subagents**: Use Claude SDK or similar to verify claims, provide sources, and stream results in real-time.
+- **Topic tracker components must analyze all content**: Extract, cluster, and visualize topics from chat, voice, canvas, and documents.
+- **Personal rolodex/cheatsheet components**: Must support dynamic, card-based, privacy-aware, and collaborative profile sharing.
+
+## Onboarding, UI Update, and Decision Engine (PRE-108, PRE-109, PRE-110)
+- **Onboarding must be instant**: Demo canvas loads in <3s, first interaction in <5s, and "wow moment" in <30s, with guest mode and progressive registration.
+- **UI update tool must work on every component**: All components must implement a universal update interface, with standardized request/response, error handling, and undo/redo.
+- **Decision engine output must flow directly to UI**: Voice → transcript → decision → UI must be seamless, with robust error handling, logging, and async flow management.
+
+## Unified Pipeline, Subagent, and Progressive Loading Principles (PRE-110+)
+- **Eliminate sequential handoffs**: Merge transcription, decision, and component creation into a single, streaming agent for <400ms speech-to-UI.
+- **Tool-calling = Component creation**: Each tool call should directly instantiate a component, with context-aware enrichment plans.
+- **Subagent architecture**: Each component can spawn a subagent for continuous enrichment, data fetching, and adaptation (replacing one-off ui_update calls).
+- **Parallel enrichment**: Components appear instantly in a pre-filled state, then are progressively enhanced as subagents fetch data (MCP, context, etc.).
+- **Streaming context**: The main agent should always have access to transcript history, canvas state, and active components for context-rich decisions.
+- **Performance target**: <400ms from voice to component on canvas, with enrichment happening in parallel.
+
+## Progressive Loading & Visual Feedback (PRE-111)
+- **Skeleton-first rendering**: Components should render instantly as skeletons, then fill in as data arrives (partial → complete → enriched).
+- **Visual feedback**: Use shimmer, progress rings, MCP activity indicators, and smart loading messages to show users what is happening.
+- **Consistent loading states**: All components should implement a unified loading state system (skeleton, partial, complete, error).
+- **Subagent visual coordination**: Subagents should report their activity to a visual feedback coordinator to avoid animation chaos.
+- **User experience**: Prioritize perceived performance and clarity—users should always know what is happening and never stare at a blank canvas.
+
+## Demo Component Patterns (PRE-112, PRE-113)
+- **Debate Scorecard**: Tracks argument quality, fact-checking, BS meter, and learning outcomes in a retro boxing/gameboy style. Uses subagents for fact-checking, BS detection, and source finding. Focuses on educational, respectful discourse.
+- **Creative Flow Studio**: Tracks inspiration, flow, synergy, and creative momentum for music/creative sessions. Captures ideas, mood, samples, and arrangement in real-time. Uses subagents for vibe analysis, idea extraction, and sample management. Focuses on collaborative building and inspiration.
+
+## General Principles
+- **No blocking operations**: Main agent should always be ready for new input; subagents handle enrichment in the background.
+- **Progressive enhancement**: Components should always be improving as more data/context arrives.
+- **Delight by default**: Visual feedback and micro-interactions are non-negotiable for user trust and engagement.
+- **Architecture flexibility**: The same pipeline and subagent system should support both adversarial (debate) and collaborative (creative) use cases.
+- **Growth mindset**: Both demo components should reward learning, humility, and positive collaboration, not just "winning".

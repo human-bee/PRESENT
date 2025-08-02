@@ -40,28 +40,20 @@
 
 import { cn } from "@/lib/utils";
 import { useTamboThread } from "@tambo-ai/react";
-import { useEffect, useRef, useState, useCallback, useMemo } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import * as React from "react";
 import dynamic from "next/dynamic";
 import type { TamboThreadMessage } from "@tambo-ai/react";
 import type { Editor } from 'tldraw';
 import { nanoid } from 'nanoid';
 import { Toaster } from "react-hot-toast";
-import { useAuth } from "@/hooks/use-auth";
+
 import { systemRegistry } from "@/lib/system-registry";
-import type { StateEnvelope } from "@/lib/shared-state";
-import { ComponentToolbox } from "./component-toolbox";
+import { createShapeId } from 'tldraw';
+
+import { components } from '@/lib/tambo';
 
 // Dynamic imports for heavy tldraw components - only load when needed
-const TldrawCanvas = dynamic(() => import("./tldraw-canvas").then(mod => ({ default: mod.TldrawCanvas })), {
-  ssr: false,
-  loading: () => <div className="flex items-center justify-center h-full w-full">Loading canvas...</div>
-});
-
-const TldrawWithPersistence = dynamic(() => import("./tldraw-with-persistence").then(mod => ({ default: mod.TldrawWithPersistence })), {
-  ssr: false,
-  loading: () => <div className="flex items-center justify-center h-full w-full">Loading canvas...</div>
-});
 
 const TldrawWithCollaboration = dynamic(() => import("./tldraw-with-collaboration").then(mod => ({ default: mod.TldrawWithCollaboration })), {
   ssr: false,
@@ -69,7 +61,7 @@ const TldrawWithCollaboration = dynamic(() => import("./tldraw-with-collaboratio
 });
 
 // Import types statically (they don't add to bundle size)
-import type { TamboShapeUtil, TamboShape } from "./tldraw-canvas";
+import type { TamboShape } from "./tldraw-canvas";
 
 // Suppress development noise and repetitive warnings
 if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
@@ -124,16 +116,44 @@ interface CanvasSpaceProps {
 export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps) {
   // Access the current Tambo thread context
   const { thread } = useTamboThread();
-  const { user } = useAuth();
   const [editor, setEditor] = useState<Editor | null>(null);
   const previousThreadId = useRef<string | null>(null);
   
-  // Component toolbox state
-  const [isComponentToolboxOpen, setIsComponentToolboxOpen] = useState(false);
-  
+  // Component toolbox toggle - creates toolbox shape on canvas
   const toggleComponentToolbox = useCallback(() => {
-    setIsComponentToolboxOpen(prev => !prev);
-  }, []);
+    if (!editor) {
+      console.warn('Editor not available');
+      return;
+    }
+
+    // Check if toolbox already exists
+    const existingToolbox = editor.getCurrentPageShapes().find(shape => shape.type === 'toolbox');
+    
+    if (existingToolbox) {
+      // Remove existing toolbox
+      editor.deleteShapes([existingToolbox.id]);
+      console.log('🗑️ Removed existing component toolbox');
+    } else {
+      // Create new toolbox shape
+      const viewport = editor.getViewportPageBounds();
+      const x = viewport ? viewport.midX - 170 : 100;
+      const y = viewport ? viewport.midY - 160 : 100;
+      
+      editor.createShape({
+        id: createShapeId(`toolbox-${nanoid()}`),
+        type: 'toolbox',
+        x,
+        y,
+        props: {
+          w: 340,
+          h: 320,
+          name: 'Component Toolbox',
+        }
+      });
+      
+      console.log('✅ Created component toolbox shape');
+    }
+  }, [editor]);
 
   // Map message IDs to tldraw shape IDs
   const [messageIdToShapeIdMap, setMessageIdToShapeIdMap] = useState<Map<string, string>>(new Map());
@@ -144,22 +164,18 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
   // Store React components separately from tldraw shapes to avoid structuredClone issues
   const componentStore = useRef<Map<string, React.ReactNode>>(new Map());
 
-  // Memoize shapeUtils array to prevent re-renders (only on client side to avoid SSR issues)
-  const customShapeUtils = useMemo(() => {
-    // Only import TamboShapeUtil on client side to avoid SSR issues
-    if (typeof window === 'undefined') return [];
-    
-    // Import TamboShapeUtil dynamically to avoid SSR issues with dynamic imports
-    const { TamboShapeUtil } = require('./tldraw-canvas');
-    return [TamboShapeUtil];
+  // Load shape utils dynamically
+  const [customShapeUtils, setCustomShapeUtils] = useState<unknown[]>([]);
+  
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      import('./tldraw-canvas').then(mod => {
+        setCustomShapeUtils([mod.TamboShapeUtil, mod.ToolboxShapeUtil]);
+      });
+    }
   }, []);
 
-  // Dynamically load the runtime class for use on the client (type-only import above is erased at runtime)
-  let RuntimeTamboShapeUtil: typeof import('./tldraw-canvas').TamboShapeUtil | undefined;
-  if (typeof window !== 'undefined') {
-     
-    RuntimeTamboShapeUtil = require('./tldraw-canvas').TamboShapeUtil;
-  }
+
 
   // Canvas persistence is now handled by TldrawWithPersistence component
 
@@ -225,7 +241,7 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
     }
     */
     
-    const existingShapeId = messageIdToShapeIdMap.get(messageId);
+    const existingShapeId = messageIdToShapeIdMap.get(messageId) as import('tldraw').TLShapeId | undefined;
 
     if (existingShapeId) {
       // Update existing shape - only update non-component props to avoid cloning issues
@@ -243,7 +259,7 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
       
       // Phase 4: Emit component update state
       const existingState = systemRegistry.getState(messageId);
-      const stateEnvelope: StateEnvelope = {
+      const stateEnvelope = {
         id: messageId,
         kind: 'component_updated',
         payload: {
@@ -258,10 +274,8 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
       systemRegistry.ingestState(stateEnvelope);
     } else {
       // Create new shape
-      const defaultShapeProps = RuntimeTamboShapeUtil
-        ? new RuntimeTamboShapeUtil().getDefaultProps()
-        : { w: 300, h: 200 }; // sensible fallback to prevent crash
-      const newShapeId = `shape:tambo-${nanoid()}`; // Generate a unique ID for the new shape with required prefix
+      const defaultShapeProps = { w: 300, h: 200 }; // Temporary fallback to fix linter
+      const newShapeId = createShapeId(`tambo-${nanoid()}`); // Generate a unique ID for the new shape with required prefix
 
       const viewport = editor.getViewportPageBounds();
       const x = viewport ? viewport.midX - defaultShapeProps.w / 2 : Math.random() * 500;
@@ -288,7 +302,7 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
       setAddedMessageIds(prevSet => new Set(prevSet).add(messageId));
       
       // Phase 4: Emit component creation state
-      const stateEnvelope: StateEnvelope = {
+      const stateEnvelope = {
         id: messageId,
         kind: 'component_created',
         payload: {
@@ -366,37 +380,50 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
 
   // Helper function to show onboarding
   const showOnboarding = useCallback(() => {
-    console.log('🆘 [CanvasSpace] Help button clicked - dispatching tambo:toolCall event');
+    console.log('🆘 [CanvasSpace] Help button clicked - creating onboarding guide');
     
-    // Use the Tambo generate_ui_component tool instead
-    window.dispatchEvent(
-      new CustomEvent("tambo:toolCall", {
-        detail: {
-          tool: "generate_ui_component",
-          args: ["show onboarding guide for canvas"]
-        }
-      })
-    );
-    
-    console.log('✅ [CanvasSpace] tambo:toolCall event dispatched successfully');
-  }, []);
+    if (!editor) {
+      console.warn('Editor not available');
+      return;
+    }
 
-  // Component creation handler for the toolbox
-  const handleComponentCreate = useCallback((componentType: string) => {
-    console.log('🔧 [ComponentToolbox] Creating component:', componentType);
+    // Create OnboardingGuide component directly
+    const shapeId = createShapeId(nanoid());
+    const OnboardingGuideComponent = components.find(c => c.name === 'OnboardingGuide')?.component;
     
-    // Use the Tambo generate_ui_component tool to create the component
-    window.dispatchEvent(
-      new CustomEvent("tambo:toolCall", {
-        detail: {
-          tool: "generate_ui_component",
-          args: [`create ${componentType} component`]
+    if (OnboardingGuideComponent) {
+      const componentInstance = React.createElement(OnboardingGuideComponent, { 
+        __tambo_message_id: shapeId,
+        context: 'canvas',
+        autoStart: true 
+      });
+      componentStore.current.set(shapeId, componentInstance);
+      
+      // Get center of viewport for placement
+      const viewport = editor.getViewportPageBounds();
+      const x = viewport ? viewport.midX - 200 : 100;
+      const y = viewport ? viewport.midY - 150 : 100;
+      
+      editor.createShape({
+        id: shapeId,
+        type: 'tambo',
+        x,
+        y,
+        props: {
+          w: 400,
+          h: 300,
+          tamboComponent: shapeId,
+          name: 'OnboardingGuide',
         }
-      })
-    );
-    
-    console.log('✅ [ComponentToolbox] Component creation event dispatched successfully');
-  }, []);
+      });
+      
+      console.log('✅ Onboarding guide created successfully');
+    } else {
+      console.error('OnboardingGuide component not found');
+    }
+  }, [editor, componentStore]);
+
+
 
   // Export functionality is now handled by TldrawWithPersistence component
 
@@ -412,23 +439,56 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
       <Toaster position="bottom-left" />
 
       {/* Use tldraw with collaboration for sync support */}
-      <TldrawWithCollaboration
-        onMount={setEditor}
-        shapeUtils={customShapeUtils}
-        componentStore={componentStore.current}
-        className="absolute inset-0"
-        onTranscriptToggle={onTranscriptToggle}
-        onHelpClick={showOnboarding}
-        onComponentToolboxToggle={toggleComponentToolbox}
-        readOnly={false}
-      />
+      <div 
+        className="absolute inset-0 z-0"
+        onDragOver={(e) => {
+          e.preventDefault();
+          e.dataTransfer.dropEffect = 'copy';
+        }}
+        onDrop={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          const componentType = e.dataTransfer.getData('application/tambo-component');
+          if (componentType && editor) {
+            console.log('📥 Dropping component:', componentType);
+            const shapeId = createShapeId(nanoid());
+            const Component = components.find(c => c.name === componentType)?.component;
+            if (Component) {
+              const componentInstance = React.createElement(Component, { __tambo_message_id: shapeId });
+              componentStore.current.set(shapeId, componentInstance);
+              const pos = editor.screenToPage({ x: e.clientX, y: e.clientY });
+              editor.createShape({
+                id: shapeId,
+                type: 'tambo',
+                x: pos.x,
+                y: pos.y,
+                props: {
+                  w: 300,
+                  h: 200,
+                  tamboComponent: shapeId,
+                  name: componentType,
+                }
+              });
+              console.log('✅ Component dropped successfully');
+            } else {
+              console.error('Failed to find component for type:', componentType);
+            }
+          }
+        }}
+      >
+        <TldrawWithCollaboration
+          onMount={setEditor}
+          shapeUtils={customShapeUtils}
+          componentStore={componentStore.current}
+          className="absolute inset-0"
+          onTranscriptToggle={onTranscriptToggle}
+          onHelpClick={showOnboarding}
+          onComponentToolboxToggle={toggleComponentToolbox}
+          readOnly={false}
+        />
+      </div>
       
-      {/* Component Toolbox */}
-      <ComponentToolbox
-        isOpen={isComponentToolboxOpen}
-        onToggle={toggleComponentToolbox}
-        onComponentCreate={handleComponentCreate}
-      />
+      {/* Component Toolbox is now rendered as a shape on canvas, not as a floating panel */}
       {/*
         The following is a placeholder for if you want to show some UI when the editor is not loaded
         or if there are no components. For now, Tldraw handles its own empty state.

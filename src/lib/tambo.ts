@@ -67,6 +67,9 @@ import { CircuitBreaker } from "./circuit-breaker";
 import { documentState } from "@/app/hackathon-canvas/documents/document-state";
 import { nanoid } from "nanoid";
 import { callMcpTool } from "@/lib/livekit-agent-tools";
+import { ComponentToolbox } from '@/components/ui/component-toolbox';
+
+export const componentToolboxSchema = z.object({});
 
 const logger = createLogger('tambo');
 const circuitBreaker = new CircuitBreaker({
@@ -809,6 +812,12 @@ export const components: TamboComponent[] = [
       "Interactive onboarding guide that teaches users how to use voice commands, create components, and navigate the canvas. Context-aware for different pages (canvas vs voice). Responds to 'show help', 'how do I', 'getting started', or 'onboarding'. Perfect for new user orientation and feature discovery.",
     component: OnboardingGuide,
     propsSchema: onboardingGuideSchema,
+  },
+  {
+    name: "ComponentToolbox",
+    description: "A draggable, resizable toolbox of all Tambo components. Drag from here to the canvas to create new components.",
+    component: ComponentToolbox,
+    propsSchema: componentToolboxSchema,
   },
   // Add more components here
 ];
