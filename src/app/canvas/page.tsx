@@ -12,12 +12,14 @@ export const dynamic = 'force-dynamic';
 
 // Force client-side rendering to prevent SSG issues with Tambo hooks
 import React, { useState, useEffect, useCallback } from "react";
+import dynamic from "next/dynamic";
 import { CanvasSpace } from "@/components/ui/canvas-space";
-import { MessageThreadCollapsible } from "@/components/ui/message-thread-collapsible";
-import { LivekitRoomConnector, CanvasLiveKitContext } from "@/components/ui/livekit-room-connector";
+// import { MessageThreadCollapsible } from "@/components/ui/message-thread-collapsible";
+// import { LivekitRoomConnector, CanvasLiveKitContext } from "@/components/ui/livekit-room-connector";
+import { CanvasLiveKitContext } from "@/components/ui/livekit-canvas-context";
 import { loadMcpServers, suppressDevelopmentWarnings, suppressViolationWarnings } from "@/lib/mcp-utils";
-import { components, tools } from "@/lib/tambo";
-import { TamboProvider } from "@tambo-ai/react";
+// import { components, tools } from "@/lib/tambo";
+import { TamboProvider, type TamboComponent, type TamboTool } from "@tambo-ai/react";
 import { EnhancedMcpProvider } from "@/components/ui/enhanced-mcp-provider";
 import { Room, ConnectionState, RoomEvent, VideoPresets, RoomOptions } from "livekit-client";
 import { RoomContext } from "@livekit/components-react";
@@ -27,6 +29,9 @@ import { ToolDispatcher } from '@/components/tool-dispatcher';
 import { SystemRegistrySync } from '@/components/ui/system-registry-sync';
 // TODO: Investigate best way to "go back" to CanvasSpace once we have a better way to handle adding/updating/managing the state of multiple components on the canvas simultaneously
 
+// Dynamic imports for heavy, non-critical UI
+const LivekitRoomConnector = dynamic(() => import("@/components/ui/livekit-room-connector").then(m => m.default), { ssr: false, loading: () => null });
+const MessageThreadCollapsible = dynamic(() => import("@/components/ui/message-thread-collapsible").then(m => m.MessageThreadCollapsible), { ssr: false, loading: () => null });
 
 // Suppress development warnings for cleaner console
 suppressDevelopmentWarnings();
@@ -36,6 +41,21 @@ export default function Canvas() {
   // Authentication check
   const { user, loading } = useAuth();
   const router = useRouter();
+  
+  // Lazy Tambo registry
+  const [tamboComponents, setTamboComponents] = useState<TamboComponent[]>([]);
+  const [tamboTools, setTamboTools] = useState<TamboTool[]>([]);
+  useEffect(() => {
+    let mounted = true;
+    import("@/lib/tambo").then(({ components, tools }) => {
+      if (!mounted) return;
+      setTamboComponents(components as unknown as TamboComponent[]);
+      setTamboTools(tools as unknown as TamboTool[]);
+    }).catch((e) => {
+      console.warn("Failed to load Tambo registry", e);
+    });
+    return () => { mounted = false; };
+  }, []);
   
   // Create unique room name based on canvas ID or generate one
   const [roomName, setRoomName] = useState<string>('tambo-canvas-room');
@@ -160,8 +180,8 @@ export default function Canvas() {
       {/* Tambo Provider Setup */}
       <TamboProvider
         apiKey={process.env.NEXT_PUBLIC_TAMBO_API_KEY!}
-        components={components}
-        tools={tools}
+        components={tamboComponents}
+        tools={tamboTools}
       >
         <EnhancedMcpProvider mcpServers={mcpServers}>
           {/* System Registry Sync - syncs components and tools */}

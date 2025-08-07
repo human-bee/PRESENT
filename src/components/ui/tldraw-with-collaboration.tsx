@@ -16,7 +16,7 @@ import {
 } from "./tldraw-with-persistence";
 import { ReactNode, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { useSyncDemo } from "@tldraw/sync";
-import { CanvasLiveKitContext } from "./livekit-room-connector";
+import { CanvasLiveKitContext } from "./livekit-canvas-context";
 import { ComponentStoreContext } from "./tldraw-canvas";
 import type { TamboShapeUtil, TamboShape } from "./tldraw-canvas";
 import { useRoomContext } from "@livekit/components-react";
