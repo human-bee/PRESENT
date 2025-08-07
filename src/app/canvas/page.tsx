@@ -37,6 +37,26 @@ export default function Canvas() {
   const { user, loading } = useAuth();
   const router = useRouter();
   
+  // Create unique room name based on canvas ID or generate one
+  const [roomName, setRoomName] = useState<string>('tambo-canvas-room');
+  
+  useEffect(() => {
+    // Extract canvas ID from URL params
+    const urlParams = new URLSearchParams(window.location.search);
+    const canvasId = urlParams.get('id');
+    
+    if (canvasId) {
+      // Use canvas-specific room
+      setRoomName(`tambo-canvas-${canvasId}`);
+      console.log('🏠 [Canvas] Using canvas-specific room:', `tambo-canvas-${canvasId}`);
+    } else {
+      // Generate unique room for new canvas
+      const newRoomId = `new-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      setRoomName(`tambo-canvas-${newRoomId}`);
+      console.log('🏠 [Canvas] Generated new room:', `tambo-canvas-${newRoomId}`);
+    }
+  }, []);
+  
   // Transcript panel state
   const [isTranscriptOpen, setIsTranscriptOpen] = useState(false);
   
@@ -169,7 +189,7 @@ export default function Canvas() {
               {/* Direct LiveKit Room Connector - positioned bottom left to avoid overlap */}
               <div className="absolute bottom-4 left-4 z-50">
                 <LivekitRoomConnector 
-                  roomName="tambo-canvas-room"
+                  roomName={roomName}
                   userName={user.user_metadata?.full_name || "Canvas User"}
                   autoConnect={false}
                 />

@@ -44,10 +44,11 @@ import {
   LivekitRoomConnector,
   livekitRoomConnectorSchema,
 } from "@/components/ui/livekit-room-connector";
-import {
-  AIImageGenerator,
-  aiImageGeneratorSchema,
-} from "@/components/ui/ai-image-generator";
+// Commented out for Node.js compatibility in agent worker
+// import {
+//   AIImageGenerator,
+//   aiImageGeneratorSchema,
+// } from "@/components/ui/ai-image-generator";
 import LiveCaptions, {
   liveCaptionsSchema,
 } from "@/components/LiveCaptions";
@@ -58,6 +59,9 @@ import {
   OnboardingGuide,
   onboardingGuideSchema,
 } from "@/components/ui/onboarding-guide";
+import {
+  Message,
+} from "@/components/ui/message";
 import type { TamboComponent } from "@tambo-ai/react";
 import { TamboTool } from "@tambo-ai/react";
 import { z } from "zod";
@@ -70,6 +74,13 @@ import { callMcpTool } from "@/lib/livekit-agent-tools";
 import { ComponentToolbox } from '@/components/ui/component-toolbox';
 
 export const componentToolboxSchema = z.object({});
+
+// Schema for AI Response component
+export const aiResponseSchema = z.object({
+  content: z.string().describe("The AI response content in markdown format"),
+  role: z.enum(["assistant", "user"]).default("assistant").describe("The role of the message sender"),
+  isLoading: z.boolean().optional().default(false).describe("Whether the message is in a loading state"),
+});
 
 const logger = createLogger('tambo');
 const circuitBreaker = new CircuitBreaker({
@@ -489,16 +500,16 @@ export const generateUiComponentTool: TamboTool = {
       }
     }
     
-    // Image generation requests
-    else if (lower.includes("image") || lower.includes("picture") || lower.includes("generate")) {
-      componentType = "AIImageGenerator";
-      
-      // Extract prompt for image generation
-      const imagePromptMatch = prompt.match(/(?:generate|create|make).*?(?:image|picture).*?(?:of|about|with)\s+([^.!?]+)/i);
-      if (imagePromptMatch) {
-        props.prompt = imagePromptMatch[1].trim();
-      }
-    }
+    // Image generation requests - Commented out for Node.js compatibility
+    // else if (lower.includes("image") || lower.includes("picture") || lower.includes("generate")) {
+    //   componentType = "AIImageGenerator";
+    //   
+    //   // Extract prompt for image generation
+    //   const imagePromptMatch = prompt.match(/(?:generate|create|make).*?(?:image|picture).*?(?:of|about|with)\s+([^.!?]+)/i);
+    //   if (imagePromptMatch) {
+    //     props.prompt = imagePromptMatch[1].trim();
+    //   }
+    // }
     
     // Action items/todo requests
     else if (lower.includes("todo") || lower.includes("task") || lower.includes("action")) {
@@ -581,7 +592,7 @@ export const generateUiComponentTool: TamboTool = {
       return { 
         success: false, 
         error: "UNSUPPORTED_PROMPT",
-        message: `Could not determine component type from prompt: "${prompt}". Supported components: DocumentEditor, RetroTimerEnhanced, WeatherForecast, YoutubeEmbed, AIImageGenerator, ActionItemTracker, ResearchPanel, LivekitRoomConnector, LivekitParticipantTile, LiveCaptions, LinearKanbanBoard, OnboardingGuide.`
+        message: `Could not determine component type from prompt: "${prompt}". Supported components: DocumentEditor, RetroTimerEnhanced, WeatherForecast, YoutubeEmbed, ActionItemTracker, ResearchPanel, LivekitRoomConnector, LivekitParticipantTile, LiveCaptions, LinearKanbanBoard, OnboardingGuide.`
       };
     }
 
@@ -810,13 +821,14 @@ export const components: TamboComponent[] = [
     component: LivekitParticipantTile,
     propsSchema: livekitParticipantTileSchema,
   },
-  {
-    name: "AIImageGenerator",
-    description:
-      "A real-time AI image generator that creates images from text prompts using Together AI's FLUX model. Features include multiple art styles (pop art, minimal, cyberpunk, etc.), generation history, canvas integration, download capability, iterative mode for consistency, and speech-to-text integration for voice-driven image generation. Perfect for creative projects, visual brainstorming, concept art generation, and real-time visual content creation. Automatically debounces prompt changes and provides visual feedback during generation. Can be controlled via microphone for hands-free operation.",
-    component: AIImageGenerator,
-    propsSchema: aiImageGeneratorSchema,
-  },
+  // Commented out for Node.js compatibility in agent worker
+  // {
+  //   name: "AIImageGenerator",
+  //   description:
+  //     "A real-time AI image generator that creates images from text prompts using Together AI's FLUX model. Features include multiple art styles (pop art, minimal, cyberpunk, etc.), generation history, canvas integration, download capability, iterative mode for consistency, and speech-to-text integration for voice-driven image generation. Perfect for creative projects, visual brainstorming, concept art generation, and real-time visual content creation. Automatically debounces prompt changes and provides visual feedback during generation. Can be controlled via microphone for hands-free operation.",
+  //   component: AIImageGenerator,
+  //   propsSchema: aiImageGeneratorSchema,
+  // },
   {
     name: "LiveCaptions",
     description:
@@ -844,5 +856,26 @@ export const components: TamboComponent[] = [
     component: ComponentToolbox,
     propsSchema: componentToolboxSchema,
   },
+  {
+    name: "AI Response",
+    description: "Displays AI-generated responses and messages with markdown support. Perfect for showing assistant replies, AI analysis, or any text-based AI output.",
+    component: Message,
+    propsSchema: aiResponseSchema,
+  },
   // Add more components here
 ];
+
+export const componentTools = components.map(comp => ({
+  type: 'function',
+  function: {
+    name: `create_${comp.name.toLowerCase().replace(/ /g, '_')}`,
+    description: comp.description,
+    parameters: comp.propsSchema.shape,
+    execute: async (params) => {
+      return {
+        componentType: comp.name,
+        initialProps: params
+      };
+    }
+  }
+})); 

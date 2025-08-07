@@ -52,7 +52,8 @@ class ComponentStore {
       ...info,
       timestamp: Date.now(),
     });
-    console.log(`[ComponentRegistry] Registered ${info.componentType} at ${info.messageId}`);
+    console.log(`🧩 [ComponentRegistry] Registered ${info.componentType} at ${info.messageId}`);
+    console.log(`🧩 [ComponentRegistry] Total components: ${this.components.size}`);
     this.notifyListeners();
   }
 

@@ -179,20 +179,7 @@ export default function LinearKanbanBoard({
     },
   }), [initialIssues]);
   
-  let subAgent;
-  try {
-    subAgent = useComponentSubAgent(subAgentConfig);
-  } catch (error) {
-    console.error('SubAgent initialization failed:', error);
-    setSubAgentError(error as Error);
-    subAgent = {
-      loadingState: LoadingState.COMPLETE,
-      context: null,
-      enrichedData: {},
-      errors: {},
-      mcpActivity: {},
-    };
-  }
+  const subAgent = useComponentSubAgent(subAgentConfig);
   
   const loadingState = subAgent.loadingState;
 
@@ -383,7 +370,7 @@ export default function LinearKanbanBoard({
           0,
       }}
     >
-      <div className={cn("p-6 bg-gray-50", className)}>
+      <div className={cn("p-6 bg-gray-50 h-full overflow-auto", className)}>
       {/* Header */}
       <div className="mb-6">
         <h1 className="text-3xl font-bold text-gray-900 mb-4">{title}</h1>
@@ -450,11 +437,12 @@ export default function LinearKanbanBoard({
       </div>
 
       {/* Board */}
-      <div className="flex gap-6 overflow-x-auto pb-4">
-        {columns.map((column) => {
-          const columnIssues = getIssuesForColumn(column.id);
-          return (
-            <div key={column.key} className="flex-shrink-0 w-80">
+          <div className="flex gap-4 overflow-x-auto pb-4" style={{ minHeight: '400px' }}>
+      {columns.map((column) => {
+        const columnIssues = getIssuesForColumn(column.id);
+        const columnWidth = Math.max(200, Math.min(320, (typeof window !== 'undefined' ? window.innerWidth : 1200) / columns.length - 32));
+        return (
+          <div key={column.key} className="flex-shrink-0" style={{ width: columnWidth + 'px' }}>
               <div className="bg-white rounded-lg shadow-sm border border-gray-200 h-fit">
                 <div className="p-4 border-b border-gray-200 bg-gray-50 rounded-t-lg">
                   <h2 className="font-semibold text-gray-900 text-sm flex items-center justify-between">

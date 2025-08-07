@@ -38,12 +38,27 @@ export function useCanvasPersistence(editor: Editor | null, enabled: boolean = t
           if (error) throw error;
 
           if (canvas) {
+            console.log('🎨 [CanvasPersistence] Loading canvas:', canvas.id, canvas.name);
+            console.log('🎨 [CanvasPersistence] Canvas document has shapes:', Object.keys(canvas.document?.store?.['shape:tambo'] || {}));
+            console.log('🎨 [CanvasPersistence] Conversation key:', canvas.conversation_key);
+            
             setCanvasId(canvas.id);
             setCanvasName(canvas.name);
             setLastSaved(new Date(canvas.last_modified));
             
             // Load the document into the editor
             editor.loadSnapshot(canvas.document);
+            
+            console.log('🎨 [CanvasPersistence] Canvas loaded successfully - shapes should appear');
+            
+            // CRITICAL: Rehydrate component store after canvas loads
+            // The canvas document contains shapes, but componentStore is empty on reload
+            setTimeout(() => {
+              console.log('🔄 [CanvasPersistence] Starting component rehydration...');
+              window.dispatchEvent(new CustomEvent('tambo:rehydrateComponents', {
+                detail: { canvasId: canvas.id, conversationKey: canvas.conversation_key }
+              }));
+            }, 100); // Small delay to ensure editor is fully loaded
           }
         } catch (error) {
           console.error("Error loading canvas:", error);

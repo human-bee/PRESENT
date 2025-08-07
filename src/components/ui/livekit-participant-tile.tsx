@@ -282,8 +282,8 @@ function SingleParticipantTile({
         state?.isMinimized && "!h-16"
       )}
       style={{ 
-        width, 
-        height: state?.isMinimized ? 64 : height, 
+        width: '100%', 
+        height: state?.isMinimized ? 64 : '100%', 
         borderRadius 
       }}
     >

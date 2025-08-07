@@ -36,7 +36,9 @@
 
 import { createContext, useContext, useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { useRoomContext } from '@livekit/components-react';
-import { useTamboThread, useTambo } from '@tambo-ai/react';
+import { useTamboThread } from '@tambo-ai/react';
+import { useValidatedTambo } from '@/hooks/use-validated-tambo';
+import { sanitizeToolName, isValidToolName } from '@/lib/tambo-tool-validator';
 import { createLiveKitBus } from '../lib/livekit-bus';
 import { useContextKey } from './RoomScopedProviders';
 import { createLogger } from '../lib/utils';
@@ -44,6 +46,8 @@ import { CircuitBreaker } from '../lib/circuit-breaker';
 import { systemRegistry, syncMcpToolsToRegistry } from '../lib/system-registry';
 import { createObservabilityBridge } from '@/lib/observability-bridge';
 import { initializeMCPBridge, registerMCPTools } from '../lib/mcp-bridge';
+import { ComponentRegistry } from '@/lib/component-registry';
+import { nanoid } from 'nanoid';
 
 // Generate unique IDs without external dependency
 const generateId = () => `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
@@ -149,7 +153,7 @@ export function ToolDispatcher({
   const room = useRoomContext();
   const { sendThreadMessage } = useTamboThread();
   const roomContextKey = useContextKey();
-  const { toolRegistry = {} } = useTambo() as any;
+  const { toolRegistry = {} } = useValidatedTambo();
   const pendingById = useRef(new Map<string, PendingTool>());
   const [isProcessing, setIsProcessing] = useState(false);
   
@@ -187,30 +191,59 @@ export function ToolDispatcher({
     if (!toolRegistry) return;
     
     // Extract all tools from registry
-    const allTools: Array<{name: string, description: string}> = [];
+    const allTools: Array<{name: string, description: string, originalName?: string}> = [];
+    
+    // Use imported validation functions
     
     // Handle both Map-style and object registries
     if (toolRegistry instanceof Map) {
       // Map-style registry
       toolRegistry.forEach((tool: any, name: string) => {
-        allTools.push({ 
-          name, 
-          description: tool.description || tool.name || name 
-        });
+        if (isValidToolName(name)) {
+          allTools.push({ 
+            name, 
+            description: tool.description || tool.name || name 
+          });
+        } else {
+          // Sanitize invalid names instead of skipping
+          const sanitized = sanitizeToolName(name);
+          console.warn(`🔧 [ToolDispatcher] Sanitized tool name: "${name}" → "${sanitized}"`);
+          allTools.push({ 
+            name: sanitized, 
+            description: tool.description || tool.name || name,
+            originalName: name
+          });
+        }
       });
     } else if (typeof toolRegistry === 'object') {
       // Object-style registry
       Object.entries(toolRegistry).forEach(([name, tool]: [string, any]) => {
-        allTools.push({ 
-          name, 
-          description: tool.description || tool.name || name 
-        });
+        if (isValidToolName(name)) {
+          allTools.push({ 
+            name, 
+            description: tool.description || tool.name || name 
+          });
+        } else {
+          // Sanitize invalid names instead of skipping
+          const sanitized = sanitizeToolName(name);
+          console.warn(`🔧 [ToolDispatcher] Sanitized tool name: "${name}" → "${sanitized}"`);
+          allTools.push({ 
+            name: sanitized, 
+            description: tool.description || tool.name || name,
+            originalName: name
+          });
+        }
       });
     }
     
     // Sync to system registry
     if (allTools.length > 0) {
       log('🔄 [ToolDispatcher] Syncing tools to system registry:', allTools.length, 'tools');
+      
+      // Debug: Log all tool names to help identify invalid ones
+      if (enableLogging) {
+        log('🔍 [ToolDispatcher] Valid tool names:', allTools.map(t => t.name).join(', '));
+      }
       syncMcpToolsToRegistry(allTools);
       
       // Initialize MCP bridge so components can call MCP tools directly
@@ -1266,6 +1299,85 @@ Please consider both the processed summary above and the original transcript con
       // livekit-js has no dispose for events; rely on room closure
     };
   }, [room]);
+
+  // Handle component_creation events from LiveKit bus
+  useEffect(() => {
+    if (!room) return;
+
+    const handleComponentCreation = async (event: CustomEvent) => {
+      const { componentType, initialProps } = event.detail;
+      log('🎨 [ToolDispatcher] Received component_creation event:', componentType, initialProps);
+
+      try {
+        // Find the component definition
+        const { components } = await import('@/lib/tambo');
+        const compDef = components.find(c => c.name === componentType);
+        if (!compDef) throw new Error(`Component ${componentType} not found`);
+
+        const messageId = `${componentType.toLowerCase()}-${nanoid(6)}`;
+
+        ComponentRegistry.register({
+          messageId,
+          componentType,
+          props: initialProps,
+          contextKey: 'default',
+          timestamp: Date.now(),
+        });
+
+        window.dispatchEvent(new CustomEvent('tambo:showComponent', {
+          detail: {
+            messageId,
+            component: { type: componentType, props: initialProps },
+          }
+        }));
+
+        log('✅ Created component from realtime tool:', componentType);
+      } catch (err) {
+        log('❌ Error handling component_creation:', err);
+      }
+    };
+
+    const handleDataReceived = async (data: Uint8Array, participant: any, kind: any, topic?: string) => {
+      try {
+        if (topic === 'component_creation') {
+          const message = JSON.parse(new TextDecoder().decode(data));
+          const { componentType, initialProps } = message.data;
+          
+          // Find the component definition
+          const { components } = await import('@/lib/tambo');
+          const compDef = components.find(c => c.name === componentType);
+          if (!compDef) throw new Error(`Component ${componentType} not found`);
+          
+          const messageId = `${componentType.toLowerCase()}-${nanoid(6)}`;
+          
+          ComponentRegistry.register({
+            messageId,
+            componentType,
+            props: initialProps,
+            contextKey: 'default',
+            timestamp: Date.now(),
+          });
+          
+          window.dispatchEvent(new CustomEvent('tambo:showComponent', {
+            detail: {
+              messageId,
+              component: { type: componentType, props: initialProps },
+            }
+          }));
+          
+          log('✅ Created component from realtime tool:', componentType);
+        }
+      } catch (err) {
+        log('❌ Error handling component_creation:', err);
+      }
+    };
+
+    room.on('dataReceived', handleDataReceived);
+
+    return () => {
+      room.off('dataReceived', handleDataReceived);
+    };
+  }, [log, room]);
 
   const contextValue: ToolDispatcherContextValue = {
     pendingTools: pendingById.current,

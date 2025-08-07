@@ -1,9 +1,6 @@
 ---
-description: 
-globs: 
 alwaysApply: false
 ---
-
 # Building a Generative UI Component with Tambo
 
 ## 1. Import Tambo Hook

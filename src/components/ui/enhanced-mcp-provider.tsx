@@ -20,7 +20,7 @@
 
 "use client";
 
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { TamboMcpProvider } from "@tambo-ai/react/mcp";
 import { 
   markMcpServerFailed, 
@@ -29,6 +29,7 @@ import {
   resetMcpServerFailures,
   type McpServer 
 } from "@/lib/mcp-utils";
+import { sanitizeToolName, isValidToolName } from "@/lib/tambo-tool-validator";
 
 interface EnhancedMcpProviderProps {
   children: React.ReactNode;

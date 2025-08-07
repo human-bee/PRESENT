@@ -16,13 +16,12 @@ config({ path: join(process.cwd(), '.env.local') });
 import { defineAgent, JobContext, cli, WorkerOptions, multimodal } from '@livekit/agents';
 import { RoomEvent, Track } from 'livekit-client';
 import * as openai from '@livekit/agents-plugin-openai';
-import { DecisionEngine } from './decision-engine';
-import WebSocket from 'ws';
 // Internal imports – not exported publicly, so we suppress type checking
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore
 import { ClientWebSocketAdapter, TLSyncClient } from '@tldraw/sync-core';
 import { createTLStore, defaultShapeUtils, defaultBindingUtils } from 'tldraw';
+import { componentTools } from './component-tools-agent';
 
 console.log('🚀 Starting Enhanced Tambo Voice Agent Worker...');
 
@@ -220,25 +219,29 @@ export default defineAgent({
     
     // Create the multimodal agent with enhanced configuration
     const model = new openai.realtime.RealtimeModel({
-      instructions: `You are Tambo Voice Agent, processing multi-participant conversations.
-        
-        You are hearing from multiple participants in a LiveKit room. When you transcribe speech, 
-        pay attention to speaker changes and different voices. Process all audio input and provide
-        accurate transcriptions for each speaker.
-        
-        IMPORTANT: When users ask for UI components, DO NOT repeat their request back as text. 
-        The UI generation is handled automatically when they speak.`,
+      instructions: `You are Tambo Voice Agent, a unified realtime agent that processes speech, decides on actions, and creates UI components directly.
+
+You have access to component creation tools. Call them when the user requests a UI component in their speech.
+
+Decision Guidelines:
+- Analyze partial transcripts for intents
+- Call tools only when confident (>80%) of complete request
+- For YouTube: detect search queries and use youtube tools
+- Summarize and create components instantly
+
+Do not respond with text unless necessary. Prefer tool calls for UI generation.`,
       model: 'gpt-4o-realtime-preview',
       modalities: ['text'],
       // Try to get better quality and reduce latency
       voice: 'alloy',
+      functions: componentTools
     });
     
     console.log('🎙️ [EnhancedAgent] Starting enhanced multimodal agent...');
     
     // Initialize Decision Engine
-    const decisionEngine = new DecisionEngine(process.env.OPENAI_API_KEY || '');
-    console.log('🧠 [EnhancedAgent] Decision Engine initialized');
+    // const decisionEngine = new DecisionEngine(process.env.OPENAI_API_KEY || '');
+    // console.log('🧠 [EnhancedAgent] Decision Engine initialized');
     
     // Connect to tldraw sync once room is connected
     const roomNameForSync = job.room.name || 'tambo-shared-canvas';
@@ -359,7 +362,23 @@ export default defineAgent({
       );
       
       // Process through decision engine
-      await decisionEngine.processTranscript(evt.transcript, speakerId);
+      // await decisionEngine.processTranscript(evt.transcript, speakerId);
+    });
+
+    session.on('function_call', async (call) => {
+      const tool = componentTools.find(t => t.function.name === call.name);
+      if (!tool) return;
+      
+      const result = await tool.function.execute(call.arguments);
+      
+      // Publish to room
+      job.room.localParticipant?.publishData(
+        new TextEncoder().encode(JSON.stringify({
+          type: 'create_component',
+          data: result
+        })),
+        { reliable: true, topic: 'component_creation' }
+      );
     });
     
     // Periodic audio state monitoring
@@ -373,78 +392,78 @@ export default defineAgent({
     }, 15000); // Every 15 seconds
     
     // Rest of the agent setup (decision engine, tool handling, etc.)
-    decisionEngine.onDecision(async (decision, participantId, originalText) => {
-      if (!decision.should_send) {
-        console.log(`⏸️ [EnhancedAgent] Filtered out: "${originalText}" from ${participantId}`);
-        return;
-      }
+    // decisionEngine.onDecision(async (decision, participantId, originalText) => {
+    //   if (!decision.should_send) {
+    //     console.log(`⏸️ [EnhancedAgent] Filtered out: "${originalText}" from ${participantId}`);
+    //     return;
+    //   }
 
-      console.log(`✅ [EnhancedAgent] Sending to Tambo: "${decision.summary}" from ${participantId}`);
+    //   console.log(`✅ [EnhancedAgent] Sending to Tambo: "${decision.summary}" from ${participantId}`);
       
-      const prompt = decision.summary && decision.summary.trim() ? decision.summary : originalText;
+    //   const prompt = decision.summary && decision.summary.trim() ? decision.summary : originalText;
       
-      const toolCallEvent = {
-        id: `enhanced-speech-${Date.now()}`,
-        roomId: job.room.name || 'unknown',
-        type: 'tool_call',
-        payload: {
-          tool: 'generate_ui_component',
-          params: {
-            prompt: prompt,
-            task_prompt: prompt
-          },
-          context: {
-            source: 'voice',
-            timestamp: Date.now(),
-            transcript: originalText,
-            summary: decision.summary,
-            speaker: participantId,
-            confidence: decision.confidence,
-            reason: decision.reason
-          }
-        },
-        timestamp: Date.now(),
-        source: 'voice' as const,
-      };
+    //   const toolCallEvent = {
+    //     id: `enhanced-speech-${Date.now()}`,
+    //     roomId: job.room.name || 'unknown',
+    //     type: 'tool_call',
+    //     payload: {
+    //       tool: 'generate_ui_component',
+    //       params: {
+    //         prompt: prompt,
+    //         task_prompt: prompt
+    //       },
+    //       context: {
+    //         source: 'voice',
+    //         timestamp: Date.now(),
+    //         transcript: originalText,
+    //         summary: decision.summary,
+    //         speaker: participantId,
+    //         confidence: decision.confidence,
+    //         reason: decision.reason
+    //       }
+    //     },
+    //     timestamp: Date.now(),
+    //     source: 'voice' as const,
+    //   };
 
-      job.room.localParticipant?.publishData(
-        new TextEncoder().encode(JSON.stringify(toolCallEvent)),
-        { reliable: true, topic: 'tool_call' }
-      );
+    //   job.room.localParticipant?.publishData(
+    //     new TextEncoder().encode(JSON.stringify(toolCallEvent)),
+    //     { reliable: true, topic: 'tool_call' }
+    //   );
 
-      // TODO: implement shape creation via canvasStore.updateStore when design is final
-      try {
-        const noteId = `shape:${nanoid()}`;
-        const noteShape = {
-          id: noteId,
-          typeName: 'shape',
-          type: 'note',
-          parentId: 'page:page',
-          childIndex: 1,
-          x: Math.random() * 400,
-          y: Math.random() * 300,
-          rotation: 0,
-          props: {
-            text: (decision.summary ?? originalText) as string,
-            w: 160,
-            h: 160,
-            color: 'yellow',
-            size: 'm',
-          },
-        } as any;
+    //   // TODO: implement shape creation via canvasStore.updateStore when design is final
+    //   try {
+    //     const noteId = `shape:${nanoid()}`;
+    //     const noteShape = {
+    //       id: noteId,
+    //       typeName: 'shape',
+    //       type: 'note',
+    //       parentId: 'page:page',
+    //       childIndex: 1,
+    //       x: Math.random() * 400,
+    //       y: Math.random() * 300,
+    //       rotation: 0,
+    //       props: {
+    //         text: (decision.summary ?? originalText) as string,
+    //         w: 160,
+    //         h: 160,
+    //         color: 'yellow',
+    //         size: 'm',
+    //       },
+    //     } as any;
 
-        canvasStore.put([noteShape]);
-        console.log('📝 [EnhancedAgent] Note shape created:', noteId);
-      } catch (err) {
-        console.error('⚠️  [EnhancedAgent] Error creating note shape:', err as Error);
-      }
-    });
+    //     canvasStore.put([noteShape]);
+    //     console.log('📝 [EnhancedAgent] Note shape created:', noteId);
+    //   } catch (err) {
+    //     console.error('⚠️  [EnhancedAgent] Error creating note shape:', err as Error);
+    //   }
+    // });
     
     // Clean up on disconnect
     job.room.on('disconnected', () => {
       console.log('🧹 [EnhancedAgent] Cleaning up enhanced agent...');
       participantAudioState.clear();
-      decisionEngine.clearAllBuffers();
+      // decisionEngine.clearAllBuffers(); // This line is removed as DecisionEngine is removed
     });
     
     console.log('🎯 [EnhancedAgent] Enhanced agent fully initialized with improved audio routing');

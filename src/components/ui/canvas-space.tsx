@@ -52,6 +52,7 @@ import { systemRegistry } from "@/lib/system-registry";
 import { createShapeId } from 'tldraw';
 
 import { components } from '@/lib/tambo';
+import { calculateInitialSize } from '@/lib/component-sizing'; // Add import for dynamic sizing
 
 // Dynamic imports for heavy tldraw components - only load when needed
 
@@ -175,7 +176,82 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
     }
   }, []);
 
-
+  // Component rehydration handler - restore componentStore after canvas reload
+  useEffect(() => {
+    const handleRehydration = (event: CustomEvent) => {
+      if (!editor) {
+        console.log('🔄 [CanvasSpace] Editor not ready for rehydration, skipping...');
+        return;
+      }
+      
+      console.log('🔄 [CanvasSpace] Starting component rehydration...');
+      const tamboShapes = editor.getCurrentPageShapes().filter(shape => shape.type === 'tambo') as TamboShape[];
+      
+      console.log(`🔄 [CanvasSpace] Found ${tamboShapes.length} tambo shapes to rehydrate`);
+      
+      tamboShapes.forEach(shape => {
+        const componentName = shape.props.name;
+        const messageId = shape.props.tamboComponent;
+        
+        console.log(`🔄 [CanvasSpace] Rehydrating ${componentName} (${messageId})`);
+        
+        // Find component definition
+        const componentDef = components.find(c => c.name === componentName);
+        if (componentDef) {
+          // Recreate React component and add to store
+          const Component = componentDef.component;
+          const componentInstance = React.createElement(Component, { __tambo_message_id: messageId });
+          componentStore.current.set(messageId, componentInstance);
+          
+          // Update mapping
+          setMessageIdToShapeIdMap(prev => new Map(prev).set(messageId, shape.id));
+          setAddedMessageIds(prev => new Set(prev).add(messageId));
+          
+          console.log(`✅ [CanvasSpace] Rehydrated ${componentName} successfully`);
+        } else {
+          console.error(`❌ [CanvasSpace] Component definition not found for: ${componentName}`);
+          
+          // Fallback: Create a placeholder component for missing registrations
+          const FallbackComponent = () => (
+            <div style={{ 
+              padding: '16px', 
+              border: '2px dashed #ff6b6b', 
+              borderRadius: '8px',
+              backgroundColor: '#fff5f5',
+              color: '#c92a2a'
+            }}>
+              <h3 style={{ margin: '0 0 8px 0', fontSize: '14px', fontWeight: 'bold' }}>
+                📦 Component Not Registered: {componentName}
+              </h3>
+              <p style={{ margin: '0 0 8px 0', fontSize: '12px' }}>
+                ID: <code>{messageId}</code>
+              </p>
+              <p style={{ margin: '0', fontSize: '11px', opacity: 0.8 }}>
+                Please add "{componentName}" to tambo.ts registry.
+              </p>
+            </div>
+          );
+          
+          const fallbackInstance = React.createElement(FallbackComponent);
+          componentStore.current.set(messageId, fallbackInstance);
+          
+          // Still update mappings so the shape shows something
+          setMessageIdToShapeIdMap(prev => new Map(prev).set(messageId, shape.id));
+          setAddedMessageIds(prev => new Set(prev).add(messageId));
+          
+          console.log(`⚠️ [CanvasSpace] Created fallback for ${componentName}`);
+        }
+      });
+      
+      console.log(`🎯 [CanvasSpace] Rehydration complete! ComponentStore now has ${componentStore.current.size} components`);
+    };
+    
+    window.addEventListener('tambo:rehydrateComponents', handleRehydration as EventListener);
+    
+    return () => {
+      window.removeEventListener('tambo:rehydrateComponents', handleRehydration as EventListener);
+    };
+  }, [editor]);
 
   // Canvas persistence is now handled by TldrawWithPersistence component
 
@@ -274,27 +350,27 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
       systemRegistry.ingestState(stateEnvelope);
     } else {
       // Create new shape
-      const defaultShapeProps = { w: 300, h: 200 }; // Temporary fallback to fix linter
       const newShapeId = createShapeId(`tambo-${nanoid()}`); // Generate a unique ID for the new shape with required prefix
 
-      const viewport = editor.getViewportPageBounds();
-      const x = viewport ? viewport.midX - defaultShapeProps.w / 2 : Math.random() * 500;
-      const y = viewport ? viewport.midY - defaultShapeProps.h / 2 : Math.random() * 300;
+              const viewport = editor.getViewportPageBounds();
+        const initialSize = calculateInitialSize(componentName || 'Default');
+        const x = viewport ? viewport.midX - initialSize.w / 2 : Math.random() * 500;
+        const y = viewport ? viewport.midY - initialSize.h / 2 : Math.random() * 300;
 
-      editor.createShapes<TamboShape>([
-        {
-          id: newShapeId,
-          type: 'tambo',
-          x,
-          y,
-          props: {
-            tamboComponent: messageId, // Store messageId as reference instead of component
-            name: componentName || `Component ${messageId}`,
-            w: defaultShapeProps.w,
-            h: defaultShapeProps.h,
+        editor.createShapes<TamboShape>([
+          {
+            id: newShapeId,
+            type: 'tambo',
+            x,
+            y,
+            props: {
+              tamboComponent: messageId, // Store messageId as reference instead of component
+              name: componentName || `Component ${messageId}`,
+              w: initialSize.w,
+              h: initialSize.h,
+            },
           },
-        },
-      ]);
+        ]);
 
       // Add the new messageId -> shapeId mapping
       setMessageIdToShapeIdMap(prevMap => new Map(prevMap).set(messageId, newShapeId));
@@ -310,7 +386,7 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
           shapeId: newShapeId,
           canvasId: editor.store.id || 'default-canvas',
           position: { x, y },
-          size: { w: defaultShapeProps.w, h: defaultShapeProps.h }
+          size: { w: initialSize.w, h: initialSize.h }
         },
         version: 1,
         ts: Date.now(),
