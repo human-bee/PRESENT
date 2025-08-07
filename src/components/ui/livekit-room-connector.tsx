@@ -50,6 +50,7 @@ import {
   Bot,
   BotOff,
 } from "lucide-react";
+import { CanvasLiveKitContext } from "./livekit-canvas-context";
 
 // Define the component props schema with Zod
 export const livekitRoomConnectorSchema = z.object({
@@ -73,13 +74,6 @@ type LivekitRoomConnectorState = {
   agentStatus: "not-requested" | "dispatching" | "joined" | "failed";
   agentIdentity: string | null;
 };
-
-// Context to provide LiveKit room to child components on canvas
-export const CanvasLiveKitContext = React.createContext<{
-  isConnected: boolean;
-  roomName: string;
-  participantCount: number;
-} | null>(null);
 
 /**
  * LivekitRoomConnector Component
@@ -219,7 +213,7 @@ export function LivekitRoomConnector({
       } : { 
         ...getInitialState(), 
         agentStatus: "failed",
-        errorMessage: error instanceof Error ? error.message : "Unknown dispatch error"
+        errorMessage: error instanceof Error ? error.message : "Unknown dispatch error" 
       });
     }
   }, [roomName]);

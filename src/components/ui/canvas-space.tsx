@@ -51,7 +51,7 @@ import { Toaster } from "react-hot-toast";
 import { systemRegistry } from "@/lib/system-registry";
 import { createShapeId } from 'tldraw';
 
-import { components } from '@/lib/tambo';
+// import { components } from '@/lib/tambo';
 import { calculateInitialSize } from '@/lib/component-sizing'; // Add import for dynamic sizing
 
 // Dynamic imports for heavy tldraw components - only load when needed
@@ -178,7 +178,7 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
 
   // Component rehydration handler - restore componentStore after canvas reload
   useEffect(() => {
-    const handleRehydration = (event: CustomEvent) => {
+    const handleRehydration = async (event: CustomEvent) => {
       if (!editor) {
         console.log('🔄 [CanvasSpace] Editor not ready for rehydration, skipping...');
         return;
@@ -188,6 +188,9 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
       const tamboShapes = editor.getCurrentPageShapes().filter(shape => shape.type === 'tambo') as TamboShape[];
       
       console.log(`🔄 [CanvasSpace] Found ${tamboShapes.length} tambo shapes to rehydrate`);
+
+      // Lazy load Tambo registry only when needed
+      const { components } = await import('@/lib/tambo');
       
       tamboShapes.forEach(shape => {
         const componentName = shape.props.name;
@@ -455,13 +458,16 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
   }, [thread?.messages, editor, addComponentToCanvas, addedMessageIds]);
 
   // Helper function to show onboarding
-  const showOnboarding = useCallback(() => {
+  const showOnboarding = useCallback(async () => {
     console.log('🆘 [CanvasSpace] Help button clicked - creating onboarding guide');
     
     if (!editor) {
       console.warn('Editor not available');
       return;
     }
+
+    // Lazy load Tambo registry
+    const { components } = await import('@/lib/tambo');
 
     // Create OnboardingGuide component directly
     const shapeId = createShapeId(nanoid());
@@ -521,13 +527,14 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
           e.preventDefault();
           e.dataTransfer.dropEffect = 'copy';
         }}
-        onDrop={(e) => {
+        onDrop={async (e) => {
           e.preventDefault();
           e.stopPropagation();
           const componentType = e.dataTransfer.getData('application/tambo-component');
           if (componentType && editor) {
             console.log('📥 Dropping component:', componentType);
             const shapeId = createShapeId(nanoid());
+            const { components } = await import('@/lib/tambo');
             const Component = components.find(c => c.name === componentType)?.component;
             if (Component) {
               const componentInstance = React.createElement(Component, { __tambo_message_id: shapeId });
