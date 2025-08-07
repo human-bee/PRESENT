@@ -58,141 +58,135 @@ class ComponentErrorBoundary extends Component<
 
 // Component wrapper to handle hooks inside the shape
 function TamboShapeComponent({ shape }: { shape: TamboShape }) {
-    const contentRef = useRef<HTMLDivElement>(null);
+    const containerRef = useRef<HTMLDivElement>(null);
+    const scaleWrapperRef = useRef<HTMLDivElement>(null);
+    const contentInnerRef = useRef<HTMLDivElement>(null);
     const componentStore = useContext(ComponentStoreContext);
-    
-    // Helper function to stop event propagation to TLDraw
-    const stopEventPropagation = (e: React.SyntheticEvent) => {
-        e.stopPropagation();
-    };
-    
-    // Note: Pinned position management is now handled globally via side effects in the mount handler
-    // This ensures all pinned shapes are repositioned consistently when camera changes
-    
+    const editor = useEditor();
+
+    // Measured intrinsic (natural) size of the component's content
+    const [naturalSize, setNaturalSize] = useState<{ w: number; h: number } | null>(null);
+    const autoFittedRef = useRef(false);
+
     useEffect(() => {
-      const element = contentRef.current;
-    if (!element) return;
-    
-      let debounceTimer: NodeJS.Timeout;
-    
-      const observer = new ResizeObserver(entries => {
-        for (const entry of entries) {
-          const { width, height } = entry.contentRect;
-    
-          // Add a small buffer or use Math.round to prevent micro-updates if needed
-          const newWidth = Math.max(1, Math.round(width)); // Ensure at least 1px
-          const newHeight = Math.max(1, Math.round(height));
-    
-          // Check if the size has actually changed by a meaningful amount (e.g., > 1px threshold)
-          if (Math.abs(newWidth - shape.props.w) > 1 || Math.abs(newHeight - shape.props.h) > 1) {
-            clearTimeout(debounceTimer);
-            debounceTimer = setTimeout(() => {
-            // Note: We can't access editor here directly, but this is for demo purposes
-            // In a real implementation, you'd need to pass the editor through context
-            // Shape size tracking for potential future use
-            }, 150); // Debounce for 150ms
-          }
+      const el = contentInnerRef.current;
+      if (!el) return;
+
+      // Measure intrinsic size (not the scaled container)
+      const measure = () => {
+        // Use scrollWidth/Height to get the natural content size regardless of transforms
+        const w = Math.max(el.scrollWidth, el.getBoundingClientRect().width);
+        const h = Math.max(el.scrollHeight, el.getBoundingClientRect().height);
+        if (!naturalSize || Math.abs(naturalSize.w - w) > 1 || Math.abs(naturalSize.h - h) > 1) {
+          setNaturalSize({ w, h });
         }
-      });
-    
-      observer.observe(element);
-    
-      return () => {
-        clearTimeout(debounceTimer);
-        observer.disconnect();
       };
-    }, [shape.id, shape.props.w, shape.props.h]); // Dependencies for the effect
-    
-        // Calculate scale based on current size vs natural size
+
+      const observer = new ResizeObserver(() => measure());
+      observer.observe(el);
+      // Initial measure
+      measure();
+
+      return () => observer.disconnect();
+    }, []);
+
+    // Auto-fit the TLDraw shape to the content on first accurate measure
+    useEffect(() => {
+      if (!editor || !naturalSize || autoFittedRef.current) return;
+
+      // If the current shape size is still close to defaults, auto-fit once
+      const { w: nw, h: nh } = naturalSize;
+      const closeTo = (a: number, b: number) => Math.abs(a - b) < 4;
+
+      if (closeTo(shape.props.w, nw) === false || closeTo(shape.props.h, nh) === false) {
+        // Update the shape to exactly fit content
+        editor.updateShapes([
+          {
+            id: shape.id,
+            type: 'tambo',
+            props: { ...shape.props, w: nw, h: nh },
+          },
+        ]);
+      }
+
+      autoFittedRef.current = true;
+    }, [editor, naturalSize, shape.id]);
+
+    // Compute uniform scale to preserve aspect ratio and avoid warping/cropping
     const sizeInfo = getComponentSizeInfo(shape.props.name);
-    const scaleX = shape.props.w / sizeInfo.naturalWidth;
-    const scaleY = shape.props.h / sizeInfo.naturalHeight;
-    
-    // Use uniform scaling to maintain aspect ratio if needed
-    const scale = sizeInfo.resizeMode === 'aspect-locked' 
-      ? Math.min(scaleX, scaleY)
-      : 1; // For free resize, we'll use a different approach
+    const baseW = naturalSize?.w ?? sizeInfo.naturalWidth;
+    const baseH = naturalSize?.h ?? sizeInfo.naturalHeight;
+
+    const scaleX = shape.props.w / baseW;
+    const scaleY = shape.props.h / baseH;
+    const scale = Math.min(scaleX, scaleY);
+
+    const scaledWidth = baseW * scale;
+    const scaledHeight = baseH * scale;
+    const offsetX = (shape.props.w - scaledWidth) / 2;
+    const offsetY = (shape.props.h - scaledHeight) / 2;
 
     return (
+      <div
+        ref={containerRef}
+        style={{
+          width: shape.props.w + 'px',
+          height: shape.props.h + 'px',
+          overflow: 'hidden',
+          position: 'relative',
+          background: 'transparent',
+          pointerEvents: 'all',
+        }}
+        onPointerDown={(e) => {
+          const target = e.target as HTMLElement;
+          if (
+            target.closest('button') ||
+            target.closest('input') ||
+            target.closest('select') ||
+            target.closest('textarea') ||
+            target.closest('[draggable="true"]')
+          ) {
+            e.stopPropagation();
+          }
+        }}
+        onContextMenu={(e) => {
+          const target = e.target as HTMLElement;
+          if (target.closest('input') || target.closest('select') || target.closest('textarea')) {
+            e.stopPropagation();
+          }
+        }}
+      >
         <div
+          ref={scaleWrapperRef}
           style={{
-            width: shape.props.w + 'px',
-            height: shape.props.h + 'px',
-            overflow: 'hidden', // Changed from 'auto' to 'hidden' for scaling
-            position: 'relative',
-            background: 'transparent', // Transparent to show only component bounds
-            pointerEvents: 'all',
-          }}
-          // Only stop propagation for specific interactive elements inside the component
-          onPointerDown={(e) => {
-            const target = e.target as HTMLElement;
-            if (target.closest('button') || 
-                target.closest('input') || 
-                target.closest('select') ||
-                target.closest('textarea') ||
-                target.closest('[draggable="true"]')) {
-              e.stopPropagation();
-            }
-          }}
-          onContextMenu={(e) => {
-            const target = e.target as HTMLElement;
-            if (target.closest('input') || 
-                target.closest('select') ||
-                target.closest('textarea')) {
-              e.stopPropagation();
-            }
+            position: 'absolute',
+            left: `${offsetX}px`,
+            top: `${offsetY}px`,
+            width: baseW + 'px',
+            height: baseH + 'px',
+            transform: `scale(${scale})`,
+            transformOrigin: 'top left',
           }}
         >
-          <div 
-            ref={contentRef} 
-            style={{
-              width: sizeInfo.resizeMode === 'aspect-locked' 
-                ? sizeInfo.naturalWidth + 'px' 
-                : '100%',
-              height: sizeInfo.resizeMode === 'aspect-locked' 
-                ? sizeInfo.naturalHeight + 'px' 
-                : '100%',
-              transform: sizeInfo.resizeMode === 'aspect-locked' 
-                ? `scale(${scale})` 
-                : `scale(${scaleX}, ${scaleY})`,
-              transformOrigin: 'top left',
-              background: 'var(--color-panel)',
-              borderRadius: '8px',
-              boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-              boxSizing: 'border-box',
-            }}>
+          <div ref={contentInnerRef} style={{ width: 'auto', height: 'auto', display: 'inline-block' }}>
             <ComponentErrorBoundary
-              fallback={<div style={{padding: '10px', color: 'var(--color-text-muted)'}}>Component error</div>}
+              fallback={<div style={{ padding: '10px', color: 'var(--color-text-muted)' }}>Component error</div>}
             >
               {shape.props.tamboComponent && componentStore ? (
                 (() => {
                   const component = componentStore.get(shape.props.tamboComponent);
-                  
-                  if (!component) {
-                    console.log(`❌ [TamboShapeComponent] Component not found:`, {
-                      shapeId: shape.id,
-                      tamboComponent: shape.props.tamboComponent,
-                      componentName: shape.props.name,
-                      availableComponents: componentStore ? Array.from(componentStore.keys()) : 'no store'
-                    });
-                  }
-                  
-                  // Component store contains React elements, which are already valid React children
-                  return component || (
-                    <div style={{padding: '10px', color: 'var(--color-text-muted)'}}>
-                      Component not found: {shape.props.name}
-                      <br />
-                      <small>ID: {shape.props.tamboComponent}</small>
-                    </div>
+                  return (
+                    component || <div style={{ padding: '10px', color: 'var(--color-text-muted)' }}>Component not found</div>
                   );
                 })()
               ) : (
-                <div style={{padding: '10px', color: 'var(--color-text-muted)'}}>No component loaded</div>
+                <div style={{ padding: '10px', color: 'var(--color-text-muted)' }}>No component loaded</div>
               )}
             </ComponentErrorBoundary>
           </div>
         </div>
-  );
+      </div>
+    );
 }
 
 // Define the TamboShapeUtil class

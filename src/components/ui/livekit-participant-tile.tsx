@@ -55,6 +55,7 @@ export const livekitParticipantTileSchema = z.object({
   // Visual Style
   borderRadius: z.number().optional().describe("Border radius in pixels (default: 12)"),
   showParticipantName: z.boolean().optional().describe("Whether to show participant name overlay (default: true)"),
+  mirrorLocal: z.boolean().optional().describe("Mirror local self-view horizontally (default: true)"),
   
   // Agent Detection
   isAgent: z.boolean().optional().describe("Whether this participant is an AI agent (shows bot icon)"),
@@ -87,6 +88,7 @@ export const LivekitParticipantTile = React.memo(function LivekitParticipantTile
   borderRadius = 12,
   showParticipantName = true,
   isAgent = false,
+  mirrorLocal = true,
 }: LivekitParticipantTileProps) {
   // Initialize Tambo component state
   const [state, setState] = useTamboComponentState<LivekitParticipantTileState>(
@@ -185,6 +187,7 @@ export const LivekitParticipantTile = React.memo(function LivekitParticipantTile
       showAudio={showAudio}
       showParticipantName={showParticipantName}
       isAgent={isAgent}
+      mirrorLocal={mirrorLocal}
       state={state}
       setState={setState}
     />;
@@ -213,6 +216,7 @@ export const LivekitParticipantTile = React.memo(function LivekitParticipantTile
           showAudio={showAudio}
           showParticipantName={showParticipantName}
           isAgent={!!(p.metadata?.includes('agent') || p.name?.toLowerCase().includes('agent'))}
+          mirrorLocal={mirrorLocal}
           state={state}
           setState={setState}
         />
@@ -233,6 +237,7 @@ function SingleParticipantTile({
   showAudio,
   showParticipantName,
   isAgent,
+  mirrorLocal,
   state,
   setState,
 }: {
@@ -246,27 +251,30 @@ function SingleParticipantTile({
   showAudio: boolean;
   showParticipantName: boolean;
   isAgent: boolean;
+  mirrorLocal: boolean;
   state: LivekitParticipantTileState | undefined;
   setState: (state: LivekitParticipantTileState) => void;
 }) {
-  // Fetch all track publications for this participant (works for both local & remote)
-  const participantTracks = participant ? participant.getTrackPublications() : [];
-  
-  // Find video and audio publications for this participant
-  const videoPublication = participantTracks.find(
-    (pub) => pub.source === Track.Source.Camera
+  // Use LiveKit hook to get reactive track references and filter to this participant
+  const trackRefs = useTracks([Track.Source.Camera, Track.Source.Microphone], {
+    onlySubscribed: false,
+  });
+
+  const videoTrackRef = React.useMemo(
+    () => trackRefs.find(
+      (t) => t.participant?.identity === participant.identity && t.source === Track.Source.Camera
+    ),
+    [trackRefs, participant.identity]
   );
-  const audioPublication = participantTracks.find(
-    (pub) => pub.source === Track.Source.Microphone
+  const audioTrackRef = React.useMemo(
+    () => trackRefs.find(
+      (t) => t.participant?.identity === participant.identity && t.source === Track.Source.Microphone
+    ),
+    [trackRefs, participant.identity]
   );
-  
-  // Build TrackReference objects expected by <VideoTrack> / <AudioTrack>
-  const videoTrackRef = videoPublication
-    ? { participant, publication: videoPublication, source: Track.Source.Camera }
-    : undefined;
-  const audioTrackRef = audioPublication
-    ? { participant, publication: audioPublication, source: Track.Source.Microphone }
-    : undefined;
+
+  const videoPublication = videoTrackRef?.publication;
+  const audioPublication = audioTrackRef?.publication;
 
   // Handle minimize toggle
   const handleMinimizeToggle = () => {
@@ -282,22 +290,26 @@ function SingleParticipantTile({
         state?.isMinimized && "!h-16"
       )}
       style={{ 
-        width: '100%', 
-        height: state?.isMinimized ? 64 : '100%', 
+        width, 
+        height: state?.isMinimized ? 64 : height, 
         borderRadius 
       }}
     >
       {/* Video Container */}
       {showVideo && !state?.isMinimized && videoTrackRef && !videoPublication?.isMuted && (
-        <VideoTrack 
-          trackRef={videoTrackRef}
-          className="absolute inset-0 w-full h-full object-cover"
-        />
+        <div className={cn("absolute inset-0 w-full h-full", isLocal && mirrorLocal && "[transform:scaleX(-1)]")}
+             style={{ transformOrigin: 'center' }}>
+          <VideoTrack 
+            trackRef={videoTrackRef}
+            className="w-full h-full object-cover"
+          />
+        </div>
       )}
 
       {/* Video muted/disabled placeholder */}
       {showVideo && !state?.isMinimized && videoPublication && videoPublication.isMuted && (
-        <div className="absolute inset-0 bg-gray-900 flex items-center justify-center">
+        <div className={cn("absolute inset-0 bg-gray-900 flex items-center justify-center", isLocal && mirrorLocal && "[transform:scaleX(-1)]")}
+             style={{ transformOrigin: 'center' }}>
           <div className="text-center text-white">
             <VideoOff className="w-12 h-12 mx-auto mb-2 opacity-75" />
             <p className="text-sm opacity-75">Video disabled</p>
@@ -307,7 +319,8 @@ function SingleParticipantTile({
 
       {/* No video track placeholder */}
       {showVideo && !state?.isMinimized && !videoPublication && (
-        <div className="absolute inset-0 bg-gray-800 flex items-center justify-center">
+        <div className={cn("absolute inset-0 bg-gray-800 flex items-center justify-center", isLocal && mirrorLocal && "[transform:scaleX(-1)]")}
+             style={{ transformOrigin: 'center' }}>
           <div className="text-center text-white">
             {isAgent ? (
               <Bot className="w-12 h-12 mx-auto mb-2 opacity-75" />
