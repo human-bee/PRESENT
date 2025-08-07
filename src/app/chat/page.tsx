@@ -19,6 +19,7 @@ suppressDevelopmentWarnings();
 export default function Home() {
   // Load MCP server configurations
   const mcpServers = loadMcpServers();
+  const enableMcp = process.env.NEXT_PUBLIC_ENABLE_MCP_IN_CHAT === 'true';
   
   // Setup global MCP error handler
   useEffect(() => {
@@ -42,12 +43,19 @@ export default function Home() {
       <TamboProvider
         apiKey={process.env.NEXT_PUBLIC_TAMBO_API_KEY!}
         components={components}
+        tools={[]}
       >
-        <EnhancedMcpProvider mcpServers={mcpServers}>
+        {enableMcp ? (
+          <EnhancedMcpProvider mcpServers={mcpServers}>
+            <div className="flex-1 overflow-hidden">
+              <MessageThreadFull contextKey="tambo-template" />
+            </div>
+          </EnhancedMcpProvider>
+        ) : (
           <div className="flex-1 overflow-hidden">
             <MessageThreadFull contextKey="tambo-template" />
           </div>
-        </EnhancedMcpProvider>
+        )}
       </TamboProvider>
     </div>
   );

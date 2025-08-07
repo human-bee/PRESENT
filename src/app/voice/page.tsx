@@ -34,9 +34,16 @@ interface ShowInCanvasButtonProps {
 
 function ShowInCanvasButton({ messageId, component }: ShowInCanvasButtonProps) {
   const handleShowInCanvas = () => {
+    let payload = component as React.ReactNode | { type: string; props?: Record<string, unknown> };
+    try {
+      // If component is already a React element, send it directly
+      if (React.isValidElement(component)) {
+        payload = component;
+      }
+    } catch {}
     window.dispatchEvent(
       new CustomEvent("tambo:showComponent", {
-        detail: { messageId, component },
+        detail: { messageId, component: payload },
       })
     );
   };

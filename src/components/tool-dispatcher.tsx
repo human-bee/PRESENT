@@ -34,7 +34,7 @@
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-import { createContext, useContext, useEffect, useRef, useState, useCallback, useMemo } from 'react';
+import React, { createContext, useContext, useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { useRoomContext } from '@livekit/components-react';
 import { useTamboThread } from '@tambo-ai/react';
 import { useValidatedTambo } from '@/hooks/use-validated-tambo';
@@ -1324,10 +1324,12 @@ Please consider both the processed summary above and the original transcript con
           timestamp: Date.now(),
         });
 
+        // Create a real React element so downstream renderers don't receive raw objects
+        const ComponentEl = React.createElement(compDef.component as any, { __tambo_message_id: messageId, ...(initialProps || {}) });
         window.dispatchEvent(new CustomEvent('tambo:showComponent', {
           detail: {
             messageId,
-            component: { type: componentType, props: initialProps },
+            component: ComponentEl,
           }
         }));
 
@@ -1358,10 +1360,11 @@ Please consider both the processed summary above and the original transcript con
             timestamp: Date.now(),
           });
           
+          const ComponentEl = React.createElement(compDef.component as any, { __tambo_message_id: messageId, ...(initialProps || {}) });
           window.dispatchEvent(new CustomEvent('tambo:showComponent', {
             detail: {
               messageId,
-              component: { type: componentType, props: initialProps },
+              component: ComponentEl,
             }
           }));
           

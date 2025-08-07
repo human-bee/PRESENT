@@ -174,10 +174,21 @@ function TamboShapeComponent({ shape }: { shape: TamboShape }) {
             >
               {shape.props.tamboComponent && componentStore ? (
                 (() => {
-                  const component = componentStore.get(shape.props.tamboComponent);
-                  return (
-                    component || <div style={{ padding: '10px', color: 'var(--color-text-muted)' }}>Component not found</div>
-                  );
+                  const stored = componentStore.get(shape.props.tamboComponent) as any;
+                  let node: React.ReactNode = null;
+                  if (React.isValidElement(stored)) {
+                    node = stored;
+                  } else if (stored && typeof stored === 'object' && (stored.type || stored.Component || stored.component)) {
+                    // Try to reconstruct from { type, props }
+                    const type = stored.type || stored.Component || stored.component;
+                    const props = stored.props || {};
+                    try {
+                      node = React.createElement(type, { __tambo_message_id: shape.props.tamboComponent, ...props });
+                    } catch {
+                      // fall through
+                    }
+                  }
+                  return node || <div style={{ padding: '10px', color: 'var(--color-text-muted)' }}>Component not found</div>;
                 })()
               ) : (
                 <div style={{ padding: '10px', color: 'var(--color-text-muted)' }}>No component loaded</div>

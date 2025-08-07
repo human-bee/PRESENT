@@ -17,6 +17,7 @@ import { MessageThreadCollapsible } from "@/components/ui/message-thread-collaps
 import { LivekitRoomConnector, CanvasLiveKitContext } from "@/components/ui/livekit-room-connector";
 import { loadMcpServers, suppressDevelopmentWarnings, suppressViolationWarnings } from "@/lib/mcp-utils";
 import { components, tools } from "@/lib/tambo";
+import { validateTamboTools } from "@/lib/tambo-tool-validator";
 import { TamboProvider } from "@tambo-ai/react";
 import { EnhancedMcpProvider } from "@/components/ui/enhanced-mcp-provider";
 import { Room, ConnectionState, RoomEvent, VideoPresets, RoomOptions } from "livekit-client";
@@ -75,6 +76,8 @@ export default function Canvas() {
   // Load MCP server configurations
   const mcpServers = loadMcpServers();
   const contextKey = "tambo-canvas";
+  // Feature flag to gate MCP in canvas to isolate invalid external tool names if needed
+  const enableMcp = process.env.NEXT_PUBLIC_ENABLE_MCP_IN_CANVAS === 'true';
   
   // Create LiveKit room instance for the canvas
   const [room] = useState(() => {
@@ -161,52 +164,85 @@ export default function Canvas() {
       <TamboProvider
         apiKey={process.env.NEXT_PUBLIC_TAMBO_API_KEY!}
         components={components}
-        tools={tools}
+        tools={validateTamboTools(tools as any)}
       >
-        <EnhancedMcpProvider mcpServers={mcpServers}>
-          {/* System Registry Sync - syncs components and tools */}
-          <SystemRegistrySync />
-          
-          {/* LiveKit Room Context Provider - wraps everything! */}
-          <RoomContext.Provider value={room}>
-            {/* Tool Dispatcher - handles voice agent tool calls */}
-            <ToolDispatcher contextKey={contextKey} enableLogging={true}>
-              {/* Canvas LiveKit Context Provider - provides connection state to all canvas components */}
-              <CanvasLiveKitContext.Provider value={roomState}>
-              {/* Full-screen Canvas Space */}
-              <CanvasSpace
-                className="absolute inset-0 w-full h-full"
-                onTranscriptToggle={toggleTranscript}
-              />
-
-              {/* Speech Transcription Component - Bottom Right */}
-              {/* Temporarily disabled - moving to MessageThreadCollapsible tabs
-              <div className="absolute bottom-20 right-8 z-[99999999999] pointer-events-auto">
-                <SpeechTranscription />
-              </div>
-              */}
-
-              {/* Direct LiveKit Room Connector - positioned bottom left to avoid overlap */}
-              <div className="absolute bottom-4 left-4 z-50">
-                <LivekitRoomConnector 
-                  roomName={roomName}
-                  userName={user.user_metadata?.full_name || "Canvas User"}
-                  autoConnect={false}
+        {enableMcp ? (
+          <EnhancedMcpProvider mcpServers={mcpServers}>
+            {/* System Registry Sync - syncs components and tools */}
+            <SystemRegistrySync />
+            
+            {/* LiveKit Room Context Provider - wraps everything! */}
+            <RoomContext.Provider value={room}>
+              {/* Tool Dispatcher - handles voice agent tool calls */}
+              <ToolDispatcher contextKey={contextKey} enableLogging={true}>
+                {/* Canvas LiveKit Context Provider - provides connection state to all canvas components */}
+                <CanvasLiveKitContext.Provider value={roomState}>
+                {/* Full-screen Canvas Space */}
+                <CanvasSpace
+                  className="absolute inset-0 w-full h-full"
+                  onTranscriptToggle={toggleTranscript}
                 />
-              </div>
 
-              {/* Collapsible Message Thread - now slides from right and controlled by toolbar */}
-              {isTranscriptOpen && (
-                <MessageThreadCollapsible
-                  contextKey={contextKey}
-                  className="fixed right-0 top-0 h-full z-50 transform transition-transform duration-300 w-full max-w-sm sm:max-w-md md:max-w-lg"
-                  variant="default"
+                {/* Direct LiveKit Room Connector - positioned bottom left to avoid overlap */}
+                <div className="absolute bottom-4 left-4 z-50">
+                  <LivekitRoomConnector 
+                    roomName={roomName}
+                    userName={user.user_metadata?.full_name || "Canvas User"}
+                    autoConnect={false}
+                  />
+                </div>
+
+                {/* Collapsible Message Thread - now slides from right and controlled by toolbar */}
+                {isTranscriptOpen && (
+                  <MessageThreadCollapsible
+                    contextKey={contextKey}
+                    className="fixed right-0 top-0 h-full z-50 transform transition-transform duration-300 w-full max-w-sm sm:max-w-md md:max-w-lg"
+                    variant="default"
+                  />
+                )}
+                </CanvasLiveKitContext.Provider>
+              </ToolDispatcher>
+            </RoomContext.Provider>
+          </EnhancedMcpProvider>
+        ) : (
+          <>
+            {/* System Registry Sync - syncs components and tools */}
+            <SystemRegistrySync />
+            
+            {/* LiveKit Room Context Provider - wraps everything! */}
+            <RoomContext.Provider value={room}>
+              {/* Tool Dispatcher - handles voice agent tool calls */}
+              <ToolDispatcher contextKey={contextKey} enableLogging={true}>
+                {/* Canvas LiveKit Context Provider - provides connection state to all canvas components */}
+                <CanvasLiveKitContext.Provider value={roomState}>
+                {/* Full-screen Canvas Space */}
+                <CanvasSpace
+                  className="absolute inset-0 w-full h-full"
+                  onTranscriptToggle={toggleTranscript}
                 />
-              )}
-              </CanvasLiveKitContext.Provider>
-            </ToolDispatcher>
-          </RoomContext.Provider>
-        </EnhancedMcpProvider>
+
+                {/* Direct LiveKit Room Connector - positioned bottom left to avoid overlap */}
+                <div className="absolute bottom-4 left-4 z-50">
+                  <LivekitRoomConnector 
+                    roomName={roomName}
+                    userName={user.user_metadata?.full_name || "Canvas User"}
+                    autoConnect={false}
+                  />
+                </div>
+
+                {/* Collapsible Message Thread - now slides from right and controlled by toolbar */}
+                {isTranscriptOpen && (
+                  <MessageThreadCollapsible
+                    contextKey={contextKey}
+                    className="fixed right-0 top-0 h-full z-50 transform transition-transform duration-300 w-full max-w-sm sm:max-w-md md:max-w-lg"
+                    variant="default"
+                  />
+                )}
+                </CanvasLiveKitContext.Provider>
+              </ToolDispatcher>
+            </RoomContext.Provider>
+          </>
+        )}
       </TamboProvider>
     </div>
   );

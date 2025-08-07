@@ -341,7 +341,15 @@ const MessageRenderedComponentArea = React.forwardRef<
             </button>
           </div>
         ) : (
-          <div className="w-full mt-4 px-2">{message.renderedComponent}</div>
+          <div className="w-full mt-4 px-2">
+            {React.isValidElement(message.renderedComponent)
+              ? message.renderedComponent
+              : (
+                <div className="text-xs text-muted-foreground">
+                  Component ready. Open the canvas to view it.
+                </div>
+              )}
+          </div>
         ))}
     </div>
   );

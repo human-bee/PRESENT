@@ -22,6 +22,7 @@ import { ScrollableMessageContainer } from "@/components/ui/scrollable-message-c
 import { cn } from "@/lib/utils";
 import { MessageSquare, FileText } from "lucide-react";
 import * as React from "react";
+import { components as tamboComponents } from "@/lib/tambo";
 import { type VariantProps } from "class-variance-authority";
 import type { Suggestion } from "@tambo-ai/react";
 import { useRoomContext } from '@livekit/components-react';
@@ -131,18 +132,43 @@ export const MessageThreadCollapsible = React.forwardRef<
 
   // Listen for Tambo component creation - register with new system
   const handleTamboComponent = React.useCallback((event: CustomEvent) => {
-    const { messageId, component } = event.detail;
-    
+    const { messageId, component } = event.detail as { messageId: string; component: unknown };
+
+    // Normalize component: ensure it's a valid React element if possible
+    let normalized: React.ReactNode = component as React.ReactNode;
+    if (!React.isValidElement(normalized)) {
+      const maybe = component as { type?: string; props?: Record<string, unknown> };
+      if (maybe && typeof maybe === 'object' && typeof maybe.type === 'string') {
+        const compDef = tamboComponents.find(c => c.name === maybe.type);
+        if (compDef) {
+          try {
+            normalized = React.createElement(compDef.component as any, { __tambo_message_id: messageId, ...(maybe.props || {}) });
+          } catch {
+            // keep fallback
+          }
+        }
+      }
+    }
+
+    // If still not a valid element, use a safe fallback instead of crashing
+    if (!React.isValidElement(normalized)) {
+      normalized = (
+        <div className="p-3 text-xs bg-red-50 border border-red-200 text-red-700 rounded">
+          Unsupported component payload. Please check registry and event format.
+        </div>
+      );
+    }
+
     // Store the component for this thread/context (for transcript display)
     setComponentStore(prev => {
       const updated = new Map(prev);
-      updated.set(messageId, { component, contextKey: effectiveContextKey || 'default' });
+      updated.set(messageId, { component: normalized, contextKey: effectiveContextKey || 'default' });
       return updated;
     });
     
     // ✅ ComponentRegistry integration re-enabled with enhanced stability
     // Register with the new ComponentRegistry system
-    if (component && React.isValidElement(component)) {
+    if (normalized && React.isValidElement(normalized)) {
       const componentType = typeof component.type === 'function' 
         ? (component.type as { displayName?: string; name?: string }).displayName || 
           (component.type as { displayName?: string; name?: string }).name || 'UnknownComponent'
@@ -154,7 +180,7 @@ export const MessageThreadCollapsible = React.forwardRef<
           ComponentRegistry.register({
             messageId,
             componentType,
-            props: (component.props || {}) as Record<string, unknown>,
+            props: ((normalized as any)?.props || {}) as Record<string, unknown>,
             contextKey: effectiveContextKey || 'default',
             timestamp: Date.now(),
             updateCallback: (patch) => {
@@ -356,7 +382,13 @@ export const MessageThreadCollapsible = React.forwardRef<
                               Component: {messageId}
                             </div>
                             <div className="bg-white dark:bg-gray-800 rounded border">
-                              {data.component}
+                              {React.isValidElement(data.component)
+                                ? data.component
+                                : (
+                                  <div className="p-3 text-xs text-red-700 bg-red-50 border border-red-200 rounded">
+                                    Invalid component payload
+                                  </div>
+                                )}
                             </div>
                           </div>
                         ))}

@@ -402,11 +402,22 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
    */
   useEffect(() => {
     const handleShowComponent = (
-      event: CustomEvent<{ messageId: string; component: React.ReactNode }>,
+      event: CustomEvent<{ messageId: string; component: React.ReactNode | { type: string; props?: Record<string, unknown> } }>,
     ) => {
       try {
-        // Pass a name for the component based on the event if available, or a default
-        addComponentToCanvas(event.detail.messageId, event.detail.component, "Rendered Component");
+        let node: React.ReactNode = event.detail.component as React.ReactNode;
+        let inferredName: string | undefined = "Rendered Component";
+        if (!React.isValidElement(node)) {
+          const maybe = event.detail.component as { type?: string; props?: Record<string, unknown> };
+          if (maybe && typeof maybe === 'object' && typeof maybe.type === 'string') {
+            const compDef = components.find(c => c.name === maybe.type);
+            if (compDef) {
+              node = React.createElement(compDef.component as any, { __tambo_message_id: event.detail.messageId, ...(maybe.props || {}) });
+              inferredName = compDef.name;
+            }
+          }
+        }
+        addComponentToCanvas(event.detail.messageId, node, inferredName);
       } catch (error) {
         console.error("Failed to add component to canvas from event:", error);
       }
@@ -446,7 +457,27 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
         const messageId = latestMessage.id || `msg-${Date.now()}`;
         // Check using addedMessageIds state
         if (!addedMessageIds.has(messageId) && latestMessage.renderedComponent) {
-          addComponentToCanvas(messageId, latestMessage.renderedComponent, latestMessage.role === 'assistant' ? 'AI Response' : 'User Input');
+          // Normalize renderedComponent into a real React element when needed
+          let node: React.ReactNode = latestMessage.renderedComponent as React.ReactNode;
+          if (!React.isValidElement(node)) {
+            const maybe = latestMessage.renderedComponent as { type?: unknown; props?: Record<string, unknown> };
+            if (maybe && typeof maybe === 'object' && maybe.type) {
+              if (typeof maybe.type === 'string') {
+                const compDef = components.find(c => c.name === maybe.type);
+                if (compDef) {
+                  try {
+                    node = React.createElement(compDef.component as any, { __tambo_message_id: messageId, ...(maybe.props || {}) });
+                  } catch {}
+                }
+              } else if (typeof maybe.type === 'function' || (typeof maybe.type === 'object' && maybe.type)) {
+                try {
+                  node = React.createElement(maybe.type as any, { __tambo_message_id: messageId, ...(maybe.props || {}) });
+                } catch {}
+              }
+            }
+          }
+
+          addComponentToCanvas(messageId, node, latestMessage.role === 'assistant' ? 'AI Response' : 'User Input');
         }
       }
     }, 100); // 100ms debounce

@@ -12,6 +12,7 @@ import {
   YoutubeEmbed,
   youtubeEmbedSchema,
 } from "@/components/ui/youtube-embed";
+import * as React from "react";
 import {
   WeatherForecast,
   weatherForecastSchema,
@@ -610,14 +611,29 @@ export const generateUiComponentTool: TamboTool = {
 
     // Dispatch event for CanvasSpace to render immediately
     if (typeof window !== "undefined") {
-      window.dispatchEvent(
-        new CustomEvent("tambo:showComponent", {
-          detail: {
-            messageId,
-            component: { type: componentType, props },
-          },
-        })
-      );
+      try {
+        // Prefer dispatching a real React element to avoid object-as-child errors in consumers
+        const compDef = components.find((c) => c.name === componentType);
+        const element = compDef ? React.createElement(compDef.component as any, { __tambo_message_id: messageId, ...(props || {}) }) : { type: componentType, props };
+        window.dispatchEvent(
+          new CustomEvent("tambo:showComponent", {
+            detail: {
+              messageId,
+              component: element,
+            },
+          })
+        );
+      } catch {
+        // Fallback to plain object payload if React.createElement isn't available
+        window.dispatchEvent(
+          new CustomEvent("tambo:showComponent", {
+            detail: {
+              messageId,
+              component: { type: componentType, props },
+            },
+          })
+        );
+      }
     }
 
     return { 
@@ -857,7 +873,7 @@ export const components: TamboComponent[] = [
     propsSchema: componentToolboxSchema,
   },
   {
-    name: "AI Response",
+    name: "AIResponse",
     description: "Displays AI-generated responses and messages with markdown support. Perfect for showing assistant replies, AI analysis, or any text-based AI output.",
     component: Message,
     propsSchema: aiResponseSchema,
