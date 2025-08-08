@@ -172,6 +172,13 @@ export function ToolDispatcher({
     return room ? createObservabilityBridge(room) : null;
   }, [room]);
   
+  // Ensure MCP bridge is initialized even before tools are discovered
+  useEffect(() => {
+    try {
+      initializeMCPBridge();
+    } catch {}
+  }, [room]);
+
   // Set up enhanced observability logging
   useEffect(() => {
     if (!observabilityBridge) return;
@@ -1033,16 +1040,33 @@ Please consider both the processed summary above and the original transcript con
         // Check if it's from a component sub-agent
         const isFromComponent = params.origin === 'component-subagent';
         
-        // Try to execute directly if we have the tool
-        const mcpTool = toolRegistry.get?.(toolName) || toolRegistry[toolName];
-        if (mcpTool && mcpTool.tool) {
+        // Try to execute directly if we have the tool (with fuzzy aliasing)
+        let mcpTool = toolRegistry.get?.(toolName) || toolRegistry[toolName];
+        let resolvedToolKey: string | null = mcpTool ? toolName : null;
+
+        if (!mcpTool) {
+          const normalize = (s: string) => s.toLowerCase().replace(/^mcp_/, '').replace(/[^a-z0-9]/g, '');
+          const requested = normalize(toolName);
+          const entries: Array<[string, any]> = toolRegistry instanceof Map
+            ? Array.from(toolRegistry.entries())
+            : Object.entries(toolRegistry as Record<string, any>);
+          for (const [name, tool] of entries) {
+            if (!name.startsWith('mcp_')) continue;
+            if (normalize(name).includes(requested)) {
+              mcpTool = tool; resolvedToolKey = name; break;
+            }
+          }
+        }
+
+        if (mcpTool && (mcpTool.tool || mcpTool.execute)) {
           log('🔧 [ToolDispatcher] Executing MCP tool directly:', toolName);
-          result = await mcpTool.tool(params);
+          const exec = mcpTool.tool || mcpTool.execute;
+          result = await exec(params);
           
           // If from component, send response via event
           if (isFromComponent) {
             window.dispatchEvent(new CustomEvent('tambo:mcpToolResponse', {
-              detail: { tool: toolName.replace('mcp_', ''), result, error: null }
+              detail: { tool: toolName.replace('mcp_', ''), result, error: null, resolved: resolvedToolKey }
             }));
           }
         } else {

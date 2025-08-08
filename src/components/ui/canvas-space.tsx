@@ -190,13 +190,21 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
       console.log(`🔄 [CanvasSpace] Found ${tamboShapes.length} tambo shapes to rehydrate`);
       
       tamboShapes.forEach(shape => {
-        const componentName = shape.props.name;
+        let componentName = shape.props.name;
         const messageId = shape.props.tamboComponent;
         
         console.log(`🔄 [CanvasSpace] Rehydrating ${componentName} (${messageId})`);
         
         // Find component definition
-        const componentDef = components.find(c => c.name === componentName);
+        // Try exact match first
+        let componentDef = components.find(c => c.name === componentName);
+        // Handle legacy names
+        if (!componentDef) {
+          if (componentName === 'AI Response') {
+            componentDef = components.find(c => c.name === 'AIResponse');
+            if (componentDef) componentName = 'AIResponse';
+          }
+        }
         if (componentDef) {
           // Recreate React component and add to store
           const Component = componentDef.component;

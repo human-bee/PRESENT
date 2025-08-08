@@ -11,6 +11,7 @@ import {
 import { LoadingState } from "@/lib/with-progressive-loading";
 import { LoadingWrapper, SkeletonPatterns } from "@/components/ui/loading-states";
 import { useComponentSubAgent, SubAgentPresets } from "@/lib/component-subagent";
+import { normalizeWeatherForecast } from "@/lib/mcp-normalizers";
 import { useComponentIsolation } from "@/lib/component-isolation";
 
 // Enhanced forecast period schema with more data types
@@ -407,12 +408,18 @@ export function WeatherForecast(props: WeatherForecastProps) {
   );
 
   // Use enriched data from sub-agent if available
-  const weatherData = subAgent.enrichedData.weather || {};
-  const forecastData = subAgent.enrichedData.forecast || {};
+  const weatherRaw = subAgent.enrichedData.weather || {};
+  const forecastRaw = subAgent.enrichedData.forecast || {};
+
+  // Normalize any MCP shapes into our canonical schema
+  const normalized = normalizeWeatherForecast(
+    (forecastRaw && Object.keys(forecastRaw).length ? forecastRaw : weatherRaw),
+    props.location
+  );
   
   // Merge props data with MCP-fetched data (props take priority)
-  const location = props.location || weatherData.location || subAgent.context?.location;
-  const periods = props.periods || forecastData.periods || [];
+  const location = props.location || normalized.location || subAgent.context?.location;
+  const periods = props.periods || normalized.periods || [];
   const currentPeriod = periods[state?.selectedPeriod || 0] || periods[0];
   
   // Determine loading state - if we have data from props, skip loading
