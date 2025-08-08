@@ -90,27 +90,35 @@ function TamboShapeComponent({ shape }: { shape: TamboShape }) {
       return () => observer.disconnect();
     }, []);
 
-    // Auto-fit the TLDraw shape to the content on first accurate measure
+    // Conditional auto-fit based on sizingPolicy and whether user resized
     useEffect(() => {
-      if (!editor || !naturalSize || autoFittedRef.current) return;
+      if (!editor || !naturalSize) return;
 
-      // If the current shape size is still close to defaults, auto-fit once
-      const { w: nw, h: nh } = naturalSize;
-      const closeTo = (a: number, b: number) => Math.abs(a - b) < 4;
+      const sizeInfo = getComponentSizeInfo(shape.props.name);
+      const policy = sizeInfo.sizingPolicy || 'fit_until_user_resize';
 
-      if (closeTo(shape.props.w, nw) === false || closeTo(shape.props.h, nh) === false) {
-        // Update the shape to exactly fit content
-        editor.updateShapes([
-          {
-            id: shape.id,
-            type: 'tambo',
-            props: { ...shape.props, w: nw, h: nh },
-          },
-        ]);
+      // TLDraw Editor.shapeUtils is not a Map in our integration; guard accordingly
+      let userHasResized = false;
+      try {
+        const shapeUtil: any = (editor as any).shapeUtils?.get?.(shape) || (editor as any).shapeUtils?.[shape.type];
+        userHasResized = Boolean(shapeUtil?.userResized?.has?.(shape.id));
+      } catch {
+        userHasResized = false;
       }
 
-      autoFittedRef.current = true;
-    }, [editor, naturalSize, shape.id]);
+      const shouldAutoFit =
+        policy === 'always_fit' || (policy === 'fit_until_user_resize' && !userHasResized);
+
+      if (shouldAutoFit) {
+        const { w: nw, h: nh } = naturalSize;
+        const changed = Math.abs(shape.props.w - nw) > 1 || Math.abs(shape.props.h - nh) > 1;
+        if (changed) {
+          editor.updateShapes([
+            { id: shape.id, type: 'tambo', props: { ...shape.props, w: nw, h: nh } },
+          ]);
+        }
+      }
+    }, [editor, naturalSize, shape.id, shape.props.name]);
 
     // Compute uniform scale to preserve aspect ratio and avoid warping/cropping
     const sizeInfo = getComponentSizeInfo(shape.props.name);
@@ -213,6 +221,9 @@ export class TamboShapeUtil extends BaseBoxShapeUtil<TamboShape> {
     pinnedY: T.optional(T.number),
   } satisfies RecordProps<TamboShape>;
 
+  // Track shapes the user has explicitly resized
+  private userResized = new Set<string>();
+
   // Provide default props for the Tambo shape
   override getDefaultProps(): TamboShape['props'] {
     return {
@@ -269,6 +280,9 @@ export class TamboShapeUtil extends BaseBoxShapeUtil<TamboShape> {
 
   // Handle TLDraw-initiated resizes with component constraints
   override onResize = (shape: TamboShape, info: ResizeInfo) => {
+    // Mark that the user has explicitly resized this shape
+    this.userResized.add(shape.id);
+
     const componentName = shape.props.name; // Component type from name
     const sizeInfo = getComponentSizeInfo(componentName);
     
@@ -313,6 +327,11 @@ export class TamboShapeUtil extends BaseBoxShapeUtil<TamboShape> {
       }
     };
   };
+
+  // Expose a method for the component renderer to query if user resized
+  public hasUserResized(id: string) {
+    return this.userResized.has(id);
+  }
 }
 
 // Component wrapper for Toolbox inside shape

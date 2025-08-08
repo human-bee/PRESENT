@@ -19,16 +19,29 @@ export function SystemRegistrySync() {
   
   // Sync Tambo components to registry
   useEffect(() => {
-    if (!componentList || componentList.length === 0) return;
-    
-    // Extract component info
-    const componentInfo = componentList.map(comp => ({
-      name: comp.name,
-      description: comp.description || `${comp.name} component`
-    }));
-    
-    logger.log('🔄 Syncing Tambo components to system registry:', componentInfo.length, 'components');
-    syncTamboComponentsToRegistry(componentInfo);
+    // Primary path: use components discovered by TamboProvider
+    if (componentList && componentList.length > 0) {
+      const componentInfo = componentList.map(comp => ({
+        name: comp.name,
+        description: comp.description || `${comp.name} component`,
+      }));
+      logger.log('🔄 Syncing Tambo components to system registry:', componentInfo.length, 'components');
+      syncTamboComponentsToRegistry(componentInfo);
+      return;
+    }
+
+    // Fallback: if Tambo hasn't exposed componentList yet, use our local registry
+    import('@/lib/tambo')
+      .then(({ components }) => {
+        if (!components || components.length === 0) return;
+        const componentInfo = components.map((comp: any) => ({
+          name: comp.name,
+          description: comp.description || `${comp.name} component`,
+        }));
+        logger.log('🔄 [Fallback] Syncing components from local registry:', componentInfo.length, 'components');
+        syncTamboComponentsToRegistry(componentInfo);
+      })
+      .catch(() => {});
   }, [componentList]);
   
   // Log registry state in development

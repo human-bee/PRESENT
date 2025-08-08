@@ -49,6 +49,7 @@ import { nanoid } from 'nanoid';
 import { Toaster } from "react-hot-toast";
 
 import { systemRegistry } from "@/lib/system-registry";
+import { ComponentRegistry } from "@/lib/component-registry";
 import { createShapeId } from 'tldraw';
 
 import { components } from '@/lib/tambo';
@@ -164,6 +165,8 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
   
   // Store React components separately from tldraw shapes to avoid structuredClone issues
   const componentStore = useRef<Map<string, React.ReactNode>>(new Map());
+  // Queue of components received before editor is ready
+  const pendingComponentsRef = useRef<Array<{ messageId: string; node: React.ReactNode; name?: string }>>([]);
 
   // Load shape utils dynamically
   const [customShapeUtils, setCustomShapeUtils] = useState<unknown[]>([]);
@@ -415,6 +418,23 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
       try {
         let node: React.ReactNode = event.detail.component as React.ReactNode;
         let inferredName: string | undefined = "Rendered Component";
+        // If editor isn't ready yet, queue the component for later
+        if (!editor) {
+          // Normalize to React element if possible so we can render later without recomputing
+          if (!React.isValidElement(node)) {
+            const maybe = event.detail.component as { type?: string; props?: Record<string, unknown> };
+            if (maybe && typeof maybe === 'object' && typeof maybe.type === 'string') {
+              const compDef = components.find(c => c.name === maybe.type);
+              if (compDef) {
+                node = React.createElement(compDef.component as any, { __tambo_message_id: event.detail.messageId, ...(maybe.props || {}) });
+                inferredName = compDef.name;
+              }
+            }
+          }
+          pendingComponentsRef.current.push({ messageId: event.detail.messageId, node, name: inferredName });
+          console.log('⏸️ [CanvasSpace] Queued component until editor is ready:', inferredName || 'component');
+          return;
+        }
         if (!React.isValidElement(node)) {
           const maybe = event.detail.component as { type?: string; props?: Record<string, unknown> };
           if (maybe && typeof maybe === 'object' && typeof maybe.type === 'string') {
@@ -443,6 +463,42 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
       );
     };
   }, [addComponentToCanvas]);
+
+  // Drain any queued components once editor is ready
+  useEffect(() => {
+    if (!editor) return;
+    if (pendingComponentsRef.current.length === 0) return;
+    const queued = [...pendingComponentsRef.current];
+    pendingComponentsRef.current = [];
+    queued.forEach(({ messageId, node, name }) => {
+      addComponentToCanvas(messageId, node, name);
+      console.log('▶️ [CanvasSpace] Rendered queued component:', name || 'component');
+    });
+  }, [editor, addComponentToCanvas]);
+
+  // On first editor ready, reconcile with ComponentRegistry in case events were missed
+  useEffect(() => {
+    if (!editor) return;
+    const existing = ComponentRegistry.list();
+    if (!existing || existing.length === 0) return;
+    console.log(`🧭 [CanvasSpace] Reconciling ${existing.length} components from registry`);
+    existing.forEach((info) => {
+      if (addedMessageIds.has(info.messageId)) return;
+      const compDef = components.find(c => c.name === info.componentType);
+      let node: React.ReactNode = null;
+      if (compDef) {
+        try {
+          node = React.createElement(compDef.component as any, { __tambo_message_id: info.messageId, ...(info.props || {}) });
+        } catch {}
+      }
+      if (!node) {
+        // Fallback minimal node
+        node = React.createElement('div', null, `${info.componentType}`);
+      }
+      addComponentToCanvas(info.messageId, node, info.componentType);
+      console.log('✅ [CanvasSpace] Reconciled component:', info.componentType, info.messageId);
+    });
+  }, [editor, addComponentToCanvas, addedMessageIds]);
 
   /**
    * Effect to automatically add the latest component from thread messages (optimized with debouncing)
@@ -591,9 +647,9 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
           }
         }}
       >
-        <TldrawWithCollaboration
+          <TldrawWithCollaboration
           onMount={setEditor}
-          shapeUtils={customShapeUtils}
+          shapeUtils={customShapeUtils as any}
           componentStore={componentStore.current}
           className="absolute inset-0"
           onTranscriptToggle={onTranscriptToggle}

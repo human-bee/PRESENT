@@ -336,11 +336,15 @@ export function syncMcpToolsToRegistry(mcpTools: Array<{name: string, descriptio
   const mcpToAgentMapping: Record<string, string> = {
     'searchVideos': 'youtube_search',
     'youtube_search': 'youtube_search',
+    'weather': 'mcp_weather',
+    'forecast': 'mcp_forecast',
+    'alerts': 'mcp_alerts',
     // Add more mappings as needed
   };
   
   mcpTools.forEach(tool => {
-    const agentToolName = mcpToAgentMapping[tool.name];
+    const normalized = tool.name.replace(/^mcp_/, '');
+    const agentToolName = mcpToAgentMapping[normalized];
     
     if (agentToolName) {
       // Update existing capability
@@ -348,12 +352,12 @@ export function syncMcpToolsToRegistry(mcpTools: Array<{name: string, descriptio
     } else {
       // Add new MCP tool capability
       systemRegistry.addCapability({
-        id: `mcp_${tool.name}`,
+        id: `mcp_${normalized}`,
         type: 'mcp_tool',
-        name: tool.name,
+        name: normalized,
         description: tool.description,
-        mcpToolName: tool.name,
-        agentToolName: `mcp_${tool.name}`,
+        mcpToolName: normalized,
+        agentToolName: `mcp_${normalized}`,
         available: true,
         source: 'mcp'
       });

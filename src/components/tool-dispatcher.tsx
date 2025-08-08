@@ -942,7 +942,7 @@ Generate a ${componentType} component based on the transcript content and compon
         
         try {
           // Import tools directly from tambo.ts
-          const { getDocumentsTool, generateUiComponentTool } = await import('@/lib/tambo');
+           const { getDocumentsTool, generateUiComponentTool } = await import('@/lib/tambo');
           
           const directTool = payload.tool === 'get_documents' ? getDocumentsTool : generateUiComponentTool;
           
@@ -1008,7 +1008,8 @@ Please consider both the processed summary above and the original transcript con
              });
              
              // Use the enhanced prompt instead of basic one
-             result = await directTool.tool(finalPrompt);
+              const exec = (directTool as any).tool || (directTool as any).execute || directTool;
+              result = await exec(finalPrompt);
            }
           
           pendingTool.status = 'completed';
@@ -1327,41 +1328,6 @@ Please consider both the processed summary above and the original transcript con
   // Handle component_creation events from LiveKit bus
   useEffect(() => {
     if (!room) return;
-
-    const handleComponentCreation = async (event: CustomEvent) => {
-      const { componentType, initialProps } = event.detail;
-      log('🎨 [ToolDispatcher] Received component_creation event:', componentType, initialProps);
-
-      try {
-        // Find the component definition
-        const { components } = await import('@/lib/tambo');
-        const compDef = components.find(c => c.name === componentType);
-        if (!compDef) throw new Error(`Component ${componentType} not found`);
-
-        const messageId = `${componentType.toLowerCase()}-${nanoid(6)}`;
-
-        ComponentRegistry.register({
-          messageId,
-          componentType,
-          props: initialProps,
-          contextKey: 'default',
-          timestamp: Date.now(),
-        });
-
-        // Create a real React element so downstream renderers don't receive raw objects
-        const ComponentEl = React.createElement(compDef.component as any, { __tambo_message_id: messageId, ...(initialProps || {}) });
-        window.dispatchEvent(new CustomEvent('tambo:showComponent', {
-          detail: {
-            messageId,
-            component: ComponentEl,
-          }
-        }));
-
-        log('✅ Created component from realtime tool:', componentType);
-      } catch (err) {
-        log('❌ Error handling component_creation:', err);
-      }
-    };
 
     const handleDataReceived = async (data: Uint8Array, participant: any, kind: any, topic?: string) => {
       try {
