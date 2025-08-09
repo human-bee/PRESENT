@@ -189,11 +189,15 @@ export default function CanvasSpaceSingleComponent({
         ]);
       } else {
         // Create new shape
+        // Determine initial size based on component type and viewport
+        const viewport = editor.getViewportPageBounds();
+        const sizeInfo = require('@/lib/component-sizing');
+        const initial = sizeInfo.calculateInitialSize(componentName || 'Default', viewport ? { width: viewport.width, height: viewport.height } : undefined);
         const defaultShapeProps = {
-          w: 700,
-          h: 1100,
+          w: initial.w,
+          h: initial.h,
           tamboComponent: "",
-          name: "Tambo Component",
+          name: componentName || "Tambo Component",
         };
         const newShapeId = `shape:tambo-${nanoid()}` as any; // Type assertion for TLShapeId
 

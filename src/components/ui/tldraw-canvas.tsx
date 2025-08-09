@@ -7,7 +7,7 @@ import { CanvasSyncAdapter } from '../CanvasSyncAdapter';
 import { nanoid } from 'nanoid';
 // 1. Import ComponentToolbox
 import { ComponentToolbox } from './component-toolbox';
-import { getComponentSizeInfo } from '@/lib/component-sizing';
+import { getComponentSizeInfo, calculateInitialSize } from '@/lib/component-sizing';
 import { ResizeInfo } from 'tldraw';
 
 // Create context for component store
@@ -364,14 +364,17 @@ function ToolboxShapeComponent({ shape }: { shape: TamboShape }) {
     const x = viewport ? viewport.midX - 150 : 0;
     const y = viewport ? viewport.midY - 100 : 0;
     
+    const viewportBounds = editor.getViewportPageBounds();
+    const initial = calculateInitialSize(componentType, viewportBounds ? { width: viewportBounds.width, height: viewportBounds.height } : undefined);
+
     editor.createShape({
       id: shapeId,
       type: 'tambo',
-      x,
-      y,
+      x: viewportBounds ? viewportBounds.midX - initial.w / 2 : x,
+      y: viewportBounds ? viewportBounds.midY - initial.h / 2 : y,
       props: {
-        w: 300,
-        h: 200,
+        w: initial.w,
+        h: initial.h,
         tamboComponent: shapeId,
         name: componentType,
       }
