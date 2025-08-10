@@ -204,3 +204,29 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for development guidelines.
 ## 📄 License
 
 This project is licensed under the MIT License.
+
+### Supabase Session Sync
+
+Set `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` in `.env.local`.
+Create a `canvas_sessions` table to track each meeting session canvas:
+
+```sql
+create table if not exists public.canvas_sessions (
+  id uuid primary key default uuid_generate_v4(),
+  canvas_id uuid references public.canvases(id),
+  room_name text not null,
+  participants jsonb not null default '[]',
+  transcript jsonb not null default '[]',
+  canvas_state jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create unique index if not exists canvas_sessions_room_canvas_uidx
+  on public.canvas_sessions(room_name, canvas_id);
+```
+
+The headless `SessionSync` component will insert/update this row and stream:
+- LiveKit participants
+- LiveKit `transcription` bus messages
+- TLDraw canvas snapshot on save
