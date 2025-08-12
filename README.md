@@ -204,3 +204,75 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for development guidelines.
 ## 📄 License
 
 This project is licensed under the MIT License.
+
+### Supabase Session Sync
+
+Set `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` in `.env.local`.
+Create a `canvas_sessions` table to track each meeting session canvas:
+
+```sql
+create table if not exists public.canvas_sessions (
+  id uuid primary key default uuid_generate_v4(),
+  canvas_id uuid references public.canvases(id),
+  room_name text not null,
+  participants jsonb not null default '[]',
+  transcript jsonb not null default '[]',
+  canvas_state jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create unique index if not exists canvas_sessions_room_canvas_uidx
+  on public.canvas_sessions(room_name, canvas_id);
+```
+
+The headless `SessionSync` component will insert/update this row and stream:
+- LiveKit participants
+- LiveKit `transcription` bus messages
+- TLDraw canvas snapshot on save
+
+#### RLS and triggers (recommended)
+
+```sql
+-- Enable RLS
+alter table public.canvas_sessions enable row level security;
+
+-- Example policy: user can read rows where the linked canvas belongs to them
+-- Adjust to your auth schema; this assumes canvases.user_id = auth.uid()
+create policy if not exists canvas_sessions_read_own
+  on public.canvas_sessions
+  for select
+  using (
+    canvas_id is null
+    or exists (
+      select 1 from public.canvases c
+      where c.id = canvas_id and c.user_id = auth.uid()
+    )
+  );
+
+-- Example write policy: allow owner to update
+create policy if not exists canvas_sessions_update_own
+  on public.canvas_sessions
+  for update
+  using (
+    canvas_id is null
+    or exists (
+      select 1 from public.canvases c
+      where c.id = canvas_id and c.user_id = auth.uid()
+    )
+  );
+
+-- Auto-update updated_at
+create or replace function public.set_updated_at()
+returns trigger as $$
+begin
+  new.updated_at = now();
+  return new;
+end;
+$$ language plpgsql;
+
+drop trigger if exists set_canvas_sessions_updated_at on public.canvas_sessions;
+create trigger set_canvas_sessions_updated_at
+before update on public.canvas_sessions
+for each row execute function public.set_updated_at();
+```

@@ -97,6 +97,13 @@ export function useCanvasPersistence(editor: Editor | null, enabled: boolean = t
 
         if (error) throw error;
         setLastSaved(new Date());
+
+        // Notify session sync to update the session's canvas_state
+        try {
+          window.dispatchEvent(new CustomEvent('tambo:sessionCanvasSaved', { detail: { snapshot, canvasId } }))
+        } catch (e) {
+          // no-op
+        }
       } else {
         // Create new canvas
         const { data: newCanvas, error } = await supabase
@@ -116,6 +123,13 @@ export function useCanvasPersistence(editor: Editor | null, enabled: boolean = t
 
         setCanvasId(newCanvas.id);
         setLastSaved(new Date());
+        
+        // Notify session sync to update the session's canvas_state
+        try {
+          window.dispatchEvent(new CustomEvent('tambo:sessionCanvasSaved', { detail: { snapshot, canvasId: newCanvas.id } }))
+        } catch (e) {
+          // no-op
+        }
         
         // Update URL with canvas ID
         const newUrl = new URL(window.location.href);

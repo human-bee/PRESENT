@@ -11,6 +11,7 @@ import type { TamboShape } from './tldraw-canvas';
 import type { Editor } from 'tldraw';
 import { useRouter } from 'next/navigation';
 import * as React from 'react';
+import TldrawSnapshotBroadcaster from '@/components/TldrawSnapshotBroadcaster';
 
 interface TldrawWithPersistenceProps {
   onMount?: (editor: Editor) => void;
@@ -389,6 +390,7 @@ export function TldrawWithPersistence({
           overrides={overrides}
           forceMobile={true}
         />
+        <TldrawSnapshotBroadcaster />
       </ComponentStoreContext.Provider>
 
       {/* Overlay a simple loading state until the editor instance is available */}

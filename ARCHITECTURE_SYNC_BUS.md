@@ -124,4 +124,32 @@ replicate the TLDraw store. If both send the same update it's idempotent; if
 they diverge, latest `timestamp` wins (implement Lamport clocks if needed).
 
 ---
+<<<<<<< Current (Your changes)
 Happy syncing! 🎉 
+=======
+Happy syncing! 🎉 
+
+## Session Sync to Supabase
+
+A headless `SessionSync` component (see `src/components/SessionSync.tsx`) mounts inside the LiveKit room context and:
+- Ensures a `canvas_sessions` row exists keyed by `room_name` + `canvas_id`
+- Streams `transcription` bus messages into the `transcript` JSONB array
+- Keeps `participants` in sync on join/leave
+- Updates `canvas_state` when `useCanvasPersistence` emits `tambo:sessionCanvasSaved`
+
+Suggested Supabase table `canvas_sessions`:
+- id: uuid primary key default uuid_generate_v4()
+- canvas_id: uuid nullable references canvases(id)
+- room_name: text not null
+- participants: jsonb default '[]'
+- transcript: jsonb default '[]'
+- canvas_state: jsonb
+- created_at: timestamp with time zone default now()
+- updated_at: timestamp with time zone default now()
+
+Add an index on (room_name, canvas_id) unique to dedupe sessions. 
+
+TLDraw events:
+- `TldrawSnapshotBroadcaster` publishes snapshots on topic `tldraw` with `{ type: 'tldraw_snapshot', data, timestamp, source }`.
+- `useSessionSync` listens to `tldraw` and appends entries to `events` (capped to 500). 
+>>>>>>> Incoming (Background Agent changes)
