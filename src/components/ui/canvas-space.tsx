@@ -201,9 +201,20 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
         // Find component definition
         // Try exact match first
         let componentDef = components.find(c => c.name === componentName);
-        // Handle legacy names
+        // Handle legacy and wrapper names that appeared in earlier saves
         if (!componentDef) {
+          // Legacy chat label
           if (componentName === 'AI Response') {
+            componentDef = components.find(c => c.name === 'AIResponse');
+            if (componentDef) componentName = 'AIResponse';
+          }
+          // Generic label from earlier showComponent flow
+          if (!componentDef && componentName === 'Rendered Component') {
+            componentDef = components.find(c => c.name === 'AIResponse');
+            if (componentDef) componentName = 'AIResponse';
+          }
+          // Wrapper from Tambo SDK
+          if (!componentDef && componentName === 'TamboMessageProvider') {
             componentDef = components.find(c => c.name === 'AIResponse');
             if (componentDef) componentName = 'AIResponse';
           }
@@ -415,9 +426,9 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
     const handleShowComponent = (
       event: CustomEvent<{ messageId: string; component: React.ReactNode | { type: string; props?: Record<string, unknown> } }>,
     ) => {
-      try {
-        let node: React.ReactNode = event.detail.component as React.ReactNode;
-        let inferredName: string | undefined = "Rendered Component";
+        try {
+          let node: React.ReactNode = event.detail.component as React.ReactNode;
+          let inferredName: string | undefined = "Rendered Component";
         // If editor isn't ready yet, queue the component for later
         if (!editor) {
           // Normalize to React element if possible so we can render later without recomputing
@@ -430,7 +441,22 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
                 inferredName = compDef.name;
               }
             }
-          }
+            } else if (React.isValidElement(node)) {
+              // Try to infer name from the React element's type and unwrap common provider wrappers
+              const type: any = node.type as any;
+              const typeName = (type?.displayName || type?.name || '').toString();
+              if (typeName === 'TamboMessageProvider' || typeName.endsWith('Provider')) {
+                const child = (node.props as any)?.children;
+                if (React.isValidElement(child)) {
+                  node = child;
+                }
+              }
+              // Match by component reference
+              const compDefByRef = components.find(c => (c.component as any) === (node as any).type);
+              if (compDefByRef) {
+                inferredName = compDefByRef.name;
+              }
+            }
           pendingComponentsRef.current.push({ messageId: event.detail.messageId, node, name: inferredName });
           console.log('⏸️ [CanvasSpace] Queued component until editor is ready:', inferredName || 'component');
           return;
@@ -444,6 +470,20 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
               inferredName = compDef.name;
             }
           }
+          } else {
+            // Valid element – try to infer better name and unwrap provider
+            const type: any = (node as any).type;
+            const typeName = (type?.displayName || type?.name || '').toString();
+            if (typeName === 'TamboMessageProvider' || typeName.endsWith('Provider')) {
+              const child = (node as any)?.props?.children;
+              if (React.isValidElement(child)) {
+                node = child;
+              }
+            }
+            const compDefByRef = components.find(c => (c.component as any) === (node as any).type);
+            if (compDefByRef) {
+              inferredName = compDefByRef.name;
+            }
         }
         addComponentToCanvas(event.detail.messageId, node, inferredName);
       } catch (error) {
