@@ -45,6 +45,16 @@ export function useComponentSubAgent(config: SubAgentConfig) {
   const enrichmentQueue = useRef<Promise<any>[]>([]);
   const isMounted = useRef(true);
 
+  // Runtime guard: disable automatic subagent execution in development by default
+  // Enable by setting NEXT_PUBLIC_SUBAGENT_AUTORUN=true
+  // In production builds, autorun remains enabled unless explicitly disabled
+  const autorunEnabled = ((): boolean => {
+    const env = process.env.NEXT_PUBLIC_SUBAGENT_AUTORUN;
+    if (env === 'true') return true;
+    if (env === 'false') return false;
+    return process.env.NODE_ENV === 'production';
+  })();
+
   // Stabilize config to prevent infinite re-renders
   const stableConfig = useRef(config);
   const configKey = `${config.componentName}-${JSON.stringify(config.mcpTools)}`;
@@ -204,6 +214,13 @@ export function useComponentSubAgent(config: SubAgentConfig) {
 
   // Main effect: Context extraction → Data enrichment
   useEffect(() => {
+    // Respect autorun guard
+    if (!autorunEnabled) {
+      // Still expose refresh/forceReload for manual triggering
+      // but do not auto-run on mount or thread changes
+      return;
+    }
+
     // Prevent multiple simultaneous loads
     if (isLoadingRef.current) {
       return;

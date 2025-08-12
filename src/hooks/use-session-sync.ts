@@ -41,6 +41,7 @@ export function useSessionSync(roomName: string) {
   const canvasIdRef = useRef<string | null>(null)
   const transcriptRef = useRef<any[]>([])
   const eventsRef = useRef<any[]>([])
+  const hasReplayedTranscriptRef = useRef<boolean>(false)
 
   // Ensure we have or create a session row
   useEffect(() => {
@@ -168,6 +169,55 @@ export function useSessionSync(roomName: string) {
 
     return off
   }, [bus, sessionId])
+
+  // On reload, replay the last N transcript lines after the room connects so any
+  // listeners (e.g. captions widgets) can rehydrate their local view.
+  useEffect(() => {
+    if (!sessionId || !room) return
+
+    const replay = () => {
+      if (hasReplayedTranscriptRef.current) return
+      if (!Array.isArray(transcriptRef.current) || transcriptRef.current.length === 0) return
+      if (room.state !== 'connected') return
+
+      hasReplayedTranscriptRef.current = true
+      const MAX_REPLAY = 100
+      const recent = transcriptRef.current.slice(-MAX_REPLAY)
+      for (const line of recent) {
+        try {
+          bus.send('transcription', {
+            type: 'live_transcription',
+            speaker: line.participantId ?? 'unknown',
+            text: line.text ?? '',
+            timestamp: typeof line.timestamp === 'number' ? line.timestamp : Date.now(),
+            is_final: true,
+            replay: true,
+          })
+          // Also notify local UI (LiveCaptions doesn't receive local data channel loopback)
+          try {
+            window.dispatchEvent(
+              new CustomEvent('livekit:transcription-replay', {
+                detail: {
+                  speaker: line.participantId ?? 'unknown',
+                  text: line.text ?? '',
+                  timestamp: typeof line.timestamp === 'number' ? line.timestamp : Date.now(),
+                },
+              })
+            )
+          } catch {}
+        } catch {
+          // ignore
+        }
+      }
+    }
+
+    // Try immediately if already connected; otherwise on connect
+    if (room.state === 'connected') replay()
+    room.on(RoomEvent.Connected, replay)
+    return () => {
+      room.off(RoomEvent.Connected, replay)
+    }
+  }, [bus, sessionId, room])
 
   // Listen for canvas save events to update session canvas_state
   useEffect(() => {

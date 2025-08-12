@@ -7,6 +7,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Mic, Clock, User, Copy, Download, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useRoomContext, useDataChannel, useParticipants } from "@livekit/components-react";
+import { useRealtimeSessionTranscript } from '@/hooks/use-realtime-session-transcript'
 import { useTamboComponentState } from "@tambo-ai/react";
 import { z } from "zod";
 
@@ -228,6 +229,13 @@ const LiveCaptions: React.FC<LiveCaptionsProps> = ({
   const canvasRef = useRef<HTMLDivElement>(null);
   const room = useRoomContext();
   const participants = useParticipants();
+  const { transcript: sessionTranscript } = useRealtimeSessionTranscript(room?.name)
+
+  const getCanvasIdFromUrl = React.useCallback(() => {
+    if (typeof window === 'undefined') return null as string | null
+    const params = new URLSearchParams(window.location.search)
+    return params.get('id')
+  }, [])
 
   // Define initial state
   const initialState: LiveCaptionsState = {
@@ -398,6 +406,63 @@ const LiveCaptions: React.FC<LiveCaptionsProps> = ({
       console.error("Error parsing transcription data:", error);
     }
   });
+
+  // Hydrate from session API on mount/reload
+  useEffect(() => {
+    if (!Array.isArray(sessionTranscript)) return
+    const nextList: Transcript[] = sessionTranscript.map((t, idx) => ({
+      id: `${t.participantId}-${t.timestamp || idx}`,
+      text: t.text,
+      speaker: t.participantId,
+      timestamp: new Date(t.timestamp),
+      isFinal: true,
+    }))
+    setState(prev => {
+      if (!prev) return prev
+      const prevList = prev.transcripts
+      if (
+        prevList.length === nextList.length &&
+        prevList.length > 0 &&
+        prevList[prevList.length - 1]?.id === nextList[nextList.length - 1]?.id
+      ) {
+        return prev
+      }
+      return { ...prev, transcripts: nextList }
+    })
+  }, [sessionTranscript, setState])
+
+  // Replay support: listen for local transcript replay events dispatched on window
+  useEffect(() => {
+    const handler = (evt: Event) => {
+      try {
+        const { speaker, text, timestamp } = (evt as CustomEvent).detail || {}
+        if (!text) return
+        const transcriptId = `${speaker || 'unknown'}-${timestamp}`
+        setState(prevState => {
+          if (!prevState) return prevState
+          const prevTranscripts = prevState.transcripts
+          const newTranscript: Transcript = {
+            id: transcriptId,
+            text,
+            speaker: speaker || 'unknown',
+            timestamp: new Date(timestamp || Date.now()),
+            isFinal: true,
+            position: prevState.settings.autoPosition ? calculatePosition(prevTranscripts.length) : undefined
+          }
+          let updatedTranscripts = [...prevTranscripts, newTranscript]
+          if (updatedTranscripts.length > prevState.settings.maxTranscripts) {
+            updatedTranscripts = updatedTranscripts.slice(-prevState.settings.maxTranscripts)
+          }
+          return { ...prevState, transcripts: updatedTranscripts }
+        })
+      } catch (e) {
+        // ignore
+      }
+    }
+
+    window.addEventListener('livekit:transcription-replay', handler as EventListener)
+    return () => window.removeEventListener('livekit:transcription-replay', handler as EventListener)
+  }, [setState, calculatePosition])
 
   // Monitor room connection and participants
   useEffect(() => {

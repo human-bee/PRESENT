@@ -28,6 +28,7 @@ import type { Suggestion } from "@tambo-ai/react";
 import { useRoomContext } from '@livekit/components-react';
 import { createLiveKitBus } from '../../lib/livekit-bus';
 import { useContextKey } from '../RoomScopedProviders';
+import { useRealtimeSessionTranscript } from '@/hooks/use-realtime-session-transcript'
 
 /**
  * Props for the MessageThreadCollapsible component
@@ -94,6 +95,7 @@ export const MessageThreadCollapsible = React.forwardRef<
   const bus = createLiveKitBus(room);
   const roomContextKey = useContextKey();
   const effectiveContextKey = contextKey || roomContextKey;
+  const { transcript: sessionTranscript } = useRealtimeSessionTranscript(room?.name)
 
   // Listen for transcription data via bus
   React.useEffect(() => {
@@ -125,10 +127,47 @@ export const MessageThreadCollapsible = React.forwardRef<
           );
           return [...filtered, transcription];
         });
+
+        // Mirror to LiveCaptions via local event so canvas bubble view stays in sync with thread transcript
+        try {
+          window.dispatchEvent(
+            new CustomEvent('livekit:transcription-replay', {
+              detail: {
+                speaker: transcription.speaker,
+                text: transcription.text,
+                timestamp: transcription.timestamp,
+              },
+            })
+          )
+        } catch {}
       }
     });
     return off;
   }, [bus]);
+
+  // Keep transcript tab mirrored to Supabase session
+  React.useEffect(() => {
+    if (!Array.isArray(sessionTranscript)) return
+    const nextList = sessionTranscript.map((t) => ({
+      id: `${t.participantId}-${t.timestamp}`,
+      speaker: t.participantId || 'Unknown',
+      text: t.text,
+      timestamp: t.timestamp,
+      isFinal: true,
+      source: t.participantId === 'tambo-voice-agent' ? 'agent' : 'user',
+      type: 'speech' as const,
+    }))
+    setTranscriptions(prev => {
+      if (
+        prev.length === nextList.length &&
+        prev.length > 0 &&
+        prev[prev.length - 1]?.id === nextList[nextList.length - 1]?.id
+      ) {
+        return prev
+      }
+      return nextList
+    })
+  }, [sessionTranscript])
 
   // Listen for Tambo component creation - register with new system
   const handleTamboComponent = React.useCallback((event: CustomEvent) => {

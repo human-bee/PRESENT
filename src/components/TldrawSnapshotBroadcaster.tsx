@@ -26,7 +26,11 @@ export function TldrawSnapshotBroadcaster() {
           timestamp: now,
           source: 'client'
         })
-      } catch (e) {
+        // Also push to Supabase via the session event so persistence stays authoritative
+        try {
+          window.dispatchEvent(new CustomEvent('tambo:sessionCanvasSaved', { detail: { snapshot } }))
+        } catch {}
+      } catch {
         // ignore
       }
     }, { scope: 'document' })
