@@ -45,3 +45,14 @@ export type Profile = {
   avatar_url?: string
   created_at: string
 } 
+
+export type CanvasSession = {
+  id: string
+  canvas_id: string | null
+  room_name: string
+  participants: Array<{ identity: string; name?: string | null; metadata?: string | null }> | null
+  transcript: Array<{ participantId: string; text: string; timestamp: number }> | null
+  canvas_state: any | null
+  created_at?: string
+  updated_at?: string
+} 

@@ -15,6 +15,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import { CanvasSpace } from "@/components/ui/canvas-space";
 import { MessageThreadCollapsible } from "@/components/ui/message-thread-collapsible";
 import { LivekitRoomConnector, CanvasLiveKitContext } from "@/components/ui/livekit-room-connector";
+import SessionSync from "@/components/SessionSync";
 import { loadMcpServers, suppressDevelopmentWarnings, suppressViolationWarnings } from "@/lib/mcp-utils";
 import { components, tools } from "@/lib/tambo";
 import { validateTamboTools } from "@/lib/tambo-tool-validator";
@@ -183,6 +184,8 @@ export default function Canvas() {
                   onTranscriptToggle={toggleTranscript}
                 />
 
+                <SessionSync roomName={roomName} />
+
                 {/* Direct LiveKit Room Connector - positioned bottom left to avoid overlap */}
                 <div className="absolute bottom-4 left-4 z-50">
                   <LivekitRoomConnector 
@@ -220,6 +223,8 @@ export default function Canvas() {
                   className="absolute inset-0 w-full h-full"
                   onTranscriptToggle={toggleTranscript}
                 />
+
+                <SessionSync roomName={roomName} />
 
                 {/* Direct LiveKit Room Connector - positioned bottom left to avoid overlap */}
                 <div className="absolute bottom-4 left-4 z-50">
