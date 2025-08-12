@@ -116,7 +116,7 @@ const Message = React.memo(React.forwardRef<HTMLDivElement, MessageProps>(
           ref={ref}
           className={cn(messageVariants({ variant }), className)}
           data-message-role={role}
-          data-message-id={message.id}
+          data-message-id={message?.id ?? 'unknown'}
           {...props}
         >
           {children}
@@ -163,9 +163,10 @@ LoadingIndicator.displayName = "LoadingIndicator";
  * @returns {string | null} The formatted status message or null if not a tool call
  */
 function getToolStatusMessage(
-  message: TamboThreadMessage,
+  message: TamboThreadMessage | undefined,
   isLoading: boolean | undefined,
 ) {
+  if (!message) return null;
   const isToolCall = message.actionType === "tool_call";
   if (!isToolCall) return null;
 
@@ -306,7 +307,7 @@ const MessageRenderedComponentArea = React.forwardRef<
     };
   }, []);
 
-  if (!message.renderedComponent || role !== "assistant") {
+  if (!message || !message.renderedComponent || role !== "assistant") {
     return null;
   }
 
@@ -326,7 +327,7 @@ const MessageRenderedComponentArea = React.forwardRef<
                   window.dispatchEvent(
                     new CustomEvent("tambo:showComponent", {
                       detail: {
-                        messageId: message.id,
+                        messageId: message?.id ?? `msg-${Date.now()}`,
                         component: message.renderedComponent,
                       },
                     }),
