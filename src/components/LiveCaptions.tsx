@@ -411,7 +411,7 @@ const LiveCaptions: React.FC<LiveCaptionsProps> = ({
   useEffect(() => {
     if (!Array.isArray(sessionTranscript)) return
     const nextList: Transcript[] = sessionTranscript.map((t, idx) => ({
-      id: `${t.participantId}-${t.timestamp || idx}`,
+      id: `${t.participantId}-${Number(t.timestamp) || idx}`,
       text: t.text,
       speaker: t.participantId,
       timestamp: new Date(t.timestamp),

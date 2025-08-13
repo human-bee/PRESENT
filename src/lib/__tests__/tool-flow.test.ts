@@ -201,4 +201,42 @@ describe('Unified Tool Execution Flow (Phase 5)', () => {
       expect(mockTool.execute).toHaveBeenCalledWith({ test: true });
     });
   });
+
+  // New tests for weather mapping
+  describe('MCP Weather Mapping', () => {
+    it('should map agent weather tools to MCP names when present in registry', async () => {
+      // Simulate capabilities synced from MCP
+      systemRegistry.addCapability({
+        id: 'mcp_weather',
+        type: 'tool',
+        name: 'Weather',
+        description: 'Weather current conditions',
+        agentToolName: 'mcp_weather',
+        mcpToolName: 'weather',
+        available: true,
+        source: 'mcp'
+      });
+      systemRegistry.addCapability({
+        id: 'mcp_forecast',
+        type: 'tool',
+        name: 'Forecast',
+        description: 'Weather forecast',
+        agentToolName: 'mcp_forecast',
+        mcpToolName: 'forecast',
+        available: true,
+        source: 'mcp'
+      });
+
+      const weatherTool = { execute: jest.fn().mockResolvedValue({ ok: true }) };
+      const forecastTool = { execute: jest.fn().mockResolvedValue({ ok: true }) };
+
+      const registry: any = { weather: weatherTool, forecast: forecastTool };
+
+      await systemRegistry.executeTool({ id: 'w1', name: 'mcp_weather', args: { location: 'SF' } }, { tamboRegistry: registry });
+      await systemRegistry.executeTool({ id: 'w2', name: 'mcp_forecast', args: { location: 'SF', days: 7 } }, { tamboRegistry: registry });
+
+      expect(weatherTool.execute).toHaveBeenCalledWith({ location: 'SF' });
+      expect(forecastTool.execute).toHaveBeenCalledWith({ location: 'SF', days: 7 });
+    });
+  });
 }); 

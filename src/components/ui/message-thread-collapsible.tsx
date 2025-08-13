@@ -149,10 +149,10 @@ export const MessageThreadCollapsible = React.forwardRef<
   React.useEffect(() => {
     if (!Array.isArray(sessionTranscript)) return
     const nextList = sessionTranscript.map((t) => ({
-      id: `${t.participantId}-${t.timestamp}`,
+      id: `${t.participantId}-${Number(t.timestamp)}`,
       speaker: t.participantId || 'Unknown',
       text: t.text,
-      timestamp: t.timestamp,
+      timestamp: Number(t.timestamp),
       isFinal: true,
       source: t.participantId === 'tambo-voice-agent' ? 'agent' : 'user',
       type: 'speech' as const,

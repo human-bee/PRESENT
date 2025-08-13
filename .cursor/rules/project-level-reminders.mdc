@@ -1,0 +1,14 @@
+---
+alwaysApply: true
+---
+Keep track of all codechanges, features, bug fixes, etc in linear. 
+
+Use browsermcp to see console logs, run playright tests on canvas UI, and take screenshots to test implementations before marking an issue done in Linear
+
+Consult linear to see if relevant item to request can be accessed.
+
+The codebase requires a lot of 'modern' agentic architecture, be mindful of using the latest subagent system design 'under the hood' of every component, feuature, etc. 
+
+always try and buidl each feature or logic lean and single-use, but something that is always supporting ai agents spun up in tiny terminal powering the state-sync of that component and the canvas and the transcript. and is also able interact with the canvas, etc. this is always being built with realtime in mind--reducing latenct at every interaction is key. these subagents can run at 500+ tokens per second, if we are able to give them enough advice and guardrails to use a fast model 'under the hood' the modern paradigm of coding these agentic systems is that 'awareness' needs to be built into everything. feature understandings and handoffs, they can now be very simply exicuted by the subagent, if given the right, effecient context.
+
+This is a new mindset being introduced to the codebase, refactor as you go. Document everything in Linear, this is your meta way to communicate with the other agents and subagents building this application. Be sure to list relevant docs, life hacks, code advice, "gotchya's learned from bugs" and overall map out the spiderwebnest that is this codebase. We are building somehting new here, so as much lessons-along-the-way really helps us all code this awesome realtime meeting agentic production app!

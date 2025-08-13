@@ -1,5 +1,6 @@
 import { systemRegistry } from '../system-registry';
-import type { StateEnvelope } from '../shared-state';
+// Using JSDoc import type to avoid TS syntax in Jest without ts-jest
+/** @typedef {import('../shared-state').StateEnvelope} StateEnvelope */
 
 describe('State Synchronization (Phase 4)', () => {
   beforeEach(() => {

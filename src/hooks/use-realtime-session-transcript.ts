@@ -17,6 +17,7 @@ export function useRealtimeSessionTranscript(roomName: string | undefined) {
   const [sessionId, setSessionId] = useState<string | null>(null)
   const [transcript, setTranscript] = useState<TranscriptLine[]>([])
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
+  const currentChannelKeyRef = useRef<string | null>(null)
 
   // Locate session row id and hydrate
   useEffect(() => {
@@ -46,11 +47,14 @@ export function useRealtimeSessionTranscript(roomName: string | undefined) {
         }
 
         // Subscribe to realtime updates for this row
-        if (channelRef.current) {
+        const key = `canvas_sessions_${data.id}`
+        if (channelRef.current && currentChannelKeyRef.current !== key) {
           try { channelRef.current.unsubscribe() } catch {}
           channelRef.current = null
+          currentChannelKeyRef.current = null
         }
-        const ch = supabase.channel(`canvas_sessions_${data.id}`)
+        if (!channelRef.current) {
+          const ch = supabase.channel(key)
           .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'canvas_sessions', filter: `id=eq.${data.id}` }, (payload) => {
             const next = (payload.new as any)?.transcript
             if (Array.isArray(next)) {
@@ -63,7 +67,9 @@ export function useRealtimeSessionTranscript(roomName: string | undefined) {
             }
           })
           .subscribe()
-        channelRef.current = ch
+          channelRef.current = ch
+          currentChannelKeyRef.current = key
+        }
       }
     }
 

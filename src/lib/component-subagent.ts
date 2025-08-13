@@ -324,39 +324,57 @@ async function getMCPTools(toolNames: string[]): Promise<Record<string, any>> {
   
   // Try to get actual MCP tools from window if available
   const mcpTools = (window as any).__tambo_mcp_tools || {};
+  const mcpToolNames = Object.keys(mcpTools);
+  const normalize = (s: string) => s.toLowerCase().replace(/^mcp_/, '').replace(/[^a-z0-9]/g, '');
   
   for (const name of toolNames) {
     // Use actual MCP tool if available
     if (mcpTools[name]) {
       tools[name] = mcpTools[name];
-    } else {
-      // Fallback to mock for development
-      tools[name] = {
-        execute: async (params: any) => {
-          // In production, this would call the actual MCP proxy
-          if (typeof window !== 'undefined' && (window as any).callMcpTool) {
-            try {
-              return await (window as any).callMcpTool(name, params);
-            } catch (error) {
-              console.error(`[MCP Tool ${name}] Failed:`, error);
-              // Fall back to mock data
-            }
-          }
-          
-          // Mock responses for development
-          switch (name) {
-            case 'weather':
-              return mockWeatherData(params);
-            case 'search':
-              return mockSearchData(params);
-            case 'analytics':
-              return mockAnalyticsData(params);
-            default:
-              return { data: `Result from ${name}` };
-          }
-        },
-      };
+      continue;
     }
+
+    // Try prefixed name (mcp_weather)
+    const prefixed = `mcp_${name}`;
+    if (mcpTools[prefixed]) {
+      tools[name] = mcpTools[prefixed];
+      continue;
+    }
+
+    // Fuzzy alias resolution: pick first tool whose normalized name includes requested name
+    const requested = normalize(name);
+    const matchKey = mcpToolNames.find((k) => normalize(k).includes(requested));
+    if (matchKey && mcpTools[matchKey]) {
+      tools[name] = mcpTools[matchKey];
+      continue;
+    }
+
+    // Fallback to calling through window.callMcpTool if available, otherwise mock
+    tools[name] = {
+      execute: async (params: any) => {
+        // In production, this would call the actual MCP proxy
+        if (typeof window !== 'undefined' && (window as any).callMcpTool) {
+          try {
+            // call with base tool name; bridge will add mcp_ if needed
+            return await (window as any).callMcpTool(name, params);
+          } catch (error) {
+            console.warn(`[MCP Tool Resolver] Direct call failed for '${name}'. Known MCP tools: ${mcpToolNames.join(', ')}`);
+          }
+        }
+        
+        // Mock responses for development
+        switch (name) {
+          case 'weather':
+            return mockWeatherData(params);
+          case 'search':
+            return mockSearchData(params);
+          case 'analytics':
+            return mockAnalyticsData(params);
+          default:
+            return { data: `Result from ${name}` };
+        }
+      },
+    };
   }
   
   return tools;
@@ -423,16 +441,22 @@ export const SubAgentPresets = {
       
       // Look for location mentions
       const locationMatch = text.match(/weather (?:for|in) ([^,]+(?:, \w{2})?)/i);
+      const allowCurrentLocation = process.env.NEXT_PUBLIC_ALLOW_CURRENT_LOCATION === 'true';
       return {
-        location: locationMatch?.[1] || "Current Location",
+        location: locationMatch?.[1] || (allowCurrentLocation ? "Current Location" : undefined),
         requestedView: text.includes("forecast") ? "weekly" : "current",
       };
     },
-    dataEnricher: (context: any, tools: any) => [
-      tools.weather?.execute({ location: context.location }),
-      tools.forecast?.execute({ location: context.location, days: 7 }),
-      tools.alerts?.execute({ location: context.location }),
-    ],
+    dataEnricher: (context: any, tools: any) => {
+      // Do not call tools without a concrete location
+      if (!context?.location) return [];
+      const location = context.location;
+      return [
+        tools.weather?.execute({ location }),
+        tools.forecast?.execute({ location, days: 7 }),
+        tools.alerts?.execute({ location }),
+      ];
+    },
   },
 
   actionItems: {

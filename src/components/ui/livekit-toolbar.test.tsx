@@ -60,7 +60,9 @@ const mockState = {
   isRecording: false,
   recordingStartTime: null,
   backgroundBlurEnabled: false,
-  assistantState: 'idle' as const,
+  // Cast using JSDoc to avoid TS const assertion in plain Jest transpile
+  /** @type {'idle'} */
+  assistantState: 'idle',
   lastVoiceCommand: null,
   connectionIssues: {},
   networkQuality: ConnectionQuality.Excellent,

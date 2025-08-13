@@ -91,9 +91,11 @@ export function useSessionSync(roomName: string) {
         events: [],
       }
 
+      // Use upsert to avoid conflict on unique (room_name, canvas_id)
       const { data: created, error: insertErr } = await supabase
         .from<CanvasSession>('canvas_sessions' as any)
-        .insert(insertPayload as any)
+        // @ts-expect-error supabase types for upsert generics are noisy
+        .upsert(insertPayload as any, { onConflict: 'room_name,canvas_id' })
         .select('*')
         .single()
 
