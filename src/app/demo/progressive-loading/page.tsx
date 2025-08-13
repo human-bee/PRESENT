@@ -6,11 +6,15 @@
 
 "use client";
 
+export const dynamic = 'force-dynamic';
+
 import { useState } from "react";
 import { WeatherForecast } from "@/components/ui/weather-forecast";
 import { ActionItemTracker } from "@/components/ui/action-item-tracker";
 import { RetroTimerEnhanced } from "@/components/ui/retro-timer-enhanced";
 import { Loader2, Zap, RefreshCw } from "lucide-react";
+import { TamboProvider } from "@tambo-ai/react";
+import { components } from "@/lib/tambo";
 
 export default function ProgressiveLoadingDemo() {
   const [resetKey, setResetKey] = useState(0);
@@ -20,8 +24,9 @@ export default function ProgressiveLoadingDemo() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 p-8">
-      <div className="max-w-6xl mx-auto space-y-8">
+    <TamboProvider apiKey={process.env.NEXT_PUBLIC_TAMBO_API_KEY!} components={components} tools={[]}> 
+      <div className="min-h-screen bg-slate-950 p-8">
+        <div className="max-w-6xl mx-auto space-y-8">
         {/* Header */}
         <div className="text-center space-y-4">
           <div className="flex items-center justify-center space-x-3">
@@ -180,7 +185,8 @@ export default function ProgressiveLoadingDemo() {
             </p>
           </div>
         </div>
+        </div>
       </div>
-    </div>
+    </TamboProvider>
   );
 }

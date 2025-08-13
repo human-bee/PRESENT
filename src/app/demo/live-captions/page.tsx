@@ -4,9 +4,9 @@
 export const dynamic = 'force-dynamic';
 export const prerender = false;
 
-import dynamic from 'next/dynamic';
+import nextDynamic from 'next/dynamic';
 
-const LiveCaptionsPageImpl = dynamic(() => import('./LiveCaptionsPageImpl'), { 
+const LiveCaptionsPageImpl = nextDynamic(() => import('./LiveCaptionsPageImpl'), { 
   ssr: false,
   loading: () => <div className="min-h-screen bg-background flex items-center justify-center">Loading...</div>
 });
