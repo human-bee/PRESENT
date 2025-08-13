@@ -45,6 +45,10 @@ import {
   LivekitRoomConnector,
   livekitRoomConnectorSchema,
 } from "@/components/ui/livekit-room-connector";
+import {
+  LivekitScreenShareTile,
+  livekitScreenShareTileSchema,
+} from "@/components/ui/livekit-screenshare-tile";
 // Commented out for Node.js compatibility in agent worker
 // import {
 //   AIImageGenerator,
@@ -73,6 +77,7 @@ import { documentState } from "@/app/hackathon-canvas/documents/document-state";
 import { nanoid } from "nanoid";
 import { callMcpTool } from "@/lib/livekit-agent-tools";
 import { ComponentToolbox } from '@/components/ui/component-toolbox';
+import { systemRegistry } from './system-registry';
 
 export const componentToolboxSchema = z.object({});
 
@@ -766,6 +771,277 @@ export const tools: TamboTool[] = [
   // extractUpdateParamsTool, // No longer needed - ui_update handles natural language directly
 ];
 
+// -------------------------------
+// Canvas Control Tools (PRE-105)
+// -------------------------------
+
+function getEditorUnsafe(): any {
+  if (typeof window === 'undefined') return null;
+  return (window as any).__present?.tldrawEditor || null;
+}
+
+export const focusCanvasTool: TamboTool = {
+  name: 'canvas_focus',
+  description: 'Focus or zoom on all, selected, or a specific component/shape. params: { target: "all"|"selected"|"component"|"shape", componentId?, shapeId?, padding? }',
+  tool: async (params: Record<string, unknown> = {}) => {
+    if (typeof window === 'undefined') return { status: 'ERROR', message: 'No window' };
+    const target = (params.target as string) || 'all';
+    const padding = typeof params.padding === 'number' ? params.padding : 64;
+    const detail: any = { target, padding };
+    if (params.componentId) detail.componentId = String(params.componentId);
+    if (params.shapeId) detail.shapeId = String(params.shapeId);
+    window.dispatchEvent(new CustomEvent('tldraw:canvas_focus', { detail }));
+    return { status: 'SUCCESS', message: `Focused ${target}` };
+  },
+  toolSchema: (z as any).function().args(z.record(z.unknown()).optional()).returns(z.object({ status: z.string(), message: z.string().optional() }))
+};
+
+export const canvasZoomAllTool: TamboTool = {
+  name: 'canvas_zoom_all',
+  description: 'Zoom to fit all shapes on the canvas',
+  tool: async () => {
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('tldraw:canvas_zoom_all'));
+    }
+    return { status: 'SUCCESS', message: 'Zoomed to fit all' };
+  },
+  toolSchema: (z as any).function().args().returns(z.object({ status: z.string(), message: z.string().optional() }))
+};
+
+export const createNoteTool: TamboTool = {
+  name: 'canvas_create_note',
+  description: 'Create a text note at the center of the viewport. params: { text }',
+  tool: async (textOrParams?: unknown) => {
+    const text = typeof textOrParams === 'string' ? textOrParams : (textOrParams as any)?.text || 'Note';
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('tldraw:create_note', { detail: { text } }));
+    }
+    return { status: 'SUCCESS', message: `Created note: ${text}` };
+  },
+  toolSchema: (z as any).function().args(z.union([z.string(), z.object({ text: z.string().optional() })]).optional()).returns(z.object({ status: z.string(), message: z.string().optional() }))
+};
+
+export const pinSelectedTool: TamboTool = {
+  name: 'canvas_pin_selected',
+  description: 'Pin selected Tambo shapes to the viewport (screen-anchored).',
+  tool: async () => {
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('tldraw:pinSelected'));
+    }
+    return { status: 'SUCCESS', message: 'Pinned selected' };
+  },
+  toolSchema: (z as any).function().args().returns(z.object({ status: z.string(), message: z.string().optional() }))
+};
+
+export const unpinSelectedTool: TamboTool = {
+  name: 'canvas_unpin_selected',
+  description: 'Unpin selected Tambo shapes from the viewport.',
+  tool: async () => {
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('tldraw:unpinSelected'));
+    }
+    return { status: 'SUCCESS', message: 'Unpinned selected' };
+  },
+  toolSchema: (z as any).function().args().returns(z.object({ status: z.string(), message: z.string().optional() }))
+};
+
+export const canvasAnalyzeTool: TamboTool = {
+  name: 'canvas_analyze',
+  description: 'Analyze canvas: counts, clusters (by proximity), visible bounds, and selected tambo components.',
+  tool: async () => {
+    const editor: any = getEditorUnsafe();
+    if (!editor) return { status: 'ERROR', message: 'Editor not ready' };
+    const shapes = editor.getCurrentPageShapes?.() || [];
+    const tambo = shapes.filter((s: any) => s.type === 'tambo');
+    const notes = shapes.filter((s: any) => s.type === 'text' || s.type === 'geo');
+    const bounds = editor.getViewportPageBounds?.();
+
+    // naive clustering by grid buckets of 600px
+    const bucket = 600;
+    const clusters: Record<string, { ids: string[]; cx: number; cy: number }> = {};
+    for (const s of tambo) {
+      const b = editor.getShapePageBounds?.(s.id);
+      if (!b) continue;
+      const key = `${Math.floor(b.x / bucket)}:${Math.floor(b.y / bucket)}`;
+      if (!clusters[key]) clusters[key] = { ids: [], cx: 0, cy: 0 };
+      clusters[key].ids.push(s.id);
+      clusters[key].cx += b.x + b.w / 2;
+      clusters[key].cy += b.y + b.h / 2;
+    }
+    const clusterArr = Object.entries(clusters).map(([k, v]) => ({
+      bucket: k,
+      count: v.ids.length,
+      center: { x: v.cx / v.ids.length, y: v.cy / v.ids.length },
+      ids: v.ids,
+    }));
+
+    const selected = editor.getSelectedShapes?.() || [];
+    const selectedComponents = selected
+      .filter((s: any) => s.type === 'tambo')
+      .map((s: any) => ({ id: s.id, componentId: s.props?.tamboComponent, name: s.props?.name }));
+
+    return {
+      status: 'SUCCESS',
+      message: 'Canvas analyzed',
+      counts: { total: shapes.length, tambo: tambo.length, notes: notes.length },
+      visibleBounds: bounds ? { x: bounds.x, y: bounds.y, w: bounds.w, h: bounds.h } : null,
+      clusters: clusterArr,
+      selectedComponents,
+    } as any;
+  },
+  toolSchema: (z as any).function().args().returns(z.any())
+};
+
+// Register canvas tools at the end
+tools.push(
+  focusCanvasTool,
+  canvasZoomAllTool,
+  createNoteTool,
+  pinSelectedTool,
+  unpinSelectedTool,
+  canvasAnalyzeTool,
+);
+
+// Additional control tools: lock/unlock and arrange grid
+export const lockSelectedTool: TamboTool = {
+  name: 'canvas_lock_selected',
+  description: 'Lock selected shapes to prevent movement',
+  tool: async () => {
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('tldraw:lockSelected'));
+    }
+    return { status: 'SUCCESS', message: 'Locked selected shapes' };
+  },
+  toolSchema: (z as any).function().args().returns(z.object({ status: z.string(), message: z.string().optional() }))
+};
+
+export const unlockSelectedTool: TamboTool = {
+  name: 'canvas_unlock_selected',
+  description: 'Unlock selected shapes to allow movement',
+  tool: async () => {
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('tldraw:unlockSelected'));
+    }
+    return { status: 'SUCCESS', message: 'Unlocked selected shapes' };
+  },
+  toolSchema: (z as any).function().args().returns(z.object({ status: z.string(), message: z.string().optional() }))
+};
+
+export const arrangeGridTool: TamboTool = {
+  name: 'canvas_arrange_grid',
+  description: 'Arrange selected (or all) Tambo components into a grid. params: { cols?, spacing?, selectionOnly? }',
+  tool: async (params?: { cols?: number; spacing?: number; selectionOnly?: boolean }) => {
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('tldraw:arrangeGrid', { detail: params || {} }));
+    }
+    return { status: 'SUCCESS', message: 'Arranged in grid' };
+  },
+  toolSchema: (z as any).function().args(z.object({ cols: z.number().optional(), spacing: z.number().optional(), selectionOnly: z.boolean().optional() }).optional()).returns(z.object({ status: z.string(), message: z.string().optional() }))
+};
+
+tools.push(lockSelectedTool, unlockSelectedTool, arrangeGridTool);
+
+// Ensure capabilities are marked available in registry
+systemRegistry.addCapability({
+  id: 'canvas_focus', type: 'tool', name: 'Canvas Focus', description: 'Focus/zoom camera on items', agentToolName: 'canvas_focus', available: true, source: 'static'
+});
+systemRegistry.addCapability({
+  id: 'canvas_zoom_all', type: 'tool', name: 'Canvas Zoom All', description: 'Zoom to fit all shapes', agentToolName: 'canvas_zoom_all', available: true, source: 'static'
+});
+systemRegistry.addCapability({
+  id: 'canvas_create_note', type: 'tool', name: 'Canvas Create Note', description: 'Create a text note at center', agentToolName: 'canvas_create_note', available: true, source: 'static'
+});
+systemRegistry.addCapability({
+  id: 'canvas_pin_selected', type: 'tool', name: 'Canvas Pin Selected', description: 'Pin selected shapes to viewport', agentToolName: 'canvas_pin_selected', available: true, source: 'static'
+});
+systemRegistry.addCapability({
+  id: 'canvas_unpin_selected', type: 'tool', name: 'Canvas Unpin Selected', description: 'Unpin selected shapes', agentToolName: 'canvas_unpin_selected', available: true, source: 'static'
+});
+systemRegistry.addCapability({
+  id: 'canvas_analyze', type: 'tool', name: 'Canvas Analyze', description: 'Analyze spatial layout & selection', agentToolName: 'canvas_analyze', available: true, source: 'static'
+});
+systemRegistry.addCapability({
+  id: 'canvas_lock_selected', type: 'tool', name: 'Canvas Lock Selected', description: 'Lock selected shapes', agentToolName: 'canvas_lock_selected', available: true, source: 'static'
+});
+systemRegistry.addCapability({
+  id: 'canvas_unlock_selected', type: 'tool', name: 'Canvas Unlock Selected', description: 'Unlock selected shapes', agentToolName: 'canvas_unlock_selected', available: true, source: 'static'
+});
+systemRegistry.addCapability({
+  id: 'canvas_arrange_grid', type: 'tool', name: 'Canvas Arrange Grid', description: 'Arrange components into a grid', agentToolName: 'canvas_arrange_grid', available: true, source: 'static'
+});
+
+// Shape primitives and alignment/distribution
+export const createRectangleTool: TamboTool = {
+  name: 'canvas_create_rectangle',
+  description: 'Create a rectangle (geo) shape. params: { x?, y?, w?, h?, name? }',
+  tool: async (params?: { x?: number; y?: number; w?: number; h?: number; name?: string }) => {
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('tldraw:createRectangle', { detail: params || {} }));
+    }
+    return { status: 'SUCCESS', message: 'Rectangle created' };
+  },
+  toolSchema: (z as any).function().args(z.object({ x: z.number().optional(), y: z.number().optional(), w: z.number().optional(), h: z.number().optional(), name: z.string().optional() }).optional()).returns(z.object({ status: z.string(), message: z.string().optional() }))
+};
+
+export const createEllipseTool: TamboTool = {
+  name: 'canvas_create_ellipse',
+  description: 'Create an ellipse (geo) shape. params: { x?, y?, w?, h?, name? }',
+  tool: async (params?: { x?: number; y?: number; w?: number; h?: number; name?: string }) => {
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('tldraw:createEllipse', { detail: params || {} }));
+    }
+    return { status: 'SUCCESS', message: 'Ellipse created' };
+  },
+  toolSchema: (z as any).function().args(z.object({ x: z.number().optional(), y: z.number().optional(), w: z.number().optional(), h: z.number().optional(), name: z.string().optional() }).optional()).returns(z.object({ status: z.string(), message: z.string().optional() }))
+};
+
+export const alignSelectedTool: TamboTool = {
+  name: 'canvas_align_selected',
+  description: 'Align selected components. params: { axis: "x"|"y", mode: "left"|"right"|"center"|"top"|"bottom"|"middle" }',
+  tool: async (params?: { axis?: 'x'|'y'; mode?: string }) => {
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('tldraw:alignSelected', { detail: params || {} }));
+    }
+    return { status: 'SUCCESS', message: 'Aligned selected' };
+  },
+  toolSchema: (z as any).function().args(z.object({ axis: z.enum(['x','y']).optional(), mode: z.string().optional() }).optional()).returns(z.object({ status: z.string(), message: z.string().optional() }))
+};
+
+export const distributeSelectedTool: TamboTool = {
+  name: 'canvas_distribute_selected',
+  description: 'Distribute selected components along an axis. params: { axis: "x"|"y" }',
+  tool: async (params?: { axis?: 'x'|'y' }) => {
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('tldraw:distributeSelected', { detail: params || {} }));
+    }
+    return { status: 'SUCCESS', message: 'Distributed selected' };
+  },
+  toolSchema: (z as any).function().args(z.object({ axis: z.enum(['x','y']).optional() }).optional()).returns(z.object({ status: z.string(), message: z.string().optional() }))
+};
+
+tools.push(createRectangleTool, createEllipseTool, alignSelectedTool, distributeSelectedTool);
+
+systemRegistry.addCapability({ id: 'canvas_create_rectangle', type: 'tool', name: 'Canvas Create Rectangle', description: 'Create a rectangle', agentToolName: 'canvas_create_rectangle', available: true, source: 'static' });
+systemRegistry.addCapability({ id: 'canvas_create_ellipse', type: 'tool', name: 'Canvas Create Ellipse', description: 'Create an ellipse', agentToolName: 'canvas_create_ellipse', available: true, source: 'static' });
+systemRegistry.addCapability({ id: 'canvas_align_selected', type: 'tool', name: 'Canvas Align Selected', description: 'Align selected components', agentToolName: 'canvas_align_selected', available: true, source: 'static' });
+systemRegistry.addCapability({ id: 'canvas_distribute_selected', type: 'tool', name: 'Canvas Distribute Selected', description: 'Distribute selected components', agentToolName: 'canvas_distribute_selected', available: true, source: 'static' });
+
+// Fun composite drawing: smiley
+export const drawSmileyTool: TamboTool = {
+  name: 'canvas_draw_smiley',
+  description: 'Draw a smiley face using basic shapes. params: { size? }',
+  tool: async (params?: { size?: number }) => {
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('tldraw:drawSmiley', { detail: params || {} }));
+    }
+    return { status: 'SUCCESS', message: 'Smiley drawn' };
+  },
+  toolSchema: (z as any).function().args(z.object({ size: z.number().optional() }).optional()).returns(z.object({ status: z.string(), message: z.string().optional() }))
+};
+
+tools.push(drawSmileyTool);
+systemRegistry.addCapability({ id: 'canvas_draw_smiley', type: 'tool', name: 'Canvas Draw Smiley', description: 'Draw a smiley face', agentToolName: 'canvas_draw_smiley', available: true, source: 'static' });
+
 /**
  * components
  *
@@ -836,6 +1112,13 @@ export const components: TamboComponent[] = [
       "Individual participant video/audio tile with real-time LiveKit integration. REQUIRES LivekitRoomConnector to be connected first. Shows participant video feed, audio controls, connection quality, speaking indicators, and individual toolbar controls. Automatically detects local vs remote participants and AI agents (with bot icons). Features minimize/expand functionality, audio level visualization, and drag-and-drop capability on the canvas.",
     component: LivekitParticipantTile,
     propsSchema: livekitParticipantTileSchema,
+  },
+  {
+    name: "LivekitScreenShareTile",
+    description:
+      "Dedicated screen share tile. Prefers the participant's screen share track and uses contain fit to avoid cropping. Includes hover overlay with stop-share for local user. Designed to spawn alongside participant tiles.",
+    component: LivekitScreenShareTile,
+    propsSchema: livekitScreenShareTileSchema,
   },
   // Commented out for Node.js compatibility in agent worker
   // {

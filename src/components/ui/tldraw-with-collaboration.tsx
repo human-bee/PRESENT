@@ -188,6 +188,12 @@ export function TldrawWithCollaboration({
 
   const handleMount = useCallback(
     (mountedEditor: Editor) => {
+      // Expose editor globally for tools that need direct access
+      if (typeof window !== 'undefined') {
+        (window as any).__present = (window as any).__present || {};
+        (window as any).__present.tldrawEditor = mountedEditor;
+      }
+
       // Set up global pin management using side effects
       let isUpdatingPinnedShapes = false;
 
@@ -249,10 +255,386 @@ export function TldrawWithCollaboration({
       // Initial update
       setTimeout(updateAllPinnedShapes, 100);
 
+      // Event handlers for canvas control (PRE-105)
+      const handleFocusEvent = (e: Event) => {
+        const detail = (e as CustomEvent).detail || {};
+        const target: 'all' | 'selected' | 'component' | 'shape' = detail.target || 'all';
+        const padding: number = typeof detail.padding === 'number' ? detail.padding : 64;
+
+        try {
+          if (target === 'all') {
+            if ((mountedEditor as any).zoomToFit) {
+              (mountedEditor as any).zoomToFit();
+            } else {
+              const bounds = mountedEditor.getCurrentPageBounds();
+              if (bounds && (mountedEditor as any).zoomToBounds) {
+                (mountedEditor as any).zoomToBounds(bounds, { animation: { duration: 320 }, inset: padding });
+              }
+            }
+            return;
+          }
+
+          if (target === 'selected') {
+            if ((mountedEditor as any).zoomToSelection) {
+              (mountedEditor as any).zoomToSelection({ inset: padding });
+              return;
+            }
+          }
+
+          let shapeId: string | null = null;
+          if (target === 'shape' && detail.shapeId) {
+            shapeId = detail.shapeId;
+          }
+          if (target === 'component' && detail.componentId) {
+            // Find tambo shape by messageId stored in props.tamboComponent
+            const tambo = mountedEditor
+              .getCurrentPageShapes()
+              .find((s: any) => s.type === 'tambo' && s.props?.tamboComponent === detail.componentId);
+            shapeId = tambo?.id ?? null;
+          }
+
+          if (shapeId) {
+            const b = mountedEditor.getShapePageBounds(shapeId as any);
+            if (b && (mountedEditor as any).zoomToBounds) {
+              (mountedEditor as any).zoomToBounds(b, { animation: { duration: 320 }, inset: padding });
+            }
+          }
+        } catch (err) {
+          console.warn('[CanvasControl] focus error', err);
+        }
+      };
+
+      const handleZoomAll = () => {
+        try {
+          if ((mountedEditor as any).zoomToFit) {
+            (mountedEditor as any).zoomToFit();
+            return;
+          }
+          const bounds = mountedEditor.getCurrentPageBounds();
+          if (bounds && (mountedEditor as any).zoomToBounds) {
+            (mountedEditor as any).zoomToBounds(bounds, { animation: { duration: 320 } });
+          }
+        } catch (err) {
+          console.warn('[CanvasControl] zoomAll error', err);
+        }
+      };
+
+      const handleCreateNote = (e: Event) => {
+        const detail = (e as CustomEvent).detail || {};
+        const text: string = detail.text || 'Note';
+
+        try {
+          const viewport = mountedEditor.getViewportPageBounds();
+          const x = viewport ? viewport.midX : 0;
+          const y = viewport ? viewport.midY : 0;
+          // Try to create a text shape; fallback to geo if needed
+          try {
+            mountedEditor.createShape({
+              id: (mountedEditor as any).createShapeId?.('note') ?? undefined,
+              type: 'text' as any,
+              x: x - 100,
+              y: y - 50,
+              props: { text, autoSize: true },
+            } as any);
+          } catch {
+            mountedEditor.createShape({
+              id: (mountedEditor as any).createShapeId?.('note') ?? undefined,
+              type: 'geo' as any,
+              x: x - 100,
+              y: y - 50,
+              props: { text, w: 200, h: 100, geo: 'rectangle' },
+            } as any);
+          }
+        } catch (err) {
+          console.warn('[CanvasControl] create_note error', err);
+        }
+      };
+
+      const handlePinSelected = () => {
+        try {
+          const selected = mountedEditor.getSelectedShapes();
+          if (!selected.length) return;
+          const viewport = mountedEditor.getViewportScreenBounds();
+          const updates: any[] = [];
+          for (const s of selected) {
+            if ((s as any).type !== 'tambo') continue;
+            const b = mountedEditor.getShapePageBounds((s as any).id);
+            if (!b) continue;
+            const screenPoint = mountedEditor.pageToScreen({ x: b.x + b.w / 2, y: b.y + b.h / 2 });
+            const pinnedX = screenPoint.x / viewport.width;
+            const pinnedY = screenPoint.y / viewport.height;
+            updates.push({ id: (s as any).id, type: 'tambo' as const, props: { pinned: true, pinnedX, pinnedY } });
+          }
+          if (updates.length) mountedEditor.updateShapes(updates);
+        } catch (err) {
+          console.warn('[CanvasControl] pin_selected error', err);
+        }
+      };
+
+      const handleUnpinSelected = () => {
+        try {
+          const selected = mountedEditor.getSelectedShapes();
+          const updates: any[] = [];
+          for (const s of selected) {
+            if ((s as any).type !== 'tambo') continue;
+            updates.push({ id: (s as any).id, type: 'tambo' as const, props: { pinned: false } });
+          }
+          if (updates.length) mountedEditor.updateShapes(updates);
+        } catch (err) {
+          console.warn('[CanvasControl] unpin_selected error', err);
+        }
+      };
+
+      const handleLockSelected = () => {
+        try {
+          const selected = mountedEditor.getSelectedShapes();
+          if (!selected.length) return;
+          const updates = selected.map((s: any) => ({ id: s.id, type: s.type, isLocked: true }));
+          mountedEditor.updateShapes(updates as any);
+        } catch (err) {
+          console.warn('[CanvasControl] lock_selected error', err);
+        }
+      };
+
+      const handleUnlockSelected = () => {
+        try {
+          const selected = mountedEditor.getSelectedShapes();
+          if (!selected.length) return;
+          const updates = selected.map((s: any) => ({ id: s.id, type: s.type, isLocked: false }));
+          mountedEditor.updateShapes(updates as any);
+        } catch (err) {
+          console.warn('[CanvasControl] unlock_selected error', err);
+        }
+      };
+
+      const handleArrangeGrid = (e: Event) => {
+        try {
+          const detail = (e as CustomEvent).detail || {};
+          const selectionOnly = Boolean(detail.selectionOnly);
+          const spacing = typeof detail.spacing === 'number' ? detail.spacing : 24;
+          let targets = (mountedEditor.getSelectedShapes() as any[]).filter(s => s.type === 'tambo');
+          if (!selectionOnly || targets.length === 0) {
+            targets = (mountedEditor.getCurrentPageShapes() as any[]).filter(s => s.type === 'tambo');
+          }
+          if (targets.length === 0) return;
+
+          // Compute grid
+          const cols = detail.cols && Number.isFinite(detail.cols) ? Math.max(1, Math.floor(detail.cols)) : Math.ceil(Math.sqrt(targets.length));
+          const rows = Math.ceil(targets.length / cols);
+          const sizes = targets.map(s => ({ w: (s.props?.w ?? 300), h: (s.props?.h ?? 200) }));
+          const maxW = Math.max(...sizes.map(s => s.w));
+          const maxH = Math.max(...sizes.map(s => s.h));
+          const viewport = mountedEditor.getViewportPageBounds();
+          const totalW = cols * maxW + (cols - 1) * spacing;
+          const totalH = rows * maxH + (rows - 1) * spacing;
+          const left = viewport ? viewport.midX - totalW / 2 : 0;
+          const top = viewport ? viewport.midY - totalH / 2 : 0;
+
+          const updates = targets.map((s, i) => {
+            const r = Math.floor(i / cols);
+            const c = i % cols;
+            const x = left + c * (maxW + spacing);
+            const y = top + r * (maxH + spacing);
+            return { id: s.id, type: s.type as any, x, y };
+          });
+          mountedEditor.updateShapes(updates as any);
+        } catch (err) {
+          console.warn('[CanvasControl] arrange_grid error', err);
+        }
+      };
+
+      const handleCreateRectangle = (e: Event) => {
+        try {
+          const detail = (e as CustomEvent).detail || {};
+          const w = typeof detail.w === 'number' ? detail.w : 300;
+          const h = typeof detail.h === 'number' ? detail.h : 200;
+          const name = typeof detail.name === 'string' ? detail.name : 'Rectangle';
+          const viewport = mountedEditor.getViewportPageBounds();
+          const x = typeof detail.x === 'number' ? detail.x : (viewport ? viewport.midX - w / 2 : 0);
+          const y = typeof detail.y === 'number' ? detail.y : (viewport ? viewport.midY - h / 2 : 0);
+          mountedEditor.createShape({
+            id: (mountedEditor as any).createShapeId?.('geo') ?? undefined,
+            type: 'geo' as any,
+            x,
+            y,
+            props: { w, h, name, geo: 'rectangle' },
+          } as any);
+        } catch (err) {
+          console.warn('[CanvasControl] create_rectangle error', err);
+        }
+      };
+
+      const handleCreateEllipse = (e: Event) => {
+        try {
+          const detail = (e as CustomEvent).detail || {};
+          const w = typeof detail.w === 'number' ? detail.w : 280;
+          const h = typeof detail.h === 'number' ? detail.h : 180;
+          const name = typeof detail.name === 'string' ? detail.name : 'Ellipse';
+          const viewport = mountedEditor.getViewportPageBounds();
+          const x = typeof detail.x === 'number' ? detail.x : (viewport ? viewport.midX - w / 2 : 0);
+          const y = typeof detail.y === 'number' ? detail.y : (viewport ? viewport.midY - h / 2 : 0);
+          mountedEditor.createShape({
+            id: (mountedEditor as any).createShapeId?.('geo') ?? undefined,
+            type: 'geo' as any,
+            x,
+            y,
+            props: { w, h, name, geo: 'ellipse' },
+          } as any);
+        } catch (err) {
+          console.warn('[CanvasControl] create_ellipse error', err);
+        }
+      };
+
+      const handleAlignSelected = (e: Event) => {
+        try {
+          const detail = (e as CustomEvent).detail || {};
+          const axis: 'x'|'y' = detail.axis || 'x';
+          const mode: string = detail.mode || (axis === 'x' ? 'center' : 'middle');
+          const targets = (mountedEditor.getSelectedShapes() as any[]).filter(s => s.type === 'tambo');
+          if (targets.length === 0) return;
+          const bounds = targets
+            .map(s => ({ s, b: mountedEditor.getShapePageBounds(s.id) }))
+            .filter(x => !!x.b) as any[];
+          if (!bounds.length) return;
+          const minX = Math.min(...bounds.map(x => x.b.x));
+          const maxX = Math.max(...bounds.map(x => x.b.x + x.b.w));
+          const minY = Math.min(...bounds.map(x => x.b.y));
+          const maxY = Math.max(...bounds.map(x => x.b.y + x.b.h));
+          const cx = (minX + maxX) / 2;
+          const cy = (minY + maxY) / 2;
+          const updates: any[] = [];
+          for (const { s, b } of bounds) {
+            if (axis === 'x') {
+              if (mode === 'left') updates.push({ id: s.id, type: s.type, x: minX });
+              else if (mode === 'right') updates.push({ id: s.id, type: s.type, x: maxX - b.w });
+              else /* center */ updates.push({ id: s.id, type: s.type, x: cx - b.w / 2 });
+            } else {
+              if (mode === 'top') updates.push({ id: s.id, type: s.type, y: minY });
+              else if (mode === 'bottom') updates.push({ id: s.id, type: s.type, y: maxY - b.h });
+              else /* middle */ updates.push({ id: s.id, type: s.type, y: cy - b.h / 2 });
+            }
+          }
+          if (updates.length) mountedEditor.updateShapes(updates as any);
+        } catch (err) {
+          console.warn('[CanvasControl] align_selected error', err);
+        }
+      };
+
+      const handleDistributeSelected = (e: Event) => {
+        try {
+          const detail = (e as CustomEvent).detail || {};
+          const axis: 'x'|'y' = detail.axis || 'x';
+          const targets = (mountedEditor.getSelectedShapes() as any[]).filter(s => s.type === 'tambo');
+          if (targets.length < 3) return; // need at least 3 to distribute
+          const items = targets
+            .map(s => ({ s, b: mountedEditor.getShapePageBounds(s.id) }))
+            .filter(x => !!x.b) as any[];
+          if (items.length < 3) return;
+          items.sort((a, b) => axis === 'x' ? a.b.x - b.b.x : a.b.y - b.b.y);
+          const first = items[0];
+          const last = items[items.length - 1];
+          const span = axis === 'x' ? (last.b.x - first.b.x) : (last.b.y - first.b.y);
+          const step = span / (items.length - 1);
+          const updates: any[] = [];
+          for (let i = 1; i < items.length - 1; i++) {
+            const targetPos = (axis === 'x') ? (first.b.x + step * i) : (first.b.y + step * i);
+            if (axis === 'x') updates.push({ id: items[i].s.id, type: items[i].s.type, x: targetPos });
+            else updates.push({ id: items[i].s.id, type: items[i].s.type, y: targetPos });
+          }
+          if (updates.length) mountedEditor.updateShapes(updates as any);
+        } catch (err) {
+          console.warn('[CanvasControl] distribute_selected error', err);
+        }
+      };
+
+      const handleDrawSmiley = (e: Event) => {
+        try {
+          const detail = (e as CustomEvent).detail || {};
+          const size = typeof detail.size === 'number' ? detail.size : 300;
+          const viewport = mountedEditor.getViewportPageBounds();
+          const cx = viewport ? viewport.midX : 0;
+          const cy = viewport ? viewport.midY : 0;
+
+          // Face
+          const faceW = size;
+          const faceH = size;
+          mountedEditor.createShape({
+            id: (mountedEditor as any).createShapeId?.('smiley-face') ?? undefined,
+            type: 'geo' as any,
+            x: cx - faceW / 2,
+            y: cy - faceH / 2,
+            props: { w: faceW, h: faceH, geo: 'ellipse', name: 'Smiley Face' },
+          } as any);
+
+          // Eyes
+          const eyeW = Math.max(16, size * 0.12);
+          const eyeH = Math.max(16, size * 0.12);
+          const eyeOffsetX = size * 0.22;
+          const eyeOffsetY = size * 0.18;
+          // Left eye
+          mountedEditor.createShape({
+            id: (mountedEditor as any).createShapeId?.('smiley-eye-l') ?? undefined,
+            type: 'geo' as any,
+            x: cx - eyeOffsetX - eyeW / 2,
+            y: cy - eyeOffsetY - eyeH / 2,
+            props: { w: eyeW, h: eyeH, geo: 'ellipse', name: 'Eye L' },
+          } as any);
+          // Right eye
+          mountedEditor.createShape({
+            id: (mountedEditor as any).createShapeId?.('smiley-eye-r') ?? undefined,
+            type: 'geo' as any,
+            x: cx + eyeOffsetX - eyeW / 2,
+            y: cy - eyeOffsetY - eyeH / 2,
+            props: { w: eyeW, h: eyeH, geo: 'ellipse', name: 'Eye R' },
+          } as any);
+
+          // Mouth (simple ellipse as placeholder)
+          const mouthW = size * 0.5;
+          const mouthH = size * 0.22;
+          const mouthY = cy + size * 0.15;
+          mountedEditor.createShape({
+            id: (mountedEditor as any).createShapeId?.('smiley-mouth') ?? undefined,
+            type: 'geo' as any,
+            x: cx - mouthW / 2,
+            y: mouthY - mouthH / 2,
+            props: { w: mouthW, h: mouthH, geo: 'ellipse', name: 'Mouth' },
+          } as any);
+        } catch (err) {
+          console.warn('[CanvasControl] draw_smiley error', err);
+        }
+      };
+
+      window.addEventListener('tldraw:canvas_focus', handleFocusEvent as EventListener);
+      window.addEventListener('tldraw:canvas_zoom_all', handleZoomAll as EventListener);
+      window.addEventListener('tldraw:create_note', handleCreateNote as EventListener);
+      window.addEventListener('tldraw:pinSelected', handlePinSelected as EventListener);
+      window.addEventListener('tldraw:unpinSelected', handleUnpinSelected as EventListener);
+      window.addEventListener('tldraw:lockSelected', handleLockSelected as EventListener);
+      window.addEventListener('tldraw:unlockSelected', handleUnlockSelected as EventListener);
+      window.addEventListener('tldraw:arrangeGrid', handleArrangeGrid as EventListener);
+      window.addEventListener('tldraw:createRectangle', handleCreateRectangle as EventListener);
+      window.addEventListener('tldraw:createEllipse', handleCreateEllipse as EventListener);
+      window.addEventListener('tldraw:alignSelected', handleAlignSelected as EventListener);
+      window.addEventListener('tldraw:distributeSelected', handleDistributeSelected as EventListener);
+      window.addEventListener('tldraw:drawSmiley', handleDrawSmiley as EventListener);
+
       // Store cleanup function
       const cleanup = () => {
         cameraCleanup();
         window.removeEventListener('resize', handleResize);
+        window.removeEventListener('tldraw:canvas_focus', handleFocusEvent as EventListener);
+        window.removeEventListener('tldraw:canvas_zoom_all', handleZoomAll as EventListener);
+        window.removeEventListener('tldraw:create_note', handleCreateNote as EventListener);
+        window.removeEventListener('tldraw:pinSelected', handlePinSelected as EventListener);
+        window.removeEventListener('tldraw:unpinSelected', handleUnpinSelected as EventListener);
+        window.removeEventListener('tldraw:lockSelected', handleLockSelected as EventListener);
+        window.removeEventListener('tldraw:unlockSelected', handleUnlockSelected as EventListener);
+        window.removeEventListener('tldraw:arrangeGrid', handleArrangeGrid as EventListener);
+        window.removeEventListener('tldraw:createRectangle', handleCreateRectangle as EventListener);
+        window.removeEventListener('tldraw:createEllipse', handleCreateEllipse as EventListener);
+        window.removeEventListener('tldraw:alignSelected', handleAlignSelected as EventListener);
+        window.removeEventListener('tldraw:distributeSelected', handleDistributeSelected as EventListener);
+        window.removeEventListener('tldraw:drawSmiley', handleDrawSmiley as EventListener);
       };
 
       // Store cleanup in editor for later use
