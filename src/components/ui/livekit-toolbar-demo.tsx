@@ -3,7 +3,9 @@
 import React, { useState, useEffect } from 'react';
 import { LivekitToolbar } from './livekit-toolbar';
 import { Room, RoomOptions, ConnectionQuality } from 'livekit-client';
-import { LiveKitRoom, RoomAudioRenderer } from '@livekit/components-react';
+import dynamic from 'next/dynamic';
+const LiveKitRoom = dynamic(() => import('@livekit/components-react').then(m => m.LiveKitRoom), { ssr: false });
+const RoomAudioRenderer = dynamic(() => import('@livekit/components-react').then(m => m.RoomAudioRenderer), { ssr: false });
 import { cn } from '@/lib/utils';
 import { 
   Play, 

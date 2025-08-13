@@ -11,48 +11,29 @@ import {
   useIsMuted,
   useConnectionQualityIndicator,
   useRoomContext,
-  useDataChannel,
-  useTracks,
   useRemoteParticipants,
 } from "@livekit/components-react";
-import { Track, ConnectionQuality, Participant, LocalParticipant } from "livekit-client";
+import { Track, ConnectionQuality, Participant } from "livekit-client";
 import {
   Mic,
   MicOff,
   Video,
   VideoOff,
   ScreenShare,
-  MessageSquare,
   Hand,
-  UserPlus,
-  Settings,
-  Users,
-  Signal,
   SignalLow,
   SignalMedium,
   SignalHigh,
-  Sparkles,
-  LayoutGrid,
   Circle,
   Square,
   X,
-  ChevronUp,
-  ChevronDown,
-  Volume2,
-  VolumeX,
-  Loader,
-  Maximize2,
-  Accessibility,
   Pin,
   UserX,
-  Crown,
-  Eye,
-  EyeOff,
   MoreHorizontal,
   AlertTriangle,
   Wifi,
-  WifiOff,
 } from "lucide-react";
+import { createLiveKitBus } from '../../lib/livekit-bus';
 
 // Custom Unpin icon as alternative
 const Unpin = ({ className }: { className?: string }) => (
@@ -222,8 +203,6 @@ export function LivekitToolbar({
   enableParticipantControls = true,
   enableAdaptiveUI = true,
   moderationEnabled = false,
-  autoMuteOnJoin = false,
-  maxParticipants,
   compactMode = false,
   showConnectionStatus = true,
   showParticipantList = true,
@@ -231,44 +210,20 @@ export function LivekitToolbar({
 }: LivekitToolbarProps) {
   const componentId = `livekit-toolbar-${roomName || 'default'}`;
   
-  // Real LiveKit hooks - connected to actual room state
-  // Wrap in try-catch to handle context not available
-  let room = null;
-  let localParticipant = null;
-  let participants: any[] = [];
-  let remoteParticipants: any[] = [];
-  let connectionQuality = null;
-  let toggleMic = () => {};
-  let micEnabled = false;
-  let toggleCamera = () => {};
-  let cameraEnabled = false;
-  let toggleScreenShare = () => {};
-  let screenShareEnabled = false;
-
-  try {
-    room = useRoomContext();
-    const localParticipantData = useLocalParticipant();
-    localParticipant = localParticipantData.localParticipant;
-    participants = useParticipants();
-    remoteParticipants = useRemoteParticipants();
-    connectionQuality = useConnectionQualityIndicator(localParticipant);
-    
-    // Media controls with real LiveKit integration
-    const micToggle = useTrackToggle(Track.Source.Microphone);
-    toggleMic = micToggle.toggle;
-    micEnabled = micToggle.enabled;
-    
-    const cameraToggle = useTrackToggle(Track.Source.Camera);
-    toggleCamera = cameraToggle.toggle;
-    cameraEnabled = cameraToggle.enabled;
-    
-    const screenShareToggle = useTrackToggle(Track.Source.ScreenShare);
-    toggleScreenShare = screenShareToggle.toggle;
-    screenShareEnabled = screenShareToggle.enabled;
-     } catch (error) {
-     console.warn('[LivekitToolbar] LiveKit context not available:', error);
-     // Component will render with default values and show appropriate message
-   }
+  // MOVED ALL HOOKS OUTSIDE TRY-CATCH - ALWAYS CALL HOOKS
+  const roomContext = useRoomContext();
+  const bus = createLiveKitBus(roomContext);
+  
+  // Always call LiveKit hooks - handle errors with conditional logic instead
+  const room = useRoomContext();
+  const { localParticipant } = useLocalParticipant();
+  const participants = useParticipants();
+  const connectionQuality = useConnectionQualityIndicator(localParticipant);
+  
+  // Media controls with real LiveKit integration - always call hooks
+  const micToggle = useTrackToggle(Track.Source.Microphone);
+  const cameraToggle = useTrackToggle(Track.Source.Camera);
+  const screenShareToggle = useTrackToggle(Track.Source.ScreenShare);
   
   // Enhanced Tambo state management
   const [state, setState] = useTamboComponentState<LivekitToolbarState>(
@@ -294,13 +249,68 @@ export function LivekitToolbar({
     }
   );
 
+  // Extract values from hooks - handle potential errors with conditional logic
+  const toggleMic = micToggle?.toggle || (() => {});
+  const micEnabled = micToggle?.enabled || false;
+  const toggleCamera = cameraToggle?.toggle || (() => {});
+  const cameraEnabled = cameraToggle?.enabled || false;
+  const toggleScreenShare = screenShareToggle?.toggle || (() => {});
+  const screenShareEnabled = screenShareToggle?.enabled || false;
+
+  // Real recording functionality
+  const handleStartRecording = React.useCallback(async () => {
+    if (!state) return;
+    
+    try {
+      if (!state.isRecording) {
+        // Start recording via room API
+        await room?.startRecording?.();
+        setState({
+          ...state,
+          isRecording: true,
+          recordingStartTime: new Date(),
+        });
+      } else {
+        // Stop recording
+        await room?.stopRecording?.();
+        setState({
+          ...state,
+          isRecording: false,
+          recordingStartTime: null,
+        });
+      }
+    } catch (error) {
+      console.error("Recording operation failed:", error);
+    }
+  }, [room, state, setState]);
+
+  // Real hand raise functionality
+  const handleRaiseHand = React.useCallback(() => {
+    if (!state) return;
+    
+    const isRaised = state.handRaisedParticipants.includes(localParticipant?.identity || '');
+    
+    // Send data channel message
+    bus.send('hand_raise', {
+      type: isRaised ? 'LOWER_HAND' : 'RAISE_HAND',
+      participantId: localParticipant?.identity || '',
+      timestamp: Date.now(),
+    });
+
+    setState({
+      ...state,
+      handRaisedParticipants: isRaised
+        ? state.handRaisedParticipants.filter(id => id !== (localParticipant?.identity || ''))
+        : [...state.handRaisedParticipants, localParticipant?.identity || ''],
+    });
+  }, [state, setState, localParticipant?.identity, bus]);
+
   // Voice command integration
-  try {
-    useDataChannel("voice-commands", (message) => {
+  React.useEffect(() => {
+    const off = bus.on("voice-commands", (commandRaw) => {
       if (!enableVoiceCommands || !state) return;
-      
       try {
-        const command = JSON.parse(new TextDecoder().decode(message.payload));
+        const command = commandRaw as { type: string };
         
         switch (command.type) {
           case "MUTE_ALL":
@@ -335,9 +345,8 @@ export function LivekitToolbar({
         console.error("Failed to parse voice command:", error);
       }
     });
-  } catch (error) {
-    // useDataChannel not available outside LiveKit context
-  }
+    return off;
+  }, [bus, enableVoiceCommands, moderationEnabled, participants, room?.localParticipant, setState, state, toggleMic, toggleCamera, handleStartRecording, handleRaiseHand]);
 
   // Real-time participant monitoring
   React.useEffect(() => {
@@ -374,68 +383,11 @@ export function LivekitToolbar({
   //   );
   // }, [componentId, state?.canvasPosition, state?.canvasSize]);
 
-  // Real recording functionality
-  const handleStartRecording = async () => {
-    if (!state) return;
-    
-    try {
-      if (!state.isRecording) {
-        // Start recording via room API
-        await room?.startRecording?.();
-        setState({
-          ...state,
-          isRecording: true,
-          recordingStartTime: new Date(),
-        });
-      } else {
-        // Stop recording
-        await room?.stopRecording?.();
-        setState({
-          ...state,
-          isRecording: false,
-          recordingStartTime: null,
-        });
-      }
-    } catch (error) {
-      console.error("Recording operation failed:", error);
-    }
-  };
-
-  // Real hand raise functionality
-  const handleRaiseHand = () => {
-    if (!state) return;
-    
-    const isRaised = state.handRaisedParticipants.includes(localParticipant?.identity || '');
-    
-    // Send data channel message
-    room?.localParticipant?.publishData(
-      new TextEncoder().encode(JSON.stringify({
-        type: isRaised ? "LOWER_HAND" : "RAISE_HAND",
-        participantId: localParticipant?.identity || '',
-        timestamp: Date.now(),
-      })),
-      { reliable: true }
-    );
-
-    setState({
-      ...state,
-      handRaisedParticipants: isRaised
-        ? state.handRaisedParticipants.filter(id => id !== (localParticipant?.identity || ''))
-        : [...state.handRaisedParticipants, localParticipant?.identity || ''],
-    });
-  };
-
   // Participant management functions
   const handleMuteParticipant = (participantId: string) => {
     if (!moderationEnabled) return;
     
-    room?.localParticipant?.publishData(
-      new TextEncoder().encode(JSON.stringify({
-        type: "MUTE_REQUEST",
-        targetId: participantId,
-      })),
-      { reliable: true }
-    );
+    bus.send('moderation', { type: 'MUTE_REQUEST', targetId: participantId });
   };
 
   const handlePinParticipant = (participantId: string) => {

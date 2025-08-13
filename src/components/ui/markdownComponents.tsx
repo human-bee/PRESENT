@@ -4,8 +4,13 @@ import * as React from "react";
 import { cn } from "@/lib/utils";
 import type { Components } from "react-markdown";
 import { Copy, Check } from "lucide-react";
-import hljs from "highlight.js";
-import "highlight.js/styles/github.css";
+// Lightweight highlight.js build – only register languages we need
+import hljs from 'highlight.js/lib/core';
+import javascript from 'highlight.js/lib/languages/javascript';
+import typescript from 'highlight.js/lib/languages/typescript';
+import json from 'highlight.js/lib/languages/json';
+import xml from 'highlight.js/lib/languages/xml'; // for html / markdown snippets
+import 'highlight.js/styles/github.css';
 import DOMPurify from 'dompurify';
 
 /**

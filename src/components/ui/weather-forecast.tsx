@@ -1,11 +1,18 @@
+"use client";
+
 import { useTamboComponentState } from "@tambo-ai/react";
 import { z } from "zod";
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState, useMemo } from 'react';
 import { 
   Cloud, CloudRain, Sun, Wind, Droplets, Eye,
   Waves, Umbrella, CloudDrizzle, Snowflake, Zap,
   ArrowUp, ArrowDown, ChevronRight
 } from 'lucide-react';
+import { LoadingState } from "@/lib/with-progressive-loading";
+import { LoadingWrapper, SkeletonPatterns } from "@/components/ui/loading-states";
+import { useComponentSubAgent, SubAgentPresets } from "@/lib/component-subagent";
+import { normalizeWeatherForecast } from "@/lib/mcp-normalizers";
+import { useComponentIsolation } from "@/lib/component-isolation";
 
 // Enhanced forecast period schema with more data types
 const forecastPeriodSchema = z.object({
@@ -325,6 +332,63 @@ export function WeatherForecast(props: WeatherForecastProps) {
   const hasDispatchedRef = useRef(false);
   const lastTempRef = useRef<number>(70);
   
+  // Component isolation to prevent re-renders from other components
+  const { isolationId, debouncedUpdate } = useComponentIsolation(
+    props.location || 'default',
+    'WeatherForecast'
+  );
+  
+  // Use sub-agent for progressive data loading with error boundary
+  const [subAgentError, setSubAgentError] = useState<Error | null>(null);
+  
+  // Memoize sub-agent config to prevent re-creation
+  const subAgentConfig = useMemo(() => ({
+    ...SubAgentPresets.weather,
+    dataEnricher: (context: any, tools: any) => {
+      // If we already have props data, skip MCP calls
+      if (props.periods && props.periods.length > 0) {
+        return [];
+      }
+      
+      // Otherwise, fetch data via MCP using actual tool names
+      const promises = [];
+      
+      // The MCP tools might have different names - let's check what's available
+      const weatherTool = tools["mcp_weather-gov-weather"] || tools.weather;
+      const forecastTool = tools["mcp_weather-gov-forecast"] || tools.forecast;
+      const alertsTool = tools["mcp_weather-gov-alerts"] || tools.alerts;
+      
+      if (weatherTool) {
+        promises.push(weatherTool.execute({ location: context.location || props.location }));
+      }
+      if (forecastTool) {
+        promises.push(forecastTool.execute({ location: context.location || props.location, days: 7 }));
+      }
+      if (alertsTool) {
+        promises.push(alertsTool.execute({ location: context.location || props.location }));
+      }
+      
+      return promises;
+    },
+  }), [props.periods, props.location]);
+  
+  let subAgent;
+  try {
+    subAgent = useComponentSubAgent(subAgentConfig);
+  } catch (error) {
+    console.error('SubAgent initialization failed:', error);
+    setSubAgentError(error as Error);
+    subAgent = {
+      loadingState: LoadingState.COMPLETE,
+      context: null,
+      enrichedData: {},
+      errors: {},
+      mcpActivity: {},
+    };
+  }
+  
+  const loadingState = subAgent.loadingState;
+  
   // Enhanced Tambo state management
   const [state, setState] = useTamboComponentState<WeatherForecastState>(
     `weather-forecast-${props.location?.replace(/\s+/g, '-').toLowerCase() || 'default'}`,
@@ -343,26 +407,41 @@ export function WeatherForecast(props: WeatherForecastProps) {
     }
   );
 
-  const location = props.location;
-  const periods = props.periods || [];
-  const isLoading = !location || periods.length === 0;
-  const currentPeriod = periods[state?.selectedPeriod || 0] || periods[0];
+  // Use enriched data from sub-agent if available
+  const weatherRaw = subAgent.enrichedData.weather || {};
+  const forecastRaw = subAgent.enrichedData.forecast || {};
 
-  // Canvas integration - ONLY run once on mount, never again
-  useEffect(() => {
-    if (!hasDispatchedRef.current && location) {
-      hasDispatchedRef.current = true;
-      const componentId = `weather-${location}-${Date.now()}`;
-      window.dispatchEvent(
-        new CustomEvent("tambo:showComponent", {
-          detail: { 
-            messageId: componentId,
-            component: <WeatherForecast {...props} />
-          }
-        })
-      );
-    }
-  }, []); // Empty dependency array - only run once
+  // Normalize any MCP shapes into our canonical schema
+  const normalized = normalizeWeatherForecast(
+    (forecastRaw && Object.keys(forecastRaw).length ? forecastRaw : weatherRaw),
+    props.location
+  );
+  
+  // Merge props data with MCP-fetched data (props take priority)
+  const location = props.location || normalized.location || subAgent.context?.location;
+  const periods = props.periods || normalized.periods || [];
+  const currentPeriod = periods[state?.selectedPeriod || 0] || periods[0];
+  
+  // Determine loading state - if we have data from props, skip loading
+  const isLoading = !props.periods && loadingState === LoadingState.SKELETON;
+  const effectiveLoadingState = props.periods ? LoadingState.COMPLETE : loadingState;
+
+  // Canvas integration - DISABLED to prevent recursive loops
+  // The component should be created by Tambo, not dispatch itself
+  // useEffect(() => {
+  //   if (!hasDispatchedRef.current && location) {
+  //     hasDispatchedRef.current = true;
+  //     const componentId = `weather-${location}-${Date.now()}`;
+  //     window.dispatchEvent(
+  //       new CustomEvent("tambo:showComponent", {
+  //         detail: { 
+  //           messageId: componentId,
+  //           component: <WeatherForecast {...props} />
+  //         }
+  //       })
+  //     );
+  //   }
+  // }, []); // Empty dependency array - only run once
 
   // Canvas event handling - simplified without problematic dependencies
   useEffect(() => {
@@ -493,17 +572,42 @@ export function WeatherForecast(props: WeatherForecastProps) {
         }
       `}</style>
 
-      {/* Main editorial weather card */}
-      <div 
-        className={`relative bg-slate-900 rounded-2xl border border-slate-700 p-6 transition-all duration-500 ${
-          state.isActive ? 'scale-105 border-slate-600 shadow-2xl' : 'hover:border-slate-600 hover:shadow-xl'
-        }`}
-        style={{
-          width: state.canvasSize.width,
-          minWidth: "320px",
-          maxWidth: "480px",
+      <LoadingWrapper
+        state={effectiveLoadingState}
+        skeleton={SkeletonPatterns.weather}
+        showLoadingIndicator={!props.periods}
+        loadingProgress={{
+          state: effectiveLoadingState,
+                  progress: 
+          effectiveLoadingState === LoadingState.SKELETON ? 33 :
+          effectiveLoadingState === LoadingState.PARTIAL ? 66 :
+          100,
+        message:
+          subAgentError ? "Using cached weather data..." :
+          effectiveLoadingState === LoadingState.SKELETON ? "Connecting to weather service..." :
+          effectiveLoadingState === LoadingState.PARTIAL ? (
+            subAgent.mcpActivity?.weather ? "Fetching current conditions..." :
+            subAgent.mcpActivity?.forecast ? "Loading forecast data..." :
+            "Processing weather data..."
+          ) :
+          "Ready!",
+          eta:
+            effectiveLoadingState === LoadingState.SKELETON ? 400 :
+            effectiveLoadingState === LoadingState.PARTIAL ? 200 :
+            0,
         }}
       >
+        {/* Main editorial weather card */}
+        <div 
+          className={`relative bg-slate-900 rounded-2xl border border-slate-700 p-6 transition-all duration-500 ${
+            state.isActive ? 'scale-105 border-slate-600 shadow-2xl' : 'hover:border-slate-600 hover:shadow-xl'
+          }`}
+          style={{
+            width: state.canvasSize.width,
+            minWidth: "320px",
+            maxWidth: "480px",
+          }}
+        >
         {/* Clean header */}
         <div className="flex items-center justify-between mb-6">
           <div>
@@ -591,6 +695,7 @@ export function WeatherForecast(props: WeatherForecastProps) {
           ))}
         </div>
       </div>
+      </LoadingWrapper>
     </div>
   );
 }

@@ -222,7 +222,7 @@ export function LivekitRoomConnector({
         errorMessage: error instanceof Error ? error.message : "Unknown dispatch error"
       });
     }
-  }, [roomName, setState]);
+  }, [roomName]);
 
   // Enhanced participant connection handler with agent triggering
   React.useEffect(() => {
@@ -239,12 +239,19 @@ export function LivekitRoomConnector({
         
         // Trigger agent join when first user connects successfully
         // Only if we're the first real participant (excluding the agent)
-        const nonAgentParticipants = Array.from(room.remoteParticipants.values())
-          .filter(p => !p.identity.toLowerCase().includes('agent') && 
-                      !p.identity.toLowerCase().includes('bot') && 
-                      !p.identity.toLowerCase().includes('ai'));
-        
-        if (nonAgentParticipants.length === 0) {
+        const isAgent = (p: Participant) =>
+          p.identity.toLowerCase().includes('agent') ||
+          p.identity.toLowerCase().includes('bot') ||
+          p.identity.toLowerCase().includes('ai') ||
+          p.identity.startsWith('tambo-voice-agent') ||
+          p.metadata?.includes('agent') ||
+          p.metadata?.includes('type":"agent');
+
+        const nonAgentParticipants = Array.from(room.remoteParticipants.values()).filter(p => !isAgent(p));
+        const agentParticipants = Array.from(room.remoteParticipants.values()).filter(p => isAgent(p));
+
+        // Trigger agent join only if there are NO existing agents and this is the first human
+        if (nonAgentParticipants.length === 0 && agentParticipants.length === 0) {
           console.log(`🤖 [LiveKitConnector-${roomName}] First participant connected, triggering agent...`);
           // Small delay to ensure room is fully established
           setTimeout(() => {
@@ -370,7 +377,7 @@ export function LivekitRoomConnector({
       room.off(RoomEvent.ParticipantConnected, handleParticipantConnected);
       room.off(RoomEvent.ParticipantDisconnected, handleParticipantDisconnected);
     };
-  }, [room, roomName, setState, triggerAgentJoin]); // Added triggerAgentJoin to dependencies
+  }, [room, roomName, triggerAgentJoin]); // Added triggerAgentJoin to dependencies
 
   // Track re-renders and token fetch state
   const renderCount = React.useRef(0);
@@ -455,7 +462,7 @@ export function LivekitRoomConnector({
     };
 
     fetchTokenAndConnect();
-  }, [stateRef.current?.connectionState, stateRef.current?.token, roomName, userName, setState, room, wsUrl]);
+  }, [stateRef.current?.connectionState, stateRef.current?.token, roomName, userName, room, wsUrl]);
 
   // Auto-connect effect (if enabled)
   React.useEffect(() => {

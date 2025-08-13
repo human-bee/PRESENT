@@ -13,8 +13,10 @@
 
 "use client";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { McpStatusIndicator } from "@/components/ui/mcp-status-indicator";
+import { useValidatedTambo } from "@/hooks/use-validated-tambo";
+import { computeMcpMappings, listRegistryTools, listWindowMcpTools } from "@/lib/mcp-introspection";
 
 // Define MCP transport types
 export enum MCPTransport {
@@ -46,6 +48,12 @@ const McpConfigPage = () => {
     MCPTransport.HTTP
   );
   const [savedSuccess, setSavedSuccess] = useState(false);
+  const { toolRegistry } = useValidatedTambo();
+  const [verifyOpen, setVerifyOpen] = useState(false);
+
+  const regToolNames = useMemo(() => listRegistryTools(toolRegistry), [toolRegistry]);
+  const winToolNames = useMemo(() => listWindowMcpTools(), []);
+  const mappings = useMemo(() => computeMcpMappings(toolRegistry), [toolRegistry]);
 
   // Load saved servers from localStorage on mount
   // This useEffect can be removed since we initialize from localStorage directly
@@ -110,10 +118,10 @@ const McpConfigPage = () => {
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-2xl font-bold">MCP Server Configuration</h1>
           <Link
-            href="/chat"
+            href="/canvas"
             className="px-4 py-2 rounded-md bg-black text-white hover:bg-black/80"
           >
-            Back to Chat
+            Back to Canvas
           </Link>
         </div>
 
@@ -126,6 +134,12 @@ const McpConfigPage = () => {
             of your Tambo application. The servers listed here will be available
             as tool providers in your chat.
           </p>
+          {winToolNames.length === 0 && (
+            <div className="mb-4 p-3 rounded-md bg-yellow-50 text-yellow-800 border border-yellow-200">
+              No MCP tools are currently registered in the window bridge. Add a server below, then use
+              "Verify & Map" to confirm tools are available and mapped.
+            </div>
+          )}
 
           {/* MCP Status Indicator */}
           <div className="mb-6">
@@ -203,7 +217,15 @@ const McpConfigPage = () => {
             <div>
               <div className="flex items-center justify-between mb-4">
                 <h3 className="font-semibold">Connected Servers:</h3>
-                <McpStatusIndicator showDetails={false} className="text-sm" />
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setVerifyOpen((v) => !v)}
+                    className="px-2 py-1 text-xs rounded bg-gray-100 hover:bg-gray-200"
+                  >
+                    {verifyOpen ? "Hide Verification" : "Verify & Map"}
+                  </button>
+                  <McpStatusIndicator showDetails={false} className="text-sm" />
+                </div>
               </div>
               <ul className="border rounded-md divide-y">
                 {mcpServers.map((server, index) => {
@@ -237,6 +259,54 @@ const McpConfigPage = () => {
                   );
                 })}
               </ul>
+              {verifyOpen && (
+                <div className="mt-4 border rounded-md p-3 bg-gray-50">
+                  <h4 className="font-medium mb-2">Verification</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
+                    <div>
+                      <div className="text-gray-600 mb-1">Window MCP Tools</div>
+                      <ul className="list-disc ml-5">
+                        {winToolNames.length === 0 && <li className="text-gray-400">none</li>}
+                        {winToolNames.map((n) => (
+                          <li key={n}>{n}</li>
+                        ))}
+                      </ul>
+                    </div>
+                    <div>
+                      <div className="text-gray-600 mb-1">Registry Tools</div>
+                      <ul className="list-disc ml-5">
+                        {regToolNames.length === 0 && <li className="text-gray-400">none</li>}
+                        {regToolNames.map((n) => (
+                          <li key={n}>{n}</li>
+                        ))}
+                      </ul>
+                    </div>
+                    <div>
+                      <div className="text-gray-600 mb-1">System Mappings</div>
+                      <ul className="list-disc ml-5">
+                        {mappings.length === 0 && <li className="text-gray-400">none</li>}
+                        {mappings.map((m) => (
+                          <li key={m.agentTool}>
+                            <span className="font-mono">{m.agentTool}</span>
+                            <span className="text-gray-500"> → </span>
+                            <span className="font-mono">{m.mcpTool}</span>
+                            <span className={`ml-2 text-xs ${m.inRegistry ? 'text-green-600' : 'text-red-600'}`}>
+                              {m.inRegistry ? 'in registry' : 'missing'}
+                            </span>
+                            <span className={`ml-2 text-xs ${m.inWindow ? 'text-green-600' : 'text-red-600'}`}>
+                              {m.inWindow ? 'in window' : 'not registered'}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+                  <div className="mt-2 text-xs text-gray-500">
+                    If a mapping is missing, ensure your MCP server exposes tool names that match the registry
+                    or add aliases in the System Registry.
+                  </div>
+                </div>
+              )}
             </div>
           ) : (
             <div className="text-center p-4 border border-dashed rounded-md text-gray-500">

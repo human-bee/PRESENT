@@ -1,15 +1,16 @@
 /**
  * LiveKit Agent Tools - TypeScript Implementation
  *
- * Ported from Python livekit-backend/tools.py
- * Provides tool functions for the Tambo Voice Agent
+ * Updated to use data channel events instead of RPC for better reliability
+ * and integration with the ToolDispatcher system.
  */
 import { JobContext } from '@livekit/agents';
-interface ToolResult {
+export interface ToolResult {
     status: 'SUCCESS' | 'ERROR';
     message: string;
-    [key: string]: any;
+    [key: string]: unknown;
 }
+export type ToolName = 'do_nothing' | 'respond_with_voice' | 'generate_ui_component' | 'youtube_search' | 'mcp_tool';
 /**
  * Call this essential tool if, after analyzing the latest user turn and the overall conversation,
  * you determine that no other specific action, information retrieval, or task generation
@@ -24,23 +25,41 @@ export declare function doNothing(): Promise<ToolResult>;
  */
 export declare function respondWithVoice(job: JobContext, spokenMessage: string, justificationForSpeaking: string): Promise<ToolResult>;
 /**
- * Helper function to dispatch tasks to the frontend AI via RPC.
+ * Helper function to dispatch tool calls to the frontend via data channel.
+ * This replaces the old RPC approach with a more reliable event-driven system.
  */
-export declare function sendTaskToFrontend(job: JobContext, taskType: string, taskPrompt: string, method?: string): Promise<ToolResult>;
+export declare function dispatchToolCall(job: JobContext, toolName: string, params?: Record<string, unknown>): Promise<ToolResult>;
+/**
+ * Generate a UI component using Tambo's generative UI system
+ */
+export declare function generateUIComponent(job: JobContext, componentType: string | undefined, prompt: string): Promise<ToolResult>;
 /**
  * Call this tool when the conversation indicates a YouTube-related task is needed.
- * You must formulate a comprehensive 'action_plan' (as a natural language, multi-step text string)
- * based on the conversation and your knowledge of how the frontend's YouTube MCP server works.
+ *
+ * This tool now includes smart search capabilities:
+ * - Detects "latest/newest" keywords and prioritizes recent uploads
+ * - Recognizes "official" requests and filters for verified channels
+ * - Automatically picks the best video and creates a YoutubeEmbed component
+ * - Special handling for known artists (e.g., PinkPantheress)
+ *
+ * Examples:
+ * - "Show me the latest React tutorial" → Finds newest tutorial from verified channels
+ * - "Play Pink Pantheress latest video" → Finds newest official video from her channel
+ * - "Find official Taylor Swift music video" → Filters for VEVO/official channels only
  */
-export declare function generateYoutubeTaskPrompt(job: JobContext, actionPlan: string): Promise<ToolResult>;
+export declare function youtubeSearch(job: JobContext, query: string): Promise<ToolResult>;
+/**
+ * Call an MCP (Model Context Protocol) tool
+ */
+export declare function callMcpTool(job: JobContext, toolName: string, params?: Record<string, unknown>): Promise<ToolResult>;
 /**
  * Tool registry for easy management
  */
-export declare const AVAILABLE_TOOLS: readonly ["do_nothing", "respond_with_voice", "generate_youtube_task_prompt"];
-export type ToolName = typeof AVAILABLE_TOOLS[number];
+export declare const AVAILABLE_TOOLS: readonly ["do_nothing", "respond_with_voice", "generate_ui_component", "youtube_search", "mcp_tool"];
 /**
  * Execute a tool by name with parameters
  */
-export declare function executeTool(toolName: ToolName, job: JobContext, params?: Record<string, any>): Promise<ToolResult>;
-export {};
+export declare function executeTool(toolName: ToolName, job: JobContext, params?: Record<string, unknown>): Promise<ToolResult>;
+export declare const generateYoutubeTaskPrompt: typeof youtubeSearch;
+export declare const sendTaskToFrontend: typeof dispatchToolCall;
 //# sourceMappingURL=livekit-agent-tools.d.ts.map

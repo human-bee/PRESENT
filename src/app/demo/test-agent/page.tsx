@@ -1,5 +1,8 @@
 "use client";
 
+// Force dynamic rendering to prevent build errors
+export const dynamic = 'force-dynamic';
+
 import React, { useState, useEffect } from "react";
 import { Room, RoomEvent } from "livekit-client";
 
@@ -114,13 +117,13 @@ export default function TestAgent() {
       addLog(`🔒 Secure context: ${isSecure} (${window.location.protocol}//${window.location.host})`);
       
       // Try different RTCPeerConnection constructors
-      let RTCPeerConnectionConstructor = window.RTCPeerConnection || 
+      const RTCPeerConnectionConstructor = window.RTCPeerConnection || 
                                         (window as any).webkitRTCPeerConnection || 
                                         (window as any).mozRTCPeerConnection;
                                         
       if (!RTCPeerConnectionConstructor) {
         addLog("❌ No RTCPeerConnection constructor found");
-        addLog("🔍 Available constructors:", Object.getOwnPropertyNames(window).filter(name => name.includes('RTC')));
+        addLog(`🔍 Available constructors: ${Object.getOwnPropertyNames(window).filter(name => name.includes('RTC')).join(', ')}`);
         return;
       }
       

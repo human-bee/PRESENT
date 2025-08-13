@@ -7,7 +7,9 @@ import { Editor, TLBaseShape } from 'tldraw';
 // --- Mocks ---
 
 // Mock ResizeObserver
-let mockResizeObserverCallback: ResizeObserverCallback | null = null;
+// Avoid TS-only types in Jest parse
+/** @type {ResizeObserverCallback | null} */
+let mockResizeObserverCallback = null;
 const mockObserve = jest.fn();
 const mockDisconnect = jest.fn();
 const mockUnobserve = jest.fn();

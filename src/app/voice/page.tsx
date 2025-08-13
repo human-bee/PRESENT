@@ -1,6 +1,7 @@
 "use client";
 
 // Force client-side rendering to prevent SSG issues with Tambo hooks
+export const dynamic = 'force-dynamic';
 
 import { CanvasSpace } from "@/components/ui/canvas-space";
 import {
@@ -19,7 +20,7 @@ import { loadMcpServers, suppressDevelopmentWarnings, suppressViolationWarnings 
 import { components } from "@/lib/tambo";
 import { TamboProvider, useTamboThread } from "@tambo-ai/react";
 import { EnhancedMcpProvider } from "@/components/ui/enhanced-mcp-provider";
-import React from "react";
+import React, { useEffect, useState } from "react";
 
 // Suppress development warnings for cleaner console
 suppressDevelopmentWarnings();
@@ -33,9 +34,16 @@ interface ShowInCanvasButtonProps {
 
 function ShowInCanvasButton({ messageId, component }: ShowInCanvasButtonProps) {
   const handleShowInCanvas = () => {
+    let payload = component as React.ReactNode | { type: string; props?: Record<string, unknown> };
+    try {
+      // If component is already a React element, send it directly
+      if (React.isValidElement(component)) {
+        payload = component;
+      }
+    } catch {}
     window.dispatchEvent(
       new CustomEvent("tambo:showComponent", {
-        detail: { messageId, component },
+        detail: { messageId, component: payload },
       })
     );
   };
@@ -93,6 +101,13 @@ export default function Voice() {
   // Load MCP server configurations
   const mcpServers = loadMcpServers();
   const contextKey = "tambo-voice-chat";
+  
+  // Client-side only state
+  const [isClient, setIsClient] = useState(false);
+  
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
 
   return (
     <div className="flex flex-col h-screen">
@@ -112,40 +127,42 @@ export default function Voice() {
           </div>
 
           {/* Tambo Chat Component */}
-          <TamboProvider
-            apiKey={process.env.NEXT_PUBLIC_TAMBO_API_KEY!}
-            components={components}
-          >
-            <EnhancedMcpProvider mcpServers={mcpServers}>
-              {/* Split view layout with canvas on left and thread on right */}
-              <div className="flex h-[calc(100vh-200px)]">
-                {/* Canvas Space on the left */}
-                <CanvasSpace className="w-1/2 border-r" />
+          {isClient && (
+            <TamboProvider
+              apiKey={process.env.NEXT_PUBLIC_TAMBO_API_KEY!}
+              components={components}
+            >
+              <EnhancedMcpProvider mcpServers={mcpServers}>
+                {/* Split view layout with canvas on left and thread on right */}
+                <div className="flex h-[calc(100vh-200px)]">
+                  {/* Canvas Space on the left */}
+                  <CanvasSpace className="w-1/2 border-r" />
 
-                {/* Thread Container with Scrollable Content on the right */}
-                <div className="w-1/2 flex flex-col">
-                  <ThreadContainer className="flex-1 h-full">
-                    <ScrollableMessageContainer className="p-4 pt-12 flex-1 h-full">
-                      <ExtendedThreadContent />
-                    </ScrollableMessageContainer>
-                  </ThreadContainer>
+                  {/* Thread Container with Scrollable Content on the right */}
+                  <div className="w-1/2 flex flex-col">
+                    <ThreadContainer className="flex-1 h-full">
+                      <ScrollableMessageContainer className="p-4 pt-12 flex-1 h-full">
+                        <ExtendedThreadContent />
+                      </ScrollableMessageContainer>
+                    </ThreadContainer>
 
-                  {/* LiveKit fixed at the bottom */}
-                  <LiveKitProvider>
-                    <RpcHandler contextKey={contextKey} />
-                    <div className="sticky bottom-0 z-10 bg-background">
-                      <LiveKitUI />
-                    </div>
-                  </LiveKitProvider>
+                    {/* LiveKit fixed at the bottom */}
+                    <LiveKitProvider>
+                      <RpcHandler contextKey={contextKey} />
+                      <div className="sticky bottom-0 z-10 bg-background">
+                        <LiveKitUI />
+                      </div>
+                    </LiveKitProvider>
+                  </div>
                 </div>
-              </div>
-              
-              {/* LivekitParticipantSpawner moved inside TamboProvider context */}
-              <LiveKitProvider>
-                <LivekitParticipantSpawner />
-              </LiveKitProvider>
-            </EnhancedMcpProvider>
-          </TamboProvider>
+                
+                {/* LivekitParticipantSpawner moved inside TamboProvider context */}
+                <LiveKitProvider>
+                  <LivekitParticipantSpawner />
+                </LiveKitProvider>
+              </EnhancedMcpProvider>
+            </TamboProvider>
+          )}
         </div>
       </div>
     </div>

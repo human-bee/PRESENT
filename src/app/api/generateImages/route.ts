@@ -1,8 +1,8 @@
 import { z } from "zod";
 
 export async function POST(req: Request) {
-  let json = await req.json();
-  let { prompt, userAPIKey, iterativeMode, style } = z
+  const json = await req.json();
+  const { prompt, userAPIKey, iterativeMode, style } = z
     .object({
       prompt: z.string(),
       iterativeMode: z.boolean(),

@@ -6,7 +6,7 @@ import { toast } from "react-hot-toast";
 import { supabase, type Canvas } from "@/lib/supabase";
 import { useAuth } from "./use-auth";
 
-export function useCanvasPersistence(editor: Editor | null) {
+export function useCanvasPersistence(editor: Editor | null, enabled: boolean = true) {
   const { user } = useAuth();
   const router = useRouter();
   const { thread } = useTamboThread();
@@ -38,12 +38,27 @@ export function useCanvasPersistence(editor: Editor | null) {
           if (error) throw error;
 
           if (canvas) {
+            console.log('🎨 [CanvasPersistence] Loading canvas:', canvas.id, canvas.name);
+            console.log('🎨 [CanvasPersistence] Canvas document has shapes:', Object.keys(canvas.document?.store?.['shape:tambo'] || {}));
+            console.log('🎨 [CanvasPersistence] Conversation key:', canvas.conversation_key);
+            
             setCanvasId(canvas.id);
             setCanvasName(canvas.name);
             setLastSaved(new Date(canvas.last_modified));
             
             // Load the document into the editor
             editor.loadSnapshot(canvas.document);
+            
+            console.log('🎨 [CanvasPersistence] Canvas loaded successfully - shapes should appear');
+            
+            // CRITICAL: Rehydrate component store after canvas loads
+            // The canvas document contains shapes, but componentStore is empty on reload
+            setTimeout(() => {
+              console.log('🔄 [CanvasPersistence] Starting component rehydration...');
+              window.dispatchEvent(new CustomEvent('tambo:rehydrateComponents', {
+                detail: { canvasId: canvas.id, conversationKey: canvas.conversation_key }
+              }));
+            }, 100); // Small delay to ensure editor is fully loaded
           }
         } catch (error) {
           console.error("Error loading canvas:", error);
@@ -58,6 +73,7 @@ export function useCanvasPersistence(editor: Editor | null) {
 
   // Auto-save functionality
   const saveCanvas = useCallback(async () => {
+    if (!enabled) return;
     if (!editor || !user?.id || isSaving) return;
 
     setIsSaving(true);
@@ -81,6 +97,13 @@ export function useCanvasPersistence(editor: Editor | null) {
 
         if (error) throw error;
         setLastSaved(new Date());
+
+        // Notify session sync to update the session's canvas_state
+        try {
+          window.dispatchEvent(new CustomEvent('tambo:sessionCanvasSaved', { detail: { snapshot, canvasId } }))
+        } catch (e) {
+          // no-op
+        }
       } else {
         // Create new canvas
         const { data: newCanvas, error } = await supabase
@@ -101,6 +124,13 @@ export function useCanvasPersistence(editor: Editor | null) {
         setCanvasId(newCanvas.id);
         setLastSaved(new Date());
         
+        // Notify session sync to update the session's canvas_state
+        try {
+          window.dispatchEvent(new CustomEvent('tambo:sessionCanvasSaved', { detail: { snapshot, canvasId: newCanvas.id } }))
+        } catch (e) {
+          // no-op
+        }
+        
         // Update URL with canvas ID
         const newUrl = new URL(window.location.href);
         newUrl.searchParams.set("id", newCanvas.id);
@@ -112,11 +142,12 @@ export function useCanvasPersistence(editor: Editor | null) {
     } finally {
       setIsSaving(false);
     }
-  }, [editor, user, canvasId, canvasName, thread, isSaving]);
+  }, [editor, user, canvasId, canvasName, thread, isSaving, enabled]);
 
   // Set up auto-save on editor changes
   useEffect(() => {
     if (!editor) return;
+    if (!enabled) return;
 
     const handleChange = () => {
       // Clear existing timeout
@@ -139,16 +170,17 @@ export function useCanvasPersistence(editor: Editor | null) {
         clearTimeout(saveTimeoutRef.current);
       }
     };
-  }, [editor, saveCanvas]);
+  }, [editor, saveCanvas, enabled]);
 
   // Manual save function
   const manualSave = useCallback(async () => {
+    if (!enabled) return;
     if (saveTimeoutRef.current) {
       clearTimeout(saveTimeoutRef.current);
     }
     await saveCanvas();
     toast.success("Canvas saved!");
-  }, [saveCanvas]);
+  }, [saveCanvas, enabled]);
 
   // Update canvas name
   const updateCanvasName = useCallback(async (newName: string) => {

@@ -1,6 +1,4 @@
 ---
-description: working with tambo-ai, llms, generative UI/UX, or AI agents/assistants/co-pilots, chatbots, etc.
-globs: 
 alwaysApply: false
 ---
 # Using tambo-ai to build AI powered chat experiences with generative UI/UX

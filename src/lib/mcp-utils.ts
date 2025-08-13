@@ -89,6 +89,25 @@ function updateServerStatus(url: string, success: boolean, error?: string) {
 }
 
 /**
+ * Simple URL validation utility. Accepts absolute URLs (http/https) and
+ * application-relative paths that start with "/". Returns `true` if the input
+ * can be successfully resolved to a valid URL, otherwise `false`.
+ */
+function isValidMcpUrl(raw: string): boolean {
+  if (!raw || typeof raw !== "string") return false;
+  // Allow relative API routes ("/api/…") which the runtime will prepend with the current origin.
+  if (raw.startsWith("/")) return true;
+
+  try {
+    // Will throw for invalid absolute URLs (e.g. empty string, missing protocol, etc.)
+    new URL(raw);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Load and process MCP server configurations from localStorage
  */
 export function loadMcpServers(): McpServer[] {
@@ -105,6 +124,15 @@ export function loadMcpServers(): McpServer[] {
     const deduplicatedServers = servers
       .filter((server: McpServer) => {
         const url = typeof server === "string" ? server : server.url;
+
+        // Skip obviously invalid entries early to avoid runtime failures later.
+        if (!isValidMcpUrl(url)) {
+          if (process.env.NODE_ENV === 'development') {
+            console.warn(`[MCP] Invalid MCP server URL detected, skipping: "${url}"`);
+          }
+          return false;
+        }
+
         if (uniqueUrls.has(url)) {
           if (process.env.NODE_ENV === 'development') {
             console.warn(`[MCP] Duplicate server URL found, skipping: ${url}`);
@@ -121,8 +149,10 @@ export function loadMcpServers(): McpServer[] {
       })
       .map((server: McpServer) => {
         // Add default timeout and retry settings if not specified
+        let processedServer: McpServer;
+        
         if (typeof server === "string") {
-          return {
+          processedServer = {
             url: server,
             transport: "sse" as const,
             timeout: 10000, // 10 seconds
@@ -130,13 +160,36 @@ export function loadMcpServers(): McpServer[] {
             enabled: true
           };
         } else {
-          return {
+          processedServer = {
             ...server,
             timeout: server.timeout || 10000,
             retryAttempts: server.retryAttempts || 2,
             enabled: server.enabled !== false
           };
         }
+        
+        // Proxy external MCP servers to avoid CORS issues
+        const url = typeof processedServer === "string" ? processedServer : processedServer.url;
+        
+        // Check if this is an external URL that needs proxying
+        if (url && !url.startsWith('http://localhost') && !url.startsWith('http://127.0.0.1') && !url.startsWith('/')) {
+          if (process.env.NODE_ENV === 'development') {
+            console.log(`[MCP] Proxying external server: ${url}`);
+          }
+          
+          // Update the URL to use our proxy
+          const proxiedUrl = `/api/mcp-proxy?target=${encodeURIComponent(url)}`;
+          
+          if (typeof processedServer === "string") {
+            processedServer = proxiedUrl;
+          } else {
+            processedServer.url = proxiedUrl;
+            // Keep original transport type - our proxy supports both SSE and HTTP
+            // processedServer.transport remains unchanged
+          }
+        }
+        
+        return processedServer;
       });
     
     // Log loading info in development
