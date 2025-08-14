@@ -46,16 +46,24 @@ export default function Canvas() {
     // Extract canvas ID from URL params
     const urlParams = new URLSearchParams(window.location.search);
     const canvasId = urlParams.get('id');
+    const roomParam = urlParams.get('room');
     
+    // Prefer explicit canvas id; fall back to room param for backward compatibility
     if (canvasId) {
       // Use canvas-specific room
       setRoomName(`tambo-canvas-${canvasId}`);
-      console.log('🏠 [Canvas] Using canvas-specific room:', `tambo-canvas-${canvasId}`);
+      console.log('🏠 [Canvas] Using canvas-specific room (id):', `tambo-canvas-${canvasId}`);
+    } else if (roomParam) {
+      // Support both raw ids and fully-qualified room names
+      const computed = roomParam.startsWith('tambo-canvas-') ? roomParam : `tambo-canvas-${roomParam}`;
+      setRoomName(computed);
+      console.log('🏠 [Canvas] Using canvas-specific room (room):', computed);
     } else {
       // Generate unique room for new canvas
       const newRoomId = `new-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-      setRoomName(`tambo-canvas-${newRoomId}`);
-      console.log('🏠 [Canvas] Generated new room:', `tambo-canvas-${newRoomId}`);
+      const computed = `tambo-canvas-${newRoomId}`;
+      setRoomName(computed);
+      console.log('🏠 [Canvas] Generated new room:', computed);
     }
   }, []);
   
@@ -115,7 +123,7 @@ export default function Canvas() {
     const updateRoomState = () => {
       setRoomState({
         isConnected: room.state === ConnectionState.Connected,
-        roomName: "tambo-canvas-room",
+        roomName,
         participantCount: room.numParticipants,
       });
     };
@@ -137,7 +145,12 @@ export default function Canvas() {
       room.off(RoomEvent.ParticipantDisconnected, updateRoomState);
       room.disconnect();
     };
-  }, [room]);
+  }, [room, roomName]);
+
+  // Keep context roomName in sync when the computed roomName changes
+  useEffect(() => {
+    setRoomState((prev) => ({ ...prev, roomName }));
+  }, [roomName]);
 
   // Show loading state while checking authentication
   if (loading) {

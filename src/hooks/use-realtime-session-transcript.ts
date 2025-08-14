@@ -74,11 +74,19 @@ export function useRealtimeSessionTranscript(roomName: string | undefined) {
     }
 
     init()
+    // Also listen to canvas id changes from UI
+    const onCanvasIdChanged = () => init()
+    if (typeof window !== 'undefined') {
+      window.addEventListener('present:canvas-id-changed', onCanvasIdChanged)
+    }
     return () => {
       cancelled = true
       if (channelRef.current) {
         try { channelRef.current.unsubscribe() } catch {}
         channelRef.current = null
+      }
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('present:canvas-id-changed', onCanvasIdChanged)
       }
     }
   }, [roomName])

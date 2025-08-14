@@ -1042,6 +1042,61 @@ export const drawSmileyTool: TamboTool = {
 tools.push(drawSmileyTool);
 systemRegistry.addCapability({ id: 'canvas_draw_smiley', type: 'tool', name: 'Canvas Draw Smiley', description: 'Draw a smiley face', agentToolName: 'canvas_draw_smiley', available: true, source: 'static' });
 
+// Grid / Theme / Background / Selection helpers
+export const toggleGridTool: TamboTool = {
+  name: 'canvas_toggle_grid',
+  description: 'Toggle a simple grid backdrop on the canvas container',
+  tool: async () => {
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('tldraw:toggleGrid'));
+    }
+    return { status: 'SUCCESS', message: 'Toggled grid' };
+  },
+  toolSchema: (z as any).function().args().returns(z.object({ status: z.string(), message: z.string().optional() }))
+};
+
+export const setBackgroundTool: TamboTool = {
+  name: 'canvas_set_background',
+  description: 'Set background color or image. params: { color?: string; image?: string }',
+  tool: async (params?: { color?: string; image?: string }) => {
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('tldraw:setBackground', { detail: params || {} }));
+    }
+    return { status: 'SUCCESS', message: 'Background updated' };
+  },
+  toolSchema: (z as any).function().args(z.object({ color: z.string().optional(), image: z.string().optional() }).optional()).returns(z.object({ status: z.string(), message: z.string().optional() }))
+};
+
+export const setThemeTool: TamboTool = {
+  name: 'canvas_set_theme',
+  description: 'Set canvas theme. params: { theme: "light"|"dark" }',
+  tool: async (params?: { theme?: 'light'|'dark' }) => {
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('tldraw:setTheme', { detail: params || {} }));
+    }
+    return { status: 'SUCCESS', message: 'Theme updated' };
+  },
+  toolSchema: (z as any).function().args(z.object({ theme: z.enum(['light','dark']).optional() }).optional()).returns(z.object({ status: z.string(), message: z.string().optional() }))
+};
+
+export const selectTool: TamboTool = {
+  name: 'canvas_select',
+  description: 'Select shapes/components by name/type/bounds. params: { nameContains?, type?, withinBounds? }',
+  tool: async (params?: { nameContains?: string; type?: string; withinBounds?: { x: number; y: number; w: number; h: number } }) => {
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('tldraw:select', { detail: params || {} }));
+    }
+    return { status: 'SUCCESS', message: 'Selection updated' };
+  },
+  toolSchema: (z as any).function().args(z.object({ nameContains: z.string().optional(), type: z.string().optional(), withinBounds: z.object({ x: z.number(), y: z.number(), w: z.number(), h: z.number() }).optional() }).optional()).returns(z.object({ status: z.string(), message: z.string().optional() }))
+};
+
+tools.push(toggleGridTool, setBackgroundTool, setThemeTool, selectTool);
+systemRegistry.addCapability({ id: 'canvas_toggle_grid', type: 'tool', name: 'Canvas Toggle Grid', description: 'Toggle grid background', agentToolName: 'canvas_toggle_grid', available: true, source: 'static' });
+systemRegistry.addCapability({ id: 'canvas_set_background', type: 'tool', name: 'Canvas Set Background', description: 'Set background color/image', agentToolName: 'canvas_set_background', available: true, source: 'static' });
+systemRegistry.addCapability({ id: 'canvas_set_theme', type: 'tool', name: 'Canvas Set Theme', description: 'Set light/dark theme', agentToolName: 'canvas_set_theme', available: true, source: 'static' });
+systemRegistry.addCapability({ id: 'canvas_select', type: 'tool', name: 'Canvas Select', description: 'Select shapes/components by query', agentToolName: 'canvas_select', available: true, source: 'static' });
+
 /**
  * components
  *

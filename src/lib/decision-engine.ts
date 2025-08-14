@@ -367,6 +367,56 @@ Analyze the current speaker's statement in full conversational context.`;
    */
   async analyzeTranscriptEnhanced(transcript: string): Promise<EnhancedDecisionResult> {
     try {
+      // Fast local heuristics for common canvas actions to reduce latency
+      const lower = transcript.toLowerCase();
+      // Draw smiley face
+      if ((/\bsmiley\b|\bsmiling face\b/).test(lower) && (/\bdraw\b|\bmake\b|\bcreate\b/).test(lower)) {
+        const sizeMatch = lower.match(/(\d{2,4})\s*(px|pixels)?/);
+        const size = sizeMatch ? Math.max(64, Math.min(1024, Number(sizeMatch[1]) || 300)) : 300;
+        return {
+          hasActionableRequest: true,
+          intent: 'ui_generation',
+          toolCalls: [{ tool: 'canvas_draw_smiley', params: { size }, priority: 1 }],
+          reasoning: 'Detected request to draw a smiley face',
+          confidence: 0.9,
+        };
+      }
+      // Create rectangle / ellipse
+      if ((/\brectangle\b/).test(lower) && (/\bdraw\b|\bmake\b|\bcreate\b/).test(lower)) {
+        return {
+          hasActionableRequest: true,
+          intent: 'ui_generation',
+          toolCalls: [{ tool: 'canvas_create_rectangle', params: {}, priority: 2 }],
+          reasoning: 'Detected request to draw a rectangle',
+          confidence: 0.75,
+        };
+      }
+      if ((/\bellipse\b|\bcircle\b/).test(lower) && (/\bdraw\b|\bmake\b|\bcreate\b/).test(lower)) {
+        return {
+          hasActionableRequest: true,
+          intent: 'ui_generation',
+          toolCalls: [{ tool: 'canvas_create_ellipse', params: {}, priority: 2 }],
+          reasoning: 'Detected request to draw an ellipse/circle',
+          confidence: 0.75,
+        };
+      }
+      // Create note
+      if ((/\b(add|create|make)\b.*\bnote\b/).test(lower)) {
+        // Try to extract note text after 'that says' or within quotes
+        let text = 'Note';
+        const saysMatch = transcript.match(/that\s+says\s+"([^"]+)"/i) || transcript.match(/that\s+says\s+'([^']+)'/i);
+        const quoted = transcript.match(/"([^"]+)"/) || transcript.match(/'([^']+)'/);
+        if (saysMatch && saysMatch[1]) text = saysMatch[1];
+        else if (quoted && quoted[1]) text = quoted[1];
+        return {
+          hasActionableRequest: true,
+          intent: 'ui_generation',
+          toolCalls: [{ tool: 'canvas_create_note', params: { text }, priority: 2 }],
+          reasoning: 'Detected request to add a note',
+          confidence: 0.7,
+        };
+      }
+
       const template = await getPrompt('enhancedDecisionTemplate');
       const prompt = template.replace('%TRANSCRIPT%', transcript.replace(/"/g, '"'));
 

@@ -29,6 +29,8 @@ import { useRoomContext } from '@livekit/components-react';
 import { createLiveKitBus } from '../../lib/livekit-bus';
 import { useContextKey } from '../RoomScopedProviders';
 import { useRealtimeSessionTranscript } from '@/hooks/use-realtime-session-transcript'
+import { supabase } from '@/lib/supabase'
+import { CanvasLiveKitContext } from './livekit-room-connector'
 
 /**
  * Props for the MessageThreadCollapsible component
@@ -95,7 +97,8 @@ export const MessageThreadCollapsible = React.forwardRef<
   const bus = createLiveKitBus(room);
   const roomContextKey = useContextKey();
   const effectiveContextKey = contextKey || roomContextKey;
-  const { transcript: sessionTranscript } = useRealtimeSessionTranscript(room?.name)
+  const livekitCtx = React.useContext(CanvasLiveKitContext);
+  const { transcript: sessionTranscript } = useRealtimeSessionTranscript(livekitCtx?.roomName)
 
   // Listen for transcription data via bus
   React.useEffect(() => {
@@ -270,8 +273,49 @@ export const MessageThreadCollapsible = React.forwardRef<
     setTranscriptions([]);
   }, []);
 
-  const handleThreadChange = React.useCallback(() => {
-    // No longer needed for collapsible behavior
+  const handleThreadChange = React.useCallback((newThreadId?: string) => {
+    // Keep canvases and transcript in sync with selected thread
+    try {
+      if (!newThreadId) return;
+      // Update URL param id to match the canvas associated with this thread (if any)
+      // We store conversation_key on canvases; look it up and navigate.
+      (async () => {
+        try {
+          const { data, error } = await supabase
+            .from('canvases')
+            .select('id')
+            .eq('conversation_key', newThreadId)
+            .limit(1)
+            .maybeSingle();
+          if (!error && data?.id) {
+            const url = new URL(window.location.href);
+            url.searchParams.set('id', data.id);
+            window.history.replaceState({}, '', url.toString());
+            // Trigger a lightweight refresh for transcript hook by dispatching an event
+            window.dispatchEvent(new Event('present:canvas-id-changed'));
+          } else {
+            // Create a new canvas pre-linked to this thread to avoid overwriting current canvas
+            const snapshot = (window as any)?.__present?.tldrawEditor?.getSnapshot?.() || null;
+            const name = `Canvas ${new Date().toLocaleString()}`;
+            const payload: any = { name, description: null, document: snapshot, conversationKey: newThreadId };
+            const res = await fetch('/api/canvas', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload)
+            });
+            if (res.ok) {
+              const { canvas } = await res.json();
+              if (canvas?.id) {
+                const url = new URL(window.location.href);
+                url.searchParams.set('id', canvas.id);
+                window.history.replaceState({}, '', url.toString());
+                window.dispatchEvent(new Event('present:canvas-id-changed'));
+              }
+            }
+          }
+        } catch {}
+      })();
+    } catch {}
   }, []);
 
   const defaultSuggestions: Suggestion[] = [

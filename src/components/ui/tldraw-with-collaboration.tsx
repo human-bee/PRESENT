@@ -14,7 +14,7 @@ import {
   CustomMainMenu,
   CustomToolbarWithTranscript,
 } from "./tldraw-with-persistence";
-import { ReactNode, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { ReactNode, useCallback, useContext, useEffect, useMemo, useState, useRef } from "react";
 import { useSyncDemo } from "@tldraw/sync";
 import { CanvasLiveKitContext } from "./livekit-room-connector";
 import { ComponentStoreContext } from "./tldraw-canvas";
@@ -118,6 +118,7 @@ export function TldrawWithCollaboration({
   onComponentToolboxToggle,
   readOnly = false,
 }: TldrawWithCollaborationProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
   const livekitCtx = useContext(CanvasLiveKitContext);
   const roomName = livekitCtx?.roomName ?? "tambo-canvas-room";
 
@@ -617,6 +618,74 @@ export function TldrawWithCollaboration({
       window.addEventListener('tldraw:alignSelected', handleAlignSelected as EventListener);
       window.addEventListener('tldraw:distributeSelected', handleDistributeSelected as EventListener);
       window.addEventListener('tldraw:drawSmiley', handleDrawSmiley as EventListener);
+      // New: grid/theme/background/select
+      const handleToggleGrid = () => {
+        const el = containerRef.current;
+        if (!el) return;
+        const has = el.dataset.grid === 'on';
+        if (has) {
+          delete el.dataset.grid;
+          el.style.backgroundImage = '';
+        } else {
+          el.dataset.grid = 'on';
+          el.style.backgroundImage = 'radial-gradient(circle, rgba(0,0,0,0.12) 1px, transparent 1px)';
+          el.style.backgroundSize = '16px 16px';
+        }
+      };
+      const handleSetBackground = (e: Event) => {
+        const el = containerRef.current;
+        if (!el) return;
+        const detail = (e as CustomEvent).detail || {};
+        if (detail.color) {
+          el.style.backgroundColor = String(detail.color);
+          if (el.dataset.grid !== 'on') el.style.backgroundImage = '';
+        } else if (detail.image) {
+          el.style.backgroundImage = `url(${detail.image})`;
+          el.style.backgroundSize = 'cover';
+          el.style.backgroundPosition = 'center';
+        }
+      };
+      const handleSetTheme = (e: Event) => {
+        const el = containerRef.current;
+        if (!el) return;
+        const detail = (e as CustomEvent).detail || {};
+        const theme = String(detail.theme || '').toLowerCase();
+        el.dataset.theme = theme === 'dark' ? 'dark' : 'light';
+      };
+      const handleSelect = (e: Event) => {
+        try {
+          const detail = (e as CustomEvent).detail || {};
+          const nameQuery = (detail.nameContains as string | undefined)?.toLowerCase();
+          const typeQuery = detail.type as string | undefined;
+          const within = detail.withinBounds as { x: number; y: number; w: number; h: number } | undefined;
+          const shapes = mountedEditor.getCurrentPageShapes().filter((s: any) => {
+            if (typeQuery && s.type !== typeQuery) return false;
+            if (nameQuery) {
+              const n = (s.props?.name || s.props?.tamboComponent || s.id || '').toString().toLowerCase();
+              if (!n.includes(nameQuery)) return false;
+            }
+            if (within) {
+              const b = mountedEditor.getShapePageBounds(s.id);
+              if (!b) return false;
+              const inside = b.x >= within.x && b.y >= within.y && (b.x + b.w) <= (within.x + within.w) && (b.y + b.h) <= (within.y + within.h);
+              if (!inside) return false;
+            }
+            return true;
+          });
+          const ids = shapes.map((s: any) => s.id);
+          if (ids.length) {
+            mountedEditor.select(ids as any);
+            if ((mountedEditor as any).zoomToSelection) (mountedEditor as any).zoomToSelection({ inset: 48 });
+          }
+        } catch (err) {
+          console.warn('[CanvasControl] select error', err);
+        }
+      };
+
+      window.addEventListener('tldraw:toggleGrid', handleToggleGrid as EventListener);
+      window.addEventListener('tldraw:setBackground', handleSetBackground as EventListener);
+      window.addEventListener('tldraw:setTheme', handleSetTheme as EventListener);
+      window.addEventListener('tldraw:select', handleSelect as EventListener);
 
       // Store cleanup function
       const cleanup = () => {
@@ -635,6 +704,10 @@ export function TldrawWithCollaboration({
         window.removeEventListener('tldraw:alignSelected', handleAlignSelected as EventListener);
         window.removeEventListener('tldraw:distributeSelected', handleDistributeSelected as EventListener);
         window.removeEventListener('tldraw:drawSmiley', handleDrawSmiley as EventListener);
+        window.removeEventListener('tldraw:toggleGrid', handleToggleGrid as EventListener);
+        window.removeEventListener('tldraw:setBackground', handleSetBackground as EventListener);
+        window.removeEventListener('tldraw:setTheme', handleSetTheme as EventListener);
+        window.removeEventListener('tldraw:select', handleSelect as EventListener);
       };
 
       // Store cleanup in editor for later use
