@@ -154,11 +154,14 @@ export function TldrawWithCollaboration({
 
   const computedReadOnly = readOnly || role === "viewer" || role === "readOnly";
 
-  // Use useSyncDemo for development - it handles the connection properly
+  // Use useSyncDemo for development - allow overriding sync server via env
+  const syncUrl = (process.env.NEXT_PUBLIC_TLDRAW_SYNC_URL || 'wss://ws.tldraw.dev/connect').replace(/\/$/, '');
   const store = useSyncDemo({
     roomId: roomName,
     shapeUtils: shapeUtils || [],
-  });
+    // @ts-expect-error: extra option supported by newer @tldraw/sync
+    uri: `${syncUrl}/${encodeURIComponent(roomName)}`,
+  } as any);
 
 
 

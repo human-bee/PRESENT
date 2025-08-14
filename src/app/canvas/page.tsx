@@ -60,10 +60,15 @@ export default function Canvas() {
       console.log('🏠 [Canvas] Using canvas-specific room (room):', computed);
     } else {
       // Generate unique room for new canvas
-      const newRoomId = `new-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-      const computed = `tambo-canvas-${newRoomId}`;
+      // Use crypto UUID when available for stability
+      const newId = (window.crypto?.randomUUID?.() || `new-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`);
+      const computed = `tambo-canvas-${newId}`;
       setRoomName(computed);
       console.log('🏠 [Canvas] Generated new room:', computed);
+      // Silently update URL with id so refreshes stay grounded
+      const nextUrl = new URL(window.location.href);
+      nextUrl.searchParams.set('id', newId);
+      window.history.replaceState({}, '', nextUrl.toString());
     }
   }, []);
   
