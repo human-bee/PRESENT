@@ -30,7 +30,10 @@ export async function GET(request: NextRequest) {
     const { error } = await supabase.auth.exchangeCodeForSession(code)
     
     if (!error) {
-      return NextResponse.redirect(`${origin}/canvas`)
+      const next = requestUrl.searchParams.get('next')
+      // Only allow internal redirects
+      const safeNext = next && next.startsWith('/') ? next : '/canvas'
+      return NextResponse.redirect(`${origin}${safeNext}`)
     }
   }
 

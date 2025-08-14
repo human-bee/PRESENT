@@ -1157,6 +1157,32 @@ Please consider both the processed summary above and the original transcript con
           message: `Tool ${payload.tool} acknowledged`,
         };
         
+      } else if (payload.tool.startsWith('canvas_')) {
+        // Fallback: execute canvas_* tools directly from local tambo registry
+        try {
+          const tamboModule: any = await import('@/lib/tambo');
+          let candidate: any = null;
+          if (Array.isArray(tamboModule.tools)) {
+            candidate = tamboModule.tools.find((t: any) => t && t.name === payload.tool);
+          }
+          if (!candidate) {
+            // scan other exports just in case
+            const values: any[] = Object.values(tamboModule);
+            candidate = values.find((v: any) => v && typeof v === 'object' && v.name === payload.tool && (v.tool || v.execute));
+          }
+          if (!candidate) {
+            throw new Error(`Canvas tool ${payload.tool} not found in local module`);
+          }
+          const exec = candidate.tool || candidate.execute;
+          result = await exec(payload.params);
+          pendingTool.status = 'completed';
+          await publishToolResult(id, result);
+          circuitBreaker.current.markCompleted(toolSignature);
+          return;
+        } catch (err) {
+          log('⚠️ [ToolDispatcher] Canvas tool fallback failed:', err);
+        }
+        
       } else {
         // Unknown tool
         throw new Error(`Unknown tool: ${payload.tool}`);

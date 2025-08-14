@@ -17,7 +17,7 @@ export interface ThreadDropdownProps
   /** Optional context key for filtering threads */
   contextKey?: string;
   /** Optional callback function called when the current thread changes */
-  onThreadChange?: () => void;
+  onThreadChange?: (threadId?: string) => void;
 }
 
 /**
@@ -54,9 +54,10 @@ export const ThreadDropdown = React.forwardRef<
       }
 
       try {
-        await startNewThread();
+        const created = await startNewThread();
         await refetch();
-        onThreadChange?.();
+        // @ts-expect-error: SDK may return the created thread
+        onThreadChange?.(created?.id);
       } catch (error) {
         console.error("Failed to create new thread:", error);
       }
@@ -86,7 +87,7 @@ export const ThreadDropdown = React.forwardRef<
 
     try {
       switchCurrentThread(threadId);
-      onThreadChange?.();
+      onThreadChange?.(threadId);
     } catch (error) {
       console.error("Failed to switch thread:", error);
     }

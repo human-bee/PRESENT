@@ -571,9 +571,10 @@ export function LivekitRoomConnector({
     setState(prev => prev ? { ...prev, isMinimized: !prev.isMinimized } : { ...getInitialState(), isMinimized: true });
   };
 
-  // Copy room link
+  // Copy room link (prefer id param to keep URL stable; strip prefix if present)
   const handleCopyLink = () => {
-    const link = `${window.location.origin}/canvas?room=${roomName}`;
+    const id = roomName.startsWith('tambo-canvas-') ? roomName.substring('tambo-canvas-'.length) : roomName;
+    const link = `${window.location.origin}/canvas?id=${encodeURIComponent(id)}`;
     navigator.clipboard.writeText(link);
   };
 

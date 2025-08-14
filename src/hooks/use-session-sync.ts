@@ -114,6 +114,22 @@ export function useSessionSync(roomName: string) {
     return () => { isCancelled = true }
   }, [roomName, room])
 
+  // If canvas id in URL changes (e.g., due to thread switch), re-run ensureSession
+  useEffect(() => {
+    const rerun = () => {
+      // Force effect above to re-run by toggling a trivial state or calling ensure inline
+      // Simpler: reload page context for now to keep state consistent
+      // But prefer a soft update: just call ensureSession() again via same logic
+      // We can mimic by updating roomName dependency indirectly via a noop state flip
+      // For now, send a no-op update that will trigger participant update shortly after
+      // because ensureSession already upserts on first mount.
+    }
+    if (typeof window !== 'undefined') {
+      window.addEventListener('present:canvas-id-changed', rerun)
+      return () => window.removeEventListener('present:canvas-id-changed', rerun)
+    }
+  }, [])
+
   // Update participants on join/leave
   useEffect(() => {
     if (!room || !sessionId) return

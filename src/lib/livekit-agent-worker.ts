@@ -233,6 +233,26 @@ export default defineAgent({
           name: 'canvas_draw_smiley',
           description: 'Draw a smiley face with basic shapes',
           examples: ['draw a smiley face']
+        },
+        {
+          name: 'canvas_toggle_grid',
+          description: 'Toggle a simple canvas grid',
+          examples: ['toggle grid']
+        },
+        {
+          name: 'canvas_set_background',
+          description: 'Set background color or image',
+          examples: ['set background to blue']
+        },
+        {
+          name: 'canvas_set_theme',
+          description: 'Set theme light/dark',
+          examples: ['switch to dark mode']
+        },
+        {
+          name: 'canvas_select',
+          description: 'Select shapes by name/type/bounds',
+          examples: ['select the todo list']
         }
       ],
       components: defaultTamboComponents,
