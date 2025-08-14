@@ -161,7 +161,7 @@ export function LivekitRoomConnector({
       console.log(`🤖 [LiveKitConnector-${roomName}] Triggering agent join...`);
       
       // Update state to show dispatching
-      setState(prev => prev ? { ...prev, agentStatus: "dispatching" } : { ...getInitialState(), agentStatus: "dispatching" });
+      setState((prev: LivekitRoomConnectorState | null) => prev ? { ...prev, agentStatus: "dispatching" } as LivekitRoomConnectorState : { ...getInitialState(), agentStatus: "dispatching" });
       
       // Call API to trigger agent dispatch
       const response = await fetch('/api/agent/dispatch', {
@@ -185,11 +185,11 @@ export function LivekitRoomConnector({
         setTimeout(() => {
           if (stateRef.current?.agentStatus === "dispatching") {
             console.warn(`⏰ [LiveKitConnector-${roomName}] Agent dispatch timeout - no agent joined within 30 seconds`);
-            setState(prev => prev ? { 
+            setState((prev: LivekitRoomConnectorState | null) => prev ? { 
               ...prev, 
               agentStatus: "failed",
               errorMessage: "Agent failed to join within timeout period"
-            } : { 
+            } as LivekitRoomConnectorState : { 
               ...getInitialState(), 
               agentStatus: "failed",
               errorMessage: "Agent failed to join within timeout period" 
@@ -200,11 +200,11 @@ export function LivekitRoomConnector({
       } else {
         const errorData = await response.json().catch(() => ({}));
         console.warn(`⚠️ [LiveKitConnector-${roomName}] Agent dispatch failed:`, response.status, errorData);
-        setState(prev => prev ? { 
+        setState((prev: LivekitRoomConnectorState | null) => prev ? { 
           ...prev, 
           agentStatus: "failed",
           errorMessage: `Dispatch failed: ${errorData.message || response.statusText}`
-        } : { 
+        } as LivekitRoomConnectorState : { 
           ...getInitialState(), 
           agentStatus: "failed",
           errorMessage: `Dispatch failed: ${errorData.message || response.statusText}`
@@ -212,11 +212,11 @@ export function LivekitRoomConnector({
       }
     } catch (error) {
       console.error(`❌ [LiveKitConnector-${roomName}] Agent dispatch error:`, error);
-      setState(prev => prev ? { 
+      setState((prev: LivekitRoomConnectorState | null) => prev ? { 
         ...prev, 
         agentStatus: "failed",
         errorMessage: error instanceof Error ? error.message : "Unknown dispatch error"
-      } : { 
+      } as LivekitRoomConnectorState : { 
         ...getInitialState(), 
         agentStatus: "failed",
         errorMessage: error instanceof Error ? error.message : "Unknown dispatch error"
@@ -235,7 +235,7 @@ export function LivekitRoomConnector({
     const handleConnected = () => {
       if (stateRef.current?.connectionState !== "connected") {
         console.log(`✅ [LiveKitConnector-${roomName}] User connected to room`);
-        setState(prev => prev ? { ...prev, connectionState: "connected", participantCount: room.numParticipants, errorMessage: null } : getInitialState());
+        setState((prev: LivekitRoomConnectorState | null) => prev ? { ...prev, connectionState: "connected", participantCount: room.numParticipants, errorMessage: null } as LivekitRoomConnectorState : getInitialState());
         
         // Trigger agent join when first user connects successfully
         // Only if we're the first real participant (excluding the agent)
@@ -263,19 +263,19 @@ export function LivekitRoomConnector({
 
     const handleDisconnected = (reason?: DisconnectReason) => {
       if (stateRef.current?.connectionState !== "disconnected") {
-        setState(prev => prev ? { ...prev, connectionState: "disconnected", participantCount: 0, errorMessage: reason ? `Disconnected: ${reason}` : null } : getInitialState());
+        setState((prev: LivekitRoomConnectorState | null) => prev ? { ...prev, connectionState: "disconnected", participantCount: 0, errorMessage: reason ? `Disconnected: ${reason}` : null } as LivekitRoomConnectorState : getInitialState());
       }
     };
 
     const handleReconnecting = () => {
       if (stateRef.current?.connectionState !== "connecting") {
-        setState(prev => prev ? { ...prev, connectionState: "connecting", errorMessage: "Reconnecting..." } : getInitialState());
+        setState((prev: LivekitRoomConnectorState | null) => prev ? { ...prev, connectionState: "connecting", errorMessage: "Reconnecting..." } as LivekitRoomConnectorState : getInitialState());
       }
     };
 
     const handleReconnected = () => {
       if (stateRef.current?.connectionState !== "connected") {
-        setState(prev => prev ? { ...prev, connectionState: "connected", participantCount: room.numParticipants, errorMessage: null } : getInitialState());
+        setState((prev: LivekitRoomConnectorState | null) => prev ? { ...prev, connectionState: "connected", participantCount: room.numParticipants, errorMessage: null } as LivekitRoomConnectorState : getInitialState());
       }
     };
 
@@ -309,15 +309,15 @@ export function LivekitRoomConnector({
           metadata: participant.metadata,
           totalParticipants: room.numParticipants
         });
-        setState(prev => prev ? { 
+        setState((prev: LivekitRoomConnectorState | null) => prev ? { 
           ...prev, 
           participantCount: room.numParticipants,
           agentStatus: "joined",
           agentIdentity: participant.identity
-        } : { ...getInitialState(), participantCount: room.numParticipants, agentStatus: "joined", agentIdentity: participant.identity });
+        } as LivekitRoomConnectorState : { ...getInitialState(), participantCount: room.numParticipants, agentStatus: "joined", agentIdentity: participant.identity });
       } else {
         console.log(`👤 [LiveKitConnector-${roomName}] Human participant connected: ${participant.identity}`);
-        setState(prev => prev ? { ...prev, participantCount: room.numParticipants } : getInitialState());
+        setState((prev: LivekitRoomConnectorState | null) => prev ? { ...prev, participantCount: room.numParticipants } as LivekitRoomConnectorState : getInitialState());
       }
     };
 
@@ -339,14 +339,14 @@ export function LivekitRoomConnector({
       
       if (isAgent && stateRef.current?.agentIdentity === participant.identity) {
         console.log(`😔 [LiveKitConnector-${roomName}] AI Agent left the room: ${participant.identity}`);
-        setState(prev => prev ? { 
+        setState((prev: LivekitRoomConnectorState | null) => prev ? { 
           ...prev, 
           participantCount: room.numParticipants,
           agentStatus: "not-requested",
           agentIdentity: null
-        } : getInitialState());
+        } as LivekitRoomConnectorState : getInitialState());
       } else {
-        setState(prev => prev ? { ...prev, participantCount: room.numParticipants } : getInitialState());
+        setState((prev: LivekitRoomConnectorState | null) => prev ? { ...prev, participantCount: room.numParticipants } as LivekitRoomConnectorState : getInitialState());
       }
     };
 
@@ -357,7 +357,7 @@ export function LivekitRoomConnector({
     const newParticipantCount = room.numParticipants;
 
     if (stateRef.current && (stateRef.current.connectionState !== newConnState || stateRef.current.participantCount !== newParticipantCount)) {
-      setState({ ...stateRef.current, connectionState: newConnState, participantCount: newParticipantCount });
+      setState({ ...stateRef.current!, connectionState: newConnState, participantCount: newParticipantCount } as LivekitRoomConnectorState);
     }
 
     // Listen to room events
@@ -418,7 +418,7 @@ export function LivekitRoomConnector({
         console.log(`🔑 [LiveKitConnector-${roomName}] Token received, connecting to room...`);
         
         // Update state with token
-        setState(prev => prev ? { ...prev, token, errorMessage: null } : { ...getInitialState(), token });
+        setState((prev: LivekitRoomConnectorState | null) => prev ? { ...prev, token, errorMessage: null } as LivekitRoomConnectorState : { ...getInitialState(), token });
         
         // Connect to the room using the token
         if (wsUrl) {
@@ -440,10 +440,10 @@ export function LivekitRoomConnector({
           } catch (mediaError) {
             console.warn(`⚠️ [LiveKitConnector-${roomName}] Media device error:`, mediaError);
             // Don't fail the connection, just log the media error
-            setState(prev => prev ? { 
+            setState((prev: LivekitRoomConnectorState | null) => prev ? { 
               ...prev, 
               errorMessage: `Connected but media device error: ${mediaError instanceof Error ? mediaError.message : 'Unknown error'}`
-            } : getInitialState());
+            } as LivekitRoomConnectorState : getInitialState());
           }
         } else {
           throw new Error('Missing LiveKit server URL');
@@ -451,11 +451,11 @@ export function LivekitRoomConnector({
         
       } catch (error) {
         console.error(`❌ [LiveKitConnector-${roomName}] Connection failed:`, error);
-        setState(prev => prev ? { 
+        setState((prev: LivekitRoomConnectorState | null) => prev ? { 
           ...prev, 
           connectionState: "error", 
           errorMessage: error instanceof Error ? error.message : 'Connection failed'
-        } : { ...getInitialState(), connectionState: "error", errorMessage: error instanceof Error ? error.message : 'Connection failed' });
+        } as LivekitRoomConnectorState : { ...getInitialState(), connectionState: "error", errorMessage: error instanceof Error ? error.message : 'Connection failed' });
       } finally {
         tokenFetchInProgress.current = false;
       }
@@ -512,24 +512,24 @@ export function LivekitRoomConnector({
     // Check for missing websocket URL
     if (!wsUrl && state.connectionState === "disconnected") {
       console.error(`🔌 [LiveKitConnector-${roomName}] Cannot connect: Missing LiveKit server URL`);
-      setState(prev => prev ? { 
+      setState((prev: LivekitRoomConnectorState | null) => prev ? { 
         ...prev, 
         connectionState: "error", 
         errorMessage: "Missing LiveKit server URL. Check your environment variables." 
-      } : { ...getInitialState(), connectionState: "error", errorMessage: "Missing LiveKit server URL. Check your environment variables." });
+      } as LivekitRoomConnectorState : { ...getInitialState(), connectionState: "error", errorMessage: "Missing LiveKit server URL. Check your environment variables." });
       return;
     }
     
     if (state.connectionState === "disconnected") {
       console.log(`🔌 [LiveKitConnector-${roomName}] Setting state to connecting`);
       // Reset agent status when starting a new connection
-      setState(prev => prev ? { 
+      setState((prev: LivekitRoomConnectorState | null) => prev ? { 
         ...prev, 
         connectionState: "connecting", 
         errorMessage: null,
         agentStatus: "not-requested",
         agentIdentity: null
-      } : { 
+      } as LivekitRoomConnectorState : { 
         ...getInitialState(), 
         connectionState: "connecting",
         agentStatus: "not-requested",
@@ -543,23 +543,23 @@ export function LivekitRoomConnector({
         room.disconnect();
         
         // Immediate state update for better UX
-        setState(prev => prev ? {
+        setState((prev: LivekitRoomConnectorState | null) => prev ? {
           ...prev,
           connectionState: "disconnected",
           participantCount: 0,
           agentStatus: "not-requested",
           agentIdentity: null,
           errorMessage: null
-        } : getInitialState());
+        } as LivekitRoomConnectorState : getInitialState());
         
         console.log(`✅ [LiveKitConnector-${roomName}] Clean disconnect completed`);
       } catch (error) {
         console.error(`❌ [LiveKitConnector-${roomName}] Error during disconnect:`, error);
-        setState(prev => prev ? {
+        setState((prev: LivekitRoomConnectorState | null) => prev ? {
           ...prev,
           connectionState: "error",
           errorMessage: "Error during disconnect"
-        } : { ...getInitialState(), connectionState: "error", errorMessage: "Error during disconnect" });
+        } as LivekitRoomConnectorState : { ...getInitialState(), connectionState: "error", errorMessage: "Error during disconnect" });
       }
     } else {
       console.log(`🔌 [LiveKitConnector-${roomName}] Connection attempt ignored - current state: ${state.connectionState}`);
@@ -568,7 +568,7 @@ export function LivekitRoomConnector({
 
   // Handle minimize toggle
   const handleMinimize = () => {
-    setState(prev => prev ? { ...prev, isMinimized: !prev.isMinimized } : { ...getInitialState(), isMinimized: true });
+    setState((prev: LivekitRoomConnectorState | null) => prev ? { ...prev, isMinimized: !prev.isMinimized } as LivekitRoomConnectorState : { ...getInitialState(), isMinimized: true });
   };
 
   // Copy room link (prefer id param to keep URL stable; strip prefix if present)

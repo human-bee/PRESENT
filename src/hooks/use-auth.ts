@@ -29,7 +29,8 @@ export function useAuth() {
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`,
+        // Send users to a client-side finisher that supports both code and hash token returns
+        redirectTo: `${window.location.origin}/auth/finish?next=${encodeURIComponent(next)}`,
         queryParams: {
           access_type: 'offline',
           prompt: 'consent',

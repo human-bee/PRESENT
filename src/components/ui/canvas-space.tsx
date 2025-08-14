@@ -224,6 +224,7 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
           const Component = componentDef.component;
           const componentInstance = React.createElement(Component, { __tambo_message_id: messageId });
           componentStore.current.set(messageId, componentInstance);
+          try { window.dispatchEvent(new Event('present:component-store-updated')); } catch {}
           
           // Update mapping
           setMessageIdToShapeIdMap(prev => new Map(prev).set(messageId, shape.id));
@@ -256,6 +257,7 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
           
           const fallbackInstance = React.createElement(FallbackComponent);
           componentStore.current.set(messageId, fallbackInstance);
+          try { window.dispatchEvent(new Event('present:component-store-updated')); } catch {}
           
           // Still update mappings so the shape shows something
           setMessageIdToShapeIdMap(prev => new Map(prev).set(messageId, shape.id));
@@ -310,6 +312,7 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
 
     // Store the component separately to avoid structuredClone issues
     componentStore.current.set(messageId, component);
+    try { window.dispatchEvent(new Event('present:component-store-updated')); } catch {}
     
     // Note: ComponentRegistry integration temporarily disabled to prevent infinite loops
     // Will be re-enabled once tldraw stability issues are resolved
@@ -609,6 +612,7 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
         autoStart: true 
       });
       componentStore.current.set(shapeId, componentInstance);
+      try { window.dispatchEvent(new Event('present:component-store-updated')); } catch {}
       
       // Get center of viewport for placement
       const viewport = editor.getViewportPageBounds();
@@ -667,6 +671,7 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
             if (Component) {
               const componentInstance = React.createElement(Component, { __tambo_message_id: shapeId });
               componentStore.current.set(shapeId, componentInstance);
+              try { window.dispatchEvent(new Event('present:component-store-updated')); } catch {}
               const pos = editor.screenToPage({ x: e.clientX, y: e.clientY });
               editor.createShape({
                 id: shapeId,

@@ -63,6 +63,7 @@ function TamboShapeComponent({ shape }: { shape: TamboShape }) {
     const contentInnerRef = useRef<HTMLDivElement>(null);
     const componentStore = useContext(ComponentStoreContext);
     const editor = useEditor();
+    const [, setRenderTick] = useState(0);
 
     // Measured intrinsic (natural) size of the component's content
     const [naturalSize, setNaturalSize] = useState<{ w: number; h: number } | null>(null);
@@ -88,6 +89,19 @@ function TamboShapeComponent({ shape }: { shape: TamboShape }) {
       measure();
 
       return () => observer.disconnect();
+    }, []);
+
+    // Re-render when component store broadcasts updates
+    useEffect(() => {
+      const rerender = () => setRenderTick((x) => x + 1);
+      if (typeof window !== 'undefined') {
+        window.addEventListener('present:component-store-updated', rerender);
+      }
+      return () => {
+        if (typeof window !== 'undefined') {
+          window.removeEventListener('present:component-store-updated', rerender);
+        }
+      };
     }, []);
 
     // Conditional auto-fit based on sizingPolicy and whether user resized

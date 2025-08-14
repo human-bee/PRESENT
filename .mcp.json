@@ -1,3 +1,26 @@
 {
-  "mcpServers": {}
+  "mcpServers": {
+    "weather-mcp": {
+      "serverUrl": "https://server.smithery.ai/@mcp-examples/weather/mcp?api_key=80808e2d-1501-472d-b1f2-93e925b6c9be",
+      "serverType": "HTTP Streamable",
+      "customHeaders": {}
+    },
+    "youtube-data-mcp": {
+      "serverUrl": "https://server.smithery.ai/@icraft2170/youtube-data-mcp-server/mcp?api_key=80808e2d-1501-472d-b1f2-93e925b6c9be&profile=general-whale-eQ9fSt",
+      "serverType": "HTTP Streamable",
+      "customHeaders": {}
+    },
+    "exa-mcp": {
+      "serverUrl": "https://server.smithery.ai/exa/mcp?api_key=80808e2d-1501-472d-b1f2-93e925b6c9be",
+      "serverType": "HTTP Streamable",
+      "customHeaders": {}
+    },
+    "linear-mcp": {
+      "serverUrl": "https://mcp.linear.app/sse",
+      "serverType": "HTTP Streamable",
+      "customHeaders": {},
+      "requiresAuthorization": true,
+      "authorizationEstablished": true
+    }
+  }
 }

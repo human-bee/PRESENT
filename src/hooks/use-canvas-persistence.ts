@@ -80,6 +80,10 @@ export function useCanvasPersistence(editor: Editor | null, enabled: boolean = t
     try {
       const snapshot = editor.getSnapshot();
       const conversationKey = thread?.id || null;
+      // Prefer a name derived from canvas id until user customizes
+      const urlParams = new URLSearchParams(window.location.search);
+      const idParam = urlParams.get("id");
+      const defaultName = idParam ? `Canvas ${idParam}` : canvasName;
       const now = new Date().toISOString();
 
       if (canvasId) {
@@ -87,6 +91,7 @@ export function useCanvasPersistence(editor: Editor | null, enabled: boolean = t
         const { error } = await supabase
           .from('canvases')
           .update({
+            name: canvasName || defaultName,
             document: snapshot,
             conversation_key: conversationKey,
             last_modified: now,
@@ -110,7 +115,7 @@ export function useCanvasPersistence(editor: Editor | null, enabled: boolean = t
           .from('canvases')
           .insert({
             user_id: user.id,
-            name: canvasName,
+            name: defaultName,
             document: snapshot,
             conversation_key: conversationKey,
             is_public: false,
