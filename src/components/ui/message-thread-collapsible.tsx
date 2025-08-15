@@ -291,6 +291,7 @@ export const MessageThreadCollapsible = React.forwardRef<
             const url = new URL(window.location.href);
             url.searchParams.set('id', data.id);
             window.history.replaceState({}, '', url.toString());
+            try { localStorage.setItem('present:lastCanvasId', data.id); } catch {}
             // Trigger a lightweight refresh for transcript hook by dispatching an event
             window.dispatchEvent(new Event('present:canvas-id-changed'));
           } else {
@@ -309,6 +310,7 @@ export const MessageThreadCollapsible = React.forwardRef<
                 const url = new URL(window.location.href);
                 url.searchParams.set('id', canvas.id);
                 window.history.replaceState({}, '', url.toString());
+                try { localStorage.setItem('present:lastCanvasId', canvas.id); } catch {}
                 window.dispatchEvent(new Event('present:canvas-id-changed'));
               }
             }

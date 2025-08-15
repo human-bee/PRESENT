@@ -54,6 +54,7 @@ import { createShapeId } from 'tldraw';
 
 import { components } from '@/lib/tambo';
 import { calculateInitialSize } from '@/lib/component-sizing'; // Add import for dynamic sizing
+import { CanvasLiveKitContext } from './livekit-room-connector';
 
 // Dynamic imports for heavy tldraw components - only load when needed
 
@@ -120,6 +121,7 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
   const { thread } = useTamboThread();
   const [editor, setEditor] = useState<Editor | null>(null);
   const previousThreadId = useRef<string | null>(null);
+  const livekitCtx = React.useContext(CanvasLiveKitContext);
   
   // Component toolbox toggle - creates toolbox shape on canvas
   const toggleComponentToolbox = useCallback(() => {
@@ -693,6 +695,7 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
         }}
       >
           <TldrawWithCollaboration
+          key={livekitCtx?.roomName || 'no-room'}
           onMount={setEditor}
           shapeUtils={customShapeUtils as any}
           componentStore={componentStore.current}

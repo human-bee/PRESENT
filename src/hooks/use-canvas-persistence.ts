@@ -45,9 +45,16 @@ export function useCanvasPersistence(editor: Editor | null, enabled: boolean = t
             setCanvasId(canvas.id);
             setCanvasName(canvas.name);
             setLastSaved(new Date(canvas.last_modified));
+            try { localStorage.setItem('present:lastCanvasId', canvas.id); } catch {}
             
             // Load the document into the editor
-            editor.loadSnapshot(canvas.document);
+            try {
+              if (canvas.document && typeof canvas.document === 'object') {
+                editor.loadSnapshot(canvas.document);
+              }
+            } catch (e) {
+              console.warn('⚠️ [CanvasPersistence] Failed to load snapshot, continuing with empty editor', e);
+            }
             
             console.log('🎨 [CanvasPersistence] Canvas loaded successfully - shapes should appear');
             
@@ -128,6 +135,7 @@ export function useCanvasPersistence(editor: Editor | null, enabled: boolean = t
 
         setCanvasId(newCanvas.id);
         setLastSaved(new Date());
+        try { localStorage.setItem('present:lastCanvasId', newCanvas.id); } catch {}
         
         // Notify session sync to update the session's canvas_state
         try {

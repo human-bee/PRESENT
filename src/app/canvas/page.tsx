@@ -38,39 +38,87 @@ export default function Canvas() {
   // Authentication check
   const { user, loading } = useAuth();
   const router = useRouter();
-  
-  // Create unique room name based on canvas ID or generate one
-  const [roomName, setRoomName] = useState<string>('tambo-canvas-room');
+  // Track resolved canvas id and room name; do not render until resolved
+  const [canvasId, setCanvasId] = useState<string | null>(null);
+  const [roomName, setRoomName] = useState<string | null>(null);
   
   useEffect(() => {
-    // Extract canvas ID from URL params
-    const urlParams = new URLSearchParams(window.location.search);
-    const canvasId = urlParams.get('id');
-    const roomParam = urlParams.get('room');
-    
-    // Prefer explicit canvas id; fall back to room param for backward compatibility
-    if (canvasId) {
-      // Use canvas-specific room
-      setRoomName(`tambo-canvas-${canvasId}`);
-      console.log('🏠 [Canvas] Using canvas-specific room (id):', `tambo-canvas-${canvasId}`);
-    } else if (roomParam) {
-      // Support both raw ids and fully-qualified room names
-      const computed = roomParam.startsWith('tambo-canvas-') ? roomParam : `tambo-canvas-${roomParam}`;
-      setRoomName(computed);
-      console.log('🏠 [Canvas] Using canvas-specific room (room):', computed);
-    } else {
-      // Generate unique room for new canvas
-      // Use crypto UUID when available for stability
-      const newId = (window.crypto?.randomUUID?.() || `new-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`);
-      const computed = `tambo-canvas-${newId}`;
-      setRoomName(computed);
-      console.log('🏠 [Canvas] Generated new room:', computed);
-      // Silently update URL with id so refreshes stay grounded
-      const nextUrl = new URL(window.location.href);
-      nextUrl.searchParams.set('id', newId);
-      window.history.replaceState({}, '', nextUrl.toString());
-    }
-  }, []);
+    if (typeof window === 'undefined') return;
+    // Resolve canvas id from URL, localStorage fallback, or create a new canvas row
+    const resolveCanvasId = async () => {
+      const url = new URL(window.location.href);
+      const idParam = url.searchParams.get('id');
+      if (idParam) {
+        setCanvasId(idParam);
+        setRoomName(`tambo-canvas-${idParam}`);
+        try { localStorage.setItem('present:lastCanvasId', idParam); } catch {}
+        return;
+      }
+
+      // Try localStorage last used canvas id
+      let lastId: string | null = null;
+      try { lastId = localStorage.getItem('present:lastCanvasId'); } catch {}
+      if (lastId) {
+        url.searchParams.set('id', lastId);
+        window.history.replaceState({}, '', url.toString());
+        setCanvasId(lastId);
+        setRoomName(`tambo-canvas-${lastId}`);
+        return;
+      }
+
+      // No id known: create a new canvas row immediately so URL + room are stable
+      try {
+        // Defer creation until user is authenticated
+        if (!user) return;
+        const now = new Date().toISOString();
+        // Lazy import to avoid SSR issues
+        const { supabase } = await import('@/lib/supabase');
+        const { data, error } = await supabase
+          .from('canvases')
+          .insert({
+            user_id: user.id,
+            name: 'Untitled Canvas',
+            description: null,
+            // Minimal placeholder document; editor will overwrite on first save
+            document: {},
+            conversation_key: null,
+            is_public: false,
+            last_modified: now,
+          })
+          .select('id')
+          .single();
+        if (error) throw error;
+        if (data?.id) {
+          url.searchParams.set('id', data.id);
+          window.history.replaceState({}, '', url.toString());
+          setCanvasId(data.id);
+          setRoomName(`tambo-canvas-${data.id}`);
+          try { localStorage.setItem('present:lastCanvasId', data.id); } catch {}
+        }
+      } catch (e) {
+        console.warn('⚠️ [Canvas] Failed to create new canvas row:', e);
+        // Fallback: ephemeral room without URL change
+        const tmpId = (window.crypto?.randomUUID?.() || `tmp-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`);
+        setCanvasId(tmpId);
+        setRoomName(`tambo-canvas-${tmpId}`);
+      }
+    };
+
+    resolveCanvasId();
+
+    const handleCanvasIdChanged = () => {
+      try {
+        const current = new URL(window.location.href).searchParams.get('id');
+        if (current) {
+          setCanvasId(current);
+          setRoomName(`tambo-canvas-${current}`);
+          try { localStorage.setItem('present:lastCanvasId', current); } catch {}
+        }
+      } catch {}
+    };
+    window.addEventListener('present:canvas-id-changed', handleCanvasIdChanged);
+    return () => window.removeEventListener('present:canvas-id-changed', handleCanvasIdChanged);
+  }, [user]);
   
   // Transcript panel state
   const [isTranscriptOpen, setIsTranscriptOpen] = useState(false);
@@ -118,7 +166,7 @@ export default function Canvas() {
   // Track room connection state for context
   const [roomState, setRoomState] = useState({
     isConnected: false,
-    roomName: "tambo-canvas-room",
+    roomName: "",
     participantCount: 0,
   });
 
@@ -154,11 +202,13 @@ export default function Canvas() {
 
   // Keep context roomName in sync when the computed roomName changes
   useEffect(() => {
-    setRoomState((prev) => ({ ...prev, roomName }));
+    if (roomName) {
+      setRoomState((prev) => ({ ...prev, roomName }));
+    }
   }, [roomName]);
 
   // Show loading state while checking authentication
-  if (loading) {
+  if (loading || !roomName) {
     return (
       <div className="h-screen w-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/20">
         <div className="text-gray-500">Loading...</div>
