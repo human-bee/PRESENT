@@ -25,7 +25,7 @@ export function useAuth() {
   }, [])
 
   const signInWithGoogle = async () => {
-    const next = typeof window !== 'undefined' ? (window.location.pathname + window.location.search) : '/canvas'
+    const next = '/canvas'
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
@@ -49,7 +49,7 @@ export function useAuth() {
   }
 
   const signUpWithEmail = async (email: string, password: string, fullName?: string) => {
-    const next = typeof window !== 'undefined' ? (window.location.pathname + window.location.search) : '/canvas'
+    const next = '/canvas'
     const { error } = await supabase.auth.signUp({
       email,
       password,
@@ -64,8 +64,27 @@ export function useAuth() {
   }
 
   const signOut = async () => {
-    const { error } = await supabase.auth.signOut()
-    if (error) throw error
+    // Best-effort: clear local session first to avoid missing-session errors
+    try {
+      await supabase.auth.signOut({ scope: 'local' } as any)
+    } catch (_) {
+      // ignore
+    }
+
+    // If a session exists, attempt a global sign-out to revoke refresh token
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (session) {
+        await supabase.auth.signOut()
+      }
+    } catch (err: any) {
+      // Ignore missing-session errors; everything is already cleared locally
+      const msg = typeof err?.message === 'string' ? err.message : String(err || '')
+      if (!/auth session missing/i.test(msg)) {
+        // Log non-trivial errors for debugging but don't throw
+        console.warn('[auth] signOut warning:', msg)
+      }
+    }
   }
 
   return {

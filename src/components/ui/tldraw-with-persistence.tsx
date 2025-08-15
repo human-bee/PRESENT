@@ -355,6 +355,14 @@ export function TldrawWithPersistence({
 
   const handleMount = useCallback((mountedEditor: Editor) => {
     setEditor(mountedEditor);
+    // Expose editor globally and emit event for listeners
+    if (typeof window !== 'undefined') {
+      (window as any).__present = (window as any).__present || {};
+      (window as any).__present.tldrawEditor = mountedEditor;
+      try {
+        window.dispatchEvent(new CustomEvent('present:editor-mounted', { detail: { editor: mountedEditor } }))
+      } catch {}
+    }
     onMount?.(mountedEditor);
   }, [onMount]);
 

@@ -21,6 +21,7 @@ import { ComponentStoreContext } from "./tldraw-canvas";
 import type { TamboShapeUtil, TamboShape } from "./tldraw-canvas";
 import { useRoomContext } from "@livekit/components-react";
 import { RoomEvent } from "livekit-client";
+import TldrawSnapshotBroadcaster from '@/components/TldrawSnapshotBroadcaster';
 
 interface TldrawWithCollaborationProps {
   onMount?: (editor: Editor) => void;
@@ -229,6 +230,9 @@ export function TldrawWithCollaboration({
       if (typeof window !== 'undefined') {
         (window as any).__present = (window as any).__present || {};
         (window as any).__present.tldrawEditor = mountedEditor;
+        try {
+          window.dispatchEvent(new CustomEvent('present:editor-mounted', { detail: { editor: mountedEditor } }))
+        } catch {}
       }
 
       // Set up global pin management using side effects
@@ -782,6 +786,8 @@ export function TldrawWithCollaboration({
           overrides={overrides}
           forceMobile={true}
         />
+        {/* Broadcast TLDraw snapshots to LiveKit and persist to Supabase session */}
+        <TldrawSnapshotBroadcaster />
       </ComponentStoreContext.Provider>
 
       {!isStoreReady && (

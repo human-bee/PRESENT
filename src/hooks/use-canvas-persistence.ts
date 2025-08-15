@@ -25,6 +25,12 @@ export function useCanvasPersistence(editor: Editor | null, enabled: boolean = t
       const urlParams = new URLSearchParams(window.location.search);
       const canvasIdParam = urlParams.get("id");
 
+      // Optimistically reflect the canvas id as the name to avoid 'Untitled' flicker
+      if (canvasIdParam && canvasName !== canvasIdParam) {
+        setCanvasName(canvasIdParam);
+        setCanvasId(canvasIdParam);
+      }
+
       if (canvasIdParam) {
         // Load existing canvas
         try {
@@ -78,6 +84,21 @@ export function useCanvasPersistence(editor: Editor | null, enabled: boolean = t
     loadCanvas();
   }, [user, editor, router]);
 
+  // React to canvas id changes broadcast from the page to keep name in sync immediately
+  useEffect(() => {
+    const handler = () => {
+      try {
+        const id = new URL(window.location.href).searchParams.get('id');
+        if (id) {
+          setCanvasId(id);
+          setCanvasName((prev) => prev || id);
+        }
+      } catch {}
+    };
+    window.addEventListener('present:canvas-id-changed', handler);
+    return () => window.removeEventListener('present:canvas-id-changed', handler);
+  }, []);
+
   // Auto-save functionality
   const saveCanvas = useCallback(async () => {
     if (!enabled) return;
@@ -90,7 +111,8 @@ export function useCanvasPersistence(editor: Editor | null, enabled: boolean = t
       // Prefer a name derived from canvas id until user customizes
       const urlParams = new URLSearchParams(window.location.search);
       const idParam = urlParams.get("id");
-      const defaultName = idParam ? `Canvas ${idParam}` : canvasName;
+      // Default to the exact id as the name for new canvases
+      const defaultName = idParam || canvasName;
       const now = new Date().toISOString();
 
       if (canvasId) {

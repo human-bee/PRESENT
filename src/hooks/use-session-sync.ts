@@ -49,19 +49,17 @@ export function useSessionSync(roomName: string) {
       const canvasId = getCanvasIdFromUrl()
       canvasIdRef.current = canvasId
 
+      // If no canvas id yet, wait until it resolves to avoid creating null-canvas sessions
+      if (canvasId === null) {
+        return;
+      }
+
       // Try to find existing
       let query = supabase
         .from<CanvasSession>('canvas_sessions' as any)
         .select('*')
         .eq('room_name', roomName)
-      
-      if (canvasId === null) {
-        // match rows where canvas_id IS NULL
-        // @ts-ignore - supabase-js has .is for null checks
-        query = (query as any).is('canvas_id', null)
-      } else {
-        query = query.eq('canvas_id', canvasId)
-      }
+        .eq('canvas_id', canvasId)
 
       const { data: existing, error: selectErr } = await query
         .limit(1)
