@@ -42,12 +42,10 @@ export function useSessionSync(roomName: string) {
   const transcriptRef = useRef<any[]>([])
   const eventsRef = useRef<any[]>([])
   const hasReplayedTranscriptRef = useRef<boolean>(false)
+  const cancelledRef = useRef<boolean>(false)
 
-  // Ensure we have or create a session row
-  useEffect(() => {
-    let isCancelled = false
-
-    async function ensureSession() {
+  const ensureSession = useMemo(() => {
+    return async function ensureSession() {
       const canvasId = getCanvasIdFromUrl()
       canvasIdRef.current = canvasId
 
@@ -73,7 +71,7 @@ export function useSessionSync(roomName: string) {
         console.error('[useSessionSync] Failed to select session', selectErr)
       }
 
-      if (!isCancelled && existing?.id) {
+      if (!cancelledRef.current && existing?.id) {
         setSessionId(existing.id)
         transcriptRef.current = Array.isArray(existing.transcript) ? existing.transcript : []
         eventsRef.current = Array.isArray((existing as any).events) ? (existing as any).events : []
@@ -104,31 +102,31 @@ export function useSessionSync(roomName: string) {
         return
       }
 
-      if (!isCancelled) {
+      if (!cancelledRef.current) {
         setSessionId(created.id)
         transcriptRef.current = []
       }
     }
-
-    ensureSession()
-    return () => { isCancelled = true }
   }, [roomName, room])
+
+  // Ensure we have or create a session row
+  useEffect(() => {
+    cancelledRef.current = false
+    ensureSession()
+    return () => { cancelledRef.current = true }
+  }, [ensureSession])
 
   // If canvas id in URL changes (e.g., due to thread switch), re-run ensureSession
   useEffect(() => {
     const rerun = () => {
-      // Force effect above to re-run by toggling a trivial state or calling ensure inline
-      // Simpler: reload page context for now to keep state consistent
-      // But prefer a soft update: just call ensureSession() again via same logic
-      // We can mimic by updating roomName dependency indirectly via a noop state flip
-      // For now, send a no-op update that will trigger participant update shortly after
-      // because ensureSession already upserts on first mount.
+      hasReplayedTranscriptRef.current = false
+      ensureSession()
     }
     if (typeof window !== 'undefined') {
       window.addEventListener('present:canvas-id-changed', rerun)
       return () => window.removeEventListener('present:canvas-id-changed', rerun)
     }
-  }, [])
+  }, [ensureSession])
 
   // Update participants on join/leave
   useEffect(() => {

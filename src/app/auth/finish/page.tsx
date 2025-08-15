@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
-export default function AuthFinish() {
+function AuthFinishContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [error, setError] = useState<string | null>(null);
@@ -83,6 +83,21 @@ export default function AuthFinish() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function AuthFinish() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/20">
+        <div className="bg-white p-8 rounded-lg shadow-lg w-full max-w-md text-center">
+          <div className="animate-spin inline-block w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full mb-3" />
+          <div className="text-gray-700">Loading…</div>
+        </div>
+      </div>
+    }>
+      <AuthFinishContent />
+    </Suspense>
   );
 }
 

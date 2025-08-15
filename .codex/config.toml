@@ -1,0 +1,13 @@
+# Codex MCP configuration (local example).
+# Copy or symlink this file to ~/.codex/config.toml for Codex to load it.
+
+[mcp_servers.linear]
+command = "npx"
+args = ["-y", "mcp-remote", "--transport", "sse", "--url", "https://mcp.linear.app/sse"]
+
+# If your Linear server requires auth, uncomment one of the lines below and
+# provide an environment variable for the token.
+# Example with Authorization header via mcp-remote:
+# args = ["-y", "mcp-remote", "--transport", "sse", "--url", "https://mcp.linear.app/sse", "--header", "Authorization: Bearer ${LINEAR_API_KEY}"]
+# env = { "LINEAR_API_KEY" = "your-linear-token" }
+
