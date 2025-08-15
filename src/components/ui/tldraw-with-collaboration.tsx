@@ -154,13 +154,46 @@ export function TldrawWithCollaboration({
 
   const computedReadOnly = readOnly || role === "viewer" || role === "readOnly";
 
-  // Use useSyncDemo for development - allow overriding sync server via env
-  const syncUrl = (process.env.NEXT_PUBLIC_TLDRAW_SYNC_URL || 'wss://ws.tldraw.dev/connect').replace(/\/$/, '');
+  // Use useSyncDemo for development - allow overriding sync host via env
+  // Preferred host is the HTTPS demo worker, which will negotiate the correct secure WebSocket URL.
+  const envHost = process.env.NEXT_PUBLIC_TLDRAW_SYNC_URL || process.env.NEXT_PUBLIC_TLDRAW_SYNC_HOST;
+  const computedHost = useMemo(() => {
+    if (!envHost) return 'https://demo.tldraw.xyz';
+    // Accept forms like ws(s)://ws.tldraw.dev or https://.../connect
+    try {
+      const url = new URL(envHost);
+      // If it's ws(s), force https base so the library will choose wss correctly
+      if (url.protocol === 'ws:' || url.protocol === 'wss:') {
+        url.protocol = 'https:';
+        url.pathname = url.pathname.replace(/\/?connect\/?$/, '').replace(/\/+$/, '');
+        return url.toString();
+      }
+      // If it already includes /connect at the end, drop it; useSyncDemo adds it
+      url.pathname = url.pathname.replace(/\/?connect\/?$/, '').replace(/\/+$/, '');
+      return url.toString();
+    } catch {
+      return 'https://demo.tldraw.xyz';
+    }
+  }, [envHost]);
+
+  const safeHost = useMemo(() => {
+    try {
+      const u = new URL(computedHost);
+      if (/ws\.tldraw\.dev$/i.test(u.host)) {
+        console.warn('[Tldraw] Overriding unsupported host to demo.tldraw.xyz:', computedHost);
+        return 'https://demo.tldraw.xyz';
+      }
+      return u.toString();
+    } catch {
+      return 'https://demo.tldraw.xyz';
+    }
+  }, [computedHost]);
+
   const store = useSyncDemo({
     roomId: roomName,
     shapeUtils: shapeUtils || [],
-    // @ts-expect-error: extra option supported by newer @tldraw/sync
-    uri: `${syncUrl}/${encodeURIComponent(roomName)}`,
+    // pass host so the library builds the right /connect URL and negotiates wss
+    host: safeHost,
   } as any);
 
 
