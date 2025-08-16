@@ -135,6 +135,8 @@ export function LivekitRoomConnector({
   // Keep a ref to the latest state for event handlers
   const stateRef = React.useRef<LivekitRoomConnectorState | null>(state);
   stateRef.current = state;
+  // Stable per-device identity for LiveKit (avoid kicking other clients with same identity)
+  const identityRef = React.useRef<string | null>(null);
 
   // Get server URL from environment or props
   const wsUrl = serverUrl || process.env.NEXT_PUBLIC_LIVEKIT_URL || process.env.NEXT_PUBLIC_LK_SERVER_URL || "";
@@ -154,6 +156,27 @@ export function LivekitRoomConnector({
       // Cleanup without excessive logging
     };
   }, []);
+
+  // Generate or load a stable identity for this device+room
+  React.useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const key = `present:lk:identity:${roomName}`;
+      let id = window.localStorage.getItem(key);
+      if (!id) {
+        const base = (userName || 'user').replace(/\s+/g, '-').slice(0, 24);
+        const rand = Math.random().toString(36).slice(2, 8);
+        id = `${base}-${rand}`;
+        window.localStorage.setItem(key, id);
+      }
+      identityRef.current = id;
+    } catch {
+      // Fallback if storage is unavailable
+      const base = (userName || 'user').replace(/\s+/g, '-').slice(0, 24);
+      const rand = Math.random().toString(36).slice(2, 8);
+      identityRef.current = `${base}-${rand}`;
+    }
+  }, [roomName, userName]);
 
   // Add agent dispatch functionality
   const triggerAgentJoin = React.useCallback(async () => {
@@ -264,6 +287,25 @@ export function LivekitRoomConnector({
     const handleDisconnected = (reason?: DisconnectReason) => {
       if (stateRef.current?.connectionState !== "disconnected") {
         setState((prev: LivekitRoomConnectorState | null) => prev ? { ...prev, connectionState: "disconnected", participantCount: 0, errorMessage: reason ? `Disconnected: ${reason}` : null } as LivekitRoomConnectorState : getInitialState());
+      }
+      // Auto-retry reconnect with backoff if we didn't explicitly click Disconnect
+      if (stateRef.current?.connectionState !== 'connecting') {
+        let backoff = 1000;
+        const maxBackoff = 8000;
+        const retry = async () => {
+          if (!stateRef.current) return;
+          if (stateRef.current.connectionState === 'connected') return;
+          try {
+            setState(prev => prev ? { ...prev, connectionState: 'connecting', errorMessage: null } as LivekitRoomConnectorState : getInitialState());
+            // Trigger token fetch effect
+          } finally {
+            backoff = Math.min(maxBackoff, backoff * 2);
+            if (stateRef.current?.connectionState !== 'connected') {
+              setTimeout(retry, backoff);
+            }
+          }
+        };
+        setTimeout(retry, backoff);
       }
     };
 
@@ -402,7 +444,8 @@ export function LivekitRoomConnector({
       
       try {
         console.log(`🎯 [LiveKitConnector-${roomName}] Fetching token...`);
-        const response = await fetch(`/api/token?roomName=${encodeURIComponent(roomName)}&username=${encodeURIComponent(userName)}`);
+        const identity = encodeURIComponent(identityRef.current || `${(userName || 'user').replace(/\s+/g, '-')}-${Math.random().toString(36).slice(2, 8)}`);
+        const response = await fetch(`/api/token?roomName=${encodeURIComponent(roomName)}&identity=${identity}&username=${encodeURIComponent(userName)}&name=${encodeURIComponent(userName)}`);
         
         if (!response.ok) {
           throw new Error(`Token fetch failed: ${response.status} ${response.statusText}`);
@@ -423,7 +466,20 @@ export function LivekitRoomConnector({
         // Connect to the room using the token
         if (wsUrl) {
           console.log(`🔌 [LiveKitConnector-${roomName}] Calling room.connect() with URL: ${wsUrl}`);
+          // Guard against hanging connects: timeout if we don't transition to connected fast enough
+          const timeoutId = setTimeout(() => {
+            if (stateRef.current?.connectionState !== 'connected') {
+              try { room.disconnect(); } catch {}
+              setState((prev: LivekitRoomConnectorState | null) => prev ? {
+                ...prev,
+                connectionState: 'error',
+                errorMessage: 'Connect timeout. Tap Connect to retry.'
+              } as LivekitRoomConnectorState : { ...getInitialState(), connectionState: 'error', errorMessage: 'Connect timeout. Tap Connect to retry.' });
+            }
+          }, 15000);
+
           await room.connect(wsUrl, token);
+          clearTimeout(timeoutId);
           console.log(`✅ [LiveKitConnector-${roomName}] Room.connect() called successfully`);
           
           // Enable camera and microphone after connecting (if not in audio-only mode)
