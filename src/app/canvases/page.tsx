@@ -101,7 +101,7 @@ export default function CanvasesPage() {
           </div>
           
           <Link
-            href="/canvas"
+            href="/canvas.new"
             className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
           >
             <Plus className="w-5 h-5" />
@@ -124,7 +124,7 @@ export default function CanvasesPage() {
               Create your first canvas to get started
             </p>
             <Link
-              href="/canvas"
+              href="/canvas.new"
               className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
             >
               <Plus className="w-5 h-5" />

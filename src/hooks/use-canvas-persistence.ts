@@ -25,14 +25,15 @@ export function useCanvasPersistence(editor: Editor | null, enabled: boolean = t
       // Check URL params for canvas ID
       const urlParams = new URLSearchParams(window.location.search);
       const canvasIdParam = urlParams.get("id");
+      const isUuid = !!canvasIdParam && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(canvasIdParam);
 
       // Optimistically reflect the canvas id as the name to avoid 'Untitled' flicker
-      if (canvasIdParam && canvasName !== canvasIdParam) {
+      if (isUuid && canvasName !== canvasIdParam) {
         setCanvasName(canvasIdParam);
         setCanvasId(canvasIdParam);
       }
 
-      if (canvasIdParam) {
+      if (isUuid) {
         // Load existing canvas
         try {
           const { data: canvas, error } = await supabase
