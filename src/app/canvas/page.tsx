@@ -112,6 +112,13 @@ export default function Canvas() {
           .from('canvases')
           .update({ name: createdId, updated_at: now, last_modified: now })
           .eq('id', createdId);
+        // Ensure creator is a member (editor) for RLS-friendly access
+        try {
+          await supabase
+            .from('canvas_members')
+            .upsert({ canvas_id: createdId, user_id: user.id, role: 'editor', created_at: now } as any,
+                    { onConflict: 'canvas_id,user_id' } as any);
+        } catch {}
       } catch (e) {
         console.warn('⚠️ [Canvas] Failed to set canvas name to id:', e);
       }

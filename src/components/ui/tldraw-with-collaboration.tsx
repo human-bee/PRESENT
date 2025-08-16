@@ -2,14 +2,7 @@
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-import {
-  Tldraw,
-  TLUiOverrides,
-  TLComponents,
-  Editor,
-  TldrawUiMenuItem,
-  useEditor,
-} from "tldraw";
+import { Tldraw, TLUiOverrides, TLComponents, Editor } from "tldraw";
 import {
   CustomMainMenu,
   CustomToolbarWithTranscript,
@@ -36,8 +29,8 @@ interface TldrawWithCollaborationProps {
 }
 
 const createCollaborationOverrides = (): TLUiOverrides => {
-  return {
-    actions: (editor, actions) => {
+  const overrides: any = {
+    actions: (editor: any, actions: any) => {
       const pinAction = {
         id: 'pin-shape-to-viewport',
         label: 'Pin to Window',
@@ -84,30 +77,9 @@ const createCollaborationOverrides = (): TLUiOverrides => {
         ...actions,
         'pin-shape-to-viewport': pinAction
       };
-    },
-    
-    menu: (editor, menu, { source }) => {
-      if (source === 'main-menu') {
-        menu.push({
-          id: 'pin-action-group',
-          type: 'group',
-          label: 'Pin Actions',
-          children: [
-            {
-              id: 'pin-shape-to-viewport',
-              type: 'item',
-              label: 'Pin Selected Shape to Window',
-              onSelect: () => {
-                editor.runAction('pin-shape-to-viewport');
-              }
-            }
-          ]
-        });
-      }
-      
-      return menu;
     }
   };
+  return overrides as TLUiOverrides;
 };
 
 export function TldrawWithCollaboration({
@@ -160,7 +132,7 @@ export function TldrawWithCollaboration({
   // Preferred host is the HTTPS demo worker, which will negotiate the correct secure WebSocket URL.
   const envHost = process.env.NEXT_PUBLIC_TLDRAW_SYNC_URL || process.env.NEXT_PUBLIC_TLDRAW_SYNC_HOST;
   const computedHost = useMemo(() => {
-    if (!envHost) return 'https://tldraw-sync-demo.tldraw.com';
+    if (!envHost) return 'https://demo.tldraw.xyz';
     // Accept forms like ws(s)://ws.tldraw.dev or https://.../connect
     try {
       const url = new URL(envHost);
@@ -174,7 +146,7 @@ export function TldrawWithCollaboration({
       url.pathname = url.pathname.replace(/\/?connect\/?$/, '').replace(/\/+$/, '');
       return url.origin;
     } catch {
-      return 'https://tldraw-sync-demo.tldraw.com';
+      return 'https://demo.tldraw.xyz';
     }
   }, [envHost]);
 
@@ -183,7 +155,7 @@ export function TldrawWithCollaboration({
       const u = new URL(computedHost);
       return u.origin;
     } catch {
-      return 'https://tldraw-sync-demo.tldraw.com';
+      return 'https://demo.tldraw.xyz';
     }
   }, [computedHost]);
 
@@ -193,6 +165,11 @@ export function TldrawWithCollaboration({
     // pass host so the library builds the right /connect URL and negotiates wss
     host: safeHost,
   } as any);
+
+  try {
+    // Lightweight runtime diagnostic
+    console.warn('[Tldraw] Using sync host:', safeHost);
+  } catch {}
 
 
 
