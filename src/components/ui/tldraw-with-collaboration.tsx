@@ -160,7 +160,7 @@ export function TldrawWithCollaboration({
   // Preferred host is the HTTPS demo worker, which will negotiate the correct secure WebSocket URL.
   const envHost = process.env.NEXT_PUBLIC_TLDRAW_SYNC_URL || process.env.NEXT_PUBLIC_TLDRAW_SYNC_HOST;
   const computedHost = useMemo(() => {
-    if (!envHost) return 'https://demo.tldraw.xyz';
+    if (!envHost) return 'https://tldraw-sync-demo.tldraw.com';
     // Accept forms like ws(s)://ws.tldraw.dev or https://.../connect
     try {
       const url = new URL(envHost);
@@ -174,20 +174,16 @@ export function TldrawWithCollaboration({
       url.pathname = url.pathname.replace(/\/?connect\/?$/, '').replace(/\/+$/, '');
       return url.toString();
     } catch {
-      return 'https://demo.tldraw.xyz';
+      return 'https://tldraw-sync-demo.tldraw.com';
     }
   }, [envHost]);
 
   const safeHost = useMemo(() => {
     try {
       const u = new URL(computedHost);
-      if (/ws\.tldraw\.dev$/i.test(u.host)) {
-        console.warn('[Tldraw] Overriding unsupported host to demo.tldraw.xyz:', computedHost);
-        return 'https://demo.tldraw.xyz';
-      }
       return u.toString();
     } catch {
-      return 'https://demo.tldraw.xyz';
+      return 'https://tldraw-sync-demo.tldraw.com';
     }
   }, [computedHost]);
 
