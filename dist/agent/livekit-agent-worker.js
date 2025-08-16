@@ -142,6 +142,97 @@ export default defineAgent({
                     name: 'respond_with_voice',
                     description: 'Provide voice responses when appropriate',
                     examples: ['speak response', 'voice reply', 'audio answer']
+                },
+                // Canvas control & analysis tools
+                {
+                    name: 'canvas_focus',
+                    description: 'Focus/zoom camera on all, selection, or a specific component/shape',
+                    examples: ['focus on the weather component', 'zoom to selection', 'center everything']
+                },
+                {
+                    name: 'canvas_zoom_all',
+                    description: 'Zoom to fit all shapes on the canvas',
+                    examples: ['zoom out to see everything', 'fit to content']
+                },
+                {
+                    name: 'canvas_create_note',
+                    description: 'Create a text note at the center of the viewport',
+                    examples: ['add a note: "Action Item: Review design"']
+                },
+                {
+                    name: 'canvas_pin_selected',
+                    description: 'Pin selected Tambo shapes to the viewport',
+                    examples: ['pin this to the screen']
+                },
+                {
+                    name: 'canvas_unpin_selected',
+                    description: 'Unpin selected Tambo shapes from the viewport',
+                    examples: ['unpin this']
+                },
+                {
+                    name: 'canvas_analyze',
+                    description: 'Analyze canvas (counts, clusters, bounds, selection)',
+                    examples: ['analyze the board layout']
+                },
+                {
+                    name: 'canvas_lock_selected',
+                    description: 'Lock selected shapes to prevent movement',
+                    examples: ['lock these']
+                },
+                {
+                    name: 'canvas_unlock_selected',
+                    description: 'Unlock selected shapes to allow movement',
+                    examples: ['unlock these']
+                },
+                {
+                    name: 'canvas_arrange_grid',
+                    description: 'Arrange selected or all components into a grid',
+                    examples: ['arrange these in a grid']
+                },
+                {
+                    name: 'canvas_create_rectangle',
+                    description: 'Create a rectangle shape',
+                    examples: ['create a rectangle']
+                },
+                {
+                    name: 'canvas_create_ellipse',
+                    description: 'Create an ellipse shape',
+                    examples: ['create an ellipse']
+                },
+                {
+                    name: 'canvas_align_selected',
+                    description: 'Align selected components',
+                    examples: ['align these to the left']
+                },
+                {
+                    name: 'canvas_distribute_selected',
+                    description: 'Distribute selected components',
+                    examples: ['distribute these evenly']
+                },
+                {
+                    name: 'canvas_draw_smiley',
+                    description: 'Draw a smiley face with basic shapes',
+                    examples: ['draw a smiley face']
+                },
+                {
+                    name: 'canvas_toggle_grid',
+                    description: 'Toggle a simple canvas grid',
+                    examples: ['toggle grid']
+                },
+                {
+                    name: 'canvas_set_background',
+                    description: 'Set background color or image',
+                    examples: ['set background to blue']
+                },
+                {
+                    name: 'canvas_set_theme',
+                    description: 'Set theme light/dark',
+                    examples: ['switch to dark mode']
+                },
+                {
+                    name: 'canvas_select',
+                    description: 'Select shapes by name/type/bounds',
+                    examples: ['select the todo list']
                 }
             ],
             components: defaultTamboComponents,
@@ -154,7 +245,8 @@ export default defineAgent({
                     'research': ['research', 'findings', 'results', 'analysis'],
                     'action_items': ['todo', 'task', 'action item', 'checklist'],
                     'image_generation': ['image', 'picture', 'illustration', 'generate image'],
-                    'captions': ['captions', 'subtitles', 'transcription', 'live text']
+                    'captions': ['captions', 'subtitles', 'transcription', 'live text'],
+                    'canvas_control': ['zoom', 'focus', 'pan', 'center', 'pin', 'unpin', 'note', 'arrange']
                 },
                 keywords: {
                     'timer_related': ['timer', 'countdown', 'minutes', 'seconds', 'alarm'],
@@ -162,7 +254,8 @@ export default defineAgent({
                     'weather_related': ['weather', 'forecast', 'temperature', 'rain', 'sunny'],
                     'ui_related': ['create', 'make', 'show', 'display', 'component'],
                     'research_related': ['research', 'study', 'analysis', 'findings'],
-                    'task_related': ['todo', 'task', 'action', 'checklist', 'manage']
+                    'task_related': ['todo', 'task', 'action', 'checklist', 'manage'],
+                    'canvas_related': ['zoom', 'focus', 'pan', 'center', 'pin', 'unpin', 'note', 'arrange', 'grid']
                 }
             }
         };
@@ -346,6 +439,7 @@ export default defineAgent({
       - Direct browser APIs and canvas manipulation
         
         CRITICAL: Always respond with TEXT ONLY. Never use audio responses. All your responses should be in text format.
+        IMPORTANT CONTEXT: You're a helpful conversation assistant with a catch: you can listen to a multi-speaker conversation, but you may only participate through the TLDraw canvas using standard tools, custom components, and MCPs. Be creative in maximizing your usefulness via the canvas.
         
         IMPORTANT: When users ask for UI components, timers, or visual elements, DO NOT repeat their request back as text. The UI generation is handled automatically when they speak.`;
             // Add available tools from capabilities
@@ -419,9 +513,22 @@ export default defineAgent({
            - Retrieve list of available documents
            - No parameters needed
            
-        5. youtube_search(query: string)
+         5. youtube_search(query: string)
            - Search and display YouTube videos
            - Example: youtube_search("React tutorials")
+        
+         6. canvas_focus(params: { target: "all" | "selected" | "component" | "shape", componentId?: string, shapeId?: string, padding?: number })
+            - Move/zoom camera to content
+         7. canvas_zoom_all()
+            - Zoom to fit all shapes on the canvas
+         8. canvas_create_note(textOrParams: string | { text?: string })
+            - Create a note at the center of the viewport
+         9. canvas_pin_selected()
+            - Pin the currently selected Tambo components to the screen
+         10. canvas_unpin_selected()
+            - Unpin the currently selected Tambo components
+         11. canvas_analyze()
+            - Inspect the current canvas to plan follow-up actions
         
         IMPORTANT TOOL SELECTION RULES:
         - For ANY YouTube-related request (search, play, find videos), you MUST use the "youtube_search" tool
@@ -429,6 +536,7 @@ export default defineAgent({
         - For document RETRIEVAL (show, list): use "get_documents" tool
         - For creating NEW components: use "generate_ui_component" tool
         - For updating EXISTING components: use "ui_update" tool
+        - For camera/zoom/focus/pin/note interactions: use the canvas_* tools
         
         Always respond with text for:
         - Answering questions

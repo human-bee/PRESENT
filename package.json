@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "engines": {
-    "node": ">=18.18.0"
+    "node": ">=20 <23"
   },
   "scripts": {
     "dev": "next dev",
@@ -89,5 +89,8 @@
     "ts-jest": "^29.3.4",
     "tsx": "^4.19.4",
     "typescript": "^5"
+  },
+  "optionalDependencies": {
+    "@livekit/rtc-node-darwin-arm64": "0.13.14"
   }
 }

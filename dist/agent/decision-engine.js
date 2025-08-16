@@ -26,6 +26,7 @@
  *
  * See docs/THREE_AGENT_ARCHITECTURE.md for complete details.
  */
+import { getPrompt } from './prompt-loader';
 // Build dynamic system prompt based on available capabilities
 const buildSystemPrompt = (config) => {
     const basePrompt = `You are the Decision Engine (Agent #2) in Tambo's 3-agent architecture.
@@ -264,57 +265,59 @@ Analyze the current speaker's statement in full conversational context.`;
      */
     async analyzeTranscriptEnhanced(transcript) {
         try {
-            const prompt = `Analyze this transcript for actionable requests and determine the appropriate tools to call.
-
-TRANSCRIPT: "${transcript}"
-
-AVAILABLE TOOLS:
-- get_documents: Retrieve list of available documents (use for: "show documents", "what documents", "list available documents")
-- generate_ui_component: Create NEW UI components (use for: "show timer", "create weather widget", "display document", "show participant tile", "create participant tile")
-- ui_update: Update EXISTING components (use for: "change timer", "update weather", "edit document", "update containment breach", "add to document", "modify document")
-- youtube_search: Search YouTube (use for: "youtube", "video", "play")
-- list_components: List current components (use for: "what components", "show components")
-
-RESPONSE FORMAT:
-{
-  "hasActionableRequest": boolean,
-  "intent": "document_retrieval|ui_generation|ui_update|youtube_search|list_components|general_conversation",
-  "toolCalls": [
-    {
-      "tool": "tool_name",
-      "params": {},
-      "priority": 1
-    }
-  ],
-  "reasoning": "explanation of why these tools were chosen",
-  "confidence": 85
-}
-
-RULES:
-1. For document RETRIEVAL (show, display, list): get_documents first, then optionally generate_ui_component
-2. For document UPDATES (edit, update, change, add to, modify): use ui_update ONLY (not get_documents)
-3. For participant tile requests: generate_ui_component with component type "LivekitParticipantTile" 
-4. For creating NEW components: generate_ui_component
-5. For updating EXISTING components: ui_update
-6. General conversation (no tools needed): hasActionableRequest: false
-
-Examples:
-- "Show me the containment breach script" → get_documents (priority 1) + generate_ui_component (priority 2)
-- "What documents are available?" → get_documents (priority 1)
-- "Update the containment breach script" → ui_update (priority 1) with {"componentId": "document-editor-movie-script-containment-breach", "patch": "update the script"} 
-- "Add more description to the control room" → ui_update (priority 1) with {"componentId": "document-editor-movie-script-containment-breach", "patch": "add more description to the control room"}
-- "Edit the document" → ui_update (priority 1) with {"componentId": "document-editor-movie-script-containment-breach", "patch": "edit the document"}
-- "Create a 5 minute timer" → generate_ui_component (priority 1) with {"prompt": "Create a 5 minute timer"}
-- "Can I see my participant tile?" → generate_ui_component (priority 1) with {"prompt": "show participant tile"}
-- "Change the timer to 10 minutes" → ui_update (priority 1) with {"componentId": "", "patch": "change timer to 10 minutes"}
-- "How are you doing?" → hasActionableRequest: false
-
-PARAMETER REQUIREMENTS:
-- ui_update: MUST include "componentId" (use "" for auto-detection) and "patch" (natural language instruction)
-- generate_ui_component: MUST include "prompt" (natural language description)
-- get_documents: no parameters needed
-- list_components: no parameters needed
-- youtube_search: MUST include "query" (search terms)`;
+            // Fast local heuristics for common canvas actions to reduce latency
+            const lower = transcript.toLowerCase();
+            // Draw smiley face
+            if ((/\bsmiley\b|\bsmiling face\b/).test(lower) && (/\bdraw\b|\bmake\b|\bcreate\b/).test(lower)) {
+                const sizeMatch = lower.match(/(\d{2,4})\s*(px|pixels)?/);
+                const size = sizeMatch ? Math.max(64, Math.min(1024, Number(sizeMatch[1]) || 300)) : 300;
+                return {
+                    hasActionableRequest: true,
+                    intent: 'ui_generation',
+                    toolCalls: [{ tool: 'canvas_draw_smiley', params: { size }, priority: 1 }],
+                    reasoning: 'Detected request to draw a smiley face',
+                    confidence: 0.9,
+                };
+            }
+            // Create rectangle / ellipse
+            if ((/\brectangle\b/).test(lower) && (/\bdraw\b|\bmake\b|\bcreate\b/).test(lower)) {
+                return {
+                    hasActionableRequest: true,
+                    intent: 'ui_generation',
+                    toolCalls: [{ tool: 'canvas_create_rectangle', params: {}, priority: 2 }],
+                    reasoning: 'Detected request to draw a rectangle',
+                    confidence: 0.75,
+                };
+            }
+            if ((/\bellipse\b|\bcircle\b/).test(lower) && (/\bdraw\b|\bmake\b|\bcreate\b/).test(lower)) {
+                return {
+                    hasActionableRequest: true,
+                    intent: 'ui_generation',
+                    toolCalls: [{ tool: 'canvas_create_ellipse', params: {}, priority: 2 }],
+                    reasoning: 'Detected request to draw an ellipse/circle',
+                    confidence: 0.75,
+                };
+            }
+            // Create note
+            if ((/\b(add|create|make)\b.*\bnote\b/).test(lower)) {
+                // Try to extract note text after 'that says' or within quotes
+                let text = 'Note';
+                const saysMatch = transcript.match(/that\s+says\s+"([^"]+)"/i) || transcript.match(/that\s+says\s+'([^']+)'/i);
+                const quoted = transcript.match(/"([^"]+)"/) || transcript.match(/'([^']+)'/);
+                if (saysMatch && saysMatch[1])
+                    text = saysMatch[1];
+                else if (quoted && quoted[1])
+                    text = quoted[1];
+                return {
+                    hasActionableRequest: true,
+                    intent: 'ui_generation',
+                    toolCalls: [{ tool: 'canvas_create_note', params: { text }, priority: 2 }],
+                    reasoning: 'Detected request to add a note',
+                    confidence: 0.7,
+                };
+            }
+            const template = await getPrompt('enhancedDecisionTemplate');
+            const prompt = template.replace('%TRANSCRIPT%', transcript.replace(/"/g, '"'));
             const requestBody = {
                 model: 'gpt-4o-mini',
                 temperature: 0.1,
