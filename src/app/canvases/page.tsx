@@ -19,10 +19,12 @@ import { toast } from "react-hot-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { supabase, type Canvas } from "@/lib/supabase";
 
+type UserCanvas = Canvas & { owner_id: string; membership_role: 'owner' | 'editor' | 'viewer' };
+
 export default function CanvasesPage() {
   const { user, loading } = useAuth();
   const router = useRouter();
-  const [canvases, setCanvases] = useState<Canvas[]>([]);
+  const [canvases, setCanvases] = useState<UserCanvas[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   // Redirect to sign in if not authenticated
@@ -39,10 +41,10 @@ export default function CanvasesPage() {
       if (!user) return;
       
       try {
+        // Prefer unified view of owned + shared canvases
         const { data: canvases, error } = await supabase
-          .from('canvases')
+          .from('user_canvases')
           .select('*')
-          .eq('user_id', user.id)
           .order('last_modified', { ascending: false });
 
         if (error) throw error;
@@ -163,6 +165,9 @@ export default function CanvasesPage() {
                   <h3 className="font-semibold text-lg text-gray-900 mb-1">
                     {canvas.name}
                   </h3>
+                  <div className="text-xs text-gray-500 mb-2">
+                    {canvas.membership_role === 'owner' ? 'Owned by you' : `Shared · ${canvas.membership_role}`}
+                  </div>
                   {canvas.description && (
                     <p className="text-sm text-gray-600 mb-3 line-clamp-2">
                       {canvas.description}
@@ -187,13 +192,15 @@ export default function CanvasesPage() {
                       <ExternalLink className="w-3 h-3" />
                     </Link>
                     
-                    <button
-                      onClick={() => handleDelete(canvas.id)}
-                      className="text-sm text-red-600 hover:text-red-700"
-                      title="Delete canvas"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                    {canvas.membership_role === 'owner' && (
+                      <button
+                        onClick={() => handleDelete(canvas.id)}
+                        className="text-sm text-red-600 hover:text-red-700"
+                        title="Delete canvas"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>

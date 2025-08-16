@@ -754,6 +754,13 @@ export function TldrawWithCollaboration({
       (mountedEditor as any)._pinnedShapesCleanup = cleanup;
 
       if (onMount) onMount(mountedEditor);
+
+      // Trigger component rehydration for collaborators who didn't load from persistence
+      try {
+        setTimeout(() => {
+          window.dispatchEvent(new CustomEvent('tambo:rehydrateComponents', { detail: {} }))
+        }, 250);
+      } catch {}
     },
     [onMount, overrides, shapeUtils, store]
   );

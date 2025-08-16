@@ -14,6 +14,7 @@ export function useCanvasPersistence(editor: Editor | null, enabled: boolean = t
   const [canvasName, setCanvasName] = useState("Untitled Canvas");
   const [isSaving, setIsSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
+  const [canWrite, setCanWrite] = useState(true);
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Load canvas from URL param or create new
@@ -38,7 +39,6 @@ export function useCanvasPersistence(editor: Editor | null, enabled: boolean = t
             .from('canvases')
             .select('*')
             .eq('id', canvasIdParam)
-            .eq('user_id', user.id)
             .single();
 
           if (error) throw error;
@@ -52,6 +52,23 @@ export function useCanvasPersistence(editor: Editor | null, enabled: boolean = t
             setCanvasName(canvas.name);
             setLastSaved(new Date(canvas.last_modified));
             try { localStorage.setItem('present:lastCanvasId', canvas.id); } catch {}
+
+            // Determine write permission: owner or editor membership
+            if (canvas.user_id === user.id) {
+              setCanWrite(true);
+            } else {
+              try {
+                const { data: membership, error: memErr } = await supabase
+                  .from('canvas_members')
+                  .select('role')
+                  .eq('canvas_id', canvas.id)
+                  .eq('user_id', user.id)
+                  .maybeSingle();
+                setCanWrite(!memErr && membership?.role === 'editor');
+              } catch {
+                setCanWrite(false);
+              }
+            }
             
             // Load the document into the editor
             try {
@@ -74,9 +91,9 @@ export function useCanvasPersistence(editor: Editor | null, enabled: boolean = t
             }, 100); // Small delay to ensure editor is fully loaded
           }
         } catch (error) {
-          console.error("Error loading canvas:", error);
-          toast.error("Canvas not found");
-          router.push("/canvas");
+          console.warn("[CanvasPersistence] Canvas load failed or not accessible; continuing in view/collab mode", error);
+          // No redirect; keep current id for TLDraw sync. Mark as read-only for persistence.
+          setCanWrite(false);
         }
       }
     };
@@ -103,6 +120,7 @@ export function useCanvasPersistence(editor: Editor | null, enabled: boolean = t
   const saveCanvas = useCallback(async () => {
     if (!enabled) return;
     if (!editor || !user?.id || isSaving) return;
+    if (!canWrite) return; // respect read-only when not the owner
 
     setIsSaving(true);
     try {
@@ -126,8 +144,7 @@ export function useCanvasPersistence(editor: Editor | null, enabled: boolean = t
             last_modified: now,
             updated_at: now,
           })
-          .eq('id', canvasId)
-          .eq('user_id', user.id);
+          .eq('id', canvasId);
 
         if (error) throw error;
         setLastSaved(new Date());
@@ -177,7 +194,7 @@ export function useCanvasPersistence(editor: Editor | null, enabled: boolean = t
     } finally {
       setIsSaving(false);
     }
-  }, [editor, user, canvasId, canvasName, thread, isSaving, enabled]);
+  }, [editor, user, canvasId, canvasName, thread, isSaving, enabled, canWrite]);
 
   // Set up auto-save on editor changes
   useEffect(() => {
@@ -210,12 +227,16 @@ export function useCanvasPersistence(editor: Editor | null, enabled: boolean = t
   // Manual save function
   const manualSave = useCallback(async () => {
     if (!enabled) return;
+    if (!canWrite) {
+      toast.error("You don't have permission to save this canvas");
+      return;
+    }
     if (saveTimeoutRef.current) {
       clearTimeout(saveTimeoutRef.current);
     }
     await saveCanvas();
     toast.success("Canvas saved!");
-  }, [saveCanvas, enabled]);
+  }, [saveCanvas, enabled, canWrite]);
 
   // Update canvas name
   const updateCanvasName = useCallback(async (newName: string) => {
@@ -226,8 +247,7 @@ export function useCanvasPersistence(editor: Editor | null, enabled: boolean = t
         const { error } = await supabase
           .from('canvases')
           .update({ name: newName })
-          .eq('id', canvasId)
-          .eq('user_id', user.id);
+          .eq('id', canvasId);
 
         if (error) throw error;
       } catch (error) {
