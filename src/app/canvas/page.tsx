@@ -52,6 +52,7 @@ export default function Canvas() {
         setCanvasId(idParam);
         setRoomName(`tambo-canvas-${idParam}`);
         try { localStorage.setItem('present:lastCanvasId', idParam); } catch {}
+        try { window.dispatchEvent(new Event('present:canvas-id-changed')); } catch {}
         return;
       }
 
@@ -63,23 +64,30 @@ export default function Canvas() {
         window.history.replaceState({}, '', url.toString());
         setCanvasId(lastId);
         setRoomName(`tambo-canvas-${lastId}`);
+        try { window.dispatchEvent(new Event('present:canvas-id-changed')); } catch {}
         return;
       }
 
       // No id known: create a new canvas row immediately so URL + room are stable
-      try {
-        // Defer creation until user is authenticated
-        if (!user) return;
-        const now = new Date().toISOString();
-        // Lazy import to avoid SSR issues
-        const { supabase } = await import('@/lib/supabase');
+      // Defer creation until user is authenticated
+      if (!user) return;
+      const now = new Date().toISOString();
+      // Lazy import to avoid SSR issues
+      const { supabase } = await import('@/lib/supabase');
+
+      // Simple retry loop to avoid transient failures
+      const MAX_TRIES = 2;
+      let attempt = 0;
+      let createdId: string | null = null;
+      let lastErr: any = null;
+      while (attempt < MAX_TRIES && !createdId) {
+        attempt++;
         const { data, error } = await supabase
           .from('canvases')
           .insert({
             user_id: user.id,
             name: 'Untitled Canvas',
             description: null,
-            // Minimal placeholder document; editor will overwrite on first save
             document: {},
             conversation_key: null,
             is_public: false,
@@ -87,21 +95,33 @@ export default function Canvas() {
           })
           .select('id')
           .single();
-        if (error) throw error;
-        if (data?.id) {
-          url.searchParams.set('id', data.id);
-          window.history.replaceState({}, '', url.toString());
-          setCanvasId(data.id);
-          setRoomName(`tambo-canvas-${data.id}`);
-          try { localStorage.setItem('present:lastCanvasId', data.id); } catch {}
+        if (error) {
+          lastErr = error;
+        } else if (data?.id) {
+          createdId = data.id;
         }
-      } catch (e) {
-        console.warn('⚠️ [Canvas] Failed to create new canvas row:', e);
-        // Fallback: ephemeral room without URL change
-        const tmpId = (window.crypto?.randomUUID?.() || `tmp-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`);
-        setCanvasId(tmpId);
-        setRoomName(`tambo-canvas-${tmpId}`);
       }
+
+      if (!createdId) {
+        console.error('❌ [Canvas] Could not create canvas row; staying on loading screen', lastErr);
+        return; // Keep loading; user can refresh or try again
+      }
+      // Immediately set the canvas name to the id for clarity/stability
+      try {
+        await supabase
+          .from('canvases')
+          .update({ name: createdId, updated_at: now, last_modified: now })
+          .eq('id', createdId);
+      } catch (e) {
+        console.warn('⚠️ [Canvas] Failed to set canvas name to id:', e);
+      }
+
+      url.searchParams.set('id', createdId);
+      window.history.replaceState({}, '', url.toString());
+      setCanvasId(createdId);
+      setRoomName(`tambo-canvas-${createdId}`);
+      try { localStorage.setItem('present:lastCanvasId', createdId); } catch {}
+      try { window.dispatchEvent(new Event('present:canvas-id-changed')); } catch {}
     };
 
     resolveCanvasId();
