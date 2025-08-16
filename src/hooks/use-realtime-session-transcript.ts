@@ -7,10 +7,16 @@ export type TranscriptLine = {
   timestamp: number
 }
 
+function isValidUuid(value: string | null | undefined): value is string {
+  if (!value) return false
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)
+}
+
 function getCanvasIdFromUrl(): string | null {
   if (typeof window === 'undefined') return null
   const params = new URLSearchParams(window.location.search)
-  return params.get('id')
+  const raw = params.get('id')
+  return isValidUuid(raw) ? raw : null
 }
 
 export function useRealtimeSessionTranscript(roomName: string | undefined) {
@@ -27,8 +33,7 @@ export function useRealtimeSessionTranscript(roomName: string | undefined) {
     async function init() {
       const canvasId = getCanvasIdFromUrl()
 
-      let query = supabase.from('canvas_sessions').select('id, transcript').eq('room_name', roomName)
-      // @ts-expect-error supabase .is exists for null checks
+      let query = supabase.from('canvas_sessions' as any).select('id, transcript').eq('room_name', roomName)
       query = canvasId === null ? (query as any).is('canvas_id', null) : query.eq('canvas_id', canvasId)
 
       const { data, error } = await query.limit(1).maybeSingle()

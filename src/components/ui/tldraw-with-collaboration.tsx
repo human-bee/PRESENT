@@ -168,11 +168,11 @@ export function TldrawWithCollaboration({
       if (url.protocol === 'ws:' || url.protocol === 'wss:') {
         url.protocol = 'https:';
         url.pathname = url.pathname.replace(/\/?connect\/?$/, '').replace(/\/+$/, '');
-        return url.toString();
+        return url.origin;
       }
       // If it already includes /connect at the end, drop it; useSyncDemo adds it
       url.pathname = url.pathname.replace(/\/?connect\/?$/, '').replace(/\/+$/, '');
-      return url.toString();
+      return url.origin;
     } catch {
       return 'https://tldraw-sync-demo.tldraw.com';
     }
@@ -181,7 +181,7 @@ export function TldrawWithCollaboration({
   const safeHost = useMemo(() => {
     try {
       const u = new URL(computedHost);
-      return u.toString();
+      return u.origin;
     } catch {
       return 'https://tldraw-sync-demo.tldraw.com';
     }

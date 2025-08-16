@@ -15,10 +15,17 @@ export type CanvasSession = {
   updated_at?: string
 }
 
+function isValidUuid(value: string | null | undefined): value is string {
+  if (!value) return false
+  // Simple UUID v4-ish check (accepts any UUID variant)
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)
+}
+
 function getCanvasIdFromUrl(): string | null {
   if (typeof window === 'undefined') return null
   const urlParams = new URLSearchParams(window.location.search)
-  return urlParams.get('id')
+  const raw = urlParams.get('id')
+  return isValidUuid(raw) ? raw : null
 }
 
 function mapParticipants(room: Room): Array<{ identity: string; name?: string | null; metadata?: string | null }> {
@@ -49,17 +56,15 @@ export function useSessionSync(roomName: string) {
       const canvasId = getCanvasIdFromUrl()
       canvasIdRef.current = canvasId
 
-      // If no canvas id yet, wait until it resolves to avoid creating null-canvas sessions
-      if (canvasId === null) {
-        return;
-      }
+      // If no valid canvas id, we still allow a room-only session (canvas_id = null)
 
       // Try to find existing
       let query = supabase
-        .from<CanvasSession>('canvas_sessions' as any)
+        .from('canvas_sessions' as any)
         .select('*')
         .eq('room_name', roomName)
-        .eq('canvas_id', canvasId)
+      // Use IS NULL for invalid/missing canvas ids to avoid 400 on uuid column
+      query = canvasId === null ? (query as any).is('canvas_id', null) : query.eq('canvas_id', canvasId)
 
       const { data: existing, error: selectErr } = await query
         .limit(1)
@@ -89,8 +94,7 @@ export function useSessionSync(roomName: string) {
 
       // Use upsert to avoid conflict on unique (room_name, canvas_id)
       const { data: created, error: insertErr } = await supabase
-        .from<CanvasSession>('canvas_sessions' as any)
-        // @ts-expect-error supabase types for upsert generics are noisy
+        .from('canvas_sessions' as any)
         .upsert(insertPayload as any, { onConflict: 'room_name,canvas_id' })
         .select('*')
         .single()
