@@ -65,6 +65,28 @@ export function TldrawSnapshotBroadcaster({ editor: propEditor }: Props) {
     return () => unsubscribe()
   }, [editor, bus])
 
+  // Send an initial snapshot shortly after mount so late joiners can hydrate
+  useEffect(() => {
+    if (!editor) return
+    const t = setTimeout(() => {
+      try {
+        const now = Date.now()
+        const snapshot = editor.getSnapshot()
+        lastSentRef.current = now
+        bus.send('tldraw', {
+          type: 'tldraw_snapshot',
+          data: snapshot,
+          timestamp: now,
+          source: 'client'
+        })
+        try {
+          window.dispatchEvent(new CustomEvent('tambo:sessionCanvasSaved', { detail: { snapshot } }))
+        } catch {}
+      } catch {}
+    }, 800)
+    return () => clearTimeout(t)
+  }, [editor, bus])
+
   return null
 }
 

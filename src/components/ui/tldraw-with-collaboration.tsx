@@ -22,6 +22,7 @@ import type { TamboShapeUtil, TamboShape } from "./tldraw-canvas";
 import { useRoomContext } from "@livekit/components-react";
 import { RoomEvent } from "livekit-client";
 import TldrawSnapshotBroadcaster from '@/components/TldrawSnapshotBroadcaster';
+import TldrawSnapshotReceiver from '@/components/TldrawSnapshotReceiver';
 
 interface TldrawWithCollaborationProps {
   onMount?: (editor: Editor) => void;
@@ -795,11 +796,15 @@ export function TldrawWithCollaboration({
         />
         {/* Broadcast TLDraw snapshots to LiveKit and persist to Supabase session */}
         <TldrawSnapshotBroadcaster />
+        {/* Receive TLDraw snapshots from LiveKit as a fallback when sync is degraded */}
+        <TldrawSnapshotReceiver />
       </ComponentStoreContext.Provider>
 
       {!isStoreReady && (
         <div className="absolute inset-0 flex items-center justify-center bg-gray-50 z-10 pointer-events-none select-none">
-          <div className="text-gray-500">Connecting to board…</div>
+          <div className="text-gray-500">
+            Connecting to board… If this hangs, we’ll fall back to live snapshots.
+          </div>
         </div>
       )}
     </div>
