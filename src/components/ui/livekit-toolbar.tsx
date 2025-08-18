@@ -130,11 +130,11 @@ const ParticipantControls: React.FC<ParticipantControlsProps> = ({
   const connectionQuality = useConnectionQualityIndicator(participant);
 
   return (
-    <div 
-      className="relative group"
-      onMouseEnter={() => setShowControls(true)}
-      onMouseLeave={() => setShowControls(false)}
-    >
+      <div
+        className="relative group touch-manipulation"
+        onPointerEnter={() => setShowControls(true)}
+        onPointerLeave={() => setShowControls(false)}
+      >
       {/* Participant Avatar/Video */}
       <div className="relative w-12 h-12 rounded-full overflow-hidden bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center">
         <span className="text-white text-sm font-semibold">

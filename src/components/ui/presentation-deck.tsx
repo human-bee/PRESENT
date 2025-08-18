@@ -667,11 +667,11 @@ export function PresentationDeck(props: PresentationDeckProps) {
       }`}
       style={{
         width: state.isFullscreen ? '100vw' : state.canvasSize.width,
-        height: state.isFullscreen ? '100vh' : state.canvasSize.height,
-        minWidth: '600px',
-        minHeight: '400px',
+        height: state.isFullscreen ? '100dvh' : state.canvasSize.height,
+        minWidth: state.isFullscreen ? '100%' : 'min(600px, 100%)',
+        minHeight: state.isFullscreen ? '100%' : 'min(400px, 100%)',
       }}
-      onMouseMove={handleMouseMove}
+      onPointerMove={handleMouseMove}
     >
       {/* Header */}
       <div className="bg-slate-900/95 backdrop-blur-sm border-b border-slate-700 px-6 py-3">
@@ -695,7 +695,10 @@ export function PresentationDeck(props: PresentationDeckProps) {
       <div className="flex h-[calc(100%-4rem)]">
         {/* Thumbnails sidebar */}
         {state.showThumbnails && (
-          <div className="w-32 bg-slate-900/50 border-r border-slate-700 p-2 overflow-y-auto">
+          <div
+            className="w-32 bg-slate-900/50 border-r border-slate-700 p-2 overflow-y-auto"
+            style={{ WebkitOverflowScrolling: 'touch' }}
+          >
             <div className="space-y-2">
               {props.slides.map((slide, index) => (
                 <SlideThumbnail

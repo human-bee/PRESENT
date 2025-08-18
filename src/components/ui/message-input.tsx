@@ -255,9 +255,9 @@ const MessageInputTextarea = ({
       onChange={handleChange}
       onKeyDown={handleKeyDown}
       className={cn(
-        "flex-1 p-3 rounded-t-lg bg-background text-foreground resize-none text-sm min-h-[82px] max-h-[40vh] focus:outline-none placeholder:text-muted-foreground/50",
-        className,
-      )}
+          'flex-1 p-3 rounded-t-lg bg-background text-foreground resize-none text-sm min-h-[82px] max-h-[40dvh] focus:outline-none placeholder:text-muted-foreground/50',
+          className,
+        )}
       disabled={isPending}
       placeholder={placeholder}
       aria-label="Chat Message Input"

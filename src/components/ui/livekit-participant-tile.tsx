@@ -386,26 +386,27 @@ function SingleParticipantTile({
   return (
     <div
       className={cn(
-        "relative bg-black border-2 border-gray-300 overflow-hidden transition-all duration-200",
+        "relative bg-black border-2 border-gray-300 overflow-hidden transition-all duration-200 touch-manipulation",
         agentState.isSpeaking && "border-green-400 shadow-lg shadow-green-400/25",
         state?.isMinimized && "!h-16"
       )}
-      style={{ 
-        width, 
-        height: state?.isMinimized ? 64 : height, 
-        borderRadius 
+      style={{
+        width,
+        height: state?.isMinimized ? 64 : height,
+        borderRadius
       }}
-      onMouseEnter={onEnter}
-      onMouseLeave={onLeave}
+      onPointerEnter={onEnter}
+      onPointerLeave={onLeave}
     >
       {/* Video Container */}
       {showVideo && !state?.isMinimized && videoTrackRef && !videoPublication?.isMuted && (
         <div className={cn("absolute inset-0 w-full h-full", isLocal && mirrorLocal && "[transform:scaleX(-1)]")}
              style={{ transformOrigin: 'center' }}>
-          <VideoTrack 
-            trackRef={videoTrackRef}
-            className={cn("w-full h-full bg-black", (fit === 'contain' ? 'object-contain' : 'object-cover'))}
-          />
+            <VideoTrack
+              trackRef={videoTrackRef}
+              playsInline
+              className={cn("w-full h-full bg-black", fit === 'contain' ? 'object-contain' : 'object-cover')}
+            />
         </div>
       )}
 
@@ -573,13 +574,15 @@ function SingleParticipantTile({
             role="dialog"
             aria-modal="true"
             onMouseDown={() => setOptionsOpen(false)}
+            onPointerDown={() => setOptionsOpen(false)}
           >
-            <div
-              className="bg-zinc-900 text-white w-[360px] max-w-[90vw] max-h-[85vh] overflow-auto rounded-xl p-4 border border-white/10 shadow-2xl"
-              onMouseDown={(e) => e.stopPropagation()}
-              onPointerDown={(e) => e.stopPropagation()}
-              onContextMenu={(e) => e.stopPropagation()}
-            >
+              <div
+                className="bg-zinc-900 text-white w-[360px] max-w-[90vw] max-h-[85dvh] overflow-auto rounded-xl p-4 border border-white/10 shadow-2xl"
+                style={{ WebkitOverflowScrolling: 'touch' }}
+                onMouseDown={(e) => e.stopPropagation()}
+                onPointerDown={(e) => e.stopPropagation()}
+                onContextMenu={(e) => e.stopPropagation()}
+              >
               <div className="flex items-center justify-between mb-3">
                 <div className="text-sm font-medium">Tile Options</div>
                 <button aria-label="Close" onClick={() => setOptionsOpen(false)} className="text-white/70 hover:text-white">✕</button>

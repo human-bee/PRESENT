@@ -129,6 +129,7 @@ export const ScrollableMessageContainer = React.forwardRef<
         "[&::-webkit-scrollbar:horizontal]:h-[4px]",
         className,
       )}
+      style={{ WebkitOverflowScrolling: 'touch' }}
       data-slot="scrollable-message-container"
       {...props}
     >
