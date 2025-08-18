@@ -6,7 +6,7 @@ import { z } from "zod";
 import { ExternalLink, CheckCircle, AlertTriangle, Info, Bookmark, BookmarkCheck, GripVertical, Upload } from "lucide-react";
 import { getRendererForResult } from "./research-renderers";
 import { useState, useEffect, useCallback } from "react";
-import { DndContext, PointerSensor, useSensor, useSensors, closestCenter } from "@dnd-kit/core";
+import { DndContext, PointerSensor, TouchSensor, useSensor, useSensors, closestCenter } from "@dnd-kit/core";
 import { arrayMove, SortableContext, verticalListSortingStrategy, useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { useDropzone } from "react-dropzone";
@@ -279,7 +279,7 @@ export function ResearchPanel({
   }, [customResults.length, results.length]);
 
   // DnD sensors
-  const sensors = useSensors(useSensor(PointerSensor));
+  const sensors = useSensors(useSensor(PointerSensor), useSensor(TouchSensor));
 
   const handleDragEnd = (event: any) => {
     const { active, over } = event;
