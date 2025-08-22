@@ -47,8 +47,14 @@ export function initializeMCPBridge() {
     // Return a promise that resolves when we get a response
     return new Promise((resolve, reject) => {
       const responseHandler = (e: any) => {
-        const { tool, result, error } = e.detail;
-        if (tool === toolName) {
+        const { tool, result, error, resolved } = e.detail;
+        const normalize = (s: string) => (s || '').toLowerCase().replace(/^mcp_/, '').trim();
+        const requested = normalize(toolName);
+        const responded = normalize(tool);
+        const resolvedKey = normalize(resolved || '');
+
+        // Match if the responded tool (or resolved key) matches requested (ignoring mcp_ prefix)
+        if (responded === requested || (!!resolvedKey && resolvedKey === requested)) {
           window.removeEventListener('tambo:mcpToolResponse', responseHandler);
           if (error) reject(error);
           else resolve(result);

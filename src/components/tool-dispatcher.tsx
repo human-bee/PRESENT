@@ -1067,7 +1067,7 @@ Please consider both the processed summary above and the original transcript con
           // If from component, send response via event
           if (isFromComponent) {
             window.dispatchEvent(new CustomEvent('tambo:mcpToolResponse', {
-              detail: { tool: toolName.replace('mcp_', ''), result, error: null, resolved: resolvedToolKey }
+              detail: { tool: toolName, result, error: null, resolved: resolvedToolKey }
             }));
           }
         } else {
@@ -1079,6 +1079,13 @@ Please consider both the processed summary above and the original transcript con
             status: 'SUCCESS',
             message: `MCP tool ${toolName} execution initiated via Tambo`,
           };
+
+          // Also notify component listeners that the request was initiated (no direct result)
+          if (isFromComponent) {
+            window.dispatchEvent(new CustomEvent('tambo:mcpToolResponse', {
+              detail: { tool: toolName, result, error: null, resolved: null }
+            }));
+          }
         }
       } else if (payload.tool === 'youtube_search') {
         // Handle YouTube search with smart filtering
