@@ -402,6 +402,23 @@ export default defineAgent({
     
     job.room.on('dataReceived', handleStateUpdate);
     
+    // Listen for tool execution results/errors from the ToolDispatcher
+    job.room.on('dataReceived', (payload: Uint8Array, participant?: any, _?: any, topic?: string) => {
+      try {
+        if (topic === 'tool_result' || topic === 'tool_error') {
+          const msg = JSON.parse(new TextDecoder().decode(payload));
+          console.log(`📨 [Agent] ${topic} received:`, {
+            toolCallId: msg.toolCallId || msg.id,
+            type: msg.type,
+            hasResult: !!msg.result,
+            error: msg.error || null,
+          });
+        }
+      } catch (err) {
+        console.warn('[Agent] Failed to parse tool result/error message', err);
+      }
+    });
+    
     // Set up periodic capability refresh (every 30 seconds)
     const capabilityRefreshInterval = setInterval(async () => {
       console.log('🔄 [Agent] Refreshing capabilities...');

@@ -350,6 +350,39 @@ export function ToolDispatcher({
     log('❌ Published tool error:', { toolCallId, error: errorEvent.error });
   }, [bus, log]);
 
+  // Direct MCP execution for component bridge and global dispatcher
+  const executeMCPToolDirect = useCallback(async (toolName: string, params: any) => {
+    const id = generateId();
+    const agentTool = toolName.startsWith('mcp_') ? toolName : `mcp_${toolName}`;
+    try {
+      const result = await systemRegistry.executeTool(
+        {
+          id,
+          name: agentTool,
+          args: params,
+          origin: 'component-bridge',
+        },
+        { tamboRegistry: toolRegistry }
+      );
+      await publishToolResult(id, result);
+      return result;
+    } catch (err: any) {
+      await publishToolError(id, err);
+      throw err;
+    }
+  }, [toolRegistry, publishToolResult, publishToolError]);
+
+  // Expose a minimal global dispatcher for components to short-circuit the DOM event path
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    (window as any).__tambo_tool_dispatcher = {
+      executeMCPTool: (toolName: string, params: any) => executeMCPToolDirect(toolName, params),
+    };
+    return () => {
+      try { delete (window as any).__tambo_tool_dispatcher; } catch {}
+    };
+  }, [executeMCPToolDirect]);
+
   // Helper to send message through Tambo
   const sendTamboMessage = useCallback(async (message: string) => {
     log('📤 [ToolDispatcher] Sending message to Tambo:', message);
@@ -1213,33 +1246,6 @@ Please consider both the processed summary above and the original transcript con
     });
     return off;
   }, [bus, executeToolCall, log]);
-
-  // Handle MCP tool requests from components
-  useEffect(() => {
-    const handleMCPRequest = (event: Event) => {
-      const customEvent = event as CustomEvent;
-      const { tool, params } = customEvent.detail;
-      log('🌉 [MCP Bridge] Component requesting MCP tool:', tool, params);
-      
-      // Execute through our normal flow
-      const toolCallEvent: ToolCallEvent = {
-        id: generateId(),
-        roomId: room?.name || 'component-request',
-        type: 'tool_call',
-        payload: {
-          tool: tool.startsWith('mcp_') ? tool : `mcp_${tool}`,
-          params: { ...params, origin: 'component-subagent' }
-        },
-        timestamp: Date.now(),
-        source: 'system'
-      };
-      
-      executeToolCall(toolCallEvent);
-    };
-    
-    window.addEventListener('tambo:executeMCPTool', handleMCPRequest);
-    return () => window.removeEventListener('tambo:executeMCPTool', handleMCPRequest);
-  }, [log, executeToolCall, room?.name]);
 
   // Clean up old pending tools
   useEffect(() => {

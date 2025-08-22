@@ -86,7 +86,7 @@
     "postcss": "^8.5.3",
     "tailwind-merge": "^3.0.2",
     "tailwindcss": "^4",
-    "ts-jest": "^29.3.4",
+    "ts-jest": "^29.4.1",
     "tsx": "^4.19.4",
     "typescript": "^5"
   },
