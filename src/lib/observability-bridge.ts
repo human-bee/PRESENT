@@ -14,8 +14,8 @@ const DEBUG_OBSERVABILITY = process.env.NEXT_PUBLIC_TAMBO_DEBUG === 'true';
 export interface ToolCallEvent {
   id: string;
   timestamp: number;
-  type: 'tool_call' | 'tool_result' | 'tool_error' | 'decision';
-  source: 'voice' | 'browser' | 'agent' | 'dispatcher';
+  type: 'tool_call' | 'tool_result' | 'tool_error' | 'decision' | 'resolve' | 'mcp_ready' | 'ui_mount';
+  source: 'voice' | 'browser' | 'agent' | 'dispatcher' | 'ui' | 'system';
   tool?: string;
   params?: Record<string, unknown>;
   result?: unknown;
@@ -72,74 +72,65 @@ export class ObservabilityBridge {
       this.dataQueue.push(data);
       if (!this.queueTimer) {
         this.queueTimer = setTimeout(() => {
-          const packets = this.dataQueue;
-          this.dataQueue = [];
+          const batch = this.dataQueue.splice(0, this.dataQueue.length);
           this.queueTimer = null;
-          packets.forEach((pkt) => this.processDataPacket(pkt));
-        }, DEBUG_OBSERVABILITY ? 20 : 100); // quicker flush when debugging
-      }
-    });
-
-    // Listen for SystemRegistry state changes
-    systemRegistry.onState((envelope) => {
-      if (envelope.kind === 'tool_result' || envelope.kind === 'tool_error') {
-        this.trackSystemRegistryEvent(envelope);
+          for (const pkt of batch) this.processDataPacket(pkt);
+        }, 25);
       }
     });
   }
 
   private setupConsoleLogging() {
-    // Enhanced console logging with color coding
-    this.onEvent((event) => {
-      const timestamp = new Date(event.timestamp).toISOString();
-      const colors = {
-        tool_call: '#2563eb',     // Blue
-        tool_result: '#16a34a',   // Green  
-        tool_error: '#dc2626',    // Red
-        decision: '#7c3aed'       // Purple
-      };
-      
-      const color = colors[event.type] || '#6b7280';
-      const icon = {
-        tool_call: '🔧',
-        tool_result: '✅',
-        tool_error: '❌',
-        decision: '🧠'
-      }[event.type] || '📊';
-      
-      console.groupCollapsed(
-        `%c${icon} [${event.source.toUpperCase()}] ${event.type.toUpperCase()}`,
-        `color: ${color}; font-weight: bold;`
-      );
-      
-      console.log(`%cTimestamp: ${timestamp}`, 'color: #6b7280;');
-      console.log(`%cID: ${event.id}`, 'color: #6b7280;');
-      
-      if (event.tool) {
-        console.log(`%cTool: ${event.tool}`, 'color: #059669;');
-      }
-      
-      if (event.params) {
-        console.log(`%cParams:`, 'color: #0891b2;', event.params);
-      }
-      
-      if (event.result) {
-        console.log(`%cResult:`, 'color: #16a34a;', event.result);
-      }
-      
-      if (event.error) {
-        console.log(`%cError: ${event.error}`, 'color: #dc2626;');
-      }
-      
-      if (event.duration) {
-        console.log(`%cDuration: ${event.duration}ms`, 'color: #7c3aed;');
-      }
-      
-      if (event.context) {
-        console.log(`%cContext:`, 'color: #ea580c;', event.context);
-      }
-      
-      console.groupEnd();
+    this.on((event) => {
+      try {
+        const symbol = event.type === 'tool_call' ? '➡️' : event.type === 'tool_result' ? '✅' : event.type === 'tool_error' ? '❌' : '📍';
+        // eslint-disable-next-line no-console
+        console.log(symbol, `[Observability] ${event.type}`, event);
+      } catch {}
+    });
+  }
+
+  private addEvent(event: ToolCallEvent) {
+    this.events.push(event);
+    if (this.events.length > this.maxEvents) this.events.shift();
+    this.metrics.recentEvents = this.events.slice(-20);
+  }
+
+  private updateMetrics(event: ToolCallEvent) {
+    // Basic counters
+    this.metrics.toolCallsByType[event.type] = (this.metrics.toolCallsByType[event.type] || 0) + 1;
+    this.metrics.toolCallsBySource[event.source] = (this.metrics.toolCallsBySource[event.source] || 0) + 1;
+
+    if (event.type === 'tool_call') this.metrics.totalToolCalls += 1;
+    if (event.type === 'tool_result') this.metrics.successfulToolCalls += 1;
+    if (event.type === 'tool_error') this.metrics.failedToolCalls += 1;
+
+    // Update execution time average when a tool_result includes a duration
+    if (typeof event.duration === 'number' && !Number.isNaN(event.duration)) {
+      const prev = this.metrics.averageExecutionTime;
+      const n = this.metrics.successfulToolCalls;
+      this.metrics.averageExecutionTime = prev + (event.duration - prev) / Math.max(1, n);
+    }
+  }
+
+  on(listener: (event: ToolCallEvent) => void) {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
+  }
+
+  logSummary() {
+    this.logger.log('📊', {
+      total: this.metrics.totalToolCalls,
+      ok: this.metrics.successfulToolCalls,
+      err: this.metrics.failedToolCalls,
+      avgMs: this.metrics.averageExecutionTime,
+      byType: this.metrics.toolCallsByType,
+    });
+  }
+
+  private notify(event: ToolCallEvent) {
+    this.listeners.forEach((l) => {
+      try { l(event); } catch {}
     });
   }
 
@@ -165,29 +156,24 @@ export class ObservabilityBridge {
     
     this.addEvent(event);
     this.updateMetrics(event);
+    this.notify(event);
   }
 
   private trackToolResult(message: any) {
+    const started = this.pendingToolCalls.get(message.toolCallId)?.startTime || Date.now();
     const event: ToolCallEvent = {
       id: message.id || message.toolCallId,
       timestamp: message.timestamp || Date.now(),
       type: 'tool_result',
-      source: 'browser',
+      source: message.source || 'dispatcher',
+      tool: message.tool || this.pendingToolCalls.get(message.toolCallId)?.event.tool,
       result: message.result,
-      duration: message.executionTime
+      duration: (message.executionTime as number) ?? (Date.now() - started)
     };
-    
-    // Calculate duration if we have the original tool call
-    const pending = this.pendingToolCalls.get(event.id);
-    if (pending) {
-      event.duration = event.timestamp - pending.startTime;
-      event.tool = pending.event.tool;
-      event.params = pending.event.params;
-      this.pendingToolCalls.delete(event.id);
-    }
-    
     this.addEvent(event);
     this.updateMetrics(event);
+    this.notify(event);
+    this.pendingToolCalls.delete(message.toolCallId);
   }
 
   private trackToolError(message: any) {
@@ -195,21 +181,14 @@ export class ObservabilityBridge {
       id: message.id || message.toolCallId,
       timestamp: message.timestamp || Date.now(),
       type: 'tool_error',
-      source: 'browser',
+      source: message.source || 'dispatcher',
+      tool: message.tool,
       error: message.error
     };
-    
-    // Calculate duration if we have the original tool call
-    const pending = this.pendingToolCalls.get(event.id);
-    if (pending) {
-      event.duration = event.timestamp - pending.startTime;
-      event.tool = pending.event.tool;
-      event.params = pending.event.params;
-      this.pendingToolCalls.delete(event.id);
-    }
-    
     this.addEvent(event);
     this.updateMetrics(event);
+    this.notify(event);
+    this.pendingToolCalls.delete(message.toolCallId);
   }
 
   private trackDecision(message: any) {
@@ -217,114 +196,30 @@ export class ObservabilityBridge {
       id: message.id,
       timestamp: message.timestamp || Date.now(),
       type: 'decision',
-      source: 'agent',
-      context: {
-        decision: message.payload?.decision,
-        participantId: message.payload?.participantId,
-        originalText: message.payload?.originalText
-      }
+      source: message.source || 'agent',
+      intent: message.intent,
+      reasoning: message.reasoning,
+      context: message.context
     };
-    
     this.addEvent(event);
     this.updateMetrics(event);
+    this.notify(event);
   }
 
-  private trackSystemRegistryEvent(envelope: any) {
+  private trackMarker(type: ToolCallEvent['type'], message: any) {
     const event: ToolCallEvent = {
-      id: envelope.id,
-      timestamp: envelope.ts,
-      type: envelope.kind === 'tool_result' ? 'tool_result' : 'tool_error',
-      source: envelope.origin || 'system',
-      result: envelope.kind === 'tool_result' ? envelope.payload.result : undefined,
-      error: envelope.kind === 'tool_error' ? envelope.payload.error : undefined
+      id: message.id || message.requestId || `${type}-${Date.now()}`,
+      timestamp: message.timestamp || Date.now(),
+      type,
+      source: message.source || (type === 'ui_mount' ? 'ui' : 'dispatcher'),
+      tool: message.tool,
+      context: message.context,
+      result: message.result,
+      duration: message.duration,
     };
-    
     this.addEvent(event);
     this.updateMetrics(event);
-  }
-
-  private addEvent(event: ToolCallEvent) {
-    this.events.push(event);
-    
-    // Keep only the most recent events
-    if (this.events.length > this.maxEvents) {
-      this.events = this.events.slice(-this.maxEvents);
-    }
-    
-    // Update recent events in metrics
-    this.metrics.recentEvents = this.events.slice(-10);
-    
-    // Notify listeners
-    this.listeners.forEach(listener => listener(event));
-  }
-
-  private updateMetrics(event: ToolCallEvent) {
-    this.metrics.totalToolCalls++;
-    
-    if (event.type === 'tool_result') {
-      this.metrics.successfulToolCalls++;
-    } else if (event.type === 'tool_error') {
-      this.metrics.failedToolCalls++;
-    }
-    
-    // Update tool call counts by type
-    if (event.tool) {
-      this.metrics.toolCallsByType[event.tool] = (this.metrics.toolCallsByType[event.tool] || 0) + 1;
-    }
-    
-    // Update tool call counts by source
-    this.metrics.toolCallsBySource[event.source] = (this.metrics.toolCallsBySource[event.source] || 0) + 1;
-    
-    // Update average execution time
-    if (event.duration) {
-      const totalDuration = this.metrics.averageExecutionTime * (this.metrics.successfulToolCalls + this.metrics.failedToolCalls - 1);
-      this.metrics.averageExecutionTime = (totalDuration + event.duration) / (this.metrics.successfulToolCalls + this.metrics.failedToolCalls);
-    }
-  }
-
-  // Public API
-  onEvent(listener: (event: ToolCallEvent) => void): () => void {
-    this.listeners.add(listener);
-    return () => this.listeners.delete(listener);
-  }
-
-  getMetrics(): ObservabilityMetrics {
-    return { ...this.metrics };
-  }
-
-  getEvents(): ToolCallEvent[] {
-    return [...this.events];
-  }
-
-  getEventsByTool(tool: string): ToolCallEvent[] {
-    return this.events.filter(event => event.tool === tool);
-  }
-
-  getEventsBySource(source: string): ToolCallEvent[] {
-    return this.events.filter(event => event.source === source);
-  }
-
-  getRecentErrors(): ToolCallEvent[] {
-    return this.events.filter(event => event.type === 'tool_error').slice(-5);
-  }
-
-  getPendingToolCalls(): string[] {
-    return Array.from(this.pendingToolCalls.keys());
-  }
-
-  // Debug helpers
-  logSummary() {
-    // Only log if there are issues or many pending calls
-    const recentErrors = this.getRecentErrors().length;
-    const pendingCalls = this.getPendingToolCalls().length;
-    
-    if (recentErrors > 0 || pendingCalls > 3) {
-      console.log(`🔍 ${this.metrics.totalToolCalls} calls, ${recentErrors} errors, ${pendingCalls} pending`);
-    }
-  }
-
-  exportEvents(): string {
-    return JSON.stringify(this.events, null, 2);
+    this.notify(event);
   }
 
   clear() {
@@ -360,6 +255,11 @@ export class ObservabilityBridge {
           break;
         case 'decision':
           this.trackDecision(message);
+          break;
+        case 'resolve':
+        case 'mcp_ready':
+        case 'ui_mount':
+          this.trackMarker(message.type, message);
           break;
         default:
           break;
