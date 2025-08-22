@@ -12,6 +12,8 @@ import { components } from "@/lib/tambo";
 import { TamboProvider } from "@tambo-ai/react";
 import { EnhancedMcpProvider } from "@/components/ui/enhanced-mcp-provider";
 import { useEffect } from "react";
+import { ToolDispatcher } from '@/components/tool-dispatcher';
+import { flags } from '@/lib/feature-flags';
 
 // Suppress development warnings for cleaner console
 suppressDevelopmentWarnings();
@@ -48,12 +50,24 @@ export default function Home() {
         {enableMcp ? (
           <EnhancedMcpProvider mcpServers={mcpServers}>
             <div className="flex-1 overflow-hidden">
-              <MessageThreadFull contextKey="tambo-template" />
+              {flags.bypassCloudChatThread ? (
+                <ToolDispatcher contextKey="tambo-template" enableLogging={true}>
+                  <MessageThreadFull contextKey="tambo-template" />
+                </ToolDispatcher>
+              ) : (
+                <MessageThreadFull contextKey="tambo-template" />
+              )}
             </div>
           </EnhancedMcpProvider>
         ) : (
           <div className="flex-1 overflow-hidden">
-            <MessageThreadFull contextKey="tambo-template" />
+            {flags.bypassCloudChatThread ? (
+              <ToolDispatcher contextKey="tambo-template" enableLogging={true}>
+                <MessageThreadFull contextKey="tambo-template" />
+              </ToolDispatcher>
+            ) : (
+              <MessageThreadFull contextKey="tambo-template" />
+            )}
           </div>
         )}
       </TamboProvider>

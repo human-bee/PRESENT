@@ -18,7 +18,7 @@
  * 2. This dispatcher receives and validates
  * 3. Routes through SystemRegistry.executeTool()
  * 4. Executes via Tambo/MCP/built-in handler
- * 5. Publishes tool_result back to Voice Agent
+ * 5. Publishes tool_result back to the Voice Agent
  * 
  * Key Features:
  * - Circuit breaker prevents duplicate executions
@@ -45,9 +45,10 @@ import { createLogger } from '../lib/utils';
 import { CircuitBreaker } from '../lib/circuit-breaker';
 import { systemRegistry, syncMcpToolsToRegistry } from '../lib/system-registry';
 import { createObservabilityBridge } from '@/lib/observability-bridge';
-import { initializeMCPBridge, registerMCPTools } from '../lib/mcp-bridge';
+import { initializeMCPBridge, registerMCPTools, waitForMcpReady } from '../lib/mcp-bridge';
 import { ComponentRegistry } from '@/lib/component-registry';
 import { nanoid } from 'nanoid';
+import { flags } from '@/lib/feature-flags';
 
 // Generate unique IDs without external dependency
 const generateId = () => `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
@@ -156,6 +157,7 @@ export function ToolDispatcher({
   const { toolRegistry = {} } = useValidatedTambo();
   const pendingById = useRef(new Map<string, PendingTool>());
   const [isProcessing, setIsProcessing] = useState(false);
+  const [mcpReady, setMcpReady] = useState(false);
   
   // Runtime flag: enable fast cadences only when debugging
   const IS_DEBUG = process.env.NEXT_PUBLIC_TAMBO_DEBUG === 'true';
@@ -175,8 +177,31 @@ export function ToolDispatcher({
   // Ensure MCP bridge is initialized even before tools are discovered
   useEffect(() => {
     try {
-      initializeMCPBridge();
+      if (flags.mcpEarlyInitEnabled) {
+        initializeMCPBridge();
+      }
     } catch {}
+  }, [room]);
+
+  // Expose a minimal MCP executor for components (used by initializeMCPBridge path 1)
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      window.__tambo_tool_dispatcher = {
+        executeMCPTool: async (toolName: string, params: any) => {
+          const name = toolName.startsWith('mcp_') ? toolName : `mcp_${toolName}`;
+          const event: ToolCallEvent = {
+            id: generateId(),
+            roomId: room?.name || 'component',
+            type: 'tool_call',
+            payload: { tool: name, params: { ...params, origin: 'component-subagent' } },
+            timestamp: Date.now(),
+            source: 'system',
+          };
+          await executeToolCall(event);
+          return { status: 'SENT' };
+        },
+      };
+    }
   }, [room]);
 
   // Set up enhanced observability logging
@@ -191,20 +216,13 @@ export function ToolDispatcher({
     return () => clearInterval(interval);
   }, [observabilityBridge]);
   
-  // Handle MCP tool requests from components (moved after executeToolCall is defined)
-  
-  // Sync MCP tools to system registry when they change
+  // Handle MCP tool discovery sync
   useEffect(() => {
     if (!toolRegistry) return;
     
-    // Extract all tools from registry
     const allTools: Array<{name: string, description: string, originalName?: string}> = [];
     
-    // Use imported validation functions
-    
-    // Handle both Map-style and object registries
     if (toolRegistry instanceof Map) {
-      // Map-style registry
       toolRegistry.forEach((tool: any, name: string) => {
         if (isValidToolName(name)) {
           allTools.push({ 
@@ -212,7 +230,6 @@ export function ToolDispatcher({
             description: tool.description || tool.name || name 
           });
         } else {
-          // Sanitize invalid names instead of skipping
           const sanitized = sanitizeToolName(name);
           console.warn(`🔧 [ToolDispatcher] Sanitized tool name: "${name}" → "${sanitized}"`);
           allTools.push({ 
@@ -223,7 +240,6 @@ export function ToolDispatcher({
         }
       });
     } else if (typeof toolRegistry === 'object') {
-      // Object-style registry
       Object.entries(toolRegistry).forEach(([name, tool]: [string, any]) => {
         if (isValidToolName(name)) {
           allTools.push({ 
@@ -231,7 +247,6 @@ export function ToolDispatcher({
             description: tool.description || tool.name || name 
           });
         } else {
-          // Sanitize invalid names instead of skipping
           const sanitized = sanitizeToolName(name);
           console.warn(`🔧 [ToolDispatcher] Sanitized tool name: "${name}" → "${sanitized}"`);
           allTools.push({ 
@@ -243,44 +258,47 @@ export function ToolDispatcher({
       });
     }
     
-    // Sync to system registry
     if (allTools.length > 0) {
       log('🔄 [ToolDispatcher] Syncing tools to system registry:', allTools.length, 'tools');
-      
-      // Debug: Log all tool names to help identify invalid ones
       if (enableLogging) {
         log('🔍 [ToolDispatcher] Valid tool names:', allTools.map(t => t.name).join(', '));
       }
       syncMcpToolsToRegistry(allTools);
-      
-      // Initialize MCP bridge so components can call MCP tools directly
-      initializeMCPBridge();
-      
-      // Register MCP tools for component access
+      if (flags.mcpEarlyInitEnabled) {
+        initializeMCPBridge();
+      }
       const mcpTools: Record<string, any> = {};
       allTools.forEach(tool => {
         if (tool.name.startsWith('mcp_')) {
-          mcpTools[tool.name] = toolRegistry.get?.(tool.name) || toolRegistry[tool.name];
+          mcpTools[tool.name] = (toolRegistry as any).get?.(tool.name) || (toolRegistry as any)[tool.name];
         }
       });
       if (Object.keys(mcpTools).length > 0) {
         registerMCPTools(mcpTools);
         log('🌉 [ToolDispatcher] MCP Bridge initialized with', Object.keys(mcpTools).length, 'MCP tools');
+        setMcpReady(true);
       }
     }
   }, [toolRegistry, log]);
   
   // Use circuit breaker for duplicate detection
   const circuitBreaker = useRef(new CircuitBreaker({
-    duplicateWindow: 3000,     // 3 seconds for duplicate tool calls
-    completedWindow: 30000,    // 30 seconds for completed calls
-    cooldownWindow: 5000       // 5 seconds general cooldown
+    duplicateWindow: 3000,
+    completedWindow: 30000,
+    cooldownWindow: 5000
   }));
   
   // Use room name as context key to ensure thread/canvas sync
   const effectiveContextKey = propContextKey || roomContextKey || room?.name || 'canvas';
 
   const bus = createLiveKitBus(room);
+
+  // Emit MCP ready marker when tools are registered
+  useEffect(() => {
+    if (mcpReady) {
+      try { bus.send('mcp_ready', { type: 'mcp_ready', timestamp: Date.now(), source: 'dispatcher' }); } catch {}
+    }
+  }, [mcpReady]);
   
   // Expose system capabilities via data channel for agent to query
   useEffect(() => {
@@ -318,7 +336,7 @@ export function ToolDispatcher({
       room.off('dataReceived', handleCapabilityQuery);
     };
   }, [room, bus, log]);
-
+  
   // Publish tool result back to agent
   const publishToolResult = useCallback(async (toolCallId: string, result: unknown) => {
     const resultEvent: ToolResultEvent = {
@@ -353,12 +371,10 @@ export function ToolDispatcher({
   // Helper to send message through Tambo
   const sendTamboMessage = useCallback(async (message: string) => {
     log('📤 [ToolDispatcher] Sending message to Tambo:', message);
-    
     await sendThreadMessage(message, {
       contextKey: effectiveContextKey,
       streamResponse: true,
     });
-    
     log('✅ [ToolDispatcher] Message sent successfully');
   }, [sendThreadMessage, effectiveContextKey, log]);
 
@@ -746,35 +762,35 @@ Generate a ${componentType} component based on the transcript content and compon
     }
   }, [log, toolRegistry, sendTamboMessage]);
 
-  // Execute tool call
+  // Execute tool call with local-first policy
   const executeToolCall = useCallback(async (event: ToolCallEvent) => {
     const { id, payload } = event;
-    
-    // Check for duplicate by ID
+
+    if (flags.toolDispatchKillSwitch) {
+      log('🛑 [ToolDispatcher] Kill switch active; skipping local execution');
+      // In kill switch mode, optionally forward to cloud here if available.
+      return;
+    }
+
+    // Dedupe
     if (pendingById.current.has(id)) {
       log('⚠️ Duplicate tool call ignored:', id);
       return;
     }
-    
-    // ALSO check for duplicate by tool + params combination (fixes multiple AI assistant messages)
     const toolSignature = JSON.stringify({ tool: payload.tool, params: payload.params });
     const existingCall = Array.from(pendingById.current.values()).find(
       pending => JSON.stringify({ tool: pending.tool, params: pending.params }) === toolSignature &&
-      (Date.now() - pending.timestamp) < 3000 // Within 3 seconds
+      (Date.now() - pending.timestamp) < 3000
     );
-    
     if (existingCall) {
       log('🚫 Duplicate tool+params combination ignored:', payload.tool, 'within 3 seconds');
       return;
     }
-    
-    // Check if this exact call was recently completed
     if (circuitBreaker.current.isRecentlyCompleted(toolSignature)) {
       log('🛑 Rejected repeating COMPLETED tool call within 30s window:', payload.tool);
       return;
     }
-    
-    // Track pending execution
+
     const pendingTool: PendingTool = {
       id,
       timestamp: Date.now(),
@@ -783,44 +799,57 @@ Generate a ${componentType} component based on the transcript content and compon
       params: payload.params,
     };
     pendingById.current.set(id, pendingTool);
-    
+
     try {
       setIsProcessing(true);
       pendingTool.status = 'executing';
       log('🔧 Executing tool:', payload.tool, payload.params);
-      
-      // Route to appropriate handler – prefer new unified registry flow
-      let result: unknown;
+
+      // Emit resolve marker with routing info for observability
+      try {
+        const routing = systemRegistry.getToolRouting(payload.tool);
+        bus.send('resolve', {
+          type: 'resolve',
+          id,
+          timestamp: Date.now(),
+          source: 'dispatcher',
+          tool: payload.tool,
+          context: { mcpToolName: routing?.mcpToolName }
+        });
+      } catch {}
+
+      // Gate local execution on MCP readiness when calling mcp_* tools
+      if (payload.tool.startsWith('mcp_') && flags.mcpEarlyInitEnabled) {
+        const ok = await waitForMcpReady(flags.mcpReadyTimeoutMs);
+        if (!ok) {
+          log('⏱️ [ToolDispatcher] MCP not ready within timeout; consider fallback');
+        }
+      }
 
       // 0️⃣ Unified execution via SystemRegistry – will resolve to Tambo/MCP
       try {
-        result = await systemRegistry.executeTool(
-          {
-            id,
-            name: payload.tool,
-            args: payload.params,
-            origin: 'browser',
-          },
-          { tamboRegistry: toolRegistry }
-        );
-
-        await publishToolResult(id, result);
-        pendingTool.status = 'completed';
-        circuitBreaker.current.markCompleted(JSON.stringify({ tool: payload.tool, params: payload.params }));
-        return; // unified path handled
+        if (flags.localToolRoutingEnabled) {
+          const result = await systemRegistry.executeTool(
+            {
+              id,
+              name: payload.tool,
+              args: payload.params,
+              origin: 'browser',
+            },
+            { tamboRegistry: toolRegistry }
+          );
+          await publishToolResult(id, result);
+          pendingTool.status = 'completed';
+          circuitBreaker.current.markCompleted(JSON.stringify({ tool: payload.tool, params: payload.params }));
+          return;
+        }
       } catch (registryErr) {
-        // Fallback to legacy built-in handling below if registry couldn't execute
         log('ℹ️ [ToolDispatcher] Unified registry execution failed, falling back. Reason:', registryErr);
       }
 
-      // --- Legacy fallbacks kept for backwards-compat ---
-
-      const tamboTool = (() => {
-        const reg: any = toolRegistry;
-        if (typeof reg?.get === 'function') return reg.get(payload.tool);
-        return reg?.[payload.tool];
-      })();
-
+      // Legacy and specific handlers (unchanged logic below)
+      let result: unknown;
+      
       if (payload.tool === 'ui_update' || payload.tool === 'list_components') {
         // Call the actual Tambo tools to get proper error messages!
         log('🔧 [ToolDispatcher] Calling Tambo tool:', payload.tool);
@@ -1039,29 +1068,48 @@ Please consider both the processed summary above and the original transcript con
         const params = payload.params;
         
         // Check if it's from a component sub-agent
-        const isFromComponent = params.origin === 'component-subagent';
+        const isFromComponent = (params as any).origin === 'component-subagent';
         
-        // Try to execute directly if we have the tool (with fuzzy aliasing)
-        let mcpTool = toolRegistry.get?.(toolName) || toolRegistry[toolName];
+        // Try to execute directly if we have the tool (with deterministic fuzzy aliasing)
+        let mcpTool = (toolRegistry as any).get?.(toolName) || (toolRegistry as any)[toolName];
         let resolvedToolKey: string | null = mcpTool ? toolName : null;
 
         if (!mcpTool) {
           const normalize = (s: string) => s.toLowerCase().replace(/^mcp_/, '').replace(/[^a-z0-9]/g, '');
           const requested = normalize(toolName);
           const entries: Array<[string, any]> = toolRegistry instanceof Map
-            ? Array.from(toolRegistry.entries())
+            ? Array.from((toolRegistry as any).entries())
             : Object.entries(toolRegistry as Record<string, any>);
-          for (const [name, tool] of entries) {
-            if (!name.startsWith('mcp_')) continue;
-            if (normalize(name).includes(requested)) {
-              mcpTool = tool; resolvedToolKey = name; break;
-            }
+
+          const candidates = entries
+            .filter(([name]) => name.startsWith('mcp_'))
+            .map(([name, tool]) => {
+              const n = normalize(name);
+              let score = 0;
+              if (n === requested) score = 1000;
+              else if (n.startsWith(requested) || requested.startsWith(n)) score = 800;
+              else if (n.includes(requested)) score = 600;
+              else {
+                // Simple character overlap score as a cheap proxy
+                const a = new Set(n.split(''));
+                const b = new Set(requested.split(''));
+                const inter = Array.from(a).filter(ch => b.has(ch)).length;
+                score = 100 + inter;
+              }
+              return { name, tool, score, normalized: n };
+            })
+            .sort((a, b) => b.score - a.score || a.normalized.localeCompare(b.normalized));
+
+          const best = candidates[0];
+          if (best && best.score >= 600) {
+            mcpTool = best.tool; resolvedToolKey = best.name;
+            log('🔎 [ToolDispatcher] Fuzzy resolved MCP tool:', toolName, '→', resolvedToolKey, '(score:', best.score, ')');
           }
         }
 
-        if (mcpTool && (mcpTool.tool || mcpTool.execute)) {
+        if (mcpTool && ((mcpTool as any).tool || (mcpTool as any).execute)) {
           log('🔧 [ToolDispatcher] Executing MCP tool directly:', toolName);
-          const exec = mcpTool.tool || mcpTool.execute;
+          const exec = (mcpTool as any).tool || (mcpTool as any).execute;
           result = await exec(params);
           
           // If from component, send response via event
@@ -1198,7 +1246,7 @@ Please consider both the processed summary above and the original transcript con
     } finally {
       setIsProcessing(false);
     }
-  }, [sendTamboMessage, publishToolResult, publishToolError, log]);
+  }, [sendTamboMessage, publishToolResult, publishToolError, log, mcpReady, bus]);
 
   // Subscribe via bus to tool_call events
   useEffect(() => {

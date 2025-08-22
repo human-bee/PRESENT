@@ -55,6 +55,8 @@ import { createShapeId } from 'tldraw';
 import { components } from '@/lib/tambo';
 import { calculateInitialSize } from '@/lib/component-sizing'; // Add import for dynamic sizing
 import { CanvasLiveKitContext } from './livekit-room-connector';
+import { useRoomContext } from '@livekit/components-react';
+import { createLiveKitBus } from '../../lib/livekit-bus';
 
 // Dynamic imports for heavy tldraw components - only load when needed
 
@@ -122,6 +124,8 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
   const [editor, setEditor] = useState<Editor | null>(null);
   const previousThreadId = useRef<string | null>(null);
   const livekitCtx = React.useContext(CanvasLiveKitContext);
+  const room = useRoomContext();
+  const bus = createLiveKitBus(room);
   
   // Component toolbox toggle - creates toolbox shape on canvas
   const toggleComponentToolbox = useCallback(() => {
@@ -491,6 +495,9 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
             }
         }
         addComponentToCanvas(event.detail.messageId, node, inferredName);
+        try {
+          bus.send('ui_mount', { type: 'ui_mount', id: event.detail.messageId, timestamp: Date.now(), source: 'ui', context: { name: inferredName } });
+        } catch {}
       } catch (error) {
         console.error("Failed to add component to canvas from event:", error);
       }
@@ -507,7 +514,7 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
         handleShowComponent as EventListener,
       );
     };
-  }, [addComponentToCanvas]);
+  }, [addComponentToCanvas, bus]);
 
   // Drain any queued components once editor is ready
   useEffect(() => {
@@ -517,9 +524,10 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
     pendingComponentsRef.current = [];
     queued.forEach(({ messageId, node, name }) => {
       addComponentToCanvas(messageId, node, name);
+      try { bus.send('ui_mount', { type: 'ui_mount', id: messageId, timestamp: Date.now(), source: 'ui', context: { name } }); } catch {}
       console.log('▶️ [CanvasSpace] Rendered queued component:', name || 'component');
     });
-  }, [editor, addComponentToCanvas]);
+  }, [editor, addComponentToCanvas, bus]);
 
   // On first editor ready, reconcile with ComponentRegistry in case events were missed
   useEffect(() => {

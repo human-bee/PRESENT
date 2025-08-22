@@ -628,6 +628,11 @@ export const generateUiComponentTool: TamboTool = {
             },
           })
         );
+        try {
+          // best-effort emission for observability consumers
+          const evt = new CustomEvent('livekit:bus', { detail: { topic: 'ui_mount', payload: { type: 'ui_mount', id: messageId, timestamp: Date.now(), source: 'ui', context: { name: componentType } } } });
+          window.dispatchEvent(evt);
+        } catch {}
       } catch {
         // Fallback to plain object payload if React.createElement isn't available
         window.dispatchEvent(
@@ -638,6 +643,10 @@ export const generateUiComponentTool: TamboTool = {
             },
           })
         );
+        try {
+          const evt = new CustomEvent('livekit:bus', { detail: { topic: 'ui_mount', payload: { type: 'ui_mount', id: messageId, timestamp: Date.now(), source: 'ui', context: { name: componentType } } } });
+          window.dispatchEvent(evt);
+        } catch {}
       }
     }
 
