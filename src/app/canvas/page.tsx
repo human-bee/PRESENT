@@ -249,7 +249,7 @@ export default function Canvas() {
   }
 
   return (
-    <div className="h-screen w-screen relative overflow-hidden">
+    <div className="ios-vh w-screen relative overflow-hidden safe-area-padded">
       {/* User Navigation - positioned top right, canvas persistence is in tldraw toolbar */}
       {/* Removed - now in main menu */}
 
@@ -275,27 +275,30 @@ export default function Canvas() {
                 <CanvasLiveKitContext.Provider value={roomState}>
                 {/* Full-screen Canvas Space */}
                 <CanvasSpace
-                  className="absolute inset-0 w-full h-full"
+                  className="absolute inset-0 w-full h-full ios-vh"
                   onTranscriptToggle={toggleTranscript}
                 />
 
                 <SessionSync roomName={roomName} />
 
-                {/* Direct LiveKit Room Connector - positioned bottom left to avoid overlap */}
-                <div className="absolute bottom-4 left-4 z-50">
-                  <LivekitRoomConnector 
-                    roomName={roomName}
-                    userName={user.user_metadata?.full_name || "Canvas User"}
-                    autoConnect={false}
-                  />
-                </div>
+                {/* Optional LiveKit Room Connector (toggle via env NEXT_PUBLIC_SHOW_LIVEKIT_CONNECTOR) */}
+                {process.env.NEXT_PUBLIC_SHOW_LIVEKIT_CONNECTOR === 'true' && (
+                  <div className="absolute left-4 z-50 safe-bottom" style={{ bottom: 'calc(1rem + env(safe-area-inset-bottom))' }}>
+                    <LivekitRoomConnector 
+                      roomName={roomName}
+                      userName={user.user_metadata?.full_name || "Canvas User"}
+                      autoConnect={false}
+                    />
+                  </div>
+                )}
 
                 {/* Collapsible Message Thread - now slides from right and controlled by toolbar */}
                 {isTranscriptOpen && (
                   <MessageThreadCollapsible
                     contextKey={contextKey}
-                    className="fixed right-0 top-0 h-full z-50 transform transition-transform duration-300 w-full max-w-sm sm:max-w-md md:max-w-lg"
+                    className="fixed right-0 top-0 z-50 transform transition-transform duration-300 w-full max-w-sm sm:max-w-md md:max-w-lg ios-vh safe-area-padded bg-background"
                     variant="default"
+                    onClose={toggleTranscript}
                   />
                 )}
                 </CanvasLiveKitContext.Provider>
@@ -315,27 +318,30 @@ export default function Canvas() {
                 <CanvasLiveKitContext.Provider value={roomState}>
                 {/* Full-screen Canvas Space */}
                 <CanvasSpace
-                  className="absolute inset-0 w-full h-full"
+                  className="absolute inset-0 w-full h-full ios-vh"
                   onTranscriptToggle={toggleTranscript}
                 />
 
                 <SessionSync roomName={roomName} />
 
-                {/* Direct LiveKit Room Connector - positioned bottom left to avoid overlap */}
-                <div className="absolute bottom-4 left-4 z-50">
-                  <LivekitRoomConnector 
-                    roomName={roomName}
-                    userName={user.user_metadata?.full_name || "Canvas User"}
-                    autoConnect={false}
-                  />
-                </div>
+                {/* Optional LiveKit Room Connector (toggle via env NEXT_PUBLIC_SHOW_LIVEKIT_CONNECTOR) */}
+                {process.env.NEXT_PUBLIC_SHOW_LIVEKIT_CONNECTOR === 'true' && (
+                  <div className="absolute left-4 z-50 safe-bottom" style={{ bottom: 'calc(1rem + env(safe-area-inset-bottom))' }}>
+                    <LivekitRoomConnector 
+                      roomName={roomName}
+                      userName={user.user_metadata?.full_name || "Canvas User"}
+                      autoConnect={false}
+                    />
+                  </div>
+                )}
 
                 {/* Collapsible Message Thread - now slides from right and controlled by toolbar */}
                 {isTranscriptOpen && (
                   <MessageThreadCollapsible
                     contextKey={contextKey}
-                    className="fixed right-0 top-0 h-full z-50 transform transition-transform duration-300 w-full max-w-sm sm:max-w-md md:max-w-lg"
+                    className="fixed right-0 top-0 z-50 transform transition-transform duration-300 w-full max-w-sm sm:max-w-md md:max-w-lg ios-vh safe-area-padded bg-background"
                     variant="default"
+                    onClose={toggleTranscript}
                   />
                 )}
                 </CanvasLiveKitContext.Provider>

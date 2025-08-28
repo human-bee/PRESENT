@@ -24,6 +24,10 @@ import { useTamboThread } from "@tambo-ai/react";
  * Automatically spawns a LiveKit room connector when the canvas loads
  */
 export function AutoSpawnRoomConnector() {
+  // Respect env flag to disable auto-spawn by default
+  if (process.env.NEXT_PUBLIC_AUTO_SPAWN_LIVEKIT !== 'true') {
+    return null;
+  }
   const tamboContext = useTamboThread();
   const hasSpawned = useRef(false);
   const [retryCount, setRetryCount] = useState(0);
