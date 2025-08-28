@@ -362,7 +362,10 @@ const LiveCaptions: React.FC<LiveCaptionsProps> = ({
           if (!prevState) return prevState;
           
           const prevTranscripts = prevState.transcripts;
-          // Check if this is an update to an existing interim transcript
+          // Strong de-dupe by id first (covers session-hydrate/replay collisions)
+          const idIndex = prevTranscripts.findIndex(t => t.id === transcriptId);
+          
+          // Check if this is an update to an existing interim transcript (legacy path)
           const existingIndex = prevTranscripts.findIndex(t => 
             t.speaker === data.speaker && !t.isFinal && 
             Math.abs(new Date(t.timestamp).getTime() - new Date(data.timestamp).getTime()) < 5000
@@ -377,9 +380,17 @@ const LiveCaptions: React.FC<LiveCaptionsProps> = ({
             position: prevState.settings.autoPosition ? calculatePosition(prevTranscripts.length) : undefined
           };
 
-          let updatedTranscripts;
-          if (existingIndex >= 0) {
-            // Update existing interim transcript
+          let updatedTranscripts = prevTranscripts;
+          if (idIndex >= 0) {
+            // Update by exact id match
+            updatedTranscripts = [...prevTranscripts];
+            updatedTranscripts[idIndex] = {
+              ...updatedTranscripts[idIndex],
+              text: data.text,
+              isFinal: data.is_final
+            };
+          } else if (existingIndex >= 0) {
+            // Update existing interim transcript by proximity
             updatedTranscripts = [...prevTranscripts];
             updatedTranscripts[existingIndex] = {
               ...updatedTranscripts[existingIndex],
@@ -420,14 +431,18 @@ const LiveCaptions: React.FC<LiveCaptionsProps> = ({
     setState(prev => {
       if (!prev) return prev
       const prevList = prev.transcripts
-      if (
-        prevList.length === nextList.length &&
-        prevList.length > 0 &&
-        prevList[prevList.length - 1]?.id === nextList[nextList.length - 1]?.id
-      ) {
-        return prev
+      // Merge by id to avoid duplicates when live data already added entries
+      const byId = new Map<string, Transcript>(prevList.map(t => [t.id, t]))
+      for (const t of nextList) {
+        if (byId.has(t.id)) {
+          const existing = byId.get(t.id)!
+          byId.set(t.id, { ...existing, text: t.text, isFinal: true, timestamp: t.timestamp })
+        } else {
+          byId.set(t.id, t)
+        }
       }
-      return { ...prev, transcripts: nextList }
+      const merged = Array.from(byId.values())
+      return { ...prev, transcripts: merged }
     })
   }, [sessionTranscript, setState])
 
@@ -441,28 +456,26 @@ const LiveCaptions: React.FC<LiveCaptionsProps> = ({
         setState(prevState => {
           if (!prevState) return prevState
           const prevTranscripts = prevState.transcripts
+          const idIndex = prevTranscripts.findIndex(t => t.id === transcriptId)
+          if (idIndex >= 0) {
+            const updated = [...prevTranscripts]
+            updated[idIndex] = { ...updated[idIndex], text, isFinal: true, timestamp: new Date(timestamp || Date.now()) }
+            return { ...prevState, transcripts: updated }
+          }
           const newTranscript: Transcript = {
             id: transcriptId,
             text,
             speaker: speaker || 'unknown',
             timestamp: new Date(timestamp || Date.now()),
             isFinal: true,
-            position: prevState.settings.autoPosition ? calculatePosition(prevTranscripts.length) : undefined
           }
-          let updatedTranscripts = [...prevTranscripts, newTranscript]
-          if (updatedTranscripts.length > prevState.settings.maxTranscripts) {
-            updatedTranscripts = updatedTranscripts.slice(-prevState.settings.maxTranscripts)
-          }
-          return { ...prevState, transcripts: updatedTranscripts }
+          return { ...prevState, transcripts: [...prevTranscripts, newTranscript] }
         })
-      } catch (e) {
-        // ignore
-      }
+      } catch {}
     }
-
     window.addEventListener('livekit:transcription-replay', handler as EventListener)
     return () => window.removeEventListener('livekit:transcription-replay', handler as EventListener)
-  }, [setState, calculatePosition])
+  }, [setState])
 
   // Monitor room connection and participants
   useEffect(() => {
