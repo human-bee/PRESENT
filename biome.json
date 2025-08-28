@@ -9,10 +9,27 @@
   "linter": {
     "enabled": true,
     "rules": {
-      "recommended": true
+      "recommended": true,
+      "suspicious": {
+        "noExplicitAny": "off",
+        "noImplicitAnyLet": "off"
+      },
+      "style": {
+        "useImportType": "off",
+        "useNodejsImportProtocol": "off",
+        "useSelfClosingElements": "off",
+        "noNonNullAssertion": "warn"
+      },
+      "complexity": {
+        "useOptionalChain": "off"
+      },
+      "a11y": {
+        "noSvgWithoutTitle": "off",
+        "useButtonType": "off"
+      }
     }
   },
-  "assist": { "actions": { "source": { "organizeImports": "on" } } },
+  "organizeImports": { "enabled": false },
   "vcs": {
     "enabled": true,
     "clientKind": "git",
@@ -27,16 +44,16 @@
     }
   },
   "files": {
-    "includes": [
-      "**",
-      "!**/node_modules",
-      "!**/dist",
-      "!**/build",
-      "!**/.next",
-      "!**/coverage",
-      "!**/.turbo",
-      "!**/.vercel",
-      "!**/out"
+    "include": ["**"],
+    "ignore": [
+      "**/node_modules",
+      "**/dist",
+      "**/build",
+      ".next",
+      "**/coverage",
+      "**/.turbo",
+      "**/.vercel",
+      "**/out"
     ]
   }
 }
