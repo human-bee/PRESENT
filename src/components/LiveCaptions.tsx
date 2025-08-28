@@ -362,6 +362,10 @@ const LiveCaptions: React.FC<LiveCaptionsProps> = ({
           if (!prevState) return prevState;
           
           const prevTranscripts = prevState.transcripts;
+          // Guard: prevent duplicates when receiving the same final line via multiple paths
+          if (data.is_final && prevTranscripts.some(t => t.id === transcriptId && t.isFinal)) {
+            return prevState;
+          }
           // Check if this is an update to an existing interim transcript
           const existingIndex = prevTranscripts.findIndex(t => 
             t.speaker === data.speaker && !t.isFinal && 
