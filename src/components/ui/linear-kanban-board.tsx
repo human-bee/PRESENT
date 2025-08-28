@@ -1,7 +1,6 @@
 "use client";
 
 import { z } from "zod";
-import { useTamboComponentState } from "@tambo-ai/react";
 import { useCallback, useEffect, useId, useState, useMemo } from "react";
 import { useComponentRegistration } from "@/lib/component-registry";
 import { cn } from "@/lib/utils";
@@ -187,8 +186,8 @@ export default function LinearKanbanBoard({
   const linearData = subAgent.enrichedData.linear || {};
   const enrichedIssues = linearData.issues || initialIssues || [];
 
-  /* 3. Persistent component state via Tambo */
-  const [state, setState] = useTamboComponentState<KanbanState>(instanceId, {
+  /* 3. Local component state */
+  const [state, setState] = useState<KanbanState>({
     selectedTeam: teams[0]?.id ?? "",
     issues: enrichedIssues,
     draggedIssue: null,

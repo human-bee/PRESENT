@@ -8,7 +8,6 @@ import { Mic, Clock, User, Copy, Download, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useRoomContext, useDataChannel, useParticipants } from "@livekit/components-react";
 import { useRealtimeSessionTranscript } from '@/hooks/use-realtime-session-transcript'
-import { useTamboComponentState } from "@tambo-ai/react";
 import { z } from "zod";
 
 // Tambo Component Schema
@@ -254,11 +253,8 @@ const LiveCaptions: React.FC<LiveCaptionsProps> = ({
     },
   };
 
-  // Tambo state management
-  const [state, setState] = useTamboComponentState<LiveCaptionsState>(
-    `live-captions-${room?.name || 'default'}`,
-    initialState
-  );
+  // Local state management
+  const [state, setState] = useState<LiveCaptionsState>(initialState);
 
   // Auto-position calculation (memoized to prevent infinite loops)
   const calculatePosition = useCallback((index: number) => {

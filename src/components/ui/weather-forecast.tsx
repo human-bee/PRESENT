@@ -1,6 +1,4 @@
 "use client";
-
-import { useTamboComponentState } from "@tambo-ai/react";
 import { z } from "zod";
 import React, { useEffect, useRef, useState, useMemo } from 'react';
 import { 
@@ -389,23 +387,20 @@ export function WeatherForecast(props: WeatherForecastProps) {
   
   const loadingState = subAgent.loadingState;
   
-  // Enhanced Tambo state management
-  const [state, setState] = useTamboComponentState<WeatherForecastState>(
-    `weather-forecast-${props.location?.replace(/\s+/g, '-').toLowerCase() || 'default'}`,
-    { 
-      activeView: props.viewType || "current",
-      selectedPeriod: 0,
-      animatedTemp: 70,
-      showDetails: false,
-      canvasSize: { width: 400, height: 600 },
-      isActive: false,
-      userPreferences: {
-        units: "imperial",
-        timeFormat: "12h",
-        emphasis: "general",
-      },
-    }
-  );
+  // Local state management
+  const [state, setState] = useState<WeatherForecastState>({ 
+    activeView: props.viewType || "current",
+    selectedPeriod: 0,
+    animatedTemp: 70,
+    showDetails: false,
+    canvasSize: { width: 400, height: 600 },
+    isActive: false,
+    userPreferences: {
+      units: "imperial",
+      timeFormat: "12h",
+      emphasis: "general",
+    },
+  });
 
   // Use enriched data from sub-agent if available
   const weatherRaw = subAgent.enrichedData.weather || {};

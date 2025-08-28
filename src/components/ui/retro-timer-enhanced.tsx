@@ -11,7 +11,6 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { useTamboComponentState } from '@tambo-ai/react';
 import { useComponentRegistration } from '@/lib/component-registry';
 import { z } from 'zod';
 import { cn } from '@/lib/utils';
@@ -88,7 +87,7 @@ export function RetroTimerEnhanced({
   const loadingState = subAgent.loadingState;
   
   // Local timer state
-  const [state, setState] = useTamboComponentState<TimerState>(componentId, initialState);
+  const [state, setState] = useState<TimerState>(initialState);
 
   // Use the exact Tambo message ID if provided, otherwise create a stable one
   const effectiveMessageId = React.useMemo(() => {

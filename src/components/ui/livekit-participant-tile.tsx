@@ -16,7 +16,6 @@
 
 import * as React from "react";
 import { cn } from "@/lib/utils";
-import { useTamboComponentState } from "@tambo-ai/react";
 import { z } from "zod";
 import {
   User,
@@ -107,15 +106,12 @@ export const LivekitParticipantTile = React.memo(function LivekitParticipantTile
   fit = "cover",
   trackPreference = "camera",
 }: LivekitParticipantTileProps) {
-  // Initialize Tambo component state
-  const [state] = useTamboComponentState<LivekitParticipantTileState>(
-    `livekit-participant-${participantIdentity || 'all'}`,
-    {
-      isMinimized: false,
-      audioLevel: 0,
-      lastSpokeAt: null,
-    }
-  );
+  // Local component state
+  const [state] = React.useState<LivekitParticipantTileState>({
+    isMinimized: false,
+    audioLevel: 0,
+    lastSpokeAt: null,
+  });
 
   // Selected participant override (for dropdown changes)
   const [selectedParticipantId, setSelectedParticipantId] = React.useState<string | null>(null);

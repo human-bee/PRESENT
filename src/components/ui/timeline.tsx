@@ -1,6 +1,6 @@
 import { cn } from "@/lib/utils";
-import { useTamboComponentState } from "@tambo-ai/react";
 import { z } from "zod";
+import { useState } from "react";
 
 export const timelineSchema = z.object({
   title: z.string().optional().describe("Title of the timeline"),
@@ -41,7 +41,7 @@ export function Timeline({
   events,
   orientation = "vertical",
 }: TimelineProps) {
-  const [state, setState] = useTamboComponentState<TimelineState>("timeline", {
+  const [state, setState] = useState<TimelineState>({
     expandedEvents: [],
   });
 

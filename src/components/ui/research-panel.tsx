@@ -1,7 +1,6 @@
 "use client";
 
 import { cn } from "@/lib/utils";
-import { useTamboComponentState } from "@tambo-ai/react";
 import { z } from "zod";
 import { ExternalLink, CheckCircle, AlertTriangle, Info, Bookmark, BookmarkCheck, GripVertical, Upload } from "lucide-react";
 import { getRendererForResult } from "./research-renderers";
@@ -247,17 +246,14 @@ export function ResearchPanel({
   ...props
 }: ResearchPanelProps & React.HTMLAttributes<HTMLDivElement>) {
   
-  // Initialize Tambo component state
-  const [state, setState] = useTamboComponentState<ResearchPanelState>(
-    "research-panel",
-    {
-      bookmarkedResults: [],
-      selectedCredibility: "all",
-      selectedSourceTypes: [],
-      expandedResults: [],
-      sortBy: "relevance",
-    }
-  );
+  // Local component state
+  const [state, setState] = useState<ResearchPanelState>({
+    bookmarkedResults: [],
+    selectedCredibility: "all",
+    selectedSourceTypes: [],
+    expandedResults: [],
+    sortBy: "relevance",
+  });
 
   // Local state for items added via drag-and-drop
   const [customResults, setCustomResults] = useState<ResearchResult[]>([]);

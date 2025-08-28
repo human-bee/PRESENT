@@ -5,9 +5,9 @@ import {
   generateWordDiff,
 } from "@/app/hackathon-canvas/documents/document-state";
 import { MarkdownViewerEditable } from "@/components/ui/hackathon/markdown-viewer-editable";
-import { useTamboComponentState } from "@tambo-ai/react";
 import { useComponentRegistration } from "@/lib/component-registry";
 import { z } from "zod";
+import { useState } from "react";
 
 export interface DocumentEditorProps {
   documentId: string;
@@ -40,15 +40,11 @@ export function DocumentEditor({
     .getDocuments()
     .find((d) => d.id === documentId);
 
-  const [state, setState] = useTamboComponentState<EditorState>(
-    // unique component id
-    `document-editor-${documentId}`,
-    {
-      content: initialDoc?.content || "",
-      originalContent: initialDoc?.originalContent || initialDoc?.content || "",
-      diffs: initialDoc?.diffs || [],
-    }
-  );
+  const [state, setState] = useState<EditorState>({
+    content: initialDoc?.content || "",
+    originalContent: initialDoc?.originalContent || initialDoc?.content || "",
+    diffs: initialDoc?.diffs || [],
+  });
 
   // Helper to update content with diff calculation
   const updateContent = useCallback((newContent: string) => {

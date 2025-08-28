@@ -2,7 +2,6 @@
 
 import * as React from "react";
 import { cn } from "@/lib/utils";
-import { useTamboComponentState } from "@tambo-ai/react";
 import { z } from "zod";
 import {
   useParticipants,
@@ -37,10 +36,7 @@ export function LivekitScreenShareTile({
   showParticipantName = true,
   fit = "contain",
 }: LivekitScreenShareTileProps) {
-  const [state, setState] = useTamboComponentState<ScreenShareTileState>(
-    `livekit-screenshare-${participantIdentity || 'auto'}`,
-    { isMinimized: false }
-  );
+  const [state, setState] = React.useState<ScreenShareTileState>({ isMinimized: false });
 
   const room = useRoomContext();
   const participants = useParticipants();
@@ -153,5 +149,4 @@ export function LivekitScreenShareTile({
 }
 
 export default LivekitScreenShareTile;
-
 

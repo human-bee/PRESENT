@@ -8,7 +8,6 @@
 "use client";
 
 import { cn } from "@/lib/utils";
-import { useTamboComponentState } from "@tambo-ai/react";
 import * as React from "react";
 import { z } from "zod";
 
@@ -60,8 +59,8 @@ export type DataCardProps = z.infer<typeof dataCardSchema> &
  */
 export const DataCard = React.forwardRef<HTMLDivElement, DataCardProps>(
 	({ title, options, className, ...props }, ref) => {
-		// Initialize Tambo component state
-		const [selectedValues, setSelectedValues] = React.useState<DataCardState>({
+		// Local component state
+		const [state, setState] = React.useState<DataCardState>({
 			selectedValues: [],
 		});
 

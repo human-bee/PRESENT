@@ -1,4 +1,3 @@
-import { useTamboComponentState } from "@tambo-ai/react";
 import { z } from "zod";
 import { useState, useEffect } from "react";
 
@@ -53,15 +52,12 @@ export function YoutubeVideoList({
   columns = 3,
   componentId = "youtube-video-list",
 }: YoutubeVideoListProps) {
-  // Initialize tambo component state for highlighting with error handling
-  const [state, setState] = useTamboComponentState<YoutubeVideoListState>(
-    componentId,
-    { 
-      highlightedId: null,
-      mcpError: null,
-      hasError: false,
-    }
-  );
+  // Local component state for highlighting with error handling
+  const [state, setState] = useState<YoutubeVideoListState>({ 
+    highlightedId: null,
+    mcpError: null,
+    hasError: false,
+  });
 
   // Error boundary for MCP transport issues
   useEffect(() => {

@@ -1,4 +1,3 @@
-import { useTamboComponentState } from "@tambo-ai/react";
 import { z } from "zod";
 import { useState, useEffect, useCallback } from "react";
 import dynamic from "next/dynamic";
@@ -78,25 +77,22 @@ export function YoutubeSearchEnhanced({
   maxResults = 20,
   componentId = "youtube-search-enhanced",
 }: YoutubeSearchEnhancedProps) {
-  const [state, setState] = useTamboComponentState<YoutubeSearchState>(
-    componentId,
-    {
-      searchQuery: initialQuery,
-      searchResults: [],
-      trendingVideos: [],
-      selectedVideo: null,
-      transcript: null,
-      loading: false,
-      error: null,
-      filters: {
-        sortBy: "relevance",
-        uploadDate: "any",
-        duration: "any",
-        officialOnly: false,
-      },
-      view: "search",
-    }
-  );
+  const [state, setState] = useState<YoutubeSearchState>({
+    searchQuery: initialQuery,
+    searchResults: [],
+    trendingVideos: [],
+    selectedVideo: null,
+    transcript: null,
+    loading: false,
+    error: null,
+    filters: {
+      sortBy: "relevance",
+      uploadDate: "any",
+      duration: "any",
+      officialOnly: false,
+    },
+    view: "search",
+  });
 
   // MCP Tool execution via Tambo
   const executeMCPTool = useCallback(async (tool: string, params: any) => {

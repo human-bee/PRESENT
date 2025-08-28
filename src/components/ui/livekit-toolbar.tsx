@@ -2,7 +2,6 @@
 
 import * as React from "react";
 import { cn } from "@/lib/utils";
-import { useTamboComponentState } from "@tambo-ai/react";
 import { z } from "zod";
 import {
 	useLocalParticipant,
@@ -270,29 +269,26 @@ export function LivekitToolbar({
 	const cameraToggle = useTrackToggle(Track.Source.Camera);
 	const screenShareToggle = useTrackToggle(Track.Source.ScreenShare);
 
-	// Enhanced Tambo state management
-	const [state, setState] = useTamboComponentState<LivekitToolbarState>(
-		componentId,
-		{
-			isExpanded: !compactMode,
-			showParticipants: showParticipantList && participants.length > 2,
-			showSettings: false,
-			compactMode,
-			selectedParticipant: null,
-			pinnedParticipants: [],
-			handRaisedParticipants: [],
-			isRecording: false,
-			recordingStartTime: null,
-			backgroundBlurEnabled: false,
-			assistantState: "idle",
-			lastVoiceCommand: null,
-			connectionIssues: {},
-			networkQuality: connectionQuality || ConnectionQuality.Unknown,
-			canvasPosition: { x: 0, y: 0 },
-			canvasSize: { width: 800, height: 60 },
-			isCanvasFocused: false,
-		},
-	);
+	// Local state management
+	const [state, setState] = React.useState<LivekitToolbarState>({
+		isExpanded: !compactMode,
+		showParticipants: showParticipantList && participants.length > 2,
+		showSettings: false,
+		compactMode,
+		selectedParticipant: null,
+		pinnedParticipants: [],
+		handRaisedParticipants: [],
+		isRecording: false,
+		recordingStartTime: null,
+		backgroundBlurEnabled: false,
+		assistantState: "idle",
+		lastVoiceCommand: null,
+		connectionIssues: {},
+		networkQuality: connectionQuality || ConnectionQuality.Unknown,
+		canvasPosition: { x: 0, y: 0 },
+		canvasSize: { width: 800, height: 60 },
+		isCanvasFocused: false,
+	});
 
 	// Extract values from hooks - handle potential errors with conditional logic
 	const toggleMic = micToggle?.toggle || (() => {});

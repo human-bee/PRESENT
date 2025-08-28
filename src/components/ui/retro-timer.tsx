@@ -1,7 +1,6 @@
 "use client";
 
 import { cn } from "@/lib/utils";
-import { useTamboComponentState } from "@tambo-ai/react";
 import { useEffect, useRef, useState } from "react";
 import { z } from "zod";
 import { CanvasSyncAdapter } from '../CanvasSyncAdapter';
@@ -55,16 +54,13 @@ export function RetroTimer({
   initialSeconds = 60,
   componentId = 'retro-timer',
 }: RetroTimerProps) {
-  // Initialize Tambo component state
-  const [state, setState] = useTamboComponentState<RetroTimerState>(
-    componentId,
-    {
-      timeRemaining: initialMinutes * 60,
-      isRunning: false,
-      initialTime: initialMinutes * 60,
-      isCompleted: false,
-    }
-  );
+  // Local component state
+  const [state, setState] = useState<RetroTimerState>({
+    timeRemaining: initialMinutes * 60,
+    isRunning: false,
+    initialTime: initialMinutes * 60,
+    isCompleted: false,
+  });
 
   // Reference for interval ID
   const intervalRef = useRef<NodeJS.Timeout | null>(null);

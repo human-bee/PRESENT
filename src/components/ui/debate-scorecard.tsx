@@ -1,8 +1,7 @@
 "use client";
 
-import React, { useMemo, useCallback } from "react";
+import React, { useMemo, useCallback, useState } from "react";
 import { z } from "zod";
-import { useTamboComponentState } from "@tambo-ai/react";
 import { useComponentRegistration } from "@/lib/component-registry";
 import { LoadingWrapper, SkeletonPatterns } from "@/components/ui/loading-states";
 import { LoadingState } from "@/lib/with-progressive-loading";
@@ -313,7 +312,7 @@ export function DebateScorecard(props: DebateScorecardProps) {
 		learningImpact: 90,
 	};
 
-	const [state, setState] = useTamboComponentState<DebateState>(componentId, {
+	const [state, setState] = useState<DebateState>({
 		round: 1,
 		p1: defaultScores,
 		p2: { ...defaultScores, evidenceQuality: 90, factualAccuracy: 85 },

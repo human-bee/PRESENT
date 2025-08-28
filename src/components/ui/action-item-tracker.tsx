@@ -30,7 +30,6 @@
 "use client";
 
 import { cn } from "@/lib/utils";
-import { useTamboComponentState } from "@tambo-ai/react";
 import { useState, useEffect, useId, useMemo } from "react";
 import { z } from "zod";
 import { 
@@ -518,21 +517,18 @@ export function ActionItemTracker({
   
   const loadingState = subAgent.loadingState;
 
-  // Initialize Tambo component state
-  const [state, setState] = useTamboComponentState<ActionItemTrackerState>(
-    instanceId,
-    {
-      items: initialItems,
-      filter: {
-        status: "all",
-        priority: "all",
-        assignee: "all",
-      },
-      sortBy: "dueDate",
-      editingId: null,
-      showAddForm: false,
-    }
-  );
+  // Local component state
+  const [state, setState] = useState<ActionItemTrackerState>({
+    items: initialItems,
+    filter: {
+      status: "all",
+      priority: "all",
+      assignee: "all",
+    },
+    sortBy: "dueDate",
+    editingId: null,
+    showAddForm: false,
+  });
   
 
 

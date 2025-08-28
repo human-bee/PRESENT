@@ -1,4 +1,3 @@
-import { useTamboComponentState } from "@tambo-ai/react";
 import { z } from "zod";
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { 
@@ -361,30 +360,27 @@ const SpeakerNotes = ({ notes }: { notes?: string }) => {
 export function PresentationDeck(props: PresentationDeckProps) {
   const componentId = `presentation-deck-${props.title.replace(/\s+/g, '-').toLowerCase()}`;
   
-  // Enhanced state with Tambo integration
-  const [state, setState] = useTamboComponentState<PresentationDeckState>(
-    componentId,
-    {
-      currentSlide: 0,
-      isPlaying: false,
-      isFullscreen: false,
-      showThumbnails: false,
-      showNotes: props.showNotes || false,
-      playbackSpeed: 1,
-      canvasSize: { width: 800, height: 600 },
-      isActive: true,
-      laserPointerActive: false,
-      laserPointerPosition: { x: 50, y: 50 },
-      bookmarkedSlides: [],
-      presentationStartTime: null,
-      elapsedTime: 0,
-      userPreferences: {
-        autoHideControls: false,
-        keyboardShortcuts: true,
-        transitionSpeed: "normal",
-      },
-    }
-  );
+  // Local state
+  const [state, setState] = useState<PresentationDeckState>({
+    currentSlide: 0,
+    isPlaying: false,
+    isFullscreen: false,
+    showThumbnails: false,
+    showNotes: props.showNotes || false,
+    playbackSpeed: 1,
+    canvasSize: { width: 800, height: 600 },
+    isActive: true,
+    laserPointerActive: false,
+    laserPointerPosition: { x: 50, y: 50 },
+    bookmarkedSlides: [],
+    presentationStartTime: null,
+    elapsedTime: 0,
+    userPreferences: {
+      autoHideControls: false,
+      keyboardShortcuts: true,
+      transitionSpeed: "normal",
+    },
+  });
 
   const containerRef = useRef<HTMLDivElement>(null);
   const [isControlsVisible, setIsControlsVisible] = useState(true);

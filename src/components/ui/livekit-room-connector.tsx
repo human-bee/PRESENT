@@ -35,7 +35,6 @@
 
 import * as React from "react";
 import { cn } from "@/lib/utils";
-import { useTamboComponentState } from "@tambo-ai/react";
 import { z } from "zod";
 import { useRoomContext, AudioConference } from "@livekit/components-react";
 import {
@@ -152,11 +151,10 @@ export function LivekitRoomConnector({
 		};
 	};
 
-	// Initialize Tambo component state with actual room state
-	const [state, setState] = useTamboComponentState<LivekitRoomConnectorState>(
-		`livekit-room-${roomName}`,
-		getInitialState(),
-	);
+  // Local component state initialized with actual room state
+  const [state, setState] = React.useState<LivekitRoomConnectorState | null>(
+    getInitialState(),
+  );
 
 	// Keep a ref to the latest state for event handlers
 	const stateRef = React.useRef<LivekitRoomConnectorState | null>(state);
