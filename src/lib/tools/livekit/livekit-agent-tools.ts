@@ -5,6 +5,8 @@
  * and integration with the ToolDispatcher system.
  */
 
+
+// TODO: split responsibilities between livekit agent and conductor agent
 import { JobContext } from '@livekit/agents';
 
 // Tool result interface

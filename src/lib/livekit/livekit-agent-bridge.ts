@@ -28,14 +28,6 @@ export interface AgentStatus {
   };
 }
 
-export interface TamboComponent {
-  type: 'tambo_component';
-  component: string;
-  props: {
-    [key: string]: string | number | boolean | undefined;
-  };
-  timestamp: number;
-}
 
 export interface LiveTranscription {
   type: 'live_transcription';
@@ -45,4 +37,4 @@ export interface LiveTranscription {
   is_final: boolean;
 }
 
-export type AgentDataMessage = TamboComponent | LiveTranscription;
+export type AgentDataMessage =  LiveTranscription;
