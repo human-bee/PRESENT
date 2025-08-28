@@ -1,50 +1,68 @@
-import { z } from "zod";
+import { z } from 'zod';
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { 
-  ChevronLeft, ChevronRight, Play, Pause, Square, Maximize, 
-  Minimize, RotateCcw, Settings, Eye, EyeOff, Clock,
-  FileText, Download, Share2, Bookmark, Grid3X3, MousePointer
+import {
+  ChevronLeft,
+  ChevronRight,
+  Play,
+  Pause,
+  Square,
+  Maximize,
+  Minimize,
+  RotateCcw,
+  Settings,
+  Eye,
+  EyeOff,
+  Clock,
+  FileText,
+  Download,
+  Share2,
+  Bookmark,
+  Grid3X3,
+  MousePointer,
 } from 'lucide-react';
 
 // Slide schema for individual slide data
 const slideSchema = z.object({
-  id: z.string().describe("Unique slide identifier"),
-  title: z.string().optional().describe("Slide title"),
-  content: z.string().optional().describe("Slide content (HTML, Markdown, or text)"),
-  imageUrl: z.string().optional().describe("Direct image URL for slide"),
-  thumbnailUrl: z.string().optional().describe("Thumbnail image URL"),
-  notes: z.string().optional().describe("Speaker notes for this slide"),
-  duration: z.number().optional().describe("Suggested duration for this slide in seconds"),
-  transition: z.enum(["fade", "slide", "zoom", "flip"]).optional().default("fade"),
+  id: z.string().describe('Unique slide identifier'),
+  title: z.string().optional().describe('Slide title'),
+  content: z.string().optional().describe('Slide content (HTML, Markdown, or text)'),
+  imageUrl: z.string().optional().describe('Direct image URL for slide'),
+  thumbnailUrl: z.string().optional().describe('Thumbnail image URL'),
+  notes: z.string().optional().describe('Speaker notes for this slide'),
+  duration: z.number().optional().describe('Suggested duration for this slide in seconds'),
+  transition: z.enum(['fade', 'slide', 'zoom', 'flip']).optional().default('fade'),
 });
 
 // Main presentation schema
 export const presentationDeckSchema = z.object({
-  title: z.string().describe("Presentation title"),
-  slides: z.array(slideSchema).describe("Array of slides in the presentation"),
-  
+  title: z.string().describe('Presentation title'),
+  slides: z.array(slideSchema).describe('Array of slides in the presentation'),
+
   // Presentation source and format
-  sourceType: z.enum(["powerpoint", "google-slides", "pdf", "images", "html", "markdown"])
-    .optional().default("images").describe("Type of presentation source"),
-  sourceUrl: z.string().optional().describe("URL to original presentation (Google Slides, etc.)"),
-  
+  sourceType: z
+    .enum(['powerpoint', 'google-slides', 'pdf', 'images', 'html', 'markdown'])
+    .optional()
+    .default('images')
+    .describe('Type of presentation source'),
+  sourceUrl: z.string().optional().describe('URL to original presentation (Google Slides, etc.)'),
+
   // Display options
-  aspectRatio: z.enum(["16:9", "4:3", "16:10"]).optional().default("16:9"),
-  theme: z.enum(["dark", "light", "auto"]).optional().default("dark"),
-  autoAdvance: z.boolean().optional().default(false).describe("Auto-advance slides"),
-  autoAdvanceInterval: z.number().optional().default(30).describe("Seconds between auto-advance"),
-  
+  aspectRatio: z.enum(['16:9', '4:3', '16:10']).optional().default('16:9'),
+  theme: z.enum(['dark', 'light', 'auto']).optional().default('dark'),
+  autoAdvance: z.boolean().optional().default(false).describe('Auto-advance slides'),
+  autoAdvanceInterval: z.number().optional().default(30).describe('Seconds between auto-advance'),
+
   // Navigation and controls
-  showControls: z.boolean().optional().default(true).describe("Show navigation controls"),
-  showProgress: z.boolean().optional().default(true).describe("Show progress indicator"),
-  showNotes: z.boolean().optional().default(false).describe("Show speaker notes"),
-  enableLaserPointer: z.boolean().optional().default(true).describe("Enable laser pointer mode"),
-  
+  showControls: z.boolean().optional().default(true).describe('Show navigation controls'),
+  showProgress: z.boolean().optional().default(true).describe('Show progress indicator'),
+  showNotes: z.boolean().optional().default(false).describe('Show speaker notes'),
+  enableLaserPointer: z.boolean().optional().default(true).describe('Enable laser pointer mode'),
+
   // Metadata
-  totalDuration: z.number().optional().describe("Total presentation duration in minutes"),
-  author: z.string().optional().describe("Presentation author"),
-  createdAt: z.string().optional().describe("Creation date"),
-  tags: z.array(z.string()).optional().describe("Presentation tags"),
+  totalDuration: z.number().optional().describe('Total presentation duration in minutes'),
+  author: z.string().optional().describe('Presentation author'),
+  createdAt: z.string().optional().describe('Creation date'),
+  tags: z.array(z.string()).optional().describe('Presentation tags'),
 });
 
 // Type definitions
@@ -70,24 +88,24 @@ type PresentationDeckState = {
   userPreferences: {
     autoHideControls: boolean;
     keyboardShortcuts: boolean;
-    transitionSpeed: "fast" | "normal" | "slow";
+    transitionSpeed: 'fast' | 'normal' | 'slow';
   };
 };
 
 // Hotkey definitions
 const HOTKEYS = {
-  NEXT_SLIDE: ["ArrowRight", "Space", "n", "j"],
-  PREV_SLIDE: ["ArrowLeft", "p", "k"],
-  FIRST_SLIDE: ["Home", "g g"],
-  LAST_SLIDE: ["End", "G"],
-  TOGGLE_PLAY: ["Enter"],
-  FULLSCREEN: ["f", "F11"],
-  EXIT_FULLSCREEN: ["Escape"],
-  TOGGLE_THUMBNAILS: ["t"],
-  TOGGLE_NOTES: ["s"],
-  LASER_POINTER: ["l"],
-  BOOKMARK: ["b"],
-  RESET: ["r"],
+  NEXT_SLIDE: ['ArrowRight', 'Space', 'n', 'j'],
+  PREV_SLIDE: ['ArrowLeft', 'p', 'k'],
+  FIRST_SLIDE: ['Home', 'g g'],
+  LAST_SLIDE: ['End', 'G'],
+  TOGGLE_PLAY: ['Enter'],
+  FULLSCREEN: ['f', 'F11'],
+  EXIT_FULLSCREEN: ['Escape'],
+  TOGGLE_THUMBNAILS: ['t'],
+  TOGGLE_NOTES: ['s'],
+  LASER_POINTER: ['l'],
+  BOOKMARK: ['b'],
+  RESET: ['r'],
 } as const;
 
 // Format time for display
@@ -98,16 +116,23 @@ const formatTime = (seconds: number): string => {
 };
 
 // Progress indicator component
-const ProgressIndicator = ({ current, total, showTime = false, elapsedTime = 0 }: {
+const ProgressIndicator = ({
+  current,
+  total,
+  showTime = false,
+  elapsedTime = 0,
+}: {
   current: number;
   total: number;
   showTime?: boolean;
   elapsedTime?: number;
 }) => (
   <div className="flex items-center space-x-3 text-sm text-slate-300">
-    <span className="font-mono">{current + 1}/{total}</span>
+    <span className="font-mono">
+      {current + 1}/{total}
+    </span>
     <div className="w-32 h-1 bg-slate-700 rounded-full overflow-hidden">
-      <div 
+      <div
         className="h-full bg-blue-400 rounded-full transition-all duration-300"
         style={{ width: `${((current + 1) / total) * 100}%` }}
       />
@@ -122,7 +147,12 @@ const ProgressIndicator = ({ current, total, showTime = false, elapsedTime = 0 }
 );
 
 // Slide thumbnail component
-const SlideThumbnail = ({ slide, index, isActive, onClick }: {
+const SlideThumbnail = ({
+  slide,
+  index,
+  isActive,
+  onClick,
+}: {
   slide: Slide;
   index: number;
   isActive: boolean;
@@ -131,13 +161,11 @@ const SlideThumbnail = ({ slide, index, isActive, onClick }: {
   <button
     onClick={onClick}
     className={`relative w-20 h-14 rounded border-2 transition-all duration-200 hover:scale-105 ${
-      isActive 
-        ? 'border-blue-400 bg-blue-400/10' 
-        : 'border-slate-600 hover:border-slate-400'
+      isActive ? 'border-blue-400 bg-blue-400/10' : 'border-slate-600 hover:border-slate-400'
     }`}
   >
     {slide.thumbnailUrl || slide.imageUrl ? (
-      <img 
+      <img
         src={slide.thumbnailUrl || slide.imageUrl}
         alt={`Slide ${index + 1}`}
         className="w-full h-full object-cover rounded"
@@ -154,21 +182,27 @@ const SlideThumbnail = ({ slide, index, isActive, onClick }: {
 );
 
 // Main slide display component
-const SlideDisplay = ({ slide, aspectRatio, laserPointer }: {
+const SlideDisplay = ({
+  slide,
+  aspectRatio,
+  laserPointer,
+}: {
   slide: Slide;
   aspectRatio: string;
   laserPointer?: { x: number; y: number; active: boolean };
 }) => {
   const aspectRatioClasses = {
-    "16:9": "aspect-video",
-    "4:3": "aspect-[4/3]",
-    "16:10": "aspect-[16/10]"
+    '16:9': 'aspect-video',
+    '4:3': 'aspect-[4/3]',
+    '16:10': 'aspect-[16/10]',
   };
 
   return (
-    <div className={`relative w-full ${aspectRatioClasses[aspectRatio as keyof typeof aspectRatioClasses]} bg-white rounded-lg overflow-hidden shadow-2xl`}>
+    <div
+      className={`relative w-full ${aspectRatioClasses[aspectRatio as keyof typeof aspectRatioClasses]} bg-white rounded-lg overflow-hidden shadow-2xl`}
+    >
       {slide.imageUrl ? (
-        <img 
+        <img
           src={slide.imageUrl}
           alt={slide.title || `Slide`}
           className="w-full h-full object-contain"
@@ -176,10 +210,8 @@ const SlideDisplay = ({ slide, aspectRatio, laserPointer }: {
         />
       ) : slide.content ? (
         <div className="w-full h-full p-8 flex flex-col justify-center">
-          {slide.title && (
-            <h2 className="text-3xl font-bold text-slate-900 mb-6">{slide.title}</h2>
-          )}
-          <div 
+          {slide.title && <h2 className="text-3xl font-bold text-slate-900 mb-6">{slide.title}</h2>}
+          <div
             className="text-slate-700 text-lg leading-relaxed"
             dangerouslySetInnerHTML={{ __html: slide.content }}
           />
@@ -192,15 +224,15 @@ const SlideDisplay = ({ slide, aspectRatio, laserPointer }: {
           </div>
         </div>
       )}
-      
+
       {/* Laser pointer */}
       {laserPointer?.active && (
-        <div 
+        <div
           className="absolute w-3 h-3 bg-red-500 rounded-full shadow-lg animate-pulse pointer-events-none"
           style={{
             left: `${laserPointer.x}%`,
             top: `${laserPointer.y}%`,
-            transform: 'translate(-50%, -50%)'
+            transform: 'translate(-50%, -50%)',
           }}
         />
       )}
@@ -209,13 +241,13 @@ const SlideDisplay = ({ slide, aspectRatio, laserPointer }: {
 };
 
 // Control panel component
-const ControlPanel = ({ 
-  currentSlide, 
-  totalSlides, 
-  isPlaying, 
-  onPrevious, 
-  onNext, 
-  onTogglePlay, 
+const ControlPanel = ({
+  currentSlide,
+  totalSlides,
+  isPlaying,
+  onPrevious,
+  onNext,
+  onTogglePlay,
   onFullscreen,
   onToggleThumbnails,
   onToggleNotes,
@@ -225,7 +257,7 @@ const ControlPanel = ({
   showThumbnails,
   showNotes,
   laserPointerActive,
-  isBookmarked 
+  isBookmarked,
 }: {
   currentSlide: number;
   totalSlides: number;
@@ -254,15 +286,15 @@ const ControlPanel = ({
       >
         <ChevronLeft size={20} />
       </button>
-      
+
       <button
         onClick={onTogglePlay}
         className="p-2 text-slate-300 hover:text-white hover:bg-slate-700 rounded transition-colors"
-        title={isPlaying ? "Pause (Enter)" : "Play (Enter)"}
+        title={isPlaying ? 'Pause (Enter)' : 'Play (Enter)'}
       >
         {isPlaying ? <Pause size={20} /> : <Play size={20} />}
       </button>
-      
+
       <button
         onClick={onNext}
         disabled={currentSlide === totalSlides - 1}
@@ -271,7 +303,7 @@ const ControlPanel = ({
       >
         <ChevronRight size={20} />
       </button>
-      
+
       <button
         onClick={onReset}
         className="p-2 text-slate-300 hover:text-white hover:bg-slate-700 rounded transition-colors"
@@ -280,56 +312,56 @@ const ControlPanel = ({
         <RotateCcw size={16} />
       </button>
     </div>
-    
+
     <div className="flex items-center space-x-2">
       <button
         onClick={onBookmark}
         className={`p-2 rounded transition-colors ${
-          isBookmarked 
-            ? 'text-yellow-400 hover:text-yellow-300' 
+          isBookmarked
+            ? 'text-yellow-400 hover:text-yellow-300'
             : 'text-slate-300 hover:text-white hover:bg-slate-700'
         }`}
         title="Bookmark slide (B)"
       >
         <Bookmark size={16} />
       </button>
-      
+
       <button
         onClick={onToggleLaserPointer}
         className={`p-2 rounded transition-colors ${
-          laserPointerActive 
-            ? 'text-red-400 hover:text-red-300 bg-red-400/10' 
+          laserPointerActive
+            ? 'text-red-400 hover:text-red-300 bg-red-400/10'
             : 'text-slate-300 hover:text-white hover:bg-slate-700'
         }`}
         title="Laser pointer (L)"
       >
         <MousePointer size={16} />
       </button>
-      
+
       <button
         onClick={onToggleThumbnails}
         className={`p-2 rounded transition-colors ${
-          showThumbnails 
-            ? 'text-blue-400 hover:text-blue-300 bg-blue-400/10' 
+          showThumbnails
+            ? 'text-blue-400 hover:text-blue-300 bg-blue-400/10'
             : 'text-slate-300 hover:text-white hover:bg-slate-700'
         }`}
         title="Toggle thumbnails (T)"
       >
         <Grid3X3 size={16} />
       </button>
-      
+
       <button
         onClick={onToggleNotes}
         className={`p-2 rounded transition-colors ${
-          showNotes 
-            ? 'text-green-400 hover:text-green-300 bg-green-400/10' 
+          showNotes
+            ? 'text-green-400 hover:text-green-300 bg-green-400/10'
             : 'text-slate-300 hover:text-white hover:bg-slate-700'
         }`}
         title="Toggle notes (S)"
       >
         {showNotes ? <EyeOff size={16} /> : <Eye size={16} />}
       </button>
-      
+
       <button
         onClick={onFullscreen}
         className="p-2 text-slate-300 hover:text-white hover:bg-slate-700 rounded transition-colors"
@@ -344,7 +376,7 @@ const ControlPanel = ({
 // Speaker notes component
 const SpeakerNotes = ({ notes }: { notes?: string }) => {
   if (!notes) return null;
-  
+
   return (
     <div className="bg-slate-900/95 backdrop-blur-sm border border-slate-700 rounded-lg p-4">
       <h4 className="text-sm font-semibold text-slate-300 mb-2 flex items-center">
@@ -359,7 +391,7 @@ const SpeakerNotes = ({ notes }: { notes?: string }) => {
 // Main component
 export function PresentationDeck(props: PresentationDeckProps) {
   const componentId = `presentation-deck-${props.title.replace(/\s+/g, '-').toLowerCase()}`;
-  
+
   // Local state
   const [state, setState] = useState<PresentationDeckState>({
     currentSlide: 0,
@@ -378,7 +410,7 @@ export function PresentationDeck(props: PresentationDeckProps) {
     userPreferences: {
       autoHideControls: false,
       keyboardShortcuts: true,
-      transitionSpeed: "normal",
+      transitionSpeed: 'normal',
     },
   });
 
@@ -387,44 +419,60 @@ export function PresentationDeck(props: PresentationDeckProps) {
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
 
   // Handle mouse movement for laser pointer
-  const handleMouseMove = useCallback((e: React.MouseEvent) => {
-    if (state?.laserPointerActive && containerRef.current) {
-      const rect = containerRef.current.getBoundingClientRect();
-      const x = ((e.clientX - rect.left) / rect.width) * 100;
-      const y = ((e.clientY - rect.top) / rect.height) * 100;
-      setState(prev => ({
-        ...prev!,
-        laserPointerPosition: { x: Math.max(0, Math.min(100, x)), y: Math.max(0, Math.min(100, y)) }
-      }));
-    }
-  }, [state?.laserPointerActive, setState]);
+  const handleMouseMove = useCallback(
+    (e: React.MouseEvent) => {
+      if (state?.laserPointerActive && containerRef.current) {
+        const rect = containerRef.current.getBoundingClientRect();
+        const x = ((e.clientX - rect.left) / rect.width) * 100;
+        const y = ((e.clientY - rect.top) / rect.height) * 100;
+        setState((prev) => ({
+          ...prev!,
+          laserPointerPosition: {
+            x: Math.max(0, Math.min(100, x)),
+            y: Math.max(0, Math.min(100, y)),
+          },
+        }));
+      }
+    },
+    [state?.laserPointerActive, setState],
+  );
 
   // Auto-advance functionality
   useEffect(() => {
     if (!state || !props.autoAdvance || !state.isPlaying) return;
 
-    const interval = setInterval(() => {
-      if (state.currentSlide < props.slides.length - 1) {
-        setState(prev => ({
-          ...prev!,
-          currentSlide: prev!.currentSlide + 1
-        }));
-      } else {
-        setState(prev => ({ ...prev!, isPlaying: false }));
-      }
-    }, (props.autoAdvanceInterval || 30) * 1000);
+    const interval = setInterval(
+      () => {
+        if (state.currentSlide < props.slides.length - 1) {
+          setState((prev) => ({
+            ...prev!,
+            currentSlide: prev!.currentSlide + 1,
+          }));
+        } else {
+          setState((prev) => ({ ...prev!, isPlaying: false }));
+        }
+      },
+      (props.autoAdvanceInterval || 30) * 1000,
+    );
 
     return () => clearInterval(interval);
-  }, [state?.isPlaying, state?.currentSlide, props.autoAdvance, props.autoAdvanceInterval, props.slides.length, setState]);
+  }, [
+    state?.isPlaying,
+    state?.currentSlide,
+    props.autoAdvance,
+    props.autoAdvanceInterval,
+    props.slides.length,
+    setState,
+  ]);
 
   // Timer for elapsed time
   useEffect(() => {
     if (!state?.isPlaying || !state.presentationStartTime) return;
 
     const interval = setInterval(() => {
-      setState(prev => ({
+      setState((prev) => ({
         ...prev!,
-        elapsedTime: Math.floor((Date.now() - prev!.presentationStartTime!.getTime()) / 1000)
+        elapsedTime: Math.floor((Date.now() - prev!.presentationStartTime!.getTime()) / 1000),
       }));
     }, 1000);
 
@@ -437,10 +485,13 @@ export function PresentationDeck(props: PresentationDeckProps) {
 
     const handleKeyDown = (e: KeyboardEvent) => {
       // Prevent default for known shortcuts
-      if (HOTKEYS.NEXT_SLIDE.includes(e.key) || 
-          HOTKEYS.PREV_SLIDE.includes(e.key) ||
-          HOTKEYS.TOGGLE_PLAY.includes(e.key) ||
-          e.key === 'f' || e.key === 'F11') {
+      if (
+        HOTKEYS.NEXT_SLIDE.includes(e.key) ||
+        HOTKEYS.PREV_SLIDE.includes(e.key) ||
+        HOTKEYS.TOGGLE_PLAY.includes(e.key) ||
+        e.key === 'f' ||
+        e.key === 'F11'
+      ) {
         e.preventDefault();
       }
 
@@ -449,9 +500,9 @@ export function PresentationDeck(props: PresentationDeckProps) {
       } else if (HOTKEYS.PREV_SLIDE.includes(e.key)) {
         previousSlide();
       } else if (HOTKEYS.FIRST_SLIDE.includes(e.key)) {
-        setState(prev => ({ ...prev!, currentSlide: 0 }));
+        setState((prev) => ({ ...prev!, currentSlide: 0 }));
       } else if (HOTKEYS.LAST_SLIDE.includes(e.key)) {
-        setState(prev => ({ ...prev!, currentSlide: props.slides.length - 1 }));
+        setState((prev) => ({ ...prev!, currentSlide: props.slides.length - 1 }));
       } else if (HOTKEYS.TOGGLE_PLAY.includes(e.key)) {
         togglePlay();
       } else if (HOTKEYS.FULLSCREEN.includes(e.key)) {
@@ -503,12 +554,12 @@ export function PresentationDeck(props: PresentationDeckProps) {
   // Canvas integration
   useEffect(() => {
     window.dispatchEvent(
-      new CustomEvent("tambo:showComponent", {
+      new CustomEvent('tambo:showComponent', {
         detail: {
           messageId: componentId,
-          component: <PresentationDeck {...props} />
-        }
-      })
+          component: <PresentationDeck {...props} />,
+        },
+      }),
     );
   }, [componentId, props]);
 
@@ -518,40 +569,40 @@ export function PresentationDeck(props: PresentationDeckProps) {
       const customEvent = event as CustomEvent;
       if (customEvent.detail.componentId === componentId) {
         switch (customEvent.detail.action) {
-          case "resize":
-            setState(prev => ({
+          case 'resize':
+            setState((prev) => ({
               ...prev!,
-              canvasSize: customEvent.detail.size
+              canvasSize: customEvent.detail.size,
             }));
             break;
-          case "focus":
-            setState(prev => ({
+          case 'focus':
+            setState((prev) => ({
               ...prev!,
-              isActive: true
+              isActive: true,
             }));
             break;
-          case "blur":
-            setState(prev => ({
+          case 'blur':
+            setState((prev) => ({
               ...prev!,
               isActive: false,
-              isPlaying: false
+              isPlaying: false,
             }));
             break;
         }
       }
     };
 
-    window.addEventListener("tambo:canvas:interaction", handleCanvasEvent);
-    return () => window.removeEventListener("tambo:canvas:interaction", handleCanvasEvent);
+    window.addEventListener('tambo:canvas:interaction', handleCanvasEvent);
+    return () => window.removeEventListener('tambo:canvas:interaction', handleCanvasEvent);
   }, [componentId, setState]);
 
   // Navigation functions
   const nextSlide = useCallback(() => {
     if (!state) return;
     if (state.currentSlide < props.slides.length - 1) {
-      setState(prev => ({
+      setState((prev) => ({
         ...prev!,
-        currentSlide: prev!.currentSlide + 1
+        currentSlide: prev!.currentSlide + 1,
       }));
     }
   }, [state, props.slides.length, setState]);
@@ -559,25 +610,28 @@ export function PresentationDeck(props: PresentationDeckProps) {
   const previousSlide = useCallback(() => {
     if (!state) return;
     if (state.currentSlide > 0) {
-      setState(prev => ({
+      setState((prev) => ({
         ...prev!,
-        currentSlide: prev!.currentSlide - 1
+        currentSlide: prev!.currentSlide - 1,
       }));
     }
   }, [state, setState]);
 
-  const goToSlide = useCallback((index: number) => {
-    setState(prev => ({
-      ...prev!,
-      currentSlide: Math.max(0, Math.min(index, props.slides.length - 1))
-    }));
-  }, [props.slides.length, setState]);
+  const goToSlide = useCallback(
+    (index: number) => {
+      setState((prev) => ({
+        ...prev!,
+        currentSlide: Math.max(0, Math.min(index, props.slides.length - 1)),
+      }));
+    },
+    [props.slides.length, setState],
+  );
 
   const togglePlay = useCallback(() => {
-    setState(prev => ({
+    setState((prev) => ({
       ...prev!,
       isPlaying: !prev!.isPlaying,
-      presentationStartTime: !prev!.isPlaying ? new Date() : prev!.presentationStartTime
+      presentationStartTime: !prev!.isPlaying ? new Date() : prev!.presentationStartTime,
     }));
   }, [setState]);
 
@@ -585,10 +639,10 @@ export function PresentationDeck(props: PresentationDeckProps) {
     if (containerRef.current) {
       if (!document.fullscreenElement) {
         containerRef.current.requestFullscreen();
-        setState(prev => ({ ...prev!, isFullscreen: true }));
+        setState((prev) => ({ ...prev!, isFullscreen: true }));
       } else {
         document.exitFullscreen();
-        setState(prev => ({ ...prev!, isFullscreen: false }));
+        setState((prev) => ({ ...prev!, isFullscreen: false }));
       }
     }
   }, [setState]);
@@ -596,48 +650,48 @@ export function PresentationDeck(props: PresentationDeckProps) {
   const exitFullscreen = useCallback(() => {
     if (document.fullscreenElement) {
       document.exitFullscreen();
-      setState(prev => ({ ...prev!, isFullscreen: false }));
+      setState((prev) => ({ ...prev!, isFullscreen: false }));
     }
   }, [setState]);
 
   const toggleThumbnails = useCallback(() => {
-    setState(prev => ({
+    setState((prev) => ({
       ...prev!,
-      showThumbnails: !prev!.showThumbnails
+      showThumbnails: !prev!.showThumbnails,
     }));
   }, [setState]);
 
   const toggleNotes = useCallback(() => {
-    setState(prev => ({
+    setState((prev) => ({
       ...prev!,
-      showNotes: !prev!.showNotes
+      showNotes: !prev!.showNotes,
     }));
   }, [setState]);
 
   const toggleLaserPointer = useCallback(() => {
-    setState(prev => ({
+    setState((prev) => ({
       ...prev!,
-      laserPointerActive: !prev!.laserPointerActive
+      laserPointerActive: !prev!.laserPointerActive,
     }));
   }, [setState]);
 
   const toggleBookmark = useCallback(() => {
     if (!state) return;
-    setState(prev => ({
+    setState((prev) => ({
       ...prev!,
       bookmarkedSlides: prev!.bookmarkedSlides.includes(prev!.currentSlide)
-        ? prev!.bookmarkedSlides.filter(i => i !== prev!.currentSlide)
-        : [...prev!.bookmarkedSlides, prev!.currentSlide]
+        ? prev!.bookmarkedSlides.filter((i) => i !== prev!.currentSlide)
+        : [...prev!.bookmarkedSlides, prev!.currentSlide],
     }));
   }, [state, setState]);
 
   const resetPresentation = useCallback(() => {
-    setState(prev => ({
+    setState((prev) => ({
       ...prev!,
       currentSlide: 0,
       isPlaying: false,
       presentationStartTime: null,
-      elapsedTime: 0
+      elapsedTime: 0,
     }));
   }, [setState]);
 
@@ -656,7 +710,7 @@ export function PresentationDeck(props: PresentationDeckProps) {
   const isBookmarked = state.bookmarkedSlides.includes(state.currentSlide);
 
   return (
-    <div 
+    <div
       ref={containerRef}
       className={`relative bg-slate-950 rounded-lg overflow-hidden ${
         state.isFullscreen ? 'fixed inset-0 z-50' : ''
@@ -674,12 +728,10 @@ export function PresentationDeck(props: PresentationDeckProps) {
         <div className="flex items-center justify-between">
           <div>
             <h3 className="text-lg font-semibold text-white">{props.title}</h3>
-            {props.author && (
-              <p className="text-sm text-slate-400">by {props.author}</p>
-            )}
+            {props.author && <p className="text-sm text-slate-400">by {props.author}</p>}
           </div>
-          <ProgressIndicator 
-            current={state.currentSlide} 
+          <ProgressIndicator
+            current={state.currentSlide}
             total={props.slides.length}
             showTime={state.isPlaying}
             elapsedTime={state.elapsedTime}
@@ -712,13 +764,13 @@ export function PresentationDeck(props: PresentationDeckProps) {
         {/* Main slide area */}
         <div className="flex-1 flex flex-col">
           <div className="flex-1 p-6 flex items-center justify-center">
-            <SlideDisplay 
+            <SlideDisplay
               slide={currentSlideData}
-              aspectRatio={props.aspectRatio || "16:9"}
+              aspectRatio={props.aspectRatio || '16:9'}
               laserPointer={{
                 x: state.laserPointerPosition.x,
                 y: state.laserPointerPosition.y,
-                active: state.laserPointerActive
+                active: state.laserPointerActive,
               }}
             />
           </div>
@@ -733,7 +785,7 @@ export function PresentationDeck(props: PresentationDeckProps) {
       </div>
 
       {/* Controls */}
-      {(props.showControls && (isControlsVisible || !state.userPreferences.autoHideControls)) && (
+      {props.showControls && (isControlsVisible || !state.userPreferences.autoHideControls) && (
         <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2">
           <ControlPanel
             currentSlide={state.currentSlide}
@@ -771,4 +823,4 @@ export function PresentationDeck(props: PresentationDeckProps) {
       )}
     </div>
   );
-} 
+}

@@ -1,6 +1,6 @@
 /**
  * Component tools for the LiveKit agent worker
- * 
+ *
  * This file defines OpenAI function tools without importing React components
  * to avoid Node.js compatibility issues.
  */
@@ -12,7 +12,8 @@ export const componentTools = [
     type: 'function',
     function: {
       name: 'create_weatherforecast',
-      description: 'Display weather forecast data with visuals. Requires JSON weather data in a specific format.',
+      description:
+        'Display weather forecast data with visuals. Requires JSON weather data in a specific format.',
       parameters: {
         location: z.string().optional().describe('Location for weather forecast'),
         periods: z.array(z.any()).optional().describe('Weather forecast periods'),
@@ -22,9 +23,9 @@ export const componentTools = [
       },
       execute: async (params: any) => ({
         componentType: 'WeatherForecast',
-        initialProps: params
-      })
-    }
+        initialProps: params,
+      }),
+    },
   },
   {
     type: 'function',
@@ -39,15 +40,16 @@ export const componentTools = [
       },
       execute: async (params: any) => ({
         componentType: 'RetroTimerEnhanced',
-        initialProps: params
-      })
-    }
+        initialProps: params,
+      }),
+    },
   },
   {
     type: 'function',
     function: {
       name: 'create_youtubeembed',
-      description: 'Use this to embed a YouTube video. Requires a video ID and optional start time in seconds.',
+      description:
+        'Use this to embed a YouTube video. Requires a video ID and optional start time in seconds.',
       parameters: {
         videoId: z.string().describe('YouTube video ID'),
         title: z.string().optional().describe('Video title'),
@@ -55,30 +57,32 @@ export const componentTools = [
       },
       execute: async (params: any) => ({
         componentType: 'YoutubeEmbed',
-        initialProps: params
-      })
-    }
+        initialProps: params,
+      }),
+    },
   },
   {
     type: 'function',
     function: {
       name: 'create_actionitemtracker',
-      description: 'A comprehensive action item management system that tracks tasks, assignments, due dates, and progress.',
+      description:
+        'A comprehensive action item management system that tracks tasks, assignments, due dates, and progress.',
       parameters: {
         title: z.string().default('Action Items').describe('Title of the action item list'),
         initialItems: z.array(z.any()).optional().describe('Initial action items'),
       },
       execute: async (params: any) => ({
         componentType: 'ActionItemTracker',
-        initialProps: params
-      })
-    }
+        initialProps: params,
+      }),
+    },
   },
   {
     type: 'function',
     function: {
       name: 'create_linearkanbanboard',
-      description: 'A comprehensive Linear project management kanban board with drag-and-drop functionality.',
+      description:
+        'A comprehensive Linear project management kanban board with drag-and-drop functionality.',
       parameters: {
         title: z.string().default('Linear Kanban Board').describe('Board title'),
         teams: z.array(z.any()).optional().describe('Linear teams available'),
@@ -87,9 +91,9 @@ export const componentTools = [
       },
       execute: async (params: any) => ({
         componentType: 'LinearKanbanBoard',
-        initialProps: params
-      })
-    }
+        initialProps: params,
+      }),
+    },
   },
   {
     type: 'function',
@@ -102,8 +106,8 @@ export const componentTools = [
       },
       execute: async (params: any) => ({
         componentType: 'LiveCaptions',
-        initialProps: params
-      })
-    }
-  }
+        initialProps: params,
+      }),
+    },
+  },
 ];

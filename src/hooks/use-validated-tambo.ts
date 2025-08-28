@@ -1,13 +1,13 @@
 /**
  * Custom hook that wraps useTambo and validates tools
- * 
+ *
  * This hook ensures all tools in the registry have valid names
  * that comply with Tambo SDK requirements (^[a-zA-Z0-9_-]+$)
  */
 
-import { useTambo } from "@tambo-ai/react";
-import { sanitizeToolName, isValidToolName } from "@/lib/tambo-tool-validator";
-import { useEffect, useRef, useMemo } from "react";
+import { useTambo } from '@tambo-ai/react';
+import { sanitizeToolName, isValidToolName } from '@/lib/tambo-tool-validator';
+import { useEffect, useRef, useMemo } from 'react';
 
 export function useValidatedTambo() {
   const tambo = useTambo() as any;
@@ -16,12 +16,12 @@ export function useValidatedTambo() {
   // Create a proxy that sanitizes tool names on access
   const proxiedRegistry = useMemo(() => {
     if (!tambo?.toolRegistry) return tambo?.toolRegistry;
-    
+
     // If registry hasn't changed, return cached proxy
     if (tambo.toolRegistry === lastRegistryRef.current) {
       return tambo.toolRegistry;
     }
-    
+
     lastRegistryRef.current = tambo.toolRegistry;
 
     // Handle Map-style registry
@@ -64,6 +64,6 @@ export function useValidatedTambo() {
   // Return tambo context with validated tool registry
   return {
     ...tambo,
-    toolRegistry: proxiedRegistry
+    toolRegistry: proxiedRegistry,
   };
 }

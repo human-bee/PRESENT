@@ -30,7 +30,6 @@ export function createLiveKitBus(room: Room | null | undefined) {
       //    teardown.
       //    Ref: https://docs.livekit.io/client-sdk-js/interfaces/Room.html#state
       if (room.state !== 'connected') {
-         
         console.warn('[LiveKitBus] Skipping publishData – room not connected.', {
           topic,
           currentState: room.state,
@@ -39,12 +38,11 @@ export function createLiveKitBus(room: Room | null | undefined) {
       }
 
       try {
-        room.localParticipant?.publishData(
-          new TextEncoder().encode(JSON.stringify(payload)),
-          { reliable: true, topic }
-        );
+        room.localParticipant?.publishData(new TextEncoder().encode(JSON.stringify(payload)), {
+          reliable: true,
+          topic,
+        });
       } catch (err) {
-         
         console.error('[LiveKitBus] Failed to send', topic, err);
       }
     },
@@ -55,7 +53,7 @@ export function createLiveKitBus(room: Room | null | undefined) {
      */
     on(topic: string, handler: (payload: unknown) => void) {
       if (!room) return () => {};
-      
+
       // Create the actual listener that will be registered
       const dataReceivedHandler = (data: Uint8Array, _p: any, _k: any, t: any) => {
         if (t === topic) {
@@ -63,19 +61,18 @@ export function createLiveKitBus(room: Room | null | undefined) {
             const msg = JSON.parse(new TextDecoder().decode(data));
             handler(msg);
           } catch (err) {
-             
             console.error('[LiveKitBus] Failed to decode', err);
           }
         }
       };
-      
+
       // Register the handler
       room.on('dataReceived', dataReceivedHandler);
-      
+
       // Return cleanup function that removes the exact same handler
       return () => {
         room.off('dataReceived', dataReceivedHandler);
       };
     },
   } as const;
-} 
+}

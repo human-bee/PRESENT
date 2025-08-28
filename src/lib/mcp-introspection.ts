@@ -1,11 +1,11 @@
-"use client";
+'use client';
 
-import { systemRegistry } from "./system-registry";
+import { systemRegistry } from './system-registry';
 
 type RegistryLike = Map<string, any> | Record<string, any> | undefined | null;
 
 export function listWindowMcpTools(): string[] {
-  if (typeof window === "undefined") return [];
+  if (typeof window === 'undefined') return [];
   const tools = (window as any).__tambo_mcp_tools || {};
   return Object.keys(tools);
 }
@@ -13,7 +13,7 @@ export function listWindowMcpTools(): string[] {
 export function listRegistryTools(registry: RegistryLike): string[] {
   if (!registry) return [];
   if (registry instanceof Map) return Array.from(registry.keys());
-  if (typeof registry === "object") return Object.keys(registry);
+  if (typeof registry === 'object') return Object.keys(registry);
   return [];
 }
 
@@ -31,7 +31,7 @@ export function computeMcpMappings(registry: RegistryLike) {
   const caps = getCapabilitySnapshot();
 
   return caps
-    .filter((c: any) => c.type === "mcp_tool" || c.mcpToolName)
+    .filter((c: any) => c.type === 'mcp_tool' || c.mcpToolName)
     .map((c: any) => {
       const mcp = c.mcpToolName || c.name;
       return {
@@ -42,8 +42,3 @@ export function computeMcpMappings(registry: RegistryLike) {
       };
     });
 }
-
-
-
-
-

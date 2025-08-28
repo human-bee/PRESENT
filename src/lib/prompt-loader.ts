@@ -19,4 +19,4 @@ export async function getPrompt(name: string): Promise<string> {
     cache[name] = txt;
     return txt;
   }
-} 
+}

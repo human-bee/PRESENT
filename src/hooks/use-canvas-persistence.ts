@@ -1,17 +1,17 @@
-import { useEffect, useRef, useState, useCallback } from "react";
-import { Editor } from "tldraw";
-import { useRouter } from "next/navigation";
-import { useTamboThread } from "@tambo-ai/react";
-import { toast } from "react-hot-toast";
-import { supabase, type Canvas } from "@/lib/supabase";
-import { useAuth } from "./use-auth";
+import { useEffect, useRef, useState, useCallback } from 'react';
+import { Editor } from 'tldraw';
+import { useRouter } from 'next/navigation';
+import { useTamboThread } from '@tambo-ai/react';
+import { toast } from 'react-hot-toast';
+import { supabase, type Canvas } from '@/lib/supabase';
+import { useAuth } from './use-auth';
 
 export function useCanvasPersistence(editor: Editor | null, enabled: boolean = true) {
   const { user } = useAuth();
   const router = useRouter();
   const { thread } = useTamboThread();
   const [canvasId, setCanvasId] = useState<string | null>(null);
-  const [canvasName, setCanvasName] = useState("Untitled Canvas");
+  const [canvasName, setCanvasName] = useState('Untitled Canvas');
   const [isSaving, setIsSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const [canWrite, setCanWrite] = useState(true);
@@ -24,8 +24,10 @@ export function useCanvasPersistence(editor: Editor | null, enabled: boolean = t
 
       // Check URL params for canvas ID
       const urlParams = new URLSearchParams(window.location.search);
-      const canvasIdParam = urlParams.get("id");
-      const isUuid = !!canvasIdParam && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(canvasIdParam);
+      const canvasIdParam = urlParams.get('id');
+      const isUuid =
+        !!canvasIdParam &&
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(canvasIdParam);
 
       // Optimistically reflect the canvas id as the name to avoid 'Untitled' flicker
       if (isUuid && canvasName !== canvasIdParam) {
@@ -46,13 +48,18 @@ export function useCanvasPersistence(editor: Editor | null, enabled: boolean = t
 
           if (canvas) {
             console.log('🎨 [CanvasPersistence] Loading canvas:', canvas.id, canvas.name);
-            console.log('🎨 [CanvasPersistence] Canvas document has shapes:', Object.keys(canvas.document?.store?.['shape:tambo'] || {}));
+            console.log(
+              '🎨 [CanvasPersistence] Canvas document has shapes:',
+              Object.keys(canvas.document?.store?.['shape:tambo'] || {}),
+            );
             console.log('🎨 [CanvasPersistence] Conversation key:', canvas.conversation_key);
-            
+
             setCanvasId(canvas.id);
             setCanvasName(canvas.name);
             setLastSaved(new Date(canvas.last_modified));
-            try { localStorage.setItem('present:lastCanvasId', canvas.id); } catch {}
+            try {
+              localStorage.setItem('present:lastCanvasId', canvas.id);
+            } catch {}
 
             // Determine write permission: owner or editor membership
             if (canvas.user_id === user.id) {
@@ -70,29 +77,37 @@ export function useCanvasPersistence(editor: Editor | null, enabled: boolean = t
                 setCanWrite(false);
               }
             }
-            
+
             // Load the document into the editor
             try {
               if (canvas.document && typeof canvas.document === 'object') {
                 editor.loadSnapshot(canvas.document);
               }
             } catch (e) {
-              console.warn('⚠️ [CanvasPersistence] Failed to load snapshot, continuing with empty editor', e);
+              console.warn(
+                '⚠️ [CanvasPersistence] Failed to load snapshot, continuing with empty editor',
+                e,
+              );
             }
-            
+
             console.log('🎨 [CanvasPersistence] Canvas loaded successfully - shapes should appear');
-            
+
             // CRITICAL: Rehydrate component store after canvas loads
             // The canvas document contains shapes, but componentStore is empty on reload
             setTimeout(() => {
               console.log('🔄 [CanvasPersistence] Starting component rehydration...');
-              window.dispatchEvent(new CustomEvent('tambo:rehydrateComponents', {
-                detail: { canvasId: canvas.id, conversationKey: canvas.conversation_key }
-              }));
+              window.dispatchEvent(
+                new CustomEvent('tambo:rehydrateComponents', {
+                  detail: { canvasId: canvas.id, conversationKey: canvas.conversation_key },
+                }),
+              );
             }, 100); // Small delay to ensure editor is fully loaded
           }
         } catch (error) {
-          console.warn("[CanvasPersistence] Canvas load failed or not accessible; continuing in view/collab mode", error);
+          console.warn(
+            '[CanvasPersistence] Canvas load failed or not accessible; continuing in view/collab mode',
+            error,
+          );
           // No redirect; keep current id for TLDraw sync. Mark as read-only for persistence.
           setCanWrite(false);
         }
@@ -129,7 +144,7 @@ export function useCanvasPersistence(editor: Editor | null, enabled: boolean = t
       const conversationKey = thread?.id || null;
       // Prefer a name derived from canvas id until user customizes
       const urlParams = new URLSearchParams(window.location.search);
-      const idParam = urlParams.get("id");
+      const idParam = urlParams.get('id');
       // Default to the exact id as the name for new canvases
       const defaultName = idParam || canvasName;
       const now = new Date().toISOString();
@@ -152,7 +167,9 @@ export function useCanvasPersistence(editor: Editor | null, enabled: boolean = t
 
         // Notify session sync to update the session's canvas_state
         try {
-          window.dispatchEvent(new CustomEvent('tambo:sessionCanvasSaved', { detail: { snapshot, canvasId } }))
+          window.dispatchEvent(
+            new CustomEvent('tambo:sessionCanvasSaved', { detail: { snapshot, canvasId } }),
+          );
         } catch (e) {
           // no-op
         }
@@ -175,23 +192,29 @@ export function useCanvasPersistence(editor: Editor | null, enabled: boolean = t
 
         setCanvasId(newCanvas.id);
         setLastSaved(new Date());
-        try { localStorage.setItem('present:lastCanvasId', newCanvas.id); } catch {}
-        
+        try {
+          localStorage.setItem('present:lastCanvasId', newCanvas.id);
+        } catch {}
+
         // Notify session sync to update the session's canvas_state
         try {
-          window.dispatchEvent(new CustomEvent('tambo:sessionCanvasSaved', { detail: { snapshot, canvasId: newCanvas.id } }))
+          window.dispatchEvent(
+            new CustomEvent('tambo:sessionCanvasSaved', {
+              detail: { snapshot, canvasId: newCanvas.id },
+            }),
+          );
         } catch (e) {
           // no-op
         }
-        
+
         // Update URL with canvas ID
         const newUrl = new URL(window.location.href);
-        newUrl.searchParams.set("id", newCanvas.id);
-        window.history.replaceState({}, "", newUrl.toString());
+        newUrl.searchParams.set('id', newCanvas.id);
+        window.history.replaceState({}, '', newUrl.toString());
       }
     } catch (error) {
-      console.error("Error saving canvas:", error);
-      toast.error("Failed to save canvas");
+      console.error('Error saving canvas:', error);
+      toast.error('Failed to save canvas');
     } finally {
       setIsSaving(false);
     }
@@ -215,7 +238,7 @@ export function useCanvasPersistence(editor: Editor | null, enabled: boolean = t
     };
 
     // Listen to editor changes
-    const unsubscribe = editor.store.listen(handleChange, { scope: "document" });
+    const unsubscribe = editor.store.listen(handleChange, { scope: 'document' });
 
     return () => {
       unsubscribe();
@@ -236,26 +259,29 @@ export function useCanvasPersistence(editor: Editor | null, enabled: boolean = t
       clearTimeout(saveTimeoutRef.current);
     }
     await saveCanvas();
-    toast.success("Canvas saved!");
+    toast.success('Canvas saved!');
   }, [saveCanvas, enabled, canWrite]);
 
   // Update canvas name
-  const updateCanvasName = useCallback(async (newName: string) => {
-    setCanvasName(newName);
-    
-    if (canvasId && user?.id) {
-      try {
-        const { error } = await supabase
-          .from('canvases')
-          .update({ name: newName })
-          .eq('id', canvasId);
+  const updateCanvasName = useCallback(
+    async (newName: string) => {
+      setCanvasName(newName);
 
-        if (error) throw error;
-      } catch (error) {
-        console.error("Error updating canvas name:", error);
+      if (canvasId && user?.id) {
+        try {
+          const { error } = await supabase
+            .from('canvases')
+            .update({ name: newName })
+            .eq('id', canvasId);
+
+          if (error) throw error;
+        } catch (error) {
+          console.error('Error updating canvas name:', error);
+        }
       }
-    }
-  }, [canvasId, user]);
+    },
+    [canvasId, user],
+  );
 
   return {
     canvasId,
@@ -265,4 +291,4 @@ export function useCanvasPersistence(editor: Editor | null, enabled: boolean = t
     saveCanvas: manualSave,
     updateCanvasName,
   };
-} 
+}

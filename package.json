@@ -12,7 +12,7 @@
     "start": "next start",
     "lint": "next lint",
     "biome:check": "biome check .",
-    "biome:format": "biome format --write .",
+    "format": "biome format --write .",
     "init": "npx tambo init",
     "test": "jest",
     "test:watch": "jest --watch",

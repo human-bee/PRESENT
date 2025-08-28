@@ -3,7 +3,7 @@ import { z } from 'zod';
 
 /**
  * OpenAI Agent-JS setup for LiveKit + Tambo UI integration
- * 
+ *
  * This agent:
  * - Connects to LiveKit rooms to receive audio from participants
  * - Uses OpenAI Responses API for speech transcription and processing
@@ -49,7 +49,7 @@ Stay focused on detecting these specific triggers rather than general conversati
  */
 export function createTamboVoiceAgent(config: Partial<AgentConfig> = {}): RealtimeAgent {
   const finalConfig = { ...defaultAgentConfig, ...config };
-  
+
   if (!finalConfig.openaiApiKey || finalConfig.openaiApiKey.trim() === '') {
     throw new Error('OpenAI API key is required. Set OPENAI_API_KEY environment variable.');
   }
@@ -69,9 +69,12 @@ export function createTamboVoiceAgent(config: Partial<AgentConfig> = {}): Realti
 /**
  * Create a RealtimeSession for the agent
  */
-export function createAgentSession(agent: RealtimeAgent, config: Partial<AgentConfig> = {}): RealtimeSession {
+export function createAgentSession(
+  agent: RealtimeAgent,
+  config: Partial<AgentConfig> = {},
+): RealtimeSession {
   const finalConfig = { ...defaultAgentConfig, ...config };
-  
+
   const session = new RealtimeSession(agent, {
     model: finalConfig.model,
   });
@@ -86,7 +89,7 @@ export class TamboVoiceAgentManager {
   private agent: RealtimeAgent | null = null;
   private session: RealtimeSession | null = null;
   private isConnected = false;
-  
+
   constructor(private config: Partial<AgentConfig> = {}) {}
 
   /**
@@ -96,7 +99,7 @@ export class TamboVoiceAgentManager {
     try {
       this.agent = createTamboVoiceAgent(this.config);
       this.session = createAgentSession(this.agent, this.config);
-      
+
       console.log('🤖 Tambo Voice Agent initialized successfully');
     } catch (error) {
       console.error('❌ Failed to initialize Tambo Voice Agent:', error);
@@ -120,7 +123,7 @@ export class TamboVoiceAgentManager {
 
       await this.session.connect({ apiKey: key });
       this.isConnected = true;
-      
+
       console.log('✅ Tambo Voice Agent connected to OpenAI Realtime API');
     } catch (error) {
       console.error('❌ Failed to connect Tambo Voice Agent:', error);
@@ -172,4 +175,4 @@ export class TamboVoiceAgentManager {
 /**
  * Global agent manager instance
  */
-export const tamboVoiceAgent = new TamboVoiceAgentManager(defaultAgentConfig); 
+export const tamboVoiceAgent = new TamboVoiceAgentManager(defaultAgentConfig);

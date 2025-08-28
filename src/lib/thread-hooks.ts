@@ -1,6 +1,6 @@
-import * as React from "react";
-import { useEffect, useState } from "react";
-import type { TamboThreadMessage } from "@tambo-ai/react";
+import * as React from 'react';
+import { useEffect, useState } from 'react';
+import type { TamboThreadMessage } from '@tambo-ai/react';
 
 /**
  * Custom hook to merge multiple refs into one callback ref
@@ -13,7 +13,7 @@ export function useMergedRef<T>(...refs: React.Ref<T>[]) {
       for (const ref of refs) {
         if (!ref) continue;
 
-        if (typeof ref === "function") {
+        if (typeof ref === 'function') {
           ref(element);
         } else {
           // This cast is safe because we're just updating the .current property
@@ -30,9 +30,7 @@ export function useMergedRef<T>(...refs: React.Ref<T>[]) {
  * @param elementRef - Reference to the component to compare position with
  * @returns Object containing hasCanvasSpace and canvasIsOnLeft
  */
-export function useCanvasDetection(
-  elementRef: React.RefObject<HTMLElement | null>,
-) {
+export function useCanvasDetection(elementRef: React.RefObject<HTMLElement | null>) {
   const [hasCanvasSpace, setHasCanvasSpace] = useState(false);
   const [canvasIsOnLeft, setCanvasIsOnLeft] = useState(false);
 
@@ -54,11 +52,11 @@ export function useCanvasDetection(
     const timeoutId = setTimeout(checkCanvas, 100);
 
     // Re-check on window resize
-    window.addEventListener("resize", checkCanvas);
+    window.addEventListener('resize', checkCanvas);
 
     return () => {
       clearTimeout(timeoutId);
-      window.removeEventListener("resize", checkCanvas);
+      window.removeEventListener('resize', checkCanvas);
     };
   }, [elementRef]);
 
@@ -80,11 +78,7 @@ export function hasRightClass(className?: string): boolean {
  * @param canvasIsOnLeft - Whether the canvas is on the left
  * @returns Object with isLeftPanel and historyPosition values
  */
-export function usePositioning(
-  className?: string,
-  canvasIsOnLeft = false,
-  hasCanvasSpace = false,
-) {
+export function usePositioning(className?: string, canvasIsOnLeft = false, hasCanvasSpace = false) {
   const isRightClass = hasRightClass(className);
   const isLeftPanel = !isRightClass;
 
@@ -92,11 +86,11 @@ export function usePositioning(
   // If panel has right class, history should be on right
   // If canvas is on left, history should be on right
   // Otherwise, history should be on left
-  const historyPosition: "left" | "right" = isRightClass
-    ? "right"
+  const historyPosition: 'left' | 'right' = isRightClass
+    ? 'right'
     : hasCanvasSpace && canvasIsOnLeft
-      ? "right"
-      : "left";
+      ? 'right'
+      : 'left';
 
   return { isLeftPanel, historyPosition };
 }
@@ -108,20 +102,18 @@ export function usePositioning(
  * @returns A renderable string or React element.
  */
 export function getSafeContent(
-  content: TamboThreadMessage["content"] | React.ReactNode | undefined | null,
+  content: TamboThreadMessage['content'] | React.ReactNode | undefined | null,
 ): string | React.ReactElement {
-  if (!content) return "";
-  if (typeof content === "string") return content;
+  if (!content) return '';
+  if (typeof content === 'string') return content;
   if (React.isValidElement(content)) return content; // Pass elements through
   if (Array.isArray(content)) {
     // Filter out non-text items and join text
-    return content
-      .map((item) => (item && item.type === "text" ? item.text ?? "" : ""))
-      .join("");
+    return content.map((item) => (item && item.type === 'text' ? (item.text ?? '') : '')).join('');
   }
   // Handle potential edge cases or unknown types
   // console.warn("getSafeContent encountered unknown content type:", content);
-  return "Invalid content format"; // Or handle differently
+  return 'Invalid content format'; // Or handle differently
 }
 
 /**
@@ -130,17 +122,17 @@ export function getSafeContent(
  * @returns True if there is content, false otherwise.
  */
 export function checkHasContent(
-  content: TamboThreadMessage["content"] | React.ReactNode | undefined | null,
+  content: TamboThreadMessage['content'] | React.ReactNode | undefined | null,
 ): boolean {
   if (!content) return false;
-  if (typeof content === "string") return content.trim().length > 0;
+  if (typeof content === 'string') return content.trim().length > 0;
   if (React.isValidElement(content)) return true; // Assume elements have content
   if (Array.isArray(content)) {
     return content.some(
       (item) =>
         item &&
-        item.type === "text" &&
-        typeof item.text === "string" &&
+        item.type === 'text' &&
+        typeof item.text === 'string' &&
         item.text.trim().length > 0,
     );
   }

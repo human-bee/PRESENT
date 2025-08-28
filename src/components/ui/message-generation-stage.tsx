@@ -1,9 +1,9 @@
-"use client";
+'use client';
 
-import * as React from "react";
-import { cn } from "@/lib/utils";
-import { useTambo } from "@tambo-ai/react";
-import { Loader2Icon } from "lucide-react";
+import * as React from 'react';
+import { cn } from '@/lib/utils';
+import { useTambo } from '@tambo-ai/react';
+import { Loader2Icon } from 'lucide-react';
 
 /**
  * Represents the generation stage of a message
@@ -11,8 +11,7 @@ import { Loader2Icon } from "lucide-react";
  * @property {boolean} showLabel - Whether to show the label
  */
 
-export interface GenerationStageProps
-  extends React.HTMLAttributes<HTMLDivElement> {
+export interface GenerationStageProps extends React.HTMLAttributes<HTMLDivElement> {
   showLabel?: boolean;
 }
 
@@ -31,22 +30,21 @@ export function MessageGenerationStage({
 
   // Map stage names to more user-friendly labels
   const stageLabels: Record<string, string> = {
-    IDLE: "Idle",
-    CHOOSING_COMPONENT: "Choosing component",
-    FETCHING_CONTEXT: "Fetching context",
-    HYDRATING_COMPONENT: "Preparing component",
-    STREAMING_RESPONSE: "Generating response",
-    COMPLETE: "Complete",
-    ERROR: "Error",
+    IDLE: 'Idle',
+    CHOOSING_COMPONENT: 'Choosing component',
+    FETCHING_CONTEXT: 'Fetching context',
+    HYDRATING_COMPONENT: 'Preparing component',
+    STREAMING_RESPONSE: 'Generating response',
+    COMPLETE: 'Complete',
+    ERROR: 'Error',
   };
 
-  const label =
-    stageLabels[stage] || `${stage.charAt(0).toUpperCase() + stage.slice(1)}`;
+  const label = stageLabels[stage] || `${stage.charAt(0).toUpperCase() + stage.slice(1)}`;
 
   return (
     <div
       className={cn(
-        "inline-flex items-center gap-2 px-2 py-1 text-xs rounded-md bg-muted/30 text-muted-foreground",
+        'inline-flex items-center gap-2 px-2 py-1 text-xs rounded-md bg-muted/30 text-muted-foreground',
         className,
       )}
       {...props}

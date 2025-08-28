@@ -1,6 +1,6 @@
 /**
  * Simple Component Registry for Tambo
- * 
+ *
  * Instead of complex bus systems, use direct React patterns for component management.
  * This provides a single source of truth for all UI components across contexts.
  */
@@ -29,7 +29,10 @@ export type PropertyDiff = {
 };
 
 // Utility to compute shallow diff of two objects
-function diffProps(oldProps: Record<string, unknown>, newProps: Record<string, unknown>): PropertyDiff[] {
+function diffProps(
+  oldProps: Record<string, unknown>,
+  newProps: Record<string, unknown>,
+): PropertyDiff[] {
   const diffs: PropertyDiff[] = [];
   const allKeys = new Set([...Object.keys(oldProps), ...Object.keys(newProps)]);
   for (const key of allKeys) {
@@ -58,7 +61,11 @@ class ComponentStore {
   }
 
   // Silent update that doesn't log registration message (for props updates)
-  updatePropsOnly(messageId: string, props: Record<string, unknown>, updateCallback?: (patch: Record<string, unknown>) => void) {
+  updatePropsOnly(
+    messageId: string,
+    props: Record<string, unknown>,
+    updateCallback?: (patch: Record<string, unknown>) => void,
+  ) {
     const component = this.components.get(messageId);
     if (component) {
       const updatedComponent = {
@@ -74,7 +81,7 @@ class ComponentStore {
 
   async update(messageId: string, patch: Record<string, unknown>) {
     const component = this.components.get(messageId);
-    
+
     if (!component) {
       return {
         success: false,
@@ -150,7 +157,7 @@ class ComponentStore {
   }
 
   private notifyListeners() {
-    this.listeners.forEach(listener => listener());
+    this.listeners.forEach((listener) => listener());
   }
 }
 
@@ -158,26 +165,28 @@ class ComponentStore {
 class UpdateCircuitBreaker {
   private recentUpdates = new Map<string, number>();
   private readonly COOLDOWN_MS = 3000; // 3 seconds
-  
+
   canUpdate(componentId: string, patch: Record<string, unknown>): boolean {
     const key = `${componentId}-${JSON.stringify(patch)}`;
     const lastUpdate = this.recentUpdates.get(key);
     const now = Date.now();
-    
-    if (lastUpdate && (now - lastUpdate) < this.COOLDOWN_MS) {
-      console.log(`🛑 [CircuitBreaker] Preventing duplicate update for ${componentId} (last update ${now - lastUpdate}ms ago)`);
+
+    if (lastUpdate && now - lastUpdate < this.COOLDOWN_MS) {
+      console.log(
+        `🛑 [CircuitBreaker] Preventing duplicate update for ${componentId} (last update ${now - lastUpdate}ms ago)`,
+      );
       return false;
     }
-    
+
     this.recentUpdates.set(key, now);
-    
+
     // Clean up old entries
     for (const [updateKey, timestamp] of this.recentUpdates) {
-      if ((now - timestamp) > this.COOLDOWN_MS) {
+      if (now - timestamp > this.COOLDOWN_MS) {
         this.recentUpdates.delete(updateKey);
       }
     }
-    
+
     return true;
   }
 }
@@ -197,16 +206,17 @@ export class ComponentRegistry {
     if (!updateCircuitBreaker.canUpdate(messageId, patch)) {
       return {
         success: false,
-        error: '🛑 Update blocked by circuit breaker - identical update too recent. Wait 3 seconds.',
-        isCircuitBreakerBlock: true
+        error:
+          '🛑 Update blocked by circuit breaker - identical update too recent. Wait 3 seconds.',
+        isCircuitBreakerBlock: true,
       };
     }
-    
+
     return componentStore.update(messageId, patch);
   }
 
   static get(messageId: string): ComponentInfo | undefined {
-    return componentStore.list().find(c => c.messageId === messageId);
+    return componentStore.list().find((c) => c.messageId === messageId);
   }
 
   static list(contextKey?: string) {
@@ -228,15 +238,12 @@ export function useComponentRegistration(
   componentType: string,
   props: Record<string, unknown>,
   contextKey: string,
-  updateCallback?: (patch: Record<string, unknown>) => void
+  updateCallback?: (patch: Record<string, unknown>) => void,
 ) {
-  const [, forceUpdate] = React.useReducer(x => x + 1, 0);
-  
+  const [, forceUpdate] = React.useReducer((x) => x + 1, 0);
+
   // Stabilize the updateCallback to prevent infinite loops
-  const stableUpdateCallback = React.useCallback(
-    updateCallback || (() => {}), 
-    [updateCallback]
-  );
+  const stableUpdateCallback = React.useCallback(updateCallback || (() => {}), [updateCallback]);
 
   React.useEffect(() => {
     // Register the component
@@ -252,7 +259,7 @@ export function useComponentRegistration(
     // Subscribe to changes, but filter out changes for this component to prevent loops
     const unsubscribe = componentStore.subscribe(() => {
       // Only trigger re-render if this component is still registered
-      const component = ComponentRegistry.list().find(c => c.messageId === messageId);
+      const component = ComponentRegistry.list().find((c) => c.messageId === messageId);
       if (component) {
         forceUpdate();
       }
@@ -264,7 +271,7 @@ export function useComponentRegistration(
       unsubscribe();
     };
   }, [messageId, componentType, contextKey]); // Remove updateCallback from deps to prevent loops
-  
+
   // Update props and callback when they change using silent update (no re-registration logs)
   React.useEffect(() => {
     componentStore.updatePropsOnly(messageId, props, stableUpdateCallback);
@@ -273,7 +280,7 @@ export function useComponentRegistration(
 
 // Simple hook to list components and rerender when they change
 export function useComponentList(contextKey?: string) {
-  const [, forceUpdate] = React.useReducer(x => x + 1, 0);
+  const [, forceUpdate] = React.useReducer((x) => x + 1, 0);
 
   React.useEffect(() => {
     const unsubscribe = componentStore.subscribe(() => {
@@ -285,4 +292,4 @@ export function useComponentList(contextKey?: string) {
   }, []);
 
   return ComponentRegistry.list(contextKey);
-} 
+}

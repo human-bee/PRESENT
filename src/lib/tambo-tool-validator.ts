@@ -1,11 +1,11 @@
 /**
  * Tambo Tool Validator
- * 
+ *
  * Validates and filters tools to ensure compatibility with Tambo SDK requirements.
  * Tool names must match pattern: ^[a-zA-Z0-9_-]+$
  */
 
-import { TamboTool } from "@tambo-ai/react";
+import { TamboTool } from '@tambo-ai/react';
 
 // Valid tool name pattern as required by Tambo SDK
 const VALID_TOOL_NAME_PATTERN = /^[a-zA-Z0-9_-]+$/;
@@ -37,14 +37,16 @@ export function validateTamboTools(tools: any[]): any[] {
   tools.forEach((tool, index) => {
     // Handle different tool formats
     const toolName = tool.name || tool.function?.name || `tool_${index}`;
-    
+
     if (isValidToolName(toolName)) {
       validTools.push(tool);
     } else {
       // Log invalid tool for debugging
-      console.warn(`🚨 [Tambo Tool Validator] Skipping tool with invalid name: "${toolName}" (contains invalid characters)`);
+      console.warn(
+        `🚨 [Tambo Tool Validator] Skipping tool with invalid name: "${toolName}" (contains invalid characters)`,
+      );
       invalidTools.push(toolName);
-      
+
       // Optionally, we could sanitize and include the tool with a fixed name:
       // const sanitizedTool = {
       //   ...tool,
@@ -56,7 +58,10 @@ export function validateTamboTools(tools: any[]): any[] {
   });
 
   if (invalidTools.length > 0) {
-    console.log(`📊 [Tambo Tool Validator] Filtered out ${invalidTools.length} invalid tools:`, invalidTools);
+    console.log(
+      `📊 [Tambo Tool Validator] Filtered out ${invalidTools.length} invalid tools:`,
+      invalidTools,
+    );
     console.log(`✅ [Tambo Tool Validator] ${validTools.length} valid tools passed through`);
   }
 

@@ -1,25 +1,28 @@
-"use client";
+'use client';
 
-import * as React from "react";
-import { cn } from "@/lib/utils";
-import { z } from "zod";
+import * as React from 'react';
+import { cn } from '@/lib/utils';
+import { z } from 'zod';
 import {
   useParticipants,
   useLocalParticipant,
   useTracks,
   VideoTrack,
   useRoomContext,
-} from "@livekit/components-react";
-import { Track } from "livekit-client";
-import { ScreenShare, X } from "lucide-react";
+} from '@livekit/components-react';
+import { Track } from 'livekit-client';
+import { ScreenShare, X } from 'lucide-react';
 
 export const livekitScreenShareTileSchema = z.object({
-  participantIdentity: z.string().optional().describe("Participant identity to display screen share for; defaults to local if available"),
-  width: z.number().optional().describe("Width of the tile in pixels (default 640)"),
-  height: z.number().optional().describe("Height of the tile in pixels (default 360)"),
-  borderRadius: z.number().optional().describe("Border radius in pixels (default 12)"),
-  showParticipantName: z.boolean().optional().describe("Show participant name (default true)"),
-  fit: z.enum(["contain","cover"]).optional().describe("object-fit policy (default contain)"),
+  participantIdentity: z
+    .string()
+    .optional()
+    .describe('Participant identity to display screen share for; defaults to local if available'),
+  width: z.number().optional().describe('Width of the tile in pixels (default 640)'),
+  height: z.number().optional().describe('Height of the tile in pixels (default 360)'),
+  borderRadius: z.number().optional().describe('Border radius in pixels (default 12)'),
+  showParticipantName: z.boolean().optional().describe('Show participant name (default true)'),
+  fit: z.enum(['contain', 'cover']).optional().describe('object-fit policy (default contain)'),
 });
 
 export type LivekitScreenShareTileProps = z.infer<typeof livekitScreenShareTileSchema>;
@@ -34,7 +37,7 @@ export function LivekitScreenShareTile({
   height = 360,
   borderRadius = 12,
   showParticipantName = true,
-  fit = "contain",
+  fit = 'contain',
 }: LivekitScreenShareTileProps) {
   const [state, setState] = React.useState<ScreenShareTileState>({ isMinimized: false });
 
@@ -52,8 +55,13 @@ export function LivekitScreenShareTile({
 
   const trackRefs = useTracks([Track.Source.ScreenShare], { onlySubscribed: false });
   const screenTrackRef = React.useMemo(
-    () => trackRefs.find((t) => t.participant?.identity === targetParticipant?.identity && t.source === Track.Source.ScreenShare),
-    [trackRefs, targetParticipant?.identity]
+    () =>
+      trackRefs.find(
+        (t) =>
+          t.participant?.identity === targetParticipant?.identity &&
+          t.source === Track.Source.ScreenShare,
+      ),
+    [trackRefs, targetParticipant?.identity],
   );
 
   const screenPub = screenTrackRef?.publication;
@@ -72,16 +80,23 @@ export function LivekitScreenShareTile({
     if (showTimer.current) window.clearTimeout(showTimer.current);
     hideTimer.current = window.setTimeout(() => setOverlayVisible(false), 1500);
   };
-  React.useEffect(() => () => {
-    if (showTimer.current) window.clearTimeout(showTimer.current);
-    if (hideTimer.current) window.clearTimeout(hideTimer.current);
-  }, []);
+  React.useEffect(
+    () => () => {
+      if (showTimer.current) window.clearTimeout(showTimer.current);
+      if (hideTimer.current) window.clearTimeout(hideTimer.current);
+    },
+    [],
+  );
 
   const stopShare = async () => {
     try {
       // Prefer LocalParticipant API if available
       // @ts-expect-error optional API
-      if (isLocal && room?.localParticipant && typeof (room.localParticipant as any).setScreenShareEnabled === 'function') {
+      if (
+        isLocal &&
+        room?.localParticipant &&
+        typeof (room.localParticipant as any).setScreenShareEnabled === 'function'
+      ) {
         // @ts-expect-error optional API
         await (room.localParticipant as any).setScreenShareEnabled(false);
       }
@@ -89,27 +104,32 @@ export function LivekitScreenShareTile({
   };
 
   return (
-      <div
-        className={cn(
-          "relative bg-black border-2 border-gray-300 overflow-hidden transition-all duration-200 touch-manipulation",
-          state?.isMinimized && "!h-16"
-        )}
-        style={{ width, height: state?.isMinimized ? 64 : height, borderRadius }}
-        onPointerEnter={onEnter}
-        onPointerLeave={onLeave}
-      >
+    <div
+      className={cn(
+        'relative bg-black border-2 border-gray-300 overflow-hidden transition-all duration-200 touch-manipulation',
+        state?.isMinimized && '!h-16',
+      )}
+      style={{ width, height: state?.isMinimized ? 64 : height, borderRadius }}
+      onPointerEnter={onEnter}
+      onPointerLeave={onLeave}
+    >
       {/* Screen share video */}
-        {screenTrackRef && !screenPub?.isMuted ? (
-          <VideoTrack
-            trackRef={screenTrackRef}
-            playsInline
-            className={cn("w-full h-full", fit === 'contain' ? 'object-contain bg-black' : 'object-cover')}
-          />
-        ) : (
+      {screenTrackRef && !screenPub?.isMuted ? (
+        <VideoTrack
+          trackRef={screenTrackRef}
+          playsInline
+          className={cn(
+            'w-full h-full',
+            fit === 'contain' ? 'object-contain bg-black' : 'object-cover',
+          )}
+        />
+      ) : (
         <div className="absolute inset-0 bg-gray-900 flex items-center justify-center text-white">
           <div className="flex flex-col items-center gap-2">
             <ScreenShare className="w-10 h-10 opacity-75" />
-            <div className="text-sm opacity-80">{isLocal ? 'Start screen share' : 'No screen share'}</div>
+            <div className="text-sm opacity-80">
+              {isLocal ? 'Start screen share' : 'No screen share'}
+            </div>
           </div>
         </div>
       )}
@@ -126,8 +146,8 @@ export function LivekitScreenShareTile({
       {/* Overlay controls */}
       <div
         className={cn(
-          "absolute inset-0 pointer-events-none select-none transition-opacity duration-200",
-          overlayVisible ? "opacity-100" : "opacity-0"
+          'absolute inset-0 pointer-events-none select-none transition-opacity duration-200',
+          overlayVisible ? 'opacity-100' : 'opacity-0',
         )}
       >
         <div className="absolute bottom-2 right-2 pointer-events-auto">
@@ -149,4 +169,3 @@ export function LivekitScreenShareTile({
 }
 
 export default LivekitScreenShareTile;
-

@@ -1,15 +1,15 @@
-"use client";
+'use client';
 
 import {
   Message,
   MessageContent,
   MessageRenderedComponentArea,
   type messageVariants,
-} from "@/components/ui/message";
-import { cn } from "@/lib/utils";
-import { type TamboThreadMessage, useTambo } from "@tambo-ai/react";
-import { type VariantProps } from "class-variance-authority";
-import * as React from "react";
+} from '@/components/ui/message';
+import { cn } from '@/lib/utils';
+import { type TamboThreadMessage, useTambo } from '@tambo-ai/react';
+import { type VariantProps } from 'class-variance-authority';
+import * as React from 'react';
 
 /**
  * @typedef ThreadContentContextValue
@@ -22,15 +22,14 @@ interface ThreadContentContextValue {
   messages: TamboThreadMessage[];
   isGenerating: boolean;
   generationStage?: string;
-  variant?: VariantProps<typeof messageVariants>["variant"];
+  variant?: VariantProps<typeof messageVariants>['variant'];
 }
 
 /**
  * React Context for sharing thread data among sub-components.
  * @internal
  */
-const ThreadContentContext =
-  React.createContext<ThreadContentContextValue | null>(null);
+const ThreadContentContext = React.createContext<ThreadContentContextValue | null>(null);
 
 /**
  * Hook to access the thread content context.
@@ -41,9 +40,7 @@ const ThreadContentContext =
 const useThreadContentContext = () => {
   const context = React.useContext(ThreadContentContext);
   if (!context) {
-    throw new Error(
-      "ThreadContent sub-components must be used within a ThreadContent"
-    );
+    throw new Error('ThreadContent sub-components must be used within a ThreadContent');
   }
   return context;
 };
@@ -52,10 +49,9 @@ const useThreadContentContext = () => {
  * Props for the ThreadContent component.
  * Extends standard HTMLDivElement attributes.
  */
-export interface ThreadContentProps
-  extends React.HTMLAttributes<HTMLDivElement> {
+export interface ThreadContentProps extends React.HTMLAttributes<HTMLDivElement> {
   /** Optional styling variant for the message container */
-  variant?: VariantProps<typeof messageVariants>["variant"];
+  variant?: VariantProps<typeof messageVariants>['variant'];
   /** The child elements to render within the container. */
   children?: React.ReactNode;
 }
@@ -75,12 +71,12 @@ const ThreadContent = React.forwardRef<HTMLDivElement, ThreadContentProps>(
   ({ children, className, variant, ...props }, ref) => {
     const { thread, generationStage } = useTambo();
     const activeGenerationStages = [
-      "CHOOSING_COMPONENT",
-      "FETCHING_CONTEXT",
-      "HYDRATING_COMPONENT",
-      "STREAMING_RESPONSE",
+      'CHOOSING_COMPONENT',
+      'FETCHING_CONTEXT',
+      'HYDRATING_COMPONENT',
+      'STREAMING_RESPONSE',
     ];
-    const isGenerating = activeGenerationStages.includes(generationStage ?? "");
+    const isGenerating = activeGenerationStages.includes(generationStage ?? '');
 
     const contextValue = React.useMemo(
       () => ({
@@ -89,24 +85,19 @@ const ThreadContent = React.forwardRef<HTMLDivElement, ThreadContentProps>(
         generationStage,
         variant,
       }),
-      [thread?.messages, isGenerating, generationStage, variant]
+      [thread?.messages, isGenerating, generationStage, variant],
     );
 
     return (
       <ThreadContentContext.Provider value={contextValue}>
-        <div
-          ref={ref}
-          className={cn(className)}
-          data-slot="thread-content-container"
-          {...props}
-        >
+        <div ref={ref} className={cn(className)} data-slot="thread-content-container" {...props}>
           {children}
         </div>
       </ThreadContentContext.Provider>
     );
-  }
+  },
 );
-ThreadContent.displayName = "ThreadContent";
+ThreadContent.displayName = 'ThreadContent';
 
 /**
  * Props for the ThreadContentMessages component.
@@ -125,68 +116,56 @@ export type ThreadContentMessagesProps = React.HTMLAttributes<HTMLDivElement>;
  * </ThreadContent>
  * ```
  */
-const ThreadContentMessages = React.forwardRef<
-  HTMLDivElement,
-  ThreadContentMessagesProps
->(({ className, ...props }, ref) => {
-  const { messages, isGenerating, variant } = useThreadContentContext();
+const ThreadContentMessages = React.forwardRef<HTMLDivElement, ThreadContentMessagesProps>(
+  ({ className, ...props }, ref) => {
+    const { messages, isGenerating, variant } = useThreadContentContext();
 
-  return (
-    <div
-      ref={ref}
-      className={cn(className)}
-      data-slot="thread-content-messages"
-      {...props}
-    >
-      {messages.map((message, index) => {
-        const showLoading = isGenerating && index === messages.length - 1;
+    return (
+      <div ref={ref} className={cn(className)} data-slot="thread-content-messages" {...props}>
+        {messages.map((message, index) => {
+          const showLoading = isGenerating && index === messages.length - 1;
 
-        return (
-          <div
-            key={
-              message.id ??
-              `${message.role}-${
-                message.createdAt ?? Date.now()
-              }-${message.content?.toString().substring(0, 10)}`
-            }
-            className={cn(
-              !isGenerating && "animate-in fade-in-0 slide-in-from-bottom-2",
-              "duration-200 ease-out"
-            )}
-            style={
-              !isGenerating ? { animationDelay: `${index * 40}ms` } : undefined
-            }
-            data-slot="thread-content-item"
-          >
-            <Message
-              role={message.role === "assistant" ? "assistant" : "user"}
-              message={message}
-              variant={variant}
-              isLoading={showLoading}
-              className={
-                message.role === "assistant"
-                  ? "flex justify-start"
-                  : "flex justify-end"
+          return (
+            <div
+              key={
+                message.id ??
+                `${message.role}-${
+                  message.createdAt ?? Date.now()
+                }-${message.content?.toString().substring(0, 10)}`
               }
+              className={cn(
+                !isGenerating && 'animate-in fade-in-0 slide-in-from-bottom-2',
+                'duration-200 ease-out',
+              )}
+              style={!isGenerating ? { animationDelay: `${index * 40}ms` } : undefined}
+              data-slot="thread-content-item"
             >
-              <div className="flex flex-col">
-                <MessageContent
-                  className={
-                    message.role === "assistant"
-                      ? "text-primary font-sans"
-                      : "text-primary bg-container hover:bg-backdrop font-sans"
-                  }
-                />
-                {/* Rendered component area determines if the message is a canvas message */}
-                <MessageRenderedComponentArea />
-              </div>
-            </Message>
-          </div>
-        );
-      })}
-    </div>
-  );
-});
-ThreadContentMessages.displayName = "ThreadContent.Messages";
+              <Message
+                role={message.role === 'assistant' ? 'assistant' : 'user'}
+                message={message}
+                variant={variant}
+                isLoading={showLoading}
+                className={message.role === 'assistant' ? 'flex justify-start' : 'flex justify-end'}
+              >
+                <div className="flex flex-col">
+                  <MessageContent
+                    className={
+                      message.role === 'assistant'
+                        ? 'text-primary font-sans'
+                        : 'text-primary bg-container hover:bg-backdrop font-sans'
+                    }
+                  />
+                  {/* Rendered component area determines if the message is a canvas message */}
+                  <MessageRenderedComponentArea />
+                </div>
+              </Message>
+            </div>
+          );
+        })}
+      </div>
+    );
+  },
+);
+ThreadContentMessages.displayName = 'ThreadContent.Messages';
 
 export { ThreadContent, ThreadContentMessages };

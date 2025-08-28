@@ -1,15 +1,14 @@
-"use client";
+'use client';
 
-import { cn } from "@/lib/utils";
-import { useTambo } from "@tambo-ai/react";
-import * as React from "react";
-import { useEffect, useRef, useState } from "react";
+import { cn } from '@/lib/utils';
+import { useTambo } from '@tambo-ai/react';
+import * as React from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 /**
  * Props for the ScrollableMessageContainer component
  */
-export type ScrollableMessageContainerProps =
-  React.HTMLAttributes<HTMLDivElement>;
+export type ScrollableMessageContainerProps = React.HTMLAttributes<HTMLDivElement>;
 
 /**
  * A scrollable container for message content with smart auto-scroll functionality.
@@ -47,7 +46,7 @@ export const ScrollableMessageContainer = React.forwardRef<
     const { scrollTop, scrollHeight, clientHeight } = container;
     const threshold = 100; // 100px from bottom
     const nearBottom = scrollTop + clientHeight >= scrollHeight - threshold;
-    
+
     setIsNearBottom(nearBottom);
     setUserHasScrolled(true);
   };
@@ -59,9 +58,9 @@ export const ScrollableMessageContainer = React.forwardRef<
 
     const currentMessageCount = thread.messages.length;
     const currentLastMessageId = thread.messages[thread.messages.length - 1]?.id;
-    
+
     // Detect if this is a genuinely new message (not just a refresh/reload)
-    const hasNewMessage = 
+    const hasNewMessage =
       currentMessageCount > previousMessageCount.current ||
       (currentLastMessageId && currentLastMessageId !== previousLastMessageId.current);
 
@@ -71,7 +70,7 @@ export const ScrollableMessageContainer = React.forwardRef<
         if (container) {
           container.scrollTo({
             top: container.scrollHeight,
-            behavior: "smooth",
+            behavior: 'smooth',
           });
           setIsNearBottom(true);
         }
@@ -91,7 +90,7 @@ export const ScrollableMessageContainer = React.forwardRef<
         if (container) {
           container.scrollTo({
             top: container.scrollHeight,
-            behavior: "smooth",
+            behavior: 'smooth',
           });
           setIsNearBottom(true);
         }
@@ -123,10 +122,10 @@ export const ScrollableMessageContainer = React.forwardRef<
       ref={scrollContainerRef}
       onScroll={handleScroll}
       className={cn(
-        "flex-1 overflow-y-auto",
-        "[&::-webkit-scrollbar]:w-[6px]",
-        "[&::-webkit-scrollbar-thumb]:bg-gray-300",
-        "[&::-webkit-scrollbar:horizontal]:h-[4px]",
+        'flex-1 overflow-y-auto',
+        '[&::-webkit-scrollbar]:w-[6px]',
+        '[&::-webkit-scrollbar-thumb]:bg-gray-300',
+        '[&::-webkit-scrollbar:horizontal]:h-[4px]',
         className,
       )}
       style={{ WebkitOverflowScrolling: 'touch' }}
@@ -137,4 +136,4 @@ export const ScrollableMessageContainer = React.forwardRef<
     </div>
   );
 });
-ScrollableMessageContainer.displayName = "ScrollableMessageContainer";
+ScrollableMessageContainer.displayName = 'ScrollableMessageContainer';

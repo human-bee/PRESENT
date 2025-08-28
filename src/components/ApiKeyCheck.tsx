@@ -1,6 +1,6 @@
-"use client";
+'use client';
 
-import { useEffect, useState } from "react";
+import { useEffect, useState } from 'react';
 
 interface ApiKeyCheckProps {
   children: React.ReactNode;
@@ -14,7 +14,7 @@ const ApiKeyMissingAlert = () => (
       <CopyButton text="npx tambo init" />
     </div>
     <p className="text-sm">
-      Or visit{" "}
+      Or visit{' '}
       <a
         href="https://tambo.co/cli-auth"
         target="_blank"
@@ -22,8 +22,8 @@ const ApiKeyMissingAlert = () => (
         className="underline hover:text-yellow-900"
       >
         tambo.co/cli-auth
-      </a>{" "}
-      to get your API key and set it in{" "}
+      </a>{' '}
+      to get your API key and set it in{' '}
       <code className="bg-yellow-100 px-2 py-1 rounded">.env.local</code>
     </p>
   </div>
@@ -75,7 +75,7 @@ const CopyButton = ({ text }: { text: string }) => {
         </svg>
       )}
       <span className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white px-2 py-1 rounded text-xs opacity-0 group-hover:opacity-100 transition-opacity">
-        {showCopied ? "Copied!" : "Copy"}
+        {showCopied ? 'Copied!' : 'Copy'}
       </span>
     </button>
   );
@@ -97,14 +97,14 @@ export function ApiKeyCheck({ children }: ApiKeyCheckProps) {
       <div className="flex-grow">
         <div className="flex items-center gap-1">
           <div className="min-w-6">
-            {isApiKeyMissing === null ? "⏳" : isApiKeyMissing ? "❌" : "✅"}
+            {isApiKeyMissing === null ? '⏳' : isApiKeyMissing ? '❌' : '✅'}
           </div>
           <p>
             {isApiKeyMissing === null
-              ? "Checking setup..."
+              ? 'Checking setup...'
               : isApiKeyMissing
-              ? "Tambo not initialized"
-              : "Tambo initialized"}
+                ? 'Tambo not initialized'
+                : 'Tambo initialized'}
           </p>
         </div>
         {isApiKeyMissing && <ApiKeyMissingAlert />}

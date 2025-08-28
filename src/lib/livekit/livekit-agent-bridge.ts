@@ -1,6 +1,6 @@
 /**
  * LiveKit Agent Bridge Types
- * 
+ *
  * Type definitions for communication between the frontend and the LiveKit agent.
  * The actual agent runs as a separate Node.js process.
  */
@@ -45,4 +45,4 @@ export interface LiveTranscription {
   is_final: boolean;
 }
 
-export type AgentDataMessage = TamboComponent | LiveTranscription; 
+export type AgentDataMessage = TamboComponent | LiveTranscription;

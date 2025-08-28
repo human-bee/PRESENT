@@ -1,13 +1,13 @@
 /*
  * LiveKit UI component with audio/video controls and RPC handling.
- * 
+ *
  * DEVELOPMENT NOTES:
  * - RPC methods must be registered in useEffect with proper cleanup to avoid memory leaks
  * - Use refs to prevent duplicate registrations and concurrent RPC processing
  * - Always handle MediaDeviceFailure and RpcError exceptions for robust error handling
  */
 
-"use client";
+'use client';
 
 import {
   ControlBar,
@@ -15,15 +15,11 @@ import {
   RoomAudioRenderer,
   useLocalParticipant,
   useToken,
-} from "@livekit/components-react";
-import { useTamboThreadInput } from "@tambo-ai/react";
-import {
-  MediaDeviceFailure,
-  RpcError,
-  RpcInvocationData,
-} from "livekit-client";
-import { ReactNode, useEffect, useMemo, useRef, useState } from "react";
-import { generateRandomUserId } from "../../lib/helper";
+} from '@livekit/components-react';
+import { useTamboThreadInput } from '@tambo-ai/react';
+import { MediaDeviceFailure, RpcError, RpcInvocationData } from 'livekit-client';
+import { ReactNode, useEffect, useMemo, useRef, useState } from 'react';
+import { generateRandomUserId } from '../../lib/helper';
 
 // Child component that will handle RPC registration
 export function RpcHandler({ contextKey }: { contextKey: string }) {
@@ -37,68 +33,65 @@ export function RpcHandler({ contextKey }: { contextKey: string }) {
     if (localParticipant && !methodRegisteredRef.current) {
       methodRegisteredRef.current = true;
 
-      const rpcMethod = "youtubeSearch";
+      const rpcMethod = 'youtubeSearch';
 
-      localParticipant.registerRpcMethod(
-        rpcMethod,
-        async (data: RpcInvocationData) => {
-          try {
-            // Prevent multiple concurrent submissions
-            if (isProcessingRef.current) {
-              console.log("Already processing a request, ignoring");
-              return JSON.stringify({
-                success: false,
-                error: "Already processing a request",
-              });
-            }
-
-            isProcessingRef.current = true;
-
-            const params = JSON.parse(data.payload);
-            const query = params.task_prompt;
-
-            // Submit the YouTube search query as a message
-            console.log("Submitting YouTube search for:", query);
-
-            // Set the value and ensure it's non-empty before submitting
-            await setValue(query);
-
-            // Add a short delay to ensure the value is set
-            await new Promise((resolve) => setTimeout(resolve, 100));
-
-            // Check if value is set before submitting
-            if (!query) {
-              isProcessingRef.current = false;
-              throw new Error("Search query is empty");
-            }
-
-            try {
-              await submit({
-                streamResponse: true,
-                contextKey: contextKey,
-              });
-
-              console.log("Performing YouTube search for:", query);
-
-              // Return search results (mocked for now)
-              return JSON.stringify({
-                success: true,
-                results: [`Search results for: ${query}`],
-              });
-            } finally {
-              // Reset the processing state, even if there's an error
-              isProcessingRef.current = false;
-            }
-          } catch (error) {
-            console.error("Error performing YouTube search:", error);
-            isProcessingRef.current = false;
-            throw new RpcError(1, "Could not perform YouTube search");
+      localParticipant.registerRpcMethod(rpcMethod, async (data: RpcInvocationData) => {
+        try {
+          // Prevent multiple concurrent submissions
+          if (isProcessingRef.current) {
+            console.log('Already processing a request, ignoring');
+            return JSON.stringify({
+              success: false,
+              error: 'Already processing a request',
+            });
           }
+
+          isProcessingRef.current = true;
+
+          const params = JSON.parse(data.payload);
+          const query = params.task_prompt;
+
+          // Submit the YouTube search query as a message
+          console.log('Submitting YouTube search for:', query);
+
+          // Set the value and ensure it's non-empty before submitting
+          await setValue(query);
+
+          // Add a short delay to ensure the value is set
+          await new Promise((resolve) => setTimeout(resolve, 100));
+
+          // Check if value is set before submitting
+          if (!query) {
+            isProcessingRef.current = false;
+            throw new Error('Search query is empty');
+          }
+
+          try {
+            await submit({
+              streamResponse: true,
+              contextKey: contextKey,
+            });
+
+            console.log('Performing YouTube search for:', query);
+
+            // Return search results (mocked for now)
+            return JSON.stringify({
+              success: true,
+              results: [`Search results for: ${query}`],
+            });
+          } finally {
+            // Reset the processing state, even if there's an error
+            isProcessingRef.current = false;
+          }
+        } catch (error) {
+          console.error('Error performing YouTube search:', error);
+          isProcessingRef.current = false;
+          throw new RpcError(1, 'Could not perform YouTube search');
         }
-      );
+      });
 
       // Setup was successful; log it
-      console.log("Registered RPC method for YouTube search");
+      console.log('Registered RPC method for YouTube search');
 
       // No explicit cleanup needed - component will be unmounted
       // and LiveKit handles this cleanup internally
@@ -114,16 +107,15 @@ interface LiveKitProviderProps {
 
 // Provider component that handles connection and authentication
 export function LiveKitProvider({ children }: LiveKitProviderProps) {
-  const params =
-    typeof window !== "undefined" ? new URLSearchParams(location.search) : null;
+  const params = typeof window !== 'undefined' ? new URLSearchParams(location.search) : null;
   const roomName = useMemo(
-    () => params?.get("room") ?? "test-room-" + Math.random().toFixed(5),
-    []
+    () => params?.get('room') ?? 'test-room-' + Math.random().toFixed(5),
+    [],
   );
   const [shouldConnect, setShouldConnect] = useState(false);
 
   const tokenOptions = useMemo(() => {
-    const userId = params?.get("user") ?? generateRandomUserId();
+    const userId = params?.get('user') ?? generateRandomUserId();
     return {
       userInfo: {
         identity: userId,
@@ -132,22 +124,18 @@ export function LiveKitProvider({ children }: LiveKitProviderProps) {
     };
   }, []);
 
-  const token = useToken(
-    process.env.NEXT_PUBLIC_LK_TOKEN_ENDPOINT,
-    roomName,
-    tokenOptions
-  );
+  const token = useToken(process.env.NEXT_PUBLIC_LK_TOKEN_ENDPOINT, roomName, tokenOptions);
 
   useEffect(() => {
-    console.log("Token endpoint:", process.env.NEXT_PUBLIC_LK_TOKEN_ENDPOINT);
-    console.log("Room name:", roomName);
-    console.log("Token options:", tokenOptions);
+    console.log('Token endpoint:', process.env.NEXT_PUBLIC_LK_TOKEN_ENDPOINT);
+    console.log('Room name:', roomName);
+    console.log('Token options:', tokenOptions);
   }, [roomName, tokenOptions]);
 
   const onDeviceFailure = (e?: MediaDeviceFailure) => {
     console.error(e);
     alert(
-      "Error acquiring camera or microphone permissions. Please make sure you grant the necessary permissions in your browser and reload the tab"
+      'Error acquiring camera or microphone permissions. Please make sure you grant the necessary permissions in your browser and reload the tab',
     );
   };
 
@@ -161,11 +149,7 @@ export function LiveKitProvider({ children }: LiveKitProviderProps) {
       onDisconnected={() => setShouldConnect(false)}
     >
       {/* Add a connection handler that can be used by children */}
-      {shouldConnect ? (
-        children
-      ) : (
-        <ConnectButton onConnect={() => setShouldConnect(true)} />
-      )}
+      {shouldConnect ? children : <ConnectButton onConnect={() => setShouldConnect(true)} />}
     </LiveKitRoom>
   );
 }

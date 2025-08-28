@@ -16,12 +16,12 @@ describe('State Synchronization (Phase 4)', () => {
         payload: { componentName: 'TestComponent' },
         version: 1,
         ts: Date.now(),
-        origin: 'browser'
+        origin: 'browser',
       };
 
       systemRegistry.ingestState(envelope);
       const retrieved = systemRegistry.getState('test-component-1');
-      
+
       expect(retrieved).toEqual(envelope);
     });
 
@@ -32,21 +32,21 @@ describe('State Synchronization (Phase 4)', () => {
         payload: { value: 'first' },
         version: 2,
         ts: Date.now(),
-        origin: 'browser'
+        origin: 'browser',
       };
 
       const envelope2: StateEnvelope = {
-        id: 'test-component-1', 
+        id: 'test-component-1',
         kind: 'component_updated',
         payload: { value: 'second' },
         version: 1, // Older version
         ts: Date.now() + 1000,
-        origin: 'agent'
+        origin: 'agent',
       };
 
       systemRegistry.ingestState(envelope1);
       systemRegistry.ingestState(envelope2);
-      
+
       const retrieved = systemRegistry.getState('test-component-1');
       expect(retrieved?.payload).toEqual({ value: 'first' });
       expect(retrieved?.version).toBe(2);
@@ -59,12 +59,12 @@ describe('State Synchronization (Phase 4)', () => {
         payload: { value: 'test' },
         version: 1,
         ts: Date.now(),
-        origin: 'browser'
+        origin: 'browser',
       };
 
       systemRegistry.ingestState(envelope);
       systemRegistry.ingestState(envelope); // Duplicate
-      
+
       const retrieved = systemRegistry.getState('test-component-1');
       expect(retrieved).toEqual(envelope);
     });
@@ -78,7 +78,7 @@ describe('State Synchronization (Phase 4)', () => {
         payload: { componentName: 'TestComponent' },
         version: 1,
         ts: Date.now(),
-        origin: 'browser'
+        origin: 'browser',
       };
 
       const unsubscribe = systemRegistry.onState((received) => {
@@ -100,7 +100,7 @@ describe('State Synchronization (Phase 4)', () => {
         payload: { value: 'first' },
         version: 2,
         ts: Date.now(),
-        origin: 'browser'
+        origin: 'browser',
       };
 
       const envelope2: StateEnvelope = {
@@ -109,12 +109,12 @@ describe('State Synchronization (Phase 4)', () => {
         payload: { value: 'second' },
         version: 1, // Older
         ts: Date.now() + 1000,
-        origin: 'agent'
+        origin: 'agent',
       };
 
       systemRegistry.ingestState(envelope1);
       expect(listener).toHaveBeenCalledTimes(1);
-      
+
       systemRegistry.ingestState(envelope2); // Should be rejected
       expect(listener).toHaveBeenCalledTimes(1); // No additional call
 
@@ -131,7 +131,7 @@ describe('State Synchronization (Phase 4)', () => {
           payload: { name: 'Comp1' },
           version: 1,
           ts: Date.now(),
-          origin: 'browser'
+          origin: 'browser',
         },
         {
           id: 'comp-2',
@@ -139,12 +139,12 @@ describe('State Synchronization (Phase 4)', () => {
           payload: { name: 'Comp2' },
           version: 1,
           ts: Date.now() + 100,
-          origin: 'agent'
-        }
+          origin: 'agent',
+        },
       ];
 
-      envelopes.forEach(env => systemRegistry.ingestState(env));
-      
+      envelopes.forEach((env) => systemRegistry.ingestState(env));
+
       const snapshot = systemRegistry.getSnapshot();
       expect(snapshot).toHaveLength(2);
       expect(snapshot).toContainEqual(envelopes[0]);
@@ -160,7 +160,7 @@ describe('State Synchronization (Phase 4)', () => {
         payload: { value: 'initial' },
         version: 1,
         ts: 1000,
-        origin: 'browser'
+        origin: 'browser',
       };
 
       const update1: StateEnvelope = {
@@ -168,7 +168,7 @@ describe('State Synchronization (Phase 4)', () => {
         payload: { value: 'update1' },
         version: 2,
         ts: 2000,
-        origin: 'agent'
+        origin: 'agent',
       };
 
       const update2: StateEnvelope = {
@@ -176,7 +176,7 @@ describe('State Synchronization (Phase 4)', () => {
         payload: { value: 'update2' },
         version: 3,
         ts: 1500, // Earlier timestamp but higher version
-        origin: 'browser'
+        origin: 'browser',
       };
 
       systemRegistry.ingestState(base);
@@ -188,4 +188,4 @@ describe('State Synchronization (Phase 4)', () => {
       expect(final?.version).toBe(3);
     });
   });
-}); 
+});

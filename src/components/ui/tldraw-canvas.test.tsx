@@ -29,7 +29,6 @@ const mockEditor = {
   updateShapes: mockUpdateShapes,
 } as unknown as Editor;
 
-
 // Helper function to render the shape component
 // This is tricky because TamboShapeUtil.component is a class method, not a standalone React component.
 // Tldraw's rendering mechanism invokes it. We need to simulate that.
@@ -102,8 +101,21 @@ describe('TamboShapeUtil.component - ResizeObserver Logic', () => {
     act(() => {
       if (mockResizeObserverCallback) {
         mockResizeObserverCallback(
-          [{ contentRect: { width: 400, height: 250, x:0, y:0, top:0, bottom:0, left:0, right:0 } }] as ResizeObserverEntry[],
-          {} as ResizeObserver
+          [
+            {
+              contentRect: {
+                width: 400,
+                height: 250,
+                x: 0,
+                y: 0,
+                top: 0,
+                bottom: 0,
+                left: 0,
+                right: 0,
+              },
+            },
+          ] as ResizeObserverEntry[],
+          {} as ResizeObserver,
         );
       }
     });
@@ -123,15 +135,32 @@ describe('TamboShapeUtil.component - ResizeObserver Logic', () => {
   });
 
   it('does not call updateShapes if resize is below threshold', () => {
-    render(<TestShapeRenderer shape={{...defaultTestShape, props: {...defaultTestShape.props, w: 300, h: 200 }}} />);
+    render(
+      <TestShapeRenderer
+        shape={{ ...defaultTestShape, props: { ...defaultTestShape.props, w: 300, h: 200 } }}
+      />,
+    );
     expect(mockResizeObserverCallback).not.toBeNull();
 
     // Simulate a small resize event (original w:300, h:200)
     act(() => {
       if (mockResizeObserverCallback) {
         mockResizeObserverCallback(
-          [{ contentRect: { width: 300.5, height: 200.5, x:0, y:0, top:0, bottom:0, left:0, right:0 } }] as ResizeObserverEntry[],
-          {} as ResizeObserver
+          [
+            {
+              contentRect: {
+                width: 300.5,
+                height: 200.5,
+                x: 0,
+                y: 0,
+                top: 0,
+                bottom: 0,
+                left: 0,
+                right: 0,
+              },
+            },
+          ] as ResizeObserverEntry[],
+          {} as ResizeObserver,
         );
       }
     });
@@ -150,11 +179,59 @@ describe('TamboShapeUtil.component - ResizeObserver Logic', () => {
     // Simulate multiple rapid resizes
     act(() => {
       if (mockResizeObserverCallback) {
-        mockResizeObserverCallback([{ contentRect: { width: 350, height: 220, x:0, y:0, top:0, bottom:0, left:0, right:0 } }] as ResizeObserverEntry[], {} as ResizeObserver); // t = 0
+        mockResizeObserverCallback(
+          [
+            {
+              contentRect: {
+                width: 350,
+                height: 220,
+                x: 0,
+                y: 0,
+                top: 0,
+                bottom: 0,
+                left: 0,
+                right: 0,
+              },
+            },
+          ] as ResizeObserverEntry[],
+          {} as ResizeObserver,
+        ); // t = 0
         jest.advanceTimersByTime(50); // t = 50ms
-        mockResizeObserverCallback([{ contentRect: { width: 400, height: 250, x:0, y:0, top:0, bottom:0, left:0, right:0 } }] as ResizeObserverEntry[], {} as ResizeObserver); // t = 50ms
+        mockResizeObserverCallback(
+          [
+            {
+              contentRect: {
+                width: 400,
+                height: 250,
+                x: 0,
+                y: 0,
+                top: 0,
+                bottom: 0,
+                left: 0,
+                right: 0,
+              },
+            },
+          ] as ResizeObserverEntry[],
+          {} as ResizeObserver,
+        ); // t = 50ms
         jest.advanceTimersByTime(50); // t = 100ms
-        mockResizeObserverCallback([{ contentRect: { width: 420, height: 260, x:0, y:0, top:0, bottom:0, left:0, right:0 } }] as ResizeObserverEntry[], {} as ResizeObserver); // t = 100ms
+        mockResizeObserverCallback(
+          [
+            {
+              contentRect: {
+                width: 420,
+                height: 260,
+                x: 0,
+                y: 0,
+                top: 0,
+                bottom: 0,
+                left: 0,
+                right: 0,
+              },
+            },
+          ] as ResizeObserverEntry[],
+          {} as ResizeObserver,
+        ); // t = 100ms
       }
     });
 

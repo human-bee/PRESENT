@@ -1,17 +1,17 @@
 /**
  * Graph component for the Next.js application.
- * 
+ *
  * This component serves as a graph display.
  */
 
-"use client";
+'use client';
 
-import { cn } from "@/lib/utils";
-import { useTambo, useTamboMessageContext } from "@tambo-ai/react";
-import { cva, type VariantProps } from "class-variance-authority";
-import * as React from "react";
-import * as RechartsCore from "recharts";
-import { z } from "zod";
+import { cn } from '@/lib/utils';
+import { useTambo, useTamboMessageContext } from '@tambo-ai/react';
+import { cva, type VariantProps } from 'class-variance-authority';
+import * as React from 'react';
+import * as RechartsCore from 'recharts';
+import { z } from 'zod';
 
 /**
  * Represents a graph data object
@@ -21,36 +21,28 @@ import { z } from "zod";
  */
 
 export const graphDataSchema = z.object({
-  type: z.enum(["bar", "line", "pie"]).describe("Type of graph to render"),
-  labels: z.array(z.string()).describe("Labels for the graph"),
+  type: z.enum(['bar', 'line', 'pie']).describe('Type of graph to render'),
+  labels: z.array(z.string()).describe('Labels for the graph'),
   datasets: z
     .array(
       z.object({
-        label: z.string().describe("Label for the dataset"),
-        data: z.array(z.number()).describe("Data points for the dataset"),
-        color: z.string().optional().describe("Optional color for the dataset"),
-      })
+        label: z.string().describe('Label for the dataset'),
+        data: z.array(z.number()).describe('Data points for the dataset'),
+        color: z.string().optional().describe('Optional color for the dataset'),
+      }),
     )
-    .describe("Data for the graph"),
+    .describe('Data for the graph'),
 });
 
 export const graphSchema = z.object({
-  data: graphDataSchema.describe(
-    "Data object containing chart configuration and values"
-  ),
-  title: z.string().describe("Title for the chart"),
-  showLegend: z
-    .boolean()
-    .optional()
-    .describe("Whether to show the legend (default: true)"),
+  data: graphDataSchema.describe('Data object containing chart configuration and values'),
+  title: z.string().describe('Title for the chart'),
+  showLegend: z.boolean().optional().describe('Whether to show the legend (default: true)'),
   variant: z
-    .enum(["default", "solid", "bordered"])
+    .enum(['default', 'solid', 'bordered'])
     .optional()
-    .describe("Visual style variant of the graph"),
-  size: z
-    .enum(["default", "sm", "lg"])
-    .optional()
-    .describe("Size of the graph"),
+    .describe('Visual style variant of the graph'),
+  size: z.enum(['default', 'sm', 'lg']).optional().describe('Size of the graph'),
 });
 
 // Define the base type from the Zod schema
@@ -58,8 +50,8 @@ type GraphDataType = z.infer<typeof graphDataSchema>;
 
 // Extend the GraphProps with additional tambo properties
 export interface GraphProps
-  extends Omit<React.HTMLAttributes<HTMLDivElement>, "data" | "title" | "size">,
-    Omit<VariantProps<typeof graphVariants>, "size" | "variant"> {
+  extends Omit<React.HTMLAttributes<HTMLDivElement>, 'data' | 'title' | 'size'>,
+    Omit<VariantProps<typeof graphVariants>, 'size' | 'variant'> {
   /** Data object containing chart configuration and values */
   data?: GraphDataType;
   /** Optional title for the chart */
@@ -67,9 +59,9 @@ export interface GraphProps
   /** Whether to show the legend (default: true) */
   showLegend?: boolean;
   /** Visual style variant of the graph */
-  variant?: "default" | "solid" | "bordered";
+  variant?: 'default' | 'solid' | 'bordered';
   /** Size of the graph */
-  size?: "default" | "sm" | "lg";
+  size?: 'default' | 'sm' | 'lg';
   /** Whether to display the status and completion messages */
   _tambo_displayMessage?: boolean;
   /** Text to display as the status message */
@@ -78,36 +70,30 @@ export interface GraphProps
   _tambo_completionStatusMessage?: string;
 }
 
-const graphVariants = cva(
-  "w-full rounded-lg overflow-hidden transition-all duration-200",
-  {
-    variants: {
-      variant: {
-        default: "bg-background",
-        solid: [
-          "shadow-lg shadow-zinc-900/10 dark:shadow-zinc-900/20",
-          "bg-muted",
-        ].join(" "),
-        bordered: ["border-2", "border-border"].join(" "),
-      },
-      size: {
-        default: "h-64",
-        sm: "h-48",
-        lg: "h-96",
-      },
+const graphVariants = cva('w-full rounded-lg overflow-hidden transition-all duration-200', {
+  variants: {
+    variant: {
+      default: 'bg-background',
+      solid: ['shadow-lg shadow-zinc-900/10 dark:shadow-zinc-900/20', 'bg-muted'].join(' '),
+      bordered: ['border-2', 'border-border'].join(' '),
     },
-    defaultVariants: {
-      variant: "default",
-      size: "default",
+    size: {
+      default: 'h-64',
+      sm: 'h-48',
+      lg: 'h-96',
     },
-  }
-);
+  },
+  defaultVariants: {
+    variant: 'default',
+    size: 'default',
+  },
+});
 
 const defaultColors = [
-  "hsl(220, 100%, 62%)", // Blue
-  "hsl(160, 82%, 47%)", // Green
-  "hsl(32, 100%, 62%)", // Orange
-  "hsl(340, 82%, 66%)", // Pink
+  'hsl(220, 100%, 62%)', // Blue
+  'hsl(160, 82%, 47%)', // Green
+  'hsl(32, 100%, 62%)', // Orange
+  'hsl(340, 82%, 66%)', // Pink
 ];
 
 /**
@@ -145,7 +131,7 @@ export const Graph = React.forwardRef<HTMLDivElement, GraphProps>(
       _tambo_displayMessage = true,
       ...props
     },
-    ref
+    ref,
   ) => {
     // Get thread state
     const { thread } = useTambo();
@@ -157,9 +143,7 @@ export const Graph = React.forwardRef<HTMLDivElement, GraphProps>(
 
     const generationStage = thread?.generationStage;
     const isGenerating =
-      generationStage &&
-      generationStage !== "COMPLETE" &&
-      generationStage !== "ERROR";
+      generationStage && generationStage !== 'COMPLETE' && generationStage !== 'ERROR';
 
     const dataIsValid =
       data &&
@@ -172,11 +156,7 @@ export const Graph = React.forwardRef<HTMLDivElement, GraphProps>(
     // For latest message, only show loading state while generating
     if (!dataIsValid || (isLatestMessage && isGenerating)) {
       return (
-        <div
-          ref={ref}
-          className={cn(graphVariants({ variant, size }), className)}
-          {...props}
-        >
+        <div ref={ref} className={cn(graphVariants({ variant, size }), className)} {...props}>
           <div className="p-4 h-full flex items-center justify-center">
             <div className="flex flex-col items-center gap-2 text-muted-foreground">
               <div className="flex items-center gap-1 h-4">
@@ -186,8 +166,7 @@ export const Graph = React.forwardRef<HTMLDivElement, GraphProps>(
               </div>
               {/* Use the specific status message if available, otherwise default */}
               <span className="text-sm">
-                {(_tambo_displayMessage && _tambo_statusMessage) ??
-                  "Streaming data..."}
+                {(_tambo_displayMessage && _tambo_statusMessage) ?? 'Streaming data...'}
               </span>
             </div>
           </div>
@@ -204,17 +183,13 @@ export const Graph = React.forwardRef<HTMLDivElement, GraphProps>(
             !dataset.label ||
             !dataset.data ||
             !Array.isArray(dataset.data) ||
-            dataset.data.length !== data.labels.length
+            dataset.data.length !== data.labels.length,
         )
       ) {
-        console.error("Invalid graph data structure (post-generation):", data);
+        console.error('Invalid graph data structure (post-generation):', data);
         // Render a specific error for invalid structure after completion
         return (
-          <div
-            ref={ref}
-            className={cn(graphVariants({ variant, size }), className)}
-            {...props}
-          >
+          <div ref={ref} className={cn(graphVariants({ variant, size }), className)} {...props}>
             <div className="p-4 h-full flex items-center justify-center">
               <div className="text-destructive text-center">
                 <p className="font-medium">Invalid Graph Data</p>
@@ -233,14 +208,12 @@ export const Graph = React.forwardRef<HTMLDivElement, GraphProps>(
       // Transform data for Recharts (only if structure is valid post-generation)
       const chartData = data.labels.map((label, index) => ({
         name: label,
-        ...Object.fromEntries(
-          data.datasets.map((dataset) => [dataset.label, dataset.data[index]])
-        ),
+        ...Object.fromEntries(data.datasets.map((dataset) => [dataset.label, dataset.data[index]])),
       }));
 
       const renderChart = () => {
-        if (!data.type || !["bar", "line", "pie"].includes(data.type)) {
-          console.error("Invalid chart type:", data.type);
+        if (!data.type || !['bar', 'line', 'pie'].includes(data.type)) {
+          console.error('Invalid chart type:', data.type);
           return (
             <div className="h-full flex items-center justify-center">
               <div className="text-destructive text-center">
@@ -254,7 +227,7 @@ export const Graph = React.forwardRef<HTMLDivElement, GraphProps>(
         }
 
         switch (data.type) {
-          case "bar":
+          case 'bar':
             return (
               <RechartsCore.BarChart data={chartData}>
                 <RechartsCore.CartesianGrid
@@ -275,20 +248,20 @@ export const Graph = React.forwardRef<HTMLDivElement, GraphProps>(
                 />
                 <RechartsCore.Tooltip
                   cursor={{
-                    fill: "hsl(var(--muted)/0.3)",
+                    fill: 'hsl(var(--muted)/0.3)',
                     radius: 4,
                   }}
                   contentStyle={{
-                    backgroundColor: "hsl(var(--background))",
-                    border: "1px solid hsl(var(--border))",
-                    borderRadius: "var(--radius)",
-                    color: "hsl(var(--foreground))",
+                    backgroundColor: 'hsl(var(--background))',
+                    border: '1px solid hsl(var(--border))',
+                    borderRadius: 'var(--radius)',
+                    color: 'hsl(var(--foreground))',
                   }}
                 />
                 {showLegend && (
                   <RechartsCore.Legend
                     wrapperStyle={{
-                      color: "hsl(var(--foreground))",
+                      color: 'hsl(var(--foreground))',
                     }}
                   />
                 )}
@@ -296,17 +269,14 @@ export const Graph = React.forwardRef<HTMLDivElement, GraphProps>(
                   <RechartsCore.Bar
                     key={dataset.label}
                     dataKey={dataset.label}
-                    fill={
-                      dataset.color ??
-                      defaultColors[index % defaultColors.length]
-                    }
+                    fill={dataset.color ?? defaultColors[index % defaultColors.length]}
                     radius={[4, 4, 0, 0]}
                   />
                 ))}
               </RechartsCore.BarChart>
             );
 
-          case "line":
+          case 'line':
             return (
               <RechartsCore.LineChart data={chartData}>
                 <RechartsCore.CartesianGrid
@@ -327,21 +297,21 @@ export const Graph = React.forwardRef<HTMLDivElement, GraphProps>(
                 />
                 <RechartsCore.Tooltip
                   cursor={{
-                    stroke: "hsl(var(--muted))",
+                    stroke: 'hsl(var(--muted))',
                     strokeWidth: 2,
                     strokeOpacity: 0.3,
                   }}
                   contentStyle={{
-                    backgroundColor: "hsl(var(--background))",
-                    border: "1px solid hsl(var(--border))",
-                    borderRadius: "var(--radius)",
-                    color: "hsl(var(--foreground))",
+                    backgroundColor: 'hsl(var(--background))',
+                    border: '1px solid hsl(var(--border))',
+                    borderRadius: 'var(--radius)',
+                    color: 'hsl(var(--foreground))',
                   }}
                 />
                 {showLegend && (
                   <RechartsCore.Legend
                     wrapperStyle={{
-                      color: "hsl(var(--foreground))",
+                      color: 'hsl(var(--foreground))',
                     }}
                   />
                 )}
@@ -350,26 +320,21 @@ export const Graph = React.forwardRef<HTMLDivElement, GraphProps>(
                     key={dataset.label}
                     type="monotone"
                     dataKey={dataset.label}
-                    stroke={
-                      dataset.color ??
-                      defaultColors[index % defaultColors.length]
-                    }
+                    stroke={dataset.color ?? defaultColors[index % defaultColors.length]}
                     dot={false}
                   />
                 ))}
               </RechartsCore.LineChart>
             );
 
-          case "pie":
+          case 'pie':
             return (
               <RechartsCore.PieChart>
                 <RechartsCore.Pie
                   data={data.datasets[0].data.map((value, index) => ({
                     name: data.labels[index],
                     value,
-                    fill:
-                      data.datasets[0].color ??
-                      defaultColors[index % defaultColors.length],
+                    fill: data.datasets[0].color ?? defaultColors[index % defaultColors.length],
                   }))}
                   dataKey="value"
                   nameKey="name"
@@ -381,23 +346,23 @@ export const Graph = React.forwardRef<HTMLDivElement, GraphProps>(
                 />
                 <RechartsCore.Tooltip
                   contentStyle={{
-                    backgroundColor: "hsl(var(--background))",
-                    border: "1px solid hsl(var(--border))",
-                    borderRadius: "var(--radius)",
-                    color: "hsl(var(--foreground))",
-                    boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
+                    backgroundColor: 'hsl(var(--background))',
+                    border: '1px solid hsl(var(--border))',
+                    borderRadius: 'var(--radius)',
+                    color: 'hsl(var(--foreground))',
+                    boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
                   }}
                   itemStyle={{
-                    color: "hsl(var(--foreground))",
+                    color: 'hsl(var(--foreground))',
                   }}
                   labelStyle={{
-                    color: "hsl(var(--foreground))",
+                    color: 'hsl(var(--foreground))',
                   }}
                 />
                 {showLegend && (
                   <RechartsCore.Legend
                     wrapperStyle={{
-                      color: "hsl(var(--foreground))",
+                      color: 'hsl(var(--foreground))',
                     }}
                   />
                 )}
@@ -407,17 +372,9 @@ export const Graph = React.forwardRef<HTMLDivElement, GraphProps>(
       };
 
       return (
-        <div
-          ref={ref}
-          className={cn(graphVariants({ variant, size }), className)}
-          {...props}
-        >
+        <div ref={ref} className={cn(graphVariants({ variant, size }), className)} {...props}>
           <div className="p-4 h-full">
-            {title && (
-              <h3 className="text-lg font-medium mb-4 text-foreground">
-                {title}
-              </h3>
-            )}
+            {title && <h3 className="text-lg font-medium mb-4 text-foreground">{title}</h3>}
             <div className="w-full h-[calc(100%-2rem)]">
               <RechartsCore.ResponsiveContainer width="100%" height="100%">
                 {renderChart()}
@@ -433,24 +390,20 @@ export const Graph = React.forwardRef<HTMLDivElement, GraphProps>(
         </div>
       );
     } catch (error) {
-      console.error("Error rendering chart:", error);
+      console.error('Error rendering chart:', error);
       return (
-        <div
-          className={cn(graphVariants({ variant, size }), className)}
-          {...props}
-        >
+        <div className={cn(graphVariants({ variant, size }), className)} {...props}>
           <div className="p-4 flex items-center justify-center h-full">
             <div className="text-destructive text-center">
               <p className="font-medium">Error loading chart</p>
               <p className="text-sm mt-1">
-                An error occurred while transforming data. Please try again
-                later.
+                An error occurred while transforming data. Please try again later.
               </p>
             </div>
           </div>
         </div>
       );
     }
-  }
+  },
 );
-Graph.displayName = "Graph";
+Graph.displayName = 'Graph';

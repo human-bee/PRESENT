@@ -1,6 +1,6 @@
 /**
  * Test file for the new Component Registry system
- * 
+ *
  * This validates that our simplified architecture works correctly:
  * 1. Components can be registered
  * 2. list_components tool returns correct data
@@ -29,7 +29,7 @@ export async function testComponentRegistry() {
       timestamp: Date.now(),
       updateCallback: (patch) => {
         console.log('   ✅ Update callback received:', patch);
-      }
+      },
     });
     console.log('   ✅ Component registered successfully\n');
 
@@ -37,7 +37,7 @@ export async function testComponentRegistry() {
     console.log('2️⃣ Testing list_components tool...');
     const listResult = await listComponentsTool.tool();
     console.log('   📋 List result:', JSON.stringify(listResult, null, 2));
-    
+
     if (listResult.status === 'SUCCESS' && listResult.components.length > 0) {
       console.log('   ✅ list_components working correctly\n');
     } else {
@@ -48,7 +48,7 @@ export async function testComponentRegistry() {
     console.log('3️⃣ Testing ui_update tool...');
     const updateResult = await uiUpdateTool.tool('msg_test_timer_123', { initialMinutes: 10 });
     console.log('   🔄 Update result:', JSON.stringify(updateResult, null, 2));
-    
+
     if (updateResult.status === 'SUCCESS') {
       console.log('   ✅ ui_update working correctly\n');
     } else {
@@ -58,8 +58,10 @@ export async function testComponentRegistry() {
     // Test 4: Verify update was applied
     console.log('4️⃣ Testing component state after update...');
     const updatedList = await listComponentsTool.tool();
-    const updatedComponent = updatedList.components.find(c => c.messageId === 'msg_test_timer_123');
-    
+    const updatedComponent = updatedList.components.find(
+      (c) => c.messageId === 'msg_test_timer_123',
+    );
+
     if (updatedComponent && updatedComponent.props.initialMinutes === 10) {
       console.log('   ✅ Component props updated correctly');
       console.log('   📊 Updated props:', updatedComponent.props);
@@ -70,7 +72,7 @@ export async function testComponentRegistry() {
 
     console.log('\n🎉 Component Registry tests completed!');
     console.log('✨ The new simplified architecture is working correctly!\n');
-    
+
     // Clean up test component
     ComponentRegistry.remove('msg_test_timer_123');
     console.log('🧹 Test component cleaned up');
@@ -132,4 +134,4 @@ if (process.env.NODE_ENV === 'development' && typeof window !== 'undefined') {
     });
   }, 2000);
 }
-*/ 
+*/

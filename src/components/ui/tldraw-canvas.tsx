@@ -1,8 +1,27 @@
-"use client";
+'use client';
 
-import { Tldraw, HTMLContainer as TldrawHTMLContainer, RecordProps, T, Editor, BaseBoxShapeUtil, TLBaseShape, createShapeId, useEditor } from 'tldraw';
-import { ReactNode, useRef, useEffect, createContext, useContext, Component, ErrorInfo, useState } from 'react';
-import React from "react";
+import {
+  Tldraw,
+  HTMLContainer as TldrawHTMLContainer,
+  RecordProps,
+  T,
+  Editor,
+  BaseBoxShapeUtil,
+  TLBaseShape,
+  createShapeId,
+  useEditor,
+} from 'tldraw';
+import {
+  ReactNode,
+  useRef,
+  useEffect,
+  createContext,
+  useContext,
+  Component,
+  ErrorInfo,
+  useState,
+} from 'react';
+import React from 'react';
 import { CanvasSyncAdapter } from '../CanvasSyncAdapter';
 import { nanoid } from 'nanoid';
 // 1. Import ComponentToolbox
@@ -28,7 +47,7 @@ export interface TamboShapeProps {
 }
 
 // Create a type for the Tambo shape
-export type TamboShape = TLBaseShape<"tambo", TamboShapeProps>;
+export type TamboShape = TLBaseShape<'tambo', TamboShapeProps>;
 
 // Error boundary for component rendering
 class ComponentErrorBoundary extends Component<
@@ -58,173 +77,196 @@ class ComponentErrorBoundary extends Component<
 
 // Component wrapper to handle hooks inside the shape
 function TamboShapeComponent({ shape }: { shape: TamboShape }) {
-    const containerRef = useRef<HTMLDivElement>(null);
-    const scaleWrapperRef = useRef<HTMLDivElement>(null);
-    const contentInnerRef = useRef<HTMLDivElement>(null);
-    const componentStore = useContext(ComponentStoreContext);
-    const editor = useEditor();
-    const [, setRenderTick] = useState(0);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const scaleWrapperRef = useRef<HTMLDivElement>(null);
+  const contentInnerRef = useRef<HTMLDivElement>(null);
+  const componentStore = useContext(ComponentStoreContext);
+  const editor = useEditor();
+  const [, setRenderTick] = useState(0);
 
-    // Measured intrinsic (natural) size of the component's content
-    const [naturalSize, setNaturalSize] = useState<{ w: number; h: number } | null>(null);
-    const autoFittedRef = useRef(false);
+  // Measured intrinsic (natural) size of the component's content
+  const [naturalSize, setNaturalSize] = useState<{ w: number; h: number } | null>(null);
+  const autoFittedRef = useRef(false);
 
-    useEffect(() => {
-      const el = contentInnerRef.current;
-      if (!el) return;
+  useEffect(() => {
+    const el = contentInnerRef.current;
+    if (!el) return;
 
-      // Measure intrinsic size (not the scaled container)
-      const measure = () => {
-        // Use scrollWidth/Height to get the natural content size regardless of transforms
-        const w = Math.max(el.scrollWidth, el.getBoundingClientRect().width);
-        const h = Math.max(el.scrollHeight, el.getBoundingClientRect().height);
-        if (!naturalSize || Math.abs(naturalSize.w - w) > 1 || Math.abs(naturalSize.h - h) > 1) {
-          setNaturalSize({ w, h });
-        }
-      };
+    // Measure intrinsic size (not the scaled container)
+    const measure = () => {
+      // Use scrollWidth/Height to get the natural content size regardless of transforms
+      const w = Math.max(el.scrollWidth, el.getBoundingClientRect().width);
+      const h = Math.max(el.scrollHeight, el.getBoundingClientRect().height);
+      if (!naturalSize || Math.abs(naturalSize.w - w) > 1 || Math.abs(naturalSize.h - h) > 1) {
+        setNaturalSize({ w, h });
+      }
+    };
 
-      const observer = new ResizeObserver(() => measure());
-      observer.observe(el);
-      // Initial measure
-      measure();
+    const observer = new ResizeObserver(() => measure());
+    observer.observe(el);
+    // Initial measure
+    measure();
 
-      return () => observer.disconnect();
-    }, []);
+    return () => observer.disconnect();
+  }, []);
 
-    // Re-render when component store broadcasts updates
-    useEffect(() => {
-      const rerender = () => setRenderTick((x) => x + 1);
+  // Re-render when component store broadcasts updates
+  useEffect(() => {
+    const rerender = () => setRenderTick((x) => x + 1);
+    if (typeof window !== 'undefined') {
+      window.addEventListener('present:component-store-updated', rerender);
+    }
+    return () => {
       if (typeof window !== 'undefined') {
-        window.addEventListener('present:component-store-updated', rerender);
+        window.removeEventListener('present:component-store-updated', rerender);
       }
-      return () => {
-        if (typeof window !== 'undefined') {
-          window.removeEventListener('present:component-store-updated', rerender);
-        }
-      };
-    }, []);
+    };
+  }, []);
 
-    // Conditional auto-fit based on sizingPolicy and whether user resized
-    useEffect(() => {
-      if (!editor || !naturalSize) return;
+  // Conditional auto-fit based on sizingPolicy and whether user resized
+  useEffect(() => {
+    if (!editor || !naturalSize) return;
 
-      const sizeInfo = getComponentSizeInfo(shape.props.name);
-      const policy = sizeInfo.sizingPolicy || 'fit_until_user_resize';
-
-      // TLDraw Editor.shapeUtils is not a Map in our integration; guard accordingly
-      let userHasResized = false;
-      try {
-        const shapeUtil: any = (editor as any).shapeUtils?.get?.(shape) || (editor as any).shapeUtils?.[shape.type];
-        userHasResized = Boolean(shapeUtil?.userResized?.has?.(shape.id));
-      } catch {
-        userHasResized = false;
-      }
-
-      const shouldAutoFit =
-        policy === 'always_fit' || (policy === 'fit_until_user_resize' && !userHasResized);
-
-      if (shouldAutoFit) {
-        const { w: nw, h: nh } = naturalSize;
-        const changed = Math.abs(shape.props.w - nw) > 1 || Math.abs(shape.props.h - nh) > 1;
-        if (changed) {
-          editor.updateShapes([
-            { id: shape.id, type: 'tambo', props: { ...shape.props, w: nw, h: nh } },
-          ]);
-        }
-      }
-    }, [editor, naturalSize, shape.id, shape.props.name]);
-
-    // Compute uniform scale to preserve aspect ratio and avoid warping/cropping
     const sizeInfo = getComponentSizeInfo(shape.props.name);
-    const baseW = naturalSize?.w ?? sizeInfo.naturalWidth;
-    const baseH = naturalSize?.h ?? sizeInfo.naturalHeight;
+    const policy = sizeInfo.sizingPolicy || 'fit_until_user_resize';
 
-    const scaleX = shape.props.w / baseW;
-    const scaleY = shape.props.h / baseH;
-    const scale = Math.min(scaleX, scaleY);
+    // TLDraw Editor.shapeUtils is not a Map in our integration; guard accordingly
+    let userHasResized = false;
+    try {
+      const shapeUtil: any =
+        (editor as any).shapeUtils?.get?.(shape) || (editor as any).shapeUtils?.[shape.type];
+      userHasResized = Boolean(shapeUtil?.userResized?.has?.(shape.id));
+    } catch {
+      userHasResized = false;
+    }
 
-    const scaledWidth = baseW * scale;
-    const scaledHeight = baseH * scale;
-    const offsetX = (shape.props.w - scaledWidth) / 2;
-    const offsetY = (shape.props.h - scaledHeight) / 2;
+    const shouldAutoFit =
+      policy === 'always_fit' || (policy === 'fit_until_user_resize' && !userHasResized);
 
-    return (
+    if (shouldAutoFit) {
+      const { w: nw, h: nh } = naturalSize;
+      const changed = Math.abs(shape.props.w - nw) > 1 || Math.abs(shape.props.h - nh) > 1;
+      if (changed) {
+        editor.updateShapes([
+          { id: shape.id, type: 'tambo', props: { ...shape.props, w: nw, h: nh } },
+        ]);
+      }
+    }
+  }, [editor, naturalSize, shape.id, shape.props.name]);
+
+  // Compute uniform scale to preserve aspect ratio and avoid warping/cropping
+  const sizeInfo = getComponentSizeInfo(shape.props.name);
+  const baseW = naturalSize?.w ?? sizeInfo.naturalWidth;
+  const baseH = naturalSize?.h ?? sizeInfo.naturalHeight;
+
+  const scaleX = shape.props.w / baseW;
+  const scaleY = shape.props.h / baseH;
+  const scale = Math.min(scaleX, scaleY);
+
+  const scaledWidth = baseW * scale;
+  const scaledHeight = baseH * scale;
+  const offsetX = (shape.props.w - scaledWidth) / 2;
+  const offsetY = (shape.props.h - scaledHeight) / 2;
+
+  return (
+    <div
+      ref={containerRef}
+      style={{
+        width: shape.props.w + 'px',
+        height: shape.props.h + 'px',
+        overflow: 'hidden',
+        position: 'relative',
+        background: 'transparent',
+        pointerEvents: 'all',
+      }}
+      onPointerDown={(e) => {
+        const target = e.target as HTMLElement;
+        if (
+          target.closest('button') ||
+          target.closest('input') ||
+          target.closest('select') ||
+          target.closest('textarea') ||
+          target.closest('[draggable="true"]')
+        ) {
+          e.stopPropagation();
+        }
+      }}
+      onContextMenu={(e) => {
+        const target = e.target as HTMLElement;
+        if (target.closest('input') || target.closest('select') || target.closest('textarea')) {
+          e.stopPropagation();
+        }
+      }}
+    >
       <div
-        ref={containerRef}
+        ref={scaleWrapperRef}
         style={{
-          width: shape.props.w + 'px',
-          height: shape.props.h + 'px',
-          overflow: 'hidden',
-          position: 'relative',
-          background: 'transparent',
-          pointerEvents: 'all',
-        }}
-        onPointerDown={(e) => {
-          const target = e.target as HTMLElement;
-          if (
-            target.closest('button') ||
-            target.closest('input') ||
-            target.closest('select') ||
-            target.closest('textarea') ||
-            target.closest('[draggable="true"]')
-          ) {
-            e.stopPropagation();
-          }
-        }}
-        onContextMenu={(e) => {
-          const target = e.target as HTMLElement;
-          if (target.closest('input') || target.closest('select') || target.closest('textarea')) {
-            e.stopPropagation();
-          }
+          position: 'absolute',
+          left: `${offsetX}px`,
+          top: `${offsetY}px`,
+          width: baseW + 'px',
+          height: baseH + 'px',
+          transform: `scale(${scale})`,
+          transformOrigin: 'top left',
         }}
       >
         <div
-          ref={scaleWrapperRef}
-          style={{
-            position: 'absolute',
-            left: `${offsetX}px`,
-            top: `${offsetY}px`,
-            width: baseW + 'px',
-            height: baseH + 'px',
-            transform: `scale(${scale})`,
-            transformOrigin: 'top left',
-          }}
+          ref={contentInnerRef}
+          style={{ width: 'auto', height: 'auto', display: 'inline-block' }}
         >
-          <div ref={contentInnerRef} style={{ width: 'auto', height: 'auto', display: 'inline-block' }}>
-            <ComponentErrorBoundary
-              fallback={<div style={{ padding: '10px', color: 'var(--color-text-muted)' }}>Component error</div>}
-            >
-              {shape.props.tamboComponent && componentStore ? (
-                (() => {
-                  const stored = componentStore.get(shape.props.tamboComponent) as any;
-                  let node: React.ReactNode = null;
-                  if (React.isValidElement(stored)) {
-                    node = stored;
-                  } else if (stored && typeof stored === 'object' && (stored.type || stored.Component || stored.component)) {
-                    // Try to reconstruct from { type, props }
-                    const type = stored.type || stored.Component || stored.component;
-                    const props = stored.props || {};
-                    try {
-                      node = React.createElement(type, { __tambo_message_id: shape.props.tamboComponent, ...props });
-                    } catch {
-                      // fall through
-                    }
+          <ComponentErrorBoundary
+            fallback={
+              <div style={{ padding: '10px', color: 'var(--color-text-muted)' }}>
+                Component error
+              </div>
+            }
+          >
+            {shape.props.tamboComponent && componentStore ? (
+              (() => {
+                const stored = componentStore.get(shape.props.tamboComponent) as any;
+                let node: React.ReactNode = null;
+                if (React.isValidElement(stored)) {
+                  node = stored;
+                } else if (
+                  stored &&
+                  typeof stored === 'object' &&
+                  (stored.type || stored.Component || stored.component)
+                ) {
+                  // Try to reconstruct from { type, props }
+                  const type = stored.type || stored.Component || stored.component;
+                  const props = stored.props || {};
+                  try {
+                    node = React.createElement(type, {
+                      __tambo_message_id: shape.props.tamboComponent,
+                      ...props,
+                    });
+                  } catch {
+                    // fall through
                   }
-                  return node || <div style={{ padding: '10px', color: 'var(--color-text-muted)' }}>Component not found</div>;
-                })()
-              ) : (
-                <div style={{ padding: '10px', color: 'var(--color-text-muted)' }}>No component loaded</div>
-              )}
-            </ComponentErrorBoundary>
-          </div>
+                }
+                return (
+                  node || (
+                    <div style={{ padding: '10px', color: 'var(--color-text-muted)' }}>
+                      Component not found
+                    </div>
+                  )
+                );
+              })()
+            ) : (
+              <div style={{ padding: '10px', color: 'var(--color-text-muted)' }}>
+                No component loaded
+              </div>
+            )}
+          </ComponentErrorBoundary>
         </div>
       </div>
-    );
+    </div>
+  );
 }
 
 // Define the TamboShapeUtil class
 export class TamboShapeUtil extends BaseBoxShapeUtil<TamboShape> {
-  static override type = "tambo" as const;
+  static override type = 'tambo' as const;
   static override props = {
     w: T.number,
     h: T.number,
@@ -243,8 +285,8 @@ export class TamboShapeUtil extends BaseBoxShapeUtil<TamboShape> {
     return {
       w: 300,
       h: 200,
-      tamboComponent: "",
-      name: "Tambo Component",
+      tamboComponent: '',
+      name: 'Tambo Component',
       pinned: false,
       pinnedX: 0.5,
       pinnedY: 0.5,
@@ -277,16 +319,16 @@ export class TamboShapeUtil extends BaseBoxShapeUtil<TamboShape> {
   override indicator(shape: TamboShape) {
     return <rect width={shape.props.w} height={shape.props.h} fill="transparent" />;
   }
-  
+
   // Override canEdit to allow interaction with the content
   override canEdit = () => false;
-  
+
   // Override canResize to allow resizing
   override canResize = () => true;
-  
+
   // Override isAspectRatioLocked to allow free resizing
   override isAspectRatioLocked = () => false;
-  
+
   // Prevent moving pinned shapes
   override canBind = ({ fromShapeType }: { fromShapeType: string }) => {
     return fromShapeType !== 'tambo';
@@ -299,21 +341,21 @@ export class TamboShapeUtil extends BaseBoxShapeUtil<TamboShape> {
 
     const componentName = shape.props.name; // Component type from name
     const sizeInfo = getComponentSizeInfo(componentName);
-    
-    console.log(`🔧 [TamboShapeUtil] Resizing ${componentName}:`, { 
-      scaleX: info.scaleX, 
-      scaleY: info.scaleY, 
-      originalSize: { w: shape.props.w, h: shape.props.h } 
+
+    console.log(`🔧 [TamboShapeUtil] Resizing ${componentName}:`, {
+      scaleX: info.scaleX,
+      scaleY: info.scaleY,
+      originalSize: { w: shape.props.w, h: shape.props.h },
     });
-    
+
     // Calculate new dimensions based on the scale factors
     let w = shape.props.w * info.scaleX;
     let h = shape.props.h * info.scaleY;
-    
+
     // Enforce minimum sizes
     w = Math.max(sizeInfo.minWidth, w);
     h = Math.max(sizeInfo.minHeight, h);
-    
+
     // Enforce aspect ratio if needed
     if (sizeInfo.aspectRatio && sizeInfo.resizeMode === 'aspect-locked') {
       const ratio = sizeInfo.aspectRatio;
@@ -326,19 +368,19 @@ export class TamboShapeUtil extends BaseBoxShapeUtil<TamboShape> {
         w = h * ratio;
       }
     }
-    
+
     // For fixed mode, snap back to natural size
     if (sizeInfo.resizeMode === 'fixed') {
       w = sizeInfo.naturalWidth;
       h = sizeInfo.naturalHeight;
     }
-    
-    return { 
+
+    return {
       props: {
-        ...shape.props, 
-        w, 
-        h 
-      }
+        ...shape.props,
+        w,
+        h,
+      },
     };
   };
 
@@ -353,15 +395,18 @@ function ToolboxShapeComponent({ shape }: { shape: TamboShape }) {
   // Use TLDraw's built-in hook to get the editor instead of context
   const editor = useEditor();
   const componentStore = useContext(ComponentStoreContext);
-  
+
   const handleComponentCreate = (componentType: string) => {
     console.log('🔧 Creating component from toolbox:', componentType);
-    
+
     if (!editor || !componentStore) {
-      console.error('Editor or component store not available', { editor: !!editor, componentStore: !!componentStore });
+      console.error('Editor or component store not available', {
+        editor: !!editor,
+        componentStore: !!componentStore,
+      });
       return;
     }
-    
+
     // Import components from tambo
     const { components } = require('@/lib/tambo');
     const Component = components.find((c: any) => c.name === componentType)?.component;
@@ -369,15 +414,15 @@ function ToolboxShapeComponent({ shape }: { shape: TamboShape }) {
       console.error('Component not found:', componentType);
       return;
     }
-    
+
     const shapeId = createShapeId(nanoid());
     const componentInstance = React.createElement(Component, { __tambo_message_id: shapeId });
     componentStore.set(shapeId, componentInstance);
-    
+
     const viewport = editor.getViewportPageBounds();
     const x = viewport ? viewport.midX - 150 : 0;
     const y = viewport ? viewport.midY - 100 : 0;
-    
+
     editor.createShape({
       id: shapeId,
       type: 'tambo',
@@ -388,12 +433,12 @@ function ToolboxShapeComponent({ shape }: { shape: TamboShape }) {
         h: 200,
         tamboComponent: shapeId,
         name: componentType,
-      }
+      },
     });
-    
+
     console.log('✅ Component created successfully:', componentType);
   };
-  
+
   return (
     <div
       style={{
@@ -415,7 +460,7 @@ function ToolboxShapeComponent({ shape }: { shape: TamboShape }) {
 
 // 2. Add ToolboxShapeUtil
 export class ToolboxShapeUtil extends BaseBoxShapeUtil<TamboShape> {
-  static override type = "toolbox" as const;
+  static override type = 'toolbox' as const;
   static override props = {
     w: T.number,
     h: T.number,
@@ -426,7 +471,7 @@ export class ToolboxShapeUtil extends BaseBoxShapeUtil<TamboShape> {
     return {
       w: 340,
       h: 320,
-      name: "Component Toolbox",
+      name: 'Component Toolbox',
     };
   }
 
@@ -488,15 +533,19 @@ class TldrawErrorBoundary extends Component<{ children: ReactNode }, TldrawError
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     // Log the error but don't let it crash the app
     console.warn('Tldraw canvas error caught:', error.message);
-    
+
     // Suppress validation errors specifically
-    if (error.message.includes('ValidationError') || 
-        error.message.includes('Expected a valid url') ||
-        error.message.includes('shape(type = bookmark)')) {
-      console.warn('Validation error suppressed - this is handled by custom external content handlers');
+    if (
+      error.message.includes('ValidationError') ||
+      error.message.includes('Expected a valid url') ||
+      error.message.includes('shape(type = bookmark)')
+    ) {
+      console.warn(
+        'Validation error suppressed - this is handled by custom external content handlers',
+      );
       return;
     }
-    
+
     console.error('Tldraw error details:', errorInfo);
   }
 
@@ -506,8 +555,10 @@ class TldrawErrorBoundary extends Component<{ children: ReactNode }, TldrawError
         <div className="flex items-center justify-center h-full w-full bg-gray-50">
           <div className="text-center p-8">
             <h2 className="text-lg font-semibold text-gray-700 mb-2">Canvas Error</h2>
-            <p className="text-gray-500 mb-4">There was an issue with the canvas. Refreshing may help.</p>
-            <button 
+            <p className="text-gray-500 mb-4">
+              There was an issue with the canvas. Refreshing may help.
+            </p>
+            <button
               onClick={() => this.setState({ hasError: false })}
               className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
             >
@@ -522,7 +573,13 @@ class TldrawErrorBoundary extends Component<{ children: ReactNode }, TldrawError
   }
 }
 
-export function TldrawCanvas({ onMount, shapeUtils, componentStore, componentId: propId, ...rest }: TldrawCanvasProps) {
+export function TldrawCanvas({
+  onMount,
+  shapeUtils,
+  componentStore,
+  componentId: propId,
+  ...rest
+}: TldrawCanvasProps) {
   const [isClient, setIsClient] = useState(false);
   const editorRef = useRef<Editor | null>(null);
 
@@ -545,7 +602,10 @@ export function TldrawCanvas({ onMount, shapeUtils, componentStore, componentId:
 
   if (!isClient) {
     return (
-      <div style={{ position: 'fixed', inset: 0 }} className="flex items-center justify-center bg-gray-50">
+      <div
+        style={{ position: 'fixed', inset: 0 }}
+        className="flex items-center justify-center bg-gray-50"
+      >
         <div className="text-gray-500">Loading canvas...</div>
       </div>
     );
@@ -557,11 +617,7 @@ export function TldrawCanvas({ onMount, shapeUtils, componentStore, componentId:
         <EditorContext.Provider value={editorRef.current}>
           <ComponentStoreContext.Provider value={componentStore || null}>
             <div style={{ position: 'fixed', inset: 0 }}>
-              <Tldraw
-                onMount={handleMount}
-                shapeUtils={shapeUtils || []}
-                {...rest}
-              />
+              <Tldraw onMount={handleMount} shapeUtils={shapeUtils || []} {...rest} />
             </div>
           </ComponentStoreContext.Provider>
         </EditorContext.Provider>

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Clean Tambo Voice Agent - Back to First Principles
- * 
+ *
  * Minimal LiveKit agent that should work with automatic dispatch from LiveKit Cloud
  */
 
@@ -24,47 +24,49 @@ const tamboAgent = defineAgent({
     console.log(`🎉 AGENT AUTOMATIC DISPATCH WORKING! 🎉`);
     console.log(`📍 Joining room: ${job.room.name}`);
     console.log(`👥 Participants already in room: ${job.room.remoteParticipants.size}`);
-    
+
     // Connect to the room
     await job.connect();
     console.log('✅ Agent connected successfully!');
-    
+
     // Send a simple message to prove the agent is working
     const welcomeMessage = {
       type: 'agent_message',
       text: '🤖 Tambo Voice Agent joined the room via automatic dispatch!',
-      timestamp: Date.now()
+      timestamp: Date.now(),
     };
-    
+
     job.room.localParticipant?.publishData(
       new TextEncoder().encode(JSON.stringify(welcomeMessage)),
-      { reliable: true }
+      { reliable: true },
     );
-    
+
     console.log('📢 Welcome message sent!');
-    
+
     // Keep the agent alive to listen for events
     job.room.on('participantConnected', (participant) => {
       console.log(`👤 New participant: ${participant.identity}`);
     });
-    
+
     job.room.on('dataReceived', (data, participant) => {
       console.log(`💬 Data from ${participant?.identity}: ${new TextDecoder().decode(data)}`);
     });
-    
+
     console.log('🔄 Agent is now listening for room events...');
-  }
+  },
 });
 
 // Run the agent worker if this file is executed directly
 if (import.meta.url.startsWith('file:') && process.argv[1].endsWith('clean-agent.ts')) {
   console.log('🚀 Starting clean agent worker...');
-  
-  cli.runApp(new WorkerOptions({
-    agent: tamboAgent,
-    // For automatic dispatch, do NOT set agent_name
-    // Let LiveKit handle dispatch automatically
-  }));
+
+  cli.runApp(
+    new WorkerOptions({
+      agent: tamboAgent,
+      // For automatic dispatch, do NOT set agent_name
+      // Let LiveKit handle dispatch automatically
+    }),
+  );
 }
 
-export default tamboAgent; 
+export default tamboAgent;

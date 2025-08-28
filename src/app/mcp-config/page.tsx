@@ -1,27 +1,27 @@
 /**
  * McpConfigPage
- * 
+ *
  * Configure MCP (Model Context Protocol) servers for the canvas workspace.
- * 
+ *
  * Storage: Configs stored in localStorage as "mcp-servers" JSON, loaded by loadMcpServers()
  * Integration: Canvas loads configs for AI agent integrations via EnhancedMcpProvider
- * 
+ *
  * Config Format:
  * - Simple: ["http://localhost:3001/mcp"]
  * - Advanced: [{ url: "http://localhost:3001/mcp", transport: "http", name: "Local Server" }]
  */
 
-"use client";
-import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
-import { McpStatusIndicator } from "@/components/ui/mcp-status-indicator";
-import { useValidatedTambo } from "@/hooks/use-validated-tambo";
-import { computeMcpMappings, listRegistryTools, listWindowMcpTools } from "@/lib/mcp-introspection";
+'use client';
+import Link from 'next/link';
+import { useEffect, useMemo, useState } from 'react';
+import { McpStatusIndicator } from '@/components/ui/mcp-status-indicator';
+import { useValidatedTambo } from '@/hooks/use-validated-tambo';
+import { computeMcpMappings, listRegistryTools, listWindowMcpTools } from '@/lib/mcp-introspection';
 
 // Define MCP transport types
 export enum MCPTransport {
-  SSE = "sse",
-  HTTP = "http",
+  SSE = 'sse',
+  HTTP = 'http',
 }
 
 // Define MCP server configuration types
@@ -36,17 +36,12 @@ export type MCPServerConfig =
 const McpConfigPage = () => {
   // Initialize from localStorage directly to avoid conflicts
   const initialMcpServers =
-    typeof window !== "undefined"
-      ? JSON.parse(localStorage.getItem("mcp-servers") || "[]")
-      : [];
+    typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('mcp-servers') || '[]') : [];
 
-  const [mcpServers, setMcpServers] =
-    useState<MCPServerConfig[]>(initialMcpServers);
-  const [serverUrl, setServerUrl] = useState("");
-  const [serverName, setServerName] = useState("");
-  const [transportType, setTransportType] = useState<MCPTransport>(
-    MCPTransport.HTTP
-  );
+  const [mcpServers, setMcpServers] = useState<MCPServerConfig[]>(initialMcpServers);
+  const [serverUrl, setServerUrl] = useState('');
+  const [serverName, setServerName] = useState('');
+  const [transportType, setTransportType] = useState<MCPTransport>(MCPTransport.HTTP);
   const [savedSuccess, setSavedSuccess] = useState(false);
   const { toolRegistry } = useValidatedTambo();
   const [verifyOpen, setVerifyOpen] = useState(false);
@@ -60,8 +55,8 @@ const McpConfigPage = () => {
 
   // Save servers to localStorage when updated
   useEffect(() => {
-    console.log("Saving to localStorage:", mcpServers);
-    localStorage.setItem("mcp-servers", JSON.stringify(mcpServers));
+    console.log('Saving to localStorage:', mcpServers);
+    localStorage.setItem('mcp-servers', JSON.stringify(mcpServers));
     if (mcpServers.length > 0) {
       setSavedSuccess(true);
       const timer = setTimeout(() => setSavedSuccess(false), 2000);
@@ -72,7 +67,7 @@ const McpConfigPage = () => {
   const addServer = (e: React.FormEvent) => {
     e.preventDefault();
     if (serverUrl.trim()) {
-      console.log("Adding server:", serverUrl.trim());
+      console.log('Adding server:', serverUrl.trim());
 
       const serverConfig = {
         url: serverUrl.trim(),
@@ -82,31 +77,31 @@ const McpConfigPage = () => {
       setMcpServers((prev) => [...prev, serverConfig]);
 
       // Reset form fields
-      setServerUrl("");
-      setServerName("");
+      setServerUrl('');
+      setServerName('');
       setTransportType(MCPTransport.HTTP);
 
       // Double-check localStorage immediately after update
       setTimeout(() => {
-        const saved = localStorage.getItem("mcp-servers");
-        console.log("Immediate localStorage check:", saved);
+        const saved = localStorage.getItem('mcp-servers');
+        console.log('Immediate localStorage check:', saved);
       }, 100);
     }
   };
 
   const removeServer = (index: number) => {
-    console.log("Removing server at index:", index);
+    console.log('Removing server at index:', index);
     setMcpServers((prev) => prev.filter((_, i) => i !== index));
   };
 
   // Helper function to get server display information
   const getServerInfo = (server: MCPServerConfig) => {
-    if (typeof server === "string") {
-      return { url: server, transport: "SSE (default)", name: null };
+    if (typeof server === 'string') {
+      return { url: server, transport: 'SSE (default)', name: null };
     } else {
       return {
         url: server.url,
-        transport: server.transport || "SSE (default)",
+        transport: server.transport || 'SSE (default)',
         name: server.name || null,
       };
     }
@@ -126,18 +121,15 @@ const McpConfigPage = () => {
         </div>
 
         <div className="mb-8">
-          <h2 className="text-lg font-semibold mb-4">
-            Model Context Protocol Servers
-          </h2>
+          <h2 className="text-lg font-semibold mb-4">Model Context Protocol Servers</h2>
           <p className="text-gray-600 mb-4">
-            Configure external MCP-compliant servers to extend the capabilities
-            of your Tambo application. The servers listed here will be available
-            as tool providers in your chat.
+            Configure external MCP-compliant servers to extend the capabilities of your Tambo
+            application. The servers listed here will be available as tool providers in your chat.
           </p>
           {winToolNames.length === 0 && (
             <div className="mb-4 p-3 rounded-md bg-yellow-50 text-yellow-800 border border-yellow-200">
-              No MCP tools are currently registered in the window bridge. Add a server below, then use
-              "Verify & Map" to confirm tools are available and mapped.
+              No MCP tools are currently registered in the window bridge. Add a server below, then
+              use "Verify & Map" to confirm tools are available and mapped.
             </div>
           )}
 
@@ -163,10 +155,7 @@ const McpConfigPage = () => {
             </div>
 
             <div className="flex flex-col space-y-2 mt-3">
-              <label
-                htmlFor="server-name"
-                className="font-medium text-gray-700"
-              >
+              <label htmlFor="server-name" className="font-medium text-gray-700">
                 Server Name (optional)
               </label>
               <input
@@ -180,18 +169,13 @@ const McpConfigPage = () => {
             </div>
 
             <div className="flex flex-col space-y-2 mt-3">
-              <label
-                htmlFor="transport-type"
-                className="font-medium text-gray-700"
-              >
+              <label htmlFor="transport-type" className="font-medium text-gray-700">
                 Transport Type
               </label>
               <select
                 id="transport-type"
                 value={transportType}
-                onChange={(e) =>
-                  setTransportType(e.target.value as MCPTransport)
-                }
+                onChange={(e) => setTransportType(e.target.value as MCPTransport)}
                 className="px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value={MCPTransport.SSE}>SSE</option>
@@ -222,7 +206,7 @@ const McpConfigPage = () => {
                     onClick={() => setVerifyOpen((v) => !v)}
                     className="px-2 py-1 text-xs rounded bg-gray-100 hover:bg-gray-200"
                   >
-                    {verifyOpen ? "Hide Verification" : "Verify & Map"}
+                    {verifyOpen ? 'Hide Verification' : 'Verify & Map'}
                   </button>
                   <McpStatusIndicator showDetails={false} className="text-sm" />
                 </div>
@@ -231,20 +215,15 @@ const McpConfigPage = () => {
                 {mcpServers.map((server, index) => {
                   const serverInfo = getServerInfo(server);
                   return (
-                    <li
-                      key={index}
-                      className="flex items-center justify-between p-3"
-                    >
+                    <li key={index} className="flex items-center justify-between p-3">
                       <div className="flex-1">
                         <div className="flex items-center">
                           <span className="text-green-600 mr-2">●</span>
                           <span>{serverInfo.url}</span>
                         </div>
-                        {(serverInfo.name || typeof server !== "string") && (
+                        {(serverInfo.name || typeof server !== 'string') && (
                           <div className="text-sm text-gray-600 ml-5 mt-1">
-                            {serverInfo.name && (
-                              <div>Name: {serverInfo.name}</div>
-                            )}
+                            {serverInfo.name && <div>Name: {serverInfo.name}</div>}
                             <div>Transport: {serverInfo.transport}</div>
                           </div>
                         )}
@@ -290,10 +269,14 @@ const McpConfigPage = () => {
                             <span className="font-mono">{m.agentTool}</span>
                             <span className="text-gray-500"> → </span>
                             <span className="font-mono">{m.mcpTool}</span>
-                            <span className={`ml-2 text-xs ${m.inRegistry ? 'text-green-600' : 'text-red-600'}`}>
+                            <span
+                              className={`ml-2 text-xs ${m.inRegistry ? 'text-green-600' : 'text-red-600'}`}
+                            >
                               {m.inRegistry ? 'in registry' : 'missing'}
                             </span>
-                            <span className={`ml-2 text-xs ${m.inWindow ? 'text-green-600' : 'text-red-600'}`}>
+                            <span
+                              className={`ml-2 text-xs ${m.inWindow ? 'text-green-600' : 'text-red-600'}`}
+                            >
                               {m.inWindow ? 'in window' : 'not registered'}
                             </span>
                           </li>
@@ -302,8 +285,8 @@ const McpConfigPage = () => {
                     </div>
                   </div>
                   <div className="mt-2 text-xs text-gray-500">
-                    If a mapping is missing, ensure your MCP server exposes tool names that match the registry
-                    or add aliases in the System Registry.
+                    If a mapping is missing, ensure your MCP server exposes tool names that match
+                    the registry or add aliases in the System Registry.
                   </div>
                 </div>
               )}
@@ -318,10 +301,9 @@ const McpConfigPage = () => {
         <div className="bg-gray-50 p-4 rounded-md">
           <h3 className="font-semibold mb-2">What is MCP?</h3>
           <p className="text-gray-600 text-sm">
-            The Model Context Protocol (MCP) is a standard that allows
-            applications to communicate with external tools and services. By
-            configuring MCP servers, you can extend your Tambo application with
-            additional capabilities provided by these servers.
+            The Model Context Protocol (MCP) is a standard that allows applications to communicate
+            with external tools and services. By configuring MCP servers, you can extend your Tambo
+            application with additional capabilities provided by these servers.
           </p>
         </div>
       </div>

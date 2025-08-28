@@ -1,16 +1,27 @@
-"use client";
-import { z } from "zod";
+'use client';
+import { z } from 'zod';
 import React, { useEffect, useRef, useState, useMemo } from 'react';
-import { 
-  Cloud, CloudRain, Sun, Wind, Droplets, Eye,
-  Waves, Umbrella, CloudDrizzle, Snowflake, Zap,
-  ArrowUp, ArrowDown, ChevronRight
+import {
+  Cloud,
+  CloudRain,
+  Sun,
+  Wind,
+  Droplets,
+  Eye,
+  Waves,
+  Umbrella,
+  CloudDrizzle,
+  Snowflake,
+  Zap,
+  ArrowUp,
+  ArrowDown,
+  ChevronRight,
 } from 'lucide-react';
-import { LoadingState } from "@/lib/with-progressive-loading";
-import { LoadingWrapper, SkeletonPatterns } from "@/components/ui/loading-states";
-import { useComponentSubAgent, SubAgentPresets } from "@/lib/component-subagent";
-import { normalizeWeatherForecast } from "@/lib/mcp-normalizers";
-import { useComponentIsolation } from "@/lib/component-isolation";
+import { LoadingState } from '@/lib/with-progressive-loading';
+import { LoadingWrapper, SkeletonPatterns } from '@/components/ui/loading-states';
+import { useComponentSubAgent, SubAgentPresets } from '@/lib/component-subagent';
+import { normalizeWeatherForecast } from '@/lib/mcp-normalizers';
+import { useComponentIsolation } from '@/lib/component-isolation';
 
 // Enhanced forecast period schema with more data types
 const forecastPeriodSchema = z.object({
@@ -21,55 +32,76 @@ const forecastPeriodSchema = z.object({
     direction: z.string().describe("Wind direction (e.g. 'NW', 'SE')"),
   }),
   condition: z.string().describe("Weather condition (e.g. 'Sunny', 'Mostly Cloudy')"),
-  humidity: z.number().optional().describe("Humidity percentage"),
-  precipitation: z.number().optional().describe("Precipitation percentage"),
-  uvIndex: z.number().optional().describe("UV index value"),
-  visibility: z.string().optional().describe("Visibility distance"),
+  humidity: z.number().optional().describe('Humidity percentage'),
+  precipitation: z.number().optional().describe('Precipitation percentage'),
+  uvIndex: z.number().optional().describe('UV index value'),
+  visibility: z.string().optional().describe('Visibility distance'),
 });
 
 // Enhanced schema with specialized data types
 export const weatherForecastSchema = z.object({
   location: z.string().describe("Location name (e.g. 'Bellingham, WA')"),
-  periods: z.array(forecastPeriodSchema).describe("Weather periods with forecast data"),
-  
+  periods: z.array(forecastPeriodSchema).describe('Weather periods with forecast data'),
+
   // View type determines layout and emphasis
-  viewType: z.enum(["current", "tonight", "weekly", "precipitation", "tides", "moon", "detailed", "minimal"])
-    .optional().default("current").describe("Type of weather view to display"),
-  
+  viewType: z
+    .enum(['current', 'tonight', 'weekly', 'precipitation', 'tides', 'moon', 'detailed', 'minimal'])
+    .optional()
+    .default('current')
+    .describe('Type of weather view to display'),
+
   // Optional specialized data
-  moonPhase: z.object({
-    phase: z.string().describe("Moon phase name"),
-    illumination: z.number().describe("Percentage illuminated"),
-    nextPhase: z.string().optional().describe("Next phase name"),
-    nextPhaseDate: z.string().optional().describe("Date of next phase"),
-  }).optional(),
-  
-  tideData: z.object({
-    nextHigh: z.object({
-      time: z.string().describe("Time of next high tide"),
-      height: z.string().describe("Height of high tide"),
-    }).optional(),
-    nextLow: z.object({
-      time: z.string().describe("Time of next low tide"),
-      height: z.string().describe("Height of low tide"),
-    }).optional(),
-  }).optional(),
-  
-  precipitationForecast: z.object({
-    hourly: z.array(z.object({
-      time: z.string(),
-      probability: z.number(),
-      intensity: z.string(),
-    })).optional(),
-    radar: z.string().optional().describe("Radar image URL"),
-  }).optional(),
-  
-  alerts: z.array(z.object({
-    type: z.string().describe("Alert type (e.g. 'severe-weather')"),
-    title: z.string().describe("Alert title"),
-    description: z.string().describe("Alert description"),
-    severity: z.enum(["minor", "moderate", "severe", "extreme"]),
-  })).optional(),
+  moonPhase: z
+    .object({
+      phase: z.string().describe('Moon phase name'),
+      illumination: z.number().describe('Percentage illuminated'),
+      nextPhase: z.string().optional().describe('Next phase name'),
+      nextPhaseDate: z.string().optional().describe('Date of next phase'),
+    })
+    .optional(),
+
+  tideData: z
+    .object({
+      nextHigh: z
+        .object({
+          time: z.string().describe('Time of next high tide'),
+          height: z.string().describe('Height of high tide'),
+        })
+        .optional(),
+      nextLow: z
+        .object({
+          time: z.string().describe('Time of next low tide'),
+          height: z.string().describe('Height of low tide'),
+        })
+        .optional(),
+    })
+    .optional(),
+
+  precipitationForecast: z
+    .object({
+      hourly: z
+        .array(
+          z.object({
+            time: z.string(),
+            probability: z.number(),
+            intensity: z.string(),
+          }),
+        )
+        .optional(),
+      radar: z.string().optional().describe('Radar image URL'),
+    })
+    .optional(),
+
+  alerts: z
+    .array(
+      z.object({
+        type: z.string().describe("Alert type (e.g. 'severe-weather')"),
+        title: z.string().describe('Alert title'),
+        description: z.string().describe('Alert description'),
+        severity: z.enum(['minor', 'moderate', 'severe', 'extreme']),
+      }),
+    )
+    .optional(),
 });
 
 // Type definitions
@@ -86,45 +118,55 @@ type WeatherForecastState = {
   canvasSize: { width: number; height: number };
   isActive: boolean;
   userPreferences: {
-    units: "imperial" | "metric";
-    timeFormat: "12h" | "24h";
-    emphasis: "temperature" | "precipitation" | "wind" | "general";
+    units: 'imperial' | 'metric';
+    timeFormat: '12h' | '24h';
+    emphasis: 'temperature' | 'precipitation' | 'wind' | 'general';
   };
 };
 
 // Enhanced weather condition mapping
 function mapConditionToType(condition: string | null | undefined): string {
   if (!condition) return 'sunny';
-  
+
   const conditionLower = condition.toLowerCase();
-  
+
   if (conditionLower.includes('sunny') || conditionLower.includes('clear')) return 'sunny';
   if (conditionLower.includes('rain') || conditionLower.includes('showers')) return 'rainy';
   if (conditionLower.includes('drizzle')) return 'drizzle';
   if (conditionLower.includes('snow') || conditionLower.includes('blizzard')) return 'snowy';
   if (conditionLower.includes('storm') || conditionLower.includes('thunderstorm')) return 'stormy';
-  if (conditionLower.includes('partly') || conditionLower.includes('scattered')) return 'partly-cloudy';
+  if (conditionLower.includes('partly') || conditionLower.includes('scattered'))
+    return 'partly-cloudy';
   if (conditionLower.includes('cloud') || conditionLower.includes('overcast')) return 'cloudy';
   if (conditionLower.includes('fog') || conditionLower.includes('mist')) return 'foggy';
-  
+
   return 'sunny';
 }
 
 // Clean, editorial weather icons
-const WeatherIcon = ({ condition, size = 48, animated = true }: { 
-  condition: string | null | undefined; 
-  size?: number; 
+const WeatherIcon = ({
+  condition,
+  size = 48,
+  animated = true,
+}: {
+  condition: string | null | undefined;
+  size?: number;
   animated?: boolean;
 }) => {
-  const iconProps = { 
-    size, 
-    className: animated ? "transition-all duration-700 ease-out" : "" 
+  const iconProps = {
+    size,
+    className: animated ? 'transition-all duration-700 ease-out' : '',
   };
   const conditionType = mapConditionToType(condition);
-  
+
   switch (conditionType) {
     case 'sunny':
-      return <Sun {...iconProps} className={`${iconProps.className} text-amber-400 ${animated ? 'animate-pulse-slow' : ''}`} />;
+      return (
+        <Sun
+          {...iconProps}
+          className={`${iconProps.className} text-amber-400 ${animated ? 'animate-pulse-slow' : ''}`}
+        />
+      );
     case 'cloudy':
       return <Cloud {...iconProps} className={`${iconProps.className} text-slate-300`} />;
     case 'rainy':
@@ -150,19 +192,24 @@ const WeatherIcon = ({ condition, size = 48, animated = true }: {
 };
 
 // Animated progress bar component
-const ProgressBar = ({ value, max = 100, color = "blue", label }: {
+const ProgressBar = ({
+  value,
+  max = 100,
+  color = 'blue',
+  label,
+}: {
   value: number;
   max?: number;
   color?: string;
   label?: string;
 }) => {
   const percentage = Math.min((value / max) * 100, 100);
-  
+
   return (
     <div className="space-y-1">
       {label && <span className="text-xs text-slate-400 font-medium">{label}</span>}
       <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
-        <div 
+        <div
           className={`h-full bg-${color}-400 rounded-full transition-all duration-1000 ease-out`}
           style={{ width: `${percentage}%` }}
         />
@@ -176,7 +223,7 @@ const MoonPhaseIcon = ({ illumination }: { illumination: number }) => {
   return (
     <div className="relative w-8 h-8 mx-auto">
       <div className="w-8 h-8 rounded-full bg-slate-700 border border-slate-600" />
-      <div 
+      <div
         className="absolute inset-0 bg-amber-300 rounded-full transition-all duration-700"
         style={{
           clipPath: `inset(0 ${100 - illumination}% 0 0)`,
@@ -187,7 +234,11 @@ const MoonPhaseIcon = ({ illumination }: { illumination: number }) => {
 };
 
 // Clean current weather card
-const CurrentWeatherCard = ({ period, state, moonPhase }: {
+const CurrentWeatherCard = ({
+  period,
+  state,
+  moonPhase,
+}: {
   period: ForecastPeriod;
   state: WeatherForecastState;
   moonPhase?: WeatherForecast['moonPhase'];
@@ -202,7 +253,7 @@ const CurrentWeatherCard = ({ period, state, moonPhase }: {
         </div>
       )}
     </div>
-    
+
     <div className="space-y-2">
       <div className="text-5xl font-light text-white transition-all duration-500">
         {state.animatedTemp}°
@@ -220,8 +271,8 @@ const WeeklyForecastCard = ({ periods }: { periods: ForecastPeriod[] }) => (
   <div className="space-y-3">
     <h3 className="text-lg font-semibold text-white mb-4">Weekly Forecast</h3>
     {periods.slice(0, 7).map((period, index) => (
-      <div 
-        key={index} 
+      <div
+        key={index}
         className="group flex items-center justify-between p-3 rounded-xl bg-slate-800/50 hover:bg-slate-700/50 transition-all duration-300 cursor-pointer border border-slate-700/50"
       >
         <div className="flex items-center space-x-3">
@@ -233,7 +284,10 @@ const WeeklyForecastCard = ({ periods }: { periods: ForecastPeriod[] }) => (
         </div>
         <div className="flex items-center space-x-3">
           <span className="text-white font-semibold text-sm">{period.temperature}</span>
-          <ChevronRight size={16} className="text-slate-500 group-hover:text-slate-400 transition-colors" />
+          <ChevronRight
+            size={16}
+            className="text-slate-500 group-hover:text-slate-400 transition-colors"
+          />
         </div>
       </div>
     ))}
@@ -241,7 +295,10 @@ const WeeklyForecastCard = ({ periods }: { periods: ForecastPeriod[] }) => (
 );
 
 // Data visualization for precipitation
-const PrecipitationCard = ({ periods, precipitationForecast }: {
+const PrecipitationCard = ({
+  periods,
+  precipitationForecast,
+}: {
   periods: ForecastPeriod[];
   precipitationForecast?: WeatherForecast['precipitationForecast'];
 }) => (
@@ -250,7 +307,7 @@ const PrecipitationCard = ({ periods, precipitationForecast }: {
       <Umbrella size={20} className="text-blue-400" />
       <h3 className="text-lg font-semibold text-white">Precipitation</h3>
     </div>
-    
+
     {precipitationForecast?.hourly && (
       <div className="space-y-3">
         <h4 className="text-sm font-medium text-slate-300">Next 12 Hours</h4>
@@ -260,15 +317,20 @@ const PrecipitationCard = ({ periods, precipitationForecast }: {
             <div className="flex-1 mx-4">
               <ProgressBar value={hour.probability} color="blue" />
             </div>
-            <span className="text-sm text-white font-medium w-12 text-right">{hour.probability}%</span>
+            <span className="text-sm text-white font-medium w-12 text-right">
+              {hour.probability}%
+            </span>
           </div>
         ))}
       </div>
     )}
-    
+
     <div className="grid grid-cols-3 gap-3">
       {periods.slice(0, 3).map((period, index) => (
-        <div key={index} className="text-center p-3 rounded-lg bg-slate-800/30 border border-slate-700/30">
+        <div
+          key={index}
+          className="text-center p-3 rounded-lg bg-slate-800/30 border border-slate-700/30"
+        >
           <WeatherIcon condition={period.condition} size={24} animated={false} />
           <p className="text-xs text-slate-400 mt-1">{period.name}</p>
           <p className="text-sm text-white font-semibold">
@@ -287,7 +349,7 @@ const TidesCard = ({ tideData }: { tideData?: WeatherForecast['tideData'] }) => 
       <Waves size={20} className="text-blue-400" />
       <h3 className="text-lg font-semibold text-white">Tides</h3>
     </div>
-    
+
     <div className="space-y-3">
       {tideData?.nextHigh && (
         <div className="flex items-center justify-between p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
@@ -301,7 +363,7 @@ const TidesCard = ({ tideData }: { tideData?: WeatherForecast['tideData'] }) => 
           </div>
         </div>
       )}
-      
+
       {tideData?.nextLow && (
         <div className="flex items-center justify-between p-3 rounded-lg bg-red-500/10 border border-red-500/20">
           <div className="flex items-center space-x-2">
@@ -314,7 +376,7 @@ const TidesCard = ({ tideData }: { tideData?: WeatherForecast['tideData'] }) => 
           </div>
         </div>
       )}
-      
+
       {!tideData && (
         <div className="text-center py-6">
           <p className="text-slate-400">Tide data unavailable</p>
@@ -329,47 +391,52 @@ export function WeatherForecast(props: WeatherForecastProps) {
   // Use refs to prevent infinite loops
   const hasDispatchedRef = useRef(false);
   const lastTempRef = useRef<number>(70);
-  
+
   // Component isolation to prevent re-renders from other components
   const { isolationId, debouncedUpdate } = useComponentIsolation(
     props.location || 'default',
-    'WeatherForecast'
+    'WeatherForecast',
   );
-  
+
   // Use sub-agent for progressive data loading with error boundary
   const [subAgentError, setSubAgentError] = useState<Error | null>(null);
-  
+
   // Memoize sub-agent config to prevent re-creation
-  const subAgentConfig = useMemo(() => ({
-    ...SubAgentPresets.weather,
-    dataEnricher: (context: any, tools: any) => {
-      // If we already have props data, skip MCP calls
-      if (props.periods && props.periods.length > 0) {
-        return [];
-      }
-      
-      // Otherwise, fetch data via MCP using actual tool names
-      const promises = [];
-      
-      // The MCP tools might have different names - let's check what's available
-      const weatherTool = tools["mcp_weather-gov-weather"] || tools.weather;
-      const forecastTool = tools["mcp_weather-gov-forecast"] || tools.forecast;
-      const alertsTool = tools["mcp_weather-gov-alerts"] || tools.alerts;
-      
-      if (weatherTool) {
-        promises.push(weatherTool.execute({ location: context.location || props.location }));
-      }
-      if (forecastTool) {
-        promises.push(forecastTool.execute({ location: context.location || props.location, days: 7 }));
-      }
-      if (alertsTool) {
-        promises.push(alertsTool.execute({ location: context.location || props.location }));
-      }
-      
-      return promises;
-    },
-  }), [props.periods, props.location]);
-  
+  const subAgentConfig = useMemo(
+    () => ({
+      ...SubAgentPresets.weather,
+      dataEnricher: (context: any, tools: any) => {
+        // If we already have props data, skip MCP calls
+        if (props.periods && props.periods.length > 0) {
+          return [];
+        }
+
+        // Otherwise, fetch data via MCP using actual tool names
+        const promises = [];
+
+        // The MCP tools might have different names - let's check what's available
+        const weatherTool = tools['mcp_weather-gov-weather'] || tools.weather;
+        const forecastTool = tools['mcp_weather-gov-forecast'] || tools.forecast;
+        const alertsTool = tools['mcp_weather-gov-alerts'] || tools.alerts;
+
+        if (weatherTool) {
+          promises.push(weatherTool.execute({ location: context.location || props.location }));
+        }
+        if (forecastTool) {
+          promises.push(
+            forecastTool.execute({ location: context.location || props.location, days: 7 }),
+          );
+        }
+        if (alertsTool) {
+          promises.push(alertsTool.execute({ location: context.location || props.location }));
+        }
+
+        return promises;
+      },
+    }),
+    [props.periods, props.location],
+  );
+
   let subAgent;
   try {
     subAgent = useComponentSubAgent(subAgentConfig);
@@ -384,21 +451,21 @@ export function WeatherForecast(props: WeatherForecastProps) {
       mcpActivity: {},
     };
   }
-  
+
   const loadingState = subAgent.loadingState;
-  
+
   // Local state management
-  const [state, setState] = useState<WeatherForecastState>({ 
-    activeView: props.viewType || "current",
+  const [state, setState] = useState<WeatherForecastState>({
+    activeView: props.viewType || 'current',
     selectedPeriod: 0,
     animatedTemp: 70,
     showDetails: false,
     canvasSize: { width: 400, height: 600 },
     isActive: false,
     userPreferences: {
-      units: "imperial",
-      timeFormat: "12h",
-      emphasis: "general",
+      units: 'imperial',
+      timeFormat: '12h',
+      emphasis: 'general',
     },
   });
 
@@ -408,15 +475,15 @@ export function WeatherForecast(props: WeatherForecastProps) {
 
   // Normalize any MCP shapes into our canonical schema
   const normalized = normalizeWeatherForecast(
-    (forecastRaw && Object.keys(forecastRaw).length ? forecastRaw : weatherRaw),
-    props.location
+    forecastRaw && Object.keys(forecastRaw).length ? forecastRaw : weatherRaw,
+    props.location,
   );
-  
+
   // Merge props data with MCP-fetched data (props take priority)
   const location = props.location || normalized.location || subAgent.context?.location;
   const periods = props.periods || normalized.periods || [];
   const currentPeriod = periods[state?.selectedPeriod || 0] || periods[0];
-  
+
   // Determine loading state - if we have data from props, skip loading
   const isLoading = !props.periods && loadingState === LoadingState.SKELETON;
   const effectiveLoadingState = props.periods ? LoadingState.COMPLETE : loadingState;
@@ -429,7 +496,7 @@ export function WeatherForecast(props: WeatherForecastProps) {
   //     const componentId = `weather-${location}-${Date.now()}`;
   //     window.dispatchEvent(
   //       new CustomEvent("tambo:showComponent", {
-  //         detail: { 
+  //         detail: {
   //           messageId: componentId,
   //           component: <WeatherForecast {...props} />
   //         }
@@ -444,39 +511,39 @@ export function WeatherForecast(props: WeatherForecastProps) {
       const customEvent = event as CustomEvent;
       if (customEvent.detail?.componentId === `weather-forecast-${location}` && state) {
         switch (customEvent.detail.action) {
-          case "resize":
+          case 'resize':
             setState({
               ...state,
-              canvasSize: customEvent.detail.size
+              canvasSize: customEvent.detail.size,
             });
             break;
-          case "focus":
+          case 'focus':
             setState({
               ...state,
-              isActive: true
+              isActive: true,
             });
             break;
         }
       }
     };
 
-    window.addEventListener("tambo:canvas:interaction", handleCanvasEvent);
-    return () => window.removeEventListener("tambo:canvas:interaction", handleCanvasEvent);
+    window.addEventListener('tambo:canvas:interaction', handleCanvasEvent);
+    return () => window.removeEventListener('tambo:canvas:interaction', handleCanvasEvent);
   }, [location]); // Only depend on location
 
   // Animate temperature changes - prevent unnecessary updates
   useEffect(() => {
     if (currentPeriod && state) {
       const newTemp = extractTemperature(currentPeriod.temperature);
-      
+
       // Only update if temperature actually changed
       if (newTemp !== lastTempRef.current) {
         lastTempRef.current = newTemp;
-      const timer = setTimeout(() => {
-        setState({ ...state, animatedTemp: newTemp });
-      }, 100);
-      return () => clearTimeout(timer);
-    }
+        const timer = setTimeout(() => {
+          setState({ ...state, animatedTemp: newTemp });
+        }, 100);
+        return () => clearTimeout(timer);
+      }
     }
   }, [currentPeriod?.temperature]); // Only depend on temperature
 
@@ -492,16 +559,21 @@ export function WeatherForecast(props: WeatherForecastProps) {
   // Dynamic view rendering based on viewType
   const renderWeatherView = () => {
     switch (state.activeView) {
-      case "weekly":
+      case 'weekly':
         return <WeeklyForecastCard periods={periods} />;
-      
-      case "precipitation":
-        return <PrecipitationCard periods={periods} precipitationForecast={props.precipitationForecast} />;
-      
-      case "tides":
+
+      case 'precipitation':
+        return (
+          <PrecipitationCard
+            periods={periods}
+            precipitationForecast={props.precipitationForecast}
+          />
+        );
+
+      case 'tides':
         return <TidesCard tideData={props.tideData} />;
-      
-      case "moon":
+
+      case 'moon':
         return (
           <div className="text-center space-y-4">
             {props.moonPhase ? (
@@ -510,7 +582,9 @@ export function WeatherForecast(props: WeatherForecastProps) {
                   <MoonPhaseIcon illumination={props.moonPhase.illumination} />
                 </div>
                 <h3 className="text-xl font-semibold text-white">{props.moonPhase.phase}</h3>
-                <p className="text-sm text-slate-400">{props.moonPhase.illumination}% illuminated</p>
+                <p className="text-sm text-slate-400">
+                  {props.moonPhase.illumination}% illuminated
+                </p>
                 {props.moonPhase.nextPhase && (
                   <p className="text-xs text-slate-500 mt-2">
                     Next: {props.moonPhase.nextPhase} on {props.moonPhase.nextPhaseDate}
@@ -522,8 +596,8 @@ export function WeatherForecast(props: WeatherForecastProps) {
             )}
           </div>
         );
-      
-      case "detailed":
+
+      case 'detailed':
         return (
           <div className="space-y-6">
             <CurrentWeatherCard period={currentPeriod} state={state} moonPhase={props.moonPhase} />
@@ -532,8 +606,8 @@ export function WeatherForecast(props: WeatherForecastProps) {
             </div>
           </div>
         );
-      
-      case "minimal":
+
+      case 'minimal':
         return (
           <div className="text-center space-y-3">
             <WeatherIcon condition={currentPeriod.condition} size={48} />
@@ -541,9 +615,11 @@ export function WeatherForecast(props: WeatherForecastProps) {
             <p className="text-sm text-slate-400 capitalize">{currentPeriod.condition}</p>
           </div>
         );
-      
+
       default: // "current"
-        return <CurrentWeatherCard period={currentPeriod} state={state} moonPhase={props.moonPhase} />;
+        return (
+          <CurrentWeatherCard period={currentPeriod} state={state} moonPhase={props.moonPhase} />
+        );
     }
   };
 
@@ -573,123 +649,130 @@ export function WeatherForecast(props: WeatherForecastProps) {
         showLoadingIndicator={!props.periods}
         loadingProgress={{
           state: effectiveLoadingState,
-                  progress: 
-          effectiveLoadingState === LoadingState.SKELETON ? 33 :
-          effectiveLoadingState === LoadingState.PARTIAL ? 66 :
-          100,
-        message:
-          subAgentError ? "Using cached weather data..." :
-          effectiveLoadingState === LoadingState.SKELETON ? "Connecting to weather service..." :
-          effectiveLoadingState === LoadingState.PARTIAL ? (
-            subAgent.mcpActivity?.weather ? "Fetching current conditions..." :
-            subAgent.mcpActivity?.forecast ? "Loading forecast data..." :
-            "Processing weather data..."
-          ) :
-          "Ready!",
+          progress:
+            effectiveLoadingState === LoadingState.SKELETON
+              ? 33
+              : effectiveLoadingState === LoadingState.PARTIAL
+                ? 66
+                : 100,
+          message: subAgentError
+            ? 'Using cached weather data...'
+            : effectiveLoadingState === LoadingState.SKELETON
+              ? 'Connecting to weather service...'
+              : effectiveLoadingState === LoadingState.PARTIAL
+                ? subAgent.mcpActivity?.weather
+                  ? 'Fetching current conditions...'
+                  : subAgent.mcpActivity?.forecast
+                    ? 'Loading forecast data...'
+                    : 'Processing weather data...'
+                : 'Ready!',
           eta:
-            effectiveLoadingState === LoadingState.SKELETON ? 400 :
-            effectiveLoadingState === LoadingState.PARTIAL ? 200 :
-            0,
+            effectiveLoadingState === LoadingState.SKELETON
+              ? 400
+              : effectiveLoadingState === LoadingState.PARTIAL
+                ? 200
+                : 0,
         }}
       >
         {/* Main editorial weather card */}
-        <div 
+        <div
           className={`relative bg-slate-900 rounded-2xl border border-slate-700 p-6 transition-all duration-500 ${
-            state.isActive ? 'scale-105 border-slate-600 shadow-2xl' : 'hover:border-slate-600 hover:shadow-xl'
+            state.isActive
+              ? 'scale-105 border-slate-600 shadow-2xl'
+              : 'hover:border-slate-600 hover:shadow-xl'
           }`}
           style={{
             width: state.canvasSize.width,
-            minWidth: "320px",
-            maxWidth: "480px",
+            minWidth: '320px',
+            maxWidth: '480px',
           }}
         >
-        {/* Clean header */}
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h2 className="text-xl font-semibold text-white">
-              {location || 'Weather Forecast'}
-            </h2>
-            <p className="text-sm text-slate-400 font-medium">
-              {new Date().toLocaleDateString('en-US', { 
-                weekday: 'long', 
-                month: 'short', 
-                day: 'numeric' 
-              })}
-            </p>
+          {/* Clean header */}
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h2 className="text-xl font-semibold text-white">{location || 'Weather Forecast'}</h2>
+              <p className="text-sm text-slate-400 font-medium">
+                {new Date().toLocaleDateString('en-US', {
+                  weekday: 'long',
+                  month: 'short',
+                  day: 'numeric',
+                })}
+              </p>
+            </div>
+
+            {/* Clean view indicator */}
+            <div className="bg-slate-800 rounded-lg px-3 py-1 border border-slate-600">
+              <span className="text-xs font-medium text-slate-300 capitalize">
+                {state.activeView}
+              </span>
+            </div>
           </div>
 
-          {/* Clean view indicator */}
-          <div className="bg-slate-800 rounded-lg px-3 py-1 border border-slate-600">
-            <span className="text-xs font-medium text-slate-300 capitalize">
-              {state.activeView}
-            </span>
-          </div>
-        </div>
+          {/* Weather alerts */}
+          {props.alerts && props.alerts.length > 0 && (
+            <div className="mb-6 space-y-2">
+              {props.alerts.map((alert, index) => (
+                <div
+                  key={index}
+                  className={`rounded-lg p-3 border ${
+                    alert.severity === 'severe'
+                      ? 'bg-red-500/10 border-red-500/30'
+                      : alert.severity === 'moderate'
+                        ? 'bg-yellow-500/10 border-yellow-500/30'
+                        : 'bg-blue-500/10 border-blue-500/30'
+                  }`}
+                >
+                  <p className="text-white font-semibold text-sm">{alert.title}</p>
+                  <p className="text-slate-300 text-xs">{alert.description}</p>
+                </div>
+              ))}
+            </div>
+          )}
 
-        {/* Weather alerts */}
-        {props.alerts && props.alerts.length > 0 && (
-          <div className="mb-6 space-y-2">
-            {props.alerts.map((alert, index) => (
-              <div key={index} className={`rounded-lg p-3 border ${
-                alert.severity === 'severe' ? 'bg-red-500/10 border-red-500/30' :
-                alert.severity === 'moderate' ? 'bg-yellow-500/10 border-yellow-500/30' :
-                'bg-blue-500/10 border-blue-500/30'
-              }`}>
-                <p className="text-white font-semibold text-sm">{alert.title}</p>
-                <p className="text-slate-300 text-xs">{alert.description}</p>
-              </div>
+          {/* Dynamic content */}
+          <div className="mb-6 animate-slide-up">{renderWeatherView()}</div>
+
+          {/* Clean stats grid */}
+          <div className="grid grid-cols-3 gap-3 mb-6">
+            <div className="text-center p-3 bg-slate-800/50 rounded-lg border border-slate-700/50">
+              <Wind size={16} className="mx-auto mb-1 text-slate-400" />
+              <p className="text-xs text-slate-500 mb-1">Wind</p>
+              <p className="text-sm font-semibold text-white">
+                {currentPeriod.wind?.speed || '12 mph'}
+              </p>
+            </div>
+            <div className="text-center p-3 bg-slate-800/50 rounded-lg border border-slate-700/50">
+              <Droplets size={16} className="mx-auto mb-1 text-slate-400" />
+              <p className="text-xs text-slate-500 mb-1">Humidity</p>
+              <p className="text-sm font-semibold text-white">{currentPeriod.humidity || 65}%</p>
+              <ProgressBar value={currentPeriod.humidity || 65} color="blue" />
+            </div>
+            <div className="text-center p-3 bg-slate-800/50 rounded-lg border border-slate-700/50">
+              <Eye size={16} className="mx-auto mb-1 text-slate-400" />
+              <p className="text-xs text-slate-500 mb-1">Visibility</p>
+              <p className="text-sm font-semibold text-white">
+                {currentPeriod.visibility || '10 mi'}
+              </p>
+            </div>
+          </div>
+
+          {/* Clean view switcher */}
+          <div className="flex flex-wrap gap-1 justify-center">
+            {['current', 'weekly', 'precipitation', 'tides', 'moon'].map((viewType) => (
+              <button
+                key={viewType}
+                onClick={() => setState({ ...state, activeView: viewType })}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-300 ${
+                  state.activeView === viewType
+                    ? 'bg-slate-700 text-white border border-slate-600'
+                    : 'text-slate-400 hover:text-slate-300 hover:bg-slate-800/50'
+                }`}
+              >
+                {viewType.charAt(0).toUpperCase() + viewType.slice(1)}
+              </button>
             ))}
           </div>
-        )}
-
-        {/* Dynamic content */}
-        <div className="mb-6 animate-slide-up">
-          {renderWeatherView()}
         </div>
-
-        {/* Clean stats grid */}
-        <div className="grid grid-cols-3 gap-3 mb-6">
-          <div className="text-center p-3 bg-slate-800/50 rounded-lg border border-slate-700/50">
-            <Wind size={16} className="mx-auto mb-1 text-slate-400" />
-            <p className="text-xs text-slate-500 mb-1">Wind</p>
-            <p className="text-sm font-semibold text-white">
-              {currentPeriod.wind?.speed || '12 mph'}
-            </p>
-          </div>
-          <div className="text-center p-3 bg-slate-800/50 rounded-lg border border-slate-700/50">
-            <Droplets size={16} className="mx-auto mb-1 text-slate-400" />
-            <p className="text-xs text-slate-500 mb-1">Humidity</p>
-            <p className="text-sm font-semibold text-white">
-              {currentPeriod.humidity || 65}%
-            </p>
-            <ProgressBar value={currentPeriod.humidity || 65} color="blue" />
-          </div>
-          <div className="text-center p-3 bg-slate-800/50 rounded-lg border border-slate-700/50">
-            <Eye size={16} className="mx-auto mb-1 text-slate-400" />
-            <p className="text-xs text-slate-500 mb-1">Visibility</p>
-            <p className="text-sm font-semibold text-white">
-              {currentPeriod.visibility || "10 mi"}
-            </p>
-          </div>
-        </div>
-
-        {/* Clean view switcher */}
-        <div className="flex flex-wrap gap-1 justify-center">
-          {["current", "weekly", "precipitation", "tides", "moon"].map((viewType) => (
-            <button
-              key={viewType}
-              onClick={() => setState({ ...state, activeView: viewType })}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-300 ${
-                state.activeView === viewType
-                  ? 'bg-slate-700 text-white border border-slate-600'
-                  : 'text-slate-400 hover:text-slate-300 hover:bg-slate-800/50'
-              }`}
-            >
-              {viewType.charAt(0).toUpperCase() + viewType.slice(1)}
-            </button>
-          ))}
-        </div>
-      </div>
       </LoadingWrapper>
     </div>
   );

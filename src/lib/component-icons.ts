@@ -3,22 +3,22 @@
  * @description Icon mappings for Tambo components used in the Component Toolbox
  */
 
-import { 
-  FileText, 
-  Timer, 
-  Cloud, 
-  Youtube, 
-  Image, 
-  CheckSquare, 
-  Search, 
-  Video, 
-  Users, 
-  Captions, 
-  Kanban, 
+import {
+  FileText,
+  Timer,
+  Cloud,
+  Youtube,
+  Image,
+  CheckSquare,
+  Search,
+  Video,
+  Users,
+  Captions,
+  Kanban,
   HelpCircle,
   Trophy,
-  type LucideIcon
-} from "lucide-react";
+  type LucideIcon,
+} from 'lucide-react';
 
 export interface ComponentIconMapping {
   icon: LucideIcon;
@@ -32,84 +32,84 @@ export interface ComponentIconMapping {
  */
 export const componentIcons: Record<string, ComponentIconMapping> = {
   // Essentials
-  'OnboardingGuide': {
+  OnboardingGuide: {
     icon: HelpCircle,
     category: 'Essentials',
-    description: 'Interactive guide for new users'
+    description: 'Interactive guide for new users',
   },
-  'RetroTimerEnhanced': {
+  RetroTimerEnhanced: {
     icon: Timer,
-    category: 'Essentials', 
-    description: 'Countdown timer with presets'
+    category: 'Essentials',
+    description: 'Countdown timer with presets',
   },
-  'DocumentEditor': {
+  DocumentEditor: {
     icon: FileText,
     category: 'Essentials',
-    description: 'Collaborative document editor'
+    description: 'Collaborative document editor',
   },
 
   // Media
-  'YoutubeEmbed': {
+  YoutubeEmbed: {
     icon: Youtube,
     category: 'Media',
-    description: 'Embed YouTube videos'
+    description: 'Embed YouTube videos',
   },
-  'AIImageGenerator': {
+  AIImageGenerator: {
     icon: Image,
-    category: 'Media', 
-    description: 'Generate AI images from text'
+    category: 'Media',
+    description: 'Generate AI images from text',
   },
 
   // Productivity
-  'WeatherForecast': {
+  WeatherForecast: {
     icon: Cloud,
     category: 'Productivity',
-    description: 'Weather forecast display'
+    description: 'Weather forecast display',
   },
-  'ActionItemTracker': {
+  ActionItemTracker: {
     icon: CheckSquare,
     category: 'Productivity',
-    description: 'Track tasks and action items'
+    description: 'Track tasks and action items',
   },
-  'ResearchPanel': {
+  ResearchPanel: {
     icon: Search,
     category: 'Productivity',
-    description: 'Display research findings'
+    description: 'Display research findings',
   },
-  'DebateScorecard': {
+  DebateScorecard: {
     icon: Trophy,
     category: 'Collaboration',
-    description: 'Live debate scorecard (boxing/Game Boy aesthetic)'
+    description: 'Live debate scorecard (boxing/Game Boy aesthetic)',
   },
-  'LinearKanbanBoard': {
+  LinearKanbanBoard: {
     icon: Kanban,
     category: 'Productivity',
-    description: 'Project management board'
+    description: 'Project management board',
   },
 
   // Collaboration
-  'LivekitRoomConnector': {
+  LivekitRoomConnector: {
     icon: Video,
     category: 'Collaboration',
-    description: 'Connect to video rooms'
+    description: 'Connect to video rooms',
   },
-  'LivekitParticipantTile': {
+  LivekitParticipantTile: {
     icon: Users,
-    category: 'Collaboration', 
-    description: 'Individual participant video'
+    category: 'Collaboration',
+    description: 'Individual participant video',
   },
-  'LiveCaptions': {
+  LiveCaptions: {
     icon: Captions,
     category: 'Collaboration',
-    description: 'Live speech transcription'
-  }
+    description: 'Live speech transcription',
+  },
 };
 
 /**
  * Get available categories for component organization
  */
 export const getCategories = (): string[] => {
-  return Array.from(new Set(Object.values(componentIcons).map(item => item.category)));
+  return Array.from(new Set(Object.values(componentIcons).map((item) => item.category)));
 };
 
 /**
@@ -117,7 +117,7 @@ export const getCategories = (): string[] => {
  */
 export const getComponentsByCategory = (category: string): string[] => {
   return Object.keys(componentIcons).filter(
-    componentName => componentIcons[componentName].category === category
+    (componentName) => componentIcons[componentName].category === category,
   );
 };
 

@@ -1,7 +1,7 @@
-"use client";
+'use client';
 
-import { DiffWord } from "@/app/hackathon-canvas/documents/document-state";
-import { cn } from "@/lib/utils";
+import { DiffWord } from '@/app/hackathon-canvas/documents/document-state';
+import { cn } from '@/lib/utils';
 import {
   ArrowUp,
   BookOpen,
@@ -13,38 +13,33 @@ import {
   X,
   ZoomIn,
   ZoomOut,
-} from "lucide-react";
-import React, { useEffect, useRef, useState } from "react";
-import { z } from "zod";
+} from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { z } from 'zod';
 
 // Define the component props schema with Zod
 export const markdownViewerEditableSchema = z.object({
-  title: z.string().describe("Title of the document"),
-  content: z.string().optional().describe("Markdown content to display"),
-  titleImage: z
-    .string()
-    .optional()
-    .describe("URL of the title image to display at the top"),
-  author: z.string().optional().describe("Document author"),
-  readTime: z.number().optional().describe("Estimated read time in minutes"),
-  publishDate: z.string().optional().describe("Publish date"),
+  title: z.string().describe('Title of the document'),
+  content: z.string().optional().describe('Markdown content to display'),
+  titleImage: z.string().optional().describe('URL of the title image to display at the top'),
+  author: z.string().optional().describe('Document author'),
+  readTime: z.number().optional().describe('Estimated read time in minutes'),
+  publishDate: z.string().optional().describe('Publish date'),
   diffs: z
     .array(
       z.object({
-        type: z.enum(["added", "removed"]),
+        type: z.enum(['added', 'removed']),
         content: z.string(),
         lineNumber: z.number(),
         wordIndex: z.number(),
-      })
+      }),
     )
     .optional()
-    .describe("Diff information to display"),
+    .describe('Diff information to display'),
 });
 
 // Define the props type based on the Zod schema
-export type MarkdownViewerEditableProps = z.infer<
-  typeof markdownViewerEditableSchema
->;
+export type MarkdownViewerEditableProps = z.infer<typeof markdownViewerEditableSchema>;
 
 // Component state type
 type MarkdownViewerEditableState = {
@@ -71,7 +66,7 @@ type TOCItem = {
  */
 export function MarkdownViewerEditable({
   title,
-  content = "",
+  content = '',
   titleImage,
   author,
   readTime,
@@ -83,14 +78,14 @@ export function MarkdownViewerEditable({
     fontSize: 16,
     readingProgress: 0,
     showTOC: false,
-    currentHeading: "",
+    currentHeading: '',
     showDiffs: false,
   });
 
   const [toc, setTOC] = useState<TOCItem[]>([]);
   const contentRef = useRef<HTMLDivElement>(null);
   const [imageModal, setImageModal] = useState<string | null>(null);
-  const lastAutoScrolledDiffs = useRef<string>("");
+  const lastAutoScrolledDiffs = useRef<string>('');
 
   // Event handlers to prevent tldraw canvas interaction
   const handleMouseDown = (e: React.MouseEvent) => {
@@ -154,13 +149,13 @@ export function MarkdownViewerEditable({
       const progress = scrollHeight > 0 ? (scrollTop / scrollHeight) * 100 : 0;
 
       // Update current heading
-      const headings = element.querySelectorAll("h1, h2, h3, h4, h5, h6");
-      let currentHeading = "";
+      const headings = element.querySelectorAll('h1, h2, h3, h4, h5, h6');
+      let currentHeading = '';
 
       for (let i = headings.length - 1; i >= 0; i--) {
         const heading = headings[i] as HTMLElement;
         if (heading.offsetTop <= scrollTop + 100) {
-          currentHeading = heading.textContent || "";
+          currentHeading = heading.textContent || '';
           break;
         }
       }
@@ -173,8 +168,8 @@ export function MarkdownViewerEditable({
     };
 
     const element = contentRef.current;
-    element.addEventListener("scroll", handleScroll);
-    return () => element.removeEventListener("scroll", handleScroll);
+    element.addEventListener('scroll', handleScroll);
+    return () => element.removeEventListener('scroll', handleScroll);
   }, []);
 
   // Generate table of contents
@@ -188,7 +183,7 @@ export function MarkdownViewerEditable({
     while ((match = headingRegex.exec(content)) !== null) {
       const level = match[1].length;
       const title = match[2].trim();
-      const id = title.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+      const id = title.toLowerCase().replace(/[^a-z0-9]+/g, '-');
 
       tocItems.push({
         id,
@@ -215,23 +210,19 @@ export function MarkdownViewerEditable({
       setTimeout(() => {
         // Find the element with the exact line number
         const targetElement = contentRef.current?.querySelector(
-          `[data-line="${firstDiffLine}"]`
+          `[data-line="${firstDiffLine}"]`,
         ) as HTMLElement;
 
         // If not found, try to find elements within a code block that spans the line
         const codeBlockElement = contentRef.current?.querySelector(
-          `[data-line-start][data-line-end]`
+          `[data-line-start][data-line-end]`,
         ) as HTMLElement;
 
         let elementToScroll: HTMLElement | null = targetElement;
 
         if (!elementToScroll && codeBlockElement) {
-          const startLine = parseInt(
-            codeBlockElement.getAttribute("data-line-start") || "0"
-          );
-          const endLine = parseInt(
-            codeBlockElement.getAttribute("data-line-end") || "0"
-          );
+          const startLine = parseInt(codeBlockElement.getAttribute('data-line-start') || '0');
+          const endLine = parseInt(codeBlockElement.getAttribute('data-line-end') || '0');
 
           if (firstDiffLine >= startLine && firstDiffLine <= endLine) {
             elementToScroll = codeBlockElement;
@@ -240,23 +231,23 @@ export function MarkdownViewerEditable({
 
         if (elementToScroll) {
           elementToScroll.scrollIntoView({
-            behavior: "smooth",
-            block: "center",
+            behavior: 'smooth',
+            block: 'center',
           });
 
           // Add a temporary highlight effect to the actual content line
           elementToScroll.classList.add(
-            "ring-2",
-            "ring-yellow-500",
-            "ring-opacity-50",
-            "bg-yellow-500/10"
+            'ring-2',
+            'ring-yellow-500',
+            'ring-opacity-50',
+            'bg-yellow-500/10',
           );
           setTimeout(() => {
             elementToScroll?.classList.remove(
-              "ring-2",
-              "ring-yellow-500",
-              "ring-opacity-50",
-              "bg-yellow-500/10"
+              'ring-2',
+              'ring-yellow-500',
+              'ring-opacity-50',
+              'bg-yellow-500/10',
             );
           }, 3000);
         }
@@ -272,7 +263,7 @@ export function MarkdownViewerEditable({
     if (!contentRef.current) return;
     const element = contentRef.current.querySelector(`#${id}`) as HTMLElement;
     if (element) {
-      element.scrollIntoView({ behavior: "smooth", block: "start" });
+      element.scrollIntoView({ behavior: 'smooth', block: 'start' });
       setState((prev) => ({ ...prev, showTOC: false }));
     }
   };
@@ -288,41 +279,36 @@ export function MarkdownViewerEditable({
   // Render diff view with word-level changes
   const renderDiffView = (diffWords: DiffWord[]) => {
     if (diffWords.length === 0) {
-      return (
-        <div className="text-slate-400 italic text-center py-4">
-          No changes detected
-        </div>
-      );
+      return <div className="text-slate-400 italic text-center py-4">No changes detected</div>;
     }
 
     // Group changes by line for better readability
-    const changesByLine = diffWords.reduce((acc, word) => {
-      if (!acc[word.lineNumber]) {
-        acc[word.lineNumber] = [];
-      }
-      acc[word.lineNumber].push(word);
-      return acc;
-    }, {} as Record<number, DiffWord[]>);
+    const changesByLine = diffWords.reduce(
+      (acc, word) => {
+        if (!acc[word.lineNumber]) {
+          acc[word.lineNumber] = [];
+        }
+        acc[word.lineNumber].push(word);
+        return acc;
+      },
+      {} as Record<number, DiffWord[]>,
+    );
 
     return (
       <div className="space-y-3">
         {Object.entries(changesByLine).map(([lineNum, words]) => (
-          <div
-            key={lineNum}
-            className="bg-slate-800/50 rounded-lg p-3"
-            data-diff-line={lineNum}
-          >
+          <div key={lineNum} className="bg-slate-800/50 rounded-lg p-3" data-diff-line={lineNum}>
             <div className="text-xs text-slate-500 mb-2">Line {lineNum}</div>
             <div className="flex flex-wrap gap-1">
               {words.map((word, index) => (
                 <span
                   key={`${lineNum}-${index}`}
                   className={cn(
-                    "px-2 py-1 rounded text-sm font-mono",
-                    word.type === "added" &&
-                      "bg-green-900/50 text-green-300 border border-green-500/30",
-                    word.type === "removed" &&
-                      "bg-red-900/50 text-red-300 border border-red-500/30 line-through"
+                    'px-2 py-1 rounded text-sm font-mono',
+                    word.type === 'added' &&
+                      'bg-green-900/50 text-green-300 border border-green-500/30',
+                    word.type === 'removed' &&
+                      'bg-red-900/50 text-red-300 border border-red-500/30 line-through',
                   )}
                 >
                   {word.content}
@@ -337,15 +323,11 @@ export function MarkdownViewerEditable({
 
   // Enhanced markdown rendering with image support
   const renderMarkdown = (text: string) => {
-    if (!text || text.trim() === "") {
-      return (
-        <div className="text-slate-500 italic text-center">
-          No content available
-        </div>
-      );
+    if (!text || text.trim() === '') {
+      return <div className="text-slate-500 italic text-center">No content available</div>;
     }
 
-    const lines = text.split("\n");
+    const lines = text.split('\n');
     const elements: React.JSX.Element[] = [];
     let inCodeBlock = false;
     let codeContent: string[] = [];
@@ -355,7 +337,7 @@ export function MarkdownViewerEditable({
       const lineNumber = index + 1;
 
       // Code blocks
-      if (line.startsWith("```")) {
+      if (line.startsWith('```')) {
         if (inCodeBlock) {
           // End code block
           elements.push(
@@ -365,15 +347,11 @@ export function MarkdownViewerEditable({
               data-line-start={codeBlockStartLine}
               data-line-end={lineNumber}
             >
-              <div className="bg-slate-800 px-4 py-2 text-xs text-slate-400 font-mono">
-                Code
-              </div>
+              <div className="bg-slate-800 px-4 py-2 text-xs text-slate-400 font-mono">Code</div>
               <pre className="p-4 overflow-x-auto">
-                <code className="text-sm font-mono text-green-400">
-                  {codeContent.join("\n")}
-                </code>
+                <code className="text-sm font-mono text-green-400">{codeContent.join('\n')}</code>
               </pre>
-            </div>
+            </div>,
           );
           codeContent = [];
           inCodeBlock = false;
@@ -395,11 +373,7 @@ export function MarkdownViewerEditable({
       if (imageMatch) {
         const [, alt, src] = imageMatch;
         elements.push(
-          <div
-            key={`img-${index}`}
-            className="my-8 text-center"
-            data-line={lineNumber}
-          >
+          <div key={`img-${index}`} className="my-8 text-center" data-line={lineNumber}>
             <div
               className="inline-block cursor-pointer group transition-all duration-300 hover:scale-105"
               onClick={() => setImageModal(src)}
@@ -418,15 +392,15 @@ export function MarkdownViewerEditable({
               </div>
             </div>
             {alt && <p className="text-sm text-slate-500 mt-2 italic">{alt}</p>}
-          </div>
+          </div>,
         );
         return;
       }
 
       // Headers with IDs for navigation
-      if (line.startsWith("# ")) {
+      if (line.startsWith('# ')) {
         const text = line.substring(2);
-        const id = text.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+        const id = text.toLowerCase().replace(/[^a-z0-9]+/g, '-');
         elements.push(
           <h1
             key={`h1-${index}`}
@@ -435,14 +409,14 @@ export function MarkdownViewerEditable({
             data-line={lineNumber}
           >
             {text}
-          </h1>
+          </h1>,
         );
         return;
       }
 
-      if (line.startsWith("## ")) {
+      if (line.startsWith('## ')) {
         const text = line.substring(3);
-        const id = text.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+        const id = text.toLowerCase().replace(/[^a-z0-9]+/g, '-');
         elements.push(
           <h2
             key={`h2-${index}`}
@@ -451,14 +425,14 @@ export function MarkdownViewerEditable({
             data-line={lineNumber}
           >
             {text}
-          </h2>
+          </h2>,
         );
         return;
       }
 
-      if (line.startsWith("### ")) {
+      if (line.startsWith('### ')) {
         const text = line.substring(4);
-        const id = text.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+        const id = text.toLowerCase().replace(/[^a-z0-9]+/g, '-');
         elements.push(
           <h3
             key={`h3-${index}`}
@@ -467,7 +441,7 @@ export function MarkdownViewerEditable({
             data-line={lineNumber}
           >
             {text}
-          </h3>
+          </h3>,
         );
         return;
       }
@@ -481,7 +455,7 @@ export function MarkdownViewerEditable({
           if (text && url) {
             processedLine = processedLine.replace(
               match,
-              `<a href="${url}" target="_blank" rel="noopener noreferrer" class="text-blue-400 hover:text-blue-300 underline inline-flex items-center gap-1 transition-colors">${text} <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path></svg></a>`
+              `<a href="${url}" target="_blank" rel="noopener noreferrer" class="text-blue-400 hover:text-blue-300 underline inline-flex items-center gap-1 transition-colors">${text} <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path></svg></a>`,
             );
           }
         });
@@ -491,13 +465,13 @@ export function MarkdownViewerEditable({
             className="mb-4 leading-relaxed text-slate-300"
             data-line={lineNumber}
             dangerouslySetInnerHTML={{ __html: processedLine }}
-          />
+          />,
         );
         return;
       }
 
       // List items
-      if (line.startsWith("- ") || line.startsWith("* ")) {
+      if (line.startsWith('- ') || line.startsWith('* ')) {
         elements.push(
           <li
             key={`li-${index}`}
@@ -505,13 +479,13 @@ export function MarkdownViewerEditable({
             data-line={lineNumber}
           >
             {line.substring(2)}
-          </li>
+          </li>,
         );
         return;
       }
 
       // Blockquotes
-      if (line.startsWith("> ")) {
+      if (line.startsWith('> ')) {
         elements.push(
           <blockquote
             key={`quote-${index}`}
@@ -519,7 +493,7 @@ export function MarkdownViewerEditable({
             data-line={lineNumber}
           >
             {line.substring(2)}
-          </blockquote>
+          </blockquote>,
         );
         return;
       }
@@ -533,13 +507,13 @@ export function MarkdownViewerEditable({
             data-line={lineNumber}
           >
             {line}
-          </p>
+          </p>,
         );
         return;
       }
 
       // Empty line
-      if (line === "") {
+      if (line === '') {
         elements.push(<br key={`br-${index}`} />);
       }
     });
@@ -547,15 +521,13 @@ export function MarkdownViewerEditable({
     return elements;
   };
 
-  const wordCount = content
-    .split(/\s+/)
-    .filter((word) => word.length > 0).length;
+  const wordCount = content.split(/\s+/).filter((word) => word.length > 0).length;
   const estimatedReadTime = readTime || Math.ceil(wordCount / 200);
 
   return (
     <div
       className="h-[1100px] bg-slate-950 text-slate-100 rounded-2xl overflow-hidden flex flex-col w-[700px]"
-      style={{ pointerEvents: "auto" }}
+      style={{ pointerEvents: 'auto' }}
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
@@ -591,18 +563,14 @@ export function MarkdownViewerEditable({
         <div className="max-w-5xl mx-auto px-6 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-4">
-              <h1 className="text-xl font-bold text-white truncate max-w-md">
-                {title}
-              </h1>
+              <h1 className="text-xl font-bold text-white truncate max-w-md">{title}</h1>
               {state.currentHeading && (
                 <span className="text-sm text-slate-400 hidden md:block">
                   / {state.currentHeading}
                 </span>
               )}
               {diffs && diffs.length > 0 && (
-                <span className="text-sm text-yellow-400 hidden md:block">
-                  Has recent changes
-                </span>
+                <span className="text-sm text-yellow-400 hidden md:block">Has recent changes</span>
               )}
             </div>
 
@@ -612,12 +580,12 @@ export function MarkdownViewerEditable({
                 <button
                   onClick={toggleDiffView}
                   className={cn(
-                    "p-2 rounded-lg transition-colors",
+                    'p-2 rounded-lg transition-colors',
                     state.showDiffs
-                      ? "bg-blue-700 text-white"
-                      : "hover:bg-slate-800 text-slate-400 hover:text-slate-300"
+                      ? 'bg-blue-700 text-white'
+                      : 'hover:bg-slate-800 text-slate-400 hover:text-slate-300',
                   )}
-                  title={state.showDiffs ? "Hide diff view" : "Show diff view"}
+                  title={state.showDiffs ? 'Hide diff view' : 'Show diff view'}
                 >
                   {state.showDiffs ? <EyeOff size={16} /> : <Eye size={16} />}
                 </button>
@@ -635,9 +603,7 @@ export function MarkdownViewerEditable({
               >
                 <ZoomOut size={16} />
               </button>
-              <span className="text-xs text-slate-500 w-8 text-center">
-                {state.fontSize}
-              </span>
+              <span className="text-xs text-slate-500 w-8 text-center">{state.fontSize}</span>
               <button
                 onClick={() =>
                   setState((prev) => ({
@@ -660,10 +626,10 @@ export function MarkdownViewerEditable({
                     }))
                   }
                   className={cn(
-                    "p-2 rounded-lg transition-colors",
+                    'p-2 rounded-lg transition-colors',
                     state.showTOC
-                      ? "bg-slate-700 text-white"
-                      : "hover:bg-slate-800 text-slate-400 hover:text-slate-300"
+                      ? 'bg-slate-700 text-white'
+                      : 'hover:bg-slate-800 text-slate-400 hover:text-slate-300',
                   )}
                 >
                   <BookOpen size={16} />
@@ -699,19 +665,17 @@ export function MarkdownViewerEditable({
             onTouchEnd={handleTouchEnd}
             onWheel={handleWheel}
           >
-            <h3 className="text-lg font-semibold text-white mb-4">
-              Table of Contents
-            </h3>
+            <h3 className="text-lg font-semibold text-white mb-4">Table of Contents</h3>
             <nav className="space-y-1">
               {toc.map((item, index) => (
                 <button
                   key={index}
                   onClick={() => scrollToHeading(item.id)}
                   className={cn(
-                    "block w-full text-left px-3 py-2 rounded-lg text-sm transition-colors hover:bg-slate-800",
-                    item.level === 1 && "font-semibold text-white",
-                    item.level === 2 && "text-slate-300 ml-2",
-                    item.level >= 3 && "text-slate-400 ml-4"
+                    'block w-full text-left px-3 py-2 rounded-lg text-sm transition-colors hover:bg-slate-800',
+                    item.level === 1 && 'font-semibold text-white',
+                    item.level === 2 && 'text-slate-300 ml-2',
+                    item.level >= 3 && 'text-slate-400 ml-4',
                   )}
                 >
                   {item.title}
@@ -762,9 +726,7 @@ export function MarkdownViewerEditable({
                 </div>
               )}
 
-              <h1 className="text-4xl font-bold text-white mb-6 leading-tight">
-                {title}
-              </h1>
+              <h1 className="text-4xl font-bold text-white mb-6 leading-tight">{title}</h1>
 
               <div className="flex flex-wrap items-center gap-6 text-sm text-slate-400">
                 {author && (
@@ -773,9 +735,7 @@ export function MarkdownViewerEditable({
                     <span className="text-slate-300 font-medium">{author}</span>
                   </span>
                 )}
-                {publishDate && (
-                  <span>{new Date(publishDate).toLocaleDateString()}</span>
-                )}
+                {publishDate && <span>{new Date(publishDate).toLocaleDateString()}</span>}
                 <span className="flex items-center space-x-1">
                   <Clock size={14} />
                   <span>{estimatedReadTime} minute read</span>
@@ -790,9 +750,7 @@ export function MarkdownViewerEditable({
             {/* Diff view */}
             {state.showDiffs && diffs && diffs.length > 0 && (
               <div className="mb-8 p-6 bg-slate-900 border border-slate-700 rounded-lg">
-                <h2 className="text-xl font-semibold text-white mb-4">
-                  Recent Changes
-                </h2>
+                <h2 className="text-xl font-semibold text-white mb-4">Recent Changes</h2>
                 <div className="overflow-x-auto">{renderDiffView(diffs)}</div>
               </div>
             )}
@@ -802,9 +760,7 @@ export function MarkdownViewerEditable({
               className="prose prose-invert prose-lg max-w-none"
               style={{ fontSize: `${state.fontSize}px` }}
             >
-              <div className="text-slate-300 leading-relaxed">
-                {renderMarkdown(content || "")}
-              </div>
+              <div className="text-slate-300 leading-relaxed">{renderMarkdown(content || '')}</div>
             </div>
 
             {/* Back to top */}
@@ -813,7 +769,7 @@ export function MarkdownViewerEditable({
                 onClick={() =>
                   contentRef.current?.scrollTo({
                     top: 0,
-                    behavior: "smooth",
+                    behavior: 'smooth',
                   })
                 }
                 className="inline-flex items-center space-x-2 px-6 py-3 bg-slate-800 hover:bg-slate-700 rounded-lg text-slate-300 hover:text-white transition-colors"

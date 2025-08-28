@@ -17,12 +17,6 @@
     "sourceMap": true,
     "types": ["node"]
   },
-  "include": [
-    "src/lib/livekit-agent-worker.ts",
-    "src/lib/livekit-agent-tools.ts"
-  ],
-  "exclude": [
-    "node_modules",
-    "dist"
-  ]
-} 
+  "include": ["src/lib/livekit-agent-worker.ts", "src/lib/livekit-agent-tools.ts"],
+  "exclude": ["node_modules", "dist"]
+}

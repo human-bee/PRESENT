@@ -1,6 +1,6 @@
 /**
  * Tambo Registry Wrapper
- * 
+ *
  * HOC that automatically registers Tambo components with the ComponentRegistry
  * and enables AI updates. This bridges Tambo's message system with our new
  * simplified component update architecture.
@@ -24,47 +24,50 @@ export interface TamboRegistryProps {
 export function withTamboRegistry<P extends Record<string, unknown>>(
   Component: React.ComponentType<P>,
   componentType: string,
-  updateHandler?: (props: P, patch: Record<string, unknown>) => Partial<P>
+  updateHandler?: (props: P, patch: Record<string, unknown>) => Partial<P>,
 ) {
   const WrappedComponent = React.forwardRef<unknown, P & TamboRegistryProps>((props, ref) => {
     const { __tambo_message_id, ...componentProps } = props;
-    
+
     // Generate fallback ID if no Tambo message ID provided
     const effectiveMessageId = __tambo_message_id || `${componentType.toLowerCase()}-${Date.now()}`;
-    
+
     // Default update handler - merge patch into props
-    const defaultUpdateHandler = useCallback((patch: Record<string, unknown>) => {
-      console.log(`[${componentType}] Received AI update:`, patch);
-      
-      // If custom update handler provided, use it
-      if (updateHandler) {
-        const updatedProps = updateHandler(componentProps as P, patch);
-        // For now, log the would-be update
-        // In a full implementation, this would trigger a re-render with new props
-        console.log(`[${componentType}] Would update props:`, updatedProps);
-        return;
-      }
-      
-      // Default behavior - this works for components that manage their own state
-      // and check props in useEffect dependencies
-      console.log(`[${componentType}] Default update - component should handle props change`);
-    }, [componentProps]);
-    
+    const defaultUpdateHandler = useCallback(
+      (patch: Record<string, unknown>) => {
+        console.log(`[${componentType}] Received AI update:`, patch);
+
+        // If custom update handler provided, use it
+        if (updateHandler) {
+          const updatedProps = updateHandler(componentProps as P, patch);
+          // For now, log the would-be update
+          // In a full implementation, this would trigger a re-render with new props
+          console.log(`[${componentType}] Would update props:`, updatedProps);
+          return;
+        }
+
+        // Default behavior - this works for components that manage their own state
+        // and check props in useEffect dependencies
+        console.log(`[${componentType}] Default update - component should handle props change`);
+      },
+      [componentProps],
+    );
+
     // Register with ComponentRegistry
     useComponentRegistration(
       effectiveMessageId,
       componentType,
       componentProps,
       'default', // context key
-      defaultUpdateHandler
+      defaultUpdateHandler,
     );
-    
+
     // Render the original component
     return <Component ref={ref} {...(componentProps as P)} />;
   });
-  
+
   WrappedComponent.displayName = `withTamboRegistry(${Component.displayName || Component.name || componentType})`;
-  
+
   return WrappedComponent;
 }
 
@@ -74,7 +77,7 @@ export function withTamboRegistry<P extends Record<string, unknown>>(
 export function createTamboRegistryComponent<P extends Record<string, unknown>>(
   Component: React.ComponentType<P>,
   componentType: string,
-  updateHandler?: (props: P, patch: Record<string, unknown>) => Partial<P>
+  updateHandler?: (props: P, patch: Record<string, unknown>) => Partial<P>,
 ) {
   return withTamboRegistry(Component, componentType, updateHandler);
 }
@@ -85,14 +88,14 @@ export function createTamboRegistryComponent<P extends Record<string, unknown>>(
  */
 export function injectTamboMessageId<P extends Record<string, unknown>>(
   Component: React.ComponentType<P>,
-  messageId: string
+  messageId: string,
 ): React.ComponentType<P> {
   return function ComponentWithMessageId(props: P) {
     const extendedProps = {
       ...props,
       __tambo_message_id: messageId,
     } as P & TamboRegistryProps;
-    
+
     return <Component {...extendedProps} />;
   };
 }
@@ -103,7 +106,7 @@ export function injectTamboMessageId<P extends Record<string, unknown>>(
  */
 export function useTamboMessageId(): string | undefined {
   const [messageId, setMessageId] = React.useState<string | undefined>(undefined);
-  
+
   React.useEffect(() => {
     // Check if we're in a Tambo render context
     if (typeof window !== 'undefined') {
@@ -113,6 +116,6 @@ export function useTamboMessageId(): string | undefined {
       }
     }
   }, []);
-  
+
   return messageId;
-} 
+}
