@@ -93,22 +93,23 @@ export function LivekitScreenShareTile({
   };
 
   return (
-    <div
-      className={cn(
-        "relative bg-black border-2 border-gray-300 overflow-hidden transition-all duration-200",
-        state?.isMinimized && "!h-16"
-      )}
-      style={{ width, height: state?.isMinimized ? 64 : height, borderRadius }}
-      onMouseEnter={onEnter}
-      onMouseLeave={onLeave}
-    >
+      <div
+        className={cn(
+          "relative bg-black border-2 border-gray-300 overflow-hidden transition-all duration-200 touch-manipulation",
+          state?.isMinimized && "!h-16"
+        )}
+        style={{ width, height: state?.isMinimized ? 64 : height, borderRadius }}
+        onPointerEnter={onEnter}
+        onPointerLeave={onLeave}
+      >
       {/* Screen share video */}
-      {screenTrackRef && !screenPub?.isMuted ? (
-        <VideoTrack
-          trackRef={screenTrackRef}
-          className={cn("w-full h-full", fit === 'contain' ? 'object-contain bg-black' : 'object-cover')}
-        />
-      ) : (
+        {screenTrackRef && !screenPub?.isMuted ? (
+          <VideoTrack
+            trackRef={screenTrackRef}
+            playsInline
+            className={cn("w-full h-full", fit === 'contain' ? 'object-contain bg-black' : 'object-cover')}
+          />
+        ) : (
         <div className="absolute inset-0 bg-gray-900 flex items-center justify-center text-white">
           <div className="flex flex-col items-center gap-2">
             <ScreenShare className="w-10 h-10 opacity-75" />

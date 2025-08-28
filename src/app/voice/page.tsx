@@ -134,7 +134,7 @@ export default function Voice() {
             >
               <EnhancedMcpProvider mcpServers={mcpServers}>
                 {/* Split view layout with canvas on left and thread on right */}
-                <div className="flex h-[calc(100vh-200px)]">
+                <div className="flex h-[calc(100dvh-200px)]">
                   {/* Canvas Space on the left */}
                   <CanvasSpace className="w-1/2 border-r" />
 

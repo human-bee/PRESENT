@@ -16,6 +16,7 @@ import {
   Captions, 
   Kanban, 
   HelpCircle,
+  Trophy,
   type LucideIcon
 } from "lucide-react";
 
@@ -74,6 +75,11 @@ export const componentIcons: Record<string, ComponentIconMapping> = {
     icon: Search,
     category: 'Productivity',
     description: 'Display research findings'
+  },
+  'DebateScorecard': {
+    icon: Trophy,
+    category: 'Collaboration',
+    description: 'Live debate scorecard (boxing/Game Boy aesthetic)'
   },
   'LinearKanbanBoard': {
     icon: Kanban,

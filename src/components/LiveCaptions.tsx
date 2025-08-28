@@ -366,6 +366,11 @@ const LiveCaptions: React.FC<LiveCaptionsProps> = ({
           const idIndex = prevTranscripts.findIndex(t => t.id === transcriptId);
           
           // Check if this is an update to an existing interim transcript (legacy path)
+          // Guard: prevent duplicates when receiving the same final line via multiple paths
+          if (data.is_final && prevTranscripts.some(t => t.id === transcriptId && t.isFinal)) {
+            return prevState;
+          }
+          // Check if this is an update to an existing interim transcript
           const existingIndex = prevTranscripts.findIndex(t => 
             t.speaker === data.speaker && !t.isFinal && 
             Math.abs(new Date(t.timestamp).getTime() - new Date(data.timestamp).getTime()) < 5000

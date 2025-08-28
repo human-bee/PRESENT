@@ -78,6 +78,7 @@ import { nanoid } from "nanoid";
 import { callMcpTool } from "@/lib/livekit-agent-tools";
 import { ComponentToolbox } from '@/components/ui/component-toolbox';
 import { systemRegistry } from './system-registry';
+import DebateScorecard, { debateScoreCardSchema } from "@/components/ui/debate-scorecard";
 
 export const componentToolboxSchema = z.object({});
 
@@ -1224,6 +1225,13 @@ export const components: TamboComponent[] = [
     description: "Displays AI-generated responses and messages with markdown support. Perfect for showing assistant replies, AI analysis, or any text-based AI output.",
     component: Message,
     propsSchema: aiResponseSchema,
+  },
+  {
+    name: "DebateScorecard",
+    description:
+      "Live debate scorecard with retro boxing aesthetic. Tracks strength, logic, sources, accuracy, BS meter, learning score, live fact checks, and timeline. Designed for real-time streams and educational debates.",
+    component: DebateScorecard,
+    propsSchema: debateScoreCardSchema,
   },
   // Add more components here
 ];

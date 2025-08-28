@@ -58,6 +58,8 @@ export interface MessageThreadCollapsibleProps
     source: 'agent' | 'user' | 'system';
     type?: 'speech' | 'system_call';
   }>) => void;
+  /** Optional close handler for mobile to minimize the panel */
+  onClose?: () => void;
 }
 
 /**
@@ -76,7 +78,7 @@ export interface MessageThreadCollapsibleProps
 export const MessageThreadCollapsible = React.forwardRef<
   HTMLDivElement,
   MessageThreadCollapsibleProps
->(({ className, contextKey, variant, onTranscriptChange, ...props }, ref) => {
+>(({ className, contextKey, variant, onTranscriptChange, onClose, ...props }, ref) => {
   const [activeTab, setActiveTab] = React.useState<'conversations' | 'transcript'>('conversations');
   const [componentStore, setComponentStore] = React.useState(new Map<string, {component: React.ReactNode, contextKey: string}>());
   const [transcriptions, setTranscriptions] = React.useState<Array<{
@@ -369,9 +371,9 @@ export const MessageThreadCollapsible = React.forwardRef<
       )}
       {...props}
     >
-      <div className="h-full flex flex-col">
+      <div className="h-full flex flex-col overscroll-contain">
         {/* Header with title and close button */}
-        <div className="flex items-center justify-between p-4 border-b border-gray-200">
+        <div className="flex items-center justify-between p-4 border-b border-gray-200 safe-top">
           <div className="flex items-center gap-2">
             <span className="font-medium">
               {activeTab === 'conversations' ? "Conversations" : "Transcript"}
@@ -381,6 +383,13 @@ export const MessageThreadCollapsible = React.forwardRef<
         onThreadChange={handleThreadChange}
       />
           </div>
+          <button
+            aria-label="Close"
+            className="px-2 py-1 rounded bg-accent hover:bg-muted text-foreground"
+            onClick={onClose}
+          >
+            Close
+          </button>
         </div>
 
           {/* Tab Navigation */}
