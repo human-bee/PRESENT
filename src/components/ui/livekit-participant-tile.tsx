@@ -108,7 +108,7 @@ export const LivekitParticipantTile = React.memo(function LivekitParticipantTile
   trackPreference = "camera",
 }: LivekitParticipantTileProps) {
   // Initialize Tambo component state
-  const [state, setState] = useTamboComponentState<LivekitParticipantTileState>(
+  const [state] = useTamboComponentState<LivekitParticipantTileState>(
     `livekit-participant-${participantIdentity || 'all'}`,
     {
       isMinimized: false,
@@ -213,7 +213,6 @@ export const LivekitParticipantTile = React.memo(function LivekitParticipantTile
       trackPreference={trackPreference}
       onSelectParticipant={(id) => setSelectedParticipantId(id)}
       state={state}
-      setState={setState}
     />;
   }
 
@@ -248,9 +247,7 @@ function SingleParticipantTile({
   fit,
   trackPreference,
   onSelectParticipant,
-  // @ts-ignore fit is carried through via closure
   state,
-  setState,
 }: {
   participant: ReturnType<typeof useParticipants>[0] | ReturnType<typeof useLocalParticipant>['localParticipant'];
   isLocal: boolean;
@@ -267,7 +264,6 @@ function SingleParticipantTile({
   trackPreference: "auto" | "camera" | "screen";
   onSelectParticipant?: (id: string) => void;
   state: LivekitParticipantTileState | undefined;
-  setState: (state: LivekitParticipantTileState) => void;
 }) {
   // Use LiveKit hook to get reactive track references and filter to this participant
   const trackRefs = useTracks([Track.Source.Camera, Track.Source.Microphone, Track.Source.ScreenShare], {
@@ -305,11 +301,7 @@ function SingleParticipantTile({
   const videoPublication = videoTrackRef?.publication;
   const audioPublication = audioTrackRef?.publication;
 
-  // Handle minimize toggle
-  const handleMinimizeToggle = () => {
-    if (!state) return;
-    setState({ ...state, isMinimized: !state.isMinimized });
-  };
+  // (Minimize handled elsewhere)
 
   // Background agent for state sync and control events
   const { state: agentState, events } = useParticipantTileAgent({
@@ -323,7 +315,31 @@ function SingleParticipantTile({
   const showTimerRef = React.useRef<number | null>(null);
   const hideTimerRef = React.useRef<number | null>(null);
 
+  // Detect coarse pointer (mobile/touch) to adjust interaction model
+  const [isCoarsePointer, setIsCoarsePointer] = React.useState(false);
+  React.useEffect(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) return;
+    const mql = window.matchMedia('(pointer: coarse)');
+    setIsCoarsePointer(!!mql.matches);
+    const onChange = (e: MediaQueryListEvent) => setIsCoarsePointer(!!e.matches);
+    try {
+      mql.addEventListener('change', onChange);
+      return () => mql.removeEventListener('change', onChange);
+    } catch {
+      // Safari < 14 fallback using legacy listener types without TS directives
+      const legacy = mql as unknown as { addListener?: (cb: (e: MediaQueryListEvent) => void) => void; removeListener?: (cb: (e: MediaQueryListEvent) => void) => void };
+      legacy.addListener?.(onChange);
+      return () => legacy.removeListener?.(onChange);
+    }
+  }, []);
+
+  // On touch devices, keep overlay visible rather than relying on hover
+  React.useEffect(() => {
+    if (isCoarsePointer) setOverlayVisible(true);
+  }, [isCoarsePointer]);
+
   const onEnter = () => {
+    if (isCoarsePointer) return;
     setHovering(true);
     if (hideTimerRef.current) window.clearTimeout(hideTimerRef.current);
     if (!overlayVisible) {
@@ -332,6 +348,7 @@ function SingleParticipantTile({
   };
 
   const onLeave = () => {
+    if (isCoarsePointer) return;
     setHovering(false);
     if (showTimerRef.current) window.clearTimeout(showTimerRef.current);
     hideTimerRef.current = window.setTimeout(() => setOverlayVisible(false), 1500);
@@ -374,38 +391,49 @@ function SingleParticipantTile({
     }).catch(() => {});
   }, [optionsOpen]);
 
+  // Prevent background scrolling when options modal is open (mobile-friendly)
+  React.useEffect(() => {
+    if (!optionsOpen) return;
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = previous;
+    };
+  }, [optionsOpen]);
+
   // Participant selection list (defaults to local)
   const room = useRoomContext();
   const allParticipants = React.useMemo(() => {
     const arr = [] as { id: string; name: string }[];
     if (room?.localParticipant) arr.push({ id: room.localParticipant.identity, name: room.localParticipant.name || room.localParticipant.identity });
-    room?.remoteParticipants && room.remoteParticipants.forEach((p) => arr.push({ id: p.identity, name: p.name || p.identity }));
+    room?.remoteParticipants?.forEach((p) => arr.push({ id: p.identity, name: p.name || p.identity }));
     return arr;
   }, [room?.localParticipant, room?.remoteParticipants]);
 
   return (
     <div
       className={cn(
-        "relative bg-black border-2 border-gray-300 overflow-hidden transition-all duration-200",
+        "relative bg-black border-2 border-gray-300 overflow-hidden transition-all duration-200 touch-manipulation",
         agentState.isSpeaking && "border-green-400 shadow-lg shadow-green-400/25",
         state?.isMinimized && "!h-16"
       )}
-      style={{ 
-        width, 
-        height: state?.isMinimized ? 64 : height, 
-        borderRadius 
+      style={{
+        width,
+        height: state?.isMinimized ? 64 : height,
+        borderRadius
       }}
-      onMouseEnter={onEnter}
-      onMouseLeave={onLeave}
+      onPointerEnter={onEnter}
+      onPointerLeave={onLeave}
     >
       {/* Video Container */}
       {showVideo && !state?.isMinimized && videoTrackRef && !videoPublication?.isMuted && (
         <div className={cn("absolute inset-0 w-full h-full", isLocal && mirrorLocal && "[transform:scaleX(-1)]")}
              style={{ transformOrigin: 'center' }}>
-          <VideoTrack 
-            trackRef={videoTrackRef}
-            className={cn("w-full h-full bg-black", (fit === 'contain' ? 'object-contain' : 'object-cover'))}
-          />
+            <VideoTrack
+              trackRef={videoTrackRef}
+              playsInline
+              className={cn("w-full h-full bg-black", fit === 'contain' ? 'object-contain' : 'object-cover')}
+            />
         </div>
       )}
 
@@ -479,17 +507,17 @@ function SingleParticipantTile({
             className="absolute bottom-2 right-2 pointer-events-auto"
             onMouseDown={(e) => e.stopPropagation()}
             onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
+            onTouchStart={(e) => e.stopPropagation()}
             onContextMenu={(e) => e.stopPropagation()}
           >
           <div className="bg-black/55 backdrop-blur-md rounded-lg p-1.5 flex items-center gap-1 shadow-lg">
               <button
                 aria-label={agentState.audioMuted ? "Unmute microphone" : "Mute microphone"}
                 aria-keyshortcuts="M"
-                onClick={async () => {
-                  const unmuted = await events.toggleMic();
-                }}
+                onClick={async () => { await events.toggleMic(); }}
                 className={cn(
-                  "w-9 h-9 rounded-md grid place-items-center transition-colors",
+                  "w-11 h-11 rounded-md grid place-items-center transition-colors",
                   agentState.audioMuted ? "bg-red-500/80 text-white hover:bg-red-600/80" : "bg-white/10 text-white hover:bg-white/20"
                 )}
               >
@@ -501,7 +529,7 @@ function SingleParticipantTile({
                 aria-keyshortcuts="V"
                 onClick={async () => { await events.toggleCamera(); }}
                 className={cn(
-                  "w-9 h-9 rounded-md grid place-items-center transition-colors",
+                  "w-11 h-11 rounded-md grid place-items-center transition-colors",
                   agentState.videoMuted ? "bg-red-500/80 text-white hover:bg-red-600/80" : "bg-white/10 text-white hover:bg-white/20"
                 )}
               >
@@ -517,7 +545,8 @@ function SingleParticipantTile({
                       try {
                         const messageId = `screenshare-${participant.identity}-${Date.now()}`;
                         const { LivekitScreenShareTile } = await import('./livekit-screenshare-tile');
-                        const element = React.createElement((LivekitScreenShareTile as any), {
+                        const TileComponent = LivekitScreenShareTile as unknown as React.ComponentType<Record<string, unknown>>;
+                        const element = React.createElement(TileComponent, {
                           __tambo_message_id: messageId,
                           participantIdentity: participant.identity,
                           width,
@@ -528,7 +557,7 @@ function SingleParticipantTile({
                       } catch {}
                     }
                   }}
-                  className="w-9 h-9 rounded-md grid place-items-center bg-white/10 text-white hover:bg-white/20 transition-colors"
+                  className="w-11 h-11 rounded-md grid place-items-center bg-white/10 text-white hover:bg-white/20 transition-colors"
                 >
                   <ScreenShare className="w-4 h-4" />
                 </button>
@@ -537,12 +566,25 @@ function SingleParticipantTile({
               <button
                 aria-label="Tile options"
                 onClick={() => setOptionsOpen(true)}
-                className="w-9 h-9 rounded-md grid place-items-center bg-white/10 text-white hover:bg-white/20 transition-colors"
+                className="w-11 h-11 rounded-md grid place-items-center bg-white/10 text-white hover:bg-white/20 transition-colors"
               >
                 <MoreHorizontal className="w-4 h-4" />
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Dedicated mobile options button (always visible on touch devices) */}
+      {showToolbar && isCoarsePointer && !state?.isMinimized && (
+        <div className="absolute bottom-2 right-2 pointer-events-auto">
+          <button
+            aria-label="Tile options"
+            onClick={() => setOptionsOpen(true)}
+            className="w-11 h-11 rounded-full bg-black/55 text-white backdrop-blur-md grid place-items-center shadow-lg"
+          >
+            <MoreHorizontal className="w-5 h-5" />
+          </button>
         </div>
       )}
 
@@ -573,13 +615,17 @@ function SingleParticipantTile({
             role="dialog"
             aria-modal="true"
             onMouseDown={() => setOptionsOpen(false)}
+            onPointerDown={() => setOptionsOpen(false)}
+            onClick={() => setOptionsOpen(false)}
+            onTouchStart={() => setOptionsOpen(false)}
           >
-            <div
-              className="bg-zinc-900 text-white w-[360px] max-w-[90vw] max-h-[85vh] overflow-auto rounded-xl p-4 border border-white/10 shadow-2xl"
-              onMouseDown={(e) => e.stopPropagation()}
-              onPointerDown={(e) => e.stopPropagation()}
-              onContextMenu={(e) => e.stopPropagation()}
-            >
+              <div
+                className="bg-zinc-900 text-white w-[360px] max-w-[90vw] max-h-[85dvh] overflow-auto rounded-xl p-4 border border-white/10 shadow-2xl"
+                style={{ WebkitOverflowScrolling: 'touch' }}
+                onMouseDown={(e) => e.stopPropagation()}
+                onPointerDown={(e) => e.stopPropagation()}
+                onContextMenu={(e) => e.stopPropagation()}
+              >
               <div className="flex items-center justify-between mb-3">
                 <div className="text-sm font-medium">Tile Options</div>
                 <button aria-label="Close" onClick={() => setOptionsOpen(false)} className="text-white/70 hover:text-white">✕</button>
@@ -611,15 +657,13 @@ function SingleParticipantTile({
                     className="w-full bg-white/10 rounded px-2 py-1 text-sm"
                     onChange={async (e) => {
                       try {
-                        // @ts-expect-error: optional API
-                        await (room as any)?.switchActiveDevice?.('audioinput', e.target.value);
-                        // Ensure mic remains enabled visually after device switch
-                        // Some browsers disable tracks on switch; re-enable explicitly
-                        // @ts-expect-error optional
-                        if (room?.localParticipant?.setMicrophoneEnabled) {
-                          // @ts-expect-error optional
-                          await room.localParticipant.setMicrophoneEnabled(true);
-                        }
+                        type DeviceSwitchRoom = {
+                          switchActiveDevice?: (kind: 'audioinput' | 'videoinput', deviceId: string) => Promise<void>;
+                          localParticipant?: { setMicrophoneEnabled?: (enabled: boolean) => Promise<void> };
+                        };
+                        const deviceRoom = room as unknown as DeviceSwitchRoom;
+                        await deviceRoom.switchActiveDevice?.('audioinput', e.target.value);
+                        await deviceRoom.localParticipant?.setMicrophoneEnabled?.(true);
                       } catch {}
                     }}
                   >
@@ -635,13 +679,13 @@ function SingleParticipantTile({
                     className="w-full bg-white/10 rounded px-2 py-1 text-sm"
                     onChange={async (e) => {
                       try {
-                        // @ts-expect-error: optional API
-                        await (room as any)?.switchActiveDevice?.('videoinput', e.target.value);
-                        // @ts-expect-error optional
-                        if (room?.localParticipant?.setCameraEnabled) {
-                          // @ts-expect-error optional
-                          await room.localParticipant.setCameraEnabled(true);
-                        }
+                        type DeviceSwitchRoom = {
+                          switchActiveDevice?: (kind: 'audioinput' | 'videoinput', deviceId: string) => Promise<void>;
+                          localParticipant?: { setCameraEnabled?: (enabled: boolean) => Promise<void> };
+                        };
+                        const deviceRoom = room as unknown as DeviceSwitchRoom;
+                        await deviceRoom.switchActiveDevice?.('videoinput', e.target.value);
+                        await deviceRoom.localParticipant?.setCameraEnabled?.(true);
                       } catch {}
                     }}
                   >

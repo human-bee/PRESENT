@@ -58,6 +58,11 @@ body {
     --sidebar-width: 16rem;
     --background: 0 0% 100%;
     --foreground: 240 10% 3.9%;
+    /* iOS safe area variables */
+    --safe-area-top: env(safe-area-inset-top);
+    --safe-area-right: env(safe-area-inset-right);
+    --safe-area-bottom: env(safe-area-inset-bottom);
+    --safe-area-left: env(safe-area-inset-left);
   }
   .dark {
     --background: 240 10% 3.9%;
@@ -83,6 +88,22 @@ body {
 }
 
 @layer utilities {
+  /* Safe area helpers and iOS viewport fixes */
+  .ios-vh {
+    height: 100dvh;
+    min-height: 100dvh;
+  }
+  .safe-area-padded {
+    padding-top: env(safe-area-inset-top);
+    padding-right: env(safe-area-inset-right);
+    padding-bottom: env(safe-area-inset-bottom);
+    padding-left: env(safe-area-inset-left);
+  }
+  .safe-top { padding-top: env(safe-area-inset-top); }
+  .safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
+  .overscroll-contain { overscroll-behavior-y: contain; }
+  .touch-manipulation { touch-action: manipulation; }
+
   /* Background Utilities */
   .bg-background {
     background-color: hsl(var(--background));
