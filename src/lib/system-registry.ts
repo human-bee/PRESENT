@@ -291,6 +291,11 @@ export class SystemRegistry {
     // 2) fallback to mcpToolName
     if (!impl && routing?.mcpToolName && registry) {
       impl = typeof registry.get === 'function' ? registry.get(routing.mcpToolName) : registry[routing.mcpToolName];
+      // Also try with 'mcp_' prefix if plain name is not found
+      if (!impl) {
+        const prefixed = `mcp_${routing.mcpToolName}`;
+        impl = typeof registry.get === 'function' ? registry.get(prefixed) : registry[prefixed];
+      }
     }
 
     if (!impl) {
