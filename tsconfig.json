@@ -1,19 +1,22 @@
 {
   "compilerOptions": {
-    "target": "ES2017",
-    "lib": ["dom", "dom.iterable", "esnext"],
+    // Aligning with agent config where appropriate, but keeping app-specific settings
+    "target": "ES2020", // match agent for modern JS features
+    "module": "esnext", // keep for Next.js, agent uses ES2020 but esnext is fine for app
+    "lib": ["dom", "dom.iterable", "esnext"], // app needs DOM, agent does not
     "allowJs": true,
     "skipLibCheck": true,
     "strict": true,
     "noImplicitAny": false,
     "noEmit": true,
     "esModuleInterop": true,
-    "module": "esnext",
-    "moduleResolution": "bundler",
+    "moduleResolution": "bundler", // Next.js default, agent uses "node"
     "resolveJsonModule": true,
     "isolatedModules": true,
     "jsx": "preserve",
     "incremental": true,
+    "forceConsistentCasingInFileNames": true, // from agent config, good for all
+    "allowSyntheticDefaultImports": true, // from agent config, good for all
     "plugins": [
       {
         "name": "next"
@@ -23,6 +26,11 @@
       "@/*": ["./src/*"]
     }
   },
-  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
+  "include": [
+    "next-env.d.ts",
+    "**/*.ts",
+    "**/*.tsx",
+    ".next/types/**/*.ts"
+  ],
   "exclude": ["node_modules"]
 }

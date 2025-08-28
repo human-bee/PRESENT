@@ -45,13 +45,13 @@
 
 
 
-# Sub agent (tambo replacement)
+# Conductor agent (tambo replacement)
 - Take instructions from primary agent
     - Receive tool call args from primary agent, and use transcript context to understand what the user wants
     - Call MCP's, to access real time external information, like youtube api etc
     - Render the component with props
     - Those components have pre existing props
     - Should be able to update state of the component
-- Monitor the transcript, and decide what to do, which will update the state of the component
-- 
+- Livekit agent currently - Monitor the transcript, and decide what to do, which will update the state of the component
+
 
