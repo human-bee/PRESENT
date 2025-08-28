@@ -4,7 +4,7 @@ import {
   documentState,
   generateWordDiff,
 } from "@/app/hackathon-canvas/documents/document-state";
-import { MarkdownViewerEditable } from "@/components/ui/hackathon/markdown-viewer-editable";
+import { MarkdownViewerEditable } from "@/components/ui/markdown-viewer-editable";
 import { useComponentRegistration } from "@/lib/component-registry";
 import { z } from "zod";
 import { useState } from "react";

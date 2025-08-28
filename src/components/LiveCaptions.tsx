@@ -10,7 +10,7 @@ import { useRoomContext, useDataChannel, useParticipants } from "@livekit/compon
 import { useRealtimeSessionTranscript } from '@/hooks/use-realtime-session-transcript'
 import { z } from "zod";
 
-// Tambo Component Schema
+// Component Schema
 export const liveCaptionsSchema = z.object({
   showSpeakerAvatars: z.boolean().optional().default(true).describe("Show speaker avatars in speech bubbles"),
   showTimestamps: z.boolean().optional().default(true).describe("Display timestamps for each transcript"),

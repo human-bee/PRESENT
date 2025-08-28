@@ -28,7 +28,7 @@ import {
 import {
 	DocumentEditor,
 	documentEditorSchema,
-} from "@/components/ui/hackathon/document-editor";
+} from "@/components/ui/document-editor";
 import {
 	ResearchPanel,
 	researchPanelSchema,
