@@ -364,7 +364,7 @@ if (
 
 	const workerOptions = new WorkerOptions({
 		agent: process.argv[1],
-		agentName: "tambo-voice-agent-whisper",
+		agentName: "ce-agent-whisper",
 	});
 
 	console.log("🔧 [WhisperAgent] Whisper API worker configured");

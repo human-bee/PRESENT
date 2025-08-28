@@ -451,7 +451,7 @@ export function CanvasSpace({
 				systemRegistry.ingestState(stateEnvelope);
 			} else {
 				// Create new shape
-				const newShapeId = createShapeId(`tambo-${nanoid()}`); // Generate a unique ID for the new shape with required prefix
+				const newShapeId = createShapeId(`shape-${nanoid()}`); // Generate a unique ID for the new shape with required prefix
 
 				const viewport = editor.getViewportPageBounds();
 				const initialSize = calculateInitialSize(componentName || "Default");

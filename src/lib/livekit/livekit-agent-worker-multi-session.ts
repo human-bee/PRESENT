@@ -245,7 +245,7 @@ if (
 
 	const workerOptions = new WorkerOptions({
 		agent: process.argv[1],
-		agentName: "tambo-voice-agent-multi",
+		agentName: "ce-agent-multi",
 	});
 
 	console.log("🔧 [MultiAgent] Multi-session worker configured");

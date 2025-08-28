@@ -136,7 +136,7 @@ export const MessageThreadCollapsible = React.forwardRef<
 						text: transcriptionData.text,
 						timestamp: transcriptionData.timestamp || Date.now(),
 						isFinal: transcriptionData.is_final || false,
-						source: (transcriptionData.speaker === "tambo-voice-agent"
+						source: (transcriptionData.speaker === "voice-agent"
 							? "agent"
 							: "user") as "agent" | "user",
 						type: "speech" as const,
@@ -194,7 +194,7 @@ export const MessageThreadCollapsible = React.forwardRef<
 				text: t.text,
 				timestamp: Number(t.timestamp),
 				isFinal: true,
-				source: t.participantId === "tambo-voice-agent" ? "agent" : "user",
+				source: t.participantId === "voice-agent" ? "agent" : "user",
 				type: "speech" as const,
 			}));
 			setTranscriptions((prev) => {
@@ -317,7 +317,7 @@ export const MessageThreadCollapsible = React.forwardRef<
 				// Also add system call to transcript
 				const systemCall = {
 					id: `system-${Date.now()}-${Math.random()}`,
-					speaker: "tambo-voice-agent",
+					speaker: "voice-agent",
 					text: `Generated component: ${messageId || "Unknown component"}`,
 					timestamp: Date.now(),
 					isFinal: true,

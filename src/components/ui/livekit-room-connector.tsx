@@ -110,7 +110,7 @@ export const CanvasLiveKitContext = React.createContext<{
  * This allows all canvas components to access LiveKit functionality.
  */
 export function LivekitRoomConnector({
-	roomName = "tambo-canvas-room",
+	roomName = "canvas-room",
 	userName = "Canvas User",
 	serverUrl,
 	audioOnly = false,
@@ -346,7 +346,7 @@ export function LivekitRoomConnector({
 					p.identity.toLowerCase().includes("agent") ||
 					p.identity.toLowerCase().includes("bot") ||
 					p.identity.toLowerCase().includes("ai") ||
-					p.identity.startsWith("tambo-voice-agent") ||
+					p.identity.startsWith("voice-agent") ||
 					p.metadata?.includes("agent") ||
 					p.metadata?.includes('type":"agent');
 
@@ -466,7 +466,7 @@ export function LivekitRoomConnector({
 				participant.identity.toLowerCase().includes("agent") ||
 				participant.identity.toLowerCase().includes("bot") ||
 				participant.identity.toLowerCase().includes("ai") ||
-				participant.identity.startsWith("tambo-voice-agent") ||
+				participant.identity.startsWith("voice-agent") ||
 				participant.metadata?.includes("agent") ||
 				participant.metadata?.includes('type":"agent');
 
@@ -526,7 +526,7 @@ export function LivekitRoomConnector({
 				participant.identity.toLowerCase().includes("agent") ||
 				participant.identity.toLowerCase().includes("bot") ||
 				participant.identity.toLowerCase().includes("ai") ||
-				participant.identity.startsWith("tambo-voice-agent") ||
+				participant.identity.startsWith("voice-agent") ||
 				participant.metadata?.includes("agent") ||
 				participant.metadata?.includes('type":"agent');
 
@@ -934,8 +934,8 @@ export function LivekitRoomConnector({
 
 	// Copy room link (prefer id param to keep URL stable; strip prefix if present)
 	const handleCopyLink = () => {
-		const id = roomName.startsWith("tambo-canvas-")
-			? roomName.substring("tambo-canvas-".length)
+		const id = roomName.startsWith("canvas-")
+			? roomName.substring("canvas-".length)
 			: roomName;
 		const link = `${window.location.origin}/canvas?id=${encodeURIComponent(id)}`;
 		navigator.clipboard.writeText(link);

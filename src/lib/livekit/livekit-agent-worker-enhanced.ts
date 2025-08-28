@@ -347,7 +347,7 @@ Do not respond with text unless necessary. Prefer tool calls for UI generation.`
 					const welcomeData = JSON.stringify({
 						type: "live_transcription",
 						text: "🤖 Enhanced Tambo Voice Agent connected! I can hear all participants and respond naturally.",
-						speaker: "tambo-voice-agent",
+						speaker: "ce-agent",
 						timestamp: Date.now(),
 						is_final: true,
 					});
@@ -562,7 +562,7 @@ if (
 
 	const workerOptions = new WorkerOptions({
 		agent: process.argv[1],
-		agentName: "tambo-voice-agent-enhanced",
+		agentName: "ce-agent-enhanced",
 	});
 
 	console.log("🔧 [EnhancedAgent] Enhanced worker configured");

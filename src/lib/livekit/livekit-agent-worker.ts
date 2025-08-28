@@ -1100,7 +1100,7 @@ export default defineAgent({
 					const welcomeData = JSON.stringify({
 						type: "live_transcription",
 						text: "🤖 Tambo Voice Agent connected! I can hear you and respond naturally. Just speak!",
-						speaker: "tambo-voice-agent",
+						speaker: "voice-agent",
 						timestamp: Date.now(),
 						is_final: true,
 					});
@@ -1138,7 +1138,7 @@ export default defineAgent({
 					const transcriptionData = JSON.stringify({
 						type: "live_transcription",
 						text: evt.text,
-						speaker: "tambo-voice-agent",
+						speaker: "voice-agent",
 						timestamp: Date.now(),
 						is_final: true,
 					});
@@ -1385,7 +1385,7 @@ export default defineAgent({
 					const responseData = JSON.stringify({
 						type: "live_transcription",
 						text: evt.text,
-						speaker: "tambo-voice-agent",
+						speaker: "voice-agent",
 						timestamp: Date.now(),
 						is_final: true,
 					});
@@ -1409,7 +1409,7 @@ if (
 
 	const workerOptions = new WorkerOptions({
 		agent: process.argv[1],
-		agentName: "tambo-voice-agent",
+		agentName: "voice-agent",
 	});
 
 	console.log("🔧 [Agent] Worker configured");
