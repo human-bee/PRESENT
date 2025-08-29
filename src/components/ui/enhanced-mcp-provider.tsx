@@ -21,7 +21,7 @@
 'use client';
 
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
-import { TamboMcpProvider } from '@tambo-ai/react/mcp';
+import { customMcpProvider } from '@custom-ai/react/mcp';
 import {
   markMcpServerFailed,
   markMcpServerConnected,
@@ -29,7 +29,7 @@ import {
   resetMcpServerFailures,
   type McpServer,
 } from '@/lib/mcp-utils';
-import { sanitizeToolName, isValidToolName } from '@/lib/tambo-tool-validator';
+import { sanitizeToolName, isValidToolName } from '@/lib/custom-tool-validator';
 
 interface EnhancedMcpProviderProps {
   children: React.ReactNode;
@@ -145,7 +145,7 @@ export function EnhancedMcpProvider({
 
   return (
     <MCPErrorBoundary onError={handleMcpError}>
-      <TamboMcpProvider mcpServers={mcpServers}>{children}</TamboMcpProvider>
+      <customMcpProvider mcpServers={mcpServers}>{children}</customMcpProvider>
     </MCPErrorBoundary>
   );
 }

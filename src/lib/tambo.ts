@@ -1,11 +1,11 @@
 /**
- * @file tambo.ts
- * @description Central configuration file for Tambo components and tools
+ * @file custom.ts
+ * @description Central configuration file for custom components and tools
  *
- * This file serves as the central place to register your Tambo components and tools.
- * It exports arrays that will be used by the TamboProvider.
+ * This file serves as the central place to register your custom components and tools.
+ * It exports arrays that will be used by the customProvider.
  *
- * Read more about Tambo at https://tambo.co/docs
+ * Read more about custom at https://custom.co/docs
  */
 
 import { YoutubeEmbed, youtubeEmbedSchema } from '@/components/ui/youtube-embed';
@@ -37,7 +37,7 @@ import LiveCaptions, { liveCaptionsSchema } from '@/components/LiveCaptions';
 import LinearKanbanBoard, { linearKanbanSchema } from '@/components/ui/linear-kanban-board';
 import { OnboardingGuide, onboardingGuideSchema } from '@/components/ui/onboarding-guide';
 import { Message } from '@/components/ui/message';
-import { TamboTool } from '@tambo-ai/react';
+import { customTool } from '@custom-ai/react';
 import { z } from 'zod';
 import { ComponentRegistry, type ComponentInfo } from './component-registry';
 import { createLogger } from './utils';
@@ -65,7 +65,7 @@ export const aiResponseSchema = z.object({
     .describe('Whether the message is in a loading state'),
 });
 
-const logger = createLogger('tambo');
+const logger = createLogger('custom');
 const circuitBreaker = new CircuitBreaker({
   duplicateWindow: 1000, // 1 second for aggressive duplicate prevention
   completedWindow: 30000, // 30 seconds for completed calls
@@ -75,7 +75,7 @@ const circuitBreaker = new CircuitBreaker({
 /**
  * tools
  *
- * This array contains all the Tambo tools that are registered for use within the application.
+ * This array contains all the custom tools that are registered for use within the application.
  * Each tool is defined with its name, description, and expected props. The tools
  * can be controlled by AI to dynamically fetch data based on user interactions.
  */
@@ -83,7 +83,7 @@ const circuitBreaker = new CircuitBreaker({
 // Circuit breaker now handles all duplicate/cooldown tracking
 
 // Direct component update tool - no complex bus system needed!
-export const uiUpdateTool: TamboTool = {
+export const uiUpdateTool: customTool = {
   name: 'ui_update',
   description: `Update a UI component with new props. 
 
@@ -222,7 +222,7 @@ ALWAYS provide the actual data: ui_update("id", {"tideData": {...}}) ✅`,
       }
     }
 
-    // 🛑 REQUIRE EXPLICIT PATCH: No more regex madness - let Tambo AI handle this properly!
+    // 🛑 REQUIRE EXPLICIT PATCH: No more regex madness - let custom AI handle this properly!
     if (!patch || Object.keys(patch).length === 0) {
       // Try to help with component-specific examples
       const component = ComponentRegistry.get(componentId);
@@ -338,7 +338,7 @@ ALWAYS provide the actual data: ui_update("id", {"tideData": {...}}) ✅`,
 };
 
 // Direct component listing tool - no bus system needed!
-export const listComponentsTool: TamboTool = {
+export const listComponentsTool: customTool = {
   name: 'list_components',
   description:
     'Get current component IDs and information. Call this to see what components are available for updates. The ui_update tool can also auto-find components if needed.',
@@ -393,7 +393,7 @@ export const listComponentsTool: TamboTool = {
   },
 };
 
-export const getDocumentsTool: TamboTool = {
+export const getDocumentsTool: customTool = {
   name: 'get_documents',
   description: 'Return a list of all documents available in the hackathon canvas document store.',
   tool: async () => {
@@ -417,7 +417,7 @@ export const getDocumentsTool: TamboTool = {
     ),
 };
 
-export const generateUiComponentTool: TamboTool = {
+export const generateUiComponentTool: customTool = {
   name: 'generate_ui_component',
   description:
     'Generate a UI component from free-form prompt with intelligent parameter extraction. This tool consolidates all NLP processing for component generation and handles complex natural language requests.',
@@ -662,12 +662,12 @@ export const generateUiComponentTool: TamboTool = {
         const compDef = components.find((c) => c.name === componentType);
         const element = compDef
           ? React.createElement(compDef.component as any, {
-              __tambo_message_id: messageId,
-              ...(props || {}),
-            })
+            __custom_message_id: messageId,
+            ...(props || {}),
+          })
           : { type: componentType, props };
         window.dispatchEvent(
-          new CustomEvent('tambo:showComponent', {
+          new CustomEvent('custom:showComponent', {
             detail: {
               messageId,
               component: element,
@@ -689,11 +689,11 @@ export const generateUiComponentTool: TamboTool = {
             },
           });
           window.dispatchEvent(evt);
-        } catch {}
+        } catch { }
       } catch {
         // Fallback to plain object payload if React.createElement isn't available
         window.dispatchEvent(
-          new CustomEvent('tambo:showComponent', {
+          new CustomEvent('custom:showComponent', {
             detail: {
               messageId,
               component: { type: componentType, props },
@@ -714,7 +714,7 @@ export const generateUiComponentTool: TamboTool = {
             },
           });
           window.dispatchEvent(evt);
-        } catch {}
+        } catch { }
       }
     }
 
@@ -758,7 +758,7 @@ export const generateUiComponentTool: TamboTool = {
 // existing LinearKanbanBoard via ui_update. Keeps UI in sync with source-of-truth.
 // ----------------------------------------------------------------------------
 
-export const refreshLinearBoardTool: TamboTool = {
+export const refreshLinearBoardTool: customTool = {
   name: 'refresh_linear_board',
   description:
     'Refresh a LinearKanbanBoard by fetching latest issues & statuses from Linear via MCP and applying them with ui_update.',
@@ -838,7 +838,7 @@ export const refreshLinearBoardTool: TamboTool = {
   },
 };
 
-export const tools: TamboTool[] = [
+export const tools: customTool[] = [
   // Set the MCP tools https://localhost:3000/mcp-config
   // Add non MCP tools here
   listComponentsTool,
@@ -858,7 +858,7 @@ function getEditorUnsafe(): any {
   return (window as any).__present?.tldrawEditor || null;
 }
 
-export const focusCanvasTool: TamboTool = {
+export const focusCanvasTool: customTool = {
   name: 'canvas_focus',
   description:
     'Focus or zoom on all, selected, or a specific component/shape. params: { target: "all"|"selected"|"component"|"shape", componentId?, shapeId?, padding? }',
@@ -878,7 +878,7 @@ export const focusCanvasTool: TamboTool = {
     .returns(z.object({ status: z.string(), message: z.string().optional() })),
 };
 
-export const canvasZoomAllTool: TamboTool = {
+export const canvasZoomAllTool: customTool = {
   name: 'canvas_zoom_all',
   description: 'Zoom to fit all shapes on the canvas',
   tool: async () => {
@@ -893,7 +893,7 @@ export const canvasZoomAllTool: TamboTool = {
     .returns(z.object({ status: z.string(), message: z.string().optional() })),
 };
 
-export const createNoteTool: TamboTool = {
+export const createNoteTool: customTool = {
   name: 'canvas_create_note',
   description: 'Create a text note at the center of the viewport. params: { text }',
   tool: async (textOrParams?: unknown) => {
@@ -910,9 +910,9 @@ export const createNoteTool: TamboTool = {
     .returns(z.object({ status: z.string(), message: z.string().optional() })),
 };
 
-export const pinSelectedTool: TamboTool = {
+export const pinSelectedTool: customTool = {
   name: 'canvas_pin_selected',
-  description: 'Pin selected Tambo shapes to the viewport (screen-anchored).',
+  description: 'Pin selected custom shapes to the viewport (screen-anchored).',
   tool: async () => {
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('tldraw:pinSelected'));
@@ -925,9 +925,9 @@ export const pinSelectedTool: TamboTool = {
     .returns(z.object({ status: z.string(), message: z.string().optional() })),
 };
 
-export const unpinSelectedTool: TamboTool = {
+export const unpinSelectedTool: customTool = {
   name: 'canvas_unpin_selected',
-  description: 'Unpin selected Tambo shapes from the viewport.',
+  description: 'Unpin selected custom shapes from the viewport.',
   tool: async () => {
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('tldraw:unpinSelected'));
@@ -940,22 +940,22 @@ export const unpinSelectedTool: TamboTool = {
     .returns(z.object({ status: z.string(), message: z.string().optional() })),
 };
 
-export const canvasAnalyzeTool: TamboTool = {
+export const canvasAnalyzeTool: customTool = {
   name: 'canvas_analyze',
   description:
-    'Analyze canvas: counts, clusters (by proximity), visible bounds, and selected tambo components.',
+    'Analyze canvas: counts, clusters (by proximity), visible bounds, and selected custom components.',
   tool: async () => {
     const editor: any = getEditorUnsafe();
     if (!editor) return { status: 'ERROR', message: 'Editor not ready' };
     const shapes = editor.getCurrentPageShapes?.() || [];
-    const tambo = shapes.filter((s: any) => s.type === 'tambo');
+    const custom = shapes.filter((s: any) => s.type === 'custom');
     const notes = shapes.filter((s: any) => s.type === 'text' || s.type === 'geo');
     const bounds = editor.getViewportPageBounds?.();
 
     // naive clustering by grid buckets of 600px
     const bucket = 600;
     const clusters: Record<string, { ids: string[]; cx: number; cy: number }> = {};
-    for (const s of tambo) {
+    for (const s of custom) {
       const b = editor.getShapePageBounds?.(s.id);
       if (!b) continue;
       const key = `${Math.floor(b.x / bucket)}:${Math.floor(b.y / bucket)}`;
@@ -973,10 +973,10 @@ export const canvasAnalyzeTool: TamboTool = {
 
     const selected = editor.getSelectedShapes?.() || [];
     const selectedComponents = selected
-      .filter((s: any) => s.type === 'tambo')
+      .filter((s: any) => s.type === 'custom')
       .map((s: any) => ({
         id: s.id,
-        componentId: s.props?.tamboComponent,
+        componentId: s.props?.customComponent,
         name: s.props?.name,
       }));
 
@@ -985,7 +985,7 @@ export const canvasAnalyzeTool: TamboTool = {
       message: 'Canvas analyzed',
       counts: {
         total: shapes.length,
-        tambo: tambo.length,
+        custom: custom.length,
         notes: notes.length,
       },
       visibleBounds: bounds ? { x: bounds.x, y: bounds.y, w: bounds.w, h: bounds.h } : null,
@@ -1007,7 +1007,7 @@ tools.push(
 );
 
 // Additional control tools: lock/unlock and arrange grid
-export const lockSelectedTool: TamboTool = {
+export const lockSelectedTool: customTool = {
   name: 'canvas_lock_selected',
   description: 'Lock selected shapes to prevent movement',
   tool: async () => {
@@ -1022,7 +1022,7 @@ export const lockSelectedTool: TamboTool = {
     .returns(z.object({ status: z.string(), message: z.string().optional() })),
 };
 
-export const unlockSelectedTool: TamboTool = {
+export const unlockSelectedTool: customTool = {
   name: 'canvas_unlock_selected',
   description: 'Unlock selected shapes to allow movement',
   tool: async () => {
@@ -1037,10 +1037,10 @@ export const unlockSelectedTool: TamboTool = {
     .returns(z.object({ status: z.string(), message: z.string().optional() })),
 };
 
-export const arrangeGridTool: TamboTool = {
+export const arrangeGridTool: customTool = {
   name: 'canvas_arrange_grid',
   description:
-    'Arrange selected (or all) Tambo components into a grid. params: { cols?, spacing?, selectionOnly? }',
+    'Arrange selected (or all) custom components into a grid. params: { cols?, spacing?, selectionOnly? }',
   tool: async (params?: {
     cols?: number;
     spacing?: number;
@@ -1151,7 +1151,7 @@ systemRegistry.addCapability({
 });
 
 // Shape primitives and alignment/distribution
-export const createRectangleTool: TamboTool = {
+export const createRectangleTool: customTool = {
   name: 'canvas_create_rectangle',
   description: 'Create a rectangle (geo) shape. params: { x?, y?, w?, h?, name? }',
   tool: async (params?: {
@@ -1182,7 +1182,7 @@ export const createRectangleTool: TamboTool = {
     .returns(z.object({ status: z.string(), message: z.string().optional() })),
 };
 
-export const createEllipseTool: TamboTool = {
+export const createEllipseTool: customTool = {
   name: 'canvas_create_ellipse',
   description: 'Create an ellipse (geo) shape. params: { x?, y?, w?, h?, name? }',
   tool: async (params?: {
@@ -1213,7 +1213,7 @@ export const createEllipseTool: TamboTool = {
     .returns(z.object({ status: z.string(), message: z.string().optional() })),
 };
 
-export const alignSelectedTool: TamboTool = {
+export const alignSelectedTool: customTool = {
   name: 'canvas_align_selected',
   description:
     'Align selected components. params: { axis: "x"|"y", mode: "left"|"right"|"center"|"top"|"bottom"|"middle" }',
@@ -1236,7 +1236,7 @@ export const alignSelectedTool: TamboTool = {
     .returns(z.object({ status: z.string(), message: z.string().optional() })),
 };
 
-export const distributeSelectedTool: TamboTool = {
+export const distributeSelectedTool: customTool = {
   name: 'canvas_distribute_selected',
   description: 'Distribute selected components along an axis. params: { axis: "x"|"y" }',
   tool: async (params?: { axis?: 'x' | 'y' }) => {
@@ -1291,7 +1291,7 @@ systemRegistry.addCapability({
 });
 
 // Fun composite drawing: smiley
-export const drawSmileyTool: TamboTool = {
+export const drawSmileyTool: customTool = {
   name: 'canvas_draw_smiley',
   description: 'Draw a smiley face using basic shapes. params: { size? }',
   tool: async (params?: { size?: number }) => {
@@ -1318,7 +1318,7 @@ systemRegistry.addCapability({
 });
 
 // Grid / Theme / Background / Selection helpers
-export const toggleGridTool: TamboTool = {
+export const toggleGridTool: customTool = {
   name: 'canvas_toggle_grid',
   description: 'Toggle a simple grid backdrop on the canvas container',
   tool: async () => {
@@ -1333,7 +1333,7 @@ export const toggleGridTool: TamboTool = {
     .returns(z.object({ status: z.string(), message: z.string().optional() })),
 };
 
-export const setBackgroundTool: TamboTool = {
+export const setBackgroundTool: customTool = {
   name: 'canvas_set_background',
   description: 'Set background color or image. params: { color?: string; image?: string }',
   tool: async (params?: { color?: string; image?: string }) => {
@@ -1348,7 +1348,7 @@ export const setBackgroundTool: TamboTool = {
     .returns(z.object({ status: z.string(), message: z.string().optional() })),
 };
 
-export const setThemeTool: TamboTool = {
+export const setThemeTool: customTool = {
   name: 'canvas_set_theme',
   description: 'Set canvas theme. params: { theme: "light"|"dark" }',
   tool: async (params?: { theme?: 'light' | 'dark' }) => {
@@ -1363,7 +1363,7 @@ export const setThemeTool: TamboTool = {
     .returns(z.object({ status: z.string(), message: z.string().optional() })),
 };
 
-export const selectTool: TamboTool = {
+export const selectTool: customTool = {
   name: 'canvas_select',
   description:
     'Select shapes/components by name/type/bounds. params: { nameContains?, type?, withinBounds? }',
@@ -1439,7 +1439,7 @@ systemRegistry.addCapability({
 /**
  * components
  *
- * This array contains all the Tambo components that are registered for use within the application.
+ * This array contains all the custom components that are registered for use within the application.
  * Each component is defined with its name, description, and expected props. The components
  * can be controlled by AI to dynamically render UI elements based on user interactions.
  */

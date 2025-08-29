@@ -11,10 +11,10 @@ import { useState } from 'react';
 
 export interface DocumentEditorProps {
   documentId: string;
-  __tambo_message_id?: string; // injected automatically when rendered by Tambo
+  __custom_message_id?: string; // injected automatically when rendered by custom
 }
 
-// Schema for Tambo registration
+// Schema for custom registration
 export const documentEditorSchema = z.object({
   documentId: z.string().describe('ID of the document to edit'),
 });
@@ -30,9 +30,9 @@ interface EditorState {
   }>;
 }
 
-export function DocumentEditor({ documentId, __tambo_message_id }: DocumentEditorProps) {
+export function DocumentEditor({ documentId, __custom_message_id }: DocumentEditorProps) {
   // Generate effective message ID
-  const effectiveMessageId = __tambo_message_id || `document-editor-${documentId}`;
+  const effectiveMessageId = __custom_message_id || `document-editor-${documentId}`;
 
   // Flag to prevent circular updates
   const isUpdatingFromDocumentState = useRef(false);
@@ -67,11 +67,11 @@ export function DocumentEditor({ documentId, __tambo_message_id }: DocumentEdito
         setState((prev) =>
           prev
             ? {
-                ...prev,
-                content: updated.content,
-                originalContent: updated.originalContent || updated.content,
-                diffs: updated.diffs,
-              }
+              ...prev,
+              content: updated.content,
+              originalContent: updated.originalContent || updated.content,
+              diffs: updated.diffs,
+            }
             : prev,
         );
 

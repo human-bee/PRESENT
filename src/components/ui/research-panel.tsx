@@ -296,7 +296,7 @@ export function ResearchPanel({
   const [customResults, setCustomResults] = useState<ResearchResult[]>([]);
   const [isDragOver, setIsDragOver] = useState(false);
 
-  // Order state for drag-reorder (local for now – can be persisted via Tambo later)
+  // Order state for drag-reorder (local for now – can be persisted via custom later)
   const [order, setOrder] = useState<string[]>([]);
 
   // Synchronise order when result list changes (add new ids at the end)

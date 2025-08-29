@@ -15,7 +15,7 @@
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { McpStatusIndicator } from '@/components/ui/mcp-status-indicator';
-import { useValidatedTambo } from '@/hooks/use-validated-tambo';
+import { useValidatedcustom } from '@/hooks/use-validated-custom';
 import { computeMcpMappings, listRegistryTools, listWindowMcpTools } from '@/lib/mcp-introspection';
 
 // Define MCP transport types
@@ -28,10 +28,10 @@ export enum MCPTransport {
 export type MCPServerConfig =
   | string
   | {
-      url: string;
-      transport?: MCPTransport;
-      name?: string;
-    };
+    url: string;
+    transport?: MCPTransport;
+    name?: string;
+  };
 
 const McpConfigPage = () => {
   // Initialize from localStorage directly to avoid conflicts
@@ -43,7 +43,7 @@ const McpConfigPage = () => {
   const [serverName, setServerName] = useState('');
   const [transportType, setTransportType] = useState<MCPTransport>(MCPTransport.HTTP);
   const [savedSuccess, setSavedSuccess] = useState(false);
-  const { toolRegistry } = useValidatedTambo();
+  const { toolRegistry } = useValidatedcustom();
   const [verifyOpen, setVerifyOpen] = useState(false);
 
   const regToolNames = useMemo(() => listRegistryTools(toolRegistry), [toolRegistry]);
@@ -123,7 +123,7 @@ const McpConfigPage = () => {
         <div className="mb-8">
           <h2 className="text-lg font-semibold mb-4">Model Context Protocol Servers</h2>
           <p className="text-gray-600 mb-4">
-            Configure external MCP-compliant servers to extend the capabilities of your Tambo
+            Configure external MCP-compliant servers to extend the capabilities of your custom
             application. The servers listed here will be available as tool providers in your chat.
           </p>
           {winToolNames.length === 0 && (
@@ -302,7 +302,7 @@ const McpConfigPage = () => {
           <h3 className="font-semibold mb-2">What is MCP?</h3>
           <p className="text-gray-600 text-sm">
             The Model Context Protocol (MCP) is a standard that allows applications to communicate
-            with external tools and services. By configuring MCP servers, you can extend your Tambo
+            with external tools and services. By configuring MCP servers, you can extend your custom
             application with additional capabilities provided by these servers.
           </p>
         </div>

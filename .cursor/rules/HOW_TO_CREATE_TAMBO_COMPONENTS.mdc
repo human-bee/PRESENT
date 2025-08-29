@@ -1,13 +1,13 @@
 ---
 alwaysApply: false
 ---
-# 🚀 The Tambo Component Creation Bible
+# 🚀 The custom Component Creation Bible
 
 > **"Stay present, let the canvas do the rest."**
 
 ## 🧘 Philosophy: Zero to Feature-Complete in One Flow
 
-This is your production bible for creating Tambo components that are **born complete**. No half-measures. No "we'll add that later." Every component that ships is a fully-realized digital organism, alive on the canvas, connected to the world, and delighting users from moment one.
+This is your production bible for creating custom components that are **born complete**. No half-measures. No "we'll add that later." Every component that ships is a fully-realized digital organism, alive on the canvas, connected to the world, and delighting users from moment one.
 
 ### The Prime Directives
 
@@ -20,6 +20,7 @@ This is your production bible for creating Tambo components that are **born comp
 ## 🏃‍♂️ The Speed Run: Idea to Canvas in 5 Minutes
 
 ### Step 1: Manifest the Vision (30 seconds)
+
 ```bash
 # Think: "I need a real-time dashboard for crypto prices"
 # Type: /ui create a crypto price dashboard with live updates, price charts, and alerts
@@ -28,8 +29,9 @@ This is your production bible for creating Tambo components that are **born comp
 ```
 
 ### Step 2: Enhance with Intelligence (60 seconds)
+
 ```typescript
-// Transform the generated UI into a Tambo-aware component
+// Transform the generated UI into a custom-aware component
 export const cryptoDashboardSchema = z.object({
   symbols: z.array(z.string()).describe("Crypto symbols to track (e.g., ['BTC', 'ETH'])"),
   refreshInterval: z.number().optional().describe("Update frequency in seconds"),
@@ -44,10 +46,11 @@ export const cryptoDashboardSchema = z.object({
 ```
 
 ### Step 3: Connect to Reality (90 seconds)
+
 ```typescript
 export function CryptoDashboard({ symbols, refreshInterval = 5 }: CryptoDashboardProps) {
   // State management - reactive and persistent
-  const [state, setState] = useTamboComponentState<DashboardState>(
+  const [state, setState] = usecustomComponentState<DashboardState>(
     `crypto-dashboard-${symbols.join('-')}`,
     { prices: {}, alerts: [], isLive: true }
   );
@@ -60,7 +63,7 @@ export function CryptoDashboard({ symbols, refreshInterval = 5 }: CryptoDashboar
   // Canvas awareness - component lives on the canvas
   useEffect(() => {
     window.dispatchEvent(
-      new CustomEvent("tambo:showComponent", {
+      new CustomEvent("custom:showComponent", {
         detail: { 
           messageId: `crypto-${Date.now()}`,
           component: <CryptoDashboard {...props} />
@@ -83,9 +86,10 @@ export function CryptoDashboard({ symbols, refreshInterval = 5 }: CryptoDashboar
 ```
 
 ### Step 4: Register and Ship (30 seconds)
+
 ```typescript
-// src/lib/tambo.ts
-export const components: TamboComponent[] = [
+// src/lib/custom.ts
+export const components: customComponent[] = [
   // ... existing components
   {
     name: "CryptoDashboard",
@@ -97,6 +101,7 @@ export const components: TamboComponent[] = [
 ```
 
 ### Step 5: Refine in Real-Time (60 seconds)
+
 ```bash
 # See it on canvas, want improvements?
 # Type: /21 add candlestick charts and volume indicators
@@ -147,7 +152,7 @@ type ComponentState = {
 };
 
 // Initialize with meaningful defaults
-const [state, setState] = useTamboComponentState<ComponentState>(
+const [state, setState] = usecustomComponentState<ComponentState>(
   uniqueComponentId,
   {
     isExpanded: false,
@@ -215,7 +220,7 @@ function useVoiceCommands() {
 
 // 🔧 MCP Tool Integration Pattern
 function useMCPTools() {
-  const { tools } = useTamboRegistry();
+  const { tools } = usecustomRegistry();
   
   // Find relevant tools for your component
   const searchTool = tools.find(t => t.name === "search");
@@ -241,7 +246,7 @@ function useMCPTools() {
 // Pattern 1: Auto-Canvas on Mount
 useEffect(() => {
   window.dispatchEvent(
-    new CustomEvent("tambo:showComponent", {
+    new CustomEvent("custom:showComponent", {
       detail: {
         messageId: componentId,
         component: <YourComponent {...props} />
@@ -273,14 +278,14 @@ function CanvasAwareComponent() {
       }
     };
 
-    window.addEventListener("tambo:canvas:interaction", handleCanvasEvent);
-    return () => window.removeEventListener("tambo:canvas:interaction", handleCanvasEvent);
+    window.addEventListener("custom:canvas:interaction", handleCanvasEvent);
+    return () => window.removeEventListener("custom:canvas:interaction", handleCanvasEvent);
   }, [componentId]);
 
   // Emit canvas updates
   const notifyCanvas = (action: string, data: any) => {
     window.dispatchEvent(
-      new CustomEvent("tambo:componentUpdate", {
+      new CustomEvent("custom:componentUpdate", {
         detail: { componentId, action, data }
       })
     );
@@ -306,7 +311,7 @@ function ComponentOrchestrator() {
   // Spawn related components
   const spawnRelatedComponent = (type: string, data: any) => {
     window.dispatchEvent(
-      new CustomEvent("tambo:spawnComponent", {
+      new CustomEvent("custom:spawnComponent", {
         detail: {
           parentId: componentId,
           componentType: type,
@@ -328,11 +333,12 @@ function ComponentOrchestrator() {
 ## 🎯 Component Patterns by Use Case
 
 ### Pattern 1: Real-Time Data Visualizer
+
 ```typescript
 // For: Dashboards, Analytics, Monitoring
 export function RealTimeVisualizer({ dataEndpoint, chartType }: Props) {
   const { data, isConnected } = useRealTimeData(dataEndpoint);
-  const [state, setState] = useTamboComponentState();
+  const [state, setState] = usecustomComponentState();
   
   // Auto-adapt to data changes
   useEffect(() => {
@@ -354,10 +360,11 @@ export function RealTimeVisualizer({ dataEndpoint, chartType }: Props) {
 ```
 
 ### Pattern 2: Interactive Form Builder
+
 ```typescript
 // For: Data Entry, Configuration, Surveys
 export function SmartForm({ schema, endpoint }: Props) {
-  const [state, setState] = useTamboComponentState();
+  const [state, setState] = usecustomComponentState();
   const { validateWithAI } = useMCPTools();
   
   // AI-assisted validation
@@ -376,11 +383,12 @@ export function SmartForm({ schema, endpoint }: Props) {
 ```
 
 ### Pattern 3: Collaborative Workspace
+
 ```typescript
 // For: Team Tools, Shared Canvases, Multi-user Experiences
 export function CollaborativeSpace({ roomId, participants }: Props) {
   const room = useRoom();
-  const [state, setState] = useTamboComponentState();
+  const [state, setState] = usecustomComponentState();
   
   // Real-time collaboration
   useDataChannel("collaboration", (message) => {
@@ -403,6 +411,7 @@ export function CollaborativeSpace({ roomId, participants }: Props) {
 ## 🔥 Advanced Techniques
 
 ### 1. Progressive Enhancement
+
 ```typescript
 // Start simple, enhance as data arrives
 export function ProgressiveComponent({ dataSource }: Props) {
@@ -435,6 +444,7 @@ export function ProgressiveComponent({ dataSource }: Props) {
 ```
 
 ### 2. Self-Healing Components
+
 ```typescript
 // Components that fix themselves
 export function ResilientComponent({ primarySource, fallbackSource }: Props) {
@@ -465,6 +475,7 @@ export function ResilientComponent({ primarySource, fallbackSource }: Props) {
 ```
 
 ### 3. AI-Powered Adaptivity
+
 ```typescript
 // Components that learn and adapt
 export function AdaptiveComponent({ userBehavior }: Props) {
@@ -487,28 +498,34 @@ export function AdaptiveComponent({ userBehavior }: Props) {
 ## 🚨 The Golden Rules
 
 ### Rule 1: No Skeleton Components
+
 ❌ **NEVER** ship a component that's "just UI"
 ✅ **ALWAYS** connect to real data/functionality from day one
 
 ### Rule 2: Canvas-First Thinking
+
 ❌ **DON'T** build in isolation then "add canvas support"
 ✅ **DO** design for canvas interaction from the start
 
 ### Rule 3: State is Sacred
+
 ❌ **AVOID** local state that doesn't persist
-✅ **EMBRACE** Tambo state management for everything important
+✅ **EMBRACE** custom state management for everything important
 
 ### Rule 4: Fail Gracefully
+
 ❌ **NO** white screens of death
 ✅ **YES** to fallbacks, skeletons, and helpful error states
 
 ### Rule 5: Delight by Default
+
 ❌ **BORING** is banned
 ✅ **BEAUTIFUL** animations, transitions, and micro-interactions
 
 ## 🎨 The 21st-Dev Accelerator Workflow
 
 ### 1. Rapid Prototyping
+
 ```bash
 # Instant UI generation
 /ui create a kanban board with drag-drop, real-time sync, and team avatars
@@ -523,9 +540,10 @@ export function AdaptiveComponent({ userBehavior }: Props) {
 ```
 
 ### 2. Intelligent Refinement
+
 ```typescript
-// After /ui generation, enhance with Tambo intelligence
-export const enhancedComponent = withTamboEnhancements(
+// After /ui generation, enhance with custom intelligence
+export const enhancedComponent = withcustomEnhancements(
   GeneratedUIComponent,
   {
     schema: componentSchema,
@@ -538,6 +556,7 @@ export const enhancedComponent = withTamboEnhancements(
 ```
 
 ### 3. Instant Testing
+
 ```typescript
 // Components self-test on canvas
 export function SelfTestingComponent() {
@@ -584,7 +603,7 @@ export const tradingDashboardSchema = z.object({
 // 2. Complete Implementation (3 minutes)
 export function TradingDashboard({ symbols, dataProvider, enableTrading = false, riskManagement }: TradingDashboardProps) {
   // State Management
-  const [state, setState] = useTamboComponentState<TradingState>(
+  const [state, setState] = usecustomComponentState<TradingState>(
     `trading-${symbols.join('-')}`,
     {
       positions: [],
@@ -647,14 +666,15 @@ export function TradingDashboard({ symbols, dataProvider, enableTrading = false,
 }
 
 // 3. Registration (10 seconds)
-// Add to tambo.ts and you're DONE!
+// Add to custom.ts and you're DONE!
 ```
 
-## 🚀 Final Words: The Tambo Way
+## 🚀 Final Words: The custom Way
 
-Building with Tambo isn't just about creating components—it's about crafting **living, breathing features** that exist harmoniously on the canvas. Every component is a complete thought, a full experience, a delight to use.
+Building with custom isn't just about creating components—it's about crafting **living, breathing features** that exist harmoniously on the canvas. Every component is a complete thought, a full experience, a delight to use.
 
 Remember:
+
 - **Speed is a feature**: If it takes more than 5 minutes, you're overthinking
 - **Connection is mandatory**: Backend, Canvas, Voice, MCP—wire it all
 - **Delight is the default**: Every interaction should spark joy

@@ -186,8 +186,8 @@ export const LivekitParticipantTile = React.memo(function LivekitParticipantTile
     selectedParticipantId || participantIdentity || localParticipant?.identity || null;
   const participant = activeParticipantId
     ? (localParticipant?.identity === activeParticipantId ? localParticipant : null) ||
-      participants.find((p) => p.identity === activeParticipantId) ||
-      null
+    participants.find((p) => p.identity === activeParticipantId) ||
+    null
     : null;
 
   // If specific participant requested but not found
@@ -274,8 +274,8 @@ function SingleParticipantTile({
   state,
 }: {
   participant:
-    | ReturnType<typeof useParticipants>[0]
-    | ReturnType<typeof useLocalParticipant>['localParticipant'];
+  | ReturnType<typeof useParticipants>[0]
+  | ReturnType<typeof useLocalParticipant>['localParticipant'];
   isLocal: boolean;
   width: number;
   height: number;
@@ -428,7 +428,7 @@ function SingleParticipantTile({
         setAudioDevices(list.filter((d) => d.kind === 'audioinput'));
         setVideoDevices(list.filter((d) => d.kind === 'videoinput'));
       })
-      .catch(() => {});
+      .catch(() => { });
   }, [optionsOpen]);
 
   // Prevent background scrolling when options modal is open (mobile-friendly)
@@ -629,18 +629,18 @@ function SingleParticipantTile({
                             Record<string, unknown>
                           >;
                         const element = React.createElement(TileComponent, {
-                          __tambo_message_id: messageId,
+                          __custom_message_id: messageId,
                           participantIdentity: participant.identity,
                           width,
                           height,
                           fit: 'contain',
                         });
                         window.dispatchEvent(
-                          new CustomEvent('tambo:showComponent', {
+                          new CustomEvent('custom:showComponent', {
                             detail: { messageId, component: element },
                           }),
                         );
-                      } catch {}
+                      } catch { }
                     }
                   }}
                   className="w-11 h-11 rounded-md grid place-items-center bg-white/10 text-white hover:bg-white/20 transition-colors"
@@ -735,7 +735,7 @@ function SingleParticipantTile({
                         try {
                           const id = e.target.value;
                           onSelectParticipant?.(id);
-                        } catch {}
+                        } catch { }
                       }}
                     >
                       {allParticipants.map((p) => (
@@ -763,7 +763,7 @@ function SingleParticipantTile({
                           const deviceRoom = room as unknown as DeviceSwitchRoom;
                           await deviceRoom.switchActiveDevice?.('audioinput', e.target.value);
                           await deviceRoom.localParticipant?.setMicrophoneEnabled?.(true);
-                        } catch {}
+                        } catch { }
                       }}
                     >
                       {audioDevices.map((d) => (
@@ -792,7 +792,7 @@ function SingleParticipantTile({
                           const deviceRoom = room as unknown as DeviceSwitchRoom;
                           await deviceRoom.switchActiveDevice?.('videoinput', e.target.value);
                           await deviceRoom.localParticipant?.setCameraEnabled?.(true);
-                        } catch {}
+                        } catch { }
                       }}
                     >
                       {videoDevices.map((d) => (

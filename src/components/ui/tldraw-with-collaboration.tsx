@@ -8,7 +8,7 @@ import { ReactNode, useCallback, useContext, useEffect, useMemo, useState, useRe
 import { useSyncDemo } from '@tldraw/sync';
 import { CanvasLiveKitContext } from './livekit-room-connector';
 import { ComponentStoreContext } from './tldraw-canvas';
-import type { TamboShapeUtil, TamboShape } from './tldraw-canvas';
+import type { customShapeUtil, customShape } from './tldraw-canvas';
 import { useRoomContext } from '@livekit/components-react';
 import { RoomEvent } from 'livekit-client';
 import TldrawSnapshotBroadcaster from '@/components/TldrawSnapshotBroadcaster';
@@ -16,7 +16,7 @@ import TldrawSnapshotReceiver from '@/components/TldrawSnapshotReceiver';
 
 interface TldrawWithCollaborationProps {
   onMount?: (editor: Editor) => void;
-  shapeUtils?: readonly (typeof TamboShapeUtil)[];
+  shapeUtils?: readonly (typeof customShapeUtil)[];
   componentStore?: Map<string, ReactNode>;
   className?: string;
   onTranscriptToggle?: () => void;
@@ -36,8 +36,8 @@ const createCollaborationOverrides = (): TLUiOverrides => {
         onSelect: () => {
           const selectedShapes = editor.getSelectedShapes();
 
-          if (selectedShapes.length === 1 && selectedShapes[0].type === 'tambo') {
-            const shape = selectedShapes[0] as TamboShape;
+          if (selectedShapes.length === 1 && selectedShapes[0].type === 'custom') {
+            const shape = selectedShapes[0] as customShape;
             const isPinned = shape.props.pinned ?? false;
 
             if (!isPinned) {
@@ -54,7 +54,7 @@ const createCollaborationOverrides = (): TLUiOverrides => {
                 editor.updateShapes([
                   {
                     id: shape.id,
-                    type: 'tambo',
+                    type: 'custom',
                     props: {
                       pinned: true,
                       pinnedX: Math.max(0, Math.min(1, pinnedX)),
@@ -67,7 +67,7 @@ const createCollaborationOverrides = (): TLUiOverrides => {
               editor.updateShapes([
                 {
                   id: shape.id,
-                  type: 'tambo',
+                  type: 'custom',
                   props: { pinned: false },
                 },
               ]);
@@ -98,7 +98,7 @@ export function TldrawWithCollaboration({
 }: TldrawWithCollaborationProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const livekitCtx = useContext(CanvasLiveKitContext);
-  const roomName = livekitCtx?.roomName ?? 'tambo-canvas-room';
+  const roomName = livekitCtx?.roomName ?? 'custom-canvas-room';
 
   // Detect role from LiveKit token metadata
   const room = useRoomContext();
@@ -174,7 +174,7 @@ export function TldrawWithCollaboration({
   try {
     // Lightweight runtime diagnostic
     console.warn('[Tldraw] Using sync host:', safeHost);
-  } catch {}
+  } catch { }
 
   // Create memoised overrides & components
   const overrides = useMemo(() => createCollaborationOverrides(), []);
@@ -210,7 +210,7 @@ export function TldrawWithCollaboration({
           window.dispatchEvent(
             new CustomEvent('present:editor-mounted', { detail: { editor: mountedEditor } }),
           );
-        } catch {}
+        } catch { }
       }
 
       // Set up global pin management using side effects
@@ -224,8 +224,8 @@ export function TldrawWithCollaboration({
 
           const allShapes = mountedEditor.getCurrentPageShapes();
           const pinnedShapes = allShapes.filter(
-            (shape): shape is TamboShape =>
-              shape.type === 'tambo' && (shape as TamboShape).props.pinned === true,
+            (shape): shape is customShape =>
+              shape.type === 'custom' && (shape as customShape).props.pinned === true,
           );
 
           if (pinnedShapes.length === 0) return;
@@ -247,7 +247,7 @@ export function TldrawWithCollaboration({
             // Update shape position
             updates.push({
               id: shape.id,
-              type: 'tambo' as const,
+              type: 'custom' as const,
               x: pagePoint.x - shape.props.w / 2,
               y: pagePoint.y - shape.props.h / 2,
             });
@@ -311,13 +311,13 @@ export function TldrawWithCollaboration({
             shapeId = detail.shapeId;
           }
           if (target === 'component' && detail.componentId) {
-            // Find tambo shape by messageId stored in props.tamboComponent
-            const tambo = mountedEditor
+            // Find custom shape by messageId stored in props.customComponent
+            const custom = mountedEditor
               .getCurrentPageShapes()
               .find(
-                (s: any) => s.type === 'tambo' && s.props?.tamboComponent === detail.componentId,
+                (s: any) => s.type === 'custom' && s.props?.customComponent === detail.componentId,
               );
-            shapeId = tambo?.id ?? null;
+            shapeId = custom?.id ?? null;
           }
 
           if (shapeId) {
@@ -387,7 +387,7 @@ export function TldrawWithCollaboration({
           const viewport = mountedEditor.getViewportScreenBounds();
           const updates: any[] = [];
           for (const s of selected) {
-            if ((s as any).type !== 'tambo') continue;
+            if ((s as any).type !== 'custom') continue;
             const b = mountedEditor.getShapePageBounds((s as any).id);
             if (!b) continue;
             const screenPoint = mountedEditor.pageToScreen({ x: b.x + b.w / 2, y: b.y + b.h / 2 });
@@ -395,7 +395,7 @@ export function TldrawWithCollaboration({
             const pinnedY = screenPoint.y / viewport.height;
             updates.push({
               id: (s as any).id,
-              type: 'tambo' as const,
+              type: 'custom' as const,
               props: { pinned: true, pinnedX, pinnedY },
             });
           }
@@ -410,8 +410,8 @@ export function TldrawWithCollaboration({
           const selected = mountedEditor.getSelectedShapes();
           const updates: any[] = [];
           for (const s of selected) {
-            if ((s as any).type !== 'tambo') continue;
-            updates.push({ id: (s as any).id, type: 'tambo' as const, props: { pinned: false } });
+            if ((s as any).type !== 'custom') continue;
+            updates.push({ id: (s as any).id, type: 'custom' as const, props: { pinned: false } });
           }
           if (updates.length) mountedEditor.updateShapes(updates);
         } catch (err) {
@@ -447,11 +447,11 @@ export function TldrawWithCollaboration({
           const selectionOnly = Boolean(detail.selectionOnly);
           const spacing = typeof detail.spacing === 'number' ? detail.spacing : 24;
           let targets = (mountedEditor.getSelectedShapes() as any[]).filter(
-            (s) => s.type === 'tambo',
+            (s) => s.type === 'custom',
           );
           if (!selectionOnly || targets.length === 0) {
             targets = (mountedEditor.getCurrentPageShapes() as any[]).filter(
-              (s) => s.type === 'tambo',
+              (s) => s.type === 'custom',
             );
           }
           if (targets.length === 0) return;
@@ -532,7 +532,7 @@ export function TldrawWithCollaboration({
           const axis: 'x' | 'y' = detail.axis || 'x';
           const mode: string = detail.mode || (axis === 'x' ? 'center' : 'middle');
           const targets = (mountedEditor.getSelectedShapes() as any[]).filter(
-            (s) => s.type === 'tambo',
+            (s) => s.type === 'custom',
           );
           if (targets.length === 0) return;
           const bounds = targets
@@ -568,7 +568,7 @@ export function TldrawWithCollaboration({
           const detail = (e as CustomEvent).detail || {};
           const axis: 'x' | 'y' = detail.axis || 'x';
           const targets = (mountedEditor.getSelectedShapes() as any[]).filter(
-            (s) => s.type === 'tambo',
+            (s) => s.type === 'custom',
           );
           if (targets.length < 3) return; // need at least 3 to distribute
           const items = targets
@@ -712,7 +712,7 @@ export function TldrawWithCollaboration({
           const shapes = mountedEditor.getCurrentPageShapes().filter((s: any) => {
             if (typeQuery && s.type !== typeQuery) return false;
             if (nameQuery) {
-              const n = (s.props?.name || s.props?.tamboComponent || s.id || '')
+              const n = (s.props?.name || s.props?.customComponent || s.id || '')
                 .toString()
                 .toLowerCase();
               if (!n.includes(nameQuery)) return false;
@@ -782,9 +782,9 @@ export function TldrawWithCollaboration({
       // Trigger component rehydration for collaborators who didn't load from persistence
       try {
         setTimeout(() => {
-          window.dispatchEvent(new CustomEvent('tambo:rehydrateComponents', { detail: {} }));
+          window.dispatchEvent(new CustomEvent('custom:rehydrateComponents', { detail: {} }));
         }, 250);
-      } catch {}
+      } catch { }
     },
     [onMount, overrides, shapeUtils, store],
   );

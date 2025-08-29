@@ -19,9 +19,9 @@ import { ScrollableMessageContainer } from '@/components/ui/scrollable-message-c
 import { cn } from '@/lib/utils';
 import { MessageSquare, FileText } from 'lucide-react';
 import * as React from 'react';
-import { components as tamboComponents } from '@/lib/tambo';
+import { components as customComponents } from '@/lib/custom';
 import { type VariantProps } from 'class-variance-authority';
-import type { Suggestion } from '@tambo-ai/react';
+import type { Suggestion } from '@custom-ai/react';
 import { useRoomContext } from '@livekit/components-react';
 import { createLiveKitBus } from '../../lib/livekit/livekit-bus';
 import { useContextKey } from '../RoomScopedProviders';
@@ -154,7 +154,7 @@ export const MessageThreadCollapsible = React.forwardRef<
               },
             }),
           );
-        } catch {}
+        } catch { }
       }
     });
     return off;
@@ -184,8 +184,8 @@ export const MessageThreadCollapsible = React.forwardRef<
     });
   }, [sessionTranscript]);
 
-  // Listen for Tambo component creation - register with new system
-  const handleTamboComponent = React.useCallback(
+  // Listen for custom component creation - register with new system
+  const handlecustomComponent = React.useCallback(
     (event: CustomEvent) => {
       const { messageId, component } = event.detail as {
         messageId: string;
@@ -200,11 +200,11 @@ export const MessageThreadCollapsible = React.forwardRef<
           props?: Record<string, unknown>;
         };
         if (maybe && typeof maybe === 'object' && typeof maybe.type === 'string') {
-          const compDef = tamboComponents.find((c) => c.name === maybe.type);
+          const compDef = customComponents.find((c) => c.name === maybe.type);
           if (compDef) {
             try {
               normalized = React.createElement(compDef.component as any, {
-                __tambo_message_id: messageId,
+                __custom_message_id: messageId,
                 ...(maybe.props || {}),
               });
             } catch {
@@ -239,8 +239,8 @@ export const MessageThreadCollapsible = React.forwardRef<
         const componentType =
           typeof component.type === 'function'
             ? (component.type as { displayName?: string; name?: string }).displayName ||
-              (component.type as { displayName?: string; name?: string }).name ||
-              'UnknownComponent'
+            (component.type as { displayName?: string; name?: string }).name ||
+            'UnknownComponent'
             : 'UnknownComponent';
 
         // Import ComponentRegistry dynamically to avoid circular imports
@@ -285,12 +285,12 @@ export const MessageThreadCollapsible = React.forwardRef<
   );
 
   React.useEffect(() => {
-    window.addEventListener('tambo:showComponent', handleTamboComponent as EventListener);
+    window.addEventListener('custom:showComponent', handlecustomComponent as EventListener);
 
     return () => {
-      window.removeEventListener('tambo:showComponent', handleTamboComponent as EventListener);
+      window.removeEventListener('custom:showComponent', handlecustomComponent as EventListener);
     };
-  }, [handleTamboComponent]);
+  }, [handlecustomComponent]);
 
   // Auto-scroll transcript when new entries are added
   React.useEffect(() => {
@@ -324,7 +324,7 @@ export const MessageThreadCollapsible = React.forwardRef<
             window.history.replaceState({}, '', url.toString());
             try {
               localStorage.setItem('present:lastCanvasId', data.id);
-            } catch {}
+            } catch { }
             // Trigger a lightweight refresh for transcript hook by dispatching an event
             window.dispatchEvent(new Event('present:canvas-id-changed'));
           } else {
@@ -350,14 +350,14 @@ export const MessageThreadCollapsible = React.forwardRef<
                 window.history.replaceState({}, '', url.toString());
                 try {
                   localStorage.setItem('present:lastCanvasId', canvas.id);
-                } catch {}
+                } catch { }
                 window.dispatchEvent(new Event('present:canvas-id-changed'));
               }
             }
           }
-        } catch {}
+        } catch { }
       })();
-    } catch {}
+    } catch { }
   }, []);
 
   const defaultSuggestions: Suggestion[] = [
@@ -544,7 +544,7 @@ export const MessageThreadCollapsible = React.forwardRef<
                           <div className="flex items-center justify-between text-xs mb-1">
                             <span className="font-medium">
                               {transcription.speaker}
-                              {transcription.type === 'system_call' && ' → Tambo System'}
+                              {transcription.type === 'system_call' && ' → custom System'}
                             </span>
                             <div className="flex items-center gap-2 text-muted-foreground">
                               {!transcription.isFinal && <span>(interim)</span>}
@@ -563,7 +563,7 @@ export const MessageThreadCollapsible = React.forwardRef<
             {/* Transcript Info */}
             <div className="p-4 border-t border-gray-200">
               <div className="flex items-center justify-between text-xs text-muted-foreground">
-                <span>Live voice transcription with Tambo</span>
+                <span>Live voice transcription with custom</span>
                 <div className="flex items-center gap-3">
                   {transcriptions.length > 0 && (
                     <button

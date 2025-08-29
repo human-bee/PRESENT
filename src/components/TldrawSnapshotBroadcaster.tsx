@@ -26,7 +26,7 @@ export function TldrawSnapshotBroadcaster({ editor: propEditor }: Props) {
     try {
       const maybe = (window as any).__present?.tldrawEditor as Editor | undefined;
       if (maybe) setEditor(maybe);
-    } catch {}
+    } catch { }
 
     // Listen for explicit editor-mounted event
     const handler = (e: Event) => {
@@ -57,11 +57,11 @@ export function TldrawSnapshotBroadcaster({ editor: propEditor }: Props) {
           // Also push to Supabase via the session event so persistence stays authoritative
           try {
             window.dispatchEvent(
-              new CustomEvent('tambo:sessionCanvasSaved', {
+              new CustomEvent('custom:sessionCanvasSaved', {
                 detail: { snapshot },
               }),
             );
-          } catch {}
+          } catch { }
         } catch {
           // ignore
         }
@@ -88,12 +88,12 @@ export function TldrawSnapshotBroadcaster({ editor: propEditor }: Props) {
         });
         try {
           window.dispatchEvent(
-            new CustomEvent('tambo:sessionCanvasSaved', {
+            new CustomEvent('custom:sessionCanvasSaved', {
               detail: { snapshot },
             }),
           );
-        } catch {}
-      } catch {}
+        } catch { }
+      } catch { }
     }, 800);
     return () => clearTimeout(t);
   }, [editor, bus]);

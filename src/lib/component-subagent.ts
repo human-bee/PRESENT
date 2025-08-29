@@ -1,7 +1,7 @@
 /**
  * Component Sub-Agent System
  *
- * Each Tambo component gets its own sub-agent that:
+ * Each custom component gets its own sub-agent that:
  * 1. Loads instantly with skeleton
  * 2. Reads context from thread/transcript
  * 3. Makes autonomous MCP calls
@@ -9,7 +9,7 @@
  */
 
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { useTamboThread } from '@tambo-ai/react';
+import { usecustomThread } from '@custom-ai/react';
 import { LoadingState } from './progressive-loading';
 
 // Sub-agent configuration
@@ -33,7 +33,7 @@ export interface SubAgentState {
  * Hook that creates a sub-agent for a component
  */
 export function useComponentSubAgent(config: SubAgentConfig) {
-  const { thread } = useTamboThread();
+  const { thread } = usecustomThread();
   const [state, setState] = useState<SubAgentState>({
     loadingState: LoadingState.SKELETON,
     context: null,
@@ -248,9 +248,9 @@ export function useComponentSubAgent(config: SubAgentConfig) {
 
     lastThreadRef.current = thread
       ? {
-          id: thread.id,
-          messages: thread.messages?.map((m: any) => ({ id: m.id, content: m.content })),
-        }
+        id: thread.id,
+        messages: thread.messages?.map((m: any) => ({ id: m.id, content: m.content })),
+      }
       : null;
 
     hasRunRef.current = true;
@@ -333,7 +333,7 @@ async function getMCPTools(toolNames: string[]): Promise<Record<string, any>> {
   const tools: Record<string, any> = {};
 
   // Try to get actual MCP tools from window if available
-  const mcpTools = (window as any).__tambo_mcp_tools || {};
+  const mcpTools = (window as any).__custom_mcp_tools || {};
   const mcpToolNames = Object.keys(mcpTools);
   const normalize = (s: string) =>
     s

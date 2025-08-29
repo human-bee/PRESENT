@@ -1,7 +1,7 @@
 'use client';
 
 import { cn } from '@/lib/utils';
-import { useTambo } from '@tambo-ai/react';
+import { usecustom } from '@custom-ai/react';
 import * as React from 'react';
 import { useEffect, useRef, useState } from 'react';
 
@@ -29,7 +29,7 @@ export const ScrollableMessageContainer = React.forwardRef<
   ScrollableMessageContainerProps
 >(({ className, children, ...props }, ref) => {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const { thread } = useTambo();
+  const { thread } = usecustom();
   const [isNearBottom, setIsNearBottom] = useState(true);
   const [userHasScrolled, setUserHasScrolled] = useState(false);
   const previousMessageCount = useRef(0);

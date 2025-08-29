@@ -32,7 +32,7 @@ const ComponentItem: React.FC<ComponentItemProps> = ({
     <button
       draggable
       onDragStart={(e) => {
-        e.dataTransfer.setData('application/tambo-component', componentName);
+        e.dataTransfer.setData('application/custom-component', componentName);
         onDragStart(componentName);
       }}
       onClick={() => onClick(componentName)}
@@ -86,13 +86,13 @@ export const ComponentToolbox: React.FC<ComponentToolboxProps> = ({ onComponentC
         const categoryComponents = getComponentsByCategory(category);
         const filteredComponents = searchQuery.trim()
           ? categoryComponents.filter((name) => {
-              const iconMapping = componentIcons[name];
-              const query = searchQuery.toLowerCase();
-              return (
-                name.toLowerCase().includes(query) ||
-                iconMapping.description.toLowerCase().includes(query)
-              );
-            })
+            const iconMapping = componentIcons[name];
+            const query = searchQuery.toLowerCase();
+            return (
+              name.toLowerCase().includes(query) ||
+              iconMapping.description.toLowerCase().includes(query)
+            );
+          })
           : categoryComponents;
         return filteredComponents.map((componentName) => {
           const iconMapping = componentIcons[componentName];

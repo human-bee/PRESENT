@@ -1,4 +1,4 @@
-# ✨ Creating Tambo Components (2025-Q3 Update)
+# ✨ Creating custom Components (2025-Q3 Update)
 
 > **One shot, feature-complete, canvas-aware.**  
 > This document supersedes older snippets that referred to the LiveKit bus patterns.
@@ -8,10 +8,10 @@
 ## 1. Quick-start Checklist
 
 1. **Schema first** – describe props with `zod`
-2. **State** – use `useTamboComponentState`
+2. **State** – use `useComponentState`
 3. **AI updates** – handle a `patch` in a stable callback
 4. **Register** – call `useComponentRegistration`
-5. **Canvas** – fire the `tambo:showComponent` event once on mount
+5. **Canvas** – fire the `custom:showComponent` event once on mount
 
 That’s it. 5 steps, <200 lines, instantly update-able by the `ui_update` tool.
 
@@ -21,7 +21,6 @@ That’s it. 5 steps, <200 lines, instantly update-able by the `ui_update` tool.
 
 ```tsx
 import { z } from "zod";
-import { useTamboComponentState } from "@tambo-ai/react";
 import { useComponentRegistration } from "@/lib/component-registry";
 import { useEffect, useCallback } from "react";
 
@@ -31,7 +30,7 @@ export const myWidgetSchema = z.object({
 });
 
 type MyWidgetProps = z.infer<typeof myWidgetSchema> & {
-  __tambo_message_id?: string; // injected by Tambo
+  __custom_message_id?: string; // injected by custom
 };
 
 type MyWidgetState = {
@@ -41,10 +40,10 @@ type MyWidgetState = {
 export default function MyWidget({
   title,
   value: initialValue,
-  __tambo_message_id,
+  __custom_message_id,
 }: MyWidgetProps) {
   // 1. Persistent state
-  const [state, setState] = useTamboComponentState<MyWidgetState>(
+  const [state, setState] = usecustomComponentState<MyWidgetState>(
     `my-widget-${title.replace(/\s+/g, "-")}`,
     { value: initialValue }
   );
@@ -61,7 +60,7 @@ export default function MyWidget({
 
   // 3. Register so `ui_update` can find us
   useComponentRegistration(
-    __tambo_message_id || `my-widget-${title}`,
+    __custom_message_id || `my-widget-${title}`,
     "MyWidget",
     { title, value: state?.value },
     "default",
@@ -71,9 +70,9 @@ export default function MyWidget({
   // 4. Show on canvas the first time we mount (NOT on every re-render!)
   useEffect(() => {
     window.dispatchEvent(
-      new CustomEvent("tambo:showComponent", {
+      new CustomEvent("custom:showComponent", {
         detail: {
-          messageId: __tambo_message_id || `my-widget-${title}`,
+          messageId: __custom_message_id || `my-widget-${title}`,
           component: <MyWidget title={title} value={state?.value ?? 0} />,
         },
       })
@@ -116,8 +115,7 @@ The following patterns are **obsolete** and should not be used any more:
 
 * Manual `bus.send('ui_update', …)` calls – use `ui_update` tool instead
 * Legacy `CanvasSyncAdapter` for simple prop updates – registry handles this now
-* Direct `documentState`-style stores – prefer `useTamboComponentState`
 
 ---
 
-Happy building! 🚀 
+Happy building! 🚀

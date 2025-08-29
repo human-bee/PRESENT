@@ -139,7 +139,7 @@ export async function dispatchToolCall(
 }
 
 /**
- * Generate a UI component using Tambo's generative UI system
+ * Generate a UI component using custom's generative UI system
  */
 export async function generateUIComponent(
   job: JobContext,

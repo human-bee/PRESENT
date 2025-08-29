@@ -1,24 +1,24 @@
 /**
- * Tambo Tool Validator
+ * custom Tool Validator
  *
- * Validates and filters tools to ensure compatibility with Tambo SDK requirements.
+ * Validates and filters tools to ensure compatibility with custom SDK requirements.
  * Tool names must match pattern: ^[a-zA-Z0-9_-]+$
  */
 
-import { TamboTool } from '@tambo-ai/react';
+import { customTool } from '@custom-ai/react';
 
-// Valid tool name pattern as required by Tambo SDK
+// Valid tool name pattern as required by custom SDK
 const VALID_TOOL_NAME_PATTERN = /^[a-zA-Z0-9_-]+$/;
 
 /**
- * Validates a tool name against Tambo SDK requirements
+ * Validates a tool name against custom SDK requirements
  */
 export function isValidToolName(name: string): boolean {
   return VALID_TOOL_NAME_PATTERN.test(name);
 }
 
 /**
- * Sanitizes a tool name to make it valid for Tambo SDK
+ * Sanitizes a tool name to make it valid for custom SDK
  * Replaces invalid characters with underscores
  */
 export function sanitizeToolName(name: string): string {
@@ -26,11 +26,11 @@ export function sanitizeToolName(name: string): string {
 }
 
 /**
- * Filters and validates tools for Tambo SDK compatibility
+ * Filters and validates tools for custom SDK compatibility
  * @param tools Array of tools to validate
  * @returns Array of valid tools with sanitized names
  */
-export function validateTamboTools(tools: any[]): any[] {
+export function validatecustomTools(tools: any[]): any[] {
   const validTools: any[] = [];
   const invalidTools: string[] = [];
 
@@ -43,7 +43,7 @@ export function validateTamboTools(tools: any[]): any[] {
     } else {
       // Log invalid tool for debugging
       console.warn(
-        `🚨 [Tambo Tool Validator] Skipping tool with invalid name: "${toolName}" (contains invalid characters)`,
+        `🚨 [custom Tool Validator] Skipping tool with invalid name: "${toolName}" (contains invalid characters)`,
       );
       invalidTools.push(toolName);
 
@@ -59,10 +59,10 @@ export function validateTamboTools(tools: any[]): any[] {
 
   if (invalidTools.length > 0) {
     console.log(
-      `📊 [Tambo Tool Validator] Filtered out ${invalidTools.length} invalid tools:`,
+      `📊 [custom Tool Validator] Filtered out ${invalidTools.length} invalid tools:`,
       invalidTools,
     );
-    console.log(`✅ [Tambo Tool Validator] ${validTools.length} valid tools passed through`);
+    console.log(`✅ [custom Tool Validator] ${validTools.length} valid tools passed through`);
   }
 
   return validTools;

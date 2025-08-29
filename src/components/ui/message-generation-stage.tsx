@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import { cn } from '@/lib/utils';
-import { useTambo } from '@tambo-ai/react';
+import { usecustom } from '@custom-ai/react';
 import { Loader2Icon } from 'lucide-react';
 
 /**
@@ -20,7 +20,7 @@ export function MessageGenerationStage({
   showLabel = true,
   ...props
 }: GenerationStageProps) {
-  const { thread } = useTambo();
+  const { thread } = usecustom();
   const stage = thread?.generationStage;
 
   // Only render if we have a generation stage

@@ -1,7 +1,7 @@
 'use client';
 
 import { cn } from '@/lib/utils';
-import { useTamboThreadInput } from '@tambo-ai/react';
+import { usecustomThreadInput } from '@custom-ai/react';
 import { cva, type VariantProps } from 'class-variance-authority';
 import { ArrowUp } from 'lucide-react';
 import * as React from 'react';
@@ -113,7 +113,7 @@ const MessageInput = React.forwardRef<HTMLFormElement, MessageInputProps>(
       submit,
       isPending,
       error,
-    } = useTamboThreadInput(contextKey);
+    } = usecustomThreadInput(contextKey);
 
     const [inputValue, setInputValue] = React.useState<string>(externalValue);
     const [submitError, setSubmitError] = React.useState<string | null>(null);
@@ -131,7 +131,7 @@ const MessageInput = React.forwardRef<HTMLFormElement, MessageInputProps>(
 
         setSubmitError(null);
         try {
-          // First, set the message content in Tambo state
+          // First, set the message content in custom state
           setExternalValue(inputValue);
 
           // Then submit the message

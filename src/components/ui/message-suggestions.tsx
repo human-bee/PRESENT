@@ -3,8 +3,8 @@
 import { MessageGenerationStage } from '@/components/ui/message-generation-stage';
 import { Tooltip, TooltipProvider } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
-import type { Suggestion, TamboThread } from '@tambo-ai/react';
-import { useTambo, useTamboSuggestions } from '@tambo-ai/react';
+import type { Suggestion, customThread } from '@custom-ai/react';
+import { usecustom, usecustomSuggestions } from '@custom-ai/react';
 import { Loader2Icon } from 'lucide-react';
 import * as React from 'react';
 import { useEffect, useRef } from 'react';
@@ -16,7 +16,7 @@ import { useEffect, useRef } from 'react';
  * @property {function} accept - Function to accept a suggestion
  * @property {boolean} isGenerating - Whether suggestions are being generated
  * @property {Error|null} error - Any error from generation
- * @property {object} thread - The current Tambo thread
+ * @property {object} thread - The current custom thread
  */
 interface MessageSuggestionsContextValue {
   suggestions: Suggestion[];
@@ -24,7 +24,7 @@ interface MessageSuggestionsContextValue {
   accept: (options: { suggestion: Suggestion }) => void;
   isGenerating: boolean;
   error: Error | null;
-  thread: TamboThread;
+  thread: customThread;
   isMac: boolean;
 }
 
@@ -75,13 +75,13 @@ export interface MessageSuggestionsProps extends React.HTMLAttributes<HTMLDivEle
  */
 const MessageSuggestions = React.forwardRef<HTMLDivElement, MessageSuggestionsProps>(
   ({ children, className, maxSuggestions = 3, initialSuggestions = [], ...props }, ref) => {
-    const { thread } = useTambo();
+    const { thread } = usecustom();
     const {
       suggestions: generatedSuggestions,
       selectedSuggestionId,
       accept,
       generateResult: { isPending: isGenerating, error },
-    } = useTamboSuggestions({ maxSuggestions });
+    } = usecustomSuggestions({ maxSuggestions });
 
     // Combine initial and generated suggestions, but only use initial ones when thread is empty
     const suggestions = React.useMemo(() => {
@@ -126,7 +126,7 @@ const MessageSuggestions = React.forwardRef<HTMLDivElement, MessageSuggestionsPr
           clearTimeout(loadingTimeoutRef.current);
         }
 
-        loadingTimeoutRef.current = setTimeout(() => {}, 5000);
+        loadingTimeoutRef.current = setTimeout(() => { }, 5000);
       }
 
       return () => {
@@ -288,44 +288,44 @@ const MessageSuggestionsList = React.forwardRef<HTMLDivElement, MessageSuggestio
       >
         {suggestions.length > 0
           ? suggestions.map((suggestion, index) => (
-              <Tooltip
-                key={suggestion.id}
-                content={
-                  <span suppressHydrationWarning>
-                    {modKey}+{altKey}+{index + 1}
-                  </span>
-                }
-                side="top"
+            <Tooltip
+              key={suggestion.id}
+              content={
+                <span suppressHydrationWarning>
+                  {modKey}+{altKey}+{index + 1}
+                </span>
+              }
+              side="top"
+            >
+              <button
+                className={cn(
+                  'py-2 px-2.5 rounded-2xl text-xs transition-colors',
+                  'border border-flat',
+                  isGenerating
+                    ? 'bg-muted/50 text-muted-foreground'
+                    : selectedSuggestionId === suggestion.id
+                      ? 'bg-accent text-accent-foreground'
+                      : 'bg-background hover:bg-accent hover:text-accent-foreground',
+                )}
+                onClick={async () => !isGenerating && (await accept({ suggestion }))}
+                disabled={isGenerating}
+                data-suggestion-id={suggestion.id}
+                data-suggestion-index={index}
               >
-                <button
-                  className={cn(
-                    'py-2 px-2.5 rounded-2xl text-xs transition-colors',
-                    'border border-flat',
-                    isGenerating
-                      ? 'bg-muted/50 text-muted-foreground'
-                      : selectedSuggestionId === suggestion.id
-                        ? 'bg-accent text-accent-foreground'
-                        : 'bg-background hover:bg-accent hover:text-accent-foreground',
-                  )}
-                  onClick={async () => !isGenerating && (await accept({ suggestion }))}
-                  disabled={isGenerating}
-                  data-suggestion-id={suggestion.id}
-                  data-suggestion-index={index}
-                >
-                  <span className="font-medium">{suggestion.title}</span>
-                </button>
-              </Tooltip>
-            ))
+                <span className="font-medium">{suggestion.title}</span>
+              </button>
+            </Tooltip>
+          ))
           : // Render placeholder buttons when no suggestions are available
-            placeholders.map((_, index) => (
-              <div
-                key={`placeholder-${index}`}
-                className="py-2 px-2.5 rounded-2xl text-xs border border-flat bg-muted/20 text-transparent animate-pulse"
-                data-placeholder-index={index}
-              >
-                <span className="invisible">Placeholder</span>
-              </div>
-            ))}
+          placeholders.map((_, index) => (
+            <div
+              key={`placeholder-${index}`}
+              className="py-2 px-2.5 rounded-2xl text-xs border border-flat bg-muted/20 text-transparent animate-pulse"
+              data-placeholder-index={index}
+            >
+              <span className="invisible">Placeholder</span>
+            </div>
+          ))}
       </div>
     );
   },

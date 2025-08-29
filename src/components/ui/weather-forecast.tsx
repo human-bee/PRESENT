@@ -489,13 +489,13 @@ export function WeatherForecast(props: WeatherForecastProps) {
   const effectiveLoadingState = props.periods ? LoadingState.COMPLETE : loadingState;
 
   // Canvas integration - DISABLED to prevent recursive loops
-  // The component should be created by Tambo, not dispatch itself
+  // The component should be created by custom, not dispatch itself
   // useEffect(() => {
   //   if (!hasDispatchedRef.current && location) {
   //     hasDispatchedRef.current = true;
   //     const componentId = `weather-${location}-${Date.now()}`;
   //     window.dispatchEvent(
-  //       new CustomEvent("tambo:showComponent", {
+  //       new CustomEvent("custom:showComponent", {
   //         detail: {
   //           messageId: componentId,
   //           component: <WeatherForecast {...props} />
@@ -527,8 +527,8 @@ export function WeatherForecast(props: WeatherForecastProps) {
       }
     };
 
-    window.addEventListener('tambo:canvas:interaction', handleCanvasEvent);
-    return () => window.removeEventListener('tambo:canvas:interaction', handleCanvasEvent);
+    window.addEventListener('custom:canvas:interaction', handleCanvasEvent);
+    return () => window.removeEventListener('custom:canvas:interaction', handleCanvasEvent);
   }, [location]); // Only depend on location
 
   // Animate temperature changes - prevent unnecessary updates
@@ -676,11 +676,10 @@ export function WeatherForecast(props: WeatherForecastProps) {
       >
         {/* Main editorial weather card */}
         <div
-          className={`relative bg-slate-900 rounded-2xl border border-slate-700 p-6 transition-all duration-500 ${
-            state.isActive
+          className={`relative bg-slate-900 rounded-2xl border border-slate-700 p-6 transition-all duration-500 ${state.isActive
               ? 'scale-105 border-slate-600 shadow-2xl'
               : 'hover:border-slate-600 hover:shadow-xl'
-          }`}
+            }`}
           style={{
             width: state.canvasSize.width,
             minWidth: '320px',
@@ -714,13 +713,12 @@ export function WeatherForecast(props: WeatherForecastProps) {
               {props.alerts.map((alert, index) => (
                 <div
                   key={index}
-                  className={`rounded-lg p-3 border ${
-                    alert.severity === 'severe'
+                  className={`rounded-lg p-3 border ${alert.severity === 'severe'
                       ? 'bg-red-500/10 border-red-500/30'
                       : alert.severity === 'moderate'
                         ? 'bg-yellow-500/10 border-yellow-500/30'
                         : 'bg-blue-500/10 border-blue-500/30'
-                  }`}
+                    }`}
                 >
                   <p className="text-white font-semibold text-sm">{alert.title}</p>
                   <p className="text-slate-300 text-xs">{alert.description}</p>
@@ -762,11 +760,10 @@ export function WeatherForecast(props: WeatherForecastProps) {
               <button
                 key={viewType}
                 onClick={() => setState({ ...state, activeView: viewType })}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-300 ${
-                  state.activeView === viewType
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-300 ${state.activeView === viewType
                     ? 'bg-slate-700 text-white border border-slate-600'
                     : 'text-slate-400 hover:text-slate-300 hover:bg-slate-800/50'
-                }`}
+                  }`}
               >
                 {viewType.charAt(0).toUpperCase() + viewType.slice(1)}
               </button>

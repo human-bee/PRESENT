@@ -2,7 +2,7 @@
 
 import { createMarkdownComponents } from '@/components/ui/markdownComponents';
 import { cn } from '@/lib/utils';
-import type { TamboThreadMessage } from '@tambo-ai/react';
+import type { customThreadMessage } from '@custom-ai/react';
 import { cva, type VariantProps } from 'class-variance-authority';
 import { ExternalLink, Check, Loader2 } from 'lucide-react';
 import * as React from 'react';
@@ -37,13 +37,13 @@ const messageVariants = cva('flex mb-4', {
  * @typedef MessageContextValue
  * @property {"user" | "assistant"} role - The role of the message sender.
  * @property {VariantProps<typeof messageVariants>["variant"]} [variant] - Optional styling variant for the message container.
- * @property {TamboThreadMessage} message - The full Tambo thread message object.
+ * @property {customThreadMessage} message - The full custom thread message object.
  * @property {boolean} [isLoading] - Optional flag to indicate if the message is in a loading state.
  */
 interface MessageContextValue {
   role: 'user' | 'assistant';
   variant?: VariantProps<typeof messageVariants>['variant'];
-  message: TamboThreadMessage;
+  message: customThreadMessage;
   isLoading?: boolean;
 }
 
@@ -77,8 +77,8 @@ const useMessageContext = () => {
 export interface MessageProps extends Omit<React.HTMLAttributes<HTMLDivElement>, 'content'> {
   /** The role of the message sender ('user' or 'assistant'). */
   role: 'user' | 'assistant';
-  /** The full Tambo thread message object. */
-  message: TamboThreadMessage;
+  /** The full custom thread message object. */
+  message: customThreadMessage;
   /** Optional styling variant for the message container. */
   variant?: VariantProps<typeof messageVariants>['variant'];
   /** Optional flag to indicate if the message is in a loading state. */
@@ -156,12 +156,12 @@ LoadingIndicator.displayName = 'LoadingIndicator';
  * This function extracts and formats status messages for tool calls based on
  * the current loading state and available status information.
  *
- * @param {TamboThreadMessage} message - The thread message object containing tool call data
+ * @param {customThreadMessage} message - The thread message object containing tool call data
  * @param {boolean | undefined} isLoading - Whether the tool call is currently in progress
  * @returns {string | null} The formatted status message or null if not a tool call
  */
 function getToolStatusMessage(
-  message: TamboThreadMessage | undefined,
+  message: customThreadMessage | undefined,
   isLoading: boolean | undefined,
 ) {
   if (!message) return null;
@@ -198,11 +198,11 @@ const MessageContent = React.forwardRef<HTMLDivElement, MessageContentProps>(
     const contentToRender = children ?? contentProp ?? message.content;
 
     const safeContent = React.useMemo(
-      () => getSafeContent(contentToRender as TamboThreadMessage['content']),
+      () => getSafeContent(contentToRender as customThreadMessage['content']),
       [contentToRender],
     );
     const hasContent = React.useMemo(
-      () => checkHasContent(contentToRender as TamboThreadMessage['content']),
+      () => checkHasContent(contentToRender as customThreadMessage['content']),
       [contentToRender],
     );
 
@@ -313,7 +313,7 @@ const MessageRenderedComponentArea = React.forwardRef<
               onClick={() => {
                 if (typeof window !== 'undefined') {
                   window.dispatchEvent(
-                    new CustomEvent('tambo:showComponent', {
+                    new CustomEvent('custom:showComponent', {
                       detail: {
                         messageId: message?.id ?? `msg-${Date.now()}`,
                         component: message.renderedComponent,

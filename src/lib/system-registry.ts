@@ -6,7 +6,7 @@
  * - Decision Engine (intents it should detect)
  * - ToolDispatcher (how to route tool calls)
  * - MCP Servers (dynamically loaded tools)
- * - Tambo Components (available UI components)
+ * - custom Components (available UI components)
  *
  * This solves the distributed knowledge problem where each part of the system
  * has its own understanding of available capabilities.
@@ -24,7 +24,7 @@ export interface SystemCapability {
   // For MCP tools - the actual MCP tool name
   mcpToolName?: string;
 
-  // For components - the Tambo component name
+  // For components - the custom component name
   componentName?: string;
 
   // Decision engine hints
@@ -47,7 +47,7 @@ export const STATIC_CAPABILITIES: SystemCapability[] = [
     id: 'generate_ui_component',
     type: 'tool',
     name: 'Generate UI Component',
-    description: 'Create any UI component from Tambo registry',
+    description: 'Create any UI component from custom registry',
     agentToolName: 'generate_ui_component',
     intents: ['ui_generation', 'create_component'],
     keywords: ['create', 'generate', 'make', 'build', 'show', 'display'],
@@ -273,7 +273,7 @@ export class SystemRegistry {
    * Execute a tool call agnostic of where the actual implementation lives.
    * The resolution order is:
    *   1. supplied override executor
-   *   2. Tambo tool registry (browser)
+   *   2. custom tool registry (browser)
    *   3. MCP mapping via capability
    */
   async executeTool(
@@ -285,7 +285,7 @@ export class SystemRegistry {
     },
     // optional injection for unit tests or server-side execution
     options: {
-      tamboRegistry?: any;
+      customRegistry?: any;
     } = {},
   ) {
     const { name } = call;
@@ -293,7 +293,7 @@ export class SystemRegistry {
     // Look up capability mapping first – may translate agent name ➜ mcp name
     const routing = this.getToolRouting(name);
 
-    const registry = options.tamboRegistry as any;
+    const registry = options.customRegistry as any;
 
     // 1) direct registry lookup
     const directTool = (() => {
@@ -318,7 +318,7 @@ export class SystemRegistry {
     }
 
     if (!impl) {
-      throw new Error(`Tool '${name}' is not registered in Tambo registry`);
+      throw new Error(`Tool '${name}' is not registered in custom registry`);
     }
 
     const started = Date.now();
@@ -389,8 +389,8 @@ export function syncMcpToolsToRegistry(mcpTools: Array<{ name: string; descripti
   });
 }
 
-// Helper to sync Tambo components to registry
-export function syncTamboComponentsToRegistry(
+// Helper to sync custom components to registry
+export function synccustomComponentsToRegistry(
   components: Array<{ name: string; description: string }>,
 ) {
   components.forEach((component) => {

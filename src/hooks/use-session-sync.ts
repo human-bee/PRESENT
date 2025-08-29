@@ -236,7 +236,7 @@ export function useSessionSync(roomName: string) {
                 },
               }),
             );
-          } catch {}
+          } catch { }
         } catch {
           // ignore
         }
@@ -294,9 +294,9 @@ export function useSessionSync(roomName: string) {
       if (error) console.error('[useSessionSync] Failed to update canvas_state', error);
     };
 
-    window.addEventListener('tambo:sessionCanvasSaved', handler as EventListener);
+    window.addEventListener('custom:sessionCanvasSaved', handler as EventListener);
     return () => {
-      window.removeEventListener('tambo:sessionCanvasSaved', handler as EventListener);
+      window.removeEventListener('custom:sessionCanvasSaved', handler as EventListener);
       offTldraw?.();
     };
   }, [sessionId]);

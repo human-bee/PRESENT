@@ -2,7 +2,7 @@
  * Enhanced YouTube Agent Prompts
  *
  * This file contains intelligent prompt engineering for the YouTube MCP integration
- * to make Tambo smarter at finding, analyzing, and presenting YouTube content.
+ * to make custom smarter at finding, analyzing, and presenting YouTube content.
  */
 
 import { getPrompt } from './prompt-loader';
@@ -80,17 +80,17 @@ export const YOUTUBE_RESPONSE_TEMPLATES = {
 I found ${results.length} high-quality videos about "${query}". Here are the best matches:
 
 ${results
-  .slice(0, 5)
-  .map(
-    (video, i) => `
+      .slice(0, 5)
+      .map(
+        (video, i) => `
 ${i + 1}. **${video.title}**
    📺 ${video.channelTitle} ${video.isVerified ? '✓' : ''} ${video.isOfficial ? '(Official)' : ''}
    👁️ ${formatViewCount(video.viewCount)} views • ${formatRelativeTime(video.publishedAt)}
    ${video.qualityScore >= 4 ? '⭐ High Quality Content' : ''}
    ${video.duration ? `⏱️ ${formatDuration(video.duration)}` : ''}
 `,
-  )
-  .join('\n')}
+      )
+      .join('\n')}
 
 Would you like me to play any of these or search for something more specific?
 `,
@@ -100,13 +100,13 @@ Would you like me to play any of these or search for something more specific?
 I found these relevant moments in the video:
 
 ${moments
-  .map(
-    (moment) => `
+      .map(
+        (moment) => `
 **${formatTimestamp(moment.start)}** - ${moment.summary}
 ${moment.relevance >= 4 ? '🎯 Highly relevant' : ''}
 `,
-  )
-  .join('\n\n')}
+      )
+      .join('\n\n')}
 
 Click any timestamp to jump directly to that part of the video.
 `,
@@ -116,15 +116,15 @@ Click any timestamp to jump directly to that part of the video.
 Here's what's trending ${category ? `in ${category}` : 'on YouTube'} right now:
 
 ${videos
-  .slice(0, 5)
-  .map(
-    (video, i) => `
+      .slice(0, 5)
+      .map(
+        (video, i) => `
 ${i + 1}. 🔥 **${video.title}**
    ${video.channelTitle} • ${formatViewCount(video.viewCount)} views
    📈 Trending #${i + 1} ${category ? `in ${category}` : ''}
 `,
-  )
-  .join('\n')}
+      )
+      .join('\n')}
 
 These videos are gaining rapid popularity today!
 `,

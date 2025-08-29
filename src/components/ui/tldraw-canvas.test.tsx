@@ -1,7 +1,7 @@
 import React from 'react';
 import { render, act, cleanup } from '@testing-library/react';
 import '@testing-library/jest-dom';
-import { TamboShapeUtil, TamboShape, TldrawCanvasProps, TldrawCanvas } from './tldraw-canvas'; // Assuming TamboShape type is exported
+import { customShapeUtil, customShape, TldrawCanvasProps, TldrawCanvas } from './tldraw-canvas'; // Assuming customShape type is exported
 import { Editor, TLBaseShape } from 'tldraw';
 
 // --- Mocks ---
@@ -30,17 +30,17 @@ const mockEditor = {
 } as unknown as Editor;
 
 // Helper function to render the shape component
-// This is tricky because TamboShapeUtil.component is a class method, not a standalone React component.
+// This is tricky because customShapeUtil.component is a class method, not a standalone React component.
 // Tldraw's rendering mechanism invokes it. We need to simulate that.
 
 // A simplified way to "render" the component method for testing its React hooks logic.
-// We'll create an instance of TamboShapeUtil and manually call its component method.
-// The TamboShapeUtil instance needs the mock editor.
-const shapeUtilInstance = new TamboShapeUtil();
+// We'll create an instance of customShapeUtil and manually call its component method.
+// The customShapeUtil instance needs the mock editor.
+const shapeUtilInstance = new customShapeUtil();
 shapeUtilInstance.editor = mockEditor; // Manually assign the mock editor
 
 interface TestShapeComponentProps {
-  shape: TamboShape;
+  shape: customShape;
 }
 
 // This TestWrapper will allow us to test the React hooks inside the component method
@@ -48,16 +48,16 @@ const TestShapeRenderer: React.FC<TestShapeComponentProps> = ({ shape }) => {
   return shapeUtilInstance.component(shape);
 };
 
-const defaultTestShape: TamboShape = {
+const defaultTestShape: customShape = {
   id: 'shape:test1',
-  type: 'tambo',
+  type: 'custom',
   x: 0,
   y: 0,
   props: {
     w: 300,
     h: 200,
-    tamboComponent: <div>Test Content</div>,
-    name: 'Test Tambo Shape',
+    customComponent: <div>Test Content</div>,
+    name: 'Test custom Shape',
   },
   // Add other required TLBaseShape props if necessary (parentId, index, rotation, isLocked, etc.)
   parentId: 'page:1',
@@ -68,7 +68,7 @@ const defaultTestShape: TamboShape = {
   meta: {},
 };
 
-describe('TamboShapeUtil.component - ResizeObserver Logic', () => {
+describe('customShapeUtil.component - ResizeObserver Logic', () => {
   beforeEach(() => {
     jest.useFakeTimers();
     mockObserve.mockClear();
@@ -130,7 +130,7 @@ describe('TamboShapeUtil.component - ResizeObserver Logic', () => {
 
     expect(mockUpdateShapes).toHaveBeenCalledTimes(1);
     expect(mockUpdateShapes).toHaveBeenCalledWith([
-      { id: defaultTestShape.id, type: 'tambo', props: { w: 400, h: 250 } },
+      { id: defaultTestShape.id, type: 'custom', props: { w: 400, h: 250 } },
     ]);
   });
 
@@ -244,7 +244,7 @@ describe('TamboShapeUtil.component - ResizeObserver Logic', () => {
     expect(mockUpdateShapes).toHaveBeenCalledTimes(1);
     // It should be called with the latest dimensions
     expect(mockUpdateShapes).toHaveBeenCalledWith([
-      { id: defaultTestShape.id, type: 'tambo', props: { w: 420, h: 260 } },
+      { id: defaultTestShape.id, type: 'custom', props: { w: 420, h: 260 } },
     ]);
   });
 });

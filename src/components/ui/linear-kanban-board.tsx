@@ -52,12 +52,12 @@ export const linearKanbanSchema = z.object({
 });
 
 export type LinearKanbanProps = z.infer<typeof linearKanbanSchema> & {
-  __tambo_message_id?: string;
+  __custom_message_id?: string;
   className?: string;
 };
 
 /* --------------------------------------------------------------------------
- * Component State (managed by Tambo)
+ * Component State (managed by custom)
  * --------------------------------------------------------------------------*/
 
 type KanbanState = {
@@ -144,14 +144,14 @@ export default function LinearKanbanBoard({
   teams = defaultTeams,
   statuses = defaultStatuses,
   issues: initialIssues,
-  __tambo_message_id,
+  __custom_message_id,
   className,
 }: LinearKanbanProps) {
-  /* 1. Stable unique id for Tambo state */
+  /* 1. Stable unique id for custom state */
   const instanceId = useId();
 
   // Derive a STABLE messageId that remains identical for this component tree
-  const messageId = __tambo_message_id || instanceId;
+  const messageId = __custom_message_id || instanceId;
 
   /* Progressive Loading with Sub-Agent */
   const [subAgentError, setSubAgentError] = useState<Error | null>(null);
@@ -216,16 +216,16 @@ export default function LinearKanbanBoard({
 
   // Only dispatch showComponent if we are the ORIGINAL instance (i.e., not already rendered by CanvasSpace)
   useEffect(() => {
-    // Avoid dispatching if __tambo_message_id was provided (already under CanvasSpace)
-    if (__tambo_message_id) return;
+    // Avoid dispatching if __custom_message_id was provided (already under CanvasSpace)
+    if (__custom_message_id) return;
 
     window.dispatchEvent(
-      new CustomEvent('tambo:showComponent', {
+      new CustomEvent('custom:showComponent', {
         detail: {
           messageId,
           component: (
             <LinearKanbanBoard
-              __tambo_message_id={messageId}
+              __custom_message_id={messageId}
               title={title}
               teams={teams}
               statuses={statuses}
@@ -484,9 +484,8 @@ export default function LinearKanbanBoard({
                         key={issue.id}
                         draggable
                         onDragStart={(e) => handleDragStart(e, issue.id)}
-                        className={`p-3 bg-white border-2 rounded-lg shadow-sm hover:shadow-md transition-all cursor-move transform hover:scale-[1.02] ${
-                          state.draggedIssue === issue.id ? 'opacity-50 rotate-2 scale-105' : ''
-                        } ${getPriorityColor(issue.priority)}`}
+                        className={`p-3 bg-white border-2 rounded-lg shadow-sm hover:shadow-md transition-all cursor-move transform hover:scale-[1.02] ${state.draggedIssue === issue.id ? 'opacity-50 rotate-2 scale-105' : ''
+                          } ${getPriorityColor(issue.priority)}`}
                       >
                         <div className="flex items-start justify-between mb-2">
                           <span className="text-xs font-mono text-gray-500 bg-gray-100 px-2 py-1 rounded">
@@ -494,13 +493,12 @@ export default function LinearKanbanBoard({
                           </span>
                           {issue.priority && (
                             <span
-                              className={`text-xs font-semibold px-2 py-1 rounded ${
-                                issue.priority.value === 1
+                              className={`text-xs font-semibold px-2 py-1 rounded ${issue.priority.value === 1
                                   ? 'bg-red-200 text-red-800'
                                   : issue.priority.value === 2
                                     ? 'bg-orange-200 text-orange-800'
                                     : 'bg-gray-200 text-gray-800'
-                              }`}
+                                }`}
                             >
                               {issue.priority.name}
                             </span>

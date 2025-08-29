@@ -16,7 +16,7 @@ import {
   useLocalParticipant,
   useToken,
 } from '@livekit/components-react';
-import { useTamboThreadInput } from '@tambo-ai/react';
+import { usecustomThreadInput } from '@custom-ai/react';
 import { MediaDeviceFailure, RpcError, RpcInvocationData } from 'livekit-client';
 import { ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { generateRandomUserId } from '../../lib/helper';
@@ -24,7 +24,7 @@ import { generateRandomUserId } from '../../lib/helper';
 // Child component that will handle RPC registration
 export function RpcHandler({ contextKey }: { contextKey: string }) {
   const { localParticipant } = useLocalParticipant();
-  const { setValue, submit } = useTamboThreadInput();
+  const { setValue, submit } = usecustomThreadInput();
   const isProcessingRef = useRef(false);
   const methodRegisteredRef = useRef(false);
 

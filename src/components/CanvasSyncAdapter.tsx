@@ -11,7 +11,7 @@ import { createLiveKitBus } from '../lib/livekit/livekit-bus';
  * bidirectional synchronisation through LiveKit data-channels.
  *
  * Props:
- *   componentId   – unique id you already pass to useTamboComponentState.
+ *   componentId   – unique id you already pass to usecustomComponentState.
  *   onRemotePatch – function(patch) => void  (called when a peer/AI sends update)
  *   getItemCount  – optional function returning number of items for heartbeat metrics
  *
@@ -59,8 +59,8 @@ export function CanvasSyncAdapter({
         sendPatch(custom.detail.patch);
       }
     };
-    window.addEventListener('tambo:canvasPatch', handler);
-    return () => window.removeEventListener('tambo:canvasPatch', handler);
+    window.addEventListener('custom:canvasPatch', handler);
+    return () => window.removeEventListener('custom:canvasPatch', handler);
   }, [sendPatch, componentId]);
 
   // Listen for remote patches

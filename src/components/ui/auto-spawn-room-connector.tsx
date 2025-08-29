@@ -16,7 +16,6 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
-import { useTamboThread } from '@tambo-ai/react';
 
 /**
  * AutoSpawnRoomConnector Component
@@ -28,7 +27,7 @@ export function AutoSpawnRoomConnector() {
   if (process.env.NEXT_PUBLIC_AUTO_SPAWN_LIVEKIT !== 'true') {
     return null;
   }
-  const tamboContext = useTamboThread();
+  const Context = useContext();//TODO: get context from registry, transcription, etc.
   const hasSpawned = useRef(false);
   const [retryCount, setRetryCount] = useState(0);
 
@@ -39,7 +38,7 @@ export function AutoSpawnRoomConnector() {
     }
 
     // If context is not ready, try again after a delay
-    if (!tamboContext || !tamboContext.sendMessage) {
+    if (!Context || !useContext.sendMessage) {
       if (retryCount < 5) {
         // Reduced retry limit
         const retryTimer = setTimeout(() => {
@@ -54,7 +53,7 @@ export function AutoSpawnRoomConnector() {
       return;
     }
 
-    const { sendMessage, thread } = tamboContext;
+    const { sendMessage, thread } = Context;
 
     // Wait for canvas to be ready
     const timer = setTimeout(() => {
@@ -87,7 +86,7 @@ export function AutoSpawnRoomConnector() {
     return () => {
       clearTimeout(timer);
     };
-  }, [tamboContext, retryCount]);
+  }, [Context, retryCount]);
 
   // This component doesn't render anything
   return null;

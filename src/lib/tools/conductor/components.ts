@@ -6,7 +6,7 @@ import { availableComponents, components } from './components/registry';
 export const renderComponent = tool({
   name: 'render_component',
   description: 'Render a component on the canvas',
-  parameters: z.object({ 
+  parameters: z.object({
     type: z.string().describe('The component type to render'),
     props: z.object({
       ...availableComponents[type],
@@ -24,15 +24,15 @@ export const renderComponent = tool({
 const renderComponentToCanvas = (type: string, props: any) => {
   // Find the component by name from the registry
   const componentInfo = components.find(comp => comp.name === type);
-  
+
   if (!componentInfo) {
     console.error(`Component type "${type}" not found in registry`);
     return;
   }
-  
+
   console.log("renderComponentToCanvas", type, props, componentInfo);
-  
-  // TODO: Integrate with tldraw canvas to actually render the component. Ask GPT5 to remove tambo, and render this component to the canvas  as a custom tldraw shape.
+
+  // TODO: Integrate with tldraw canvas to actually render the component. Ask GPT5 to remove custom, and render this component to the canvas  as a custom tldraw shape.
 
   const actualComponent = componentInfo.component;
   // This would involve:
@@ -44,7 +44,7 @@ const renderComponentToCanvas = (type: string, props: any) => {
 export const updateComponent = tool({
   name: 'update_component',
   description: 'Update an existing component on the canvas',
-  parameters: z.object({ 
+  parameters: z.object({
     component: z.string().describe('The component to update')
   }),
   async execute({ component }) {

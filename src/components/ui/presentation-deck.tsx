@@ -160,9 +160,8 @@ const SlideThumbnail = ({
 }) => (
   <button
     onClick={onClick}
-    className={`relative w-20 h-14 rounded border-2 transition-all duration-200 hover:scale-105 ${
-      isActive ? 'border-blue-400 bg-blue-400/10' : 'border-slate-600 hover:border-slate-400'
-    }`}
+    className={`relative w-20 h-14 rounded border-2 transition-all duration-200 hover:scale-105 ${isActive ? 'border-blue-400 bg-blue-400/10' : 'border-slate-600 hover:border-slate-400'
+      }`}
   >
     {slide.thumbnailUrl || slide.imageUrl ? (
       <img
@@ -316,11 +315,10 @@ const ControlPanel = ({
     <div className="flex items-center space-x-2">
       <button
         onClick={onBookmark}
-        className={`p-2 rounded transition-colors ${
-          isBookmarked
+        className={`p-2 rounded transition-colors ${isBookmarked
             ? 'text-yellow-400 hover:text-yellow-300'
             : 'text-slate-300 hover:text-white hover:bg-slate-700'
-        }`}
+          }`}
         title="Bookmark slide (B)"
       >
         <Bookmark size={16} />
@@ -328,11 +326,10 @@ const ControlPanel = ({
 
       <button
         onClick={onToggleLaserPointer}
-        className={`p-2 rounded transition-colors ${
-          laserPointerActive
+        className={`p-2 rounded transition-colors ${laserPointerActive
             ? 'text-red-400 hover:text-red-300 bg-red-400/10'
             : 'text-slate-300 hover:text-white hover:bg-slate-700'
-        }`}
+          }`}
         title="Laser pointer (L)"
       >
         <MousePointer size={16} />
@@ -340,11 +337,10 @@ const ControlPanel = ({
 
       <button
         onClick={onToggleThumbnails}
-        className={`p-2 rounded transition-colors ${
-          showThumbnails
+        className={`p-2 rounded transition-colors ${showThumbnails
             ? 'text-blue-400 hover:text-blue-300 bg-blue-400/10'
             : 'text-slate-300 hover:text-white hover:bg-slate-700'
-        }`}
+          }`}
         title="Toggle thumbnails (T)"
       >
         <Grid3X3 size={16} />
@@ -352,11 +348,10 @@ const ControlPanel = ({
 
       <button
         onClick={onToggleNotes}
-        className={`p-2 rounded transition-colors ${
-          showNotes
+        className={`p-2 rounded transition-colors ${showNotes
             ? 'text-green-400 hover:text-green-300 bg-green-400/10'
             : 'text-slate-300 hover:text-white hover:bg-slate-700'
-        }`}
+          }`}
         title="Toggle notes (S)"
       >
         {showNotes ? <EyeOff size={16} /> : <Eye size={16} />}
@@ -554,7 +549,7 @@ export function PresentationDeck(props: PresentationDeckProps) {
   // Canvas integration
   useEffect(() => {
     window.dispatchEvent(
-      new CustomEvent('tambo:showComponent', {
+      new CustomEvent('custom:showComponent', {
         detail: {
           messageId: componentId,
           component: <PresentationDeck {...props} />,
@@ -592,8 +587,8 @@ export function PresentationDeck(props: PresentationDeckProps) {
       }
     };
 
-    window.addEventListener('tambo:canvas:interaction', handleCanvasEvent);
-    return () => window.removeEventListener('tambo:canvas:interaction', handleCanvasEvent);
+    window.addEventListener('custom:canvas:interaction', handleCanvasEvent);
+    return () => window.removeEventListener('custom:canvas:interaction', handleCanvasEvent);
   }, [componentId, setState]);
 
   // Navigation functions
@@ -712,9 +707,8 @@ export function PresentationDeck(props: PresentationDeckProps) {
   return (
     <div
       ref={containerRef}
-      className={`relative bg-slate-950 rounded-lg overflow-hidden ${
-        state.isFullscreen ? 'fixed inset-0 z-50' : ''
-      }`}
+      className={`relative bg-slate-950 rounded-lg overflow-hidden ${state.isFullscreen ? 'fixed inset-0 z-50' : ''
+        }`}
       style={{
         width: state.isFullscreen ? '100vw' : state.canvasSize.width,
         height: state.isFullscreen ? '100dvh' : state.canvasSize.height,

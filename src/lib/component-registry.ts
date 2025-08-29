@@ -1,5 +1,5 @@
 /**
- * Simple Component Registry for Tambo
+ * Simple Component Registry for custom
  *
  * Instead of complex bus systems, use direct React patterns for component management.
  * This provides a single source of truth for all UI components across contexts.
@@ -243,7 +243,7 @@ export function useComponentRegistration(
   const [, forceUpdate] = React.useReducer((x) => x + 1, 0);
 
   // Stabilize the updateCallback to prevent infinite loops
-  const stableUpdateCallback = React.useCallback(updateCallback || (() => {}), [updateCallback]);
+  const stableUpdateCallback = React.useCallback(updateCallback || (() => { }), [updateCallback]);
 
   React.useEffect(() => {
     // Register the component

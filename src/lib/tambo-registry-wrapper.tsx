@@ -1,8 +1,8 @@
 /**
- * Tambo Registry Wrapper
+ * custom Registry Wrapper
  *
- * HOC that automatically registers Tambo components with the ComponentRegistry
- * and enables AI updates. This bridges Tambo's message system with our new
+ * HOC that automatically registers custom components with the ComponentRegistry
+ * and enables AI updates. This bridges custom's message system with our new
  * simplified component update architecture.
  */
 
@@ -11,9 +11,9 @@
 import React, { useCallback } from 'react';
 import { useComponentRegistration } from './component-registry';
 
-// Extended props interface that includes Tambo message ID
-export interface TamboRegistryProps {
-  __tambo_message_id?: string;
+// Extended props interface that includes custom message ID
+export interface customRegistryProps {
+  __custom_message_id?: string;
   [key: string]: unknown;
 }
 
@@ -21,16 +21,16 @@ export interface TamboRegistryProps {
  * HOC that wraps a component to automatically register it with ComponentRegistry
  * and enable AI updates
  */
-export function withTamboRegistry<P extends Record<string, unknown>>(
+export function withcustomRegistry<P extends Record<string, unknown>>(
   Component: React.ComponentType<P>,
   componentType: string,
   updateHandler?: (props: P, patch: Record<string, unknown>) => Partial<P>,
 ) {
-  const WrappedComponent = React.forwardRef<unknown, P & TamboRegistryProps>((props, ref) => {
-    const { __tambo_message_id, ...componentProps } = props;
+  const WrappedComponent = React.forwardRef<unknown, P & customRegistryProps>((props, ref) => {
+    const { __custom_message_id, ...componentProps } = props;
 
-    // Generate fallback ID if no Tambo message ID provided
-    const effectiveMessageId = __tambo_message_id || `${componentType.toLowerCase()}-${Date.now()}`;
+    // Generate fallback ID if no custom message ID provided
+    const effectiveMessageId = __custom_message_id || `${componentType.toLowerCase()}-${Date.now()}`;
 
     // Default update handler - merge patch into props
     const defaultUpdateHandler = useCallback(
@@ -66,7 +66,7 @@ export function withTamboRegistry<P extends Record<string, unknown>>(
     return <Component ref={ref} {...(componentProps as P)} />;
   });
 
-  WrappedComponent.displayName = `withTamboRegistry(${Component.displayName || Component.name || componentType})`;
+  WrappedComponent.displayName = `withcustomRegistry(${Component.displayName || Component.name || componentType})`;
 
   return WrappedComponent;
 }
@@ -74,45 +74,45 @@ export function withTamboRegistry<P extends Record<string, unknown>>(
 /**
  * Factory function to create registry-enabled components
  */
-export function createTamboRegistryComponent<P extends Record<string, unknown>>(
+export function createcustomRegistryComponent<P extends Record<string, unknown>>(
   Component: React.ComponentType<P>,
   componentType: string,
   updateHandler?: (props: P, patch: Record<string, unknown>) => Partial<P>,
 ) {
-  return withTamboRegistry(Component, componentType, updateHandler);
+  return withcustomRegistry(Component, componentType, updateHandler);
 }
 
 /**
- * Utility to inject message ID into component props when rendered by Tambo
+ * Utility to inject message ID into component props when rendered by custom
  * This will be called by the message rendering system
  */
-export function injectTamboMessageId<P extends Record<string, unknown>>(
+export function injectcustomMessageId<P extends Record<string, unknown>>(
   Component: React.ComponentType<P>,
   messageId: string,
 ): React.ComponentType<P> {
   return function ComponentWithMessageId(props: P) {
     const extendedProps = {
       ...props,
-      __tambo_message_id: messageId,
-    } as P & TamboRegistryProps;
+      __custom_message_id: messageId,
+    } as P & customRegistryProps;
 
     return <Component {...extendedProps} />;
   };
 }
 
 /**
- * Hook to get the current Tambo message ID from context
+ * Hook to get the current custom message ID from context
  * Useful for components that need to know their own message ID
  */
-export function useTamboMessageId(): string | undefined {
+export function usecustomMessageId(): string | undefined {
   const [messageId, setMessageId] = React.useState<string | undefined>(undefined);
 
   React.useEffect(() => {
-    // Check if we're in a Tambo render context
+    // Check if we're in a custom render context
     if (typeof window !== 'undefined') {
-      const tamboMessageId = (window as any).__CURRENT_TAMBO_MESSAGE_ID__;
-      if (tamboMessageId) {
-        setMessageId(tamboMessageId);
+      const customMessageId = (window as any).__CURRENT_custom_MESSAGE_ID__;
+      if (customMessageId) {
+        setMessageId(customMessageId);
       }
     }
   }, []);

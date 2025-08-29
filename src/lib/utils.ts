@@ -9,9 +9,9 @@ export function cn(...inputs: ClassValue[]) {
  * Centralized logging utility for consistent debug output
  * Only logs in development mode
  */
-export const tamboLog = (...args: unknown[]) => {
+export const customLog = (...args: unknown[]) => {
   if (process.env.NODE_ENV === 'development') {
-    console.log('[Tambo]', ...args);
+    console.log('[custom]', ...args);
   }
 };
 
@@ -20,15 +20,15 @@ export const tamboLog = (...args: unknown[]) => {
  */
 export const createLogger = (prefix: string) => {
   return {
-    log: (...args: unknown[]) => tamboLog(`[${prefix}]`, ...args),
+    log: (...args: unknown[]) => customLog(`[${prefix}]`, ...args),
     warn: (...args: unknown[]) => {
       if (process.env.NODE_ENV === 'development') {
-        console.warn(`[Tambo] [${prefix}]`, ...args);
+        console.warn(`[custom] [${prefix}]`, ...args);
       }
     },
     error: (...args: unknown[]) => {
       if (process.env.NODE_ENV === 'development') {
-        console.error(`[Tambo] [${prefix}]`, ...args);
+        console.error(`[custom] [${prefix}]`, ...args);
       }
     },
   };

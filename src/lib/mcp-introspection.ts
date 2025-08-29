@@ -6,7 +6,7 @@ type RegistryLike = Map<string, any> | Record<string, any> | undefined | null;
 
 export function listWindowMcpTools(): string[] {
   if (typeof window === 'undefined') return [];
-  const tools = (window as any).__tambo_mcp_tools || {};
+  const tools = (window as any).__custom_mcp_tools || {};
   return Object.keys(tools);
 }
 

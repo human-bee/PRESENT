@@ -7,6 +7,7 @@
 **Location**: `src/lib/livekit-agent-worker.ts` - `buildInstructions()`
 
 **Dynamic Features**:
+
 - ✅ **Tool List**: Dynamically populated from SystemRegistry capabilities
 - ✅ **Tool Count**: Shows actual number of available tools
 - ✅ **Tool Categories**: Breaks down UI vs MCP tools with counts
@@ -14,8 +15,9 @@
 - ✅ **Architecture Awareness**: Now knows it's Agent #1 of 3
 
 **System Prompt Structure**:
+
 ```
-You are Tambo Voice Agent...
+You are custom Voice Agent...
 
 ARCHITECTURE AWARENESS:
 You are Agent #1 in a 3-agent system:
@@ -39,14 +41,16 @@ Tool Categories:
 **Location**: `src/lib/decision-engine.ts` - `buildSystemPrompt()`
 
 **Dynamic Features**:
+
 - ✅ **Available Intents**: Lists intents from SystemRegistry
 - ✅ **Trigger Keywords**: Shows first 5 keywords per tool
 - ✅ **Architecture Awareness**: Now knows it's Agent #2 of 3
 - ⚠️ **Base Prompt**: Still mostly static
 
 **System Prompt Structure**:
+
 ```
-You are the Decision Engine (Agent #2) in Tambo's 3-agent architecture.
+You are the Decision Engine (Agent #2) in custom's 3-agent architecture.
 
 ARCHITECTURE AWARENESS:
 - Voice Agent (Agent #1): Captures and transcribes speech, forwards to you
@@ -73,13 +77,14 @@ TRIGGER KEYWORDS:
 - Handles dynamic routing through code
 - Syncs tools to SystemRegistry automatically
 
-### 4. 🎨 **Tambo Dashboard Custom Instructions** - MANUAL CONFIGURATION ⚙️
+### 4. 🎨 **custom Dashboard Custom Instructions** - MANUAL CONFIGURATION ⚙️
 
-**Location**: Tambo Dashboard - Custom Instructions field
+**Location**: custom Dashboard - Custom Instructions field
 
-**Purpose**: These instructions are manually configured in the Tambo dashboard to help Tambo's AI understand the sophisticated 3-agent architecture and how to work with it effectively.
+**Purpose**: These instructions are manually configured in the custom dashboard to help custom's AI understand the sophisticated 3-agent architecture and how to work with it effectively.
 
 **Current Instructions**:
+
 ```markdown
 ## System Architecture
 
@@ -95,7 +100,7 @@ All agents are synchronized through the SystemRegistry, which is the single sour
 
 Tools and components are discovered dynamically:
 - MCP tools are synced from MCP servers configured at /mcp-config
-- Tambo components are registered in src/lib/tambo.ts
+- custom components are registered in src/lib/custom.ts
 - New tools are automatically available to all agents within 30 seconds
 - No code changes needed to add new capabilities
 
@@ -108,7 +113,7 @@ Be aware of tool name mappings:
 
 ## Component State Management
 
-- Components on the canvas maintain persistent state via `useTamboComponentState`
+- Components on the canvas maintain persistent state via `usecustomComponentState`
 - State changes are synchronized across all agents via LiveKit data channels
 - Components can be updated with `ui_update` tool (must call `list_components` first)
 - The canvas (tldraw) persists component positions and properties
@@ -153,14 +158,14 @@ If a tool fails:
 Remember: You're orchestrating a sophisticated system where voice, UI, and external tools work together seamlessly. Focus on the user's intent and let the architecture handle the complexity.
 ```
 
-**Important Note**: These instructions should be updated in the Tambo dashboard whenever major architectural changes are made. They help Tambo's AI understand the system it's working within.
+**Important Note**: These instructions should be updated in the custom dashboard whenever major architectural changes are made. They help custom's AI understand the system it's working within.
 
 ## Dynamic Capability Flow
 
 ```mermaid
 graph LR
     A[MCP Tools Added] --> B[Tool Dispatcher]
-    C[Tambo Components] --> B
+    C[custom Components] --> B
     B --> D[SystemRegistry]
     D --> E[Voice Agent Queries]
     D --> F[Decision Engine Config]
@@ -170,14 +175,16 @@ graph LR
 
 ## What Gets Updated Dynamically
 
-### When Adding MCP Tools:
+### When Adding MCP Tools
+
 1. **Tool Dispatcher** syncs to SystemRegistry
 2. **Voice Agent** sees new tools in next capability refresh (30s)
 3. **Decision Engine** gets new keywords/intents if configured
 4. **All agents** can use the new tool immediately
 
-### When Adding Tambo Components:
-1. **Tambo Registry** syncs to SystemRegistry
+### When Adding custom Components
+
+1. **custom Registry** syncs to SystemRegistry
 2. **Voice Agent** shows in "UI Generation" category
 3. **Decision Engine** detects via generic UI keywords
 4. **Tool Dispatcher** routes automatically
@@ -187,6 +194,7 @@ graph LR
 1. **User** adds weather MCP server at `/mcp-config`
 
 2. **SystemRegistry** gets updated:
+
    ```javascript
    {
      id: 'mcp_getWeather',
@@ -198,6 +206,7 @@ graph LR
    ```
 
 3. **Voice Agent** prompt updates (within 30s):
+
    ```
    You have access to 12 tools:
    ...
@@ -218,42 +227,49 @@ graph LR
 ## Recommendations for Further Enhancement
 
 ### 1. **Make Decision Engine Fully Dynamic**
+
 - Include tool-specific decision rules in prompt
 - Add examples from each tool's configuration
 - Update confidence thresholds based on tool types
 
 ### 2. **Add Capability Descriptions**
+
 - Include richer descriptions of what each tool category does
 - Add limitations or requirements for specific tools
 - Provide usage hints based on tool complexity
 
 ### 3. **Context-Aware Prompts**
+
 - Adjust prompts based on room type (meeting vs solo)
 - Include recent tool usage statistics
 - Adapt language based on user expertise level
 
 ### 4. **Real-time Feedback Loop**
+
 - Track successful tool executions
 - Update prompts to emphasize frequently used tools
 - De-emphasize or hide rarely used tools
 
 ## Testing Dynamic Prompts
 
-### Check Voice Agent Prompt:
+### Check Voice Agent Prompt
+
 ```javascript
 // In browser console while agent is running
 // Voice Agent will log its full instructions on startup
 ```
 
-### Check Decision Engine Config:
+### Check Decision Engine Config
+
 ```javascript
 // The Decision Engine logs its configuration
 // Look for: "Decision Engine initialized with: X intents, Y keywords"
 ```
 
-### Monitor Capability Updates:
+### Monitor Capability Updates
+
 ```javascript
 // Watch for these logs:
 "🔄 [Agent] Refreshing capabilities..."
 "✅ [Agent] Received capabilities: N tools"
-``` 
+```

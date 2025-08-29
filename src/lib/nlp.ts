@@ -1,5 +1,5 @@
 /**
- * Natural Language Processing utilities for Tambo
+ * Natural Language Processing utilities for custom
  *
  * NOTE: This file is being phased out in favor of consolidated NLP processing
  * inside the generate_ui_component tool. The pattern-based approach here

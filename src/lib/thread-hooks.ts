@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { useEffect, useState } from 'react';
-import type { TamboThreadMessage } from '@tambo-ai/react';
+import type { customThreadMessage } from '@custom-ai/react';
 
 /**
  * Custom hook to merge multiple refs into one callback ref
@@ -102,7 +102,7 @@ export function usePositioning(className?: string, canvasIsOnLeft = false, hasCa
  * @returns A renderable string or React element.
  */
 export function getSafeContent(
-  content: TamboThreadMessage['content'] | React.ReactNode | undefined | null,
+  content: customThreadMessage['content'] | React.ReactNode | undefined | null,
 ): string | React.ReactElement {
   if (!content) return '';
   if (typeof content === 'string') return content;
@@ -122,7 +122,7 @@ export function getSafeContent(
  * @returns True if there is content, false otherwise.
  */
 export function checkHasContent(
-  content: TamboThreadMessage['content'] | React.ReactNode | undefined | null,
+  content: customThreadMessage['content'] | React.ReactNode | undefined | null,
 ): boolean {
   if (!content) return false;
   if (typeof content === 'string') return content.trim().length > 0;

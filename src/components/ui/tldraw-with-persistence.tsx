@@ -17,8 +17,8 @@ import { User } from 'lucide-react';
 import { useCanvasPersistence } from '@/hooks/use-canvas-persistence';
 import { useAuth } from '@/hooks/use-auth';
 import { toast } from 'react-hot-toast';
-import { TamboShapeUtil, ComponentStoreContext } from './tldraw-canvas';
-import type { TamboShape } from './tldraw-canvas';
+import { customShapeUtil, ComponentStoreContext } from './tldraw-canvas';
+import type { customShape } from './tldraw-canvas';
 import type { Editor } from 'tldraw';
 import { useRouter } from 'next/navigation';
 import * as React from 'react';
@@ -26,7 +26,7 @@ import TldrawSnapshotBroadcaster from '@/components/TldrawSnapshotBroadcaster';
 
 interface TldrawWithPersistenceProps {
   onMount?: (editor: Editor) => void;
-  shapeUtils?: readonly (typeof TamboShapeUtil)[];
+  shapeUtils?: readonly (typeof customShapeUtil)[];
   componentStore?: Map<string, ReactNode>;
   className?: string;
   onTranscriptToggle?: () => void;
@@ -40,14 +40,14 @@ export const TranscriptPanelContext = createContext<{
   toggle: () => void;
 }>({
   isOpen: false,
-  toggle: () => {},
+  toggle: () => { },
 });
 
 const createPersistenceOverrides = (): TLUiOverrides => {
   return {
     contextMenu: (_editor, contextMenu, { onlySelectedShape }) => {
-      if (onlySelectedShape && onlySelectedShape.type === 'tambo') {
-        const isPinned = (onlySelectedShape as TamboShape).props.pinned ?? false;
+      if (onlySelectedShape && onlySelectedShape.type === 'custom') {
+        const isPinned = (onlySelectedShape as customShape).props.pinned ?? false;
 
         const pinItem = {
           id: 'pin-to-viewport',
@@ -55,7 +55,7 @@ const createPersistenceOverrides = (): TLUiOverrides => {
           label: isPinned ? 'Unpin from Window' : 'Pin to Window',
           onSelect: () => {
             const editor = _editor;
-            const shape = onlySelectedShape as TamboShape;
+            const shape = onlySelectedShape as customShape;
 
             if (!isPinned) {
               // Calculate relative position when pinning
@@ -73,7 +73,7 @@ const createPersistenceOverrides = (): TLUiOverrides => {
                 editor.updateShapes([
                   {
                     id: shape.id,
-                    type: 'tambo',
+                    type: 'custom',
                     props: {
                       pinned: true,
                       pinnedX: Math.max(0, Math.min(1, pinnedX)),
@@ -87,7 +87,7 @@ const createPersistenceOverrides = (): TLUiOverrides => {
               editor.updateShapes([
                 {
                   id: shape.id,
-                  type: 'tambo',
+                  type: 'custom',
                   props: {
                     pinned: false,
                   },
@@ -392,7 +392,7 @@ export function TldrawWithPersistence({
           window.dispatchEvent(
             new CustomEvent('present:editor-mounted', { detail: { editor: mountedEditor } }),
           );
-        } catch {}
+        } catch { }
       }
       onMount?.(mountedEditor);
     },

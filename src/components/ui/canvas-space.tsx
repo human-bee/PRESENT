@@ -2,16 +2,16 @@
  * CanvasSpace Component
  *
  * This is the main canvas component that displays the Tldraw canvas and handles
- * the creation and management of Tambo shapes.
+ * the creation and management of custom shapes.
  *
  * DEVELOPER NOTES:
  * - Uses TldrawWithPersistence for persistent canvas state
- * - Handles Tambo shape creation and updates
+ * - Handles custom shape creation and updates
  * - Manages message-to-shape mapping for persistent rendering
  * - Handles component addition and deletion
  * - Implements debounced component addition for performance
  * - Manages component state with optimistic updates
- * - Handles custom 'tambo:showComponent' events
+ * - Handles custom 'custom:showComponent' events
  * - Manages component store for persistent rendering
  * - Handles thread state changes and resets
  *
@@ -23,7 +23,6 @@
  * - Toast notifications for UI feedback
  *
  * DEPENDENCIES:
- * - @tambo-ai/react: Tambo thread context
  * - @/hooks/use-auth: Authentication state
  * - tldraw: Canvas editor
  * - react-hot-toast: Toast notifications
@@ -39,11 +38,9 @@
 'use client';
 
 import { cn } from '@/lib/utils';
-import { useTamboThread } from '@tambo-ai/react';
 import { useEffect, useRef, useState, useCallback } from 'react';
 import * as React from 'react';
 import dynamic from 'next/dynamic';
-import type { TamboThreadMessage } from '@tambo-ai/react';
 import type { Editor } from 'tldraw';
 import { nanoid } from 'nanoid';
 import { Toaster } from 'react-hot-toast';
@@ -52,7 +49,6 @@ import { systemRegistry } from '@/lib/system-registry';
 import { ComponentRegistry } from '@/lib/component-registry';
 import { createShapeId } from 'tldraw';
 
-import { components } from '@/lib/tambo';
 import { calculateInitialSize } from '@/lib/component-sizing'; // Add import for dynamic sizing
 import { CanvasLiveKitContext } from './livekit-room-connector';
 import { useRoomContext } from '@livekit/components-react';
@@ -74,7 +70,7 @@ const TldrawWithCollaboration = dynamic(
 );
 
 // Import types statically (they don't add to bundle size)
-import type { TamboShape } from './tldraw-canvas';
+import type { CustomShape } from './tldraw-canvas';
 
 // Suppress development noise and repetitive warnings
 if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
@@ -129,8 +125,8 @@ interface CanvasSpaceProps {
  * ```
  */
 export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps) {
-  // Access the current Tambo thread context
-  const { thread } = useTamboThread();
+  // TODO: Access the current context
+  const { thread } = useContext();
   const [editor, setEditor] = useState<Editor | null>(null);
   const previousThreadId = useRef<string | null>(null);
   const livekitCtx = React.useContext(CanvasLiveKitContext);
@@ -194,7 +190,7 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
   useEffect(() => {
     if (typeof window !== 'undefined') {
       import('./tldraw-canvas').then((mod) => {
-        setCustomShapeUtils([mod.TamboShapeUtil, mod.ToolboxShapeUtil]);
+        setCustomShapeUtils([mod.CustomShapeUtil, mod.ToolboxShapeUtil]);
       });
     }
   }, []);
@@ -208,21 +204,21 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
       }
 
       console.log('🔄 [CanvasSpace] Starting component rehydration...');
-      const tamboShapes = editor
+      const customShapes = editor
         .getCurrentPageShapes()
-        .filter((shape) => shape.type === 'tambo') as TamboShape[];
+        .filter((shape) => shape.type === 'custom') as CustomShape[];
 
-      console.log(`🔄 [CanvasSpace] Found ${tamboShapes.length} tambo shapes to rehydrate`);
+      console.log(`🔄 [CanvasSpace] Found ${customShapes.length} custom shapes to rehydrate`);
 
-      tamboShapes.forEach((shape) => {
+      customShapes.forEach((shape) => {
         let componentName = shape.props.name;
-        const messageId = shape.props.tamboComponent;
+        const messageId = shape.props.customComponent;
 
         console.log(`🔄 [CanvasSpace] Rehydrating ${componentName} (${messageId})`);
 
         // Find component definition
         // Try exact match first
-        let componentDef = components.find((c) => c.name === componentName);
+        let componentDef = customComponents.find((c) => c.name === componentName);
         // Handle legacy and wrapper names that appeared in earlier saves
         if (!componentDef) {
           // Legacy chat label
@@ -235,8 +231,8 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
             componentDef = components.find((c) => c.name === 'AIResponse');
             if (componentDef) componentName = 'AIResponse';
           }
-          // Wrapper from Tambo SDK
-          if (!componentDef && componentName === 'TamboMessageProvider') {
+          // TODO: MessageProvider was deprecated, fix/replace this from first principles undserstanding of current codebase
+          if (!componentDef && componentName === 'MessageProvider') {
             componentDef = components.find((c) => c.name === 'AIResponse');
             if (componentDef) componentName = 'AIResponse';
           }
@@ -245,12 +241,12 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
           // Recreate React component and add to store
           const Component = componentDef.component;
           const componentInstance = React.createElement(Component, {
-            __tambo_message_id: messageId,
+            __custom_message_id: messageId,
           });
           componentStore.current.set(messageId, componentInstance);
           try {
             window.dispatchEvent(new Event('present:component-store-updated'));
-          } catch {}
+          } catch { }
 
           // Update mapping
           setMessageIdToShapeIdMap((prev) => new Map(prev).set(messageId, shape.id));
@@ -284,7 +280,7 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
                 ID: <code>{messageId}</code>
               </p>
               <p style={{ margin: '0', fontSize: '11px', opacity: 0.8 }}>
-                Please add "{componentName}" to tambo.ts registry.
+                Please add "{componentName}" to custom.ts registry.
               </p>
             </div>
           );
@@ -293,7 +289,7 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
           componentStore.current.set(messageId, fallbackInstance);
           try {
             window.dispatchEvent(new Event('present:component-store-updated'));
-          } catch {}
+          } catch { }
 
           // Still update mappings so the shape shows something
           setMessageIdToShapeIdMap((prev) => new Map(prev).set(messageId, shape.id));
@@ -308,10 +304,10 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
       );
     };
 
-    window.addEventListener('tambo:rehydrateComponents', handleRehydration as EventListener);
+    window.addEventListener('custom:rehydrateComponents', handleRehydration as EventListener);
 
     return () => {
-      window.removeEventListener('tambo:rehydrateComponents', handleRehydration as EventListener);
+      window.removeEventListener('custom:rehydrateComponents', handleRehydration as EventListener);
     };
   }, [editor]);
 
@@ -350,7 +346,7 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
       componentStore.current.set(messageId, component);
       try {
         window.dispatchEvent(new Event('present:component-store-updated'));
-      } catch {}
+      } catch { }
 
       // Note: ComponentRegistry integration temporarily disabled to prevent infinite loops
       // Will be re-enabled once tldraw stability issues are resolved
@@ -386,12 +382,12 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
 
       if (existingShapeId) {
         // Update existing shape - only update non-component props to avoid cloning issues
-        editor.updateShapes<TamboShape>([
+        editor.updateShapes<customShape>([
           {
             id: existingShapeId,
-            type: 'tambo',
+            type: 'custom',
             props: {
-              tamboComponent: messageId, // Store messageId as reference instead of component
+              customComponent: messageId, // Store messageId as reference instead of component
               name: componentName || `Component ${messageId}`,
               // w, h could be updated if needed, potentially from component itself or new defaults
             },
@@ -422,14 +418,14 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
         const x = viewport ? viewport.midX - initialSize.w / 2 : Math.random() * 500;
         const y = viewport ? viewport.midY - initialSize.h / 2 : Math.random() * 300;
 
-        editor.createShapes<TamboShape>([
+        editor.createShapes<customShape>([
           {
             id: newShapeId,
-            type: 'tambo',
+            type: 'custom',
             x,
             y,
             props: {
-              tamboComponent: messageId, // Store messageId as reference instead of component
+              customComponent: messageId, // Store messageId as reference instead of component
               name: componentName || `Component ${messageId}`,
               w: initialSize.w,
               h: initialSize.h,
@@ -464,7 +460,7 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
   );
 
   /**
-   * Effect to handle custom 'tambo:showComponent' events
+   * Effect to handle custom 'custom:showComponent' events
    */
   useEffect(() => {
     const handleShowComponent = (
@@ -488,7 +484,7 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
               const compDef = components.find((c) => c.name === maybe.type);
               if (compDef) {
                 node = React.createElement(compDef.component as any, {
-                  __tambo_message_id: event.detail.messageId,
+                  __custom_message_id: event.detail.messageId,
                   ...(maybe.props || {}),
                 });
                 inferredName = compDef.name;
@@ -498,7 +494,7 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
             // Try to infer name from the React element's type and unwrap common provider wrappers
             const type: any = node.type as any;
             const typeName = (type?.displayName || type?.name || '').toString();
-            if (typeName === 'TamboMessageProvider' || typeName.endsWith('Provider')) {
+            if (typeName === 'customMessageProvider' || typeName.endsWith('Provider')) {
               const child = (node.props as any)?.children;
               if (React.isValidElement(child)) {
                 node = child;
@@ -532,7 +528,7 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
             const compDef = components.find((c) => c.name === maybe.type);
             if (compDef) {
               node = React.createElement(compDef.component as any, {
-                __tambo_message_id: event.detail.messageId,
+                __custom_message_id: event.detail.messageId,
                 ...(maybe.props || {}),
               });
               inferredName = compDef.name;
@@ -542,7 +538,7 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
           // Valid element – try to infer better name and unwrap provider
           const type: any = (node as any).type;
           const typeName = (type?.displayName || type?.name || '').toString();
-          if (typeName === 'TamboMessageProvider' || typeName.endsWith('Provider')) {
+          if (typeName === 'customMessageProvider' || typeName.endsWith('Provider')) {
             const child = (node as any)?.props?.children;
             if (React.isValidElement(child)) {
               node = child;
@@ -562,16 +558,16 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
             source: 'ui',
             context: { name: inferredName },
           });
-        } catch {}
+        } catch { }
       } catch (error) {
         console.error('Failed to add component to canvas from event:', error);
       }
     };
 
-    window.addEventListener('tambo:showComponent', handleShowComponent as EventListener);
+    window.addEventListener('custom:showComponent', handleShowComponent as EventListener);
 
     return () => {
-      window.removeEventListener('tambo:showComponent', handleShowComponent as EventListener);
+      window.removeEventListener('custom:showComponent', handleShowComponent as EventListener);
     };
   }, [addComponentToCanvas, bus]);
 
@@ -591,7 +587,7 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
           source: 'ui',
           context: { name },
         });
-      } catch {}
+      } catch { }
       console.log('▶️ [CanvasSpace] Rendered queued component:', name || 'component');
     });
   }, [editor, addComponentToCanvas, bus]);
@@ -609,10 +605,10 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
       if (compDef) {
         try {
           node = React.createElement(compDef.component as any, {
-            __tambo_message_id: info.messageId,
+            __custom_message_id: info.messageId,
             ...(info.props || {}),
           });
-        } catch {}
+        } catch { }
       }
       if (!node) {
         // Fallback minimal node
@@ -634,7 +630,7 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
     // Debounce component addition to prevent excessive rendering
     const timeoutId = setTimeout(() => {
       const messagesWithComponents = thread.messages.filter(
-        (msg: TamboThreadMessage) => msg.renderedComponent,
+        (msg: customThreadMessage) => msg.renderedComponent,
       );
 
       if (messagesWithComponents.length > 0) {
@@ -656,10 +652,10 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
                 if (compDef) {
                   try {
                     node = React.createElement(compDef.component as any, {
-                      __tambo_message_id: messageId,
+                      __custom_message_id: messageId,
                       ...(maybe.props || {}),
                     });
-                  } catch {}
+                  } catch { }
                 }
               } else if (
                 typeof maybe.type === 'function' ||
@@ -667,10 +663,10 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
               ) {
                 try {
                   node = React.createElement(maybe.type as any, {
-                    __tambo_message_id: messageId,
+                    __custom_message_id: messageId,
                     ...(maybe.props || {}),
                   });
-                } catch {}
+                } catch { }
               }
             }
           }
@@ -704,14 +700,14 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
 
     if (OnboardingGuideComponent) {
       const componentInstance = React.createElement(OnboardingGuideComponent, {
-        __tambo_message_id: shapeId,
+        __custom_message_id: shapeId,
         context: 'canvas',
         autoStart: true,
       });
       componentStore.current.set(shapeId, componentInstance);
       try {
         window.dispatchEvent(new Event('present:component-store-updated'));
-      } catch {}
+      } catch { }
 
       // Get center of viewport for placement
       const viewport = editor.getViewportPageBounds();
@@ -720,13 +716,13 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
 
       editor.createShape({
         id: shapeId,
-        type: 'tambo',
+        type: 'custom',
         x,
         y,
         props: {
           w: 400,
           h: 300,
-          tamboComponent: shapeId,
+          customComponent: shapeId,
           name: 'OnboardingGuide',
         },
       });
@@ -760,29 +756,29 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
         onDrop={(e) => {
           e.preventDefault();
           e.stopPropagation();
-          const componentType = e.dataTransfer.getData('application/tambo-component');
+          const componentType = e.dataTransfer.getData('application/custom-component');
           if (componentType && editor) {
             console.log('📥 Dropping component:', componentType);
             const shapeId = createShapeId(nanoid());
             const Component = components.find((c) => c.name === componentType)?.component;
             if (Component) {
               const componentInstance = React.createElement(Component, {
-                __tambo_message_id: shapeId,
+                __custom_message_id: shapeId,
               });
               componentStore.current.set(shapeId, componentInstance);
               try {
                 window.dispatchEvent(new Event('present:component-store-updated'));
-              } catch {}
+              } catch { }
               const pos = editor.screenToPage({ x: e.clientX, y: e.clientY });
               editor.createShape({
                 id: shapeId,
-                type: 'tambo',
+                type: 'custom',
                 x: pos.x,
                 y: pos.y,
                 props: {
                   w: 300,
                   h: 200,
-                  tamboComponent: shapeId,
+                  customComponent: shapeId,
                   name: componentType,
                 },
               });

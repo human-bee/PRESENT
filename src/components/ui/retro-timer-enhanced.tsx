@@ -18,7 +18,7 @@ import { Play, Pause, RotateCcw, Clock } from 'lucide-react';
 import { useComponentProgressiveLoading, LoadingState } from '@/lib/with-progressive-loading';
 import { LoadingWrapper, SkeletonPatterns } from '@/components/ui/loading-states';
 
-// Enhanced schema with better defaults + Tambo message ID support
+// Enhanced schema with better defaults + custom message ID support
 export const retroTimerEnhancedSchema = z.object({
   initialMinutes: z
     .number()
@@ -36,7 +36,7 @@ export const retroTimerEnhancedSchema = z.object({
   autoStart: z.boolean().default(false).describe('Start timer automatically'),
   showPresets: z.boolean().default(true).describe('Show preset time buttons'),
   componentId: z.string().default('retro-timer').describe('Unique component identifier'),
-  __tambo_message_id: z.string().optional().describe('Internal: Tambo message ID for AI updates'),
+  __custom_message_id: z.string().optional().describe('Internal: custom message ID for AI updates'),
 });
 
 export type RetroTimerEnhancedProps = z.infer<typeof retroTimerEnhancedSchema>;
@@ -54,7 +54,7 @@ export function RetroTimerEnhanced({
   autoStart = false,
   showPresets = true,
   componentId = 'retro-timer',
-  __tambo_message_id,
+  __custom_message_id,
 }: RetroTimerEnhancedProps) {
   // Calculate initial time in seconds - memoized to prevent recalculation
   const initialTimeInSeconds = React.useMemo(
@@ -102,11 +102,11 @@ export function RetroTimerEnhanced({
   // Local timer state
   const [state, setState] = useState<TimerState>(initialState);
 
-  // Use the exact Tambo message ID if provided, otherwise create a stable one
+  // Use the exact custom message ID if provided, otherwise create a stable one
   const effectiveMessageId = React.useMemo(() => {
-    if (__tambo_message_id) {
-      console.log(`[RetroTimerEnhanced] Using provided Tambo message ID: ${__tambo_message_id}`);
-      return __tambo_message_id;
+    if (__custom_message_id) {
+      console.log(`[RetroTimerEnhanced] Using provided custom message ID: ${__custom_message_id}`);
+      return __custom_message_id;
     }
 
     // Fallback: create a stable ID based on componentId and initial settings
@@ -114,7 +114,7 @@ export function RetroTimerEnhanced({
     const fallbackId = `timer-${componentId}-${initialMinutes}min`;
     console.log(`[RetroTimerEnhanced] Using fallback message ID: ${fallbackId}`);
     return fallbackId;
-  }, [__tambo_message_id, componentId, initialMinutes]);
+  }, [__custom_message_id, componentId, initialMinutes]);
 
   // Stable props object to prevent re-registration loops
   const stableProps = React.useMemo(
@@ -145,16 +145,16 @@ export function RetroTimerEnhanced({
         setState((prev) =>
           prev
             ? {
-                ...prev,
-                timeLeft: newTimeInSeconds,
-                isFinished: false,
-                isRunning: false, // Reset to stopped state
-              }
+              ...prev,
+              timeLeft: newTimeInSeconds,
+              isFinished: false,
+              isRunning: false, // Reset to stopped state
+            }
             : {
-                timeLeft: newTimeInSeconds,
-                isRunning: false,
-                isFinished: false,
-              },
+              timeLeft: newTimeInSeconds,
+              isRunning: false,
+              isFinished: false,
+            },
         );
       }
 
@@ -166,10 +166,10 @@ export function RetroTimerEnhanced({
           return prev
             ? { ...prev, isRunning: true }
             : {
-                timeLeft: currentInitialTime,
-                isRunning: true,
-                isFinished: false,
-              };
+              timeLeft: currentInitialTime,
+              isRunning: true,
+              isFinished: false,
+            };
         });
       }
     },

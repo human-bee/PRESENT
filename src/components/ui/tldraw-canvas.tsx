@@ -35,19 +35,19 @@ export const ComponentStoreContext = createContext<Map<string, ReactNode> | null
 // Create context for editor instance
 export const EditorContext = createContext<Editor | null>(null);
 
-// Define the props for the Tambo shape
-export interface TamboShapeProps {
+// Define the props for the custom shape
+export interface customShapeProps {
   w: number;
   h: number;
-  tamboComponent: string; // Store message ID instead of ReactNode to avoid cloning issues
+  customComponent: string; // Store message ID instead of ReactNode to avoid cloning issues
   name: string;
   pinned?: boolean; // Whether the shape is pinned to viewport
   pinnedX?: number; // Relative X position (0-1) when pinned
   pinnedY?: number; // Relative Y position (0-1) when pinned
 }
 
-// Create a type for the Tambo shape
-export type TamboShape = TLBaseShape<'tambo', TamboShapeProps>;
+// Create a type for the custom shape
+export type customShape = TLBaseShape<'custom', customShapeProps>;
 
 // Error boundary for component rendering
 class ComponentErrorBoundary extends Component<
@@ -76,7 +76,7 @@ class ComponentErrorBoundary extends Component<
 }
 
 // Component wrapper to handle hooks inside the shape
-function TamboShapeComponent({ shape }: { shape: TamboShape }) {
+function customShapeComponent({ shape }: { shape: customShape }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const scaleWrapperRef = useRef<HTMLDivElement>(null);
   const contentInnerRef = useRef<HTMLDivElement>(null);
@@ -148,7 +148,7 @@ function TamboShapeComponent({ shape }: { shape: TamboShape }) {
       const changed = Math.abs(shape.props.w - nw) > 1 || Math.abs(shape.props.h - nh) > 1;
       if (changed) {
         editor.updateShapes([
-          { id: shape.id, type: 'tambo', props: { ...shape.props, w: nw, h: nh } },
+          { id: shape.id, type: 'custom', props: { ...shape.props, w: nw, h: nh } },
         ]);
       }
     }
@@ -221,9 +221,9 @@ function TamboShapeComponent({ shape }: { shape: TamboShape }) {
               </div>
             }
           >
-            {shape.props.tamboComponent && componentStore ? (
+            {shape.props.customComponent && componentStore ? (
               (() => {
-                const stored = componentStore.get(shape.props.tamboComponent) as any;
+                const stored = componentStore.get(shape.props.customComponent) as any;
                 let node: React.ReactNode = null;
                 if (React.isValidElement(stored)) {
                   node = stored;
@@ -237,7 +237,7 @@ function TamboShapeComponent({ shape }: { shape: TamboShape }) {
                   const props = stored.props || {};
                   try {
                     node = React.createElement(type, {
-                      __tambo_message_id: shape.props.tamboComponent,
+                      __custom_message_id: shape.props.customComponent,
                       ...props,
                     });
                   } catch {
@@ -264,29 +264,29 @@ function TamboShapeComponent({ shape }: { shape: TamboShape }) {
   );
 }
 
-// Define the TamboShapeUtil class
-export class TamboShapeUtil extends BaseBoxShapeUtil<TamboShape> {
-  static override type = 'tambo' as const;
+// Define the customShapeUtil class
+export class customShapeUtil extends BaseBoxShapeUtil<customShape> {
+  static override type = 'custom' as const;
   static override props = {
     w: T.number,
     h: T.number,
-    tamboComponent: T.any,
+    customComponent: T.any,
     name: T.string,
     pinned: T.optional(T.boolean),
     pinnedX: T.optional(T.number),
     pinnedY: T.optional(T.number),
-  } satisfies RecordProps<TamboShape>;
+  } satisfies RecordProps<customShape>;
 
   // Track shapes the user has explicitly resized
   private userResized = new Set<string>();
 
-  // Provide default props for the Tambo shape
-  override getDefaultProps(): TamboShape['props'] {
+  // Provide default props for the custom shape
+  override getDefaultProps(): customShape['props'] {
     return {
       w: 300,
       h: 200,
-      tamboComponent: '',
-      name: 'Tambo Component',
+      customComponent: '',
+      name: 'custom Component',
       pinned: false,
       pinnedX: 0.5,
       pinnedY: 0.5,
@@ -294,7 +294,7 @@ export class TamboShapeUtil extends BaseBoxShapeUtil<TamboShape> {
   }
 
   // Render method for the shape
-  override component(shape: TamboShape) {
+  override component(shape: customShape) {
     return (
       <TldrawHTMLContainer
         id={shape.id}
@@ -310,13 +310,13 @@ export class TamboShapeUtil extends BaseBoxShapeUtil<TamboShape> {
           zIndex: (shape.props.pinned ?? false) ? 1000 : 100,
         }}
       >
-        <TamboShapeComponent shape={shape} />
+        <customShapeComponent shape={shape} />
       </TldrawHTMLContainer>
     );
   }
 
   // Override indicator for selection, hover, etc.
-  override indicator(shape: TamboShape) {
+  override indicator(shape: customShape) {
     return <rect width={shape.props.w} height={shape.props.h} fill="transparent" />;
   }
 
@@ -331,18 +331,18 @@ export class TamboShapeUtil extends BaseBoxShapeUtil<TamboShape> {
 
   // Prevent moving pinned shapes
   override canBind = ({ fromShapeType }: { fromShapeType: string }) => {
-    return fromShapeType !== 'tambo';
+    return fromShapeType !== 'custom';
   };
 
   // Handle TLDraw-initiated resizes with component constraints
-  override onResize = (shape: TamboShape, info: ResizeInfo) => {
+  override onResize = (shape: customShape, info: ResizeInfo) => {
     // Mark that the user has explicitly resized this shape
     this.userResized.add(shape.id);
 
     const componentName = shape.props.name; // Component type from name
     const sizeInfo = getComponentSizeInfo(componentName);
 
-    console.log(`🔧 [TamboShapeUtil] Resizing ${componentName}:`, {
+    console.log(`🔧 [customShapeUtil] Resizing ${componentName}:`, {
       scaleX: info.scaleX,
       scaleY: info.scaleY,
       originalSize: { w: shape.props.w, h: shape.props.h },
@@ -391,7 +391,7 @@ export class TamboShapeUtil extends BaseBoxShapeUtil<TamboShape> {
 }
 
 // Component wrapper for Toolbox inside shape
-function ToolboxShapeComponent({ shape }: { shape: TamboShape }) {
+function ToolboxShapeComponent({ shape }: { shape: customShape }) {
   // Use TLDraw's built-in hook to get the editor instead of context
   const editor = useEditor();
   const componentStore = useContext(ComponentStoreContext);
@@ -407,8 +407,8 @@ function ToolboxShapeComponent({ shape }: { shape: TamboShape }) {
       return;
     }
 
-    // Import components from tambo
-    const { components } = require('@/lib/tambo');
+    // Import components from custom
+    const { components } = require('@/lib/custom');
     const Component = components.find((c: any) => c.name === componentType)?.component;
     if (!Component) {
       console.error('Component not found:', componentType);
@@ -416,7 +416,7 @@ function ToolboxShapeComponent({ shape }: { shape: TamboShape }) {
     }
 
     const shapeId = createShapeId(nanoid());
-    const componentInstance = React.createElement(Component, { __tambo_message_id: shapeId });
+    const componentInstance = React.createElement(Component, { __custom_message_id: shapeId });
     componentStore.set(shapeId, componentInstance);
 
     const viewport = editor.getViewportPageBounds();
@@ -425,13 +425,13 @@ function ToolboxShapeComponent({ shape }: { shape: TamboShape }) {
 
     editor.createShape({
       id: shapeId,
-      type: 'tambo',
+      type: 'custom',
       x,
       y,
       props: {
         w: 300,
         h: 200,
-        tamboComponent: shapeId,
+        customComponent: shapeId,
         name: componentType,
       },
     });
@@ -459,15 +459,15 @@ function ToolboxShapeComponent({ shape }: { shape: TamboShape }) {
 }
 
 // 2. Add ToolboxShapeUtil
-export class ToolboxShapeUtil extends BaseBoxShapeUtil<TamboShape> {
+export class ToolboxShapeUtil extends BaseBoxShapeUtil<customShape> {
   static override type = 'toolbox' as const;
   static override props = {
     w: T.number,
     h: T.number,
     name: T.string,
-  } satisfies RecordProps<TamboShape>;
+  } satisfies RecordProps<customShape>;
 
-  override getDefaultProps(): TamboShape['props'] {
+  override getDefaultProps(): customShape['props'] {
     return {
       w: 340,
       h: 320,
@@ -475,7 +475,7 @@ export class ToolboxShapeUtil extends BaseBoxShapeUtil<TamboShape> {
     };
   }
 
-  override component(shape: TamboShape) {
+  override component(shape: customShape) {
     return (
       <TldrawHTMLContainer
         id={shape.id}
@@ -494,7 +494,7 @@ export class ToolboxShapeUtil extends BaseBoxShapeUtil<TamboShape> {
     );
   }
 
-  override indicator(shape: TamboShape) {
+  override indicator(shape: customShape) {
     return <rect width={shape.props.w} height={shape.props.h} fill="transparent" />;
   }
 
@@ -508,8 +508,8 @@ export class ToolboxShapeUtil extends BaseBoxShapeUtil<TamboShape> {
 
 export interface TldrawCanvasProps {
   onMount?: (editor: Editor) => void;
-  shapeUtils?: readonly (typeof TamboShapeUtil)[]; // Allow passing custom shape utils
-  componentStore?: Map<string, ReactNode>; // Component store for Tambo shapes
+  shapeUtils?: readonly (typeof customShapeUtil)[]; // Allow passing custom shape utils
+  componentStore?: Map<string, ReactNode>; // Component store for custom shapes
   componentId?: string;
   // Add any other props you might need to pass to Tldraw component
 }

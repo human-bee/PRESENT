@@ -24,7 +24,7 @@ import {
   ThreadHistorySearch,
 } from '@/components/ui/thread-history';
 import { useMergedRef } from '@/lib/thread-hooks';
-import { Suggestion } from '@tambo-ai/react';
+import { Suggestion } from '@custom-ai/react';
 import type { VariantProps } from 'class-variance-authority';
 import * as React from 'react';
 

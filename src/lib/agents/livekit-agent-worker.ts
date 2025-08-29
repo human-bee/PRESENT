@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 /**
- * Tambo Voice Agent - LiveKit Agent JS Implementation
+ * custom Voice Agent - LiveKit Agent JS Implementation
  *
- * AGENT #1 of 3 in the Tambo Architecture
+ * AGENT #1 of 3 in the custom Architecture
  * =======================================
  * This is the VOICE AGENT that runs as a Node.js worker process.
  *
@@ -34,7 +34,7 @@ import { RoomEvent, Track } from 'livekit-client';
 import * as openai from '@livekit/agents-plugin-openai';
 import { DecisionEngine, DecisionEngineConfig } from '../decision-engine';
 
-console.log('🚀 Starting Tambo Voice Agent Worker...');
+console.log('🚀 Starting custom Voice Agent Worker...');
 console.log('🔧 Environment Check:');
 console.log(`  - OpenAI API Key: ${process.env.OPENAI_API_KEY ? '✅ Present' : '❌ Missing'}`);
 console.log(`  - LiveKit API Key: ${process.env.LIVEKIT_API_KEY ? '✅ Present' : '❌ Missing'}`);
@@ -72,8 +72,8 @@ export default defineAgent({
 
     let systemCapabilities: SystemCapabilities | null = null;
 
-    // Define default Tambo UI components for fallback
-    const defaultTamboComponents = [
+    // Define default custom UI components for fallback
+    const defaultcustomComponents = [
       {
         name: 'YoutubeEmbed',
         description: 'Embed a YouTube video with a specific video ID and optional start time',
@@ -137,7 +137,7 @@ export default defineAgent({
       tools: [
         {
           name: 'generate_ui_component',
-          description: 'Generate any UI component from the Tambo component library',
+          description: 'Generate any UI component from the custom component library',
           examples: ['create a timer', 'show weather', 'make a chart', 'generate youtube embed'],
         },
         {
@@ -188,12 +188,12 @@ export default defineAgent({
         },
         {
           name: 'canvas_pin_selected',
-          description: 'Pin selected Tambo shapes to the viewport',
+          description: 'Pin selected custom shapes to the viewport',
           examples: ['pin this to the screen'],
         },
         {
           name: 'canvas_unpin_selected',
-          description: 'Unpin selected Tambo shapes from the viewport',
+          description: 'Unpin selected custom shapes from the viewport',
           examples: ['unpin this'],
         },
         {
@@ -262,7 +262,7 @@ export default defineAgent({
           examples: ['select the todo list'],
         },
       ],
-      components: defaultTamboComponents,
+      components: defaultcustomComponents,
       decisionEngine: {
         intents: {
           ui_generation: ['create', 'make', 'generate', 'show', 'display', 'build'],
@@ -542,7 +542,7 @@ export default defineAgent({
 
     // Build dynamic instructions based on available capabilities
     const buildInstructions = () => {
-      const baseInstructions = `You are Tambo Voice Agent, a helpful AI assistant integrated with a powerful UI generation system.
+      const baseInstructions = `You are custom Voice Agent, a helpful AI assistant integrated with a powerful UI generation system.
         
       ARCHITECTURE AWARENESS:
       You are Agent #1 in a 3-agent system:
@@ -551,7 +551,7 @@ export default defineAgent({
       - Tool Dispatcher: Executes tools in the browser and returns results
       
       Your tool calls are sent to the Tool Dispatcher in the browser, which has access to:
-      - Tambo UI components for generating visual elements
+      - custom UI components for generating visual elements
       - MCP (Model Context Protocol) tools for external integrations
       - Direct browser APIs and canvas manipulation
         
@@ -583,9 +583,9 @@ export default defineAgent({
         toolSection += `\n- Total Available: ${systemCapabilities.tools.length} tools`;
       }
 
-      // Add available Tambo UI components
-      let componentSection = `\n\nTAMBO UI COMPONENTS AVAILABLE:`;
-      const components = systemCapabilities?.components || defaultTamboComponents;
+      // Add available custom UI components
+      let componentSection = `\n\ncustom UI COMPONENTS AVAILABLE:`;
+      const components = systemCapabilities?.components || defaultcustomComponents;
       componentSection += `\nYou can generate any of these ${components.length} UI components:`;
 
       components.forEach((component) => {
@@ -635,7 +635,7 @@ export default defineAgent({
         You have access to these function calls (use EXACT function names and parameter structures):
         
         1. generate_ui_component(prompt: string)
-           - Create any UI component from the Tambo library
+           - Create any UI component from the custom library
            - Example: generate_ui_component("Create a 5 minute timer")
            
         2. ui_update(componentId: string, patch: string)
@@ -663,9 +663,9 @@ export default defineAgent({
          8. canvas_create_note(textOrParams: string | { text?: string })
             - Create a note at the center of the viewport
          9. canvas_pin_selected()
-            - Pin the currently selected Tambo components to the screen
+            - Pin the currently selected custom components to the screen
          10. canvas_unpin_selected()
-            - Unpin the currently selected Tambo components
+            - Unpin the currently selected custom components
          11. canvas_analyze()
             - Inspect the current canvas to plan follow-up actions
         
@@ -694,7 +694,7 @@ export default defineAgent({
     const openAIFunctions = [
       {
         name: 'generate_ui_component',
-        description: 'Generate any UI component from the Tambo component library',
+        description: 'Generate any UI component from the custom component library',
         parameters: {
           type: 'object',
           properties: {
@@ -885,9 +885,9 @@ export default defineAgent({
     };
 
     // Log available components for debugging
-    console.log('🎨 [Agent] Available Tambo UI Components:', {
-      total: defaultTamboComponents.length,
-      components: defaultTamboComponents.map((c) => c.name).join(', '),
+    console.log('🎨 [Agent] Available custom UI Components:', {
+      total: defaultcustomComponents.length,
+      components: defaultcustomComponents.map((c) => c.name).join(', '),
     });
 
     // Configure agent to accept text responses when using tools
@@ -917,7 +917,7 @@ export default defineAgent({
         setTimeout(() => {
           const welcomeData = JSON.stringify({
             type: 'live_transcription',
-            text: '🤖 Tambo Voice Agent connected! I can hear you and respond naturally. Just speak!',
+            text: '🤖 custom Voice Agent connected! I can hear you and respond naturally. Just speak!',
             speaker: 'voice-agent',
             timestamp: Date.now(),
             is_final: true,
@@ -932,7 +932,7 @@ export default defineAgent({
 
         // Override recoverFromTextResponse to turn it into a no-op so text responses are fine
         (session as unknown as { recoverFromTextResponse: () => void }).recoverFromTextResponse =
-          () => {};
+          () => { };
 
         return session;
       })
@@ -949,7 +949,7 @@ export default defineAgent({
           console.log(`📝 [Agent] Text-only response received: "${evt.text}"`);
 
           // Only log the text response - don't send it as a tool call
-          // The user's actual speech is already being sent to Tambo
+          // The user's actual speech is already being sent to custom
 
           // Send as transcription for display
           const transcriptionData = JSON.stringify({

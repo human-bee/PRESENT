@@ -105,16 +105,16 @@ export function YoutubeSearchEnhanced({
     view: 'search',
   });
 
-  // MCP Tool execution via Tambo
+  // MCP Tool execution via custom
   const executeMCPTool = useCallback(
     async (tool: string, params: any) => {
       try {
-        // Send to Tambo as a formatted message that will trigger MCP tool
+        // Send to custom as a formatted message that will trigger MCP tool
         const message = `Execute YouTube MCP tool: ${tool} with parameters: ${JSON.stringify(params, null, 2)}`;
 
-        // Dispatch custom event that Tambo will handle
+        // Dispatch custom event that custom will handle
         window.dispatchEvent(
-          new CustomEvent('tambo:executeMCPTool', {
+          new CustomEvent('custom:executeMCPTool', {
             detail: {
               tool: `youtube_${tool}`,
               params,
@@ -161,10 +161,10 @@ export function YoutubeSearchEnhanced({
           setState((prev) =>
             prev
               ? {
-                  ...prev,
-                  searchResults: processedResults,
-                  loading: false,
-                }
+                ...prev,
+                searchResults: processedResults,
+                loading: false,
+              }
               : prev,
           );
         }
@@ -172,10 +172,10 @@ export function YoutubeSearchEnhanced({
         setState((prev) =>
           prev
             ? {
-                ...prev,
-                error: 'Failed to search videos',
-                loading: false,
-              }
+              ...prev,
+              error: 'Failed to search videos',
+              loading: false,
+            }
             : prev,
         );
       }
@@ -197,9 +197,9 @@ export function YoutubeSearchEnhanced({
         setState((prev) =>
           prev
             ? {
-                ...prev,
-                trendingVideos: result.data,
-              }
+              ...prev,
+              trendingVideos: result.data,
+            }
             : prev,
         );
       }
@@ -223,9 +223,9 @@ export function YoutubeSearchEnhanced({
           setState((prev) =>
             prev
               ? {
-                  ...prev,
-                  transcript: result.data[0].segments,
-                }
+                ...prev,
+                transcript: result.data[0].segments,
+              }
               : prev,
           );
         }
@@ -311,11 +311,11 @@ export function YoutubeSearchEnhanced({
     setState((prev) =>
       prev
         ? {
-            ...prev,
-            selectedVideo: video,
-            view: 'video',
-            transcript: null,
-          }
+          ...prev,
+          selectedVideo: video,
+          view: 'video',
+          transcript: null,
+        }
         : prev,
     );
 

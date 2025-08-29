@@ -1,7 +1,7 @@
 /**
- * Simple AI-Powered Decision Engine for Tambo Voice Agent
+ * Simple AI-Powered Decision Engine for custom Voice Agent
  *
- * AGENT #2 of 3 in the Tambo Architecture
+ * AGENT #2 of 3 in the custom Architecture
  * =======================================
  * This is the DECISION ENGINE that runs embedded within the Voice Agent.
  *
@@ -48,12 +48,12 @@ export interface Decision {
 export interface EnhancedDecisionResult {
   hasActionableRequest: boolean;
   intent:
-    | 'document_retrieval'
-    | 'ui_generation'
-    | 'ui_update'
-    | 'youtube_search'
-    | 'list_components'
-    | 'general_conversation';
+  | 'document_retrieval'
+  | 'ui_generation'
+  | 'ui_update'
+  | 'youtube_search'
+  | 'list_components'
+  | 'general_conversation';
   toolCalls: Array<{
     tool: string;
     params: Record<string, unknown>;
@@ -88,7 +88,7 @@ export interface MeetingContext {
 
 // Build dynamic system prompt based on available capabilities
 const buildSystemPrompt = (config: DecisionEngineConfig): string => {
-  const basePrompt = `You are the Decision Engine (Agent #2) in Tambo's 3-agent architecture.
+  const basePrompt = `You are the Decision Engine (Agent #2) in custom's 3-agent architecture.
 
 ARCHITECTURE AWARENESS:
 - Voice Agent (Agent #1): Captures and transcribes speech, forwards to you
@@ -289,21 +289,19 @@ export class DecisionEngine {
     }
 
     const contextualInput = `CONVERSATION CONTEXT:
-${
-  conversationContext
-    ? `Previous conversation:
+${conversationContext
+        ? `Previous conversation:
 ${conversationContext}
 
 `
-    : ''
-}${
-  recentContext
-    ? `Recent context from others:
+        : ''
+      }${recentContext
+        ? `Recent context from others:
 ${recentContext}
 
 `
-    : ''
-}Current speaker (${currentParticipant}): "${currentText}"
+        : ''
+      }Current speaker (${currentParticipant}): "${currentText}"
 
 IMPORTANT: 
 - Pay attention to references like "the task at hand", "do it", "that", etc. which refer to previous requests
@@ -498,15 +496,15 @@ Analyze the current speaker's statement in full conversational context.`;
           intent: hasActionable ? 'ui_generation' : 'general_conversation',
           toolCalls: hasActionable
             ? [
-                {
-                  tool: 'generate_ui_component',
-                  params: {
-                    component_type: 'LivekitParticipantTile',
-                    request: transcript,
-                  },
-                  priority: 1,
+              {
+                tool: 'generate_ui_component',
+                params: {
+                  component_type: 'LivekitParticipantTile',
+                  request: transcript,
                 },
-              ]
+                priority: 1,
+              },
+            ]
             : [],
           reasoning: 'Fallback analysis due to JSON parsing error',
           confidence: hasActionable ? 75 : 25,

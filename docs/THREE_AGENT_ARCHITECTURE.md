@@ -1,15 +1,17 @@
-# The Three-Agent Architecture of Tambo
+# The Three-Agent Architecture of custom
 
 ## Overview
 
-Tambo uses a sophisticated **3-agent architecture** where each agent has distinct responsibilities and they work together through well-defined handoffs. This design enables voice-driven UI generation with intelligent decision-making and dynamic tool execution.
+custom uses a sophisticated **3-agent architecture** where each agent has distinct responsibilities and they work together through well-defined handoffs. This design enables voice-driven UI generation with intelligent decision-making and dynamic tool execution.
 
 ## The Three Agents
 
 ### 1. 🎙️ **LiveKit Voice Agent** (`livekit-agent-worker.ts`)
+
 **Role**: Voice interface and orchestration  
 **Location**: Runs in Node.js as a separate worker process  
 **Responsibilities**:
+
 - Captures voice input from users via LiveKit rooms
 - Provides real-time transcription using OpenAI Realtime API
 - Initiates tool calls based on voice commands
@@ -18,6 +20,7 @@ Tambo uses a sophisticated **3-agent architecture** where each agent has distinc
 - Refreshes capabilities every 30 seconds
 
 **Key Features**:
+
 - Uses OpenAI Realtime API for natural voice interaction
 - Publishes transcriptions to `transcription` topic
 - Publishes tool requests to `tool_call` topic  
@@ -25,9 +28,11 @@ Tambo uses a sophisticated **3-agent architecture** where each agent has distinc
 - Auto-disconnects when no humans remain in room
 
 ### 2. 🧠 **Decision Engine** (`decision-engine.ts`)
+
 **Role**: Intelligent filtering and context understanding  
 **Location**: Embedded within the LiveKit Voice Agent  
 **Responsibilities**:
+
 - Analyzes transcriptions to determine if they contain actionable requests
 - Maintains conversation context across multiple speakers
 - Detects intent (YouTube search, UI component, general)
@@ -36,6 +41,7 @@ Tambo uses a sophisticated **3-agent architecture** where each agent has distinc
 - Uses GPT-4 to make intelligent decisions about what to forward
 
 **Key Features**:
+
 - 30-second conversation memory window
 - Handles collaborative meeting scenarios
 - Detects references to previous requests ("do it", "that component")
@@ -43,17 +49,20 @@ Tambo uses a sophisticated **3-agent architecture** where each agent has distinc
 - Dynamic configuration from SystemRegistry
 
 ### 3. 🔧 **Tool Dispatcher** (`tool-dispatcher.tsx`)
+
 **Role**: Tool execution and UI integration  
 **Location**: Runs in the browser as a React component  
 **Responsibilities**:
+
 - Receives tool calls from the voice agent
-- Routes to appropriate handlers (Tambo, MCP, built-in)
+- Routes to appropriate handlers (custom, MCP, built-in)
 - Manages tool execution state and prevents duplicates
 - Publishes results back to the voice agent
 - Syncs MCP tools to SystemRegistry
-- Integrates with Tambo UI generation system
+- Integrates with custom UI generation system
 
 **Key Features**:
+
 - Circuit breaker for duplicate prevention
 - Unified execution through SystemRegistry
 - Smart YouTube search with filtering
@@ -77,7 +86,7 @@ graph TD
     subgraph "Browser"
         TD[Tool Dispatcher<br/>tool-dispatcher.tsx]
         SR[System Registry]
-        UI[Tambo UI]
+        UI[custom UI]
         MCP[MCP Tools]
     end
 
@@ -97,6 +106,7 @@ graph TD
 ## Communication Channels
 
 ### LiveKit Data Channels (Topics)
+
 1. **`transcription`** - Live speech-to-text updates
 2. **`tool_call`** - Tool execution requests
 3. **`tool_result`** - Successful tool execution results
@@ -111,7 +121,8 @@ Here's how a typical request flows through the system:
 
 1. **User says**: "Create a timer for 5 minutes"
 
-2. **Voice Agent** transcribes: 
+2. **Voice Agent** transcribes:
+
    ```json
    {
      "type": "live_transcription",
@@ -128,6 +139,7 @@ Here's how a typical request flows through the system:
    - Decides to forward
 
 4. **Voice Agent** publishes tool call:
+
    ```json
    {
      "type": "tool_call",
@@ -146,7 +158,7 @@ Here's how a typical request flows through the system:
    ```
 
 5. **Tool Dispatcher** executes:
-   - Routes to Tambo UI system
+   - Routes to custom UI system
    - Generates RetroTimer component
    - Publishes result back
 
@@ -205,7 +217,7 @@ All three agents stay synchronized through the **SystemRegistry**:
 To add a new tool or component:
 
 1. **For MCP tools**: Configure in `/mcp-config`
-2. **For Tambo components**: Add to `tambo.ts`
+2. **For custom components**: Add to `custom.ts`
 3. **That's it!** All agents automatically discover and use it
 
 No need to update any agent code - the dynamic discovery handles everything.
@@ -213,6 +225,7 @@ No need to update any agent code - the dynamic discovery handles everything.
 ## Debugging Tips
 
 1. **Check capability sync**:
+
    ```javascript
    // In browser console
    window.systemRegistry?.getAllCapabilities()
@@ -230,4 +243,4 @@ No need to update any agent code - the dynamic discovery handles everything.
 
 - **Phase 4**: Full state synchronization between agents
 - **Phase 5**: Unified tool execution with hot-reloading
-- **Phase 6**: Multi-agent collaboration patterns 
+- **Phase 6**: Multi-agent collaboration patterns

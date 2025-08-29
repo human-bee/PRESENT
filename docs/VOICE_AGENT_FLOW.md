@@ -13,18 +13,21 @@ The voice agent system consists of 3 main components working together:
 ## Key Improvements
 
 ### ✅ Simplified Architecture
+
 - **Single decision pipeline** instead of multiple scattered NLP layers
 - **Consolidated NLP processing** in `generate_ui_component` tool
 - **Enhanced decision engine** with parallel tool calls support
 - **Unified observability** with centralized logging and metrics
 
 ### ✅ Low-Latency Optimizations
+
 - **Direct tool dispatch** without complex bus systems
 - **Parallel tool execution** for multi-step requests
 - **Circuit breaker patterns** to prevent duplicate calls
 - **Streaming responses** for real-time feedback
 
 ### ✅ Enhanced Capabilities
+
 - **Document retrieval** with `get_documents` tool
 - **Intelligent parameter extraction** from natural language
 - **Real-time state synchronization** across participants
@@ -74,6 +77,7 @@ sequenceDiagram
 The decision engine now supports parallel tool calls and intelligent intent detection:
 
 ### 1. Transcript Analysis
+
 ```typescript
 async analyzeTranscriptEnhanced(transcript: string): Promise<EnhancedDecisionResult> {
   // AI-powered analysis with structured output
@@ -97,6 +101,7 @@ async analyzeTranscriptEnhanced(transcript: string): Promise<EnhancedDecisionRes
 ```
 
 ### 2. Parallel Tool Execution
+
 ```typescript
 // Execute tool calls in parallel based on priority
 const sortedTools = result.toolCalls.sort((a, b) => a.priority - b.priority);
@@ -125,16 +130,19 @@ for (const toolCall of sortedTools) {
 The new document system provides seamless access to stored documents:
 
 ### Available Documents
+
 - **Containment Breach Script** (`movie-script-containment-breach`)
 - **System Documentation** (dynamically loaded)
 - **User-Created Documents** (via document state)
 
 ### Document Tool Chain
+
 1. **`get_documents`** - Retrieves list of available documents
 2. **`generate_ui_component`** - Creates DocumentEditor for viewing/editing
 3. **`ui_update`** - Updates document content with diff tracking
 
 ### Example Request Flow
+
 ```
 User: "Show me the containment breach script"
 ↓
@@ -154,6 +162,7 @@ UI: DocumentEditor with containment breach script, diff view enabled
 All natural language processing is now centralized in the `generate_ui_component` tool:
 
 ### Enhanced Parameter Extraction
+
 ```typescript
 // Timer requests: "Set a timer for 5 minutes", "ten minute countdown"
 if (lower.includes("timer") || lower.includes("countdown")) {
@@ -178,6 +187,7 @@ if (lower.includes("timer") || lower.includes("countdown")) {
 ```
 
 ### Supported Component Types
+
 - **DocumentEditor** - Document viewing/editing with diff tracking
 - **RetroTimerEnhanced** - Countdown timers with AI updates
 - **WeatherForecast** - Weather information display
@@ -192,6 +202,7 @@ if (lower.includes("timer") || lower.includes("countdown")) {
 ## Observability and Debugging
 
 ### Enhanced Logging
+
 The new observability bridge provides rich debugging capabilities:
 
 ```typescript
@@ -207,22 +218,25 @@ console.groupEnd();
 ```
 
 ### Metrics Tracking
+
 - **Tool call success rates** - Success/failure ratios
 - **Execution times** - Performance monitoring
 - **Error tracking** - Failure analysis
 - **Usage patterns** - Tool popularity metrics
 
 ### Debug Access
+
 ```javascript
 // Global debug access in browser console
-window.tamboObservability.logSummary();
-window.tamboObservability.getRecentErrors();
-window.tamboObservability.exportEvents();
+window.customObservability.logSummary();
+window.customObservability.getRecentErrors();
+window.customObservability.exportEvents();
 ```
 
 ## Performance Characteristics
 
 ### Latency Improvements
+
 - **Speech → Transcription**: ~200ms (OpenAI Realtime API)
 - **Transcription → Decision**: ~300ms (GPT-4o-mini)
 - **Decision → Tool Dispatch**: ~50ms (Direct data channel)
@@ -232,6 +246,7 @@ window.tamboObservability.exportEvents();
 **Total: ~700ms-1.1s** from speech to UI update
 
 ### Throughput
+
 - **Concurrent users**: 50+ per room
 - **Tool calls/second**: 10+ per user
 - **Document operations**: Real-time with diff tracking
@@ -240,6 +255,7 @@ window.tamboObservability.exportEvents();
 ## Error Handling
 
 ### Circuit Breaker Pattern
+
 ```typescript
 const circuitBreaker = new CircuitBreaker({
   duplicateWindow: 1000,    // 1 second for duplicate prevention
@@ -249,6 +265,7 @@ const circuitBreaker = new CircuitBreaker({
 ```
 
 ### Graceful Degradation
+
 1. **Enhanced decision fails** → Falls back to regular decision
 2. **Tool dispatch fails** → Returns error with guidance
 3. **Component creation fails** → Provides detailed error message
@@ -257,6 +274,7 @@ const circuitBreaker = new CircuitBreaker({
 ## Future Enhancements
 
 ### Planned Improvements
+
 - **Voice response generation** for confirmations
 - **Multi-language support** for international users
 - **Custom component plugins** for extensibility
@@ -264,6 +282,7 @@ const circuitBreaker = new CircuitBreaker({
 - **Performance optimizations** for lower latency
 
 ### Architecture Evolution
+
 - **Microservice split** for better scalability
 - **Edge deployment** for reduced latency
 - **Caching layers** for frequently accessed data
@@ -274,25 +293,28 @@ const circuitBreaker = new CircuitBreaker({
 ## Quick Reference
 
 ### Key Files
+
 - `src/lib/livekit-agent-worker.ts` - Voice agent implementation
 - `src/lib/decision-engine.ts` - Enhanced decision processing
 - `src/components/tool-dispatcher.tsx` - Tool execution and UI updates
-- `src/lib/tambo.ts` - Consolidated NLP and component tools
+- `src/lib/custom.ts` - Consolidated NLP and component tools
 - `src/lib/observability-bridge.ts` - Logging and metrics
 
 ### Debug Commands
+
 ```javascript
 // Check current tool calls
-tamboObservability.getPendingToolCalls()
+customObservability.getPendingToolCalls()
 
 // View success rates
-tamboObservability.getMetrics()
+customObservability.getMetrics()
 
 // Export debugging data
-tamboObservability.exportEvents()
+customObservability.exportEvents()
 ```
 
 ### Tool Examples
+
 ```javascript
 // Get available documents
 get_documents()
@@ -304,4 +326,4 @@ generate_ui_component("Create a 5 minute timer")
 ui_update("timer-abc123", {"initialMinutes": 10})
 ```
 
-This architecture provides a robust, scalable, and debuggable foundation for voice-driven UI generation with minimal latency and maximum reliability. 
+This architecture provides a robust, scalable, and debuggable foundation for voice-driven UI generation with minimal latency and maximum reliability.

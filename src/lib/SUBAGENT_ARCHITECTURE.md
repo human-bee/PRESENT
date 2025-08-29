@@ -6,7 +6,8 @@ This implements the true vision from PRE-111: Components that appear instantly a
 
 ## 🧠 Core Concept
 
-Each Tambo component has its own **sub-agent** that:
+Each custom component has its own **sub-agent** that:
+
 1. **Loads instantly** - Component appears as skeleton in <100ms
 2. **Reads context** - Extracts relevant info from thread/transcript
 3. **Fetches data autonomously** - Makes its own MCP calls
@@ -15,7 +16,7 @@ Each Tambo component has its own **sub-agent** that:
 ## 🏗️ Architecture
 
 ```
-Tambo Thread/Transcript
+custom Thread/Transcript
         ↓
 Component Creation (instant skeleton)
         ↓
@@ -119,7 +120,7 @@ else {
 ## 🎯 Benefits
 
 1. **True Progressive Loading** - Not just visual, actual data flows
-2. **Decoupled Architecture** - Components don't wait for Tambo
+2. **Decoupled Architecture** - Components don't wait for custom
 3. **Autonomous Data Fetching** - Each component manages its own data
 4. **Context-Aware** - Components understand the conversation
 5. **Fault Tolerant** - Individual MCP failures don't break the component
@@ -134,6 +135,7 @@ else {
 ## 🔧 Creating New Components with Sub-Agents
 
 1. **Define the sub-agent config**:
+
 ```typescript
 const config: SubAgentConfig = {
   componentName: "MyComponent",
@@ -147,11 +149,13 @@ const config: SubAgentConfig = {
 ```
 
 2. **Use in your component**:
+
 ```tsx
 const subAgent = useComponentSubAgent(config);
 ```
 
 3. **Render with progressive data**:
+
 ```tsx
 <LoadingWrapper state={subAgent.loadingState}>
   <YourComponent data={subAgent.enrichedData} />
@@ -161,7 +165,9 @@ const subAgent = useComponentSubAgent(config);
 ## 🚀 Advanced Features
 
 ### MCP Activity Indicators
+
 Show users which data sources are active:
+
 ```tsx
 <MCPStatusPanel
   activities={subAgent.mcpActivity}
@@ -171,13 +177,17 @@ Show users which data sources are active:
 ```
 
 ### Error Handling
+
 Sub-agents handle errors gracefully:
+
 - Failed MCP calls don't crash the component
 - Errors are tracked and displayed
 - Fallback data can be provided
 
 ### Refresh Capability
+
 Components can re-fetch data:
+
 ```tsx
 <button onClick={subAgent.refresh}>
   Refresh Data
@@ -187,9 +197,10 @@ Components can re-fetch data:
 ## 🎨 The Magic
 
 This architecture creates the "magical" experience where:
+
 - Components appear instantly (no blank states)
 - Data flows in progressively (users see progress)
 - Each component is intelligent (has its own sub-agent)
 - The system feels alive and responsive
 
-No more waiting for props from Tambo - components take control of their own destiny!
+No more waiting for props from custom - components take control of their own destiny!

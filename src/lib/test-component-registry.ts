@@ -9,7 +9,7 @@
  */
 
 import { ComponentRegistry } from './component-registry';
-import { listComponentsTool, uiUpdateTool } from './tambo';
+import { listComponentsTool, uiUpdateTool } from './custom';
 
 /**
  * Run tests for the component registry system

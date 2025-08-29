@@ -9,7 +9,7 @@
 
 import * as React from 'react';
 import { useParticipants, useLocalParticipant } from '@livekit/components-react';
-import { useTamboThread } from '@tambo-ai/react';
+import { usecustomThread } from '@custom-ai/react';
 
 /**
  * LivekitParticipantSpawner Component
@@ -20,7 +20,7 @@ import { useTamboThread } from '@tambo-ai/react';
 export function LivekitParticipantSpawner() {
   const participants = useParticipants();
   const { localParticipant } = useLocalParticipant();
-  const { sendMessage } = useTamboThread();
+  const { sendMessage } = usecustomThread();
 
   // Track which participants we've already spawned
   const spawnedParticipants = React.useRef<Set<string>>(new Set());

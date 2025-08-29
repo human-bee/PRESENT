@@ -7,7 +7,7 @@
 'use client';
 
 import { cn } from '@/lib/utils';
-import { useTambo, useTamboMessageContext } from '@tambo-ai/react';
+import { usecustom, usecustomMessageContext } from '@custom-ai/react';
 import { cva, type VariantProps } from 'class-variance-authority';
 import * as React from 'react';
 import * as RechartsCore from 'recharts';
@@ -48,10 +48,10 @@ export const graphSchema = z.object({
 // Define the base type from the Zod schema
 type GraphDataType = z.infer<typeof graphDataSchema>;
 
-// Extend the GraphProps with additional tambo properties
+// Extend the GraphProps with additional custom properties
 export interface GraphProps
   extends Omit<React.HTMLAttributes<HTMLDivElement>, 'data' | 'title' | 'size'>,
-    Omit<VariantProps<typeof graphVariants>, 'size' | 'variant'> {
+  Omit<VariantProps<typeof graphVariants>, 'size' | 'variant'> {
   /** Data object containing chart configuration and values */
   data?: GraphDataType;
   /** Optional title for the chart */
@@ -63,11 +63,11 @@ export interface GraphProps
   /** Size of the graph */
   size?: 'default' | 'sm' | 'lg';
   /** Whether to display the status and completion messages */
-  _tambo_displayMessage?: boolean;
+  _custom_displayMessage?: boolean;
   /** Text to display as the status message */
-  _tambo_statusMessage?: string;
+  _custom_statusMessage?: string;
   /** Text to display as the completion status message */
-  _tambo_completionStatusMessage?: string;
+  _custom_completionStatusMessage?: string;
 }
 
 const graphVariants = cva('w-full rounded-lg overflow-hidden transition-all duration-200', {
@@ -126,16 +126,16 @@ export const Graph = React.forwardRef<HTMLDivElement, GraphProps>(
       data,
       title,
       showLegend = true,
-      _tambo_completionStatusMessage,
-      _tambo_statusMessage,
-      _tambo_displayMessage = true,
+      _custom_completionStatusMessage,
+      _custom_statusMessage,
+      _custom_displayMessage = true,
       ...props
     },
     ref,
   ) => {
     // Get thread state
-    const { thread } = useTambo();
-    const { messageId } = useTamboMessageContext();
+    const { thread } = usecustom();
+    const { messageId } = usecustomMessageContext();
 
     const message = thread?.messages[thread?.messages.length - 1];
 
@@ -166,7 +166,7 @@ export const Graph = React.forwardRef<HTMLDivElement, GraphProps>(
               </div>
               {/* Use the specific status message if available, otherwise default */}
               <span className="text-sm">
-                {(_tambo_displayMessage && _tambo_statusMessage) ?? 'Streaming data...'}
+                {(_custom_displayMessage && _custom_statusMessage) ?? 'Streaming data...'}
               </span>
             </div>
           </div>
@@ -195,9 +195,9 @@ export const Graph = React.forwardRef<HTMLDivElement, GraphProps>(
                 <p className="font-medium">Invalid Graph Data</p>
                 <p className="text-sm mt-1">
                   The final data structure is invalid.
-                  {_tambo_displayMessage &&
-                    _tambo_completionStatusMessage &&
-                    ` (${_tambo_completionStatusMessage})`}
+                  {_custom_displayMessage &&
+                    _custom_completionStatusMessage &&
+                    ` (${_custom_completionStatusMessage})`}
                 </p>
               </div>
             </div>
@@ -381,9 +381,9 @@ export const Graph = React.forwardRef<HTMLDivElement, GraphProps>(
               </RechartsCore.ResponsiveContainer>
             </div>
             {/* Optionally display completion message */}
-            {_tambo_displayMessage && _tambo_completionStatusMessage && (
+            {_custom_displayMessage && _custom_completionStatusMessage && (
               <div className="text-xs text-muted-foreground text-center pt-2">
-                {_tambo_completionStatusMessage}
+                {_custom_completionStatusMessage}
               </div>
             )}
           </div>

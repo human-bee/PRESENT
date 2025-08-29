@@ -8,20 +8,20 @@
 import { Room } from 'livekit-client';
 import { systemRegistry } from './system-registry';
 import { createLogger } from './utils';
-// Debug flag (use NEXT_PUBLIC_TAMBO_DEBUG=true to enable verbose logging)
-const DEBUG_OBSERVABILITY = process.env.NEXT_PUBLIC_TAMBO_DEBUG === 'true';
+// Debug flag (use NEXT_PUBLIC_custom_DEBUG=true to enable verbose logging)
+const DEBUG_OBSERVABILITY = process.env.NEXT_PUBLIC_custom_DEBUG === 'true';
 
 export interface ToolCallEvent {
   id: string;
   timestamp: number;
   type:
-    | 'tool_call'
-    | 'tool_result'
-    | 'tool_error'
-    | 'decision'
-    | 'resolve'
-    | 'mcp_ready'
-    | 'ui_mount';
+  | 'tool_call'
+  | 'tool_result'
+  | 'tool_error'
+  | 'decision'
+  | 'resolve'
+  | 'mcp_ready'
+  | 'ui_mount';
   source: 'voice' | 'browser' | 'agent' | 'dispatcher' | 'ui' | 'system';
   tool?: string;
   params?: Record<string, unknown>;
@@ -100,7 +100,7 @@ export class ObservabilityBridge {
                 : '📍';
         // eslint-disable-next-line no-console
         console.log(symbol, `[Observability] ${event.type}`, event);
-      } catch {}
+      } catch { }
     });
   }
 
@@ -147,7 +147,7 @@ export class ObservabilityBridge {
     this.listeners.forEach((l) => {
       try {
         l(event);
-      } catch {}
+      } catch { }
     });
   }
 
@@ -299,7 +299,7 @@ export function createObservabilityBridge(room: Room): ObservabilityBridge {
 
   // Make it available globally for debugging
   if (typeof window !== 'undefined') {
-    (window as any).tamboObservability = globalObservabilityBridge;
+    (window as any).customObservability = globalObservabilityBridge;
   }
 
   return globalObservabilityBridge;

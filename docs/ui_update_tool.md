@@ -7,7 +7,7 @@ ui_update(componentId: string, patch: Record<string, unknown> | string)
 ```
 
 * Call `list_components` first to get valid `componentId` values.
-* If `patch` is a **string** natural-language command, Tambo auto-extracts the parameters via GPT.
+* If `patch` is a **string** natural-language command, custom auto-extracts the parameters via GPT.
 * If `patch` is an **object**, it must not be empty (`{}` will be rejected).
 
 ## Examples
@@ -26,6 +26,7 @@ ui_update(componentId: string, patch: Record<string, unknown> | string)
 ## Auto Component Selection
 
 If `componentId` is `""` or invalid:
+
 1. If only **one** component exists it’s chosen automatically.
 2. If patch mentions timer-like props (`initialMinutes` etc.) UI tries to pick a timer component.
 3. Otherwise returns helpful error.
@@ -41,4 +42,4 @@ If `componentId` is `""` or invalid:
 
 ---
 
-*See `src/lib/tambo.ts` for full implementation.* 
+*See `src/lib/custom.ts` for full implementation.*

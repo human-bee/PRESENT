@@ -305,7 +305,7 @@ export function AIImageGenerator({
 
         // Notify canvas of new image
         window.dispatchEvent(
-          new CustomEvent('tambo:componentUpdate', {
+          new CustomEvent('custom:componentUpdate', {
             detail: {
               componentId,
               imageGenerated: true,
@@ -331,11 +331,11 @@ export function AIImageGenerator({
       }
     };
 
-    window.addEventListener('tambo:canvas:interaction', handleCanvasInteraction as EventListener);
+    window.addEventListener('custom:canvas:interaction', handleCanvasInteraction as EventListener);
 
     return () => {
       window.removeEventListener(
-        'tambo:canvas:interaction',
+        'custom:canvas:interaction',
         handleCanvasInteraction as EventListener,
       );
     };
@@ -418,7 +418,7 @@ export function AIImageGenerator({
   // Show component on canvas when mounted
   useEffect(() => {
     window.dispatchEvent(
-      new CustomEvent('tambo:showComponent', {
+      new CustomEvent('custom:showComponent', {
         detail: {
           messageId: `ai-image-generator-${safePrompt}`,
           component: (

@@ -1,6 +1,6 @@
 /**
  * @file component-icons.ts
- * @description Icon mappings for Tambo components used in the Component Toolbox
+ * @description Icon mappings for custom components used in the Component Toolbox
  */
 
 import {
@@ -27,8 +27,8 @@ export interface ComponentIconMapping {
 }
 
 /**
- * Icon mappings for all available Tambo components
- * Maps component names from tambo.ts to their corresponding Lucide icons
+ * Icon mappings for all available custom components
+ * Maps component names from custom.ts to their corresponding Lucide icons
  */
 export const componentIcons: Record<string, ComponentIconMapping> = {
   // Essentials

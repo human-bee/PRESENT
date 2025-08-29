@@ -1,41 +1,41 @@
 /**
  * System Registry Sync Component
  *
- * This component runs in the background to sync Tambo components
+ * This component runs in the background to sync custom components
  * and MCP tools to the centralized System Registry.
  */
 
 'use client';
 
 import { useEffect } from 'react';
-import { useTambo } from '@tambo-ai/react';
-import { systemRegistry, syncTamboComponentsToRegistry } from '@/lib/system-registry';
+import { usecustom } from '@custom-ai/react';
+import { systemRegistry, synccustomComponentsToRegistry } from '@/lib/system-registry';
 import { createLogger } from '@/lib/utils';
 
 const logger = createLogger('SystemRegistrySync');
 
 export function SystemRegistrySync() {
-  const { componentList } = useTambo();
+  const { componentList } = usecustom();
 
-  // Sync Tambo components to registry
+  // Sync custom components to registry
   useEffect(() => {
-    // Primary path: use components discovered by TamboProvider
+    // Primary path: use components discovered by customProvider
     if (componentList && componentList.length > 0) {
       const componentInfo = componentList.map((comp) => ({
         name: comp.name,
         description: comp.description || `${comp.name} component`,
       }));
       logger.log(
-        '🔄 Syncing Tambo components to system registry:',
+        '🔄 Syncing custom components to system registry:',
         componentInfo.length,
         'components',
       );
-      syncTamboComponentsToRegistry(componentInfo);
+      synccustomComponentsToRegistry(componentInfo);
       return;
     }
 
-    // Fallback: if Tambo hasn't exposed componentList yet, use our local registry
-    import('@/lib/tambo')
+    // Fallback: if custom hasn't exposed componentList yet, use our local registry
+    import('@/lib/custom')
       .then(({ components }) => {
         if (!components || components.length === 0) return;
         const componentInfo = components.map((comp: any) => ({
@@ -47,9 +47,9 @@ export function SystemRegistrySync() {
           componentInfo.length,
           'components',
         );
-        syncTamboComponentsToRegistry(componentInfo);
+        synccustomComponentsToRegistry(componentInfo);
       })
-      .catch(() => {});
+      .catch(() => { });
   }, [componentList]);
 
   // Log registry state in development

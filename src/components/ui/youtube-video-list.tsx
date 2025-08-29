@@ -64,15 +64,15 @@ export function YoutubeVideoList({
           setState((prev) =>
             prev
               ? {
-                  ...prev,
-                  mcpError: 'Connection to external services temporarily unavailable',
-                  hasError: true,
-                }
+                ...prev,
+                mcpError: 'Connection to external services temporarily unavailable',
+                hasError: true,
+              }
               : {
-                  highlightedId: null,
-                  mcpError: 'Connection to external services temporarily unavailable',
-                  hasError: true,
-                },
+                highlightedId: null,
+                mcpError: 'Connection to external services temporarily unavailable',
+                hasError: true,
+              },
           );
         }
         event.preventDefault(); // Prevent the error from bubbling up
@@ -96,7 +96,7 @@ export function YoutubeVideoList({
       }
     } catch (error) {
       console.warn('[YouTube Video List] Error updating state:', error);
-      // Fallback to local state if Tambo state fails
+      // Fallback to local state if custom state fails
     }
   };
 
@@ -177,15 +177,13 @@ export function YoutubeVideoPreview({
 
   return (
     <div
-      className={`flex flex-col group cursor-pointer ${
-        isHighlighted ? 'transform scale-[1.02]' : ''
-      }`}
+      className={`flex flex-col group cursor-pointer ${isHighlighted ? 'transform scale-[1.02]' : ''
+        }`}
       onClick={() => onHighlight(id)}
     >
       <div
-        className={`relative block overflow-hidden rounded-lg shadow-md transition-transform duration-300 group-hover:shadow-lg ${
-          isHighlighted ? 'ring-2 ring-primary ring-offset-2' : ''
-        }`}
+        className={`relative block overflow-hidden rounded-lg shadow-md transition-transform duration-300 group-hover:shadow-lg ${isHighlighted ? 'ring-2 ring-primary ring-offset-2' : ''
+          }`}
       >
         {isHighlighted && (
           <div className="absolute top-2 right-2 z-10 bg-primary text-primary-foreground text-xs px-2 py-1 rounded-full font-medium">

@@ -45,7 +45,7 @@ export const debateScoreCardSchema = z.object({
   moderatorMode: z.boolean().default(false),
 
   componentId: z.string().default('debate-scorecard'),
-  __tambo_message_id: z.string().optional(),
+  __custom_message_id: z.string().optional(),
 });
 
 export type DebateScorecardProps = z.infer<typeof debateScoreCardSchema>;
@@ -315,15 +315,15 @@ export function DebateScorecard(props: DebateScorecardProps) {
     twitchMode = false,
     moderatorMode = false,
     componentId = 'debate-scorecard',
-    __tambo_message_id,
+    __custom_message_id,
   } = props;
 
   const effectiveMessageId = useMemo(() => {
-    if (__tambo_message_id) return __tambo_message_id;
+    if (__custom_message_id) return __custom_message_id;
     const p1 = (participant1?.name || 'p1').replace(/\s+/g, '-').toLowerCase();
     const p2 = (participant2?.name || 'p2').replace(/\s+/g, '-').toLowerCase();
     return `debate-${p1}-vs-${p2}-${rounds}`;
-  }, [__tambo_message_id, participant1?.name, participant2?.name, rounds]);
+  }, [__custom_message_id, participant1?.name, participant2?.name, rounds]);
 
   type DebateState = {
     round: number;

@@ -4,13 +4,13 @@
 export type McpServer =
   | string
   | {
-      url: string;
-      transport?: 'sse' | 'http';
-      name?: string;
-      timeout?: number;
-      retryAttempts?: number;
-      enabled?: boolean;
-    };
+    url: string;
+    transport?: 'sse' | 'http';
+    name?: string;
+    timeout?: number;
+    retryAttempts?: number;
+    enabled?: boolean;
+  };
 
 /**
  * MCP Server status tracking
@@ -260,11 +260,11 @@ export function suppressDevelopmentWarnings() {
     const originalConsoleError = console.error;
 
     console.warn = (...args) => {
-      // Suppress known tool overwrite warnings from Tambo MCP provider
+      // Suppress known tool overwrite warnings from custom MCP provider
       const message = args.join(' ');
       if (
         message.includes('Overwriting tool') ||
-        message.includes('TamboRegistryProvider') ||
+        message.includes('customRegistryProvider') ||
         message.includes('Added non-passive event listener') ||
         message.includes("Consider marking event handler as 'passive'") ||
         message.includes('Cannot update server for missing message') ||

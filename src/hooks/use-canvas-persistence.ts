@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { Editor } from 'tldraw';
 import { useRouter } from 'next/navigation';
-import { useTamboThread } from '@tambo-ai/react';
+import { usecustomThread } from '@custom-ai/react';
 import { toast } from 'react-hot-toast';
 import { supabase, type Canvas } from '@/lib/supabase';
 import { useAuth } from './use-auth';
@@ -9,7 +9,7 @@ import { useAuth } from './use-auth';
 export function useCanvasPersistence(editor: Editor | null, enabled: boolean = true) {
   const { user } = useAuth();
   const router = useRouter();
-  const { thread } = useTamboThread();
+  const { thread } = usecustomThread();
   const [canvasId, setCanvasId] = useState<string | null>(null);
   const [canvasName, setCanvasName] = useState('Untitled Canvas');
   const [isSaving, setIsSaving] = useState(false);
@@ -50,7 +50,7 @@ export function useCanvasPersistence(editor: Editor | null, enabled: boolean = t
             console.log('🎨 [CanvasPersistence] Loading canvas:', canvas.id, canvas.name);
             console.log(
               '🎨 [CanvasPersistence] Canvas document has shapes:',
-              Object.keys(canvas.document?.store?.['shape:tambo'] || {}),
+              Object.keys(canvas.document?.store?.['shape:custom'] || {}),
             );
             console.log('🎨 [CanvasPersistence] Conversation key:', canvas.conversation_key);
 
@@ -59,7 +59,7 @@ export function useCanvasPersistence(editor: Editor | null, enabled: boolean = t
             setLastSaved(new Date(canvas.last_modified));
             try {
               localStorage.setItem('present:lastCanvasId', canvas.id);
-            } catch {}
+            } catch { }
 
             // Determine write permission: owner or editor membership
             if (canvas.user_id === user.id) {
@@ -97,7 +97,7 @@ export function useCanvasPersistence(editor: Editor | null, enabled: boolean = t
             setTimeout(() => {
               console.log('🔄 [CanvasPersistence] Starting component rehydration...');
               window.dispatchEvent(
-                new CustomEvent('tambo:rehydrateComponents', {
+                new CustomEvent('custom:rehydrateComponents', {
                   detail: { canvasId: canvas.id, conversationKey: canvas.conversation_key },
                 }),
               );
@@ -126,7 +126,7 @@ export function useCanvasPersistence(editor: Editor | null, enabled: boolean = t
           setCanvasId(id);
           setCanvasName((prev) => prev || id);
         }
-      } catch {}
+      } catch { }
     };
     window.addEventListener('present:canvas-id-changed', handler);
     return () => window.removeEventListener('present:canvas-id-changed', handler);
@@ -168,7 +168,7 @@ export function useCanvasPersistence(editor: Editor | null, enabled: boolean = t
         // Notify session sync to update the session's canvas_state
         try {
           window.dispatchEvent(
-            new CustomEvent('tambo:sessionCanvasSaved', { detail: { snapshot, canvasId } }),
+            new CustomEvent('custom:sessionCanvasSaved', { detail: { snapshot, canvasId } }),
           );
         } catch (e) {
           // no-op
@@ -194,12 +194,12 @@ export function useCanvasPersistence(editor: Editor | null, enabled: boolean = t
         setLastSaved(new Date());
         try {
           localStorage.setItem('present:lastCanvasId', newCanvas.id);
-        } catch {}
+        } catch { }
 
         // Notify session sync to update the session's canvas_state
         try {
           window.dispatchEvent(
-            new CustomEvent('tambo:sessionCanvasSaved', {
+            new CustomEvent('custom:sessionCanvasSaved', {
               detail: { snapshot, canvasId: newCanvas.id },
             }),
           );

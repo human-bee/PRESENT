@@ -1,18 +1,18 @@
 /**
  * MCP Bridge - Connects components to existing MCP infrastructure
  *
- * This bridges the gap between components and the MCP tools that Tambo already uses.
+ * This bridges the gap between components and the MCP tools that custom already uses.
  * We're NOT reinventing the wheel - just exposing existing functionality to components.
  */
 
-import { useTamboClient } from '@tambo-ai/react';
+import { usecustomClient } from '@custom-ai/react';
 import { useCallback } from 'react';
 
 // Global MCP tool registry populated by the Tool Dispatcher
 declare global {
   interface Window {
-    __tambo_mcp_tools?: Record<string, any>;
-    __tambo_tool_dispatcher?: {
+    __custom_mcp_tools?: Record<string, any>;
+    __custom_tool_dispatcher?: {
       executeMCPTool: (toolName: string, params: any) => Promise<any>;
     };
     __mcp_ready_promise?: Promise<void>;
@@ -24,7 +24,7 @@ let resolveReady: (() => void) | null = null;
 
 /**
  * Initialize the MCP bridge - called once when app starts
- * This connects components to the same MCP infrastructure Tambo uses
+ * This connects components to the same MCP infrastructure custom uses
  */
 export function initializeMCPBridge() {
   if (typeof window === 'undefined') return;
@@ -38,12 +38,12 @@ export function initializeMCPBridge() {
   // Create the bridge function that components will use
   window.callMcpTool = async (toolName: string, params: any) => {
     // Option 1: Use Tool Dispatcher if available
-    if (window.__tambo_tool_dispatcher?.executeMCPTool) {
-      return window.__tambo_tool_dispatcher.executeMCPTool(toolName, params);
+    if (window.__custom_tool_dispatcher?.executeMCPTool) {
+      return window.__custom_tool_dispatcher.executeMCPTool(toolName, params);
     }
 
-    // Option 2: Send via Tambo message (existing pattern)
-    const event = new CustomEvent('tambo:executeMCPTool', {
+    // Option 2: Send via custom message (existing pattern)
+    const event = new CustomEvent('custom:executeMCPTool', {
       detail: {
         tool: toolName.startsWith('mcp_') ? toolName : `mcp_${toolName}`,
         params,
@@ -64,17 +64,17 @@ export function initializeMCPBridge() {
 
         // Match if the responded tool (or resolved key) matches requested (ignoring mcp_ prefix)
         if (responded === requested || (!!resolvedKey && resolvedKey === requested)) {
-          window.removeEventListener('tambo:mcpToolResponse', responseHandler);
+          window.removeEventListener('custom:mcpToolResponse', responseHandler);
           if (error) reject(error);
           else resolve(result);
         }
       };
 
-      window.addEventListener('tambo:mcpToolResponse', responseHandler);
+      window.addEventListener('custom:mcpToolResponse', responseHandler);
 
       // Timeout after 30 seconds
       setTimeout(() => {
-        window.removeEventListener('tambo:mcpToolResponse', responseHandler);
+        window.removeEventListener('custom:mcpToolResponse', responseHandler);
         reject(new Error(`MCP tool ${toolName} timed out`));
       }, 30000);
     });
@@ -113,10 +113,10 @@ export function markMcpReady() {
 
 /**
  * Hook for components to call MCP tools directly
- * Uses the same infrastructure as Tambo
+ * Uses the same infrastructure as custom
  */
 export function useMCPTool() {
-  const tambo = useTamboClient();
+  const custom = usecustomClient();
 
   const callTool = useCallback(
     async (toolName: string, params: any) => {
@@ -131,12 +131,12 @@ export function useMCPTool() {
           return await window.callMcpTool(toolName, params);
         }
 
-        // Fallback: Send as Tambo message
-        if (tambo) {
-          await tambo.sendMessage(
+        // Fallback: Send as custom message
+        if (custom) {
+          await custom.sendMessage(
             `Execute MCP tool ${fullToolName} with params: ${JSON.stringify(params)}`,
           );
-          return { status: 'sent', message: 'MCP tool request sent via Tambo' };
+          return { status: 'sent', message: 'MCP tool request sent via custom' };
         }
 
         throw new Error('No MCP bridge available');
@@ -145,7 +145,7 @@ export function useMCPTool() {
         throw error;
       }
     },
-    [tambo],
+    [custom],
   );
 
   return { callTool };
@@ -157,10 +157,10 @@ export function useMCPTool() {
  */
 export function registerMCPTools(tools: Record<string, any>) {
   if (typeof window === 'undefined') return;
-  window.__tambo_mcp_tools = tools;
+  window.__custom_mcp_tools = tools;
   console.log('[MCP Bridge] Registered MCP tools:', Object.keys(tools));
   // Mark ready once tools registered
   try {
     markMcpReady();
-  } catch {}
+  } catch { }
 }

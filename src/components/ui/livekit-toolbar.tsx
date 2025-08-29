@@ -232,7 +232,7 @@ const ParticipantControls: React.FC<ParticipantControlsProps> = ({
  *
  * A living, breathing video conferencing control center that adapts to real room state,
  * manages individual participants intelligently, and provides context-aware controls.
- * Built following Tambo principles for complete, connected, delightful experiences.
+ * Built following custom principles for complete, connected, delightful experiences.
  */
 export function LivekitToolbar({
   roomName,
@@ -284,11 +284,11 @@ export function LivekitToolbar({
   });
 
   // Extract values from hooks - handle potential errors with conditional logic
-  const toggleMic = micToggle?.toggle || (() => {});
+  const toggleMic = micToggle?.toggle || (() => { });
   const micEnabled = micToggle?.enabled || false;
-  const toggleCamera = cameraToggle?.toggle || (() => {});
+  const toggleCamera = cameraToggle?.toggle || (() => { });
   const cameraEnabled = cameraToggle?.enabled || false;
-  const toggleScreenShare = screenShareToggle?.toggle || (() => {});
+  const toggleScreenShare = screenShareToggle?.toggle || (() => { });
   const screenShareEnabled = screenShareToggle?.enabled || false;
 
   // Real recording functionality
@@ -435,7 +435,7 @@ export function LivekitToolbar({
   // The component should be rendered directly by the user or AI in the proper LiveKit context
   // React.useEffect(() => {
   //   window.dispatchEvent(
-  //     new CustomEvent("tambo:showComponent", {
+  //     new CustomEvent("custom:showComponent", {
   //       detail: {
   //         messageId: componentId,
   //         component: <LivekitToolbar {...{ roomName, enableVoiceCommands, enableParticipantControls, enableAdaptiveUI, moderationEnabled, autoMuteOnJoin, maxParticipants, compactMode, showConnectionStatus, showParticipantList, features }} />,
@@ -467,7 +467,7 @@ export function LivekitToolbar({
 
     // Notify canvas about layout change
     window.dispatchEvent(
-      new CustomEvent('tambo:layoutUpdate', {
+      new CustomEvent('custom:layoutUpdate', {
         detail: {
           pinnedParticipants: isPinned
             ? state.pinnedParticipants.filter((id) => id !== participantId)

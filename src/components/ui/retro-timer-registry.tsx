@@ -9,7 +9,7 @@
 
 import React from 'react';
 import { RetroTimer, retroTimerSchema, type RetroTimerProps } from './retro-timer';
-import { withTamboRegistry, type TamboRegistryProps } from '@/lib/tambo-registry-wrapper';
+import { withcustomRegistry, type customRegistryProps } from '@/lib/custom-registry-wrapper';
 
 // Custom update handler for RetroTimer
 function handleRetroTimerUpdate(
@@ -46,7 +46,7 @@ function handleRetroTimerUpdate(
 }
 
 // Create the registry-enabled component
-export const RetroTimerRegistry = withTamboRegistry(
+export const RetroTimerRegistry = withcustomRegistry(
   RetroTimer,
   'RetroTimer',
   handleRetroTimerUpdate,

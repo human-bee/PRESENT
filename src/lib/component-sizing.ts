@@ -1,6 +1,6 @@
 'use client';
 
-import { components } from './tambo'; // Import all registered components
+import { components } from './custom'; // Import all registered components
 
 // Define interface for component size information
 export interface ComponentSizeInfo {

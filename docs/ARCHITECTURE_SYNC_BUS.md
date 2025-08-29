@@ -2,11 +2,13 @@
 
 This document explains the **LiveKit bus + adapter** refactor that landed in PR XXX.
 It replaces ad-hoc `publishData` / `useDataChannel` calls with a single, structured
-event stream shared by every layer: voice agent, browser UI, Tambo threads and
+event stream shared by every layer: voice agent, browser UI, custom threads and
 canvas components.
 
 ---
+
 ## 1  Event Bus
+
 `src/lib/livekit-bus.ts`
 
 ```ts
@@ -31,19 +33,21 @@ bus.on('ui_update', (payload) => { ... })
 | `state_pong`   | LiveTranscription / Canvas ……  | ToolDispatcher (logs)                | {source,itemCount|lineCount} |
 
 ---
+
 ## 2  Adapters
 
 | Adapter                | File                                   | Responsibilities |
 |------------------------|----------------------------------------|------------------|
 | **CanvasSyncAdapter**  | `components/CanvasSyncAdapter.tsx`     | • wrap a visual component<br/>• emit `ui_update` via `bus.send`<br/>• apply remote patches via `onRemotePatch`<br/>• answer `state_ping` with `state_pong` + `itemCount` |
 | **LiveTranscription**  | `components/LiveTranscription.tsx`     | • publish demo or real ASR on `transcription`<br/>• forward remote lines to callback<br/>• answer `state_ping` with lineCount |
-| **ThreadSyncAdapter**  | `components/ThreadSyncAdapter.tsx`     | • publish each local Tambo chat message on `thread_msg`<br/>• inject remote messages via `sendThreadMessage` |
+| **ThreadSyncAdapter**  | `components/ThreadSyncAdapter.tsx`     | • publish each local custom chat message on `thread_msg`<br/>• inject remote messages via `sendThreadMessage` |
 | **ToolDispatcher**     | `components/tool-dispatcher.tsx`       | • listen for `tool_call` → execute<br/>• publish `tool_result` / `tool_error`<br/>• 15 s heartbeat `state_ping` & mismatch logging |
 
 ---
+
 ## 3  Dynamic Tool Execution
 
-`ToolDispatcher.executeToolCall` now first checks `useTambo().toolRegistry`. If a
+`ToolDispatcher.executeToolCall` now first checks `usecustom().toolRegistry`. If a
 tool with that name exists *and* is not one of the 4 built-ins it runs:
 
 ```ts
@@ -55,10 +59,13 @@ This means adding a new MCP server instantly expands capabilities—no new `case
 statements required.
 
 ---
+
 ## 4  Wrapping Components
 
 ### TLDraw Canvas
+
 `components/ui/tldraw-canvas.tsx`
+
 ```tsx
 <CanvasSyncAdapter
   componentId={componentId}
@@ -69,7 +76,9 @@ statements required.
 ```
 
 ### Retro Timer
+
 `components/ui/retro-timer.tsx`
+
 ```tsx
 <CanvasSyncAdapter componentId={componentId} onRemotePatch={patch => {
   if ('seconds' in patch) setSeconds(patch.seconds)
@@ -82,9 +91,11 @@ statements required.
 Any patch of the form `{seconds:300}` sent over `ui_update` will update everyone.
 
 ---
+
 ## 5  Voice Agent `ui_update`
 
 Inside `livekit-agent-worker.ts` after completing a function call:
+
 ```ts
 room.localParticipant.publishData(
   new TextEncoder().encode(JSON.stringify({
@@ -97,6 +108,7 @@ room.localParticipant.publishData(
 ```
 
 ---
+
 ## 6  Heartbeat & Reconciliation
 
 • Every 15 s ToolDispatcher broadcasts `state_ping`.
@@ -104,19 +116,23 @@ room.localParticipant.publishData(
 • Dispatcher logs deltas > 1; future work could trigger a resync request.
 
 ---
+
 ## 7  Migration Checklist for New Components
 
 1. Give it a stable **componentId**.
 2. Wrap JSX in `<CanvasSyncAdapter componentId=…>`.
 3. Emit patches by dispatching:
+
    ```js
-   window.dispatchEvent(new CustomEvent('tambo:canvasPatch',
+   window.dispatchEvent(new CustomEvent('custom:canvasPatch',
      {detail:{componentId:'my-chart',patch:{filter:"Q2"}}}))
    ```
+
 4. Handle incoming `patch` inside `onRemotePatch`.
 5. Optionally implement `getItemCount` for heartbeat stats.
 
 ---
+
 ## 8  Compatibility with tldraw-sync
 
 CanvasSyncAdapter operates at the React-state layer. tldraw-sync continues to
@@ -124,32 +140,35 @@ replicate the TLDraw store. If both send the same update it's idempotent; if
 they diverge, latest `timestamp` wins (implement Lamport clocks if needed).
 
 ---
+
 <<<<<<< Current (Your changes)
-Happy syncing! 🎉 
+Happy syncing! 🎉
 =======
-Happy syncing! 🎉 
+
+Happy syncing! 🎉
 
 ## Session Sync to Supabase
 
 A headless `SessionSync` component (see `src/components/SessionSync.tsx`) mounts inside the LiveKit room context and:
-- Ensures a `canvas_sessions` row exists keyed by `room_name` + `canvas_id`
-- Streams `transcription` bus messages into the `transcript` JSONB array
-- Keeps `participants` in sync on join/leave
-- Updates `canvas_state` when `useCanvasPersistence` emits `tambo:sessionCanvasSaved`
+* Ensures a `canvas_sessions` row exists keyed by `room_name` + `canvas_id`
+* Streams `transcription` bus messages into the `transcript` JSONB array
+* Keeps `participants` in sync on join/leave
+* Updates `canvas_state` when `useCanvasPersistence` emits `custom:sessionCanvasSaved`
 
 Suggested Supabase table `canvas_sessions`:
-- id: uuid primary key default uuid_generate_v4()
-- canvas_id: uuid nullable references canvases(id)
-- room_name: text not null
-- participants: jsonb default '[]'
-- transcript: jsonb default '[]'
-- canvas_state: jsonb
-- created_at: timestamp with time zone default now()
-- updated_at: timestamp with time zone default now()
+* id: uuid primary key default uuid_generate_v4()
+* canvas_id: uuid nullable references canvases(id)
+* room_name: text not null
+* participants: jsonb default '[]'
+* transcript: jsonb default '[]'
+* canvas_state: jsonb
+* created_at: timestamp with time zone default now()
+* updated_at: timestamp with time zone default now()
 
-Add an index on (room_name, canvas_id) unique to dedupe sessions. 
+Add an index on (room_name, canvas_id) unique to dedupe sessions.
 
 TLDraw events:
-- `TldrawSnapshotBroadcaster` publishes snapshots on topic `tldraw` with `{ type: 'tldraw_snapshot', data, timestamp, source }`.
-- `useSessionSync` listens to `tldraw` and appends entries to `events` (capped to 500). 
+* `TldrawSnapshotBroadcaster` publishes snapshots on topic `tldraw` with `{ type: 'tldraw_snapshot', data, timestamp, source }`.
+* `useSessionSync` listens to `tldraw` and appends entries to `events` (capped to 500).
+
 >>>>>>> Incoming (Background Agent changes)
