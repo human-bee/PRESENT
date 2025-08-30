@@ -8,7 +8,7 @@
 
 'use client';
 
-import React, { useCallback } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { useComponentRegistration } from './component-registry';
 
 // Extended props interface that includes custom message ID
@@ -29,28 +29,31 @@ export function withcustomRegistry<P extends Record<string, unknown>>(
   const WrappedComponent = React.forwardRef<unknown, P & customRegistryProps>((props, ref) => {
     const { __custom_message_id, ...componentProps } = props;
 
+    // Local shadow props that can be updated by ComponentRegistry.update(...)
+    const [localProps, setLocalProps] = useState<Record<string, unknown>>({ ...componentProps });
+    // Effective props passed down: start from local shadow to allow updates
+    const effectiveProps = useMemo(() => ({ ...localProps }), [localProps]);
+
     // Generate fallback ID if no custom message ID provided
     const effectiveMessageId = __custom_message_id || `${componentType.toLowerCase()}-${Date.now()}`;
 
     // Default update handler - merge patch into props
     const defaultUpdateHandler = useCallback(
       (patch: Record<string, unknown>) => {
-        console.log(`[${componentType}] Received AI update:`, patch);
-
-        // If custom update handler provided, use it
-        if (updateHandler) {
-          const updatedProps = updateHandler(componentProps as P, patch);
-          // For now, log the would-be update
-          // In a full implementation, this would trigger a re-render with new props
-          console.log(`[${componentType}] Would update props:`, updatedProps);
-          return;
+        try {
+          // If consumer provided a custom handler, let it transform the props first
+          if (updateHandler) {
+            const updates = updateHandler(effectiveProps as P, patch);
+            setLocalProps((prev) => ({ ...prev, ...updates }));
+            return;
+          }
+          // Default: shallow merge patch into local shadow props
+          setLocalProps((prev) => ({ ...prev, ...patch }));
+        } catch (e) {
+          console.warn(`[${componentType}] update handler failed`, e);
         }
-
-        // Default behavior - this works for components that manage their own state
-        // and check props in useEffect dependencies
-        console.log(`[${componentType}] Default update - component should handle props change`);
       },
-      [componentProps],
+      [effectiveProps, updateHandler],
     );
 
     // Register with ComponentRegistry
@@ -62,8 +65,8 @@ export function withcustomRegistry<P extends Record<string, unknown>>(
       defaultUpdateHandler,
     );
 
-    // Render the original component
-    return <Component ref={ref} {...(componentProps as P)} />;
+    // Render the original component with effective props
+    return <Component ref={ref} {...(effectiveProps as P)} />;
   });
 
   WrappedComponent.displayName = `withcustomRegistry(${Component.displayName || Component.name || componentType})`;
@@ -119,4 +122,3 @@ export function usecustomMessageId(): string | undefined {
 
   return messageId;
 }
-
