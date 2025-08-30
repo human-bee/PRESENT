@@ -171,10 +171,14 @@ export function TldrawWithCollaboration({
     host: safeHost,
   } as any);
 
+  // Log sync host once per session in dev
   try {
-    // Lightweight runtime diagnostic
-    console.warn('[Tldraw] Using sync host:', safeHost);
-  } catch { }
+    const g: any = globalThis as any;
+    if (process.env.NODE_ENV === 'development' && !g.__LOGGED_TLDRAW_SYNC_HOST__) {
+      console.warn('[Tldraw] Using sync host:', safeHost);
+      g.__LOGGED_TLDRAW_SYNC_HOST__ = true;
+    }
+  } catch {}
 
   // Create memoised overrides & components
   const overrides = useMemo(() => createCollaborationOverrides(), []);

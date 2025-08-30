@@ -55,15 +55,21 @@ export function SystemRegistrySync() {
   // Log registry state in development
   useEffect(() => {
     if (process.env.NODE_ENV === 'development') {
+      let lastSig: string | null = null;
       const logRegistryState = () => {
         const capabilities = systemRegistry.getAllCapabilities();
-        logger.log('📊 System Registry State:', {
+        const summary = {
           total: capabilities.length,
           tools: capabilities.filter((c) => c.type === 'tool').length,
           components: capabilities.filter((c) => c.type === 'component').length,
           mcpTools: capabilities.filter((c) => c.type === 'mcp_tool').length,
           available: capabilities.filter((c) => c.available).length,
-        });
+        };
+        const sig = JSON.stringify(summary);
+        if (sig !== lastSig) {
+          logger.log('📊 System Registry State:', summary);
+          lastSig = sig;
+        }
       };
 
       // Log initially and on changes

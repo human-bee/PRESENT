@@ -125,6 +125,9 @@ export function loadMcpServers(): McpServer[] {
 
     // Deduplicate servers by URL to prevent multiple tool registrations
     const uniqueUrls = new Set();
+    // Track logs to avoid noisy duplicates in dev / strict mode
+    const loggedProxy = (window as any).__mcp_logged_proxy__ || new Set<string>();
+    (window as any).__mcp_logged_proxy__ = loggedProxy;
     const deduplicatedServers = servers
       .filter((server: McpServer) => {
         const url = typeof server === 'string' ? server : server.url;
@@ -182,8 +185,9 @@ export function loadMcpServers(): McpServer[] {
           !url.startsWith('http://127.0.0.1') &&
           !url.startsWith('/')
         ) {
-          if (process.env.NODE_ENV === 'development') {
+          if (process.env.NODE_ENV === 'development' && !loggedProxy.has(url)) {
             console.log(`[MCP] Proxying external server: ${url}`);
+            loggedProxy.add(url);
           }
 
           // Update the URL to use our proxy
@@ -203,7 +207,12 @@ export function loadMcpServers(): McpServer[] {
 
     // Log loading info in development
     if (process.env.NODE_ENV === 'development' && deduplicatedServers.length > 0) {
-      console.log(`[MCP] Loading ${deduplicatedServers.length} MCP server(s)`);
+      const g: any = window as any;
+      const key = '__mcp_last_count__';
+      if (g[key] !== deduplicatedServers.length) {
+        console.log(`[MCP] Loading ${deduplicatedServers.length} MCP server(s)`);
+        g[key] = deduplicatedServers.length;
+      }
 
       // Show which servers are being skipped
       const skippedServers = servers.length - deduplicatedServers.length;

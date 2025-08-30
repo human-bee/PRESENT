@@ -76,7 +76,7 @@ class ComponentErrorBoundary extends Component<
 }
 
 // Component wrapper to handle hooks inside the shape
-function customShapeComponent({ shape }: { shape: customShape }) {
+function CustomShapeComponent({ shape }: { shape: customShape }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const scaleWrapperRef = useRef<HTMLDivElement>(null);
   const contentInnerRef = useRef<HTMLDivElement>(null);
@@ -310,7 +310,7 @@ export class customShapeUtil extends BaseBoxShapeUtil<customShape> {
           zIndex: (shape.props.pinned ?? false) ? 1000 : 100,
         }}
       >
-        <customShapeComponent shape={shape} />
+        <CustomShapeComponent shape={shape} />
       </TldrawHTMLContainer>
     );
   }

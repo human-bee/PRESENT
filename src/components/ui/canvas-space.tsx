@@ -54,6 +54,7 @@ import { calculateInitialSize } from '@/lib/component-sizing'; // Add import for
 import { CanvasLiveKitContext } from './livekit-room-connector';
 import { useRoomContext } from '@livekit/components-react';
 import { createLiveKitBus } from '../../lib/livekit/livekit-bus';
+import { components } from '@/lib/custom';
 
 // Dynamic imports for heavy tldraw components - only load when needed
 
@@ -223,7 +224,7 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
 
         // Find component definition
         // Try exact match first
-        let componentDef = customComponents.find((c) => c.name === componentName);
+        let componentDef = components.find((c) => c.name === componentName);
         // Handle legacy and wrapper names that appeared in earlier saves
         if (!componentDef) {
           // Legacy chat label
