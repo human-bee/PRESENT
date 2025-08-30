@@ -1,4 +1,5 @@
 import type { NextConfig } from 'next';
+import path from 'path';
 
 const nextConfig: NextConfig = {
   // 🚨 TEMPORARY FIX FOR DEPLOYMENT - REMOVE THESE FOR PRODUCTION! 🚨
@@ -23,13 +24,15 @@ const nextConfig: NextConfig = {
   // Skip trailing slash redirect
   skipTrailingSlashRedirect: true,
 
-  // Fix tldraw multiple instances issue
+  // Fix tldraw multiple instances issue and alias away @custom-ai/react
   webpack: (config, { dev, isServer }) => {
     // Ensure single instance of tldraw libraries
     if (!isServer) {
       config.resolve.alias = {
         ...config.resolve.alias,
         tldraw: require.resolve('tldraw'),
+        '@custom-ai/react': path.resolve(__dirname, 'src/lib/shims/custom-react.ts'),
+        '@custom-ai/react/mcp': path.resolve(__dirname, 'src/lib/shims/custom-react-mcp.tsx'),
       };
     }
 

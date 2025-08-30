@@ -39,6 +39,7 @@
 
 import { cn } from '@/lib/utils';
 import { useEffect, useRef, useState, useCallback } from 'react';
+import { usecustom } from '@custom-ai/react';
 import * as React from 'react';
 import dynamic from 'next/dynamic';
 import type { Editor } from 'tldraw';
@@ -126,7 +127,7 @@ interface CanvasSpaceProps {
  */
 export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps) {
   // TODO: Access the current context
-  const { thread } = useContext();
+  const { thread } = usecustom();
   const [editor, setEditor] = useState<Editor | null>(null);
   const previousThreadId = useRef<string | null>(null);
   const livekitCtx = React.useContext(CanvasLiveKitContext);
@@ -190,7 +191,11 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
   useEffect(() => {
     if (typeof window !== 'undefined') {
       import('./tldraw-canvas').then((mod) => {
-        setCustomShapeUtils([mod.CustomShapeUtil, mod.ToolboxShapeUtil]);
+        const utils = [
+          (mod as any).customShapeUtil,
+          (mod as any).ToolboxShapeUtil,
+        ].filter(Boolean);
+        setCustomShapeUtils(utils);
       });
     }
   }, []);

@@ -23,7 +23,9 @@
       }
     ],
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@custom-ai/react": ["./src/lib/shims/custom-react.ts"],
+      "@custom-ai/react/mcp": ["./src/lib/shims/custom-react-mcp.tsx"]
     }
   },
   "include": [
