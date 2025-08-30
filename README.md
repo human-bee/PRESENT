@@ -1,11 +1,11 @@
-# Tambo Voice AI Application
+# custom Voice AI Application
 
-A sophisticated Next.js application that combines Tambo AI's generative UI capabilities with LiveKit's real-time voice agents and Model Context Protocol (MCP) integration.
+A sophisticated Next.js application that combines custom AI's generative UI capabilities with LiveKit's real-time voice agents and Model Context Protocol (MCP) integration.
 
 ## 🎯 Features
 
 - **Voice-Enabled AI Agent**: Real-time voice interactions powered by LiveKit and OpenAI
-- **Generative UI Components**: Dynamic UI generation through Tambo AI
+- **Generative UI Components**: Dynamic UI generation through custom AI
 - **MCP Integration**: Connect to various AI tools and services via Model Context Protocol
 - **Multi-Modal Interactions**: Support for both chat and voice interfaces
 - **Canvas Collaboration**: Interactive canvas with AI-generated components
@@ -14,9 +14,10 @@ A sophisticated Next.js application that combines Tambo AI's generative UI capab
 ## 🚀 Getting Started
 
 ### Prerequisites
-- Node.js 18+ 
+
+- Node.js 18+
 - Valid API keys for:
-  - Tambo AI
+  - custom AI
   - LiveKit (Cloud or self-hosted)
   - OpenAI
   - Supabase (for auth/storage)
@@ -24,21 +25,25 @@ A sophisticated Next.js application that combines Tambo AI's generative UI capab
 ### Installation
 
 1. **Clone the repository**
+
 ```bash
 git clone <your-repo-url>
 cd PRESENT
 ```
 
 2. **Install dependencies**
+
 ```bash
 npm install
 ```
 
 3. **Set up environment variables**
+
 - Copy `example.env.local` to `.env.local`
 - Fill in all required API keys:
+
   ```
-  NEXT_PUBLIC_TAMBO_API_KEY=
+  NEXT_PUBLIC_custom_API_KEY=
   LIVEKIT_API_KEY=
   LIVEKIT_API_SECRET=
   LIVEKIT_URL=
@@ -48,6 +53,7 @@ npm install
   ```
 
 4. **Build the agent (TypeScript)**
+
 ```bash
 npm run agent:build
 ```
@@ -55,14 +61,17 @@ npm run agent:build
 ### Running the Application
 
 #### Development Mode (Recommended)
+
 Run in two terminals:
 
 **Terminal 1 - Voice Agent (start first):**
+
 ```bash
 npm run agent:dev
 ```
 
 **Terminal 2 - Next.js App:**
+
 ```bash
 npm run dev
 ```
@@ -72,6 +81,7 @@ Visit `http://localhost:3000`
 > **Important**: Always start the agent before the web app to ensure proper connection.
 
 #### Production Mode
+
 ```bash
 npm run build
 npm run agent:build
@@ -82,7 +92,7 @@ npm run agent:run  # Terminal 2
 ## 📱 Key Features & Pages
 
 - **`/`** - Landing page with setup checklist
-- **`/chat`** - Tambo AI chat interface with MCP integration
+- **`/chat`** - custom AI chat interface with MCP integration
 - **`/voice`** - Voice assistant with speech-to-text display
 - **`/canvas`** - Interactive canvas with voice agent integration
 - **`/mcp-config`** - Configure MCP servers
@@ -100,34 +110,34 @@ For the demo above we used smithery.ai's [brave-search-mcp](https://smithery.ai/
 
 You can use any MCP compatible server that supports SSE or HTTP.
 
-Our MCP config page is built using the tambo-ai/react/mcp package:
+Our MCP config page is built using the custom-ai/react/mcp package:
 
 ```tsx
 // In your chat page
-<TamboProvider
-  apiKey={process.env.NEXT_PUBLIC_TAMBO_API_KEY!}
+<customProvider
+  apiKey={process.env.NEXT_PUBLIC_custom_API_KEY!}
   components={components}
 >
-  <TamboMcpProvider mcpServers={mcpServers}>
-    <MessageThreadFull contextKey="tambo-template" />
-  </TamboMcpProvider>
-</TamboProvider>
+  <customMcpProvider mcpServers={mcpServers}>
+    <MessageThreadFull contextKey="custom-template" />
+  </customMcpProvider>
+</customProvider>
 ```
 
 In this example, MCP servers are stored in browser localStorage and loaded when the application starts.
 
 You could have these servers be stored in a database or fetched from an API.
 
-For more detailed documentation, visit [Tambo's official docs](https://tambo.co/docs).
+For more detailed documentation, visit [custom's official docs](https://custom.co/docs).
 
 ## Customizing
 
-### Change what components tambo can control
+### Change what components custom can control
 
-You can see how the `Graph` component is registered with tambo in `src/lib/tambo.ts`:
+You can see how the `Graph` component is registered with custom in `src/lib/custom.ts`:
 
 ```tsx
-const components: TamboComponent[] = [
+const components: customComponent[] = [
   {
     name: "Graph",
     description:
@@ -139,7 +149,7 @@ const components: TamboComponent[] = [
 ];
 ```
 
-You can find more information about the options [here](https://tambo.co/docs/concepts/registering-components)
+You can find more information about the options [here](https://custom.co/docs/concepts/registering-components)
 
 ## 🎙️ Voice Agent Architecture
 
@@ -156,7 +166,7 @@ The agent connects via WebRTC for low-latency voice interactions and publishes t
 
 ### Three-Agent System
 
-Tambo uses a sophisticated **3-agent architecture** for intelligent voice-driven UI generation:
+custom uses a sophisticated **3-agent architecture** for intelligent voice-driven UI generation:
 
 1. **🎙️ LiveKit Voice Agent** (`livekit-agent-worker.ts`)
    - Captures and transcribes voice input
@@ -174,11 +184,11 @@ Tambo uses a sophisticated **3-agent architecture** for intelligent voice-driven
 3. **🔧 Tool Dispatcher** (`tool-dispatcher.tsx`)
    - Runs in the browser as a React component
    - Routes tool calls to appropriate handlers
-   - Executes via Tambo UI, MCP tools, or built-in functions
+   - Executes via custom UI, MCP tools, or built-in functions
    - Syncs available tools to SystemRegistry
    - Returns results to Voice Agent
 
-All three agents stay synchronized through the **SystemRegistry** - a single source of truth for available capabilities. When you add new MCP tools or Tambo components, all agents automatically discover and can use them without code changes.
+All three agents stay synchronized through the **SystemRegistry** - a single source of truth for available capabilities. When you add new MCP tools or custom components, all agents automatically discover and can use them without code changes.
 
 For detailed architecture documentation, see [docs/THREE_AGENT_ARCHITECTURE.md](docs/THREE_AGENT_ARCHITECTURE.md).
 
@@ -193,7 +203,7 @@ src/
 │   └── shared-state.ts          # State synchronization types
 ├── components/
 │   ├── tool-dispatcher.tsx      # Tool Dispatcher (Agent #3)
-│   └── ui/                      # Tambo components
+│   └── ui/                      # custom components
 └── app/                         # Next.js pages
 ```
 
@@ -227,6 +237,7 @@ create unique index if not exists canvas_sessions_room_canvas_uidx
 ```
 
 The headless `SessionSync` component will insert/update this row and stream:
+
 - LiveKit participants
 - LiveKit `transcription` bus messages
 - TLDraw canvas snapshot on save

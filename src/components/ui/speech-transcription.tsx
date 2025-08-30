@@ -1,7 +1,11 @@
-"use client";
+'use client';
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { useRoomContext, useRemoteParticipants, useLocalParticipant } from '@livekit/components-react';
+import {
+  useRoomContext,
+  useRemoteParticipants,
+  useLocalParticipant,
+} from '@livekit/components-react';
 import { RemoteParticipant } from 'livekit-client';
 import { Mic, MicOff, Loader2, AudioLines } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -34,51 +38,55 @@ export function SpeechTranscription({
 
   const [transcriptions, setTranscriptions] = useState<Transcription[]>([]);
   const [isListening, setIsListening] = useState(false);
-  const [connectionStatus, setConnectionStatus] = useState<'disconnected' | 'connecting' | 'connected'>('disconnected');
+  const [connectionStatus, setConnectionStatus] = useState<
+    'disconnected' | 'connecting' | 'connected'
+  >('disconnected');
   const [agentStatus, setAgentStatus] = useState<'waiting' | 'active' | 'error'>('waiting');
-  
+
   const transcriptionContainerRef = useRef<HTMLDivElement>(null);
 
   // Check for agent presence with detailed logging
-  const agentParticipant = remoteParticipants.find(p => 
-    p.identity === 'tambo-voice-agent' || 
-    p.identity.startsWith('tambo-voice-agent') ||
-    p.metadata?.includes('agent') ||
-    p.metadata?.includes('type":"agent') ||
-    p.name?.toLowerCase().includes('agent') ||
-    p.identity.toLowerCase().includes('agent')
+  const agentParticipant = remoteParticipants.find(
+    (p) =>
+      p.identity === 'voice-agent' ||
+      p.identity.startsWith('voice-agent') ||
+      p.metadata?.includes('agent') ||
+      p.metadata?.includes('type":"agent') ||
+      p.name?.toLowerCase().includes('agent') ||
+      p.identity.toLowerCase().includes('agent'),
   );
 
   // Log all participants for debugging
   useEffect(() => {
     console.log('🔍 [SpeechTranscription] Current participants:', {
       total: remoteParticipants.length,
-      participants: remoteParticipants.map(p => ({
+      participants: remoteParticipants.map((p) => ({
         identity: p.identity,
         name: p.name,
         metadata: p.metadata,
-        isAgent: p.identity === 'tambo-voice-agent' || 
-                 p.identity.startsWith('tambo-voice-agent') ||
-                 p.metadata?.includes('agent') ||
-                 p.metadata?.includes('type":"agent') ||
-                 p.name?.toLowerCase().includes('agent') ||
-                 p.identity.toLowerCase().includes('agent')
+        isAgent:
+          p.identity === 'voice-agent' ||
+          p.identity.startsWith('voice-agent') ||
+          p.metadata?.includes('agent') ||
+          p.metadata?.includes('type":"agent') ||
+          p.name?.toLowerCase().includes('agent') ||
+          p.identity.toLowerCase().includes('agent'),
       })),
       agentFound: !!agentParticipant,
-      agentIdentity: agentParticipant?.identity || 'none'
+      agentIdentity: agentParticipant?.identity || 'none',
     });
   }, [remoteParticipants, agentParticipant]);
 
   useEffect(() => {
     if (room) {
       setConnectionStatus('connected');
-      
+
       // Listen for data messages from the agent
       const handleDataReceived = (payload: Uint8Array, participant?: RemoteParticipant) => {
         try {
           const data = new TextDecoder().decode(payload);
           const parsed = JSON.parse(data);
-          
+
           // Handle transcription data from agent
           if (parsed.type === 'live_transcription') {
             const transcription: Transcription = {
@@ -87,9 +95,9 @@ export function SpeechTranscription({
               text: parsed.text,
               timestamp: parsed.timestamp || Date.now(),
               isFinal: parsed.is_final || false,
-              source: participant?.identity === 'tambo-voice-agent' ? 'agent' : 'user',
+              source: participant?.identity === 'voice-agent' ? 'agent' : 'user',
             };
-            
+
             addTranscription(transcription);
             onTranscription?.(transcription);
           }
@@ -99,7 +107,7 @@ export function SpeechTranscription({
       };
 
       room.on('dataReceived', handleDataReceived);
-      
+
       return () => {
         room.off('dataReceived', handleDataReceived);
       };
@@ -115,28 +123,31 @@ export function SpeechTranscription({
     }
   }, [agentParticipant]);
 
-  const addTranscription = useCallback((transcription: Transcription) => {
-    setTranscriptions(prev => {
-      const updated = [...prev];
-      
-      // Remove old interim results from same speaker
-      if (!transcription.isFinal) {
-        const filteredPrev = updated.filter(t => 
-          !(t.speaker === transcription.speaker && !t.isFinal)
+  const addTranscription = useCallback(
+    (transcription: Transcription) => {
+      setTranscriptions((prev) => {
+        const updated = [...prev];
+
+        // Remove old interim results from same speaker
+        if (!transcription.isFinal) {
+          const filteredPrev = updated.filter(
+            (t) => !(t.speaker === transcription.speaker && !t.isFinal),
+          );
+          filteredPrev.push(transcription);
+          return filteredPrev.slice(-maxTranscriptions);
+        }
+
+        // For final results, replace any interim result from same speaker
+        const filteredPrev = updated.filter(
+          (t) => !(t.speaker === transcription.speaker && !t.isFinal),
         );
         filteredPrev.push(transcription);
+
         return filteredPrev.slice(-maxTranscriptions);
-      }
-      
-      // For final results, replace any interim result from same speaker
-      const filteredPrev = updated.filter(t => 
-        !(t.speaker === transcription.speaker && !t.isFinal)
-      );
-      filteredPrev.push(transcription);
-      
-      return filteredPrev.slice(-maxTranscriptions);
-    });
-  }, [maxTranscriptions]);
+      });
+    },
+    [maxTranscriptions],
+  );
 
   // Auto-scroll to bottom when new transcriptions arrive
   useEffect(() => {
@@ -147,7 +158,7 @@ export function SpeechTranscription({
 
   const handleStartListening = useCallback(() => {
     if (!room || !localParticipant) return;
-    
+
     setIsListening(true);
     console.log('🎤 Started listening for agent transcriptions');
   }, [room, localParticipant]);
@@ -186,7 +197,12 @@ export function SpeechTranscription({
   };
 
   return (
-    <div className={cn('flex flex-col space-y-4 p-4 bg-white dark:bg-gray-900 rounded-lg border', className)}>
+    <div
+      className={cn(
+        'flex flex-col space-y-4 p-4 bg-white dark:bg-gray-900 rounded-lg border',
+        className,
+      )}
+    >
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-2">
@@ -195,7 +211,7 @@ export function SpeechTranscription({
             Speech Transcription
           </h3>
         </div>
-        
+
         <div className="flex items-center space-x-2">
           <button
             onClick={clearTranscriptions}
@@ -210,16 +226,12 @@ export function SpeechTranscription({
       <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-md">
         <div className="flex items-center space-x-3">
           <div className={cn('w-2 h-2 rounded-full', getStatusColor())} />
-          <span className={cn('text-sm font-medium', getStatusColor())}>
-            {getStatusText()}
-          </span>
+          <span className={cn('text-sm font-medium', getStatusColor())}>{getStatusText()}</span>
         </div>
-        
+
         <div className="flex items-center space-x-2">
           {connectionStatus === 'connected' && (
-            <span className="text-xs text-green-600 dark:text-green-400">
-              Room Connected
-            </span>
+            <span className="text-xs text-green-600 dark:text-green-400">Room Connected</span>
           )}
           {agentParticipant && (
             <span className="text-xs text-blue-600 dark:text-blue-400">
@@ -267,14 +279,15 @@ export function SpeechTranscription({
               npm run agent:dev
             </code>
             <div className="mt-1">
-              The agent dispatch API only creates tokens - the actual worker must be running separately.
+              The agent dispatch API only creates tokens - the actual worker must be running
+              separately.
             </div>
           </div>
         </div>
       )}
 
       {/* Transcriptions */}
-      <div 
+      <div
         ref={transcriptionContainerRef}
         className="flex-1 space-y-2 max-h-96 overflow-y-auto p-3 bg-gray-50 dark:bg-gray-800 rounded-md"
       >
@@ -284,16 +297,16 @@ export function SpeechTranscription({
           </div>
         ) : (
           transcriptions
-            .filter(t => showInterimResults || t.isFinal)
+            .filter((t) => showInterimResults || t.isFinal)
             .map((transcription) => (
               <div
                 key={transcription.id}
                 className={cn(
                   'p-2 rounded border-l-4 transition-opacity',
-                  transcription.source === 'agent' 
-                    ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-400' 
+                  transcription.source === 'agent'
+                    ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-400'
                     : 'bg-green-50 dark:bg-green-900/20 border-green-400',
-                  !transcription.isFinal && 'opacity-60 italic'
+                  !transcription.isFinal && 'opacity-60 italic',
                 )}
               >
                 <div className="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400 mb-1">
@@ -304,9 +317,7 @@ export function SpeechTranscription({
                     <span>{formatTime(transcription.timestamp)}</span>
                   </div>
                 </div>
-                <div className="text-sm text-gray-900 dark:text-gray-100">
-                  {transcription.text}
-                </div>
+                <div className="text-sm text-gray-900 dark:text-gray-100">{transcription.text}</div>
               </div>
             ))
         )}
@@ -318,4 +329,4 @@ export function SpeechTranscription({
       </div>
     </div>
   );
-} 
+}

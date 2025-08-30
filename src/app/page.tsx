@@ -1,6 +1,6 @@
 /**
  * Home page component for the Next.js application.
- * 
+ *
  * This component serves as the main landing page for the application.
  * It includes:
  * - A logo and title section
@@ -9,7 +9,7 @@
  * - A footer section
  */
 
-"use client";
+'use client';
 
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';

@@ -1,4 +1,4 @@
-# 🖼️ Tambo Component System – 2025
+# 🖼️ custom Component System – 2025
 
 This document is the single source of truth for how UI components are rendered, updated and synchronised across users and agents.
 
@@ -11,10 +11,9 @@ This document is the single source of truth for how UI components are rendered, 
 | Concept | File | Summary |
 |---------|------|---------|
 | **ComponentRegistry** | `src/lib/component-registry.ts` | Global map of every live component on the canvas – ID, props, diff history, update callback |
-| **ui_update** tool | `src/lib/tambo.ts` | AI‐facing function for patching any component’s props |
-| **list_components** tool | `src/lib/tambo.ts` | Enumerate current IDs/types so AI can target updates |
+| **ui_update** tool | `src/lib/custom.ts` | AI‐facing function for patching any component’s props |
+| **list_components** tool | `src/lib/custom.ts` | Enumerate current IDs/types so AI can target updates |
 | **useComponentRegistration** | `src/lib/component-registry.ts` | Hook run by each component to self-register |
-| **useTamboComponentState** | `@tambo-ai/react` | Persistent per-component React state (optionally diff-tracked) |
 | **PropertyDiffViewer** | `src/components/ui/property-diff-viewer.tsx` | Generic UI for showing prop changes |
 
 ---
@@ -45,6 +44,7 @@ sequenceDiagram
 *Word-level content diff (for documents) lives in `generateWordDiff`.*
 
 For ordinary prop changes we store shallow diffs:
+
 ```ts
 {
   key: "initialMinutes",
@@ -53,6 +53,7 @@ For ordinary prop changes we store shallow diffs:
   ts: 1718893562123
 }
 ```
+
 Use `<PropertyDiffViewer>` to render these in any admin/debug panel.
 
 ---
@@ -71,4 +72,4 @@ Large components (e.g. tldraw, video tiles) still use LiveKit bus topics for phy
 
 ---
 
-*Last updated 2025-07-08* 
+*Last updated 2025-07-08*

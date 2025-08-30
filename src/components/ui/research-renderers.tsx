@@ -1,15 +1,32 @@
-import React from "react";
-import dynamic from "next/dynamic";
-import { ResearchResult } from "./research-panel";
-import { cn } from "@/lib/utils";
-import { ExternalLink, CheckCircle, AlertTriangle, Info, Bookmark, BookmarkCheck, MessageCircle, FileText, Layout } from "lucide-react";
-import { useToolDispatcher } from "../tool-dispatcher";
+import React from 'react';
+import dynamic from 'next/dynamic';
+import { ResearchResult } from './research-panel';
+import { cn } from '@/lib/utils';
+import {
+  ExternalLink,
+  CheckCircle,
+  AlertTriangle,
+  Info,
+  Bookmark,
+  BookmarkCheck,
+  MessageCircle,
+  FileText,
+  Layout,
+} from 'lucide-react';
+import { useToolDispatcher } from '../tool-dispatcher';
 
 // Dynamic import for YouTube embed - only load when needed
-const YoutubeEmbed = dynamic(() => import("./youtube-embed").then(mod => ({ default: mod.YoutubeEmbed })), {
-  ssr: false,
-  loading: () => <div className="flex items-center justify-center p-4 bg-gray-50 rounded">Loading video...</div>
-});
+const YoutubeEmbed = dynamic(
+  () => import('./youtube-embed').then((mod) => ({ default: mod.YoutubeEmbed })),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex items-center justify-center p-4 bg-gray-50 rounded">
+        Loading video...
+      </div>
+    ),
+  },
+);
 
 /* -------------------------------------------------------------------------- */
 /*                                Base types                                  */
@@ -27,18 +44,21 @@ type BaseRendererProps = {
 /*                           Credibility sub-components                        */
 /* -------------------------------------------------------------------------- */
 
-function CredibilityBadge({ level, className }: { level: "high" | "medium" | "low"; className?: string }) {
+function CredibilityBadge({
+  level,
+  className,
+}: { level: 'high' | 'medium' | 'low'; className?: string }) {
   const styles = {
-    high: "bg-green-100 text-green-800 border-green-200",
-    medium: "bg-yellow-100 text-yellow-800 border-yellow-200",
-    low: "bg-red-100 text-red-800 border-red-200",
+    high: 'bg-green-100 text-green-800 border-green-200',
+    medium: 'bg-yellow-100 text-yellow-800 border-yellow-200',
+    low: 'bg-red-100 text-red-800 border-red-200',
   } as const;
   const icons = { high: CheckCircle, medium: AlertTriangle, low: AlertTriangle } as const;
   const Icon = icons[level];
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium border",
+        'inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium border',
         styles[level],
         className,
       )}
@@ -49,18 +69,21 @@ function CredibilityBadge({ level, className }: { level: "high" | "medium" | "lo
   );
 }
 
-function FactCheckBadge({ factCheck, className }: { factCheck: ResearchResult["factCheck"]; className?: string }) {
+function FactCheckBadge({
+  factCheck,
+  className,
+}: { factCheck: ResearchResult['factCheck']; className?: string }) {
   if (!factCheck) return null;
   const styles = {
-    verified: "bg-green-100 text-green-800 border-green-200",
-    disputed: "bg-orange-100 text-orange-800 border-orange-200",
-    unverified: "bg-gray-100 text-gray-800 border-gray-200",
-    false: "bg-red-100 text-red-800 border-red-200",
+    verified: 'bg-green-100 text-green-800 border-green-200',
+    disputed: 'bg-orange-100 text-orange-800 border-orange-200',
+    unverified: 'bg-gray-100 text-gray-800 border-gray-200',
+    false: 'bg-red-100 text-red-800 border-red-200',
   } as const;
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium border",
+        'inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium border',
         styles[factCheck.status],
         className,
       )}
@@ -73,18 +96,18 @@ function FactCheckBadge({ factCheck, className }: { factCheck: ResearchResult["f
 
 function SourceTypeBadge({ type, className }: { type: string; className?: string }) {
   const colors = {
-    news: "bg-blue-100 text-blue-800",
-    academic: "bg-purple-100 text-purple-800",
-    wiki: "bg-gray-100 text-gray-800",
-    blog: "bg-orange-100 text-orange-800",
-    social: "bg-pink-100 text-pink-800",
-    government: "bg-indigo-100 text-indigo-800",
-    other: "bg-gray-100 text-gray-800",
+    news: 'bg-blue-100 text-blue-800',
+    academic: 'bg-purple-100 text-purple-800',
+    wiki: 'bg-gray-100 text-gray-800',
+    blog: 'bg-orange-100 text-orange-800',
+    social: 'bg-pink-100 text-pink-800',
+    government: 'bg-indigo-100 text-indigo-800',
+    other: 'bg-gray-100 text-gray-800',
   } as const;
   return (
     <span
       className={cn(
-        "inline-flex items-center px-2 py-1 rounded-md text-xs font-medium",
+        'inline-flex items-center px-2 py-1 rounded-md text-xs font-medium',
         //@ts-expect-error – fallback guard
         colors[type as keyof typeof colors] || colors.other,
         className,
@@ -107,11 +130,11 @@ function QuickActions({ result }: { result: ResearchResult }) {
   const fire = (tool: string, params: Record<string, unknown>) => {
     void executeToolCall({
       id: generateId(),
-      roomId: "local", // will be overridden inside dispatcher with room context if needed
-      type: "tool_call",
+      roomId: 'local', // will be overridden inside dispatcher with room context if needed
+      type: 'tool_call',
       payload: { tool, params },
       timestamp: Date.now(),
-      source: "system",
+      source: 'system',
     } as any);
   };
 
@@ -120,8 +143,8 @@ function QuickActions({ result }: { result: ResearchResult }) {
       <button
         className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800"
         onClick={() =>
-          fire("generate_ui_component", {
-            componentType: "message_thread",
+          fire('generate_ui_component', {
+            componentType: 'message_thread',
             prompt: `Discuss research finding: ${result.title}`,
           })
         }
@@ -131,8 +154,8 @@ function QuickActions({ result }: { result: ResearchResult }) {
       <button
         className="flex items-center gap-1 text-xs text-green-600 hover:text-green-800"
         onClick={() =>
-          fire("generate_ui_component", {
-            componentType: "summary",
+          fire('generate_ui_component', {
+            componentType: 'summary',
             prompt: `Summarize research finding: ${result.title}`,
           })
         }
@@ -142,8 +165,8 @@ function QuickActions({ result }: { result: ResearchResult }) {
       <button
         className="flex items-center gap-1 text-xs text-purple-600 hover:text-purple-800"
         onClick={() =>
-          fire("generate_ui_component", {
-            componentType: "presentation_deck",
+          fire('generate_ui_component', {
+            componentType: 'presentation_deck',
             prompt: `Add slide for research finding: ${result.title}`,
           })
         }
@@ -170,7 +193,9 @@ function TextResearchRenderer({
       {/* Header */}
       <div className="flex items-start justify-between gap-3 mb-3">
         <div className="flex-1 min-w-0">
-          <h3 className="font-semibold text-gray-900 text-sm leading-5 line-clamp-2">{result.title}</h3>
+          <h3 className="font-semibold text-gray-900 text-sm leading-5 line-clamp-2">
+            {result.title}
+          </h3>
           <div className="flex items-center gap-2 mt-2">
             <span className="text-xs text-gray-600">{result.source.name}</span>
             <CredibilityBadge level={result.source.credibility} />
@@ -178,11 +203,25 @@ function TextResearchRenderer({
           </div>
         </div>
         <div className="flex items-center gap-1 flex-shrink-0">
-          <button onClick={onToggleBookmark} className="p-1 rounded hover:bg-gray-100 transition-colors" title={isBookmarked ? "Remove bookmark" : "Bookmark"}>
-            {isBookmarked ? <BookmarkCheck className="w-4 h-4 text-blue-600" /> : <Bookmark className="w-4 h-4 text-gray-400" />}
+          <button
+            onClick={onToggleBookmark}
+            className="p-1 rounded hover:bg-gray-100 transition-colors"
+            title={isBookmarked ? 'Remove bookmark' : 'Bookmark'}
+          >
+            {isBookmarked ? (
+              <BookmarkCheck className="w-4 h-4 text-blue-600" />
+            ) : (
+              <Bookmark className="w-4 h-4 text-gray-400" />
+            )}
           </button>
           {result.source.url && (
-            <a href={result.source.url} target="_blank" rel="noopener noreferrer" className="p-1 rounded hover:bg-gray-100 transition-colors" title="Open source">
+            <a
+              href={result.source.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="p-1 rounded hover:bg-gray-100 transition-colors"
+              title="Open source"
+            >
               <ExternalLink className="w-4 h-4 text-gray-400" />
             </a>
           )}
@@ -190,10 +229,15 @@ function TextResearchRenderer({
       </div>
       {/* Content */}
       <div className="mb-3">
-        <p className={cn("text-sm text-gray-700 leading-relaxed", !isExpanded && "line-clamp-3")}>{result.content}</p>
+        <p className={cn('text-sm text-gray-700 leading-relaxed', !isExpanded && 'line-clamp-3')}>
+          {result.content}
+        </p>
         {result.content.length > 200 && (
-          <button onClick={onToggleExpanded} className="text-xs text-blue-600 hover:text-blue-800 mt-1 font-medium">
-            {isExpanded ? "Show less" : "Read more"}
+          <button
+            onClick={onToggleExpanded}
+            className="text-xs text-blue-600 hover:text-blue-800 mt-1 font-medium"
+          >
+            {isExpanded ? 'Show less' : 'Read more'}
           </button>
         )}
       </div>
@@ -203,14 +247,19 @@ function TextResearchRenderer({
           <span className="text-xs text-gray-500">Relevance: {result.relevance}%</span>
           {result.factCheck && <FactCheckBadge factCheck={result.factCheck} />}
         </div>
-        <span className="text-xs text-gray-400">{new Date(result.timestamp).toLocaleTimeString()}</span>
+        <span className="text-xs text-gray-400">
+          {new Date(result.timestamp).toLocaleTimeString()}
+        </span>
       </div>
       <QuickActions result={result} />
       {/* Tags */}
       {result.tags && result.tags.length > 0 && (
         <div className="flex flex-wrap gap-1 mt-2">
           {result.tags.map((tag, idx) => (
-            <span key={idx} className="inline-block px-2 py-0.5 bg-gray-100 text-gray-600 text-xs rounded-full">
+            <span
+              key={idx}
+              className="inline-block px-2 py-0.5 bg-gray-100 text-gray-600 text-xs rounded-full"
+            >
               {tag}
             </span>
           ))}
@@ -257,10 +306,14 @@ function MarkdownResearchRenderer({ result }: BaseRendererProps) {
 
 export function getRendererForResult(result: ResearchResult) {
   // heuristics
-  if (result.source.type === "video" || /(?:youtube\.com|youtu\.be)/i.test(result.content) || /youtu/.test(result.source.url ?? "")) {
+  if (
+    result.source.type === 'video' ||
+    /(?:youtube\.com|youtu\.be)/i.test(result.content) ||
+    /youtu/.test(result.source.url ?? '')
+  ) {
     return YouTubeResearchRenderer;
   }
-  if (result.source.type === "wiki" || result.content.trim().startsWith("#")) {
+  if (result.source.type === 'wiki' || result.content.trim().startsWith('#')) {
     return MarkdownResearchRenderer;
   }
   return TextResearchRenderer;
@@ -271,4 +324,4 @@ export const ResearchRenderers = {
   TextResearchRenderer,
   YouTubeResearchRenderer,
   MarkdownResearchRenderer,
-}; 
+};

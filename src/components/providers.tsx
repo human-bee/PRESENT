@@ -1,11 +1,7 @@
-"use client";
+'use client';
 
-import {
-  QueryCache,
-  QueryClient,
-  QueryClientProvider,
-} from "@tanstack/react-query";
-import { ReactNode, useState } from "react";
+import { QueryCache, QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { ReactNode, useState } from 'react';
 
 export default function Providers({ children }: { children: ReactNode }) {
   const [queryClient] = useState(
@@ -13,7 +9,7 @@ export default function Providers({ children }: { children: ReactNode }) {
       new QueryClient({
         queryCache: new QueryCache({
           onError: (error) => {
-            console.error("Query error:", error);
+            console.error('Query error:', error);
           },
         }),
         defaultOptions: {
@@ -22,12 +18,8 @@ export default function Providers({ children }: { children: ReactNode }) {
             retry: false,
           },
         },
-      })
+      }),
   );
 
-  return (
-    <QueryClientProvider client={queryClient}>
-      {children}
-    </QueryClientProvider>
-  );
-} 
+  return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
+}

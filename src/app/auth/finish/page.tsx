@@ -1,8 +1,8 @@
-"use client";
+'use client';
 
-import { Suspense, useEffect, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
-import { supabase } from "@/lib/supabase";
+import { Suspense, useEffect, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { supabase } from '@/lib/supabase';
 
 function AuthFinishContent() {
   const router = useRouter();
@@ -14,10 +14,10 @@ function AuthFinishContent() {
 
     const finish = async () => {
       try {
-        const next = searchParams.get("next") || "/canvas";
+        const next = searchParams.get('next') || '/canvas';
 
         // 1) Try Authorization Code flow (?code=)
-        const code = searchParams.get("code");
+        const code = searchParams.get('code');
         if (code) {
           const { error: exErr } = await supabase.auth.exchangeCodeForSession(code);
           if (exErr) throw exErr;
@@ -26,11 +26,11 @@ function AuthFinishContent() {
         }
 
         // 2) Handle implicit flow (#access_token=...)
-        if (typeof window !== "undefined" && window.location.hash) {
+        if (typeof window !== 'undefined' && window.location.hash) {
           const hash = window.location.hash.substring(1);
           const params = new URLSearchParams(hash);
-          const access_token = params.get("access_token");
-          const refresh_token = params.get("refresh_token") || params.get("provider_refresh_token");
+          const access_token = params.get('access_token');
+          const refresh_token = params.get('refresh_token') || params.get('provider_refresh_token');
 
           if (access_token && refresh_token) {
             const { error: setErr } = await supabase.auth.setSession({
@@ -41,8 +41,8 @@ function AuthFinishContent() {
             // Clean the hash from the URL
             try {
               const url = new URL(window.location.href);
-              url.hash = "";
-              window.history.replaceState({}, "", url.toString());
+              url.hash = '';
+              window.history.replaceState({}, '', url.toString());
             } catch {}
             router.replace(next);
             return;
@@ -50,9 +50,9 @@ function AuthFinishContent() {
         }
 
         // 3) If neither code nor tokens are present, show a friendly error
-        setError("Missing OAuth credentials in URL. Please try signing in again.");
+        setError('Missing OAuth credentials in URL. Please try signing in again.');
       } catch (e: any) {
-        setError(e?.message || "Authentication error. Please try again.");
+        setError(e?.message || 'Authentication error. Please try again.');
       } finally {
         done = true;
       }
@@ -75,7 +75,7 @@ function AuthFinishContent() {
             <div className="text-sm text-gray-600 mb-4">{error}</div>
             <button
               className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-              onClick={() => router.replace("/auth/signin")}
+              onClick={() => router.replace('/auth/signin')}
             >
               Return to Sign In
             </button>
@@ -88,17 +88,17 @@ function AuthFinishContent() {
 
 export default function AuthFinish() {
   return (
-    <Suspense fallback={
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/20">
-        <div className="bg-white p-8 rounded-lg shadow-lg w-full max-w-md text-center">
-          <div className="animate-spin inline-block w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full mb-3" />
-          <div className="text-gray-700">Loading…</div>
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/20">
+          <div className="bg-white p-8 rounded-lg shadow-lg w-full max-w-md text-center">
+            <div className="animate-spin inline-block w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full mb-3" />
+            <div className="text-gray-700">Loading…</div>
+          </div>
         </div>
-      </div>
-    }>
+      }
+    >
       <AuthFinishContent />
     </Suspense>
   );
 }
-
-

@@ -1,15 +1,9 @@
 ---
 alwaysApply: false
 ---
-# Building a Generative UI Component with Tambo
+# Building a Generative UI Component Compatible with Agents and Canvas
 
-## 1. Import Tambo Hook
-
-```typescript
-import { useTamboComponentState } from "@tambo-ai/react";
-```
-
-## 2. Define Component State Type
+## 1. Define Component State Type
 
 ```typescript
 type YourComponentState = {
@@ -17,7 +11,7 @@ type YourComponentState = {
 };
 ```
 
-## 3. Define Props Schema with Zod
+## 2. Define Props Schema with Zod
 
 ```typescript
 import { z } from "zod";
@@ -38,16 +32,16 @@ export const yourComponentSchema = z.object({
 export type YourComponentProps = z.infer<typeof yourComponentSchema>;
 ```
 
-## 4. Initialize Tambo State
+## 3. Initialize State
 
 ```typescript
-const [state, setState] = useTamboComponentState<YourComponentState>(
+const [state, setState] = useComponentState<YourComponentState>(
   "your-component-id",
   { selectedValues: [] }
 );
 ```
 
-## 5. Implement State Updates
+## 4. Implement State Updates
 
 ```typescript
 const handleToggleSelection = (value: string) => {
@@ -66,7 +60,7 @@ const handleToggleSelection = (value: string) => {
 };
 ```
 
-## 6. Build UI with State-Based Rendering
+## 5. Build UI with State-Based Rendering
 
 ```tsx
 return (

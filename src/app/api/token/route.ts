@@ -1,7 +1,7 @@
-import type { AccessTokenOptions, VideoGrant } from "livekit-server-sdk";
-import { AccessToken } from "livekit-server-sdk";
-import { NextRequest, NextResponse } from "next/server";
-export const runtime = "nodejs";
+import type { AccessTokenOptions, VideoGrant } from 'livekit-server-sdk';
+import { AccessToken } from 'livekit-server-sdk';
+import { NextRequest, NextResponse } from 'next/server';
+export const runtime = 'nodejs';
 
 /**
  * GET /api/token?roomName=ROOM&username=NAME
@@ -22,11 +22,11 @@ const apiSecret = process.env.LIVEKIT_API_SECRET;
 
 const createToken = async (userInfo: AccessTokenOptions, grant: VideoGrant) => {
   if (!apiKey) {
-    throw new Error("Server misconfigured: missing LIVEKIT_API_KEY");
+    throw new Error('Server misconfigured: missing LIVEKIT_API_KEY');
   }
 
   if (!apiSecret) {
-    throw new Error("Server misconfigured: missing LIVEKIT_API_SECRET");
+    throw new Error('Server misconfigured: missing LIVEKIT_API_SECRET');
   }
 
   try {
@@ -34,7 +34,7 @@ const createToken = async (userInfo: AccessTokenOptions, grant: VideoGrant) => {
     at.addGrant(grant);
     return await at.toJwt();
   } catch (error) {
-    console.error("Token creation error:", error);
+    console.error('Token creation error:', error);
     throw new Error(`Failed to create token: ${(error as Error).message}`);
   }
 };
@@ -42,11 +42,8 @@ const createToken = async (userInfo: AccessTokenOptions, grant: VideoGrant) => {
 export async function GET(req: NextRequest) {
   try {
     // Add debug logging
-    console.log(
-      "Token request params:",
-      Object.fromEntries(req.nextUrl.searchParams)
-    );
-    console.log("Environment check:", {
+    console.log('Token request params:', Object.fromEntries(req.nextUrl.searchParams));
+    console.log('Environment check:', {
       hasApiKey: !!apiKey,
       hasApiSecret: !!apiSecret,
       hasLivekitUrl: !!process.env.LIVEKIT_URL,
@@ -54,25 +51,23 @@ export async function GET(req: NextRequest) {
 
     // Update parameter names to match what's being sent by useToken
     const roomName =
-      req.nextUrl.searchParams.get("roomName") ||
-      req.nextUrl.searchParams.get("room");
+      req.nextUrl.searchParams.get('roomName') || req.nextUrl.searchParams.get('room');
     const identity =
-      req.nextUrl.searchParams.get("identity") ||
-      req.nextUrl.searchParams.get("username");
-    const name = req.nextUrl.searchParams.get("name");
-    const metadata = req.nextUrl.searchParams.get("metadata");
+      req.nextUrl.searchParams.get('identity') || req.nextUrl.searchParams.get('username');
+    const name = req.nextUrl.searchParams.get('name');
+    const metadata = req.nextUrl.searchParams.get('metadata');
 
     if (!roomName) {
       return NextResponse.json(
         { error: 'Missing "roomName" or "room" query parameter' },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
     if (!identity) {
       return NextResponse.json(
         { error: 'Missing "identity" or "username" query parameter' },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -80,10 +75,9 @@ export async function GET(req: NextRequest) {
     if (!wsUrl) {
       return NextResponse.json(
         {
-          error:
-            "Server misconfigured: missing LIVEKIT_URL environment variable",
+          error: 'Server misconfigured: missing LIVEKIT_URL environment variable',
         },
-        { status: 500 }
+        { status: 500 },
       );
     }
 
@@ -103,30 +97,27 @@ export async function GET(req: NextRequest) {
         name: name || undefined,
         metadata: metadata || undefined,
       },
-      grant
+      grant,
     );
 
     console.log(`✅ Token created for ${identity} in room ${roomName}`);
     console.log('🤖 Agent will automatically join via automatic dispatch');
 
     return NextResponse.json(
-      { 
-        identity, 
+      {
+        identity,
         accessToken: token,
       },
-      { headers: { "Cache-Control": "no-store" } }
+      { headers: { 'Cache-Control': 'no-store' } },
     );
   } catch (e) {
-    console.error("Token generation error:", e);
+    console.error('Token generation error:', e);
     return NextResponse.json(
       {
         error: (e as Error).message,
-        stack:
-          process.env.NODE_ENV === "development"
-            ? (e as Error).stack
-            : undefined,
+        stack: process.env.NODE_ENV === 'development' ? (e as Error).stack : undefined,
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

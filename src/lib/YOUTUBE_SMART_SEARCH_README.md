@@ -13,7 +13,7 @@ When a user says something like "Show me the latest Pink Pantheress video", the 
    - Time preferences (latest, newest, recent → last 7 days)
    - Quality signals (official, VEVO → verified channels)
    - Artist/channel names for special handling
-3. **Enhanced Message** is sent to Tambo with instructions to:
+3. **Enhanced Message** is sent to custom with instructions to:
    - Use the YouTube MCP tool with smart parameters
    - Filter results based on detected preferences
    - Pick the single best video
@@ -24,11 +24,13 @@ When a user says something like "Show me the latest Pink Pantheress video", the 
 **User says:** "Show me the latest Pink Pantheress video"
 
 **System interprets:**
+
 - Query: "Pink Pantheress"
 - Wants: Latest video (sort by date, last 7 days)
 - Channel: Look for official "Pinkpantheress" channel
 
-**Tambo receives:**
+**custom receives:**
+
 ```
 Use the YouTube MCP tool to search for: "Pink Pantheress latest video"
 - Sort by upload date (newest first)
@@ -48,13 +50,16 @@ Note: Look for videos from the official "Pinkpantheress" channel
 ## Smart Query Detection
 
 ### Time-based Keywords
+
 - "latest", "newest", "recent", "new" → Sort by date, prioritize last 7 days
 
 ### Quality Keywords  
+
 - "official", "vevo" → Filter for verified/official channels
 - Known artists get special handling (e.g., "Pinkpantheress" → "Pinkpantheress" channel)
 
 ### Default Behavior
+
 - Without keywords, searches normally but still picks single best result
 - Always creates `YoutubeEmbed`, never a search UI
 
@@ -69,9 +74,10 @@ Note: Look for videos from the official "Pinkpantheress" channel
 ## Testing
 
 Try these voice commands:
+
 - "Show me the latest React tutorial"
 - "Play Taylor Swift's newest official video"
 - "Find the latest TypeScript features video"
 - "Show Pink Pantheress latest song"
 
-Each should result in a single, high-quality video embed appearing on the canvas. 
+Each should result in a single, high-quality video embed appearing on the canvas.

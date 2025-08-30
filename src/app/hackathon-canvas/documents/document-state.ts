@@ -1,185 +1,87 @@
-import { movieScriptContent } from "./doc-contents";
+// Lightweight in-memory document state with naive word-diffing.
 
-// Diff word type
 export type DiffWord = {
-  type: "added" | "removed";
+  type: 'added' | 'removed';
   content: string;
   lineNumber: number;
   wordIndex: number;
 };
 
-// Define document type
 export type Document = {
   id: string;
-  name: string;
-  description: string;
+  name?: string;
+  titleImage?: string;
   content: string;
-  titleImage?: string; // URL of the title image
-  originalContent?: string; // Baseline content for diff comparison
+  originalContent?: string;
   diffs?: DiffWord[];
-  lastModified?: Date;
 };
 
-// Improved word-level diff algorithm that only tracks actual changes
-export const generateWordDiff = (
-  original: string,
-  modified: string
-): DiffWord[] => {
-  const originalLines = original.split("\n");
-  const modifiedLines = modified.split("\n");
+function diffWords(oldText: string, newText: string): DiffWord[] {
   const diffs: DiffWord[] = [];
-
-  // Process each line
-  for (
-    let lineIndex = 0;
-    lineIndex < Math.max(originalLines.length, modifiedLines.length);
-    lineIndex++
-  ) {
-    const originalLine = originalLines[lineIndex] || "";
-    const modifiedLine = modifiedLines[lineIndex] || "";
-
-    // If lines are identical, skip
-    if (originalLine === modifiedLine) continue;
-
-    // Split lines into words (preserving whitespace)
-    const originalWords = originalLine.split(/(\s+)/);
-    const modifiedWords = modifiedLine.split(/(\s+)/);
-
-    let i = 0,
-      j = 0;
-    let wordIndex = 0;
-
-    while (i < originalWords.length || j < modifiedWords.length) {
-      if (
-        i < originalWords.length &&
-        j < modifiedWords.length &&
-        originalWords[i] === modifiedWords[j]
-      ) {
-        // Unchanged word - skip it
-        i++;
-        j++;
-        wordIndex++;
-      } else if (
-        j < modifiedWords.length &&
-        (i >= originalWords.length || originalWords[i] !== modifiedWords[j])
-      ) {
-        // Added word
-        diffs.push({
-          type: "added",
-          content: modifiedWords[j],
-          lineNumber: lineIndex + 1,
-          wordIndex: wordIndex++,
-        });
-        j++;
-      } else if (i < originalWords.length) {
-        // Removed word
-        diffs.push({
-          type: "removed",
-          content: originalWords[i],
-          lineNumber: lineIndex + 1,
-          wordIndex: wordIndex++,
-        });
-        i++;
+  const oldLines = oldText.split('\n');
+  const newLines = newText.split('\n');
+  const max = Math.max(oldLines.length, newLines.length);
+  for (let i = 0; i < max; i++) {
+    const a = (oldLines[i] || '').split(/\s+/).filter(Boolean);
+    const b = (newLines[i] || '').split(/\s+/).filter(Boolean);
+    const len = Math.max(a.length, b.length);
+    for (let j = 0; j < len; j++) {
+      if (a[j] !== b[j]) {
+        if (a[j] && !b[j]) {
+          diffs.push({ type: 'removed', content: a[j], lineNumber: i + 1, wordIndex: j });
+        } else if (!a[j] && b[j]) {
+          diffs.push({ type: 'added', content: b[j], lineNumber: i + 1, wordIndex: j });
+        } else if (a[j] && b[j]) {
+          // changed: mark removal and addition
+          diffs.push({ type: 'removed', content: a[j], lineNumber: i + 1, wordIndex: j });
+          diffs.push({ type: 'added', content: b[j], lineNumber: i + 1, wordIndex: j });
+        }
       }
     }
   }
-
   return diffs;
-};
+}
 
-// Shared state for document content
-export const documentState: {
-  documents: Document[];
-  listeners: Set<(documents: Document[]) => void>;
-  subscribe: (listener: (documents: Document[]) => void) => () => void;
-  updateDocument: (id: string, content: string) => void;
-  getDocuments: () => Document[];
-  clearDiffs: (id: string) => void;
-  setOriginalContent: (id: string, content: string) => void;
-} = {
-  documents: [
-    {
-      id: "movie-script-containment-breach",
-      name: "Containment Breach",
-      description: "A movie script for the movie 'Containment Breach'",
-      titleImage: "/containment-breach.png",
-      content: movieScriptContent,
-      originalContent: movieScriptContent, // Set initial original content
-      diffs: [],
-      lastModified: new Date(),
-    },
-  ],
-  listeners: new Set<(documents: Document[]) => void>(),
+export function generateWordDiff(oldText: string, newText: string): DiffWord[] {
+  return diffWords(oldText || '', newText || '');
+}
 
-  // Subscribe to document changes
-  subscribe: (listener: (documents: Document[]) => void) => {
-    documentState.listeners.add(listener);
-    return () => documentState.listeners.delete(listener);
-  },
+class DocumentState {
+  private docs: Document[] = [];
+  private listeners = new Set<(docs: Document[]) => void>();
 
-  // Update document content and calculate diffs
-  updateDocument: (id: string, content: string) => {
-    const docIndex = documentState.documents.findIndex(
-      (doc: Document) => doc.id === id
-    );
-    if (docIndex !== -1) {
-      const currentContent = documentState.documents[docIndex].content;
-      const diffs = generateWordDiff(currentContent, content);
+  getDocuments(): Document[] {
+    return this.docs;
+  }
 
-      // Only store diffs if there are actual changes
-      const hasChanges = diffs.length > 0;
+  subscribe(cb: (docs: Document[]) => void): () => void {
+    this.listeners.add(cb);
+    return () => this.listeners.delete(cb);
+  }
 
-      documentState.documents[docIndex] = {
-        ...documentState.documents[docIndex],
-        content,
-        diffs: hasChanges ? diffs : undefined,
-        lastModified: new Date(),
-      };
-      // Notify all listeners
-      documentState.listeners.forEach(
-        (listener: (documents: Document[]) => void) =>
-          listener([...documentState.documents])
-      );
+  updateDocument(id: string, content: string) {
+    const idx = this.docs.findIndex((d) => d.id === id);
+    if (idx === -1) {
+      const doc: Document = { id, content, originalContent: content, diffs: [] };
+      this.docs.push(doc);
+    } else {
+      const current = this.docs[idx];
+      const original = current.originalContent ?? current.content;
+      const diffs = generateWordDiff(original, content);
+      this.docs[idx] = { ...current, content, diffs };
     }
-  },
+    this.emit();
+  }
 
-  // Set the original content for diff comparison
-  setOriginalContent: (id: string, content: string) => {
-    const docIndex = documentState.documents.findIndex(
-      (doc: Document) => doc.id === id
-    );
-    if (docIndex !== -1) {
-      documentState.documents[docIndex] = {
-        ...documentState.documents[docIndex],
-        originalContent: content,
-        diffs: undefined, // Clear diffs when setting new original content
-      };
-      // Notify all listeners
-      documentState.listeners.forEach(
-        (listener: (documents: Document[]) => void) =>
-          listener([...documentState.documents])
-      );
-    }
-  },
+  private emit() {
+    const snap = [...this.docs];
+    this.listeners.forEach((cb) => {
+      try {
+        cb(snap);
+      } catch {}
+    });
+  }
+}
 
-  // Clear diffs for a document
-  clearDiffs: (id: string) => {
-    const docIndex = documentState.documents.findIndex(
-      (doc: Document) => doc.id === id
-    );
-    if (docIndex !== -1) {
-      documentState.documents[docIndex] = {
-        ...documentState.documents[docIndex],
-        diffs: undefined,
-      };
-      // Notify all listeners
-      documentState.listeners.forEach(
-        (listener: (documents: Document[]) => void) =>
-          listener([...documentState.documents])
-      );
-    }
-  },
+export const documentState = new DocumentState();
 
-  // Get current documents
-  getDocuments: () => [...documentState.documents],
-};

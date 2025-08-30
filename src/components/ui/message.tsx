@@ -1,13 +1,13 @@
-"use client";
+'use client';
 
-import { createMarkdownComponents } from "@/components/ui/markdownComponents";
-import { cn } from "@/lib/utils";
-import type { TamboThreadMessage } from "@tambo-ai/react";
-import { cva, type VariantProps } from "class-variance-authority";
-import { ExternalLink, Check, Loader2 } from "lucide-react";
-import * as React from "react";
-import ReactMarkdown from "react-markdown";
-import { getSafeContent, checkHasContent } from "@/lib/thread-hooks";
+import { createMarkdownComponents } from '@/components/ui/markdownComponents';
+import { cn } from '@/lib/utils';
+import type { customThreadMessage } from '@custom-ai/react';
+import { cva, type VariantProps } from 'class-variance-authority';
+import { ExternalLink, Check, Loader2 } from 'lucide-react';
+import * as React from 'react';
+import ReactMarkdown from 'react-markdown';
+import { getSafeContent, checkHasContent } from '@/lib/thread-hooks';
 
 /**
  * CSS variants for the message container
@@ -15,21 +15,21 @@ import { getSafeContent, checkHasContent } from "@/lib/thread-hooks";
  * @property {string} default - Default styling
  * @property {string} solid - Solid styling with shadow effects
  */
-const messageVariants = cva("flex mb-4", {
+const messageVariants = cva('flex mb-4', {
   variants: {
     variant: {
-      default: "",
+      default: '',
       solid: [
-        "[&>div>div:first-child]:shadow-md",
-        "[&>div>div:first-child]:bg-container/50",
-        "[&>div>div:first-child]:hover:bg-container",
-        "[&>div>div:first-child]:transition-all",
-        "[&>div>div:first-child]:duration-200",
-      ].join(" "),
+        '[&>div>div:first-child]:shadow-md',
+        '[&>div>div:first-child]:bg-container/50',
+        '[&>div>div:first-child]:hover:bg-container',
+        '[&>div>div:first-child]:transition-all',
+        '[&>div>div:first-child]:duration-200',
+      ].join(' '),
     },
   },
   defaultVariants: {
-    variant: "default",
+    variant: 'default',
   },
 });
 
@@ -37,13 +37,13 @@ const messageVariants = cva("flex mb-4", {
  * @typedef MessageContextValue
  * @property {"user" | "assistant"} role - The role of the message sender.
  * @property {VariantProps<typeof messageVariants>["variant"]} [variant] - Optional styling variant for the message container.
- * @property {TamboThreadMessage} message - The full Tambo thread message object.
+ * @property {customThreadMessage} message - The full custom thread message object.
  * @property {boolean} [isLoading] - Optional flag to indicate if the message is in a loading state.
  */
 interface MessageContextValue {
-  role: "user" | "assistant";
-  variant?: VariantProps<typeof messageVariants>["variant"];
-  message: TamboThreadMessage;
+  role: 'user' | 'assistant';
+  variant?: VariantProps<typeof messageVariants>['variant'];
+  message: customThreadMessage;
   isLoading?: boolean;
 }
 
@@ -63,7 +63,7 @@ const MessageContext = React.createContext<MessageContextValue | null>(null);
 const useMessageContext = () => {
   const context = React.useContext(MessageContext);
   if (!context) {
-    throw new Error("Message sub-components must be used within a Message");
+    throw new Error('Message sub-components must be used within a Message');
   }
   return context;
 };
@@ -74,14 +74,13 @@ const useMessageContext = () => {
  * Props for the Message component.
  * Extends standard HTMLDivElement attributes.
  */
-export interface MessageProps
-  extends Omit<React.HTMLAttributes<HTMLDivElement>, "content"> {
+export interface MessageProps extends Omit<React.HTMLAttributes<HTMLDivElement>, 'content'> {
   /** The role of the message sender ('user' or 'assistant'). */
-  role: "user" | "assistant";
-  /** The full Tambo thread message object. */
-  message: TamboThreadMessage;
+  role: 'user' | 'assistant';
+  /** The full custom thread message object. */
+  message: customThreadMessage;
   /** Optional styling variant for the message container. */
-  variant?: VariantProps<typeof messageVariants>["variant"];
+  variant?: VariantProps<typeof messageVariants>['variant'];
   /** Optional flag to indicate if the message is in a loading state. */
   isLoading?: boolean;
   /** The child elements to render within the root container. Typically includes Message.Bubble and Message.RenderedComponentArea. */
@@ -100,32 +99,31 @@ export interface MessageProps
  * </Message>
  * ```
  */
-const Message = React.memo(React.forwardRef<HTMLDivElement, MessageProps>(
-  (
-    { children, className, role, variant, isLoading, message, ...props },
-    ref,
-  ) => {
-    const contextValue = React.useMemo(
-      () => ({ role, variant, isLoading, message }),
-      [role, variant, isLoading, message],
-    );
+const Message = React.memo(
+  React.forwardRef<HTMLDivElement, MessageProps>(
+    ({ children, className, role, variant, isLoading, message, ...props }, ref) => {
+      const contextValue = React.useMemo(
+        () => ({ role, variant, isLoading, message }),
+        [role, variant, isLoading, message],
+      );
 
-    return (
-      <MessageContext.Provider value={contextValue}>
-        <div
-          ref={ref}
-          className={cn(messageVariants({ variant }), className)}
-          data-message-role={role}
-          data-message-id={message?.id ?? 'unknown'}
-          {...props}
-        >
-          {children}
-        </div>
-      </MessageContext.Provider>
-    );
-  },
-));
-Message.displayName = "Message";
+      return (
+        <MessageContext.Provider value={contextValue}>
+          <div
+            ref={ref}
+            className={cn(messageVariants({ variant }), className)}
+            data-message-role={role}
+            data-message-id={message?.id ?? 'unknown'}
+            {...props}
+          >
+            {children}
+          </div>
+        </MessageContext.Provider>
+      );
+    },
+  ),
+);
+Message.displayName = 'Message';
 
 /**
  * Loading indicator with bouncing dots animation
@@ -143,14 +141,14 @@ const LoadingIndicator: React.FC<React.HTMLAttributes<HTMLDivElement>> = ({
   ...props
 }) => {
   return (
-    <div className={cn("flex items-center gap-1", className)} {...props}>
+    <div className={cn('flex items-center gap-1', className)} {...props}>
       <span className="w-1 h-1 bg-current rounded-full animate-bounce [animation-delay:-0.3s]"></span>
       <span className="w-1 h-1 bg-current rounded-full animate-bounce [animation-delay:-0.2s]"></span>
       <span className="w-1 h-1 bg-current rounded-full animate-bounce [animation-delay:-0.1s]"></span>
     </div>
   );
 };
-LoadingIndicator.displayName = "LoadingIndicator";
+LoadingIndicator.displayName = 'LoadingIndicator';
 
 /**
  * Gets the appropriate status message for a tool call
@@ -158,21 +156,21 @@ LoadingIndicator.displayName = "LoadingIndicator";
  * This function extracts and formats status messages for tool calls based on
  * the current loading state and available status information.
  *
- * @param {TamboThreadMessage} message - The thread message object containing tool call data
+ * @param {customThreadMessage} message - The thread message object containing tool call data
  * @param {boolean | undefined} isLoading - Whether the tool call is currently in progress
  * @returns {string | null} The formatted status message or null if not a tool call
  */
 function getToolStatusMessage(
-  message: TamboThreadMessage | undefined,
+  message: customThreadMessage | undefined,
   isLoading: boolean | undefined,
 ) {
   if (!message) return null;
-  const isToolCall = message.actionType === "tool_call";
+  const isToolCall = message.actionType === 'tool_call';
   if (!isToolCall) return null;
 
   const toolCallMessage = isLoading
-    ? `Calling ${message.toolCallRequest?.toolName ?? "tool"}`
-    : `Called ${message.toolCallRequest?.toolName ?? "tool"}`;
+    ? `Calling ${message.toolCallRequest?.toolName ?? 'tool'}`
+    : `Called ${message.toolCallRequest?.toolName ?? 'tool'}`;
   const toolStatusMessage = isLoading
     ? message.component?.statusMessage
     : message.component?.completionStatusMessage;
@@ -183,8 +181,7 @@ function getToolStatusMessage(
  * Props for the MessageContent component.
  * Extends standard HTMLDivElement attributes.
  */
-export interface MessageContentProps
-  extends Omit<React.HTMLAttributes<HTMLDivElement>, "content"> {
+export interface MessageContentProps extends Omit<React.HTMLAttributes<HTMLDivElement>, 'content'> {
   /** Optional override for the message content. If not provided, uses the content from the message object in the context. */
   content?: string | { type: string; text?: string }[];
   /** Optional flag to render as Markdown. Default is true. */
@@ -196,19 +193,16 @@ export interface MessageContentProps
  * @component MessageContent
  */
 const MessageContent = React.forwardRef<HTMLDivElement, MessageContentProps>(
-  (
-    { className, children, content: contentProp, markdown = true, ...props },
-    ref,
-  ) => {
+  ({ className, children, content: contentProp, markdown = true, ...props }, ref) => {
     const { message, isLoading } = useMessageContext();
     const contentToRender = children ?? contentProp ?? message.content;
 
     const safeContent = React.useMemo(
-      () => getSafeContent(contentToRender as TamboThreadMessage["content"]),
+      () => getSafeContent(contentToRender as customThreadMessage['content']),
       [contentToRender],
     );
     const hasContent = React.useMemo(
-      () => checkHasContent(contentToRender as TamboThreadMessage["content"]),
+      () => checkHasContent(contentToRender as customThreadMessage['content']),
       [contentToRender],
     );
 
@@ -219,7 +213,7 @@ const MessageContent = React.forwardRef<HTMLDivElement, MessageContentProps>(
       <div
         ref={ref}
         className={cn(
-          "relative inline-block rounded-3xl px-4 py-2 text-[15px] leading-relaxed transition-all duration-200 font-medium max-w-full [&_p]:my-1 [&_ul]:-my-5 [&_ol]:-my-5",
+          'relative inline-block rounded-3xl px-4 py-2 text-[15px] leading-relaxed transition-all duration-200 font-medium max-w-full [&_p]:my-1 [&_ul]:-my-5 [&_ol]:-my-5',
           className,
         )}
         data-slot="message-content"
@@ -233,19 +227,14 @@ const MessageContent = React.forwardRef<HTMLDivElement, MessageContentProps>(
             <LoadingIndicator />
           </div>
         ) : (
-          <div
-            className="break-words whitespace-pre-wrap"
-            data-slot="message-content-text"
-          >
+          <div className="break-words whitespace-pre-wrap" data-slot="message-content-text">
             {!contentToRender ? (
-              <span className="text-muted-foreground italic">
-                Empty message
-              </span>
+              <span className="text-muted-foreground italic">Empty message</span>
             ) : React.isValidElement(contentToRender) ? (
               contentToRender
             ) : markdown ? (
               <ReactMarkdown components={createMarkdownComponents()}>
-                {typeof safeContent === "string" ? safeContent : ""}
+                {typeof safeContent === 'string' ? safeContent : ''}
               </ReactMarkdown>
             ) : (
               safeContent
@@ -266,14 +255,13 @@ const MessageContent = React.forwardRef<HTMLDivElement, MessageContentProps>(
     );
   },
 );
-MessageContent.displayName = "MessageContent";
+MessageContent.displayName = 'MessageContent';
 
 /**
  * Props for the MessageRenderedComponentArea component.
  * Extends standard HTMLDivElement attributes.
  */
-export type MessageRenderedComponentAreaProps =
-  React.HTMLAttributes<HTMLDivElement>;
+export type MessageRenderedComponentAreaProps = React.HTMLAttributes<HTMLDivElement>;
 
 /**
  * Displays the `renderedComponent` associated with an assistant message.
@@ -299,22 +287,22 @@ const MessageRenderedComponentArea = React.forwardRef<
     checkCanvasExists();
 
     // Set up resize listener
-    window.addEventListener("resize", checkCanvasExists);
+    window.addEventListener('resize', checkCanvasExists);
 
     // Clean up
     return () => {
-      window.removeEventListener("resize", checkCanvasExists);
+      window.removeEventListener('resize', checkCanvasExists);
     };
   }, []);
 
-  if (!message || !message.renderedComponent || role !== "assistant") {
+  if (!message || !message.renderedComponent || role !== 'assistant') {
     return null;
   }
 
   return (
     <div
       ref={ref}
-      className={cn("mt-2", className)}
+      className={cn('mt-2', className)}
       data-slot="message-rendered-component-area"
       {...props}
     >
@@ -323,9 +311,9 @@ const MessageRenderedComponentArea = React.forwardRef<
           <div className="flex justify-start pl-4">
             <button
               onClick={() => {
-                if (typeof window !== "undefined") {
+                if (typeof window !== 'undefined') {
                   window.dispatchEvent(
-                    new CustomEvent("tambo:showComponent", {
+                    new CustomEvent('custom:showComponent', {
                       detail: {
                         messageId: message?.id ?? `msg-${Date.now()}`,
                         component: message.renderedComponent,
@@ -343,25 +331,19 @@ const MessageRenderedComponentArea = React.forwardRef<
           </div>
         ) : (
           <div className="w-full mt-4 px-2">
-            {React.isValidElement(message.renderedComponent)
-              ? message.renderedComponent
-              : (
-                <div className="text-xs text-muted-foreground">
-                  Component ready. Open the canvas to view it.
-                </div>
-              )}
+            {React.isValidElement(message.renderedComponent) ? (
+              message.renderedComponent
+            ) : (
+              <div className="text-xs text-muted-foreground">
+                Component ready. Open the canvas to view it.
+              </div>
+            )}
           </div>
         ))}
     </div>
   );
 });
-MessageRenderedComponentArea.displayName = "Message.RenderedComponentArea";
+MessageRenderedComponentArea.displayName = 'Message.RenderedComponentArea';
 
 // --- Exports ---
-export {
-  messageVariants,
-  Message,
-  MessageContent,
-  MessageRenderedComponentArea,
-  LoadingIndicator,
-};
+export { messageVariants, Message, MessageContent, MessageRenderedComponentArea, LoadingIndicator };

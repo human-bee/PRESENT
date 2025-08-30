@@ -7,4 +7,4 @@ export async function GET(req: NextRequest) {
   // Optional query param ?roomId=xxx not used yet but future-proof.
   const snapshot = systemRegistry.getSnapshot();
   return NextResponse.json({ snapshot, timestamp: Date.now() });
-} 
+}

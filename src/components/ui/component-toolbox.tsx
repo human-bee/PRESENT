@@ -1,7 +1,12 @@
-"use client";
+'use client';
 
 import React, { useMemo } from 'react';
-import { componentIcons, getCategories, getComponentsByCategory, type ComponentIconMapping } from '@/lib/component-icons';
+import {
+  componentIcons,
+  getCategories,
+  getComponentsByCategory,
+  type ComponentIconMapping,
+} from '@/lib/component-icons';
 import { stopEventPropagation } from 'tldraw';
 
 interface ComponentToolboxProps {
@@ -15,19 +20,19 @@ interface ComponentItemProps {
   onClick: (componentType: string) => void;
 }
 
-const ComponentItem: React.FC<ComponentItemProps> = ({ 
-  componentName, 
-  iconMapping, 
+const ComponentItem: React.FC<ComponentItemProps> = ({
+  componentName,
+  iconMapping,
   onDragStart,
-  onClick 
+  onClick,
 }) => {
   const IconComponent = iconMapping.icon;
-  
+
   return (
     <button
       draggable
       onDragStart={(e) => {
-        e.dataTransfer.setData('application/tambo-component', componentName);
+        e.dataTransfer.setData('application/custom-component', componentName);
         onDragStart(componentName);
       }}
       onClick={() => onClick(componentName)}
@@ -53,9 +58,7 @@ const ComponentItem: React.FC<ComponentItemProps> = ({
   );
 };
 
-export const ComponentToolbox: React.FC<ComponentToolboxProps> = ({
-  onComponentCreate
-}) => {
+export const ComponentToolbox: React.FC<ComponentToolboxProps> = ({ onComponentCreate }) => {
   const searchQuery = '';
   const categories = useMemo(() => getCategories(), []);
 
@@ -67,29 +70,31 @@ export const ComponentToolbox: React.FC<ComponentToolboxProps> = ({
   };
 
   return (
-    <div style={{
-      display: 'grid',
-      gridTemplateColumns: 'repeat(6, 1fr)',
-      gap: '2px',
-      padding: '8px',
-      width: '100%',
-      height: '100%',
-      boxSizing: 'border-box',
-      background: 'var(--color-panel)',
-    }}>
-      {categories.map(category => {
+    <div
+      style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(6, 1fr)',
+        gap: '2px',
+        padding: '8px',
+        width: '100%',
+        height: '100%',
+        boxSizing: 'border-box',
+        background: 'var(--color-panel)',
+      }}
+    >
+      {categories.map((category) => {
         const categoryComponents = getComponentsByCategory(category);
-        const filteredComponents = searchQuery.trim() 
-          ? categoryComponents.filter(name => {
-              const iconMapping = componentIcons[name];
-              const query = searchQuery.toLowerCase();
-              return (
-                name.toLowerCase().includes(query) ||
-                iconMapping.description.toLowerCase().includes(query)
-              );
-            })
+        const filteredComponents = searchQuery.trim()
+          ? categoryComponents.filter((name) => {
+            const iconMapping = componentIcons[name];
+            const query = searchQuery.toLowerCase();
+            return (
+              name.toLowerCase().includes(query) ||
+              iconMapping.description.toLowerCase().includes(query)
+            );
+          })
           : categoryComponents;
-        return filteredComponents.map(componentName => {
+        return filteredComponents.map((componentName) => {
           const iconMapping = componentIcons[componentName];
           return (
             <ComponentItem

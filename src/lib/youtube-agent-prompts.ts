@@ -1,8 +1,8 @@
 /**
  * Enhanced YouTube Agent Prompts
- * 
+ *
  * This file contains intelligent prompt engineering for the YouTube MCP integration
- * to make Tambo smarter at finding, analyzing, and presenting YouTube content.
+ * to make custom smarter at finding, analyzing, and presenting YouTube content.
  */
 
 import { getPrompt } from './prompt-loader';
@@ -79,13 +79,18 @@ export const YOUTUBE_RESPONSE_TEMPLATES = {
   searchResultsPresentation: (results: any[], query: string) => `
 I found ${results.length} high-quality videos about "${query}". Here are the best matches:
 
-${results.slice(0, 5).map((video, i) => `
+${results
+      .slice(0, 5)
+      .map(
+        (video, i) => `
 ${i + 1}. **${video.title}**
    📺 ${video.channelTitle} ${video.isVerified ? '✓' : ''} ${video.isOfficial ? '(Official)' : ''}
    👁️ ${formatViewCount(video.viewCount)} views • ${formatRelativeTime(video.publishedAt)}
    ${video.qualityScore >= 4 ? '⭐ High Quality Content' : ''}
    ${video.duration ? `⏱️ ${formatDuration(video.duration)}` : ''}
-`).join('\n')}
+`,
+      )
+      .join('\n')}
 
 Would you like me to play any of these or search for something more specific?
 `,
@@ -94,10 +99,14 @@ Would you like me to play any of these or search for something more specific?
   transcriptMomentPresentation: (moments: any[]) => `
 I found these relevant moments in the video:
 
-${moments.map(moment => `
+${moments
+      .map(
+        (moment) => `
 **${formatTimestamp(moment.start)}** - ${moment.summary}
 ${moment.relevance >= 4 ? '🎯 Highly relevant' : ''}
-`).join('\n\n')}
+`,
+      )
+      .join('\n\n')}
 
 Click any timestamp to jump directly to that part of the video.
 `,
@@ -106,11 +115,16 @@ Click any timestamp to jump directly to that part of the video.
   trendingPresentation: (videos: any[], category?: string) => `
 Here's what's trending ${category ? `in ${category}` : 'on YouTube'} right now:
 
-${videos.slice(0, 5).map((video, i) => `
+${videos
+      .slice(0, 5)
+      .map(
+        (video, i) => `
 ${i + 1}. 🔥 **${video.title}**
    ${video.channelTitle} • ${formatViewCount(video.viewCount)} views
    📈 Trending #${i + 1} ${category ? `in ${category}` : ''}
-`).join('\n')}
+`,
+      )
+      .join('\n')}
 
 These videos are gaining rapid popularity today!
 `,
@@ -128,10 +142,10 @@ function formatRelativeTime(dateString: string): string {
   const date = new Date(dateString);
   const now = new Date();
   const diffInHours = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60));
-  
-  if (diffInHours < 1) return "just now";
+
+  if (diffInHours < 1) return 'just now';
   if (diffInHours < 24) return `${diffInHours} hours ago`;
-  if (diffInHours < 48) return "yesterday";
+  if (diffInHours < 48) return 'yesterday';
   if (diffInHours < 168) return `${Math.floor(diffInHours / 24)} days ago`;
   if (diffInHours < 720) return `${Math.floor(diffInHours / 168)} weeks ago`;
   return `${Math.floor(diffInHours / 720)} months ago`;
@@ -139,71 +153,71 @@ function formatRelativeTime(dateString: string): string {
 
 function formatDuration(isoDuration: string): string {
   const match = isoDuration.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
-  if (!match) return "";
-  
-  const hours = match[1] ? `${match[1]}:` : "";
-  const minutes = match[2] ? match[2].padStart(2, "0") : "00";
-  const seconds = match[3] ? match[3].padStart(2, "0") : "00";
-  
-  return hours + minutes + ":" + seconds;
+  if (!match) return '';
+
+  const hours = match[1] ? `${match[1]}:` : '';
+  const minutes = match[2] ? match[2].padStart(2, '0') : '00';
+  const seconds = match[3] ? match[3].padStart(2, '0') : '00';
+
+  return hours + minutes + ':' + seconds;
 }
 
 function formatTimestamp(seconds: number): string {
   const hours = Math.floor(seconds / 3600);
   const minutes = Math.floor((seconds % 3600) / 60);
   const secs = Math.floor(seconds % 60);
-  
+
   if (hours > 0) {
-    return `${hours}:${minutes.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
+    return `${hours}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   }
-  return `${minutes}:${secs.toString().padStart(2, "0")}`;
+  return `${minutes}:${secs.toString().padStart(2, '0')}`;
 }
 
 // Export smart search strategies
 export const SMART_SEARCH_STRATEGIES = {
   findLatestTutorials: (topic: string) => ({
     query: topic,
-    order: "date",
+    order: 'date',
     publishedAfter: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
-    videoDuration: "medium",
-    relevanceLanguage: "en",
+    videoDuration: 'medium',
+    relevanceLanguage: 'en',
   }),
 
   findOfficialContent: (artist: string) => ({
     query: `${artist} official`,
-    order: "relevance",
-    channelType: "show",
-    safeSearch: "moderate",
+    order: 'relevance',
+    channelType: 'show',
+    safeSearch: 'moderate',
   }),
 
   findTrendingInCategory: (category: string) => ({
-    chart: "mostPopular",
+    chart: 'mostPopular',
     videoCategoryId: getCategoryId(category),
-    regionCode: "US",
+    regionCode: 'US',
     maxResults: 25,
   }),
 
   findEducationalContent: (subject: string) => ({
     query: `${subject} explained tutorial course`,
-    order: "viewCount",
-    videoDuration: "medium,long",
-    videoDefinition: "high",
+    order: 'viewCount',
+    videoDuration: 'medium,long',
+    videoDefinition: 'high',
   }),
 };
 
 function getCategoryId(category: string): string {
   const categoryMap: Record<string, string> = {
-    "music": "10",
-    "gaming": "20",
-    "education": "27",
-    "science": "28",
-    "technology": "28",
-    "howto": "26",
-    "entertainment": "24",
-    "news": "25",
-    "sports": "17",
-    "travel": "19",
+    music: '10',
+    gaming: '20',
+    education: '27',
+    science: '28',
+    technology: '28',
+    howto: '26',
+    entertainment: '24',
+    news: '25',
+    sports: '17',
+    travel: '19',
   };
-  
-  return categoryMap[category.toLowerCase()] || "0";
-} 
+
+  return categoryMap[category.toLowerCase()] || '0';
+}

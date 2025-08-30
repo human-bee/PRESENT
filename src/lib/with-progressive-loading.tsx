@@ -1,28 +1,28 @@
 /**
  * Higher-Order Component for Progressive Loading
- * 
+ *
  * Wraps any component with progressive loading capabilities
  */
 
-"use client";
+'use client';
 
-import React, { ComponentType, useState, useEffect } from "react";
-import { useProgressiveLoading, LoadingState, ComponentLoadingStates } from "./progressive-loading";
-import { LoadingWrapper, Skeleton, SkeletonPatterns } from "@/components/ui/loading-states";
+import React, { ComponentType, useState, useEffect } from 'react';
+import { useProgressiveLoading, LoadingState, ComponentLoadingStates } from './progressive-loading';
+import { LoadingWrapper, Skeleton, SkeletonPatterns } from '@/components/ui/loading-states';
 
 // Re-export LoadingState for component usage
-export { LoadingState } from "./progressive-loading";
+export { LoadingState } from './progressive-loading';
 
 export interface WithProgressiveLoadingOptions<P> {
   // Function to fetch data for the component
   dataFetcher?: (props: P) => Promise<any>;
-  
+
   // Custom loading states
   loadingStates?: ComponentLoadingStates<any>;
-  
+
   // Default skeleton to use
   skeletonType?: keyof typeof SkeletonPatterns | React.ReactNode;
-  
+
   // Loading options
   loadingOptions?: {
     skeletonDelay?: number;
@@ -30,7 +30,7 @@ export interface WithProgressiveLoadingOptions<P> {
     completeDelay?: number;
     showProgress?: boolean;
   };
-  
+
   // Component name for debugging
   componentName?: string;
 }
@@ -40,14 +40,14 @@ export interface WithProgressiveLoadingOptions<P> {
  */
 export function withProgressiveLoading<P extends object>(
   Component: ComponentType<P>,
-  options: WithProgressiveLoadingOptions<P> = {}
+  options: WithProgressiveLoadingOptions<P> = {},
 ) {
   const {
     dataFetcher,
     loadingStates,
-    skeletonType = "card",
+    skeletonType = 'card',
     loadingOptions = {},
-    componentName = Component.displayName || Component.name || "Component",
+    componentName = Component.displayName || Component.name || 'Component',
   } = options;
 
   const WrappedComponent = (props: P) => {
@@ -59,7 +59,7 @@ export function withProgressiveLoading<P extends object>(
     // Use progressive loading hook
     const { state, data, progress, error } = useProgressiveLoading(
       () => dataFetcher(props),
-      loadingOptions
+      loadingOptions,
     );
 
     // Get skeleton
@@ -67,9 +67,9 @@ export function withProgressiveLoading<P extends object>(
       if (React.isValidElement(skeletonType)) {
         return skeletonType;
       }
-      if (typeof skeletonType === "string" && skeletonType in SkeletonPatterns) {
+      if (typeof skeletonType === 'string' && skeletonType in SkeletonPatterns) {
         const pattern = SkeletonPatterns[skeletonType as keyof typeof SkeletonPatterns];
-        return typeof pattern === "function" ? pattern() : pattern;
+        return typeof pattern === 'function' ? pattern() : pattern;
       }
       return <Skeleton className="h-64 w-full" />;
     }, [skeletonType]);
@@ -110,16 +110,14 @@ export function withProgressiveLoading<P extends object>(
   };
 
   WrappedComponent.displayName = `WithProgressiveLoading(${componentName})`;
-  
+
   return WrappedComponent;
 }
 
 /**
  * Hook for components that want to manage their own progressive loading
  */
-export function useComponentProgressiveLoading<T>(
-  initialData: T | null = null
-): {
+export function useComponentProgressiveLoading<T>(initialData: T | null = null): {
   state: LoadingState;
   data: T | null;
   updateState: (state: LoadingState) => void;
@@ -127,23 +125,26 @@ export function useComponentProgressiveLoading<T>(
   simulateProgression: () => void;
 } {
   const [state, setState] = useState<LoadingState>(
-    initialData ? LoadingState.COMPLETE : LoadingState.SKELETON
+    initialData ? LoadingState.COMPLETE : LoadingState.SKELETON,
   );
   const [data, setData] = useState<T | null>(initialData);
 
   const updateState = (newState: LoadingState) => setState(newState);
-  
+
   const updateData = (partialData: Partial<T>) => {
-    setData(current => ({
-      ...current,
-      ...partialData,
-    } as T));
+    setData(
+      (current) =>
+        ({
+          ...current,
+          ...partialData,
+        }) as T,
+    );
   };
 
   // Simulate natural progression through states
   const simulateProgression = () => {
     setState(LoadingState.SKELETON);
-    
+
     setTimeout(() => setState(LoadingState.PARTIAL), 200);
     setTimeout(() => setState(LoadingState.COMPLETE), 500);
   };
@@ -161,7 +162,7 @@ export function useComponentProgressiveLoading<T>(
  * Component decorator for class components
  */
 export function ProgressiveLoading<P extends object>(
-  options: WithProgressiveLoadingOptions<P> = {}
+  options: WithProgressiveLoadingOptions<P> = {},
 ) {
   return function (Component: ComponentType<P>) {
     return withProgressiveLoading(Component, options);

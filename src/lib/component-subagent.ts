@@ -1,23 +1,23 @@
 /**
  * Component Sub-Agent System
- * 
- * Each Tambo component gets its own sub-agent that:
+ *
+ * Each custom component gets its own sub-agent that:
  * 1. Loads instantly with skeleton
  * 2. Reads context from thread/transcript
  * 3. Makes autonomous MCP calls
  * 4. Progressively updates component state
  */
 
-import { useEffect, useRef, useState, useCallback } from "react";
-import { useTamboThread } from "@tambo-ai/react";
-import { LoadingState } from "./progressive-loading";
+import { useEffect, useRef, useState, useCallback } from 'react';
+import { usecustomThread } from '@custom-ai/react';
+import { LoadingState } from './progressive-loading';
 
 // Sub-agent configuration
 export interface SubAgentConfig {
   componentName: string;
-  mcpTools: string[];  // Which MCP tools this component can use
-  contextExtractor: (thread: any) => any;  // Extract relevant context from thread
-  dataEnricher: (context: any, mcpTools: any) => Promise<any>[];  // Define enrichment pipeline
+  mcpTools: string[]; // Which MCP tools this component can use
+  contextExtractor: (thread: any) => any; // Extract relevant context from thread
+  dataEnricher: (context: any, mcpTools: any) => Promise<any>[]; // Define enrichment pipeline
 }
 
 // Sub-agent state
@@ -33,7 +33,7 @@ export interface SubAgentState {
  * Hook that creates a sub-agent for a component
  */
 export function useComponentSubAgent(config: SubAgentConfig) {
-  const { thread } = useTamboThread();
+  const { thread } = usecustomThread();
   const [state, setState] = useState<SubAgentState>({
     loadingState: LoadingState.SKELETON,
     context: null,
@@ -65,11 +65,11 @@ export function useComponentSubAgent(config: SubAgentConfig) {
   // Extract context from thread
   const extractContext = useCallback(() => {
     if (!thread || !stableConfig.current.contextExtractor) return null;
-    
+
     try {
       const context = stableConfig.current.contextExtractor(thread);
       if (isMounted.current) {
-        setState(prev => ({
+        setState((prev) => ({
           ...prev,
           context,
           loadingState: LoadingState.PARTIAL,
@@ -77,9 +77,12 @@ export function useComponentSubAgent(config: SubAgentConfig) {
       }
       return context;
     } catch (error) {
-      console.error(`[SubAgent ${stableConfig.current.componentName}] Context extraction failed:`, error);
+      console.error(
+        `[SubAgent ${stableConfig.current.componentName}] Context extraction failed:`,
+        error,
+      );
       if (isMounted.current) {
-        setState(prev => ({
+        setState((prev) => ({
           ...prev,
           errors: { ...prev.errors, contextExtraction: error as Error },
         }));
@@ -91,13 +94,13 @@ export function useComponentSubAgent(config: SubAgentConfig) {
   // Execute MCP enrichment pipeline
   const enrichData = useCallback(async (context: any) => {
     if (!context || !stableConfig.current.dataEnricher) {
-        return;
+      return;
     }
 
     try {
       // Get available MCP tools
       const mcpTools = await getMCPTools(stableConfig.current.mcpTools);
-      
+
       // Create enrichment promises
       const enrichmentPromises = stableConfig.current.dataEnricher(context, mcpTools);
       enrichmentQueue.current = enrichmentPromises;
@@ -106,7 +109,7 @@ export function useComponentSubAgent(config: SubAgentConfig) {
       enrichmentPromises.forEach((promise, index) => {
         const toolName = stableConfig.current.mcpTools[index];
         if (isMounted.current) {
-          setState(prev => ({
+          setState((prev) => ({
             ...prev,
             mcpActivity: { ...prev.mcpActivity, [toolName]: true },
           }));
@@ -114,18 +117,18 @@ export function useComponentSubAgent(config: SubAgentConfig) {
 
         // Execute enrichment
         promise
-          .then(result => {
+          .then((result) => {
             if (isMounted.current) {
-              setState(prev => ({
+              setState((prev) => ({
                 ...prev,
                 enrichedData: { ...prev.enrichedData, [toolName]: result },
                 mcpActivity: { ...prev.mcpActivity, [toolName]: false },
               }));
             }
           })
-          .catch(error => {
+          .catch((error) => {
             if (isMounted.current) {
-              setState(prev => ({
+              setState((prev) => ({
                 ...prev,
                 errors: { ...prev.errors, [toolName]: error },
                 mcpActivity: { ...prev.mcpActivity, [toolName]: false },
@@ -136,9 +139,9 @@ export function useComponentSubAgent(config: SubAgentConfig) {
 
       // Wait for all enrichments to complete
       await Promise.allSettled(enrichmentPromises);
-      
+
       if (isMounted.current) {
-        setState(prev => ({
+        setState((prev) => ({
           ...prev,
           loadingState: LoadingState.COMPLETE,
         }));
@@ -146,7 +149,7 @@ export function useComponentSubAgent(config: SubAgentConfig) {
     } catch (error) {
       console.error(`[SubAgent ${stableConfig.current.componentName}] Enrichment failed:`, error);
       if (isMounted.current) {
-        setState(prev => ({
+        setState((prev) => ({
           ...prev,
           errors: { ...prev.errors, dataEnrichment: error as Error },
         }));
@@ -165,20 +168,20 @@ export function useComponentSubAgent(config: SubAgentConfig) {
     if (!lastThreadRef.current && !thread) return false;
     if (!lastThreadRef.current && thread) return true;
     if (lastThreadRef.current && !thread) return true;
-    
+
     // Compare thread IDs if available
     if (lastThreadRef.current?.id !== thread?.id) return true;
-    
+
     // Compare message counts
     const oldCount = lastThreadRef.current?.messages?.length || 0;
     const newCount = thread?.messages?.length || 0;
     if (oldCount !== newCount) return true;
-    
+
     // Compare last message content
     const oldLastMsg = lastThreadRef.current?.messages?.[oldCount - 1];
     const newLastMsg = thread?.messages?.[newCount - 1];
     if (oldLastMsg?.id !== newLastMsg?.id) return true;
-    
+
     return false;
   }, [thread]);
 
@@ -192,20 +195,23 @@ export function useComponentSubAgent(config: SubAgentConfig) {
   const needsInitialLoad = useCallback(() => {
     // If we haven't run yet, we need to load
     if (!hasRunRef.current) return true;
-    
+
     // Access state through ref to avoid dependency
     const currentState = stateRef.current;
-    
+
     // If we have no data yet, we need to load
-    if (Object.keys(currentState.enrichedData).length === 0 && currentState.loadingState === LoadingState.SKELETON) {
+    if (
+      Object.keys(currentState.enrichedData).length === 0 &&
+      currentState.loadingState === LoadingState.SKELETON
+    ) {
       return true;
     }
-    
+
     // If component was just mounted (within 100ms), force load
     if (Date.now() - mountTimeRef.current < 100) {
       return true;
     }
-    
+
     return false;
   }, []); // No dependencies!
 
@@ -227,29 +233,33 @@ export function useComponentSubAgent(config: SubAgentConfig) {
     }
 
     const shouldLoad = threadHasChanged() || needsInitialLoad();
-    
+
     // Skip if we don't need to load
     if (!shouldLoad && hasRunRef.current) {
       console.log(`[SubAgent ${componentIdRef.current}] No changes detected, skipping load`);
       return;
     }
 
-    console.log(`[SubAgent ${componentIdRef.current}] Loading data - threadChanged: ${threadHasChanged()}, needsInitial: ${needsInitialLoad()}`);
-    
+    console.log(
+      `[SubAgent ${componentIdRef.current}] Loading data - threadChanged: ${threadHasChanged()}, needsInitial: ${needsInitialLoad()}`,
+    );
+
     isLoadingRef.current = true;
-    
-    lastThreadRef.current = thread ? { 
-      id: thread.id,
-      messages: thread.messages?.map((m: any) => ({ id: m.id, content: m.content }))
-    } : null;
-    
+
+    lastThreadRef.current = thread
+      ? {
+        id: thread.id,
+        messages: thread.messages?.map((m: any) => ({ id: m.id, content: m.content })),
+      }
+      : null;
+
     hasRunRef.current = true;
     isMounted.current = true;
 
     // Reset state if thread changed OR if we need initial load
     if (shouldLoad) {
-      setState(prev => ({ 
-        ...prev, 
+      setState((prev) => ({
+        ...prev,
         loadingState: LoadingState.SKELETON,
         context: null,
         enrichedData: {},
@@ -259,7 +269,7 @@ export function useComponentSubAgent(config: SubAgentConfig) {
     }
 
     // Component-specific delay to prevent thundering herd
-    const delay = 50 + (Math.random() * 100); // 50-150ms random delay
+    const delay = 50 + Math.random() * 100; // 50-150ms random delay
     const timeoutId = setTimeout(() => {
       if (isMounted.current) {
         const context = extractContext();
@@ -321,12 +331,16 @@ export function useComponentSubAgent(config: SubAgentConfig) {
  */
 async function getMCPTools(toolNames: string[]): Promise<Record<string, any>> {
   const tools: Record<string, any> = {};
-  
+
   // Try to get actual MCP tools from window if available
-  const mcpTools = (window as any).__tambo_mcp_tools || {};
+  const mcpTools = (window as any).__custom_mcp_tools || {};
   const mcpToolNames = Object.keys(mcpTools);
-  const normalize = (s: string) => s.toLowerCase().replace(/^mcp_/, '').replace(/[^a-z0-9]/g, '');
-  
+  const normalize = (s: string) =>
+    s
+      .toLowerCase()
+      .replace(/^mcp_/, '')
+      .replace(/[^a-z0-9]/g, '');
+
   for (const name of toolNames) {
     // Use actual MCP tool if available
     if (mcpTools[name]) {
@@ -358,10 +372,12 @@ async function getMCPTools(toolNames: string[]): Promise<Record<string, any>> {
             // call with base tool name; bridge will add mcp_ if needed
             return await (window as any).callMcpTool(name, params);
           } catch (error) {
-            console.warn(`[MCP Tool Resolver] Direct call failed for '${name}'. Known MCP tools: ${mcpToolNames.join(', ')}`);
+            console.warn(
+              `[MCP Tool Resolver] Direct call failed for '${name}'. Known MCP tools: ${mcpToolNames.join(', ')}`,
+            );
           }
         }
-        
+
         // Mock responses for development
         switch (name) {
           case 'weather':
@@ -376,18 +392,18 @@ async function getMCPTools(toolNames: string[]): Promise<Record<string, any>> {
       },
     };
   }
-  
+
   return tools;
 }
 
 // Mock data generators for testing
 function mockWeatherData(params: any) {
-  return new Promise(resolve => {
+  return new Promise((resolve) => {
     setTimeout(() => {
       resolve({
-        location: params.location || "San Francisco, CA",
+        location: params.location || 'San Francisco, CA',
         temperature: Math.floor(Math.random() * 30 + 50),
-        condition: ["Sunny", "Cloudy", "Rainy"][Math.floor(Math.random() * 3)],
+        condition: ['Sunny', 'Cloudy', 'Rainy'][Math.floor(Math.random() * 3)],
         humidity: Math.floor(Math.random() * 40 + 40),
       });
     }, 500);
@@ -395,26 +411,28 @@ function mockWeatherData(params: any) {
 }
 
 function mockSearchData(params: any) {
-  return new Promise(resolve => {
+  return new Promise((resolve) => {
     setTimeout(() => {
       resolve({
         query: params.query,
-        results: Array(5).fill(null).map((_, i) => ({
-          title: `Result ${i + 1} for "${params.query}"`,
-          url: `https://example.com/${i}`,
-        })),
+        results: Array(5)
+          .fill(null)
+          .map((_, i) => ({
+            title: `Result ${i + 1} for "${params.query}"`,
+            url: `https://example.com/${i}`,
+          })),
       });
     }, 300);
   });
 }
 
 function mockAnalyticsData(params: any) {
-  return new Promise(resolve => {
+  return new Promise((resolve) => {
     setTimeout(() => {
       resolve({
         metric: params.metric,
         value: Math.floor(Math.random() * 1000),
-        trend: Math.random() > 0.5 ? "up" : "down",
+        trend: Math.random() > 0.5 ? 'up' : 'down',
       });
     }, 400);
   });
@@ -425,26 +443,27 @@ function mockAnalyticsData(params: any) {
  */
 export const SubAgentPresets = {
   weather: {
-    componentName: "WeatherForecast",
-    mcpTools: ["weather", "forecast", "alerts"],
+    componentName: 'WeatherForecast',
+    mcpTools: ['weather', 'forecast', 'alerts'],
     contextExtractor: (thread: any) => {
       // Extract location from thread messages
       const lastMessage = thread.messages?.[thread.messages.length - 1];
-      let text = "";
-      
+      let text = '';
+
       // Safely extract text content
       if (lastMessage?.content) {
-        text = typeof lastMessage.content === 'string' 
-          ? lastMessage.content 
-          : JSON.stringify(lastMessage.content);
+        text =
+          typeof lastMessage.content === 'string'
+            ? lastMessage.content
+            : JSON.stringify(lastMessage.content);
       }
-      
+
       // Look for location mentions
       const locationMatch = text.match(/weather (?:for|in) ([^,]+(?:, \w{2})?)/i);
       const allowCurrentLocation = process.env.NEXT_PUBLIC_ALLOW_CURRENT_LOCATION === 'true';
       return {
-        location: locationMatch?.[1] || (allowCurrentLocation ? "Current Location" : undefined),
-        requestedView: text.includes("forecast") ? "weekly" : "current",
+        location: locationMatch?.[1] || (allowCurrentLocation ? 'Current Location' : undefined),
+        requestedView: text.includes('forecast') ? 'weekly' : 'current',
       };
     },
     dataEnricher: (context: any, tools: any) => {
@@ -460,76 +479,81 @@ export const SubAgentPresets = {
   },
 
   actionItems: {
-    componentName: "ActionItemTracker",
-    mcpTools: ["linear", "github", "calendar"],
+    componentName: 'ActionItemTracker',
+    mcpTools: ['linear', 'github', 'calendar'],
     contextExtractor: (thread: any) => {
       // Extract action items from conversation
       const messages = thread.messages || [];
-      const actionKeywords = ["todo", "action", "task", "need to", "should", "must"];
-      
+      const actionKeywords = ['todo', 'action', 'task', 'need to', 'should', 'must'];
+
       return {
         extractedItems: messages
           .filter((m: any) => {
             const content = typeof m.content === 'string' ? m.content : '';
-            return actionKeywords.some(k => content.toLowerCase().includes(k));
+            return actionKeywords.some((k) => content.toLowerCase().includes(k));
           })
-          .map((m: any) => typeof m.content === 'string' ? m.content : ''),
-        meetingContext: messages[0]?.content 
-          ? (typeof messages[0].content === 'string' ? messages[0].content : "General Tasks")
-          : "General Tasks",
+          .map((m: any) => (typeof m.content === 'string' ? m.content : '')),
+        meetingContext: messages[0]?.content
+          ? typeof messages[0].content === 'string'
+            ? messages[0].content
+            : 'General Tasks'
+          : 'General Tasks',
       };
     },
     dataEnricher: (context: any, tools: any) => [
-      tools.linear?.execute({ action: "list_issues" }),
-      tools.github?.execute({ action: "list_issues" }),
-      tools.calendar?.execute({ action: "upcoming_events" }),
+      tools.linear?.execute({ action: 'list_issues' }),
+      tools.github?.execute({ action: 'list_issues' }),
+      tools.calendar?.execute({ action: 'upcoming_events' }),
     ],
   },
 
   dashboard: {
-    componentName: "Dashboard",
-    mcpTools: ["analytics", "metrics", "alerts"],
+    componentName: 'Dashboard',
+    mcpTools: ['analytics', 'metrics', 'alerts'],
     contextExtractor: (thread: any) => {
       const lastMessage = thread.messages?.[thread.messages.length - 1];
-      const content = lastMessage?.content 
-        ? (typeof lastMessage.content === 'string' ? lastMessage.content : "overview")
-        : "overview";
-      
+      const content = lastMessage?.content
+        ? typeof lastMessage.content === 'string'
+          ? lastMessage.content
+          : 'overview'
+        : 'overview';
+
       return {
         requestedMetrics: content,
-        timeRange: "24h",
+        timeRange: '24h',
       };
     },
     dataEnricher: (context: any, tools: any) => [
-      tools.analytics?.execute({ metric: "visitors", range: context.timeRange }),
-      tools.metrics?.execute({ type: "performance", range: context.timeRange }),
-      tools.alerts?.execute({ severity: "all" }),
+      tools.analytics?.execute({ metric: 'visitors', range: context.timeRange }),
+      tools.metrics?.execute({ type: 'performance', range: context.timeRange }),
+      tools.alerts?.execute({ severity: 'all' }),
     ],
   },
 
   kanban: {
-    componentName: "LinearKanbanBoard",
-    mcpTools: ["linear"],
+    componentName: 'LinearKanbanBoard',
+    mcpTools: ['linear'],
     contextExtractor: (thread: any) => {
       const lastMessage = thread.messages?.[thread.messages.length - 1];
-      let text = "";
-      
+      let text = '';
+
       if (lastMessage?.content) {
-        text = typeof lastMessage.content === 'string' 
-          ? lastMessage.content 
-          : JSON.stringify(lastMessage.content);
+        text =
+          typeof lastMessage.content === 'string'
+            ? lastMessage.content
+            : JSON.stringify(lastMessage.content);
       }
-      
+
       // Look for team mentions
       const teamMatch = text.match(/team[:\s]+([^,\s]+)/i);
       return {
-        requestedTeam: teamMatch?.[1] || "Personal",
-        showCompleted: text.toLowerCase().includes("completed"),
+        requestedTeam: teamMatch?.[1] || 'Personal',
+        showCompleted: text.toLowerCase().includes('completed'),
       };
     },
     dataEnricher: (context: any, tools: any) => [
-      tools.linear?.execute({ 
-        action: "list_issues",
+      tools.linear?.execute({
+        action: 'list_issues',
         teamName: context.requestedTeam,
         includeCompleted: context.showCompleted,
       }),

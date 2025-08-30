@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "engines": {
-    "node": ">=20 <23"
+    "node": ">=20"
   },
   "scripts": {
     "dev": "next dev",
@@ -11,7 +11,9 @@
     "analyze": "ANALYZE=true next build",
     "start": "next start",
     "lint": "next lint",
-    "init": "npx tambo init",
+    "biome:check": "biome check .",
+    "format": "biome format --write .",
+    "init": "npx custom init",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:agent": "npm run dev",
@@ -35,7 +37,6 @@
     "@openai/agents": "^0.0.2",
     "@supabase/ssr": "^0.6.1",
     "@supabase/supabase-js": "^2.49.9",
-    "@tambo-ai/react": "^0.23.1",
     "@tanstack/react-query": "^5.80.2",
     "@tldraw/sync": "^3.13.3",
     "@tldraw/sync-core": "^3.13.3",
@@ -50,6 +51,7 @@
     "lucide-react": "^0.484.0",
     "nanoid": "^5.1.5",
     "next": "15.2.3",
+    "node": "^22.19.0",
     "radix-ui": "^1.1.3",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
@@ -61,6 +63,7 @@
     "zod": "^3.25.49"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.2.2",
     "@eslint/eslintrc": "^3",
     "@jest/globals": "^29.7.0",
     "@tailwindcss/postcss": "^4.1.5",

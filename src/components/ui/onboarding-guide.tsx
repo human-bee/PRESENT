@@ -1,4 +1,4 @@
-"use client";
+'use client';
 
 import React, { useState } from 'react';
 import { ChevronRight, ChevronLeft, Mic, Palette, Users, HelpCircle } from 'lucide-react';
@@ -23,10 +23,10 @@ export const onboardingGuideSchema = z.object({
   autoStart: z.boolean().optional().default(false),
 });
 
-export function OnboardingGuide({ 
-  context = 'general', 
+export function OnboardingGuide({
+  context = 'general',
   autoStart = false,
-  onComplete
+  onComplete,
 }: OnboardingGuideProps) {
   const [currentStep, setCurrentStep] = useState(0);
   const [isVisible, setIsVisible] = useState(autoStart);
@@ -37,51 +37,57 @@ export function OnboardingGuide({
       {
         id: 'welcome',
         title: 'Welcome to PRESENT',
-        description: 'This is your AI-powered collaborative workspace. Everything here is controllable by voice, touch, or canvas interaction.',
+        description:
+          'This is your AI-powered collaborative workspace. Everything here is controllable by voice, touch, or canvas interaction.',
         icon: <HelpCircle className="w-5 h-5 text-blue-600" />,
-        voiceExample: 'Try saying "show me help" anytime'
-      }
+        voiceExample: 'Try saying "show me help" anytime',
+      },
     ];
 
     const canvasSteps = [
       {
         id: 'voice-connection',
         title: 'Connect Your Voice',
-        description: 'Click the microphone button to join the voice room. The AI agent will listen for commands and respond in real-time.',
+        description:
+          'Click the microphone button to join the voice room. The AI agent will listen for commands and respond in real-time.',
         icon: <Mic className="w-5 h-5 text-green-600" />,
-        voiceExample: 'Say "connect to voice" or click the mic button'
+        voiceExample: 'Say "connect to voice" or click the mic button',
       },
       {
         id: 'component-creation',
         title: 'Create Components',
-        description: 'Say things like "show timer", "create weather widget", or "add a document editor" to generate interactive components.',
+        description:
+          'Say things like "show timer", "create weather widget", or "add a document editor" to generate interactive components.',
         icon: <Palette className="w-5 h-5 text-purple-600" />,
-        voiceExample: 'Try: "show me a timer" or "create a weather forecast"'
+        voiceExample: 'Try: "show me a timer" or "create a weather forecast"',
       },
       {
         id: 'canvas-interaction',
         title: 'Everything is Interactive',
-        description: 'Components appear on the canvas where you can move, resize, and interact with them. The AI can also update them via voice.',
+        description:
+          'Components appear on the canvas where you can move, resize, and interact with them. The AI can also update them via voice.',
         icon: <Users className="w-5 h-5 text-orange-600" />,
-        voiceExample: 'Say "update the timer to 5 minutes" or drag components around'
-      }
+        voiceExample: 'Say "update the timer to 5 minutes" or drag components around',
+      },
     ];
 
     const voiceSteps = [
       {
         id: 'chat-interaction',
         title: 'Voice Chat Mode',
-        description: 'This split-view lets you chat naturally with the AI. It understands context and can create visual components.',
+        description:
+          'This split-view lets you chat naturally with the AI. It understands context and can create visual components.',
         icon: <Mic className="w-5 h-5 text-blue-600" />,
-        voiceExample: 'Just start talking naturally'
+        voiceExample: 'Just start talking naturally',
       },
       {
         id: 'canvas-integration',
         title: 'Show in Canvas',
-        description: 'Components created in chat can be transferred to the canvas using "Show in Canvas" buttons or voice commands.',
+        description:
+          'Components created in chat can be transferred to the canvas using "Show in Canvas" buttons or voice commands.',
         icon: <Palette className="w-5 h-5 text-green-600" />,
-        voiceExample: 'Say "put that on the canvas" or use the button'
-      }
+        voiceExample: 'Say "put that on the canvas" or use the button',
+      },
     ];
 
     switch (ctx) {
@@ -120,7 +126,6 @@ export function OnboardingGuide({
     }
   };
 
-
   const handleShow = () => {
     setCurrentStep(0);
     setIsVisible(true);
@@ -147,9 +152,7 @@ export function OnboardingGuide({
     <div className="max-w-md mx-auto bg-white rounded-xl shadow-lg border p-6">
       {/* Header */}
       <div className="flex items-center space-x-3 mb-4">
-        <div className="p-2 bg-blue-100 rounded-lg">
-          {step.icon}
-        </div>
+        <div className="p-2 bg-blue-100 rounded-lg">{step.icon}</div>
         <div className="flex-1">
           <h3 className="font-semibold text-gray-900">{step.title}</h3>
           <div className="text-xs text-gray-500">
@@ -175,8 +178,11 @@ export function OnboardingGuide({
           <div
             key={index}
             className={`flex-1 h-2 rounded-full transition-colors ${
-              index === currentStep ? 'bg-blue-600' : 
-              index < currentStep ? 'bg-blue-300' : 'bg-gray-200'
+              index === currentStep
+                ? 'bg-blue-600'
+                : index < currentStep
+                  ? 'bg-blue-300'
+                  : 'bg-gray-200'
             }`}
           />
         ))}

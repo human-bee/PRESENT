@@ -1,6 +1,6 @@
 /**
  * Canvas Share Zone component for the Next.js application.
- * 
+ *
  * This component serves as a share zone for the canvas.
  * It includes:
  * - A link to the my canvases page
@@ -8,12 +8,12 @@
  * - A sign out button
  */
 
-"use client";
+'use client';
 
-import { useAuth } from "@/hooks/use-auth";
-import { useRouter } from "next/navigation";
-import Link from "next/link";
-import { LogOut, FolderOpen, User } from "lucide-react";
+import { useAuth } from '@/hooks/use-auth';
+import { useRouter } from 'next/navigation';
+import Link from 'next/link';
+import { LogOut, FolderOpen, User } from 'lucide-react';
 
 export function CanvasShareZone() {
   const { user, signOut } = useAuth();
@@ -22,9 +22,9 @@ export function CanvasShareZone() {
   const handleSignOut = async () => {
     try {
       await signOut();
-      router.push("/auth/signin");
+      router.push('/auth/signin');
     } catch (error) {
-      console.error("Error signing out:", error);
+      console.error('Error signing out:', error);
     }
   };
 
@@ -43,15 +43,13 @@ export function CanvasShareZone() {
         <FolderOpen className="w-4 h-4" />
         My Canvases
       </Link>
-      
+
       {/* User Info */}
       <div className="flex items-center gap-2 px-3 py-1.5 bg-white/90 backdrop-blur-sm rounded-md">
         <User className="w-4 h-4 text-gray-600" />
-        <span className="text-sm text-gray-700">
-          {user.user_metadata?.full_name || user.email}
-        </span>
+        <span className="text-sm text-gray-700">{user.user_metadata?.full_name || user.email}</span>
       </div>
-      
+
       {/* Sign Out Button */}
       <button
         onClick={handleSignOut}
@@ -63,4 +61,4 @@ export function CanvasShareZone() {
       </button>
     </div>
   );
-} 
+}

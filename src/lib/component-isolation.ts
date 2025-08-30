@@ -1,17 +1,20 @@
 /**
  * Component Isolation System
- * 
+ *
  * Prevents components from re-rendering when other components update
  */
 
-import { useRef, useEffect } from "react";
+import { useRef, useEffect } from 'react';
 
 // Global component registry to track active components
-const activeComponents = new Map<string, {
-  id: string;
-  lastUpdate: number;
-  isUpdating: boolean;
-}>();
+const activeComponents = new Map<
+  string,
+  {
+    id: string;
+    lastUpdate: number;
+    isUpdating: boolean;
+  }
+>();
 
 // Debounce map to prevent rapid updates
 const updateDebounce = new Map<string, NodeJS.Timeout>();
@@ -46,18 +49,19 @@ export function useComponentIsolation(componentId: string, componentType: string
   const shouldUpdate = (minInterval = 1000): boolean => {
     const now = Date.now();
     const lastUpdate = lastUpdateRef.current;
-    
+
     // Prevent updates faster than minInterval
     if (now - lastUpdate < minInterval) {
       return false;
     }
 
     // Check if other components of same type are updating
-    const sameTypeComponents = Array.from(activeComponents.values())
-      .filter(c => c.id.startsWith(componentType) && c.id !== isolationId);
-    
+    const sameTypeComponents = Array.from(activeComponents.values()).filter(
+      (c) => c.id.startsWith(componentType) && c.id !== isolationId,
+    );
+
     const recentlyUpdated = sameTypeComponents.some(
-      c => c.isUpdating || (now - c.lastUpdate < 500)
+      (c) => c.isUpdating || now - c.lastUpdate < 500,
     );
 
     if (recentlyUpdated) {
@@ -143,7 +147,7 @@ export class IsolatedEventBus {
 
   emit(componentId: string, event: string, data: any) {
     const key = `${componentId}:${event}`;
-    
+
     // Queue event
     if (!this.eventQueue.has(key)) {
       this.eventQueue.set(key, []);
@@ -164,10 +168,10 @@ export class IsolatedEventBus {
       const listeners = this.listeners.get(key);
       if (listeners && events.length > 0) {
         const event = events.shift()!;
-        
+
         // Notify listeners asynchronously
         await Promise.resolve();
-        listeners.forEach(callback => {
+        listeners.forEach((callback) => {
           try {
             callback(event);
           } catch (error) {
