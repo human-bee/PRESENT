@@ -132,6 +132,13 @@ function CustomMainMenu({ readOnly = false }: { readOnly?: boolean } & any) {
     router.push('/canvases');
   };
 
+  const handleNewCanvas = () => {
+    try {
+      localStorage.removeItem('present:lastCanvasId');
+    } catch {}
+    router.push('/canvas');
+  };
+
   const handleMcpConfig = () => {
     // Navigate to MCP config page
     router.push('/mcp-config');
@@ -226,6 +233,13 @@ function CustomMainMenu({ readOnly = false }: { readOnly?: boolean } & any) {
           label="My Canvases"
           icon="external-link"
           onSelect={handleOpenCanvases}
+        />
+
+        <TldrawUiMenuItem
+          id="new-canvas"
+          label="New Canvas"
+          icon="external-link"
+          onSelect={handleNewCanvas}
         />
 
         <TldrawUiMenuItem
