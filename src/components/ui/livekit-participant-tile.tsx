@@ -420,16 +420,21 @@ function SingleParticipantTile({
   const [optionsOpen, setOptionsOpen] = React.useState(false);
   const [audioDevices, setAudioDevices] = React.useState<MediaDeviceInfo[]>([]);
   const [videoDevices, setVideoDevices] = React.useState<MediaDeviceInfo[]>([]);
+  const [selectedQuality, setSelectedQuality] = React.useState<'auto' | 'low' | 'high'>('auto');
+  const modalRef = React.useRef<HTMLDivElement | null>(null);
+  const closeButtonRef = React.useRef<HTMLButtonElement | null>(null);
+  const refreshDevices = React.useCallback(async () => {
+    try {
+      const list = await navigator.mediaDevices?.enumerateDevices?.();
+      if (!list) return;
+      setAudioDevices(list.filter((d) => d.kind === 'audioinput'));
+      setVideoDevices(list.filter((d) => d.kind === 'videoinput'));
+    } catch {}
+  }, []);
   React.useEffect(() => {
     if (!optionsOpen) return;
-    navigator.mediaDevices
-      ?.enumerateDevices?.()
-      .then((list) => {
-        setAudioDevices(list.filter((d) => d.kind === 'audioinput'));
-        setVideoDevices(list.filter((d) => d.kind === 'videoinput'));
-      })
-      .catch(() => { });
-  }, [optionsOpen]);
+    refreshDevices();
+  }, [optionsOpen, refreshDevices]);
 
   // Prevent background scrolling when options modal is open (mobile-friendly)
   React.useEffect(() => {
@@ -438,6 +443,23 @@ function SingleParticipantTile({
     document.body.style.overflow = 'hidden';
     return () => {
       document.body.style.overflow = previous;
+    };
+  }, [optionsOpen]);
+
+  // Close modal on Escape and focus close button for accessibility
+  React.useEffect(() => {
+    if (!optionsOpen) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setOptionsOpen(false);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    const t = window.setTimeout(() => closeButtonRef.current?.focus(), 0);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      window.clearTimeout(t);
     };
   }, [optionsOpen]);
 
@@ -700,16 +722,18 @@ function SingleParticipantTile({
             className="fixed inset-0 z-[1000] bg-black/40 backdrop-blur-sm flex items-center justify-center"
             role="dialog"
             aria-modal="true"
-            onMouseDown={() => setOptionsOpen(false)}
-            onPointerDown={() => setOptionsOpen(false)}
-            onClick={() => setOptionsOpen(false)}
-            onTouchStart={() => setOptionsOpen(false)}
+            onClick={(e) => {
+              if (e.target === e.currentTarget) setOptionsOpen(false);
+            }}
           >
             <div
               className="bg-zinc-900 text-white w-[360px] max-w-[90vw] max-h-[85dvh] overflow-auto rounded-xl p-4 border border-white/10 shadow-2xl"
               style={{ WebkitOverflowScrolling: 'touch' }}
+              ref={modalRef}
               onMouseDown={(e) => e.stopPropagation()}
               onPointerDown={(e) => e.stopPropagation()}
+              onClick={(e) => e.stopPropagation()}
+              onTouchStart={(e) => e.stopPropagation()}
               onContextMenu={(e) => e.stopPropagation()}
             >
               <div className="flex items-center justify-between mb-3">
@@ -717,6 +741,7 @@ function SingleParticipantTile({
                 <button
                   aria-label="Close"
                   onClick={() => setOptionsOpen(false)}
+                  ref={closeButtonRef}
                   className="text-white/70 hover:text-white"
                 >
                   ✕
@@ -725,6 +750,15 @@ function SingleParticipantTile({
 
               {isLocal && (
                 <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="text-xs text-white/70">Devices</div>
+                    <button
+                      className="px-2 py-1 rounded bg-white/10 hover:bg-white/20 text-xs"
+                      onClick={refreshDevices}
+                    >
+                      Refresh devices
+                    </button>
+                  </div>
                   <div>
                     <div className="text-xs text-white/70 mb-1">Participant</div>
                     <select
@@ -809,8 +843,16 @@ function SingleParticipantTile({
                       {(['auto', 'low', 'high'] as const).map((q) => (
                         <button
                           key={q}
-                          className="px-2 py-1 rounded bg-white/10 hover:bg-white/20 text-xs"
-                          onClick={() => events.setQuality(q)}
+                          className={cn(
+                            'px-2 py-1 rounded text-xs transition-colors',
+                            selectedQuality === q
+                              ? 'bg-white/20 text-white'
+                              : 'bg-white/10 hover:bg-white/20 text-white',
+                          )}
+                          onClick={() => {
+                            setSelectedQuality(q);
+                            events.setQuality(q);
+                          }}
                         >
                           {q}
                         </button>
