@@ -1,0 +1,114 @@
+---
+alwaysApply: false
+---
+
+# First Principles
+
+## What Needs Doing First
+
+- Merge branches – **DONE**
+- Figure out what needs doing – **DONE**
+- TLDraw sub-agent
+- Conductor agent that takes all tools
+- Expose TLDraw agent and conductor to the primary agent as tool calls
+
+## 1. One LiveKit Agent Per User (`livekit-agent-worker.ts`)
+
+- Agents should be able to initialize custom components, create TLDraw shapes, or manipulate the canvas through tool calls.
+- **Available tools:**
+  - Canvas subagent (natural language → TLDraw editor API calls)
+  - Pass off component creation to the conductor agent
+  - Pass off component update to the conductor agent
+
+## 2. One Room With Multiple Participants
+
+- **DONE**
+
+## 3. Canvas Syncs State Between Participants
+
+- **DONE**
+
+## 5. Sub-Agent: Conductor Agent
+
+- Takes instructions from the watcher or primary agent and performs actions
+- Has access to Linear, YouTube, and all MCP tools
+- Takes natural language instructions and uses its toolbox to update components
+- In the future, there will be specialized mini agents that are experts in their component (e.g., a Linear agent that uses all of Linear's tools)
+
+## 6. Watcher Agent
+
+- **FUTURE**
+- Monitors the transcript and decides if a component should be updated based on the transcript
+- Sends a message to the conductor agent to update the component
+
+## Principles
+
+- Real-time speech-to-UI platform
+- Receives transcript from the user and from other users
+- Initializes components and controls the canvas
+- Receives text input from user messages (**TODO**)
+
+## Conductor Agent (Custom Replacement)
+
+- Takes instructions from the primary agent:
+  - Receives tool call arguments from the primary agent and uses transcript context to understand what the user wants
+  - Calls MCPs to access real-time external information (e.g., YouTube API)
+  - Renders the component with props
+  - Components have pre-existing props
+  - Should be able to update the state of the component
+- LiveKit agent currently: Monitors the transcript and decides what to do, which will update the state of the component
+# First Principles
+
+## What Needs Doing First
+
+- Merge branches – **DONE**
+- Figure out what needs doing – **DONE**
+- TLDraw sub-agent
+- Conductor agent that takes all tools
+- Expose TLDraw agent and conductor to the primary agent as tool calls
+
+## 1. One LiveKit Agent Per User (`livekit-agent-worker.ts`)
+
+- Agents should be able to initialize custom components, create TLDraw shapes, or manipulate the canvas through tool calls.
+- **Available tools:**
+  - Canvas subagent (natural language → TLDraw editor API calls)
+  - Pass off component creation to the conductor agent
+  - Pass off component update to the conductor agent
+
+## 2. One Room With Multiple Participants
+
+- **DONE**
+
+## 3. Canvas Syncs State Between Participants
+
+- **DONE**
+
+## 5. Sub-Agent: Conductor Agent
+
+- Takes instructions from the watcher or primary agent and performs actions
+- Has access to Linear, YouTube, and all MCP tools
+- Takes natural language instructions and uses its toolbox to update components
+- In the future, there will be specialized mini agents that are experts in their component (e.g., a Linear agent that uses all of Linear's tools)
+
+## 6. Watcher Agent
+
+- **FUTURE**
+- Monitors the transcript and decides if a component should be updated based on the transcript
+- Sends a message to the conductor agent to update the component
+
+## Principles
+
+- Real-time speech-to-UI platform
+- Receives transcript from the user and from other users
+- Initializes components and controls the canvas
+- Receives text input from user messages (**TODO**)
+
+## Conductor Agent (Custom Replacement)
+
+- Takes instructions from the primary agent:
+  - Receives tool call arguments from the primary agent and uses transcript context to understand what the user wants
+  - Calls MCPs to access real-time external information (e.g., YouTube API)
+  - Renders the component with props
+  - Components have pre-existing props
+  - Should be able to update the state of the component
+- LiveKit agent currently: Monitors the transcript and decides what to do, which will update the state of the component
