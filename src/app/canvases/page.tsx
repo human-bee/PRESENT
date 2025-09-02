@@ -47,7 +47,16 @@ export default function CanvasesPage() {
           .order('last_modified', { ascending: false });
 
         if (error) throw error;
-        setCanvases(canvases || []);
+        const list = (canvases || []) as UserCanvas[];
+        // Dedupe by id to avoid duplicate React keys from the view
+        const seen = new Set<string>();
+        const deduped = list.filter((c) => {
+          if (!c?.id) return false;
+          if (seen.has(c.id)) return false;
+          seen.add(c.id);
+          return true;
+        });
+        setCanvases(deduped);
       } catch (error) {
         console.error('Error fetching canvases:', error);
         toast.error('Failed to load canvases');
