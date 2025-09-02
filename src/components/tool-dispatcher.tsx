@@ -242,6 +242,52 @@ export function ToolDispatcher({
                 source: 'dispatcher',
               });
             } catch {}
+            // Opportunistically reflect research in the scorecard UI
+            try {
+              if (toolName === 'exa') {
+                const queryText = String((params as any)?.query || '').trim();
+                const items = (result?.results || result?.items || result?.documents || []) as any[];
+                const sourcesText = Array.isArray(items)
+                  ? items
+                      .slice(0, 3)
+                      .map((it: any) => it.title || it.url || it.snippet || it.text?.slice?.(0, 80))
+                      .filter(Boolean)
+                      .join('; ')
+                  : '';
+
+                // Find the most recent DebateScorecard on the canvas
+                const list = ComponentRegistry.list();
+                const latestScorecard = [...list]
+                  .filter((c) => c.componentType === 'DebateScorecard')
+                  .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))[0];
+                if (latestScorecard) {
+                  const messageId = latestScorecard.messageId;
+                  const patch: Record<string, unknown> = {
+                    timeline: [
+                      {
+                        timestamp: Date.now(),
+                        event: `🔎 Research results for: ${queryText || 'query'}`,
+                        type: 'fact_check',
+                      },
+                    ],
+                  };
+                  if (sourcesText) {
+                    (patch as any).factChecks = [
+                      {
+                        claim: queryText,
+                        verdict: 'Unverifiable',
+                        confidence: 0,
+                        sourcesText,
+                        timestamp: Date.now(),
+                      },
+                    ];
+                  }
+                  await ComponentRegistry.update(messageId, patch);
+                }
+              }
+            } catch (e) {
+              console.warn('[ToolDispatcher] exa-to-ui_update synthesis failed', e);
+            }
             return { status: 'SUCCESS', message: 'MCP tool executed', result } as any;
           } catch (e) {
             const msg = e instanceof Error ? e.message : String(e);
