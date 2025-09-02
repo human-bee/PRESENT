@@ -9,7 +9,7 @@
 
 import { useEffect } from 'react';
 import { usecustom } from '@custom-ai/react';
-import { systemRegistry, synccustomComponentsToRegistry } from '@/lib/system-registry';
+import { systemRegistry, synccustomComponentsToRegistry, syncMcpToolsToRegistry } from '@/lib/system-registry';
 import { createLogger } from '@/lib/utils';
 
 const logger = createLogger('SystemRegistrySync');
@@ -51,6 +51,23 @@ export function SystemRegistrySync() {
       })
       .catch(() => { });
   }, [componentList]);
+
+  // Sync MCP tools (from window bridge) to registry
+  useEffect(() => {
+    const syncMcp = () => {
+      try {
+        const tools = (window as any).__custom_mcp_tools || {};
+        const list = Object.keys(tools).map((name) => ({ name, description: tools[name]?.description || name }));
+        if (list.length > 0) {
+          syncMcpToolsToRegistry(list);
+        }
+      } catch {}
+    };
+    // Initial sync and on interval (lightweight)
+    syncMcp();
+    const t = setInterval(syncMcp, 2000);
+    return () => clearInterval(t);
+  }, []);
 
   // Log registry state in development
   useEffect(() => {

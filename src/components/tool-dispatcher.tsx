@@ -51,6 +51,7 @@ export function ToolDispatcher({
 }) {
   const log = (...args: any[]) => enableLogging && console.log('[ToolDispatcher]', ...args);
   const room = useRoomContext();
+  const bus = React.useMemo(() => createLiveKitBus(room), [room]);
 
   const executeToolCall = React.useCallback<DispatcherContext['executeToolCall']>(
     async (call) => {
@@ -69,6 +70,40 @@ export function ToolDispatcher({
         };
 
         switch (tool) {
+          case 'youtube_search': {
+            const query = String((params as any)?.query || '').trim();
+            try {
+              const mcpr = await (window as any).callMcpTool?.('searchVideos', { query });
+              const first = mcpr?.videos?.[0] || mcpr?.items?.[0] || null;
+              const videoId = first?.id || first?.videoId || first?.video_id || null;
+              if (videoId) {
+                const messageId = `ui-youtube-${Date.now()}`;
+                window.dispatchEvent(
+                  new CustomEvent('custom:showComponent', {
+                    detail: {
+                      messageId,
+                      component: { type: 'YoutubeEmbed', props: { videoId } },
+                      contextKey,
+                    },
+                  }),
+                );
+                try {
+                  bus.send('tool_result', {
+                    type: 'tool_result',
+                    id: call.id,
+                    tool,
+                    result: { status: 'SUCCESS', videoId },
+                    timestamp: Date.now(),
+                    source: 'dispatcher',
+                  });
+                } catch {}
+                return { status: 'SUCCESS', message: 'Rendered YouTube video', videoId } as any;
+              }
+            } catch (e) {
+              console.warn('[ToolDispatcher] youtube_search MCP failed', e);
+            }
+            return { status: 'IGNORED', message: 'No YouTube result' } as const;
+          }
           case 'canvas_focus':
             return dispatchTL('tldraw:canvas_focus', params);
           case 'canvas_zoom_all':
@@ -109,7 +144,8 @@ export function ToolDispatcher({
 
         if (tool === 'generate_ui_component') {
           const componentType = String((params as any)?.componentType || 'Message');
-          const messageId = `ui-${componentType.toLowerCase()}-${Date.now()}`;
+          const providedId = String((params as any)?.messageId || '') || undefined;
+          const messageId = providedId || `ui-${componentType.toLowerCase()}-${Date.now()}`;
           // Let the thread listener materialize this component
           try {
             window.dispatchEvent(
@@ -142,7 +178,81 @@ export function ToolDispatcher({
               }
             }
           } catch {}
+          // Emit tool_result so agents can correlate
+          try {
+            bus.send('tool_result', {
+              type: 'tool_result',
+              id: call.id,
+              tool,
+              result: { status: 'SUCCESS', messageId, componentType },
+              timestamp: Date.now(),
+              source: 'dispatcher',
+            });
+          } catch {}
           return { status: 'SUCCESS', message: `Rendered ${componentType}`, messageId } as any;
+        }
+
+        if (tool === 'ui_update') {
+          const messageId = String((params as any)?.messageId || (params as any)?.id || '');
+          const patch = (params as any)?.patch || {};
+          if (!messageId) {
+            const msg = 'ui_update requires messageId';
+            try {
+              bus.send('tool_error', {
+                type: 'tool_error',
+                id: call.id,
+                tool,
+                error: msg,
+                timestamp: Date.now(),
+                source: 'dispatcher',
+              });
+            } catch {}
+            return { status: 'ERROR', message: msg } as any;
+          }
+          const res = await ComponentRegistry.update(messageId, patch);
+          // Emit result back
+          try {
+            bus.send('tool_result', {
+              type: 'tool_result',
+              id: call.id,
+              tool,
+              result: { ...(res as any), messageId },
+              timestamp: Date.now(),
+              source: 'dispatcher',
+            });
+          } catch {}
+          return { status: 'SUCCESS', message: 'Component updated', ...(res as any) } as any;
+        }
+
+        if (tool.startsWith('mcp_')) {
+          try {
+            const toolName = tool.replace(/^mcp_/, '');
+            const result = await (window as any).callMcpTool?.(toolName, params);
+            try {
+              bus.send('tool_result', {
+                type: 'tool_result',
+                id: call.id,
+                tool,
+                result,
+                timestamp: Date.now(),
+                source: 'dispatcher',
+              });
+            } catch {}
+            return { status: 'SUCCESS', message: 'MCP tool executed', result } as any;
+          } catch (e) {
+            const msg = e instanceof Error ? e.message : String(e);
+            try {
+              bus.send('tool_error', {
+                type: 'tool_error',
+                id: call.id,
+                tool,
+                error: msg,
+                timestamp: Date.now(),
+                source: 'dispatcher',
+              });
+            } catch {}
+            return { status: 'ERROR', message: msg } as any;
+          }
         }
 
         // Future: route mcp_* to MCP bridge (window.__custom_tool_dispatcher)

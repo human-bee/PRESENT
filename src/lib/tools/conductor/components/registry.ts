@@ -24,10 +24,11 @@ import LinearKanbanBoard, { linearKanbanSchema } from '@/components/ui/linear-ka
 import { OnboardingGuide, onboardingGuideSchema } from '@/components/ui/onboarding-guide';
 import { Message } from '@/components/ui/message';
 import { ComponentToolbox } from '@/components/ui/component-toolbox';
+
+// Add debate scorecard @debate-scorecard.tsx
 import DebateScorecard, { debateScoreCardSchema } from '@/components/ui/debate-scorecard';
+
 import { aiResponseSchema, componentToolboxSchema } from "@/lib/custom";
-
-
 
 const extendedSchema = <T extends z.AnyZodObject>(schema: T) => {
   return schema.extend({
@@ -159,14 +160,13 @@ export const components: any = [
   },
   // Add more components here
 ];
+
 export const allComponents = {
   YoutubeEmbed: extendedSchema(youtubeEmbedSchema),
+  DebateScorecard: extendedSchema(debateScoreCardSchema), // Added debate scorecard @debate-scorecard.tsx
 }
 
-export const availableComponents = getAvailableComponents(allComponents)
-
-
-
+export const availableComponents = getAvailableComponents(allComponents);
 
 function getAvailableComponents<T extends Record<string, z.AnyZodObject>>(components: T): T {
   return components;

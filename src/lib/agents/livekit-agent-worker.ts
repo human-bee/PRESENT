@@ -26,6 +26,7 @@ import { defineAgent, JobContext, cli, WorkerOptions, multimodal } from '@liveki
 import { RoomEvent, Track } from 'livekit-client';
 import * as openai from '@livekit/agents-plugin-openai';
 import { DecisionEngine, DecisionEngineConfig } from '../decision-engine';
+import { DebateJudgeManager, isStartDebate } from './debate-judge';
 
 console.log('🚀 Starting custom Voice Agent Worker...');
 console.log('🔧 Environment Check:');
@@ -48,303 +49,20 @@ export default defineAgent({
     await job.connect();
     console.log('✅ [Agent] Successfully connected to room!');
 
-    // Query system capabilities from the browser
-    interface SystemCapabilities {
-      tools: Array<{ name: string; description: string; examples?: string[] }>;
-      decisionEngine: {
-        intents: Record<string, string[]>;
-        keywords: Record<string, string[]>;
-      };
-      // Add components info
-      components?: Array<{
-        name: string;
-        description: string;
-        examples?: string[];
-      }>;
-    }
+    // Query capabilities via data channel with fallback to defaults
+    const { queryCapabilities } = await import('./capabilities');
 
-    let systemCapabilities: SystemCapabilities | null = null;
-
-    // Define default custom UI components for fallback
-    const defaultcustomComponents = [
-      {
-        name: 'YoutubeEmbed',
-        description: 'Embed a YouTube video with a specific video ID and optional start time',
-        examples: ['show me a video about react', 'play youtube video', 'embed this youtube link'],
-      },
-      {
-        name: 'WeatherForecast',
-        description: 'Display weather forecast data with visuals',
-        examples: ['show weather forecast', "what's the weather like", 'weather for today'],
-      },
-      {
-        name: 'RetroTimer',
-        description: 'A retro-styled countdown timer with preset options',
-        examples: ['set a timer for 5 minutes', 'create a countdown timer', 'start a timer'],
-      },
-      {
-        name: 'RetroTimerEnhanced',
-        description: 'An enhanced retro-styled countdown timer with AI update capabilities',
-        examples: ['advanced timer with updates', 'smart countdown timer', 'enhanced timer'],
-      },
-      {
-        name: 'DocumentEditor',
-        description:
-          'An advanced collaborative document editor with AI-powered editing capabilities',
-        examples: ['edit this document', 'create a new document', 'collaborative writing'],
-      },
-      {
-        name: 'ResearchPanel',
-        description: 'A sophisticated research results display panel',
-        examples: ['show research results', 'display findings', 'research summary'],
-      },
-      {
-        name: 'ActionItemTracker',
-        description: 'A comprehensive action item management system',
-        examples: ['track action items', 'manage tasks', 'create todo list'],
-      },
-      {
-        name: 'LivekitRoomConnector',
-        description: 'Establishes a LiveKit room connection',
-        examples: ['connect to room', 'join video call', 'start meeting'],
-      },
-      {
-        name: 'LivekitParticipantTile',
-        description: 'Individual participant video/audio tile',
-        examples: ['show participant video', 'participant tile', 'user video feed'],
-      },
-      {
-        name: 'AIImageGenerator',
-        description: 'A real-time AI image generator',
-        examples: ['generate an image', 'create picture', 'make an illustration'],
-      },
-      {
-        name: 'LiveCaptions',
-        description: 'A real-time live captions component',
-        examples: ['show live captions', 'enable subtitles', 'display transcription'],
-      },
-      {
-        name: 'DebateScorecard',
-        description: 'A real-time debate scorecard component',
-        examples: ['show debate scorecard', 'enable debate scorecard', 'display debate scorecard'],
-      },
-    ];
-
-    // Define default capabilities with comprehensive tool list
-    const defaultCapabilities: SystemCapabilities = {
-      tools: [
-        {
-          name: 'generate_ui_component',
-          description: 'Generate any UI component from the custom component library',
-          examples: ['create a timer', 'show weather', 'make a chart', 'generate youtube embed'],
-        },
-        {
-          name: 'youtube_search',
-          description: 'Search and display YouTube videos',
-          examples: ['search youtube for cats', 'find video about react', 'show youtube results'],
-        },
-        {
-          name: 'mcp_tool',
-          description: 'Access external tools via Model Context Protocol',
-          examples: ['use external tool', 'call mcp function', 'access external service'],
-        },
-        {
-          name: 'ui_update',
-          description: 'Update existing UI components',
-          examples: ['update timer', 'change weather location', 'modify component'],
-        },
-        {
-          name: 'list_components',
-          description: 'List all current UI components and their IDs',
-          examples: ['show current components', 'list active elements', 'what components exist'],
-        },
-        {
-          name: 'web_search',
-          description: 'Search the web for information',
-          examples: ['search for information', 'find recent news', 'look up facts'],
-        },
-        {
-          name: 'respond_with_voice',
-          description: 'Provide voice responses when appropriate',
-          examples: ['speak response', 'voice reply', 'audio answer'],
-        },
-        // Canvas control & analysis tools
-        {
-          name: 'canvas_focus',
-          description: 'Focus/zoom camera on all, selection, or a specific component/shape',
-          examples: ['focus on the weather component', 'zoom to selection', 'center everything'],
-        },
-        {
-          name: 'canvas_zoom_all',
-          description: 'Zoom to fit all shapes on the canvas',
-          examples: ['zoom out to see everything', 'fit to content'],
-        },
-        {
-          name: 'canvas_create_note',
-          description: 'Create a text note at the center of the viewport',
-          examples: ['add a note: "Action Item: Review design"'],
-        },
-        {
-          name: 'canvas_pin_selected',
-          description: 'Pin selected custom shapes to the viewport',
-          examples: ['pin this to the screen'],
-        },
-        {
-          name: 'canvas_unpin_selected',
-          description: 'Unpin selected custom shapes from the viewport',
-          examples: ['unpin this'],
-        },
-        {
-          name: 'canvas_analyze',
-          description: 'Analyze canvas (counts, clusters, bounds, selection)',
-          examples: ['analyze the board layout'],
-        },
-        {
-          name: 'canvas_lock_selected',
-          description: 'Lock selected shapes to prevent movement',
-          examples: ['lock these'],
-        },
-        {
-          name: 'canvas_unlock_selected',
-          description: 'Unlock selected shapes to allow movement',
-          examples: ['unlock these'],
-        },
-        {
-          name: 'canvas_arrange_grid',
-          description: 'Arrange selected or all components into a grid',
-          examples: ['arrange these in a grid'],
-        },
-        {
-          name: 'canvas_create_rectangle',
-          description: 'Create a rectangle shape',
-          examples: ['create a rectangle'],
-        },
-        {
-          name: 'canvas_create_ellipse',
-          description: 'Create an ellipse shape',
-          examples: ['create an ellipse'],
-        },
-        {
-          name: 'canvas_align_selected',
-          description: 'Align selected components',
-          examples: ['align these to the left'],
-        },
-        {
-          name: 'canvas_distribute_selected',
-          description: 'Distribute selected components',
-          examples: ['distribute these evenly'],
-        },
-        {
-          name: 'canvas_draw_smiley',
-          description: 'Draw a smiley face with basic shapes',
-          examples: ['draw a smiley face'],
-        },
-        {
-          name: 'canvas_toggle_grid',
-          description: 'Toggle a simple canvas grid',
-          examples: ['toggle grid'],
-        },
-        {
-          name: 'canvas_set_background',
-          description: 'Set background color or image',
-          examples: ['set background to blue'],
-        },
-        {
-          name: 'canvas_set_theme',
-          description: 'Set theme light/dark',
-          examples: ['switch to dark mode'],
-        },
-        {
-          name: 'canvas_select',
-          description: 'Select shapes by name/type/bounds',
-          examples: ['select the todo list'],
-        },
-      ],
-      components: defaultcustomComponents,
-      decisionEngine: {
-        intents: {
-          ui_generation: ['create', 'make', 'generate', 'show', 'display', 'build'],
-          youtube_search: ['youtube', 'video', 'play', 'watch', 'search youtube'],
-          timer: ['timer', 'countdown', 'alarm', 'stopwatch', 'time'],
-          weather: ['weather', 'forecast', 'temperature', 'climate'],
-          research: ['research', 'findings', 'results', 'analysis'],
-          action_items: ['todo', 'task', 'action item', 'checklist'],
-          image_generation: ['image', 'picture', 'illustration', 'generate image'],
-          captions: ['captions', 'subtitles', 'transcription', 'live text'],
-          canvas_control: ['zoom', 'focus', 'pan', 'center', 'pin', 'unpin', 'note', 'arrange'],
-        },
-        keywords: {
-          timer_related: ['timer', 'countdown', 'minutes', 'seconds', 'alarm'],
-          youtube_related: ['youtube', 'video', 'play', 'watch', 'embed'],
-          weather_related: ['weather', 'forecast', 'temperature', 'rain', 'sunny'],
-          ui_related: ['create', 'make', 'show', 'display', 'component'],
-          research_related: ['research', 'study', 'analysis', 'findings'],
-          task_related: ['todo', 'task', 'action', 'checklist', 'manage'],
-          canvas_related: [
-            'zoom',
-            'focus',
-            'pan',
-            'center',
-            'pin',
-            'unpin',
-            'note',
-            'arrange',
-            'grid',
-          ],
-        },
-      },
-    };
-
-    const queryCapabilities = async (): Promise<void> => {
-      return new Promise((resolve) => {
-        console.log('🔍 [Agent] Querying system capabilities...');
-
-        // Set up one-time listener for response
-        const handleCapabilityResponse = (data: Uint8Array) => {
-          try {
-            const message = JSON.parse(new TextDecoder().decode(data));
-            if (message.type === 'capability_list') {
-              systemCapabilities = message.capabilities;
-              console.log('✅ [Agent] Received capabilities:', {
-                tools: systemCapabilities?.tools.length || 0,
-                intents: Object.keys(systemCapabilities?.decisionEngine.intents || {}).length,
-                keywords: Object.keys(systemCapabilities?.decisionEngine.keywords || {}).length,
-              });
-              job.room.off('dataReceived', handleCapabilityResponse);
-              resolve();
-            }
-          } catch {
-            // Ignore non-JSON messages
-          }
-        };
-
-        job.room.on('dataReceived', handleCapabilityResponse);
-
-        // Send capability query
-        const queryMessage = JSON.stringify({
-          type: 'capability_query',
-          timestamp: Date.now(),
-        });
-
-        job.room.localParticipant?.publishData(new TextEncoder().encode(queryMessage), {
-          reliable: true,
-          topic: 'capability_query',
-        });
-
-        // Timeout after 5 seconds and continue with defaults
-        setTimeout(() => {
-          if (!systemCapabilities) {
-            console.log('⚠️ [Agent] Capability query timed out, using comprehensive defaults');
-            systemCapabilities = defaultCapabilities;
-            job.room.off('dataReceived', handleCapabilityResponse);
-            resolve();
-          }
-        }, 5000);
+    let systemCapabilities: any = null;
+    try {
+      console.log('🔍 [Agent] Querying system capabilities...');
+      systemCapabilities = (await queryCapabilities(job.room)) as any;
+      console.log('✅ [Agent] Capabilities:', {
+        tools: systemCapabilities?.tools?.length || 0,
+        intents: Object.keys(systemCapabilities?.decisionEngine?.intents || {}).length,
       });
-    };
-
-    // Query capabilities
-    await queryCapabilities();
+    } catch {
+      systemCapabilities = null;
+    }
 
     // Phase 4: Set up state synchronization
     // Define StateEnvelope inline to avoid import issues in Node worker
@@ -440,7 +158,9 @@ export default defineAgent({
     // Set up periodic capability refresh (every 30 seconds)
     const capabilityRefreshInterval = setInterval(async () => {
       console.log('🔄 [Agent] Refreshing capabilities...');
-      await queryCapabilities();
+      try {
+        systemCapabilities = (await queryCapabilities(job.room)) as any;
+      } catch {}
 
       // Update decision engine if capabilities changed
       if (systemCapabilities) {
@@ -598,7 +318,7 @@ Embrace your constraint. In your silence, let your creativity and helpfulness sh
 
       // Add available custom UI components
       let componentSection = `\n\ncustom UI COMPONENTS AVAILABLE:`;
-      const components = systemCapabilities?.components || defaultcustomComponents;
+      const components = systemCapabilities?.components || defaultComponents;
       componentSection += `\nYou can generate any of these ${components.length} UI components:`;
 
       components.forEach((component) => {
@@ -773,10 +493,23 @@ Embrace your constraint. In your silence, let your creativity and helpfulness sh
       },
     ];
 
+    // Build instructions via extracted builder
+    let instructionsText = '';
+    try {
+      const { buildVoiceAgentInstructions } = await import('./instructions');
+      const { defaultCustomComponents } = await import('./capabilities');
+      instructionsText = buildVoiceAgentInstructions(
+        (systemCapabilities as any) || ({} as any),
+        defaultCustomComponents,
+      );
+    } catch {
+      instructionsText = buildInstructions();
+    }
+
     // Create the multimodal agent using OpenAI Realtime API
     // Note: Tools will be handled through OpenAI's native function calling mechanism
     const model = new openai.realtime.RealtimeModel({
-      instructions: buildInstructions(),
+      instructions: instructionsText,
       model: 'gpt-realtime',
       modalities: ['text'], //add Audio input for Agent audio output, text only for transcription only
     });
@@ -826,8 +559,22 @@ Embrace your constraint. In your silence, let your creativity and helpfulness sh
       keywords: Object.keys(decisionEngineConfig.keywords || {}).length,
     });
 
+    // Debate judge manager
+    const debateJudgeManager = new DebateJudgeManager(job.room, job.room.name || 'room');
+
     // Enhanced decision handling with parallel tool calls
     const handleEnhancedDecision = async (transcript: string, participantId: string) => {
+      // Quick path: start a debate if requested
+      const lower = transcript.toLowerCase();
+      if (isStartDebate(lower) && !debateJudgeManager.isActive()) {
+        const participants = Array.from(job.room.remoteParticipants.values());
+        const p1 = participants[0]?.identity || 'Debater A';
+        const p2 = participants[1]?.identity || 'Debater B';
+        const id = await debateJudgeManager.ensureScorecard(p1, p2, 'Open debate');
+        console.log(`🥊 [Agent] DebateScorecard requested with id ${id}`);
+        return true;
+      }
+
       try {
         // Use enhanced analysis if available, otherwise fallback to regular
         const result = (await decisionEngine.analyzeTranscriptEnhanced?.(transcript)) || {
@@ -899,8 +646,8 @@ Embrace your constraint. In your silence, let your creativity and helpfulness sh
 
     // Log available components for debugging
     console.log('🎨 [Agent] Available custom UI Components:', {
-      total: defaultcustomComponents.length,
-      components: defaultcustomComponents.map((c) => c.name).join(', '),
+      total: defaultComponents.length,
+      components: defaultComponents.map((c) => c.name).join(', '),
     });
 
     // Configure agent to accept text responses when using tools
@@ -1173,6 +920,11 @@ Embrace your constraint. In your silence, let your creativity and helpfulness sh
 
         // Process through decision engine with participant ID
         await decisionEngine.processTranscript(evt.transcript, speakerId);
+
+        // Feed debate judge if active
+        if (debateJudgeManager.isActive() && speakerId !== 'voice-agent') {
+          await debateJudgeManager.processClaim(speakerId, evt.transcript);
+        }
       } else {
         console.log(`⏭️ [Agent] Skipping duplicate transcription: "${evt.transcript}"`);
       }

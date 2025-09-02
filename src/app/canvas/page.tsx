@@ -27,11 +27,17 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/use-auth';
 import { ToolDispatcher } from '@/components/tool-dispatcher';
 import { SystemRegistrySync } from '@/components/ui/system-registry-sync';
+import { initializeMCPBridge } from '@/lib/mcp-bridge';
+import { AgentCapabilitiesBridge } from '@/components/ui/agent-capabilities-bridge';
 // TODO: Investigate best way to "go back" to CanvasSpace once we have a better way to handle adding/updating/managing the state of multiple components on the canvas simultaneously
 
 // Suppress development warnings for cleaner console
 suppressDevelopmentWarnings();
 suppressViolationWarnings();
+// Initialize MCP bridge on client
+if (typeof window !== 'undefined') {
+  try { initializeMCPBridge(); } catch {}
+}
 
 export default function Canvas() {
   // Authentication check
@@ -291,6 +297,8 @@ export default function Canvas() {
           <RoomContext.Provider value={room}>
             {/* Tool Dispatcher - handles voice agent tool calls */}
             <ToolDispatcher contextKey={contextKey} enableLogging={true}>
+              {/* Respond to agent capability queries */}
+              <AgentCapabilitiesBridge />
               {/* Canvas LiveKit Context Provider - provides connection state to all canvas components */}
               <CanvasLiveKitContext.Provider value={roomState}>
                 {/* Full-screen Canvas Space */}
@@ -339,6 +347,8 @@ export default function Canvas() {
           <RoomContext.Provider value={room}>
             {/* Tool Dispatcher - handles voice agent tool calls */}
             <ToolDispatcher contextKey={contextKey} enableLogging={true}>
+              {/* Respond to agent capability queries */}
+              <AgentCapabilitiesBridge />
               {/* Canvas LiveKit Context Provider - provides connection state to all canvas components */}
               <CanvasLiveKitContext.Provider value={roomState}>
                 {/* Full-screen Canvas Space */}
