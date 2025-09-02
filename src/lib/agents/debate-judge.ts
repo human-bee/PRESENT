@@ -1,4 +1,13 @@
-import { Room } from 'livekit-client';
+// Narrow Room type to a minimal interface to support rtc-node Room
+interface RoomLike {
+  name?: string;
+  localParticipant?: {
+    publishData: (
+      data: Uint8Array,
+      options?: { reliable?: boolean; topic?: string },
+    ) => unknown;
+  } | null;
+}
 import { Agent as OpenAIAgent, run as runAgent, tool as agentTool } from '@openai/agents';
 import z from 'zod';
 
@@ -15,12 +24,12 @@ function sanitizeIdPart(s: string): string {
 }
 
 export class DebateJudgeManager {
-  private room: Room;
+  private room: RoomLike;
   private roomName: string;
   private messageId: string | null = null;
   private judge: OpenAIAgent | null = null;
 
-  constructor(room: Room, roomName: string) {
+  constructor(room: RoomLike, roomName: string) {
     this.room = room;
     this.roomName = roomName || 'room';
   }
@@ -66,15 +75,17 @@ export class DebateJudgeManager {
   }
 
   private createJudgeAgent(messageId: string): OpenAIAgent {
+    const manager = this;
     const verifyClaim = agentTool({
       name: 'verify_claim',
       description:
         'Verify a factual claim. Return verdict, confidence (0-100), and short rationale.',
       parameters: z.object({
         claim: z.string().describe('The claim to verify'),
-        context: z.string().optional().describe('Conversation context'),
+        context: z.string().nullable().describe('Conversation context'),
       }),
-      async execute({ claim, context }: { claim: string; context?: string }) {
+      async execute({ claim, context }: { claim: string; context?: string | null }) {
+        const debugMeta = { model: 'gpt-5-mini', tool: 'verify_claim', claim, context };
         try {
           const resp = await fetch('https://api.openai.com/v1/chat/completions', {
             method: 'POST',
@@ -96,10 +107,48 @@ export class DebateJudgeManager {
               ],
             }),
           });
+          const reqId = resp.headers.get('x-request-id') || resp.headers.get('x-openai-request-id');
+          console.log('[DebateJudge.verify_claim] request', { ...debugMeta, requestId: reqId });
           const data = (await resp.json()) as any;
-          const parsed = JSON.parse(data.choices?.[0]?.message?.content || '{}');
+          let content = String(data.choices?.[0]?.message?.content || '{}');
+          const fenced = content.match(/```(?:json)?\n([\s\S]*?)\n```/i);
+          if (fenced && fenced[1]) content = fenced[1];
+          const parsed = JSON.parse(content || '{}');
+          console.log('[DebateJudge.verify_claim] response', { requestId: reqId, parsed });
+
+          // Proactively update the UI, even if the agent doesn't call score_update
+          const verdict: 'Supported' | 'Refuted' | 'Partial' | 'Unverifiable' =
+            parsed?.verdict || 'Unverifiable';
+          const confidence = typeof parsed?.confidence === 'number' ? parsed.confidence : 0;
+          const rationale = typeof parsed?.rationale === 'string' ? parsed.rationale : '';
+
+          try {
+            await manager.publishUiUpdate({
+              liveClaim: claim,
+              factChecks: [
+                {
+                  claim,
+                  verdict,
+                  confidence,
+                  contextNotes: rationale ? [rationale] : [],
+                  sourcesText: parsed?.source || parsed?.sourceText || undefined,
+                  timestamp: Date.now(),
+                },
+              ],
+              timeline: [
+                {
+                  timestamp: Date.now(),
+                  text: `Fact check: ${verdict}${confidence ? ` (${confidence}%)` : ''}`,
+                  type: 'fact_check',
+                },
+              ],
+            } as any);
+          } catch (e) {
+            console.warn('[DebateJudge] failed to publish UI update from verify_claim', e);
+          }
           return parsed;
         } catch (e) {
+          console.warn('[DebateJudge.verify_claim] error', e);
           return { verdict: 'Unverifiable', confidence: 0, rationale: 'Verification failed' };
         }
       },
@@ -110,23 +159,49 @@ export class DebateJudgeManager {
       description:
         'Update the debate scorecard metrics and timeline. Include optional latest factCheck.',
       parameters: z.object({
-        p1Delta: z.record(z.any()).optional().describe('Partial scores for participant 1'),
-        p2Delta: z.record(z.any()).optional().describe('Partial scores for participant 2'),
-        liveClaim: z.string().optional(),
-        factCheck: z.record(z.any()).optional().describe('Fact check entry'),
-        timelineText: z.string().optional().describe('Short timeline entry'),
+        p1Delta: z
+          .record(z.number())
+          .nullable()
+          .optional()
+          .describe('Partial numeric scores for participant 1'),
+        p2Delta: z
+          .record(z.number())
+          .nullable()
+          .optional()
+          .describe('Partial numeric scores for participant 2'),
+        liveClaim: z.string().nullable().optional(),
+        factCheck: z
+          .object({
+            claim: z.string().nullable().optional(),
+            verdict: z.enum(['Supported', 'Refuted', 'Partial', 'Unverifiable']),
+            confidence: z.number().min(0).max(100),
+            // Flatten sources to a simple, schema-safe text field to avoid URL validation issues
+            sourcesText: z.string().nullable().optional(),
+            contextNotes: z.array(z.string()).nullable().optional(),
+            timestamp: z.number().nullable().optional(),
+          })
+          .nullable()
+          .optional()
+          .describe('Fact check summary entry'),
+        timelineText: z.string().nullable().optional().describe('Short timeline entry'),
       }),
       async execute({ p1Delta, p2Delta, liveClaim, factCheck, timelineText }: any) {
         const patch: Record<string, unknown> = {};
         if (p1Delta) patch.p1 = p1Delta;
         if (p2Delta) patch.p2 = p2Delta;
         if (typeof liveClaim === 'string') patch.liveClaim = liveClaim;
-        if (factCheck) patch.factChecks = [factCheck];
+        if (factCheck) {
+          const fc = {
+            timestamp: Date.now(),
+            ...factCheck,
+          };
+          patch.factChecks = [fc];
+        }
         if (timelineText) patch.timeline = [{ timestamp: Date.now(), text: timelineText }];
         await (async () => {
           const event = {
             id: `uiupdate-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-            roomId: (this.room.name || 'unknown'),
+            roomId: (manager.room?.name || 'unknown'),
             type: 'tool_call' as const,
             payload: {
               tool: 'ui_update',
@@ -136,7 +211,7 @@ export class DebateJudgeManager {
             timestamp: Date.now(),
             source: 'voice' as const,
           };
-          await this.publishData('tool_call', event);
+          await manager.publishData('tool_call', event);
         })();
         return { ok: true };
       },
@@ -147,13 +222,13 @@ export class DebateJudgeManager {
       description: 'Trigger deeper MCP research (e.g., Exa) for a claim or topic.',
       parameters: z.object({
         query: z.string().describe('Research query'),
-        maxResults: z.number().optional().describe('Max results to fetch'),
+        maxResults: z.number().nullable().optional().describe('Max results to fetch'),
       }),
-      async execute({ query, maxResults }: { query: string; maxResults?: number }) {
+      async execute({ query, maxResults }: { query: string; maxResults?: number | null }) {
         // Dispatch a generic MCP call; ToolDispatcher handles mcp_* via window bridge
         const event = {
           id: `mcp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-          roomId: (this.room.name || 'unknown'),
+          roomId: (manager.room?.name || 'unknown'),
           type: 'tool_call' as const,
           payload: {
             tool: 'mcp_exa',
@@ -163,9 +238,9 @@ export class DebateJudgeManager {
           timestamp: Date.now(),
           source: 'voice' as const,
         };
-        await this.publishData('tool_call', event);
+        await manager.publishData('tool_call', event);
         // Add a timeline note for visibility
-        await this.publishUiUpdate({
+        await manager.publishUiUpdate({
           timeline: [{ timestamp: Date.now(), text: `🔎 Deep research requested: ${query}` }],
         });
         return { ok: true };

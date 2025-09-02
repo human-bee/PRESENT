@@ -445,6 +445,7 @@ Analyze the current speaker's statement in full conversational context.`;
       const requestBody = {
         model: 'gpt-4o-mini',
         temperature: 0.1,
+        response_format: { type: 'json_object' },
         messages: [{ role: 'user', content: prompt }],
       };
 
@@ -477,7 +478,12 @@ Analyze the current speaker's statement in full conversational context.`;
         }>;
       };
 
-      const content = data.choices[0].message.content || '{}';
+      let content = data.choices[0].message.content || '{}';
+      // Guard: some models may return fenced JSON despite response_format
+      const fenced = content.match(/```(?:json)?\n([\s\S]*?)\n```/i);
+      if (fenced && fenced[1]) {
+        content = fenced[1];
+      }
 
       let result;
       try {

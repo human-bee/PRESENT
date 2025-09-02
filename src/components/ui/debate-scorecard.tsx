@@ -215,6 +215,12 @@ export type DebateEvent = {
   type?: 'argument' | 'rebuttal' | 'fact_check' | 'score_change' | 'moderation';
 };
 
+type TopicSection = {
+  topic: string;
+  color: string;
+  weight: number;
+};
+
 // ---------------- Helpers ----------------
 function clamp(v: number, min = 0, max = 100) {
   return Math.max(min, Math.min(max, v));
@@ -332,31 +338,38 @@ export function DebateScorecard(props: DebateScorecardProps) {
     factChecks: FactCheck[];
     timeline: DebateEvent[];
     liveClaim?: string;
+    topicSections?: TopicSection[];
   };
 
   const defaultScores: DebateScores = {
-    argumentStrength: 85,
-    evidenceQuality: 76,
-    factualAccuracy: 88,
-    logicalConsistency: 92,
-    bsMeter: 12,
-    strawmanDetection: 8,
-    adHominemScore: 5,
-    curiosityScore: 80,
-    teachingEffectiveness: 82,
-    learningImpact: 90,
+    argumentStrength: 0,
+    evidenceQuality: 0,
+    factualAccuracy: 0,
+    logicalConsistency: 0,
+    bsMeter: 0,
+    strawmanDetection: 0,
+    adHominemScore: 0,
+    curiosityScore: 0,
+    teachingEffectiveness: 0,
+    learningImpact: 0,
   };
 
   const [state, setState] = useState<DebateState>({
     round: 1,
-    p1: defaultScores,
-    p2: { ...defaultScores, evidenceQuality: 90, factualAccuracy: 85 },
+    p1: { ...defaultScores },
+    p2: { ...defaultScores },
     factChecks: [],
     timeline: [],
+    topicSections: [],
   });
 
   const handleAIUpdate = useCallback(
     (patch: Record<string, unknown>) => {
+      // Dev visibility for round-trip UI updates
+      try {
+        // eslint-disable-next-line no-console
+        console.log('[DebateScorecard] handleAIUpdate', { patch });
+      } catch {}
       setState((prev) => {
         if (!prev) return prev;
         const next = { ...prev } as DebateState;
@@ -365,21 +378,85 @@ export function DebateScorecard(props: DebateScorecardProps) {
         if (typeof (patch as any).topic === 'string') {
           // topic is prop-only; ignore in state
         }
-        if ((patch as any).p1 && typeof (patch as any).p1 === 'object') {
-          next.p1 = { ...next.p1, ...(patch as any).p1 } as DebateScores;
+        // Support both p1/p2 and p1Delta/p2Delta
+        const p1Patch = (patch as any).p1 || (patch as any).p1Delta;
+        const p2Patch = (patch as any).p2 || (patch as any).p2Delta;
+        if (p1Patch && typeof p1Patch === 'object') {
+          const incoming = (patch as any).p1 as Partial<DebateScores>;
+          const merged: DebateScores = { ...next.p1 } as DebateScores;
+          for (const [k, v] of Object.entries(incoming)) {
+            if (typeof (merged as any)[k] === 'number' && typeof v === 'number') {
+              (merged as any)[k] = v;
+            }
+          }
+          next.p1 = merged;
         }
-        if ((patch as any).p2 && typeof (patch as any).p2 === 'object') {
-          next.p2 = { ...next.p2, ...(patch as any).p2 } as DebateScores;
+        if (p2Patch && typeof p2Patch === 'object') {
+          const incoming = (patch as any).p2 as Partial<DebateScores>;
+          const merged: DebateScores = { ...next.p2 } as DebateScores;
+          for (const [k, v] of Object.entries(incoming)) {
+            if (typeof (merged as any)[k] === 'number' && typeof v === 'number') {
+              (merged as any)[k] = v;
+            }
+          }
+          next.p2 = merged;
+        }
+        // Map common top-level fields to both sides for convenience
+        const topMap: Array<[string, keyof DebateScores]> = [
+          ['strength', 'argumentStrength'],
+          ['logic', 'logicalConsistency'],
+          ['sources', 'evidenceQuality'],
+          ['accuracy', 'factualAccuracy'],
+          ['bsMeter', 'bsMeter'],
+        ];
+        for (const [from, to] of topMap) {
+          const val = (patch as any)[from];
+          if (typeof val === 'number') {
+            (next.p1 as any)[to] = val;
+            (next.p2 as any)[to] = val;
+          }
         }
         if (Array.isArray((patch as any).factChecks)) {
-          next.factChecks = (patch as any).factChecks as FactCheck[];
+          const raw = (patch as any).factChecks as any[];
+          const normalized: FactCheck[] = raw.map((fc) => {
+            const ts = typeof fc?.timestamp === 'number' ? fc.timestamp : Date.now();
+            let sources = fc?.sources as any[] | undefined;
+            if (!sources && typeof fc?.sourcesText === 'string' && fc.sourcesText.trim()) {
+              sources = [{ title: fc.sourcesText.trim(), url: '', credibilityScore: 0, relevanceScore: 0, publicationDate: '', sourceType: 'Blog' }];
+            }
+            return {
+              claim: String(fc?.claim || ''),
+              verdict: fc?.verdict || 'Unverifiable',
+              confidence: typeof fc?.confidence === 'number' ? fc.confidence : 0,
+              sources: Array.isArray(sources) ? (sources as any) : [],
+              contextNotes: Array.isArray(fc?.contextNotes) ? fc.contextNotes : [],
+              timestamp: ts,
+            } as FactCheck;
+          });
+          next.factChecks = normalized;
         }
         if (Array.isArray((patch as any).timeline)) {
-          next.timeline = (patch as any).timeline as DebateEvent[];
+          const raw = (patch as any).timeline as any[];
+          const normalized: DebateEvent[] = raw.map((e) => {
+            const text = typeof e?.text === 'string' ? e.text : String(e?.event || '');
+            let ts: number;
+            if (typeof e?.timestamp === 'number') ts = e.timestamp;
+            else if (typeof e?.timestamp === 'string' && e.timestamp.toLowerCase() === 'now') ts = Date.now();
+            else ts = Date.now();
+            return { timestamp: ts, text, type: e?.type } as DebateEvent;
+          });
+          next.timeline = normalized;
+        }
+        if (Array.isArray((patch as any).topicSections)) {
+          next.topicSections = (patch as any).topicSections as TopicSection[];
         }
         if (typeof (patch as any).liveClaim === 'string') {
           next.liveClaim = (patch as any).liveClaim as string;
         }
+        try {
+          // eslint-disable-next-line no-console
+          console.log('[DebateScorecard] state after patch', next);
+        } catch {}
         return next;
       });
     },
@@ -560,6 +637,29 @@ export function DebateScorecard(props: DebateScorecardProps) {
               ) : (
                 <div className="text-slate-400 text-xs">Awaiting claims for verification…</div>
               )}
+            </div>
+          </div>
+        )}
+
+        {/* Topic Sections */}
+        {Array.isArray(state?.topicSections) && state.topicSections.length > 0 && (
+          <div className="border-t border-yellow-500/30 px-4 py-2">
+            <div className="text-xs uppercase tracking-wider opacity-80">🧩 Topic Sections</div>
+            <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {state.topicSections.map((s, i) => (
+                <div
+                  key={i}
+                  className="rounded-md border p-2 text-xs"
+                  style={{ borderColor: s.color }}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold" style={{ color: s.color }}>
+                      {s.topic}
+                    </span>
+                    <span className="opacity-80">weight {Math.round((s.weight || 0) * 100)}%</span>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         )}

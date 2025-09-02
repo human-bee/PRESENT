@@ -210,6 +210,10 @@ export function ToolDispatcher({
             return { status: 'ERROR', message: msg } as any;
           }
           const res = await ComponentRegistry.update(messageId, patch);
+          try {
+            // eslint-disable-next-line no-console
+            console.log('[ToolDispatcher][ui_update] result', { messageId, res });
+          } catch {}
           // Emit result back
           try {
             bus.send('tool_result', {

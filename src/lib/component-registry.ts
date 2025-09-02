@@ -107,7 +107,10 @@ class ComponentStore {
     if (component.updateCallback) {
       try {
         component.updateCallback(patch);
-        console.log(`[ComponentRegistry] Updated ${messageId} with`, patch);
+        try {
+          // eslint-disable-next-line no-console
+          console.log(`[ComponentRegistry] Updated ${messageId} with`, patch);
+        } catch {}
         this.notifyListeners();
         return { success: true };
       } catch (error) {

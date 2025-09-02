@@ -1,4 +1,14 @@
-import type { Room } from 'livekit-client';
+// Accept either browser or node LiveKit Room by using a minimal interface
+export interface RoomLike {
+  on: (event: string, cb: (...args: any[]) => void) => unknown;
+  off: (event: string, cb: (...args: any[]) => void) => unknown;
+  localParticipant?: {
+    publishData: (
+      data: Uint8Array,
+      options?: { reliable?: boolean; topic?: string },
+    ) => unknown;
+  } | null;
+}
 
 export interface SystemCapabilities {
   tools: Array<{ name: string; description: string; examples?: string[] }>;
@@ -83,7 +93,7 @@ export const defaultCapabilities: SystemCapabilities = {
 };
 
 /** Query system capabilities via LiveKit data channel with fallback to defaults */
-export async function queryCapabilities(room: Room): Promise<SystemCapabilities> {
+export async function queryCapabilities(room: RoomLike): Promise<SystemCapabilities> {
   return await new Promise<SystemCapabilities>((resolve) => {
     let resolved = false;
     const handler = (data: Uint8Array) => {

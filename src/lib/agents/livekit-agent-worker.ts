@@ -27,6 +27,8 @@ import { RoomEvent, Track } from 'livekit-client';
 import * as openai from '@livekit/agents-plugin-openai';
 import { DecisionEngine, DecisionEngineConfig } from '../decision-engine';
 import { DebateJudgeManager, isStartDebate } from './debate-judge';
+import type { SystemCapabilities } from './capabilities';
+import { defaultCustomComponents } from './capabilities';
 
 console.log('🚀 Starting custom Voice Agent Worker...');
 console.log('🔧 Environment Check:');
@@ -55,7 +57,7 @@ export default defineAgent({
     let systemCapabilities: any = null;
     try {
       console.log('🔍 [Agent] Querying system capabilities...');
-      systemCapabilities = (await queryCapabilities(job.room)) as any;
+      systemCapabilities = (await queryCapabilities(job.room as any)) as any;
       console.log('✅ [Agent] Capabilities:', {
         tools: systemCapabilities?.tools?.length || 0,
         intents: Object.keys(systemCapabilities?.decisionEngine?.intents || {}).length,
@@ -159,7 +161,7 @@ export default defineAgent({
     const capabilityRefreshInterval = setInterval(async () => {
       console.log('🔄 [Agent] Refreshing capabilities...');
       try {
-        systemCapabilities = (await queryCapabilities(job.room)) as any;
+        systemCapabilities = (await queryCapabilities(job.room as any)) as any;
       } catch {}
 
       // Update decision engine if capabilities changed
@@ -318,7 +320,7 @@ Embrace your constraint. In your silence, let your creativity and helpfulness sh
 
       // Add available custom UI components
       let componentSection = `\n\ncustom UI COMPONENTS AVAILABLE:`;
-      const components = systemCapabilities?.components || defaultComponents;
+      const components = systemCapabilities?.components || defaultCustomComponents;
       componentSection += `\nYou can generate any of these ${components.length} UI components:`;
 
       components.forEach((component) => {
@@ -533,7 +535,7 @@ Embrace your constraint. In your silence, let your creativity and helpfulness sh
         timer_related: ['timer', 'countdown', 'minutes', 'seconds', 'alarm'],
         youtube_related: ['youtube', 'video', 'play', 'watch', 'embed'],
         weather_related: ['weather', 'forecast', 'temperature', 'rain', 'sunny'],
-        ui_related: ['create', 'make', 'show', 'display', 'component'],
+        ui_related: ['create', 'make', 'show', 'display', 'component', 'generate', 'build', 'add'],
         research_related: ['research', 'study', 'analysis', 'findings'],
         task_related: ['todo', 'task', 'action', 'checklist', 'manage'],
         document_related: ['document', 'script', 'containment breach', 'files', 'show document'],
@@ -560,7 +562,7 @@ Embrace your constraint. In your silence, let your creativity and helpfulness sh
     });
 
     // Debate judge manager
-    const debateJudgeManager = new DebateJudgeManager(job.room, job.room.name || 'room');
+    const debateJudgeManager = new DebateJudgeManager(job.room as any, job.room.name || 'room');
 
     // Enhanced decision handling with parallel tool calls
     const handleEnhancedDecision = async (transcript: string, participantId: string) => {
@@ -646,8 +648,10 @@ Embrace your constraint. In your silence, let your creativity and helpfulness sh
 
     // Log available components for debugging
     console.log('🎨 [Agent] Available custom UI Components:', {
-      total: defaultComponents.length,
-      components: defaultComponents.map((c) => c.name).join(', '),
+      total: (systemCapabilities?.components || defaultCustomComponents).length,
+      components: (systemCapabilities?.components || defaultCustomComponents)
+        .map((c) => c.name)
+        .join(', '),
     });
 
     // Configure agent to accept text responses when using tools
@@ -788,6 +792,10 @@ Embrace your constraint. In your silence, let your creativity and helpfulness sh
             new TextEncoder().encode(JSON.stringify(toolCallEvent)),
             { reliable: true, topic: 'tool_call' },
           );
+          try {
+            // eslint-disable-next-line no-console
+            console.log('[Agent→Dispatcher] tool_call', toolCallEvent);
+          } catch {}
 
           console.log(`✅ [Agent] Tool call dispatched:`, {
             originalName: evt.name,
@@ -849,6 +857,8 @@ Embrace your constraint. In your silence, let your creativity and helpfulness sh
             context: {
               source: 'voice-decision',
               timestamp: Date.now(),
+              // Hint the dispatcher/model to prefer UI tool-calls over text replies
+              preference: 'ui_actions_first',
             },
           },
           timestamp: Date.now(),
@@ -859,6 +869,10 @@ Embrace your constraint. In your silence, let your creativity and helpfulness sh
           new TextEncoder().encode(JSON.stringify(toolDispatchEvent)),
           { reliable: true, topic: 'decision' },
         );
+        try {
+          // eslint-disable-next-line no-console
+          console.log('[Agent→Dispatcher] decision', toolDispatchEvent);
+        } catch {}
 
         console.log(`✅ [Agent] Decision dispatched to tool dispatcher`);
       } else {

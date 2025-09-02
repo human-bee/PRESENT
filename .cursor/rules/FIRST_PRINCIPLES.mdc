@@ -1,7 +1,6 @@
 ---
-alwaysApply: false
+alwaysApply: true
 ---
-
 # First Principles
 
 ## What Needs Doing First
@@ -57,6 +56,7 @@ alwaysApply: false
   - Components have pre-existing props
   - Should be able to update the state of the component
 - LiveKit agent currently: Monitors the transcript and decides what to do, which will update the state of the component
+
 # First Principles
 
 ## What Needs Doing First
