@@ -7,9 +7,8 @@
     - TlDraw sub agent
     - Conductor agent that takes all tools
     - Expose Tldraw agent and conductor to the primary agent as tool calls
-    - Rip out custom EVERYWHERE
 
-## 1. One LiveKit agent per user
+## 1. One LiveKit agent per user (livekit-agent-worker.ts)
 
     -  We want the agents to be able to initialize custom components, or creating TLDraw shapes, or manipulating the canvas, through tool calls. 
     - Available tools:
@@ -43,7 +42,7 @@
 - Real time speech to ui platform
 - Recieves transcript from the user and from the other user
 - Initialize components and control the canvas
-- Recieve text input from user message
+- Recieve text input from user message (TODO)
 
 # Conductor agent (custom replacement)
 

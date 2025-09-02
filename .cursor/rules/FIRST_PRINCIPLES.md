@@ -5,16 +5,15 @@
     - Merge branches - DONE
     - Figure out what needs doing - DONE
     - TlDraw sub agent
-    - Conductor agent that takes all tools
+    - Conductor agent handles creating and updating components in realtime
     - Expose Tldraw agent and conductor to the primary agent as tool calls
-    - Rip out tambo EVERYWHERE (and then fix everything with fresh eyes in our wake)
 
 ## 1. One LiveKit agent per user
 
     -  We want the agents to be able to initialize custom components, or creating TLDraw shapes, or manipulating the canvas, through tool calls. 
     - Available tools:
         - Canvas subagent (natural language -> tldraw editor api calls)
-        - Pass off component creation to the conductor agent
+        - Pass off component creation to the conductor agent (can include initiating parallel mcp tool calls via best practices in https://openai.com/index/introducing-gpt-realtime/)
         - Pass off component update to the conductor agent
 
 ## 2. One room with multiple participants
@@ -40,7 +39,7 @@
 
 # Principles
 
-- Real time speech to ui platform
+- Real time speech to ui platform (Using Best Practices from https://openai.github.io/openai-agents-js/ and https://openai.com/index/introducing-gpt-realtime/)
 - Recieves transcript from the user and from the other user
 - Initialize components and control the canvas
 - Recieve text input from user message
