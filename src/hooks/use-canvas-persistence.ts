@@ -149,6 +149,24 @@ export function useCanvasPersistence(editor: Editor | null, enabled: boolean = t
       const defaultName = idParam || canvasName;
       const now = new Date().toISOString();
 
+      // Generate a lightweight SVG thumbnail of the current page
+      let thumbnail: string | null = null;
+      try {
+        const shapeIds = Array.from(editor.getCurrentPageShapeIds());
+        if (shapeIds.length > 0) {
+          const svgEl = await editor.getSvg(shapeIds);
+          if (svgEl) {
+            // Serialize SVG and store as data URL for <img src="...">
+            const serializer = new XMLSerializer();
+            const svgString = serializer.serializeToString(svgEl as unknown as Node);
+            thumbnail = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgString)}`;
+          }
+        }
+      } catch {
+        // Ignore thumbnail errors; don't block save
+        thumbnail = null;
+      }
+
       if (canvasId) {
         // Update existing canvas
         const { error } = await supabase
@@ -159,6 +177,8 @@ export function useCanvasPersistence(editor: Editor | null, enabled: boolean = t
             conversation_key: conversationKey,
             last_modified: now,
             updated_at: now,
+            // Store thumbnail preview if available
+            thumbnail,
           })
           .eq('id', canvasId);
 
@@ -184,6 +204,7 @@ export function useCanvasPersistence(editor: Editor | null, enabled: boolean = t
             conversation_key: conversationKey,
             is_public: false,
             last_modified: now,
+            thumbnail,
           })
           .select()
           .single();

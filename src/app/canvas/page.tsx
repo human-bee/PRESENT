@@ -38,8 +38,8 @@ export default function Canvas() {
   const { user, loading } = useAuth();
   const router = useRouter();
   // Track resolved canvas id and room name; do not render until resolved
-  const [canvasId, setCanvasId] = useState<string | null>(null);
-  const [roomName, setRoomName] = useState<string | null>(null);
+  const [, setCanvasId] = useState<string | null>(null);
+  const [roomName, setRoomName] = useState<string>('');
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -78,6 +78,16 @@ export default function Canvas() {
       // No id known: create a new canvas row immediately so URL + room are stable
       // Defer creation until user is authenticated
       if (!user) return;
+
+      // Guard against duplicate inserts (React StrictMode / fast refresh / rapid re-entry)
+      try {
+        (window as any).__present = (window as any).__present || {};
+        if ((window as any).__present.creatingCanvas) {
+          console.warn('⚠️ [Canvas] Creation in progress; skipping duplicate create attempt');
+          return;
+        }
+        (window as any).__present.creatingCanvas = true;
+      } catch {}
       const now = new Date().toISOString();
       // Lazy import to avoid SSR issues
       const { supabase } = await import('@/lib/supabase');
@@ -114,6 +124,9 @@ export default function Canvas() {
           '❌ [Canvas] Could not create canvas row; staying on loading screen',
           lastErr,
         );
+        try {
+          (window as any).__present.creatingCanvas = false;
+        } catch {}
         return; // Keep loading; user can refresh or try again
       }
       // Immediately set the canvas name to the id for clarity/stability
@@ -122,18 +135,7 @@ export default function Canvas() {
           .from('canvases')
           .update({ name: createdId, updated_at: now, last_modified: now })
           .eq('id', createdId);
-        // Ensure creator is a member (editor) for RLS-friendly access
-        try {
-          await supabase.from('canvas_members').upsert(
-            {
-              canvas_id: createdId,
-              user_id: user.id,
-              role: 'editor',
-              created_at: now,
-            } as any,
-            { onConflict: 'canvas_id,user_id' } as any,
-          );
-        } catch {}
+        // Do NOT upsert owner into canvas_members to avoid duplicate rows in views
       } catch (e) {
         console.warn('⚠️ [Canvas] Failed to set canvas name to id:', e);
       }
@@ -144,6 +146,9 @@ export default function Canvas() {
       setRoomName(`canvas-${createdId}`);
       try {
         localStorage.setItem('present:lastCanvasId', createdId);
+      } catch {}
+      try {
+        (window as any).__present.creatingCanvas = false;
       } catch {}
       try {
         window.dispatchEvent(new Event('present:canvas-id-changed'));

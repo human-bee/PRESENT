@@ -111,6 +111,7 @@ function CustomMainMenu({ readOnly = false }: { readOnly?: boolean } & any) {
   const { user, signOut } = useAuth();
   const router = useRouter();
   const editor = useEditor();
+  const componentStore = React.useContext(ComponentStoreContext);
   const { canvasName, isSaving, lastSaved, saveCanvas, updateCanvasName } = useCanvasPersistence(
     editor,
     !readOnly,
@@ -135,6 +136,25 @@ function CustomMainMenu({ readOnly = false }: { readOnly?: boolean } & any) {
   const handleNewCanvas = () => {
     try {
       localStorage.removeItem('present:lastCanvasId');
+    } catch {}
+    try {
+      // Clear all TLDraw shapes immediately for a fresh start
+      if (editor) {
+        const allShapes = editor.getCurrentPageShapes();
+        if (allShapes.length > 0) {
+          editor.deleteShapes(allShapes.map((s) => s.id));
+        }
+        try {
+          editor.selectNone();
+        } catch {}
+      }
+      // Clear component store so custom components unmount
+      if (componentStore && typeof componentStore.clear === 'function') {
+        componentStore.clear();
+        try {
+          window.dispatchEvent(new Event('present:component-store-updated'));
+        } catch {}
+      }
     } catch {}
     router.push('/canvas');
   };
