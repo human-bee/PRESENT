@@ -44,6 +44,8 @@ export interface customShapeProps {
   pinned?: boolean; // Whether the shape is pinned to viewport
   pinnedX?: number; // Relative X position (0-1) when pinned
   pinnedY?: number; // Relative Y position (0-1) when pinned
+  // Persist whether a user explicitly resized this shape so auto-fit can stop
+  userResized?: boolean;
 }
 
 // Create a type for the custom shape
@@ -123,6 +125,11 @@ function CustomShapeComponent({ shape }: { shape: customShape }) {
     };
   }, []);
 
+  // Reset one-time autofit guard when the component type changes
+  useEffect(() => {
+    autoFittedRef.current = false;
+  }, [shape.props.name]);
+
   // Conditional auto-fit based on sizingPolicy and whether user resized
   useEffect(() => {
     if (!editor || !naturalSize) return;
@@ -130,15 +137,8 @@ function CustomShapeComponent({ shape }: { shape: customShape }) {
     const sizeInfo = getComponentSizeInfo(shape.props.name);
     const policy = sizeInfo.sizingPolicy || 'fit_until_user_resize';
 
-    // TLDraw Editor.shapeUtils is not a Map in our integration; guard accordingly
-    let userHasResized = false;
-    try {
-      const shapeUtil: any =
-        (editor as any).shapeUtils?.get?.(shape) || (editor as any).shapeUtils?.[shape.type];
-      userHasResized = Boolean(shapeUtil?.userResized?.has?.(shape.id));
-    } catch {
-      userHasResized = false;
-    }
+    // Respect explicit user resize persisted on the shape
+    const userHasResized = Boolean((shape.props as any).userResized);
 
     const shouldAutoFit =
       policy === 'always_fit' || (policy === 'fit_until_user_resize' && !userHasResized);
@@ -146,10 +146,13 @@ function CustomShapeComponent({ shape }: { shape: customShape }) {
     if (shouldAutoFit) {
       const { w: nw, h: nh } = naturalSize;
       const changed = Math.abs(shape.props.w - nw) > 1 || Math.abs(shape.props.h - nh) > 1;
-      if (changed) {
+      // Apply only once for fit_until_user_resize to avoid resize loops from dynamic content
+      const allowMultiple = policy === 'always_fit';
+      if (changed && (allowMultiple || !autoFittedRef.current)) {
         editor.updateShapes([
           { id: shape.id, type: 'custom', props: { ...shape.props, w: nw, h: nh } },
         ]);
+        if (!allowMultiple) autoFittedRef.current = true;
       }
     }
   }, [editor, naturalSize, shape.id, shape.props.name]);
@@ -275,6 +278,7 @@ export class customShapeUtil extends BaseBoxShapeUtil<customShape> {
     pinned: T.optional(T.boolean),
     pinnedX: T.optional(T.number),
     pinnedY: T.optional(T.number),
+    userResized: T.optional(T.boolean),
   } satisfies RecordProps<customShape>;
 
   // Track shapes the user has explicitly resized
@@ -290,6 +294,7 @@ export class customShapeUtil extends BaseBoxShapeUtil<customShape> {
       pinned: false,
       pinnedX: 0.5,
       pinnedY: 0.5,
+      userResized: false,
     };
   }
 
@@ -380,9 +385,78 @@ export class customShapeUtil extends BaseBoxShapeUtil<customShape> {
         ...shape.props,
         w,
         h,
+        userResized: true,
       },
     };
   };
+
+  // Provide a lightweight SVG for thumbnails so we don't render HTML fallbacks
+  override toSvg(shape: customShape, _ctx: any) {
+    const SVG_NS = 'http://www.w3.org/2000/svg';
+    const XHTML_NS = 'http://www.w3.org/1999/xhtml';
+
+    const group = document.createElementNS(SVG_NS, 'g');
+
+    // Background so thumbnails look nice on light/dark pages
+    const bg = document.createElementNS(SVG_NS, 'rect');
+    bg.setAttribute('x', '0');
+    bg.setAttribute('y', '0');
+    bg.setAttribute('width', String(shape.props.w));
+    bg.setAttribute('height', String(shape.props.h));
+    bg.setAttribute('rx', '8');
+    bg.setAttribute('ry', '8');
+    bg.setAttribute('fill', 'white');
+    bg.setAttribute('stroke', '#E5E7EB');
+    bg.setAttribute('stroke-width', '1');
+    group.appendChild(bg);
+
+    // Try to capture the live HTML from the on-canvas container
+    const container = document.getElementById(shape.id);
+
+    // Wrap HTML content inside a foreignObject to embed real DOM in SVG
+    const fo = document.createElementNS(SVG_NS, 'foreignObject');
+    fo.setAttribute('x', '0');
+    fo.setAttribute('y', '0');
+    fo.setAttribute('width', String(shape.props.w));
+    fo.setAttribute('height', String(shape.props.h));
+
+    const html = document.createElementNS(XHTML_NS, 'div');
+    html.setAttribute('xmlns', XHTML_NS);
+    html.setAttribute(
+      'style',
+      [
+        'width: 100%',
+        'height: 100%',
+        'display: block',
+        'overflow: hidden',
+        'background: transparent',
+        'font-family: ui-sans-serif, system-ui, -apple-system',
+      ].join('; '),
+    );
+
+    if (container) {
+      // Clone the visible content. This preserves the scaling applied by the shape wrapper
+      // so the thumbnail matches what the user sees.
+      html.innerHTML = container.innerHTML;
+    } else {
+      // Fallback minimal label when the DOM isn't available yet
+      const text = document.createElementNS(SVG_NS, 'text');
+      text.setAttribute('x', String(shape.props.w / 2));
+      text.setAttribute('y', String(shape.props.h / 2));
+      text.setAttribute('dominant-baseline', 'middle');
+      text.setAttribute('text-anchor', 'middle');
+      text.setAttribute('fill', '#64748B');
+      text.setAttribute('font-size', '12');
+      text.setAttribute('font-family', 'ui-sans-serif, system-ui, -apple-system');
+      text.textContent = shape.props.name || 'Component';
+      group.appendChild(text);
+      return group;
+    }
+
+    fo.appendChild(html as any);
+    group.appendChild(fo);
+    return group;
+  }
 
   // Expose a method for the component renderer to query if user resized
   public hasUserResized(id: string) {
