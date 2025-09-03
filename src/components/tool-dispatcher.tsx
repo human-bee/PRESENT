@@ -212,7 +212,7 @@ export function ToolDispatcher({
           const res = await ComponentRegistry.update(messageId, patch);
           try {
             // eslint-disable-next-line no-console
-            console.log('[ToolDispatcher][ui_update] result', { messageId, res });
+            console.log('[ToolDispatcher][ui_update] result', JSON.stringify({ messageId, res }));
           } catch {}
           // Emit result back
           try {
@@ -232,6 +232,10 @@ export function ToolDispatcher({
           try {
             const toolName = tool.replace(/^mcp_/, '');
             const result = await (window as any).callMcpTool?.(toolName, params);
+            try {
+              // eslint-disable-next-line no-console
+              console.log('[ToolDispatcher][mcp]', toolName, 'result:', JSON.stringify(result)?.slice(0, 2000));
+            } catch {}
             try {
               bus.send('tool_result', {
                 type: 'tool_result',
@@ -282,7 +286,11 @@ export function ToolDispatcher({
                       },
                     ];
                   }
-                  await ComponentRegistry.update(messageId, patch);
+                  const uiRes = await ComponentRegistry.update(messageId, patch);
+                  try {
+                    // eslint-disable-next-line no-console
+                    console.log('[ToolDispatcher][mcp→ui_update] patched scorecard', JSON.stringify({ messageId, uiRes, patch }));
+                  } catch {}
                 }
               }
             } catch (e) {

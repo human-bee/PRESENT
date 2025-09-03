@@ -123,6 +123,18 @@ export class DebateJudgeManager {
           const rationale = typeof parsed?.rationale === 'string' ? parsed.rationale : '';
 
           try {
+            // Simple auto-scoring heuristics to make changes visible immediately
+            const p1Delta: Record<string, number> = {};
+            if (verdict === 'Supported') {
+              p1Delta.factualAccuracy = 20;
+              p1Delta.bsMeter = -10;
+            } else if (verdict === 'Refuted') {
+              p1Delta.factualAccuracy = -20;
+              p1Delta.bsMeter = 20;
+            } else if (verdict === 'Partial') {
+              p1Delta.factualAccuracy = 10;
+              p1Delta.bsMeter = -5;
+            }
             await manager.publishUiUpdate({
               liveClaim: claim,
               factChecks: [
@@ -142,6 +154,7 @@ export class DebateJudgeManager {
                   type: 'fact_check',
                 },
               ],
+              p1Delta: Object.keys(p1Delta).length ? p1Delta : undefined,
             } as any);
           } catch (e) {
             console.warn('[DebateJudge] failed to publish UI update from verify_claim', e);

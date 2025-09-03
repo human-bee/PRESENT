@@ -368,36 +368,92 @@ export function DebateScorecard(props: DebateScorecardProps) {
       // Dev visibility for round-trip UI updates
       try {
         // eslint-disable-next-line no-console
-        console.log('[DebateScorecard] handleAIUpdate', { patch });
+        console.log('[DebateScorecard] handleAIUpdate', typeof patch === 'object' ? JSON.stringify(patch) : String(patch));
       } catch {}
+      // Normalize wrapper shapes like { update: {...} } or { updates: {...} }
+      const patchData = ((patch as any)?.update || (patch as any)?.updates || patch) as Record<string, unknown>;
+      // Alias common keys
+      if ((patchData as any)['BS meter'] !== undefined && (patchData as any).bsMeter === undefined) {
+        (patchData as any).bsMeter = (patchData as any)['BS meter'];
+      }
+      if ((patchData as any)['live fact checks'] !== undefined && (patchData as any).factChecks === undefined) {
+        (patchData as any).factChecks = (patchData as any)['live fact checks'];
+      }
+      // Label → numeric helpers
+      const labelToPercent = (label: unknown): number | null => {
+        if (typeof label !== 'string') return null;
+        const l = label.trim().toLowerCase();
+        if (!l) return null;
+        if (/^very\s*low|poor|bad|weak|unreliable$/.test(l)) return 10;
+        if (/^low|below\s*average|questionable|mixed$/.test(l)) return 30;
+        if (/^moderate|average|ok|fair$/.test(l)) return 50;
+        if (/^high|good|strong|reliable$/.test(l)) return 75;
+        if (/^very\s*high|excellent|outstanding$/.test(l)) return 90;
+        if (/^true|supported$/.test(l)) return 90;
+        if (/^false|refuted$/.test(l)) return 10;
+        return null;
+      };
+      const bsLabelToPercent = (label: unknown): number | null => {
+        if (typeof label !== 'string') return null;
+        const l = label.trim().toLowerCase();
+        if (/^very\s*low$/.test(l)) return 5;
+        if (/^low$/.test(l)) return 15;
+        if (/^medium|moderate$/.test(l)) return 35;
+        if (/^high$/.test(l)) return 65;
+        if (/^very\s*high$/.test(l)) return 85;
+        return null;
+      };
       setState((prev) => {
         if (!prev) return prev;
         const next = { ...prev } as DebateState;
 
-        if (typeof patch.round === 'number') next.round = patch.round as number;
-        if (typeof (patch as any).topic === 'string') {
+        if (typeof patchData.round === 'number') next.round = patchData.round as number;
+        if (typeof (patchData as any).topic === 'string') {
           // topic is prop-only; ignore in state
         }
         // Support both p1/p2 and p1Delta/p2Delta
-        const p1Patch = (patch as any).p1 || (patch as any).p1Delta;
-        const p2Patch = (patch as any).p2 || (patch as any).p2Delta;
+        const p1Patch = (patchData as any).p1 || (patchData as any).p1Delta;
+        const p2Patch = (patchData as any).p2 || (patchData as any).p2Delta;
         if (p1Patch && typeof p1Patch === 'object') {
-          const incoming = (patch as any).p1 as Partial<DebateScores>;
+          const incoming = (patchData as any).p1 as Partial<DebateScores>;
           const merged: DebateScores = { ...next.p1 } as DebateScores;
           for (const [k, v] of Object.entries(incoming)) {
-            if (typeof (merged as any)[k] === 'number' && typeof v === 'number') {
-              (merged as any)[k] = v;
+            const current = (merged as any)[k];
+            const numeric = typeof v === 'number' ? v : labelToPercent(v);
+            if (typeof current === 'number' && numeric !== null) {
+              (merged as any)[k] = numeric;
             }
           }
           next.p1 = merged;
         }
         if (p2Patch && typeof p2Patch === 'object') {
-          const incoming = (patch as any).p2 as Partial<DebateScores>;
+          const incoming = (patchData as any).p2 as Partial<DebateScores>;
           const merged: DebateScores = { ...next.p2 } as DebateScores;
           for (const [k, v] of Object.entries(incoming)) {
-            if (typeof (merged as any)[k] === 'number' && typeof v === 'number') {
-              (merged as any)[k] = v;
+            const current = (merged as any)[k];
+            const numeric = typeof v === 'number' ? v : labelToPercent(v);
+            if (typeof current === 'number' && numeric !== null) {
+              (merged as any)[k] = numeric;
             }
+          }
+          next.p2 = merged;
+        }
+        // Apply additive deltas when provided
+        if ((patchData as any).p1Delta && typeof (patchData as any).p1Delta === 'object') {
+          const incoming = (patchData as any).p1Delta as Partial<DebateScores>;
+          const merged: DebateScores = { ...next.p1 } as DebateScores;
+          for (const [k, v] of Object.entries(incoming)) {
+            const current = (merged as any)[k];
+            if (typeof current === 'number' && typeof v === 'number') (merged as any)[k] = clamp(current + v);
+          }
+          next.p1 = merged;
+        }
+        if ((patchData as any).p2Delta && typeof (patchData as any).p2Delta === 'object') {
+          const incoming = (patchData as any).p2Delta as Partial<DebateScores>;
+          const merged: DebateScores = { ...next.p2 } as DebateScores;
+          for (const [k, v] of Object.entries(incoming)) {
+            const current = (merged as any)[k];
+            if (typeof current === 'number' && typeof v === 'number') (merged as any)[k] = clamp(current + v);
           }
           next.p2 = merged;
         }
@@ -410,14 +466,17 @@ export function DebateScorecard(props: DebateScorecardProps) {
           ['bsMeter', 'bsMeter'],
         ];
         for (const [from, to] of topMap) {
-          const val = (patch as any)[from];
-          if (typeof val === 'number') {
-            (next.p1 as any)[to] = val;
-            (next.p2 as any)[to] = val;
+          const raw = (patchData as any)[from] ?? (from === 'bsMeter' ? (patchData as any)['BS meter'] : undefined);
+          let numeric: number | null = null;
+          if (typeof raw === 'number') numeric = raw;
+          else numeric = from === 'bsMeter' ? bsLabelToPercent(raw) : labelToPercent(raw);
+          if (numeric !== null) {
+            (next.p1 as any)[to] = numeric;
+            (next.p2 as any)[to] = numeric;
           }
         }
-        if (Array.isArray((patch as any).factChecks)) {
-          const raw = (patch as any).factChecks as any[];
+        if (Array.isArray((patchData as any).factChecks)) {
+          const raw = (patchData as any).factChecks as any[];
           const normalized: FactCheck[] = raw.map((fc) => {
             const ts = typeof fc?.timestamp === 'number' ? fc.timestamp : Date.now();
             let sources = fc?.sources as any[] | undefined;
@@ -426,19 +485,39 @@ export function DebateScorecard(props: DebateScorecardProps) {
             }
             return {
               claim: String(fc?.claim || ''),
-              verdict: fc?.verdict || 'Unverifiable',
+              verdict:
+                fc?.verdict ||
+                (typeof fc?.status === 'string'
+                  ? fc.status.toLowerCase() === 'true'
+                    ? 'Supported'
+                    : fc.status.toLowerCase() === 'false'
+                      ? 'Refuted'
+                      : 'Unverifiable'
+                  : 'Unverifiable'),
               confidence: typeof fc?.confidence === 'number' ? fc.confidence : 0,
               sources: Array.isArray(sources) ? (sources as any) : [],
-              contextNotes: Array.isArray(fc?.contextNotes) ? fc.contextNotes : [],
+              contextNotes: Array.isArray(fc?.contextNotes)
+                ? fc.contextNotes
+                : typeof fc?.reason === 'string'
+                  ? [fc.reason]
+                  : [],
               timestamp: ts,
             } as FactCheck;
           });
           next.factChecks = normalized;
         }
-        if (Array.isArray((patch as any).timeline)) {
-          const raw = (patch as any).timeline as any[];
+        if (Array.isArray((patchData as any).timeline)) {
+          const raw = (patchData as any).timeline as any[];
           const normalized: DebateEvent[] = raw.map((e) => {
-            const text = typeof e?.text === 'string' ? e.text : String(e?.event || '');
+            let text = typeof e?.text === 'string' ? e.text : String(e?.event || '');
+            if (!text && (e as any)?.argument) {
+              const parts = [
+                (e as any)?.speaker ? String((e as any).speaker) + ':' : null,
+                (e as any)?.argument || (e as any)?.claim || null,
+                (e as any)?.counter ? `— Counter: ${(e as any).counter}` : null,
+              ].filter(Boolean);
+              text = parts.join(' ');
+            }
             let ts: number;
             if (typeof e?.timestamp === 'number') ts = e.timestamp;
             else if (typeof e?.timestamp === 'string' && e.timestamp.toLowerCase() === 'now') ts = Date.now();
@@ -447,15 +526,28 @@ export function DebateScorecard(props: DebateScorecardProps) {
           });
           next.timeline = normalized;
         }
-        if (Array.isArray((patch as any).topicSections)) {
-          next.topicSections = (patch as any).topicSections as TopicSection[];
+        if (Array.isArray((patchData as any).topicSections)) {
+          next.topicSections = (patchData as any).topicSections as TopicSection[];
         }
-        if (typeof (patch as any).liveClaim === 'string') {
-          next.liveClaim = (patch as any).liveClaim as string;
+        if (typeof (patchData as any).liveClaim === 'string') {
+          next.liveClaim = (patchData as any).liveClaim as string;
         }
         try {
           // eslint-disable-next-line no-console
-          console.log('[DebateScorecard] state after patch', next);
+          console.log(
+            '[DebateScorecard] state after patch',
+            JSON.stringify(
+              {
+                p1: next.p1,
+                p2: next.p2,
+                liveClaim: next.liveClaim,
+                lastFactCheck: (next.factChecks || []).slice(-1)[0] || null,
+                timelineTail: (next.timeline || []).slice(-3),
+              },
+              null,
+              2,
+            ),
+          );
         } catch {}
         return next;
       });
