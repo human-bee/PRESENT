@@ -935,9 +935,20 @@ Embrace your constraint. In your silence, let your creativity and helpfulness sh
         // Process through decision engine with participant ID
         await decisionEngine.processTranscript(evt.transcript, speakerId);
 
-        // Feed debate judge if active
-        if (debateJudgeManager.isActive() && speakerId !== 'voice-agent') {
-          await debateJudgeManager.processClaim(speakerId, evt.transcript);
+        // Feed debate judge if active, try to attach lazily if a scorecard exists
+        if (speakerId !== 'voice-agent') {
+          try {
+            if (!debateJudgeManager.isActive()) {
+              const latest = stateSnapshot?.snapshot
+                ?.filter((s: any) => s?.payload?.componentType === 'DebateScorecard')
+                ?.sort((a: any, b: any) => (b?.ts || 0) - (a?.ts || 0))?.[0];
+              const msgId = latest?.payload?.messageId || latest?.id;
+              if (msgId) await debateJudgeManager.activateWithMessageId(msgId);
+            }
+          } catch {}
+          if (debateJudgeManager.isActive()) {
+            await debateJudgeManager.processClaim(speakerId, evt.transcript);
+          }
         }
       } else {
         console.log(`⏭️ [Agent] Skipping duplicate transcription: "${evt.transcript}"`);

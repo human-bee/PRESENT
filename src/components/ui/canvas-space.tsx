@@ -72,7 +72,7 @@ const TldrawWithCollaboration = dynamic(
 );
 
 // Import types statically (they don't add to bundle size)
-import type { CustomShape } from './tldraw-canvas';
+import type { customShape as CustomShape } from './tldraw-canvas';
 
 // Suppress development noise and repetitive warnings
 if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
@@ -203,7 +203,7 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
 
   // Component rehydration handler - restore componentStore after canvas reload
   useEffect(() => {
-    const handleRehydration = (event: CustomEvent) => {
+    const handleRehydration = () => {
       if (!editor) {
         console.log('🔄 [CanvasSpace] Editor not ready for rehydration, skipping...');
         return;
@@ -248,6 +248,13 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
           const Component = componentDef.component;
           const componentInstance = React.createElement(Component, {
             __custom_message_id: messageId,
+            state: (shape.props as any).state || {},
+            updateState: (patch: Record<string, unknown> | ((prev: any) => any)) => {
+              if (!editor) return;
+              const prev = ((shape.props as any).state as Record<string, unknown>) || {};
+              const next = typeof patch === 'function' ? (patch as any)(prev) : { ...prev, ...patch };
+              editor.updateShapes([{ id: shape.id, type: 'custom', props: { state: next } }]);
+            },
           });
           componentStore.current.set(messageId, componentInstance);
           try {
@@ -286,7 +293,7 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
                 ID: <code>{messageId}</code>
               </p>
               <p style={{ margin: '0', fontSize: '11px', opacity: 0.8 }}>
-                Please add "{componentName}" to custom.ts registry.
+                Please add &quot;{componentName}&quot; to custom.ts registry.
               </p>
             </div>
           );
@@ -388,7 +395,7 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
 
       if (existingShapeId) {
         // Update existing shape - only update non-component props to avoid cloning issues
-        editor.updateShapes<customShape>([
+        editor.updateShapes<CustomShape>([
           {
             id: existingShapeId,
             type: 'custom',
@@ -424,7 +431,7 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
         const x = viewport ? viewport.midX - initialSize.w / 2 : Math.random() * 500;
         const y = viewport ? viewport.midY - initialSize.h / 2 : Math.random() * 300;
 
-        editor.createShapes<customShape>([
+        editor.createShapes<CustomShape>([
           {
             id: newShapeId,
             type: 'custom',
@@ -598,6 +605,27 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
     });
   }, [editor, addComponentToCanvas, bus]);
 
+  // Rehydrate components shortly after any TLDraw document change (collaboration or local)
+  useEffect(() => {
+    if (!editor) return;
+    let timeout: ReturnType<typeof setTimeout> | null = null;
+    const unsubscribe = editor.store.listen(
+      () => {
+        if (timeout) clearTimeout(timeout);
+        timeout = setTimeout(() => {
+          try {
+            window.dispatchEvent(new CustomEvent('custom:rehydrateComponents', { detail: {} }));
+          } catch { }
+        }, 150);
+      },
+      { scope: 'document' },
+    );
+    return () => {
+      unsubscribe();
+      if (timeout) clearTimeout(timeout);
+    };
+  }, [editor]);
+
   // On first editor ready, reconcile with ComponentRegistry in case events were missed
   useEffect(() => {
     if (!editor) return;
@@ -636,11 +664,11 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
     // Debounce component addition to prevent excessive rendering
     const timeoutId = setTimeout(() => {
       const messagesWithComponents = thread.messages.filter(
-        (msg: customThreadMessage) => msg.renderedComponent,
+        (msg: any) => (msg as any).renderedComponent,
       );
 
       if (messagesWithComponents.length > 0) {
-        const latestMessage = messagesWithComponents[messagesWithComponents.length - 1];
+        const latestMessage: any = messagesWithComponents[messagesWithComponents.length - 1];
 
         const messageId = latestMessage.id || `msg-${Date.now()}`;
         // Check using addedMessageIds state
@@ -709,6 +737,13 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
         __custom_message_id: shapeId,
         context: 'canvas',
         autoStart: true,
+        state: {},
+        updateState: (patch: Record<string, unknown> | ((prev: any) => any)) => {
+          if (!editor) return;
+          const prev = {} as Record<string, unknown>;
+          const next = typeof patch === 'function' ? (patch as any)(prev) : { ...prev, ...patch };
+          editor.updateShapes([{ id: shapeId, type: 'custom' as const, props: { state: next } }]);
+        },
       });
       componentStore.current.set(shapeId, componentInstance);
       try {

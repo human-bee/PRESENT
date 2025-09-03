@@ -194,7 +194,7 @@ export function ToolDispatcher({
 
         if (tool === 'ui_update') {
           const messageId = String((params as any)?.messageId || (params as any)?.id || '');
-          const patch = (params as any)?.patch || {};
+          const patch = { ...((params as any)?.patch || {}) };
           if (!messageId) {
             const msg = 'ui_update requires messageId';
             try {
@@ -209,6 +209,29 @@ export function ToolDispatcher({
             } catch {}
             return { status: 'ERROR', message: msg } as any;
           }
+          // If patch contains factCheck(s) but no score deltas, synthesize small deltas for visibility
+          try {
+            const hasDeltas = !!(patch as any).p1Delta || !!(patch as any).p2Delta || !!(patch as any).p1 || !!(patch as any).p2;
+            const rawFactChecks = (patch as any).factCheck
+              ? [(patch as any).factCheck]
+              : Array.isArray((patch as any).factChecks)
+                ? (patch as any).factChecks
+                : [];
+            if (!hasDeltas && rawFactChecks.length > 0) {
+              const latest = rawFactChecks[rawFactChecks.length - 1] || {};
+              const verdict = String(latest.verdict || '').toLowerCase();
+              const confidence = Number(latest.confidence || 0);
+              const boost = (v: number) => (confidence >= 80 ? Math.round(v * 1.5) : v);
+              if (verdict === 'supported') {
+                (patch as any).p1Delta = { factualAccuracy: boost(20), bsMeter: -boost(10) };
+              } else if (verdict === 'refuted') {
+                (patch as any).p1Delta = { factualAccuracy: -boost(20), bsMeter: boost(20) };
+              } else if (verdict === 'partial') {
+                (patch as any).p1Delta = { factualAccuracy: boost(10), bsMeter: -boost(5) };
+              }
+            }
+          } catch {}
+
           const res = await ComponentRegistry.update(messageId, patch);
           try {
             // eslint-disable-next-line no-console
@@ -231,7 +254,34 @@ export function ToolDispatcher({
         if (tool.startsWith('mcp_')) {
           try {
             const toolName = tool.replace(/^mcp_/, '');
-            const result = await (window as any).callMcpTool?.(toolName, params);
+            const registry = (window as any).__custom_mcp_tools || {};
+            let result: any = undefined;
+
+            // Prefer directly registered window MCP tools if available
+            const direct = (registry as any)[toolName] || (registry as any)[`mcp_${toolName}`];
+            if (direct) {
+              try {
+                result = typeof direct?.execute === 'function' ? await direct.execute(params) : await direct(params);
+              } catch (e) {
+                console.warn('[ToolDispatcher] direct MCP tool failed', toolName, e);
+              }
+            }
+            // Fallback to bridge
+            if (!result) {
+              result = await (window as any).callMcpTool?.(toolName, params);
+            }
+
+            // Last-resort stub for exa so UI still gets signal
+            if ((!result || result?.status === 'IGNORED') && toolName === 'exa') {
+              const q = String((params as any)?.query || '').trim();
+              result = {
+                status: 'STUB',
+                results: [
+                  { title: `Research stub for: ${q}`, snippet: 'MCP not wired. Configure MCP servers in /mcp-config to enable real results.' },
+                ],
+              };
+            }
+
             try {
               // eslint-disable-next-line no-console
               console.log('[ToolDispatcher][mcp]', toolName, 'result:', JSON.stringify(result)?.slice(0, 2000));

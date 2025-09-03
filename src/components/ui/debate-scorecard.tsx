@@ -411,11 +411,11 @@ export function DebateScorecard(props: DebateScorecardProps) {
         if (typeof (patchData as any).topic === 'string') {
           // topic is prop-only; ignore in state
         }
-        // Support both p1/p2 and p1Delta/p2Delta
-        const p1Patch = (patchData as any).p1 || (patchData as any).p1Delta;
-        const p2Patch = (patchData as any).p2 || (patchData as any).p2Delta;
+        // Absolute assignments only from explicit p1/p2
+        const p1Patch = (patchData as any).p1;
+        const p2Patch = (patchData as any).p2;
         if (p1Patch && typeof p1Patch === 'object') {
-          const incoming = (patchData as any).p1 as Partial<DebateScores>;
+          const incoming = p1Patch as Partial<DebateScores>;
           const merged: DebateScores = { ...next.p1 } as DebateScores;
           for (const [k, v] of Object.entries(incoming)) {
             const current = (merged as any)[k];
@@ -427,7 +427,7 @@ export function DebateScorecard(props: DebateScorecardProps) {
           next.p1 = merged;
         }
         if (p2Patch && typeof p2Patch === 'object') {
-          const incoming = (patchData as any).p2 as Partial<DebateScores>;
+          const incoming = p2Patch as Partial<DebateScores>;
           const merged: DebateScores = { ...next.p2 } as DebateScores;
           for (const [k, v] of Object.entries(incoming)) {
             const current = (merged as any)[k];

@@ -46,6 +46,8 @@ export interface customShapeProps {
   pinnedY?: number; // Relative Y position (0-1) when pinned
   // Persist whether a user explicitly resized this shape so auto-fit can stop
   userResized?: boolean;
+  // Serializable component state that syncs via TLDraw and persists in Supabase
+  state?: Record<string, unknown>;
 }
 
 // Create a type for the custom shape
@@ -228,8 +230,30 @@ function CustomShapeComponent({ shape }: { shape: customShape }) {
               (() => {
                 const stored = componentStore.get(shape.props.customComponent) as any;
                 let node: React.ReactNode = null;
+                const updateState = (patch: Record<string, unknown> | ((prev: any) => any)) => {
+                  if (!editor) return;
+                  const prevState = (shape.props.state as Record<string, unknown>) || {};
+                  const nextState =
+                    typeof patch === 'function' ? (patch as any)(prevState) : { ...prevState, ...patch };
+                  editor.updateShapes([
+                    {
+                      id: shape.id,
+                      type: 'custom',
+                      props: { state: nextState },
+                    },
+                  ]);
+                };
+                const injected = {
+                  __custom_message_id: shape.props.customComponent,
+                  state: (shape.props.state as Record<string, unknown>) || {},
+                  updateState,
+                } as const;
                 if (React.isValidElement(stored)) {
-                  node = stored;
+                  try {
+                    node = React.cloneElement(stored, injected as any);
+                  } catch {
+                    node = stored;
+                  }
                 } else if (
                   stored &&
                   typeof stored === 'object' &&
@@ -237,12 +261,9 @@ function CustomShapeComponent({ shape }: { shape: customShape }) {
                 ) {
                   // Try to reconstruct from { type, props }
                   const type = stored.type || stored.Component || stored.component;
-                  const props = stored.props || {};
+                  const props = { ...(stored.props || {}), ...injected };
                   try {
-                    node = React.createElement(type, {
-                      __custom_message_id: shape.props.customComponent,
-                      ...props,
-                    });
+                    node = React.createElement(type, props);
                   } catch {
                     // fall through
                   }
@@ -279,6 +300,7 @@ export class customShapeUtil extends BaseBoxShapeUtil<customShape> {
     pinnedX: T.optional(T.number),
     pinnedY: T.optional(T.number),
     userResized: T.optional(T.boolean),
+    state: T.optional(T.json),
   } satisfies RecordProps<customShape>;
 
   // Track shapes the user has explicitly resized
@@ -347,11 +369,13 @@ export class customShapeUtil extends BaseBoxShapeUtil<customShape> {
     const componentName = shape.props.name; // Component type from name
     const sizeInfo = getComponentSizeInfo(componentName);
 
-    console.log(`🔧 [customShapeUtil] Resizing ${componentName}:`, {
-      scaleX: info.scaleX,
-      scaleY: info.scaleY,
-      originalSize: { w: shape.props.w, h: shape.props.h },
-    });
+    if (process.env.NODE_ENV === 'development' && (window as any)?.__PRESENT_VERBOSE__) {
+      console.log(`🔧 [customShapeUtil] Resizing ${componentName}:`, {
+        scaleX: info.scaleX,
+        scaleY: info.scaleY,
+        originalSize: { w: shape.props.w, h: shape.props.h },
+      });
+    }
 
     // Calculate new dimensions based on the scale factors
     let w = shape.props.w * info.scaleX;
@@ -392,70 +416,72 @@ export class customShapeUtil extends BaseBoxShapeUtil<customShape> {
 
   // Provide a lightweight SVG for thumbnails so we don't render HTML fallbacks
   override toSvg(shape: customShape, _ctx: any) {
-    const SVG_NS = 'http://www.w3.org/2000/svg';
     const XHTML_NS = 'http://www.w3.org/1999/xhtml';
 
-    const group = document.createElementNS(SVG_NS, 'g');
-
-    // Background so thumbnails look nice on light/dark pages
-    const bg = document.createElementNS(SVG_NS, 'rect');
-    bg.setAttribute('x', '0');
-    bg.setAttribute('y', '0');
-    bg.setAttribute('width', String(shape.props.w));
-    bg.setAttribute('height', String(shape.props.h));
-    bg.setAttribute('rx', '8');
-    bg.setAttribute('ry', '8');
-    bg.setAttribute('fill', 'white');
-    bg.setAttribute('stroke', '#E5E7EB');
-    bg.setAttribute('stroke-width', '1');
-    group.appendChild(bg);
-
     // Try to capture the live HTML from the on-canvas container
-    const container = document.getElementById(shape.id);
+    const container = typeof document !== 'undefined' ? document.getElementById(shape.id) : null;
+    const inner = container?.innerHTML ?? '';
 
-    // Wrap HTML content inside a foreignObject to embed real DOM in SVG
-    const fo = document.createElementNS(SVG_NS, 'foreignObject');
-    fo.setAttribute('x', '0');
-    fo.setAttribute('y', '0');
-    fo.setAttribute('width', String(shape.props.w));
-    fo.setAttribute('height', String(shape.props.h));
-
-    const html = document.createElementNS(XHTML_NS, 'div');
-    html.setAttribute('xmlns', XHTML_NS);
-    html.setAttribute(
-      'style',
-      [
-        'width: 100%',
-        'height: 100%',
-        'display: block',
-        'overflow: hidden',
-        'background: transparent',
-        'font-family: ui-sans-serif, system-ui, -apple-system',
-      ].join('; '),
+    const backgroundRect = (
+      <rect
+        x={0}
+        y={0}
+        width={shape.props.w}
+        height={shape.props.h}
+        rx={8}
+        ry={8}
+        fill="white"
+        stroke="#E5E7EB"
+        strokeWidth={1}
+      />
     );
 
-    if (container) {
-      // Clone the visible content. This preserves the scaling applied by the shape wrapper
-      // so the thumbnail matches what the user sees.
-      html.innerHTML = container.innerHTML;
-    } else {
+    if (!inner) {
       // Fallback minimal label when the DOM isn't available yet
-      const text = document.createElementNS(SVG_NS, 'text');
-      text.setAttribute('x', String(shape.props.w / 2));
-      text.setAttribute('y', String(shape.props.h / 2));
-      text.setAttribute('dominant-baseline', 'middle');
-      text.setAttribute('text-anchor', 'middle');
-      text.setAttribute('fill', '#64748B');
-      text.setAttribute('font-size', '12');
-      text.setAttribute('font-family', 'ui-sans-serif, system-ui, -apple-system');
-      text.textContent = shape.props.name || 'Component';
-      group.appendChild(text);
-      return group;
+      return (
+        <>
+          {backgroundRect}
+          <text
+            x={shape.props.w / 2}
+            y={shape.props.h / 2}
+            dominantBaseline="middle"
+            textAnchor="middle"
+            fill="#64748B"
+            fontSize={12}
+            fontFamily="ui-sans-serif, system-ui, -apple-system"
+          >
+            {shape.props.name || 'Component'}
+          </text>
+        </>
+      );
     }
 
-    fo.appendChild(html as any);
-    group.appendChild(fo);
-    return group;
+    // Wrap HTML content inside a foreignObject to embed real DOM in SVG
+    return (
+      <>
+        {backgroundRect}
+        <foreignObject
+          x={0}
+          y={0}
+          width={shape.props.w}
+          height={shape.props.h}
+          className="tl-export-embed-styles"
+        >
+          <div
+            xmlns={XHTML_NS}
+            style={{
+              width: '100%',
+              height: '100%',
+              display: 'block',
+              overflow: 'hidden',
+              background: 'transparent',
+              fontFamily: 'ui-sans-serif, system-ui, -apple-system',
+            }}
+            dangerouslySetInnerHTML={{ __html: inner }}
+          />
+        </foreignObject>
+      </>
+    );
   }
 
   // Expose a method for the component renderer to query if user resized

@@ -42,6 +42,19 @@ export class DebateJudgeManager {
     return this.messageId;
   }
 
+  /**
+   * Activate the judge for an existing scorecard that was created by another path
+   * (e.g., LLM tool call). This avoids dispatching a second UI creation event.
+   */
+  async activateWithMessageId(messageId: string): Promise<string> {
+    if (!messageId) return this.messageId || '';
+    if (!this.messageId) {
+      this.messageId = messageId;
+      this.judge = this.createJudgeAgent(messageId);
+    }
+    return this.messageId!;
+  }
+
   private async publishData(topic: string, payload: unknown): Promise<void> {
     try {
       this.room.localParticipant?.publishData(new TextEncoder().encode(JSON.stringify(payload)), {
@@ -72,6 +85,83 @@ export class DebateJudgeManager {
   private async publishUiUpdate(patch: Record<string, unknown>): Promise<void> {
     if (!this.messageId) return;
     await this.publishToolCall('ui_update', { messageId: this.messageId, patch });
+  }
+
+  // Force a verification cycle regardless of the agent's tool choice
+  private async verifyClaimDirect(claim: string, context?: string | null): Promise<void> {
+    const manager = this;
+    const debugMeta = { model: 'gpt-5-mini', tool: 'verify_claim', claim, context: context || '' };
+    try {
+      const resp = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+        },
+        body: JSON.stringify({
+          model: 'gpt-5-mini',
+          temperature: 0.2,
+          response_format: { type: 'json_object' },
+          messages: [
+            {
+              role: 'system',
+              content:
+                'You are a concise fact checker. Output JSON with keys: verdict (Supported|Refuted|Partial|Unverifiable), confidence (0-100), rationale (<=25 words).',
+            },
+            { role: 'user', content: `Claim: ${claim}\nContext: ${context || ''}` },
+          ],
+        }),
+      });
+      const reqId = resp.headers.get('x-request-id') || resp.headers.get('x-openai-request-id');
+      console.log('[DebateJudge.verify_claim] request', { ...debugMeta, requestId: reqId });
+      const data = (await resp.json()) as any;
+      let content = String(data.choices?.[0]?.message?.content || '{}');
+      const fenced = content.match(/```(?:json)?\n([\s\S]*?)\n```/i);
+      if (fenced && fenced[1]) content = fenced[1];
+      const parsed = JSON.parse(content || '{}');
+      console.log('[DebateJudge.verify_claim] response', { requestId: reqId, parsed });
+
+      const verdict: 'Supported' | 'Refuted' | 'Partial' | 'Unverifiable' =
+        parsed?.verdict || 'Unverifiable';
+      const confidence = typeof parsed?.confidence === 'number' ? parsed.confidence : 0;
+      const rationale = typeof parsed?.rationale === 'string' ? parsed.rationale : '';
+
+      // Auto-score delta for visibility
+      const p1Delta: Record<string, number> = {};
+      if (verdict === 'Supported') {
+        p1Delta.factualAccuracy = 20;
+        p1Delta.bsMeter = -10;
+      } else if (verdict === 'Refuted') {
+        p1Delta.factualAccuracy = -20;
+        p1Delta.bsMeter = 20;
+      } else if (verdict === 'Partial') {
+        p1Delta.factualAccuracy = 10;
+        p1Delta.bsMeter = -5;
+      }
+
+      await manager.publishUiUpdate({
+        liveClaim: claim,
+        factChecks: [
+          {
+            claim,
+            verdict,
+            confidence,
+            contextNotes: rationale ? [rationale] : [],
+            timestamp: Date.now(),
+          },
+        ],
+        timeline: [
+          {
+            timestamp: Date.now(),
+            text: `Fact check: ${verdict}${confidence ? ` (${confidence}%)` : ''}`,
+            type: 'fact_check',
+          },
+        ],
+        p1Delta: Object.keys(p1Delta).length ? p1Delta : undefined,
+      } as any);
+    } catch (e) {
+      console.warn('[DebateJudge.verify_claim] error (direct)', e);
+    }
   }
 
   private createJudgeAgent(messageId: string): OpenAIAgent {
@@ -256,6 +346,18 @@ export class DebateJudgeManager {
         await manager.publishUiUpdate({
           timeline: [{ timestamp: Date.now(), text: `🔎 Deep research requested: ${query}` }],
         });
+        // Also emit a synthetic neutral fact check immediately so UI shows content even if MCP is stubbed
+        await manager.publishUiUpdate({
+          factChecks: [
+            {
+              claim: query,
+              verdict: 'Unverifiable',
+              confidence: 0,
+              contextNotes: ['Research in progress...'],
+              timestamp: Date.now(),
+            },
+          ],
+        } as any);
         return { ok: true };
       },
     });
@@ -292,16 +394,24 @@ export class DebateJudgeManager {
     if (!this.messageId || !this.judge) return;
     const trimmed = (claim || '').trim();
     if (!trimmed) return;
-    // Minimal length gate to avoid noise
-    if (trimmed.split(/\s+/).length < 6) return;
+    // Allow short fact-y answers (numbers, named entities); skip only single-character fillers
+    const wordCount = trimmed.split(/\s+/).length;
+    const hasDigits = /\d/.test(trimmed);
+    if (wordCount < 2 && !hasDigits) {
+      return;
+    }
 
     try {
-      await runAgent(this.judge, `Claim by ${speakerId}: ${trimmed}`);
-      // add liveClaim & timeline entry for UI feedback
-      await this.publishUiUpdate({
-        liveClaim: trimmed,
-        timeline: [{ timestamp: Date.now(), text: `${speakerId}: ${trimmed}` }],
-      });
+      await Promise.all([
+        runAgent(this.judge, `Claim by ${speakerId}: ${trimmed}`),
+        (async () =>
+          this.publishUiUpdate({
+            liveClaim: trimmed,
+            timeline: [{ timestamp: Date.now(), text: `${speakerId}: ${trimmed}` }],
+          }))(),
+        // Force a verification pass for immediate scoring/feedback
+        this.verifyClaimDirect(trimmed, 'Inline verify from processClaim'),
+      ]);
     } catch (e) {
       console.warn('[DebateJudge] processClaim failed', e);
     }
