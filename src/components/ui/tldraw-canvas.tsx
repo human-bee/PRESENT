@@ -44,6 +44,8 @@ export interface customShapeProps {
   pinned?: boolean; // Whether the shape is pinned to viewport
   pinnedX?: number; // Relative X position (0-1) when pinned
   pinnedY?: number; // Relative Y position (0-1) when pinned
+  // Persist whether a user explicitly resized this shape so auto-fit can stop
+  userResized?: boolean;
 }
 
 // Create a type for the custom shape
@@ -123,6 +125,11 @@ function CustomShapeComponent({ shape }: { shape: customShape }) {
     };
   }, []);
 
+  // Reset one-time autofit guard when the component type changes
+  useEffect(() => {
+    autoFittedRef.current = false;
+  }, [shape.props.name]);
+
   // Conditional auto-fit based on sizingPolicy and whether user resized
   useEffect(() => {
     if (!editor || !naturalSize) return;
@@ -130,15 +137,8 @@ function CustomShapeComponent({ shape }: { shape: customShape }) {
     const sizeInfo = getComponentSizeInfo(shape.props.name);
     const policy = sizeInfo.sizingPolicy || 'fit_until_user_resize';
 
-    // TLDraw Editor.shapeUtils is not a Map in our integration; guard accordingly
-    let userHasResized = false;
-    try {
-      const shapeUtil: any =
-        (editor as any).shapeUtils?.get?.(shape) || (editor as any).shapeUtils?.[shape.type];
-      userHasResized = Boolean(shapeUtil?.userResized?.has?.(shape.id));
-    } catch {
-      userHasResized = false;
-    }
+    // Respect explicit user resize persisted on the shape
+    const userHasResized = Boolean((shape.props as any).userResized);
 
     const shouldAutoFit =
       policy === 'always_fit' || (policy === 'fit_until_user_resize' && !userHasResized);
@@ -146,10 +146,13 @@ function CustomShapeComponent({ shape }: { shape: customShape }) {
     if (shouldAutoFit) {
       const { w: nw, h: nh } = naturalSize;
       const changed = Math.abs(shape.props.w - nw) > 1 || Math.abs(shape.props.h - nh) > 1;
-      if (changed) {
+      // Apply only once for fit_until_user_resize to avoid resize loops from dynamic content
+      const allowMultiple = policy === 'always_fit';
+      if (changed && (allowMultiple || !autoFittedRef.current)) {
         editor.updateShapes([
           { id: shape.id, type: 'custom', props: { ...shape.props, w: nw, h: nh } },
         ]);
+        if (!allowMultiple) autoFittedRef.current = true;
       }
     }
   }, [editor, naturalSize, shape.id, shape.props.name]);
@@ -275,6 +278,7 @@ export class customShapeUtil extends BaseBoxShapeUtil<customShape> {
     pinned: T.optional(T.boolean),
     pinnedX: T.optional(T.number),
     pinnedY: T.optional(T.number),
+    userResized: T.optional(T.boolean),
   } satisfies RecordProps<customShape>;
 
   // Track shapes the user has explicitly resized
@@ -290,6 +294,7 @@ export class customShapeUtil extends BaseBoxShapeUtil<customShape> {
       pinned: false,
       pinnedX: 0.5,
       pinnedY: 0.5,
+      userResized: false,
     };
   }
 
@@ -380,9 +385,41 @@ export class customShapeUtil extends BaseBoxShapeUtil<customShape> {
         ...shape.props,
         w,
         h,
+        userResized: true,
       },
     };
   };
+
+  // Provide a lightweight SVG for thumbnails so we don't render HTML fallbacks
+  override toSvg(shape: customShape, _ctx: any) {
+    const NS = 'http://www.w3.org/2000/svg';
+    const g = document.createElementNS(NS, 'g');
+
+    const rect = document.createElementNS(NS, 'rect');
+    rect.setAttribute('x', '0');
+    rect.setAttribute('y', '0');
+    rect.setAttribute('width', String(shape.props.w));
+    rect.setAttribute('height', String(shape.props.h));
+    rect.setAttribute('rx', '8');
+    rect.setAttribute('ry', '8');
+    rect.setAttribute('fill', 'white');
+    rect.setAttribute('stroke', '#CBD5E1'); // slate-300
+    rect.setAttribute('stroke-width', '2');
+    g.appendChild(rect);
+
+    const label = document.createElementNS(NS, 'text');
+    label.setAttribute('x', String(Math.max(8, shape.props.w / 2)));
+    label.setAttribute('y', String(Math.max(16, shape.props.h / 2)));
+    label.setAttribute('dominant-baseline', 'middle');
+    label.setAttribute('text-anchor', shape.props.w >= 64 ? 'middle' : 'start');
+    label.setAttribute('fill', '#64748B'); // slate-500
+    label.setAttribute('font-size', '12');
+    label.setAttribute('font-family', 'ui-sans-serif, system-ui, -apple-system');
+    label.textContent = shape.props.name || 'Component';
+    g.appendChild(label);
+
+    return g;
+  }
 
   // Expose a method for the component renderer to query if user resized
   public hasUserResized(id: string) {
