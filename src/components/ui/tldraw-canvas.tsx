@@ -392,33 +392,70 @@ export class customShapeUtil extends BaseBoxShapeUtil<customShape> {
 
   // Provide a lightweight SVG for thumbnails so we don't render HTML fallbacks
   override toSvg(shape: customShape, _ctx: any) {
-    const NS = 'http://www.w3.org/2000/svg';
-    const g = document.createElementNS(NS, 'g');
+    const SVG_NS = 'http://www.w3.org/2000/svg';
+    const XHTML_NS = 'http://www.w3.org/1999/xhtml';
 
-    const rect = document.createElementNS(NS, 'rect');
-    rect.setAttribute('x', '0');
-    rect.setAttribute('y', '0');
-    rect.setAttribute('width', String(shape.props.w));
-    rect.setAttribute('height', String(shape.props.h));
-    rect.setAttribute('rx', '8');
-    rect.setAttribute('ry', '8');
-    rect.setAttribute('fill', 'white');
-    rect.setAttribute('stroke', '#CBD5E1'); // slate-300
-    rect.setAttribute('stroke-width', '2');
-    g.appendChild(rect);
+    const group = document.createElementNS(SVG_NS, 'g');
 
-    const label = document.createElementNS(NS, 'text');
-    label.setAttribute('x', String(Math.max(8, shape.props.w / 2)));
-    label.setAttribute('y', String(Math.max(16, shape.props.h / 2)));
-    label.setAttribute('dominant-baseline', 'middle');
-    label.setAttribute('text-anchor', shape.props.w >= 64 ? 'middle' : 'start');
-    label.setAttribute('fill', '#64748B'); // slate-500
-    label.setAttribute('font-size', '12');
-    label.setAttribute('font-family', 'ui-sans-serif, system-ui, -apple-system');
-    label.textContent = shape.props.name || 'Component';
-    g.appendChild(label);
+    // Background so thumbnails look nice on light/dark pages
+    const bg = document.createElementNS(SVG_NS, 'rect');
+    bg.setAttribute('x', '0');
+    bg.setAttribute('y', '0');
+    bg.setAttribute('width', String(shape.props.w));
+    bg.setAttribute('height', String(shape.props.h));
+    bg.setAttribute('rx', '8');
+    bg.setAttribute('ry', '8');
+    bg.setAttribute('fill', 'white');
+    bg.setAttribute('stroke', '#E5E7EB');
+    bg.setAttribute('stroke-width', '1');
+    group.appendChild(bg);
 
-    return g;
+    // Try to capture the live HTML from the on-canvas container
+    const container = document.getElementById(shape.id);
+
+    // Wrap HTML content inside a foreignObject to embed real DOM in SVG
+    const fo = document.createElementNS(SVG_NS, 'foreignObject');
+    fo.setAttribute('x', '0');
+    fo.setAttribute('y', '0');
+    fo.setAttribute('width', String(shape.props.w));
+    fo.setAttribute('height', String(shape.props.h));
+
+    const html = document.createElementNS(XHTML_NS, 'div');
+    html.setAttribute('xmlns', XHTML_NS);
+    html.setAttribute(
+      'style',
+      [
+        'width: 100%',
+        'height: 100%',
+        'display: block',
+        'overflow: hidden',
+        'background: transparent',
+        'font-family: ui-sans-serif, system-ui, -apple-system',
+      ].join('; '),
+    );
+
+    if (container) {
+      // Clone the visible content. This preserves the scaling applied by the shape wrapper
+      // so the thumbnail matches what the user sees.
+      html.innerHTML = container.innerHTML;
+    } else {
+      // Fallback minimal label when the DOM isn't available yet
+      const text = document.createElementNS(SVG_NS, 'text');
+      text.setAttribute('x', String(shape.props.w / 2));
+      text.setAttribute('y', String(shape.props.h / 2));
+      text.setAttribute('dominant-baseline', 'middle');
+      text.setAttribute('text-anchor', 'middle');
+      text.setAttribute('fill', '#64748B');
+      text.setAttribute('font-size', '12');
+      text.setAttribute('font-family', 'ui-sans-serif, system-ui, -apple-system');
+      text.textContent = shape.props.name || 'Component';
+      group.appendChild(text);
+      return group;
+    }
+
+    fo.appendChild(html as any);
+    group.appendChild(fo);
+    return group;
   }
 
   // Expose a method for the component renderer to query if user resized
