@@ -104,6 +104,10 @@ export const MessageThreadCollapsible = React.forwardRef<
   const livekitCtx = React.useContext(CanvasLiveKitContext);
   const { transcript: sessionTranscript } = useRealtimeSessionTranscript(livekitCtx?.roomName);
 
+  // Local text input state for sending manual messages to the agent from Transcript tab
+  const [typedMessage, setTypedMessage] = React.useState<string>('');
+  const [isSending, setIsSending] = React.useState<boolean>(false);
+
   // Listen for transcription data via bus
   React.useEffect(() => {
     const off = bus.on('transcription', (data: unknown) => {
@@ -559,6 +563,104 @@ export const MessageThreadCollapsible = React.forwardRef<
                 })()}
               </div>
             </ScrollableMessageContainer>
+
+            {/* Manual text input for sending messages to the LiveKit agent */}
+            <div className="p-4 border-t border-gray-200">
+              <form
+                onSubmit={async (e) => {
+                  e.preventDefault();
+                  const message = typedMessage.trim();
+                  if (!message) return;
+                  setIsSending(true);
+                  try {
+                    // Ensure the agent is present in this room (fire-and-forget)
+                    try {
+                      const roomName = livekitCtx?.roomName;
+                      if (roomName) {
+                        void fetch('/api/agent/dispatch', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ roomName }),
+                        });
+                      }
+                    } catch {}
+
+                    // Broadcast the text as a live transcription so the UI stays consistent
+                    const speaker = room?.localParticipant?.identity || 'Canvas-User';
+                    const payload = {
+                      type: 'live_transcription',
+                      text: message,
+                      speaker,
+                      timestamp: Date.now(),
+                      is_final: true,
+                    } as const;
+                    try {
+                      bus.send('transcription', payload);
+                    } catch {}
+
+                    // Also mirror to canvas live captions immediately for the local user
+                    try {
+                      window.dispatchEvent(
+                        new CustomEvent('livekit:transcription-replay', {
+                          detail: {
+                            speaker,
+                            text: message,
+                            timestamp: Date.now(),
+                          },
+                        }),
+                      );
+                    } catch {}
+
+                    // Optimistically append to local transcript for immediate feedback
+                    setTranscriptions((prev) => [
+                      ...prev,
+                      {
+                        id: `${Date.now()}-${Math.random()}`,
+                        speaker,
+                        text: message,
+                        timestamp: Date.now(),
+                        isFinal: true,
+                        source: 'user' as const,
+                        type: 'speech' as const,
+                      },
+                    ]);
+
+                    setTypedMessage('');
+                    // Scroll to bottom after send
+                    setTimeout(() => {
+                      if (transcriptContainerRef.current) {
+                        transcriptContainerRef.current.scrollTop =
+                          transcriptContainerRef.current.scrollHeight;
+                      }
+                    }, 10);
+                  } finally {
+                    setIsSending(false);
+                  }
+                }}
+                className="flex items-center gap-2"
+              >
+                <input
+                  type="text"
+                  value={typedMessage}
+                  onChange={(e) => setTypedMessage(e.target.value)}
+                  placeholder="Type a message for the agent…"
+                  className="flex-1 px-3 py-2 rounded border border-gray-300 bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                  aria-label="Type a message for the agent"
+                />
+                <button
+                  type="submit"
+                  disabled={isSending || !typedMessage.trim()}
+                  className={cn(
+                    'px-3 py-2 rounded bg-primary text-primary-foreground disabled:opacity-50',
+                  )}
+                >
+                  {isSending ? 'Sending…' : 'Send'}
+                </button>
+              </form>
+              <div className="text-[11px] text-muted-foreground mt-1">
+                Sends as “you” over LiveKit to the voice agent
+              </div>
+            </div>
 
             {/* Transcript Info */}
             <div className="p-4 border-t border-gray-200">
