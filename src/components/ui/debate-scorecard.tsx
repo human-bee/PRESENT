@@ -17,6 +17,9 @@ import {
   CheckCircle2,
   Info,
 } from 'lucide-react';
+import { Users, Sparkles, Gavel, XCircle, FlaskConical, Pin, History } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { nanoid } from 'nanoid';
 
 // ---------------- Schema ----------------
 export const debateScoreCardSchema = z.object({
@@ -221,6 +224,34 @@ type TopicSection = {
   weight: number;
 };
 
+// ---------------- Claim Ledger Types ----------------
+type ClaimVerdict = 'Supported' | 'Refuted' | 'Partial' | 'Unverifiable' | undefined;
+type ClaimVisual = { type: 'image' | 'chart' | 'link'; url: string; title?: string };
+type ClaimEntry = {
+  id: string;
+  timestamp: number;
+  text: string;
+  verdict?: ClaimVerdict;
+  speaker?: string;
+  side?: 'p1' | 'p2' | 'mod' | 'audience';
+  refutesClaimId?: string | null;
+  deepResearch?: { done: boolean; sources: FactSource[]; results?: string[] };
+  visuals?: ClaimVisual[];
+  points?: { crowd: number; bonus: number };
+};
+
+type ClaimLedger = {
+  entries: ClaimEntry[];
+  summary: {
+    claimsMade: number;
+    claimsCorrect: number;
+    refutes: number;
+    crowdPoints: number;
+    bonusPoints: number;
+    momentum: number; // consecutive correct claims
+  };
+};
+
 // ---------------- Helpers ----------------
 function clamp(v: number, min = 0, max = 100) {
   return Math.max(min, Math.min(max, v));
@@ -324,6 +355,27 @@ export function DebateScorecard(props: DebateScorecardProps) {
     __custom_message_id,
   } = props;
 
+  // Injected TLDraw shape state for persistence & sync
+  const injectedShapeStateRaw = ((props as any)?.state || (props as any)?.customState) as
+    | Record<string, unknown>
+    | undefined;
+  const injectedShapeState = ((): Record<string, unknown> | undefined => {
+    if (!injectedShapeStateRaw) return injectedShapeStateRaw;
+    // Unwrap state if stored under __present container
+    const maybeWrapped = (injectedShapeStateRaw as any).__present;
+    if (typeof maybeWrapped === 'string') {
+      try {
+        return JSON.parse(maybeWrapped);
+      } catch {
+        return undefined;
+      }
+    }
+    return maybeWrapped && typeof maybeWrapped === 'object' ? (maybeWrapped as any) : injectedShapeStateRaw;
+  })();
+  const updateShapeState = (props as any)?.updateState as
+    | ((patch: Record<string, unknown> | ((prev: any) => any)) => void)
+    | undefined;
+
   const effectiveMessageId = useMemo(() => {
     if (__custom_message_id) return __custom_message_id;
     const p1 = (participant1?.name || 'p1').replace(/\s+/g, '-').toLowerCase();
@@ -362,6 +414,105 @@ export function DebateScorecard(props: DebateScorecardProps) {
     timeline: [],
     topicSections: [],
   });
+
+  // --------------- Ledger State (Synced via TLDraw shape state) ---------------
+  const defaultLedger: ClaimLedger = {
+    entries: [],
+    summary: {
+      claimsMade: 0,
+      claimsCorrect: 0,
+      refutes: 0,
+      crowdPoints: 0,
+      bonusPoints: 0,
+      momentum: 0,
+    },
+  };
+
+  const [ledger, setLedger] = useState<ClaimLedger>(
+    (() => {
+      const incoming = (injectedShapeState as any)?.debateLedger as ClaimLedger | undefined;
+      if (incoming && typeof incoming === 'object') {
+        try {
+          return JSON.parse(JSON.stringify(incoming));
+        } catch {
+          return defaultLedger;
+        }
+      }
+      return defaultLedger;
+    })(),
+  );
+  const [activeTab, setActiveTab] = useState<'summary' | 'ledger'>(
+    (() => {
+      const t = (injectedShapeState as any)?.debateLedgerTab as 'summary' | 'ledger' | undefined;
+      return t === 'ledger' ? 'ledger' : 'summary';
+    })(),
+  );
+
+  // Sync inbound TLDraw shape state changes
+  React.useEffect(() => {
+    const incoming = (injectedShapeState as any)?.debateLedger;
+    if (incoming && JSON.stringify(incoming) !== JSON.stringify(ledger)) {
+      setLedger(incoming as ClaimLedger);
+    }
+    const incomingTab = (injectedShapeState as any)?.debateLedgerTab;
+    if (incomingTab && incomingTab !== activeTab) {
+      setActiveTab(incomingTab as 'summary' | 'ledger');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [injectedShapeState?.debateLedger, injectedShapeState?.debateLedgerTab]);
+
+  const recomputeSummary = useCallback((entries: ClaimEntry[]) => {
+    const claimsMade = entries.length;
+    const claimsCorrect = entries.filter((e) => e.verdict === 'Supported').length;
+    const refutes = entries.filter((e) => !!e.refutesClaimId).length;
+    const crowdPoints = entries.reduce((acc, e) => acc + (e.points?.crowd || 0), 0);
+    const bonusPoints = entries.reduce((acc, e) => acc + (e.points?.bonus || 0), 0);
+    let momentum = 0;
+    for (let i = entries.length - 1; i >= 0; i--) {
+      if (entries[i].verdict === 'Supported') momentum++;
+      else break;
+    }
+    return { claimsMade, claimsCorrect, refutes, crowdPoints, bonusPoints, momentum };
+  }, []);
+
+  const persistLedger = useCallback(
+    (updater: ClaimLedger | ((prev: ClaimLedger) => ClaimLedger)) => {
+      setLedger((prev) => {
+        const next = typeof updater === 'function' ? (updater as any)(prev) : updater;
+        // Write JSON-safe state to TLDraw shape state using function updater to merge
+        try {
+          const safeNext = (() => {
+            try {
+              return JSON.parse(JSON.stringify(next));
+            } catch {
+              return next;
+            }
+          })();
+          updateShapeState?.((prevState: any) => {
+            const prev = prevState && typeof prevState === 'object' ? prevState : {};
+            const prevUnwrapped = (prev as any).__present && typeof (prev as any).__present === 'object' ? (prev as any).__present : prev;
+            return { __present: { ...prevUnwrapped, debateLedger: safeNext } };
+          });
+        } catch {}
+        return next;
+      });
+    },
+    [updateShapeState],
+  );
+
+  const persistTab = useCallback(
+    (tab: 'summary' | 'ledger') => {
+      setActiveTab(tab);
+      try {
+        updateShapeState?.((prevState: any) => {
+          const prev = prevState && typeof prevState === 'object' ? prevState : {};
+          const prevUnwrapped = (prev as any).__present && typeof (prev as any).__present === 'object' ? (prev as any).__present : prev;
+          return { __present: { ...prevUnwrapped, debateLedgerTab: tab } };
+        });
+      } catch {}
+    },
+    [updateShapeState],
+  );
 
   const handleAIUpdate = useCallback(
     (patch: Record<string, unknown>) => {
@@ -551,6 +702,183 @@ export function DebateScorecard(props: DebateScorecardProps) {
         } catch {}
         return next;
       });
+
+      // ---------------- Claim Ledger Handling ----------------
+      try {
+        const now = Date.now();
+        const appendClaim = (raw: any) => {
+          let entry: ClaimEntry | null = null;
+          if (typeof raw === 'string') {
+            entry = {
+              id: nanoid(),
+              timestamp: now,
+              text: raw,
+              verdict: undefined,
+              speaker: undefined,
+              side: undefined,
+              refutesClaimId: null,
+              deepResearch: { done: false, sources: [], results: [] },
+              visuals: [],
+              points: { crowd: 0, bonus: 0 },
+            };
+          } else if (raw && typeof raw === 'object') {
+            entry = {
+              id: String((raw as any).id || nanoid()),
+              timestamp:
+                typeof (raw as any).timestamp === 'number' ? (raw as any).timestamp : now,
+              text: String((raw as any).text || (raw as any).claim || ''),
+              verdict: (raw as any).verdict,
+              speaker: (raw as any).speaker,
+              side: (raw as any).side,
+              refutesClaimId: (raw as any).refutesClaimId || null,
+              deepResearch: (raw as any).deepResearch || { done: false, sources: [], results: [] },
+              visuals: Array.isArray((raw as any).visuals) ? (raw as any).visuals : [],
+              points: (raw as any).points || { crowd: 0, bonus: 0 },
+            };
+          }
+          if (!entry || !entry.text) return;
+          persistLedger((prev) => {
+            const entries = [...prev.entries, entry as ClaimEntry];
+            const summary = recomputeSummary(entries);
+            // Combo bonus: clever improvement - reward streaks
+            if (summary.momentum >= 3) {
+              const bonus = 1; // small combo bonus
+              summary.bonusPoints += bonus;
+            }
+            return { entries, summary };
+          });
+        };
+
+        // Add claims from various keys
+        const singleClaim = (patchData as any).addClaim || (patchData as any).claim || (patchData as any).statement || (patchData as any).assertion;
+        if (singleClaim) appendClaim(singleClaim);
+        const claimsArray = (patchData as any).claims || (patchData as any).claimsToAdd;
+        if (Array.isArray(claimsArray)) {
+          for (const c of claimsArray) appendClaim(c);
+        }
+
+        // Replace entire ledger (if provided)
+        if (Array.isArray((patchData as any).claimsReplace)) {
+          const normalized = ((patchData as any).claimsReplace as any[]).map((c) => ({
+            id: String((c as any).id || nanoid()),
+            timestamp: typeof (c as any).timestamp === 'number' ? (c as any).timestamp : now,
+            text: String((c as any).text || (c as any).claim || ''),
+            verdict: (c as any).verdict as ClaimVerdict,
+            speaker: (c as any).speaker,
+            side: (c as any).side,
+            refutesClaimId: (c as any).refutesClaimId || null,
+            deepResearch: (c as any).deepResearch || { done: false, sources: [], results: [] },
+            visuals: Array.isArray((c as any).visuals) ? (c as any).visuals : [],
+            points: (c as any).points || { crowd: 0, bonus: 0 },
+          } as ClaimEntry));
+          persistLedger({ entries: normalized, summary: recomputeSummary(normalized) });
+        }
+
+        // Helpers to find target claim
+        const findTargetIndex = (target: any, entries: ClaimEntry[]) => {
+          if (!entries.length) return -1;
+          if (!target || target === 'latest' || target === 'last') return entries.length - 1;
+          const byId = entries.findIndex((e) => e.id === target);
+          if (byId >= 0) return byId;
+          if (typeof target === 'number' && target >= 0 && target < entries.length) return target;
+          return entries.length - 1;
+        };
+
+        // Verdict update
+        if ((patchData as any).verdict || (patchData as any).setVerdict) {
+          const verdict = (patchData as any).verdict || (patchData as any).setVerdict;
+          const target = (patchData as any).claimId || (patchData as any).targetClaim || 'latest';
+          persistLedger((prev) => {
+            const entries = [...prev.entries];
+            const i = findTargetIndex(target, entries);
+            if (i >= 0) entries[i] = { ...entries[i], verdict };
+            const summary = recomputeSummary(entries);
+            return { entries, summary };
+          });
+        }
+
+        // Refute link
+        if ((patchData as any).refute || (patchData as any).refutes) {
+          const refutesTarget = (patchData as any).refutes || (patchData as any).refute;
+          const target = (patchData as any).claimId || (patchData as any).targetClaim || 'latest';
+          persistLedger((prev) => {
+            const entries = [...prev.entries];
+            const i = findTargetIndex(target, entries);
+            const j = findTargetIndex(refutesTarget, entries);
+            if (i >= 0 && j >= 0) entries[i] = { ...entries[i], refutesClaimId: entries[j].id };
+            const summary = recomputeSummary(entries);
+            return { entries, summary };
+          });
+        }
+
+        // Deep research enrichment
+        if ((patchData as any).deepResearch || (patchData as any).research) {
+          const r = (patchData as any).deepResearch || (patchData as any).research;
+          const target = r?.claimId || (patchData as any).claimId || 'latest';
+          persistLedger((prev) => {
+            const entries = [...prev.entries];
+            const i = findTargetIndex(target, entries);
+            if (i >= 0) {
+              const sources: FactSource[] = Array.isArray(r?.sources) ? r.sources : [];
+              const results: string[] = Array.isArray(r?.results)
+                ? (r.results as string[])
+                : typeof r?.summary === 'string'
+                  ? [r.summary]
+                  : [];
+              const deepResearch = { done: true, sources, results };
+              entries[i] = { ...entries[i], deepResearch };
+            }
+            const summary = recomputeSummary(entries);
+            return { entries, summary };
+          });
+        }
+
+        // Award points
+        if ((patchData as any).award || (patchData as any).points || (patchData as any).crowdPoints || (patchData as any).bonusPoints) {
+          const award = (patchData as any).award || (patchData as any).points || {};
+          const crowd = (patchData as any).crowdPoints ?? award.crowd ?? 0;
+          const bonus = (patchData as any).bonusPoints ?? award.bonus ?? 0;
+          const target = award.claimId || (patchData as any).claimId || 'latest';
+          persistLedger((prev) => {
+            const entries = [...prev.entries];
+            const i = findTargetIndex(target, entries);
+            if (i >= 0) {
+              const prevPoints = entries[i].points || { crowd: 0, bonus: 0 };
+              entries[i] = {
+                ...entries[i],
+                points: { crowd: (prevPoints.crowd || 0) + (crowd || 0), bonus: (prevPoints.bonus || 0) + (bonus || 0) },
+              };
+            }
+            const summary = recomputeSummary(entries);
+            // Also add to global summary in case not tied to a particular claim
+            summary.crowdPoints += typeof (patchData as any).crowdPoints === 'number' ? (patchData as any).crowdPoints : 0;
+            summary.bonusPoints += typeof (patchData as any).bonusPoints === 'number' ? (patchData as any).bonusPoints : 0;
+            return { entries, summary };
+          });
+        }
+
+        // Switch tab
+        if (typeof (patchData as any).switchTab === 'string' || typeof (patchData as any).view === 'string') {
+          const tab = ((patchData as any).switchTab || (patchData as any).view).toLowerCase();
+          if (tab.includes('ledger')) persistTab('ledger');
+          else if (tab.includes('score') || tab.includes('summary')) persistTab('summary');
+        }
+
+        // Pin claim to canvas (clever additional feature)
+        if ((patchData as any).pinClaim) {
+          const target = (patchData as any).pinClaim; // 'latest' | id | index
+          const entries = ledger.entries;
+          const idx = findTargetIndex(target, entries);
+          const text = idx >= 0 ? `Claim: ${entries[idx].text}\nVerdict: ${entries[idx].verdict || '—'}` : 'Claim';
+          try {
+            window.dispatchEvent(
+              new CustomEvent('tldraw:create_note', {
+                detail: { text },
+              }),
+            );
+          } catch {}
+        }
+      } catch {}
     },
     [setState],
   );
@@ -580,6 +908,9 @@ export function DebateScorecard(props: DebateScorecardProps) {
   const learningScoreP2 = computeLearningScore(state?.p2 || {});
 
   const latestFact = (state?.factChecks || []).slice(-1)[0];
+  const latestClaim = ledger.entries[ledger.entries.length - 1];
+  const mostRecentCorrect = [...ledger.entries].reverse().find((e) => e.verdict === 'Supported');
+  const mostRecentWrong = [...ledger.entries].reverse().find((e) => e.verdict === 'Refuted');
 
   return (
     <LoadingWrapper
@@ -597,11 +928,23 @@ export function DebateScorecard(props: DebateScorecardProps) {
             <span className="text-lg">🥊</span>
             <span className="tracking-wider font-semibold">DEBATE ARENA</span>
           </div>
-          <div className="flex items-center gap-2 text-sm opacity-80">
-            <Timer className="w-4 h-4" />
-            <span>
-              Round {state?.round ?? 1}/{rounds}
-            </span>
+          <div className="flex items-center gap-3 text-sm opacity-80">
+            <button
+              onClick={() => persistTab(activeTab === 'summary' ? 'ledger' : 'summary')}
+              className="px-2 py-1 rounded-md border border-yellow-500/40 hover:border-yellow-400/80 transition-colors"
+            >
+              {activeTab === 'summary' ? (
+                <span className="inline-flex items-center gap-1"><History className="w-4 h-4" /> Ledger</span>
+              ) : (
+                <span className="inline-flex items-center gap-1"><Trophy className="w-4 h-4" /> Summary</span>
+              )}
+            </button>
+            <div className="flex items-center gap-2">
+              <Timer className="w-4 h-4" />
+              <span>
+                Round {state?.round ?? 1}/{rounds}
+              </span>
+            </div>
           </div>
         </div>
 
@@ -642,51 +985,234 @@ export function DebateScorecard(props: DebateScorecardProps) {
           </div>
         </div>
 
-        {/* Metrics */}
-        <div className="px-4 py-3">
-          <MetricRow
-            icon={<Sword className="w-4 h-4" />}
-            label="Strength"
-            left={state?.p1?.argumentStrength ?? 0}
-            right={state?.p2?.argumentStrength ?? 0}
-            colorL={p1Color}
-            colorR={p2Color}
-          />
-          <MetricRow
-            icon={<Brain className="w-4 h-4" />}
-            label="Logic"
-            left={state?.p1?.logicalConsistency ?? 0}
-            right={state?.p2?.logicalConsistency ?? 0}
-            colorL={p1Color}
-            colorR={p2Color}
-          />
-          <MetricRow
-            icon={<BookOpen className="w-4 h-4" />}
-            label="Sources"
-            left={state?.p1?.evidenceQuality ?? 0}
-            right={state?.p2?.evidenceQuality ?? 0}
-            colorL={p1Color}
-            colorR={p2Color}
-          />
-          <MetricRow
-            icon={<Target className="w-4 h-4" />}
-            label="Accuracy"
-            left={state?.p1?.factualAccuracy ?? 0}
-            right={state?.p2?.factualAccuracy ?? 0}
-            colorL={p1Color}
-            colorR={p2Color}
-          />
-          {showBSMeter && (
-            <MetricRow
-              icon={<ShieldAlert className="w-4 h-4" />}
-              label="BS Meter"
-              left={state?.p1?.bsMeter ?? 0}
-              right={state?.p2?.bsMeter ?? 0}
-              colorL={p1Color}
-              colorR={p2Color}
-            />
+        {/* Summary or Ledger View */}
+        <AnimatePresence mode="wait">
+          {activeTab === 'summary' ? (
+            <motion.div key="summary" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.18 }}>
+              {/* Metrics */}
+              <div className="px-4 py-3">
+                <MetricRow
+                  icon={<Sword className="w-4 h-4" />}
+                  label="Strength"
+                  left={state?.p1?.argumentStrength ?? 0}
+                  right={state?.p2?.argumentStrength ?? 0}
+                  colorL={p1Color}
+                  colorR={p2Color}
+                />
+                <MetricRow
+                  icon={<Brain className="w-4 h-4" />}
+                  label="Logic"
+                  left={state?.p1?.logicalConsistency ?? 0}
+                  right={state?.p2?.logicalConsistency ?? 0}
+                  colorL={p1Color}
+                  colorR={p2Color}
+                />
+                <MetricRow
+                  icon={<BookOpen className="w-4 h-4" />}
+                  label="Sources"
+                  left={state?.p1?.evidenceQuality ?? 0}
+                  right={state?.p2?.evidenceQuality ?? 0}
+                  colorL={p1Color}
+                  colorR={p2Color}
+                />
+                <MetricRow
+                  icon={<Target className="w-4 h-4" />}
+                  label="Accuracy"
+                  left={state?.p1?.factualAccuracy ?? 0}
+                  right={state?.p2?.factualAccuracy ?? 0}
+                  colorL={p1Color}
+                  colorR={p2Color}
+                />
+                {showBSMeter && (
+                  <MetricRow
+                    icon={<ShieldAlert className="w-4 h-4" />}
+                    label="BS Meter"
+                    left={state?.p1?.bsMeter ?? 0}
+                    right={state?.p2?.bsMeter ?? 0}
+                    colorL={p1Color}
+                    colorR={p2Color}
+                  />
+                )}
+              </div>
+
+              {/* Animated Counters Row */}
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-3 px-4 pb-2">
+                <motion.div layout className="rounded-lg border border-yellow-500/30 p-2 text-sm flex items-center gap-2">
+                  <Gavel className="w-4 h-4 text-yellow-300" />
+                  <div>
+                    <div className="text-xs opacity-80">Claims Made</div>
+                    <div className="text-lg font-semibold">{ledger.summary.claimsMade}</div>
+                  </div>
+                </motion.div>
+                <motion.div layout className="rounded-lg border border-green-500/30 p-2 text-sm flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-green-400" />
+                  <div>
+                    <div className="text-xs opacity-80">Claims Correct</div>
+                    <div className="text-lg font-semibold">{ledger.summary.claimsCorrect}</div>
+                  </div>
+                </motion.div>
+                <motion.div layout className="rounded-lg border border-blue-500/30 p-2 text-sm flex items-center gap-2">
+                  <Users className="w-4 h-4 text-blue-300" />
+                  <div>
+                    <div className="text-xs opacity-80">Crowd Points</div>
+                    <div className="text-lg font-semibold">{ledger.summary.crowdPoints}</div>
+                  </div>
+                </motion.div>
+                <motion.div layout className="rounded-lg border border-purple-500/30 p-2 text-sm flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-purple-300" />
+                  <div>
+                    <div className="text-xs opacity-80">Bonus Points</div>
+                    <div className="text-lg font-semibold">{ledger.summary.bonusPoints}</div>
+                  </div>
+                </motion.div>
+                <motion.div layout className="rounded-lg border border-red-500/30 p-2 text-sm flex items-center gap-2">
+                  <XCircle className="w-4 h-4 text-red-300" />
+                  <div>
+                    <div className="text-xs opacity-80">Refutes</div>
+                    <div className="text-lg font-semibold">{ledger.summary.refutes}</div>
+                  </div>
+                </motion.div>
+                {/* Clever improvement: Momentum meter */}
+                <motion.div layout className="rounded-lg border border-amber-500/30 p-2 text-sm">
+                  <div className="flex items-center gap-2 mb-1">
+                    <FlaskConical className="w-4 h-4 text-amber-300" />
+                    <div className="text-xs opacity-80">Momentum</div>
+                  </div>
+                  <div className="w-full h-2 bg-black/30 rounded-full overflow-hidden">
+                    <div
+                      style={{ width: `${Math.min(100, ledger.summary.momentum * 20)}%`, background: 'linear-gradient(90deg,#f59e0b,#84cc16)' }}
+                      className="h-full transition-all duration-500"
+                    />
+                  </div>
+                </motion.div>
+              </div>
+
+              {/* Latest claim widgets */}
+              <div className="px-4 pb-3">
+                <div className="rounded-md border border-yellow-500/30 p-2">
+                  <div className="text-xs uppercase tracking-wider opacity-80 mb-1">Most Recent Claim</div>
+                  {latestClaim ? (
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="text-sm">
+                        <div className="text-slate-100">“{latestClaim.text}”</div>
+                        <div className="text-xs text-slate-400 mt-1">
+                          Verdict: {latestClaim.verdict || '—'}
+                          {latestClaim.deepResearch?.done && (
+                            <span className="ml-2 inline-flex items-center gap-1 text-emerald-300">
+                              <FlaskConical className="w-3 h-3" /> Deep research
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <button
+                        className="text-xs px-2 py-1 rounded-md border border-yellow-500/40 hover:border-yellow-400/80 transition-colors inline-flex items-center gap-1"
+                        onClick={() => {
+                          try {
+                            window.dispatchEvent(new CustomEvent('tldraw:create_note', { detail: { text: `Claim: ${latestClaim.text}\nVerdict: ${latestClaim.verdict || '—'}` } }));
+                          } catch {}
+                        }}
+                      >
+                        <Pin className="w-3 h-3" /> Pin
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="text-xs text-slate-400">No claims yet.</div>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 mt-2">
+                  <div className="rounded-md border border-green-500/30 p-2">
+                    <div className="text-xs uppercase tracking-wider opacity-80 mb-1">Most Recent Right</div>
+                    {mostRecentCorrect ? (
+                      <div className="text-sm text-slate-100">“{mostRecentCorrect.text}”</div>
+                    ) : (
+                      <div className="text-xs text-slate-500">—</div>
+                    )}
+                  </div>
+                  <div className="rounded-md border border-red-500/30 p-2">
+                    <div className="text-xs uppercase tracking-wider opacity-80 mb-1">Most Recent Wrong</div>
+                    {mostRecentWrong ? (
+                      <div className="text-sm text-slate-100">“{mostRecentWrong.text}”</div>
+                    ) : (
+                      <div className="text-xs text-slate-500">—</div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          ) : (
+            <motion.div key="ledger" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.18 }}>
+              {/* Post-modern ledger table */}
+              <div className="px-4 pb-3">
+                <div className="text-xs uppercase tracking-wider opacity-80 mb-2">Claim Ledger</div>
+                <div className="rounded-lg overflow-hidden border border-slate-700">
+                  <div className="grid grid-cols-6 gap-0 text-[11px] bg-slate-900/60">
+                    <div className="px-2 py-2 border-b border-slate-700">Time</div>
+                    <div className="px-2 py-2 border-b border-slate-700 col-span-2">Claim</div>
+                    <div className="px-2 py-2 border-b border-slate-700">Verdict</div>
+                    <div className="px-2 py-2 border-b border-slate-700">Research</div>
+                    <div className="px-2 py-2 border-b border-slate-700">Points</div>
+                  </div>
+                  <div className="max-h-52 overflow-auto">
+                    {ledger.entries.length === 0 && (
+                      <div className="px-3 py-4 text-xs text-slate-500">No entries yet. As claims are made, they will appear here with research and sources.</div>
+                    )}
+                    {ledger.entries.map((e) => (
+                      <div key={e.id} className="grid grid-cols-6 gap-0 text-[11px] border-b border-slate-800/60 hover:bg-slate-800/30 transition-colors">
+                        <div className="px-2 py-2 text-slate-400">
+                          {new Date(e.timestamp).toLocaleTimeString([], { minute: '2-digit', second: '2-digit' })}
+                        </div>
+                        <div className="px-2 py-2 col-span-2">
+                          <div className="text-slate-100">{e.text}</div>
+                          {e.refutesClaimId && (
+                            <div className="text-[10px] text-amber-300">refutes #{e.refutesClaimId.slice(0, 5)}</div>
+                          )}
+                          {Array.isArray(e.visuals) && e.visuals.length > 0 && (
+                            <div className="mt-1 flex gap-1 flex-wrap">
+                              {e.visuals.slice(0, 3).map((v, i) => (
+                                <a key={i} href={v.url} target="_blank" rel="noreferrer" className="text-[10px] underline opacity-80 hover:opacity-100">{v.title || v.type}</a>
+                              ))}
+                              {e.visuals.length > 3 && <span className="text-[10px] opacity-60">+{e.visuals.length - 3} more</span>}
+                            </div>
+                          )}
+                        </div>
+                        <div className="px-2 py-2">
+                          {e.verdict || '—'}
+                        </div>
+                        <div className="px-2 py-2">
+                          {e.deepResearch?.done ? (
+                            <div>
+                              <div className="text-emerald-300 inline-flex items-center gap-1"><FlaskConical className="w-3 h-3" /> done</div>
+                              {Array.isArray(e.deepResearch?.sources) && e.deepResearch!.sources.length > 0 && (
+                                <div className="mt-1 space-y-0.5">
+                                  {e.deepResearch!.sources.slice(0, 2).map((s, i) => (
+                                    <a key={i} href={s.url} target="_blank" rel="noreferrer" className="block text-[10px] underline text-sky-300 truncate">{s.title}</a>
+                                  ))}
+                                  {e.deepResearch!.sources.length > 2 && (
+                                    <div className="text-[10px] text-slate-500">+{e.deepResearch!.sources.length - 2} more</div>
+                                  )}
+                                </div>
+                              )}
+                              {Array.isArray(e.deepResearch?.results) && e.deepResearch!.results.length > 0 && (
+                                <div className="mt-1 text-[10px] text-slate-300 line-clamp-2">{e.deepResearch!.results[0]}</div>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-slate-500">—</span>
+                          )}
+                        </div>
+                        <div className="px-2 py-2">
+                          <div className="text-sky-300">Crowd: {e.points?.crowd || 0}</div>
+                          <div className="text-purple-300">Bonus: {e.points?.bonus || 0}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </motion.div>
           )}
-        </div>
+        </AnimatePresence>
 
         {/* Learning Score */}
         <div className="grid grid-cols-2 gap-4 px-4 pb-3">

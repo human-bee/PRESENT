@@ -232,21 +232,48 @@ function CustomShapeComponent({ shape }: { shape: customShape }) {
                 let node: React.ReactNode = null;
                 const updateState = (patch: Record<string, unknown> | ((prev: any) => any)) => {
                   if (!editor) return;
-                  const prevState = (shape.props.state as Record<string, unknown>) || {};
-                  const nextState =
-                    typeof patch === 'function' ? (patch as any)(prevState) : { ...prevState, ...patch };
+                  const prevContainer = (shape.props as any).customState;
+                  const prevStr = typeof prevContainer?.__present === 'string' ? prevContainer.__present : '{}';
+                  let prevState: any = {};
+                  try { prevState = JSON.parse(prevStr); } catch { prevState = {}; }
+                  const nextState = typeof patch === 'function' ? (patch as any)(prevState) : { ...prevState, ...patch };
+                  let safeNext = nextState;
+                  try { safeNext = JSON.parse(JSON.stringify(nextState)); } catch {}
                   editor.updateShapes([
                     {
                       id: shape.id,
                       type: 'custom',
-                      props: { state: nextState },
+                      props: { state: {}, customState: { __present: JSON.stringify(safeNext) } },
                     },
                   ]);
                 };
                 const injected = {
                   __custom_message_id: shape.props.customComponent,
-                  state: (shape.props.state as Record<string, unknown>) || {},
-                  updateState,
+                  state: (() => {
+                    const container = (shape.props as any).customState;
+                    const str = typeof container?.__present === 'string' ? container.__present : '{}';
+                    try { return JSON.parse(str); } catch { return {}; }
+                  })(),
+                  updateState: (patch: Record<string, unknown> | ((prev: any) => any)) => {
+                    // Ensure we always produce a JSON-serializable object and merge with previous
+                    const prevContainer = (shape.props as any).customState;
+                    const prevStr = typeof prevContainer?.__present === 'string' ? prevContainer.__present : '{}';
+                    let prevState: any = {};
+                    try { prevState = JSON.parse(prevStr); } catch { prevState = {}; }
+                    const nextState = typeof patch === 'function' ? (patch as any)(prevState) : { ...prevState, ...patch };
+                    let safeNext = nextState;
+                    try {
+                      safeNext = JSON.parse(JSON.stringify(nextState));
+                    } catch {}
+                    // Repair any old invalid state and write to the new container
+                    editor.updateShapes([
+                      {
+                        id: shape.id,
+                        type: 'custom',
+                        props: { state: {}, customState: { __present: JSON.stringify(safeNext) } },
+                      },
+                    ]);
+                  },
                 } as const;
                 if (React.isValidElement(stored)) {
                   try {
@@ -301,6 +328,7 @@ export class customShapeUtil extends BaseBoxShapeUtil<customShape> {
     pinnedY: T.optional(T.number),
     userResized: T.optional(T.boolean),
     state: T.optional(T.json),
+    customState: T.optional(T.json),
   } satisfies RecordProps<customShape>;
 
   // Track shapes the user has explicitly resized
