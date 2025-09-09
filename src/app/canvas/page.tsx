@@ -309,7 +309,16 @@ export default function Canvas() {
 
                 <SessionSync roomName={roomName} />
 
-                {/* Optional LiveKit Room Connector (toggle via env NEXT_PUBLIC_SHOW_LIVEKIT_CONNECTOR) */}
+                {/* Hidden auto-connector ensures data channel + agent are available */}
+                <div className="hidden">
+                  <LivekitRoomConnector
+                    roomName={roomName}
+                    userName={user.user_metadata?.full_name || 'Canvas User'}
+                    autoConnect={true}
+                  />
+                </div>
+
+                {/* Optional: show connector UI if explicitly enabled */}
                 {process.env.NEXT_PUBLIC_SHOW_LIVEKIT_CONNECTOR === 'true' && (
                   <div
                     className="absolute left-4 z-50 safe-bottom"
@@ -320,7 +329,7 @@ export default function Canvas() {
                     <LivekitRoomConnector
                       roomName={roomName}
                       userName={user.user_metadata?.full_name || 'Canvas User'}
-                      autoConnect={false}
+                      autoConnect={true}
                     />
                   </div>
                 )}
@@ -359,7 +368,16 @@ export default function Canvas() {
 
                 <SessionSync roomName={roomName} />
 
-                {/* Optional LiveKit Room Connector (toggle via env NEXT_PUBLIC_SHOW_LIVEKIT_CONNECTOR) */}
+                {/* Hidden auto-connector ensures data channel + agent are available */}
+                <div className="hidden">
+                  <LivekitRoomConnector
+                    roomName={roomName}
+                    userName={user.user_metadata?.full_name || 'Canvas User'}
+                    autoConnect={true}
+                  />
+                </div>
+
+                {/* Optional: show connector UI if explicitly enabled */}
                 {process.env.NEXT_PUBLIC_SHOW_LIVEKIT_CONNECTOR === 'true' && (
                   <div
                     className="absolute left-4 z-50 safe-bottom"
@@ -370,7 +388,7 @@ export default function Canvas() {
                     <LivekitRoomConnector
                       roomName={roomName}
                       userName={user.user_metadata?.full_name || 'Canvas User'}
-                      autoConnect={false}
+                      autoConnect={true}
                     />
                   </div>
                 )}

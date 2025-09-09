@@ -1,27 +1,13 @@
 'use client';
 
-import {
-  MessageInput,
-  MessageInputTextarea,
-  MessageInputToolbar,
-  MessageInputSubmitButton,
-  MessageInputError,
-} from '@/components/ui/message-input';
-import {
-  MessageSuggestions,
-  MessageSuggestionsStatus,
-  MessageSuggestionsList,
-} from '@/components/ui/message-suggestions';
 import type { messageVariants } from '@/components/ui/message';
-import { ThreadContent, ThreadContentMessages } from '@/components/ui/thread-content';
 import { ThreadDropdown } from '@/components/ui/thread-dropdown';
 import { ScrollableMessageContainer } from '@/components/ui/scrollable-message-container';
 import { cn } from '@/lib/utils';
-import { MessageSquare, FileText } from 'lucide-react';
+import { FileText } from 'lucide-react';
 import * as React from 'react';
 import { components as customComponents } from '@/lib/custom';
 import { type VariantProps } from 'class-variance-authority';
-import type { Suggestion } from '@custom-ai/react';
 import { useRoomContext } from '@livekit/components-react';
 import { createLiveKitBus } from '../../lib/livekit/livekit-bus';
 import { useContextKey } from '../RoomScopedProviders';
@@ -76,8 +62,8 @@ export interface MessageThreadCollapsibleProps extends React.HTMLAttributes<HTML
 export const MessageThreadCollapsible = React.forwardRef<
   HTMLDivElement,
   MessageThreadCollapsibleProps
->(({ className, contextKey, variant, onTranscriptChange, onClose, ...props }, ref) => {
-  const [activeTab, setActiveTab] = React.useState<'conversations' | 'transcript'>('conversations');
+>(({ className, contextKey, onTranscriptChange, onClose, ...props }, ref) => {
+  // Conversations tab removed; Transcript is the only view
   const [componentStore, setComponentStore] = React.useState(
     new Map<string, { component: React.ReactNode; contextKey: string }>(),
   );
@@ -298,10 +284,10 @@ export const MessageThreadCollapsible = React.forwardRef<
 
   // Auto-scroll transcript when new entries are added
   React.useEffect(() => {
-    if (transcriptContainerRef.current && activeTab === 'transcript') {
+    if (transcriptContainerRef.current) {
       transcriptContainerRef.current.scrollTop = transcriptContainerRef.current.scrollHeight;
     }
-  }, [transcriptions, activeTab]);
+  }, [transcriptions]);
 
   // Clear transcriptions
   const clearTranscriptions = React.useCallback(() => {
@@ -364,26 +350,7 @@ export const MessageThreadCollapsible = React.forwardRef<
     } catch { }
   }, []);
 
-  const defaultSuggestions: Suggestion[] = [
-    {
-      id: 'suggestion-1',
-      title: 'Get started',
-      detailedSuggestion: 'What can you help me with?',
-      messageId: 'welcome-query',
-    },
-    {
-      id: 'suggestion-2',
-      title: 'Learn more',
-      detailedSuggestion: 'Tell me about your capabilities.',
-      messageId: 'capabilities-query',
-    },
-    {
-      id: 'suggestion-3',
-      title: 'Examples',
-      detailedSuggestion: 'Show me some example queries I can try.',
-      messageId: 'examples-query',
-    },
-  ];
+  // Conversations and suggestions removed; this panel focuses on Transcript only
 
   // Format timestamp for display
   const formatTime = (timestamp: number) => {
@@ -417,9 +384,7 @@ export const MessageThreadCollapsible = React.forwardRef<
         {/* Header with title and close button */}
         <div className="flex items-center justify-between p-4 border-b border-gray-200 safe-top">
           <div className="flex items-center gap-2">
-            <span className="font-medium">
-              {activeTab === 'conversations' ? 'Conversations' : 'Transcript'}
-            </span>
+            <span className="font-medium">Transcript</span>
             <ThreadDropdown contextKey={effectiveContextKey} onThreadChange={handleThreadChange} />
           </div>
           <button
@@ -431,67 +396,8 @@ export const MessageThreadCollapsible = React.forwardRef<
           </button>
         </div>
 
-        {/* Tab Navigation */}
-        <div className="flex border-b border-gray-200">
-          <button
-            onClick={() => setActiveTab('conversations')}
-            className={cn(
-              'flex items-center gap-2 px-4 py-2 text-sm font-medium transition-colors',
-              activeTab === 'conversations'
-                ? 'text-foreground border-b-2 border-primary'
-                : 'text-muted-foreground hover:text-foreground',
-            )}
-          >
-            <MessageSquare className="h-4 w-4" />
-            Conversations
-          </button>
-          <button
-            onClick={() => setActiveTab('transcript')}
-            className={cn(
-              'flex items-center gap-2 px-4 py-2 text-sm font-medium transition-colors',
-              activeTab === 'transcript'
-                ? 'text-foreground border-b-2 border-primary'
-                : 'text-muted-foreground hover:text-foreground',
-            )}
-          >
-            <FileText className="h-4 w-4" />
-            Transcript
-          </button>
-        </div>
-
-        {/* Tab Content */}
-        {activeTab === 'conversations' ? (
-          <>
-            {/* Original Conversations Content */}
-            <ScrollableMessageContainer className="p-4">
-              <ThreadContent variant={variant}>
-                <ThreadContentMessages />
-              </ThreadContent>
-            </ScrollableMessageContainer>
-
-            {/* Message Suggestions Status */}
-            <MessageSuggestions>
-              <MessageSuggestionsStatus />
-            </MessageSuggestions>
-
-            {/* Message input */}
-            <div className="p-4">
-              <MessageInput contextKey={effectiveContextKey}>
-                <MessageInputTextarea />
-                <MessageInputToolbar>
-                  <MessageInputSubmitButton />
-                </MessageInputToolbar>
-                <MessageInputError />
-              </MessageInput>
-            </div>
-
-            {/* Message suggestions */}
-            <MessageSuggestions initialSuggestions={defaultSuggestions}>
-              <MessageSuggestionsList />
-            </MessageSuggestions>
-          </>
-        ) : (
-          <>
+        {/* Transcript Content */}
+        <>
             {/* Transcript Content */}
             <ScrollableMessageContainer className="flex-1 p-4" ref={transcriptContainerRef}>
               <div className="space-y-2">
@@ -680,7 +586,6 @@ export const MessageThreadCollapsible = React.forwardRef<
               </div>
             </div>
           </>
-        )}
       </div>
     </div>
   );
