@@ -37,6 +37,7 @@ import * as React from 'react';
 import { cn } from '@/lib/utils';
 import { z } from 'zod';
 import { useRoomContext, AudioConference } from '@livekit/components-react';
+import { createLiveKitBus } from '@/lib/livekit/livekit-bus';
 import { ConnectionState, RoomEvent, DisconnectReason, Participant } from 'livekit-client';
 import {
   Wifi,
@@ -546,6 +547,30 @@ export function LivekitRoomConnector({
       room.off(RoomEvent.ParticipantDisconnected, handleParticipantDisconnected);
     };
   }, [room, roomName, triggerAgentJoin]); // Added triggerAgentJoin to dependencies
+
+  // Fallback agent detection via data channel topics (decision/transcription)
+  React.useEffect(() => {
+    if (!room) return;
+    const bus = createLiveKitBus(room);
+    const markJoined = () =>
+      setState((prev: LivekitRoomConnectorState | null) =>
+        prev
+          ? ({ ...prev, agentStatus: 'joined' } as LivekitRoomConnectorState)
+          : { ...getInitialState(), agentStatus: 'joined' },
+      );
+    const offDecision = bus.on('decision', () => markJoined());
+    const offTranscription = bus.on('transcription', (msg: any) => {
+      try {
+        if (msg && msg.type === 'live_transcription' && msg.speaker === 'voice-agent') {
+          markJoined();
+        }
+      } catch {}
+    });
+    return () => {
+      offDecision?.();
+      offTranscription?.();
+    };
+  }, [room]);
 
   // Track re-renders and token fetch state
   const renderCount = React.useRef(0);

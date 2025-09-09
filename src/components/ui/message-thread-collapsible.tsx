@@ -9,11 +9,13 @@ import * as React from 'react';
 import { components as customComponents } from '@/lib/custom';
 import { type VariantProps } from 'class-variance-authority';
 import { useRoomContext } from '@livekit/components-react';
+import { RoomEvent } from 'livekit-client';
 import { createLiveKitBus } from '../../lib/livekit/livekit-bus';
 import { useContextKey } from '../RoomScopedProviders';
 import { useRealtimeSessionTranscript } from '@/hooks/use-realtime-session-transcript';
 import { supabase } from '@/lib/supabase';
 import { CanvasLiveKitContext } from './livekit-room-connector';
+import { useAuth } from '@/hooks/use-auth';
 
 /**
  * Props for the MessageThreadCollapsible component
@@ -89,10 +91,97 @@ export const MessageThreadCollapsible = React.forwardRef<
   const effectiveContextKey = contextKey || roomContextKey;
   const livekitCtx = React.useContext(CanvasLiveKitContext);
   const { transcript: sessionTranscript } = useRealtimeSessionTranscript(livekitCtx?.roomName);
+  const { user } = useAuth();
 
   // Local text input state for sending manual messages to the agent from Transcript tab
   const [typedMessage, setTypedMessage] = React.useState<string>('');
   const [isSending, setIsSending] = React.useState<boolean>(false);
+  const [connBusy, setConnBusy] = React.useState<boolean>(false);
+
+  // Helper: detect if an agent participant is present in the room
+  const isAgentPresent = React.useCallback(() => {
+    try {
+      if (!room) return false;
+      const participants = Array.from(room.remoteParticipants.values());
+      const isAgent = (id: string, meta?: string | null) => {
+        const lower = (id || '').toLowerCase();
+        const m = (meta || '').toLowerCase();
+        return (
+          lower.includes('agent') ||
+          lower.includes('bot') ||
+          lower.includes('ai') ||
+          lower.startsWith('voice-agent') ||
+          m.includes('agent') ||
+          m.includes('type":"agent')
+        );
+      };
+      return participants.some((p: any) => isAgent(p.identity, p.metadata));
+    } catch {
+      return false;
+    }
+  }, [room]);
+
+  // Track agent presence reactively
+  const [agentPresent, setAgentPresent] = React.useState<boolean>(() => isAgentPresent());
+  const [agentJoining, setAgentJoining] = React.useState<boolean>(false);
+  React.useEffect(() => {
+    if (!room) return;
+    const recompute = () => setAgentPresent(isAgentPresent());
+    recompute();
+    const handleJoin = () => recompute();
+    const handleLeave = () => recompute();
+    room.on(RoomEvent.ParticipantConnected, handleJoin as any);
+    room.on(RoomEvent.ParticipantDisconnected, handleLeave as any);
+    return () => {
+      room.off(RoomEvent.ParticipantConnected, handleJoin as any);
+      room.off(RoomEvent.ParticipantDisconnected, handleLeave as any);
+    };
+  }, [room, isAgentPresent]);
+
+  // Minimal connect/disconnect helpers (replaces canvas LivekitRoomConnector UI)
+  const wsUrl =
+    process.env.NEXT_PUBLIC_LIVEKIT_URL || process.env.NEXT_PUBLIC_LK_SERVER_URL || '';
+
+  const connectRoom = React.useCallback(async () => {
+    if (!room || !livekitCtx?.roomName || !wsUrl) return;
+    if (room.state === 'connected' || connBusy) return;
+    setConnBusy(true);
+    try {
+      // Stable identity per device+room
+      const key = `present:lk:identity:${livekitCtx.roomName}`;
+      let identity: string | null = null;
+      try {
+        identity = window.localStorage.getItem(key);
+        if (!identity) {
+          const base = (user?.user_metadata?.full_name || 'user').replace(/\s+/g, '-').slice(0, 24);
+          const rand = Math.random().toString(36).slice(2, 8);
+          identity = `${base}-${rand}`;
+          window.localStorage.setItem(key, identity);
+        }
+      } catch {
+        const base = (user?.user_metadata?.full_name || 'user').replace(/\s+/g, '-').slice(0, 24);
+        const rand = Math.random().toString(36).slice(2, 8);
+        identity = `${base}-${rand}`;
+      }
+
+      const url = `/api/token?roomName=${encodeURIComponent(livekitCtx.roomName)}&identity=${encodeURIComponent(identity!)}&name=${encodeURIComponent(user?.user_metadata?.full_name || 'Canvas User')}`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`Token fetch failed: ${res.status}`);
+      const data = await res.json();
+      const token = data.accessToken || data.token;
+      if (!token) throw new Error('No token received');
+
+      await room.connect(wsUrl, token);
+      try { await room.localParticipant.setMicrophoneEnabled(true); } catch {}
+    } finally {
+      setConnBusy(false);
+    }
+  }, [room, wsUrl, livekitCtx?.roomName, user, connBusy]);
+
+  const disconnectRoom = React.useCallback(async () => {
+    if (!room) return;
+    try { await room.disconnect(); } catch {}
+  }, [room]);
 
   // Listen for transcription data via bus
   React.useEffect(() => {
@@ -105,6 +194,10 @@ export const MessageThreadCollapsible = React.forwardRef<
         is_final?: boolean;
       };
       if (transcriptionData.type === 'live_transcription' && transcriptionData.text) {
+        // If we see the agent speaking, mark presence true (fallback for agent detection)
+        if (transcriptionData.speaker === 'voice-agent') {
+          try { setAgentPresent(true); } catch {}
+        }
         const transcription = {
           id: `${Date.now()}-${Math.random()}`,
           speaker: transcriptionData.speaker || 'Unknown',
@@ -173,6 +266,19 @@ export const MessageThreadCollapsible = React.forwardRef<
       return nextList;
     });
   }, [sessionTranscript]);
+
+  // When canvas id changes, clear local transcript immediately to avoid showing stale lines
+  React.useEffect(() => {
+    const clearOnCanvasChange = () => setTranscriptions([]);
+    if (typeof window !== 'undefined') {
+      window.addEventListener('present:canvas-id-changed', clearOnCanvasChange);
+    }
+    return () => {
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('present:canvas-id-changed', clearOnCanvasChange);
+      }
+    };
+  }, []);
 
   // Listen for custom component creation - register with new system
   const handlecustomComponent = React.useCallback(
@@ -479,18 +585,6 @@ export const MessageThreadCollapsible = React.forwardRef<
                   if (!message) return;
                   setIsSending(true);
                   try {
-                    // Ensure the agent is present in this room (fire-and-forget)
-                    try {
-                      const roomName = livekitCtx?.roomName;
-                      if (roomName) {
-                        void fetch('/api/agent/dispatch', {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ roomName }),
-                        });
-                      }
-                    } catch {}
-
                     // Broadcast the text as a live transcription so the UI stays consistent
                     const speaker = room?.localParticipant?.identity || 'Canvas-User';
                     const payload = {
@@ -499,9 +593,15 @@ export const MessageThreadCollapsible = React.forwardRef<
                       speaker,
                       timestamp: Date.now(),
                       is_final: true,
+                      manual: true,
                     } as const;
                     try {
-                      bus.send('transcription', payload);
+                      // Only send when connected; skip otherwise (no buffering server-side)
+                      if (room?.state === 'connected') {
+                        bus.send('transcription', payload);
+                      } else {
+                        console.warn('[Transcript] Room not connected; skipping send');
+                      }
                     } catch {}
 
                     // Also mirror to canvas live captions immediately for the local user
@@ -516,20 +616,6 @@ export const MessageThreadCollapsible = React.forwardRef<
                         }),
                       );
                     } catch {}
-
-                    // Optimistically append to local transcript for immediate feedback
-                    setTranscriptions((prev) => [
-                      ...prev,
-                      {
-                        id: `${Date.now()}-${Math.random()}`,
-                        speaker,
-                        text: message,
-                        timestamp: Date.now(),
-                        isFinal: true,
-                        source: 'user' as const,
-                        type: 'speech' as const,
-                      },
-                    ]);
 
                     setTypedMessage('');
                     // Scroll to bottom after send
@@ -549,13 +635,14 @@ export const MessageThreadCollapsible = React.forwardRef<
                   type="text"
                   value={typedMessage}
                   onChange={(e) => setTypedMessage(e.target.value)}
-                  placeholder="Type a message for the agent…"
+                  placeholder={room?.state === 'connected' ? 'Type a message for the agent…' : 'Connecting to LiveKit…'}
                   className="flex-1 px-3 py-2 rounded border border-gray-300 bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
                   aria-label="Type a message for the agent"
+                  disabled={isSending || room?.state !== 'connected'}
                 />
                 <button
                   type="submit"
-                  disabled={isSending || !typedMessage.trim()}
+                  disabled={isSending || !typedMessage.trim() || room?.state !== 'connected'}
                   className={cn(
                     'px-3 py-2 rounded bg-primary text-primary-foreground disabled:opacity-50',
                   )}
@@ -563,25 +650,72 @@ export const MessageThreadCollapsible = React.forwardRef<
                   {isSending ? 'Sending…' : 'Send'}
                 </button>
               </form>
-              <div className="text-[11px] text-muted-foreground mt-1">
-                Sends as “you” over LiveKit to the voice agent
+              <div className="text-[11px] text-muted-foreground mt-1 flex items-center gap-2">
+                {agentPresent ? (
+                  <span>Sends as “you” over LiveKit to the voice agent</span>
+                ) : (
+                  <>
+                    <span>Agent not joined</span>
+                    <button
+                      className="underline disabled:opacity-50"
+                      disabled={agentJoining || room?.state !== 'connected'}
+                      onClick={async () => {
+                        if (!livekitCtx?.roomName || room?.state !== 'connected') return;
+                        setAgentJoining(true);
+                        try {
+                          await fetch('/api/agent/dispatch', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ roomName: livekitCtx.roomName }),
+                          });
+                        } finally {
+                          // We'll flip to enabled when presence updates via room events
+                          setTimeout(() => setAgentJoining(false), 1500);
+                        }
+                      }}
+                    >
+                      {agentJoining ? 'Requesting agent…' : 'Request agent'}
+                    </button>
+                  </>
+                )}
               </div>
             </div>
 
-            {/* Transcript Info */}
-            <div className="p-4 border-t border-gray-200">
-              <div className="flex items-center justify-between text-xs text-muted-foreground">
-                <span>Live voice transcription with custom</span>
-                <div className="flex items-center gap-3">
+            {/* Transcript Footer: connection + tools */}
+            <div className="p-3 border-t border-gray-200">
+              <div className="flex items-center justify-between text-[11px] text-muted-foreground gap-2">
+                <div className="flex items-center gap-2 overflow-hidden">
+                  <span className={cn('inline-block h-2 w-2 rounded-full', room?.state === 'connected' ? 'bg-green-500' : room?.state === 'connecting' ? 'bg-yellow-500' : 'bg-gray-400')} />
+                  <span className="truncate">{room?.state === 'connected' ? 'Connected' : room?.state === 'connecting' ? 'Connecting…' : 'Disconnected'}</span>
+                  {livekitCtx?.roomName && (
+                    <span className="font-mono truncate max-w-[140px]">{livekitCtx.roomName}</span>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={room?.state === 'connected' ? disconnectRoom : connectRoom}
+                    disabled={connBusy}
+                    className="px-2 py-1 rounded border text-foreground hover:bg-muted disabled:opacity-50"
+                  >
+                    {room?.state === 'connected' ? 'Disconnect' : 'Connect'}
+                  </button>
+                  <button
+                    onClick={() => {
+                      try {
+                        const id = new URL(window.location.href).searchParams.get('id');
+                        const link = `${window.location.origin}/canvas${id ? `?id=${encodeURIComponent(id)}` : ''}`;
+                        navigator.clipboard.writeText(link);
+                      } catch {}
+                    }}
+                    className="px-2 py-1 rounded border hover:bg-muted"
+                  >
+                    Copy Link
+                  </button>
                   {transcriptions.length > 0 && (
-                    <button
-                      onClick={clearTranscriptions}
-                      className="text-xs hover:text-foreground transition-colors"
-                    >
+                    <button onClick={clearTranscriptions} className="px-2 py-1 rounded hover:bg-muted">
                       Clear
                     </button>
                   )}
-                  {room && <span className="text-green-600 dark:text-green-400">Connected</span>}
                 </div>
               </div>
             </div>

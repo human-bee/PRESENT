@@ -222,6 +222,12 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
 
         console.log(`🔄 [CanvasSpace] Rehydrating ${componentName} (${messageId})`);
 
+        // Skip rehydration of legacy LivekitRoomConnector components to avoid duplicate connectors
+        if (componentName === 'LivekitRoomConnector') {
+          console.log('⏭️  [CanvasSpace] Skipping rehydration of LivekitRoomConnector (moved to Transcript sidebar)');
+          return;
+        }
+
         // Find component definition
         // Try exact match first
         let componentDef = components.find((c) => c.name === componentName);

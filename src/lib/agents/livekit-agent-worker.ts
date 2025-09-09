@@ -164,6 +164,9 @@ export default defineAgent({
         if (topic !== 'transcription') return;
         try {
           const msg = JSON.parse(new TextDecoder().decode(payload));
+          // Ignore transcript replays used to rehydrate UIs and only process explicit manual inputs
+          if (msg?.replay) return;
+          if (msg?.manual !== true) return;
           if (msg && msg.type === 'live_transcription' && typeof msg.text === 'string') {
             const speaker = (participant && participant.identity) || msg.speaker || 'user';
             console.log('📝 [Agent] Received manual text input:', {

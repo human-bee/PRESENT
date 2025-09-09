@@ -133,29 +133,47 @@ function CustomMainMenu({ readOnly = false }: { readOnly?: boolean } & any) {
     router.push('/canvases');
   };
 
-  const handleNewCanvas = () => {
+  const handleNewCanvas = async () => {
+    // Create a brand new canvas via API, then route directly to /canvas?id=...
+    try { localStorage.removeItem('present:lastCanvasId'); } catch {}
     try {
-      localStorage.removeItem('present:lastCanvasId');
-    } catch {}
-    try {
-      // Clear all TLDraw shapes immediately for a fresh start
-      if (editor) {
-        const allShapes = editor.getCurrentPageShapes();
-        if (allShapes.length > 0) {
-          editor.deleteShapes(allShapes.map((s) => s.id));
+      const payload = {
+        name: `Canvas ${new Date().toLocaleString()}`,
+        description: null,
+        document: {},
+        conversationKey: null,
+      } as any;
+      const res = await fetch('/api/canvas', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (res.ok) {
+        const { canvas } = await res.json();
+        if (canvas?.id) {
+          const url = `/canvas?id=${encodeURIComponent(canvas.id)}`;
+          router.push(url);
+          try { localStorage.setItem('present:lastCanvasId', canvas.id); } catch {}
+          try { window.dispatchEvent(new Event('present:canvas-id-changed')); } catch {}
+          // Clear local UI quickly while the new session hydrates
+          try {
+            if (editor) {
+              const all = editor.getCurrentPageShapes();
+              if (all.length) editor.deleteShapes(all.map((s) => s.id));
+              try { editor.selectNone(); } catch {}
+            }
+            if (componentStore && typeof componentStore.clear === 'function') {
+              componentStore.clear();
+              try { window.dispatchEvent(new Event('present:component-store-updated')); } catch {}
+            }
+          } catch {}
+          return;
         }
-        try {
-          editor.selectNone();
-        } catch {}
       }
-      // Clear component store so custom components unmount
-      if (componentStore && typeof componentStore.clear === 'function') {
-        componentStore.clear();
-        try {
-          window.dispatchEvent(new Event('present:component-store-updated'));
-        } catch {}
-      }
-    } catch {}
+    } catch (e) {
+      console.warn('[NewCanvas] Fallback to resolver flow', e);
+    }
+    // Fallback: go to resolver (will create on load)
     router.push('/canvas');
   };
 

@@ -13,7 +13,7 @@ export const dynamic = 'force-dynamic';
 import React, { useState, useEffect, useCallback } from 'react';
 import { CanvasSpace } from '@/components/ui/canvas-space';
 import { MessageThreadCollapsible } from '@/components/ui/message-thread-collapsible';
-import { LivekitRoomConnector, CanvasLiveKitContext } from '@/components/ui/livekit-room-connector';
+import { CanvasLiveKitContext } from '@/components/ui/livekit-room-connector';
 import SessionSync from '@/components/SessionSync';
 import {
   loadMcpServers,
@@ -309,40 +309,18 @@ export default function Canvas() {
 
                 <SessionSync roomName={roomName} />
 
-                {/* Hidden auto-connector ensures data channel + agent are available */}
-                <div className="hidden">
-                  <LivekitRoomConnector
-                    roomName={roomName}
-                    userName={user.user_metadata?.full_name || 'Canvas User'}
-                    autoConnect={true}
-                  />
-                </div>
+                {/* LiveKit connection is now controlled from the Transcript sidebar */}
 
-                {/* Optional: show connector UI if explicitly enabled */}
-                {process.env.NEXT_PUBLIC_SHOW_LIVEKIT_CONNECTOR === 'true' && (
-                  <div
-                    className="absolute left-4 z-50 safe-bottom"
-                    style={{
-                      bottom: 'calc(1rem + env(safe-area-inset-bottom))',
-                    }}
-                  >
-                    <LivekitRoomConnector
-                      roomName={roomName}
-                      userName={user.user_metadata?.full_name || 'Canvas User'}
-                      autoConnect={true}
-                    />
-                  </div>
-                )}
-
-                {/* Collapsible Message Thread - now slides from right and controlled by toolbar */}
-                {isTranscriptOpen && (
-                  <MessageThreadCollapsible
-                    contextKey={contextKey}
-                    className="fixed right-0 top-0 z-50 transform transition-transform duration-300 w-full max-w-sm sm:max-w-md md:max-w-lg ios-vh safe-area-padded bg-background"
-                    variant="default"
-                    onClose={toggleTranscript}
-                  />
-                )}
+                {/* Collapsible Message Thread - keep mounted; hide via transform to preserve state */}
+                <MessageThreadCollapsible
+                  contextKey={contextKey}
+                  className={[
+                    'fixed right-0 top-0 z-50 transform transition-transform duration-300 w-full max-w-sm sm:max-w-md md:max-w-lg ios-vh safe-area-padded bg-background',
+                    isTranscriptOpen ? 'translate-x-0' : 'translate-x-full pointer-events-none opacity-0',
+                  ].join(' ')}
+                  variant="default"
+                  onClose={toggleTranscript}
+                />
               </CanvasLiveKitContext.Provider>
             </ToolDispatcher>
           </RoomContext.Provider>
@@ -368,40 +346,18 @@ export default function Canvas() {
 
                 <SessionSync roomName={roomName} />
 
-                {/* Hidden auto-connector ensures data channel + agent are available */}
-                <div className="hidden">
-                  <LivekitRoomConnector
-                    roomName={roomName}
-                    userName={user.user_metadata?.full_name || 'Canvas User'}
-                    autoConnect={true}
-                  />
-                </div>
+                {/* LiveKit connection is now controlled from the Transcript sidebar */}
 
-                {/* Optional: show connector UI if explicitly enabled */}
-                {process.env.NEXT_PUBLIC_SHOW_LIVEKIT_CONNECTOR === 'true' && (
-                  <div
-                    className="absolute left-4 z-50 safe-bottom"
-                    style={{
-                      bottom: 'calc(1rem + env(safe-area-inset-bottom))',
-                    }}
-                  >
-                    <LivekitRoomConnector
-                      roomName={roomName}
-                      userName={user.user_metadata?.full_name || 'Canvas User'}
-                      autoConnect={true}
-                    />
-                  </div>
-                )}
-
-                {/* Collapsible Message Thread - now slides from right and controlled by toolbar */}
-                {isTranscriptOpen && (
-                  <MessageThreadCollapsible
-                    contextKey={contextKey}
-                    className="fixed right-0 top-0 z-50 transform transition-transform duration-300 w-full max-w-sm sm:max-w-md md:max-w-lg ios-vh safe-area-padded bg-background"
-                    variant="default"
-                    onClose={toggleTranscript}
-                  />
-                )}
+                {/* Collapsible Message Thread - keep mounted; hide via transform to preserve state */}
+                <MessageThreadCollapsible
+                  contextKey={contextKey}
+                  className={[
+                    'fixed right-0 top-0 z-50 transform transition-transform duration-300 w-full max-w-sm sm:max-w-md md:max-w-lg ios-vh safe-area-padded bg-background',
+                    isTranscriptOpen ? 'translate-x-0' : 'translate-x-full pointer-events-none opacity-0',
+                  ].join(' ')}
+                  variant="default"
+                  onClose={toggleTranscript}
+                />
               </CanvasLiveKitContext.Provider>
             </ToolDispatcher>
           </RoomContext.Provider>
