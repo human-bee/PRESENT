@@ -157,6 +157,31 @@ export default defineAgent({
       },
     );
 
+    // Listen for manual text inputs from the Transcript tab (sent over data channel)
+    job.room.on(
+      'dataReceived',
+      async (payload: Uint8Array, participant?: any, _?: any, topic?: string) => {
+        if (topic !== 'transcription') return;
+        try {
+          const msg = JSON.parse(new TextDecoder().decode(payload));
+          if (msg && msg.type === 'live_transcription' && typeof msg.text === 'string') {
+            const speaker = (participant && participant.identity) || msg.speaker || 'user';
+            console.log('📝 [Agent] Received manual text input:', {
+              speaker,
+              text: msg.text?.slice?.(0, 160) || msg.text,
+            });
+            try {
+              await decisionEngine.processTranscript(String(msg.text), String(speaker));
+            } catch (e) {
+              console.warn('[Agent] decisionEngine.processTranscript failed for manual input', e);
+            }
+          }
+        } catch (e) {
+          console.warn('[Agent] Failed to parse transcription message', e);
+        }
+      },
+    );
+
     // Set up periodic capability refresh (every 30 seconds)
     const capabilityRefreshInterval = setInterval(async () => {
       console.log('🔄 [Agent] Refreshing capabilities...');
