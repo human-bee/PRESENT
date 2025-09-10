@@ -296,7 +296,10 @@ export default function Canvas() {
           {/* LiveKit Room Context Provider - wraps everything! */}
           <RoomContext.Provider value={room}>
             {/* Tool Dispatcher - handles voice agent tool calls */}
-            <ToolDispatcher contextKey={contextKey} enableLogging={true}>
+            <ToolDispatcher
+              contextKey={contextKey}
+              enableLogging={process.env.NEXT_PUBLIC_TOOL_DISPATCHER_LOGS === 'true'}
+            >
               {/* Respond to agent capability queries */}
               <AgentCapabilitiesBridge />
               {/* Canvas LiveKit Context Provider - provides connection state to all canvas components */}
@@ -333,7 +336,10 @@ export default function Canvas() {
           {/* LiveKit Room Context Provider - wraps everything! */}
           <RoomContext.Provider value={room}>
             {/* Tool Dispatcher - handles voice agent tool calls */}
-            <ToolDispatcher contextKey={contextKey} enableLogging={true}>
+            <ToolDispatcher
+              contextKey={contextKey}
+              enableLogging={process.env.NEXT_PUBLIC_TOOL_DISPATCHER_LOGS === 'true'}
+            >
               {/* Respond to agent capability queries */}
               <AgentCapabilitiesBridge />
               {/* Canvas LiveKit Context Provider - provides connection state to all canvas components */}

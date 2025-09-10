@@ -1,6 +1,8 @@
 /**
  * Type for MCP Server entries
  */
+import { createLogger } from '@/lib/utils';
+
 export type McpServer =
   | string
   | {
@@ -43,7 +45,9 @@ function shouldAttemptConnection(url: string): boolean {
     const timeSinceLastAttempt = Date.now() - status.lastAttempt;
     if (timeSinceLastAttempt < FAILURE_BACKOFF_TIME) {
       if (process.env.NODE_ENV === 'development') {
-        console.log(`[MCP] Skipping ${url} - too many failures, backing off`);
+        try {
+          createLogger('MCP').info(`Skipping ${url} - too many failures, backing off`);
+        } catch {}
       }
       return false;
     } else {
@@ -82,9 +86,13 @@ function updateServerStatus(url: string, success: boolean, error?: string) {
     if (status.failureCount >= MAX_FAILURES) {
       status.status = 'disabled';
       if (process.env.NODE_ENV === 'development') {
-        console.warn(
-          `[MCP] Disabling server ${url} after ${MAX_FAILURES} failures. Will retry in ${FAILURE_BACKOFF_TIME / 60000} minutes.`,
-        );
+        try {
+          createLogger('MCP').warn(
+            `Disabling server ${url} after ${MAX_FAILURES} failures. Will retry in ${
+              FAILURE_BACKOFF_TIME / 60000
+            } minutes.`,
+          );
+        } catch {}
       }
     }
   }
@@ -135,14 +143,18 @@ export function loadMcpServers(): McpServer[] {
         // Skip obviously invalid entries early to avoid runtime failures later.
         if (!isValidMcpUrl(url)) {
           if (process.env.NODE_ENV === 'development') {
-            console.warn(`[MCP] Invalid MCP server URL detected, skipping: "${url}"`);
+            try {
+              createLogger('MCP').warn(`Invalid MCP server URL detected, skipping: "${url}"`);
+            } catch {}
           }
           return false;
         }
 
         if (uniqueUrls.has(url)) {
           if (process.env.NODE_ENV === 'development') {
-            console.warn(`[MCP] Duplicate server URL found, skipping: ${url}`);
+            try {
+              createLogger('MCP').info(`Duplicate server URL found, skipping: ${url}`);
+            } catch {}
           }
           return false;
         }
@@ -186,7 +198,9 @@ export function loadMcpServers(): McpServer[] {
           !url.startsWith('/')
         ) {
           if (process.env.NODE_ENV === 'development' && !loggedProxy.has(url)) {
-            console.log(`[MCP] Proxying external server: ${url}`);
+            try {
+              createLogger('MCP').info(`Proxying external server: ${url}`);
+            } catch {}
             loggedProxy.add(url);
           }
 
@@ -210,20 +224,26 @@ export function loadMcpServers(): McpServer[] {
       const g: any = window as any;
       const key = '__mcp_last_count__';
       if (g[key] !== deduplicatedServers.length) {
-        console.log(`[MCP] Loading ${deduplicatedServers.length} MCP server(s)`);
+        try {
+          createLogger('MCP').info(`Loading ${deduplicatedServers.length} MCP server(s)`);
+        } catch {}
         g[key] = deduplicatedServers.length;
       }
 
       // Show which servers are being skipped
       const skippedServers = servers.length - deduplicatedServers.length;
       if (skippedServers > 0) {
-        console.log(`[MCP] Skipping ${skippedServers} server(s) due to failures or duplicates`);
+        try {
+          createLogger('MCP').info(`Skipping ${skippedServers} server(s) due to failures or duplicates`);
+        } catch {}
       }
     }
 
     return deduplicatedServers;
   } catch (e) {
-    console.error('Failed to parse saved MCP servers', e);
+    try {
+      createLogger('MCP').error('Failed to parse saved MCP servers', e as any);
+    } catch {}
     return [];
   }
 }
@@ -255,7 +275,9 @@ export function getMcpServerStatuses(): Map<string, McpServerStatus> {
 export function resetMcpServerFailures() {
   serverStatusMap.clear();
   if (process.env.NODE_ENV === 'development') {
-    console.log('[MCP] Server failure counts reset');
+    try {
+      createLogger('MCP').info('Server failure counts reset');
+    } catch {}
   }
 }
 

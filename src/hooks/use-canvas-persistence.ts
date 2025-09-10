@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { usecustomThread } from '@custom-ai/react';
 import { toast } from 'react-hot-toast';
 import { supabase, type Canvas } from '@/lib/supabase';
+import { createLogger } from '@/lib/utils';
 import { useAuth } from './use-auth';
 
 export function useCanvasPersistence(editor: Editor | null, enabled: boolean = true) {
@@ -16,6 +17,7 @@ export function useCanvasPersistence(editor: Editor | null, enabled: boolean = t
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const [canWrite, setCanWrite] = useState(true);
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const logger = createLogger('CanvasPersistence');
 
   // Load canvas from URL param or create new
   useEffect(() => {
@@ -47,12 +49,12 @@ export function useCanvasPersistence(editor: Editor | null, enabled: boolean = t
           if (error) throw error;
 
           if (canvas) {
-            console.log('🎨 [CanvasPersistence] Loading canvas:', canvas.id, canvas.name);
-            console.log(
-              '🎨 [CanvasPersistence] Canvas document has shapes:',
+            logger.info('🎨 Loading canvas:', canvas.id, canvas.name);
+            logger.debug(
+              'Canvas document has shapes:',
               Object.keys(canvas.document?.store?.['shape:custom'] || {}),
             );
-            console.log('🎨 [CanvasPersistence] Conversation key:', canvas.conversation_key);
+            logger.debug('Conversation key:', canvas.conversation_key);
 
             setCanvasId(canvas.id);
             setCanvasName(canvas.name);
@@ -90,12 +92,12 @@ export function useCanvasPersistence(editor: Editor | null, enabled: boolean = t
               );
             }
 
-            console.log('🎨 [CanvasPersistence] Canvas loaded successfully - shapes should appear');
+            logger.info('🎨 Canvas loaded successfully - shapes should appear');
 
             // CRITICAL: Rehydrate component store after canvas loads
             // The canvas document contains shapes, but componentStore is empty on reload
             setTimeout(() => {
-              console.log('🔄 [CanvasPersistence] Starting component rehydration...');
+              logger.info('🔄 Starting component rehydration...');
               window.dispatchEvent(
                 new CustomEvent('custom:rehydrateComponents', {
                   detail: { canvasId: canvas.id, conversationKey: canvas.conversation_key },

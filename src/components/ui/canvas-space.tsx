@@ -37,7 +37,7 @@
 
 'use client';
 
-import { cn } from '@/lib/utils';
+import { cn, createLogger } from '@/lib/utils';
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { usecustom } from '@custom-ai/react';
 import * as React from 'react';
@@ -134,6 +134,7 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
   const livekitCtx = React.useContext(CanvasLiveKitContext);
   const room = useRoomContext();
   const bus = createLiveKitBus(room);
+  const logger = createLogger('CanvasSpace');
 
   // Component toolbox toggle - creates toolbox shape on canvas
   const toggleComponentToolbox = useCallback(() => {
@@ -148,7 +149,7 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
     if (existingToolbox) {
       // Remove existing toolbox
       editor.deleteShapes([existingToolbox.id]);
-      console.log('🗑️ Removed existing component toolbox');
+      logger.info('🗑️ Removed existing component toolbox');
     } else {
       // Create new toolbox shape
       const viewport = editor.getViewportPageBounds();
@@ -169,7 +170,7 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
         },
       });
 
-      console.log('✅ Created component toolbox shape');
+      logger.info('✅ Created component toolbox shape');
     }
   }, [editor]);
 
@@ -207,26 +208,26 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
   useEffect(() => {
     const handleRehydration = () => {
       if (!editor) {
-        console.log('🔄 [CanvasSpace] Editor not ready for rehydration, skipping...');
+        logger.debug('Editor not ready for rehydration, skipping...');
         return;
       }
 
-      console.log('🔄 [CanvasSpace] Starting component rehydration...');
+      logger.info('🔄 Starting component rehydration...');
       const customShapes = editor
         .getCurrentPageShapes()
         .filter((shape) => shape.type === 'custom') as CustomShape[];
 
-      console.log(`🔄 [CanvasSpace] Found ${customShapes.length} custom shapes to rehydrate`);
+      logger.debug(`Found ${customShapes.length} custom shapes to rehydrate`);
 
       customShapes.forEach((shape) => {
         let componentName = shape.props.name;
         const messageId = shape.props.customComponent;
 
-        console.log(`🔄 [CanvasSpace] Rehydrating ${componentName} (${messageId})`);
+        logger.debug(`Rehydrating ${componentName} (${messageId})`);
 
         // Skip rehydration of legacy LivekitRoomConnector components to avoid duplicate connectors
         if (componentName === 'LivekitRoomConnector') {
-          console.log('⏭️  [CanvasSpace] Skipping rehydration of LivekitRoomConnector (moved to Transcript sidebar)');
+          logger.debug('⏭️  Skipping rehydration of LivekitRoomConnector (moved to Transcript sidebar)');
           return;
         }
 
@@ -273,9 +274,9 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
           setMessageIdToShapeIdMap((prev) => new Map(prev).set(messageId, shape.id));
           setAddedMessageIds((prev) => new Set(prev).add(messageId));
 
-          console.log(`✅ [CanvasSpace] Rehydrated ${componentName} successfully`);
+          logger.debug(`✅ Rehydrated ${componentName} successfully`);
         } else {
-          console.error(`❌ [CanvasSpace] Component definition not found for: ${componentName}`);
+          logger.warn(`❌ Component definition not found for: ${componentName}`);
 
           // Fallback: Create a placeholder component for missing registrations
           const FallbackComponent = () => (
@@ -316,12 +317,12 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
           setMessageIdToShapeIdMap((prev) => new Map(prev).set(messageId, shape.id));
           setAddedMessageIds((prev) => new Set(prev).add(messageId));
 
-          console.log(`⚠️ [CanvasSpace] Created fallback for ${componentName}`);
+          logger.debug(`⚠️ Created fallback for ${componentName}`);
         }
       });
 
-      console.log(
-        `🎯 [CanvasSpace] Rehydration complete! ComponentStore now has ${componentStore.current.size} components`,
+      logger.info(
+        `🎯 Rehydration complete! ComponentStore now has ${componentStore.current.size} components`,
       );
     };
 
@@ -534,10 +535,7 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
             node,
             name: inferredName,
           });
-          console.log(
-            '⏸️ [CanvasSpace] Queued component until editor is ready:',
-            inferredName || 'component',
-          );
+          logger.debug('⏸️  Queued component until editor is ready:', inferredName || 'component');
           return;
         }
         if (!React.isValidElement(node)) {
@@ -609,7 +607,7 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
           context: { name },
         });
       } catch { }
-      console.log('▶️ [CanvasSpace] Rendered queued component:', name || 'component');
+      logger.debug('▶️  Rendered queued component:', name || 'component');
     });
   }, [editor, addComponentToCanvas, bus]);
 
@@ -639,7 +637,7 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
     if (!editor) return;
     const existing = ComponentRegistry.list();
     if (!existing || existing.length === 0) return;
-    console.log(`🧭 [CanvasSpace] Reconciling ${existing.length} components from registry`);
+    logger.info(`🧭 Reconciling ${existing.length} components from registry`);
     existing.forEach((info) => {
       if (addedMessageIds.has(info.messageId)) return;
       const compDef = components.find((c) => c.name === info.componentType);
@@ -657,7 +655,7 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
         node = React.createElement('div', null, `${info.componentType}`);
       }
       addComponentToCanvas(info.messageId, node, info.componentType);
-      console.log('✅ [CanvasSpace] Reconciled component:', info.componentType, info.messageId);
+      logger.debug('✅ Reconciled component:', info.componentType, info.messageId);
     });
   }, [editor, addComponentToCanvas, addedMessageIds]);
 
@@ -727,7 +725,7 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
 
   // Helper function to show onboarding
   const showOnboarding = useCallback(() => {
-    console.log('🆘 [CanvasSpace] Help button clicked - creating onboarding guide');
+    logger.info('🆘 Help button clicked - creating onboarding guide');
 
     if (!editor) {
       console.warn('Editor not available');
@@ -776,9 +774,9 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
         },
       });
 
-      console.log('✅ Onboarding guide created successfully');
+      logger.info('✅ Onboarding guide created successfully');
     } else {
-      console.error('OnboardingGuide component not found');
+      logger.warn('OnboardingGuide component not found');
     }
   }, [editor, componentStore]);
 
@@ -807,7 +805,7 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
           e.stopPropagation();
           const componentType = e.dataTransfer.getData('application/custom-component');
           if (componentType && editor) {
-            console.log('📥 Dropping component:', componentType);
+            logger.info('📥 Dropping component:', componentType);
             const shapeId = createShapeId(nanoid());
             const Component = components.find((c) => c.name === componentType)?.component;
             if (Component) {
@@ -831,9 +829,9 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
                   name: componentType,
                 },
               });
-              console.log('✅ Component dropped successfully');
+              logger.info('✅ Component dropped successfully');
             } else {
-              console.error('Failed to find component for type:', componentType);
+              logger.warn('Failed to find component for type:', componentType);
             }
           }
         }}
