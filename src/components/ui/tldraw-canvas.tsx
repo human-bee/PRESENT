@@ -27,7 +27,7 @@ import { nanoid } from 'nanoid';
 // 1. Import ComponentToolbox
 import { ComponentToolbox } from './component-toolbox';
 import { getComponentSizeInfo } from '@/lib/component-sizing';
-import { ResizeInfo } from 'tldraw';
+import { TLResizeInfo } from 'tldraw';
 
 // Create context for component store
 export const ComponentStoreContext = createContext<Map<string, ReactNode> | null>(null);
@@ -232,48 +232,21 @@ function CustomShapeComponent({ shape }: { shape: customShape }) {
                 let node: React.ReactNode = null;
                 const updateState = (patch: Record<string, unknown> | ((prev: any) => any)) => {
                   if (!editor) return;
-                  const prevContainer = (shape.props as any).customState;
-                  const prevStr = typeof prevContainer?.__present === 'string' ? prevContainer.__present : '{}';
-                  let prevState: any = {};
-                  try { prevState = JSON.parse(prevStr); } catch { prevState = {}; }
-                  const nextState = typeof patch === 'function' ? (patch as any)(prevState) : { ...prevState, ...patch };
-                  let safeNext = nextState;
-                  try { safeNext = JSON.parse(JSON.stringify(nextState)); } catch {}
+                  const prevState = (shape.props.state as Record<string, unknown>) || {};
+                  const nextState =
+                    typeof patch === 'function' ? (patch as any)(prevState) : { ...prevState, ...patch };
                   editor.updateShapes([
                     {
                       id: shape.id,
                       type: 'custom',
-                      props: { state: {}, customState: { __present: JSON.stringify(safeNext) } },
+                      props: { state: nextState },
                     },
                   ]);
                 };
                 const injected = {
                   __custom_message_id: shape.props.customComponent,
-                  state: (() => {
-                    const container = (shape.props as any).customState;
-                    const str = typeof container?.__present === 'string' ? container.__present : '{}';
-                    try { return JSON.parse(str); } catch { return {}; }
-                  })(),
-                  updateState: (patch: Record<string, unknown> | ((prev: any) => any)) => {
-                    // Ensure we always produce a JSON-serializable object and merge with previous
-                    const prevContainer = (shape.props as any).customState;
-                    const prevStr = typeof prevContainer?.__present === 'string' ? prevContainer.__present : '{}';
-                    let prevState: any = {};
-                    try { prevState = JSON.parse(prevStr); } catch { prevState = {}; }
-                    const nextState = typeof patch === 'function' ? (patch as any)(prevState) : { ...prevState, ...patch };
-                    let safeNext = nextState;
-                    try {
-                      safeNext = JSON.parse(JSON.stringify(nextState));
-                    } catch {}
-                    // Repair any old invalid state and write to the new container
-                    editor.updateShapes([
-                      {
-                        id: shape.id,
-                        type: 'custom',
-                        props: { state: {}, customState: { __present: JSON.stringify(safeNext) } },
-                      },
-                    ]);
-                  },
+                  state: (shape.props.state as Record<string, unknown>) || {},
+                  updateState,
                 } as const;
                 if (React.isValidElement(stored)) {
                   try {
@@ -327,8 +300,7 @@ export class customShapeUtil extends BaseBoxShapeUtil<customShape> {
     pinnedX: T.optional(T.number),
     pinnedY: T.optional(T.number),
     userResized: T.optional(T.boolean),
-    state: T.optional(T.json),
-    customState: T.optional(T.json),
+    state: T.optional(T.any),
   } satisfies RecordProps<customShape>;
 
   // Track shapes the user has explicitly resized
@@ -390,7 +362,7 @@ export class customShapeUtil extends BaseBoxShapeUtil<customShape> {
   };
 
   // Handle TLDraw-initiated resizes with component constraints
-  override onResize = (shape: customShape, info: ResizeInfo) => {
+  override onResize = (shape: customShape, info: TLResizeInfo<customShape>) => {
     // Mark that the user has explicitly resized this shape
     this.userResized.add(shape.id);
 
@@ -496,7 +468,6 @@ export class customShapeUtil extends BaseBoxShapeUtil<customShape> {
           className="tl-export-embed-styles"
         >
           <div
-            xmlns={XHTML_NS}
             style={{
               width: '100%',
               height: '100%',
@@ -519,7 +490,7 @@ export class customShapeUtil extends BaseBoxShapeUtil<customShape> {
 }
 
 // Component wrapper for Toolbox inside shape
-function ToolboxShapeComponent({ shape }: { shape: customShape }) {
+function ToolboxShapeComponent({ shape }: { shape: TLBaseShape<'toolbox', { w: number; h: number; name: string }> }) {
   // Use TLDraw's built-in hook to get the editor instead of context
   const editor = useEditor();
   const componentStore = useContext(ComponentStoreContext);
@@ -587,15 +558,15 @@ function ToolboxShapeComponent({ shape }: { shape: customShape }) {
 }
 
 // 2. Add ToolboxShapeUtil
-export class ToolboxShapeUtil extends BaseBoxShapeUtil<customShape> {
+export class ToolboxShapeUtil extends BaseBoxShapeUtil<TLBaseShape<'toolbox', { w: number; h: number; name: string }>> {
   static override type = 'toolbox' as const;
   static override props = {
     w: T.number,
     h: T.number,
     name: T.string,
-  } satisfies RecordProps<customShape>;
+  } satisfies RecordProps<TLBaseShape<'toolbox', { w: number; h: number; name: string }>>;
 
-  override getDefaultProps(): customShape['props'] {
+  override getDefaultProps(): { w: number; h: number; name: string } {
     return {
       w: 56,
       h: 560,
@@ -603,7 +574,7 @@ export class ToolboxShapeUtil extends BaseBoxShapeUtil<customShape> {
     };
   }
 
-  override component(shape: customShape) {
+  override component(shape: TLBaseShape<'toolbox', { w: number; h: number; name: string }>) {
     return (
       <TldrawHTMLContainer
         id={shape.id}
@@ -622,7 +593,7 @@ export class ToolboxShapeUtil extends BaseBoxShapeUtil<customShape> {
     );
   }
 
-  override indicator(shape: customShape) {
+  override indicator(shape: TLBaseShape<'toolbox', { w: number; h: number; name: string }>) {
     return <rect width={shape.props.w} height={shape.props.h} fill="transparent" />;
   }
 
@@ -725,7 +696,11 @@ export function TldrawCanvas({
   const getItemCount = () => {
     const ed = editorRef.current;
     if (!ed) return 0;
-    return Object.keys(ed.store?.getSnapshot().document?.pages || {}).length;
+    try {
+      return ed.getCurrentPageShapes().length;
+    } catch {
+      return 0;
+    }
   };
 
   if (!isClient) {

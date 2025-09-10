@@ -62,136 +62,11 @@ export type DebateScores = {
   bsMeter: number;
   strawmanDetection: number;
   adHominemScore: number;
-  humilityScore?: number; // legacy misspelling guard
-  humility?: number; // guard
-  humility_score?: number; // guard
-  humilityScore?: number; // guard
-  humilityscore?: number; // guard
-  humilityIndex?: number; // guard
-  humility_index?: number; // guard
-  humilityindex?: number; // guard
-  humilityLevel?: number; // guard
-  humility_level?: number; // guard
-  humilitylevel?: number; // guard
-  humilityPoints?: number; // guard
-  humility_points?: number; // guard
-  humilitypoints?: number; // guard
-  humilityPct?: number; // guard
-  humility_pct?: number; // guard
-  humilitypct?: number; // guard
-  humilityPercent?: number; // guard
-  humility_percent?: number; // guard
-  humilitypercent?: number; // guard
-  humilityScoreNormalized?: number; // guard
-  humility_scorenormalized?: number; // guard
-  humilityscorenormalized?: number; // guard
-  humilityNormalized?: number; // guard
-  humility_normalized?: number; // guard
-  humilitynormalized?: number; // guard
-  humilityRatio?: number; // guard
-  humility_ratio?: number; // guard
-  humilityratio?: number; // guard
-  humilityValue?: number; // guard
-  humility_value?: number; // guard
-  humilityvalue?: number; // guard
-  humilityComponent?: number; // guard
-  humility_component?: number; // guard
-  humilitycomponent?: number; // guard
-  humilityFactor?: number; // guard
-  humility_factor?: number; // guard
-  humilityfactor?: number; // guard
-  humilityMetric?: number; // guard
-  humility_metric?: number; // guard
-  humilitymetric?: number; // guard
-  humilityPointsNormalized?: number; // guard
-  humility_points_normalized?: number; // guard
-  humilitypointsnormalized?: number; // guard
-  humilityWeighted?: number; // guard
-  humility_weighted?: number; // guard
-  humilityweighted?: number; // guard
-  humilityScorePercentile?: number; // guard
-  humility_score_percentile?: number; // guard
-  humilityscorepercentile?: number; // guard
-  humilityScorePercent?: number; // guard
-  humility_score_percent?: number; // guard
-  humilityscorepercent?: number; // guard
-  humilityScorePct?: number; // guard
-  humility_score_pct?: number; // guard
-  humilityscorepct?: number; // guard
-  humilityScorePctile?: number; // guard
-  humility_score_pctile?: number; // guard
-  humilityscorepctile?: number; // guard
-  humilityScoreIndex?: number; // guard
-  humility_score_index?: number; // guard
-  humilityscoreindex?: number; // guard
-  humilityScoreValue?: number; // guard
-  humility_score_value?: number; // guard
-  humilityscorevalue?: number; // guard
-  humilityScoreRaw?: number; // guard
-  humility_score_raw?: number; // guard
-  humilityscoreraw?: number; // guard
-  humilityScoreAdjusted?: number; // guard
-  humility_score_adjusted?: number; // guard
-  humilityscoreadjusted?: number; // guard
-  humilityScoreWeighted?: number; // guard
-  humility_score_weighted?: number; // guard
-  humilityscoreweighted?: number; // guard
-  humilityScoreFinal?: number; // guard
-  humility_score_final?: number; // guard
-  humilityscorefinal?: number; // guard
-
-  // Correct ones
-  humilityScore?: number; // compatibility
-  humility_score?: number; // compatibility
-  humility?: number; // compatibility
-  humilityPercent?: number; // compatibility
-  humilityPct?: number; // compatibility
-  humilityIndex?: number; // compatibility
-  humilityWeighted?: number; // compatibility
-  humilityFinal?: number; // compatibility
-
-  // Learning metrics
-  humilityScoreFixed?: number; // compatibility
-  humility_score_fixed?: number; // compatibility
-
-  humilityScoreMaybe?: number; // compatibility
-  humility_score_maybe?: number; // compatibility
-
-  humilityScoreCap?: number; // compatibility
-  humility_score_cap?: number; // compatibility
-
-  humilityScoreMin?: number; // compatibility
-  humility_score_min?: number; // compatibility
-
-  humilityScoreMax?: number; // compatibility
-  humility_score_max?: number; // compatibility
-
-  humilityScoreFloor?: number; // compatibility
-  humility_score_floor?: number; // compatibility
-
-  humilityScoreCeil?: number; // compatibility
-  humility_score_ceil?: number; // compatibility
-
-  humilityScoreRound?: number; // compatibility
-  humility_score_round?: number; // compatibility
-
-  humilityScoreMedian?: number; // compatibility
-  humility_score_median?: number; // compatibility
-
-  humilityScoreMean?: number; // compatibility
-  humility_score_mean?: number; // compatibility
-
-  humilityScoreVar?: number; // compatibility
-  humility_score_var?: number; // compatibility
-
-  humilityScoreStd?: number; // compatibility
-  humility_score_std?: number; // compatibility
-
-  // Preferred fields
-  humilityScore?: number; // de-dupe
+  humility?: number;
   curiosityScore?: number;
   teachingEffectiveness?: number;
   learningImpact?: number;
+  [key: string]: any; // tolerate legacy/variant fields; normalization handles them
 };
 
 export type FactSource = {
@@ -342,36 +217,16 @@ export function DebateScorecard(props: DebateScorecardProps) {
   const {
     participant1,
     participant2,
-    topic = 'Live Debate: Topic TBD',
-    timeLimit = 30,
     rounds = 5,
     visualStyle = 'boxing',
     showFactChecking = true,
     showBSMeter = true,
     showTimeline = true,
-    twitchMode = false,
-    moderatorMode = false,
-    componentId = 'debate-scorecard',
     __custom_message_id,
   } = props;
 
   // Injected TLDraw shape state for persistence & sync
-  const injectedShapeStateRaw = ((props as any)?.state || (props as any)?.customState) as
-    | Record<string, unknown>
-    | undefined;
-  const injectedShapeState = ((): Record<string, unknown> | undefined => {
-    if (!injectedShapeStateRaw) return injectedShapeStateRaw;
-    // Unwrap state if stored under __present container
-    const maybeWrapped = (injectedShapeStateRaw as any).__present;
-    if (typeof maybeWrapped === 'string') {
-      try {
-        return JSON.parse(maybeWrapped);
-      } catch {
-        return undefined;
-      }
-    }
-    return maybeWrapped && typeof maybeWrapped === 'object' ? (maybeWrapped as any) : injectedShapeStateRaw;
-  })();
+  const injectedShapeState = (props as any)?.state as Record<string, unknown> | undefined;
   const updateShapeState = (props as any)?.updateState as
     | ((patch: Record<string, unknown> | ((prev: any) => any)) => void)
     | undefined;
@@ -429,23 +284,10 @@ export function DebateScorecard(props: DebateScorecardProps) {
   };
 
   const [ledger, setLedger] = useState<ClaimLedger>(
-    (() => {
-      const incoming = (injectedShapeState as any)?.debateLedger as ClaimLedger | undefined;
-      if (incoming && typeof incoming === 'object') {
-        try {
-          return JSON.parse(JSON.stringify(incoming));
-        } catch {
-          return defaultLedger;
-        }
-      }
-      return defaultLedger;
-    })(),
+    ((injectedShapeState as any)?.debateLedger as ClaimLedger) || defaultLedger,
   );
   const [activeTab, setActiveTab] = useState<'summary' | 'ledger'>(
-    (() => {
-      const t = (injectedShapeState as any)?.debateLedgerTab as 'summary' | 'ledger' | undefined;
-      return t === 'ledger' ? 'ledger' : 'summary';
-    })(),
+    ((injectedShapeState as any)?.debateLedgerTab as 'summary' | 'ledger') || 'summary',
   );
 
   // Sync inbound TLDraw shape state changes
@@ -479,20 +321,8 @@ export function DebateScorecard(props: DebateScorecardProps) {
     (updater: ClaimLedger | ((prev: ClaimLedger) => ClaimLedger)) => {
       setLedger((prev) => {
         const next = typeof updater === 'function' ? (updater as any)(prev) : updater;
-        // Write JSON-safe state to TLDraw shape state using function updater to merge
         try {
-          const safeNext = (() => {
-            try {
-              return JSON.parse(JSON.stringify(next));
-            } catch {
-              return next;
-            }
-          })();
-          updateShapeState?.((prevState: any) => {
-            const prev = prevState && typeof prevState === 'object' ? prevState : {};
-            const prevUnwrapped = (prev as any).__present && typeof (prev as any).__present === 'object' ? (prev as any).__present : prev;
-            return { __present: { ...prevUnwrapped, debateLedger: safeNext } };
-          });
+          updateShapeState?.({ debateLedger: next });
         } catch {}
         return next;
       });
@@ -504,11 +334,7 @@ export function DebateScorecard(props: DebateScorecardProps) {
     (tab: 'summary' | 'ledger') => {
       setActiveTab(tab);
       try {
-        updateShapeState?.((prevState: any) => {
-          const prev = prevState && typeof prevState === 'object' ? prevState : {};
-          const prevUnwrapped = (prev as any).__present && typeof (prev as any).__present === 'object' ? (prev as any).__present : prev;
-          return { __present: { ...prevUnwrapped, debateLedgerTab: tab } };
-        });
+        updateShapeState?.({ debateLedgerTab: tab });
       } catch {}
     },
     [updateShapeState],
@@ -518,7 +344,6 @@ export function DebateScorecard(props: DebateScorecardProps) {
     (patch: Record<string, unknown>) => {
       // Dev visibility for round-trip UI updates
       try {
-        // eslint-disable-next-line no-console
         console.log('[DebateScorecard] handleAIUpdate', typeof patch === 'object' ? JSON.stringify(patch) : String(patch));
       } catch {}
       // Normalize wrapper shapes like { update: {...} } or { updates: {...} }
@@ -684,7 +509,6 @@ export function DebateScorecard(props: DebateScorecardProps) {
           next.liveClaim = (patchData as any).liveClaim as string;
         }
         try {
-          // eslint-disable-next-line no-console
           console.log(
             '[DebateScorecard] state after patch',
             JSON.stringify(
@@ -880,7 +704,7 @@ export function DebateScorecard(props: DebateScorecardProps) {
         }
       } catch {}
     },
-    [setState],
+    [setState, persistLedger, persistTab, recomputeSummary, ledger.entries],
   );
 
   useComponentRegistration(
