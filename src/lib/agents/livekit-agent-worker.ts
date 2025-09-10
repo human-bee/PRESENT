@@ -1022,7 +1022,7 @@ Embrace your constraint. In your silence, let your creativity and helpfulness sh
                     s?.payload?.componentName === 'DebateScorecard',
                 )
                 ?.sort((a: any, b: any) => (b?.ts || 0) - (a?.ts || 0))?.[0];
-              const msgId = latest?.payload?.messageId || latest?.id;
+              const msgId = ((latest as any)?.payload?.messageId as string | undefined) || (latest as any)?.id;
               if (msgId) await debateJudgeManager.activateWithMessageId(msgId);
             }
           } catch {}

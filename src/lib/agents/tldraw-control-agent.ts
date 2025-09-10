@@ -41,8 +41,8 @@ export function createTldrawControlAgent(room: RoomLike) {
   const createNote = agentTool({
     name: 'canvas_create_note',
     description: 'Create a sticky note (TLDraw note).',
-    parameters: { type: 'object', properties: { text: { type: 'string' } }, required: [] } as const,
-    async execute(params: { text?: string }) {
+    parameters: undefined as unknown as undefined,
+    async execute(params: any) {
       const id = `note-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
       await publish(room, 'tool_call', {
         id,
@@ -59,16 +59,7 @@ export function createTldrawControlAgent(room: RoomLike) {
   const focus = agentTool({
     name: 'canvas_focus',
     description: 'Focus/zoom camera to all, selection, a component id, or a shape id.',
-    parameters: {
-      type: 'object',
-      properties: {
-        target: { type: 'string', enum: ['all', 'selected', 'component', 'shape'] },
-        componentId: { type: 'string' },
-        shapeId: { type: 'string' },
-        padding: { type: 'number' },
-      },
-      required: ['target'],
-    } as const,
+    parameters: undefined as unknown as undefined,
     async execute(params: any) {
       const id = `focus-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
       await publish(room, 'tool_call', {
@@ -86,8 +77,8 @@ export function createTldrawControlAgent(room: RoomLike) {
   const drawSmiley = agentTool({
     name: 'canvas_draw_smiley',
     description: 'Draw a simple smiley using geo shapes.',
-    parameters: { type: 'object', properties: { size: { type: 'number' } }, required: [] } as const,
-    async execute(params: { size?: number }) {
+    parameters: undefined as unknown as undefined,
+    async execute(params: any) {
       const id = `smiley-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
       await publish(room, 'tool_call', {
         id,

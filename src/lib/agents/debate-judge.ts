@@ -177,11 +177,8 @@ export class DebateJudgeManager {
       name: 'verify_claim',
       description:
         'Verify a factual claim. Return verdict, confidence (0-100), and short rationale.',
-      parameters: z.object({
-        claim: z.string().describe('The claim to verify'),
-        context: z.string().nullable().describe('Conversation context'),
-      }),
-      async execute({ claim, context }: { claim: string; context?: string | null }) {
+      parameters: undefined as unknown as undefined,
+      async execute({ claim, context }: any) {
         const debugMeta = { model: 'gpt-5-mini', tool: 'verify_claim', claim, context };
         try {
           const resp = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -268,33 +265,7 @@ export class DebateJudgeManager {
       name: 'score_update',
       description:
         'Update the debate scorecard metrics and timeline. Include optional latest factCheck.',
-      parameters: z.object({
-        p1Delta: z
-          .record(z.number())
-          .nullable()
-          .optional()
-          .describe('Partial numeric scores for participant 1'),
-        p2Delta: z
-          .record(z.number())
-          .nullable()
-          .optional()
-          .describe('Partial numeric scores for participant 2'),
-        liveClaim: z.string().nullable().optional(),
-        factCheck: z
-          .object({
-            claim: z.string().nullable().optional(),
-            verdict: z.enum(['Supported', 'Refuted', 'Partial', 'Unverifiable']),
-            confidence: z.number().min(0).max(100),
-            // Flatten sources to a simple, schema-safe text field to avoid URL validation issues
-            sourcesText: z.string().nullable().optional(),
-            contextNotes: z.array(z.string()).nullable().optional(),
-            timestamp: z.number().nullable().optional(),
-          })
-          .nullable()
-          .optional()
-          .describe('Fact check summary entry'),
-        timelineText: z.string().nullable().optional().describe('Short timeline entry'),
-      }),
+      parameters: undefined as unknown as undefined,
       async execute({ p1Delta, p2Delta, liveClaim, factCheck, timelineText }: any) {
         const patch: Record<string, unknown> = {};
         if (p1Delta) patch.p1 = p1Delta;
@@ -330,11 +301,8 @@ export class DebateJudgeManager {
     const deepResearch = agentTool({
       name: 'deep_research',
       description: 'Trigger deeper MCP research (e.g., Exa) for a claim or topic.',
-      parameters: z.object({
-        query: z.string().describe('Research query'),
-        maxResults: z.number().nullable().optional().describe('Max results to fetch'),
-      }),
-      async execute({ query, maxResults }: { query: string; maxResults?: number | null }) {
+      parameters: undefined as unknown as undefined,
+      async execute({ query, maxResults }: any) {
         // Dispatch a generic MCP call; ToolDispatcher handles mcp_* via window bridge
         const event = {
           id: `mcp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,

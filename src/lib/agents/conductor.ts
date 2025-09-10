@@ -1,5 +1,4 @@
 import { Agent,  run, tool } from '@openai/agents';
-import { renderComponent, updateComponent } from '../tools/conductor/components';
 import z from 'zod';
 
 
@@ -9,12 +8,12 @@ You are a conductor agent in our system. You're going to get natural language re
 
 
 <current_components_on_canvas>
-${getComponentsOnCanvas()}
+${''}
 </current_components_on_canvas>
 
 Here's the last 500 characters of the transcript of the conversation so far:
 <transcript_snippet>
-${getLatestTranscriptSnippet()}
+${''}
 </transcript_snippet>
 
 If you need to know the full transcript, you can use the getFullTranscript tool.
@@ -35,13 +34,11 @@ const getFullTranscript = () => {
     return "This is a full transcript of the conversation so far"
 }
 
-const constant_tools = [
-    renderComponent,
-    updateComponent,
+const constant_tools: any[] = [
     getFullTranscript,
 ]
 // follow this: https://openai.github.io/openai-agents-js/guides/mcp/
-const constant_MCPs = [
+const constant_MCPs: any[] = [
     // Linear
     // Youtube api
     // weather
@@ -50,10 +47,10 @@ const constant_MCPs = [
 ]
 
 // User generated MCP tools from mcp config
-const dynamic_MCPs= []
+const dynamic_MCPs: any[] = []
 
 
-const all_tools_for_conductor = [...constant_tools, ...constant_MCPs, ...dynamic_MCPs]
+const all_tools_for_conductor: any[] = [...constant_tools, ...constant_MCPs, ...dynamic_MCPs]
 
 export const conductor = new Agent({
   name: 'Conductor',
