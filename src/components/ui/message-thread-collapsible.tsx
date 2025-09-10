@@ -163,12 +163,32 @@ export const MessageThreadCollapsible = React.forwardRef<
         const rand = Math.random().toString(36).slice(2, 8);
         identity = `${base}-${rand}`;
       }
+      // Prefer configured token endpoint; fall back to /api/token
+      const tokenEndpoint =
+        process.env.NEXT_PUBLIC_LK_TOKEN_ENDPOINT || '/api/token';
+      // Build absolute URL to avoid basePath/iframe pitfalls
+      const base = typeof window !== 'undefined' ? window.location.origin : '';
+      const tokenUrl = new URL(tokenEndpoint, base);
+      tokenUrl.searchParams.set('roomName', livekitCtx.roomName);
+      tokenUrl.searchParams.set('identity', identity!);
+      tokenUrl.searchParams.set('name', user?.user_metadata?.full_name || 'Canvas User');
 
-      const url = `/api/token?roomName=${encodeURIComponent(livekitCtx.roomName)}&identity=${encodeURIComponent(identity!)}&name=${encodeURIComponent(user?.user_metadata?.full_name || 'Canvas User')}`;
-      const res = await fetch(url);
-      if (!res.ok) throw new Error(`Token fetch failed: ${res.status}`);
-      const data = await res.json();
-      const token = data.accessToken || data.token;
+      let data: any | null = null;
+      try {
+        const res = await fetch(tokenUrl.toString(), { cache: 'no-store' });
+        if (!res.ok) throw new Error(`Token fetch failed: ${res.status}`);
+        data = await res.json();
+      } catch (err) {
+        console.error('[LiveKit] Token fetch error', {
+          endpoint: tokenUrl.toString(),
+          roomName: livekitCtx.roomName,
+          identity,
+          error: err,
+        });
+        throw err;
+      }
+
+      const token = data?.accessToken || data?.token;
       if (!token) throw new Error('No token received');
 
       await room.connect(wsUrl, token);
