@@ -29,6 +29,7 @@ import { ToolDispatcher } from '@/components/tool-dispatcher';
 import { SystemRegistrySync } from '@/components/ui/system-registry-sync';
 import { initializeMCPBridge } from '@/lib/mcp-bridge';
 import { AgentCapabilitiesBridge } from '@/components/ui/agent-capabilities-bridge';
+import { LiveKitStateBridge } from '@/lib/livekit/livekit-state-bridge';
 // TODO: Investigate best way to "go back" to CanvasSpace once we have a better way to handle adding/updating/managing the state of multiple components on the canvas simultaneously
 
 // Suppress development warnings for cleaner console
@@ -265,6 +266,21 @@ export default function Canvas() {
       setRoomState((prev) => ({ ...prev, roomName }));
     }
   }, [roomName]);
+
+  // Bridge SystemRegistry state <-> LiveKit data channel so the agent can see canvas components
+  useEffect(() => {
+    if (!room) return;
+    try {
+      // Avoid double-start in dev/StrictMode by using a per-room guard
+      const key = `present:state-bridge:${room.name || 'default'}`;
+      const w = window as any;
+      if (typeof window !== 'undefined' && w[key]) return;
+      if (typeof window !== 'undefined') w[key] = true;
+
+      const bridge = new LiveKitStateBridge(room);
+      bridge.start();
+    } catch {}
+  }, [room]);
 
   // Show loading state while checking authentication
   if (loading || !roomName) {

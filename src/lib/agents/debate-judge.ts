@@ -13,9 +13,16 @@ import z from 'zod';
 
 export function isStartDebate(text: string): boolean {
   const lower = (text || '').toLowerCase();
+  // Only treat as a start request when an explicit start/creation verb is present.
+  if (!/\bdebate\b/.test(lower)) return false;
   return (
-    /(^|\b)(start|begin|let's|lets|launch)\b.*\bdebate\b/.test(lower) ||
-    /\bdebate\b/.test(lower)
+    /(^|\b)(start|begin|launch|create|open|setup|set\s*up|initiate|kick\s*off)\b.*\bdebate\b/.test(
+      lower,
+    ) ||
+    /\bnew\b.*\bdebate\b/.test(lower) ||
+    /\bdebate\b.*\b(start|begin|launch|create|open|setup|set\s*up|initiate|kick\s*off)\b/.test(
+      lower,
+    )
   );
 }
 

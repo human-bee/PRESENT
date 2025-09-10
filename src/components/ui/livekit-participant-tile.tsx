@@ -39,7 +39,7 @@ import {
   AudioTrack,
   useRoomContext,
 } from '@livekit/components-react';
-import { Track } from 'livekit-client';
+import { Track, RoomEvent } from 'livekit-client';
 import { useParticipantTileAgent } from '@/hooks/use-participant-tile-agent';
 import * as ReactDOM from 'react-dom';
 
@@ -465,6 +465,72 @@ function SingleParticipantTile({
 
   // Participant selection list (defaults to local)
   const room = useRoomContext();
+
+  // Auto-select last used microphone/camera for the local participant
+  React.useEffect(() => {
+    if (!isLocal || !room) return;
+    try {
+      type DeviceSwitchRoom = {
+        switchActiveDevice?: (
+          kind: 'audioinput' | 'videoinput',
+          deviceId: string,
+        ) => Promise<void>;
+        localParticipant?: {
+          setMicrophoneEnabled?: (enabled: boolean) => Promise<void>;
+          setCameraEnabled?: (enabled: boolean) => Promise<void>;
+        };
+        state?: string;
+      };
+      const deviceRoom = room as unknown as DeviceSwitchRoom;
+      const restore = async () => {
+        try {
+          const isConnected = (deviceRoom.state as unknown as string) === 'connected';
+          if (!isConnected) return;
+          const list = await navigator.mediaDevices?.enumerateDevices?.();
+          const audioInputs = (list || []).filter((d) => d.kind === 'audioinput');
+          const videoInputs = (list || []).filter((d) => d.kind === 'videoinput');
+          const lastMicId = typeof window !== 'undefined'
+            ? window.localStorage.getItem('livekit:lastMicId')
+            : null;
+          const lastCamId = typeof window !== 'undefined'
+            ? window.localStorage.getItem('livekit:lastCamId')
+            : null;
+          if (lastMicId && audioInputs.some((d) => d.deviceId === lastMicId)) {
+            await deviceRoom.switchActiveDevice?.('audioinput', lastMicId);
+            await deviceRoom.localParticipant?.setMicrophoneEnabled?.(true);
+          }
+          if (lastCamId && videoInputs.some((d) => d.deviceId === lastCamId)) {
+            await deviceRoom.switchActiveDevice?.('videoinput', lastCamId);
+            await deviceRoom.localParticipant?.setCameraEnabled?.(true);
+          }
+        } catch { }
+      };
+      // Slight delay to ensure LiveKit finished initializing local tracks
+      const t = window.setTimeout(restore, 200);
+      return () => window.clearTimeout(t);
+    } catch { }
+  }, [isLocal, room]);
+
+  // Persist active device changes reported by LiveKit
+  React.useEffect(() => {
+    if (!isLocal || !room) return;
+    try {
+      const onActiveDeviceChanged = (kind: 'audioinput' | 'videoinput', deviceId?: string) => {
+        try {
+          if (!deviceId) return;
+          if (kind === 'audioinput') window.localStorage.setItem('livekit:lastMicId', deviceId);
+          if (kind === 'videoinput') window.localStorage.setItem('livekit:lastCamId', deviceId);
+        } catch { }
+      };
+      // Types from livekit-client
+      // @ts-expect-error runtime event name ensured
+      room.on(RoomEvent.ActiveDeviceChanged, onActiveDeviceChanged);
+      return () => {
+        // @ts-expect-error runtime event name ensured
+        room.off(RoomEvent.ActiveDeviceChanged, onActiveDeviceChanged);
+      };
+    } catch { }
+  }, [isLocal, room]);
   const allParticipants = React.useMemo(() => {
     const arr = [] as { id: string; name: string }[];
     if (room?.localParticipant)
@@ -796,6 +862,9 @@ function SingleParticipantTile({
                           };
                           const deviceRoom = room as unknown as DeviceSwitchRoom;
                           await deviceRoom.switchActiveDevice?.('audioinput', e.target.value);
+                          try {
+                            window.localStorage.setItem('livekit:lastMicId', e.target.value);
+                          } catch { }
                           await deviceRoom.localParticipant?.setMicrophoneEnabled?.(true);
                         } catch { }
                       }}
@@ -825,6 +894,9 @@ function SingleParticipantTile({
                           };
                           const deviceRoom = room as unknown as DeviceSwitchRoom;
                           await deviceRoom.switchActiveDevice?.('videoinput', e.target.value);
+                          try {
+                            window.localStorage.setItem('livekit:lastCamId', e.target.value);
+                          } catch { }
                           await deviceRoom.localParticipant?.setCameraEnabled?.(true);
                         } catch { }
                       }}

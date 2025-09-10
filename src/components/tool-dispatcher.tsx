@@ -63,6 +63,15 @@ export function ToolDispatcher({
         const dispatchTL = (name: string, detail?: any) => {
           try {
             window.dispatchEvent(new CustomEvent(name, { detail }));
+            try {
+              // Emit a lightweight editor trace so we can see canvas commands in Transcript
+              bus.send('editor_action', {
+                type: 'canvas_command',
+                command: name,
+                detail,
+                timestamp: Date.now(),
+              });
+            } catch {}
             return { status: 'SUCCESS', message: `${name} dispatched` } as const;
           } catch (e) {
             return { status: 'ERROR', message: e instanceof Error ? e.message : String(e) } as const;
@@ -103,6 +112,36 @@ export function ToolDispatcher({
               console.warn('[ToolDispatcher] youtube_search MCP failed', e);
             }
             return { status: 'IGNORED', message: 'No YouTube result' } as const;
+          }
+          case 'list_components': {
+            // Return the list of currently registered components (optionally scoped by contextKey)
+            try {
+              const components = ComponentRegistry.list(contextKey);
+              try {
+                bus.send('tool_result', {
+                  type: 'tool_result',
+                  id: call.id,
+                  tool,
+                  result: { status: 'SUCCESS', components },
+                  timestamp: Date.now(),
+                  source: 'dispatcher',
+                });
+              } catch {}
+              return { status: 'SUCCESS', components } as any;
+            } catch (e) {
+              const message = e instanceof Error ? e.message : String(e);
+              try {
+                bus.send('tool_error', {
+                  type: 'tool_error',
+                  id: call.id,
+                  tool,
+                  error: message,
+                  timestamp: Date.now(),
+                  source: 'dispatcher',
+                });
+              } catch {}
+              return { status: 'ERROR', message } as any;
+            }
           }
           case 'canvas_focus':
             return dispatchTL('tldraw:canvas_focus', params);

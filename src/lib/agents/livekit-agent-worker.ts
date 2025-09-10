@@ -594,8 +594,39 @@ Embrace your constraint. In your silence, let your creativity and helpfulness sh
 
     // Enhanced decision handling with parallel tool calls
     const handleEnhancedDecision = async (transcript: string, participantId: string) => {
-      // Quick path: start a debate if requested
+      // Quick paths for debate interactions
       const lower = transcript.toLowerCase();
+
+      // If a debate scorecard already exists and user asks to zoom/focus it, focus the existing one
+      if (
+        debateJudgeManager.isActive() &&
+        /\b(zoom|focus|center|show)\b/.test(lower) &&
+        /\bdebate\b/.test(lower)
+      ) {
+        const componentId = debateJudgeManager.getMessageId();
+        if (componentId) {
+          const focusEvent = {
+            id: `focus-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            roomId: job.room.name || 'unknown',
+            type: 'tool_call' as const,
+            payload: {
+              tool: 'canvas_focus',
+              params: { target: 'component', componentId, padding: 96 },
+              context: { source: 'voice-enhanced', timestamp: Date.now(), intent: 'canvas_control' },
+            },
+            timestamp: Date.now(),
+            source: 'voice' as const,
+          };
+          await job.room.localParticipant?.publishData(
+            new TextEncoder().encode(JSON.stringify(focusEvent)),
+            { reliable: true, topic: 'tool_call' },
+          );
+          console.log(`🎯 [Agent] Focused existing DebateScorecard: ${componentId}`);
+          return true;
+        }
+      }
+
+      // Start a debate only on explicit create/start intent
       if (isStartDebate(lower) && !debateJudgeManager.isActive()) {
         const participants = Array.from(job.room.remoteParticipants.values());
         const p1 = participants[0]?.identity || 'Debater A';
@@ -968,7 +999,12 @@ Embrace your constraint. In your silence, let your creativity and helpfulness sh
           try {
             if (!debateJudgeManager.isActive()) {
               const latest = stateSnapshot?.snapshot
-                ?.filter((s: any) => s?.payload?.componentType === 'DebateScorecard')
+                // Accept either legacy componentType or current componentName
+                ?.filter(
+                  (s: any) =>
+                    s?.payload?.componentType === 'DebateScorecard' ||
+                    s?.payload?.componentName === 'DebateScorecard',
+                )
                 ?.sort((a: any, b: any) => (b?.ts || 0) - (a?.ts || 0))?.[0];
               const msgId = latest?.payload?.messageId || latest?.id;
               if (msgId) await debateJudgeManager.activateWithMessageId(msgId);

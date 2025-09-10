@@ -283,6 +283,11 @@ export function ResearchPanel({
   className,
   ...props
 }: ResearchPanelProps & React.HTMLAttributes<HTMLDivElement>) {
+  // Strip custom shape injection props so they don't leak onto the DOM
+  const domProps = { ...(props as any) } as Record<string, unknown>;
+  delete (domProps as any).updateState;
+  delete (domProps as any).state;
+  delete (domProps as any).__custom_message_id;
   // Local component state
   const [state, setState] = useState<ResearchPanelState>({
     bookmarkedResults: [],
@@ -475,7 +480,7 @@ export function ResearchPanel({
   const availableSourceTypes = [...new Set(results.map((r) => r.source.type))];
 
   return (
-    <div className={cn('w-full max-w-4xl mx-auto', className)} {...props}>
+    <div className={cn('w-full max-w-4xl mx-auto', className)} {...(domProps as any)}>
       {/* Header */}
       <div className="mb-6">
         <div className="flex items-center justify-between mb-4">

@@ -2,7 +2,8 @@
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-import { Tldraw, TLUiOverrides, TLComponents, Editor } from 'tldraw';
+import { Tldraw, TLUiOverrides, TLComponents, Editor, createShapeId } from 'tldraw';
+import { nanoid } from 'nanoid';
 import { CustomMainMenu, CustomToolbarWithTranscript } from './tldraw-with-persistence';
 import { ReactNode, useCallback, useContext, useEffect, useMemo, useState, useRef } from 'react';
 import { useSyncDemo } from '@tldraw/sync';
@@ -10,6 +11,7 @@ import { CanvasLiveKitContext } from './livekit-room-connector';
 import { ComponentStoreContext } from './tldraw-canvas';
 import type { customShapeUtil, customShape } from './tldraw-canvas';
 import { useRoomContext } from '@livekit/components-react';
+import { createLiveKitBus } from '@/lib/livekit/livekit-bus';
 import { RoomEvent } from 'livekit-client';
 import TldrawSnapshotBroadcaster from '@/components/TldrawSnapshotBroadcaster';
 import TldrawSnapshotReceiver from '@/components/TldrawSnapshotReceiver';
@@ -102,6 +104,7 @@ export function TldrawWithCollaboration({
 
   // Detect role from LiveKit token metadata
   const room = useRoomContext();
+  const bus = useMemo(() => createLiveKitBus(room), [room]);
   const [role, setRole] = useState<string | null>(null);
 
   useEffect(() => {
@@ -361,24 +364,24 @@ export function TldrawWithCollaboration({
           const viewport = mountedEditor.getViewportPageBounds();
           const x = viewport ? viewport.midX : 0;
           const y = viewport ? viewport.midY : 0;
-          // Try to create a text shape; fallback to geo if needed
+          // Use a safe geo rectangle for now; TLDraw text schema differs across versions
+          const noteId = createShapeId(`note-${nanoid()}`);
+          mountedEditor.createShape({
+            id: noteId,
+            type: 'geo' as any,
+            x: x - 100,
+            y: y - 50,
+            props: { w: 240, h: 120, geo: 'rectangle' },
+          } as any);
+          // Emit an editor_action so we can correlate in logs
           try {
-            mountedEditor.createShape({
-              id: (mountedEditor as any).createShapeId?.('note') ?? undefined,
-              type: 'text' as any,
-              x: x - 100,
-              y: y - 50,
-              props: { text, autoSize: true },
-            } as any);
-          } catch {
-            mountedEditor.createShape({
-              id: (mountedEditor as any).createShapeId?.('note') ?? undefined,
-              type: 'geo' as any,
-              x: x - 100,
-              y: y - 50,
-              props: { text, w: 200, h: 100, geo: 'rectangle' },
-            } as any);
-          }
+            bus.send('editor_action', {
+              type: 'create_note',
+              shapeId: noteId,
+              text,
+              timestamp: Date.now(),
+            });
+          } catch {}
         } catch (err) {
           console.warn('[CanvasControl] create_note error', err);
         }
@@ -493,16 +496,16 @@ export function TldrawWithCollaboration({
           const detail = (e as CustomEvent).detail || {};
           const w = typeof detail.w === 'number' ? detail.w : 300;
           const h = typeof detail.h === 'number' ? detail.h : 200;
-          const name = typeof detail.name === 'string' ? detail.name : 'Rectangle';
+          // TLDraw Geo shapes don't accept arbitrary name fields; omit
           const viewport = mountedEditor.getViewportPageBounds();
           const x = typeof detail.x === 'number' ? detail.x : viewport ? viewport.midX - w / 2 : 0;
           const y = typeof detail.y === 'number' ? detail.y : viewport ? viewport.midY - h / 2 : 0;
           mountedEditor.createShape({
-            id: (mountedEditor as any).createShapeId?.('geo') ?? undefined,
+            id: createShapeId(`rect-${nanoid()}`),
             type: 'geo' as any,
             x,
             y,
-            props: { w, h, name, geo: 'rectangle' },
+            props: { w, h, geo: 'rectangle' },
           } as any);
         } catch (err) {
           console.warn('[CanvasControl] create_rectangle error', err);
@@ -514,16 +517,16 @@ export function TldrawWithCollaboration({
           const detail = (e as CustomEvent).detail || {};
           const w = typeof detail.w === 'number' ? detail.w : 280;
           const h = typeof detail.h === 'number' ? detail.h : 180;
-          const name = typeof detail.name === 'string' ? detail.name : 'Ellipse';
+          // TLDraw Geo shapes don't accept arbitrary name fields; omit
           const viewport = mountedEditor.getViewportPageBounds();
           const x = typeof detail.x === 'number' ? detail.x : viewport ? viewport.midX - w / 2 : 0;
           const y = typeof detail.y === 'number' ? detail.y : viewport ? viewport.midY - h / 2 : 0;
           mountedEditor.createShape({
-            id: (mountedEditor as any).createShapeId?.('geo') ?? undefined,
+            id: createShapeId(`ellipse-${nanoid()}`),
             type: 'geo' as any,
             x,
             y,
-            props: { w, h, name, geo: 'ellipse' },
+            props: { w, h, geo: 'ellipse' },
           } as any);
         } catch (err) {
           console.warn('[CanvasControl] create_ellipse error', err);
@@ -608,12 +611,13 @@ export function TldrawWithCollaboration({
           // Face
           const faceW = size;
           const faceH = size;
+          const faceId = createShapeId(`smiley-face-${nanoid()}`);
           mountedEditor.createShape({
-            id: (mountedEditor as any).createShapeId?.('smiley-face') ?? undefined,
+            id: createShapeId(`smiley-face-${nanoid()}`),
             type: 'geo' as any,
             x: cx - faceW / 2,
             y: cy - faceH / 2,
-            props: { w: faceW, h: faceH, geo: 'ellipse', name: 'Smiley Face' },
+            props: { w: faceW, h: faceH, geo: 'ellipse' },
           } as any);
 
           // Eyes
@@ -622,33 +626,47 @@ export function TldrawWithCollaboration({
           const eyeOffsetX = size * 0.22;
           const eyeOffsetY = size * 0.18;
           // Left eye
+          const lEyeId = createShapeId(`smiley-eye-l-${nanoid()}`);
           mountedEditor.createShape({
-            id: (mountedEditor as any).createShapeId?.('smiley-eye-l') ?? undefined,
+            id: createShapeId(`smiley-eye-l-${nanoid()}`),
             type: 'geo' as any,
             x: cx - eyeOffsetX - eyeW / 2,
             y: cy - eyeOffsetY - eyeH / 2,
-            props: { w: eyeW, h: eyeH, geo: 'ellipse', name: 'Eye L' },
+            props: { w: eyeW, h: eyeH, geo: 'ellipse' },
           } as any);
           // Right eye
+          const rEyeId = createShapeId(`smiley-eye-r-${nanoid()}`);
           mountedEditor.createShape({
-            id: (mountedEditor as any).createShapeId?.('smiley-eye-r') ?? undefined,
+            id: createShapeId(`smiley-eye-r-${nanoid()}`),
             type: 'geo' as any,
             x: cx + eyeOffsetX - eyeW / 2,
             y: cy - eyeOffsetY - eyeH / 2,
-            props: { w: eyeW, h: eyeH, geo: 'ellipse', name: 'Eye R' },
+            props: { w: eyeW, h: eyeH, geo: 'ellipse' },
           } as any);
 
           // Mouth (simple ellipse as placeholder)
           const mouthW = size * 0.5;
           const mouthH = size * 0.22;
           const mouthY = cy + size * 0.15;
+          const mouthId = createShapeId(`smiley-mouth-${nanoid()}`);
           mountedEditor.createShape({
-            id: (mountedEditor as any).createShapeId?.('smiley-mouth') ?? undefined,
+            id: createShapeId(`smiley-mouth-${nanoid()}`),
             type: 'geo' as any,
             x: cx - mouthW / 2,
             y: mouthY - mouthH / 2,
-            props: { w: mouthW, h: mouthH, geo: 'ellipse', name: 'Mouth' },
+            props: { w: mouthW, h: mouthH, geo: 'ellipse' },
           } as any);
+          try {
+            bus.send('editor_action', {
+              type: 'draw_smiley',
+              faceId,
+              lEyeId,
+              rEyeId,
+              mouthId,
+              size,
+              timestamp: Date.now(),
+            });
+          } catch {}
         } catch (err) {
           console.warn('[CanvasControl] draw_smiley error', err);
         }
