@@ -941,8 +941,9 @@ Embrace your constraint. In your silence, let your creativity and helpfulness sh
 
     // Track participant rotation for better attribution (now using time-based rotation)
 
-    // Track processed transcriptions to avoid duplicates
-    const processedTranscriptions = new Set<string>();
+    // Track recent transcriptions to avoid duplicates within a window
+    const lastSeenTranscripts = new Map<string, number>();
+    const SEEN_WINDOW_MS = 8000; // 8s window
 
     // Subscribe to transcription events from all participants
     session.on('input_speech_transcription_completed', async (evt: { transcript: string }) => {
@@ -966,15 +967,16 @@ Embrace your constraint. In your silence, let your creativity and helpfulness sh
 
       console.log(`🗣️ [Agent] ${speakerId}: "${evt.transcript}"`);
 
-      // Create a unique key to check for duplicates
-      const transcriptionKey = `${evt.transcript}-${Math.floor(Date.now() / 1000)}`;
-
-      // Only process if this transcription hasn't been processed recently
-      if (!processedTranscriptions.has(transcriptionKey)) {
-        processedTranscriptions.add(transcriptionKey);
-
-        // Clean up old entries after 5 seconds
-        setTimeout(() => processedTranscriptions.delete(transcriptionKey), 5000);
+      // Deduplicate by normalized text within a short window
+      const norm = String(evt.transcript || '').trim().toLowerCase();
+      const now = Date.now();
+      const last = lastSeenTranscripts.get(norm) || 0;
+      if (now - last > SEEN_WINDOW_MS) {
+        lastSeenTranscripts.set(norm, now);
+        // Periodic cleanup
+        for (const [k, t] of lastSeenTranscripts) {
+          if (now - t > SEEN_WINDOW_MS * 2) lastSeenTranscripts.delete(k);
+        }
 
         // Send transcription to frontend for display
         const transcriptionData = JSON.stringify({

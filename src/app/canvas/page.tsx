@@ -7,8 +7,9 @@
 
 'use client';
 
-// Force dynamic rendering to prevent build errors
-export const dynamic = 'force-dynamic';
+// Route segment config is server-only; avoid exporting from a client component to keep TSX parse simple.
+// If you need dynamic rendering, configure it in a server wrapper for this page or via middleware.
+// export const dynamic = 'force-dynamic';
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { CanvasSpace } from '@/components/ui/canvas-space';
@@ -30,6 +31,7 @@ import { SystemRegistrySync } from '@/components/ui/system-registry-sync';
 import { initializeMCPBridge } from '@/lib/mcp-bridge';
 import { AgentCapabilitiesBridge } from '@/components/ui/agent-capabilities-bridge';
 import { LiveKitStateBridge } from '@/lib/livekit/livekit-state-bridge';
+import LiveKitDebugConsole from '@/components/LiveKitDebugConsole';
 // TODO: Investigate best way to "go back" to CanvasSpace once we have a better way to handle adding/updating/managing the state of multiple components on the canvas simultaneously
 
 // Suppress development warnings for cleaner console
@@ -200,6 +202,9 @@ export default function Canvas() {
   const contextKey = 'canvas';
   // Feature flag to gate MCP in canvas to isolate invalid external tool names if needed
   const enableMcp = process.env.NEXT_PUBLIC_ENABLE_MCP_IN_CANVAS === 'true';
+  // Local flags for logs / debug console
+  const enableDispatcherLogs = process.env.NEXT_PUBLIC_TOOL_DISPATCHER_LOGS !== 'false';
+  const enableDebugConsole = process.env.NODE_ENV !== 'production';
 
   // Create LiveKit room instance for the canvas
   const [room] = useState(() => {
@@ -311,11 +316,10 @@ export default function Canvas() {
 
           {/* LiveKit Room Context Provider - wraps everything! */}
           <RoomContext.Provider value={room}>
+            {/* Dev traces for data-channel (decision/tool_call/tool_result/editor_action) */}
+            <LiveKitDebugConsole enabled={enableDebugConsole} />
             {/* Tool Dispatcher - handles voice agent tool calls */}
-            <ToolDispatcher
-              contextKey={contextKey}
-              enableLogging={process.env.NEXT_PUBLIC_TOOL_DISPATCHER_LOGS === 'true'}
-            >
+            <ToolDispatcher contextKey={contextKey} enableLogging={enableDispatcherLogs}>
               {/* Respond to agent capability queries */}
               <AgentCapabilitiesBridge />
               {/* Canvas LiveKit Context Provider - provides connection state to all canvas components */}
@@ -351,11 +355,10 @@ export default function Canvas() {
 
           {/* LiveKit Room Context Provider - wraps everything! */}
           <RoomContext.Provider value={room}>
+            {/* Dev traces for data-channel (decision/tool_call/tool_result/editor_action) */}
+            <LiveKitDebugConsole enabled={enableDebugConsole} />
             {/* Tool Dispatcher - handles voice agent tool calls */}
-            <ToolDispatcher
-              contextKey={contextKey}
-              enableLogging={process.env.NEXT_PUBLIC_TOOL_DISPATCHER_LOGS === 'true'}
-            >
+            <ToolDispatcher contextKey={contextKey} enableLogging={enableDispatcherLogs}>
               {/* Respond to agent capability queries */}
               <AgentCapabilitiesBridge />
               {/* Canvas LiveKit Context Provider - provides connection state to all canvas components */}
