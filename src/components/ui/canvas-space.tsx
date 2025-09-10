@@ -152,8 +152,10 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
     } else {
       // Create new toolbox shape
       const viewport = editor.getViewportPageBounds();
-      const x = viewport ? viewport.midX - 170 : 100;
-      const y = viewport ? viewport.midY - 160 : 100;
+      const TOOLBOX_W = 56;
+      const TOOLBOX_H = 560; // taller vertical column
+      const x = viewport ? viewport.minX + 24 : 24; // near left edge
+      const y = viewport ? viewport.midY - TOOLBOX_H / 2 : 24; // vertically centered
 
       editor.createShape({
         id: createShapeId(`toolbox-${nanoid()}`),
@@ -161,8 +163,8 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
         x,
         y,
         props: {
-          w: 340,
-          h: 320,
+          w: TOOLBOX_W,
+          h: TOOLBOX_H,
           name: 'Component Toolbox',
         },
       });

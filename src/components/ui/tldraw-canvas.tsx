@@ -576,7 +576,7 @@ function ToolboxShapeComponent({ shape }: { shape: customShape }) {
         borderRadius: '12px',
         background: 'var(--color-panel)',
         boxShadow: '0 2px 16px 0 rgba(0,0,0,0.10)',
-        overflow: 'hidden',
+        overflow: 'visible',
         display: 'flex',
         flexDirection: 'column',
       }}
@@ -597,8 +597,8 @@ export class ToolboxShapeUtil extends BaseBoxShapeUtil<customShape> {
 
   override getDefaultProps(): customShape['props'] {
     return {
-      w: 340,
-      h: 320,
+      w: 56,
+      h: 560,
       name: 'Component Toolbox',
     };
   }
