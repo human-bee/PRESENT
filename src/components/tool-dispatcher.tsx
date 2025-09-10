@@ -217,6 +217,10 @@ export function ToolDispatcher({
             return dispatchTL('tldraw:deleteShape', params);
           case 'canvas_rename_note':
             return dispatchTL('tldraw:renameNote', params);
+          case 'canvas_connect_shapes':
+            return dispatchTL('tldraw:connectShapes', params);
+          case 'canvas_label_arrow':
+            return dispatchTL('tldraw:labelArrow', params);
           default:
             break;
         }
