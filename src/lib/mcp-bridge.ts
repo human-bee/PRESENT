@@ -7,6 +7,7 @@
 
 import { usecustomClient } from '@custom-ai/react';
 import { useCallback } from 'react';
+import { createLogger } from '@/lib/utils';
 
 // Global MCP tool registry populated by the Tool Dispatcher
 declare global {
@@ -80,7 +81,10 @@ export function initializeMCPBridge() {
     });
   };
 
-  console.log('[MCP Bridge] Initialized - components can now call MCP tools directly');
+  try {
+    const logger = createLogger('MCP');
+    logger.once('bridge_init', '[MCP Bridge] Initialized - components can now call MCP tools directly');
+  } catch {}
 }
 
 /** Expose a readiness promise so dispatchers can gate on MCP being available */
@@ -107,7 +111,10 @@ export function markMcpReady() {
   if (resolveReady) {
     resolveReady();
     resolveReady = null;
-    console.log('[MCP Bridge] Ready');
+    try {
+      const logger = createLogger('MCP');
+      logger.info('[MCP Bridge] Ready');
+    } catch {}
   }
 }
 
@@ -122,8 +129,8 @@ export function useMCPTool() {
     async (toolName: string, params: any) => {
       // Ensure we have the prefix
       const fullToolName = toolName.startsWith('mcp_') ? toolName : `mcp_${toolName}`;
-
-      console.log(`[useMCPTool] Calling ${fullToolName} with params:`, params);
+      const logger = createLogger('MCP');
+      logger.debug(`[useMCPTool] Calling ${fullToolName} with params:`, params);
 
       try {
         // Try direct window call first
@@ -141,7 +148,8 @@ export function useMCPTool() {
 
         throw new Error('No MCP bridge available');
       } catch (error) {
-        console.error(`[useMCPTool] Error calling ${fullToolName}:`, error);
+        const logger = createLogger('MCP');
+        logger.error(`[useMCPTool] Error calling ${fullToolName}:`, error);
         throw error;
       }
     },
@@ -158,7 +166,10 @@ export function useMCPTool() {
 export function registerMCPTools(tools: Record<string, any>) {
   if (typeof window === 'undefined') return;
   window.__custom_mcp_tools = tools;
-  console.log('[MCP Bridge] Registered MCP tools:', Object.keys(tools));
+  try {
+    const logger = createLogger('MCP');
+    logger.info('[MCP Bridge] Registered MCP tools:', Object.keys(tools));
+  } catch {}
   // Mark ready once tools registered
   try {
     markMcpReady();

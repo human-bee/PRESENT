@@ -15,6 +15,7 @@ import { createLiveKitBus } from '@/lib/livekit/livekit-bus';
 import { RoomEvent } from 'livekit-client';
 import TldrawSnapshotBroadcaster from '@/components/TldrawSnapshotBroadcaster';
 import TldrawSnapshotReceiver from '@/components/TldrawSnapshotReceiver';
+import { createLogger } from '@/lib/utils';
 
 interface TldrawWithCollaborationProps {
   onMount?: (editor: Editor) => void;
@@ -174,11 +175,11 @@ export function TldrawWithCollaboration({
     host: safeHost,
   } as any);
 
-  // Log sync host once per session in dev
+  // Log sync host once per session in dev; gated by logger level
   try {
     const g: any = globalThis as any;
     if (process.env.NODE_ENV === 'development' && !g.__LOGGED_TLDRAW_SYNC_HOST__) {
-      console.warn('[Tldraw] Using sync host:', safeHost);
+      createLogger('Tldraw').info('Using sync host:', safeHost);
       g.__LOGGED_TLDRAW_SYNC_HOST__ = true;
     }
   } catch {}

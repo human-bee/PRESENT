@@ -1,6 +1,7 @@
 export type { DataMessage } from '@livekit/components-react';
 
 import { Room } from 'livekit-client';
+import { createLogger } from '@/lib/utils';
 
 /**
  * Lightweight event bus on top of LiveKit data-channels. Each message is JSON
@@ -12,6 +13,9 @@ import { Room } from 'livekit-client';
  *   bus.on('transcription', (msg) => { ... });
  */
 export function createLiveKitBus(room: Room | null | undefined) {
+  const logger = createLogger('LiveKitBus');
+  let lastWarnedDisconnectedAt = 0;
+  const DISCONNECT_WARN_THROTTLE_MS = 5000;
   return {
     /** Publish a JSON-serialisable payload under the given topic */
     send(topic: string, payload: unknown) {
@@ -30,10 +34,16 @@ export function createLiveKitBus(room: Room | null | undefined) {
       //    teardown.
       //    Ref: https://docs.livekit.io/client-sdk-js/interfaces/Room.html#state
       if (room.state !== 'connected') {
-        console.warn('[LiveKitBus] Skipping publishData – room not connected.', {
-          topic,
-          currentState: room.state,
-        });
+        const now = Date.now();
+        if (now - lastWarnedDisconnectedAt > DISCONNECT_WARN_THROTTLE_MS) {
+          lastWarnedDisconnectedAt = now;
+          logger.info('Skipping publishData – room not connected.', {
+            topic,
+            currentState: room.state,
+          });
+        } else {
+          logger.debug('Skipping publishData (throttled) – room not connected.', topic);
+        }
         return;
       }
 
@@ -43,7 +53,7 @@ export function createLiveKitBus(room: Room | null | undefined) {
           topic,
         });
       } catch (err) {
-        console.error('[LiveKitBus] Failed to send', topic, err);
+        logger.error('Failed to send', topic, err);
       }
     },
 
@@ -61,7 +71,7 @@ export function createLiveKitBus(room: Room | null | undefined) {
             const msg = JSON.parse(new TextDecoder().decode(data));
             handler(msg);
           } catch (err) {
-            console.error('[LiveKitBus] Failed to decode', err);
+            logger.warn('Failed to decode data message', err);
           }
         }
       };

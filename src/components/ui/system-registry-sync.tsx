@@ -84,7 +84,8 @@ export function SystemRegistrySync() {
         };
         const sig = JSON.stringify(summary);
         if (sig !== lastSig) {
-          logger.log('📊 System Registry State:', summary);
+          // Only print this when the namespace is enabled or level allows info
+          logger.info('📊 System Registry State:', summary);
           lastSig = sig;
         }
       };
