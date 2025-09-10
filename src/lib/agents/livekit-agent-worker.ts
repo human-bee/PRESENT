@@ -29,6 +29,7 @@ import { DecisionEngine, DecisionEngineConfig } from '../decision-engine';
 import { DebateJudgeManager, isStartDebate } from './debate-judge';
 import type { SystemCapabilities } from './capabilities';
 import { defaultCustomComponents } from './capabilities';
+import { runTldrawControlAgent } from './tldraw-control-agent';
 
 console.log('🚀 Starting custom Voice Agent Worker...');
 console.log('🔧 Environment Check:');
@@ -893,6 +894,19 @@ Embrace your constraint. In your silence, let your creativity and helpfulness sh
       );
 
       if (decision.should_send) {
+        // Route TLDraw-like intents to TLDraw sub-agent first for better control & observability
+        const tldrawLike = /\b(canvas|tldraw|note|sticky|zoom|focus|smiley|draw|shape|shapes|arrow|connect)\b/i.test(
+          originalText || decision.summary || '',
+        );
+        if (tldrawLike) {
+          try {
+            await runTldrawControlAgent(job.room as any, originalText);
+            console.log('🧩 [Agent] Routed to TLDraw sub-agent');
+            return; // handled by sub-agent via tool_call events
+          } catch (e) {
+            console.warn('[Agent] TLDraw sub-agent failed, falling back', e);
+          }
+        }
         // Try enhanced decision handling first
         const enhancedHandled = await handleEnhancedDecision(originalText, participantId);
 

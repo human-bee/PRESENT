@@ -32,6 +32,7 @@ import { initializeMCPBridge } from '@/lib/mcp-bridge';
 import { AgentCapabilitiesBridge } from '@/components/ui/agent-capabilities-bridge';
 import { LiveKitStateBridge } from '@/lib/livekit/livekit-state-bridge';
 import LiveKitDebugConsole from '@/components/LiveKitDebugConsole';
+import DevEventFeed from '@/components/ui/dev-event-feed';
 // TODO: Investigate best way to "go back" to CanvasSpace once we have a better way to handle adding/updating/managing the state of multiple components on the canvas simultaneously
 
 // Suppress development warnings for cleaner console
@@ -330,6 +331,9 @@ export default function Canvas() {
                   onTranscriptToggle={toggleTranscript}
                 />
 
+                {/* Dev Event Feed overlay */}
+                <DevEventFeed />
+
                 <SessionSync roomName={roomName} />
 
                 {/* LiveKit connection is now controlled from the Transcript sidebar */}
@@ -368,6 +372,9 @@ export default function Canvas() {
                   className="absolute inset-0 w-full h-full ios-vh"
                   onTranscriptToggle={toggleTranscript}
                 />
+
+                {/* Dev Event Feed overlay */}
+                <DevEventFeed />
 
                 <SessionSync roomName={roomName} />
 

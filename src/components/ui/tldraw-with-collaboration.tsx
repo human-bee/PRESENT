@@ -2,7 +2,7 @@
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-import { Tldraw, TLUiOverrides, TLComponents, Editor, createShapeId } from 'tldraw';
+import { Tldraw, TLUiOverrides, TLComponents, Editor, createShapeId, toRichText } from 'tldraw';
 import { nanoid } from 'nanoid';
 import { CustomMainMenu, CustomToolbarWithTranscript } from './tldraw-with-persistence';
 import { ReactNode, useCallback, useContext, useEffect, useMemo, useState, useRef } from 'react';
@@ -359,21 +359,29 @@ export function TldrawWithCollaboration({
 
       const handleCreateNote = (e: Event) => {
         const detail = (e as CustomEvent).detail || {};
-        const text: string = detail.text || 'Note';
+        const text: string = (detail.text || '').toString().trim() || 'Note';
 
         try {
           const viewport = mountedEditor.getViewportPageBounds();
           const x = viewport ? viewport.midX : 0;
           const y = viewport ? viewport.midY : 0;
-          // Use a safe geo rectangle for now; TLDraw text schema differs across versions
+          // Create a proper TLDraw note and set its rich text
           const noteId = createShapeId(`note-${nanoid()}`);
           mountedEditor.createShape({
             id: noteId,
-            type: 'geo' as any,
-            x: x - 100,
-            y: y - 50,
-            props: { w: 240, h: 120, geo: 'rectangle' },
+            type: 'note' as any,
+            x: x,
+            y: y,
+            props: { scale: 1 },
           } as any);
+          try {
+            mountedEditor.updateShapes([
+              { id: noteId, type: 'note' as any, props: { richText: toRichText(text) } },
+            ] as any);
+          } catch {}
+          try {
+            mountedEditor.setEditingShape(noteId);
+          } catch {}
           // Emit an editor_action so we can correlate in logs
           try {
             bus.send('editor_action', {
@@ -689,6 +697,58 @@ export function TldrawWithCollaboration({
         handleDistributeSelected as EventListener,
       );
       window.addEventListener('tldraw:drawSmiley', handleDrawSmiley as EventListener);
+      // List shapes to dispatcher via bus
+      const handleListShapes = (e: Event) => {
+        const detail = (e as CustomEvent).detail || {};
+        const callId: string | undefined = detail.callId;
+        try {
+          const shapes = (mountedEditor.getCurrentPageShapes() as any[]).map((s) => {
+            const base: any = { id: s.id, type: s.type };
+            try {
+              if (s.type === 'note') {
+                base.text = renderPlaintextFromRichText(mountedEditor as any, s.props?.richText);
+                base.scale = s.props?.scale;
+              } else if (s.type === 'geo') {
+                base.geo = s.props?.geo;
+                base.w = s.props?.w;
+                base.h = s.props?.h;
+              } else if (s.type === 'custom') {
+                base.name = s.props?.name || s.props?.customComponent;
+              }
+            } catch {}
+            return base;
+          });
+          try {
+            bus.send('tool_result', {
+              type: 'tool_result',
+              id: callId || `list-${Date.now()}`,
+              tool: 'canvas_list_shapes',
+              result: { shapes },
+              timestamp: Date.now(),
+              source: 'editor',
+            });
+          } catch {}
+          try {
+            bus.send('editor_action', {
+              type: 'list_shapes',
+              count: shapes.length,
+              timestamp: Date.now(),
+            });
+          } catch {}
+        } catch (err) {
+          try {
+            bus.send('tool_error', {
+              type: 'tool_error',
+              id: callId || `list-${Date.now()}`,
+              tool: 'canvas_list_shapes',
+              error: err instanceof Error ? err.message : String(err),
+              timestamp: Date.now(),
+              source: 'editor',
+            });
+          } catch {}
+        }
+      };
+      window.addEventListener('tldraw:listShapes', handleListShapes as EventListener);
       // New: grid/theme/background/select
       const handleToggleGrid = () => {
         const el = containerRef.current;
@@ -763,10 +823,103 @@ export function TldrawWithCollaboration({
         }
       };
 
+      // Select notes by plaintext content (case-insensitive)
+      const handleSelectNote = (e: Event) => {
+        try {
+          const detail = (e as CustomEvent).detail || {};
+          const query = String(detail.text || '').toLowerCase();
+          if (!query) return;
+          const notes = (mountedEditor.getCurrentPageShapes() as any[]).filter((s) => s.type === 'note');
+          const match = notes.find((n) => {
+            try {
+              const t = renderPlaintextFromRichText(mountedEditor as any, n.props?.richText || undefined)
+                ?.toString()
+                ?.toLowerCase();
+              return t && t.includes(query);
+            } catch {
+              return false;
+            }
+          });
+          if (match) {
+            mountedEditor.select([match.id] as any);
+            if ((mountedEditor as any).zoomToSelection)
+              (mountedEditor as any).zoomToSelection({ inset: 64 });
+          }
+        } catch (err) {
+          console.warn('[CanvasControl] selectNote error', err);
+        }
+      };
+
+      const resolveTargetShape = (detail: any) => {
+        const byId = detail?.shapeId as string | undefined;
+        if (byId) return byId;
+        const text = (detail?.textContains || detail?.contains || '').toString().toLowerCase();
+        if (text) {
+          const notes = (mountedEditor.getCurrentPageShapes() as any[]).filter((s) => s.type === 'note');
+          const match = notes.find((n) => {
+            try {
+              const t = renderPlaintextFromRichText(mountedEditor as any, n.props?.richText || undefined)
+                ?.toString()
+                ?.toLowerCase();
+              return t && t.includes(text);
+            } catch {
+              return false;
+            }
+          });
+          if (match) return match.id;
+        }
+        return undefined;
+      };
+
+      const handleColorShape = (e: Event) => {
+        try {
+          const detail = (e as CustomEvent).detail || {};
+          const color = (detail.color || '').toString();
+          const id = resolveTargetShape(detail);
+          if (!id || !color) return;
+          const s = mountedEditor.getShape(id as any) as any;
+          if (s?.type === 'note') {
+            mountedEditor.updateShapes([{ id: s.id, type: 'note' as const, props: { color } }]);
+          }
+        } catch (err) {
+          console.warn('[CanvasControl] colorShape error', err);
+        }
+      };
+
+      const handleDeleteShape = (e: Event) => {
+        try {
+          const detail = (e as CustomEvent).detail || {};
+          const id = resolveTargetShape(detail);
+          if (!id) return;
+          mountedEditor.deleteShapes([id as any]);
+        } catch (err) {
+          console.warn('[CanvasControl] deleteShape error', err);
+        }
+      };
+
+      const handleRenameNote = (e: Event) => {
+        try {
+          const detail = (e as CustomEvent).detail || {};
+          const id = resolveTargetShape(detail);
+          const text = (detail.text || '').toString();
+          if (!id || !text) return;
+          const s = mountedEditor.getShape(id as any) as any;
+          if (s?.type === 'note') {
+            mountedEditor.updateShapes([{ id: s.id, type: 'note' as const, props: { richText: toRichText(text) } }]);
+          }
+        } catch (err) {
+          console.warn('[CanvasControl] renameNote error', err);
+        }
+      };
+
       window.addEventListener('tldraw:toggleGrid', handleToggleGrid as EventListener);
       window.addEventListener('tldraw:setBackground', handleSetBackground as EventListener);
       window.addEventListener('tldraw:setTheme', handleSetTheme as EventListener);
       window.addEventListener('tldraw:select', handleSelect as EventListener);
+      window.addEventListener('tldraw:selectNote', handleSelectNote as EventListener);
+      window.addEventListener('tldraw:colorShape', handleColorShape as EventListener);
+      window.addEventListener('tldraw:deleteShape', handleDeleteShape as EventListener);
+      window.addEventListener('tldraw:renameNote', handleRenameNote as EventListener);
 
       // Store cleanup function
       const cleanup = () => {
@@ -775,6 +928,7 @@ export function TldrawWithCollaboration({
         window.removeEventListener('tldraw:canvas_focus', handleFocusEvent as EventListener);
         window.removeEventListener('tldraw:canvas_zoom_all', handleZoomAll as EventListener);
         window.removeEventListener('tldraw:create_note', handleCreateNote as EventListener);
+        window.removeEventListener('tldraw:listShapes', handleListShapes as EventListener);
         window.removeEventListener('tldraw:pinSelected', handlePinSelected as EventListener);
         window.removeEventListener('tldraw:unpinSelected', handleUnpinSelected as EventListener);
         window.removeEventListener('tldraw:lockSelected', handleLockSelected as EventListener);
@@ -795,6 +949,10 @@ export function TldrawWithCollaboration({
         window.removeEventListener('tldraw:setBackground', handleSetBackground as EventListener);
         window.removeEventListener('tldraw:setTheme', handleSetTheme as EventListener);
         window.removeEventListener('tldraw:select', handleSelect as EventListener);
+        window.removeEventListener('tldraw:selectNote', handleSelectNote as EventListener);
+        window.removeEventListener('tldraw:colorShape', handleColorShape as EventListener);
+        window.removeEventListener('tldraw:deleteShape', handleDeleteShape as EventListener);
+        window.removeEventListener('tldraw:renameNote', handleRenameNote as EventListener);
       };
 
       // Store cleanup in editor for later use

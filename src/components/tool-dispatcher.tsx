@@ -169,6 +169,38 @@ export function ToolDispatcher({
             return dispatchTL('tldraw:distributeSelected', params);
           case 'canvas_draw_smiley':
             return dispatchTL('tldraw:drawSmiley', params);
+          case 'canvas_list_shapes': {
+            // Ask the TLDraw layer to enumerate shapes and reply over tool_result
+            const callId = call.id;
+            try {
+              window.dispatchEvent(
+                new CustomEvent('tldraw:listShapes', { detail: { callId } }),
+              );
+              // Also emit an editor trace of the request
+              try {
+                bus.send('editor_action', {
+                  type: 'canvas_command',
+                  command: 'tldraw:listShapes',
+                  detail: { callId },
+                  timestamp: Date.now(),
+                });
+              } catch {}
+              return { status: 'ACK', message: 'Listing shapes' } as any;
+            } catch (e) {
+              const message = e instanceof Error ? e.message : String(e);
+              try {
+                bus.send('tool_error', {
+                  type: 'tool_error',
+                  id: callId,
+                  tool,
+                  error: message,
+                  timestamp: Date.now(),
+                  source: 'dispatcher',
+                });
+              } catch {}
+              return { status: 'ERROR', message } as any;
+            }
+          }
           case 'canvas_toggle_grid':
             return dispatchTL('tldraw:toggleGrid');
           case 'canvas_set_background':
@@ -177,6 +209,14 @@ export function ToolDispatcher({
             return dispatchTL('tldraw:setTheme', params);
           case 'canvas_select':
             return dispatchTL('tldraw:select', params);
+          case 'canvas_select_by_note':
+            return dispatchTL('tldraw:selectNote', params);
+          case 'canvas_color_shape':
+            return dispatchTL('tldraw:colorShape', params);
+          case 'canvas_delete_shape':
+            return dispatchTL('tldraw:deleteShape', params);
+          case 'canvas_rename_note':
+            return dispatchTL('tldraw:renameNote', params);
           default:
             break;
         }
