@@ -1,24 +1,34 @@
-import { useTamboComponentState } from "@tambo-ai/react";
-import { z } from "zod";
-import { useState, useEffect, useCallback } from "react";
-import dynamic from "next/dynamic";
-import { debounce } from "lodash";
+import { z } from 'zod';
+import { useState, useEffect, useCallback } from 'react';
+import dynamic from 'next/dynamic';
+import { debounce } from 'lodash';
 
 // Dynamic import for YouTube embed - only load when actually playing a video
-const YoutubeEmbed = dynamic(() => import("./youtube-embed").then(mod => ({ default: mod.YoutubeEmbed })), {
-  ssr: false,
-  loading: () => <div className="flex items-center justify-center p-8 bg-gray-50 rounded">Loading video player...</div>
-});
+const YoutubeEmbed = dynamic(
+  () => import('./youtube-embed').then((mod) => ({ default: mod.YoutubeEmbed })),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex items-center justify-center p-8 bg-gray-50 rounded">
+        Loading video player...
+      </div>
+    ),
+  },
+);
 
 // Enhanced search parameters schema
 export const youtubeSearchEnhancedSchema = z.object({
-  title: z.string().optional().describe("Title displayed above the search interface"),
-  initialQuery: z.string().optional().describe("Initial search query"),
-  autoSearch: z.boolean().optional().default(true).describe("Automatically search on mount"),
-  showTranscripts: z.boolean().optional().default(true).describe("Enable transcript viewing"),
-  showTrending: z.boolean().optional().default(true).describe("Show trending videos section"),
-  maxResults: z.number().optional().default(20).describe("Maximum results per search"),
-  componentId: z.string().optional().default("youtube-search-enhanced").describe("Unique component ID"),
+  title: z.string().optional().describe('Title displayed above the search interface'),
+  initialQuery: z.string().optional().describe('Initial search query'),
+  autoSearch: z.boolean().optional().default(true).describe('Automatically search on mount'),
+  showTranscripts: z.boolean().optional().default(true).describe('Enable transcript viewing'),
+  showTrending: z.boolean().optional().default(true).describe('Show trending videos section'),
+  maxResults: z.number().optional().default(20).describe('Maximum results per search'),
+  componentId: z
+    .string()
+    .optional()
+    .default('youtube-search-enhanced')
+    .describe('Unique component ID'),
 });
 
 export type YoutubeSearchEnhancedProps = z.infer<typeof youtubeSearchEnhancedSchema>;
@@ -33,7 +43,7 @@ export type YoutubeSearchState = {
   loading: boolean;
   error: string | null;
   filters: SearchFilters;
-  view: "search" | "trending" | "video";
+  view: 'search' | 'trending' | 'video';
 };
 
 export type VideoResult = {
@@ -63,73 +73,73 @@ export type TranscriptSegment = {
 };
 
 export type SearchFilters = {
-  sortBy: "relevance" | "date" | "viewCount" | "rating";
-  uploadDate: "any" | "today" | "week" | "month" | "year";
-  duration: "any" | "short" | "medium" | "long";
+  sortBy: 'relevance' | 'date' | 'viewCount' | 'rating';
+  uploadDate: 'any' | 'today' | 'week' | 'month' | 'year';
+  duration: 'any' | 'short' | 'medium' | 'long';
   officialOnly: boolean;
 };
 
 export function YoutubeSearchEnhanced({
   title,
-  initialQuery = "",
+  initialQuery = '',
   autoSearch = true,
   showTranscripts = true,
   showTrending = true,
   maxResults = 20,
-  componentId = "youtube-search-enhanced",
+  componentId = 'youtube-search-enhanced',
 }: YoutubeSearchEnhancedProps) {
-  const [state, setState] = useTamboComponentState<YoutubeSearchState>(
-    componentId,
-    {
-      searchQuery: initialQuery,
-      searchResults: [],
-      trendingVideos: [],
-      selectedVideo: null,
-      transcript: null,
-      loading: false,
-      error: null,
-      filters: {
-        sortBy: "relevance",
-        uploadDate: "any",
-        duration: "any",
-        officialOnly: false,
-      },
-      view: "search",
-    }
+  const [state, setState] = useState<YoutubeSearchState>({
+    searchQuery: initialQuery,
+    searchResults: [],
+    trendingVideos: [],
+    selectedVideo: null,
+    transcript: null,
+    loading: false,
+    error: null,
+    filters: {
+      sortBy: 'relevance',
+      uploadDate: 'any',
+      duration: 'any',
+      officialOnly: false,
+    },
+    view: 'search',
+  });
+
+  // MCP Tool execution via custom
+  const executeMCPTool = useCallback(
+    async (tool: string, params: any) => {
+      try {
+        // Send to custom as a formatted message that will trigger MCP tool
+        const message = `Execute YouTube MCP tool: ${tool} with parameters: ${JSON.stringify(params, null, 2)}`;
+
+        // Dispatch custom event that custom will handle
+        window.dispatchEvent(
+          new CustomEvent('custom:executeMCPTool', {
+            detail: {
+              tool: `youtube_${tool}`,
+              params,
+              componentId,
+            },
+          }),
+        );
+
+        // For now, we'll simulate the response structure
+        // In production, this would come from the MCP server
+        return { success: true, data: null };
+      } catch (error) {
+        console.error(`Error executing MCP tool ${tool}:`, error);
+        return { success: false, error };
+      }
+    },
+    [componentId],
   );
-
-  // MCP Tool execution via Tambo
-  const executeMCPTool = useCallback(async (tool: string, params: any) => {
-    try {
-      // Send to Tambo as a formatted message that will trigger MCP tool
-      const message = `Execute YouTube MCP tool: ${tool} with parameters: ${JSON.stringify(params, null, 2)}`;
-      
-      // Dispatch custom event that Tambo will handle
-      window.dispatchEvent(
-        new CustomEvent("tambo:executeMCPTool", {
-          detail: {
-            tool: `youtube_${tool}`,
-            params,
-            componentId,
-          }
-        })
-      );
-
-      // For now, we'll simulate the response structure
-      // In production, this would come from the MCP server
-      return { success: true, data: null };
-    } catch (error) {
-      console.error(`Error executing MCP tool ${tool}:`, error);
-      return { success: false, error };
-    }
-  }, [componentId]);
 
   // Debounced search function
   const performSearch = useCallback(
     debounce(async (query: string, filters: SearchFilters) => {
-      if (!query.trim() && state?.view !== "trending") return;
+      if (!query.trim() && state?.view !== 'trending') return;
 
-      setState(prev => prev ? { ...prev, loading: true, error: null } : prev);
+      setState((prev) => (prev ? { ...prev, loading: true, error: null } : prev));
 
       try {
         // Build search parameters based on filters
@@ -138,31 +148,39 @@ export function YoutubeSearchEnhanced({
           maxResults,
           order: filters.sortBy,
           publishedAfter: getPublishedAfterDate(filters.uploadDate),
-          videoDuration: filters.duration !== "any" ? filters.duration : undefined,
+          videoDuration: filters.duration !== 'any' ? filters.duration : undefined,
         };
 
         // Execute search via MCP
-        const result = await executeMCPTool("searchVideos", searchParams);
+        const result = await executeMCPTool('searchVideos', searchParams);
 
         if (result.success) {
           // Process results to identify official channels
           const processedResults = await processSearchResults(result.data || []);
-          
-          setState(prev => prev ? {
-            ...prev,
-            searchResults: processedResults,
-            loading: false,
-          } : prev);
+
+          setState((prev) =>
+            prev
+              ? {
+                ...prev,
+                searchResults: processedResults,
+                loading: false,
+              }
+              : prev,
+          );
         }
       } catch (error) {
-        setState(prev => prev ? {
-          ...prev,
-          error: "Failed to search videos",
-          loading: false,
-        } : prev);
+        setState((prev) =>
+          prev
+            ? {
+              ...prev,
+              error: 'Failed to search videos',
+              loading: false,
+            }
+            : prev,
+        );
       }
     }, 500),
-    [state?.view, maxResults, executeMCPTool, setState]
+    [state?.view, maxResults, executeMCPTool, setState],
   );
 
   // Load trending videos
@@ -170,60 +188,72 @@ export function YoutubeSearchEnhanced({
     if (!showTrending) return;
 
     try {
-      const result = await executeMCPTool("getTrendingVideos", {
+      const result = await executeMCPTool('getTrendingVideos', {
         maxResults: 10,
-        regionCode: "US", // Can be made configurable
+        regionCode: 'US', // Can be made configurable
       });
 
       if (result.success && result.data) {
-        setState(prev => prev ? {
-          ...prev,
-          trendingVideos: result.data,
-        } : prev);
+        setState((prev) =>
+          prev
+            ? {
+              ...prev,
+              trendingVideos: result.data,
+            }
+            : prev,
+        );
       }
     } catch (error) {
-      console.error("Failed to load trending videos:", error);
+      console.error('Failed to load trending videos:', error);
     }
   }, [showTrending, executeMCPTool, setState]);
 
   // Load transcript for selected video
-  const loadTranscript = useCallback(async (videoId: string) => {
-    if (!showTranscripts) return;
+  const loadTranscript = useCallback(
+    async (videoId: string) => {
+      if (!showTranscripts) return;
 
-    try {
-      const result = await executeMCPTool("getTranscripts", {
-        videoIds: [videoId],
-        lang: "en", // Can be made configurable
-      });
+      try {
+        const result = await executeMCPTool('getTranscripts', {
+          videoIds: [videoId],
+          lang: 'en', // Can be made configurable
+        });
 
-      if (result.success && result.data?.[0]) {
-        setState(prev => prev ? {
-          ...prev,
-          transcript: result.data[0].segments,
-        } : prev);
+        if (result.success && result.data?.[0]) {
+          setState((prev) =>
+            prev
+              ? {
+                ...prev,
+                transcript: result.data[0].segments,
+              }
+              : prev,
+          );
+        }
+      } catch (error) {
+        console.error('Failed to load transcript:', error);
       }
-    } catch (error) {
-      console.error("Failed to load transcript:", error);
-    }
-  }, [showTranscripts, executeMCPTool, setState]);
+    },
+    [showTranscripts, executeMCPTool, setState],
+  );
 
   // Process search results to identify official/verified channels
   const processSearchResults = async (results: any[]): Promise<VideoResult[]> => {
     // Get channel details to verify official status
-    const channelIds = [...new Set(results.map(r => r.snippet.channelId))];
-    
+    const channelIds = [...new Set(results.map((r) => r.snippet.channelId))];
+
     try {
-      const channelResult = await executeMCPTool("getChannelStatistics", {
+      const channelResult = await executeMCPTool('getChannelStatistics', {
         channelIds,
       });
 
       const channelData = channelResult.data || {};
-      
-      return results.map(item => {
+
+      return results.map((item) => {
         const channel = channelData[item.snippet.channelId] || {};
         const isVerified = channel.subscriberCount > 100000; // Simple heuristic
-        const isOfficial = item.snippet.channelTitle.includes("Official") || 
-                          item.snippet.channelTitle.includes("VEVO");
+        const isOfficial =
+          item.snippet.channelTitle.includes('Official') ||
+          item.snippet.channelTitle.includes('VEVO');
 
         return {
           id: item.id.videoId,
@@ -232,10 +262,10 @@ export function YoutubeSearchEnhanced({
           channelTitle: item.snippet.channelTitle,
           channelId: item.snippet.channelId,
           publishedAt: item.snippet.publishedAt,
-          duration: item.contentDetails?.duration || "",
-          viewCount: item.statistics?.viewCount || "0",
-          likeCount: item.statistics?.likeCount || "0",
-          commentCount: item.statistics?.commentCount || "0",
+          duration: item.contentDetails?.duration || '',
+          viewCount: item.statistics?.viewCount || '0',
+          likeCount: item.statistics?.likeCount || '0',
+          commentCount: item.statistics?.commentCount || '0',
           thumbnail: item.snippet.thumbnails.high,
           isVerified,
           isOfficial,
@@ -243,17 +273,17 @@ export function YoutubeSearchEnhanced({
       });
     } catch (error) {
       // Fallback without channel verification
-      return results.map(item => ({
+      return results.map((item) => ({
         id: item.id.videoId,
         title: item.snippet.title,
         description: item.snippet.description,
         channelTitle: item.snippet.channelTitle,
         channelId: item.snippet.channelId,
         publishedAt: item.snippet.publishedAt,
-        duration: item.contentDetails?.duration || "",
-        viewCount: item.statistics?.viewCount || "0",
-        likeCount: item.statistics?.likeCount || "0",
-        commentCount: item.statistics?.commentCount || "0",
+        duration: item.contentDetails?.duration || '',
+        viewCount: item.statistics?.viewCount || '0',
+        likeCount: item.statistics?.likeCount || '0',
+        commentCount: item.statistics?.commentCount || '0',
         thumbnail: item.snippet.thumbnails.high,
       }));
     }
@@ -263,13 +293,13 @@ export function YoutubeSearchEnhanced({
   const getPublishedAfterDate = (filter: string): string | undefined => {
     const now = new Date();
     switch (filter) {
-      case "today":
+      case 'today':
         return new Date(now.setDate(now.getDate() - 1)).toISOString();
-      case "week":
+      case 'week':
         return new Date(now.setDate(now.getDate() - 7)).toISOString();
-      case "month":
+      case 'month':
         return new Date(now.setMonth(now.getMonth() - 1)).toISOString();
-      case "year":
+      case 'year':
         return new Date(now.setFullYear(now.getFullYear() - 1)).toISOString();
       default:
         return undefined;
@@ -278,12 +308,16 @@ export function YoutubeSearchEnhanced({
 
   // Handle video selection
   const selectVideo = (video: VideoResult) => {
-    setState(prev => prev ? {
-      ...prev,
-      selectedVideo: video,
-      view: "video",
-      transcript: null,
-    } : prev);
+    setState((prev) =>
+      prev
+        ? {
+          ...prev,
+          selectedVideo: video,
+          view: 'video',
+          transcript: null,
+        }
+        : prev,
+    );
 
     // Load transcript if enabled
     if (showTranscripts) {
@@ -297,26 +331,26 @@ export function YoutubeSearchEnhanced({
 
     // Update the embedded video to start at the specified time
     window.dispatchEvent(
-      new CustomEvent("youtube:seekTo", {
+      new CustomEvent('youtube:seekTo', {
         detail: {
           videoId: state.selectedVideo.id,
           seconds,
-        }
-      })
+        },
+      }),
     );
   };
 
   // Format duration for display
   const formatDuration = (isoDuration: string): string => {
-    if (!isoDuration) return "";
+    if (!isoDuration) return '';
     // Convert ISO 8601 duration to readable format
     const match = isoDuration.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
-    if (!match) return "";
-    
-    const hours = match[1] ? `${match[1]}:` : "";
-    const minutes = match[2] ? match[2].padStart(2, "0") : "00";
-    const seconds = match[3] ? match[3].padStart(2, "0") : "00";
-    
+    if (!match) return '';
+
+    const hours = match[1] ? `${match[1]}:` : '';
+    const minutes = match[2] ? match[2].padStart(2, '0') : '00';
+    const seconds = match[3] ? match[3].padStart(2, '0') : '00';
+
     return `${hours}${minutes}:${seconds}`;
   };
 
@@ -331,12 +365,15 @@ export function YoutubeSearchEnhanced({
   // Initial load
   useEffect(() => {
     if (autoSearch && initialQuery) {
-      performSearch(initialQuery, state?.filters || {
-        sortBy: "relevance",
-        uploadDate: "any",
-        duration: "any",
-        officialOnly: false,
-      });
+      performSearch(
+        initialQuery,
+        state?.filters || {
+          sortBy: 'relevance',
+          uploadDate: 'any',
+          duration: 'any',
+          officialOnly: false,
+        },
+      );
     }
     if (showTrending) {
       loadTrendingVideos();
@@ -350,7 +387,7 @@ export function YoutubeSearchEnhanced({
       {title && <h2 className="text-2xl font-bold mb-6">{title}</h2>}
 
       {/* Search Interface */}
-      {state.view !== "video" && (
+      {state.view !== 'video' && (
         <div className="mb-8">
           {/* Search Bar */}
           <div className="flex gap-4 mb-4">
@@ -439,15 +476,15 @@ export function YoutubeSearchEnhanced({
           {/* View Tabs */}
           <div className="flex gap-4 mb-6 border-b">
             <button
-              onClick={() => setState({ ...state, view: "search" })}
-              className={`pb-2 px-4 ${state.view === "search" ? "border-b-2 border-blue-600 font-semibold" : ""}`}
+              onClick={() => setState({ ...state, view: 'search' })}
+              className={`pb-2 px-4 ${state.view === 'search' ? 'border-b-2 border-blue-600 font-semibold' : ''}`}
             >
               Search Results
             </button>
             {showTrending && (
               <button
-                onClick={() => setState({ ...state, view: "trending" })}
-                className={`pb-2 px-4 ${state.view === "trending" ? "border-b-2 border-blue-600 font-semibold" : ""}`}
+                onClick={() => setState({ ...state, view: 'trending' })}
+                className={`pb-2 px-4 ${state.view === 'trending' ? 'border-b-2 border-blue-600 font-semibold' : ''}`}
               >
                 Trending Now
               </button>
@@ -471,14 +508,10 @@ export function YoutubeSearchEnhanced({
       )}
 
       {/* Search Results Grid */}
-      {state.view === "search" && !state.loading && (
+      {state.view === 'search' && !state.loading && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {state.searchResults.map((video) => (
-            <VideoCard
-              key={video.id}
-              video={video}
-              onSelect={() => selectVideo(video)}
-            />
+            <VideoCard key={video.id} video={video} onSelect={() => selectVideo(video)} />
           ))}
           {state.searchResults.length === 0 && state.searchQuery && (
             <div className="col-span-full text-center py-12 text-gray-500">
@@ -489,7 +522,7 @@ export function YoutubeSearchEnhanced({
       )}
 
       {/* Trending Videos Grid */}
-      {state.view === "trending" && !state.loading && (
+      {state.view === 'trending' && !state.loading && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {state.trendingVideos.map((video) => (
             <VideoCard
@@ -503,14 +536,21 @@ export function YoutubeSearchEnhanced({
       )}
 
       {/* Video Player View */}
-      {state.view === "video" && state.selectedVideo && (
+      {state.view === 'video' && state.selectedVideo && (
         <div>
           <button
-            onClick={() => setState({ ...state, view: "search", selectedVideo: null, transcript: null })}
+            onClick={() =>
+              setState({ ...state, view: 'search', selectedVideo: null, transcript: null })
+            }
             className="mb-4 text-blue-600 hover:text-blue-700 flex items-center gap-2"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M15 19l-7-7 7-7"
+              />
             </svg>
             Back to results
           </button>
@@ -518,11 +558,8 @@ export function YoutubeSearchEnhanced({
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {/* Video Player */}
             <div className="lg:col-span-2">
-              <YoutubeEmbed
-                videoId={state.selectedVideo.id}
-                title={state.selectedVideo.title}
-              />
-              
+              <YoutubeEmbed videoId={state.selectedVideo.id} title={state.selectedVideo.title} />
+
               {/* Video Info */}
               <div className="mt-4">
                 <h3 className="text-xl font-semibold">{state.selectedVideo.title}</h3>
@@ -574,12 +611,12 @@ export function YoutubeSearchEnhanced({
 }
 
 // Video Card Component
-function VideoCard({ 
-  video, 
-  onSelect, 
-  showTrendingBadge = false 
-}: { 
-  video: VideoResult; 
+function VideoCard({
+  video,
+  onSelect,
+  showTrendingBadge = false,
+}: {
+  video: VideoResult;
   onSelect: () => void;
   showTrendingBadge?: boolean;
 }) {
@@ -610,7 +647,7 @@ function VideoCard({
           </div>
         )}
       </div>
-      
+
       <div className="p-4">
         <h3 className="font-medium line-clamp-2 group-hover:text-blue-600 transition-colors">
           {video.title}
@@ -620,7 +657,11 @@ function VideoCard({
             <span>{video.channelTitle}</span>
             {video.isVerified && (
               <svg className="w-4 h-4 text-blue-600" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                <path
+                  fillRule="evenodd"
+                  d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+                  clipRule="evenodd"
+                />
               </svg>
             )}
           </div>
@@ -636,14 +677,14 @@ function VideoCard({
 
 // Helper functions
 function formatDuration(isoDuration: string): string {
-  if (!isoDuration) return "";
+  if (!isoDuration) return '';
   const match = isoDuration.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
-  if (!match) return "";
-  
-  const hours = match[1] ? `${match[1]}:` : "";
-  const minutes = match[2] ? match[2].padStart(2, "0") : "00";
-  const seconds = match[3] ? match[3].padStart(2, "0") : "00";
-  
+  if (!match) return '';
+
+  const hours = match[1] ? `${match[1]}:` : '';
+  const minutes = match[2] ? match[2].padStart(2, '0') : '00';
+  const seconds = match[3] ? match[3].padStart(2, '0') : '00';
+
   return `${hours}${minutes}:${seconds}`;
 }
 
@@ -658,8 +699,8 @@ function formatRelativeTime(dateString: string): string {
   const date = new Date(dateString);
   const now = new Date();
   const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
-  
-  if (diffInSeconds < 60) return "just now";
+
+  if (diffInSeconds < 60) return 'just now';
   if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)} minutes ago`;
   if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)} hours ago`;
   if (diffInSeconds < 2592000) return `${Math.floor(diffInSeconds / 86400)} days ago`;
@@ -671,9 +712,9 @@ function formatTimestamp(seconds: number): string {
   const hours = Math.floor(seconds / 3600);
   const minutes = Math.floor((seconds % 3600) / 60);
   const secs = Math.floor(seconds % 60);
-  
+
   if (hours > 0) {
-    return `${hours}:${minutes.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
+    return `${hours}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   }
-  return `${minutes}:${secs.toString().padStart(2, "0")}`;
-} 
+  return `${minutes}:${secs.toString().padStart(2, '0')}`;
+}

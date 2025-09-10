@@ -1,44 +1,76 @@
-"use client";
+'use client';
 
-import { cn } from "@/lib/utils";
-import { useTamboComponentState } from "@tambo-ai/react";
-import { z } from "zod";
-import { ExternalLink, CheckCircle, AlertTriangle, Info, Bookmark, BookmarkCheck, GripVertical, Upload } from "lucide-react";
-import { getRendererForResult } from "./research-renderers";
-import { useState, useEffect, useCallback } from "react";
-import { DndContext, PointerSensor, TouchSensor, useSensor, useSensors, closestCenter } from "@dnd-kit/core";
-import { arrayMove, SortableContext, verticalListSortingStrategy, useSortable } from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
-import { useDropzone } from "react-dropzone";
+import { cn } from '@/lib/utils';
+import { z } from 'zod';
+import {
+  ExternalLink,
+  CheckCircle,
+  AlertTriangle,
+  Info,
+  Bookmark,
+  BookmarkCheck,
+  GripVertical,
+  Upload,
+} from 'lucide-react';
+import { getRendererForResult } from './research-renderers';
+import { useState, useEffect, useCallback } from 'react';
+import {
+  DndContext,
+  PointerSensor,
+  TouchSensor,
+  useSensor,
+  useSensors,
+  closestCenter,
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  verticalListSortingStrategy,
+  useSortable,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import { useDropzone } from 'react-dropzone';
 
 // Define the research result type
 export const researchResultSchema = z.object({
-  id: z.string().describe("Unique identifier for this research result"),
-  title: z.string().describe("Title or headline of the research finding"),
-  content: z.string().describe("Main content or summary of the research"),
-  source: z.object({
-    name: z.string().describe("Name of the source (e.g., 'Wikipedia', 'Reuters')"),
-    url: z.string().optional().describe("URL to the original source"),
-    credibility: z.enum(["high", "medium", "low"]).describe("Credibility rating of the source"),
-    type: z.enum(["news", "academic", "wiki", "blog", "social", "government", "other"]).describe("Type of source"),
-  }).describe("Source information and metadata"),
-  relevance: z.number().min(0).max(100).describe("Relevance score (0-100) to the current topic"),
-  timestamp: z.string().describe("When this research was conducted or published"),
-  tags: z.array(z.string()).optional().describe("Topic tags associated with this research"),
-  factCheck: z.object({
-    status: z.enum(["verified", "disputed", "unverified", "false"]).describe("Fact-checking status"),
-    confidence: z.number().min(0).max(100).describe("Confidence level in the fact-check"),
-  }).optional().describe("Fact-checking information if available"),
+  id: z.string().describe('Unique identifier for this research result'),
+  title: z.string().describe('Title or headline of the research finding'),
+  content: z.string().describe('Main content or summary of the research'),
+  source: z
+    .object({
+      name: z.string().describe("Name of the source (e.g., 'Wikipedia', 'Reuters')"),
+      url: z.string().optional().describe('URL to the original source'),
+      credibility: z.enum(['high', 'medium', 'low']).describe('Credibility rating of the source'),
+      type: z
+        .enum(['news', 'academic', 'wiki', 'blog', 'social', 'government', 'other'])
+        .describe('Type of source'),
+    })
+    .describe('Source information and metadata'),
+  relevance: z.number().min(0).max(100).describe('Relevance score (0-100) to the current topic'),
+  timestamp: z.string().describe('When this research was conducted or published'),
+  tags: z.array(z.string()).optional().describe('Topic tags associated with this research'),
+  factCheck: z
+    .object({
+      status: z
+        .enum(['verified', 'disputed', 'unverified', 'false'])
+        .describe('Fact-checking status'),
+      confidence: z.number().min(0).max(100).describe('Confidence level in the fact-check'),
+    })
+    .optional()
+    .describe('Fact-checking information if available'),
 });
 
 // Main component schema
 export const researchPanelSchema = z.object({
-  title: z.string().optional().describe("Title displayed at the top of the panel"),
-  results: z.array(researchResultSchema).describe("Array of research results to display"),
-  currentTopic: z.string().optional().describe("Current topic being researched"),
-  isLive: z.boolean().optional().describe("Whether this is showing live research results"),
-  maxResults: z.number().optional().describe("Maximum number of results to show"),
-  showCredibilityFilter: z.boolean().optional().describe("Whether to show credibility filtering options"),
+  title: z.string().optional().describe('Title displayed at the top of the panel'),
+  results: z.array(researchResultSchema).describe('Array of research results to display'),
+  currentTopic: z.string().optional().describe('Current topic being researched'),
+  isLive: z.boolean().optional().describe('Whether this is showing live research results'),
+  maxResults: z.number().optional().describe('Maximum number of results to show'),
+  showCredibilityFilter: z
+    .boolean()
+    .optional()
+    .describe('Whether to show credibility filtering options'),
 });
 
 export type ResearchPanelProps = z.infer<typeof researchPanelSchema>;
@@ -47,18 +79,21 @@ export type ResearchResult = z.infer<typeof researchResultSchema>;
 // Component state type
 type ResearchPanelState = {
   bookmarkedResults: string[];
-  selectedCredibility: "all" | "high" | "medium" | "low";
+  selectedCredibility: 'all' | 'high' | 'medium' | 'low';
   selectedSourceTypes: string[];
   expandedResults: string[];
-  sortBy: "relevance" | "timestamp" | "credibility";
+  sortBy: 'relevance' | 'timestamp' | 'credibility';
 };
 
 // Credibility badge component
-function CredibilityBadge({ level, className }: { level: "high" | "medium" | "low"; className?: string }) {
+function CredibilityBadge({
+  level,
+  className,
+}: { level: 'high' | 'medium' | 'low'; className?: string }) {
   const styles = {
-    high: "bg-green-100 text-green-800 border-green-200",
-    medium: "bg-yellow-100 text-yellow-800 border-yellow-200", 
-    low: "bg-red-100 text-red-800 border-red-200",
+    high: 'bg-green-100 text-green-800 border-green-200',
+    medium: 'bg-yellow-100 text-yellow-800 border-yellow-200',
+    low: 'bg-red-100 text-red-800 border-red-200',
   };
 
   const icons = {
@@ -70,11 +105,13 @@ function CredibilityBadge({ level, className }: { level: "high" | "medium" | "lo
   const Icon = icons[level];
 
   return (
-    <span className={cn(
-      "inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium border",
-      styles[level],
-      className
-    )}>
+    <span
+      className={cn(
+        'inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium border',
+        styles[level],
+        className,
+      )}
+    >
       <Icon className="w-3 h-3" />
       {level.charAt(0).toUpperCase() + level.slice(1)}
     </span>
@@ -82,22 +119,27 @@ function CredibilityBadge({ level, className }: { level: "high" | "medium" | "lo
 }
 
 // Fact-check badge component
-function FactCheckBadge({ factCheck, className }: { factCheck: ResearchResult["factCheck"]; className?: string }) {
+function FactCheckBadge({
+  factCheck,
+  className,
+}: { factCheck: ResearchResult['factCheck']; className?: string }) {
   if (!factCheck) return null;
 
   const styles = {
-    verified: "bg-green-100 text-green-800 border-green-200",
-    disputed: "bg-orange-100 text-orange-800 border-orange-200",
-    unverified: "bg-gray-100 text-gray-800 border-gray-200",
-    false: "bg-red-100 text-red-800 border-red-200",
+    verified: 'bg-green-100 text-green-800 border-green-200',
+    disputed: 'bg-orange-100 text-orange-800 border-orange-200',
+    unverified: 'bg-gray-100 text-gray-800 border-gray-200',
+    false: 'bg-red-100 text-red-800 border-red-200',
   };
 
   return (
-    <span className={cn(
-      "inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium border",
-      styles[factCheck.status],
-      className
-    )}>
+    <span
+      className={cn(
+        'inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium border',
+        styles[factCheck.status],
+        className,
+      )}
+    >
       <Info className="w-3 h-3" />
       {factCheck.status} ({factCheck.confidence}%)
     </span>
@@ -107,33 +149,35 @@ function FactCheckBadge({ factCheck, className }: { factCheck: ResearchResult["f
 // Source type badge component
 function SourceTypeBadge({ type, className }: { type: string; className?: string }) {
   const colors = {
-    news: "bg-blue-100 text-blue-800",
-    academic: "bg-purple-100 text-purple-800", 
-    wiki: "bg-gray-100 text-gray-800",
-    blog: "bg-orange-100 text-orange-800",
-    social: "bg-pink-100 text-pink-800",
-    government: "bg-indigo-100 text-indigo-800",
-    other: "bg-gray-100 text-gray-800",
+    news: 'bg-blue-100 text-blue-800',
+    academic: 'bg-purple-100 text-purple-800',
+    wiki: 'bg-gray-100 text-gray-800',
+    blog: 'bg-orange-100 text-orange-800',
+    social: 'bg-pink-100 text-pink-800',
+    government: 'bg-indigo-100 text-indigo-800',
+    other: 'bg-gray-100 text-gray-800',
   };
 
   return (
-    <span className={cn(
-      "inline-flex items-center px-2 py-1 rounded-md text-xs font-medium",
-      colors[type as keyof typeof colors] || colors.other,
-      className
-    )}>
+    <span
+      className={cn(
+        'inline-flex items-center px-2 py-1 rounded-md text-xs font-medium',
+        colors[type as keyof typeof colors] || colors.other,
+        className,
+      )}
+    >
       {type}
     </span>
   );
 }
 
 // Individual research result card
-function ResearchResultCard({ 
-  result, 
-  isBookmarked, 
+function ResearchResultCard({
+  result,
+  isBookmarked,
   isExpanded,
-  onToggleBookmark, 
-  onToggleExpanded 
+  onToggleBookmark,
+  onToggleExpanded,
 }: {
   result: ResearchResult;
   isBookmarked: boolean;
@@ -155,12 +199,12 @@ function ResearchResultCard({
             <SourceTypeBadge type={result.source.type} />
           </div>
         </div>
-        
+
         <div className="flex items-center gap-1 flex-shrink-0">
           <button
             onClick={onToggleBookmark}
             className="p-1 rounded hover:bg-gray-100 transition-colors"
-            title={isBookmarked ? "Remove bookmark" : "Bookmark"}
+            title={isBookmarked ? 'Remove bookmark' : 'Bookmark'}
           >
             {isBookmarked ? (
               <BookmarkCheck className="w-4 h-4 text-blue-600" />
@@ -168,7 +212,7 @@ function ResearchResultCard({
               <Bookmark className="w-4 h-4 text-gray-400" />
             )}
           </button>
-          
+
           {result.source.url && (
             <a
               href={result.source.url}
@@ -185,19 +229,16 @@ function ResearchResultCard({
 
       {/* Content */}
       <div className="mb-3">
-        <p className={cn(
-          "text-sm text-gray-700 leading-relaxed",
-          !isExpanded && "line-clamp-3"
-        )}>
+        <p className={cn('text-sm text-gray-700 leading-relaxed', !isExpanded && 'line-clamp-3')}>
           {result.content}
         </p>
-        
+
         {result.content.length > 200 && (
           <button
             onClick={onToggleExpanded}
             className="text-xs text-blue-600 hover:text-blue-800 mt-1 font-medium"
           >
-            {isExpanded ? "Show less" : "Read more"}
+            {isExpanded ? 'Show less' : 'Read more'}
           </button>
         )}
       </div>
@@ -205,14 +246,10 @@ function ResearchResultCard({
       {/* Footer */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <span className="text-xs text-gray-500">
-            Relevance: {result.relevance}%
-          </span>
-          {result.factCheck && (
-            <FactCheckBadge factCheck={result.factCheck} />
-          )}
+          <span className="text-xs text-gray-500">Relevance: {result.relevance}%</span>
+          {result.factCheck && <FactCheckBadge factCheck={result.factCheck} />}
         </div>
-        
+
         <span className="text-xs text-gray-400">
           {new Date(result.timestamp).toLocaleTimeString()}
         </span>
@@ -237,7 +274,7 @@ function ResearchResultCard({
 
 // Main ResearchPanel component
 export function ResearchPanel({
-  title = "Research Panel",
+  title = 'Research Panel',
   results = [] as ResearchResult[],
   currentTopic,
   isLive = false,
@@ -246,24 +283,25 @@ export function ResearchPanel({
   className,
   ...props
 }: ResearchPanelProps & React.HTMLAttributes<HTMLDivElement>) {
-  
-  // Initialize Tambo component state
-  const [state, setState] = useTamboComponentState<ResearchPanelState>(
-    "research-panel",
-    {
-      bookmarkedResults: [],
-      selectedCredibility: "all",
-      selectedSourceTypes: [],
-      expandedResults: [],
-      sortBy: "relevance",
-    }
-  );
+  // Strip custom shape injection props so they don't leak onto the DOM
+  const domProps = { ...(props as any) } as Record<string, unknown>;
+  delete (domProps as any).updateState;
+  delete (domProps as any).state;
+  delete (domProps as any).__custom_message_id;
+  // Local component state
+  const [state, setState] = useState<ResearchPanelState>({
+    bookmarkedResults: [],
+    selectedCredibility: 'all',
+    selectedSourceTypes: [],
+    expandedResults: [],
+    sortBy: 'relevance',
+  });
 
   // Local state for items added via drag-and-drop
   const [customResults, setCustomResults] = useState<ResearchResult[]>([]);
   const [isDragOver, setIsDragOver] = useState(false);
 
-  // Order state for drag-reorder (local for now – can be persisted via Tambo later)
+  // Order state for drag-reorder (local for now – can be persisted via custom later)
   const [order, setOrder] = useState<string[]>([]);
 
   // Synchronise order when result list changes (add new ids at the end)
@@ -297,7 +335,12 @@ export function ResearchPanel({
     handleDrop(evt as unknown as React.DragEvent<HTMLDivElement>);
   }, []);
 
-  const { getRootProps, getInputProps, isDragActive, open: openFileDialog } = useDropzone({ onDrop, noKeyboard: true, noClick: true });
+  const {
+    getRootProps,
+    getInputProps,
+    isDragActive,
+    open: openFileDialog,
+  } = useDropzone({ onDrop, noKeyboard: true, noClick: true });
 
   const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -314,20 +357,20 @@ export function ResearchPanel({
           title: file.name,
           content: objectUrl,
           source: {
-            name: "Local File",
+            name: 'Local File',
             url: objectUrl,
-            credibility: "high",
-            type: "other",
+            credibility: 'high',
+            type: 'other',
           },
           relevance: 0,
           timestamp: new Date().toISOString(),
-          tags: [file.type.split("/")[0] || "file"],
+          tags: [file.type.split('/')[0] || 'file'],
         } as ResearchResult);
       });
     }
 
     // 2. Links / text dropped
-    const uriList = e.dataTransfer.getData("text/uri-list") || e.dataTransfer.getData("text/plain");
+    const uriList = e.dataTransfer.getData('text/uri-list') || e.dataTransfer.getData('text/plain');
     if (uriList) {
       uriList.split(/\n/).forEach((uri) => {
         const trimmed = uri.trim();
@@ -337,10 +380,10 @@ export function ResearchPanel({
             title: trimmed,
             content: trimmed,
             source: {
-              name: "Dropped Link",
+              name: 'Dropped Link',
               url: trimmed,
-              credibility: "medium",
-              type: /youtube|youtu\.be/.test(trimmed) ? "video" : "other",
+              credibility: 'medium',
+              type: /youtube|youtu\.be/.test(trimmed) ? 'video' : 'other',
             },
             relevance: 0,
             timestamp: new Date().toISOString(),
@@ -371,28 +414,28 @@ export function ResearchPanel({
 
   // Filter and sort results
   const filteredResults = orderedResults
-    .filter(result => {
+    .filter((result) => {
       // Credibility filter
-      if (state?.selectedCredibility && state.selectedCredibility !== "all") {
+      if (state?.selectedCredibility && state.selectedCredibility !== 'all') {
         if (result.source.credibility !== state.selectedCredibility) return false;
       }
-      
+
       // Source type filter
       if (state?.selectedSourceTypes && state.selectedSourceTypes.length > 0) {
         if (!state.selectedSourceTypes.includes(result.source.type)) return false;
       }
-      
+
       return true;
     })
     .sort((a, b) => {
       if (!state?.sortBy) return 0;
-      
+
       switch (state.sortBy) {
-        case "relevance":
+        case 'relevance':
           return b.relevance - a.relevance;
-        case "timestamp":
+        case 'timestamp':
           return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
-        case "credibility":
+        case 'credibility':
           const credibilityScore = { high: 3, medium: 2, low: 1 };
           return credibilityScore[b.source.credibility] - credibilityScore[a.source.credibility];
         default:
@@ -404,40 +447,40 @@ export function ResearchPanel({
   // Handle bookmark toggle
   const toggleBookmark = (resultId: string) => {
     if (!state) return;
-    
+
     const bookmarked = [...state.bookmarkedResults];
     const index = bookmarked.indexOf(resultId);
-    
+
     if (index > -1) {
       bookmarked.splice(index, 1);
     } else {
       bookmarked.push(resultId);
     }
-    
+
     setState({ ...state, bookmarkedResults: bookmarked });
   };
 
   // Handle expand toggle
   const toggleExpanded = (resultId: string) => {
     if (!state) return;
-    
+
     const expanded = [...state.expandedResults];
     const index = expanded.indexOf(resultId);
-    
+
     if (index > -1) {
       expanded.splice(index, 1);
     } else {
       expanded.push(resultId);
     }
-    
+
     setState({ ...state, expandedResults: expanded });
   };
 
   // Get unique source types for filter
-  const availableSourceTypes = [...new Set(results.map(r => r.source.type))];
+  const availableSourceTypes = [...new Set(results.map((r) => r.source.type))];
 
   return (
-    <div className={cn("w-full max-w-4xl mx-auto", className)} {...props}>
+    <div className={cn('w-full max-w-4xl mx-auto', className)} {...(domProps as any)}>
       {/* Header */}
       <div className="mb-6">
         <div className="flex items-center justify-between mb-4">
@@ -457,13 +500,19 @@ export function ResearchPanel({
               </p>
             )}
           </div>
-          
+
           <div className="flex items-center gap-4 text-sm text-gray-500">
-            <span>{filteredResults.length} of {combinedResults.length} results</span>
+            <span>
+              {filteredResults.length} of {combinedResults.length} results
+            </span>
             <button
               type="button"
-              onClick={(e) => { e.stopPropagation(); openFileDialog(); }}
-              className="flex items-center gap-1 text-blue-600 hover:text-blue-800">
+              onClick={(e) => {
+                e.stopPropagation();
+                openFileDialog();
+              }}
+              className="flex items-center gap-1 text-blue-600 hover:text-blue-800"
+            >
               <Upload className="w-4 h-4" /> Upload
             </button>
           </div>
@@ -476,11 +525,14 @@ export function ResearchPanel({
             <div className="flex items-center gap-2">
               <label className="text-sm font-medium text-gray-700">Credibility:</label>
               <select
-                value={state?.selectedCredibility || "all"}
-                onChange={(e) => state && setState({ 
-                  ...state, 
-                  selectedCredibility: e.target.value as typeof state.selectedCredibility 
-                })}
+                value={state?.selectedCredibility || 'all'}
+                onChange={(e) =>
+                  state &&
+                  setState({
+                    ...state,
+                    selectedCredibility: e.target.value as typeof state.selectedCredibility,
+                  })
+                }
                 className="text-sm border border-gray-300 rounded px-2 py-1 bg-white"
               >
                 <option value="all">All</option>
@@ -494,11 +546,14 @@ export function ResearchPanel({
             <div className="flex items-center gap-2">
               <label className="text-sm font-medium text-gray-700">Sort by:</label>
               <select
-                value={state?.sortBy || "relevance"}
-                onChange={(e) => state && setState({ 
-                  ...state, 
-                  sortBy: e.target.value as typeof state.sortBy 
-                })}
+                value={state?.sortBy || 'relevance'}
+                onChange={(e) =>
+                  state &&
+                  setState({
+                    ...state,
+                    sortBy: e.target.value as typeof state.sortBy,
+                  })
+                }
                 className="text-sm border border-gray-300 rounded px-2 py-1 bg-white"
               >
                 <option value="relevance">Relevance</option>
@@ -513,7 +568,10 @@ export function ResearchPanel({
       {/* Results */}
       <div
         {...getRootProps()}
-        className={cn("space-y-4 relative", (isDragOver || isDragActive) && "ring-2 ring-blue-400 ring-offset-2")}
+        className={cn(
+          'space-y-4 relative',
+          (isDragOver || isDragActive) && 'ring-2 ring-blue-400 ring-offset-2',
+        )}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
       >
@@ -530,15 +588,21 @@ export function ResearchPanel({
             </div>
             <h3 className="text-lg font-medium text-gray-900 mb-2">No research results</h3>
             <p className="text-gray-600">
-              {results.length === 0 
-                ? "Start a conversation to see research results appear here."
-                : "Try adjusting your filters to see more results."
-              }
+              {results.length === 0
+                ? 'Start a conversation to see research results appear here.'
+                : 'Try adjusting your filters to see more results.'}
             </p>
           </div>
         ) : (
-          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-            <SortableContext items={filteredResults.map((r) => r.id)} strategy={verticalListSortingStrategy}>
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragEnd={handleDragEnd}
+          >
+            <SortableContext
+              items={filteredResults.map((r) => r.id)}
+              strategy={verticalListSortingStrategy}
+            >
               {filteredResults.map((result) => {
                 const Renderer = getRendererForResult(result);
                 return (
@@ -606,4 +670,4 @@ function SortableItem({ id, children }: { id: string; children: React.ReactNode 
       {children}
     </div>
   );
-} 
+}

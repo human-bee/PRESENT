@@ -1,22 +1,33 @@
-import { promises as fs } from 'fs';
-import path from 'path';
+/**
+ * Minimal prompt loader for agent + YouTube helpers.
+ * Uses in-memory templates with clear placeholders.
+ */
 
-const cache: Record<string, string> = {};
+const PROMPTS: Record<string, string> = {
+  enhancedDecisionTemplate: `You are a meeting-aware decision engine.
+
+Given the following conversational input (with context already embedded), decide whether to forward it to the UI generation system.
+
+Return strict JSON with fields: should_send (boolean), summary (<= 60 words), confidence (0-100), reason.
+
+INPUT:
+%TRANSCRIPT%
+`,
+
+  videoQualityAnalysis: `Analyze a list of YouTube videos for quality.
+Consider:
+- recency
+- verified/official channels
+- view-to-like ratios
+- content depth vs clickbait
+Return a brief rubric and how to score results 1-5.
+`,
+};
 
 export async function getPrompt(name: string): Promise<string> {
-  if (cache[name]) return cache[name];
+  const found = PROMPTS[name];
+  if (found) return found;
+  // Safe fallback prompt to keep agent running if a name is unknown
+  return `Provide a concise JSON decision for the following input:\n%TRANSCRIPT%`;
+}
 
-  // Attempt server-side file read first
-  try {
-    const filePath = path.join(process.cwd(), 'public', 'prompts', `${name}.txt`);
-    const data = await fs.readFile(filePath, 'utf-8');
-    cache[name] = data;
-    return data;
-  } catch {
-    // Fallback to client-side fetch if running in browser
-    const res = await fetch(`/prompts/${name}.txt`);
-    const txt = await res.text();
-    cache[name] = txt;
-    return txt;
-  }
-} 

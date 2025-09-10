@@ -28,7 +28,11 @@ function toTitleCase(s: string) {
 export function normalizeWeatherForecast(raw: any, location?: string): NormalizedForecast {
   // Case 1: Already in canonical form
   if (raw && Array.isArray(raw.periods)) {
-    return { location: raw.location || location, periods: raw.periods, alerts: raw.alerts ?? null } as NormalizedForecast;
+    return {
+      location: raw.location || location,
+      periods: raw.periods,
+      alerts: raw.alerts ?? null,
+    } as NormalizedForecast;
   }
 
   // Case 2: NOAA style { properties: { periods: [...] } } or { periods: [...] } with different keys
@@ -36,7 +40,10 @@ export function normalizeWeatherForecast(raw: any, location?: string): Normalize
   if (Array.isArray(periodsLike) && periodsLike.length > 0) {
     const periods = periodsLike.map((p: any, idx: number) => ({
       name: String(p.name ?? p.period ?? `Period ${idx + 1}`),
-      temperature: typeof p.temperature === 'number' ? `${p.temperature}°F` : String(p.temperature ?? p.temp ?? ''),
+      temperature:
+        typeof p.temperature === 'number'
+          ? `${p.temperature}°F`
+          : String(p.temperature ?? p.temp ?? ''),
       wind: {
         speed: String(p.windSpeed ?? p.wind?.speed ?? p.wind_speed ?? ''),
         direction: String(p.windDirection ?? p.wind?.direction ?? p.wind_dir ?? ''),
@@ -56,31 +63,34 @@ export function normalizeWeatherForecast(raw: any, location?: string): Normalize
       .split(/---+|\n\n|\r\n\r\n/)
       .map((s) => s.trim())
       .filter(Boolean);
-    const periods = segments.map((seg, idx) => {
-      const nameMatch = seg.match(/^(.*?):/);
-      const name = nameMatch ? nameMatch[1].trim() : `Period ${idx + 1}`;
-      const tempMatch = seg.match(/Temperature:\s*([^\n]+)/i);
-      const windMatch = seg.match(/Wind:\s*([^\n]+)/i);
-      const condMatch = seg.match(/\n\s*([A-Za-z ].*?)\s*$/);
-      let windSpeed = '', windDir = '';
-      if (windMatch) {
-        const wind = windMatch[1].trim();
-        const parts = wind.split(/\s+/);
-        // e.g. "5 mph SW" → speed = "5 mph", dir = "SW"
-        if (parts.length >= 3) {
-          windSpeed = parts.slice(0, 2).join(' ');
-          windDir = parts.slice(2).join(' ');
-        } else {
-          windSpeed = wind;
+    const periods = segments
+      .map((seg, idx) => {
+        const nameMatch = seg.match(/^(.*?):/);
+        const name = nameMatch ? nameMatch[1].trim() : `Period ${idx + 1}`;
+        const tempMatch = seg.match(/Temperature:\s*([^\n]+)/i);
+        const windMatch = seg.match(/Wind:\s*([^\n]+)/i);
+        const condMatch = seg.match(/\n\s*([A-Za-z ].*?)\s*$/);
+        let windSpeed = '',
+          windDir = '';
+        if (windMatch) {
+          const wind = windMatch[1].trim();
+          const parts = wind.split(/\s+/);
+          // e.g. "5 mph SW" → speed = "5 mph", dir = "SW"
+          if (parts.length >= 3) {
+            windSpeed = parts.slice(0, 2).join(' ');
+            windDir = parts.slice(2).join(' ');
+          } else {
+            windSpeed = wind;
+          }
         }
-      }
-      return {
-        name,
-        temperature: tempMatch ? tempMatch[1].trim() : '',
-        wind: { speed: windSpeed, direction: windDir },
-        condition: toTitleCase((condMatch?.[1] || '').trim()),
-      };
-    }).filter(p => p.temperature || p.condition);
+        return {
+          name,
+          temperature: tempMatch ? tempMatch[1].trim() : '',
+          wind: { speed: windSpeed, direction: windDir },
+          condition: toTitleCase((condMatch?.[1] || '').trim()),
+        };
+      })
+      .filter((p) => p.temperature || p.condition);
 
     return { location, periods, alerts: null };
   }
@@ -88,5 +98,3 @@ export function normalizeWeatherForecast(raw: any, location?: string): Normalize
   // Fallback: empty data so component shows loading fallback gracefully
   return { location, periods: [], alerts: null };
 }
-
-

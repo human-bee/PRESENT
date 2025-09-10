@@ -1,47 +1,56 @@
 /**
  * CanvasPage
- * 
- * Core collaborative workspace for authenticated users. 
+ *
+ * Core collaborative workspace for authenticated users.
  * Handles authentication redirect, initializes LiveKit for real-time audio/video and data sync, loads MCP server configs, and composes the main canvas UI with chat, controls, and agent integrations.
  */
 
-"use client";
+'use client';
 
-// Force dynamic rendering to prevent build errors
-export const dynamic = 'force-dynamic';
+// Route segment config is server-only; avoid exporting from a client component to keep TSX parse simple.
+// If you need dynamic rendering, configure it in a server wrapper for this page or via middleware.
+// export const dynamic = 'force-dynamic';
 
-// Force client-side rendering to prevent SSG issues with Tambo hooks
-import React, { useState, useEffect, useCallback } from "react";
-import { CanvasSpace } from "@/components/ui/canvas-space";
-import { MessageThreadCollapsible } from "@/components/ui/message-thread-collapsible";
-import { LivekitRoomConnector, CanvasLiveKitContext } from "@/components/ui/livekit-room-connector";
-import SessionSync from "@/components/SessionSync";
-import { loadMcpServers, suppressDevelopmentWarnings, suppressViolationWarnings } from "@/lib/mcp-utils";
-import { components, tools } from "@/lib/tambo";
-import { validateTamboTools } from "@/lib/tambo-tool-validator";
-import { TamboProvider } from "@tambo-ai/react";
-import { EnhancedMcpProvider } from "@/components/ui/enhanced-mcp-provider";
-import { Room, ConnectionState, RoomEvent, VideoPresets, RoomOptions } from "livekit-client";
-import { RoomContext } from "@livekit/components-react";
-import { useRouter } from "next/navigation";
-import { useAuth } from "@/hooks/use-auth";
+import React, { useState, useEffect, useCallback } from 'react';
+import { CanvasSpace } from '@/components/ui/canvas-space';
+import { MessageThreadCollapsible } from '@/components/ui/message-thread-collapsible';
+import { CanvasLiveKitContext } from '@/components/ui/livekit-room-connector';
+import SessionSync from '@/components/SessionSync';
+import {
+  loadMcpServers,
+  suppressDevelopmentWarnings,
+  suppressViolationWarnings,
+} from '@/lib/mcp-utils';
+import { EnhancedMcpProvider } from '@/components/ui/enhanced-mcp-provider';
+import { Room, ConnectionState, RoomEvent, VideoPresets, RoomOptions } from 'livekit-client';
+import { RoomContext } from '@livekit/components-react';
+import { useRouter } from 'next/navigation';
+import { useAuth } from '@/hooks/use-auth';
 import { ToolDispatcher } from '@/components/tool-dispatcher';
 import { SystemRegistrySync } from '@/components/ui/system-registry-sync';
+import { initializeMCPBridge } from '@/lib/mcp-bridge';
+import { AgentCapabilitiesBridge } from '@/components/ui/agent-capabilities-bridge';
+import { LiveKitStateBridge } from '@/lib/livekit/livekit-state-bridge';
+import LiveKitDebugConsole from '@/components/LiveKitDebugConsole';
+import DevEventFeed from '@/components/ui/dev-event-feed';
 // TODO: Investigate best way to "go back" to CanvasSpace once we have a better way to handle adding/updating/managing the state of multiple components on the canvas simultaneously
-
 
 // Suppress development warnings for cleaner console
 suppressDevelopmentWarnings();
 suppressViolationWarnings();
+// Initialize MCP bridge on client
+if (typeof window !== 'undefined') {
+  try { initializeMCPBridge(); } catch {}
+}
 
 export default function Canvas() {
   // Authentication check
   const { user, loading } = useAuth();
   const router = useRouter();
   // Track resolved canvas id and room name; do not render until resolved
-  const [canvasId, setCanvasId] = useState<string | null>(null);
-  const [roomName, setRoomName] = useState<string | null>(null);
-  
+  const [, setCanvasId] = useState<string | null>(null);
+  const [roomName, setRoomName] = useState<string>('');
+
   useEffect(() => {
     if (typeof window === 'undefined') return;
     // Resolve canvas id from URL, localStorage fallback, or create a new canvas row
@@ -50,27 +59,45 @@ export default function Canvas() {
       const idParam = url.searchParams.get('id');
       if (idParam) {
         setCanvasId(idParam);
-        setRoomName(`tambo-canvas-${idParam}`);
-        try { localStorage.setItem('present:lastCanvasId', idParam); } catch {}
-        try { window.dispatchEvent(new Event('present:canvas-id-changed')); } catch {}
+        setRoomName(`canvas-${idParam}`);
+        try {
+          localStorage.setItem('present:lastCanvasId', idParam);
+        } catch {}
+        try {
+          window.dispatchEvent(new Event('present:canvas-id-changed'));
+        } catch {}
         return;
       }
 
       // Try localStorage last used canvas id
       let lastId: string | null = null;
-      try { lastId = localStorage.getItem('present:lastCanvasId'); } catch {}
+      try {
+        lastId = localStorage.getItem('present:lastCanvasId');
+      } catch {}
       if (lastId) {
         url.searchParams.set('id', lastId);
         window.history.replaceState({}, '', url.toString());
         setCanvasId(lastId);
-        setRoomName(`tambo-canvas-${lastId}`);
-        try { window.dispatchEvent(new Event('present:canvas-id-changed')); } catch {}
+        setRoomName(`canvas-${lastId}`);
+        try {
+          window.dispatchEvent(new Event('present:canvas-id-changed'));
+        } catch {}
         return;
       }
 
       // No id known: create a new canvas row immediately so URL + room are stable
       // Defer creation until user is authenticated
       if (!user) return;
+
+      // Guard against duplicate inserts (React StrictMode / fast refresh / rapid re-entry)
+      try {
+        (window as any).__present = (window as any).__present || {};
+        if ((window as any).__present.creatingCanvas) {
+          console.warn('⚠️ [Canvas] Creation in progress; skipping duplicate create attempt');
+          return;
+        }
+        (window as any).__present.creatingCanvas = true;
+      } catch {}
       const now = new Date().toISOString();
       // Lazy import to avoid SSR issues
       const { supabase } = await import('@/lib/supabase');
@@ -103,7 +130,13 @@ export default function Canvas() {
       }
 
       if (!createdId) {
-        console.error('❌ [Canvas] Could not create canvas row; staying on loading screen', lastErr);
+        console.error(
+          '❌ [Canvas] Could not create canvas row; staying on loading screen',
+          lastErr,
+        );
+        try {
+          (window as any).__present.creatingCanvas = false;
+        } catch {}
         return; // Keep loading; user can refresh or try again
       }
       // Immediately set the canvas name to the id for clarity/stability
@@ -112,13 +145,7 @@ export default function Canvas() {
           .from('canvases')
           .update({ name: createdId, updated_at: now, last_modified: now })
           .eq('id', createdId);
-        // Ensure creator is a member (editor) for RLS-friendly access
-        try {
-          await supabase
-            .from('canvas_members')
-            .upsert({ canvas_id: createdId, user_id: user.id, role: 'editor', created_at: now } as any,
-                    { onConflict: 'canvas_id,user_id' } as any);
-        } catch {}
+        // Do NOT upsert owner into canvas_members to avoid duplicate rows in views
       } catch (e) {
         console.warn('⚠️ [Canvas] Failed to set canvas name to id:', e);
       }
@@ -126,9 +153,16 @@ export default function Canvas() {
       url.searchParams.set('id', createdId);
       window.history.replaceState({}, '', url.toString());
       setCanvasId(createdId);
-      setRoomName(`tambo-canvas-${createdId}`);
-      try { localStorage.setItem('present:lastCanvasId', createdId); } catch {}
-      try { window.dispatchEvent(new Event('present:canvas-id-changed')); } catch {}
+      setRoomName(`canvas-${createdId}`);
+      try {
+        localStorage.setItem('present:lastCanvasId', createdId);
+      } catch {}
+      try {
+        (window as any).__present.creatingCanvas = false;
+      } catch {}
+      try {
+        window.dispatchEvent(new Event('present:canvas-id-changed'));
+      } catch {}
     };
 
     resolveCanvasId();
@@ -138,36 +172,41 @@ export default function Canvas() {
         const current = new URL(window.location.href).searchParams.get('id');
         if (current) {
           setCanvasId(current);
-          setRoomName(`tambo-canvas-${current}`);
-          try { localStorage.setItem('present:lastCanvasId', current); } catch {}
+          setRoomName(`canvas-${current}`);
+          try {
+            localStorage.setItem('present:lastCanvasId', current);
+          } catch {}
         }
       } catch {}
     };
     window.addEventListener('present:canvas-id-changed', handleCanvasIdChanged);
     return () => window.removeEventListener('present:canvas-id-changed', handleCanvasIdChanged);
   }, [user]);
-  
+
   // Transcript panel state
   const [isTranscriptOpen, setIsTranscriptOpen] = useState(false);
-  
+
   const toggleTranscript = useCallback(() => {
-    setIsTranscriptOpen(prev => !prev);
+    setIsTranscriptOpen((prev) => !prev);
   }, []);
-  
+
   // Redirect to sign in if not authenticated
   useEffect(() => {
     if (loading) return;
     if (!user) {
-      router.push("/auth/signin");
+      router.push('/auth/signin');
     }
   }, [user, loading, router]);
-  
+
   // Load MCP server configurations
   const mcpServers = loadMcpServers();
-  const contextKey = "tambo-canvas";
+  const contextKey = 'canvas';
   // Feature flag to gate MCP in canvas to isolate invalid external tool names if needed
   const enableMcp = process.env.NEXT_PUBLIC_ENABLE_MCP_IN_CANVAS === 'true';
-  
+  // Local flags for logs / debug console
+  const enableDispatcherLogs = process.env.NEXT_PUBLIC_TOOL_DISPATCHER_LOGS !== 'false';
+  const enableDebugConsole = process.env.NODE_ENV !== 'production';
+
   // Create LiveKit room instance for the canvas
   const [room] = useState(() => {
     const roomOptions: RoomOptions = {
@@ -186,14 +225,14 @@ export default function Canvas() {
         videoCodec: 'vp8',
       },
     };
-    
+
     return new Room(roomOptions);
   });
-  
+
   // Track room connection state for context
   const [roomState, setRoomState] = useState({
     isConnected: false,
-    roomName: "",
+    roomName: '',
     participantCount: 0,
   });
 
@@ -207,7 +246,7 @@ export default function Canvas() {
         participantCount: room.numParticipants,
       });
     };
-    
+
     // Listen to room events
     room.on(RoomEvent.Connected, updateRoomState);
     room.on(RoomEvent.Disconnected, updateRoomState);
@@ -215,7 +254,7 @@ export default function Canvas() {
     room.on(RoomEvent.Reconnected, updateRoomState);
     room.on(RoomEvent.ParticipantConnected, updateRoomState);
     room.on(RoomEvent.ParticipantDisconnected, updateRoomState);
-    
+
     return () => {
       room.off(RoomEvent.Connected, updateRoomState);
       room.off(RoomEvent.Disconnected, updateRoomState);
@@ -233,6 +272,21 @@ export default function Canvas() {
       setRoomState((prev) => ({ ...prev, roomName }));
     }
   }, [roomName]);
+
+  // Bridge SystemRegistry state <-> LiveKit data channel so the agent can see canvas components
+  useEffect(() => {
+    if (!room) return;
+    try {
+      // Avoid double-start in dev/StrictMode by using a per-room guard
+      const key = `present:state-bridge:${room.name || 'default'}`;
+      const w = window as any;
+      if (typeof window !== 'undefined' && w[key]) return;
+      if (typeof window !== 'undefined') w[key] = true;
+
+      const bridge = new LiveKitStateBridge(room);
+      bridge.start();
+    } catch {}
+  }, [room]);
 
   // Show loading state while checking authentication
   if (loading || !roomName) {
@@ -256,100 +310,91 @@ export default function Canvas() {
       {/* MCP Config Button - positioned at top left */}
       {/* Removed - now in main menu */}
 
-      {/* Tambo Provider Setup */}
-      <TamboProvider
-        apiKey={process.env.NEXT_PUBLIC_TAMBO_API_KEY!}
-        components={components}
-        tools={validateTamboTools(tools as any)}
-      >
-        {enableMcp ? (
-          <EnhancedMcpProvider mcpServers={mcpServers}>
-            {/* System Registry Sync - syncs components and tools */}
-            <SystemRegistrySync />
-            
-            {/* LiveKit Room Context Provider - wraps everything! */}
-            <RoomContext.Provider value={room}>
-              {/* Tool Dispatcher - handles voice agent tool calls */}
-              <ToolDispatcher contextKey={contextKey} enableLogging={true}>
-                {/* Canvas LiveKit Context Provider - provides connection state to all canvas components */}
-                <CanvasLiveKitContext.Provider value={roomState}>
+      {enableMcp ? (
+        <EnhancedMcpProvider mcpServers={mcpServers}>
+          {/* System Registry Sync - syncs components and tools */}
+          <SystemRegistrySync />
+
+          {/* LiveKit Room Context Provider - wraps everything! */}
+          <RoomContext.Provider value={room}>
+            {/* Dev traces for data-channel (decision/tool_call/tool_result/editor_action) */}
+            <LiveKitDebugConsole enabled={enableDebugConsole} />
+            {/* Tool Dispatcher - handles voice agent tool calls */}
+            <ToolDispatcher contextKey={contextKey} enableLogging={enableDispatcherLogs}>
+              {/* Respond to agent capability queries */}
+              <AgentCapabilitiesBridge />
+              {/* Canvas LiveKit Context Provider - provides connection state to all canvas components */}
+              <CanvasLiveKitContext.Provider value={roomState}>
                 {/* Full-screen Canvas Space */}
                 <CanvasSpace
                   className="absolute inset-0 w-full h-full ios-vh"
                   onTranscriptToggle={toggleTranscript}
                 />
 
+                {/* Dev Event Feed overlay */}
+                <DevEventFeed />
+
                 <SessionSync roomName={roomName} />
 
-                {/* Optional LiveKit Room Connector (toggle via env NEXT_PUBLIC_SHOW_LIVEKIT_CONNECTOR) */}
-                {process.env.NEXT_PUBLIC_SHOW_LIVEKIT_CONNECTOR === 'true' && (
-                  <div className="absolute left-4 z-50 safe-bottom" style={{ bottom: 'calc(1rem + env(safe-area-inset-bottom))' }}>
-                    <LivekitRoomConnector 
-                      roomName={roomName}
-                      userName={user.user_metadata?.full_name || "Canvas User"}
-                      autoConnect={false}
-                    />
-                  </div>
-                )}
+                {/* LiveKit connection is now controlled from the Transcript sidebar */}
 
-                {/* Collapsible Message Thread - now slides from right and controlled by toolbar */}
-                {isTranscriptOpen && (
-                  <MessageThreadCollapsible
-                    contextKey={contextKey}
-                    className="fixed right-0 top-0 z-50 transform transition-transform duration-300 w-full max-w-sm sm:max-w-md md:max-w-lg ios-vh safe-area-padded bg-background"
-                    variant="default"
-                    onClose={toggleTranscript}
-                  />
-                )}
-                </CanvasLiveKitContext.Provider>
-              </ToolDispatcher>
-            </RoomContext.Provider>
-          </EnhancedMcpProvider>
-        ) : (
-          <>
-            {/* System Registry Sync - syncs components and tools */}
-            <SystemRegistrySync />
-            
-            {/* LiveKit Room Context Provider - wraps everything! */}
-            <RoomContext.Provider value={room}>
-              {/* Tool Dispatcher - handles voice agent tool calls */}
-              <ToolDispatcher contextKey={contextKey} enableLogging={true}>
-                {/* Canvas LiveKit Context Provider - provides connection state to all canvas components */}
-                <CanvasLiveKitContext.Provider value={roomState}>
+                {/* Collapsible Message Thread - keep mounted; hide via transform to preserve state */}
+                <MessageThreadCollapsible
+                  contextKey={contextKey}
+                  className={[
+                    'fixed right-0 top-0 z-50 transform transition-transform duration-300 w-full max-w-sm sm:max-w-md md:max-w-lg ios-vh safe-area-padded bg-background',
+                    isTranscriptOpen ? 'translate-x-0' : 'translate-x-full pointer-events-none opacity-0',
+                  ].join(' ')}
+                  variant="default"
+                  onClose={toggleTranscript}
+                />
+              </CanvasLiveKitContext.Provider>
+            </ToolDispatcher>
+          </RoomContext.Provider>
+        </EnhancedMcpProvider>
+      ) : (
+        <>
+          {/* System Registry Sync - syncs components and tools */}
+          <SystemRegistrySync />
+
+          {/* LiveKit Room Context Provider - wraps everything! */}
+          <RoomContext.Provider value={room}>
+            {/* Dev traces for data-channel (decision/tool_call/tool_result/editor_action) */}
+            <LiveKitDebugConsole enabled={enableDebugConsole} />
+            {/* Tool Dispatcher - handles voice agent tool calls */}
+            <ToolDispatcher contextKey={contextKey} enableLogging={enableDispatcherLogs}>
+              {/* Respond to agent capability queries */}
+              <AgentCapabilitiesBridge />
+              {/* Canvas LiveKit Context Provider - provides connection state to all canvas components */}
+              <CanvasLiveKitContext.Provider value={roomState}>
                 {/* Full-screen Canvas Space */}
                 <CanvasSpace
                   className="absolute inset-0 w-full h-full ios-vh"
                   onTranscriptToggle={toggleTranscript}
                 />
 
+                {/* Dev Event Feed overlay */}
+                <DevEventFeed />
+
                 <SessionSync roomName={roomName} />
 
-                {/* Optional LiveKit Room Connector (toggle via env NEXT_PUBLIC_SHOW_LIVEKIT_CONNECTOR) */}
-                {process.env.NEXT_PUBLIC_SHOW_LIVEKIT_CONNECTOR === 'true' && (
-                  <div className="absolute left-4 z-50 safe-bottom" style={{ bottom: 'calc(1rem + env(safe-area-inset-bottom))' }}>
-                    <LivekitRoomConnector 
-                      roomName={roomName}
-                      userName={user.user_metadata?.full_name || "Canvas User"}
-                      autoConnect={false}
-                    />
-                  </div>
-                )}
+                {/* LiveKit connection is now controlled from the Transcript sidebar */}
 
-                {/* Collapsible Message Thread - now slides from right and controlled by toolbar */}
-                {isTranscriptOpen && (
-                  <MessageThreadCollapsible
-                    contextKey={contextKey}
-                    className="fixed right-0 top-0 z-50 transform transition-transform duration-300 w-full max-w-sm sm:max-w-md md:max-w-lg ios-vh safe-area-padded bg-background"
-                    variant="default"
-                    onClose={toggleTranscript}
-                  />
-                )}
-                </CanvasLiveKitContext.Provider>
-              </ToolDispatcher>
-            </RoomContext.Provider>
-          </>
-        )}
-      </TamboProvider>
+                {/* Collapsible Message Thread - keep mounted; hide via transform to preserve state */}
+                <MessageThreadCollapsible
+                  contextKey={contextKey}
+                  className={[
+                    'fixed right-0 top-0 z-50 transform transition-transform duration-300 w-full max-w-sm sm:max-w-md md:max-w-lg ios-vh safe-area-padded bg-background',
+                    isTranscriptOpen ? 'translate-x-0' : 'translate-x-full pointer-events-none opacity-0',
+                  ].join(' ')}
+                  variant="default"
+                  onClose={toggleTranscript}
+                />
+              </CanvasLiveKitContext.Provider>
+            </ToolDispatcher>
+          </RoomContext.Provider>
+        </>
+      )}
     </div>
   );
 }

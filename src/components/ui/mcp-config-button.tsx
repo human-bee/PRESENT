@@ -1,7 +1,7 @@
-"use client";
-import Link from "next/link";
-import { useEffect, useState } from "react";
-import { getMcpServerStatuses } from "@/lib/mcp-utils";
+'use client';
+import Link from 'next/link';
+import { useEffect, useState } from 'react';
+import { getMcpServerStatuses } from '@/lib/mcp-utils';
 
 export const McpConfigButton = () => {
   // Load MCP server configurations from localStorage
@@ -12,23 +12,25 @@ export const McpConfigButton = () => {
   useEffect(() => {
     const updateStatus = () => {
       // Only run in browser environment
-      if (typeof window !== "undefined") {
-        const savedServers = localStorage.getItem("mcp-servers");
+      if (typeof window !== 'undefined') {
+        const savedServers = localStorage.getItem('mcp-servers');
         if (savedServers) {
           try {
             const servers = JSON.parse(savedServers);
             setMcpServerCount(servers.length);
           } catch (e) {
-            console.error("Failed to parse saved MCP servers", e);
+            console.error('Failed to parse saved MCP servers', e);
           }
         }
 
         // Get connection status
         const statuses = getMcpServerStatuses();
         const statusArray = Array.from(statuses.values());
-        const connected = statusArray.filter(s => s.status === 'connected').length;
-        const failed = statusArray.filter(s => s.status === 'failed' || s.status === 'disabled').length;
-        
+        const connected = statusArray.filter((s) => s.status === 'connected').length;
+        const failed = statusArray.filter(
+          (s) => s.status === 'failed' || s.status === 'disabled',
+        ).length;
+
         setConnectedCount(connected);
         setHasFailures(failed > 0);
       }
@@ -42,7 +44,7 @@ export const McpConfigButton = () => {
 
   const getStatusIndicator = () => {
     if (mcpServerCount === 0) return null;
-    
+
     if (hasFailures) {
       return (
         <span className="flex items-center justify-center bg-red-500 text-white text-xs rounded-full w-5 h-5 ml-1">
@@ -50,7 +52,7 @@ export const McpConfigButton = () => {
         </span>
       );
     }
-    
+
     if (connectedCount > 0) {
       return (
         <span className="flex items-center justify-center bg-green-500 text-white text-xs rounded-full w-5 h-5 ml-1">
@@ -58,7 +60,7 @@ export const McpConfigButton = () => {
         </span>
       );
     }
-    
+
     return (
       <span className="flex items-center justify-center bg-yellow-500 text-white text-xs rounded-full w-5 h-5 ml-1">
         {mcpServerCount}

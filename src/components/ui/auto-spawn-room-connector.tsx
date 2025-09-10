@@ -1,4 +1,4 @@
-"use client";
+'use client';
 
 /**
  * AutoSpawnRoomConnector Component
@@ -15,8 +15,7 @@
  * 🧹 [AutoSpawn] Cleanup operations
  */
 
-import { useEffect, useRef, useState } from "react";
-import { useTamboThread } from "@tambo-ai/react";
+import { useEffect, useRef, useState } from 'react';
 
 /**
  * AutoSpawnRoomConnector Component
@@ -28,7 +27,7 @@ export function AutoSpawnRoomConnector() {
   if (process.env.NEXT_PUBLIC_AUTO_SPAWN_LIVEKIT !== 'true') {
     return null;
   }
-  const tamboContext = useTamboThread();
+  const Context = useContext();//TODO: get context from registry, transcription, etc.
   const hasSpawned = useRef(false);
   const [retryCount, setRetryCount] = useState(0);
 
@@ -37,12 +36,13 @@ export function AutoSpawnRoomConnector() {
     if (hasSpawned.current) {
       return;
     }
-    
+
     // If context is not ready, try again after a delay
-    if (!tamboContext || !tamboContext.sendMessage) {
-      if (retryCount < 5) { // Reduced retry limit
+    if (!Context || !useContext.sendMessage) {
+      if (retryCount < 5) {
+        // Reduced retry limit
         const retryTimer = setTimeout(() => {
-          setRetryCount(prev => prev + 1);
+          setRetryCount((prev) => prev + 1);
         }, 2000); // Longer delay between retries
         return () => {
           clearTimeout(retryTimer);
@@ -53,26 +53,27 @@ export function AutoSpawnRoomConnector() {
       return;
     }
 
-    const { sendMessage, thread } = tamboContext;
-    
+    const { sendMessage, thread } = Context;
+
     // Wait for canvas to be ready
     const timer = setTimeout(() => {
       try {
         // Check if we already have a room connector in the thread messages
-        const hasRoomConnector = thread?.messages?.some(msg => 
-          msg.role === 'assistant' && msg.content && (
-            msg.content.includes('LivekitRoomConnector') ||
-            msg.content.includes('room connector') ||
-            msg.content.includes('LiveKit room')
-          )
+        const hasRoomConnector = thread?.messages?.some(
+          (msg) =>
+            msg.role === 'assistant' &&
+            msg.content &&
+            (msg.content.includes('LivekitRoomConnector') ||
+              msg.content.includes('room connector') ||
+              msg.content.includes('LiveKit room')),
         );
-        
+
         if (!hasRoomConnector && !hasSpawned.current) {
           hasSpawned.current = true;
-          
+
           // Send message to create room connector
           sendMessage(
-            'Create a LiveKit room connector with room name "tambo-canvas-room" and show it on the canvas. Set userName to "Canvas User".'
+            'Create a LiveKit room connector with room name "canvas-room" and show it on the canvas. Set userName to "Canvas User".',
           );
         } else if (hasRoomConnector) {
           hasSpawned.current = true;
@@ -85,10 +86,10 @@ export function AutoSpawnRoomConnector() {
     return () => {
       clearTimeout(timer);
     };
-  }, [tamboContext, retryCount]);
+  }, [Context, retryCount]);
 
   // This component doesn't render anything
   return null;
 }
 
-export default AutoSpawnRoomConnector; 
+export default AutoSpawnRoomConnector;

@@ -1,5 +1,5 @@
 ---
-alwaysApply: true
+alwaysApply: false
 ---
 Keep track of all codechanges, features, bug fixes, etc in linear. 
 

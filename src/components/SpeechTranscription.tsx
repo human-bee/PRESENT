@@ -2,13 +2,20 @@
 
 import React, { useState, useEffect } from 'react';
 import dynamic from 'next/dynamic';
-const LivekitRoom = dynamic(() => import('@livekit/components-react').then(m => m.LiveKitRoom), { ssr: false });
-const RoomAudioRenderer = dynamic(() => import('@livekit/components-react').then(m => m.RoomAudioRenderer), { ssr: false });
-const ControlBar = dynamic(() => import('@livekit/components-react').then(m => m.ControlBar), { ssr: false });
+const LivekitRoom = dynamic(() => import('@livekit/components-react').then((m) => m.LiveKitRoom), {
+  ssr: false,
+});
+const RoomAudioRenderer = dynamic(
+  () => import('@livekit/components-react').then((m) => m.RoomAudioRenderer),
+  { ssr: false },
+);
+const ControlBar = dynamic(() => import('@livekit/components-react').then((m) => m.ControlBar), {
+  ssr: false,
+});
 const useDataChannel = (...args: any[]) => {
   // lazy hook accessor
   const mod = require('@livekit/components-react');
-  return mod.useDataChannel(...args as any);
+  return mod.useDataChannel(...(args as any));
 };
 const AudioPresets = require('@livekit/components-react').AudioPresets;
 const useRoomContext = require('@livekit/components-react').useRoomContext;
@@ -41,11 +48,11 @@ export function SpeechTranscription({ roomName, username }: SpeechTranscriptionP
     try {
       const response = await fetch(`/api/token?roomName=${roomName}&username=${username}`);
       const data = await response.json();
-      
+
       if (!response.ok) {
         throw new Error(data.error || 'Failed to get token');
       }
-      
+
       setToken(data.token);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to get token');
@@ -74,8 +81,8 @@ export function SpeechTranscription({ roomName, username }: SpeechTranscriptionP
         body: JSON.stringify({
           roomName,
           trigger: 'participant_connected',
-          timestamp: Date.now()
-        })
+          timestamp: Date.now(),
+        }),
       });
 
       if (!response.ok) {
@@ -105,9 +112,9 @@ export function SpeechTranscription({ roomName, username }: SpeechTranscriptionP
               id: `${data.participantId}-${data.timestamp}`,
               participantId: data.participantId,
               text: data.text,
-              timestamp: data.timestamp
+              timestamp: data.timestamp,
             };
-            setTranscriptions(prev => [...prev, entry]);
+            setTranscriptions((prev) => [...prev, entry]);
           }
         } catch (e) {
           console.error('Failed to parse data channel message:', e);
@@ -129,7 +136,7 @@ export function SpeechTranscription({ roomName, username }: SpeechTranscriptionP
   return (
     <div className="p-6 bg-white rounded-lg shadow-lg">
       <h2 className="text-2xl font-bold mb-4">Speech Transcription</h2>
-      
+
       <LivekitRoom
         token={token}
         serverUrl={process.env.NEXT_PUBLIC_LK_SERVER_URL}
@@ -159,10 +166,10 @@ export function SpeechTranscription({ roomName, username }: SpeechTranscriptionP
       >
         {/* Track room instance */}
         <RoomTracker />
-        
+
         {/* Browser-based transcription service */}
-        <LiveTranscription 
-          room={room} 
+        <LiveTranscription
+          room={room}
           onTranscription={(data) => {
             console.log('Browser transcription:', data);
             // The LiveTranscription component already sends data via LiveKit data channels
@@ -179,18 +186,16 @@ export function SpeechTranscription({ roomName, username }: SpeechTranscriptionP
             onClick={isConnected ? handleDisconnect : handleConnect}
             disabled={isConnecting || !token}
             className={`px-4 py-2 rounded-md font-medium transition-colors ${
-              isConnected 
-                ? 'bg-red-500 hover:bg-red-600 text-white' 
+              isConnected
+                ? 'bg-red-500 hover:bg-red-600 text-white'
                 : 'bg-blue-500 hover:bg-blue-600 text-white disabled:bg-gray-300'
             }`}
           >
             {isConnecting ? 'Connecting...' : isConnected ? 'Stop' : 'Start'}
           </button>
-          
-          {error && (
-            <p className="mt-2 text-red-500 text-sm">{error}</p>
-          )}
-          
+
+          {error && <p className="mt-2 text-red-500 text-sm">{error}</p>}
+
           {isConnected && (
             <p className="mt-2 text-green-600 text-sm">
               Connected as {username} to room: {roomName}
@@ -233,4 +238,4 @@ export function SpeechTranscription({ roomName, username }: SpeechTranscriptionP
       </LivekitRoom>
     </div>
   );
-} 
+}

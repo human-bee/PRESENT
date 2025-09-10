@@ -1,8 +1,8 @@
-"use client";
+'use client';
 
-import React, { useEffect, useCallback } from "react";
-import { useRoomContext } from "@livekit/components-react";
-import { createLiveKitBus } from "../lib/livekit-bus";
+import React, { useEffect, useCallback } from 'react';
+import { useRoomContext } from '@livekit/components-react';
+import { createLiveKitBus } from '../lib/livekit/livekit-bus';
 
 /**
  * CanvasSyncAdapter
@@ -11,7 +11,7 @@ import { createLiveKitBus } from "../lib/livekit-bus";
  * bidirectional synchronisation through LiveKit data-channels.
  *
  * Props:
- *   componentId   – unique id you already pass to useTamboComponentState.
+ *   componentId   – unique id you already pass to usecustomComponentState.
  *   onRemotePatch – function(patch) => void  (called when a peer/AI sends update)
  *   getItemCount  – optional function returning number of items for heartbeat metrics
  *
@@ -28,36 +28,44 @@ export interface CanvasSyncAdapterProps {
   children: React.ReactNode;
 }
 
-export function CanvasSyncAdapter({ componentId, onRemotePatch, getItemCount, children }: CanvasSyncAdapterProps) {
+export function CanvasSyncAdapter({
+  componentId,
+  onRemotePatch,
+  getItemCount,
+  children,
+}: CanvasSyncAdapterProps) {
   const room = useRoomContext();
   const bus = createLiveKitBus(room);
 
   const sendPatch = useCallback(
     (patch: Record<string, unknown>) => {
-      bus.send("ui_update", {
+      bus.send('ui_update', {
         componentId,
         patch,
         timestamp: Date.now(),
       });
     },
-    [bus, componentId]
+    [bus, componentId],
   );
 
   // Expose sendPatch via custom event so inner components can call without prop-drilling
   useEffect(() => {
     const handler = (e: Event) => {
-      const custom = e as CustomEvent<{ componentId: string; patch: Record<string, unknown> }>;
+      const custom = e as CustomEvent<{
+        componentId: string;
+        patch: Record<string, unknown>;
+      }>;
       if (custom.detail.componentId === componentId) {
         sendPatch(custom.detail.patch);
       }
     };
-    window.addEventListener("tambo:canvasPatch", handler);
-    return () => window.removeEventListener("tambo:canvasPatch", handler);
+    window.addEventListener('custom:canvasPatch', handler);
+    return () => window.removeEventListener('custom:canvasPatch', handler);
   }, [sendPatch, componentId]);
 
   // Listen for remote patches
   useEffect(() => {
-    const off = bus.on("ui_update", (msg: any) => {
+    const off = bus.on('ui_update', (msg: any) => {
       if (msg?.componentId === componentId && msg?.patch) {
         onRemotePatch?.(msg.patch);
       }
@@ -82,4 +90,4 @@ export function CanvasSyncAdapter({ componentId, onRemotePatch, getItemCount, ch
   }, [bus, componentId, getItemCount]);
 
   return <>{children}</>;
-} 
+}

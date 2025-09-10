@@ -1,1476 +1,637 @@
 /**
- * ToolDispatcher - Unified Tool Execution System
- * 
- * AGENT #3 of 3 in the Tambo Architecture
- * =======================================
- * This is the TOOL DISPATCHER that runs in the browser as a React component.
- * 
- * Responsibilities:
- * - Receive tool calls from the Voice Agent
- * - Route to appropriate handlers (Tambo UI, MCP tools, built-in)
- * - Execute tools through the unified SystemRegistry
- * - Manage execution state and prevent duplicates
- * - Publish results back to the Voice Agent
- * - Sync discovered MCP tools to SystemRegistry
- * 
- * Data Flow:
- * 1. Voice Agent publishes tool_call event
- * 2. This dispatcher receives and validates
- * 3. Routes through SystemRegistry.executeTool()
- * 4. Executes via Tambo/MCP/built-in handler
- * 5. Publishes tool_result back to the Voice Agent
- * 
- * Key Features:
- * - Circuit breaker prevents duplicate executions
- * - Dynamic tool discovery and registration
- * - Smart YouTube search with context
- * - Real-time state synchronization
- * 
- * This replaces the fragmented RPC approach with a unified event-driven system.
- * See docs/THREE_AGENT_ARCHITECTURE.md for complete details.
+ * ToolDispatcher
+ *
+ * Minimal first-principles dispatcher that exposes a context + hook
+ * and handles a small set of tool calls needed by the UI.
+ *
+ * Responsibilities now:
+ * - Provide `useToolDispatcher()` with `executeToolCall` function
+ * - For `generate_ui_component`, dispatch a browser event that the
+ *   thread UI listens to (custom:showComponent)
+ * - Optionally expose a global bridge used by the MCP layer
  */
 
-"use client";
+'use client';
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
-
-import React, { createContext, useContext, useEffect, useRef, useState, useCallback, useMemo } from 'react';
+import * as React from 'react';
 import { useRoomContext } from '@livekit/components-react';
-import { useTamboThread } from '@tambo-ai/react';
-import { useValidatedTambo } from '@/hooks/use-validated-tambo';
-import { sanitizeToolName, isValidToolName } from '@/lib/tambo-tool-validator';
-import { createLiveKitBus } from '../lib/livekit-bus';
-import { useContextKey } from './RoomScopedProviders';
-import { createLogger } from '../lib/utils';
-import { CircuitBreaker } from '../lib/circuit-breaker';
-import { systemRegistry, syncMcpToolsToRegistry } from '../lib/system-registry';
+import { createLiveKitBus } from '@/lib/livekit/livekit-bus';
 import { createObservabilityBridge } from '@/lib/observability-bridge';
-import { initializeMCPBridge, registerMCPTools, waitForMcpReady } from '../lib/mcp-bridge';
 import { ComponentRegistry } from '@/lib/component-registry';
-import { nanoid } from 'nanoid';
-import { flags } from '@/lib/feature-flags';
 
-// Generate unique IDs without external dependency
-const generateId = () => `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-
-// Create logger for consistent logging
-const logger = createLogger('ToolDispatcher');
-
-// Event types for the unified system
-export const TOOL_TOPICS = {
-  TRANSCRIPT: 'transcription',     // Existing topic for transcripts
-  TOOL_CALL: 'tool_call',          // New: Agent requests tool execution
-  TOOL_RESULT: 'tool_result',      // New: Tool execution results
-  TOOL_ERROR: 'tool_error',        // New: Tool execution errors
-  UI_UPDATE: 'ui_update',          // New: UI component updates
-} as const;
-
-// Tool call event structure
-interface ToolCallEvent {
+type ToolCall = {
   id: string;
-  roomId: string;
+  roomId?: string;
   type: 'tool_call';
-  payload: {
-    tool: string;
-    params: Record<string, unknown>;
-    context?: {
-      source?: string;
-      timestamp?: number;
-      transcript?: string;
-      summary?: string;
-      speaker?: string;
-      confidence?: number;
-      reason?: string;
-      intent?: 'youtube_search' | 'ui_component' | 'general';
-      structuredContext?: {
-        rawQuery?: string;
-        wantsLatest?: boolean;
-        wantsOfficial?: boolean;
-        contentType?: string;
-        artist?: string;
-      };
-    };
-  };
-  timestamp: number;
-  source: 'voice' | 'text' | 'system';
+  payload: { tool: string; params?: Record<string, unknown> };
+  timestamp?: number;
+  source?: string;
+};
+
+type DispatcherContext = {
+  executeToolCall: (call: ToolCall) => Promise<{ status: string; message?: string }>;
+};
+
+const Ctx = React.createContext<DispatcherContext | null>(null);
+
+export function useToolDispatcher(): DispatcherContext {
+  const ctx = React.useContext(Ctx);
+  if (!ctx) throw new Error('useToolDispatcher must be used within ToolDispatcher');
+  return ctx;
 }
 
-// Tool result event structure
-interface ToolResultEvent {
-  id: string;
-  toolCallId: string;
-  type: 'tool_result';
-  result: unknown;
-  timestamp: number;
-  executionTime?: number;
-}
-
-// Tool error event structure
-interface ToolErrorEvent {
-  id: string;
-  toolCallId: string;
-  type: 'tool_error';
-  error: string;
-  timestamp: number;
-}
-
-// Pending tool tracking
-interface PendingTool {
-  id: string;
-  timestamp: number;
-  status: 'pending' | 'executing' | 'completed' | 'failed' | 'error';
-  tool: string;
-  params: Record<string, unknown>;
-}
-
-// Context for tool dispatcher
-interface ToolDispatcherContextValue {
-  pendingTools: Map<string, PendingTool>;
-  executeToolCall: (event: ToolCallEvent) => Promise<void>;
-  isProcessing: boolean;
-}
-
-const ToolDispatcherContext = createContext<ToolDispatcherContextValue>({
-  pendingTools: new Map(),
-  executeToolCall: async () => {},
-  isProcessing: false,
-});
-
-export const useToolDispatcher = () => useContext(ToolDispatcherContext);
-
-interface ToolDispatcherProps {
+export function ToolDispatcher({
+  children,
+  contextKey,
+  enableLogging = false,
+}: {
   children: React.ReactNode;
+  contextKey?: string;
   enableLogging?: boolean;
-  maxPendingAge?: number; // Max age for pending tools in ms
-  contextKey?: string; // Context key for Tambo thread
-}
-
-export function ToolDispatcher({ 
-  children, 
-  enableLogging = true,
-  maxPendingAge = 30000, // 30 seconds
-  contextKey: propContextKey
-}: ToolDispatcherProps) {
+}) {
+  const log = (...args: any[]) => enableLogging && console.log('[ToolDispatcher]', ...args);
   const room = useRoomContext();
-  const { sendThreadMessage } = useTamboThread();
-  const roomContextKey = useContextKey();
-  const { toolRegistry = {} } = useValidatedTambo();
-  const pendingById = useRef(new Map<string, PendingTool>());
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [mcpReady, setMcpReady] = useState(false);
-  
-  // Runtime flag: enable fast cadences only when debugging
-  const IS_DEBUG = process.env.NEXT_PUBLIC_TAMBO_DEBUG === 'true';
-  
-  // Log helper using centralized logger - moved before useEffect
-  const log = useCallback((...args: unknown[]) => {
-    if (enableLogging) {
-      logger.log(...args);
-    }
-  }, [enableLogging]);
-  
-  // Initialize observability bridge
-  const observabilityBridge = useMemo(() => {
-    return room ? createObservabilityBridge(room) : null;
-  }, [room]);
-  
-  // Ensure MCP bridge is initialized even before tools are discovered
-  useEffect(() => {
-    try {
-      if (flags.mcpEarlyInitEnabled) {
-        initializeMCPBridge();
-      }
-    } catch {}
-  }, [room]);
+  const bus = React.useMemo(() => createLiveKitBus(room), [room]);
 
-  // Expose a minimal MCP executor for components (used by initializeMCPBridge path 1)
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      window.__tambo_tool_dispatcher = {
-        executeMCPTool: async (toolName: string, params: any) => {
-          const name = toolName.startsWith('mcp_') ? toolName : `mcp_${toolName}`;
-          const event: ToolCallEvent = {
-            id: generateId(),
-            roomId: room?.name || 'component',
-            type: 'tool_call',
-            payload: { tool: name, params: { ...params, origin: 'component-subagent' } },
-            timestamp: Date.now(),
-            source: 'system',
-          };
-          await executeToolCall(event);
-          return { status: 'SENT' };
-        },
-      };
-    }
-  }, [room]);
+  const executeToolCall = React.useCallback<DispatcherContext['executeToolCall']>(
+    async (call) => {
+      const { tool, params = {} } = call.payload || ({} as any);
+      log('call', tool, params);
 
-  // Set up enhanced observability logging
-  useEffect(() => {
-    if (!observabilityBridge) return;
-    
-    // Log observability summary every 30 seconds
-    const interval = setInterval(() => {
-      observabilityBridge.logSummary();
-    }, 30000);
-    
-    return () => clearInterval(interval);
-  }, [observabilityBridge]);
-  
-  // Handle MCP tool discovery sync
-  useEffect(() => {
-    if (!toolRegistry) return;
-    
-    const allTools: Array<{name: string, description: string, originalName?: string}> = [];
-    
-    if (toolRegistry instanceof Map) {
-      toolRegistry.forEach((tool: any, name: string) => {
-        if (isValidToolName(name)) {
-          allTools.push({ 
-            name, 
-            description: tool.description || tool.name || name 
-          });
-        } else {
-          const sanitized = sanitizeToolName(name);
-          console.warn(`🔧 [ToolDispatcher] Sanitized tool name: "${name}" → "${sanitized}"`);
-          allTools.push({ 
-            name: sanitized, 
-            description: tool.description || tool.name || name,
-            originalName: name
-          });
-        }
-      });
-    } else if (typeof toolRegistry === 'object') {
-      Object.entries(toolRegistry).forEach(([name, tool]: [string, any]) => {
-        if (isValidToolName(name)) {
-          allTools.push({ 
-            name, 
-            description: tool.description || tool.name || name 
-          });
-        } else {
-          const sanitized = sanitizeToolName(name);
-          console.warn(`🔧 [ToolDispatcher] Sanitized tool name: "${name}" → "${sanitized}"`);
-          allTools.push({ 
-            name: sanitized, 
-            description: tool.description || tool.name || name,
-            originalName: name
-          });
-        }
-      });
-    }
-    
-    if (allTools.length > 0) {
-      log('🔄 [ToolDispatcher] Syncing tools to system registry:', allTools.length, 'tools');
-      if (enableLogging) {
-        log('🔍 [ToolDispatcher] Valid tool names:', allTools.map(t => t.name).join(', '));
-      }
-      syncMcpToolsToRegistry(allTools);
-      if (flags.mcpEarlyInitEnabled) {
-        initializeMCPBridge();
-      }
-      const mcpTools: Record<string, any> = {};
-      allTools.forEach(tool => {
-        if (tool.name.startsWith('mcp_')) {
-          mcpTools[tool.name] = (toolRegistry as any).get?.(tool.name) || (toolRegistry as any)[tool.name];
-        }
-      });
-      if (Object.keys(mcpTools).length > 0) {
-        registerMCPTools(mcpTools);
-        log('🌉 [ToolDispatcher] MCP Bridge initialized with', Object.keys(mcpTools).length, 'MCP tools');
-        setMcpReady(true);
-      }
-    }
-  }, [toolRegistry, log]);
-  
-  // Use circuit breaker for duplicate detection
-  const circuitBreaker = useRef(new CircuitBreaker({
-    duplicateWindow: 3000,
-    completedWindow: 30000,
-    cooldownWindow: 5000
-  }));
-  
-  // Use room name as context key to ensure thread/canvas sync
-  const effectiveContextKey = propContextKey || roomContextKey || room?.name || 'canvas';
-
-  const bus = createLiveKitBus(room);
-
-  // Emit MCP ready marker when tools are registered
-  useEffect(() => {
-    if (mcpReady) {
-      try { bus.send('mcp_ready', { type: 'mcp_ready', timestamp: Date.now(), source: 'dispatcher' }); } catch {}
-    }
-  }, [mcpReady]);
-  
-  // Expose system capabilities via data channel for agent to query
-  useEffect(() => {
-    if (!room || !bus) return;
-    
-    const handleCapabilityQuery = (data: Uint8Array) => {
       try {
-        const message = JSON.parse(new TextDecoder().decode(data));
-        
-        if (message.type === 'capability_query') {
-          log('📊 [ToolDispatcher] Agent requesting capability list');
-          
-          // Get current capabilities from system registry
-          const capabilities = systemRegistry.exportForAgent();
-          
-          // Send back via data channel
-          const response = {
-            type: 'capability_list',
-            capabilities,
-            timestamp: Date.now()
-          };
-          
-          bus.send('capability_list', response);
-          log('✅ [ToolDispatcher] Sent capability list to agent:', capabilities.tools.length, 'tools');
-        }
-      } catch {
-        // Ignore non-JSON messages
-      }
-    };
-    
-    // Listen for capability queries
-    room.on('dataReceived', handleCapabilityQuery);
-    
-    return () => {
-      room.off('dataReceived', handleCapabilityQuery);
-    };
-  }, [room, bus, log]);
-  
-  // Publish tool result back to agent
-  const publishToolResult = useCallback(async (toolCallId: string, result: unknown) => {
-    const resultEvent: ToolResultEvent = {
-      id: generateId(),
-      toolCallId,
-      type: 'tool_result',
-      result,
-      timestamp: Date.now(),
-      executionTime: Date.now() - (pendingById.current.get(toolCallId)?.timestamp || Date.now()),
-    };
-
-    bus.send(TOOL_TOPICS.TOOL_RESULT, resultEvent);
-
-    log('📤 Published tool result:', { toolCallId, executionTime: resultEvent.executionTime });
-  }, [bus, log]);
-
-  // Publish tool error back to agent
-  const publishToolError = useCallback(async (toolCallId: string, error: Error | string) => {
-    const errorEvent: ToolErrorEvent = {
-      id: generateId(),
-      toolCallId,
-      type: 'tool_error',
-      error: error instanceof Error ? error.message : error,
-      timestamp: Date.now(),
-    };
-
-    bus.send(TOOL_TOPICS.TOOL_ERROR, errorEvent);
-
-    log('❌ Published tool error:', { toolCallId, error: errorEvent.error });
-  }, [bus, log]);
-
-  // Direct MCP execution for component bridge and global dispatcher
-  const executeMCPToolDirect = useCallback(async (toolName: string, params: any) => {
-    const id = generateId();
-    const agentTool = toolName.startsWith('mcp_') ? toolName : `mcp_${toolName}`;
-    try {
-      const result = await systemRegistry.executeTool(
-        {
-          id,
-          name: agentTool,
-          args: params,
-          origin: 'component-bridge',
-        },
-        { tamboRegistry: toolRegistry }
-      );
-      await publishToolResult(id, result);
-      return result;
-    } catch (err: any) {
-      await publishToolError(id, err);
-      throw err;
-    }
-  }, [toolRegistry, publishToolResult, publishToolError]);
-
-  // Expose a minimal global dispatcher for components to short-circuit the DOM event path
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    (window as any).__tambo_tool_dispatcher = {
-      executeMCPTool: (toolName: string, params: any) => executeMCPToolDirect(toolName, params),
-    };
-    return () => {
-      try { delete (window as any).__tambo_tool_dispatcher; } catch {}
-    };
-  }, [executeMCPToolDirect]);
-
-  // Helper to send message through Tambo
-  const sendTamboMessage = useCallback(async (message: string) => {
-    log('📤 [ToolDispatcher] Sending message to Tambo:', message);
-    await sendThreadMessage(message, {
-      contextKey: effectiveContextKey,
-      streamResponse: true,
-    });
-    log('✅ [ToolDispatcher] Message sent successfully');
-  }, [sendThreadMessage, effectiveContextKey, log]);
-
-  // Helper to analyze conversation context for richer CAR messages
-  const analyzeConversationContext = useCallback((transcript: string, speaker: string): string => {
-    const lowerTranscript = transcript.toLowerCase();
-    
-    // Look for common conversation patterns that indicate specific needs
-    if (lowerTranscript.includes('can you see me') || lowerTranscript.includes('can you hear me')) {
-      return `This appears to be a video/audio troubleshooting request. ${speaker} is checking if they are visible/audible to others.`;
-    }
-    
-    if (lowerTranscript.includes('not yet') || lowerTranscript.includes('no') || lowerTranscript.includes('can\'t see')) {
-      return `This indicates a negative response to visibility/audio, suggesting technical issues need to be resolved.`;
-    }
-    
-    if (lowerTranscript.includes('let me') || lowerTranscript.includes('i need to') || lowerTranscript.includes('i want to')) {
-      return `This suggests ${speaker} is expressing intent to perform an action or needs assistance with a task.`;
-    }
-    
-    if (lowerTranscript.includes('show me') || lowerTranscript.includes('display') || lowerTranscript.includes('can i see')) {
-      return `This is a request to display or show something to ${speaker}.`;
-    }
-    
-    return `Standard request from ${speaker} for component functionality.`;
-  }, []);
-
-  // Helper to generate specific component messages based on component type
-  const generateComponentMessage = useCallback((componentType: string, transcript: string, speaker: string): string => {
-    const lowerType = componentType.toLowerCase();
-    const conversationContext = analyzeConversationContext(transcript, speaker);
-    
-    // Handle specific component types with more context
-    if (lowerType.includes('livekitparticipanttile') || lowerType.includes('participant')) {
-      return `**Component Action Request (CAR)**
-
-**Relevant transcript section:**
-${speaker}: "${transcript}"
-
-**Conversation context analysis:**
-${conversationContext}
-
-**Assumed action request:**
-Add the video participant tile for livekit room participant: ${speaker}
-
-**Additional info:**
-- Assume the livekit room is already connected
-- User wants to see their own participant tile or be visible to others
-- Component should show participant's name, video feed (if available), and audio/mute status
-- This is likely for troubleshooting video/audio visibility issues
-- May be response to visibility concerns in the conversation
-
-**Technical implementation:**
-Generate a LivekitParticipantTile component configured for participant "${speaker}"`;
-    }
-    
-    if (lowerType.includes('timer') || lowerType.includes('retrotimer')) {
-      return `**Component Action Request (CAR)**
-
-**Relevant transcript section:**
-${speaker}: "${transcript}"
-
-**Conversation context analysis:**
-${conversationContext}
-
-**Assumed action request:**
-Add a timer component for ${speaker} (likely needs countdown functionality)
-
-**Additional info:**
-- User wants to track time for a specific duration
-- Should be a RetroTimer or RetroTimerEnhanced component
-- May need to parse duration from transcript (e.g., "5 minutes", "30 seconds")
-- Should be prominently displayed for easy monitoring
-
-**Technical implementation:**
-Generate a RetroTimer component with appropriate duration settings`;
-    }
-    
-    if (lowerType.includes('weather')) {
-      return `**Component Action Request (CAR)**
-
-**Relevant transcript section:**
-${speaker}: "${transcript}"
-
-**Conversation context analysis:**
-${conversationContext}
-
-**Assumed action request:**
-Add a weather forecast component for ${speaker}'s location
-
-**Additional info:**
-- User wants current weather conditions and forecast
-- Should show temperature, conditions, and relevant weather data
-- May need to detect location from context or use default location
-- Should be visually clear and easy to read
-
-**Technical implementation:**
-Generate a WeatherForecast component with appropriate location settings`;
-    }
-    
-    if (lowerType.includes('youtube')) {
-      return `**Component Action Request (CAR)**
-
-**Relevant transcript section:**
-${speaker}: "${transcript}"
-
-**Conversation context analysis:**
-${conversationContext}
-
-**Assumed action request:**
-Add a YouTube video player component for ${speaker}
-
-**Additional info:**
-- User wants to embed and play YouTube videos
-- Should support video playback controls
-- May need to extract video ID from transcript or search terms
-- Should be properly sized for the canvas
-
-**Technical implementation:**
-Generate a YoutubeEmbed component with appropriate video settings`;
-    }
-    
-    if (lowerType.includes('document') || lowerType.includes('editor') || lowerType.includes('display_document')) {
-      return `**Component Action Request (CAR)**
-
-**Relevant transcript section:**
-${speaker}: "${transcript}"
-
-**Conversation context analysis:**
-${conversationContext}
-
-**Assumed action request:**
-Add a document editor component for ${speaker} to view/edit documents
-
-**Additional info:**
-- User wants to view or edit documents collaboratively
-- Should use DocumentEditor component for full functionality
-- May need to load specific document mentioned in transcript
-- Should support real-time collaboration features
-
-**Technical implementation:**
-Generate a DocumentEditor component with appropriate document settings`;
-    }
-    
-    if (lowerType.includes('research')) {
-      return `**Component Action Request (CAR)**
-
-**Relevant transcript section:**
-${speaker}: "${transcript}"
-
-**Conversation context analysis:**
-${conversationContext}
-
-**Assumed action request:**
-Add a research panel component for ${speaker} to display research results
-
-**Additional info:**
-- User wants to display research results and findings
-- Should show structured research data in an organized format
-- May need to load specific research data mentioned in transcript
-- Should be easy to read and navigate
-
-**Technical implementation:**
-Generate a ResearchPanel component with appropriate data settings`;
-    }
-    
-    if (lowerType.includes('image') || lowerType.includes('aiimagegenerator')) {
-      return `**Component Action Request (CAR)**
-
-**Relevant transcript section:**
-${speaker}: "${transcript}"
-
-**Conversation context analysis:**
-${conversationContext}
-
-**Assumed action request:**
-Add an AI image generator component for ${speaker} to create images
-
-**Additional info:**
-- User wants to generate images based on text descriptions
-- Should provide text input for image prompts
-- May need to extract image description from transcript
-- Should display generated images clearly
-
-**Technical implementation:**
-Generate an AIImageGenerator component with appropriate prompt settings`;
-    }
-    
-    if (lowerType.includes('captions') || lowerType.includes('livecaptions')) {
-      return `**Component Action Request (CAR)**
-
-**Relevant transcript section:**
-${speaker}: "${transcript}"
-
-**Conversation context analysis:**
-${conversationContext}
-
-**Assumed action request:**
-Add a live captions component for ${speaker} to show real-time transcription
-
-**Additional info:**
-- User wants real-time speech transcription and captions
-- Should display live text of spoken conversation
-- Should be clearly visible and readable
-- May be needed for accessibility or record-keeping
-
-**Technical implementation:**
-Generate a LiveCaptions component with appropriate transcription settings`;
-    }
-    
-    if (lowerType.includes('actionitem')) {
-      return `**Component Action Request (CAR)**
-
-**Relevant transcript section:**
-${speaker}: "${transcript}"
-
-**Conversation context analysis:**
-${conversationContext}
-
-**Assumed action request:**
-Add an action item tracker component for ${speaker} to manage tasks
-
-**Additional info:**
-- User wants to track and manage tasks and action items
-- Should allow adding, editing, and completing tasks
-- May need to extract specific tasks from transcript
-- Should be organized and easy to use
-
-**Technical implementation:**
-Generate an ActionItemTracker component with appropriate task management settings`;
-    }
-    
-    // Generic fallback with the original transcript
-    return `**Component Action Request (CAR)**
-
-**Relevant transcript section:**
-${speaker}: "${transcript}"
-
-**Conversation context analysis:**
-${conversationContext}
-
-**Assumed action request:**
-Add a ${componentType} component for ${speaker}
-
-**Additional info:**
-- User requested a specific component type: ${componentType}
-- Should implement the functionality implied by the component type
-- May need to parse specific parameters from the transcript
-- Should be properly configured for the user's needs
-
-**Technical implementation:**
-Generate a ${componentType} component based on the transcript content and component type`;
-  }, []);
-
-  // Smart YouTube search helper
-  const runYoutubeSmartSearch = useCallback(async (
-    query: string,
-    flags: {
-      wantsLatest?: boolean;
-      wantsOfficial?: boolean;
-      contentType?: string;
-      artist?: string;
-    } = {}
-  ) => {
-    log('🎥 [ToolDispatcher] Running smart YouTube search:', { query, flags });
-
-    try {
-      // 1. Build search parameters for the MCP `searchVideos` tool
-      // Use simple parameters that most YouTube MCP implementations support
-      const searchParams: Record<string, unknown> = {
-        q: query, // Most YouTube APIs use 'q' not 'query'
-        maxResults: 10,
-        part: 'snippet,statistics', // Common requirement
-        type: 'video'
-      };
-
-      // Add optional parameters only if supported
-      if (flags.wantsLatest) {
-        searchParams.order = 'date';
-      }
-
-      if (flags.contentType === 'music') {
-        searchParams.videoCategoryId = '10'; // Music category
-      }
-
-      log('🔧 [ToolDispatcher] Calling MCP searchVideos with params:', searchParams);
-
-      // 2. Route to the actual MCP tool using system registry mapping
-      const routing = systemRegistry.getToolRouting('youtube_search');
-      const mcpToolName = routing?.mcpToolName || 'searchVideos'; // Default fallback
-      
-      // Check if MCP tool is available in Tambo's registry
-      const searchVideosTool = (() => {
-        // Handle both Map-style (toolRegistry.get) and plain object registries
-        const reg: any = toolRegistry;
-        if (typeof reg?.get === 'function') return reg.get(mcpToolName);
-        return reg?.[mcpToolName];
-      })();
-      
-      if (!searchVideosTool) {
-        // Fallback: try the direct youtube_search name
-        const fallbackTool = (() => {
-          const reg: any = toolRegistry;
-          if (typeof reg?.get === 'function') return reg.get('youtube_search');
-          return reg?.['youtube_search'];
-        })();
-        
-        if (!fallbackTool) {
-          // Final fallback - create a mock YouTube search result
-          log('⚠️ [ToolDispatcher] No YouTube MCP configured, using mock result');
-          
-          // Create a mock video result to demonstrate the functionality
-          const mockVideoId = 'dQw4w9WgXcQ'; // Classic video ID as placeholder
-          const mockTitle = `Mock Result: ${query}`;
-          
-          // Send the YouTube embed component directly
-          const embedMsg = `<<component name=\"YoutubeEmbed\" videoId=\"${mockVideoId}\" title=\"${mockTitle}\" startTime={0} >>`;
-          await sendTamboMessage(embedMsg);
-          
-          return {
-            status: 'SUCCESS',
-            message: 'YouTube search unavailable - showing placeholder video. Configure MCP at /mcp-config',
-            videoId: mockVideoId,
-            videoTitle: mockTitle,
-            note: 'This is a placeholder. Please configure YouTube MCP server for real search results.'
-          };
-        }
-        
-        // Use the fallback tool
-        const searchResults: any = await fallbackTool.execute(searchParams);
-        return searchResults;
-      }
-      
-      // Execute the MCP tool
-      const searchResults: any = await searchVideosTool.execute(searchParams);
-
-      // 3. Choose the best video – simple heuristic
-      const bestVideo = (() => {
-        const items = searchResults?.items || [];
-        if (items.length === 0) return null;
-
-        // If wantsOfficial, prioritise official channels
-         
-        const scored = items.map((item: any) => {
-          const channelTitle: string = item.snippet?.channelTitle || '';
-          const officialScore = flags.wantsOfficial && /official|vevo/i.test(channelTitle) ? 1000 : 0;
-          const viewScore = Number(item.statistics?.viewCount || 0);
-          return { item, score: officialScore + viewScore };
-        });
-
-         
-        scored.sort((a: any, b: any) => b.score - a.score);
-        return scored[0].item;
-      })();
-
-      if (!bestVideo) {
-        throw new Error('No suitable video found');
-      }
-
-      const videoId = bestVideo.id?.videoId || bestVideo.id;
-      const videoTitle = bestVideo.snippet?.title || bestVideo.title || 'Selected Video';
-
-      // 4. Send a message that directly instantiates YoutubeEmbed
-      const embedMsg = `<<component name=\"YoutubeEmbed\" videoId=\"${videoId}\" title=\"${videoTitle.replace(/\"/g, '\\\"')}\" startTime={0} >>`;
-      await sendTamboMessage(embedMsg);
-
-      return {
-        status: 'SUCCESS',
-        message: 'YoutubeEmbed component created',
-        videoId,
-        videoTitle,
-      };
-    } catch (error: any) {
-      log('❌ [ToolDispatcher] Smart YouTube search failed:', error);
-      
-      // Provide helpful error messages
-      if (error.message?.includes('not registered')) {
-        throw new Error(
-          'YouTube search requires MCP configuration. ' +
-          'Please go to /mcp-config and add a YouTube MCP server URL.'
-        );
-      }
-      
-      throw error;
-    }
-  }, [log, toolRegistry, sendTamboMessage]);
-
-  // Execute tool call with local-first policy
-  const executeToolCall = useCallback(async (event: ToolCallEvent) => {
-    const { id, payload } = event;
-
-    if (flags.toolDispatchKillSwitch) {
-      log('🛑 [ToolDispatcher] Kill switch active; skipping local execution');
-      // In kill switch mode, optionally forward to cloud here if available.
-      return;
-    }
-
-    // Dedupe
-    if (pendingById.current.has(id)) {
-      log('⚠️ Duplicate tool call ignored:', id);
-      return;
-    }
-    const toolSignature = JSON.stringify({ tool: payload.tool, params: payload.params });
-    const existingCall = Array.from(pendingById.current.values()).find(
-      pending => JSON.stringify({ tool: pending.tool, params: pending.params }) === toolSignature &&
-      (Date.now() - pending.timestamp) < 3000
-    );
-    if (existingCall) {
-      log('🚫 Duplicate tool+params combination ignored:', payload.tool, 'within 3 seconds');
-      return;
-    }
-    if (circuitBreaker.current.isRecentlyCompleted(toolSignature)) {
-      log('🛑 Rejected repeating COMPLETED tool call within 30s window:', payload.tool);
-      return;
-    }
-
-    const pendingTool: PendingTool = {
-      id,
-      timestamp: Date.now(),
-      status: 'pending',
-      tool: payload.tool,
-      params: payload.params,
-    };
-    pendingById.current.set(id, pendingTool);
-
-    try {
-      setIsProcessing(true);
-      pendingTool.status = 'executing';
-      log('🔧 Executing tool:', payload.tool, payload.params);
-
-      // Emit resolve marker with routing info for observability
-      try {
-        const routing = systemRegistry.getToolRouting(payload.tool);
-        bus.send('resolve', {
-          type: 'resolve',
-          id,
-          timestamp: Date.now(),
-          source: 'dispatcher',
-          tool: payload.tool,
-          context: { mcpToolName: routing?.mcpToolName }
-        });
-      } catch {}
-
-      // Gate local execution on MCP readiness when calling mcp_* tools
-      if (payload.tool.startsWith('mcp_') && flags.mcpEarlyInitEnabled) {
-        const ok = await waitForMcpReady(flags.mcpReadyTimeoutMs);
-        if (!ok) {
-          log('⏱️ [ToolDispatcher] MCP not ready within timeout; consider fallback');
-        }
-      }
-
-      // 0️⃣ Unified execution via SystemRegistry – will resolve to Tambo/MCP
-      try {
-        if (flags.localToolRoutingEnabled) {
-          const result = await systemRegistry.executeTool(
-            {
-              id,
-              name: payload.tool,
-              args: payload.params,
-              origin: 'browser',
-            },
-            { tamboRegistry: toolRegistry }
-          );
-          await publishToolResult(id, result);
-          pendingTool.status = 'completed';
-          circuitBreaker.current.markCompleted(JSON.stringify({ tool: payload.tool, params: payload.params }));
-          return;
-        }
-      } catch (registryErr) {
-        log('ℹ️ [ToolDispatcher] Unified registry execution failed, falling back. Reason:', registryErr);
-      }
-
-      // Legacy and specific handlers (unchanged logic below)
-      let result: unknown;
-      
-      if (payload.tool === 'ui_update' || payload.tool === 'list_components') {
-        // Call the actual Tambo tools to get proper error messages!
-        log('🔧 [ToolDispatcher] Calling Tambo tool:', payload.tool);
-        log('🔍 [ToolDispatcher] Tool registry structure:', {
-          registryType: typeof toolRegistry,
-          hasGet: typeof toolRegistry?.get === 'function',
-          keys: toolRegistry ? Object.keys(toolRegistry) : 'no registry',
-          registryKeys: toolRegistry instanceof Map ? Array.from(toolRegistry.keys()) : 'not a Map'
-        });
-        log('🔍 [ToolDispatcher] Looking for tool:', payload.tool, 'found:', !!tamboTool);
-        
-        try {
-          // Import tools directly as fallback
-          const { uiUpdateTool, listComponentsTool } = await import('@/lib/tambo');
-          
-          const directTool = payload.tool === 'ui_update' ? uiUpdateTool : listComponentsTool;
-          
-          if (!directTool) {
-            throw new Error(`Tool ${payload.tool} not found in registry or direct import. Available registry tools: ${toolRegistry ? Object.keys(toolRegistry).join(', ') : 'none'}`);
-          }
-          
-          log('✅ [ToolDispatcher] Found tool via direct import');
-          
-          // Extract and convert parameters BEFORE calling the tool
-          if (payload.tool === 'ui_update') {
-            // Voice agent sends: {component, description, request, transcript}
-            // uiUpdateTool expects: (componentId, patch)
-            
-            const params = payload.params as {
-              component?: string;
-              componentId?: string; 
-              description?: string;
-              patch?: any;
-              request?: string;
-              transcript?: string;
-            };
-            
-            // Extract component identifier - try multiple parameter names
-            let componentId = params.componentId || params.component;
-            
-                         // Extract the update content - prioritize patch, then description, then request
-             const patch = params.patch || params.description || params.request || params.transcript;
-            
-            // If component is a partial name like 'containment_breach', try to find the full component ID
-            if (componentId && !componentId.includes('-')) {
-              // Get available components to find a match
-              const { listComponentsTool } = await import('@/lib/tambo');
-              try {
-                const componentsList = await listComponentsTool.tool();
-                if (componentsList.status === 'SUCCESS' && componentsList.components) {
-                  // Look for component that matches the partial name
-                  const matchingComponent = componentsList.components.find((comp: any) => 
-                    comp.messageId.toLowerCase().includes(componentId!.toLowerCase()) ||
-                    comp.componentType.toLowerCase().includes(componentId!.toLowerCase()) ||
-                    (comp.props?.documentId && comp.props.documentId.toLowerCase().includes(componentId!.toLowerCase()))
-                  );
-                  
-                  if (matchingComponent) {
-                    componentId = matchingComponent.messageId;
-                    log('🎯 [ToolDispatcher] Mapped component name to ID:', params.component, '→', componentId);
-                  }
-                }
-              } catch (listError) {
-                log('⚠️ [ToolDispatcher] Failed to list components for ID mapping:', listError);
-              }
-            }
-            
-            log('🔍 [ToolDispatcher] UI Update Parameters:', {
-              originalParams: payload.params,
-              extractedComponentId: componentId,
-              extractedPatch: patch,
-              patchType: typeof patch,
-              mappedFromPartialName: params.component !== componentId
-            });
-            
-            // Call the uiUpdateTool with proper parameters
-            result = await directTool.tool(componentId, patch);
-            
-            // If successful, also send the update via bus for UI sync
-            if (result && (result as any).status === 'SUCCESS') {
-              bus.send('ui_update', { 
-                componentId, 
-                patch, 
-                timestamp: Date.now() 
+        // Canvas control tools -> dispatch TLDraw DOM events handled in tldraw-with-collaboration
+        const dispatchTL = (name: string, detail?: any) => {
+          try {
+            window.dispatchEvent(new CustomEvent(name, { detail }));
+            try {
+              // Emit a lightweight editor trace so we can see canvas commands in Transcript
+              bus.send('editor_action', {
+                type: 'canvas_command',
+                command: name,
+                detail,
+                timestamp: Date.now(),
               });
-            }
-            
-          } else {
-            // list_components has no parameters
-            result = await directTool.tool();
+            } catch {}
+            return { status: 'SUCCESS', message: `${name} dispatched` } as const;
+          } catch (e) {
+            return { status: 'ERROR', message: e instanceof Error ? e.message : String(e) } as const;
           }
-          
-          pendingTool.status = 'completed';
-          await publishToolResult(id, result);
-          // ✅ Mark signature as completed to block further repeats
-          circuitBreaker.current.markCompleted(toolSignature);
-          return;
-          
-        } catch (error) {
-          // The Tambo tool threw an error with detailed guidance!
-          pendingTool.status = 'error';
-          const errorMessage = error instanceof Error ? error.message : String(error);
-          
-          // Send the FULL educational error back to the AI!
-          await publishToolResult(id, { 
-            status: 'ERROR',
-            error: errorMessage,
-            detailedError: errorMessage // Include full error for AI learning
-          });
-          
-          log('📚 [ToolDispatcher] Tambo tool error (educational):', errorMessage);
-          return;
-        }
-      }
+        };
 
-      if (payload.tool === 'get_documents' || payload.tool === 'generate_ui_component') {
-        // Handle built-in Tambo tools that aren't in the MCP registry
-        log('🔧 [ToolDispatcher] Calling built-in Tambo tool:', payload.tool);
-        
-        try {
-          // Import tools directly from tambo.ts
-           const { getDocumentsTool, generateUiComponentTool } = await import('@/lib/tambo');
-          
-          const directTool = payload.tool === 'get_documents' ? getDocumentsTool : generateUiComponentTool;
-          
-          if (!directTool) {
-            throw new Error(`Built-in tool ${payload.tool} not found in tambo.ts`);
-          }
-          
-          log('✅ [ToolDispatcher] Found built-in tool, executing...');
-          
-                     // Execute the tool with the right parameters
-           if (payload.tool === 'get_documents') {
-             // get_documents takes no parameters
-             result = await directTool.tool();
-           } else if (payload.tool === 'generate_ui_component') {
-             // Use enhanced context processing for UI generation
-             const params = payload.params as { 
-               componentType?: string; 
-               prompt?: string; 
-               task_prompt?: string;
-               request?: string;
-               component_type?: string;
-               transcript?: string;
-             };
-             const { componentType, prompt, task_prompt, request, component_type, transcript } = params;
-             
-             // Extract context information
-             const context = payload.context;
-             const aiSummary = context?.summary;
-             const originalTranscript = transcript || context?.transcript;
-             const speaker = context?.speaker || 'user';
-             const actualComponentType = componentType || component_type || 'auto';
-             
-             // Build enhanced message with CAR system
-             let finalPrompt: string;
-             
-             if (aiSummary) {
-               // Use AI summary if available (highest priority)
-               finalPrompt = aiSummary;
-             } else if (actualComponentType && actualComponentType !== 'auto') {
-               // Use enhanced CAR message for specific component types
-               finalPrompt = generateComponentMessage(actualComponentType, originalTranscript || '', speaker);
-             } else {
-               // Use basic prompt/request
-               finalPrompt = request || prompt || task_prompt || originalTranscript || 'Generate a UI component';
-             }
-             
-             // Enhance with additional context if available
-             if (originalTranscript && originalTranscript !== finalPrompt && originalTranscript.length > 0) {
-               finalPrompt = `${finalPrompt}
-
-Additional Context:
-• Speaker: ${speaker}
-• Original transcript: "${originalTranscript}"
-• Requested component: ${actualComponentType}
-
-Please consider both the processed summary above and the original transcript context for the most accurate generation.`;
-             }
-             
-             log('📤 [ToolDispatcher] Enhanced UI generation with CAR:', {
-               component: actualComponentType,
-               messageType: aiSummary ? 'AI_SUMMARY' : actualComponentType !== 'auto' ? 'CAR_MESSAGE' : 'BASIC',
-               messageLength: finalPrompt.length
-             });
-             
-             // Use the enhanced prompt instead of basic one
-              const exec = (directTool as any).tool || (directTool as any).execute || directTool;
-              result = await exec(finalPrompt);
-           }
-          
-          pendingTool.status = 'completed';
-          await publishToolResult(id, result);
-          circuitBreaker.current.markCompleted(JSON.stringify({ tool: payload.tool, params: payload.params }));
-          return;
-          
-        } catch (error) {
-          pendingTool.status = 'error';
-          const errorMessage = error instanceof Error ? error.message : String(error);
-          
-          await publishToolResult(id, { 
-            status: 'ERROR',
-            error: errorMessage,
-            detailedError: errorMessage
-          });
-          
-          log('❌ [ToolDispatcher] Built-in Tambo tool error:', errorMessage);
-          return;
-        }
-      }
-
-      // NOTE: generate_ui_component is now handled above in the built-in tools section
-      else if (payload.tool.startsWith('mcp_')) {
-        // Route to MCP provider through Tambo's registered tools
-        const toolName = payload.tool;
-        const params = payload.params;
-        
-        // Check if it's from a component sub-agent
-        const isFromComponent = (params as any).origin === 'component-subagent';
-        
-        // Try to execute directly if we have the tool (with deterministic fuzzy aliasing)
-        let mcpTool = (toolRegistry as any).get?.(toolName) || (toolRegistry as any)[toolName];
-        let resolvedToolKey: string | null = mcpTool ? toolName : null;
-
-        if (!mcpTool) {
-          const normalize = (s: string) => s.toLowerCase().replace(/^mcp_/, '').replace(/[^a-z0-9]/g, '');
-          const requested = normalize(toolName);
-          const entries: Array<[string, any]> = toolRegistry instanceof Map
-            ? Array.from((toolRegistry as any).entries())
-            : Object.entries(toolRegistry as Record<string, any>);
-
-          const candidates = entries
-            .filter(([name]) => name.startsWith('mcp_'))
-            .map(([name, tool]) => {
-              const n = normalize(name);
-              let score = 0;
-              if (n === requested) score = 1000;
-              else if (n.startsWith(requested) || requested.startsWith(n)) score = 800;
-              else if (n.includes(requested)) score = 600;
-              else {
-                // Simple character overlap score as a cheap proxy
-                const a = new Set(n.split(''));
-                const b = new Set(requested.split(''));
-                const inter = Array.from(a).filter(ch => b.has(ch)).length;
-                score = 100 + inter;
+        switch (tool) {
+          case 'youtube_search': {
+            const query = String((params as any)?.query || '').trim();
+            try {
+              const mcpr = await (window as any).callMcpTool?.('searchVideos', { query });
+              const first = mcpr?.videos?.[0] || mcpr?.items?.[0] || null;
+              const videoId = first?.id || first?.videoId || first?.video_id || null;
+              if (videoId) {
+                const messageId = `ui-youtube-${Date.now()}`;
+                window.dispatchEvent(
+                  new CustomEvent('custom:showComponent', {
+                    detail: {
+                      messageId,
+                      component: { type: 'YoutubeEmbed', props: { videoId } },
+                      contextKey,
+                    },
+                  }),
+                );
+                try {
+                  bus.send('tool_result', {
+                    type: 'tool_result',
+                    id: call.id,
+                    tool,
+                    result: { status: 'SUCCESS', videoId },
+                    timestamp: Date.now(),
+                    source: 'dispatcher',
+                  });
+                } catch {}
+                return { status: 'SUCCESS', message: 'Rendered YouTube video', videoId } as any;
               }
-              return { name, tool, score, normalized: n };
-            })
-            .sort((a, b) => b.score - a.score || a.normalized.localeCompare(b.normalized));
-
-          const best = candidates[0];
-          if (best && best.score >= 600) {
-            mcpTool = best.tool; resolvedToolKey = best.name;
-            log('🔎 [ToolDispatcher] Fuzzy resolved MCP tool:', toolName, '→', resolvedToolKey, '(score:', best.score, ')');
-          }
-        }
-
-        if (mcpTool && ((mcpTool as any).tool || (mcpTool as any).execute)) {
-          log('🔧 [ToolDispatcher] Executing MCP tool directly:', toolName);
-          const exec = (mcpTool as any).tool || (mcpTool as any).execute;
-          result = await exec(params);
-          
-          // If from component, send response via event
-          if (isFromComponent) {
-            window.dispatchEvent(new CustomEvent('tambo:mcpToolResponse', {
-              detail: { tool: toolName, result, error: null, resolved: resolvedToolKey }
-            }));
-          }
-        } else {
-          // Fallback: send to Tambo
-          const toolCallMessage = `Execute ${toolName} with params: ${JSON.stringify(params)}`;
-          await sendTamboMessage(toolCallMessage);
-          
-          result = {
-            status: 'SUCCESS',
-            message: `MCP tool ${toolName} execution initiated via Tambo`,
-          };
-
-          // Also notify component listeners that the request was initiated (no direct result)
-          if (isFromComponent) {
-            window.dispatchEvent(new CustomEvent('tambo:mcpToolResponse', {
-              detail: { tool: toolName, result, error: null, resolved: null }
-            }));
-          }
-        }
-      } else if (payload.tool === 'youtube_search') {
-        // Handle YouTube search with smart filtering
-        const params = payload.params as { query?: string; task_prompt?: string; prompt?: string };
-        
-        // Extract a clean search query - prefer task_prompt or prompt over the raw query
-        // which might contain conversation context
-        let query = params.task_prompt || params.prompt || params.query || '';
-        
-        // If query contains conversation context, extract the actual search intent
-        if (query.includes('CONVERSATION CONTEXT:')) {
-          // Extract from the summary/prompt instead
-          const context = payload.context;
-          const summary = context?.summary || '';
-          
-          // Extract search terms from the summary
-          if (summary.includes('Search YouTube for')) {
-            // Extract everything after "Search YouTube for"
-            const searchMatch = summary.match(/Search YouTube for (.+?)(?:\.|$)/i);
-            if (searchMatch) {
-              query = searchMatch[1].trim();
+            } catch (e) {
+              console.warn('[ToolDispatcher] youtube_search MCP failed', e);
             }
-          } else if (summary) {
-            query = summary;
+            return { status: 'IGNORED', message: 'No YouTube result' } as const;
           }
-          
-          // Clean up the query further
-          query = query
-            .replace(/,?\s*as previously requested\.?/i, '')
-            .replace(/from this band/i, 'latest music videos')
-            .replace(/from the past week/i, 'latest')
-            .trim();
+          case 'list_components': {
+            // Return the list of currently registered components (optionally scoped by contextKey)
+            try {
+              const components = ComponentRegistry.list(contextKey);
+              try {
+                bus.send('tool_result', {
+                  type: 'tool_result',
+                  id: call.id,
+                  tool,
+                  result: { status: 'SUCCESS', components },
+                  timestamp: Date.now(),
+                  source: 'dispatcher',
+                });
+              } catch {}
+              return { status: 'SUCCESS', components } as any;
+            } catch (e) {
+              const message = e instanceof Error ? e.message : String(e);
+              try {
+                bus.send('tool_error', {
+                  type: 'tool_error',
+                  id: call.id,
+                  tool,
+                  error: message,
+                  timestamp: Date.now(),
+                  source: 'dispatcher',
+                });
+              } catch {}
+              return { status: 'ERROR', message } as any;
+            }
+          }
+          case 'canvas_focus':
+            return dispatchTL('tldraw:canvas_focus', params);
+          case 'canvas_zoom_all':
+            return dispatchTL('tldraw:canvas_zoom_all');
+          case 'canvas_create_note':
+            return dispatchTL('tldraw:create_note', params);
+          case 'canvas_pin_selected':
+            return dispatchTL('tldraw:pinSelected');
+          case 'canvas_unpin_selected':
+            return dispatchTL('tldraw:unpinSelected');
+          case 'canvas_lock_selected':
+            return dispatchTL('tldraw:lockSelected');
+          case 'canvas_unlock_selected':
+            return dispatchTL('tldraw:unlockSelected');
+          case 'canvas_arrange_grid':
+            return dispatchTL('tldraw:arrangeGrid', params);
+          case 'canvas_create_rectangle':
+            return dispatchTL('tldraw:createRectangle', params);
+          case 'canvas_create_ellipse':
+            return dispatchTL('tldraw:createEllipse', params);
+          case 'canvas_align_selected':
+            return dispatchTL('tldraw:alignSelected', params);
+          case 'canvas_distribute_selected':
+            return dispatchTL('tldraw:distributeSelected', params);
+          case 'canvas_draw_smiley':
+            return dispatchTL('tldraw:drawSmiley', params);
+          case 'canvas_list_shapes': {
+            // Ask the TLDraw layer to enumerate shapes and reply over tool_result
+            const callId = call.id;
+            try {
+              window.dispatchEvent(
+                new CustomEvent('tldraw:listShapes', { detail: { callId } }),
+              );
+              // Also emit an editor trace of the request
+              try {
+                bus.send('editor_action', {
+                  type: 'canvas_command',
+                  command: 'tldraw:listShapes',
+                  detail: { callId },
+                  timestamp: Date.now(),
+                });
+              } catch {}
+              return { status: 'ACK', message: 'Listing shapes' } as any;
+            } catch (e) {
+              const message = e instanceof Error ? e.message : String(e);
+              try {
+                bus.send('tool_error', {
+                  type: 'tool_error',
+                  id: callId,
+                  tool,
+                  error: message,
+                  timestamp: Date.now(),
+                  source: 'dispatcher',
+                });
+              } catch {}
+              return { status: 'ERROR', message } as any;
+            }
+          }
+          case 'canvas_toggle_grid':
+            return dispatchTL('tldraw:toggleGrid');
+          case 'canvas_set_background':
+            return dispatchTL('tldraw:setBackground', params);
+          case 'canvas_set_theme':
+            return dispatchTL('tldraw:setTheme', params);
+          case 'canvas_select':
+            return dispatchTL('tldraw:select', params);
+          case 'canvas_select_by_note':
+            return dispatchTL('tldraw:selectNote', params);
+          case 'canvas_color_shape':
+            return dispatchTL('tldraw:colorShape', params);
+          case 'canvas_delete_shape':
+            return dispatchTL('tldraw:deleteShape', params);
+          case 'canvas_rename_note':
+            return dispatchTL('tldraw:renameNote', params);
+          case 'canvas_connect_shapes':
+            return dispatchTL('tldraw:connectShapes', params);
+          case 'canvas_label_arrow':
+            return dispatchTL('tldraw:labelArrow', params);
+          default:
+            break;
         }
-        
-        log('🎯 [ToolDispatcher] Cleaned YouTube search query:', { original: params.query, cleaned: query });
-        
-        const context = payload.context;
-        
-        // Use structured context if available, otherwise fall back to query parsing
-        let searchFlags: {
-          wantsLatest?: boolean;
-          wantsOfficial?: boolean;
-          contentType?: string;
-          artist?: string;
-        } = {};
-        
-        if (context?.structuredContext) {
-          // Use the enhanced context from Decision Engine
-          searchFlags = {
-            wantsLatest: context.structuredContext.wantsLatest,
-            wantsOfficial: context.structuredContext.wantsOfficial,
-            contentType: context.structuredContext.contentType,
-            artist: context.structuredContext.artist
-          };
-          log('🎯 [ToolDispatcher] Using structured context for YouTube search:', searchFlags);
-        } else {
-          // Fall back to query parsing
-          const queryLower = query.toLowerCase();
-          searchFlags = {
-            wantsLatest: queryLower.includes('latest') || queryLower.includes('newest') || 
-                        queryLower.includes('recent') || queryLower.includes('new'),
-            wantsOfficial: queryLower.includes('official') || queryLower.includes('vevo'),
-            contentType: queryLower.includes('music') ? 'music' : 'video',
-            artist: queryLower.includes('pinkpantheress') ? 'PinkPantheress' : ''
-          };
-          log('⚠️ [ToolDispatcher] No structured context, using query parsing:', searchFlags);
-        }
-        
-        // Use the smart search helper
-        result = await runYoutubeSmartSearch(query, searchFlags);
-        
-      } else if (payload.tool === 'respond_with_voice' || payload.tool === 'do_nothing') {
-        // These are no-op tools for the agent
-        result = {
-          status: 'SUCCESS',
-          message: `Tool ${payload.tool} acknowledged`,
-        };
-        
-      } else if (payload.tool.startsWith('canvas_')) {
-        // Fallback: execute canvas_* tools directly from local tambo registry
-        try {
-          const tamboModule: any = await import('@/lib/tambo');
-          let candidate: any = null;
-          if (Array.isArray(tamboModule.tools)) {
-            candidate = tamboModule.tools.find((t: any) => t && t.name === payload.tool);
-          }
-          if (!candidate) {
-            // scan other exports just in case
-            const values: any[] = Object.values(tamboModule);
-            candidate = values.find((v: any) => v && typeof v === 'object' && v.name === payload.tool && (v.tool || v.execute));
-          }
-          if (!candidate) {
-            throw new Error(`Canvas tool ${payload.tool} not found in local module`);
-          }
-          const exec = candidate.tool || candidate.execute;
-          result = await exec(payload.params);
-          pendingTool.status = 'completed';
-          await publishToolResult(id, result);
-          circuitBreaker.current.markCompleted(toolSignature);
-          return;
-        } catch (err) {
-          log('⚠️ [ToolDispatcher] Canvas tool fallback failed:', err);
-        }
-        
-      } else {
-        // Unknown tool
-        throw new Error(`Unknown tool: ${payload.tool}`);
-      }
-      
-      pendingTool.status = 'completed';
-      await publishToolResult(id, result);
-      
-    } catch (error) {
-      log('❌ Tool execution failed:', error);
-      pendingTool.status = 'failed';
-      await publishToolError(id, error as Error);
-    } finally {
-      setIsProcessing(false);
-    }
-  }, [sendTamboMessage, publishToolResult, publishToolError, log, mcpReady, bus]);
 
-  // Subscribe via bus to tool_call events
-  useEffect(() => {
-    const off = bus.on(TOOL_TOPICS.TOOL_CALL, async (raw) => {
-      try {
-        const event = raw as ToolCallEvent;
-        log('📨 Tool call:', event.payload.tool, 'from', event.source);
-        await executeToolCall(event);
-      } catch (error) {
-        log('❌ Error processing tool call:', error);
-      }
-    });
-    return off;
-  }, [bus, executeToolCall, log]);
-
-  // Clean up old pending tools
-  useEffect(() => {
-    const interval = setInterval(() => {
-      const now = Date.now();
-      for (const [id, tool] of pendingById.current.entries()) {
-        if (now - tool.timestamp > maxPendingAge) {
-          log('🧹 Cleaning up old pending tool:', id);
-          pendingById.current.delete(id);
-        }
-      }
-    }, IS_DEBUG ? 5000 : 30000); // Fast cleanup in debug, otherwise 30 s
-    
-    return () => clearInterval(interval);
-  }, [maxPendingAge, log]);
-
-  // Bridge DOM tambo:toolCall events to LiveKit bus events
-  useEffect(() => {
-    const handleDomToolCall = (event: CustomEvent) => {
-      log('🌉 [ToolDispatcher] Bridging DOM tambo:toolCall to LiveKit bus:', event.detail);
-      
-      try {
-        const { tool, args } = event.detail;
-        
-        // Convert DOM event to ToolCallEvent format
-        const toolCallEvent: ToolCallEvent = {
-          id: generateId(),
-          roomId: room?.name || 'default',
-          type: 'tool_call',
-          payload: {
-            tool: tool,
-            params: Array.isArray(args) && args.length > 0 ? { prompt: args[0] } : { prompt: '' },
-            context: {
-              source: 'dom_event',
+        if (tool === 'generate_ui_component') {
+          const componentType = String((params as any)?.componentType || 'Message');
+          const providedId = String((params as any)?.messageId || '') || undefined;
+          const messageId = providedId || `ui-${componentType.toLowerCase()}-${Date.now()}`;
+          // Let the thread listener materialize this component
+          try {
+            window.dispatchEvent(
+              new CustomEvent('custom:showComponent', {
+                detail: {
+                  messageId,
+                  component: {
+                    type: componentType,
+                    props: { _custom_displayMessage: true, ...(params as any) },
+                  },
+                  contextKey,
+                },
+              }),
+            );
+          } catch {}
+          // Opportunistically populate certain components after mount
+          try {
+            if (componentType === 'WeatherForecast') {
+              const locRaw = String((params as any)?.location || (params as any)?.city || '')
+                .replace(/\s+on the canvas\b/i, '')
+                .trim();
+              if (locRaw) {
+                void (async () => {
+                  for (let attempt = 0; attempt < 5; attempt++) {
+                    const ok = await populateWeather(messageId, locRaw);
+                    if (ok) break;
+                    await new Promise((r) => setTimeout(r, 250 * (attempt + 1)));
+                  }
+                })();
+              }
+            }
+          } catch {}
+          // Emit tool_result so agents can correlate
+          try {
+            bus.send('tool_result', {
+              type: 'tool_result',
+              id: call.id,
+              tool,
+              result: { status: 'SUCCESS', messageId, componentType },
               timestamp: Date.now(),
-              intent: 'ui_component'
-            }
-          },
-          timestamp: Date.now(),
-          source: 'system'
-        };
-        
-        // Execute the tool call directly (no need to go through LiveKit bus for local events)
-        executeToolCall(toolCallEvent);
-        
-      } catch (error) {
-        log('❌ [ToolDispatcher] Failed to bridge DOM event:', error);
-      }
-    };
-
-    // Listen for DOM tambo:toolCall events
-    window.addEventListener('tambo:toolCall', handleDomToolCall as EventListener);
-    
-    return () => {
-      window.removeEventListener('tambo:toolCall', handleDomToolCall as EventListener);
-    };
-  }, [log, room, executeToolCall]);
-
-  // Log dispatcher status
-  useEffect(() => {
-    log('🚀 ToolDispatcher initialized');
-    return () => log('👋 ToolDispatcher unmounted');
-  }, [log]);
-
-  // ──────────────────────────────────────────────
-  // Heartbeat / state reconciliation (optional)
-  // ──────────────────────────────────────────────
-  useEffect(() => {
-    // Skip frequent heartbeat unless in debug mode
-    if (!IS_DEBUG) return;
-
-    const interval = setInterval(() => {
-      const payload = {
-        type: 'state_ping',
-        pendingToolCount: pendingById.current.size,
-        timestamp: Date.now(),
-      };
-      bus.send('state_ping', payload);
-    }, 15000); // 15 s heartbeat only during debug
-
-    // Listen for peer pings and log discrepancies
-    const off = bus.on('state_ping', (msg: any) => {
-      if (msg?.type === 'state_ping') {
-        const delta = Math.abs((pendingById.current.size || 0) - (msg.pendingToolCount || 0));
-        if (delta > 1) {
-          log('⚠️ State mismatch (pending tools delta):', delta);
+              source: 'dispatcher',
+            });
+          } catch {}
+          return { status: 'SUCCESS', message: `Rendered ${componentType}`, messageId } as any;
         }
+
+        if (tool === 'ui_update') {
+          const messageId = String((params as any)?.messageId || (params as any)?.id || '');
+          const patch = { ...((params as any)?.patch || {}) };
+          if (!messageId) {
+            const msg = 'ui_update requires messageId';
+            try {
+              bus.send('tool_error', {
+                type: 'tool_error',
+                id: call.id,
+                tool,
+                error: msg,
+                timestamp: Date.now(),
+                source: 'dispatcher',
+              });
+            } catch {}
+            return { status: 'ERROR', message: msg } as any;
+          }
+          // If patch contains factCheck(s) but no score deltas, synthesize small deltas for visibility
+          try {
+            const hasDeltas = !!(patch as any).p1Delta || !!(patch as any).p2Delta || !!(patch as any).p1 || !!(patch as any).p2;
+            const rawFactChecks = (patch as any).factCheck
+              ? [(patch as any).factCheck]
+              : Array.isArray((patch as any).factChecks)
+                ? (patch as any).factChecks
+                : [];
+            if (!hasDeltas && rawFactChecks.length > 0) {
+              const latest = rawFactChecks[rawFactChecks.length - 1] || {};
+              const verdict = String(latest.verdict || '').toLowerCase();
+              const confidence = Number(latest.confidence || 0);
+              const boost = (v: number) => (confidence >= 80 ? Math.round(v * 1.5) : v);
+              if (verdict === 'supported') {
+                (patch as any).p1Delta = { factualAccuracy: boost(20), bsMeter: -boost(10) };
+              } else if (verdict === 'refuted') {
+                (patch as any).p1Delta = { factualAccuracy: -boost(20), bsMeter: boost(20) };
+              } else if (verdict === 'partial') {
+                (patch as any).p1Delta = { factualAccuracy: boost(10), bsMeter: -boost(5) };
+              }
+            }
+          } catch {}
+
+          const res = await ComponentRegistry.update(messageId, patch);
+          try {
+            // eslint-disable-next-line no-console
+            console.log('[ToolDispatcher][ui_update] result', JSON.stringify({ messageId, res }));
+          } catch {}
+          // Emit result back
+          try {
+            bus.send('tool_result', {
+              type: 'tool_result',
+              id: call.id,
+              tool,
+              result: { ...(res as any), messageId },
+              timestamp: Date.now(),
+              source: 'dispatcher',
+            });
+          } catch {}
+          return { status: 'SUCCESS', message: 'Component updated', ...(res as any) } as any;
+        }
+
+        if (tool.startsWith('mcp_')) {
+          try {
+            const toolName = tool.replace(/^mcp_/, '');
+            const registry = (window as any).__custom_mcp_tools || {};
+            let result: any = undefined;
+
+            // Prefer directly registered window MCP tools if available
+            const direct = (registry as any)[toolName] || (registry as any)[`mcp_${toolName}`];
+            if (direct) {
+              try {
+                result = typeof direct?.execute === 'function' ? await direct.execute(params) : await direct(params);
+              } catch (e) {
+                console.warn('[ToolDispatcher] direct MCP tool failed', toolName, e);
+              }
+            }
+            // Fallback to bridge
+            if (!result) {
+              result = await (window as any).callMcpTool?.(toolName, params);
+            }
+
+            // Last-resort stub for exa so UI still gets signal
+            if ((!result || result?.status === 'IGNORED') && toolName === 'exa') {
+              const q = String((params as any)?.query || '').trim();
+              result = {
+                status: 'STUB',
+                results: [
+                  { title: `Research stub for: ${q}`, snippet: 'MCP not wired. Configure MCP servers in /mcp-config to enable real results.' },
+                ],
+              };
+            }
+
+            try {
+              // eslint-disable-next-line no-console
+              console.log('[ToolDispatcher][mcp]', toolName, 'result:', JSON.stringify(result)?.slice(0, 2000));
+            } catch {}
+            try {
+              bus.send('tool_result', {
+                type: 'tool_result',
+                id: call.id,
+                tool,
+                result,
+                timestamp: Date.now(),
+                source: 'dispatcher',
+              });
+            } catch {}
+            // Opportunistically reflect research in the scorecard UI
+            try {
+              if (toolName === 'exa') {
+                const queryText = String((params as any)?.query || '').trim();
+                const items = (result?.results || result?.items || result?.documents || []) as any[];
+                const sourcesText = Array.isArray(items)
+                  ? items
+                      .slice(0, 3)
+                      .map((it: any) => it.title || it.url || it.snippet || it.text?.slice?.(0, 80))
+                      .filter(Boolean)
+                      .join('; ')
+                  : '';
+
+                // Find the most recent DebateScorecard on the canvas
+                const list = ComponentRegistry.list();
+                const latestScorecard = [...list]
+                  .filter((c) => c.componentType === 'DebateScorecard')
+                  .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))[0];
+                if (latestScorecard) {
+                  const messageId = latestScorecard.messageId;
+                  const patch: Record<string, unknown> = {
+                    timeline: [
+                      {
+                        timestamp: Date.now(),
+                        event: `🔎 Research results for: ${queryText || 'query'}`,
+                        type: 'fact_check',
+                      },
+                    ],
+                  };
+                  if (sourcesText) {
+                    (patch as any).factChecks = [
+                      {
+                        claim: queryText,
+                        verdict: 'Unverifiable',
+                        confidence: 0,
+                        sourcesText,
+                        timestamp: Date.now(),
+                      },
+                    ];
+                  }
+                  const uiRes = await ComponentRegistry.update(messageId, patch);
+                  try {
+                    // eslint-disable-next-line no-console
+                    console.log('[ToolDispatcher][mcp→ui_update] patched scorecard', JSON.stringify({ messageId, uiRes, patch }));
+                  } catch {}
+                }
+              }
+            } catch (e) {
+              console.warn('[ToolDispatcher] exa-to-ui_update synthesis failed', e);
+            }
+            return { status: 'SUCCESS', message: 'MCP tool executed', result } as any;
+          } catch (e) {
+            const msg = e instanceof Error ? e.message : String(e);
+            try {
+              bus.send('tool_error', {
+                type: 'tool_error',
+                id: call.id,
+                tool,
+                error: msg,
+                timestamp: Date.now(),
+                source: 'dispatcher',
+              });
+            } catch {}
+            return { status: 'ERROR', message: msg } as any;
+          }
+        }
+
+        // Future: route mcp_* to MCP bridge (window.__custom_tool_dispatcher)
+        return { status: 'IGNORED', message: `No handler for tool '${tool}'` };
+      } catch (e) {
+        console.error('[ToolDispatcher] error executing tool', tool, e);
+        return { status: 'ERROR', message: e instanceof Error ? e.message : 'Unknown error' };
+      }
+    },
+    [contextKey, enableLogging],
+  );
+
+  // Wire data channel -> dispatcher
+  React.useEffect(() => {
+    if (!room) return;
+    // Initialize observability once per room
+    try { createObservabilityBridge(room); } catch {}
+    const bus = createLiveKitBus(room);
+    const offTool = bus.on('tool_call', (message: any) => {
+      try {
+        if (!message || message.type !== 'tool_call') return;
+        const tool = message.payload?.tool;
+        const params = message.payload?.params || {};
+        log('received tool_call from data channel:', tool, params);
+        void executeToolCall({
+          id: message.id || `${Date.now()}`,
+          type: 'tool_call',
+          payload: { tool, params },
+          timestamp: message.timestamp || Date.now(),
+          source: 'dispatcher',
+          roomId: message.roomId,
+        } as any);
+      } catch (e) {
+        console.error('[ToolDispatcher] failed handling tool_call', e);
+      }
+    });
+
+    // Also consume 'decision' events as a fallback and synthesize tool calls when appropriate
+    const offDecision = bus.on('decision', async (message: any) => {
+      try {
+        if (!message || message.type !== 'decision') return;
+        const decision = message.payload?.decision || {};
+        const originalText: string = message.payload?.originalText || '';
+        log('received decision from data channel:', decision);
+
+        // Heuristics: map common requests when explicit tool_call isn't present
+        const summary: string = String(decision.summary || originalText || '').toLowerCase();
+        const minutesParsed = parseMinutesFromText(summary);
+        if (decision.should_send && minutesParsed) {
+          const minutes = Math.max(1, Math.min(180, minutesParsed));
+          log('synthesizing timer component', { minutes });
+          await executeToolCall({
+            id: message.id || `${Date.now()}`,
+            type: 'tool_call',
+            payload: {
+              tool: 'generate_ui_component',
+              params: { componentType: 'RetroTimerEnhanced', initialMinutes: minutes },
+            },
+            timestamp: Date.now(),
+            source: 'dispatcher',
+            roomId: message.roomId,
+          } as any);
+          return;
+        }
+
+        const isWeather = /\bweather\b|\bforecast\b/.test(summary);
+        if (decision.should_send && isWeather) {
+          const locMatch = /\b(?:in|for)\s+([^.,!?]+)\b/.exec(String(decision.summary || originalText));
+          const location = locMatch ? locMatch[1].replace(/\s+on the canvas\b/i, '').trim() : undefined;
+          log('synthesizing weather component', { location });
+          await executeToolCall({
+            id: message.id || `${Date.now()}`,
+            type: 'tool_call',
+            payload: {
+              tool: 'generate_ui_component',
+              params: { componentType: 'WeatherForecast', location },
+            },
+            timestamp: Date.now(),
+            source: 'dispatcher',
+            roomId: message.roomId,
+          } as any);
+        }
+      } catch (e) {
+        console.error('[ToolDispatcher] failed handling decision', e);
       }
     });
 
     return () => {
-      clearInterval(interval);
-      off();
+      offTool();
+      offDecision();
     };
-  }, [bus, log]);
+  }, [room, executeToolCall]);
 
-  // Phase 4: Start LiveKitStateBridge for real-time shared state sync
-  useEffect(() => {
-    if (!room) return;
-    
-    // Dynamic import to avoid ESM issues
-    import('@/lib/livekit-state-bridge').then(({ LiveKitStateBridge }) => {
-      const bridge = new LiveKitStateBridge(room);
-      bridge.start();
-    }).catch(console.error);
-    
+  // Optional: expose global bridge, so other parts can reuse dispatcher
+  React.useEffect(() => {
+    const globalAny = window as any;
+    globalAny.__custom_tool_dispatcher = {
+      executeMCPTool: async (tool: string, params: any) => {
+        return executeToolCall({
+          id: crypto.randomUUID?.() || String(Date.now()),
+          type: 'tool_call',
+          payload: { tool, params },
+          timestamp: Date.now(),
+          source: 'global-bridge',
+        });
+      },
+    };
     return () => {
-      // livekit-js has no dispose for events; rely on room closure
+      if (globalAny.__custom_tool_dispatcher) delete globalAny.__custom_tool_dispatcher;
     };
-  }, [room]);
+  }, [executeToolCall]);
 
-  // Handle component_creation events from LiveKit bus
-  useEffect(() => {
-    if (!room) return;
-
-    const handleDataReceived = async (data: Uint8Array, participant: any, kind: any, topic?: string) => {
-      try {
-        if (topic === 'component_creation') {
-          const message = JSON.parse(new TextDecoder().decode(data));
-          const { componentType, initialProps } = message.data;
-          
-          // Find the component definition
-          const { components } = await import('@/lib/tambo');
-          const compDef = components.find(c => c.name === componentType);
-          if (!compDef) throw new Error(`Component ${componentType} not found`);
-          
-          const messageId = `${componentType.toLowerCase()}-${nanoid(6)}`;
-          
-          ComponentRegistry.register({
-            messageId,
-            componentType,
-            props: initialProps,
-            contextKey: 'default',
-            timestamp: Date.now(),
-          });
-          
-          const ComponentEl = React.createElement(compDef.component as any, { __tambo_message_id: messageId, ...(initialProps || {}) });
-          window.dispatchEvent(new CustomEvent('tambo:showComponent', {
-            detail: {
-              messageId,
-              component: ComponentEl,
-            }
-          }));
-          
-          log('✅ Created component from realtime tool:', componentType);
-        }
-      } catch (err) {
-        log('❌ Error handling component_creation:', err);
-      }
-    };
-
-    room.on('dataReceived', handleDataReceived);
-
-    return () => {
-      room.off('dataReceived', handleDataReceived);
-    };
-  }, [log, room]);
-
-  const contextValue: ToolDispatcherContextValue = {
-    pendingTools: pendingById.current,
-    executeToolCall,
-    isProcessing,
-  };
-
-  return (
-    <ToolDispatcherContext.Provider value={contextValue}>
-      {children}
-    </ToolDispatcherContext.Provider>
-  );
+  return <Ctx.Provider value={{ executeToolCall }}>{children}</Ctx.Provider>;
 }
 
-// Export types for use in other components
-export type { ToolCallEvent, ToolResultEvent, ToolErrorEvent, PendingTool }; 
+// ──────────────────────────────────────────────
+// Helpers
+// ──────────────────────────────────────────────
+
+function parseMinutesFromText(text: string): number | null {
+  // 1) Numeric forms: "5 minute", "5-min", "5min", "5 minutes"
+  const numeric = /(\d{1,3})\s*(?:-|\s)?\s*(?:minutes?|mins?|min)\b/i.exec(text);
+  if (numeric) return Number(numeric[1]);
+
+  // 2) Word forms up to common ranges (1..120)
+  const words: Record<string, number> = {
+    one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10,
+    eleven: 11, twelve: 12, thirteen: 13, fourteen: 14, fifteen: 15, sixteen: 16, seventeen: 17,
+    eighteen: 18, nineteen: 19, twenty: 20, thirty: 30, forty: 40, fifty: 50, sixty: 60,
+    seventy: 70, eighty: 80, ninety: 90, hundred: 100,
+  };
+  const wordMatch = /\b([a-z\-]+)\s*(?:-|\s)?\s*(?:minutes?|mins?|min)\b/i.exec(text);
+  if (wordMatch) {
+    const token = wordMatch[1].replace(/-/g, ' ');
+    const parts = token.split(/\s+/).filter(Boolean);
+    let total = 0;
+    for (const p of parts) total += words[p] || 0;
+    if (total > 0) return total;
+  }
+  return null;
+}
+
+async function populateWeather(messageId: string, location: string): Promise<boolean> {
+  try {
+    const geoRes = await fetch(
+      `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(location)}&count=1&language=en&format=json`,
+    );
+    const geocode = await geoRes.json().catch(() => null);
+    const first = geocode?.results?.[0];
+    if (!first) return false;
+
+    const { latitude, longitude, name, country_code } = first;
+    const locLabel = `${name}${country_code ? ', ' + country_code : ''}`;
+
+    const wxRes = await fetch(
+      `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,wind_speed_10m,wind_direction_10m,relative_humidity_2m&hourly=precipitation_probability&timezone=auto`,
+    );
+    const wx = await wxRes.json().catch(() => null);
+    if (!wx?.current) return false;
+
+    const temp = wx.current.temperature_2m;
+    const windSpd = wx.current.wind_speed_10m;
+    const windDir = wx.current.wind_direction_10m;
+    const humidity = wx.current.relative_humidity_2m;
+    const precipProb = wx.hourly?.precipitation_probability?.[0] ?? null;
+
+    const toCompass = (deg: number) => {
+      if (typeof deg !== 'number') return 'N';
+      const dirs = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+      return dirs[Math.round(deg / 45) % 8];
+    };
+
+    const periods = [
+      {
+        name: 'Now',
+        temperature: `${Math.round(temp)}°`,
+        wind: { speed: `${Math.round(windSpd)} mph`, direction: toCompass(windDir) },
+        condition: 'Current conditions',
+        humidity: typeof humidity === 'number' ? Math.round(humidity) : undefined,
+        precipitation: typeof precipProb === 'number' ? Math.round(precipProb) : undefined,
+      },
+    ];
+
+    const patch = { location: locLabel, periods, viewType: 'current' } as any;
+    const res = await ComponentRegistry.update(messageId, patch);
+    return Boolean((res as any)?.success);
+  } catch (e) {
+    console.warn('[ToolDispatcher] populateWeather failed', e);
+    return false;
+  }
+}

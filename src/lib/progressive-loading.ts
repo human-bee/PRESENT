@@ -1,18 +1,18 @@
 /**
  * Progressive Loading System
- * 
+ *
  * Implements the "Instant Skeleton, Progressive Soul" pattern
  * where components appear instantly (<100ms) as skeletons,
  * then progressively enhance with real data.
  */
 
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useRef } from 'react';
 
 // Loading states for progressive rendering
 export enum LoadingState {
-  SKELETON = "skeleton",   // Instant placeholder
-  PARTIAL = "partial",     // Basic data loaded
-  COMPLETE = "complete"    // Fully loaded
+  SKELETON = 'skeleton', // Instant placeholder
+  PARTIAL = 'partial', // Basic data loaded
+  COMPLETE = 'complete', // Fully loaded
 }
 
 // Component loading states interface
@@ -24,25 +24,25 @@ export interface ComponentLoadingStates<T> {
 
 // Progressive loading options
 export interface ProgressiveLoadingOptions {
-  skeletonDelay?: number;     // Delay before showing skeleton (default: 0ms)
-  partialDelay?: number;      // Delay before partial state (default: 200ms)
-  completeDelay?: number;     // Delay before complete state (default: 500ms)
-  showProgress?: boolean;     // Show progress indicator
+  skeletonDelay?: number; // Delay before showing skeleton (default: 0ms)
+  partialDelay?: number; // Delay before partial state (default: 200ms)
+  completeDelay?: number; // Delay before complete state (default: 500ms)
+  showProgress?: boolean; // Show progress indicator
   animationDuration?: number; // Transition animation duration
 }
 
 // Loading progress data
 export interface LoadingProgress {
   state: LoadingState;
-  progress: number;        // 0-100
-  eta?: number;           // Estimated time remaining in ms
-  message?: string;       // Loading message
+  progress: number; // 0-100
+  eta?: number; // Estimated time remaining in ms
+  message?: string; // Loading message
 }
 
 // Progressive loading hook
 export function useProgressiveLoading<T>(
   dataFetcher: () => Promise<T>,
-  options: ProgressiveLoadingOptions = {}
+  options: ProgressiveLoadingOptions = {},
 ): {
   state: LoadingState;
   data: Partial<T> | null;
@@ -65,7 +65,7 @@ export function useProgressiveLoading<T>(
     eta: completeDelay,
   });
   const [error, setError] = useState<Error | null>(null);
-  
+
   const startTimeRef = useRef<number>(Date.now());
   const isMountedRef = useRef(true);
 
@@ -78,7 +78,7 @@ export function useProgressiveLoading<T>(
         state: LoadingState.SKELETON,
         progress: 0,
         eta: completeDelay,
-        message: "Loading..."
+        message: 'Loading...',
       });
 
       // Simulate progressive loading stages
@@ -91,7 +91,7 @@ export function useProgressiveLoading<T>(
             state: LoadingState.SKELETON,
             progress: 33,
             eta: completeDelay - skeletonDelay,
-            message: "Preparing..."
+            message: 'Preparing...',
           });
         }
       }, skeletonDelay);
@@ -104,7 +104,7 @@ export function useProgressiveLoading<T>(
             state: LoadingState.PARTIAL,
             progress: 66,
             eta: completeDelay - partialDelay,
-            message: "Loading data..."
+            message: 'Loading data...',
           });
 
           // In real implementation, this could be partial data from cache
@@ -132,11 +132,10 @@ export function useProgressiveLoading<T>(
             state: LoadingState.COMPLETE,
             progress: 100,
             eta: 0,
-            message: "Complete!"
+            message: 'Complete!',
           });
         }
       }, remainingDelay);
-
     } catch (err) {
       if (isMountedRef.current) {
         setError(err as Error);
@@ -145,7 +144,7 @@ export function useProgressiveLoading<T>(
           state: LoadingState.COMPLETE,
           progress: 0,
           eta: 0,
-          message: "Error loading"
+          message: 'Error loading',
         });
       }
     }
@@ -179,7 +178,7 @@ function extractPartialData<T>(fullData: T): Partial<T> {
   // This is a simple implementation - could be customized per component
   const partial: Partial<T> = {};
   const essentialKeys = ['id', 'name', 'title', 'temperature', 'value', 'status'];
-  
+
   for (const key in fullData) {
     if (essentialKeys.includes(key)) {
       partial[key as keyof T] = fullData[key as keyof T];
@@ -201,7 +200,7 @@ export function getProgressRingProps({
   progress,
   size = 40,
   strokeWidth = 3,
-  color = "#3b82f6"
+  color = '#3b82f6',
 }: ProgressRingProps) {
   const radius = (size - strokeWidth) / 2;
   const circumference = radius * 2 * Math.PI;
@@ -222,24 +221,24 @@ export function getProgressRingProps({
 // Animation helper for smooth transitions
 export function getTransitionStyles(state: LoadingState, duration = 300) {
   const baseTransition = `all ${duration}ms cubic-bezier(0.4, 0, 0.2, 1)`;
-  
+
   switch (state) {
     case LoadingState.SKELETON:
       return {
         opacity: 0.5,
-        transform: "scale(0.98)",
+        transform: 'scale(0.98)',
         transition: baseTransition,
       };
     case LoadingState.PARTIAL:
       return {
         opacity: 0.8,
-        transform: "scale(0.99)",
+        transform: 'scale(0.99)',
         transition: baseTransition,
       };
     case LoadingState.COMPLETE:
       return {
         opacity: 1,
-        transform: "scale(1)",
+        transform: 'scale(1)',
         transition: baseTransition,
       };
   }

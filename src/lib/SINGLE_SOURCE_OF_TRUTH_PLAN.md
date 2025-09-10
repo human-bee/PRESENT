@@ -4,13 +4,14 @@
 
 **Phases 1-5 COMPLETE!** All three agents now dynamically discover and use available tools/components:
 
-- **Phase 1**: ✅ Registry Infrastructure 
+- **Phase 1**: ✅ Registry Infrastructure
 - **Phase 2**: ✅ Browser Integration
 - **Phase 3**: ✅ Agent Integration  
 - **Phase 4**: ✅ State Management
 - **Phase 5**: ✅ Unified Tool Execution
 
 The system now features:
+
 - 🔄 Dynamic capability discovery - no hardcoded tool lists
 - 🌐 Real-time state synchronization across all agents
 - 🔧 Unified tool execution through SystemRegistry
@@ -25,9 +26,10 @@ Currently, we have multiple disconnected systems that each maintain their own un
 2. **Decision Engine** - Hardcoded intent detection patterns
 3. **ToolDispatcher** (Browser) - Expects certain tools and routes
 4. **MCP Servers** - Dynamically loaded tools unknown to the agent
-5. **Tambo Components** - Dynamically registered components unknown to the agent
+5. **custom Components** - Dynamically registered components unknown to the agent
 
 This causes issues like:
+
 - Agent calls `youtube_search` but ToolDispatcher expects MCP `searchVideos`
 - New MCP tools aren't available to the agent
 - New components require manual updates to multiple files
@@ -38,24 +40,28 @@ This causes issues like:
 Create a centralized `SystemRegistry` that maintains all capabilities and can be accessed by all parts of the system.
 
 ### Phase 1: Registry Infrastructure ✅
+
 - [x] Create `system-registry.ts` with capability model
 - [x] Define capability types (tool, component, mcp_tool)
 - [x] Implement registry class with add/remove/update methods
-- [x] Add sync helpers for MCP and Tambo components
+- [x] Add sync helpers for MCP and custom components
 
 ### Phase 2: Browser Integration
+
 - [x] Update ToolDispatcher to use SystemRegistry for routing
 - [x] Update MCP provider to sync discovered tools to registry
-- [x] Update Tambo provider to sync components to registry
+- [x] Update custom provider to sync components to registry
 - [x] Create capability sync endpoint for agent to query
 
 ### Phase 3: Agent Integration
+
 - [x] Update agent to fetch capabilities on startup
 - [x] Update decision engine to use dynamic intents/keywords
 - [x] Update tool list to be dynamic based on registry
 - [x] Add periodic capability refresh
 
 ### Phase 4: State Management ✅
+
 - [x] Create shared state types (`shared-state.ts`)
 - [x] Add state storage to SystemRegistry
 - [x] Implement LiveKit state bridge for browser
@@ -65,6 +71,7 @@ Create a centralized `SystemRegistry` that maintains all capabilities and can be
 - [x] Add snapshot API endpoint
 
 ### Phase 5: Unified Tool Execution ✅
+
 - [x] Implement `executeTool` in SystemRegistry
 - [x] Route all tools through unified execution
 - [x] Add tool result/error state emission
@@ -75,6 +82,7 @@ Create a centralized `SystemRegistry` that maintains all capabilities and can be
 ## Implementation Details
 
 ### 1. Capability Model
+
 ```typescript
 interface SystemCapability {
   id: string;
@@ -83,7 +91,7 @@ interface SystemCapability {
   description: string;
   agentToolName?: string;      // How agent calls it
   mcpToolName?: string;         // Actual MCP tool name
-  componentName?: string;       // Tambo component name
+  componentName?: string;       // custom component name
   intents?: string[];          // Decision engine patterns
   keywords?: string[];         // Trigger keywords
   examples?: string[];         // Usage examples
@@ -98,7 +106,7 @@ interface SystemCapability {
 Browser Startup:
 1. Load static capabilities
 2. Discover MCP tools → sync to registry
-3. Discover Tambo components → sync to registry
+3. Discover custom components → sync to registry
 4. Expose registry via endpoint/data channel
 
 Agent Startup:
@@ -111,6 +119,7 @@ Agent Startup:
 ### 3. Tool Name Mapping
 
 Handle mismatches between different naming conventions:
+
 - Agent: `youtube_search`
 - MCP: `searchVideos`
 - Component: `YoutubeEmbed`
@@ -120,6 +129,7 @@ Registry maintains these mappings to route correctly.
 ### 4. Real-time Updates
 
 When capabilities change:
+
 1. Registry notifies all listeners
 2. Browser updates available tools
 3. Agent receives update via data channel
@@ -138,4 +148,4 @@ When capabilities change:
 1. Start with YouTube search as test case
 2. Move other tools to registry gradually
 3. Eventually remove all hardcoded tool lists
-4. Make agent fully dynamic based on registry 
+4. Make agent fully dynamic based on registry

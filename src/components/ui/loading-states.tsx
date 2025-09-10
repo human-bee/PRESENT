@@ -1,21 +1,21 @@
 /**
  * Loading State Components
- * 
+ *
  * Reusable skeleton, shimmer effects, and loading indicators
  * for the progressive loading system.
  */
 
-"use client";
+'use client';
 
-import React from "react";
-import { cn } from "@/lib/utils";
-import { Loader2 } from "lucide-react";
-import { LoadingState, LoadingProgress, getProgressRingProps } from "@/lib/progressive-loading";
+import React from 'react';
+import { cn } from '@/lib/utils';
+import { Loader2 } from 'lucide-react';
+import { LoadingState, LoadingProgress, getProgressRingProps } from '@/lib/progressive-loading';
 
 // Shimmer effect for loading skeletons
 export function Shimmer({ className }: { className?: string }) {
   return (
-    <div className={cn("animate-shimmer", className)}>
+    <div className={cn('animate-shimmer', className)}>
       <div className="animate-shimmer-slide h-full w-full bg-gradient-to-r from-transparent via-white/10 to-transparent" />
     </div>
   );
@@ -34,9 +34,9 @@ export function Skeleton({
   return (
     <div
       className={cn(
-        "relative overflow-hidden rounded-md bg-slate-800/50",
-        animate && "animate-pulse",
-        className
+        'relative overflow-hidden rounded-md bg-slate-800/50',
+        animate && 'animate-pulse',
+        className,
       )}
     >
       {children}
@@ -48,13 +48,13 @@ export function Skeleton({
 // Text skeleton
 export function TextSkeleton({ lines = 1, className }: { lines?: number; className?: string }) {
   return (
-    <div className={cn("space-y-2", className)}>
+    <div className={cn('space-y-2', className)}>
       {Array.from({ length: lines }).map((_, i) => (
         <Skeleton
           key={i}
           className={cn(
-            "h-4",
-            i === lines - 1 && lines > 1 && "w-3/4" // Last line shorter
+            'h-4',
+            i === lines - 1 && lines > 1 && 'w-3/4', // Last line shorter
           )}
         />
       ))}
@@ -67,7 +67,7 @@ export function ProgressRing({
   progress,
   size = 40,
   strokeWidth = 3,
-  color = "#3b82f6",
+  color = '#3b82f6',
   showPercentage = false,
   className,
 }: {
@@ -81,7 +81,7 @@ export function ProgressRing({
   const props = getProgressRingProps({ progress, size, strokeWidth, color });
 
   return (
-    <div className={cn("relative inline-flex items-center justify-center", className)}>
+    <div className={cn('relative inline-flex items-center justify-center', className)}>
       <svg width={props.size} height={props.size} className="transform -rotate-90">
         <circle
           cx={props.size / 2}
@@ -106,9 +106,7 @@ export function ProgressRing({
         />
       </svg>
       {showPercentage && (
-        <span className="absolute text-xs font-medium text-white">
-          {Math.round(progress)}%
-        </span>
+        <span className="absolute text-xs font-medium text-white">{Math.round(progress)}%</span>
       )}
     </div>
   );
@@ -123,7 +121,7 @@ export function LoadingIndicator({
   className?: string;
 }) {
   return (
-    <div className={cn("flex items-center space-x-3", className)}>
+    <div className={cn('flex items-center space-x-3', className)}>
       {progress.progress < 100 ? (
         <ProgressRing progress={progress.progress} size={24} strokeWidth={2} />
       ) : (
@@ -132,7 +130,7 @@ export function LoadingIndicator({
         </div>
       )}
       <div className="flex-1">
-        <p className="text-sm font-medium text-white">{progress.message || "Loading..."}</p>
+        <p className="text-sm font-medium text-white">{progress.message || 'Loading...'}</p>
         {progress.eta && progress.eta > 0 && (
           <p className="text-xs text-slate-400">~{Math.ceil(progress.eta / 1000)}s remaining</p>
         )}
@@ -158,7 +156,7 @@ export function LoadingWrapper({
   loadingProgress?: LoadingProgress;
 }) {
   return (
-    <div className={cn("relative", className)}>
+    <div className={cn('relative', className)}>
       {/* Loading indicator overlay */}
       {showLoadingIndicator && loadingProgress && state !== LoadingState.COMPLETE && (
         <div className="absolute top-2 right-2 z-10">
@@ -169,10 +167,10 @@ export function LoadingWrapper({
       {/* Content with transitions */}
       <div
         className={cn(
-          "transition-all duration-300 ease-out",
-          state === LoadingState.SKELETON && "opacity-60 scale-[0.98]",
-          state === LoadingState.PARTIAL && "opacity-80 scale-[0.99]",
-          state === LoadingState.COMPLETE && "opacity-100 scale-100"
+          'transition-all duration-300 ease-out',
+          state === LoadingState.SKELETON && 'opacity-60 scale-[0.98]',
+          state === LoadingState.PARTIAL && 'opacity-80 scale-[0.99]',
+          state === LoadingState.COMPLETE && 'opacity-100 scale-100',
         )}
       >
         {state === LoadingState.SKELETON ? skeleton : children}
@@ -270,8 +268,8 @@ export const SkeletonPatterns = {
 };
 
 // Add shimmer animation styles
-if (typeof window !== "undefined") {
-  const style = document.createElement("style");
+if (typeof window !== 'undefined') {
+  const style = document.createElement('style');
   style.textContent = `
     @keyframes shimmer {
       0% { transform: translateX(-100%); }

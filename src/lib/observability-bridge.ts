@@ -1,20 +1,27 @@
 /**
  * Observability Bridge for Tool Call Events
- * 
- * Provides centralized logging, monitoring, and debugging capabilities for the 
+ *
+ * Provides centralized logging, monitoring, and debugging capabilities for the
  * 3-agent system. Captures all tool calls, results, and errors with rich context.
  */
 
 import { Room } from 'livekit-client';
 import { systemRegistry } from './system-registry';
 import { createLogger } from './utils';
-// Debug flag (use NEXT_PUBLIC_TAMBO_DEBUG=true to enable verbose logging)
-const DEBUG_OBSERVABILITY = process.env.NEXT_PUBLIC_TAMBO_DEBUG === 'true';
+// Debug flag (use NEXT_PUBLIC_custom_DEBUG=true to enable verbose logging)
+const DEBUG_OBSERVABILITY = process.env.NEXT_PUBLIC_custom_DEBUG === 'true';
 
 export interface ToolCallEvent {
   id: string;
   timestamp: number;
-  type: 'tool_call' | 'tool_result' | 'tool_error' | 'decision' | 'resolve' | 'mcp_ready' | 'ui_mount';
+  type:
+  | 'tool_call'
+  | 'tool_result'
+  | 'tool_error'
+  | 'decision'
+  | 'resolve'
+  | 'mcp_ready'
+  | 'ui_mount';
   source: 'voice' | 'browser' | 'agent' | 'dispatcher' | 'ui' | 'system';
   tool?: string;
   params?: Record<string, unknown>;
@@ -48,7 +55,7 @@ export class ObservabilityBridge {
     averageExecutionTime: 0,
     toolCallsByType: {},
     toolCallsBySource: {},
-    recentEvents: []
+    recentEvents: [],
   };
   private maxEvents = 100; // Keep last 100 events in memory
   private listeners: Set<(event: ToolCallEvent) => void> = new Set();
@@ -83,10 +90,17 @@ export class ObservabilityBridge {
   private setupConsoleLogging() {
     this.on((event) => {
       try {
-        const symbol = event.type === 'tool_call' ? '➡️' : event.type === 'tool_result' ? '✅' : event.type === 'tool_error' ? '❌' : '📍';
+        const symbol =
+          event.type === 'tool_call'
+            ? '➡️'
+            : event.type === 'tool_result'
+              ? '✅'
+              : event.type === 'tool_error'
+                ? '❌'
+                : '📍';
         // eslint-disable-next-line no-console
         console.log(symbol, `[Observability] ${event.type}`, event);
-      } catch {}
+      } catch { }
     });
   }
 
@@ -99,7 +113,8 @@ export class ObservabilityBridge {
   private updateMetrics(event: ToolCallEvent) {
     // Basic counters
     this.metrics.toolCallsByType[event.type] = (this.metrics.toolCallsByType[event.type] || 0) + 1;
-    this.metrics.toolCallsBySource[event.source] = (this.metrics.toolCallsBySource[event.source] || 0) + 1;
+    this.metrics.toolCallsBySource[event.source] =
+      (this.metrics.toolCallsBySource[event.source] || 0) + 1;
 
     if (event.type === 'tool_call') this.metrics.totalToolCalls += 1;
     if (event.type === 'tool_result') this.metrics.successfulToolCalls += 1;
@@ -130,7 +145,9 @@ export class ObservabilityBridge {
 
   private notify(event: ToolCallEvent) {
     this.listeners.forEach((l) => {
-      try { l(event); } catch {}
+      try {
+        l(event);
+      } catch { }
     });
   }
 
@@ -145,15 +162,15 @@ export class ObservabilityBridge {
       context: message.payload?.context,
       priority: message.payload?.context?.priority,
       intent: message.payload?.context?.intent,
-      reasoning: message.payload?.context?.reasoning
+      reasoning: message.payload?.context?.reasoning,
     };
-    
+
     // Track pending tool call for duration calculation
     this.pendingToolCalls.set(message.id, {
       startTime: event.timestamp,
-      event
+      event,
     });
-    
+
     this.addEvent(event);
     this.updateMetrics(event);
     this.notify(event);
@@ -168,7 +185,7 @@ export class ObservabilityBridge {
       source: message.source || 'dispatcher',
       tool: message.tool || this.pendingToolCalls.get(message.toolCallId)?.event.tool,
       result: message.result,
-      duration: (message.executionTime as number) ?? (Date.now() - started)
+      duration: (message.executionTime as number) ?? Date.now() - started,
     };
     this.addEvent(event);
     this.updateMetrics(event);
@@ -183,7 +200,7 @@ export class ObservabilityBridge {
       type: 'tool_error',
       source: message.source || 'dispatcher',
       tool: message.tool,
-      error: message.error
+      error: message.error,
     };
     this.addEvent(event);
     this.updateMetrics(event);
@@ -199,7 +216,7 @@ export class ObservabilityBridge {
       source: message.source || 'agent',
       intent: message.intent,
       reasoning: message.reasoning,
-      context: message.context
+      context: message.context,
     };
     this.addEvent(event);
     this.updateMetrics(event);
@@ -231,7 +248,7 @@ export class ObservabilityBridge {
       averageExecutionTime: 0,
       toolCallsByType: {},
       toolCallsBySource: {},
-      recentEvents: []
+      recentEvents: [],
     };
     this.pendingToolCalls.clear();
     this.logger.log('📊 Observability data cleared');
@@ -277,17 +294,17 @@ export function createObservabilityBridge(room: Room): ObservabilityBridge {
   if (globalObservabilityBridge) {
     return globalObservabilityBridge;
   }
-  
+
   globalObservabilityBridge = new ObservabilityBridge(room);
-  
+
   // Make it available globally for debugging
   if (typeof window !== 'undefined') {
-    (window as any).tamboObservability = globalObservabilityBridge;
+    (window as any).customObservability = globalObservabilityBridge;
   }
-  
+
   return globalObservabilityBridge;
 }
 
 export function getObservabilityBridge(): ObservabilityBridge | null {
   return globalObservabilityBridge;
-} 
+}

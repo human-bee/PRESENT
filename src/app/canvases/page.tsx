@@ -1,23 +1,22 @@
 /**
  * CanvasesPage
- * 
+ *
  * This page displays a list of canvases belonging to the authenticated user.
  * It handles authentication checks, fetches the user's canvases from Supabase,
  * and provides UI for viewing, creating, and managing canvases.
- * 
+ *
  * Redirects to the sign-in page if the user is not authenticated.
  */
 
+'use client';
 
-"use client";
-
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import Link from "next/link";
-import { Plus, Calendar, Trash2, ExternalLink, MessageSquare } from "lucide-react";
-import { toast } from "react-hot-toast";
-import { useAuth } from "@/hooks/use-auth";
-import { supabase, type Canvas } from "@/lib/supabase";
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import Link from 'next/link';
+import { Plus, Calendar, Trash2, ExternalLink, MessageSquare } from 'lucide-react';
+import { toast } from 'react-hot-toast';
+import { useAuth } from '@/hooks/use-auth';
+import { supabase, type Canvas } from '@/lib/supabase';
 
 type UserCanvas = Canvas & { owner_id: string; membership_role: 'owner' | 'editor' | 'viewer' };
 
@@ -31,7 +30,7 @@ export default function CanvasesPage() {
   useEffect(() => {
     if (loading) return;
     if (!user) {
-      router.push("/auth/signin");
+      router.push('/auth/signin');
     }
   }, [user, loading, router]);
 
@@ -39,7 +38,7 @@ export default function CanvasesPage() {
   useEffect(() => {
     const fetchCanvases = async () => {
       if (!user) return;
-      
+
       try {
         // Prefer unified view of owned + shared canvases
         const { data: canvases, error } = await supabase
@@ -48,10 +47,19 @@ export default function CanvasesPage() {
           .order('last_modified', { ascending: false });
 
         if (error) throw error;
-        setCanvases(canvases || []);
+        const list = (canvases || []) as UserCanvas[];
+        // Dedupe by id to avoid duplicate React keys from the view
+        const seen = new Set<string>();
+        const deduped = list.filter((c) => {
+          if (!c?.id) return false;
+          if (seen.has(c.id)) return false;
+          seen.add(c.id);
+          return true;
+        });
+        setCanvases(deduped);
       } catch (error) {
-        console.error("Error fetching canvases:", error);
-        toast.error("Failed to load canvases");
+        console.error('Error fetching canvases:', error);
+        toast.error('Failed to load canvases');
       } finally {
         setIsLoading(false);
       }
@@ -61,7 +69,7 @@ export default function CanvasesPage() {
   }, [user]);
 
   const handleDelete = async (canvasId: string) => {
-    if (!confirm("Are you sure you want to delete this canvas?")) return;
+    if (!confirm('Are you sure you want to delete this canvas?')) return;
 
     try {
       const { error } = await supabase
@@ -72,11 +80,11 @@ export default function CanvasesPage() {
 
       if (error) throw error;
 
-      setCanvases(canvases.filter(c => c.id !== canvasId));
-      toast.success("Canvas deleted");
+      setCanvases(canvases.filter((c) => c.id !== canvasId));
+      toast.success('Canvas deleted');
     } catch (error) {
-      console.error("Error deleting canvas:", error);
-      toast.error("Failed to delete canvas");
+      console.error('Error deleting canvas:', error);
+      toast.error('Failed to delete canvas');
     }
   };
 
@@ -99,7 +107,7 @@ export default function CanvasesPage() {
               Welcome back, {user.user_metadata?.full_name || user.email}
             </p>
           </div>
-          
+
           <Link
             href="/canvas.new"
             className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
@@ -117,12 +125,8 @@ export default function CanvasesPage() {
         ) : canvases.length === 0 ? (
           <div className="text-center py-12">
             <div className="text-6xl mb-4">🎨</div>
-            <h3 className="text-xl font-semibold text-gray-700 mb-2">
-              No canvases yet
-            </h3>
-            <p className="text-gray-500 mb-6">
-              Create your first canvas to get started
-            </p>
+            <h3 className="text-xl font-semibold text-gray-700 mb-2">No canvases yet</h3>
+            <p className="text-gray-500 mb-6">Create your first canvas to get started</p>
             <Link
               href="/canvas.new"
               className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
@@ -151,10 +155,13 @@ export default function CanvasesPage() {
                       <div className="text-6xl opacity-20">🎨</div>
                     </div>
                   )}
-                  
+
                   {/* Conversation Indicator */}
                   {canvas.conversation_key && (
-                    <div className="absolute top-2 right-2 bg-white/90 rounded-full p-1.5" title="Has linked conversation">
+                    <div
+                      className="absolute top-2 right-2 bg-white/90 rounded-full p-1.5"
+                      title="Has linked conversation"
+                    >
                       <MessageSquare className="w-4 h-4 text-blue-600" />
                     </div>
                   )}
@@ -162,18 +169,16 @@ export default function CanvasesPage() {
 
                 {/* Canvas Info */}
                 <div className="p-4">
-                  <h3 className="font-semibold text-lg text-gray-900 mb-1">
-                    {canvas.name}
-                  </h3>
+                  <h3 className="font-semibold text-lg text-gray-900 mb-1">{canvas.name}</h3>
                   <div className="text-xs text-gray-500 mb-2">
-                    {canvas.membership_role === 'owner' ? 'Owned by you' : `Shared · ${canvas.membership_role}`}
+                    {canvas.membership_role === 'owner'
+                      ? 'Owned by you'
+                      : `Shared · ${canvas.membership_role}`}
                   </div>
                   {canvas.description && (
-                    <p className="text-sm text-gray-600 mb-3 line-clamp-2">
-                      {canvas.description}
-                    </p>
+                    <p className="text-sm text-gray-600 mb-3 line-clamp-2">{canvas.description}</p>
                   )}
-                  
+
                   {/* Last Modified */}
                   <div className="flex items-center gap-1 text-xs text-gray-500 mb-3">
                     <Calendar className="w-3 h-3" />
@@ -191,7 +196,7 @@ export default function CanvasesPage() {
                       Open
                       <ExternalLink className="w-3 h-3" />
                     </Link>
-                    
+
                     {canvas.membership_role === 'owner' && (
                       <button
                         onClick={() => handleDelete(canvas.id)}
@@ -210,4 +215,4 @@ export default function CanvasesPage() {
       </div>
     </div>
   );
-} 
+}

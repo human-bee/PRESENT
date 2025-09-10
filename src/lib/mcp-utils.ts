@@ -1,14 +1,18 @@
 /**
  * Type for MCP Server entries
  */
-export type McpServer = string | {
-  url: string;
-  transport?: "sse" | "http";
-  name?: string;
-  timeout?: number;
-  retryAttempts?: number;
-  enabled?: boolean;
-};
+import { createLogger } from '@/lib/utils';
+
+export type McpServer =
+  | string
+  | {
+    url: string;
+    transport?: 'sse' | 'http';
+    name?: string;
+    timeout?: number;
+    retryAttempts?: number;
+    enabled?: boolean;
+  };
 
 /**
  * MCP Server status tracking
@@ -32,16 +36,18 @@ const FAILURE_BACKOFF_TIME = 5 * 60 * 1000; // 5 minutes
 function shouldAttemptConnection(url: string): boolean {
   const status = serverStatusMap.get(url);
   if (!status) return true;
-  
+
   if (status.status === 'connected') return true;
   if (status.status === 'disabled') return false;
-  
+
   // If we've had too many failures, check if enough time has passed
   if (status.failureCount >= MAX_FAILURES) {
     const timeSinceLastAttempt = Date.now() - status.lastAttempt;
     if (timeSinceLastAttempt < FAILURE_BACKOFF_TIME) {
       if (process.env.NODE_ENV === 'development') {
-        console.log(`[MCP] Skipping ${url} - too many failures, backing off`);
+        try {
+          createLogger('MCP').info(`Skipping ${url} - too many failures, backing off`);
+        } catch {}
       }
       return false;
     } else {
@@ -49,7 +55,7 @@ function shouldAttemptConnection(url: string): boolean {
       status.failureCount = 0;
     }
   }
-  
+
   return true;
 }
 
@@ -62,11 +68,11 @@ function updateServerStatus(url: string, success: boolean, error?: string) {
     url,
     status: 'connecting',
     lastAttempt: Date.now(),
-    failureCount: 0
+    failureCount: 0,
   };
-  
+
   status.lastAttempt = Date.now();
-  
+
   if (success) {
     status.status = 'connected';
     status.failureCount = 0;
@@ -75,16 +81,22 @@ function updateServerStatus(url: string, success: boolean, error?: string) {
     status.status = 'failed';
     status.failureCount++;
     status.lastError = error;
-    
+
     // Disable server if too many failures
     if (status.failureCount >= MAX_FAILURES) {
       status.status = 'disabled';
       if (process.env.NODE_ENV === 'development') {
-        console.warn(`[MCP] Disabling server ${url} after ${MAX_FAILURES} failures. Will retry in ${FAILURE_BACKOFF_TIME/60000} minutes.`);
+        try {
+          createLogger('MCP').warn(
+            `Disabling server ${url} after ${MAX_FAILURES} failures. Will retry in ${
+              FAILURE_BACKOFF_TIME / 60000
+            } minutes.`,
+          );
+        } catch {}
       }
     }
   }
-  
+
   serverStatusMap.set(url, status);
 }
 
@@ -94,9 +106,9 @@ function updateServerStatus(url: string, success: boolean, error?: string) {
  * can be successfully resolved to a valid URL, otherwise `false`.
  */
 function isValidMcpUrl(raw: string): boolean {
-  if (!raw || typeof raw !== "string") return false;
+  if (!raw || typeof raw !== 'string') return false;
   // Allow relative API routes ("/api/…") which the runtime will prepend with the current origin.
-  if (raw.startsWith("/")) return true;
+  if (raw.startsWith('/')) return true;
 
   try {
     // Will throw for invalid absolute URLs (e.g. empty string, missing protocol, etc.)
@@ -111,31 +123,38 @@ function isValidMcpUrl(raw: string): boolean {
  * Load and process MCP server configurations from localStorage
  */
 export function loadMcpServers(): McpServer[] {
-  if (typeof window === "undefined") return [];
+  if (typeof window === 'undefined') return [];
 
-  const savedServersData = localStorage.getItem("mcp-servers");
+  const savedServersData = localStorage.getItem('mcp-servers');
   if (!savedServersData) return [];
 
   try {
     const servers = JSON.parse(savedServersData);
-    
+
     // Deduplicate servers by URL to prevent multiple tool registrations
     const uniqueUrls = new Set();
+    // Track logs to avoid noisy duplicates in dev / strict mode
+    const loggedProxy = (window as any).__mcp_logged_proxy__ || new Set<string>();
+    (window as any).__mcp_logged_proxy__ = loggedProxy;
     const deduplicatedServers = servers
       .filter((server: McpServer) => {
-        const url = typeof server === "string" ? server : server.url;
+        const url = typeof server === 'string' ? server : server.url;
 
         // Skip obviously invalid entries early to avoid runtime failures later.
         if (!isValidMcpUrl(url)) {
           if (process.env.NODE_ENV === 'development') {
-            console.warn(`[MCP] Invalid MCP server URL detected, skipping: "${url}"`);
+            try {
+              createLogger('MCP').warn(`Invalid MCP server URL detected, skipping: "${url}"`);
+            } catch {}
           }
           return false;
         }
 
         if (uniqueUrls.has(url)) {
           if (process.env.NODE_ENV === 'development') {
-            console.warn(`[MCP] Duplicate server URL found, skipping: ${url}`);
+            try {
+              createLogger('MCP').info(`Duplicate server URL found, skipping: ${url}`);
+            } catch {}
           }
           return false;
         }
@@ -144,43 +163,51 @@ export function loadMcpServers(): McpServer[] {
       })
       .filter((server: McpServer) => {
         // Filter out servers that shouldn't be attempted due to failures
-        const url = typeof server === "string" ? server : server.url;
+        const url = typeof server === 'string' ? server : server.url;
         return shouldAttemptConnection(url);
       })
       .map((server: McpServer) => {
         // Add default timeout and retry settings if not specified
         let processedServer: McpServer;
-        
-        if (typeof server === "string") {
+
+        if (typeof server === 'string') {
           processedServer = {
             url: server,
-            transport: "sse" as const,
+            transport: 'sse' as const,
             timeout: 10000, // 10 seconds
             retryAttempts: 2,
-            enabled: true
+            enabled: true,
           };
         } else {
           processedServer = {
             ...server,
             timeout: server.timeout || 10000,
             retryAttempts: server.retryAttempts || 2,
-            enabled: server.enabled !== false
+            enabled: server.enabled !== false,
           };
         }
-        
+
         // Proxy external MCP servers to avoid CORS issues
-        const url = typeof processedServer === "string" ? processedServer : processedServer.url;
-        
+        const url = typeof processedServer === 'string' ? processedServer : processedServer.url;
+
         // Check if this is an external URL that needs proxying
-        if (url && !url.startsWith('http://localhost') && !url.startsWith('http://127.0.0.1') && !url.startsWith('/')) {
-          if (process.env.NODE_ENV === 'development') {
-            console.log(`[MCP] Proxying external server: ${url}`);
+        if (
+          url &&
+          !url.startsWith('http://localhost') &&
+          !url.startsWith('http://127.0.0.1') &&
+          !url.startsWith('/')
+        ) {
+          if (process.env.NODE_ENV === 'development' && !loggedProxy.has(url)) {
+            try {
+              createLogger('MCP').info(`Proxying external server: ${url}`);
+            } catch {}
+            loggedProxy.add(url);
           }
-          
+
           // Update the URL to use our proxy
           const proxiedUrl = `/api/mcp-proxy?target=${encodeURIComponent(url)}`;
-          
-          if (typeof processedServer === "string") {
+
+          if (typeof processedServer === 'string') {
             processedServer = proxiedUrl;
           } else {
             processedServer.url = proxiedUrl;
@@ -188,24 +215,35 @@ export function loadMcpServers(): McpServer[] {
             // processedServer.transport remains unchanged
           }
         }
-        
+
         return processedServer;
       });
-    
+
     // Log loading info in development
     if (process.env.NODE_ENV === 'development' && deduplicatedServers.length > 0) {
-      console.log(`[MCP] Loading ${deduplicatedServers.length} MCP server(s)`);
-      
+      const g: any = window as any;
+      const key = '__mcp_last_count__';
+      if (g[key] !== deduplicatedServers.length) {
+        try {
+          createLogger('MCP').info(`Loading ${deduplicatedServers.length} MCP server(s)`);
+        } catch {}
+        g[key] = deduplicatedServers.length;
+      }
+
       // Show which servers are being skipped
       const skippedServers = servers.length - deduplicatedServers.length;
       if (skippedServers > 0) {
-        console.log(`[MCP] Skipping ${skippedServers} server(s) due to failures or duplicates`);
+        try {
+          createLogger('MCP').info(`Skipping ${skippedServers} server(s) due to failures or duplicates`);
+        } catch {}
       }
     }
-    
+
     return deduplicatedServers;
   } catch (e) {
-    console.error("Failed to parse saved MCP servers", e);
+    try {
+      createLogger('MCP').error('Failed to parse saved MCP servers', e as any);
+    } catch {}
     return [];
   }
 }
@@ -237,7 +275,9 @@ export function getMcpServerStatuses(): Map<string, McpServerStatus> {
 export function resetMcpServerFailures() {
   serverStatusMap.clear();
   if (process.env.NODE_ENV === 'development') {
-    console.log('[MCP] Server failure counts reset');
+    try {
+      createLogger('MCP').info('Server failure counts reset');
+    } catch {}
   }
 }
 
@@ -249,28 +289,32 @@ export function suppressDevelopmentWarnings() {
     const originalConsoleWarn = console.warn;
     const originalConsoleLog = console.log;
     const originalConsoleError = console.error;
-    
+
     console.warn = (...args) => {
-      // Suppress known tool overwrite warnings from Tambo MCP provider
+      // Suppress known tool overwrite warnings from custom MCP provider
       const message = args.join(' ');
-      if (message.includes('Overwriting tool') || 
-          message.includes('TamboRegistryProvider') ||
-          message.includes('Added non-passive event listener') ||
-          message.includes('Consider marking event handler as \'passive\'') ||
-          message.includes('Cannot update server for missing message') ||
-          message.includes('No canvas context found') ||
-          message.includes('Audio loading failed, will use fallback sound') ||
-          message.includes('Agent dispatch timeout')) {
+      if (
+        message.includes('Overwriting tool') ||
+        message.includes('customRegistryProvider') ||
+        message.includes('Added non-passive event listener') ||
+        message.includes("Consider marking event handler as 'passive'") ||
+        message.includes('Cannot update server for missing message') ||
+        message.includes('No canvas context found') ||
+        message.includes('Audio loading failed, will use fallback sound') ||
+        message.includes('Agent dispatch timeout')
+      ) {
         return;
       }
       originalConsoleWarn.apply(console, args);
     };
-    
+
     console.log = (...args) => {
       const message = args.join(' ');
       // Suppress React DevTools recommendation and repetitive MCP messages
-      if (message.includes('Download the React DevTools') ||
-          message.includes('handler took') && message.includes('ms')) {
+      if (
+        message.includes('Download the React DevTools') ||
+        (message.includes('handler took') && message.includes('ms'))
+      ) {
         return;
       }
       originalConsoleLog.apply(console, args);
@@ -279,16 +323,18 @@ export function suppressDevelopmentWarnings() {
     console.error = (...args) => {
       const message = args.join(' ');
       // Suppress known browser extension errors and CORS errors from external services
-      if (message.includes('No tab with id:') ||
-          message.includes('ERR_FAILED') ||
-          message.includes('CORS policy') ||
-          message.includes('net::ERR_FAILED 524') ||
-          message.includes('net::ERR_FAILED 404') ||
-          message.includes('Uncaught (in promise) Error: No tab with id:') ||
-          message.includes('Access to fetch at') ||
-          message.includes('Access to audio at') ||
-          message.includes('from origin') ||
-          message.includes('background.js:')) {
+      if (
+        message.includes('No tab with id:') ||
+        message.includes('ERR_FAILED') ||
+        message.includes('CORS policy') ||
+        message.includes('net::ERR_FAILED 524') ||
+        message.includes('net::ERR_FAILED 404') ||
+        message.includes('Uncaught (in promise) Error: No tab with id:') ||
+        message.includes('Access to fetch at') ||
+        message.includes('Access to audio at') ||
+        message.includes('from origin') ||
+        message.includes('background.js:')
+      ) {
         return;
       }
       originalConsoleError.apply(console, args);
@@ -302,18 +348,20 @@ export function suppressDevelopmentWarnings() {
 export function suppressViolationWarnings() {
   if (process.env.NODE_ENV === 'development') {
     const originalConsoleError = console.error;
-    
+
     console.error = (...args) => {
       const message = args.join(' ');
       // Suppress known browser extension errors and CORS errors from external services
-      if (message.includes('No tab with id:') ||
-          message.includes('ERR_FAILED') ||
-          message.includes('CORS policy') ||
-          message.includes('Uncaught (in promise) Error: No tab with id:') ||
-          message.includes('[Violation]') ||
-          message.includes('handler took') ||
-          message.includes('MCP error -32001: Request timed out') ||
-          message.includes('Failed to register tools from MCP servers')) {
+      if (
+        message.includes('No tab with id:') ||
+        message.includes('ERR_FAILED') ||
+        message.includes('CORS policy') ||
+        message.includes('Uncaught (in promise) Error: No tab with id:') ||
+        message.includes('[Violation]') ||
+        message.includes('handler took') ||
+        message.includes('MCP error -32001: Request timed out') ||
+        message.includes('Failed to register tools from MCP servers')
+      ) {
         return;
       }
       originalConsoleError.apply(console, args);
@@ -325,25 +373,28 @@ export function suppressViolationWarnings() {
  * Global MCP error handler
  */
 export function setupGlobalMcpErrorHandler() {
-  if (typeof window === "undefined") return;
+  if (typeof window === 'undefined') return;
 
   // Handle unhandled promise rejections related to MCP
   const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
-    if (event.reason?.message?.includes('Transport is closed') || 
-        event.reason?.message?.includes('HTTP 400') ||
-        event.reason?.message?.includes('streamableHttp')) {
-      
+    if (
+      event.reason?.message?.includes('Transport is closed') ||
+      event.reason?.message?.includes('HTTP 400') ||
+      event.reason?.message?.includes('streamableHttp')
+    ) {
       console.warn('[MCP Global Handler] Transport error detected:', event.reason?.message);
-      
+
       // Mark the failing server as temporarily disabled
       const failedUrl = extractUrlFromError(event.reason?.message || '');
       if (failedUrl) {
         markMcpServerFailed(failedUrl, event.reason?.message || 'Transport closed');
       }
-      
+
       // Show user-friendly notification
-      showMcpErrorNotification('Connection to external services temporarily unavailable. Components will work with reduced functionality.');
-      
+      showMcpErrorNotification(
+        'Connection to external services temporarily unavailable. Components will work with reduced functionality.',
+      );
+
       // Prevent the error from bubbling up and breaking the UI
       event.preventDefault();
     }
@@ -351,9 +402,10 @@ export function setupGlobalMcpErrorHandler() {
 
   // Handle general errors that might be MCP-related
   const handleError = (event: ErrorEvent) => {
-    if (event.message?.includes('Transport is closed') || 
-        event.message?.includes('streamableHttp')) {
-      
+    if (
+      event.message?.includes('Transport is closed') ||
+      event.message?.includes('streamableHttp')
+    ) {
       console.warn('[MCP Global Handler] Error detected:', event.message);
       event.preventDefault();
     }
@@ -383,15 +435,15 @@ function extractUrlFromError(errorMessage: string): string | null {
  */
 function showMcpErrorNotification(message: string) {
   // Check if we're in a browser environment and have a way to show notifications
-  if (typeof window !== "undefined") {
+  if (typeof window !== 'undefined') {
     // Try to use toast notification if available
     if (window.dispatchEvent) {
-      const toastEvent = new CustomEvent('mcp-error', { 
-        detail: { message, type: 'warning' }
+      const toastEvent = new CustomEvent('mcp-error', {
+        detail: { message, type: 'warning' },
       });
       window.dispatchEvent(toastEvent);
     }
-    
+
     // Fallback to console warning
     console.warn(`[MCP] ${message}`);
   }

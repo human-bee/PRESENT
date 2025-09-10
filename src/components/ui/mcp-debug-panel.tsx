@@ -1,8 +1,8 @@
-"use client";
+'use client';
 
-import { useState, useEffect } from "react";
-import { getMcpServerStatuses, loadMcpServers, type McpServer } from "@/lib/mcp-utils";
-import { Button } from "@/components/ui/button";
+import { useState, useEffect } from 'react';
+import { getMcpServerStatuses, loadMcpServers, type McpServer } from '@/lib/mcp-utils';
+import { Button } from '@/components/ui/button';
 
 interface McpDebugPanelProps {
   className?: string;
@@ -21,17 +21,17 @@ export function McpDebugPanel({ className }: McpDebugPanelProps) {
   }, []);
 
   const clearFailedServers = () => {
-    if (typeof window !== "undefined") {
-      localStorage.removeItem("mcp-server-failures");
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('mcp-server-failures');
       const serverStatuses = getMcpServerStatuses();
       setStatuses(serverStatuses);
     }
   };
 
   const clearAllMcpServers = () => {
-    if (typeof window !== "undefined") {
-      localStorage.removeItem("mcp-servers");
-      localStorage.removeItem("mcp-server-failures");
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('mcp-servers');
+      localStorage.removeItem('mcp-server-failures');
       setServers([]);
       setStatuses(new Map());
     }
@@ -53,7 +53,9 @@ export function McpDebugPanel({ className }: McpDebugPanelProps) {
   }
 
   return (
-    <div className={`fixed bottom-4 right-4 w-80 bg-white border rounded-lg shadow-lg p-4 z-50 ${className}`}>
+    <div
+      className={`fixed bottom-4 right-4 w-80 bg-white border rounded-lg shadow-lg p-4 z-50 ${className}`}
+    >
       <div className="flex justify-between items-center mb-3">
         <h3 className="font-semibold text-sm">MCP Debug Panel</h3>
         <Button
@@ -74,18 +76,20 @@ export function McpDebugPanel({ className }: McpDebugPanelProps) {
           ) : (
             <div className="space-y-1">
               {servers.map((server, index) => {
-                const url = typeof server === "string" ? server : server.url;
+                const url = typeof server === 'string' ? server : server.url;
                 const status = statuses.get(url);
-                
+
                 return (
                   <div key={index} className="flex items-center gap-2 text-xs">
-                    <div className={`w-2 h-2 rounded-full ${
-                      status?.status === 'failed' 
-                        ? 'bg-red-500' 
-                        : status?.status === 'connected'
-                        ? 'bg-green-500'
-                        : 'bg-gray-400'
-                    }`} />
+                    <div
+                      className={`w-2 h-2 rounded-full ${
+                        status?.status === 'failed'
+                          ? 'bg-red-500'
+                          : status?.status === 'connected'
+                            ? 'bg-green-500'
+                            : 'bg-gray-400'
+                      }`}
+                    />
                     <div className="flex-1 truncate" title={url}>
                       {url.split('/').pop() || url}
                     </div>
@@ -100,18 +104,18 @@ export function McpDebugPanel({ className }: McpDebugPanelProps) {
         </div>
 
         <div className="border-t pt-3 space-y-2">
-          <Button 
+          <Button
             onClick={clearFailedServers}
-            variant="outline" 
-            size="sm" 
+            variant="outline"
+            size="sm"
             className="w-full text-xs h-7"
           >
             Clear Failed Status
           </Button>
-          <Button 
+          <Button
             onClick={clearAllMcpServers}
-            variant="outline" 
-            size="sm" 
+            variant="outline"
+            size="sm"
             className="w-full text-xs h-7 text-red-600 border-red-200 hover:bg-red-50"
           >
             Clear All MCP Servers
@@ -119,9 +123,10 @@ export function McpDebugPanel({ className }: McpDebugPanelProps) {
         </div>
 
         <div className="text-xs text-gray-500 border-t pt-2">
-          If you're seeing "Transport is closed" errors, try clearing failed servers or removing problematic MCP servers.
+          If you're seeing "Transport is closed" errors, try clearing failed servers or removing
+          problematic MCP servers.
         </div>
       </div>
     </div>
   );
-} 
+}

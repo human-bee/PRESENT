@@ -1,52 +1,52 @@
-"use client";
+'use client';
 
 // Force dynamic rendering to prevent build errors
 export const dynamic = 'force-dynamic';
 
-import { useState, useEffect, Suspense } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
-import Link from "next/link";
-import { useAuth } from "@/hooks/use-auth";
+import { useState, useEffect, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import Link from 'next/link';
+import { useAuth } from '@/hooks/use-auth';
 
 function SignInForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { signInWithGoogle, signInWithEmail } = useAuth();
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
   // Handle OAuth errors from URL params
   useEffect(() => {
     const oauthError = searchParams.get('error');
     if (oauthError === 'oauth_error') {
-      setError("There was an issue with OAuth authentication. Please try again.");
+      setError('There was an issue with OAuth authentication. Please try again.');
     }
   }, [searchParams]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
-    setError("");
+    setError('');
 
     try {
       await signInWithEmail(email, password);
-      router.push("/canvas");
+      router.push('/canvas');
     } catch (error: any) {
-      setError(error.message || "Invalid email or password");
+      setError(error.message || 'Invalid email or password');
     } finally {
       setIsLoading(false);
     }
   };
 
   const handleGoogleSignIn = async () => {
-    setError("");
+    setError('');
     try {
       await signInWithGoogle();
       // The redirect will be handled by the OAuth flow
     } catch (error: any) {
-      setError(error.message || "Failed to sign in with Google");
+      setError(error.message || 'Failed to sign in with Google');
     }
   };
 
@@ -54,7 +54,7 @@ function SignInForm() {
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/20">
       <div className="bg-white p-8 rounded-lg shadow-lg w-full max-w-md">
         <h1 className="text-2xl font-bold text-center mb-6">Sign In to TLDraw</h1>
-        
+
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label htmlFor="email" className="block text-sm font-medium text-gray-700">
@@ -69,7 +69,7 @@ function SignInForm() {
               className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
             />
           </div>
-          
+
           <div>
             <label htmlFor="password" className="block text-sm font-medium text-gray-700">
               Password
@@ -95,7 +95,7 @@ function SignInForm() {
             disabled={isLoading}
             className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {isLoading ? "Signing in..." : "Sign In"}
+            {isLoading ? 'Signing in...' : 'Sign In'}
           </button>
         </form>
 
@@ -136,7 +136,7 @@ function SignInForm() {
         </div>
 
         <p className="mt-4 text-center text-sm text-gray-600">
-          Don&apos;t have an account?{" "}
+          Don&apos;t have an account?{' '}
           <Link href="/auth/signup" className="font-medium text-blue-600 hover:text-blue-500">
             Sign up
           </Link>
@@ -148,21 +148,23 @@ function SignInForm() {
 
 export default function SignIn() {
   return (
-    <Suspense fallback={
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/20">
-        <div className="bg-white p-8 rounded-lg shadow-lg w-full max-w-md">
-          <div className="animate-pulse">
-            <div className="h-8 bg-gray-200 rounded mb-6"></div>
-            <div className="space-y-4">
-              <div className="h-10 bg-gray-200 rounded"></div>
-              <div className="h-10 bg-gray-200 rounded"></div>
-              <div className="h-10 bg-gray-200 rounded"></div>
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/20">
+          <div className="bg-white p-8 rounded-lg shadow-lg w-full max-w-md">
+            <div className="animate-pulse">
+              <div className="h-8 bg-gray-200 rounded mb-6"></div>
+              <div className="space-y-4">
+                <div className="h-10 bg-gray-200 rounded"></div>
+                <div className="h-10 bg-gray-200 rounded"></div>
+                <div className="h-10 bg-gray-200 rounded"></div>
+              </div>
             </div>
           </div>
         </div>
-      </div>
-    }>
+      }
+    >
       <SignInForm />
     </Suspense>
   );
-} 
+}
