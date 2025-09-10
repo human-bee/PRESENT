@@ -10,6 +10,7 @@ import { useSyncDemo } from '@tldraw/sync';
 import { CanvasLiveKitContext } from './livekit-room-connector';
 import { ComponentStoreContext } from './tldraw-canvas';
 import type { customShapeUtil, customShape } from './tldraw-canvas';
+// Re-exported shape util type may include MermaidStreamShapeUtil via dynamic load in CanvasSpace
 import { useRoomContext } from '@livekit/components-react';
 import { createLiveKitBus } from '@/lib/livekit/livekit-bus';
 import { RoomEvent } from 'livekit-client';
@@ -284,6 +285,47 @@ export function TldrawWithCollaboration({
 
       // Initial update
       setTimeout(updateAllPinnedShapes, 100);
+
+      // Realtime: Apply mermaid_stream updates via LiveKit bus (last-write-wins)
+      const lastTsByShape = new Map<string, number>();
+      const offUiUpdate = bus.on('ui_update', (msg: any) => {
+        try {
+          if (!msg || typeof msg !== 'object') return;
+          const componentId = String(msg.componentId || '');
+          const patch = (msg.patch || {}) as Record<string, unknown>;
+          const ts = typeof msg.timestamp === 'number' ? msg.timestamp : Date.now();
+          if (!componentId || !patch) return;
+
+          const shape = mountedEditor.getShape(componentId as any) as any;
+          if (!shape || shape.type !== 'mermaid_stream') return;
+
+          const last = lastTsByShape.get(componentId) || 0;
+          if (ts < last) return; // drop stale
+          lastTsByShape.set(componentId, ts);
+
+          const nextProps: Record<string, unknown> = {};
+          if (typeof patch.mermaidText === 'string') nextProps.mermaidText = patch.mermaidText;
+          if (typeof patch.keepLastGood === 'boolean') nextProps.keepLastGood = patch.keepLastGood;
+          if (typeof patch.w === 'number') nextProps.w = patch.w;
+          if (typeof patch.h === 'number') nextProps.h = patch.h;
+          if (Object.keys(nextProps).length === 0) return;
+          mountedEditor.updateShapes([{ id: componentId as any, type: 'mermaid_stream' as any, props: nextProps }]);
+        } catch {
+          // ignore
+        }
+      });
+
+      // Bridge local shape patch events → LiveKit bus
+      const handleShapePatch = (e: Event) => {
+        try {
+          const detail = (e as CustomEvent).detail || {};
+          const shapeId = String(detail.shapeId || '');
+          const patch = (detail.patch || {}) as Record<string, unknown>;
+          if (!shapeId || !patch) return;
+          bus.send('ui_update', { componentId: shapeId, patch, timestamp: Date.now() });
+        } catch {}
+      };
+      window.addEventListener('custom:shapePatch', handleShapePatch as EventListener);
 
       // Event handlers for canvas control (PRE-105)
       const handleFocusEvent = (e: Event) => {
@@ -697,6 +739,37 @@ export function TldrawWithCollaboration({
         handleDistributeSelected as EventListener,
       );
       window.addEventListener('tldraw:drawSmiley', handleDrawSmiley as EventListener);
+      // Create mermaid stream shape quickly for testing/tools
+      const handleCreateMermaidStream = (e: Event) => {
+        try {
+          const detail = (e as CustomEvent).detail || {};
+          const text = typeof detail.text === 'string' ? detail.text : undefined;
+          const viewport = mountedEditor.getViewportPageBounds();
+          const x = viewport ? viewport.midX - 200 : 0;
+          const y = viewport ? viewport.midY - 150 : 0;
+          mountedEditor.createShape({
+            id: createShapeId(`mermaid-${nanoid()}`),
+            type: 'mermaid_stream' as any,
+            x,
+            y,
+            props: {
+              w: 400,
+              h: 300,
+              name: 'Mermaid (stream)',
+              mermaidText:
+                text || 'graph TD; A[Start] --> B{Decision}; B -->|Yes| C[OK]; B -->|No| D[Retry];',
+              renderState: 'idle',
+              keepLastGood: true,
+            },
+          } as any);
+        } catch (err) {
+          console.warn('[CanvasControl] create_mermaid_stream error', err);
+        }
+      };
+      window.addEventListener(
+        'tldraw:create_mermaid_stream',
+        handleCreateMermaidStream as EventListener,
+      );
       // List shapes to dispatcher via bus
       const handleListShapes = (e: Event) => {
         const detail = (e as CustomEvent).detail || {};
@@ -945,6 +1018,10 @@ export function TldrawWithCollaboration({
           handleDistributeSelected as EventListener,
         );
         window.removeEventListener('tldraw:drawSmiley', handleDrawSmiley as EventListener);
+        window.removeEventListener(
+          'tldraw:create_mermaid_stream',
+          handleCreateMermaidStream as EventListener,
+        );
         window.removeEventListener('tldraw:toggleGrid', handleToggleGrid as EventListener);
         window.removeEventListener('tldraw:setBackground', handleSetBackground as EventListener);
         window.removeEventListener('tldraw:setTheme', handleSetTheme as EventListener);

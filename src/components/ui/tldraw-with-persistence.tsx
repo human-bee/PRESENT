@@ -400,6 +400,25 @@ function CustomToolbarWithTranscript({
             />
           </button>
         )}
+        {process.env.NEXT_PUBLIC_ENABLE_MERMAID_STREAM_SHAPE === 'true' && (
+          <button
+            className="tlui-button tlui-button__tool"
+            onClick={() => {
+              try {
+                window.dispatchEvent(new CustomEvent('tldraw:create_mermaid_stream', { detail: {} }));
+              } catch {}
+            }}
+            title="Create Mermaid (stream)"
+            style={{ color: 'rgb(29, 29, 29)' }}
+          >
+            <div
+              className="tlui-icon tlui-button__icon"
+              style={{
+                mask: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 3h18v18H3z'%3E%3C/path%3E%3Cpath d='M7 8h10M7 12h10M7 16h10'%3E%3C/path%3E%3C/svg%3E") center 100% / 100% no-repeat`,
+              }}
+            />
+          </button>
+        )}
       </div>
     </DefaultToolbar>
   );

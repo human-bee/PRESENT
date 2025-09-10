@@ -198,8 +198,12 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
         const utils = [
           (mod as any).customShapeUtil,
           (mod as any).ToolboxShapeUtil,
-        ].filter(Boolean);
-        setCustomShapeUtils(utils);
+        ];
+        const enableMermaid = process.env.NEXT_PUBLIC_ENABLE_MERMAID_STREAM_SHAPE === 'true';
+        if (enableMermaid && (mod as any).MermaidStreamShapeUtil) {
+          utils.push((mod as any).MermaidStreamShapeUtil);
+        }
+        setCustomShapeUtils(utils.filter(Boolean));
       });
     }
   }, []);
