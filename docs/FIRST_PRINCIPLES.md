@@ -16,7 +16,7 @@
   - Pass off component creation to the conductor agent
   - Pass off component update to the conductor agent
 
-## 2. One Room With Multiple Participants
+## 2. One Livekit Room With Multiple Participants
 
 - **DONE**
 
@@ -24,7 +24,7 @@
 
 - **DONE**
 
-## 5. Sub-Agent: Conductor Agent
+## 4. Sub-Agent: Conductor Agent
 
 - Acts on instructions from the watcher or primary agent to perform actions.
 - Has access to all MCP tools (e.g., Linear, YouTube).
@@ -35,7 +35,7 @@
 - Specialized mini agents (e.g., a Linear agent) may be used for specific components, streaming real-time updates to their respective components based on progreessing transcript and canvas interactions.
 - The LiveKit agent currently monitors the transcript and decides when to update component state accordingly.
 
-## 6. Watcher Agent
+## 5. Watcher Agent
 
 - Monitors the transcript and decides if a component should be updated based on the transcript
 - Sends a message to the conductor agent to update the component
