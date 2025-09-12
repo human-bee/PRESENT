@@ -81,6 +81,26 @@ export function ToolDispatcher({
         switch (tool) {
           case 'canvas_create_mermaid_stream':
             return dispatchTL('tldraw:create_mermaid_stream', params);
+          case 'canvas_update_mermaid_stream': {
+            const globalAny = window as any;
+            const shapeId = (params as any)?.shapeId || globalAny.__present_mermaid_last_shape_id || '';
+            const text = String((params as any)?.text || '');
+            if (!shapeId) return { status: 'ERROR', message: 'No mermaid shapeId available' } as const;
+            try {
+              window.dispatchEvent(new CustomEvent('tldraw:update_mermaid_stream', { detail: { shapeId, text } }));
+              try {
+                bus.send('editor_action', {
+                  type: 'update_mermaid_stream',
+                  shapeId,
+                  len: text.length,
+                  timestamp: Date.now(),
+                });
+              } catch {}
+              return { status: 'SUCCESS', message: 'Updated mermaid stream' } as const;
+            } catch (e) {
+              return { status: 'ERROR', message: e instanceof Error ? e.message : String(e) } as const;
+            }
+          }
           case 'youtube_search': {
             const query = String((params as any)?.query || '').trim();
             try {
