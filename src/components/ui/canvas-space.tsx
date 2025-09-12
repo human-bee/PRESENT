@@ -192,11 +192,7 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
 
   // Provide shape utils synchronously at first render so the store registers them on mount
   const customShapeUtils = React.useMemo(() => {
-    const list: any[] = [customShapeUtil, ToolboxShapeUtil];
-    if (process.env.NEXT_PUBLIC_ENABLE_MERMAID_STREAM_SHAPE === 'true') {
-      list.push(MermaidStreamShapeUtil);
-    }
-    return list;
+    return [customShapeUtil, ToolboxShapeUtil, MermaidStreamShapeUtil] as any[];
   }, []);
 
   // Component rehydration handler - restore componentStore after canvas reload
