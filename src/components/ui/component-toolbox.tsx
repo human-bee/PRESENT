@@ -184,6 +184,13 @@ export const ComponentToolbox: React.FC<ComponentToolboxProps> = ({ onComponentC
     // No-op
   };
   const handleComponentClick = (componentType: string) => {
+    // Special case: Mermaid (stream) creates a TLDraw shape, not a React component
+    if (componentType === 'Mermaid (stream)') {
+      try {
+        window.dispatchEvent(new CustomEvent('tldraw:create_mermaid_stream', { detail: {} }));
+        return;
+      } catch {}
+    }
     onComponentCreate(componentType);
   };
 

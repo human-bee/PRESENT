@@ -79,6 +79,8 @@ export function ToolDispatcher({
         };
 
         switch (tool) {
+          case 'canvas_create_mermaid_stream':
+            return dispatchTL('tldraw:create_mermaid_stream', params);
           case 'youtube_search': {
             const query = String((params as any)?.query || '').trim();
             try {
@@ -510,6 +512,19 @@ export function ToolDispatcher({
         }
 
         const isWeather = /\bweather\b|\bforecast\b/.test(summary);
+        const wantsMermaid = /\bmermaid\b|\bflow\s*chart\b|\bdiagram\b/.test(summary);
+        if (decision.should_send && wantsMermaid) {
+          log('synthesizing mermaid stream shape');
+          await executeToolCall({
+            id: message.id || `${Date.now()}`,
+            type: 'tool_call',
+            payload: { tool: 'canvas_create_mermaid_stream', params: { text: 'graph TD; A-->B' } },
+            timestamp: Date.now(),
+            source: 'dispatcher',
+            roomId: message.roomId,
+          } as any);
+          return;
+        }
         if (decision.should_send && isWeather) {
           const locMatch = /\b(?:in|for)\s+([^.,!?]+)\b/.exec(String(decision.summary || originalText));
           const location = locMatch ? locMatch[1].replace(/\s+on the canvas\b/i, '').trim() : undefined;

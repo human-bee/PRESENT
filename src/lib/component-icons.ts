@@ -81,6 +81,12 @@ export const componentIcons: Record<string, ComponentIconMapping> = {
     category: 'Collaboration',
     description: 'Live debate scorecard (boxing/Game Boy aesthetic)',
   },
+  // Experimental: TLDraw Mermaid (stream) shape (not a React component)
+  'Mermaid (stream)': {
+    icon: FileText,
+    category: 'Productivity',
+    description: 'Real-time Mermaid flowchart/diagram (experimental)',
+  },
   LinearKanbanBoard: {
     icon: Kanban,
     category: 'Productivity',
