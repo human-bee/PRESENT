@@ -744,6 +744,21 @@ export function TldrawWithCollaboration({
         try {
           const detail = (e as CustomEvent).detail || {};
           const text = typeof detail.text === 'string' ? detail.text : undefined;
+          // Guard util readiness; retry once if needed
+          try {
+            // @ts-expect-error internal API
+            const hasUtil = !!(mountedEditor as any).getShapeUtil?.('mermaid_stream');
+            if (!hasUtil) {
+              setTimeout(() => {
+                try {
+                  window.dispatchEvent(
+                    new CustomEvent('tldraw:create_mermaid_stream', { detail: { text } }),
+                  );
+                } catch {}
+              }, 150);
+              return;
+            }
+          } catch {}
           const viewport = mountedEditor.getViewportPageBounds();
           const x = viewport ? viewport.midX - 200 : 0;
           const y = viewport ? viewport.midY - 150 : 0;
@@ -758,7 +773,7 @@ export function TldrawWithCollaboration({
               name: 'Mermaid (stream)',
               mermaidText:
                 text || 'graph TD; A[Start] --> B{Decision}; B -->|Yes| C[OK]; B -->|No| D[Retry];',
-              renderState: 'idle',
+              compileState: 'idle',
               keepLastGood: true,
             },
           } as any);

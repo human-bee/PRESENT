@@ -60,7 +60,7 @@ export interface MermaidStreamShapeProps {
   h: number;
   name: string;
   mermaidText: string;
-  renderState: 'idle' | 'compiling' | 'ok' | 'error';
+  compileState: 'idle' | 'compiling' | 'ok' | 'error';
   streamId?: string;
   keepLastGood?: boolean;
 }
@@ -323,7 +323,7 @@ function MermaidStreamShapeComponent({ shape }: { shape: MermaidStreamShape }) {
           {
             id: shape.id,
             type: 'mermaid_stream' as const,
-            props: { renderState: state },
+            props: { compileState: state },
           } as any,
         ]);
         if (process.env.NODE_ENV === 'development') {
@@ -349,6 +349,22 @@ function MermaidStreamShapeComponent({ shape }: { shape: MermaidStreamShape }) {
     },
     [editor, shape.id, shape.props.w, shape.props.h],
   );
+
+  // Auto-fit on first successful compile if size is known
+  useEffect(() => {
+    if (shape.props.compileState === 'ok' && lastMeasuredRef.current) {
+      const size = lastMeasuredRef.current;
+      const dw = Math.abs((shape.props.w || 0) - size.w);
+      const dh = Math.abs((shape.props.h || 0) - size.h);
+      if (dw > 2 || dh > 2) {
+        try {
+          editor.updateShapes([
+            { id: shape.id, type: 'mermaid_stream' as const, props: { w: size.w, h: size.h } } as any,
+          ]);
+        } catch {}
+      }
+    }
+  }, [editor, shape.id, shape.props.compileState]);
 
   const applyText = React.useCallback(
     (text: string) => {
@@ -542,7 +558,7 @@ export class MermaidStreamShapeUtil extends BaseBoxShapeUtil<MermaidStreamShape>
     h: T.number,
     name: T.string,
     mermaidText: T.string,
-    renderState: T.string,
+    compileState: T.string,
     streamId: T.optional(T.string),
     keepLastGood: T.optional(T.boolean),
   } satisfies RecordProps<MermaidStreamShape>;
@@ -553,7 +569,7 @@ export class MermaidStreamShapeUtil extends BaseBoxShapeUtil<MermaidStreamShape>
       h: 300,
       name: 'Mermaid (stream)',
       mermaidText: 'graph TD; A[Start] --> B{Decision}; B -->|Yes| C[OK]; B -->|No| D[Retry];',
-      renderState: 'idle',
+      compileState: 'idle',
       keepLastGood: true,
     };
   }
