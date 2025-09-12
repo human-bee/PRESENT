@@ -73,6 +73,7 @@ const TldrawWithCollaboration = dynamic(
 
 // Import types statically (they don't add to bundle size)
 import type { customShape as CustomShape } from './tldraw-canvas';
+import { customShapeUtil, ToolboxShapeUtil, MermaidStreamShapeUtil } from './tldraw-canvas';
 
 // Suppress development noise and repetitive warnings
 if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
@@ -189,23 +190,13 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
     Array<{ messageId: string; node: React.ReactNode; name?: string }>
   >([]);
 
-  // Load shape utils dynamically
-  const [customShapeUtils, setCustomShapeUtils] = useState<unknown[]>([]);
-
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      import('./tldraw-canvas').then((mod) => {
-        const utils = [
-          (mod as any).customShapeUtil,
-          (mod as any).ToolboxShapeUtil,
-        ];
-        const enableMermaid = process.env.NEXT_PUBLIC_ENABLE_MERMAID_STREAM_SHAPE === 'true';
-        if (enableMermaid && (mod as any).MermaidStreamShapeUtil) {
-          utils.push((mod as any).MermaidStreamShapeUtil);
-        }
-        setCustomShapeUtils(utils.filter(Boolean));
-      });
+  // Provide shape utils synchronously at first render so the store registers them on mount
+  const customShapeUtils = React.useMemo(() => {
+    const list: any[] = [customShapeUtil, ToolboxShapeUtil];
+    if (process.env.NEXT_PUBLIC_ENABLE_MERMAID_STREAM_SHAPE === 'true') {
+      list.push(MermaidStreamShapeUtil);
     }
+    return list;
   }, []);
 
   // Component rehydration handler - restore componentStore after canvas reload

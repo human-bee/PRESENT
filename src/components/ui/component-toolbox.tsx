@@ -178,7 +178,11 @@ export const ComponentToolbox: React.FC<ComponentToolboxProps> = ({ onComponentC
       obs.disconnect();
     };
   }, []);
-  const componentNames = useMemo(() => getAvailableComponents(), []);
+  const componentNames = useMemo(() => {
+    const all = getAvailableComponents();
+    const enableMermaid = process.env.NEXT_PUBLIC_ENABLE_MERMAID_STREAM_SHAPE === 'true';
+    return all.filter((name) => enableMermaid ? true : name !== 'Mermaid (stream)');
+  }, []);
 
   const handleDragStart = () => {
     // No-op
