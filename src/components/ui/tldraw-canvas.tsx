@@ -542,7 +542,7 @@ export class MermaidStreamShapeUtil extends BaseBoxShapeUtil<MermaidStreamShape>
     h: T.number,
     name: T.string,
     mermaidText: T.string,
-    renderState: T.union('idle', 'compiling', 'ok', 'error'),
+    renderState: T.string,
     streamId: T.optional(T.string),
     keepLastGood: T.optional(T.boolean),
   } satisfies RecordProps<MermaidStreamShape>;
