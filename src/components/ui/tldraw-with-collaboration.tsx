@@ -309,6 +309,7 @@ export function TldrawWithCollaboration({
           if (typeof patch.w === 'number') nextProps.w = patch.w;
           if (typeof patch.h === 'number') nextProps.h = patch.h;
           if (Object.keys(nextProps).length === 0) return;
+          try { console.log('[Canvas][ui_update] apply', { componentId, keys: Object.keys(nextProps), ts }); } catch {}
           mountedEditor.updateShapes([{ id: componentId as any, type: 'mermaid_stream' as any, props: nextProps }]);
         } catch {
           // ignore
@@ -322,7 +323,9 @@ export function TldrawWithCollaboration({
           const shapeId = String(detail.shapeId || '');
           const patch = (detail.patch || {}) as Record<string, unknown>;
           if (!shapeId || !patch) return;
-          bus.send('ui_update', { componentId: shapeId, patch, timestamp: Date.now() });
+          const ts = Date.now();
+          try { console.log('[Canvas][shapePatch] send', { shapeId, keys: Object.keys(patch), ts }); } catch {}
+          bus.send('ui_update', { componentId: shapeId, patch, timestamp: ts });
         } catch {}
       };
       window.addEventListener('custom:shapePatch', handleShapePatch as EventListener);
@@ -744,6 +747,13 @@ export function TldrawWithCollaboration({
         try {
           const detail = (e as CustomEvent).detail || {};
           const text = typeof detail.text === 'string' ? detail.text : undefined;
+          // Dedupe: prevent duplicate creates within a short window
+          const g: any = window as any;
+          if (g.__present_mermaid_creating === true) {
+            console.warn('⚠️ [Canvas] Creation in progress; skipping duplicate create attempt');
+            return;
+          }
+          g.__present_mermaid_creating = true;
           // Guard util readiness; retry once if needed
           try {
             // @ts-expect-error internal API
@@ -756,6 +766,7 @@ export function TldrawWithCollaboration({
                   );
                 } catch {}
               }, 150);
+              g.__present_mermaid_creating = false;
               return;
             }
           } catch {}
@@ -779,10 +790,13 @@ export function TldrawWithCollaboration({
             },
           } as any);
           try {
-            (window as any).__present_mermaid_last_shape_id = id;
+            g.__present_mermaid_last_shape_id = id;
+            g.__present_mermaid_session = { text: text || 'graph TD;' };
           } catch {}
+          setTimeout(() => { try { g.__present_mermaid_creating = false; } catch {} }, 250);
         } catch (err) {
           console.warn('[CanvasControl] create_mermaid_stream error', err);
+          try { (window as any).__present_mermaid_creating = false; } catch {}
         }
       };
       window.addEventListener(

@@ -534,15 +534,30 @@ export function ToolDispatcher({
         const isWeather = /\bweather\b|\bforecast\b/.test(summary);
         const wantsMermaid = /\bmermaid\b|\bflow\s*chart\b|\bdiagram\b/.test(summary);
         if (decision.should_send && wantsMermaid) {
-          log('synthesizing mermaid stream shape');
-          await executeToolCall({
-            id: message.id || `${Date.now()}`,
-            type: 'tool_call',
-            payload: { tool: 'canvas_create_mermaid_stream', params: { text: 'graph TD; A-->B' } },
-            timestamp: Date.now(),
-            source: 'dispatcher',
-            roomId: message.roomId,
-          } as any);
+          const g = window as any;
+          const lastShapeId = g.__present_mermaid_last_shape_id as string | undefined;
+          const session = (g.__present_mermaid_session || {}) as { text?: string };
+          if (lastShapeId) {
+            log('updating mermaid stream shape', { shapeId: lastShapeId });
+            await executeToolCall({
+              id: message.id || `${Date.now()}`,
+              type: 'tool_call',
+              payload: { tool: 'canvas_update_mermaid_stream', params: { shapeId: lastShapeId, text: session.text || 'graph TD;' } },
+              timestamp: Date.now(),
+              source: 'dispatcher',
+              roomId: message.roomId,
+            } as any);
+          } else {
+            log('synthesizing mermaid stream shape');
+            await executeToolCall({
+              id: message.id || `${Date.now()}`,
+              type: 'tool_call',
+              payload: { tool: 'canvas_create_mermaid_stream', params: { text: 'graph TD; A-->B' } },
+              timestamp: Date.now(),
+              source: 'dispatcher',
+              roomId: message.roomId,
+            } as any);
+          }
           return;
         }
 
