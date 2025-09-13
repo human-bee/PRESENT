@@ -811,6 +811,7 @@ export function TldrawWithCollaboration({
         const text = String(detail.text || '');
         if (!shapeId || !text) return;
         try {
+          try { console.log('[Canvas][update_mermaid] apply', { shapeId, len: text.length }); } catch {}
           mountedEditor.updateShapes([
             { id: shapeId as any, type: 'mermaid_stream' as any, props: { mermaidText: text } },
           ]);
