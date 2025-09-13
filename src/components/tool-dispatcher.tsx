@@ -545,6 +545,39 @@ export function ToolDispatcher({
           } as any);
           return;
         }
+
+        // If a Mermaid session is active (shape was created), try to append steps from ongoing decisions
+        const g = window as any;
+        const lastShapeId = g.__present_mermaid_last_shape_id as string | undefined;
+        const session = (g.__present_mermaid_session || {}) as { last?: string; text?: string };
+        const isDiagramFollowup = /\bdiagram\b|\bflow\s*chart\b|\bitinerary\b|\bmap out\b|\bprocess\b|\bsteps?\b/i.test(
+          originalText || summary,
+        );
+        if (lastShapeId && (isDiagramFollowup || wantsMermaid)) {
+          const sanitize = (s: string) =>
+            s
+              .toLowerCase()
+              .replace(/[^a-z0-9\s_-]/g, '')
+              .trim()
+              .split(/\s+/)
+              .slice(0, 5)
+              .join('_') || `step_${Date.now().toString(36)}`;
+          const current = session.text && typeof session.text === 'string' ? session.text : 'graph TD;';
+          const last = session.last && typeof session.last === 'string' ? session.last : 'Start';
+          const next = sanitize(originalText || summary);
+          const line = `${last}-->${next}`;
+          const merged = current.includes('graph') ? `${current} ${line};` : `graph TD; ${line};`;
+          g.__present_mermaid_session = { last: next, text: merged };
+          await executeToolCall({
+            id: message.id || `${Date.now()}`,
+            type: 'tool_call',
+            payload: { tool: 'canvas_update_mermaid_stream', params: { shapeId: lastShapeId, text: merged } },
+            timestamp: Date.now(),
+            source: 'dispatcher',
+            roomId: message.roomId,
+          } as any);
+          return;
+        }
         if (decision.should_send && isWeather) {
           const locMatch = /\b(?:in|for)\s+([^.,!?]+)\b/.exec(String(decision.summary || originalText));
           const location = locMatch ? locMatch[1].replace(/\s+on the canvas\b/i, '').trim() : undefined;
