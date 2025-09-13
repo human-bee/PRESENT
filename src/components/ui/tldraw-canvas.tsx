@@ -559,6 +559,8 @@ export class MermaidStreamShapeUtil extends BaseBoxShapeUtil<MermaidStreamShape>
     name: T.string,
     mermaidText: T.string,
     compileState: T.optional(T.string),
+    // Back-compat: accept legacy saved shapes that used renderState to avoid rehydrate crashes
+    renderState: T.optional(T.string),
     streamId: T.optional(T.string),
     keepLastGood: T.optional(T.boolean),
   } satisfies RecordProps<MermaidStreamShape>;
@@ -575,6 +577,15 @@ export class MermaidStreamShapeUtil extends BaseBoxShapeUtil<MermaidStreamShape>
   }
 
   override component(shape: MermaidStreamShape) {
+    // On first mount/rehydrate, migrate legacy renderState → compileState if needed
+    try {
+      if ((shape as any).props && (shape as any).props.renderState && !(shape as any).props.compileState) {
+        const s = (shape as any).props.renderState as string;
+        // best-effort migration; do not block if editor not available in this context
+        const ed = typeof window !== 'undefined' ? (window as any).__present?.tldrawEditor : null;
+        ed?.updateShapes?.([{ id: shape.id, type: 'mermaid_stream' as any, props: { compileState: s } }]);
+      }
+    } catch {}
     return (
       <TldrawHTMLContainer
         id={shape.id}
