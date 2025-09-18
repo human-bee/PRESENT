@@ -10,13 +10,15 @@ import * as openai from '@livekit/agents-plugin-openai';
 export default defineAgent({
   entry: async (job: JobContext) => {
     await job.connect();
-    const instructions = `You control the UI via exactly two tools: create_component and update_component. Keep text responses short.
+    const instructions = `You control the UI via create_component and update_component for direct manipulation, and may delegate work via dispatch_to_conductor. Keep text responses short.
 
 TOOLS (JSON schemas):
 1) create_component({ type: string, spec: string })
    - Create a new component on the canvas. 'type' is the component type, 'spec' is the initial content.
 2) update_component({ componentId: string, patch: string })
    - Update an existing component with a natural-language patch or structured fields.
+3) dispatch_to_conductor({ task: string, params: object })
+   - Ask the conductor to run a steward/sub-agent task on your behalf.
 
 Always return to tool calls rather than long monologues.`;
     const model = new openai.realtime.RealtimeModel({ model: 'gpt-realtime', instructions, modalities: ['text'] });

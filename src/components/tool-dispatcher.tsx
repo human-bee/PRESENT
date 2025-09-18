@@ -58,6 +58,74 @@ export function ToolDispatcher({
     typeof process !== 'undefined' && process.env.NEXT_PUBLIC_STEWARD_FLOWCHART_ENABLED === 'true';
   const room = useRoomContext();
   const bus = React.useMemo(() => createLiveKitBus(room), [room]);
+  const stewardPendingRef = React.useRef<{ room: string; docId: string } | null>(null);
+  const stewardTimerRef = React.useRef<number | null>(null);
+  const stewardInFlightRef = React.useRef(false);
+
+  const scheduleStewardRun = React.useCallback(
+    (roomName?: string | null, docId?: string | null) => {
+      if (!STEWARD_FLOWCHART) return;
+      const normalizedRoom = typeof roomName === 'string' ? roomName.trim() : '';
+      const normalizedDoc = typeof docId === 'string' ? docId.trim() : '';
+      if (!normalizedRoom || !normalizedDoc) return;
+
+      stewardPendingRef.current = { room: normalizedRoom, docId: normalizedDoc };
+      if (stewardTimerRef.current) {
+        try {
+          window.clearTimeout(stewardTimerRef.current);
+        } catch {}
+        stewardTimerRef.current = null;
+      }
+
+      const attemptRun = async () => {
+        const pending = stewardPendingRef.current;
+        if (!pending) {
+          stewardTimerRef.current = null;
+          return;
+        }
+        if (stewardInFlightRef.current) {
+          stewardTimerRef.current = window.setTimeout(attemptRun, 1000);
+          return;
+        }
+        stewardInFlightRef.current = true;
+        log('steward_run: starting', pending);
+        try {
+          const res = await fetch('/api/steward/run', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ...pending, windowMs: 60000 }),
+          });
+          if (!res.ok) {
+            let text = '';
+            try {
+              text = await res.text();
+            } catch {}
+            console.warn('[ToolDispatcher] steward run failed', { status: res.status, text });
+          }
+        } catch (err) {
+          console.warn('[ToolDispatcher] steward run error', err);
+        } finally {
+          stewardInFlightRef.current = false;
+          stewardTimerRef.current = null;
+        }
+      };
+
+      log('steward_run: scheduled', { room: normalizedRoom, docId: normalizedDoc });
+      stewardTimerRef.current = window.setTimeout(attemptRun, 2000);
+    },
+    [STEWARD_FLOWCHART, log],
+  );
+
+  React.useEffect(() => {
+    return () => {
+      if (stewardTimerRef.current) {
+        try {
+          window.clearTimeout(stewardTimerRef.current);
+        } catch {}
+        stewardTimerRef.current = null;
+      }
+    };
+  }, []);
 
   const executeToolCall = React.useCallback<DispatcherContext['executeToolCall']>(
     async (call) => {
@@ -616,65 +684,85 @@ export function ToolDispatcher({
 
         const isWeather = /\bweather\b|\bforecast\b/.test(summary);
 
-        // Steward bootstrap: ensure a mermaid shape exists on explicit steward_trigger signals
-        if (STEWARD_FLOWCHART && decision.should_send && /steward_trigger/i.test(summary || originalText)) {
-          try {
-            const g: any = window as any;
-            if (!g.__present_mermaid_last_shape_id) {
-              window.dispatchEvent(
-                new CustomEvent('tldraw:create_mermaid_stream', { detail: { text: 'graph TD;\nA-->B;' } }),
-              );
-            }
-          } catch {}
-          // Allow subsequent updates via steward commits
-          return;
-        }
-        const wantsMermaid = /\bmermaid\b|\bflow\s*chart\b|\bdiagram\b/.test(summary);
+        const globalAny = window as any;
 
-        // If a Mermaid session is active (shape was created), try to append steps from ongoing decisions
-        const g = window as any;
-        const lastShapeId = g.__present_mermaid_last_shape_id as string | undefined;
-        const session = (g.__present_mermaid_session || {}) as { last?: string; text?: string };
-        const isDiagramFollowup = /\bdiagram\b|\bflow\s*chart\b|\bitinerary\b|\bmap out\b|\bprocess\b|\bsteps?\b/i.test(
-          originalText || summary,
-        );
-        if (lastShapeId && (isDiagramFollowup || wantsMermaid)) {
-          const sanitize = (s: string) =>
-            s
-              .toLowerCase()
-              .replace(/[^a-z0-9\s_-]/g, '')
-              .trim()
-              .split(/\s+/)
-              .slice(0, 5)
-              .join('_') || `step_${Date.now().toString(36)}`;
-          const current = session.text && typeof session.text === 'string' ? session.text : 'graph TD;';
-          const last = session.last && typeof session.last === 'string' ? session.last : 'Start';
-          const next = sanitize(originalText || summary);
-          const line = `${last}-->${next}`;
-          const merged = current.includes('graph') ? `${current} ${line};` : `graph TD; ${line};`;
-          g.__present_mermaid_session = { last: next, text: merged };
-          await executeToolCall({
-            id: message.id || `${Date.now()}`,
-            type: 'tool_call',
-            payload: { tool: 'canvas_update_mermaid_stream', params: { shapeId: lastShapeId, text: merged } },
-            timestamp: Date.now(),
-            source: 'dispatcher',
-            roomId: message.roomId,
-          } as any);
-          return;
-        }
-        // If we want Mermaid and no active session, create it now
-        if (decision.should_send && wantsMermaid && !lastShapeId) {
-          log('synthesizing mermaid stream shape');
-          await executeToolCall({
-            id: message.id || `${Date.now()}`,
-            type: 'tool_call',
-            payload: { tool: 'canvas_create_mermaid_stream', params: { text: 'graph TD; A-->B' } },
-            timestamp: Date.now(),
-            source: 'dispatcher',
-            roomId: message.roomId,
-          } as any);
-          return;
+        if (STEWARD_FLOWCHART) {
+          if (decision.should_send && /steward_trigger/i.test(summary || originalText)) {
+            try {
+              if (!globalAny.__present_mermaid_last_shape_id) {
+                window.dispatchEvent(
+                  new CustomEvent('tldraw:create_mermaid_stream', { detail: { text: 'graph TD;\nA-->B;' } }),
+                );
+              }
+            } catch {}
+
+            const roomName =
+              (typeof message.roomId === 'string' && message.roomId) || room?.name || '';
+            const docId =
+              typeof globalAny.__present_mermaid_last_shape_id === 'string'
+                ? globalAny.__present_mermaid_last_shape_id
+                : '';
+
+            log('steward trigger received', { room: roomName, docId: docId || 'pending' });
+
+            if (roomName) {
+              if (docId) {
+                scheduleStewardRun(roomName, docId);
+              } else {
+                window.setTimeout(() => {
+                  try {
+                    const fallbackId = String((window as any).__present_mermaid_last_shape_id || '');
+                    if (fallbackId) scheduleStewardRun(roomName, fallbackId);
+                  } catch {}
+                }, 150);
+              }
+            }
+            return;
+          }
+        } else {
+          const wantsMermaid = /\bmermaid\b|\bflow\s*chart\b|\bdiagram\b/.test(summary);
+          const lastShapeId = globalAny.__present_mermaid_last_shape_id as string | undefined;
+          const session = (globalAny.__present_mermaid_session || {}) as { last?: string; text?: string };
+          const isDiagramFollowup = /\bdiagram\b|\bflow\s*chart\b|\bitinerary\b|\bmap out\b|\bprocess\b|\bsteps?\b/i.test(
+            originalText || summary,
+          );
+          if (lastShapeId && (isDiagramFollowup || wantsMermaid)) {
+            const sanitize = (s: string) =>
+              s
+                .toLowerCase()
+                .replace(/[^a-z0-9\s_-]/g, '')
+                .trim()
+                .split(/\s+/)
+                .slice(0, 5)
+                .join('_') || `step_${Date.now().toString(36)}`;
+            const current = session.text && typeof session.text === 'string' ? session.text : 'graph TD;';
+            const last = session.last && typeof session.last === 'string' ? session.last : 'Start';
+            const next = sanitize(originalText || summary);
+            const line = `${last}-->${next}`;
+            const merged = current.includes('graph') ? `${current} ${line};` : `graph TD; ${line};`;
+            globalAny.__present_mermaid_session = { last: next, text: merged };
+            await executeToolCall({
+              id: message.id || `${Date.now()}`,
+              type: 'tool_call',
+              payload: { tool: 'canvas_update_mermaid_stream', params: { shapeId: lastShapeId, text: merged } },
+              timestamp: Date.now(),
+              source: 'dispatcher',
+              roomId: message.roomId,
+            } as any);
+            return;
+          }
+          if (decision.should_send && wantsMermaid && !lastShapeId) {
+            log('synthesizing mermaid stream shape');
+            await executeToolCall({
+              id: message.id || `${Date.now()}`,
+              type: 'tool_call',
+              payload: { tool: 'canvas_create_mermaid_stream', params: { text: 'graph TD; A-->B' } },
+              timestamp: Date.now(),
+              source: 'dispatcher',
+              roomId: message.roomId,
+            } as any);
+            return;
+          }
         }
         if (decision.should_send && isWeather) {
           const locMatch = /\b(?:in|for)\s+([^.,!?]+)\b/.exec(String(decision.summary || originalText));
@@ -701,7 +789,7 @@ export function ToolDispatcher({
       offTool();
       offDecision();
     };
-  }, [room, executeToolCall, log]);
+  }, [room, executeToolCall, log, scheduleStewardRun, STEWARD_FLOWCHART]);
 
   // Optional: expose global bridge, so other parts can reuse dispatcher
   React.useEffect(() => {
