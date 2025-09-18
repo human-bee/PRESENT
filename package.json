@@ -46,7 +46,7 @@
     "@tldraw/tlschema": "^3.13.3",
     "@uidotdev/usehooks": "^2.4.1",
     "class-variance-authority": "^0.7.1",
-    "codex": "^0.31.0",
+    "codex": "^0.2.3",
     "dompurify": "^3.0.6",
     "framer-motion": "^12.16.0",
     "highlight.js": "^11.11.1",
