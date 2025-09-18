@@ -320,18 +320,24 @@ export function TldrawWithCollaboration({
 
           const nextProps: Record<string, unknown> = {};
           if (STEWARD_FLOWCHART) {
-            // Steward mode: accept verbatim doc/format/version and map to mermaidText only for rendering
             const doc = (patch as any).flowchartDoc as string | undefined;
-            const format = (patch as any).format as string | undefined;
-            // Minimal safety: extract first mermaid fence when format is markdown/streamdown
-            const extractFirstMermaid = (d?: string, f?: string) => {
-              if (!d) return undefined;
-              if (f === 'mermaid') return d;
-              const m = d.match(/```mermaid\s*([\s\S]*?)```/i);
-              return m ? m[1] : undefined;
-            };
-            const mermaid = extractFirstMermaid(doc, format);
-            if (typeof mermaid === 'string') nextProps.mermaidText = mermaid;
+            const formatRaw = (patch as any).format as string | undefined;
+            const format = typeof formatRaw === 'string' ? formatRaw.toLowerCase() : undefined;
+            try {
+              console.log('[Canvas][ui_update] steward patch received', { componentId, format: formatRaw, hasDoc: !!doc });
+            } catch {}
+            if (typeof doc === 'string' && doc.length > 0) {
+              let mermaidText: string | undefined;
+              if (format === 'mermaid') {
+                mermaidText = doc;
+              } else if (format === 'markdown' || format === 'streamdown') {
+                const match = doc.match(/```mermaid\s*([\s\S]*?)```/i);
+                mermaidText = match ? match[1] : doc;
+              } else {
+                mermaidText = doc;
+              }
+              if (typeof mermaidText === 'string') nextProps.mermaidText = mermaidText;
+            }
           } else {
             if (typeof patch.mermaidText === 'string') nextProps.mermaidText = patch.mermaidText;
             if (typeof patch.keepLastGood === 'boolean') nextProps.keepLastGood = patch.keepLastGood;
@@ -341,6 +347,13 @@ export function TldrawWithCollaboration({
           if (Object.keys(nextProps).length === 0) return;
           try { console.log('[Canvas][ui_update] apply', { componentId, keys: Object.keys(nextProps), ts }); } catch {}
           mountedEditor.updateShapes([{ id: componentId as any, type: 'mermaid_stream' as any, props: nextProps }]);
+          if (STEWARD_FLOWCHART) {
+            try {
+              const g: any = window as any;
+              g.__present_mermaid_last_shape_id = componentId;
+              if (g.__present_mermaid_session) delete g.__present_mermaid_session;
+            } catch {}
+          }
         } catch {
           // ignore
         }
