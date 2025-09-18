@@ -192,6 +192,10 @@ export const MessageThreadCollapsible = React.forwardRef<
       if (!token) throw new Error('No token received');
 
       await room.connect(wsUrl, token);
+      try {
+        console.log('[LiveKit] Connected, enabling camera and microphone');
+        await room.localParticipant.setCameraEnabled(true);
+      } catch {}
       try { await room.localParticipant.setMicrophoneEnabled(true); } catch {}
     } finally {
       setConnBusy(false);

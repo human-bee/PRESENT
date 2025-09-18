@@ -559,4 +559,24 @@ export const SubAgentPresets = {
       }),
     ],
   },
+
+  mermaidStream: {
+    componentName: 'Mermaid (stream)',
+    mcpTools: ['search'],
+    contextExtractor: (thread: any) => {
+      const last = thread?.messages?.[thread.messages.length - 1];
+      const text = last?.content && typeof last.content === 'string' ? last.content : '';
+      // Extract a simple graph skeleton from the conversation as a seed
+      const wantsSequence = /sequence|steps|process/i.test(text);
+      const wantsFlow = /flow|graph|diagram/i.test(text) || !wantsSequence;
+      const seed = wantsFlow
+        ? 'graph TD; Start-->Decision; Decision-->|Yes|OK; Decision-->|No|Retry;'
+        : 'sequenceDiagram\nparticipant A\nparticipant B\nA->>B: Hello\nB-->>A: World';
+      return { seed };
+    },
+    dataEnricher: (context: any, tools: any) => {
+      // Prefer fast streaming model via external MCP in future; for now, no-op
+      return [];
+    },
+  },
 };
