@@ -36,6 +36,7 @@ export async function commitFlowchartDoc(
 ) {
   // Fetch current
   const current = await getFlowchartDoc(room, docId);
+  const previousVersion = current.version || 0;
   if (typeof payload.prevVersion === 'number' && payload.prevVersion !== current.version) {
     throw new Error('CONFLICT');
   }
@@ -63,7 +64,7 @@ export async function commitFlowchartDoc(
     .update({ document })
     .eq('id', canvas.id);
   if (updateErr) throw new Error(updateErr.message);
-  return { version: nextVersion };
+  return { version: nextVersion, previousVersion };
 }
 
 export async function getTranscriptWindow(room: string, windowMs: number) {

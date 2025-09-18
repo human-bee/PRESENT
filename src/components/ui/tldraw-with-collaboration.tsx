@@ -328,10 +328,14 @@ export function TldrawWithCollaboration({
               if (!d) return undefined;
               if (f === 'mermaid') return d;
               const m = d.match(/```mermaid\s*([\s\S]*?)```/i);
-              return m ? m[1] : undefined;
+              return m ? m[1] : d;
             };
             const mermaid = extractFirstMermaid(doc, format);
             if (typeof mermaid === 'string') nextProps.mermaidText = mermaid;
+            try {
+              (window as any).__present_steward_active = true;
+              (window as any).__present_mermaid_last_shape_id = componentId;
+            } catch {}
           } else {
             if (typeof patch.mermaidText === 'string') nextProps.mermaidText = patch.mermaidText;
             if (typeof patch.keepLastGood === 'boolean') nextProps.keepLastGood = patch.keepLastGood;
@@ -341,6 +345,9 @@ export function TldrawWithCollaboration({
           if (Object.keys(nextProps).length === 0) return;
           try { console.log('[Canvas][ui_update] apply', { componentId, keys: Object.keys(nextProps), ts }); } catch {}
           mountedEditor.updateShapes([{ id: componentId as any, type: 'mermaid_stream' as any, props: nextProps }]);
+          try {
+            (window as any).__present_mermaid_session = {};
+          } catch {}
         } catch {
           // ignore
         }

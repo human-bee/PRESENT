@@ -10,13 +10,15 @@ import * as openai from '@livekit/agents-plugin-openai';
 export default defineAgent({
   entry: async (job: JobContext) => {
     await job.connect();
-    const instructions = `You control the UI via exactly two tools: create_component and update_component. Keep text responses short.
+    const instructions = `You control the UI via create_component and update_component for direct manipulation, and may delegate work via dispatch_to_conductor. Keep text responses short.
 
 TOOLS (JSON schemas):
-1) create_component({ type: string, spec: string })
-   - Create a new component on the canvas. 'type' is the component type, 'spec' is the initial content.
-2) update_component({ componentId: string, patch: string })
-   - Update an existing component with a natural-language patch or structured fields.
+1) create_component({ type: string, spec: object })
+   - Create a new component on the canvas. 'type' is the component type, 'spec' is the initial content payload.
+2) update_component({ componentId: string, patch: object })
+   - Update an existing component with structured fields.
+3) dispatch_to_conductor({ task: string, params: object })
+   - Ask the conductor to run a steward/sub-agent task on your behalf.
 
 Always return to tool calls rather than long monologues.`;
     const model = new openai.realtime.RealtimeModel({ model: 'gpt-realtime', instructions, modalities: ['text'] });
@@ -29,7 +31,14 @@ Always return to tool calls rather than long monologues.`;
       try {
         const args = JSON.parse(evt.arguments || '{}');
         if (evt.name !== 'create_component' && evt.name !== 'update_component' && evt.name !== 'dispatch_to_conductor') {
-          session.conversation.item.create({ type: 'function_call_output', call_id: evt.call_id, output: JSON.stringify({ status: 'ERROR', message: `Unsupported tool: ${evt.name}` }) });
+          session.conversation.item.create({
+            type: 'function_call_output',
+            call_id: evt.call_id,
+            output: JSON.stringify({ status: 'ERROR', message: `Unsupported tool: ${evt.name}` }),
+          });
+          try {
+            await session.response.create({ instructions: 'continue' });
+          } catch {}
           return;
         }
         const toolCallEvent = {
@@ -40,8 +49,18 @@ Always return to tool calls rather than long monologues.`;
           timestamp: Date.now(),
           source: 'voice' as const,
         };
-        await job.room.localParticipant?.publishData(new TextEncoder().encode(JSON.stringify(toolCallEvent)), { reliable: true, topic: 'tool_call' });
-        session.conversation.item.create({ type: 'function_call_output', call_id: evt.call_id, output: JSON.stringify({ status: 'DISPATCHED' }) });
+        await job.room.localParticipant?.publishData(new TextEncoder().encode(JSON.stringify(toolCallEvent)), {
+          reliable: true,
+          topic: 'tool_call',
+        });
+        session.conversation.item.create({
+          type: 'function_call_output',
+          call_id: evt.call_id,
+          output: JSON.stringify({ status: 'DISPATCHED' }),
+        });
+        try {
+          await session.response.create({ instructions: 'continue' });
+        } catch {}
       } catch (e) {
         session.conversation.item.create({ type: 'function_call_output', call_id: evt.call_id, output: JSON.stringify({ status: 'ERROR', message: String(e) }) });
       }

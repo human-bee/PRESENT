@@ -22,7 +22,11 @@ const get_current_flowchart = tool({
   description: 'Fetch current flowchart doc for a room/docId from Supabase.',
   parameters: GetCurrentArgs,
   async execute({ room, docId }) {
-    return await getFlowchartDoc(room, docId);
+    const doc = await getFlowchartDoc(room, docId);
+    try {
+      console.log('[Steward][get_current_flowchart]', { room, docId, format: doc.format, version: doc.version });
+    } catch {}
+    return doc;
   },
 });
 
@@ -32,7 +36,11 @@ const get_context = tool({
   parameters: GetContextArgs,
   async execute({ room, windowMs }) {
     const spanMs = typeof windowMs === 'number' ? windowMs : 60000;
-    return await getTranscriptWindow(room, spanMs);
+    const ctx = await getTranscriptWindow(room, spanMs);
+    try {
+      console.log('[Steward][get_context]', { room, windowMs: spanMs, lines: ctx?.transcript?.length || 0 });
+    } catch {}
+    return ctx;
   },
 });
 
@@ -48,21 +56,77 @@ const commit_flowchart = tool({
         throw new Error('INVALID_DOC: Missing mermaid code fence in markdown/streamdown');
       }
     }
-    const res = await commitFlowchartDoc(room, docId, {
-      format,
-      doc,
-      prevVersion: typeof prevVersion === 'number' ? prevVersion : undefined,
-      rationale: typeof rationale === 'string' ? rationale : undefined,
-    });
-    try {
-      const base = process.env.NEXT_PUBLIC_BASE_URL || process.env.BASE_URL || '';
-      await fetch(`${base}/api/steward/commit`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ room, componentId: docId, flowchartDoc: doc, format, version: res.version }),
-      }).catch(() => {});
-    } catch {}
-    return res;
+    let attempts = 0;
+    let lastError: unknown;
+    const cleanedRationale = typeof rationale === 'string' ? rationale : undefined;
+    let expectedVersion = typeof prevVersion === 'number' ? prevVersion : undefined;
+
+    while (attempts < 2) {
+      attempts += 1;
+      try {
+        if (attempts > 1) {
+          try {
+            const latest = await getFlowchartDoc(room, docId);
+            expectedVersion = latest.version;
+            console.warn('[Steward][commit_flowchart] retrying after conflict', {
+              room,
+              docId,
+              latestVersion: latest.version,
+            });
+          } catch (conflictFetchError) {
+            console.error('[Steward][commit_flowchart] failed to refetch after conflict', conflictFetchError);
+          }
+        }
+        console.log('[Steward][commit_flowchart] attempt', {
+          room,
+          docId,
+          format,
+          prevVersion: expectedVersion,
+        });
+        const res = await commitFlowchartDoc(room, docId, {
+          format,
+          doc,
+          prevVersion: expectedVersion,
+          rationale: cleanedRationale,
+        });
+        try {
+          console.log('[Steward][commit_flowchart] committed', {
+            room,
+            docId,
+            prevVersion: res.previousVersion,
+            nextVersion: res.version,
+          });
+        } catch {}
+        try {
+          const base =
+            process.env.STEWARD_COMMIT_BASE_URL ||
+            process.env.NEXT_PUBLIC_BASE_URL ||
+            process.env.BASE_URL ||
+            'http://127.0.0.1:3000';
+          await fetch(`${base}/api/steward/commit`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ room, componentId: docId, flowchartDoc: doc, format, version: res.version }),
+          })
+            .then(() => {
+              try {
+                console.log('[Steward][commit_flowchart] broadcasted', { room, docId, version: res.version });
+              } catch {}
+            })
+            .catch((err) => {
+              console.error('[Steward][commit_flowchart] broadcast failed', err);
+            });
+        } catch {}
+        return res;
+      } catch (error: any) {
+        lastError = error;
+        if (typeof error?.message === 'string' && error.message.includes('CONFLICT') && attempts < 2) {
+          continue;
+        }
+        throw error;
+      }
+    }
+    throw lastError instanceof Error ? lastError : new Error('UNKNOWN_COMMIT_ERROR');
   },
 });
 
@@ -75,8 +139,23 @@ export const flowchartSteward = new Agent({
 });
 
 export async function runFlowchartSteward(params: { room: string; docId: string; windowMs?: number }) {
-  const prompt = `Update the flowchart for room ${params.room} doc ${params.docId} with params: ${JSON.stringify(params)}`;
+  const windowMs = typeof params.windowMs === 'number' ? params.windowMs : 60000;
+  try {
+    console.log('[Steward][runFlowchartSteward] start', { room: params.room, docId: params.docId, windowMs });
+  } catch {}
+  const prompt = `Update the flowchart for room ${params.room} doc ${params.docId} with params: ${JSON.stringify({
+    ...params,
+    windowMs,
+  })}`;
   const result = await run(flowchartSteward, prompt);
+  try {
+    console.log('[Steward][runFlowchartSteward] result', {
+      room: params.room,
+      docId: params.docId,
+      windowMs,
+      output: result.finalOutput,
+    });
+  } catch {}
   return result.finalOutput;
 }
 
