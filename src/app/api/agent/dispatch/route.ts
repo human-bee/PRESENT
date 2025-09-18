@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { AccessToken } from 'livekit-server-sdk';
+import { AgentDispatchClient } from 'livekit-server-sdk';
 
 export const runtime = 'nodejs';
 
@@ -27,85 +27,15 @@ export async function POST(request: NextRequest) {
     }
 
     try {
-      // Create agent dispatch using LiveKit's Agent Dispatch Service
+      // Use official AgentDispatchClient from livekit-server-sdk
       const agentDispatchUrl = serverUrl.replace('wss://', 'https://').replace('ws://', 'http://');
-      const dispatchUrl = `${agentDispatchUrl}/twirp/livekit.AgentDispatchService/CreateDispatch`;
-
-      // Create admin token for the dispatch request with all necessary permissions
-      const adminToken = new AccessToken(apiKey, apiSecret, {
-        identity: 'system-admin',
-        name: 'System Admin',
+      const client = new AgentDispatchClient(agentDispatchUrl, apiKey, apiSecret);
+      console.log('🚀 Creating agent dispatch via SDK:', { agentDispatchUrl, roomName, agentName: 'voice-agent' });
+      const dispatch = await client.createDispatch(roomName, 'voice-agent', {
+        metadata: JSON.stringify({ dispatchedAt: Date.now(), reason: 'manual_dispatch' }),
       });
-
-      // Add comprehensive grants for agent dispatch
-      adminToken.addGrant({
-        room: roomName,
-        roomJoin: true,
-        roomAdmin: true,
-        roomCreate: true,
-        roomList: true,
-        roomRecord: true,
-        canPublish: true,
-        canPublishData: true,
-        canSubscribe: true,
-        canUpdateOwnMetadata: true,
-        ingressAdmin: true,
-      });
-
-      const token = await adminToken.toJwt();
-
-      console.log('🚀 Dispatching agent to room:', roomName);
-      console.log('📍 Dispatch URL:', dispatchUrl);
-
-      const dispatchResponse = await fetch(dispatchUrl, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          agentName: 'voice-agent', // Changed to voice-agent-enhanced to experiment with Agentic Canvas Control
-          room: roomName,
-          metadata: JSON.stringify({
-            dispatchedAt: Date.now(),
-            reason: 'manual_dispatch',
-          }),
-        }),
-      });
-
-      if (!dispatchResponse.ok) {
-        const errorText = await dispatchResponse.text();
-        console.error('❌ Agent dispatch failed:', dispatchResponse.status, errorText);
-
-        // Check if it's an authentication error
-        if (dispatchResponse.status === 401) {
-          console.error('🔐 Authentication failed - checking token permissions');
-          console.log('Token grants:', {
-            room: roomName,
-            identity: 'system-admin',
-          });
-        }
-
-        return NextResponse.json(
-          {
-            error: 'Agent dispatch failed',
-            details: errorText,
-            status: dispatchResponse.status,
-          },
-          { status: 500 },
-        );
-      }
-
-      const dispatchResult = await dispatchResponse.json();
-      console.log('✅ Agent dispatch successful:', dispatchResult);
-
-      return NextResponse.json({
-        success: true,
-        message: 'Agent dispatched successfully',
-        dispatch: dispatchResult,
-        agentName: 'voice-agent',
-        room: roomName,
-      });
+      console.log('✅ Agent dispatch successful:', dispatch);
+      return NextResponse.json({ success: true, dispatch, agentName: 'voice-agent', room: roomName });
     } catch (dispatchError) {
       console.error('❌ Agent dispatch error:', dispatchError);
 

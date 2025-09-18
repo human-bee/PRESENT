@@ -49,7 +49,13 @@ export function ToolDispatcher({
   contextKey?: string;
   enableLogging?: boolean;
 }) {
-  const log = (...args: any[]) => enableLogging && console.log('[ToolDispatcher]', ...args);
+  const log = (...args: any[]) => {
+    try {
+      if (enableLogging) console.log('[ToolDispatcher]', ...args);
+    } catch {}
+  };
+  const STEWARD_FLOWCHART =
+    typeof process !== 'undefined' && process.env.NEXT_PUBLIC_STEWARD_FLOWCHART_ENABLED === 'true';
   const room = useRoomContext();
   const bus = React.useMemo(() => createLiveKitBus(room), [room]);
 
@@ -77,6 +83,86 @@ export function ToolDispatcher({
             return { status: 'ERROR', message: e instanceof Error ? e.message : String(e) } as const;
           }
         };
+
+        // When steward flowchart mode is enabled, enforce the minimal tool contract
+        if (STEWARD_FLOWCHART) {
+          if (tool === 'create_component') {
+            // Map to existing generate_ui_component path
+            const componentType = String((params as any)?.type || 'Message');
+            const providedId = String((params as any)?.messageId || '') || undefined;
+            const messageId = providedId || `ui-${componentType.toLowerCase()}-${Date.now()}`;
+            try {
+              window.dispatchEvent(
+                new CustomEvent('custom:showComponent', {
+                  detail: {
+                    messageId,
+                    component: {
+                      type: componentType,
+                      // Carry the steward-provided spec onto props for component-specific hydration
+                      props: { _custom_displayMessage: true, ...(params as any), spec: (params as any)?.spec },
+                    },
+                    contextKey,
+                  },
+                }),
+              );
+            } catch {}
+            try {
+              bus.send('tool_result', {
+                type: 'tool_result',
+                id: call.id,
+                tool,
+                result: { status: 'SUCCESS', messageId, componentType },
+                timestamp: Date.now(),
+                source: 'dispatcher',
+              });
+            } catch {}
+            return { status: 'SUCCESS', message: `Rendered ${componentType}`, messageId } as any;
+          }
+          if (tool === 'update_component') {
+            // Map to existing ui_update path while preserving semantics
+            const messageId = String((params as any)?.componentId || (params as any)?.messageId || '');
+            const patch = (params as any)?.patch;
+            if (!messageId) {
+              const msg = 'update_component requires componentId';
+              try {
+                bus.send('tool_error', {
+                  type: 'tool_error',
+                  id: call.id,
+                  tool,
+                  error: msg,
+                  timestamp: Date.now(),
+                  source: 'dispatcher',
+                });
+              } catch {}
+              return { status: 'ERROR', message: msg } as any;
+            }
+            // Reuse the ui_update handler by calling ComponentRegistry.update directly
+            const res = await ComponentRegistry.update(messageId, typeof patch === 'string' ? { instruction: patch } : patch);
+            try {
+              bus.send('tool_result', {
+                type: 'tool_result',
+                id: call.id,
+                tool,
+                result: { ...(res as any), messageId },
+                timestamp: Date.now(),
+                source: 'dispatcher',
+              });
+            } catch {}
+            return { status: 'SUCCESS', message: 'Component updated', ...(res as any) } as any;
+          }
+          // Everything else is rejected in steward mode
+          try {
+            bus.send('tool_error', {
+              type: 'tool_error',
+              id: call.id,
+              tool,
+              error: `Unsupported tool in steward mode: ${tool}`,
+              timestamp: Date.now(),
+              source: 'dispatcher',
+            });
+          } catch {}
+          return { status: 'ERROR', message: `Unsupported tool in steward mode: ${tool}` } as const;
+        }
 
         switch (tool) {
           case 'canvas_create_mermaid_stream':
@@ -339,7 +425,6 @@ export function ToolDispatcher({
 
           const res = await ComponentRegistry.update(messageId, patch);
           try {
-            // eslint-disable-next-line no-console
             console.log('[ToolDispatcher][ui_update] result', JSON.stringify({ messageId, res }));
           } catch {}
           // Emit result back
@@ -387,10 +472,9 @@ export function ToolDispatcher({
               };
             }
 
-            try {
-              // eslint-disable-next-line no-console
-              console.log('[ToolDispatcher][mcp]', toolName, 'result:', JSON.stringify(result)?.slice(0, 2000));
-            } catch {}
+              try {
+                console.log('[ToolDispatcher][mcp]', toolName, 'result:', JSON.stringify(result)?.slice(0, 2000));
+              } catch {}
             try {
               bus.send('tool_result', {
                 type: 'tool_result',
@@ -443,7 +527,6 @@ export function ToolDispatcher({
                   }
                   const uiRes = await ComponentRegistry.update(messageId, patch);
                   try {
-                    // eslint-disable-next-line no-console
                     console.log('[ToolDispatcher][mcp→ui_update] patched scorecard', JSON.stringify({ messageId, uiRes, patch }));
                   } catch {}
                 }
@@ -475,7 +558,7 @@ export function ToolDispatcher({
         return { status: 'ERROR', message: e instanceof Error ? e.message : 'Unknown error' };
       }
     },
-    [contextKey, enableLogging],
+    [contextKey, enableLogging, STEWARD_FLOWCHART, bus, log],
   );
 
   // Wire data channel -> dispatcher
@@ -532,6 +615,20 @@ export function ToolDispatcher({
         }
 
         const isWeather = /\bweather\b|\bforecast\b/.test(summary);
+
+        // Steward bootstrap: ensure a mermaid shape exists on explicit steward_trigger signals
+        if (STEWARD_FLOWCHART && decision.should_send && /steward_trigger/i.test(summary || originalText)) {
+          try {
+            const g: any = window as any;
+            if (!g.__present_mermaid_last_shape_id) {
+              window.dispatchEvent(
+                new CustomEvent('tldraw:create_mermaid_stream', { detail: { text: 'graph TD;\nA-->B;' } }),
+              );
+            }
+          } catch {}
+          // Allow subsequent updates via steward commits
+          return;
+        }
         const wantsMermaid = /\bmermaid\b|\bflow\s*chart\b|\bdiagram\b/.test(summary);
 
         // If a Mermaid session is active (shape was created), try to append steps from ongoing decisions
@@ -604,7 +701,7 @@ export function ToolDispatcher({
       offTool();
       offDecision();
     };
-  }, [room, executeToolCall]);
+  }, [room, executeToolCall, log]);
 
   // Optional: expose global bridge, so other parts can reuse dispatcher
   React.useEffect(() => {
@@ -703,4 +800,51 @@ async function populateWeather(messageId: string, location: string): Promise<boo
     console.warn('[ToolDispatcher] populateWeather failed', e);
     return false;
   }
+}
+
+export function normalizeMermaidText(text: string): string {
+  const raw = (text || '').replace(/\r/g, '').trim();
+  if (!raw) return 'graph TD;';
+  if (/^sequenceDiagram\b/.test(raw)) {
+    return raw.split('\n').map((line) => line.trimEnd()).join('\n').trim();
+  }
+  const tokens = raw
+    .split(/\n+/)
+    .flatMap((line) => line.split(/;+/))
+    .map((line) => line.trim())
+    .filter(Boolean);
+  let header = 'graph TD;';
+  const body: string[] = [];
+  for (const token of tokens) {
+    if (/^graph\s+/i.test(token)) {
+      const dirMatch = token.match(/^graph\s+([A-Za-z]{2})/i);
+      if (dirMatch) {
+        const dir = dirMatch[1].toUpperCase();
+        header = new Set(['TD', 'TB', 'LR', 'RL', 'BT']).has(dir) ? `graph ${dir};` : 'graph TD;';
+      } else if (/^graph\s+LR/i.test(token)) {
+        header = 'graph LR;';
+      } else {
+        header = 'graph TD;';
+      }
+      continue;
+    }
+    const normalized = token.replace(/\s+/g, ' ').trim();
+    if (!normalized) continue;
+    if (/^(?:end|subgraph\b|classDef\b|class\b|style\b|linkStyle\b|click\b|direction\b|%%)/i.test(normalized)) {
+      body.push(normalized);
+      continue;
+    }
+    body.push(`${normalized.replace(/;$/, '')};`);
+  }
+  if (body.length === 0) return header;
+  return [header, ...body].join('\n');
+}
+
+export function getMermaidLastNode(text: string): string | undefined {
+  const normalized = normalizeMermaidText(text);
+  if (/^sequenceDiagram\b/.test(normalized)) return undefined;
+  const matches = Array.from(normalized.matchAll(/([^\s;]+)\s*--\>\s*([^\s;]+)/g));
+  if (matches.length === 0) return undefined;
+  const last = matches[matches.length - 1];
+  return last?.[2]?.replace(/;$/, '') || undefined;
 }

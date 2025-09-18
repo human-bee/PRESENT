@@ -19,6 +19,18 @@ import TldrawSnapshotReceiver from '@/components/TldrawSnapshotReceiver';
 import { createLogger } from '@/lib/utils';
 import { normalizeMermaidText, getMermaidLastNode } from '@/components/tool-dispatcher';
 
+function renderPlaintextFromRichText(_editor: any, richText: any | undefined): string {
+  // Fallback: best-effort text extraction
+  try {
+    if (!richText) return '';
+    if (typeof richText === 'string') return richText;
+    if (Array.isArray(richText)) return richText.map((n: any) => (typeof n === 'string' ? n : n?.text || '')).join(' ');
+    return String(richText?.text || '');
+  } catch {
+    return '';
+  }
+}
+
 interface TldrawWithCollaborationProps {
   onMount?: (editor: Editor) => void;
   shapeUtils?: readonly (typeof customShapeUtil)[];
@@ -108,6 +120,8 @@ export function TldrawWithCollaboration({
   // Detect role from LiveKit token metadata
   const room = useRoomContext();
   const bus = useMemo(() => createLiveKitBus(room), [room]);
+  const STEWARD_FLOWCHART =
+    typeof process !== 'undefined' && process.env.NEXT_PUBLIC_STEWARD_FLOWCHART_ENABLED === 'true';
   const [role, setRole] = useState<string | null>(null);
 
   useEffect(() => {
@@ -241,7 +255,7 @@ export function TldrawWithCollaboration({
           if (pinnedShapes.length === 0) return;
 
           const viewport = mountedEditor.getViewportScreenBounds();
-          const updates = [];
+          const updates: any[] = [];
 
           for (const shape of pinnedShapes) {
             const pinnedX = shape.props.pinnedX ?? 0.5;
@@ -264,7 +278,7 @@ export function TldrawWithCollaboration({
           }
 
           if (updates.length > 0) {
-            mountedEditor.updateShapes(updates);
+            mountedEditor.updateShapes(updates as any);
           }
         } finally {
           isUpdatingPinnedShapes = false;
@@ -305,10 +319,25 @@ export function TldrawWithCollaboration({
           lastTsByShape.set(componentId, ts);
 
           const nextProps: Record<string, unknown> = {};
-          if (typeof patch.mermaidText === 'string') nextProps.mermaidText = patch.mermaidText;
-          if (typeof patch.keepLastGood === 'boolean') nextProps.keepLastGood = patch.keepLastGood;
-          if (typeof patch.w === 'number') nextProps.w = patch.w;
-          if (typeof patch.h === 'number') nextProps.h = patch.h;
+          if (STEWARD_FLOWCHART) {
+            // Steward mode: accept verbatim doc/format/version and map to mermaidText only for rendering
+            const doc = (patch as any).flowchartDoc as string | undefined;
+            const format = (patch as any).format as string | undefined;
+            // Minimal safety: extract first mermaid fence when format is markdown/streamdown
+            const extractFirstMermaid = (d?: string, f?: string) => {
+              if (!d) return undefined;
+              if (f === 'mermaid') return d;
+              const m = d.match(/```mermaid\s*([\s\S]*?)```/i);
+              return m ? m[1] : undefined;
+            };
+            const mermaid = extractFirstMermaid(doc, format);
+            if (typeof mermaid === 'string') nextProps.mermaidText = mermaid;
+          } else {
+            if (typeof patch.mermaidText === 'string') nextProps.mermaidText = patch.mermaidText;
+            if (typeof patch.keepLastGood === 'boolean') nextProps.keepLastGood = patch.keepLastGood;
+            if (typeof patch.w === 'number') nextProps.w = patch.w;
+            if (typeof patch.h === 'number') nextProps.h = patch.h;
+          }
           if (Object.keys(nextProps).length === 0) return;
           try { console.log('[Canvas][ui_update] apply', { componentId, keys: Object.keys(nextProps), ts }); } catch {}
           mountedEditor.updateShapes([{ id: componentId as any, type: 'mermaid_stream' as any, props: nextProps }]);
@@ -338,6 +367,7 @@ export function TldrawWithCollaboration({
       };
 
       const updateMermaidSession = (normalizedText: string, lastOverride?: string) => {
+        if (STEWARD_FLOWCHART) return;
         try {
           const g: any = window as any;
           g.__present_mermaid_session = {
@@ -567,13 +597,14 @@ export function TldrawWithCollaboration({
           const left = viewport ? viewport.midX - totalW / 2 : 0;
           const top = viewport ? viewport.midY - totalH / 2 : 0;
 
-          const updates = targets.map((s, i) => {
+          const updates: any[] = [];
+          for (let i = 0; i < targets.length; i++) {
             const r = Math.floor(i / cols);
             const c = i % cols;
             const x = left + c * (maxW + spacing);
             const y = top + r * (maxH + spacing);
-            return { id: s.id, type: s.type as any, x, y };
-          });
+            updates.push({ id: targets[i].id, type: targets[i].type as any, x, y });
+          }
           mountedEditor.updateShapes(updates as any);
         } catch (err) {
           console.warn('[CanvasControl] arrange_grid error', err);
@@ -782,7 +813,9 @@ export function TldrawWithCollaboration({
         try {
           const detail = (e as CustomEvent).detail || {};
           const requestedText = typeof detail.text === 'string' ? detail.text : undefined;
-          const normalized = normalizeMermaidText(requestedText || 'graph TD;\nA-->B;');
+          const normalized = STEWARD_FLOWCHART
+            ? (requestedText || 'graph TD;\nA-->B;')
+            : normalizeMermaidText(requestedText || 'graph TD;\nA-->B;');
           const g: any = window as any;
           if (g.__present_mermaid_creating === true) {
             console.warn('⚠️ [Canvas] Creation in progress; skipping duplicate create attempt');
@@ -790,7 +823,6 @@ export function TldrawWithCollaboration({
           }
           g.__present_mermaid_creating = true;
           try {
-            // @ts-expect-error internal API
             const hasUtil = !!(mountedEditor as any).getShapeUtil?.('mermaid_stream');
             if (!hasUtil) {
               setTimeout(() => {
@@ -848,7 +880,7 @@ export function TldrawWithCollaboration({
         const shapeId = providedShapeId || g.__present_mermaid_last_shape_id || '';
         if (!shapeId) return;
         try {
-          const normalized = normalizeMermaidText(text);
+          const normalized = STEWARD_FLOWCHART ? text : normalizeMermaidText(text);
           try { console.log('[Canvas][update_mermaid] apply', { shapeId, len: normalized.length }); } catch {}
           mountedEditor.updateShapes([
             { id: shapeId as any, type: 'mermaid_stream' as any, props: { mermaidText: normalized } },
