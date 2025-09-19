@@ -1,40 +1,38 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse, after } from 'next/server';
 import { runFlowchartSteward } from '@/lib/agents/subagents/flowchart-steward';
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json().catch(() => null);
-    const roomRaw = typeof body?.room === 'string' ? body.room : undefined;
-    const docRaw = typeof body?.docId === 'string' ? body.docId : undefined;
-    const windowMsRaw = typeof body?.windowMs === 'number' ? body.windowMs : undefined;
+    const { room, docId, windowMs } = await req.json();
 
-    const room = roomRaw?.trim();
-    const docId = docRaw?.trim();
-    if (!room || !docId) {
-      return NextResponse.json({ error: 'room and docId are required' }, { status: 400 });
+    if (typeof room !== 'string' || typeof docId !== 'string') {
+      return NextResponse.json({ error: 'Missing or invalid room/docId' }, { status: 400 });
     }
 
-    const windowMs = windowMsRaw ? Math.max(1000, Math.min(600000, windowMsRaw)) : undefined;
-    const effectiveWindow = windowMs ?? 60000;
+    const trimmedRoom = room.trim();
+    const trimmedDocId = docId.trim();
+    if (!trimmedRoom || !trimmedDocId) {
+      return NextResponse.json({ error: 'Missing or invalid room/docId' }, { status: 400 });
+    }
 
-    try {
-      console.log('[Steward][run] starting', { room, docId, windowMs: effectiveWindow });
-    } catch {}
+    const resolvedWindow = windowMs === undefined ? undefined : Number(windowMs);
+    if (resolvedWindow !== undefined && Number.isNaN(resolvedWindow)) {
+      return NextResponse.json({ error: 'Invalid windowMs value' }, { status: 400 });
+    }
 
-    void runFlowchartSteward({ room, docId, windowMs: effectiveWindow })
-      .then((result) => {
-        try {
-          console.log('[Steward][run] completed', { room, docId, windowMs: effectiveWindow, result });
-        } catch {}
-      })
-      .catch((error) => {
-        try {
-          console.error('[Steward][run] failed', { room, docId, windowMs: effectiveWindow, error });
-        } catch {}
-      });
+    after(async () => {
+      try {
+        console.log('[Steward][run] scheduled', { room: trimmedRoom, docId: trimmedDocId, windowMs: resolvedWindow });
+        await runFlowchartSteward({ room: trimmedRoom, docId: trimmedDocId, windowMs: resolvedWindow });
+        console.log('[Steward][run] completed', { room: trimmedRoom, docId: trimmedDocId, windowMs: resolvedWindow });
+      } catch (error) {
+        console.error('[Steward][run] error', { room: trimmedRoom, docId: trimmedDocId, windowMs: resolvedWindow, error });
+      }
+    });
 
-    return NextResponse.json({ status: 'running' });
-  } catch (error: any) {
-    return NextResponse.json({ error: error?.message || 'Unknown error' }, { status: 500 });
+    return NextResponse.json({ status: 'scheduled' }, { status: 202 });
+  } catch (error) {
+    console.error('Invalid request to steward/run', error);
+    return NextResponse.json({ error: 'Bad Request' }, { status: 400 });
   }
 }

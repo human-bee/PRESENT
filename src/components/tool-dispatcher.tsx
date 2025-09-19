@@ -58,9 +58,84 @@ export function ToolDispatcher({
     typeof process !== 'undefined' && process.env.NEXT_PUBLIC_STEWARD_FLOWCHART_ENABLED === 'true';
   const room = useRoomContext();
   const bus = React.useMemo(() => createLiveKitBus(room), [room]);
-  const stewardPendingRef = React.useRef<{ room: string; docId: string } | null>(null);
-  const stewardTimerRef = React.useRef<number | null>(null);
-  const stewardInFlightRef = React.useRef(false);
+  const stewardPendingRef = React.useRef(false);
+  const queuedRunRef = React.useRef<{ room: string; docId: string; windowMs?: number } | null>(null);
+  const stewardWindowTimerRef = React.useRef<number | null>(null);
+  const stewardDelayTimerRef = React.useRef<number | null>(null);
+
+  const triggerStewardRun = React.useCallback(
+    (roomName: string, docId: string, windowMs = 60000) => {
+      if (!STEWARD_FLOWCHART) return;
+      const normalizedRoom = roomName.trim();
+      const normalizedDoc = docId.trim();
+      if (!normalizedRoom || !normalizedDoc) return;
+
+      if (stewardPendingRef.current) {
+        queuedRunRef.current = { room: normalizedRoom, docId: normalizedDoc, windowMs };
+        log('steward_run: requested while pending; queued for later', queuedRunRef.current);
+        return;
+      }
+
+      stewardPendingRef.current = true;
+      queuedRunRef.current = null;
+
+      const complete = () => {
+        stewardPendingRef.current = false;
+        const queued = queuedRunRef.current;
+        queuedRunRef.current = null;
+        if (queued) {
+          log('steward_run: starting queued run', queued);
+          triggerStewardRun(queued.room, queued.docId, queued.windowMs);
+        }
+      };
+
+      const scheduleCompletion = (duration?: number) => {
+        if (stewardWindowTimerRef.current) {
+          try {
+            window.clearTimeout(stewardWindowTimerRef.current);
+          } catch {}
+          stewardWindowTimerRef.current = null;
+        }
+        if (duration && duration > 0) {
+          stewardWindowTimerRef.current = window.setTimeout(() => {
+            stewardWindowTimerRef.current = null;
+            complete();
+          }, duration);
+        } else {
+          complete();
+        }
+      };
+
+      log('steward_run: starting', { room: normalizedRoom, docId: normalizedDoc, windowMs });
+      const run = async () => {
+        try {
+          log('steward_run: posting /api/steward/run', { room: normalizedRoom, docId: normalizedDoc, windowMs });
+          const res = await fetch('/api/steward/run', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ room: normalizedRoom, docId: normalizedDoc, windowMs }),
+          });
+          if (!res.ok) {
+            let text = '';
+            try {
+              text = await res.text();
+            } catch {}
+            console.warn('[ToolDispatcher] steward run failed', { status: res.status, text });
+            scheduleCompletion();
+            return;
+          }
+          log('steward_run: dispatched', { status: res.status });
+          scheduleCompletion(windowMs);
+        } catch (err) {
+          console.warn('[ToolDispatcher] steward run error', err);
+          scheduleCompletion();
+        }
+      };
+
+      void run();
+    },
+    [STEWARD_FLOWCHART, log],
+  );
 
   const scheduleStewardRun = React.useCallback(
     (roomName?: string | null, docId?: string | null) => {
@@ -69,64 +144,38 @@ export function ToolDispatcher({
       const normalizedDoc = typeof docId === 'string' ? docId.trim() : '';
       if (!normalizedRoom || !normalizedDoc) return;
 
-      stewardPendingRef.current = { room: normalizedRoom, docId: normalizedDoc };
-      if (stewardTimerRef.current) {
+      if (stewardDelayTimerRef.current) {
         try {
-          window.clearTimeout(stewardTimerRef.current);
+          window.clearTimeout(stewardDelayTimerRef.current);
         } catch {}
-        stewardTimerRef.current = null;
+        stewardDelayTimerRef.current = null;
       }
 
-      const attemptRun = async () => {
-        const pending = stewardPendingRef.current;
-        if (!pending) {
-          stewardTimerRef.current = null;
-          return;
-        }
-        if (stewardInFlightRef.current) {
-          stewardTimerRef.current = window.setTimeout(attemptRun, 1000);
-          return;
-        }
-        stewardInFlightRef.current = true;
-        log('steward_run: starting', pending);
-        try {
-          log('steward_run: posting /api/steward/run', pending);
-          const res = await fetch('/api/steward/run', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ ...pending, windowMs: 60000 }),
-          });
-          if (!res.ok) {
-            let text = '';
-            try {
-              text = await res.text();
-            } catch {}
-            console.warn('[ToolDispatcher] steward run failed', { status: res.status, text });
-          } else {
-            log('steward_run: dispatched', { status: res.status });
-          }
-        } catch (err) {
-          console.warn('[ToolDispatcher] steward run error', err);
-        } finally {
-          stewardInFlightRef.current = false;
-          stewardTimerRef.current = null;
-        }
-      };
-
       log('steward_run: scheduled', { room: normalizedRoom, docId: normalizedDoc });
-      stewardTimerRef.current = window.setTimeout(attemptRun, 2000);
+      stewardDelayTimerRef.current = window.setTimeout(() => {
+        stewardDelayTimerRef.current = null;
+        triggerStewardRun(normalizedRoom, normalizedDoc, 60000);
+      }, 2000);
     },
-    [STEWARD_FLOWCHART, log],
+    [STEWARD_FLOWCHART, log, triggerStewardRun],
   );
 
   React.useEffect(() => {
     return () => {
-      if (stewardTimerRef.current) {
+      if (stewardDelayTimerRef.current) {
         try {
-          window.clearTimeout(stewardTimerRef.current);
+          window.clearTimeout(stewardDelayTimerRef.current);
         } catch {}
-        stewardTimerRef.current = null;
+        stewardDelayTimerRef.current = null;
       }
+      if (stewardWindowTimerRef.current) {
+        try {
+          window.clearTimeout(stewardWindowTimerRef.current);
+        } catch {}
+        stewardWindowTimerRef.current = null;
+      }
+      queuedRunRef.current = null;
+      stewardPendingRef.current = false;
     };
   }, []);
 
