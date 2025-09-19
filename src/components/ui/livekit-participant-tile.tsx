@@ -39,9 +39,8 @@ import {
   AudioTrack,
   useRoomContext,
 } from '@livekit/components-react';
-import { Track, RoomEvent } from 'livekit-client';
+import { Track, Room, RoomEvent } from 'livekit-client';
 import { useParticipantTileAgent } from '@/hooks/use-participant-tile-agent';
-import * as ReactDOM from 'react-dom';
 
 // Define the component props schema with Zod
 export const livekitParticipantTileSchema = z.object({
@@ -99,16 +98,6 @@ type LivekitParticipantTileState = {
   audioLevel: number;
   lastSpokeAt: number | null;
 };
-
-// Simple portal helper to render modals above canvas clipping
-function Portal({ children }: { children: React.ReactNode }) {
-  const [mounted, setMounted] = React.useState(false);
-  React.useEffect(() => {
-    setMounted(true);
-  }, []);
-  if (!mounted) return null;
-  return ReactDOM.createPortal(children, document.body);
-}
 
 /**
  * LivekitParticipantTile Component
@@ -349,6 +338,16 @@ function SingleParticipantTile({
   const showTimerRef = React.useRef<number | null>(null);
   const hideTimerRef = React.useRef<number | null>(null);
 
+  // Local mute state for remote participant audio playback
+  const [playbackMuted, setPlaybackMuted] = React.useState(false);
+  React.useEffect(() => {
+    setPlaybackMuted(false);
+  }, [participant.identity]);
+
+  const effectiveAudioMuted = isLocal
+    ? agentState.audioMuted
+    : playbackMuted || agentState.audioMuted;
+
   // Detect coarse pointer (mobile/touch) to adjust interaction model
   const [isCoarsePointer, setIsCoarsePointer] = React.useState(false);
   React.useEffect(() => {
@@ -416,55 +415,222 @@ function SingleParticipantTile({
     return () => window.removeEventListener('keydown', onKey);
   }, [isLocal, hovering, overlayVisible, events]);
 
-  // Options modal
+  // Options dropdown anchored to tile controls
   const [optionsOpen, setOptionsOpen] = React.useState(false);
   const [audioDevices, setAudioDevices] = React.useState<MediaDeviceInfo[]>([]);
   const [videoDevices, setVideoDevices] = React.useState<MediaDeviceInfo[]>([]);
+  const [activeMicrophoneId, setActiveMicrophoneId] = React.useState<string | null>(null);
+  const [activeCameraId, setActiveCameraId] = React.useState<string | null>(null);
   const [selectedQuality, setSelectedQuality] = React.useState<'auto' | 'low' | 'high'>('auto');
-  const modalRef = React.useRef<HTMLDivElement | null>(null);
-  const closeButtonRef = React.useRef<HTMLButtonElement | null>(null);
+  const optionsPanelRef = React.useRef<HTMLDivElement | null>(null);
+  const optionsButtonRef = React.useRef<HTMLButtonElement | null>(null);
+  const handleOptionsButtonRef = React.useCallback((node: HTMLButtonElement | null) => {
+    optionsButtonRef.current = node;
+  }, []);
+
+  type StoredDeviceInfo = {
+    deviceId: string;
+    label?: string | null;
+    groupId?: string | null;
+  };
+
+  const getStoredDevice = React.useCallback(
+    (kind: 'audioinput' | 'videoinput'): StoredDeviceInfo | null => {
+      if (typeof window === 'undefined') return null;
+      const key = `livekit:lastDevice:${kind}`;
+      try {
+        const raw = window.localStorage.getItem(key);
+        if (raw) {
+          const parsed = JSON.parse(raw) as StoredDeviceInfo;
+          if (parsed && typeof parsed.deviceId === 'string' && parsed.deviceId.length > 0) {
+            return parsed;
+          }
+        }
+      } catch {}
+      try {
+        const legacyKey = kind === 'audioinput' ? 'livekit:lastMicId' : 'livekit:lastCamId';
+        const legacyId = window.localStorage.getItem(legacyKey);
+        if (legacyId) {
+          return { deviceId: legacyId };
+        }
+      } catch {}
+      return null;
+    },
+    [],
+  );
+
+  const persistStoredDevice = React.useCallback(
+    (kind: 'audioinput' | 'videoinput', info: StoredDeviceInfo) => {
+      if (typeof window === 'undefined' || !info.deviceId) return;
+      try {
+        const payload: StoredDeviceInfo = {
+          deviceId: info.deviceId,
+          label: info.label ?? '',
+          groupId: info.groupId ?? '',
+        };
+        window.localStorage.setItem(`livekit:lastDevice:${kind}`, JSON.stringify(payload));
+        const legacyKey = kind === 'audioinput' ? 'livekit:lastMicId' : 'livekit:lastCamId';
+        window.localStorage.setItem(legacyKey, info.deviceId);
+      } catch {}
+    },
+    [],
+  );
+
+  const matchStoredDevice = React.useCallback(
+    (devices: MediaDeviceInfo[], stored: StoredDeviceInfo | null) => {
+      if (!stored) return undefined;
+      const byId = devices.find((device) => device.deviceId === stored.deviceId);
+      if (byId) return byId;
+      if (stored.groupId) {
+        const byGroup = devices.find(
+          (device) => device.groupId && device.groupId === stored.groupId,
+        );
+        if (byGroup) return byGroup;
+      }
+      if (stored.label) {
+        const labelLower = stored.label.toLowerCase();
+        const byLabel = devices.find(
+          (device) => device.label && device.label.toLowerCase() === labelLower,
+        );
+        if (byLabel) return byLabel;
+      }
+      return undefined;
+    },
+    [],
+  );
+
+  const room = useRoomContext();
+
+  const updateActiveDevicesFromRoom = React.useCallback(() => {
+    if (!isLocal) return;
+    const mic = room?.getActiveDevice?.('audioinput');
+    const cam = room?.getActiveDevice?.('videoinput');
+    if (mic) setActiveMicrophoneId(mic);
+    if (cam) setActiveCameraId(cam);
+  }, [isLocal, room]);
+
   const refreshDevices = React.useCallback(async () => {
+    if (typeof window === 'undefined') return;
+    try {
+      const [audioInputs, videoInputs] = await Promise.all([
+        Room.getLocalDevices('audioinput', true),
+        Room.getLocalDevices('videoinput', true),
+      ]);
+      setAudioDevices(audioInputs);
+      setVideoDevices(videoInputs);
+      updateActiveDevicesFromRoom();
+      return;
+    } catch {}
     try {
       const list = await navigator.mediaDevices?.enumerateDevices?.();
       if (!list) return;
-      setAudioDevices(list.filter((d) => d.kind === 'audioinput'));
-      setVideoDevices(list.filter((d) => d.kind === 'videoinput'));
+      const audioInputs = list.filter((device) => device.kind === 'audioinput');
+      const videoInputs = list.filter((device) => device.kind === 'videoinput');
+      setAudioDevices(audioInputs);
+      setVideoDevices(videoInputs);
+      updateActiveDevicesFromRoom();
     } catch {}
-  }, []);
+  }, [updateActiveDevicesFromRoom]);
+
+  const switchLocalDevice = React.useCallback(
+    async (kind: 'audioinput' | 'videoinput', deviceId: string) => {
+      if (!isLocal || !room) return;
+      try {
+        type DeviceSwitchRoom = {
+          switchActiveDevice?: (
+            kind: 'audioinput' | 'videoinput',
+            deviceId: string,
+            exact?: boolean,
+          ) => Promise<boolean> | Promise<void>;
+          localParticipant?: {
+            setMicrophoneEnabled?: (enabled: boolean) => Promise<void>;
+            setCameraEnabled?: (enabled: boolean) => Promise<void>;
+          };
+        };
+        const deviceRoom = room as unknown as DeviceSwitchRoom;
+        await deviceRoom.switchActiveDevice?.(kind, deviceId, true);
+        if (kind === 'audioinput') {
+          await deviceRoom.localParticipant?.setMicrophoneEnabled?.(true);
+        } else {
+          await deviceRoom.localParticipant?.setCameraEnabled?.(true);
+        }
+      } catch {}
+    },
+    [isLocal, room],
+  );
+
+  React.useEffect(() => {
+    void refreshDevices();
+  }, [refreshDevices]);
+
   React.useEffect(() => {
     if (!optionsOpen) return;
-    refreshDevices();
+    void refreshDevices();
   }, [optionsOpen, refreshDevices]);
 
-  // Prevent background scrolling when options modal is open (mobile-friendly)
   React.useEffect(() => {
     if (!optionsOpen) return;
-    const previous = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.body.style.overflow = previous;
-    };
-  }, [optionsOpen]);
-
-  // Close modal on Escape and focus close button for accessibility
-  React.useEffect(() => {
-    if (!optionsOpen) return;
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.preventDefault();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
         setOptionsOpen(false);
+        optionsButtonRef.current?.focus?.();
       }
     };
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target as Node | null;
+      if (
+        (target && optionsPanelRef.current?.contains(target)) ||
+        (target && optionsButtonRef.current?.contains(target))
+      ) {
+        return;
+      }
+      setOptionsOpen(false);
+    };
     window.addEventListener('keydown', onKeyDown);
-    const t = window.setTimeout(() => closeButtonRef.current?.focus(), 0);
+    window.addEventListener('pointerdown', onPointerDown);
     return () => {
       window.removeEventListener('keydown', onKeyDown);
-      window.clearTimeout(t);
+      window.removeEventListener('pointerdown', onPointerDown);
     };
   }, [optionsOpen]);
 
-  // Participant selection list (defaults to local)
-  const room = useRoomContext();
+  React.useEffect(() => {
+    if (typeof navigator === 'undefined' || !navigator.mediaDevices) return;
+    const handler = () => {
+      void refreshDevices();
+    };
+    try {
+      navigator.mediaDevices.addEventListener('devicechange', handler);
+      return () => {
+        navigator.mediaDevices.removeEventListener('devicechange', handler);
+      };
+    } catch {
+      const mediaDevices = navigator.mediaDevices as unknown as {
+        ondevicechange: null | (() => void);
+      };
+      const previous = mediaDevices.ondevicechange;
+      mediaDevices.ondevicechange = handler;
+      return () => {
+        if (mediaDevices.ondevicechange === handler) {
+          mediaDevices.ondevicechange = previous ?? null;
+        }
+      };
+    }
+  }, [refreshDevices]);
+
+  React.useEffect(() => {
+    if (!room) return;
+    const handleMediaDevicesChanged = () => {
+      void refreshDevices();
+    };
+    // @ts-expect-error runtime event ensured by LiveKit typings
+    room.on(RoomEvent.MediaDevicesChanged, handleMediaDevicesChanged);
+    return () => {
+      // @ts-expect-error runtime event ensured by LiveKit typings
+      room.off(RoomEvent.MediaDevicesChanged, handleMediaDevicesChanged);
+    };
+  }, [room, refreshDevices]);
 
   // Auto-select last used microphone/camera for the local participant
   React.useEffect(() => {
@@ -474,7 +640,8 @@ function SingleParticipantTile({
         switchActiveDevice?: (
           kind: 'audioinput' | 'videoinput',
           deviceId: string,
-        ) => Promise<void>;
+          exact?: boolean,
+        ) => Promise<boolean> | Promise<void>;
         localParticipant?: {
           setMicrophoneEnabled?: (enabled: boolean) => Promise<void>;
           setCameraEnabled?: (enabled: boolean) => Promise<void>;
@@ -486,51 +653,64 @@ function SingleParticipantTile({
         try {
           const isConnected = (deviceRoom.state as unknown as string) === 'connected';
           if (!isConnected) return;
-          const list = await navigator.mediaDevices?.enumerateDevices?.();
-          const audioInputs = (list || []).filter((d) => d.kind === 'audioinput');
-          const videoInputs = (list || []).filter((d) => d.kind === 'videoinput');
-          const lastMicId = typeof window !== 'undefined'
-            ? window.localStorage.getItem('livekit:lastMicId')
-            : null;
-          const lastCamId = typeof window !== 'undefined'
-            ? window.localStorage.getItem('livekit:lastCamId')
-            : null;
-          if (lastMicId && audioInputs.some((d) => d.deviceId === lastMicId)) {
-            await deviceRoom.switchActiveDevice?.('audioinput', lastMicId);
-            await deviceRoom.localParticipant?.setMicrophoneEnabled?.(true);
+          const [audioInputs, videoInputs] = await Promise.all([
+            Room.getLocalDevices('audioinput', true),
+            Room.getLocalDevices('videoinput', true),
+          ]);
+          setAudioDevices(audioInputs);
+          setVideoDevices(videoInputs);
+          const storedMic = matchStoredDevice(audioInputs, getStoredDevice('audioinput'));
+          const storedCam = matchStoredDevice(videoInputs, getStoredDevice('videoinput'));
+          if (storedMic) {
+            await switchLocalDevice('audioinput', storedMic.deviceId);
+            setActiveMicrophoneId(storedMic.deviceId);
+            persistStoredDevice('audioinput', storedMic);
           }
-          if (lastCamId && videoInputs.some((d) => d.deviceId === lastCamId)) {
-            await deviceRoom.switchActiveDevice?.('videoinput', lastCamId);
-            await deviceRoom.localParticipant?.setCameraEnabled?.(true);
+          if (storedCam) {
+            await switchLocalDevice('videoinput', storedCam.deviceId);
+            setActiveCameraId(storedCam.deviceId);
+            persistStoredDevice('videoinput', storedCam);
           }
-        } catch { }
+        } catch {}
       };
-      // Slight delay to ensure LiveKit finished initializing local tracks
-      const t = window.setTimeout(restore, 200);
-      return () => window.clearTimeout(t);
-    } catch { }
-  }, [isLocal, room]);
+      const timeout = window.setTimeout(() => {
+        void restore();
+      }, 220);
+      return () => window.clearTimeout(timeout);
+    } catch {}
+  }, [getStoredDevice, isLocal, matchStoredDevice, persistStoredDevice, room, switchLocalDevice]);
 
-  // Persist active device changes reported by LiveKit
   React.useEffect(() => {
     if (!isLocal || !room) return;
-    try {
-      const onActiveDeviceChanged = (kind: 'audioinput' | 'videoinput', deviceId?: string) => {
-        try {
-          if (!deviceId) return;
-          if (kind === 'audioinput') window.localStorage.setItem('livekit:lastMicId', deviceId);
-          if (kind === 'videoinput') window.localStorage.setItem('livekit:lastCamId', deviceId);
-        } catch { }
-      };
-      // Types from livekit-client
-      // @ts-expect-error runtime event name ensured
-      room.on(RoomEvent.ActiveDeviceChanged, onActiveDeviceChanged);
-      return () => {
-        // @ts-expect-error runtime event name ensured
-        room.off(RoomEvent.ActiveDeviceChanged, onActiveDeviceChanged);
-      };
-    } catch { }
-  }, [isLocal, room]);
+    const onActiveDeviceChanged = (kind: 'audioinput' | 'videoinput', deviceId?: string) => {
+      if (!deviceId) return;
+      if (kind === 'audioinput') {
+        setActiveMicrophoneId(deviceId);
+        const selected = audioDevices.find((device) => device.deviceId === deviceId);
+        persistStoredDevice('audioinput', {
+          deviceId,
+          label: selected?.label ?? '',
+          groupId: selected?.groupId ?? '',
+        });
+      }
+      if (kind === 'videoinput') {
+        setActiveCameraId(deviceId);
+        const selected = videoDevices.find((device) => device.deviceId === deviceId);
+        persistStoredDevice('videoinput', {
+          deviceId,
+          label: selected?.label ?? '',
+          groupId: selected?.groupId ?? '',
+        });
+      }
+    };
+    // @ts-expect-error runtime event ensured by LiveKit typings
+    room.on(RoomEvent.ActiveDeviceChanged, onActiveDeviceChanged);
+    return () => {
+      // @ts-expect-error runtime event ensured by LiveKit typings
+      room.off(RoomEvent.ActiveDeviceChanged, onActiveDeviceChanged);
+    };
+  }, [audioDevices, isLocal, persistStoredDevice, room, videoDevices]);
+
   const allParticipants = React.useMemo(() => {
     const arr = [] as { id: string; name: string }[];
     if (room?.localParticipant)
@@ -543,6 +723,15 @@ function SingleParticipantTile({
     );
     return arr;
   }, [room?.localParticipant, room?.remoteParticipants]);
+
+  const microphoneSelectValue =
+    activeMicrophoneId && audioDevices.some((device) => device.deviceId === activeMicrophoneId)
+      ? activeMicrophoneId
+      : '';
+  const cameraSelectValue =
+    activeCameraId && videoDevices.some((device) => device.deviceId === activeCameraId)
+      ? activeCameraId
+      : '';
 
   return (
     <div
@@ -616,7 +805,7 @@ function SingleParticipantTile({
       )}
 
       {/* Audio Track */}
-      {showAudio && audioTrackRef && !audioPublication?.isMuted && (
+      {showAudio && audioTrackRef && !audioPublication?.isMuted && !playbackMuted && (
         <AudioTrack trackRef={audioTrackRef} />
       )}
 
@@ -662,19 +851,31 @@ function SingleParticipantTile({
           >
             <div className="bg-black/55 backdrop-blur-md rounded-lg p-1.5 flex items-center gap-1 shadow-lg">
               <button
-                aria-label={agentState.audioMuted ? 'Unmute microphone' : 'Mute microphone'}
-                aria-keyshortcuts="M"
+                aria-label={
+                  effectiveAudioMuted
+                    ? isLocal
+                      ? 'Unmute microphone'
+                      : 'Unmute participant audio'
+                    : isLocal
+                      ? 'Mute microphone'
+                      : 'Mute participant audio'
+                }
+                aria-keyshortcuts={isLocal ? 'M' : undefined}
                 onClick={async () => {
-                  await events.toggleMic();
+                  if (isLocal) {
+                    await events.toggleMic();
+                    return;
+                  }
+                  setPlaybackMuted((prev) => !prev);
                 }}
                 className={cn(
                   'w-11 h-11 rounded-md grid place-items-center transition-colors',
-                  agentState.audioMuted
+                  effectiveAudioMuted
                     ? 'bg-red-500/80 text-white hover:bg-red-600/80'
                     : 'bg-white/10 text-white hover:bg-white/20',
                 )}
               >
-                {agentState.audioMuted ? (
+                {effectiveAudioMuted ? (
                   <MicOff className="w-4 h-4" />
                 ) : (
                   <Mic className="w-4 h-4" />
@@ -740,6 +941,7 @@ function SingleParticipantTile({
               <button
                 aria-label="Tile options"
                 onClick={() => setOptionsOpen(true)}
+                ref={handleOptionsButtonRef}
                 className="w-11 h-11 rounded-md grid place-items-center bg-white/10 text-white hover:bg-white/20 transition-colors"
               >
                 <MoreHorizontal className="w-4 h-4" />
@@ -755,6 +957,7 @@ function SingleParticipantTile({
           <button
             aria-label="Tile options"
             onClick={() => setOptionsOpen(true)}
+            ref={handleOptionsButtonRef}
             className="w-11 h-11 rounded-full bg-black/55 text-white backdrop-blur-md grid place-items-center shadow-lg"
           >
             <MoreHorizontal className="w-5 h-5" />
@@ -781,197 +984,181 @@ function SingleParticipantTile({
         </div>
       )}
 
-      {/* Options Modal (lightweight) */}
+      {/* Tile options dropdown */}
       {optionsOpen && (
-        <Portal>
-          <div
-            className="fixed inset-0 z-[1000] bg-black/40 backdrop-blur-sm flex items-center justify-center"
-            role="dialog"
-            aria-modal="true"
-            onClick={(e) => {
-              if (e.target === e.currentTarget) setOptionsOpen(false);
-            }}
-          >
-            <div
-              className="bg-zinc-900 text-white w-[360px] max-w-[90vw] max-h-[85dvh] overflow-auto rounded-xl p-4 border border-white/10 shadow-2xl"
-              style={{ WebkitOverflowScrolling: 'touch' }}
-              ref={modalRef}
-              onMouseDown={(e) => e.stopPropagation()}
-              onPointerDown={(e) => e.stopPropagation()}
-              onClick={(e) => e.stopPropagation()}
-              onTouchStart={(e) => e.stopPropagation()}
-              onContextMenu={(e) => e.stopPropagation()}
+        <div
+          ref={optionsPanelRef}
+          className={cn(
+            'absolute right-2 z-[60] w-72 max-w-[calc(100%-1.5rem)] rounded-xl border border-white/10 bg-zinc-900/95 p-3 text-white shadow-xl backdrop-blur-md',
+            isCoarsePointer ? 'bottom-20' : 'bottom-16',
+          )}
+          role="dialog"
+          aria-modal="false"
+        >
+          <div className="mb-3 flex items-center justify-between">
+            <div className="text-sm font-medium">Tile Options</div>
+            <button
+              aria-label="Close tile options"
+              onClick={() => setOptionsOpen(false)}
+              className="rounded-full px-2 py-1 text-white/70 transition hover:bg-white/10 hover:text-white"
             >
-              <div className="flex items-center justify-between mb-3">
-                <div className="text-sm font-medium">Tile Options</div>
+              ✕
+            </button>
+          </div>
+
+          {isLocal && (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="text-xs text-white/70">Devices</div>
                 <button
-                  aria-label="Close"
-                  onClick={() => setOptionsOpen(false)}
-                  ref={closeButtonRef}
-                  className="text-white/70 hover:text-white"
+                  className="rounded px-2 py-1 text-xs transition hover:bg-white/20 bg-white/10"
+                  onClick={() => {
+                    void refreshDevices();
+                  }}
                 >
-                  ✕
+                  Refresh
                 </button>
               </div>
-
-              {isLocal && (
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div className="text-xs text-white/70">Devices</div>
+              <div>
+                <div className="mb-1 text-xs text-white/70">Participant</div>
+                <select
+                  className="w-full rounded bg-white/10 px-2 py-1 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
+                  value={participant.identity}
+                  onChange={(event) => {
+                    try {
+                      onSelectParticipant?.(event.target.value);
+                    } catch {}
+                  }}
+                >
+                  {allParticipants.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <div className="mb-1 text-xs text-white/70">Microphone</div>
+                <select
+                  className="w-full rounded bg-white/10 px-2 py-1 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
+                  value={microphoneSelectValue}
+                  onChange={async (event) => {
+                    const nextDeviceId = event.target.value;
+                    setActiveMicrophoneId(nextDeviceId);
+                    try {
+                      await switchLocalDevice('audioinput', nextDeviceId);
+                      const selectedDevice = audioDevices.find(
+                        (device) => device.deviceId === nextDeviceId,
+                      );
+                      persistStoredDevice('audioinput', {
+                        deviceId: nextDeviceId,
+                        label: selectedDevice?.label ?? '',
+                        groupId: selectedDevice?.groupId ?? '',
+                      });
+                    } catch {}
+                  }}
+                >
+                  <option value="" disabled>
+                    {audioDevices.length ? 'Select a microphone' : 'No microphones found'}
+                  </option>
+                  {audioDevices.map((device) => (
+                    <option key={device.deviceId} value={device.deviceId}>
+                      {device.label || 'Microphone'}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <div className="mb-1 text-xs text-white/70">Camera</div>
+                <select
+                  className="w-full rounded bg-white/10 px-2 py-1 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
+                  value={cameraSelectValue}
+                  onChange={async (event) => {
+                    const nextDeviceId = event.target.value;
+                    setActiveCameraId(nextDeviceId);
+                    try {
+                      await switchLocalDevice('videoinput', nextDeviceId);
+                      const selectedDevice = videoDevices.find(
+                        (device) => device.deviceId === nextDeviceId,
+                      );
+                      persistStoredDevice('videoinput', {
+                        deviceId: nextDeviceId,
+                        label: selectedDevice?.label ?? '',
+                        groupId: selectedDevice?.groupId ?? '',
+                      });
+                    } catch {}
+                  }}
+                >
+                  <option value="" disabled>
+                    {videoDevices.length ? 'Select a camera' : 'No cameras found'}
+                  </option>
+                  {videoDevices.map((device) => (
+                    <option key={device.deviceId} value={device.deviceId}>
+                      {device.label || 'Camera'}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <div className="mb-1 text-xs text-white/70">Stream Quality</div>
+                <div className="flex gap-2">
+                  {(['auto', 'low', 'high'] as const).map((quality) => (
                     <button
-                      className="px-2 py-1 rounded bg-white/10 hover:bg-white/20 text-xs"
-                      onClick={refreshDevices}
+                      key={quality}
+                      className={cn(
+                        'rounded px-2 py-1 text-xs transition-colors',
+                        selectedQuality === quality
+                          ? 'bg-white/20 text-white'
+                          : 'bg-white/10 text-white hover:bg-white/20',
+                      )}
+                      onClick={() => {
+                        setSelectedQuality(quality);
+                        events.setQuality(quality);
+                      }}
                     >
-                      Refresh devices
+                      {quality}
                     </button>
-                  </div>
-                  <div>
-                    <div className="text-xs text-white/70 mb-1">Participant</div>
-                    <select
-                      className="w-full bg-white/10 rounded px-2 py-1 text-sm"
-                      value={participant.identity}
-                      onChange={(e) => {
-                        // Replace this tile with selected participant by dispatching a new component
-                        try {
-                          const id = e.target.value;
-                          onSelectParticipant?.(id);
-                        } catch { }
-                      }}
-                    >
-                      {allParticipants.map((p) => (
-                        <option key={p.id} value={p.id}>
-                          {p.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <div className="text-xs text-white/70 mb-1">Microphone</div>
-                    <select
-                      className="w-full bg-white/10 rounded px-2 py-1 text-sm"
-                      onChange={async (e) => {
-                        try {
-                          type DeviceSwitchRoom = {
-                            switchActiveDevice?: (
-                              kind: 'audioinput' | 'videoinput',
-                              deviceId: string,
-                            ) => Promise<void>;
-                            localParticipant?: {
-                              setMicrophoneEnabled?: (enabled: boolean) => Promise<void>;
-                            };
-                          };
-                          const deviceRoom = room as unknown as DeviceSwitchRoom;
-                          await deviceRoom.switchActiveDevice?.('audioinput', e.target.value);
-                          try {
-                            window.localStorage.setItem('livekit:lastMicId', e.target.value);
-                          } catch { }
-                          await deviceRoom.localParticipant?.setMicrophoneEnabled?.(true);
-                        } catch { }
-                      }}
-                    >
-                      {audioDevices.map((d) => (
-                        <option key={d.deviceId} value={d.deviceId}>
-                          {d.label || 'Microphone'}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <div className="text-xs text-white/70 mb-1">Camera</div>
-                    <select
-                      className="w-full bg-white/10 rounded px-2 py-1 text-sm"
-                      onChange={async (e) => {
-                        try {
-                          type DeviceSwitchRoom = {
-                            switchActiveDevice?: (
-                              kind: 'audioinput' | 'videoinput',
-                              deviceId: string,
-                            ) => Promise<void>;
-                            localParticipant?: {
-                              setCameraEnabled?: (enabled: boolean) => Promise<void>;
-                            };
-                          };
-                          const deviceRoom = room as unknown as DeviceSwitchRoom;
-                          await deviceRoom.switchActiveDevice?.('videoinput', e.target.value);
-                          try {
-                            window.localStorage.setItem('livekit:lastCamId', e.target.value);
-                          } catch { }
-                          await deviceRoom.localParticipant?.setCameraEnabled?.(true);
-                        } catch { }
-                      }}
-                    >
-                      {videoDevices.map((d) => (
-                        <option key={d.deviceId} value={d.deviceId}>
-                          {d.label || 'Camera'}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <div className="text-xs text-white/70 mb-1">Stream Quality</div>
-                    <div className="flex gap-2">
-                      {(['auto', 'low', 'high'] as const).map((q) => (
-                        <button
-                          key={q}
-                          className={cn(
-                            'px-2 py-1 rounded text-xs transition-colors',
-                            selectedQuality === q
-                              ? 'bg-white/20 text-white'
-                              : 'bg-white/10 hover:bg-white/20 text-white',
-                          )}
-                          onClick={() => {
-                            setSelectedQuality(q);
-                            events.setQuality(q);
-                          }}
-                        >
-                          {q}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
+                  ))}
                 </div>
-              )}
-
-              <div className="mt-4 flex items-center justify-end gap-2">
-                <button
-                  className="px-3 py-1.5 rounded bg-white/10 hover:bg-white/20 text-sm"
-                  onClick={() => {
-                    // Pin requests: dispatch TLDraw intents
-                    window.dispatchEvent(
-                      new CustomEvent('tldraw:pin', {
-                        detail: { participantId: participant.identity },
-                      }),
-                    );
-                    setOptionsOpen(false);
-                  }}
-                >
-                  Pin
-                </button>
-                <button
-                  className="px-3 py-1.5 rounded bg-white/10 hover:bg-white/20 text-sm"
-                  onClick={() => {
-                    window.dispatchEvent(
-                      new CustomEvent('tldraw:pinOnTop', {
-                        detail: { participantId: participant.identity },
-                      }),
-                    );
-                    setOptionsOpen(false);
-                  }}
-                >
-                  Pin on top
-                </button>
-                <button
-                  className="px-3 py-1.5 rounded bg-white/20 hover:bg-white/30 text-sm"
-                  onClick={() => setOptionsOpen(false)}
-                >
-                  Done
-                </button>
               </div>
             </div>
+          )}
+
+          <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
+            <button
+              className="rounded bg-white/10 px-3 py-1.5 text-sm transition hover:bg-white/20"
+              onClick={() => {
+                window.dispatchEvent(
+                  new CustomEvent('tldraw:pin', {
+                    detail: { participantId: participant.identity },
+                  }),
+                );
+                setOptionsOpen(false);
+              }}
+            >
+              Pin
+            </button>
+            <button
+              className="rounded bg-white/10 px-3 py-1.5 text-sm transition hover:bg-white/20"
+              onClick={() => {
+                window.dispatchEvent(
+                  new CustomEvent('tldraw:pinOnTop', {
+                    detail: { participantId: participant.identity },
+                  }),
+                );
+                setOptionsOpen(false);
+              }}
+            >
+              Pin on top
+            </button>
+            <button
+              className="rounded bg-white/20 px-3 py-1.5 text-sm transition hover:bg-white/30"
+              onClick={() => setOptionsOpen(false)}
+            >
+              Done
+            </button>
           </div>
-        </Portal>
+        </div>
       )}
     </div>
   );
