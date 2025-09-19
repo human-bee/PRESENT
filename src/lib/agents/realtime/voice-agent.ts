@@ -84,6 +84,9 @@ Always return to tool calls rather than long monologues.`;
 
 // CLI runner for local dev
 if (import.meta.url.startsWith('file:') && process.argv[1].endsWith('voice-agent.ts')) {
+  if (process.argv.length < 3) {
+    process.argv.push('dev');
+  }
   const workerOptions = new WorkerOptions({
     agent: process.argv[1],
     agentName: 'voice-agent',
@@ -93,5 +96,3 @@ if (import.meta.url.startsWith('file:') && process.argv[1].endsWith('voice-agent
   });
   cli.runApp(workerOptions);
 }
-
-
