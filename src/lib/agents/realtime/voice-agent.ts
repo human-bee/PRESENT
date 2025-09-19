@@ -44,8 +44,14 @@ Always return to tool calls rather than long monologues.`;
         };
         await job.room.localParticipant?.publishData(new TextEncoder().encode(JSON.stringify(toolCallEvent)), { reliable: true, topic: 'tool_call' });
         session.conversation.item.create({ type: 'function_call_output', call_id: evt.call_id, output: JSON.stringify({ status: 'DISPATCHED' }) });
+        try {
+          (session as any).response?.create?.({ instructions: 'continue' });
+        } catch {}
       } catch (e) {
         session.conversation.item.create({ type: 'function_call_output', call_id: evt.call_id, output: JSON.stringify({ status: 'ERROR', message: String(e) }) });
+        try {
+          (session as any).response?.create?.({ instructions: 'continue' });
+        } catch {}
       }
     });
 
