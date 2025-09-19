@@ -2,7 +2,6 @@
 
 import {
   Tldraw,
-  TLUiOverrides,
   DefaultToolbar,
   DefaultToolbarContent,
   TldrawUiMenuItem,
@@ -11,6 +10,10 @@ import {
   DefaultMainMenu,
   DefaultMainMenuContent,
   TldrawUiMenuGroup,
+  DefaultContextMenu,
+  DefaultContextMenuContent,
+  TLUiContextMenuProps,
+  useValue,
 } from 'tldraw';
 import { ReactNode, createContext, useState, useCallback, useEffect } from 'react';
 import { User } from 'lucide-react';
@@ -43,69 +46,81 @@ export const TranscriptPanelContext = createContext<{
   toggle: () => { },
 });
 
-const createPersistenceOverrides = (): TLUiOverrides => {
-  return {
-    contextMenu: (_editor, contextMenu, { onlySelectedShape }) => {
-      if (onlySelectedShape && onlySelectedShape.type === 'custom') {
-        const isPinned = (onlySelectedShape as customShape).props.pinned ?? false;
+const CustomContextMenuContent = () => {
+  const editor = useEditor();
+  const onlySelectedShape = useValue(
+    'only-selected-shape',
+    () => editor.getOnlySelectedShape(),
+    [editor],
+  );
 
-        const pinItem = {
-          id: 'pin-to-viewport',
-          type: 'item' as const,
-          label: isPinned ? 'Unpin from Window' : 'Pin to Window',
-          onSelect: () => {
-            const editor = _editor;
-            const shape = onlySelectedShape as customShape;
+  const canPin = onlySelectedShape?.type === 'custom';
+  const isPinned = canPin ? ((onlySelectedShape as customShape).props.pinned ?? false) : false;
 
-            if (!isPinned) {
-              // Calculate relative position when pinning
-              const viewport = editor.getViewportScreenBounds();
-              const bounds = editor.getShapePageBounds(shape.id);
-              if (bounds) {
-                // Convert page bounds to screen coordinates
-                const screenPoint = editor.pageToScreen({
-                  x: bounds.x + bounds.w / 2,
-                  y: bounds.y + bounds.h / 2,
-                });
-                const pinnedX = screenPoint.x / viewport.width;
-                const pinnedY = screenPoint.y / viewport.height;
+  const handleTogglePin = React.useCallback(() => {
+    const selected = editor.getOnlySelectedShape();
+    if (!selected || selected.type !== 'custom') return;
+    const shape = selected as customShape;
+    const currentlyPinned = shape.props.pinned ?? false;
 
-                editor.updateShapes([
-                  {
-                    id: shape.id,
-                    type: 'custom',
-                    props: {
-                      pinned: true,
-                      pinnedX: Math.max(0, Math.min(1, pinnedX)),
-                      pinnedY: Math.max(0, Math.min(1, pinnedY)),
-                    },
-                  },
-                ]);
-              }
-            } else {
-              // Unpin the shape
-              editor.updateShapes([
-                {
-                  id: shape.id,
-                  type: 'custom',
-                  props: {
-                    pinned: false,
-                  },
-                },
-              ]);
-            }
+    if (!currentlyPinned) {
+      const viewport = editor.getViewportScreenBounds();
+      const bounds = editor.getShapePageBounds(shape.id);
+      if (!viewport || !bounds) return;
+
+      const screenPoint = editor.pageToScreen({
+        x: bounds.x + bounds.w / 2,
+        y: bounds.y + bounds.h / 2,
+      });
+
+      editor.updateShapes([
+        {
+          id: shape.id,
+          type: 'custom',
+          props: {
+            pinned: true,
+            pinnedX: Math.max(0, Math.min(1, screenPoint.x / viewport.width)),
+            pinnedY: Math.max(0, Math.min(1, screenPoint.y / viewport.height)),
           },
-        };
+        },
+      ]);
+    } else {
+      editor.updateShapes([
+        {
+          id: shape.id,
+          type: 'custom',
+          props: {
+            pinned: false,
+          },
+        },
+      ]);
+    }
+  }, [editor]);
 
-        // Add separator and pin item at the end
-        contextMenu.push({ type: 'separator' as const });
-        contextMenu.push(pinItem);
-      }
-
-      return contextMenu;
-    },
-  };
+  return (
+    <>
+      <DefaultContextMenuContent />
+      {canPin && (
+        <TldrawUiMenuGroup id="custom-pin">
+          <TldrawUiMenuItem
+            id="pin-to-viewport"
+            icon="external-link"
+            label={isPinned ? 'Unpin from Window' : 'Pin to Window'}
+            onSelect={() => {
+              handleTogglePin();
+            }}
+          />
+        </TldrawUiMenuGroup>
+      )}
+    </>
+  );
 };
+
+const CustomContextMenu = (props: TLUiContextMenuProps) => (
+  <DefaultContextMenu {...props}>
+    <CustomContextMenuContent />
+  </DefaultContextMenu>
+);
 
 function CustomMainMenu({ readOnly = false }: { readOnly?: boolean } & any) {
   const { user, signOut } = useAuth();
@@ -187,9 +202,9 @@ function CustomMainMenu({ readOnly = false }: { readOnly?: boolean } & any) {
     if (disabled) return;
 
     try {
-      const svg = await editor.getSvg(Array.from(editor.getCurrentPageShapeIds()));
-      if (svg) {
-        const blob = new Blob([svg.outerHTML], { type: 'image/svg+xml' });
+      const result = await editor.getSvgString(Array.from(editor.getCurrentPageShapeIds()));
+      if (result?.svg) {
+        const blob = new Blob([result.svg], { type: 'image/svg+xml' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
@@ -437,6 +452,7 @@ const createPersistenceComponents = (
     />
   ),
   MainMenu: CustomMainMenu,
+  ContextMenu: CustomContextMenu,
 });
 
 export function TldrawWithPersistence({
@@ -471,9 +487,6 @@ export function TldrawWithPersistence({
   // Render a lightweight placeholder until the TLDraw editor instance is ready.
   const isEditorReady = Boolean(editor);
 
-  // Create the overrides with the transcript toggle function
-  const overrides = React.useMemo(() => createPersistenceOverrides(), []);
-
   // Handle keyboard shortcut for transcript
   React.useEffect(() => {
     if (!onTranscriptToggle) return;
@@ -501,7 +514,6 @@ export function TldrawWithPersistence({
             onHelpClick,
             onComponentToolboxToggle,
           )}
-          overrides={overrides}
           forceMobile={true}
         />
         <TldrawSnapshotBroadcaster />

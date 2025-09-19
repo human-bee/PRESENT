@@ -156,12 +156,9 @@ export function useCanvasPersistence(editor: Editor | null, enabled: boolean = t
       try {
         const shapeIds = Array.from(editor.getCurrentPageShapeIds());
         if (shapeIds.length > 0) {
-          const svgEl = await editor.getSvg(shapeIds);
-          if (svgEl) {
-            // Serialize SVG and store as data URL for <img src="...">
-            const serializer = new XMLSerializer();
-            const svgString = serializer.serializeToString(svgEl as unknown as Node);
-            thumbnail = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgString)}`;
+          const svgResult = await editor.getSvgString(shapeIds);
+          if (svgResult?.svg) {
+            thumbnail = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgResult.svg)}`;
           }
         }
       } catch {

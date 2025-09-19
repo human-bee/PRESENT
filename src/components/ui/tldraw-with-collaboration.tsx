@@ -189,12 +189,19 @@ export function TldrawWithCollaboration({
     }
   }, [computedHost]);
 
-  const store: RemoteTLStoreWithStatus = useSyncDemo({
-    roomId: roomName,
-    ...(resolvedShapeUtils ? { shapeUtils: resolvedShapeUtils } : {}),
-    // pass host so the library builds the right /connect URL and negotiates wss
-    host: safeHost,
-  });
+  type UseSyncDemoOptionsWithHost = Parameters<typeof useSyncDemo>[0] & { host?: string };
+
+  const syncOptions = useMemo<UseSyncDemoOptionsWithHost>(
+    () => ({
+      roomId: roomName,
+      ...(resolvedShapeUtils ? { shapeUtils: resolvedShapeUtils } : {}),
+      // pass host so the library builds the right /connect URL and negotiates wss
+      host: safeHost,
+    }),
+    [roomName, resolvedShapeUtils, safeHost],
+  );
+
+  const store: RemoteTLStoreWithStatus = useSyncDemo(syncOptions);
 
   // Log sync host once per session in dev; gated by logger level
   try {
