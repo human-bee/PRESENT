@@ -6,7 +6,7 @@ import { Tldraw, TLUiOverrides, TLComponents, Editor, createShapeId, toRichText 
 import { nanoid } from 'nanoid';
 import { CustomMainMenu, CustomToolbarWithTranscript } from './tldraw-with-persistence';
 import { ReactNode, useCallback, useContext, useEffect, useMemo, useState, useRef } from 'react';
-import { useSyncDemo } from '@tldraw/sync';
+import { RemoteTLStoreWithStatus, useSyncDemo } from '@tldraw/sync';
 import { CanvasLiveKitContext } from './livekit-room-connector';
 import { ComponentStoreContext } from './tldraw-canvas';
 import type { customShapeUtil, customShape } from './tldraw-canvas';
@@ -152,6 +152,11 @@ export function TldrawWithCollaboration({
 
   const computedReadOnly = readOnly || role === 'viewer' || role === 'readOnly';
 
+  const resolvedShapeUtils = useMemo(
+    () => (shapeUtils && shapeUtils.length > 0 ? shapeUtils : undefined),
+    [shapeUtils],
+  );
+
   // Use useSyncDemo for development - allow overriding sync host via env
   // Preferred host is the HTTPS demo worker, which will negotiate the correct secure WebSocket URL.
   const envHost =
@@ -184,12 +189,12 @@ export function TldrawWithCollaboration({
     }
   }, [computedHost]);
 
-  const store = useSyncDemo({
+  const store: RemoteTLStoreWithStatus = useSyncDemo({
     roomId: roomName,
-    shapeUtils: shapeUtils || [],
+    ...(resolvedShapeUtils ? { shapeUtils: resolvedShapeUtils } : {}),
     // pass host so the library builds the right /connect URL and negotiates wss
     host: safeHost,
-  } as any);
+  });
 
   // Log sync host once per session in dev; gated by logger level
   try {
@@ -1210,7 +1215,7 @@ export function TldrawWithCollaboration({
 
   // Ready flag: hide overlay once sync store reports ready (status !== 'loading')
 
-  const isStoreReady = !!store && (store as any).status !== 'loading';
+  const isStoreReady = store.status !== 'loading';
 
   return (
     <div className={className} style={{ position: 'absolute', inset: 0 }}>
@@ -1218,7 +1223,7 @@ export function TldrawWithCollaboration({
         <Tldraw
           store={store}
           onMount={handleMount}
-          shapeUtils={shapeUtils || []}
+          shapeUtils={resolvedShapeUtils}
           components={components}
           overrides={overrides}
           forceMobile={true}
