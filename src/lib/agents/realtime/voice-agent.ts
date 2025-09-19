@@ -22,10 +22,13 @@ TOOLS (JSON schemas):
 
 Always return to tool calls rather than long monologues.`;
     const model = new openai.realtime.RealtimeModel({ model: 'gpt-realtime', instructions, modalities: ['text'] });
-    const agent = new multimodal.MultimodalAgent({ model });
+    // Configure the agent for text-only output. We set maxTextResponseRetries to Infinity so
+    // it never throws when the model responds with text (expected for speech-to-UI), and we
+    // no-op the recovery path below.
+    const agent = new multimodal.MultimodalAgent({ model, maxTextResponseRetries: Number.POSITIVE_INFINITY });
     const session = await agent.start(job.room);
-    // Allow text-only responses without crashing the session
-    try { (session as unknown as { recoverFromTextResponse?: () => void }).recoverFromTextResponse = () => {}; } catch {}
+    // Allow text-only responses without attempting to recover to audio
+    try { (session as unknown as { recoverFromTextResponse?: (itemId?: string) => void }).recoverFromTextResponse = () => {}; } catch {}
 
     session.on('response_function_call_completed', async (evt: { call_id: string; name: string; arguments: string }) => {
       try {
@@ -84,14 +87,15 @@ Always return to tool calls rather than long monologues.`;
 
 // CLI runner for local dev
 if (import.meta.url.startsWith('file:') && process.argv[1].endsWith('voice-agent.ts')) {
+  if (process.argv.length < 3) {
+    process.argv.push('dev');
+  }
   const workerOptions = new WorkerOptions({
     agent: process.argv[1],
     agentName: 'voice-agent',
     apiKey: process.env.LIVEKIT_API_KEY,
     apiSecret: process.env.LIVEKIT_API_SECRET,
-    url: process.env.LIVEKIT_URL,
+    wsURL: process.env.LIVEKIT_URL,
   });
   cli.runApp(workerOptions);
 }
-
-
