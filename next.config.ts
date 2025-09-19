@@ -32,6 +32,7 @@ const nextConfig: NextConfig = {
         ...config.resolve.alias,
         tldraw: require.resolve('tldraw'),
         // Force ESM entries for tldraw subpackages to avoid dual CJS/ESM imports in dev
+        // TODO: TLDraw v4 exposes ESM entrypoints by default—confirm and remove these aliases when safe.
         '@tldraw/utils': path.resolve(__dirname, 'node_modules/@tldraw/utils/dist-esm/index.mjs'),
         '@tldraw/state': path.resolve(__dirname, 'node_modules/@tldraw/state/dist-esm/index.mjs'),
         '@tldraw/state-react': path.resolve(

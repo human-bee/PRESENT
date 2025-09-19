@@ -10,20 +10,25 @@ import * as openai from '@livekit/agents-plugin-openai';
 export default defineAgent({
   entry: async (job: JobContext) => {
     await job.connect();
-    const instructions = `You control the UI via exactly two tools: create_component and update_component. Keep text responses short.
+    const instructions = `You control the UI via create_component and update_component for direct manipulation, and may delegate work via dispatch_to_conductor. Keep text responses short.
 
 TOOLS (JSON schemas):
 1) create_component({ type: string, spec: string })
    - Create a new component on the canvas. 'type' is the component type, 'spec' is the initial content.
 2) update_component({ componentId: string, patch: string })
    - Update an existing component with a natural-language patch or structured fields.
+3) dispatch_to_conductor({ task: string, params: object })
+   - Ask the conductor to run a steward/sub-agent task on your behalf.
 
 Always return to tool calls rather than long monologues.`;
     const model = new openai.realtime.RealtimeModel({ model: 'gpt-realtime', instructions, modalities: ['text'] });
-    const agent = new multimodal.MultimodalAgent({ model });
+    // Configure the agent for text-only output. We set maxTextResponseRetries to Infinity so
+    // it never throws when the model responds with text (expected for speech-to-UI), and we
+    // no-op the recovery path below.
+    const agent = new multimodal.MultimodalAgent({ model, maxTextResponseRetries: Number.POSITIVE_INFINITY });
     const session = await agent.start(job.room);
-    // Allow text-only responses without crashing the session
-    try { (session as unknown as { recoverFromTextResponse?: () => void }).recoverFromTextResponse = () => {}; } catch {}
+    // Allow text-only responses without attempting to recover to audio
+    try { (session as unknown as { recoverFromTextResponse?: (itemId?: string) => void }).recoverFromTextResponse = () => {}; } catch {}
 
     session.on('response_function_call_completed', async (evt: { call_id: string; name: string; arguments: string }) => {
       try {
@@ -42,8 +47,14 @@ Always return to tool calls rather than long monologues.`;
         };
         await job.room.localParticipant?.publishData(new TextEncoder().encode(JSON.stringify(toolCallEvent)), { reliable: true, topic: 'tool_call' });
         session.conversation.item.create({ type: 'function_call_output', call_id: evt.call_id, output: JSON.stringify({ status: 'DISPATCHED' }) });
+        try {
+          (session as any).response?.create?.({ instructions: 'continue' });
+        } catch {}
       } catch (e) {
         session.conversation.item.create({ type: 'function_call_output', call_id: evt.call_id, output: JSON.stringify({ status: 'ERROR', message: String(e) }) });
+        try {
+          (session as any).response?.create?.({ instructions: 'continue' });
+        } catch {}
       }
     });
 
@@ -76,14 +87,15 @@ Always return to tool calls rather than long monologues.`;
 
 // CLI runner for local dev
 if (import.meta.url.startsWith('file:') && process.argv[1].endsWith('voice-agent.ts')) {
+  if (process.argv.length < 3) {
+    process.argv.push('dev');
+  }
   const workerOptions = new WorkerOptions({
     agent: process.argv[1],
     agentName: 'voice-agent',
     apiKey: process.env.LIVEKIT_API_KEY,
     apiSecret: process.env.LIVEKIT_API_SECRET,
-    url: process.env.LIVEKIT_URL,
+    wsURL: process.env.LIVEKIT_URL,
   });
   cli.runApp(workerOptions);
 }
-
-

@@ -6,7 +6,7 @@ import { Tldraw, TLUiOverrides, TLComponents, Editor, createShapeId, toRichText 
 import { nanoid } from 'nanoid';
 import { CustomMainMenu, CustomToolbarWithTranscript } from './tldraw-with-persistence';
 import { ReactNode, useCallback, useContext, useEffect, useMemo, useState, useRef } from 'react';
-import { useSyncDemo } from '@tldraw/sync';
+import { RemoteTLStoreWithStatus, useSyncDemo } from '@tldraw/sync';
 import { CanvasLiveKitContext } from './livekit-room-connector';
 import { ComponentStoreContext } from './tldraw-canvas';
 import type { customShapeUtil, customShape } from './tldraw-canvas';
@@ -152,6 +152,11 @@ export function TldrawWithCollaboration({
 
   const computedReadOnly = readOnly || role === 'viewer' || role === 'readOnly';
 
+  const resolvedShapeUtils = useMemo(
+    () => (shapeUtils && shapeUtils.length > 0 ? shapeUtils : undefined),
+    [shapeUtils],
+  );
+
   // Use useSyncDemo for development - allow overriding sync host via env
   // Preferred host is the HTTPS demo worker, which will negotiate the correct secure WebSocket URL.
   const envHost =
@@ -184,12 +189,19 @@ export function TldrawWithCollaboration({
     }
   }, [computedHost]);
 
-  const store = useSyncDemo({
-    roomId: roomName,
-    shapeUtils: shapeUtils || [],
-    // pass host so the library builds the right /connect URL and negotiates wss
-    host: safeHost,
-  } as any);
+  type UseSyncDemoOptionsWithHost = Parameters<typeof useSyncDemo>[0] & { host?: string };
+
+  const syncOptions = useMemo<UseSyncDemoOptionsWithHost>(
+    () => ({
+      roomId: roomName,
+      ...(resolvedShapeUtils ? { shapeUtils: resolvedShapeUtils } : {}),
+      // pass host so the library builds the right /connect URL and negotiates wss
+      host: safeHost,
+    }),
+    [roomName, resolvedShapeUtils, safeHost],
+  );
+
+  const store: RemoteTLStoreWithStatus = useSyncDemo(syncOptions);
 
   // Log sync host once per session in dev; gated by logger level
   try {
@@ -320,18 +332,24 @@ export function TldrawWithCollaboration({
 
           const nextProps: Record<string, unknown> = {};
           if (STEWARD_FLOWCHART) {
-            // Steward mode: accept verbatim doc/format/version and map to mermaidText only for rendering
             const doc = (patch as any).flowchartDoc as string | undefined;
-            const format = (patch as any).format as string | undefined;
-            // Minimal safety: extract first mermaid fence when format is markdown/streamdown
-            const extractFirstMermaid = (d?: string, f?: string) => {
-              if (!d) return undefined;
-              if (f === 'mermaid') return d;
-              const m = d.match(/```mermaid\s*([\s\S]*?)```/i);
-              return m ? m[1] : undefined;
-            };
-            const mermaid = extractFirstMermaid(doc, format);
-            if (typeof mermaid === 'string') nextProps.mermaidText = mermaid;
+            const formatRaw = (patch as any).format as string | undefined;
+            const format = typeof formatRaw === 'string' ? formatRaw.toLowerCase() : undefined;
+            try {
+              console.log('[Canvas][ui_update] steward patch received', { componentId, format: formatRaw, hasDoc: !!doc });
+            } catch {}
+            if (typeof doc === 'string' && doc.length > 0) {
+              let mermaidText: string | undefined;
+              if (format === 'mermaid') {
+                mermaidText = doc;
+              } else if (format === 'markdown' || format === 'streamdown') {
+                const match = doc.match(/```mermaid\s*([\s\S]*?)```/i);
+                mermaidText = match ? match[1] : doc;
+              } else {
+                mermaidText = doc;
+              }
+              if (typeof mermaidText === 'string') nextProps.mermaidText = mermaidText;
+            }
           } else {
             if (typeof patch.mermaidText === 'string') nextProps.mermaidText = patch.mermaidText;
             if (typeof patch.keepLastGood === 'boolean') nextProps.keepLastGood = patch.keepLastGood;
@@ -341,6 +359,13 @@ export function TldrawWithCollaboration({
           if (Object.keys(nextProps).length === 0) return;
           try { console.log('[Canvas][ui_update] apply', { componentId, keys: Object.keys(nextProps), ts }); } catch {}
           mountedEditor.updateShapes([{ id: componentId as any, type: 'mermaid_stream' as any, props: nextProps }]);
+          if (STEWARD_FLOWCHART) {
+            try {
+              const g: any = window as any;
+              g.__present_mermaid_last_shape_id = componentId;
+              if (g.__present_mermaid_session) delete g.__present_mermaid_session;
+            } catch {}
+          }
         } catch {
           // ignore
         }
@@ -1197,7 +1222,7 @@ export function TldrawWithCollaboration({
 
   // Ready flag: hide overlay once sync store reports ready (status !== 'loading')
 
-  const isStoreReady = !!store && (store as any).status !== 'loading';
+  const isStoreReady = store.status !== 'loading';
 
   return (
     <div className={className} style={{ position: 'absolute', inset: 0 }}>
@@ -1205,7 +1230,7 @@ export function TldrawWithCollaboration({
         <Tldraw
           store={store}
           onMount={handleMount}
-          shapeUtils={shapeUtils || []}
+          shapeUtils={resolvedShapeUtils}
           components={components}
           overrides={overrides}
           forceMobile={true}
