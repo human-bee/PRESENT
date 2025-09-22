@@ -6,7 +6,7 @@ import { Tldraw, TLUiOverrides, TLComponents, Editor, createShapeId, toRichText 
 import { nanoid } from 'nanoid';
 import { CustomMainMenu, CustomToolbarWithTranscript } from './tldraw-with-persistence';
 import { ReactNode, useCallback, useContext, useEffect, useMemo, useState, useRef } from 'react';
-import { useSyncDemo } from '@tldraw/sync';
+import { RemoteTLStoreWithStatus, useSyncDemo } from '@tldraw/sync';
 import { CanvasLiveKitContext } from './livekit-room-connector';
 import { ComponentStoreContext } from './tldraw-canvas';
 import type { customShapeUtil, customShape } from './tldraw-canvas';
@@ -17,6 +17,19 @@ import { RoomEvent } from 'livekit-client';
 import TldrawSnapshotBroadcaster from '@/components/TldrawSnapshotBroadcaster';
 import TldrawSnapshotReceiver from '@/components/TldrawSnapshotReceiver';
 import { createLogger } from '@/lib/utils';
+import { normalizeMermaidText, getMermaidLastNode } from '@/components/tool-dispatcher';
+
+function renderPlaintextFromRichText(_editor: any, richText: any | undefined): string {
+  // Fallback: best-effort text extraction
+  try {
+    if (!richText) return '';
+    if (typeof richText === 'string') return richText;
+    if (Array.isArray(richText)) return richText.map((n: any) => (typeof n === 'string' ? n : n?.text || '')).join(' ');
+    return String(richText?.text || '');
+  } catch {
+    return '';
+  }
+}
 
 interface TldrawWithCollaborationProps {
   onMount?: (editor: Editor) => void;
@@ -107,6 +120,8 @@ export function TldrawWithCollaboration({
   // Detect role from LiveKit token metadata
   const room = useRoomContext();
   const bus = useMemo(() => createLiveKitBus(room), [room]);
+  const STEWARD_FLOWCHART =
+    typeof process !== 'undefined' && process.env.NEXT_PUBLIC_STEWARD_FLOWCHART_ENABLED === 'true';
   const [role, setRole] = useState<string | null>(null);
 
   useEffect(() => {
@@ -136,6 +151,11 @@ export function TldrawWithCollaboration({
   }, [room]);
 
   const computedReadOnly = readOnly || role === 'viewer' || role === 'readOnly';
+
+  const resolvedShapeUtils = useMemo(
+    () => (shapeUtils && shapeUtils.length > 0 ? shapeUtils : undefined),
+    [shapeUtils],
+  );
 
   // Use useSyncDemo for development - allow overriding sync host via env
   // Preferred host is the HTTPS demo worker, which will negotiate the correct secure WebSocket URL.
@@ -169,12 +189,19 @@ export function TldrawWithCollaboration({
     }
   }, [computedHost]);
 
-  const store = useSyncDemo({
-    roomId: roomName,
-    shapeUtils: shapeUtils || [],
-    // pass host so the library builds the right /connect URL and negotiates wss
-    host: safeHost,
-  } as any);
+  type UseSyncDemoOptionsWithHost = Parameters<typeof useSyncDemo>[0] & { host?: string };
+
+  const syncOptions = useMemo<UseSyncDemoOptionsWithHost>(
+    () => ({
+      roomId: roomName,
+      ...(resolvedShapeUtils ? { shapeUtils: resolvedShapeUtils } : {}),
+      // pass host so the library builds the right /connect URL and negotiates wss
+      host: safeHost,
+    }),
+    [roomName, resolvedShapeUtils, safeHost],
+  );
+
+  const store: RemoteTLStoreWithStatus = useSyncDemo(syncOptions);
 
   // Log sync host once per session in dev; gated by logger level
   try {
@@ -240,7 +267,7 @@ export function TldrawWithCollaboration({
           if (pinnedShapes.length === 0) return;
 
           const viewport = mountedEditor.getViewportScreenBounds();
-          const updates = [];
+          const updates: any[] = [];
 
           for (const shape of pinnedShapes) {
             const pinnedX = shape.props.pinnedX ?? 0.5;
@@ -263,7 +290,7 @@ export function TldrawWithCollaboration({
           }
 
           if (updates.length > 0) {
-            mountedEditor.updateShapes(updates);
+            mountedEditor.updateShapes(updates as any);
           }
         } finally {
           isUpdatingPinnedShapes = false;
@@ -304,17 +331,76 @@ export function TldrawWithCollaboration({
           lastTsByShape.set(componentId, ts);
 
           const nextProps: Record<string, unknown> = {};
-          if (typeof patch.mermaidText === 'string') nextProps.mermaidText = patch.mermaidText;
-          if (typeof patch.keepLastGood === 'boolean') nextProps.keepLastGood = patch.keepLastGood;
-          if (typeof patch.w === 'number') nextProps.w = patch.w;
-          if (typeof patch.h === 'number') nextProps.h = patch.h;
+          if (STEWARD_FLOWCHART) {
+            const doc = (patch as any).flowchartDoc as string | undefined;
+            const formatRaw = (patch as any).format as string | undefined;
+            const format = typeof formatRaw === 'string' ? formatRaw.toLowerCase() : undefined;
+            try {
+              console.log('[Canvas][ui_update] steward patch received', { componentId, format: formatRaw, hasDoc: !!doc });
+            } catch {}
+            if (typeof doc === 'string' && doc.length > 0) {
+              let mermaidText: string | undefined;
+              if (format === 'mermaid') {
+                mermaidText = doc;
+              } else if (format === 'markdown' || format === 'streamdown') {
+                const match = doc.match(/```mermaid\s*([\s\S]*?)```/i);
+                mermaidText = match ? match[1] : doc;
+              } else {
+                mermaidText = doc;
+              }
+              if (typeof mermaidText === 'string') nextProps.mermaidText = mermaidText;
+            }
+          } else {
+            if (typeof patch.mermaidText === 'string') nextProps.mermaidText = patch.mermaidText;
+            if (typeof patch.keepLastGood === 'boolean') nextProps.keepLastGood = patch.keepLastGood;
+            if (typeof patch.w === 'number') nextProps.w = patch.w;
+            if (typeof patch.h === 'number') nextProps.h = patch.h;
+          }
           if (Object.keys(nextProps).length === 0) return;
           try { console.log('[Canvas][ui_update] apply', { componentId, keys: Object.keys(nextProps), ts }); } catch {}
           mountedEditor.updateShapes([{ id: componentId as any, type: 'mermaid_stream' as any, props: nextProps }]);
+          if (STEWARD_FLOWCHART) {
+            try {
+              const g: any = window as any;
+              g.__present_mermaid_last_shape_id = componentId;
+              if (g.__present_mermaid_session) delete g.__present_mermaid_session;
+            } catch {}
+          }
         } catch {
           // ignore
         }
       });
+
+      const registerMermaidHandler = (flag: string, event: string, handler: EventListener) => {
+        const g: any = window as any;
+        const existing = g[flag] as EventListener | undefined;
+        if (existing) {
+          window.removeEventListener(event, existing);
+        }
+        window.addEventListener(event, handler);
+        g[flag] = handler;
+        return handler;
+      };
+
+      const removeMermaidHandler = (flag: string, event: string) => {
+        const g: any = window as any;
+        const existing = g[flag] as EventListener | undefined;
+        if (existing) {
+          window.removeEventListener(event, existing);
+          delete g[flag];
+        }
+      };
+
+      const updateMermaidSession = (normalizedText: string, lastOverride?: string) => {
+        if (STEWARD_FLOWCHART) return;
+        try {
+          const g: any = window as any;
+          g.__present_mermaid_session = {
+            text: normalizedText,
+            last: typeof lastOverride === 'string' ? lastOverride : getMermaidLastNode(normalizedText),
+          };
+        } catch {}
+      };
 
       // Bridge local shape patch events → LiveKit bus
       const handleShapePatch = (e: Event) => {
@@ -328,7 +414,11 @@ export function TldrawWithCollaboration({
           bus.send('ui_update', { componentId: shapeId, patch, timestamp: ts });
         } catch {}
       };
-      window.addEventListener('custom:shapePatch', handleShapePatch as EventListener);
+      registerMermaidHandler(
+        '__present_mermaid_shapePatch_handler',
+        'custom:shapePatch',
+        handleShapePatch as EventListener,
+      );
 
       // Event handlers for canvas control (PRE-105)
       const handleFocusEvent = (e: Event) => {
@@ -532,13 +622,14 @@ export function TldrawWithCollaboration({
           const left = viewport ? viewport.midX - totalW / 2 : 0;
           const top = viewport ? viewport.midY - totalH / 2 : 0;
 
-          const updates = targets.map((s, i) => {
+          const updates: any[] = [];
+          for (let i = 0; i < targets.length; i++) {
             const r = Math.floor(i / cols);
             const c = i % cols;
             const x = left + c * (maxW + spacing);
             const y = top + r * (maxH + spacing);
-            return { id: s.id, type: s.type as any, x, y };
-          });
+            updates.push({ id: targets[i].id, type: targets[i].type as any, x, y });
+          }
           mountedEditor.updateShapes(updates as any);
         } catch (err) {
           console.warn('[CanvasControl] arrange_grid error', err);
@@ -746,23 +837,23 @@ export function TldrawWithCollaboration({
       const handleCreateMermaidStream = (e: Event) => {
         try {
           const detail = (e as CustomEvent).detail || {};
-          const text = typeof detail.text === 'string' ? detail.text : undefined;
-          // Dedupe: prevent duplicate creates within a short window
+          const requestedText = typeof detail.text === 'string' ? detail.text : undefined;
+          const normalized = STEWARD_FLOWCHART
+            ? (requestedText || 'graph TD;\nA-->B;')
+            : normalizeMermaidText(requestedText || 'graph TD;\nA-->B;');
           const g: any = window as any;
           if (g.__present_mermaid_creating === true) {
             console.warn('⚠️ [Canvas] Creation in progress; skipping duplicate create attempt');
             return;
           }
           g.__present_mermaid_creating = true;
-          // Guard util readiness; retry once if needed
           try {
-            // @ts-expect-error internal API
             const hasUtil = !!(mountedEditor as any).getShapeUtil?.('mermaid_stream');
             if (!hasUtil) {
               setTimeout(() => {
                 try {
                   window.dispatchEvent(
-                    new CustomEvent('tldraw:create_mermaid_stream', { detail: { text } }),
+                    new CustomEvent('tldraw:create_mermaid_stream', { detail: { text: normalized } }),
                   );
                 } catch {}
               }, 150);
@@ -783,15 +874,14 @@ export function TldrawWithCollaboration({
               w: 400,
               h: 300,
               name: 'Mermaid (stream)',
-              mermaidText:
-                text || 'graph TD; A[Start] --> B{Decision}; B -->|Yes| C[OK]; B -->|No| D[Retry];',
+              mermaidText: normalized,
               compileState: 'idle',
               keepLastGood: true,
             },
           } as any);
           try {
             g.__present_mermaid_last_shape_id = id;
-            g.__present_mermaid_session = { text: text || 'graph TD;' };
+            updateMermaidSession(normalized);
           } catch {}
           setTimeout(() => { try { g.__present_mermaid_creating = false; } catch {} }, 250);
         } catch (err) {
@@ -799,7 +889,8 @@ export function TldrawWithCollaboration({
           try { (window as any).__present_mermaid_creating = false; } catch {}
         }
       };
-      window.addEventListener(
+      registerMermaidHandler(
+        '__present_mermaid_create_handler',
         'tldraw:create_mermaid_stream',
         handleCreateMermaidStream as EventListener,
       );
@@ -807,19 +898,27 @@ export function TldrawWithCollaboration({
       // Update mermaid stream shape text
       const handleUpdateMermaidStream = (e: Event) => {
         const detail = (e as CustomEvent).detail || {};
-        const shapeId = String(detail.shapeId || '');
-        const text = String(detail.text || '');
-        if (!shapeId || !text) return;
+        const providedShapeId = detail.shapeId ? String(detail.shapeId) : '';
+        const text = typeof detail.text === 'string' ? detail.text : '';
+        if (!providedShapeId && !text) return;
+        const g: any = window as any;
+        const shapeId = providedShapeId || g.__present_mermaid_last_shape_id || '';
+        if (!shapeId) return;
         try {
-          try { console.log('[Canvas][update_mermaid] apply', { shapeId, len: text.length }); } catch {}
+          const normalized = STEWARD_FLOWCHART ? text : normalizeMermaidText(text);
+          try { console.log('[Canvas][update_mermaid] apply', { shapeId, len: normalized.length }); } catch {}
           mountedEditor.updateShapes([
-            { id: shapeId as any, type: 'mermaid_stream' as any, props: { mermaidText: text } },
+            { id: shapeId as any, type: 'mermaid_stream' as any, props: { mermaidText: normalized } },
           ]);
+          try {
+            g.__present_mermaid_last_shape_id = shapeId;
+            updateMermaidSession(normalized);
+          } catch {}
           // Broadcast patch over LiveKit via existing bridge
           try {
             window.dispatchEvent(
               new CustomEvent('custom:shapePatch', {
-                detail: { shapeId, patch: { mermaidText: text } },
+                detail: { shapeId, patch: { mermaidText: normalized } },
               }),
             );
           } catch {}
@@ -827,7 +926,8 @@ export function TldrawWithCollaboration({
           console.warn('[CanvasControl] update_mermaid_stream error', err);
         }
       };
-      window.addEventListener(
+      registerMermaidHandler(
+        '__present_mermaid_update_handler',
         'tldraw:update_mermaid_stream',
         handleUpdateMermaidStream as EventListener,
       );
@@ -1079,14 +1179,9 @@ export function TldrawWithCollaboration({
           handleDistributeSelected as EventListener,
         );
         window.removeEventListener('tldraw:drawSmiley', handleDrawSmiley as EventListener);
-        window.removeEventListener(
-          'tldraw:create_mermaid_stream',
-          handleCreateMermaidStream as EventListener,
-        );
-        window.removeEventListener(
-          'tldraw:update_mermaid_stream',
-          handleUpdateMermaidStream as EventListener,
-        );
+        removeMermaidHandler('__present_mermaid_create_handler', 'tldraw:create_mermaid_stream');
+        removeMermaidHandler('__present_mermaid_update_handler', 'tldraw:update_mermaid_stream');
+        removeMermaidHandler('__present_mermaid_shapePatch_handler', 'custom:shapePatch');
         window.removeEventListener('tldraw:toggleGrid', handleToggleGrid as EventListener);
         window.removeEventListener('tldraw:setBackground', handleSetBackground as EventListener);
         window.removeEventListener('tldraw:setTheme', handleSetTheme as EventListener);
@@ -1127,7 +1222,7 @@ export function TldrawWithCollaboration({
 
   // Ready flag: hide overlay once sync store reports ready (status !== 'loading')
 
-  const isStoreReady = !!store && (store as any).status !== 'loading';
+  const isStoreReady = store.status !== 'loading';
 
   return (
     <div className={className} style={{ position: 'absolute', inset: 0 }}>
@@ -1135,7 +1230,7 @@ export function TldrawWithCollaboration({
         <Tldraw
           store={store}
           onMount={handleMount}
-          shapeUtils={shapeUtils || []}
+          shapeUtils={resolvedShapeUtils}
           components={components}
           overrides={overrides}
           forceMobile={true}

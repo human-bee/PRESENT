@@ -25,7 +25,9 @@
     "agent:enhanced": "npx tsx src/lib/livekit-agent-worker-enhanced.ts dev",
     "agent:multi": "npx tsx src/lib/livekit-agent-worker-multi-session.ts dev",
     "agent:whisper": "npx tsx src/lib/livekit-agent-worker-whisper.ts dev",
-    "agent:fixed": "npx tsx src/lib/livekit-agent-worker-fixed.ts dev"
+    "agent:fixed": "npx tsx src/lib/livekit-agent-worker-fixed.ts dev",
+    "agent:realtime": "npx tsx src/lib/agents/realtime/voice-agent.ts",
+    "agent:conductor": "npx tsx src/lib/agents/conductor/index.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
@@ -39,11 +41,12 @@
     "@supabase/ssr": "^0.6.1",
     "@supabase/supabase-js": "^2.49.9",
     "@tanstack/react-query": "^5.80.2",
-    "@tldraw/sync": "^3.13.3",
-    "@tldraw/sync-core": "^3.13.3",
-    "@tldraw/tlschema": "^3.13.3",
+    "@tldraw/sync": "^4.0.2",
+    "@tldraw/sync-core": "^4.0.2",
+    "@tldraw/tlschema": "^4.0.2",
     "@uidotdev/usehooks": "^2.4.1",
-    "class-variance-authority": "^0.7.1",
+    "class-variance-authority": "^0.7.1"
+    "codex": "^0.2.3",
     "dompurify": "^3.0.6",
     "framer-motion": "^12.16.0",
     "highlight.js": "^11.11.1",
@@ -60,7 +63,7 @@
     "react-hot-toast": "^2.5.2",
     "react-markdown": "^10.1.0",
     "recharts": "^2.15.3",
-    "tldraw": "^3.13.1",
+    "tldraw": "^4.0.2",
     "zod": "^3.25.49"
   },
   "devDependencies": {
