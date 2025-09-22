@@ -35,6 +35,7 @@ import {
   useParticipants,
   useLocalParticipant,
   useTracks,
+  useTrackToggle,
   VideoTrack,
   AudioTrack,
   useRoomContext,
@@ -332,6 +333,59 @@ function SingleParticipantTile({
     isLocal,
   });
 
+  const micToggle = useTrackToggle(Track.Source.Microphone);
+  const cameraToggle = useTrackToggle(Track.Source.Camera);
+
+  const toggleLocalMicrophone = React.useCallback(async () => {
+    if (!isLocal) return;
+    const nextEnabled = agentState.audioMuted;
+    type LocalMicControl = {
+      setMicrophoneEnabled?: (enabled: boolean) => Promise<void>;
+    };
+    const localControls = participant as unknown as LocalMicControl | null;
+    if (localControls?.setMicrophoneEnabled) {
+      try {
+        await localControls.setMicrophoneEnabled(nextEnabled);
+        return;
+      } catch {}
+    }
+    const roomControls = room?.localParticipant as unknown as LocalMicControl | null;
+    if (roomControls?.setMicrophoneEnabled) {
+      try {
+        await roomControls.setMicrophoneEnabled(nextEnabled);
+        return;
+      } catch {}
+    }
+    try {
+      await micToggle?.toggle();
+    } catch {}
+  }, [agentState.audioMuted, isLocal, micToggle, participant, room]);
+
+  const toggleLocalCamera = React.useCallback(async () => {
+    if (!isLocal) return;
+    const nextEnabled = agentState.videoMuted;
+    type LocalCameraControl = {
+      setCameraEnabled?: (enabled: boolean) => Promise<void>;
+    };
+    const localControls = participant as unknown as LocalCameraControl | null;
+    if (localControls?.setCameraEnabled) {
+      try {
+        await localControls.setCameraEnabled(nextEnabled);
+        return;
+      } catch {}
+    }
+    const roomControls = room?.localParticipant as unknown as LocalCameraControl | null;
+    if (roomControls?.setCameraEnabled) {
+      try {
+        await roomControls.setCameraEnabled(nextEnabled);
+        return;
+      } catch {}
+    }
+    try {
+      await cameraToggle?.toggle();
+    } catch {}
+  }, [agentState.videoMuted, cameraToggle, isLocal, participant, room]);
+
   // Overlay visibility with hover timers (show after 2s, hide 1.5s after leave)
   const [overlayVisible, setOverlayVisible] = React.useState(false);
   const [hovering, setHovering] = React.useState(false);
@@ -404,16 +458,16 @@ function SingleParticipantTile({
       if (!hovering && !overlayVisible) return;
       if (e.key === 'm' || e.key === 'M') {
         e.preventDefault();
-        events.toggleMic();
+        void toggleLocalMicrophone();
       }
       if (e.key === 'v' || e.key === 'V') {
         e.preventDefault();
-        events.toggleCamera();
+        void toggleLocalCamera();
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [isLocal, hovering, overlayVisible, events]);
+  }, [isLocal, hovering, overlayVisible, toggleLocalCamera, toggleLocalMicrophone]);
 
   // Options dropdown anchored to tile controls
   const [optionsOpen, setOptionsOpen] = React.useState(false);
@@ -863,7 +917,7 @@ function SingleParticipantTile({
                 aria-keyshortcuts={isLocal ? 'M' : undefined}
                 onClick={async () => {
                   if (isLocal) {
-                    await events.toggleMic();
+                    await toggleLocalMicrophone();
                     return;
                   }
                   setPlaybackMuted((prev) => !prev);
@@ -886,7 +940,7 @@ function SingleParticipantTile({
                 aria-label={agentState.videoMuted ? 'Turn camera on' : 'Turn camera off'}
                 aria-keyshortcuts="V"
                 onClick={async () => {
-                  await events.toggleCamera();
+                  await toggleLocalCamera();
                 }}
                 className={cn(
                   'w-11 h-11 rounded-md grid place-items-center transition-colors',
