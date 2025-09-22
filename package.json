@@ -45,7 +45,7 @@
     "@tldraw/sync-core": "^4.0.2",
     "@tldraw/tlschema": "^4.0.2",
     "@uidotdev/usehooks": "^2.4.1",
-    "class-variance-authority": "^0.7.1"
+    "class-variance-authority": "^0.7.1",
     "codex": "^0.2.3",
     "dompurify": "^3.0.6",
     "framer-motion": "^12.16.0",
