@@ -38,6 +38,8 @@ import { cn } from '@/lib/utils';
 import { z } from 'zod';
 import { useRoomContext, AudioConference } from '@livekit/components-react';
 import { createLiveKitBus } from '@/lib/livekit/livekit-bus';
+import { isDefaultCanvasUser } from '@/lib/livekit/display-names';
+import { useAuth } from '@/hooks/use-auth';
 import { ConnectionState, RoomEvent, DisconnectReason, Participant } from 'livekit-client';
 import {
   Wifi,
@@ -102,6 +104,21 @@ export function LivekitRoomConnector({
 }: LivekitRoomConnectorProps) {
   // Get the room instance from context
   const room = useRoomContext();
+  const { user } = useAuth();
+
+  const effectiveUserName = React.useMemo(() => {
+    const provided = (userName ?? '').trim();
+    if (provided && !isDefaultCanvasUser(provided)) return provided;
+    const profileName =
+      typeof user?.user_metadata?.full_name === 'string'
+        ? user.user_metadata.full_name.trim()
+        : '';
+    if (profileName) return profileName;
+    const emailName =
+      typeof user?.email === 'string' ? user.email.split('@')[0]?.trim() ?? '' : '';
+    if (emailName) return emailName;
+    return provided || 'Canvas User';
+  }, [userName, user]);
 
   // Determine initial state based on room state
   const getInitialState = (): LivekitRoomConnectorState => {
@@ -171,7 +188,7 @@ export function LivekitRoomConnector({
       const key = `present:lk:identity:${roomName}`;
       let id = window.localStorage.getItem(key);
       if (!id) {
-        const base = (userName || 'user').replace(/\s+/g, '-').slice(0, 24);
+        const base = (effectiveUserName || 'user').replace(/\s+/g, '-').slice(0, 24);
         const rand = Math.random().toString(36).slice(2, 8);
         id = `${base}-${rand}`;
         window.localStorage.setItem(key, id);
@@ -179,11 +196,11 @@ export function LivekitRoomConnector({
       identityRef.current = id;
     } catch {
       // Fallback if storage is unavailable
-      const base = (userName || 'user').replace(/\s+/g, '-').slice(0, 24);
+      const base = (effectiveUserName || 'user').replace(/\s+/g, '-').slice(0, 24);
       const rand = Math.random().toString(36).slice(2, 8);
       identityRef.current = `${base}-${rand}`;
     }
-  }, [roomName, userName]);
+  }, [roomName, effectiveUserName]);
 
   // Add agent dispatch functionality
   const triggerAgentJoin = React.useCallback(async () => {
@@ -597,10 +614,18 @@ export function LivekitRoomConnector({
         console.log(`🎯 [LiveKitConnector-${roomName}] Fetching token...`);
         const identity = encodeURIComponent(
           identityRef.current ||
-            `${(userName || 'user').replace(/\s+/g, '-')}-${Math.random().toString(36).slice(2, 8)}`,
+            `${(effectiveUserName || 'user').replace(/\s+/g, '-')}-${Math.random()
+              .toString(36)
+              .slice(2, 8)}`,
         );
+        const metadataPayload = {
+          displayName: effectiveUserName,
+          fullName: effectiveUserName,
+          userId: user?.id ?? undefined,
+        };
+        const metadataParam = `&metadata=${encodeURIComponent(JSON.stringify(metadataPayload))}`;
         const response = await fetch(
-          `/api/token?roomName=${encodeURIComponent(roomName)}&identity=${identity}&username=${encodeURIComponent(userName)}&name=${encodeURIComponent(userName)}`,
+          `/api/token?roomName=${encodeURIComponent(roomName)}&identity=${identity}&username=${encodeURIComponent(effectiveUserName)}&name=${encodeURIComponent(effectiveUserName)}${metadataParam}`,
         );
 
         if (!response.ok) {
@@ -707,7 +732,15 @@ export function LivekitRoomConnector({
     };
 
     fetchTokenAndConnect();
-  }, [stateRef.current?.connectionState, stateRef.current?.token, roomName, userName, room, wsUrl]);
+  }, [
+    stateRef.current?.connectionState,
+    stateRef.current?.token,
+    roomName,
+    effectiveUserName,
+    room,
+    wsUrl,
+    user,
+  ]);
 
   // Auto-connect effect (if enabled)
   React.useEffect(() => {
