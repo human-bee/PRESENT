@@ -2,7 +2,7 @@ import * as React from 'react';
 import { Bot, User, VideoOff } from 'lucide-react';
 import { VideoTrack } from '@livekit/components-react';
 import { cn } from '@/lib/utils';
-import type { ParticipantTracks } from '@/hooks/use-participant-tracks';
+import type { ParticipantTracks } from '@/hooks/livekit/use-participant-tracks';
 
 type ParticipantVideoLayerProps = {
   showVideo: boolean;

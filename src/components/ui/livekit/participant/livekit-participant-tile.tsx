@@ -10,7 +10,7 @@
 import * as React from 'react';
 import { z } from 'zod';
 import { AlertCircle, User } from 'lucide-react';
-import { useCanvasLiveKit } from './livekit-room-connector';
+import { useCanvasLiveKit } from '../livekit-room-connector';
 import { useParticipants, useLocalParticipant, useRoomContext } from '@livekit/components-react';
 import { LivekitParticipantTileState, SingleParticipantTile } from './livekit-single-participant-tile';
 
