@@ -123,7 +123,7 @@ export function SingleParticipantTile({
     if (sharing) {
       try {
         const messageId = `screenshare-${participant.identity}-${Date.now()}`;
-        const { LivekitScreenShareTile } = await import('./livekit-screenshare-tile');
+        const { LivekitScreenShareTile } = await import('../../livekit-screenshare-tile');
         const TileComponent = LivekitScreenShareTile as unknown as React.ComponentType<Record<string, unknown>>;
         const element = React.createElement(TileComponent, {
           __custom_message_id: messageId,
