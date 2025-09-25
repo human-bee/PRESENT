@@ -207,6 +207,55 @@ export const MessageThreadCollapsible = React.forwardRef<
     try { await room.disconnect(); } catch {}
   }, [room]);
 
+  const ingestTranscription = React.useCallback(
+    (transcriptionData: {
+      speaker?: string;
+      text?: string;
+      timestamp?: number;
+      is_final?: boolean;
+    }) => {
+      if (!transcriptionData.text) return;
+      if (transcriptionData.speaker === 'voice-agent') {
+        try { setAgentPresent(true); } catch {}
+      }
+      const transcription = {
+        id: `${Date.now()}-${Math.random()}`,
+        speaker: transcriptionData.speaker || 'Unknown',
+        text: transcriptionData.text,
+        timestamp: transcriptionData.timestamp || Date.now(),
+        isFinal: transcriptionData.is_final || false,
+        source: (transcriptionData.speaker === 'voice-agent' ? 'agent' : 'user') as 'agent' | 'user',
+        type: 'speech' as const,
+      };
+
+      setTranscriptions((prev) => {
+        if (transcription.isFinal) {
+          const filtered = prev.filter(
+            (t) => !(t.speaker === transcription.speaker && !t.isFinal && t.type === 'speech'),
+          );
+          return [...filtered, transcription];
+        }
+        const filtered = prev.filter(
+          (t) => !(t.speaker === transcription.speaker && !t.isFinal && t.type === 'speech'),
+        );
+        return [...filtered, transcription];
+      });
+
+      try {
+        window.dispatchEvent(
+          new CustomEvent('livekit:transcription-replay', {
+            detail: {
+              speaker: transcription.speaker,
+              text: transcription.text,
+              timestamp: transcription.timestamp,
+            },
+          }),
+        );
+      } catch {}
+    },
+    [setAgentPresent, setTranscriptions],
+  );
+
   // Listen for transcription data via bus
   React.useEffect(() => {
     const off = bus.on('transcription', (data: unknown) => {
@@ -217,55 +266,31 @@ export const MessageThreadCollapsible = React.forwardRef<
         timestamp?: number;
         is_final?: boolean;
       };
-      if (transcriptionData.type === 'live_transcription' && transcriptionData.text) {
-        // If we see the agent speaking, mark presence true (fallback for agent detection)
-        if (transcriptionData.speaker === 'voice-agent') {
-          try { setAgentPresent(true); } catch {}
-        }
-        const transcription = {
-          id: `${Date.now()}-${Math.random()}`,
-          speaker: transcriptionData.speaker || 'Unknown',
-          text: transcriptionData.text,
-          timestamp: transcriptionData.timestamp || Date.now(),
-          isFinal: transcriptionData.is_final || false,
-          source: (transcriptionData.speaker === 'voice-agent' ? 'agent' : 'user') as
-            | 'agent'
-            | 'user',
-          type: 'speech' as const,
-        };
-
-        setTranscriptions((prev) => {
-          // Remove old interim results from same speaker if this is final
-          if (transcription.isFinal) {
-            const filtered = prev.filter(
-              (t) => !(t.speaker === transcription.speaker && !t.isFinal && t.type === 'speech'),
-            );
-            return [...filtered, transcription];
-          }
-
-          // For interim results, replace existing interim from same speaker
-          const filtered = prev.filter(
-            (t) => !(t.speaker === transcription.speaker && !t.isFinal && t.type === 'speech'),
-          );
-          return [...filtered, transcription];
-        });
-
-        // Mirror to LiveCaptions via local event so canvas bubble view stays in sync with thread transcript
-        try {
-          window.dispatchEvent(
-            new CustomEvent('livekit:transcription-replay', {
-              detail: {
-                speaker: transcription.speaker,
-                text: transcription.text,
-                timestamp: transcription.timestamp,
-              },
-            }),
-          );
-        } catch { }
+      if (transcriptionData.type === 'live_transcription') {
+        ingestTranscription(transcriptionData);
       }
     });
     return off;
-  }, [bus]);
+  }, [bus, ingestTranscription]);
+
+  // Local manual messages do not echo back over LiveKit; mirror them here
+  React.useEffect(() => {
+    const handler = (event: Event) => {
+      const payload = (event as CustomEvent).detail;
+      if (!payload || typeof payload.text !== 'string') return;
+      const transcriptionData = {
+        type: 'live_transcription',
+        speaker: payload.participantId || payload.speaker || 'Canvas-User',
+        text: payload.text,
+        timestamp: typeof payload.timestamp === 'number' ? payload.timestamp : Date.now(),
+        is_final: true,
+        manual: true,
+      } as const;
+      ingestTranscription(transcriptionData);
+    };
+    window.addEventListener('custom:transcription-local', handler as EventListener);
+    return () => window.removeEventListener('custom:transcription-local', handler as EventListener);
+  }, [ingestTranscription]);
 
   // Keep transcript tab mirrored to Supabase session
   React.useEffect(() => {
@@ -637,6 +662,14 @@ export const MessageThreadCollapsible = React.forwardRef<
                             text: message,
                             timestamp: Date.now(),
                           },
+                        }),
+                      );
+                    } catch {}
+
+                    try {
+                      window.dispatchEvent(
+                        new CustomEvent('custom:transcription-local', {
+                          detail: payload,
                         }),
                       );
                     } catch {}

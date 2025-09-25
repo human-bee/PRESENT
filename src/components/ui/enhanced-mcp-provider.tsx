@@ -45,6 +45,16 @@ export function EnhancedMcpProvider({
   mcpServers,
   onConnectionStatus,
 }: EnhancedMcpProviderProps) {
+  const CustomMcpProvider = useMemo(
+    () =>
+      customMcpProvider as unknown as React.ComponentType<
+        {
+          children: React.ReactNode;
+          mcpServers?: unknown[];
+        }
+      >,
+    [],
+  );
   const [connectionAttempts, setConnectionAttempts] = useState(0);
   const [lastConnectionTime, setLastConnectionTime] = useState<number>(0);
 
@@ -145,7 +155,7 @@ export function EnhancedMcpProvider({
 
   return (
     <MCPErrorBoundary onError={handleMcpError}>
-      <customMcpProvider mcpServers={mcpServers}>{children}</customMcpProvider>
+      <CustomMcpProvider mcpServers={mcpServers}>{children}</CustomMcpProvider>
     </MCPErrorBoundary>
   );
 }

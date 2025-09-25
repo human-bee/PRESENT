@@ -1,4 +1,4 @@
-import { defineAgent, JobContext, multimodal, cli, WorkerOptions } from '@livekit/agents';
+import { defineAgent, JobContext, multimodal, cli, WorkerOptions, llm } from '@livekit/agents';
 import { config } from 'dotenv';
 import { join } from 'path';
 
@@ -6,6 +6,7 @@ try {
   config({ path: join(process.cwd(), '.env.local') });
 } catch {}
 import * as openai from '@livekit/agents-plugin-openai';
+import { appendTranscriptCache } from '@/lib/agents/shared/supabase-context';
 
 export default defineAgent({
   entry: async (job: JobContext) => {
@@ -61,6 +62,13 @@ Always return to tool calls rather than long monologues.`;
     session.on('input_speech_transcription_completed', async (evt: { transcript: string }) => {
       const payload = { type: 'live_transcription', text: evt.transcript, speaker: 'user', timestamp: Date.now(), is_final: true };
       await job.room.localParticipant?.publishData(new TextEncoder().encode(JSON.stringify(payload)), { reliable: true, topic: 'transcription' });
+      try {
+        appendTranscriptCache(job.room.name || 'unknown', {
+          participantId: 'user',
+          text: evt.transcript,
+          timestamp: Date.now(),
+        });
+      } catch {}
       // Debounced steward trigger example (2-4s window)
       try {
         const g: any = globalThis as any;
@@ -79,6 +87,50 @@ Always return to tool calls rather than long monologues.`;
         if (evt.contentType === 'text' && evt.text) {
           const payload = { type: 'live_transcription', text: evt.text, speaker: 'voice-agent', timestamp: Date.now(), is_final: true };
           await job.room.localParticipant?.publishData(new TextEncoder().encode(JSON.stringify(payload)), { reliable: true, topic: 'transcription' });
+          try {
+            appendTranscriptCache(job.room.name || 'unknown', {
+              participantId: 'voice-agent',
+              text: evt.text,
+              timestamp: Date.now(),
+            });
+          } catch {}
+        }
+      } catch {}
+    });
+
+    job.room.on('dataReceived', (data, _participant, _kind, topic) => {
+      if (topic !== 'transcription') return;
+      try {
+        const msg = JSON.parse(new TextDecoder().decode(data));
+        if (msg?.manual === true && typeof msg.text === 'string') {
+          appendTranscriptCache(job.room.name || 'unknown', {
+            participantId: msg.speaker || 'user',
+            text: msg.text,
+            timestamp: typeof msg.timestamp === 'number' ? msg.timestamp : Date.now(),
+          });
+          try {
+            session.conversation.item.create(
+              new llm.ChatMessage({ role: llm.ChatRole.USER, content: String(msg.text) }),
+            );
+            session.response.create();
+          } catch (err) {
+            console.error('[VoiceAgent] Failed to forward manual text to OpenAI session', err);
+          }
+          try {
+            const g: any = globalThis as any;
+            clearTimeout(g.__steward_timer__);
+            g.__steward_timer__ = setTimeout(async () => {
+              const hint = {
+                type: 'decision',
+                payload: { decision: { should_send: true, summary: 'steward_trigger' } },
+                timestamp: Date.now(),
+              };
+              await job.room.localParticipant?.publishData(
+                new TextEncoder().encode(JSON.stringify(hint)),
+                { reliable: true, topic: 'decision' },
+              );
+            }, 2500);
+          } catch {}
         }
       } catch {}
     });

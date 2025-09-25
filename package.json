@@ -70,6 +70,7 @@
     "@biomejs/biome": "^2.2.2",
     "@eslint/eslintrc": "^3",
     "@jest/globals": "^29.7.0",
+    "@playwright/test": "^1.55.1",
     "@resvg/resvg-js": "^2.6.2",
     "@tailwindcss/postcss": "^4.1.5",
     "@testing-library/jest-dom": "^6.6.3",
