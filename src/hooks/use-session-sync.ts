@@ -251,6 +251,36 @@ export function useSessionSync(roomName: string) {
     };
   }, [bus, sessionId, room]);
 
+  // Handle manual local transcripts that never loop back over the LiveKit data channel
+  useEffect(() => {
+    if (!sessionId) return;
+
+    const handler = async (event: Event) => {
+      const detail = (event as CustomEvent<any>).detail;
+      if (!detail || typeof detail.text !== 'string') return;
+      if (detail.replay) return;
+      const entry = {
+        participantId: detail.participantId ?? detail.speaker ?? 'unknown',
+        text: String(detail.text),
+        timestamp: typeof detail.timestamp === 'number' ? detail.timestamp : Date.now(),
+      };
+      transcriptRef.current = [...transcriptRef.current, entry];
+      const { error } = await supabase
+        .from('canvas_sessions')
+        .update({
+          transcript: transcriptRef.current,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', sessionId);
+      if (error) console.error('[useSessionSync] Failed to append local transcript', error);
+    };
+
+    window.addEventListener('custom:transcription-local', handler as EventListener);
+    return () => {
+      window.removeEventListener('custom:transcription-local', handler as EventListener);
+    };
+  }, [sessionId]);
+
   // Listen for canvas save events to update session canvas_state
   useEffect(() => {
     if (!sessionId) return;

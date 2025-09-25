@@ -62,15 +62,21 @@ npm run agent:build
 
 #### Development Mode (Recommended)
 
-Run in two terminals:
+Run in three terminals (new architecture):
 
-**Terminal 1 - Voice Agent (start first):**
+**Terminal 1 - Voice Agent (Realtime, start first):**
 
 ```bash
-npm run agent:dev
+npm run agent:realtime
 ```
 
-**Terminal 2 - Next.js App:**
+**Terminal 2 - Conductor (Agents SDK):**
+
+```bash
+npm run agent:conductor
+```
+
+**Terminal 3 - Next.js App:**
 
 ```bash
 npm run dev
@@ -78,7 +84,7 @@ npm run dev
 
 Visit `http://localhost:3000`
 
-> **Important**: Always start the agent before the web app to ensure proper connection.
+> Important: Start the agents before the web app to ensure proper connection.
 
 #### Production Mode
 
@@ -102,7 +108,7 @@ npm run agent:run  # Terminal 2
 
 ### Configure Model Context Protocol (MCP) Servers
 
-Navigate to `http://localhost:3000/mcp-config` to add MCP servers.
+Navigate to `http://app.present.best/mcp-config` to add MCP servers.
 
 For the demo above we used smithery.ai's [brave-search-mcp](https://smithery.ai/server/@mikechao/brave-search-mcp)
 
@@ -151,46 +157,24 @@ const components: customComponent[] = [
 
 You can find more information about the options [here](https://custom.co/docs/concepts/registering-components)
 
-## 🎙️ Voice Agent Architecture
+## 🎙️ Voice + Steward Architecture
 
-The voice agent runs as a separate Node.js process using the LiveKit Agents framework:
+The production pipeline now runs as two lightweight Node processes plus the client dispatcher:
 
-- **Agent Worker**: `src/lib/livekit-agent-worker.ts` - TypeScript-based agent using OpenAI Realtime API
-- **Automatic Dispatch**: Agent automatically joins any room created in your LiveKit project
-- **Real-time Transcription**: Live speech-to-text displayed in the UI
-- **Tool Support**: Extensible tool system in `src/lib/livekit-agent-tools.ts`
+1. **Voice Agent (Realtime)** – `src/lib/agents/realtime/voice-agent.ts`
+   - Uses the LiveKit Agents Realtime API.
+   - Listens to room audio, transcribes, and calls exactly two UI tools: `create_component` and `update_component`.
+   - Can optionally hand off server-side work by calling `dispatch_to_conductor`.
 
-The agent connects via WebRTC for low-latency voice interactions and publishes transcriptions back to the room.
+2. **Conductor + Stewards** – `src/lib/agents/conductor/` and `src/lib/agents/subagents/`
+   - Conductor is a tiny router (Agents SDK) that delegates to domain stewards via handoffs.
+   - Stewards (e.g., Flowchart Steward) read state from Supabase, reason holistically, and emit one structured UI patch or component creation. Flowchart commits trigger `/api/steward/commit`, which broadcasts the update over LiveKit.
 
-## 🏗️ Architecture
+3. **Browser ToolDispatcher** – `src/components/tool-dispatcher.tsx`
+   - Executes the two UI tools, updates TLDraw or React components, and returns `tool_result`/`tool_error` events.
+   - All other logic (diagram merging, lookups, narration) lives in stewards.
 
-### Three-Agent System
-
-custom uses a sophisticated **3-agent architecture** for intelligent voice-driven UI generation:
-
-1. **🎙️ LiveKit Voice Agent** (`livekit-agent-worker.ts`)
-   - Captures and transcribes voice input
-   - Manages conversation flow
-   - Queries available tools/components dynamically
-   - Publishes tool calls to the browser
-
-2. **🧠 Decision Engine** (`decision-engine.ts`)
-   - Embedded within the Voice Agent
-   - Analyzes transcriptions for actionable requests
-   - Maintains 30-second conversation context
-   - Uses GPT-4 for intelligent filtering
-   - Detects intent (YouTube search, UI component, etc.)
-
-3. **🔧 Tool Dispatcher** (`tool-dispatcher.tsx`)
-   - Runs in the browser as a React component
-   - Routes tool calls to appropriate handlers
-   - Executes via custom UI, MCP tools, or built-in functions
-   - Syncs available tools to SystemRegistry
-   - Returns results to Voice Agent
-
-All three agents stay synchronized through the **SystemRegistry** - a single source of truth for available capabilities. When you add new MCP tools or custom components, all agents automatically discover and can use them without code changes.
-
-For detailed architecture documentation, see [docs/THREE_AGENT_ARCHITECTURE.md](docs/THREE_AGENT_ARCHITECTURE.md).
+Legacy docs for the original `livekit-agent-worker.ts` / three-agent setup now live in `docs/THREE_AGENT_ARCHITECTURE.md` under the archived section.
 
 ### Project Structure
 
