@@ -257,14 +257,23 @@ function CustomShapeComponent({ shape }: { shape: customShape }) {
                     },
                   ]);
                 };
-                const injected = {
+                const injectedBase = {
                   __custom_message_id: shape.props.customComponent,
                   state: (shape.props.state as Record<string, unknown>) || {},
-                  updateState,
                 } as const;
                 if (React.isValidElement(stored)) {
+                  const elementType = stored.type as any;
+                  const shouldInjectUpdateState = typeof elementType !== 'string';
+                  const nextProps = {
+                    ...(stored.props || {}),
+                    ...injectedBase,
+                    ...(shouldInjectUpdateState ? { updateState } : {}),
+                  } as Record<string, unknown>;
+                  if (!shouldInjectUpdateState) {
+                    delete (nextProps as any).updateState;
+                  }
                   try {
-                    node = React.cloneElement(stored, injected as any);
+                    node = React.cloneElement(stored, nextProps as any);
                   } catch {
                     node = stored;
                   }
@@ -275,7 +284,15 @@ function CustomShapeComponent({ shape }: { shape: customShape }) {
                 ) {
                   // Try to reconstruct from { type, props }
                   const type = stored.type || stored.Component || stored.component;
-                  const props = { ...(stored.props || {}), ...injected };
+                  const shouldInjectUpdateState = typeof type !== 'string';
+                  const props = {
+                    ...(stored.props || {}),
+                    ...injectedBase,
+                    ...(shouldInjectUpdateState ? { updateState } : {}),
+                  };
+                  if (!shouldInjectUpdateState) {
+                    delete (props as any).updateState;
+                  }
                   try {
                     node = React.createElement(type, props);
                   } catch {

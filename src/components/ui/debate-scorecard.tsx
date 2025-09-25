@@ -1,1136 +1,724 @@
 'use client';
 
-import React, { useMemo, useCallback, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { z } from 'zod';
-import { useComponentRegistration } from '@/lib/component-registry';
-import { LoadingWrapper, SkeletonPatterns } from '@/components/ui/loading-states';
-import { LoadingState } from '@/lib/with-progressive-loading';
-import { cn } from '@/lib/utils';
 import {
-  Trophy,
-  Brain,
-  BookOpen,
-  Target,
+  FileText,
+  Filter,
+  Map as MapIcon,
+  Layers3,
+  Search,
+  ShieldCheck,
+  ShieldMinus,
   ShieldAlert,
-  Sword,
-  Timer,
-  CheckCircle2,
+  ShieldX,
+  GaugeCircle,
+  ArrowRightLeft,
+  BarChart3,
+  FileOutput,
+  BookOpen,
   Info,
+  ClipboardList,
+  ExternalLink,
+  CheckCircle2,
+  AlertTriangle,
+  Sparkles,
+  Link2,
+  History,
+  Gavel,
 } from 'lucide-react';
-import { Users, Sparkles, Gavel, XCircle, FlaskConical, Pin, History } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { nanoid } from 'nanoid';
+import { useComponentRegistration } from '@/lib/component-registry';
+import { cn } from '@/lib/utils';
 
-// ---------------- Schema ----------------
-export const debateScoreCardSchema = z.object({
-  participant1: z.object({
-    name: z.string().default('Ben'),
-    avatar: z.string().optional(),
-    color: z.string().default('#3B82F6'),
-  }),
-  participant2: z.object({
-    name: z.string().default('Challenger'),
-    avatar: z.string().optional(),
-    color: z.string().default('#EF4444'),
-  }),
+// ------------------------------------------------------------
+// Schema & Types
+// ------------------------------------------------------------
 
-  topic: z.string().default('Live Debate: Topic TBD').describe('What are they debating?'),
-  timeLimit: z.number().default(30).describe('Minutes per round'),
-  rounds: z.number().default(5).describe('Number of rounds'),
+export const verdictEnum = z.enum(['ACCURATE', 'PARTIALLY_TRUE', 'UNSUPPORTED', 'FALSE']);
+export type Verdict = z.infer<typeof verdictEnum>;
 
-  visualStyle: z.enum(['boxing', 'gameboy', 'modern', 'minimalist']).default('boxing'),
-  showFactChecking: z.boolean().default(true),
-  showBSMeter: z.boolean().default(true),
-  showTimeline: z.boolean().default(true),
+export const impactEnum = z.enum(['KEY_VOTER', 'MAJOR', 'MINOR', 'CREDIBILITY_HIT', 'DROPPED']);
+export type Impact = z.infer<typeof impactEnum>;
 
-  twitchMode: z.boolean().default(false),
-  audiencePolling: z.boolean().default(false),
-  moderatorMode: z.boolean().default(false),
+export const evidenceRefSchema = z.object({
+  id: z.string(),
+  title: z.string().optional(),
+  url: z.string().optional(),
+  credibility: z.enum(['HIGH', 'MEDIUM', 'LOW', 'UNKNOWN']).default('UNKNOWN'),
+  type: z.enum(['Academic', 'News', 'Government', 'Think Tank', 'Blog']).default('Academic'),
+  lastVerified: z.string().optional(), // ISO
+});
+export type EvidenceRef = z.infer<typeof evidenceRefSchema>;
 
+export const factCheckNoteSchema = z.object({
+  id: z.string(),
+  summary: z.string(),
+  tags: z.array(z.string()).default([]),
+  evidenceRefs: z.array(z.string()).default([]),
+});
+export type FactCheckNote = z.infer<typeof factCheckNoteSchema>;
+
+export const claimSchema = z.object({
+  id: z.string(),
+  side: z.enum(['AFF', 'NEG']),
+  speech: z.enum(['1AC', '1NC', '2AC', '2NC', '1AR', '1NR', '2AR', '2NR']),
+  quote: z.string(),
+  evidenceInline: z.string().optional(),
+  factChecks: z.array(factCheckNoteSchema).default([]),
+  verdict: verdictEnum.optional(),
+  impact: impactEnum.optional(),
+  mapNodeId: z.string().optional(),
+  createdAt: z.string().optional(),
+  updatedAt: z.string().optional(),
+});
+export type Claim = z.infer<typeof claimSchema>;
+
+export const mapNodeSchema = z.object({
+  id: z.string(),
+  type: z.enum(['MAIN', 'REASON', 'OBJECTION', 'REBUTTAL']),
+  label: z.string(),
+  claimId: z.string().optional(),
+});
+export type MapNode = z.infer<typeof mapNodeSchema>;
+
+export const mapEdgeSchema = z.object({ from: z.string(), to: z.string() });
+export type MapEdge = z.infer<typeof mapEdgeSchema>;
+
+export const rfdLinkSchema = z.object({ id: z.string(), claimId: z.string(), excerpt: z.string() });
+export type RFDLink = z.infer<typeof rfdLinkSchema>;
+
+export const roundMetricsSchema = z.object({
+  roundScore: z.number().default(0),
+  evidenceQuality: z.number().default(0),
+  judgeLean: z.enum(['AFF', 'NEG', 'NEUTRAL']).default('NEUTRAL'),
+});
+export type RoundMetrics = z.infer<typeof roundMetricsSchema>;
+
+export const timelineEventSchema = z.object({
+  id: z.string(),
+  timestamp: z.number(),
+  text: z.string(),
+  type: z.enum(['argument', 'rebuttal', 'fact_check', 'score_change', 'moderation']).default('argument'),
+});
+export type TimelineEvent = z.infer<typeof timelineEventSchema>;
+
+export const debateScorecardSchema = z.object({
   componentId: z.string().default('debate-scorecard'),
-  __custom_message_id: z.string().optional(),
+  topic: z.string().default('Untitled debate'),
+  round: z.string().default('Prelim Round'),
+  showMetricsStrip: z.boolean().default(true),
+  factCheckEnabled: z.boolean().default(true),
+  filters: z
+    .object({
+      speaker: z.union([
+        z.enum(['ALL', 'AFF', 'NEG', '1AC', '1NC', '2AC', '2NC', '1AR', '1NR', '2AR', '2NR']),
+        z.null(),
+      ])
+        .default('ALL')
+        .nullable(),
+      verdicts: z.array(verdictEnum).default([]),
+      searchQuery: z.string().default(''),
+      activeTab: z.enum(['ledger', 'map', 'rfd', 'sources']).default('ledger'),
+    })
+    .default({ speaker: 'ALL', verdicts: [], searchQuery: '', activeTab: 'ledger' }),
+  metrics: roundMetricsSchema.default({ roundScore: 0.67, evidenceQuality: 0.55, judgeLean: 'AFF' }),
+  claims: z.array(claimSchema).default([]),
+  map: z
+    .object({ nodes: z.array(mapNodeSchema).default([]), edges: z.array(mapEdgeSchema).default([]) })
+    .default({ nodes: [], edges: [] }),
+  rfd: z
+    .object({
+      summary: z.string().default('Judge has not submitted an RFD yet.'),
+      links: z.array(rfdLinkSchema).default([]),
+    })
+    .default({ summary: 'Judge has not submitted an RFD yet.', links: [] }),
+  sources: z.array(evidenceRefSchema).default([]),
+  timeline: z.array(timelineEventSchema).default([]),
 });
 
-export type DebateScorecardProps = z.infer<typeof debateScoreCardSchema>;
+export type DebateScorecardProps = z.infer<typeof debateScorecardSchema>;
+// Backwards compatibility alias (legacy code imports debateScoreCardSchema)
+export const debateScoreCardSchema = debateScorecardSchema;
 
-// ---------------- Types ----------------
-export type DebateScores = {
-  argumentStrength: number;
-  evidenceQuality: number;
-  factualAccuracy: number;
-  logicalConsistency: number;
-  bsMeter: number;
-  strawmanDetection: number;
-  adHominemScore: number;
-  humility?: number;
-  curiosityScore?: number;
-  teachingEffectiveness?: number;
-  learningImpact?: number;
-  [key: string]: any; // tolerate legacy/variant fields; normalization handles them
+// ------------------------------------------------------------
+// Helpers
+// ------------------------------------------------------------
+
+const verdictConfig: Record<
+  Verdict,
+  { label: string; className: string; icon: React.ComponentType<{ className?: string }> }
+> = {
+  ACCURATE: { label: 'Accurate', className: 'bg-emerald-600/15 text-emerald-400 border border-emerald-500/30', icon: CheckCircle2 },
+  PARTIALLY_TRUE: {
+    label: 'Partially True',
+    className: 'bg-amber-500/15 text-amber-300 border border-amber-400/30',
+    icon: ShieldMinus,
+  },
+  UNSUPPORTED: {
+    label: 'Unsupported',
+    className: 'bg-orange-500/15 text-orange-300 border border-orange-400/30',
+    icon: AlertTriangle,
+  },
+  FALSE: { label: 'False', className: 'bg-red-600/15 text-red-400 border border-red-500/30', icon: ShieldX },
 };
 
-export type FactSource = {
-  title: string;
-  url: string;
-  credibilityScore: number; // 0-100
-  relevanceScore: number; // 0-100
-  publicationDate: Date | string;
-  sourceType: 'Academic' | 'News' | 'Government' | 'Think Tank' | 'Blog';
+const impactConfig: Record<Impact, { label: string; className: string }> = {
+  KEY_VOTER: { label: 'Key Voter', className: 'bg-blue-500/10 text-blue-300 border border-blue-400/40' },
+  MAJOR: { label: 'Major', className: 'bg-sky-500/10 text-sky-300 border border-sky-400/40' },
+  MINOR: { label: 'Minor', className: 'bg-slate-500/10 text-slate-300 border border-slate-400/40' },
+  CREDIBILITY_HIT: {
+    label: 'Credibility Hit',
+    className: 'bg-purple-500/10 text-purple-300 border border-purple-400/40',
+  },
+  DROPPED: { label: 'Dropped', className: 'bg-neutral-500/10 text-neutral-300 border border-neutral-400/40' },
 };
 
-export type FactCheck = {
-  claim: string;
-  confidence: 'High' | 'Medium' | 'Low' | 'Uncertain';
-  verdict: 'Supported' | 'Refuted' | 'Partial' | 'Unverifiable';
-  sources: FactSource[];
-  contextNotes: string[];
-  timestamp: number;
+const speechLabels: Record<string, string> = {
+  AFF: 'Aff',
+  NEG: 'Neg',
+  '1AC': '1AC – Aff Constructive',
+  '1NC': '1NC – Neg Constructive',
+  '2AC': '2AC – Aff Constructive',
+  '2NC': '2NC – Neg Constructive',
+  '1AR': '1AR – Aff Rebuttal',
+  '1NR': '1NR – Neg Rebuttal',
+  '2AR': '2AR – Aff Rebuttal',
+  '2NR': '2NR – Neg Rebuttal',
 };
 
-export type DebateEvent = {
-  timestamp: number;
-  text: string;
-  type?: 'argument' | 'rebuttal' | 'fact_check' | 'score_change' | 'moderation';
-};
-
-type TopicSection = {
-  topic: string;
-  color: string;
-  weight: number;
-};
-
-// ---------------- Claim Ledger Types ----------------
-type ClaimVerdict = 'Supported' | 'Refuted' | 'Partial' | 'Unverifiable' | undefined;
-type ClaimVisual = { type: 'image' | 'chart' | 'link'; url: string; title?: string };
-type ClaimEntry = {
-  id: string;
-  timestamp: number;
-  text: string;
-  verdict?: ClaimVerdict;
-  speaker?: string;
-  side?: 'p1' | 'p2' | 'mod' | 'audience';
-  refutesClaimId?: string | null;
-  deepResearch?: { done: boolean; sources: FactSource[]; results?: string[] };
-  visuals?: ClaimVisual[];
-  points?: { crowd: number; bonus: number };
-};
-
-type ClaimLedger = {
-  entries: ClaimEntry[];
-  summary: {
-    claimsMade: number;
-    claimsCorrect: number;
-    refutes: number;
-    crowdPoints: number;
-    bonusPoints: number;
-    momentum: number; // consecutive correct claims
-  };
-};
-
-// ---------------- Helpers ----------------
-function clamp(v: number, min = 0, max = 100) {
-  return Math.max(min, Math.min(max, v));
-}
-
-function normalizeHumility(scores: Partial<DebateScores>): number {
-  const candidates = [
-    (scores as any).humilityScore,
-    (scores as any).humility,
-    (scores as any).humilityPercent,
-    (scores as any).humilityPct,
-    (scores as any).humilityIndex,
-    (scores as any).humilityWeighted,
-    (scores as any).humilityFinal,
-    (scores as any).humilityScoreFixed,
-    (scores as any).humilityScoreMaybe,
-    (scores as any).humilityScoreCap,
-    (scores as any).humilityScoreMin,
-    (scores as any).humilityScoreMax,
-    (scores as any).humilityScoreFloor,
-    (scores as any).humilityScoreCeil,
-    (scores as any).humilityScoreRound,
-    (scores as any).humilityScoreMedian,
-    (scores as any).humilityScoreMean,
-    (scores as any).humilityScoreVar,
-    (scores as any).humilityScoreStd,
-  ];
-  const value = candidates.find((v) => typeof v === 'number');
-  return clamp(typeof value === 'number' ? value : 70);
-}
-
-function computeLearningScore(scores: Partial<DebateScores>) {
-  const humility = normalizeHumility(scores);
-  const curiosity = clamp(scores.curiosityScore ?? 75);
-  const teaching = clamp(scores.teachingEffectiveness ?? 72);
-  return Math.round((humility + curiosity + teaching) / 3);
-}
-
-function Bar({ value, color }: { value: number; color: string }) {
+function verdictBadge(verdict?: Verdict) {
+  if (!verdict) return null;
+  const cfg = verdictConfig[verdict];
+  const Icon = cfg.icon;
   return (
-    <div className="w-full h-2 bg-black/30 rounded-full overflow-hidden">
-      <div
-        style={{ width: `${clamp(value)}%`, background: color }}
-        className="h-full transition-all duration-500"
-      />
+    <span className={cn('inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium', cfg.className)}>
+      <Icon className="w-3 h-3" />
+      {cfg.label}
+    </span>
+  );
+}
+
+function impactBadge(impact?: Impact) {
+  if (!impact) return null;
+  const cfg = impactConfig[impact];
+  return (
+    <span className={cn('inline-flex items-center gap-1 px-2 py-1 rounded-full text-[11px] font-medium', cfg.className)}>
+      <Sparkles className="w-3 h-3" />
+      {cfg.label}
+    </span>
+  );
+}
+
+function formatDate(value?: string) {
+  if (!value) return '—';
+  try {
+    return new Intl.DateTimeFormat('en', { month: 'short', day: 'numeric', year: 'numeric' }).format(new Date(value));
+  } catch {
+    return value;
+  }
+}
+
+// ------------------------------------------------------------
+// Components
+// ------------------------------------------------------------
+
+function MetricsStrip({ metrics, show }: { metrics: RoundMetrics; show: boolean }) {
+  if (!show) return null;
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-4 text-sm">
+      <div className="rounded-xl border border-white/5 bg-white/[0.03] p-4 flex items-center justify-between">
+        <div>
+          <p className="text-xs uppercase tracking-wide text-white/60">Round Score</p>
+          <p className="text-2xl font-semibold text-white">{Math.round(metrics.roundScore * 100)}%</p>
+        </div>
+        <GaugeCircle className="w-8 h-8 text-emerald-400" />
+      </div>
+      <div className="rounded-xl border border-white/5 bg-white/[0.03] p-4 flex items-center justify-between">
+        <div>
+          <p className="text-xs uppercase tracking-wide text-white/60">Judge Lean</p>
+          <p className="text-lg font-medium text-white">{metrics.judgeLean === 'NEUTRAL' ? 'Neutral' : metrics.judgeLean}</p>
+        </div>
+        <ArrowRightLeft className="w-8 h-8 text-sky-400" />
+      </div>
+      <div className="rounded-xl border border-white/5 bg-white/[0.03] p-4 flex items-center justify-between">
+        <div>
+          <p className="text-xs uppercase tracking-wide text-white/60">Evidence Quality</p>
+          <p className="text-2xl font-semibold text-white">{Math.round(metrics.evidenceQuality * 100)}%</p>
+        </div>
+        <BarChart3 className="w-8 h-8 text-amber-400" />
+      </div>
     </div>
   );
 }
 
-function MetricRow({
-  icon,
-  label,
-  left,
-  right,
-  colorL,
-  colorR,
+function LedgerTable({
+  claims,
+  factCheckEnabled,
 }: {
-  icon: React.ReactNode;
-  label: string;
-  left: number;
-  right: number;
-  colorL: string;
-  colorR: string;
+  claims: Claim[];
+  factCheckEnabled: boolean;
 }) {
+  if (!claims.length) {
+    return (
+      <div className="flex flex-col items-center justify-center py-16 text-white/60 gap-2 border border-dashed border-white/10 rounded-xl">
+        <ClipboardList className="w-10 h-10" />
+        <p className="font-medium">No claims captured yet.</p>
+        <p className="text-xs text-white/40">Record arguments with the voice agent or by typing in the transcript.</p>
+      </div>
+    );
+  }
+
   return (
-    <div className="grid grid-cols-2 gap-6 items-center text-xs md:text-sm">
-      <div className="flex items-center gap-2">
-        <span className="opacity-80">{icon}</span>
-        <span className="text-slate-200">
-          {label}: {clamp(left)}%
-        </span>
+    <div className="overflow-hidden rounded-xl border border-white/5 bg-white/[0.02]">
+      <table className="min-w-full text-sm text-white/80">
+        <thead className="bg-white/[0.04] text-xs uppercase tracking-wide text-white/60">
+          <tr>
+            <th className="px-4 py-3 text-left">Claim ID</th>
+            <th className="px-4 py-3 text-left">Speaker</th>
+            <th className="px-4 py-3 text-left">Core Claim</th>
+            {factCheckEnabled && <th className="px-4 py-3 text-left">Fact-Check Notes</th>}
+            <th className="px-4 py-3 text-left">Evaluation</th>
+            <th className="px-4 py-3 text-left">Impact</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-white/5">
+          {claims.map((claim) => (
+            <tr key={claim.id} className="hover:bg-white/[0.03]">
+              <td className="px-4 py-3 font-semibold text-white">{claim.id}</td>
+              <td className="px-4 py-3">
+                <div className="flex flex-col">
+                  <span className="font-medium text-white/90">{speechLabels[claim.speech] || claim.speech}</span>
+                  <span className="text-xs text-white/40">{claim.side}</span>
+                </div>
+              </td>
+              <td className="px-4 py-3">
+                <p className="text-white/90">{claim.quote}</p>
+                {claim.evidenceInline && (
+                  <p className="text-xs text-white/40 mt-1 italic">Evidence: {claim.evidenceInline}</p>
+                )}
+              </td>
+              {factCheckEnabled && (
+                <td className="px-4 py-3">
+                  {claim.factChecks.length === 0 ? (
+                    <span className="text-xs text-white/40">No research notes</span>
+                  ) : (
+                    <ul className="flex flex-col gap-1 text-xs text-white/70">
+                      {claim.factChecks.map((note) => (
+                        <li key={note.id} className="flex items-start gap-2">
+                          <Info className="w-3.5 h-3.5 mt-0.5 text-white/40" />
+                          <span>{note.summary}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </td>
+              )}
+              <td className="px-4 py-3 space-y-2">
+                {verdictBadge(claim.verdict as Verdict)}
+                {claim.factChecks.length > 0 && (
+                  <span className="block text-[11px] text-white/40">{claim.factChecks.length} research note(s)</span>
+                )}
+              </td>
+              <td className="px-4 py-3">{impactBadge(claim.impact as Impact)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function MapView({ nodes, edges }: { nodes: MapNode[]; edges: MapEdge[] }) {
+  if (!nodes.length) {
+    return (
+      <div className="flex flex-col items-center justify-center py-16 text-white/60 gap-2 border border-dashed border-white/10 rounded-xl">
+        <MapIcon className="w-10 h-10" />
+        <p className="font-medium">Argument map is empty.</p>
+        <p className="text-xs text-white/40">Drag claims from the ledger to build the skeleton of the round.</p>
       </div>
-      <div className="text-right text-slate-200">
-        {label}: {clamp(right)}%
+    );
+  }
+
+  return (
+    <div className="grid md:grid-cols-2 gap-4">
+      <div className="space-y-2">
+        {nodes.map((node) => (
+          <div
+            key={node.id}
+            className={cn(
+              'rounded-xl border px-4 py-3 backdrop-blur-sm flex flex-col gap-1 text-sm',
+              node.type === 'MAIN'
+                ? 'border-blue-400/40 bg-blue-500/10 text-blue-100'
+                : node.type === 'REASON'
+                  ? 'border-white/10 bg-white/5 text-white'
+                  : node.type === 'OBJECTION'
+                    ? 'border-orange-400/40 bg-orange-500/10 text-orange-100'
+                    : 'border-emerald-400/40 bg-emerald-500/10 text-emerald-100',
+            )}
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-xs uppercase tracking-wide text-white/60">
+                {node.type === 'MAIN'
+                  ? 'Main Claim'
+                  : node.type === 'REASON'
+                    ? 'Reason'
+                    : node.type === 'OBJECTION'
+                      ? 'Objection'
+                      : 'Rebuttal'}
+              </span>
+              {node.claimId && <span className="text-xs text-white/50">Linked to {node.claimId}</span>}
+            </div>
+            <p className="text-sm font-medium text-white/90">{node.label}</p>
+          </div>
+        ))}
       </div>
-      <div>
-        <Bar value={left} color={colorL} />
-      </div>
-      <div>
-        <Bar value={right} color={colorR} />
+      <div className="rounded-xl border border-white/5 bg-white/[0.03] px-4 py-4 text-sm text-white/70 space-y-3">
+        <h3 className="text-white font-medium flex items-center gap-2 text-sm">
+          <Layers3 className="w-4 h-4" />
+          Connections
+        </h3>
+        {edges.length === 0 ? (
+          <p className="text-xs text-white/40">No edges yet. Connect claims to show clash and support.</p>
+        ) : (
+          <ul className="space-y-2 text-xs">
+            {edges.map((edge) => {
+              const from = nodes.find((n) => n.id === edge.from);
+              const to = nodes.find((n) => n.id === edge.to);
+              return (
+                <li key={`${edge.from}-${edge.to}`} className="flex items-start gap-2">
+                  <ArrowRightLeft className="w-4 h-4 text-white/30 mt-[2px]" />
+                  <span>
+                    <strong>{from?.label || edge.from}</strong>
+                    <span className="text-white/40"> ↦ </span>
+                    <strong>{to?.label || edge.to}</strong>
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+        <div className="mt-4 text-xs text-white/40 space-y-1">
+          <p className="uppercase tracking-wide text-[10px] text-white/30">Legend</p>
+          <div className="flex flex-wrap gap-2 text-[11px]">
+            <span className="px-2 py-1 rounded-full bg-blue-500/15 text-blue-200">Main</span>
+            <span className="px-2 py-1 rounded-full bg-white/10 text-white/80">Reason</span>
+            <span className="px-2 py-1 rounded-full bg-orange-500/15 text-orange-200">Objection</span>
+            <span className="px-2 py-1 rounded-full bg-emerald-500/15 text-emerald-200">Rebuttal</span>
+          </div>
+        </div>
       </div>
     </div>
   );
 }
 
-// ---------------- Component ----------------
-export function DebateScorecard(props: DebateScorecardProps) {
-  const {
-    participant1,
-    participant2,
-    rounds = 5,
-    visualStyle = 'boxing',
-    showFactChecking = true,
-    showBSMeter = true,
-    showTimeline = true,
-    __custom_message_id,
-  } = props;
-
-  // Injected TLDraw shape state for persistence & sync
-  const injectedShapeState = (props as any)?.state as Record<string, unknown> | undefined;
-  const updateShapeState = (props as any)?.updateState as
-    | ((patch: Record<string, unknown> | ((prev: any) => any)) => void)
-    | undefined;
-
-  const effectiveMessageId = useMemo(() => {
-    if (__custom_message_id) return __custom_message_id;
-    const p1 = (participant1?.name || 'p1').replace(/\s+/g, '-').toLowerCase();
-    const p2 = (participant2?.name || 'p2').replace(/\s+/g, '-').toLowerCase();
-    return `debate-${p1}-vs-${p2}-${rounds}`;
-  }, [__custom_message_id, participant1?.name, participant2?.name, rounds]);
-
-  type DebateState = {
-    round: number;
-    p1: DebateScores;
-    p2: DebateScores;
-    factChecks: FactCheck[];
-    timeline: DebateEvent[];
-    liveClaim?: string;
-    topicSections?: TopicSection[];
-  };
-
-  const defaultScores: DebateScores = {
-    argumentStrength: 0,
-    evidenceQuality: 0,
-    factualAccuracy: 0,
-    logicalConsistency: 0,
-    bsMeter: 0,
-    strawmanDetection: 0,
-    adHominemScore: 0,
-    curiosityScore: 0,
-    teachingEffectiveness: 0,
-    learningImpact: 0,
-  };
-
-  const [state, setState] = useState<DebateState>({
-    round: 1,
-    p1: { ...defaultScores },
-    p2: { ...defaultScores },
-    factChecks: [],
-    timeline: [],
-    topicSections: [],
-  });
-
-  // --------------- Ledger State (Synced via TLDraw shape state) ---------------
-  const defaultLedger: ClaimLedger = {
-    entries: [],
-    summary: {
-      claimsMade: 0,
-      claimsCorrect: 0,
-      refutes: 0,
-      crowdPoints: 0,
-      bonusPoints: 0,
-      momentum: 0,
-    },
-  };
-
-  const [ledger, setLedger] = useState<ClaimLedger>(
-    ((injectedShapeState as any)?.debateLedger as ClaimLedger) || defaultLedger,
-  );
-  const [activeTab, setActiveTab] = useState<'summary' | 'ledger'>(
-    ((injectedShapeState as any)?.debateLedgerTab as 'summary' | 'ledger') || 'summary',
-  );
-
-  // Sync inbound TLDraw shape state changes
-  React.useEffect(() => {
-    const incoming = (injectedShapeState as any)?.debateLedger;
-    if (incoming && JSON.stringify(incoming) !== JSON.stringify(ledger)) {
-      setLedger(incoming as ClaimLedger);
-    }
-    const incomingTab = (injectedShapeState as any)?.debateLedgerTab;
-    if (incomingTab && incomingTab !== activeTab) {
-      setActiveTab(incomingTab as 'summary' | 'ledger');
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [injectedShapeState?.debateLedger, injectedShapeState?.debateLedgerTab]);
-
-  const recomputeSummary = useCallback((entries: ClaimEntry[]) => {
-    const claimsMade = entries.length;
-    const claimsCorrect = entries.filter((e) => e.verdict === 'Supported').length;
-    const refutes = entries.filter((e) => !!e.refutesClaimId).length;
-    const crowdPoints = entries.reduce((acc, e) => acc + (e.points?.crowd || 0), 0);
-    const bonusPoints = entries.reduce((acc, e) => acc + (e.points?.bonus || 0), 0);
-    let momentum = 0;
-    for (let i = entries.length - 1; i >= 0; i--) {
-      if (entries[i].verdict === 'Supported') momentum++;
-      else break;
-    }
-    return { claimsMade, claimsCorrect, refutes, crowdPoints, bonusPoints, momentum };
-  }, []);
-
-  const persistLedger = useCallback(
-    (updater: ClaimLedger | ((prev: ClaimLedger) => ClaimLedger)) => {
-      setLedger((prev) => {
-        const next = typeof updater === 'function' ? (updater as any)(prev) : updater;
-        try {
-          updateShapeState?.({ debateLedger: next });
-        } catch {}
-        return next;
-      });
-    },
-    [updateShapeState],
-  );
-
-  const persistTab = useCallback(
-    (tab: 'summary' | 'ledger') => {
-      setActiveTab(tab);
-      try {
-        updateShapeState?.({ debateLedgerTab: tab });
-      } catch {}
-    },
-    [updateShapeState],
-  );
-
-  const handleAIUpdate = useCallback(
-    (patch: Record<string, unknown>) => {
-      // Dev visibility for round-trip UI updates
-      try {
-        console.log('[DebateScorecard] handleAIUpdate', typeof patch === 'object' ? JSON.stringify(patch) : String(patch));
-      } catch {}
-      // Normalize wrapper shapes like { update: {...} } or { updates: {...} }
-      const patchData = ((patch as any)?.update || (patch as any)?.updates || patch) as Record<string, unknown>;
-      // Alias common keys
-      if ((patchData as any)['BS meter'] !== undefined && (patchData as any).bsMeter === undefined) {
-        (patchData as any).bsMeter = (patchData as any)['BS meter'];
-      }
-      if ((patchData as any)['live fact checks'] !== undefined && (patchData as any).factChecks === undefined) {
-        (patchData as any).factChecks = (patchData as any)['live fact checks'];
-      }
-      // Label → numeric helpers
-      const labelToPercent = (label: unknown): number | null => {
-        if (typeof label !== 'string') return null;
-        const l = label.trim().toLowerCase();
-        if (!l) return null;
-        if (/^very\s*low|poor|bad|weak|unreliable$/.test(l)) return 10;
-        if (/^low|below\s*average|questionable|mixed$/.test(l)) return 30;
-        if (/^moderate|average|ok|fair$/.test(l)) return 50;
-        if (/^high|good|strong|reliable$/.test(l)) return 75;
-        if (/^very\s*high|excellent|outstanding$/.test(l)) return 90;
-        if (/^true|supported$/.test(l)) return 90;
-        if (/^false|refuted$/.test(l)) return 10;
-        return null;
-      };
-      const bsLabelToPercent = (label: unknown): number | null => {
-        if (typeof label !== 'string') return null;
-        const l = label.trim().toLowerCase();
-        if (/^very\s*low$/.test(l)) return 5;
-        if (/^low$/.test(l)) return 15;
-        if (/^medium|moderate$/.test(l)) return 35;
-        if (/^high$/.test(l)) return 65;
-        if (/^very\s*high$/.test(l)) return 85;
-        return null;
-      };
-      setState((prev) => {
-        if (!prev) return prev;
-        const next = { ...prev } as DebateState;
-
-        if (typeof patchData.round === 'number') next.round = patchData.round as number;
-        if (typeof (patchData as any).topic === 'string') {
-          // topic is prop-only; ignore in state
-        }
-        // Absolute assignments only from explicit p1/p2
-        const p1Patch = (patchData as any).p1;
-        const p2Patch = (patchData as any).p2;
-        if (p1Patch && typeof p1Patch === 'object') {
-          const incoming = p1Patch as Partial<DebateScores>;
-          const merged: DebateScores = { ...next.p1 } as DebateScores;
-          for (const [k, v] of Object.entries(incoming)) {
-            const current = (merged as any)[k];
-            const numeric = typeof v === 'number' ? v : labelToPercent(v);
-            if (typeof current === 'number' && numeric !== null) {
-              (merged as any)[k] = numeric;
-            }
-          }
-          next.p1 = merged;
-        }
-        if (p2Patch && typeof p2Patch === 'object') {
-          const incoming = p2Patch as Partial<DebateScores>;
-          const merged: DebateScores = { ...next.p2 } as DebateScores;
-          for (const [k, v] of Object.entries(incoming)) {
-            const current = (merged as any)[k];
-            const numeric = typeof v === 'number' ? v : labelToPercent(v);
-            if (typeof current === 'number' && numeric !== null) {
-              (merged as any)[k] = numeric;
-            }
-          }
-          next.p2 = merged;
-        }
-        // Apply additive deltas when provided
-        if ((patchData as any).p1Delta && typeof (patchData as any).p1Delta === 'object') {
-          const incoming = (patchData as any).p1Delta as Partial<DebateScores>;
-          const merged: DebateScores = { ...next.p1 } as DebateScores;
-          for (const [k, v] of Object.entries(incoming)) {
-            const current = (merged as any)[k];
-            if (typeof current === 'number' && typeof v === 'number') (merged as any)[k] = clamp(current + v);
-          }
-          next.p1 = merged;
-        }
-        if ((patchData as any).p2Delta && typeof (patchData as any).p2Delta === 'object') {
-          const incoming = (patchData as any).p2Delta as Partial<DebateScores>;
-          const merged: DebateScores = { ...next.p2 } as DebateScores;
-          for (const [k, v] of Object.entries(incoming)) {
-            const current = (merged as any)[k];
-            if (typeof current === 'number' && typeof v === 'number') (merged as any)[k] = clamp(current + v);
-          }
-          next.p2 = merged;
-        }
-        // Map common top-level fields to both sides for convenience
-        const topMap: Array<[string, keyof DebateScores]> = [
-          ['strength', 'argumentStrength'],
-          ['logic', 'logicalConsistency'],
-          ['sources', 'evidenceQuality'],
-          ['accuracy', 'factualAccuracy'],
-          ['bsMeter', 'bsMeter'],
-        ];
-        for (const [from, to] of topMap) {
-          const raw = (patchData as any)[from] ?? (from === 'bsMeter' ? (patchData as any)['BS meter'] : undefined);
-          let numeric: number | null = null;
-          if (typeof raw === 'number') numeric = raw;
-          else numeric = from === 'bsMeter' ? bsLabelToPercent(raw) : labelToPercent(raw);
-          if (numeric !== null) {
-            (next.p1 as any)[to] = numeric;
-            (next.p2 as any)[to] = numeric;
-          }
-        }
-        if (Array.isArray((patchData as any).factChecks)) {
-          const raw = (patchData as any).factChecks as any[];
-          const normalized: FactCheck[] = raw.map((fc) => {
-            const ts = typeof fc?.timestamp === 'number' ? fc.timestamp : Date.now();
-            let sources = fc?.sources as any[] | undefined;
-            if (!sources && typeof fc?.sourcesText === 'string' && fc.sourcesText.trim()) {
-              sources = [{ title: fc.sourcesText.trim(), url: '', credibilityScore: 0, relevanceScore: 0, publicationDate: '', sourceType: 'Blog' }];
-            }
-            return {
-              claim: String(fc?.claim || ''),
-              verdict:
-                fc?.verdict ||
-                (typeof fc?.status === 'string'
-                  ? fc.status.toLowerCase() === 'true'
-                    ? 'Supported'
-                    : fc.status.toLowerCase() === 'false'
-                      ? 'Refuted'
-                      : 'Unverifiable'
-                  : 'Unverifiable'),
-              confidence: typeof fc?.confidence === 'number' ? fc.confidence : 0,
-              sources: Array.isArray(sources) ? (sources as any) : [],
-              contextNotes: Array.isArray(fc?.contextNotes)
-                ? fc.contextNotes
-                : typeof fc?.reason === 'string'
-                  ? [fc.reason]
-                  : [],
-              timestamp: ts,
-            } as FactCheck;
-          });
-          next.factChecks = normalized;
-        }
-        if (Array.isArray((patchData as any).timeline)) {
-          const raw = (patchData as any).timeline as any[];
-          const normalized: DebateEvent[] = raw.map((e) => {
-            let text = typeof e?.text === 'string' ? e.text : String(e?.event || '');
-            if (!text && (e as any)?.argument) {
-              const parts = [
-                (e as any)?.speaker ? String((e as any).speaker) + ':' : null,
-                (e as any)?.argument || (e as any)?.claim || null,
-                (e as any)?.counter ? `— Counter: ${(e as any).counter}` : null,
-              ].filter(Boolean);
-              text = parts.join(' ');
-            }
-            let ts: number;
-            if (typeof e?.timestamp === 'number') ts = e.timestamp;
-            else if (typeof e?.timestamp === 'string' && e.timestamp.toLowerCase() === 'now') ts = Date.now();
-            else ts = Date.now();
-            return { timestamp: ts, text, type: e?.type } as DebateEvent;
-          });
-          next.timeline = normalized;
-        }
-        if (Array.isArray((patchData as any).topicSections)) {
-          next.topicSections = (patchData as any).topicSections as TopicSection[];
-        }
-        if (typeof (patchData as any).liveClaim === 'string') {
-          next.liveClaim = (patchData as any).liveClaim as string;
-        }
-        try {
-          console.log(
-            '[DebateScorecard] state after patch',
-            JSON.stringify(
-              {
-                p1: next.p1,
-                p2: next.p2,
-                liveClaim: next.liveClaim,
-                lastFactCheck: (next.factChecks || []).slice(-1)[0] || null,
-                timelineTail: (next.timeline || []).slice(-3),
-              },
-              null,
-              2,
-            ),
-          );
-        } catch {}
-        return next;
-      });
-
-      // ---------------- Claim Ledger Handling ----------------
-      try {
-        const now = Date.now();
-        const appendClaim = (raw: any) => {
-          let entry: ClaimEntry | null = null;
-          if (typeof raw === 'string') {
-            entry = {
-              id: nanoid(),
-              timestamp: now,
-              text: raw,
-              verdict: undefined,
-              speaker: undefined,
-              side: undefined,
-              refutesClaimId: null,
-              deepResearch: { done: false, sources: [], results: [] },
-              visuals: [],
-              points: { crowd: 0, bonus: 0 },
-            };
-          } else if (raw && typeof raw === 'object') {
-            entry = {
-              id: String((raw as any).id || nanoid()),
-              timestamp:
-                typeof (raw as any).timestamp === 'number' ? (raw as any).timestamp : now,
-              text: String((raw as any).text || (raw as any).claim || ''),
-              verdict: (raw as any).verdict,
-              speaker: (raw as any).speaker,
-              side: (raw as any).side,
-              refutesClaimId: (raw as any).refutesClaimId || null,
-              deepResearch: (raw as any).deepResearch || { done: false, sources: [], results: [] },
-              visuals: Array.isArray((raw as any).visuals) ? (raw as any).visuals : [],
-              points: (raw as any).points || { crowd: 0, bonus: 0 },
-            };
-          }
-          if (!entry || !entry.text) return;
-          persistLedger((prev) => {
-            const entries = [...prev.entries, entry as ClaimEntry];
-            const summary = recomputeSummary(entries);
-            // Combo bonus: clever improvement - reward streaks
-            if (summary.momentum >= 3) {
-              const bonus = 1; // small combo bonus
-              summary.bonusPoints += bonus;
-            }
-            return { entries, summary };
-          });
-        };
-
-        // Add claims from various keys
-        const singleClaim = (patchData as any).addClaim || (patchData as any).claim || (patchData as any).statement || (patchData as any).assertion;
-        if (singleClaim) appendClaim(singleClaim);
-        const claimsArray = (patchData as any).claims || (patchData as any).claimsToAdd;
-        if (Array.isArray(claimsArray)) {
-          for (const c of claimsArray) appendClaim(c);
-        }
-
-        // Replace entire ledger (if provided)
-        if (Array.isArray((patchData as any).claimsReplace)) {
-          const normalized = ((patchData as any).claimsReplace as any[]).map((c) => ({
-            id: String((c as any).id || nanoid()),
-            timestamp: typeof (c as any).timestamp === 'number' ? (c as any).timestamp : now,
-            text: String((c as any).text || (c as any).claim || ''),
-            verdict: (c as any).verdict as ClaimVerdict,
-            speaker: (c as any).speaker,
-            side: (c as any).side,
-            refutesClaimId: (c as any).refutesClaimId || null,
-            deepResearch: (c as any).deepResearch || { done: false, sources: [], results: [] },
-            visuals: Array.isArray((c as any).visuals) ? (c as any).visuals : [],
-            points: (c as any).points || { crowd: 0, bonus: 0 },
-          } as ClaimEntry));
-          persistLedger({ entries: normalized, summary: recomputeSummary(normalized) });
-        }
-
-        // Helpers to find target claim
-        const findTargetIndex = (target: any, entries: ClaimEntry[]) => {
-          if (!entries.length) return -1;
-          if (!target || target === 'latest' || target === 'last') return entries.length - 1;
-          const byId = entries.findIndex((e) => e.id === target);
-          if (byId >= 0) return byId;
-          if (typeof target === 'number' && target >= 0 && target < entries.length) return target;
-          return entries.length - 1;
-        };
-
-        // Verdict update
-        if ((patchData as any).verdict || (patchData as any).setVerdict) {
-          const verdict = (patchData as any).verdict || (patchData as any).setVerdict;
-          const target = (patchData as any).claimId || (patchData as any).targetClaim || 'latest';
-          persistLedger((prev) => {
-            const entries = [...prev.entries];
-            const i = findTargetIndex(target, entries);
-            if (i >= 0) entries[i] = { ...entries[i], verdict };
-            const summary = recomputeSummary(entries);
-            return { entries, summary };
-          });
-        }
-
-        // Refute link
-        if ((patchData as any).refute || (patchData as any).refutes) {
-          const refutesTarget = (patchData as any).refutes || (patchData as any).refute;
-          const target = (patchData as any).claimId || (patchData as any).targetClaim || 'latest';
-          persistLedger((prev) => {
-            const entries = [...prev.entries];
-            const i = findTargetIndex(target, entries);
-            const j = findTargetIndex(refutesTarget, entries);
-            if (i >= 0 && j >= 0) entries[i] = { ...entries[i], refutesClaimId: entries[j].id };
-            const summary = recomputeSummary(entries);
-            return { entries, summary };
-          });
-        }
-
-        // Deep research enrichment
-        if ((patchData as any).deepResearch || (patchData as any).research) {
-          const r = (patchData as any).deepResearch || (patchData as any).research;
-          const target = r?.claimId || (patchData as any).claimId || 'latest';
-          persistLedger((prev) => {
-            const entries = [...prev.entries];
-            const i = findTargetIndex(target, entries);
-            if (i >= 0) {
-              const sources: FactSource[] = Array.isArray(r?.sources) ? r.sources : [];
-              const results: string[] = Array.isArray(r?.results)
-                ? (r.results as string[])
-                : typeof r?.summary === 'string'
-                  ? [r.summary]
-                  : [];
-              const deepResearch = { done: true, sources, results };
-              entries[i] = { ...entries[i], deepResearch };
-            }
-            const summary = recomputeSummary(entries);
-            return { entries, summary };
-          });
-        }
-
-        // Award points
-        if ((patchData as any).award || (patchData as any).points || (patchData as any).crowdPoints || (patchData as any).bonusPoints) {
-          const award = (patchData as any).award || (patchData as any).points || {};
-          const crowd = (patchData as any).crowdPoints ?? award.crowd ?? 0;
-          const bonus = (patchData as any).bonusPoints ?? award.bonus ?? 0;
-          const target = award.claimId || (patchData as any).claimId || 'latest';
-          persistLedger((prev) => {
-            const entries = [...prev.entries];
-            const i = findTargetIndex(target, entries);
-            if (i >= 0) {
-              const prevPoints = entries[i].points || { crowd: 0, bonus: 0 };
-              entries[i] = {
-                ...entries[i],
-                points: { crowd: (prevPoints.crowd || 0) + (crowd || 0), bonus: (prevPoints.bonus || 0) + (bonus || 0) },
-              };
-            }
-            const summary = recomputeSummary(entries);
-            // Also add to global summary in case not tied to a particular claim
-            summary.crowdPoints += typeof (patchData as any).crowdPoints === 'number' ? (patchData as any).crowdPoints : 0;
-            summary.bonusPoints += typeof (patchData as any).bonusPoints === 'number' ? (patchData as any).bonusPoints : 0;
-            return { entries, summary };
-          });
-        }
-
-        // Switch tab
-        if (typeof (patchData as any).switchTab === 'string' || typeof (patchData as any).view === 'string') {
-          const tab = ((patchData as any).switchTab || (patchData as any).view).toLowerCase();
-          if (tab.includes('ledger')) persistTab('ledger');
-          else if (tab.includes('score') || tab.includes('summary')) persistTab('summary');
-        }
-
-        // Pin claim to canvas (clever additional feature)
-        if ((patchData as any).pinClaim) {
-          const target = (patchData as any).pinClaim; // 'latest' | id | index
-          const entries = ledger.entries;
-          const idx = findTargetIndex(target, entries);
-          const text = idx >= 0 ? `Claim: ${entries[idx].text}\nVerdict: ${entries[idx].verdict || '—'}` : 'Claim';
-          try {
-            window.dispatchEvent(
-              new CustomEvent('tldraw:create_note', {
-                detail: { text },
-              }),
-            );
-          } catch {}
-        }
-      } catch {}
-    },
-    [setState, persistLedger, persistTab, recomputeSummary, ledger.entries],
-  );
-
-  useComponentRegistration(
-    effectiveMessageId,
-    'DebateScorecard',
-    { ...props },
-    'default',
-    handleAIUpdate,
-  );
-
-  // Visual style presets (simple switch for now)
-  const frameClass =
-    visualStyle === 'boxing'
-      ? 'border-[3px] border-yellow-400 shadow-[0_0_20px_rgba(255,215,0,0.3)] bg-gradient-to-br from-[#1a1a2e] to-[#16213e]'
-      : visualStyle === 'gameboy'
-        ? 'border-2 border-emerald-600 bg-emerald-900/30'
-        : visualStyle === 'modern'
-          ? 'border border-slate-700 bg-slate-900/60'
-          : 'border border-slate-800 bg-slate-900/40';
-
-  const p1Color = participant1?.color || '#3B82F6';
-  const p2Color = participant2?.color || '#EF4444';
-
-  const learningScoreP1 = computeLearningScore(state?.p1 || {});
-  const learningScoreP2 = computeLearningScore(state?.p2 || {});
-
-  const latestFact = (state?.factChecks || []).slice(-1)[0];
-  const latestClaim = ledger.entries[ledger.entries.length - 1];
-  const mostRecentCorrect = [...ledger.entries].reverse().find((e) => e.verdict === 'Supported');
-  const mostRecentWrong = [...ledger.entries].reverse().find((e) => e.verdict === 'Refuted');
-
+function RFDView({ summary, links, claims }: { summary: string; links: RFDLink[]; claims: Claim[] }) {
   return (
-    <LoadingWrapper
-      state={LoadingState.COMPLETE}
-      skeleton={SkeletonPatterns.card}
-      showLoadingIndicator={false}
-    >
-      <div
-        className={cn('rounded-xl text-white font-mono', frameClass)}
-        style={{ fontFamily: 'Orbitron, monospace' }}
-      >
-        {/* Header */}
-        <div className="flex items-center justify-between px-4 py-2 border-b border-yellow-500/50">
-          <div className="flex items-center gap-2">
-            <span className="text-lg">🥊</span>
-            <span className="tracking-wider font-semibold">DEBATE ARENA</span>
-          </div>
-          <div className="flex items-center gap-3 text-sm opacity-80">
-            <button
-              onClick={() => persistTab(activeTab === 'summary' ? 'ledger' : 'summary')}
-              className="px-2 py-1 rounded-md border border-yellow-500/40 hover:border-yellow-400/80 transition-colors"
-            >
-              {activeTab === 'summary' ? (
-                <span className="inline-flex items-center gap-1"><History className="w-4 h-4" /> Ledger</span>
-              ) : (
-                <span className="inline-flex items-center gap-1"><Trophy className="w-4 h-4" /> Summary</span>
-              )}
-            </button>
-            <div className="flex items-center gap-2">
-              <Timer className="w-4 h-4" />
-              <span>
-                Round {state?.round ?? 1}/{rounds}
-              </span>
-            </div>
-          </div>
-        </div>
-
-        {/* Participants Row */}
-        <div className="grid grid-cols-2 gap-4 px-4 pt-4">
-          {/* P1 */}
-          <div className="p-3 rounded-lg border-2" style={{ borderColor: p1Color }}>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="w-2.5 h-2.5 rounded-full" style={{ background: p1Color }} />
-                <span className="text-sm">{participant1?.name || 'P1'}</span>
-              </div>
-              <div className="text-yellow-300">
-                {Array.from({ length: Math.round((state?.p1?.argumentStrength ?? 80) / 20) }).map(
-                  (_, i) => (
-                    <span key={i}>🔥</span>
-                  ),
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* P2 */}
-          <div className="p-3 rounded-lg border-2" style={{ borderColor: p2Color }}>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="w-2.5 h-2.5 rounded-full" style={{ background: p2Color }} />
-                <span className="text-sm">{participant2?.name || 'P2'}</span>
-              </div>
-              <div className="text-yellow-300">
-                {Array.from({ length: Math.round((state?.p2?.argumentStrength ?? 80) / 20) }).map(
-                  (_, i) => (
-                    <span key={i}>🔥</span>
-                  ),
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Summary or Ledger View */}
-        <AnimatePresence mode="wait">
-          {activeTab === 'summary' ? (
-            <motion.div key="summary" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.18 }}>
-              {/* Metrics */}
-              <div className="px-4 py-3">
-                <MetricRow
-                  icon={<Sword className="w-4 h-4" />}
-                  label="Strength"
-                  left={state?.p1?.argumentStrength ?? 0}
-                  right={state?.p2?.argumentStrength ?? 0}
-                  colorL={p1Color}
-                  colorR={p2Color}
-                />
-                <MetricRow
-                  icon={<Brain className="w-4 h-4" />}
-                  label="Logic"
-                  left={state?.p1?.logicalConsistency ?? 0}
-                  right={state?.p2?.logicalConsistency ?? 0}
-                  colorL={p1Color}
-                  colorR={p2Color}
-                />
-                <MetricRow
-                  icon={<BookOpen className="w-4 h-4" />}
-                  label="Sources"
-                  left={state?.p1?.evidenceQuality ?? 0}
-                  right={state?.p2?.evidenceQuality ?? 0}
-                  colorL={p1Color}
-                  colorR={p2Color}
-                />
-                <MetricRow
-                  icon={<Target className="w-4 h-4" />}
-                  label="Accuracy"
-                  left={state?.p1?.factualAccuracy ?? 0}
-                  right={state?.p2?.factualAccuracy ?? 0}
-                  colorL={p1Color}
-                  colorR={p2Color}
-                />
-                {showBSMeter && (
-                  <MetricRow
-                    icon={<ShieldAlert className="w-4 h-4" />}
-                    label="BS Meter"
-                    left={state?.p1?.bsMeter ?? 0}
-                    right={state?.p2?.bsMeter ?? 0}
-                    colorL={p1Color}
-                    colorR={p2Color}
-                  />
-                )}
-              </div>
-
-              {/* Animated Counters Row */}
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-3 px-4 pb-2">
-                <motion.div layout className="rounded-lg border border-yellow-500/30 p-2 text-sm flex items-center gap-2">
-                  <Gavel className="w-4 h-4 text-yellow-300" />
-                  <div>
-                    <div className="text-xs opacity-80">Claims Made</div>
-                    <div className="text-lg font-semibold">{ledger.summary.claimsMade}</div>
-                  </div>
-                </motion.div>
-                <motion.div layout className="rounded-lg border border-green-500/30 p-2 text-sm flex items-center gap-2">
-                  <CheckCircle2 className="w-4 h-4 text-green-400" />
-                  <div>
-                    <div className="text-xs opacity-80">Claims Correct</div>
-                    <div className="text-lg font-semibold">{ledger.summary.claimsCorrect}</div>
-                  </div>
-                </motion.div>
-                <motion.div layout className="rounded-lg border border-blue-500/30 p-2 text-sm flex items-center gap-2">
-                  <Users className="w-4 h-4 text-blue-300" />
-                  <div>
-                    <div className="text-xs opacity-80">Crowd Points</div>
-                    <div className="text-lg font-semibold">{ledger.summary.crowdPoints}</div>
-                  </div>
-                </motion.div>
-                <motion.div layout className="rounded-lg border border-purple-500/30 p-2 text-sm flex items-center gap-2">
-                  <Sparkles className="w-4 h-4 text-purple-300" />
-                  <div>
-                    <div className="text-xs opacity-80">Bonus Points</div>
-                    <div className="text-lg font-semibold">{ledger.summary.bonusPoints}</div>
-                  </div>
-                </motion.div>
-                <motion.div layout className="rounded-lg border border-red-500/30 p-2 text-sm flex items-center gap-2">
-                  <XCircle className="w-4 h-4 text-red-300" />
-                  <div>
-                    <div className="text-xs opacity-80">Refutes</div>
-                    <div className="text-lg font-semibold">{ledger.summary.refutes}</div>
-                  </div>
-                </motion.div>
-                {/* Clever improvement: Momentum meter */}
-                <motion.div layout className="rounded-lg border border-amber-500/30 p-2 text-sm">
-                  <div className="flex items-center gap-2 mb-1">
-                    <FlaskConical className="w-4 h-4 text-amber-300" />
-                    <div className="text-xs opacity-80">Momentum</div>
-                  </div>
-                  <div className="w-full h-2 bg-black/30 rounded-full overflow-hidden">
-                    <div
-                      style={{ width: `${Math.min(100, ledger.summary.momentum * 20)}%`, background: 'linear-gradient(90deg,#f59e0b,#84cc16)' }}
-                      className="h-full transition-all duration-500"
-                    />
-                  </div>
-                </motion.div>
-              </div>
-
-              {/* Latest claim widgets */}
-              <div className="px-4 pb-3">
-                <div className="rounded-md border border-yellow-500/30 p-2">
-                  <div className="text-xs uppercase tracking-wider opacity-80 mb-1">Most Recent Claim</div>
-                  {latestClaim ? (
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="text-sm">
-                        <div className="text-slate-100">“{latestClaim.text}”</div>
-                        <div className="text-xs text-slate-400 mt-1">
-                          Verdict: {latestClaim.verdict || '—'}
-                          {latestClaim.deepResearch?.done && (
-                            <span className="ml-2 inline-flex items-center gap-1 text-emerald-300">
-                              <FlaskConical className="w-3 h-3" /> Deep research
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                      <button
-                        className="text-xs px-2 py-1 rounded-md border border-yellow-500/40 hover:border-yellow-400/80 transition-colors inline-flex items-center gap-1"
-                        onClick={() => {
-                          try {
-                            window.dispatchEvent(new CustomEvent('tldraw:create_note', { detail: { text: `Claim: ${latestClaim.text}\nVerdict: ${latestClaim.verdict || '—'}` } }));
-                          } catch {}
-                        }}
-                      >
-                        <Pin className="w-3 h-3" /> Pin
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="text-xs text-slate-400">No claims yet.</div>
-                  )}
-                </div>
-
-                <div className="grid grid-cols-2 gap-2 mt-2">
-                  <div className="rounded-md border border-green-500/30 p-2">
-                    <div className="text-xs uppercase tracking-wider opacity-80 mb-1">Most Recent Right</div>
-                    {mostRecentCorrect ? (
-                      <div className="text-sm text-slate-100">“{mostRecentCorrect.text}”</div>
-                    ) : (
-                      <div className="text-xs text-slate-500">—</div>
-                    )}
-                  </div>
-                  <div className="rounded-md border border-red-500/30 p-2">
-                    <div className="text-xs uppercase tracking-wider opacity-80 mb-1">Most Recent Wrong</div>
-                    {mostRecentWrong ? (
-                      <div className="text-sm text-slate-100">“{mostRecentWrong.text}”</div>
-                    ) : (
-                      <div className="text-xs text-slate-500">—</div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </motion.div>
-          ) : (
-            <motion.div key="ledger" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.18 }}>
-              {/* Post-modern ledger table */}
-              <div className="px-4 pb-3">
-                <div className="text-xs uppercase tracking-wider opacity-80 mb-2">Claim Ledger</div>
-                <div className="rounded-lg overflow-hidden border border-slate-700">
-                  <div className="grid grid-cols-6 gap-0 text-[11px] bg-slate-900/60">
-                    <div className="px-2 py-2 border-b border-slate-700">Time</div>
-                    <div className="px-2 py-2 border-b border-slate-700 col-span-2">Claim</div>
-                    <div className="px-2 py-2 border-b border-slate-700">Verdict</div>
-                    <div className="px-2 py-2 border-b border-slate-700">Research</div>
-                    <div className="px-2 py-2 border-b border-slate-700">Points</div>
-                  </div>
-                  <div className="max-h-52 overflow-auto">
-                    {ledger.entries.length === 0 && (
-                      <div className="px-3 py-4 text-xs text-slate-500">No entries yet. As claims are made, they will appear here with research and sources.</div>
-                    )}
-                    {ledger.entries.map((e) => (
-                      <div key={e.id} className="grid grid-cols-6 gap-0 text-[11px] border-b border-slate-800/60 hover:bg-slate-800/30 transition-colors">
-                        <div className="px-2 py-2 text-slate-400">
-                          {new Date(e.timestamp).toLocaleTimeString([], { minute: '2-digit', second: '2-digit' })}
-                        </div>
-                        <div className="px-2 py-2 col-span-2">
-                          <div className="text-slate-100">{e.text}</div>
-                          {e.refutesClaimId && (
-                            <div className="text-[10px] text-amber-300">refutes #{e.refutesClaimId.slice(0, 5)}</div>
-                          )}
-                          {Array.isArray(e.visuals) && e.visuals.length > 0 && (
-                            <div className="mt-1 flex gap-1 flex-wrap">
-                              {e.visuals.slice(0, 3).map((v, i) => (
-                                <a key={i} href={v.url} target="_blank" rel="noreferrer" className="text-[10px] underline opacity-80 hover:opacity-100">{v.title || v.type}</a>
-                              ))}
-                              {e.visuals.length > 3 && <span className="text-[10px] opacity-60">+{e.visuals.length - 3} more</span>}
-                            </div>
-                          )}
-                        </div>
-                        <div className="px-2 py-2">
-                          {e.verdict || '—'}
-                        </div>
-                        <div className="px-2 py-2">
-                          {e.deepResearch?.done ? (
-                            <div>
-                              <div className="text-emerald-300 inline-flex items-center gap-1"><FlaskConical className="w-3 h-3" /> done</div>
-                              {Array.isArray(e.deepResearch?.sources) && e.deepResearch!.sources.length > 0 && (
-                                <div className="mt-1 space-y-0.5">
-                                  {e.deepResearch!.sources.slice(0, 2).map((s, i) => (
-                                    <a key={i} href={s.url} target="_blank" rel="noreferrer" className="block text-[10px] underline text-sky-300 truncate">{s.title}</a>
-                                  ))}
-                                  {e.deepResearch!.sources.length > 2 && (
-                                    <div className="text-[10px] text-slate-500">+{e.deepResearch!.sources.length - 2} more</div>
-                                  )}
-                                </div>
-                              )}
-                              {Array.isArray(e.deepResearch?.results) && e.deepResearch!.results.length > 0 && (
-                                <div className="mt-1 text-[10px] text-slate-300 line-clamp-2">{e.deepResearch!.results[0]}</div>
-                              )}
-                            </div>
-                          ) : (
-                            <span className="text-slate-500">—</span>
-                          )}
-                        </div>
-                        <div className="px-2 py-2">
-                          <div className="text-sky-300">Crowd: {e.points?.crowd || 0}</div>
-                          <div className="text-purple-300">Bonus: {e.points?.bonus || 0}</div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* Learning Score */}
-        <div className="grid grid-cols-2 gap-4 px-4 pb-3">
-          <div className="flex items-center gap-2 text-sm">
-            <Trophy className="w-4 h-4 text-yellow-400" />
-            <span>Learning Score: {learningScoreP1}%</span>
-          </div>
-          <div className="flex items-center gap-2 text-sm justify-end">
-            <Trophy className="w-4 h-4 text-yellow-400" />
-            <span>Learning Score: {learningScoreP2}%</span>
-          </div>
-        </div>
-
-        {/* Fact Check */}
-        {showFactChecking && (
-          <div className="border-t border-yellow-500/30 px-4 py-2">
-            <div className="flex items-center gap-2 text-xs uppercase tracking-wider opacity-80">
-              <span>📊</span>
-              <span>Live Fact Check</span>
-            </div>
-            <div className="mt-1 text-sm">
-              {state?.liveClaim && (
-                <div className="text-slate-200 flex items-start gap-2">
-                  <Info className="w-4 h-4 mt-0.5 text-blue-300" />
-                  <span>“{state.liveClaim}” — checking sources…</span>
-                </div>
-              )}
-              {latestFact ? (
-                <div className="mt-1 text-slate-100 flex items-start gap-2">
-                  <CheckCircle2 className="w-4 h-4 text-green-400 mt-0.5" />
-                  <span>
-                    {latestFact.verdict === 'Supported' && '✅'}
-                    {latestFact.verdict === 'Refuted' && '❌'}
-                    {latestFact.verdict === 'Partial' && '⚠️'}
-                    {latestFact.verdict === 'Unverifiable' && '❓'}{' '}
-                    {latestFact.sources?.[0]?.title || 'Source reviewed'} ({latestFact.confidence}{' '}
-                    conf.)
-                  </span>
-                </div>
-              ) : (
-                <div className="text-slate-400 text-xs">Awaiting claims for verification…</div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Topic Sections */}
-        {Array.isArray(state?.topicSections) && state.topicSections.length > 0 && (
-          <div className="border-t border-yellow-500/30 px-4 py-2">
-            <div className="text-xs uppercase tracking-wider opacity-80">🧩 Topic Sections</div>
-            <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {state.topicSections.map((s, i) => (
-                <div
-                  key={i}
-                  className="rounded-md border p-2 text-xs"
-                  style={{ borderColor: s.color }}
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="font-semibold" style={{ color: s.color }}>
-                      {s.topic}
-                    </span>
-                    <span className="opacity-80">weight {Math.round((s.weight || 0) * 100)}%</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Timeline */}
-        {showTimeline && (
-          <div className="border-t border-yellow-500/30 px-4 py-2">
-            <div className="text-xs uppercase tracking-wider opacity-80">⏱️ Debate Timeline</div>
-            <div className="mt-1 space-y-1 max-h-40 overflow-auto pr-1">
-              {(state?.timeline || []).slice(-6).map((e, i) => (
-                <div key={i} className="text-xs text-slate-300">
-                  {new Date(e.timestamp).toLocaleTimeString([], {
-                    minute: '2-digit',
-                    second: '2-digit',
-                  })}
-                  : {e.text}
-                </div>
-              ))}
-              {(state?.timeline || []).length === 0 && (
-                <div className="text-xs text-slate-500">No events yet. Start debating!</div>
-              )}
-            </div>
-          </div>
+    <div className="grid md:grid-cols-5 gap-4">
+      <div className="md:col-span-3 rounded-xl border border-white/5 bg-white/[0.03] p-5 space-y-3 text-sm text-white/80">
+        <h3 className="text-white font-semibold flex items-center gap-2 text-base">
+          <Gavel className="w-5 h-5" />
+          Reason For Decision
+        </h3>
+        <p className="leading-relaxed whitespace-pre-line text-white/80">{summary}</p>
+      </div>
+      <div className="md:col-span-2 rounded-xl border border-white/5 bg-white/[0.03] p-5 text-sm space-y-3">
+        <h3 className="text-white font-medium flex items-center gap-2 text-sm">
+          <Link2 className="w-4 h-4" />
+          Linked Voters
+        </h3>
+        {links.length === 0 ? (
+          <p className="text-xs text-white/40">Judge has not linked any claims to the RFD.</p>
+        ) : (
+          <ul className="space-y-2 text-xs text-white/70">
+            {links.map((link) => {
+              const claim = claims.find((c) => c.id === link.claimId);
+              return (
+                <li key={link.id} className="border border-white/5 rounded-lg p-2">
+                  <p className="font-semibold text-white/90">{claim?.id || link.claimId}</p>
+                  <p className="text-[11px] text-white/50">{claim?.quote || 'Claim not found'}</p>
+                  <p className="mt-1 text-white/70">“{link.excerpt}”</p>
+                </li>
+              );
+            })}
+          </ul>
         )}
       </div>
-    </LoadingWrapper>
+    </div>
   );
 }
 
-DebateScorecard.displayName = 'DebateScorecard';
+function SourcesView({ sources }: { sources: EvidenceRef[] }) {
+  if (!sources.length) {
+    return (
+      <div className="flex flex-col items-center justify-center py-16 text-white/60 gap-2 border border-dashed border-white/10 rounded-xl">
+        <BookOpen className="w-10 h-10" />
+        <p className="font-medium">No sources logged yet.</p>
+        <p className="text-xs text-white/40">As claims are fact-checked, add citations so the audit trail stays complete.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="overflow-hidden rounded-xl border border-white/5 bg-white/[0.02]">
+      <table className="min-w-full text-sm text-white/80">
+        <thead className="bg-white/[0.04] text-xs uppercase tracking-wide text-white/60">
+          <tr>
+            <th className="px-4 py-3 text-left">Title</th>
+            <th className="px-4 py-3 text-left">Type</th>
+            <th className="px-4 py-3 text-left">Credibility</th>
+            <th className="px-4 py-3 text-left">Last Verified</th>
+            <th className="px-4 py-3 text-left">Link</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-white/5">
+          {sources.map((source) => (
+            <tr key={source.id} className="hover:bg-white/[0.03]">
+              <td className="px-4 py-3">
+                <p className="text-white/90 font-medium">{source.title || 'Untitled source'}</p>
+                <p className="text-xs text-white/40">{source.url}</p>
+              </td>
+              <td className="px-4 py-3 text-xs text-white/60">{source.type}</td>
+              <td className="px-4 py-3 text-xs text-white/60">{source.credibility}</td>
+              <td className="px-4 py-3 text-xs text-white/60">{formatDate(source.lastVerified)}</td>
+              <td className="px-4 py-3 text-xs">
+                {source.url ? (
+                  <a
+                    href={source.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1 text-sky-300 hover:text-sky-200"
+                  >
+                    Open <ExternalLink className="w-3 h-3" />
+                  </a>
+                ) : (
+                  <span className="text-white/30">—</span>
+                )}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function Timeline({ events }: { events: TimelineEvent[] }) {
+  if (!events.length) return null;
+  return (
+    <div className="mt-8">
+      <h3 className="text-white font-medium flex items-center gap-2 text-sm">
+        <History className="w-4 h-4" />
+        Timeline
+      </h3>
+      <ul className="mt-3 space-y-2 text-xs text-white/70">
+        {events
+          .slice()
+          .sort((a, b) => a.timestamp - b.timestamp)
+          .map((event) => (
+            <li key={event.id} className="flex items-start gap-2">
+              <span className="text-white/30">{new Date(event.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+              <span className="text-white/80">{event.text}</span>
+            </li>
+          ))}
+      </ul>
+    </div>
+  );
+}
+
+// ------------------------------------------------------------
+// Main Component
+// ------------------------------------------------------------
+
+export function DebateScorecard(props: DebateScorecardProps) {
+  const parsed = useMemo(() => debateScorecardSchema.parse(props), [props]);
+  const messageId = (props as any).__custom_message_id || parsed.componentId || 'debate-scorecard';
+  useComponentRegistration(messageId, 'DebateScorecard', parsed, 'canvas');
+
+  const [localFilters, setLocalFilters] = useState(parsed.filters);
+  const [factCheckToggle, setFactCheckToggle] = useState(parsed.factCheckEnabled);
+
+  useEffect(() => {
+    setLocalFilters(parsed.filters);
+  }, [parsed.filters]);
+
+  useEffect(() => {
+    setFactCheckToggle(parsed.factCheckEnabled);
+  }, [parsed.factCheckEnabled]);
+
+  const filteredClaims = useMemo(() => {
+    return parsed.claims.filter((claim) => {
+      if (localFilters.speaker && localFilters.speaker !== 'ALL') {
+        if (localFilters.speaker === 'AFF' && claim.side !== 'AFF') return false;
+        if (localFilters.speaker === 'NEG' && claim.side !== 'NEG') return false;
+        if (
+          ['1AC', '1NC', '2AC', '2NC', '1AR', '1NR', '2AR', '2NR'].includes(localFilters.speaker || '') &&
+          claim.speech !== localFilters.speaker
+        )
+          return false;
+      }
+      if (localFilters.verdicts.length && (!claim.verdict || !localFilters.verdicts.includes(claim.verdict))) {
+        return false;
+      }
+      if (localFilters.searchQuery.trim().length) {
+        const q = localFilters.searchQuery.toLowerCase();
+        if (!claim.quote.toLowerCase().includes(q) && !(claim.evidenceInline || '').toLowerCase().includes(q)) {
+          return false;
+        }
+      }
+      return true;
+    });
+  }, [parsed.claims, localFilters]);
+
+  return (
+    <div className="w-full rounded-2xl border border-white/5 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.08),transparent_55%)] p-6 md:p-8 text-white font-sans">
+      <header className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+          <p className="text-xs uppercase tracking-[0.25em] text-white/40">Debate Analysis</p>
+          <h2 className="text-2xl md:text-3xl font-semibold text-white mt-1">{parsed.topic}</h2>
+          <p className="text-sm text-white/50">{parsed.round}</p>
+        </div>
+        <div className="flex flex-wrap gap-2 text-xs">
+          <button
+            className={cn(
+              'inline-flex items-center gap-2 px-3 py-2 rounded-full border border-white/10 bg-white/[0.04] hover:bg-white/[0.07] transition',
+              localFilters.activeTab === 'ledger' && 'border-white/30 bg-white/[0.09]',
+            )}
+            onClick={() => setLocalFilters((prev) => ({ ...prev, activeTab: 'ledger' }))}
+          >
+            <FileText className="w-4 h-4" /> Ledger
+          </button>
+          <button
+            className={cn(
+              'inline-flex items-center gap-2 px-3 py-2 rounded-full border border-white/10 bg-white/[0.04] hover:bg-white/[0.07] transition',
+              localFilters.activeTab === 'map' && 'border-white/30 bg-white/[0.09]',
+            )}
+            onClick={() => setLocalFilters((prev) => ({ ...prev, activeTab: 'map' }))}
+          >
+            <MapIcon className="w-4 h-4" /> Map
+          </button>
+          <button
+            className={cn(
+              'inline-flex items-center gap-2 px-3 py-2 rounded-full border border-white/10 bg-white/[0.04] hover:bg-white/[0.07] transition',
+              localFilters.activeTab === 'rfd' && 'border-white/30 bg-white/[0.09]',
+            )}
+            onClick={() => setLocalFilters((prev) => ({ ...prev, activeTab: 'rfd' }))}
+          >
+            <Gavel className="w-4 h-4" /> Judge RFD
+          </button>
+          <button
+            className={cn(
+              'inline-flex items-center gap-2 px-3 py-2 rounded-full border border-white/10 bg-white/[0.04] hover:bg-white/[0.07] transition',
+              localFilters.activeTab === 'sources' && 'border-white/30 bg-white/[0.09]',
+            )}
+            onClick={() => setLocalFilters((prev) => ({ ...prev, activeTab: 'sources' }))}
+          >
+            <BookOpen className="w-4 h-4" /> Sources
+          </button>
+        </div>
+      </header>
+
+      <div className="mt-6 grid gap-3 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-2">
+            <GaugeCircle className="w-4 h-4" />
+            <span className="font-medium text-white/80">{Math.round(parsed.metrics.roundScore * 100)}% round score</span>
+          </div>
+          <label className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-2 cursor-pointer">
+            <ShieldCheck className="w-4 h-4" />
+            <span className="font-medium text-white/70">Fact-check</span>
+            <input
+              type="checkbox"
+              className="accent-emerald-400"
+              checked={factCheckToggle}
+              onChange={(e) => setFactCheckToggle(e.target.checked)}
+            />
+          </label>
+          <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-2">
+            <Filter className="w-4 h-4" />
+            <select
+              className="bg-transparent text-white/80 text-xs focus:outline-none"
+              value={localFilters.speaker || 'ALL'}
+              onChange={(e) => setLocalFilters((prev) => ({ ...prev, speaker: e.target.value as any }))}
+            >
+              {['ALL', 'AFF', 'NEG', '1AC', '1NC', '2AC', '2NC', '1AR', '1NR', '2AR', '2NR'].map((value) => (
+                <option key={value} value={value} className="text-black">
+                  {value}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+        <div className="flex gap-2 justify-end">
+          <div className="relative flex-1">
+            <Search className="w-4 h-4 text-white/30 absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              type="search"
+              placeholder="Search claims, evidence, notes"
+              value={localFilters.searchQuery}
+              onChange={(e) => setLocalFilters((prev) => ({ ...prev, searchQuery: e.target.value }))}
+              className="w-full rounded-full border border-white/10 bg-white/[0.05] pl-9 pr-3 py-2 text-xs focus:outline-none focus:border-white/30"
+            />
+          </div>
+          <button className="inline-flex items-center gap-2 px-3 py-2 rounded-full border border-white/10 bg-white/[0.04] hover:bg-white/[0.07] text-xs">
+            <FileOutput className="w-4 h-4" /> Export
+          </button>
+        </div>
+      </div>
+
+      <MetricsStrip metrics={parsed.metrics} show={parsed.showMetricsStrip} />
+
+      <div className="mt-6">
+        {localFilters.activeTab === 'ledger' && (
+          <LedgerTable claims={filteredClaims} factCheckEnabled={factCheckToggle} />
+        )}
+        {localFilters.activeTab === 'map' && (
+          <MapView nodes={parsed.map.nodes} edges={parsed.map.edges} />
+        )}
+        {localFilters.activeTab === 'rfd' && (
+          <RFDView summary={parsed.rfd.summary} links={parsed.rfd.links} claims={parsed.claims} />
+        )}
+        {localFilters.activeTab === 'sources' && <SourcesView sources={parsed.sources} />}
+      </div>
+
+      <div className="mt-10 grid gap-4 md:grid-cols-3 text-xs text-white/70">
+        <div className="rounded-xl border border-white/5 bg-white/[0.03] p-4 space-y-2">
+          <p className="text-white font-medium flex items-center gap-2 text-sm">
+            <ShieldAlert className="w-4 h-4" /> Verdict legend
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {Object.entries(verdictConfig).map(([key, cfg]) => (
+              <span key={key} className={cn('px-2 py-1 rounded-full text-[11px] font-medium', cfg.className)}>
+                {cfg.label}
+              </span>
+            ))}
+          </div>
+        </div>
+        <div className="rounded-xl border border-white/5 bg-white/[0.03] p-4 space-y-2">
+          <p className="text-white font-medium flex items-center gap-2 text-sm">
+            <Info className="w-4 h-4" /> How to use
+          </p>
+          <ol className="list-decimal list-inside space-y-1 text-white/70">
+            <li>Record every claim verbatim.</li>
+            <li>Verify sources and add fact-check notes.</li>
+            <li>Set verdict + impact as you weigh voters.</li>
+            <li>Link key voters to the judge’s RFD.</li>
+          </ol>
+        </div>
+        <div className="rounded-xl border border-white/5 bg-white/[0.03] p-4 space-y-2">
+          <p className="text-white font-medium flex items-center gap-2 text-sm">
+            <Sparkles className="w-4 h-4" /> Tips
+          </p>
+          <ul className="space-y-1 text-white/70">
+            <li>Drag ledger rows into the map to expose clash.</li>
+            <li>Use filters to prep a judge-facing summary fast.</li>
+            <li>Export JSON to rehydrate the scorecard later.</li>
+          </ul>
+        </div>
+      </div>
+
+      <Timeline events={parsed.timeline} />
+    </div>
+  );
+}
 
 export default DebateScorecard;
