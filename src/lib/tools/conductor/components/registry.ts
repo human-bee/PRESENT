@@ -9,7 +9,7 @@ import { ActionItemTracker, actionItemTrackerSchema } from '@/components/ui/acti
 import {
   LivekitParticipantTile,
   livekitParticipantTileSchema,
-} from '@/components/ui/livekit-participant-tile';
+} from '@/components/ui/livekit/participant/livekit-participant-tile';
 import {
   LivekitRoomConnector,
   livekitRoomConnectorSchema,
