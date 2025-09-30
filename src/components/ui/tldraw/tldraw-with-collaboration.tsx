@@ -7,7 +7,7 @@ import { nanoid } from 'nanoid';
 import { CustomMainMenu, CustomToolbarWithTranscript } from './tldraw-with-persistence';
 import { ReactNode, useCallback, useContext, useEffect, useMemo, useState, useRef } from 'react';
 import { RemoteTLStoreWithStatus, useSyncDemo } from '@tldraw/sync';
-import { CanvasLiveKitContext } from './livekit-room-connector';
+import { CanvasLiveKitContext } from './livekit/livekit-room-connector';
 import { ComponentStoreContext } from './tldraw-canvas';
 import type { customShapeUtil, customShape } from './tldraw-canvas';
 // Re-exported shape util type may include MermaidStreamShapeUtil via dynamic load in CanvasSpace
@@ -17,7 +17,7 @@ import { RoomEvent } from 'livekit-client';
 import TldrawSnapshotBroadcaster from '@/components/TldrawSnapshotBroadcaster';
 import TldrawSnapshotReceiver from '@/components/TldrawSnapshotReceiver';
 import { createLogger } from '@/lib/utils';
-import { normalizeMermaidText, getMermaidLastNode } from '@/components/tool-dispatcher';
+import { normalizeMermaidText, getMermaidLastNode } from '@/components/TO BE ARCHIVED/tool-dispatcher';
 
 function renderPlaintextFromRichText(_editor: any, richText: any | undefined): string {
   // Fallback: best-effort text extraction

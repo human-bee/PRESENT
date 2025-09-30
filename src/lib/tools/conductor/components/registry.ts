@@ -1,11 +1,11 @@
-import { YoutubeEmbed, youtubeEmbedSchema } from "@/components/ui/youtube-embed";
+import { YoutubeEmbed, youtubeEmbedSchema } from "@/components/ui/youtube/youtube-embed";
 import { z } from "zod";
-import { WeatherForecast, weatherForecastSchema } from '@/components/ui/weather-forecast';
-import { RetroTimerRegistry, retroTimerSchema } from '@/components/ui/retro-timer-registry';
-import { RetroTimerEnhanced, retroTimerEnhancedSchema } from '@/components/ui/retro-timer-enhanced';
-import { DocumentEditor, documentEditorSchema } from '@/components/ui/document-editor';
-import { ResearchPanel, researchPanelSchema } from '@/components/ui/research-panel';
-import { ActionItemTracker, actionItemTrackerSchema } from '@/components/ui/action-item-tracker';
+import { WeatherForecast, weatherForecastSchema } from '@/components/ui/integrations/weather-forecast';
+import { RetroTimerRegistry, retroTimerSchema } from '@/components/ui/productivity/retro-timer-registry';
+import { RetroTimerEnhanced, retroTimerEnhancedSchema } from '@/components/ui/productivity/retro-timer-enhanced';
+import { DocumentEditor, documentEditorSchema } from '@/components/ui/documents/document-editor';
+import { ResearchPanel, researchPanelSchema } from '@/components/ui/research/research-panel';
+import { ActionItemTracker, actionItemTrackerSchema } from '@/components/ui/productivity/action-item-tracker';
 import {
   LivekitParticipantTile,
   livekitParticipantTileSchema,
@@ -13,20 +13,20 @@ import {
 import {
   LivekitRoomConnector,
   livekitRoomConnectorSchema,
-} from '@/components/ui/livekit-room-connector';
+} from '@/components/ui/livekit/livekit-room-connector';
 import {
   LivekitScreenShareTile,
   livekitScreenShareTileSchema,
-} from '@/components/ui/livekit-screenshare-tile';
+} from '@/components/ui/livekit/livekit-screenshare-tile';
 
 import LiveCaptions, { liveCaptionsSchema } from '@/components/LiveCaptions';
-import LinearKanbanBoard, { linearKanbanSchema } from '@/components/ui/linear-kanban-board';
-import { OnboardingGuide, onboardingGuideSchema } from '@/components/ui/onboarding-guide';
-import { Message } from '@/components/ui/message';
+import LinearKanbanBoard, { linearKanbanSchema } from '@/components/ui/productivity/linear-kanban-board';
+import { OnboardingGuide, onboardingGuideSchema } from '@/components/ui/onboarding/onboarding-guide';
+import { Message } from '@/components/ui/messaging/message';
 import { ComponentToolbox } from '@/components/ui/component-toolbox';
 
 // Add debate scorecard @debate-scorecard.tsx
-import DebateScorecard, { debateScoreCardSchema } from '@/components/ui/debate-scorecard';
+import DebateScorecard, { debateScoreCardSchema } from '@/components/ui/productivity/debate-scorecard';
 
 import { aiResponseSchema, componentToolboxSchema } from "@/lib/custom";
 

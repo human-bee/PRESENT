@@ -13,8 +13,8 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { CanvasSpace } from '@/components/ui/canvas-space';
-import { MessageThreadCollapsible } from '@/components/ui/message-thread-collapsible';
-import { CanvasLiveKitContext } from '@/components/ui/livekit-room-connector';
+import { MessageThreadCollapsible } from '@/components/ui/messaging/message-thread-collapsible';
+import { CanvasLiveKitContext } from '@/components/ui/livekit/livekit-room-connector';
 import SessionSync from '@/components/SessionSync';
 import {
   loadMcpServers,
@@ -26,7 +26,7 @@ import { Room, ConnectionState, RoomEvent, VideoPresets, RoomOptions } from 'liv
 import { RoomContext } from '@livekit/components-react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/use-auth';
-import { ToolDispatcher } from '@/components/tool-dispatcher';
+import { ToolDispatcher } from '@/components/TO BE ARCHIVED/tool-dispatcher';
 import { SystemRegistrySync } from '@/components/ui/system-registry-sync';
 import { initializeMCPBridge } from '@/lib/mcp-bridge';
 import { AgentCapabilitiesBridge } from '@/components/ui/agent-capabilities-bridge';

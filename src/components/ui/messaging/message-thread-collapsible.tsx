@@ -1,6 +1,6 @@
 'use client';
 
-import type { messageVariants } from '@/components/ui/message';
+import type { messageVariants } from '@/components/ui/messaging/message';
 import { ThreadDropdown } from '@/components/ui/thread-dropdown';
 import { ScrollableMessageContainer } from '@/components/ui/scrollable-message-container';
 import { cn } from '@/lib/utils';

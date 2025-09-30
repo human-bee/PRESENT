@@ -1,28 +1,28 @@
 'use client';
 
-import type { messageVariants } from '@/components/ui/message';
+import type { messageVariants } from '@/components/ui/messaging/message';
 import {
   MessageInput,
   MessageInputError,
   MessageInputSubmitButton,
   MessageInputTextarea,
   MessageInputToolbar,
-} from '@/components/ui/message-input';
+} from '@/components/ui/messaging/message-input';
 import {
   MessageSuggestions,
   MessageSuggestionsList,
   MessageSuggestionsStatus,
-} from '@/components/ui/message-suggestions';
-import { ScrollableMessageContainer } from '@/components/ui/scrollable-message-container';
-import { ThreadContainer, useThreadContainerContext } from '@/components/ui/thread-container';
-import { ThreadContent, ThreadContentMessages } from '@/components/ui/thread-content';
+} from '@/components/ui/messaging/message-suggestions';
+import { ScrollableMessageContainer } from '@/components/ui/messaging/scrollable-message-container';
+import { ThreadContainer, useThreadContainerContext } from '@/components/ui/messaging/thread-container';
+import { ThreadContent, ThreadContentMessages } from '@/components/ui/messaging/thread-content';
 import {
   ThreadHistory,
   ThreadHistoryHeader,
   ThreadHistoryList,
   ThreadHistoryNewButton,
   ThreadHistorySearch,
-} from '@/components/ui/thread-history';
+} from '@/components/ui/messaging/thread-history';
 import { useMergedRef } from '@/lib/thread-hooks';
 import { Suggestion } from '@custom-ai/react';
 import type { VariantProps } from 'class-variance-authority';

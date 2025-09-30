@@ -1,6 +1,6 @@
 'use client';
 
-import { DiffWord } from '@/app/hackathon-canvas/documents/document-state';
+import { DiffWord } from '@/lib/stores/document-state';
 import { cn } from '@/lib/utils';
 import {
   ArrowUp,

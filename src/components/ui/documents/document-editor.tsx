@@ -1,10 +1,6 @@
 import { useCallback, useEffect, useRef } from 'react';
-import {
-  Document,
-  documentState,
-  generateWordDiff,
-} from '@/app/hackathon-canvas/documents/document-state';
-import { MarkdownViewerEditable } from '@/components/ui/markdown-viewer-editable';
+import { Document, documentState, generateWordDiff } from '@/lib/stores/document-state';
+import { MarkdownViewerEditable } from '@/components/ui/documents/markdown-viewer-editable';
 import { useComponentRegistration } from '@/lib/component-registry';
 import { z } from 'zod';
 import { useState } from 'react';

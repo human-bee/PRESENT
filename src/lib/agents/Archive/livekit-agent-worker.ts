@@ -25,11 +25,11 @@ config({ path: join(process.cwd(), '.env.local') });
 import { defineAgent, JobContext, cli, WorkerOptions, multimodal } from '@livekit/agents';
 import { RoomEvent, Track } from 'livekit-client';
 import * as openai from '@livekit/agents-plugin-openai';
-import { DecisionEngine, DecisionEngineConfig } from '../decision-engine';
-import { DebateJudgeManager, isStartDebate } from './debate-judge';
-import type { SystemCapabilities } from './capabilities';
-import { defaultCustomComponents } from './capabilities';
-import { runTldrawControlAgent } from './tldraw-control-agent';
+import { DecisionEngine, DecisionEngineConfig } from '../../decision-engine';
+import { DebateJudgeManager, isStartDebate } from '../debate-judge';
+import type { SystemCapabilities } from '../capabilities';
+import { defaultCustomComponents } from '../capabilities';
+import { runTldrawControlAgent } from '../tldraw-control-agent';
 
 console.log('🚀 Starting custom Voice Agent Worker...');
 console.log('🔧 Environment Check:');
@@ -53,7 +53,7 @@ export default defineAgent({
     console.log('✅ [Agent] Successfully connected to room!');
 
     // Query capabilities via data channel with fallback to defaults
-    const { queryCapabilities } = await import('./capabilities');
+    const { queryCapabilities } = await import('../capabilities');
 
     let systemCapabilities: any = null;
     try {
@@ -527,8 +527,8 @@ Embrace your constraint. In your silence, let your creativity and helpfulness sh
     // Build instructions via extracted builder
     let instructionsText = '';
     try {
-      const { buildVoiceAgentInstructions } = await import('./instructions');
-      const { defaultCustomComponents } = await import('./capabilities');
+      const { buildVoiceAgentInstructions } = await import('../instructions');
+      const { defaultCustomComponents } = await import('../capabilities');
       instructionsText = buildVoiceAgentInstructions(
         (systemCapabilities as any) || ({} as any),
         defaultCustomComponents,

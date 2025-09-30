@@ -1,6 +1,6 @@
-import MarkdownViewerEditable from '@/components/ui/markdown-viewer-editable';
+import MarkdownViewerEditable from '@/components/ui/documents/markdown-viewer-editable';
 import { useEffect, useState } from 'react';
-import { Document, documentState } from '../../../app/hackathon-canvas/documents/document-state';
+import { Document, documentState } from '@/lib/stores/document-state';
 
 export default function DocumentViewerWrapper({
   documentId,
