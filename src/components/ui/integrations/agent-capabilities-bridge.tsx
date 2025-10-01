@@ -18,7 +18,7 @@ export function AgentCapabilitiesBridge() {
     if (!room) return;
     const bus = createLiveKitBus(room);
 
-    const off = bus.on('capability_query', async (payload: any) => {
+    const off = bus.on('capability_query', async () => {
       try {
         // Build capabilities from the SystemRegistry
         const exported = systemRegistry.exportForAgent();

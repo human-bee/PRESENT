@@ -1,6 +1,6 @@
 import React from 'react';
 import dynamic from 'next/dynamic';
-import { ResearchResult } from './research/research-panel';
+import { ResearchResult } from './research-panel';
 import { cn } from '@/lib/utils';
 import {
   ExternalLink,
@@ -13,11 +13,11 @@ import {
   FileText,
   Layout,
 } from 'lucide-react';
-import { useToolDispatcher } from '../tool-dispatcher';
+import { useToolDispatcher } from '../../TO BE REFACTORED/tool-dispatcher';
 
 // Dynamic import for YouTube embed - only load when needed
 const YoutubeEmbed = dynamic(
-  () => import('./youtube-embed').then((mod) => ({ default: mod.YoutubeEmbed })),
+  () => import('../youtube/youtube-embed').then((mod) => ({ default: mod.YoutubeEmbed })),
   {
     ssr: false,
     loading: () => (

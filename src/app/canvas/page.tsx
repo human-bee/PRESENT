@@ -12,7 +12,7 @@
 // export const dynamic = 'force-dynamic';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { CanvasSpace } from '@/components/ui/canvas-space';
+import { CanvasSpace } from '@/components/ui/canvas/canvas-space';
 import { MessageThreadCollapsible } from '@/components/ui/messaging/message-thread-collapsible';
 import { CanvasLiveKitContext } from '@/components/ui/livekit/livekit-room-connector';
 import SessionSync from '@/components/SessionSync';
@@ -21,12 +21,12 @@ import {
   suppressDevelopmentWarnings,
   suppressViolationWarnings,
 } from '@/lib/mcp-utils';
-import { EnhancedMcpProvider } from '@/components/ui/enhanced-mcp-provider';
+import { EnhancedMcpProvider } from '@/components/ui/mcp/enhanced-mcp-provider';
 import { Room, ConnectionState, RoomEvent, VideoPresets, RoomOptions } from 'livekit-client';
 import { RoomContext } from '@livekit/components-react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/use-auth';
-import { ToolDispatcher } from '@/components/TO BE ARCHIVED/tool-dispatcher';
+import { ToolDispatcher } from '@/components/TO BE REFACTORED/tool-dispatcher';
 import { SystemRegistrySync } from '@/components/ui/system-registry-sync';
 import { initializeMCPBridge } from '@/lib/mcp-bridge';
 import { AgentCapabilitiesBridge } from '@/components/ui/agent-capabilities-bridge';

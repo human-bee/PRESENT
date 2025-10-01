@@ -19,7 +19,7 @@ import {
 import { usecustomThreadInput } from '@custom-ai/react';
 import { MediaDeviceFailure, RpcError, RpcInvocationData } from 'livekit-client';
 import { ReactNode, useEffect, useMemo, useRef, useState } from 'react';
-import { generateRandomUserId } from '../../lib/helper';
+import { generateRandomUserId } from '@/lib/helper';
 
 // Child component that will handle RPC registration
 export function RpcHandler({ contextKey }: { contextKey: string }) {

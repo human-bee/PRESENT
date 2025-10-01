@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef } from 'react';
 import DOMPurify from 'dompurify';
 import { nanoid } from 'nanoid';
 
@@ -41,7 +41,6 @@ export function MermaidStreamRenderer({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const lastGoodSvgRef = useRef<string>('');
   const lastErrorRef = useRef<string | null>(null);
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const compileIdRef = useRef<number>(0);
   const mountedRef = useRef(true);
 

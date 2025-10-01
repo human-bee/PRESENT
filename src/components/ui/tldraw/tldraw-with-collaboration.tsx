@@ -17,7 +17,7 @@ import { RoomEvent } from 'livekit-client';
 import TldrawSnapshotBroadcaster from '@/components/TldrawSnapshotBroadcaster';
 import TldrawSnapshotReceiver from '@/components/TldrawSnapshotReceiver';
 import { createLogger } from '@/lib/utils';
-import { normalizeMermaidText, getMermaidLastNode } from '@/components/TO BE ARCHIVED/tool-dispatcher';
+import { normalizeMermaidText, getMermaidLastNode } from '@/components/TO BE REFACTORED/tool-dispatcher';
 
 function renderPlaintextFromRichText(_editor: any, richText: any | undefined): string {
   // Fallback: best-effort text extraction

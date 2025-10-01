@@ -46,15 +46,13 @@ import type { Editor } from 'tldraw';
 import { nanoid } from 'nanoid';
 import { Toaster } from 'react-hot-toast';
 
-import { systemRegistry } from '@/lib/system-registry';
 import { ComponentRegistry } from '@/lib/component-registry';
 import { createShapeId } from 'tldraw';
-
-import { calculateInitialSize } from '@/lib/component-sizing'; // Add import for dynamic sizing
 import { CanvasLiveKitContext } from './livekit/livekit-room-connector';
 import { useRoomContext } from '@livekit/components-react';
 import { createLiveKitBus } from '../../lib/livekit/livekit-bus';
 import { components } from '@/lib/custom';
+import { useCanvasComponentStore } from './hooks/useCanvasComponentStore';
 
 // Dynamic imports for heavy tldraw components - only load when needed
 
@@ -173,22 +171,17 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
 
       logger.info('✅ Created component toolbox shape');
     }
-  }, [editor]);
+  }, [editor, logger]);
 
-  // Map message IDs to tldraw shape IDs
-  const [messageIdToShapeIdMap, setMessageIdToShapeIdMap] = useState<Map<string, string>>(
-    new Map(),
-  );
-
-  // Track which message IDs have been added to prevent duplicates
-  const [addedMessageIds, setAddedMessageIds] = useState<Set<string>>(new Set());
-
-  // Store React components separately from tldraw shapes to avoid structuredClone issues
-  const componentStore = useRef<Map<string, React.ReactNode>>(new Map());
-  // Queue of components received before editor is ready
-  const pendingComponentsRef = useRef<
-    Array<{ messageId: string; node: React.ReactNode; name?: string }>
-  >([]);
+  const {
+    componentStore,
+    setMessageIdToShapeIdMap,
+    addedMessageIds,
+    setAddedMessageIds,
+    addComponentToCanvas,
+    queuePendingComponent,
+    drainPendingComponents,
+  } = useCanvasComponentStore(editor, logger);
 
   // Provide shape utils synchronously at first render so the store registers them on mount
   const customShapeUtils = React.useMemo(() => {
@@ -322,7 +315,7 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
     return () => {
       window.removeEventListener('custom:rehydrateComponents', handleRehydration as EventListener);
     };
-  }, [editor]);
+  }, [editor, componentStore, logger, setAddedMessageIds, setMessageIdToShapeIdMap]);
 
   // Canvas persistence is now handled by TldrawWithPersistence component
 
@@ -343,135 +336,11 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
       componentStore.current.clear(); // Clear the component store
     }
     previousThreadId.current = thread?.id ?? null;
-  }, [thread, editor]);
+  }, [thread, editor, componentStore, setMessageIdToShapeIdMap, setAddedMessageIds, logger]);
 
   /**
    * Add or update a component on the tldraw canvas
    */
-  const addComponentToCanvas = useCallback(
-    (messageId: string, component: React.ReactNode, componentName?: string) => {
-      if (!editor) {
-        console.warn('Editor not available, cannot add or update component on canvas.');
-        return;
-      }
-
-      // Store the component separately to avoid structuredClone issues
-      componentStore.current.set(messageId, component);
-      try {
-        window.dispatchEvent(new Event('present:component-store-updated'));
-      } catch { }
-
-      // Note: ComponentRegistry integration temporarily disabled to prevent infinite loops
-      // Will be re-enabled once tldraw stability issues are resolved
-
-      /*
-    // Register with the new ComponentRegistry system
-    if (component && React.isValidElement(component)) {
-      const componentType = typeof component.type === 'function' 
-        ? (component.type as { displayName?: string; name?: string }).displayName || 
-          (component.type as { displayName?: string; name?: string }).name || 'CanvasComponent'
-        : 'CanvasComponent';
-      
-      // Import ComponentRegistry dynamically to avoid circular imports
-      import('@/lib/component-registry').then(({ ComponentRegistry }) => {
-        ComponentRegistry.register({
-          messageId,
-          componentType,
-          props: (component.props || {}) as Record<string, unknown>,
-          contextKey: 'canvas', // Canvas context
-          timestamp: Date.now(),
-          updateCallback: (patch) => {
-            console.log(`[Canvas] Component ${messageId} received update:`, patch);
-            // The component should handle its own updates via the registry wrapper
-          }
-        });
-      });
-    }
-    */
-
-      const existingShapeId = messageIdToShapeIdMap.get(messageId) as
-        | import('tldraw').TLShapeId
-        | undefined;
-
-      if (existingShapeId) {
-        // Update existing shape - only update non-component props to avoid cloning issues
-        editor.updateShapes<CustomShape>([
-          {
-            id: existingShapeId,
-            type: 'custom',
-            props: {
-              customComponent: messageId, // Store messageId as reference instead of component
-              name: componentName || `Component ${messageId}`,
-              // w, h could be updated if needed, potentially from component itself or new defaults
-            },
-          },
-        ]);
-
-        // Phase 4: Emit component update state
-        const existingState = systemRegistry.getState(messageId);
-        const stateEnvelope = {
-          id: messageId,
-          kind: 'component_updated',
-          payload: {
-            componentName: componentName || `Component ${messageId}`,
-            shapeId: existingShapeId,
-            canvasId: editor.store.id || 'default-canvas',
-          },
-          version: (existingState?.version || 0) + 1,
-          ts: Date.now(),
-          origin: 'browser',
-        };
-        systemRegistry.ingestState(stateEnvelope);
-      } else {
-        // Create new shape
-        const newShapeId = createShapeId(`shape-${nanoid()}`); // Generate a unique ID for the new shape with required prefix
-
-        const viewport = editor.getViewportPageBounds();
-        const initialSize = calculateInitialSize(componentName || 'Default');
-        const x = viewport ? viewport.midX - initialSize.w / 2 : Math.random() * 500;
-        const y = viewport ? viewport.midY - initialSize.h / 2 : Math.random() * 300;
-
-        editor.createShapes<CustomShape>([
-          {
-            id: newShapeId,
-            type: 'custom',
-            x,
-            y,
-            props: {
-              customComponent: messageId, // Store messageId as reference instead of component
-              name: componentName || `Component ${messageId}`,
-              w: initialSize.w,
-              h: initialSize.h,
-            },
-          },
-        ]);
-
-        // Add the new messageId -> shapeId mapping
-        setMessageIdToShapeIdMap((prevMap) => new Map(prevMap).set(messageId, newShapeId));
-        // Mark this message as added
-        setAddedMessageIds((prevSet) => new Set(prevSet).add(messageId));
-
-        // Phase 4: Emit component creation state
-        const stateEnvelope = {
-          id: messageId,
-          kind: 'component_created',
-          payload: {
-            componentName: componentName || `Component ${messageId}`,
-            shapeId: newShapeId,
-            canvasId: editor.store.id || 'default-canvas',
-            position: { x, y },
-            size: { w: initialSize.w, h: initialSize.h },
-          },
-          version: 1,
-          ts: Date.now(),
-          origin: 'browser',
-        };
-        systemRegistry.ingestState(stateEnvelope);
-      }
-    },
-    [editor, messageIdToShapeIdMap],
-  );
-
   /**
    * Effect to handle custom 'custom:showComponent' events
    */
@@ -521,7 +390,7 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
               inferredName = compDefByRef.name;
             }
           }
-          pendingComponentsRef.current.push({
+          queuePendingComponent({
             messageId: event.detail.messageId,
             node,
             name: inferredName,
@@ -579,16 +448,12 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
     return () => {
       window.removeEventListener('custom:showComponent', handleShowComponent as EventListener);
     };
-  }, [addComponentToCanvas, bus]);
+  }, [addComponentToCanvas, bus, editor, logger, queuePendingComponent]);
 
   // Drain any queued components once editor is ready
   useEffect(() => {
     if (!editor) return;
-    if (pendingComponentsRef.current.length === 0) return;
-    const queued = [...pendingComponentsRef.current];
-    pendingComponentsRef.current = [];
-    queued.forEach(({ messageId, node, name }) => {
-      addComponentToCanvas(messageId, node, name);
+    drainPendingComponents((messageId, name) => {
       try {
         bus.send('ui_mount', {
           type: 'ui_mount',
@@ -598,9 +463,8 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
           context: { name },
         });
       } catch { }
-      logger.debug('▶️  Rendered queued component:', name || 'component');
     });
-  }, [editor, addComponentToCanvas, bus]);
+  }, [editor, drainPendingComponents, bus]);
 
   // Rehydrate components shortly after any TLDraw document change (collaboration or local)
   useEffect(() => {
@@ -617,11 +481,13 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
       },
       { scope: 'document' },
     );
+    logger.debug('📡 Subscribed to editor store for rehydration');
     return () => {
       unsubscribe();
       if (timeout) clearTimeout(timeout);
+      logger.debug('📴 Unsubscribed from editor store rehydration listener');
     };
-  }, [editor]);
+  }, [editor, logger]);
 
   // On first editor ready, reconcile with ComponentRegistry in case events were missed
   useEffect(() => {
@@ -639,7 +505,9 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
             __custom_message_id: info.messageId,
             ...(info.props || {}),
           });
-        } catch { }
+        } catch {
+          logger.warn('Failed to recreate component from registry', info.componentType);
+        }
       }
       if (!node) {
         // Fallback minimal node
@@ -648,7 +516,7 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
       addComponentToCanvas(info.messageId, node, info.componentType);
       logger.debug('✅ Reconciled component:', info.componentType, info.messageId);
     });
-  }, [editor, addComponentToCanvas, addedMessageIds]);
+  }, [editor, addComponentToCanvas, addedMessageIds, logger]);
 
   /**
    * Effect to automatically add the latest component from thread messages (optimized with debouncing)
@@ -769,7 +637,7 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
     } else {
       logger.warn('OnboardingGuide component not found');
     }
-  }, [editor, componentStore]);
+  }, [editor, componentStore, logger]);
 
   // Export functionality is now handled by TldrawWithPersistence component
 

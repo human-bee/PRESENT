@@ -3,7 +3,7 @@
 import * as React from 'react';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/shared/avatar';
 import { Mic, Clock, User, Copy, Download, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useRoomContext, useDataChannel, useParticipants } from '@livekit/components-react';
