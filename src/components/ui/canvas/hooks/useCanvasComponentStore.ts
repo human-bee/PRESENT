@@ -9,7 +9,7 @@ import { systemRegistry } from '@/lib/system-registry';
 
 import type { customShape as CustomShape } from '../tldraw-canvas';
 
-type CanvasLogger = {
+export type CanvasLogger = {
   info: (...args: unknown[]) => void;
   warn: (...args: unknown[]) => void;
   debug: (...args: unknown[]) => void;

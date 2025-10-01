@@ -3,7 +3,8 @@
 ## Project Structure & Module Organization
 
 - `src/app/`: Next.js routes (App Router) and API endpoints.
-- `src/components/`: React UI (custom UI, LiveKit UI, shared widgets).
+- `src/components/`: React UI (feature-based folders; see `docs/code-organization.md`).
+  - `src/components/ui/canvas/hooks/`: TLDraw canvas hooks (component store, rehydration, LiveKit event wiring).
 - `src/lib/`: Agent workers, tools, and utilities.
   - `src/lib/agents/realtime/voice-agent.ts`: Primary LiveKit agent (Realtime API).
   - `src/lib/agents/conductor/`: Router agent with handoffs.

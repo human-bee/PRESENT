@@ -52,7 +52,12 @@ import { CanvasLiveKitContext } from './livekit/livekit-room-connector';
 import { useRoomContext } from '@livekit/components-react';
 import { createLiveKitBus } from '../../lib/livekit/livekit-bus';
 import { components } from '@/lib/custom';
-import { useCanvasComponentStore } from './hooks/useCanvasComponentStore';
+import {
+  useCanvasComponentStore,
+  useCanvasRehydration,
+  useCanvasThreadReset,
+  useCanvasEvents,
+} from './hooks';
 
 // Dynamic imports for heavy tldraw components - only load when needed
 
@@ -70,7 +75,6 @@ const TldrawWithCollaboration = dynamic(
 );
 
 // Import types statically (they don't add to bundle size)
-import type { customShape as CustomShape } from './tldraw-canvas';
 import { customShapeUtil, ToolboxShapeUtil, MermaidStreamShapeUtil } from './tldraw-canvas';
 
 // Suppress development noise and repetitive warnings
@@ -183,311 +187,37 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
     drainPendingComponents,
   } = useCanvasComponentStore(editor, logger);
 
+  useCanvasRehydration({
+    editor,
+    componentStore,
+    setMessageIdToShapeIdMap,
+    setAddedMessageIds,
+    logger,
+  });
+
+  useCanvasThreadReset({
+    thread,
+    editor,
+    componentStore,
+    setMessageIdToShapeIdMap,
+    setAddedMessageIds,
+    previousThreadId,
+    logger,
+  });
+
+  useCanvasEvents({
+    editor,
+    addComponentToCanvas,
+    queuePendingComponent,
+    drainPendingComponents,
+    bus,
+    logger,
+  });
+
   // Provide shape utils synchronously at first render so the store registers them on mount
   const customShapeUtils = React.useMemo(() => {
     return [customShapeUtil, ToolboxShapeUtil, MermaidStreamShapeUtil] as any[];
   }, []);
-
-  // Component rehydration handler - restore componentStore after canvas reload
-  useEffect(() => {
-    const handleRehydration = () => {
-      if (!editor) {
-        logger.debug('Editor not ready for rehydration, skipping...');
-        return;
-      }
-
-      logger.info('🔄 Starting component rehydration...');
-      const customShapes = editor
-        .getCurrentPageShapes()
-        .filter((shape) => shape.type === 'custom') as CustomShape[];
-
-      logger.debug(`Found ${customShapes.length} custom shapes to rehydrate`);
-
-      customShapes.forEach((shape) => {
-        let componentName = shape.props.name;
-        const messageId = shape.props.customComponent;
-
-        logger.debug(`Rehydrating ${componentName} (${messageId})`);
-
-        // Skip rehydration of legacy LivekitRoomConnector components to avoid duplicate connectors
-        if (componentName === 'LivekitRoomConnector') {
-          logger.debug('⏭️  Skipping rehydration of LivekitRoomConnector (moved to Transcript sidebar)');
-          return;
-        }
-
-        // Find component definition
-        // Try exact match first
-        let componentDef = components.find((c) => c.name === componentName);
-        // Handle legacy and wrapper names that appeared in earlier saves
-        if (!componentDef) {
-          // Legacy chat label
-          if (componentName === 'AI Response') {
-            componentDef = components.find((c) => c.name === 'AIResponse');
-            if (componentDef) componentName = 'AIResponse';
-          }
-          // Generic label from earlier showComponent flow
-          if (!componentDef && componentName === 'Rendered Component') {
-            componentDef = components.find((c) => c.name === 'AIResponse');
-            if (componentDef) componentName = 'AIResponse';
-          }
-          // TODO: MessageProvider was deprecated, fix/replace this from first principles undserstanding of current codebase
-          if (!componentDef && componentName === 'MessageProvider') {
-            componentDef = components.find((c) => c.name === 'AIResponse');
-            if (componentDef) componentName = 'AIResponse';
-          }
-        }
-        if (componentDef) {
-          // Recreate React component and add to store
-          const Component = componentDef.component;
-          const componentInstance = React.createElement(Component, {
-            __custom_message_id: messageId,
-            state: (shape.props as any).state || {},
-            updateState: (patch: Record<string, unknown> | ((prev: any) => any)) => {
-              if (!editor) return;
-              const prev = ((shape.props as any).state as Record<string, unknown>) || {};
-              const next = typeof patch === 'function' ? (patch as any)(prev) : { ...prev, ...patch };
-              editor.updateShapes([{ id: shape.id, type: 'custom', props: { state: next } }]);
-            },
-          });
-          componentStore.current.set(messageId, componentInstance);
-          try {
-            window.dispatchEvent(new Event('present:component-store-updated'));
-          } catch { }
-
-          // Update mapping
-          setMessageIdToShapeIdMap((prev) => new Map(prev).set(messageId, shape.id));
-          setAddedMessageIds((prev) => new Set(prev).add(messageId));
-
-          logger.debug(`✅ Rehydrated ${componentName} successfully`);
-        } else {
-          logger.warn(`❌ Component definition not found for: ${componentName}`);
-
-          // Fallback: Create a placeholder component for missing registrations
-          const FallbackComponent = () => (
-            <div
-              style={{
-                padding: '16px',
-                border: '2px dashed #ff6b6b',
-                borderRadius: '8px',
-                backgroundColor: '#fff5f5',
-                color: '#c92a2a',
-              }}
-            >
-              <h3
-                style={{
-                  margin: '0 0 8px 0',
-                  fontSize: '14px',
-                  fontWeight: 'bold',
-                }}
-              >
-                📦 Component Not Registered: {componentName}
-              </h3>
-              <p style={{ margin: '0 0 8px 0', fontSize: '12px' }}>
-                ID: <code>{messageId}</code>
-              </p>
-              <p style={{ margin: '0', fontSize: '11px', opacity: 0.8 }}>
-                Please add &quot;{componentName}&quot; to custom.ts registry.
-              </p>
-            </div>
-          );
-
-          const fallbackInstance = React.createElement(FallbackComponent);
-          componentStore.current.set(messageId, fallbackInstance);
-          try {
-            window.dispatchEvent(new Event('present:component-store-updated'));
-          } catch { }
-
-          // Still update mappings so the shape shows something
-          setMessageIdToShapeIdMap((prev) => new Map(prev).set(messageId, shape.id));
-          setAddedMessageIds((prev) => new Set(prev).add(messageId));
-
-          logger.debug(`⚠️ Created fallback for ${componentName}`);
-        }
-      });
-
-      logger.info(
-        `🎯 Rehydration complete! ComponentStore now has ${componentStore.current.size} components`,
-      );
-    };
-
-    window.addEventListener('custom:rehydrateComponents', handleRehydration as EventListener);
-
-    return () => {
-      window.removeEventListener('custom:rehydrateComponents', handleRehydration as EventListener);
-    };
-  }, [editor, componentStore, logger, setAddedMessageIds, setMessageIdToShapeIdMap]);
-
-  // Canvas persistence is now handled by TldrawWithPersistence component
-
-  /**
-   * Effect to clear the canvas and reset messageIdToShapeIdMap when switching between threads
-   */
-  useEffect(() => {
-    if (!thread || (previousThreadId.current && previousThreadId.current !== thread.id)) {
-      // Clear existing shapes from the tldraw editor
-      if (editor) {
-        const allShapes = editor.getCurrentPageShapes();
-        if (allShapes.length > 0) {
-          editor.deleteShapes(allShapes.map((s) => s.id));
-        }
-      }
-      setMessageIdToShapeIdMap(new Map()); // Reset the map
-      setAddedMessageIds(new Set()); // Reset the added messages set
-      componentStore.current.clear(); // Clear the component store
-    }
-    previousThreadId.current = thread?.id ?? null;
-  }, [thread, editor, componentStore, setMessageIdToShapeIdMap, setAddedMessageIds, logger]);
-
-  /**
-   * Add or update a component on the tldraw canvas
-   */
-  /**
-   * Effect to handle custom 'custom:showComponent' events
-   */
-  useEffect(() => {
-    const handleShowComponent = (
-      event: CustomEvent<{
-        messageId: string;
-        component: React.ReactNode | { type: string; props?: Record<string, unknown> };
-      }>,
-    ) => {
-      try {
-        let node: React.ReactNode = event.detail.component as React.ReactNode;
-        let inferredName: string | undefined = 'Rendered Component';
-        // If editor isn't ready yet, queue the component for later
-        if (!editor) {
-          // Normalize to React element if possible so we can render later without recomputing
-          if (!React.isValidElement(node)) {
-            const maybe = event.detail.component as {
-              type?: string;
-              props?: Record<string, unknown>;
-            };
-            if (maybe && typeof maybe === 'object' && typeof maybe.type === 'string') {
-              const compDef = components.find((c) => c.name === maybe.type);
-              if (compDef) {
-                node = React.createElement(compDef.component as any, {
-                  __custom_message_id: event.detail.messageId,
-                  ...(maybe.props || {}),
-                });
-                inferredName = compDef.name;
-              }
-            }
-          } else if (React.isValidElement(node)) {
-            // Try to infer name from the React element's type and unwrap common provider wrappers
-            const type: any = node.type as any;
-            const typeName = (type?.displayName || type?.name || '').toString();
-            if (typeName === 'customMessageProvider' || typeName.endsWith('Provider')) {
-              const child = (node.props as any)?.children;
-              if (React.isValidElement(child)) {
-                node = child;
-              }
-            }
-            // Match by component reference
-            const compDefByRef = components.find(
-              (c) => (c.component as any) === (node as any).type,
-            );
-            if (compDefByRef) {
-              inferredName = compDefByRef.name;
-            }
-          }
-          queuePendingComponent({
-            messageId: event.detail.messageId,
-            node,
-            name: inferredName,
-          });
-          logger.debug('⏸️  Queued component until editor is ready:', inferredName || 'component');
-          return;
-        }
-        if (!React.isValidElement(node)) {
-          const maybe = event.detail.component as {
-            type?: string;
-            props?: Record<string, unknown>;
-          };
-          if (maybe && typeof maybe === 'object' && typeof maybe.type === 'string') {
-            const compDef = components.find((c) => c.name === maybe.type);
-            if (compDef) {
-              node = React.createElement(compDef.component as any, {
-                __custom_message_id: event.detail.messageId,
-                ...(maybe.props || {}),
-              });
-              inferredName = compDef.name;
-            }
-          }
-        } else {
-          // Valid element – try to infer better name and unwrap provider
-          const type: any = (node as any).type;
-          const typeName = (type?.displayName || type?.name || '').toString();
-          if (typeName === 'customMessageProvider' || typeName.endsWith('Provider')) {
-            const child = (node as any)?.props?.children;
-            if (React.isValidElement(child)) {
-              node = child;
-            }
-          }
-          const compDefByRef = components.find((c) => (c.component as any) === (node as any).type);
-          if (compDefByRef) {
-            inferredName = compDefByRef.name;
-          }
-        }
-        addComponentToCanvas(event.detail.messageId, node, inferredName);
-        try {
-          bus.send('ui_mount', {
-            type: 'ui_mount',
-            id: event.detail.messageId,
-            timestamp: Date.now(),
-            source: 'ui',
-            context: { name: inferredName },
-          });
-        } catch { }
-      } catch (error) {
-        console.error('Failed to add component to canvas from event:', error);
-      }
-    };
-
-    window.addEventListener('custom:showComponent', handleShowComponent as EventListener);
-
-    return () => {
-      window.removeEventListener('custom:showComponent', handleShowComponent as EventListener);
-    };
-  }, [addComponentToCanvas, bus, editor, logger, queuePendingComponent]);
-
-  // Drain any queued components once editor is ready
-  useEffect(() => {
-    if (!editor) return;
-    drainPendingComponents((messageId, name) => {
-      try {
-        bus.send('ui_mount', {
-          type: 'ui_mount',
-          id: messageId,
-          timestamp: Date.now(),
-          source: 'ui',
-          context: { name },
-        });
-      } catch { }
-    });
-  }, [editor, drainPendingComponents, bus]);
-
-  // Rehydrate components shortly after any TLDraw document change (collaboration or local)
-  useEffect(() => {
-    if (!editor) return;
-    let timeout: ReturnType<typeof setTimeout> | null = null;
-    const unsubscribe = editor.store.listen(
-      () => {
-        if (timeout) clearTimeout(timeout);
-        timeout = setTimeout(() => {
-          try {
-            window.dispatchEvent(new CustomEvent('custom:rehydrateComponents', { detail: {} }));
-          } catch { }
-        }, 150);
-      },
-      { scope: 'document' },
-    );
-    logger.debug('📡 Subscribed to editor store for rehydration');
-    return () => {
-      unsubscribe();
-      if (timeout) clearTimeout(timeout);
-      logger.debug('📴 Unsubscribed from editor store rehydration listener');
-    };
-  }, [editor, logger]);
 
   // On first editor ready, reconcile with ComponentRegistry in case events were missed
   useEffect(() => {
