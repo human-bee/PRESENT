@@ -27,14 +27,23 @@ The canvas entrypoint now delegates to hooks:
 - `useCanvasRehydration`: restores shapes/components on load or document change.
 - `useCanvasThreadReset`: clears canvas state when switching threads.
 - `useCanvasEvents`: handles `custom:showComponent`, draining queued components, and dispatching `ui_mount` events.
+- `useCanvasInteractions`: manages drag/drop, component toolbox toggle, and onboarding guide creation.
+- `useCanvasMessageSync`: handles registry reconciliation and auto-adding components from thread messages.
 
 Each hook lives under `src/components/ui/canvas/hooks/` and exposes typed APIs for reuse.
+
+**Refactor Status (2025-10-01):** `canvas-space.tsx` successfully reduced from 461 LOC to 245 LOC ✅
 
 ## Refactor Roadmap (2025-10)
 
 Targeting files >300 LOC for decomposition. Prioritized by size/impact:
 
-1. `src/components/ui/tldraw/tldraw-with-collaboration.tsx` (~1250 LOC)
+1. ✅ **COMPLETED:** `src/components/ui/canvas/canvas-space.tsx` (461 LOC → 245 LOC)
+   - Extracted `useCanvasInteractions` hook (180 LOC) for drag/drop and UI interactions
+   - Extracted `useCanvasMessageSync` hook (127 LOC) for component reconciliation
+   - Removed unused imports and simplified main component
+   - All functionality preserved with improved separation of concerns
+2. `src/components/ui/tldraw/tldraw-with-collaboration.tsx` (~1250 LOC)
    - Split TLDraw bus wiring, collaboration sync, and steward hooks into `hooks/` directory.
    - Extract UI overlays/toolbars into `components/`.
 2. `src/components/ui/livekit/livekit-room-connector.tsx` (~1220 LOC)
