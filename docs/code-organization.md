@@ -14,6 +14,9 @@
 - `src/components/ui/research/`: research panel and renderers.
 - `src/components/ui/shared/`: reusable UI primitives (buttons, cards, avatar, toolbox, etc.).
 - `src/components/ui/tldraw/`: TLDraw shapes, canvas integration, persistence wrappers.
+  - `hooks/`: collaboration session + editor bridge hooks (`useCollaborationSession`, `useTldrawEditorBridge`).
+  - `components/`: lightweight fragments like `CollaborationLoadingOverlay`.
+  - `utils/`: granular event registries (`canvas-*-handlers.ts`), rich-text helpers, LiveKit wiring.
 - `src/components/ui/youtube/`: YouTube embed/search/list components.
 - `src/components/ui/diagnostics/`, `integrations/`, etc. for specialized features.
 
