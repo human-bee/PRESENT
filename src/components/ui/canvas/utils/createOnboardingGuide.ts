@@ -8,7 +8,7 @@ import { components } from '@/lib/custom';
 import type { CanvasLogger } from '../hooks/useCanvasComponentStore';
 
 export interface CreateOnboardingGuideOptions {
-  editor: Editor;
+  editor: Editor | null;
   componentStore: React.MutableRefObject<Map<string, React.ReactNode>>;
   logger: CanvasLogger;
 }
@@ -19,6 +19,11 @@ export function createOnboardingGuide({
   logger,
 }: CreateOnboardingGuideOptions) {
   logger.info('🆘 Help button clicked - creating onboarding guide');
+
+  if (!editor) {
+    logger.warn('Editor not available, cannot create onboarding guide');
+    return false;
+  }
 
   const shapeId = createShapeId(nanoid());
   const OnboardingGuideComponent = components.find((c) => c.name === 'OnboardingGuide')?.component;
@@ -34,6 +39,11 @@ export function createOnboardingGuide({
     autoStart: true,
     state: {},
     updateState: (patch: Record<string, unknown> | ((prev: any) => any)) => {
+      if (!editor) {
+        logger.warn('Editor not available while updating onboarding guide state');
+        return;
+      }
+
       const previousState: Record<string, unknown> = {};
       const nextState =
         typeof patch === 'function'
