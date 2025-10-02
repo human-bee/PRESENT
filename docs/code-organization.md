@@ -30,27 +30,48 @@ The canvas entrypoint now delegates to hooks:
 
 Each hook lives under `src/components/ui/canvas/hooks/` and exposes typed APIs for reuse.
 
-## Refactor Roadmap (2025-10)
+## Refactor Results (October 2025)
 
-Targeting files >300 LOC for decomposition. Prioritized by size/impact:
+### Completed Refactors ✅
 
-1. `src/components/ui/tldraw/tldraw-with-collaboration.tsx` (~1250 LOC)
-   - Split TLDraw bus wiring, collaboration sync, and steward hooks into `hooks/` directory.
-   - Extract UI overlays/toolbars into `components/`.
-2. `src/components/ui/livekit/livekit-room-connector.tsx` (~1220 LOC)
-   - Separate token-fetch and auto-connect flow into hooks.
-   - Move render subsections (status banner, participant controls) into `livekit/components/`.
+#### 1. `tldraw-with-collaboration.tsx` (1254 LOC → 161 LOC | 87% reduction)
+
+Extracted into modular, reusable pieces:
+
+**Hooks** (`src/components/ui/tldraw/hooks/`):
+- `useCollaborationRole.ts` - Detects user role from LiveKit metadata
+- `useTLDrawSync.ts` - Configures TLDraw sync with demo server
+- `usePinnedShapes.ts` - Manages viewport-pinned shapes
+- `useCanvasEventHandlers.ts` - Registers all canvas control events (mermaid, shapes, selection, etc.)
+
+**Utils** (`src/components/ui/tldraw/utils/`):
+- `collaborationOverrides.ts` - TLDraw UI overrides for pin-to-viewport action
+
+**Main Component**: Simplified orchestration of hooks and TLDraw setup
+
+#### 2. `livekit-room-connector.tsx` (1220 LOC → 233 LOC | 81% reduction)
+
+Extracted into clean, testable modules:
+
+**Hooks** (`src/components/ui/livekit/hooks/`):
+- `useLivekitConnection.ts` - Handles token fetch and room connection
+- `useAgentDispatch.ts` - Manages AI agent dispatch and tracking
+- `useRoomEvents.ts` - Sets up event listeners for room state changes
+
+**Components** (`src/components/ui/livekit/components/`):
+- `RoomConnectorUI.tsx` - Presentational UI component (287 LOC)
+
+**Main Component**: Simplified state management and hook orchestration
+
+### Patterns Established
+
+- **Target**: ≤300 LOC per primary component file
+- **Hooks**: Single responsibility, typed interfaces, cleanup functions
+- **Components**: Pure presentational, props-driven
+- **Utils**: Pure functions, zero side effects
+
+### Remaining Candidates
+
 3. `src/components/ui/presentation/presentation-deck.tsx` (~820 LOC)
-   - Break out controls, slide navigation, overlays.
 4. `src/components/ui/documents/markdown-viewer-editable.tsx` (~818 LOC)
-   - Extract diff rendering, markdown parsing, and header UI into dedicated modules.
-5. `src/components/ui/productivity/action-item-tracker.tsx` & others in the 700–900 LOC range.
-
-Each refactor pass should:
-
-- Record pre/post line counts to monitor progress.
-- Move reusable logic into feature folders (`hooks/`, `components/`, `utils/`).
-- Run `npx eslint --ext .ts,.tsx` on touched files.
-- Update tests/doc strings where behavior shifts.
-
-_Remove this roadmap once completed._
+5. `src/components/ui/productivity/action-item-tracker.tsx` (~700-900 LOC)
