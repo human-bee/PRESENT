@@ -1,32 +1,27 @@
-import { useCallback, useEffect } from 'react';
-import { Room, Participant } from 'livekit-client';
+import { useCallback, useEffect, useRef } from 'react';
+import { Participant } from 'livekit-client';
+import { LivekitRoomConnectorState } from './types';
 
-type AgentStatus = 'not-requested' | 'dispatching' | 'joined' | 'failed';
+type MergeFn = (patch: Partial<LivekitRoomConnectorState>) => void;
+type GetStateFn = () => LivekitRoomConnectorState;
 
-interface AgentState {
-  agentStatus: AgentStatus;
-  agentIdentity: string | null;
-}
-
-/**
- * Manages AI agent dispatch and tracking
- */
 export function useAgentDispatch(
-  room: Room | undefined,
   roomName: string,
-  connectionState: string,
-  setState: (updater: (prev: any) => any) => void,
-  stateRef: React.RefObject<any>,
+  connectionState: LivekitRoomConnectorState['connectionState'],
+  mergeState: MergeFn,
+  getState: GetStateFn,
 ) {
+  const dispatchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   // Trigger agent join
   const triggerAgentJoin = useCallback(async () => {
     try {
       console.log(`🤖 [LiveKitConnector-${roomName}] Triggering agent join...`);
 
-      setState((prev: any) => ({
-        ...prev,
+      mergeState({
         agentStatus: 'dispatching',
-      }));
+        errorMessage: null,
+      });
 
       const response = await fetch('/api/agent/dispatch', {
         method: 'POST',
@@ -44,18 +39,24 @@ export function useAgentDispatch(
         const result = await response.json();
         console.log(`✅ [LiveKitConnector-${roomName}] Agent dispatch triggered:`, result);
 
-        setTimeout(() => {
-          if (stateRef.current?.agentStatus === 'dispatching') {
-            console.warn(
-              `⏰ [LiveKitConnector-${roomName}] Agent dispatch timeout - no agent joined within 30 seconds`,
-            );
-            setState((prev: any) => ({
-              ...prev,
-              agentStatus: 'failed',
-              errorMessage: 'Agent failed to join within timeout period',
-            }));
+        if (typeof window !== 'undefined') {
+          if (dispatchTimeoutRef.current) {
+            clearTimeout(dispatchTimeoutRef.current);
           }
-        }, 30000);
+
+          dispatchTimeoutRef.current = setTimeout(() => {
+            const latest = getState();
+            if (latest.agentStatus === 'dispatching') {
+              console.warn(
+                `⏰ [LiveKitConnector-${roomName}] Agent dispatch timeout - no agent joined within 30 seconds`,
+              );
+              mergeState({
+                agentStatus: 'failed',
+                errorMessage: 'Agent failed to join within timeout period',
+              });
+            }
+          }, 30000);
+        }
       } else {
         const errorData = await response.json().catch(() => ({}));
         console.warn(
@@ -63,21 +64,19 @@ export function useAgentDispatch(
           response.status,
           errorData,
         );
-        setState((prev: any) => ({
-          ...prev,
+        mergeState({
           agentStatus: 'failed',
           errorMessage: `Dispatch failed: ${errorData.message || response.statusText}`,
-        }));
+        });
       }
     } catch (error) {
       console.error(`❌ [LiveKitConnector-${roomName}] Agent dispatch error:`, error);
-      setState((prev: any) => ({
-        ...prev,
+      mergeState({
         agentStatus: 'failed',
         errorMessage: error instanceof Error ? error.message : 'Unknown dispatch error',
-      }));
+      });
     }
-  }, [roomName, setState, stateRef]);
+  }, [roomName, mergeState, getState]);
 
   // Listen for manual agent requests
   useEffect(() => {
@@ -89,11 +88,15 @@ export function useAgentDispatch(
       }
     };
 
-    window.addEventListener('livekit:request-agent', handleAgentRequest as EventListener);
+        window.addEventListener('livekit:request-agent', handleAgentRequest as EventListener);
 
-    return () => {
-      window.removeEventListener('livekit:request-agent', handleAgentRequest as EventListener);
-    };
+        return () => {
+          window.removeEventListener('livekit:request-agent', handleAgentRequest as EventListener);
+          if (dispatchTimeoutRef.current) {
+            clearTimeout(dispatchTimeoutRef.current);
+            dispatchTimeoutRef.current = null;
+          }
+        };
   }, [roomName, connectionState, triggerAgentJoin]);
 
   return { triggerAgentJoin };
@@ -103,12 +106,13 @@ export function useAgentDispatch(
  * Helper to check if a participant is an agent
  */
 export function isAgentParticipant(p: Participant): boolean {
+  const identity = p.identity.toLowerCase();
   return (
-    p.identity.toLowerCase().includes('agent') ||
-    p.identity.toLowerCase().includes('bot') ||
-    p.identity.toLowerCase().includes('ai') ||
+    identity.includes('agent') ||
+    identity.includes('bot') ||
+    identity.includes('ai') ||
     p.identity.startsWith('voice-agent') ||
-    p.metadata?.includes('agent') ||
-    p.metadata?.includes('type":"agent')
+    Boolean(p.metadata?.includes('agent')) ||
+    Boolean(p.metadata?.includes('type":"agent'))
   );
 }

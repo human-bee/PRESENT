@@ -1,5 +1,5 @@
 import { useCallback } from 'react';
-import { Editor } from 'tldraw';
+import { Editor, useEditor } from 'tldraw';
 import type { customShape } from '../tldraw-canvas';
 
 /**
@@ -7,7 +7,9 @@ import type { customShape } from '../tldraw-canvas';
  * @param editor - TLDraw editor instance
  * @returns Cleanup function for pinned shapes side effects
  */
-export function usePinnedShapes(editor: Editor | undefined) {
+export function usePinnedShapes() {
+  const editor = useEditor();
+
   const setupPinnedShapes = useCallback(() => {
     if (!editor) return () => {};
 

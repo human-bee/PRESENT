@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useEffect, useRef } from 'react';
-import { Editor, createShapeId, toRichText } from 'tldraw';
+import { Editor, createShapeId, toRichText } from '@tldraw/tldraw';
 import { nanoid } from 'nanoid';
 import { Room } from 'livekit-client';
 import { createLiveKitBus } from '@/lib/livekit/livekit-bus';
@@ -28,14 +28,16 @@ function renderPlaintextFromRichText(_editor: any, richText: any | undefined): s
  * @returns Cleanup function
  */
 export function useCanvasEventHandlers(
-  editor: Editor | undefined,
+  editor: Editor | null,
   room: Room | undefined,
   containerRef: React.RefObject<HTMLDivElement>,
+  options?: { enabled?: boolean },
 ) {
+  const { enabled = true } = options ?? {};
   const lastTsByShape = useRef(new Map<string, number>());
 
   useEffect(() => {
-    if (!editor || !room) return;
+    if (!enabled || !editor || !room) return;
 
     const bus = createLiveKitBus(room);
 
@@ -896,5 +898,5 @@ export function useCanvasEventHandlers(
       window.removeEventListener('tldraw:deleteShape', handleDeleteShape as EventListener);
       window.removeEventListener('tldraw:renameNote', handleRenameNote as EventListener);
     };
-  }, [editor, room, containerRef]);
+  }, [editor, room, containerRef, enabled]);
 }

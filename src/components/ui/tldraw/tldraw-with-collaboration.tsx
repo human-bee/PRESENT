@@ -4,11 +4,12 @@
 
 import { Tldraw, TLComponents, Editor } from 'tldraw';
 import { CustomMainMenu, CustomToolbarWithTranscript } from './tldraw-with-persistence';
-import { ReactNode, useCallback, useContext, useEffect, useMemo, useRef } from 'react';
+import { ReactNode, useCallback, useContext, useEffect, useMemo, useRef, type RefObject } from 'react';
 import { CanvasLiveKitContext } from './livekit/livekit-room-connector';
 import { ComponentStoreContext } from './tldraw-canvas';
 import type { customShapeUtil } from './tldraw-canvas';
 import { useRoomContext } from '@livekit/components-react';
+import type { Room } from 'livekit-client';
 import TldrawSnapshotBroadcaster from '@/components/TldrawSnapshotBroadcaster';
 import TldrawSnapshotReceiver from '@/components/TldrawSnapshotReceiver';
 
@@ -17,6 +18,7 @@ import { useCollaborationRole } from './hooks/useCollaborationRole';
 import { useTLDrawSync } from './hooks/useTLDrawSync';
 import { usePinnedShapes } from './hooks/usePinnedShapes';
 import { useCanvasEventHandlers } from './hooks/useCanvasEventHandlers';
+import { useEditorReady } from './hooks/useEditorReady';
 import { createCollaborationOverrides } from './utils/collaborationOverrides';
 
 interface TldrawWithCollaborationProps {
@@ -51,7 +53,6 @@ export function TldrawWithCollaboration({
   // Use extracted hooks
   const role = useCollaborationRole(room);
   const store = useTLDrawSync(roomName, shapeUtils);
-  const setupPinnedShapes = usePinnedShapes(editorRef.current);
 
   const computedReadOnly = readOnly || role === 'viewer' || role === 'readOnly';
 
@@ -97,12 +98,6 @@ export function TldrawWithCollaboration({
         } catch {}
       }
 
-      // Setup pinned shapes with cleanup
-      const pinnedShapesCleanup = setupPinnedShapes();
-
-      // Store cleanup in editor
-      (mountedEditor as any)._pinnedShapesCleanup = pinnedShapesCleanup;
-
       // Call user's onMount if provided
       if (onMount) onMount(mountedEditor);
 
@@ -113,11 +108,8 @@ export function TldrawWithCollaboration({
         }, 250);
       } catch {}
     },
-    [onMount, setupPinnedShapes],
+    [onMount],
   );
-
-  // Setup canvas event handlers
-  useCanvasEventHandlers(editorRef.current, room, containerRef);
 
   // Keyboard shortcut for transcript
   useEffect(() => {
@@ -144,7 +136,9 @@ export function TldrawWithCollaboration({
           components={components}
           overrides={overrides}
           forceMobile={true}
-        />
+        >
+          <CollaborationEditorEffects room={room} containerRef={containerRef} />
+        </Tldraw>
         <TldrawSnapshotBroadcaster />
         <TldrawSnapshotReceiver />
       </ComponentStoreContext.Provider>
@@ -158,4 +152,27 @@ export function TldrawWithCollaboration({
       )}
     </div>
   );
+}
+
+function CollaborationEditorEffects({
+  room,
+  containerRef,
+}: {
+  room: Room | undefined;
+  containerRef: RefObject<HTMLDivElement | null>;
+}) {
+  const { editor, ready } = useEditorReady();
+  const setupPinnedShapes = usePinnedShapes();
+
+  useCanvasEventHandlers(editor, room, containerRef, { enabled: ready });
+
+  useEffect(() => {
+    if (!ready || !editor) return;
+    const cleanup = setupPinnedShapes();
+    return () => {
+      cleanup();
+    };
+  }, [ready, editor, setupPinnedShapes]);
+
+  return null;
 }

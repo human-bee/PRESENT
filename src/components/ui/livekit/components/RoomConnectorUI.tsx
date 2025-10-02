@@ -10,16 +10,7 @@ import {
   Bot,
   BotOff,
 } from 'lucide-react';
-
-type LivekitRoomConnectorState = {
-  connectionState: 'disconnected' | 'connecting' | 'connected' | 'error';
-  isMinimized: boolean;
-  participantCount: number;
-  errorMessage: string | null;
-  token: string | null;
-  agentStatus: 'not-requested' | 'dispatching' | 'joined' | 'failed';
-  agentIdentity: string | null;
-};
+import type { LivekitRoomConnectorState } from '../hooks/types';
 
 interface RoomConnectorUIProps {
   state: LivekitRoomConnectorState | null;
@@ -28,6 +19,7 @@ interface RoomConnectorUIProps {
   onConnect?: () => void;
   onDisconnect?: () => void;
   onCopyLink: () => void;
+  onRequestAgent?: () => void;
 }
 
 export function RoomConnectorUI({
@@ -37,6 +29,7 @@ export function RoomConnectorUI({
   onConnect,
   onDisconnect,
   onCopyLink,
+  onRequestAgent,
 }: RoomConnectorUIProps) {
   const connectionState = (state?.connectionState ?? 'disconnected') as LivekitRoomConnectorState['connectionState'];
   const isMinimized = state?.isMinimized || false;
@@ -203,6 +196,11 @@ export function RoomConnectorUI({
             <div className="flex gap-2">
               <button
                 onClick={() => {
+                  if (onRequestAgent) {
+                    onRequestAgent();
+                    return;
+                  }
+
                   if (typeof window !== 'undefined') {
                     window.dispatchEvent(
                       new CustomEvent('livekit:request-agent', {

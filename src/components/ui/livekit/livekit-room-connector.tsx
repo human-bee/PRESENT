@@ -1,16 +1,13 @@
 'use client';
 
 import * as React from 'react';
-import { cn } from '@/lib/utils';
 import { z } from 'zod';
 import { useRoomContext, AudioConference } from '@livekit/components-react';
 import { isDefaultCanvasUser } from '@/lib/livekit/display-names';
 import { useAuth } from '@/hooks/use-auth';
-import { ConnectionState } from 'livekit-client';
 
 // Extracted hooks
 import { useLivekitConnection } from './hooks/useLivekitConnection';
-import { useAgentDispatch } from './hooks/useAgentDispatch';
 import { useRoomEvents } from './hooks/useRoomEvents';
 
 // Import the UI component (we'll extract this separately)
@@ -26,52 +23,11 @@ export const livekitRoomConnectorSchema = z.object({
 
 export type LivekitRoomConnectorProps = z.infer<typeof livekitRoomConnectorSchema>;
 
-type LivekitRoomConnectorState = {
-  connectionState: 'disconnected' | 'connecting' | 'connected' | 'error';
-  isMinimized: boolean;
-  participantCount: number;
-  errorMessage: string | null;
-  token: string | null;
-  agentStatus: 'not-requested' | 'dispatching' | 'joined' | 'failed';
-  agentIdentity: string | null;
-};
-
 export const CanvasLiveKitContext = React.createContext<{
   isConnected: boolean;
   roomName: string;
   participantCount: number;
 } | null>(null);
-
-function getInitialState(room?: any): LivekitRoomConnectorState {
-  if (!room) {
-    return {
-      connectionState: 'disconnected',
-      isMinimized: false,
-      participantCount: 0,
-      errorMessage: null,
-      token: null,
-      agentStatus: 'not-requested',
-      agentIdentity: null,
-    };
-  }
-
-  const connectionState =
-    room.state === ConnectionState.Connected
-      ? 'connected'
-      : room.state === ConnectionState.Connecting || room.state === ConnectionState.Reconnecting
-        ? 'connecting'
-        : 'disconnected';
-
-  return {
-    connectionState,
-    isMinimized: false,
-    participantCount: room.numParticipants,
-    errorMessage: null,
-    token: null,
-    agentStatus: 'not-requested',
-    agentIdentity: null,
-  };
-}
 
 export function LivekitRoomConnector({
   roomName = 'canvas-room',
@@ -93,10 +49,6 @@ export function LivekitRoomConnector({
     return provided || 'Canvas User';
   }, [userName, user]);
 
-  const [state, setState] = React.useState<LivekitRoomConnectorState | null>(getInitialState(room));
-  const stateRef = React.useRef<LivekitRoomConnectorState | null>(state);
-  stateRef.current = state;
-  
   const identityRef = React.useRef<string | null>(null);
   const wsUrl = serverUrl || process.env.NEXT_PUBLIC_LIVEKIT_URL || process.env.NEXT_PUBLIC_LK_SERVER_URL || '';
 
@@ -121,83 +73,45 @@ export function LivekitRoomConnector({
   }, [roomName, effectiveUserName]);
 
   // Use extracted hooks
-  const { triggerAgentJoin } = useAgentDispatch(
+  const {
+    state,
+    connect,
+    disconnect,
+    triggerAgentJoin,
+    roomEventHandlers,
+    toggleMinimized,
+  } = useLivekitConnection({
     room,
     roomName,
-    state?.connectionState || 'disconnected',
-    setState,
-    stateRef,
-  );
+    userName: effectiveUserName,
+    wsUrl,
+    audioOnly,
+    autoConnect,
+    user,
+    identityRef,
+  });
+  useRoomEvents(room, roomName, roomEventHandlers);
 
-  useRoomEvents(room, roomName, setState, stateRef, triggerAgentJoin);
-
-  useLivekitConnection(
-    room,
-    {
-      roomName,
-      userName: effectiveUserName,
-      wsUrl,
-      audioOnly,
-      user,
-      identityRef,
-    },
-    stateRef,
-  );
-
-  // Auto-connect
-  React.useEffect(() => {
-    if (!autoConnect || !stateRef.current || stateRef.current.connectionState !== 'disconnected') {
-      return;
-    }
-    const connectTimer = setTimeout(() => {
-      handleConnect();
-    }, 1000);
-    return () => clearTimeout(connectTimer);
-  }, [autoConnect, stateRef.current?.connectionState]);
-
-  const handleConnect = () => {
-    console.log(`🔌 [LiveKitConnector-${roomName}] handleConnect called`);
-    if (!state || !room) return;
-    if (!wsUrl && state.connectionState === 'disconnected') {
-      setState((prev: any) => ({
-        ...prev,
-        connectionState: 'error',
-        errorMessage: 'Missing LiveKit server URL. Check your environment variables.',
-      }));
+  const handleConnectToggle = React.useCallback(() => {
+    if (state.connectionState === 'connected') {
+      void disconnect();
       return;
     }
 
-    if (state.connectionState === 'disconnected') {
-      setState((prev: any) => ({
-        ...prev,
-        connectionState: 'connecting',
-        errorMessage: null,
-        agentStatus: 'not-requested',
-        agentIdentity: null,
-      }));
-    } else if (state.connectionState === 'connected') {
-      try {
-        room.disconnect();
-        setState((prev: any) => ({
-          ...prev,
-          connectionState: 'disconnected',
-          participantCount: 0,
-          agentStatus: 'not-requested',
-          agentIdentity: null,
-          errorMessage: null,
-        }));
-      } catch (error) {
-        console.error(`❌ [LiveKitConnector-${roomName}] Error during disconnect:`, error);
-      }
+    if (state.connectionState === 'disconnected' || state.connectionState === 'error') {
+      void connect();
     }
-  };
+  }, [state.connectionState, connect, disconnect]);
 
-  const handleMinimize = () => {
-    setState((prev: any) => ({
-      ...prev,
-      isMinimized: !prev.isMinimized,
-    }));
-  };
+  const handleMinimize = React.useCallback(() => {
+    toggleMinimized();
+  }, [toggleMinimized]);
+
+  const handleRequestAgent = React.useCallback(() => {
+    if (state.connectionState === 'connected') {
+      void triggerAgentJoin();
+    }
+  }, [state.connectionState, triggerAgentJoin]);
 
   const handleCopyLink = () => {
     const id = roomName.startsWith('canvas-') ? roomName.substring('canvas-'.length) : roomName;
@@ -208,15 +122,16 @@ export function LivekitRoomConnector({
   return (
     <>
       <RoomConnectorUI
-        state={state || null}
+        state={state}
         roomName={roomName}
         onMinimize={handleMinimize}
-        onConnect={handleConnect}
-        onDisconnect={handleConnect}
+        onConnect={handleConnectToggle}
+        onDisconnect={handleConnectToggle}
         onCopyLink={handleCopyLink}
+        onRequestAgent={handleRequestAgent}
       />
 
-      {state?.connectionState === 'connected' && (
+      {state.connectionState === 'connected' && (
         <div className="hidden">
           <AudioConference />
         </div>
