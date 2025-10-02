@@ -112,7 +112,7 @@ export function SpeechTranscription({
         room.off('dataReceived', handleDataReceived);
       };
     }
-  }, [room, onTranscription]);
+  }, [room, onTranscription, addTranscription]);
 
   // Monitor agent status
   useEffect(() => {
