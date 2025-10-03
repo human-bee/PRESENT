@@ -87,23 +87,28 @@ export function useAgentDispatch(
 
   // Listen for manual agent requests
   useEffect(() => {
-    const handleAgentRequest = (event: CustomEvent) => {
-      const { roomName: requestedRoom } = event.detail;
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    const handleAgentRequest = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      const { roomName: requestedRoom } = customEvent.detail ?? {};
       if (requestedRoom === roomName && connectionState === 'connected') {
         console.log(`🎯 [LiveKitConnector-${roomName}] Manual agent request received`);
-        requestAgent();
+        void requestAgent();
       }
     };
 
-        window.addEventListener('livekit:request-agent', handleAgentRequest as EventListener);
+    window.addEventListener('livekit:request-agent', handleAgentRequest);
 
-        return () => {
-          window.removeEventListener('livekit:request-agent', handleAgentRequest as EventListener);
-          if (dispatchTimeoutRef.current) {
-            clearTimeout(dispatchTimeoutRef.current);
-            dispatchTimeoutRef.current = null;
-          }
-        };
+    return () => {
+      window.removeEventListener('livekit:request-agent', handleAgentRequest);
+      if (dispatchTimeoutRef.current) {
+        clearTimeout(dispatchTimeoutRef.current);
+        dispatchTimeoutRef.current = null;
+      }
+    };
   }, [roomName, connectionState, requestAgent]);
 
   return { requestAgent };

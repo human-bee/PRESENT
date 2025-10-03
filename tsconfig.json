@@ -4,6 +4,7 @@
     "target": "ES2020", // match agent for modern JS features
     "module": "esnext", // keep for Next.js, agent uses ES2020 but esnext is fine for app
     "lib": ["dom", "dom.iterable", "esnext"], // app needs DOM, agent does not
+    "baseUrl": ".",
     "allowJs": true,
     "skipLibCheck": true,
     "strict": true,

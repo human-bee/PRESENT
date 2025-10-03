@@ -2,16 +2,9 @@
 
 import * as React from 'react';
 import { z } from 'zod';
-import { useRoomContext, AudioConference } from '@livekit/components-react';
-import { isDefaultCanvasUser } from '@/lib/livekit/display-names';
-import { useAuth } from '@/hooks/use-auth';
-
-// Extracted hooks
-import { useLivekitConnection } from './hooks/useLivekitConnection';
-import { useRoomEvents } from './hooks/useRoomEvents';
-
-// Import the UI component (we'll extract this separately)
-import { RoomConnectorUI } from './components/RoomConnectorUI';
+import { AudioConference } from '@livekit/components-react';
+import { useLivekitConnection, useRoomEvents } from './hooks';
+import { RoomConnectorUI } from './components';
 
 export const livekitRoomConnectorSchema = z.object({
   roomName: z.string().optional().describe("Name of the room to join (default: 'canvas-room')"),
@@ -36,60 +29,17 @@ export function LivekitRoomConnector({
   audioOnly = false,
   autoConnect = false,
 }: LivekitRoomConnectorProps) {
-  const room = useRoomContext();
-  const { user } = useAuth();
-
-  const effectiveUserName = React.useMemo(() => {
-    const provided = (userName ?? '').trim();
-    if (provided && !isDefaultCanvasUser(provided)) return provided;
-    const profileName = typeof user?.user_metadata?.full_name === 'string' ? user.user_metadata.full_name.trim() : '';
-    if (profileName) return profileName;
-    const emailName = typeof user?.email === 'string' ? user.email.split('@')[0]?.trim() ?? '' : '';
-    if (emailName) return emailName;
-    return provided || 'Canvas User';
-  }, [userName, user]);
-
-  const identityRef = React.useRef<string | null>(null);
-  const wsUrl = serverUrl || process.env.NEXT_PUBLIC_LIVEKIT_URL || process.env.NEXT_PUBLIC_LK_SERVER_URL || '';
-
-  // Generate stable identity
-  React.useEffect(() => {
-    if (typeof window === 'undefined') return;
-    try {
-      const key = `present:lk:identity:${roomName}`;
-      let id = window.localStorage.getItem(key);
-      if (!id) {
-        const base = (effectiveUserName || 'user').replace(/\s+/g, '-').slice(0, 24);
-        const rand = Math.random().toString(36).slice(2, 8);
-        id = `${base}-${rand}`;
-        window.localStorage.setItem(key, id);
-      }
-      identityRef.current = id;
-    } catch {
-      const base = (effectiveUserName || 'user').replace(/\s+/g, '-').slice(0, 24);
-      const rand = Math.random().toString(36).slice(2, 8);
-      identityRef.current = `${base}-${rand}`;
-    }
-  }, [roomName, effectiveUserName]);
-
-  // Use extracted hooks
   const {
     state,
     connect,
     disconnect,
     requestAgent,
-    roomEventHandlers,
     toggleMinimized,
-  } = useLivekitConnection({
+    copyInviteLink,
+    roomEventHandlers,
     room,
-    roomName,
-    identityName: effectiveUserName,
-    wsUrl,
-    audioOnly,
-    autoConnect,
-    user,
-    identityRef,
-  });
+  } = useLivekitConnection({ roomName, userName, serverUrl, audioOnly, autoConnect });
+
   useRoomEvents(room, roomName, roomEventHandlers);
 
   const handleConnectToggle = React.useCallback(() => {
@@ -103,9 +53,7 @@ export function LivekitRoomConnector({
     }
   }, [state.connectionState, connect, disconnect]);
 
-  const handleMinimize = React.useCallback(() => {
-    toggleMinimized();
-  }, [toggleMinimized]);
+  const handleMinimize = toggleMinimized;
 
   const handleRequestAgent = React.useCallback(() => {
     if (state.connectionState === 'connected') {
@@ -113,11 +61,9 @@ export function LivekitRoomConnector({
     }
   }, [state.connectionState, requestAgent]);
 
-  const handleCopyLink = () => {
-    const id = roomName.startsWith('canvas-') ? roomName.substring('canvas-'.length) : roomName;
-    const link = `${window.location.origin}/canvas?id=${encodeURIComponent(id)}`;
-    navigator.clipboard.writeText(link);
-  };
+  const handleCopyLink = React.useCallback(() => {
+    void copyInviteLink();
+  }, [copyInviteLink]);
 
   return (
     <>

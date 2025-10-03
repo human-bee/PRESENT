@@ -1,38 +1,49 @@
-import { useState, useRef, useCallback, useEffect, useMemo, type RefObject } from 'react';
+import {
+  useState,
+  useRef,
+  useCallback,
+  useEffect,
+  useMemo,
+  type RefObject,
+} from 'react';
+import { useRoomContext } from '@livekit/components-react';
 import { ConnectionState, DisconnectReason, Participant, Room } from 'livekit-client';
 import type { User } from '@supabase/supabase-js';
-import { mergeState as mergeWithFallback } from '@/components/ui/shared/utils/safeSet';
+import { useAuth } from '@/hooks/use-auth';
+import { isDefaultCanvasUser } from '@/lib/livekit/display-names';
+import { mergeState, produceState } from '@/components/ui/shared/utils/state';
 import {
   LivekitRoomConnectorState,
   initialLivekitRoomConnectorState,
 } from './types';
 import { useAgentDispatch, isAgentParticipant } from './useAgentDispatch';
 import type { RoomEventHandlers } from './useRoomEvents';
+import {
+  TOKEN_TIMEOUT_MS,
+  AUTO_CONNECT_DELAY_MS,
+  AGENT_AUTO_TRIGGER_DELAY_MS,
+  STORAGE_KEY_PREFIX,
+} from '../utils';
 
-const TOKEN_TIMEOUT_MS = 15000;
-const AUTO_CONNECT_DELAY_MS = 500;
-const AGENT_AUTO_TRIGGER_DELAY_MS = 2000;
-
-interface ConnectionOptions {
-  room: Room | undefined;
-  roomName: string;
-  identityName: string;
-  wsUrl: string;
-  audioOnly: boolean;
+export interface UseLivekitConnectionOptions {
+  roomName?: string;
+  userName?: string;
+  serverUrl?: string;
+  audioOnly?: boolean;
   autoConnect?: boolean;
-  user?: User | null;
-  identityRef: RefObject<string | null>;
-  onConnected?: () => void;
-  onDisconnected?: (reason?: string) => void;
 }
 
-interface LivekitConnectionApi {
+export interface LivekitConnectionApi {
   state: LivekitRoomConnectorState;
   connect: () => Promise<void>;
   disconnect: () => Promise<void>;
   requestAgent: () => Promise<void>;
-  roomEventHandlers: RoomEventHandlers;
   toggleMinimized: () => void;
+  copyInviteLink: () => Promise<void>;
+  roomEventHandlers: RoomEventHandlers;
+  room: Room | undefined;
+  roomName: string;
+  displayName: string;
 }
 
 function resolveInitialState(room?: Room): LivekitRoomConnectorState {
@@ -54,44 +65,130 @@ function resolveInitialState(room?: Room): LivekitRoomConnectorState {
   };
 }
 
-export function useLivekitConnection(options: ConnectionOptions): LivekitConnectionApi {
+function createSlug(source: string): string {
+  return source.replace(/\s+/g, '-').slice(0, 24) || 'user';
+}
+
+function resolveDisplayName(userName: string, user: User | null): string {
+  const provided = userName.trim();
+  if (provided && !isDefaultCanvasUser(provided)) {
+    return provided;
+  }
+
+  const profileName =
+    typeof user?.user_metadata?.full_name === 'string'
+      ? user.user_metadata.full_name.trim()
+      : '';
+  if (profileName) {
+    return profileName;
+  }
+
+  const emailName = typeof user?.email === 'string' ? user.email.split('@')[0]?.trim() ?? '' : '';
+  if (emailName) {
+    return emailName;
+  }
+
+  return provided || 'Canvas User';
+}
+
+function ensureIdentity(
+  identityRef: RefObject<string | null>,
+  displayName: string,
+  roomName: string,
+): string {
+  const existing = identityRef.current;
+  if (existing) {
+    return existing;
+  }
+
+  const base = createSlug(displayName || 'user');
+  const generated = `${base}-${Math.random().toString(36).slice(2, 8)}`;
+  identityRef.current = generated;
+
+  if (typeof window !== 'undefined') {
+    try {
+      window.localStorage.setItem(`${STORAGE_KEY_PREFIX}${roomName}`, generated);
+    } catch {
+      // ignore storage failures
+    }
+  }
+
+  return generated;
+}
+
+export function useLivekitConnection(options: UseLivekitConnectionOptions): LivekitConnectionApi {
   const {
-    room,
-    roomName,
-    identityName,
-    wsUrl,
-    audioOnly,
+    roomName: providedRoomName = 'canvas-room',
+    userName: providedUserName = 'Canvas User',
+    serverUrl,
+    audioOnly = false,
     autoConnect = false,
-    user,
-    identityRef,
-    onConnected,
-    onDisconnected,
   } = options;
 
-  const [state, setState] = useState<LivekitRoomConnectorState>(() => resolveInitialState(room));
-  const stateRef = useRef(state);
+  const { user } = useAuth();
+  const room = useRoomContext();
+
+  const displayName = useMemo(
+    () => resolveDisplayName(providedUserName, user ?? null),
+    [providedUserName, user],
+  );
+
+  const identityRef = useRef<string | null>(null);
+  const stateRef = useRef<LivekitRoomConnectorState>(initialLivekitRoomConnectorState);
   const tokenFetchInProgress = useRef(false);
   const tokenRequestAbortRef = useRef<AbortController | null>(null);
   const agentAutoTriggerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const [state, setState] = useState<LivekitRoomConnectorState>(() => resolveInitialState(room ?? undefined));
 
   useEffect(() => {
     stateRef.current = state;
   }, [state]);
 
-  const mergeConnectorState = useCallback((patch: Partial<LivekitRoomConnectorState>) => {
-    setState((prev) => mergeWithFallback(prev, patch, initialLivekitRoomConnectorState));
-  }, []);
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      ensureIdentity(identityRef, displayName, providedRoomName);
+      return;
+    }
+
+    const storageKey = `${STORAGE_KEY_PREFIX}${providedRoomName}`;
+    try {
+      const stored = window.localStorage.getItem(storageKey);
+      if (stored) {
+        identityRef.current = stored;
+        return;
+      }
+    } catch {
+      // ignore storage access failures and fall back to generated id
+    }
+
+    ensureIdentity(identityRef, displayName, providedRoomName);
+  }, [providedRoomName, displayName]);
+
+  const wsUrl = useMemo(() => {
+    return (
+      serverUrl ||
+      process.env.NEXT_PUBLIC_LIVEKIT_URL ||
+      process.env.NEXT_PUBLIC_LK_SERVER_URL ||
+      ''
+    );
+  }, [serverUrl]);
+
+  const mergeConnectorState = useCallback(
+    (patch: Partial<LivekitRoomConnectorState>) => {
+      setState((prev) => mergeState(prev, patch, initialLivekitRoomConnectorState));
+    },
+    [],
+  );
 
   const getConnectorState = useCallback(() => stateRef.current, []);
 
   const toggleMinimized = useCallback(() => {
-    setState((prev) => {
-      const base = prev ?? initialLivekitRoomConnectorState;
-      return {
-        ...base,
-        isMinimized: !base.isMinimized,
-      };
-    });
+    setState((prev) =>
+      produceState(prev, (draft) => {
+        draft.isMinimized = !draft.isMinimized;
+      }, initialLivekitRoomConnectorState),
+    );
   }, []);
 
   const clearAgentAutoTrigger = useCallback(() => {
@@ -101,18 +198,20 @@ export function useLivekitConnection(options: ConnectionOptions): LivekitConnect
     }
   }, []);
 
-  useEffect(() => () => {
-    tokenRequestAbortRef.current?.abort();
-    tokenRequestAbortRef.current = null;
-    clearAgentAutoTrigger();
+  useEffect(() => {
+    return () => {
+      tokenRequestAbortRef.current?.abort();
+      tokenRequestAbortRef.current = null;
+      clearAgentAutoTrigger();
+    };
   }, [clearAgentAutoTrigger]);
 
   useEffect(() => {
     clearAgentAutoTrigger();
-  }, [roomName, identityName, clearAgentAutoTrigger]);
+  }, [providedRoomName, displayName, clearAgentAutoTrigger]);
 
   const { requestAgent: rawRequestAgent } = useAgentDispatch(
-    roomName,
+    providedRoomName,
     state.connectionState,
     mergeConnectorState,
     getConnectorState,
@@ -145,7 +244,7 @@ export function useLivekitConnection(options: ConnectionOptions): LivekitConnect
 
   const connect = useCallback(async () => {
     if (!room) {
-      console.error(`❌ [LiveKitConnector-${roomName}] No room instance available for connect().`);
+      console.error(`❌ [LiveKitConnector-${providedRoomName}] No room instance available for connect().`);
       mergeConnectorState({
         connectionState: 'error',
         errorMessage: 'LiveKit room is unavailable.',
@@ -178,23 +277,18 @@ export function useLivekitConnection(options: ConnectionOptions): LivekitConnect
     const abortController = new AbortController();
     tokenRequestAbortRef.current = abortController;
 
-    let identity = identityRef.current;
-    if (!identity) {
-      const fallback = `${identityName.replace(/\s+/g, '-')}-${Math.random().toString(36).slice(2, 8)}`;
-      identityRef.current = fallback;
-      identity = fallback;
-    }
+    const identity = ensureIdentity(identityRef, displayName, providedRoomName);
 
     const metadataPayload = {
-      displayName: identityName,
-      fullName: identityName,
+      displayName,
+      fullName: displayName,
       userId: user?.id ?? undefined,
     };
     const metadataParam = `&metadata=${encodeURIComponent(JSON.stringify(metadataPayload))}`;
 
     try {
       const tokenResponse = await fetch(
-        `/api/token?roomName=${encodeURIComponent(roomName)}&identity=${encodeURIComponent(identity)}&username=${encodeURIComponent(identityName)}&name=${encodeURIComponent(identityName)}${metadataParam}`,
+        `/api/token?roomName=${encodeURIComponent(providedRoomName)}&identity=${encodeURIComponent(identity)}&username=${encodeURIComponent(displayName)}&name=${encodeURIComponent(displayName)}${metadataParam}`,
         { signal: abortController.signal },
       );
 
@@ -241,7 +335,7 @@ export function useLivekitConnection(options: ConnectionOptions): LivekitConnect
           await room.localParticipant.setMicrophoneEnabled(true);
         }
       } catch (mediaError) {
-        console.warn(`⚠️ [LiveKitConnector-${roomName}] Media device error:`, mediaError);
+        console.warn(`⚠️ [LiveKitConnector-${providedRoomName}] Media device error:`, mediaError);
       }
 
       mergeConnectorState({
@@ -250,9 +344,9 @@ export function useLivekitConnection(options: ConnectionOptions): LivekitConnect
         errorMessage: null,
       });
 
-      onConnected?.();
+      scheduleAgentJoin(room);
     } catch (error) {
-      console.error(`❌ [LiveKitConnector-${roomName}] Connection failed:`, error);
+      console.error(`❌ [LiveKitConnector-${providedRoomName}] Connection failed:`, error);
       mergeConnectorState({
         connectionState: 'error',
         errorMessage:
@@ -267,15 +361,14 @@ export function useLivekitConnection(options: ConnectionOptions): LivekitConnect
     }
   }, [
     room,
-    roomName,
+    providedRoomName,
     wsUrl,
     audioOnly,
-    identityName,
+    displayName,
     user,
     mergeConnectorState,
     getConnectorState,
-    identityRef,
-    onConnected,
+    scheduleAgentJoin,
   ]);
 
   const disconnect = useCallback(async () => {
@@ -286,7 +379,7 @@ export function useLivekitConnection(options: ConnectionOptions): LivekitConnect
     try {
       await room.disconnect();
     } catch (error) {
-      console.error(`❌ [LiveKitConnector-${roomName}] Error during disconnect:`, error);
+      console.error(`❌ [LiveKitConnector-${providedRoomName}] Error during disconnect:`, error);
     } finally {
       clearAgentAutoTrigger();
       mergeConnectorState({
@@ -297,9 +390,8 @@ export function useLivekitConnection(options: ConnectionOptions): LivekitConnect
         errorMessage: null,
         token: null,
       });
-      onDisconnected?.();
     }
-  }, [room, roomName, mergeConnectorState, onDisconnected, clearAgentAutoTrigger]);
+  }, [room, providedRoomName, mergeConnectorState, clearAgentAutoTrigger]);
 
   useEffect(() => {
     if (!autoConnect) {
@@ -447,12 +539,33 @@ export function useLivekitConnection(options: ConnectionOptions): LivekitConnect
     ],
   );
 
+  const copyInviteLink = useCallback(async () => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    const id = providedRoomName.startsWith('canvas-')
+      ? providedRoomName.substring('canvas-'.length)
+      : providedRoomName;
+    const link = `${window.location.origin}/canvas?id=${encodeURIComponent(id)}`;
+
+    try {
+      await navigator.clipboard.writeText(link);
+    } catch (error) {
+      console.error(`❌ [LiveKitConnector-${providedRoomName}] Failed to copy invite link:`, error);
+    }
+  }, [providedRoomName]);
+
   return {
     state,
     connect,
     disconnect,
     requestAgent,
-    roomEventHandlers,
     toggleMinimized,
+    copyInviteLink,
+    roomEventHandlers,
+    room: room ?? undefined,
+    roomName: providedRoomName,
+    displayName,
   };
 }

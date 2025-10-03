@@ -162,17 +162,9 @@ function CollaborationEditorEffects({
   containerRef: RefObject<HTMLDivElement | null>;
 }) {
   const { editor, ready } = useEditorReady();
-  const setupPinnedShapes = usePinnedShapes();
 
+  usePinnedShapes(editor, ready);
   useCanvasEventHandlers(editor, room, containerRef, { enabled: ready });
-
-  useEffect(() => {
-    if (!ready || !editor) return;
-    const cleanup = setupPinnedShapes();
-    return () => {
-      cleanup();
-    };
-  }, [ready, editor, setupPinnedShapes]);
 
   return null;
 }

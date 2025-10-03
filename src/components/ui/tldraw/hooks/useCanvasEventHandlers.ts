@@ -4,7 +4,7 @@ import { Editor, createShapeId, toRichText } from '@tldraw/tldraw';
 import { nanoid } from 'nanoid';
 import { Room } from 'livekit-client';
 import { createLiveKitBus } from '@/lib/livekit/livekit-bus';
-import { normalizeMermaidText, getMermaidLastNode } from '@/components/TO BE REFACTORED/tool-dispatcher';
+import { attachMermaidBridge, registerWindowListener } from '../utils';
 
 const STEWARD_FLOWCHART =
   typeof process !== 'undefined' && process.env.NEXT_PUBLIC_STEWARD_FLOWCHART_ENABLED === 'true';
@@ -40,113 +40,8 @@ export function useCanvasEventHandlers(
     if (!enabled || !editor || !room) return;
 
     const bus = createLiveKitBus(room);
-
-    // Mermaid helper functions
-    const registerMermaidHandler = (flag: string, event: string, handler: EventListener) => {
-      const g: any = window as any;
-      const existing = g[flag] as EventListener | undefined;
-      if (existing) {
-        window.removeEventListener(event, existing);
-      }
-      window.addEventListener(event, handler);
-      g[flag] = handler;
-      return handler;
-    };
-
-    const removeMermaidHandler = (flag: string, event: string) => {
-      const g: any = window as any;
-      const existing = g[flag] as EventListener | undefined;
-      if (existing) {
-        window.removeEventListener(event, existing);
-        delete g[flag];
-      }
-    };
-
-    const updateMermaidSession = (normalizedText: string, lastOverride?: string) => {
-      if (STEWARD_FLOWCHART) return;
-      try {
-        const g: any = window as any;
-        g.__present_mermaid_session = {
-          text: normalizedText,
-          last: typeof lastOverride === 'string' ? lastOverride : getMermaidLastNode(normalizedText),
-        };
-      } catch {}
-    };
-
-    // LiveKit bus ui_update handler for mermaid_stream shapes
-    const offUiUpdate = bus.on('ui_update', (msg: any) => {
-      try {
-        if (!msg || typeof msg !== 'object') return;
-        const componentId = String(msg.componentId || '');
-        const patch = (msg.patch || {}) as Record<string, unknown>;
-        const ts = typeof msg.timestamp === 'number' ? msg.timestamp : Date.now();
-        if (!componentId || !patch) return;
-
-        const shape = editor.getShape(componentId as any) as any;
-        if (!shape || shape.type !== 'mermaid_stream') return;
-
-        const last = lastTsByShape.current.get(componentId) || 0;
-        if (ts < last) return; // drop stale
-        lastTsByShape.current.set(componentId, ts);
-
-        const nextProps: Record<string, unknown> = {};
-        if (STEWARD_FLOWCHART) {
-          const doc = (patch as any).flowchartDoc as string | undefined;
-          const formatRaw = (patch as any).format as string | undefined;
-          const format = typeof formatRaw === 'string' ? formatRaw.toLowerCase() : undefined;
-          try {
-            console.log('[Canvas][ui_update] steward patch received', { componentId, format: formatRaw, hasDoc: !!doc });
-          } catch {}
-          if (typeof doc === 'string' && doc.length > 0) {
-            let mermaidText: string | undefined;
-            if (format === 'mermaid') {
-              mermaidText = doc;
-            } else if (format === 'markdown' || format === 'streamdown') {
-              const match = doc.match(/```mermaid\s*([\s\S]*?)```/i);
-              mermaidText = match ? match[1] : doc;
-            } else {
-              mermaidText = doc;
-            }
-            if (typeof mermaidText === 'string') nextProps.mermaidText = mermaidText;
-          }
-        } else {
-          if (typeof patch.mermaidText === 'string') nextProps.mermaidText = patch.mermaidText;
-          if (typeof patch.keepLastGood === 'boolean') nextProps.keepLastGood = patch.keepLastGood;
-          if (typeof patch.w === 'number') nextProps.w = patch.w;
-          if (typeof patch.h === 'number') nextProps.h = patch.h;
-        }
-        if (Object.keys(nextProps).length === 0) return;
-        try { console.log('[Canvas][ui_update] apply', { componentId, keys: Object.keys(nextProps), ts }); } catch {}
-        editor.updateShapes([{ id: componentId as any, type: 'mermaid_stream' as any, props: nextProps }]);
-        if (STEWARD_FLOWCHART) {
-          try {
-            const g: any = window as any;
-            g.__present_mermaid_last_shape_id = componentId;
-            if (g.__present_mermaid_session) delete g.__present_mermaid_session;
-          } catch {}
-        }
-      } catch {
-        // ignore
-      }
-    });
-
-    // Bridge local shape patch events → LiveKit bus
-    const handleShapePatch = (e: Event) => {
-      try {
-        const detail = (e as CustomEvent).detail || {};
-        const shapeId = String(detail.shapeId || '');
-        const patch = (detail.patch || {}) as Record<string, unknown>;
-        if (!shapeId || !patch) return;
-        const ts = Date.now();
-        try { console.log('[Canvas][shapePatch] send', { shapeId, keys: Object.keys(patch), ts }); } catch {}
-        bus.send('ui_update', { componentId: shapeId, patch, timestamp: ts });
-      } catch {}
-    };
-    registerMermaidHandler(
-      '__present_mermaid_shapePatch_handler',
-      'custom:shapePatch',
-      handleShapePatch as EventListener,
-    );
+    const cleanups: Array<() => void> = [];
+    cleanups.push(attachMermaidBridge({ editor, bus, lastTimestampsRef: lastTsByShape }));
 
     // Canvas control event handlers
     const handleFocusEvent = (e: Event) => {
@@ -534,101 +429,7 @@ export function useCanvasEventHandlers(
       }
     };
 
-    const handleCreateMermaidStream = (e: Event) => {
-      try {
-        const detail = (e as CustomEvent).detail || {};
-        const requestedText = typeof detail.text === 'string' ? detail.text : undefined;
-        const normalized = STEWARD_FLOWCHART
-          ? (requestedText || 'graph TD;\nA-->B;')
-          : normalizeMermaidText(requestedText || 'graph TD;\nA-->B;');
-        const g: any = window as any;
-        if (g.__present_mermaid_creating === true) {
-          console.warn('⚠️ [Canvas] Creation in progress; skipping duplicate create attempt');
-          return;
-        }
-        g.__present_mermaid_creating = true;
-        try {
-          const hasUtil = !!(editor as any).getShapeUtil?.('mermaid_stream');
-          if (!hasUtil) {
-            setTimeout(() => {
-              try {
-                window.dispatchEvent(
-                  new CustomEvent('tldraw:create_mermaid_stream', { detail: { text: normalized } }),
-                );
-              } catch {}
-            }, 150);
-            g.__present_mermaid_creating = false;
-            return;
-          }
-        } catch {}
-        const viewport = editor.getViewportPageBounds();
-        const x = viewport ? viewport.midX - 200 : 0;
-        const y = viewport ? viewport.midY - 150 : 0;
-        const id = createShapeId(`mermaid-${nanoid()}`);
-        editor.createShape({
-          id,
-          type: 'mermaid_stream' as any,
-          x,
-          y,
-          props: {
-            w: 400,
-            h: 300,
-            name: 'Mermaid (stream)',
-            mermaidText: normalized,
-            compileState: 'idle',
-            keepLastGood: true,
-          },
-        } as any);
-        try {
-          g.__present_mermaid_last_shape_id = id;
-          updateMermaidSession(normalized);
-        } catch {}
-        setTimeout(() => { try { g.__present_mermaid_creating = false; } catch {} }, 250);
-      } catch (err) {
-        console.warn('[CanvasControl] create_mermaid_stream error', err);
-        try { (window as any).__present_mermaid_creating = false; } catch {}
-      }
-    };
-    registerMermaidHandler(
-      '__present_mermaid_create_handler',
-      'tldraw:create_mermaid_stream',
-      handleCreateMermaidStream as EventListener,
-    );
-
-    const handleUpdateMermaidStream = (e: Event) => {
-      const detail = (e as CustomEvent).detail || {};
-      const providedShapeId = detail.shapeId ? String(detail.shapeId) : '';
-      const text = typeof detail.text === 'string' ? detail.text : '';
-      if (!providedShapeId && !text) return;
-      const g: any = window as any;
-      const shapeId = providedShapeId || g.__present_mermaid_last_shape_id || '';
-      if (!shapeId) return;
-      try {
-        const normalized = STEWARD_FLOWCHART ? text : normalizeMermaidText(text);
-        try { console.log('[Canvas][update_mermaid] apply', { shapeId, len: normalized.length }); } catch {}
-        editor.updateShapes([
-          { id: shapeId as any, type: 'mermaid_stream' as any, props: { mermaidText: normalized } },
-        ]);
-        try {
-          g.__present_mermaid_last_shape_id = shapeId;
-          updateMermaidSession(normalized);
-        } catch {}
-        try {
-          window.dispatchEvent(
-            new CustomEvent('custom:shapePatch', {
-              detail: { shapeId, patch: { mermaidText: normalized } },
-            }),
-          );
-        } catch {}
-      } catch (err) {
-        console.warn('[CanvasControl] update_mermaid_stream error', err);
-      }
-    };
-    registerMermaidHandler(
-      '__present_mermaid_update_handler',
-      'tldraw:update_mermaid_stream',
-      handleUpdateMermaidStream as EventListener,
-    );
+    // Mermaid event handlers are managed via attachMermaidBridge
 
     const handleListShapes = (e: Event) => {
       const detail = (e as CustomEvent).detail || {};
@@ -845,58 +646,41 @@ export function useCanvasEventHandlers(
       }
     };
 
-    // Register all event listeners
-    window.addEventListener('tldraw:canvas_focus', handleFocusEvent as EventListener);
-    window.addEventListener('tldraw:canvas_zoom_all', handleZoomAll as EventListener);
-    window.addEventListener('tldraw:create_note', handleCreateNote as EventListener);
-    window.addEventListener('tldraw:pinSelected', handlePinSelected as EventListener);
-    window.addEventListener('tldraw:unpinSelected', handleUnpinSelected as EventListener);
-    window.addEventListener('tldraw:lockSelected', handleLockSelected as EventListener);
-    window.addEventListener('tldraw:unlockSelected', handleUnlockSelected as EventListener);
-    window.addEventListener('tldraw:arrangeGrid', handleArrangeGrid as EventListener);
-    window.addEventListener('tldraw:createRectangle', handleCreateRectangle as EventListener);
-    window.addEventListener('tldraw:createEllipse', handleCreateEllipse as EventListener);
-    window.addEventListener('tldraw:alignSelected', handleAlignSelected as EventListener);
-    window.addEventListener('tldraw:distributeSelected', handleDistributeSelected as EventListener);
-    window.addEventListener('tldraw:drawSmiley', handleDrawSmiley as EventListener);
-    window.addEventListener('tldraw:listShapes', handleListShapes as EventListener);
-    window.addEventListener('tldraw:toggleGrid', handleToggleGrid as EventListener);
-    window.addEventListener('tldraw:setBackground', handleSetBackground as EventListener);
-    window.addEventListener('tldraw:setTheme', handleSetTheme as EventListener);
-    window.addEventListener('tldraw:select', handleSelect as EventListener);
-    window.addEventListener('tldraw:selectNote', handleSelectNote as EventListener);
-    window.addEventListener('tldraw:colorShape', handleColorShape as EventListener);
-    window.addEventListener('tldraw:deleteShape', handleDeleteShape as EventListener);
-    window.addEventListener('tldraw:renameNote', handleRenameNote as EventListener);
+    const listenerCleanups = [
+      registerWindowListener('tldraw:canvas_focus', handleFocusEvent as EventListener),
+      registerWindowListener('tldraw:canvas_zoom_all', handleZoomAll as EventListener),
+      registerWindowListener('tldraw:create_note', handleCreateNote as EventListener),
+      registerWindowListener('tldraw:listShapes', handleListShapes as EventListener),
+      registerWindowListener('tldraw:pinSelected', handlePinSelected as EventListener),
+      registerWindowListener('tldraw:unpinSelected', handleUnpinSelected as EventListener),
+      registerWindowListener('tldraw:lockSelected', handleLockSelected as EventListener),
+      registerWindowListener('tldraw:unlockSelected', handleUnlockSelected as EventListener),
+      registerWindowListener('tldraw:arrangeGrid', handleArrangeGrid as EventListener),
+      registerWindowListener('tldraw:createRectangle', handleCreateRectangle as EventListener),
+      registerWindowListener('tldraw:createEllipse', handleCreateEllipse as EventListener),
+      registerWindowListener('tldraw:alignSelected', handleAlignSelected as EventListener),
+      registerWindowListener('tldraw:distributeSelected', handleDistributeSelected as EventListener),
+      registerWindowListener('tldraw:drawSmiley', handleDrawSmiley as EventListener),
+      registerWindowListener('tldraw:toggleGrid', handleToggleGrid as EventListener),
+      registerWindowListener('tldraw:setBackground', handleSetBackground as EventListener),
+      registerWindowListener('tldraw:setTheme', handleSetTheme as EventListener),
+      registerWindowListener('tldraw:select', handleSelect as EventListener),
+      registerWindowListener('tldraw:selectNote', handleSelectNote as EventListener),
+      registerWindowListener('tldraw:colorShape', handleColorShape as EventListener),
+      registerWindowListener('tldraw:deleteShape', handleDeleteShape as EventListener),
+      registerWindowListener('tldraw:renameNote', handleRenameNote as EventListener),
+    ];
 
-    // Cleanup function
+    listenerCleanups.forEach((cleanup) => cleanups.push(cleanup));
+
     return () => {
-      offUiUpdate?.();
-      window.removeEventListener('tldraw:canvas_focus', handleFocusEvent as EventListener);
-      window.removeEventListener('tldraw:canvas_zoom_all', handleZoomAll as EventListener);
-      window.removeEventListener('tldraw:create_note', handleCreateNote as EventListener);
-      window.removeEventListener('tldraw:listShapes', handleListShapes as EventListener);
-      window.removeEventListener('tldraw:pinSelected', handlePinSelected as EventListener);
-      window.removeEventListener('tldraw:unpinSelected', handleUnpinSelected as EventListener);
-      window.removeEventListener('tldraw:lockSelected', handleLockSelected as EventListener);
-      window.removeEventListener('tldraw:unlockSelected', handleUnlockSelected as EventListener);
-      window.removeEventListener('tldraw:arrangeGrid', handleArrangeGrid as EventListener);
-      window.removeEventListener('tldraw:createRectangle', handleCreateRectangle as EventListener);
-      window.removeEventListener('tldraw:createEllipse', handleCreateEllipse as EventListener);
-      window.removeEventListener('tldraw:alignSelected', handleAlignSelected as EventListener);
-      window.removeEventListener('tldraw:distributeSelected', handleDistributeSelected as EventListener);
-      window.removeEventListener('tldraw:drawSmiley', handleDrawSmiley as EventListener);
-      removeMermaidHandler('__present_mermaid_create_handler', 'tldraw:create_mermaid_stream');
-      removeMermaidHandler('__present_mermaid_update_handler', 'tldraw:update_mermaid_stream');
-      removeMermaidHandler('__present_mermaid_shapePatch_handler', 'custom:shapePatch');
-      window.removeEventListener('tldraw:toggleGrid', handleToggleGrid as EventListener);
-      window.removeEventListener('tldraw:setBackground', handleSetBackground as EventListener);
-      window.removeEventListener('tldraw:setTheme', handleSetTheme as EventListener);
-      window.removeEventListener('tldraw:select', handleSelect as EventListener);
-      window.removeEventListener('tldraw:selectNote', handleSelectNote as EventListener);
-      window.removeEventListener('tldraw:colorShape', handleColorShape as EventListener);
-      window.removeEventListener('tldraw:deleteShape', handleDeleteShape as EventListener);
-      window.removeEventListener('tldraw:renameNote', handleRenameNote as EventListener);
+      cleanups.forEach((cleanup) => {
+        try {
+          cleanup();
+        } catch {
+          // ignore cleanup errors
+        }
+      });
     };
   }, [editor, room, containerRef, enabled]);
 }
