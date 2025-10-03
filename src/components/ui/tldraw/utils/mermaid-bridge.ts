@@ -1,9 +1,10 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
+ 
 import { nanoid } from 'nanoid';
 import { Editor, createShapeId } from '@tldraw/tldraw';
 import { normalizeMermaidText, getMermaidLastNode } from '@/components/TO BE REFACTORED/tool-dispatcher';
 import type { MutableRefObject } from 'react';
 import { registerSingletonWindowListener, registerWindowListener } from './window-listeners';
+import type { LiveKitBus } from './types';
 
 const STEWARD_FLOWCHART =
   typeof process !== 'undefined' && process.env.NEXT_PUBLIC_STEWARD_FLOWCHART_ENABLED === 'true';
@@ -18,11 +19,6 @@ declare global {
     __present_mermaid_creating?: boolean;
   }
 }
-
-type LiveKitBus = {
-  send(topic: string, payload: unknown): void;
-  on(topic: string, handler: (payload: unknown) => void): (() => void) | undefined;
-};
 
 interface MermaidBridgeOptions {
   editor: Editor;

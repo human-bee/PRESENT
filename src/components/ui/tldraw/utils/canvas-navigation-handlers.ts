@@ -1,9 +1,8 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import type { Editor } from '@tldraw/tldraw';
 import type { RefObject } from 'react';
 import type { CanvasEventMap } from './types';
 
-function createFocusHandler(editor: Editor, containerRef: RefObject<HTMLDivElement>) {
+function createFocusHandler(editor: Editor) {
   return (event: Event) => {
     const detail = (event as CustomEvent).detail || {};
     const target: 'all' | 'selected' | 'component' | 'shape' = detail.target || 'all';
@@ -124,7 +123,7 @@ export function createCanvasNavigationHandlers(
   containerRef: RefObject<HTMLDivElement>,
 ): CanvasEventMap {
   return {
-    'tldraw:canvas_focus': createFocusHandler(editor, containerRef),
+    'tldraw:canvas_focus': createFocusHandler(editor),
     'tldraw:canvas_zoom_all': createZoomAllHandler(editor),
     'tldraw:toggleGrid': createToggleGridHandler(containerRef),
     'tldraw:setBackground': createBackgroundHandler(containerRef),

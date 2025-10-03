@@ -58,6 +58,11 @@ export function useTldrawEditorBridge(editor: Editor | null, options?: TldrawEdi
     const timerId = window.setTimeout(() => {
       try {
         bridge.dispatch('rehydrate-components');
+        window.dispatchEvent(
+          new CustomEvent('custom:rehydrateComponents', {
+            detail: { editorId: bridge.editorId },
+          }),
+        );
       } catch {
         // ignore dispatch failures during teardown
       }
