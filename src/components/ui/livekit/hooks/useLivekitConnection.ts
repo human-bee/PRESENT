@@ -16,7 +16,7 @@ const AGENT_AUTO_TRIGGER_DELAY_MS = 2000;
 interface ConnectionOptions {
   room: Room | undefined;
   roomName: string;
-  userName: string;
+  identityName: string;
   wsUrl: string;
   audioOnly: boolean;
   autoConnect?: boolean;
@@ -30,7 +30,7 @@ interface LivekitConnectionApi {
   state: LivekitRoomConnectorState;
   connect: () => Promise<void>;
   disconnect: () => Promise<void>;
-  triggerAgentJoin: () => Promise<void>;
+  requestAgent: () => Promise<void>;
   roomEventHandlers: RoomEventHandlers;
   toggleMinimized: () => void;
 }
@@ -58,7 +58,7 @@ export function useLivekitConnection(options: ConnectionOptions): LivekitConnect
   const {
     room,
     roomName,
-    userName,
+    identityName,
     wsUrl,
     audioOnly,
     autoConnect = false,
@@ -109,19 +109,19 @@ export function useLivekitConnection(options: ConnectionOptions): LivekitConnect
 
   useEffect(() => {
     clearAgentAutoTrigger();
-  }, [roomName, clearAgentAutoTrigger]);
+  }, [roomName, identityName, clearAgentAutoTrigger]);
 
-  const { triggerAgentJoin: rawTriggerAgentJoin } = useAgentDispatch(
+  const { requestAgent: rawRequestAgent } = useAgentDispatch(
     roomName,
     state.connectionState,
     mergeConnectorState,
     getConnectorState,
   );
 
-  const triggerAgentJoin = useCallback(async () => {
+  const requestAgent = useCallback(async () => {
     clearAgentAutoTrigger();
-    await rawTriggerAgentJoin();
-  }, [clearAgentAutoTrigger, rawTriggerAgentJoin]);
+    await rawRequestAgent();
+  }, [clearAgentAutoTrigger, rawRequestAgent]);
 
   const scheduleAgentJoin = useCallback(
     (eventRoom: Room) => {
@@ -136,11 +136,11 @@ export function useLivekitConnection(options: ConnectionOptions): LivekitConnect
       if (nonAgentParticipants.length === 0 && agentParticipants.length === 0) {
         clearAgentAutoTrigger();
         agentAutoTriggerRef.current = setTimeout(() => {
-          void triggerAgentJoin();
+          void requestAgent();
         }, AGENT_AUTO_TRIGGER_DELAY_MS);
       }
     },
-    [clearAgentAutoTrigger, triggerAgentJoin],
+    [clearAgentAutoTrigger, requestAgent],
   );
 
   const connect = useCallback(async () => {
@@ -174,26 +174,27 @@ export function useLivekitConnection(options: ConnectionOptions): LivekitConnect
     });
 
     tokenFetchInProgress.current = true;
+    tokenRequestAbortRef.current?.abort();
     const abortController = new AbortController();
     tokenRequestAbortRef.current = abortController;
 
     let identity = identityRef.current;
     if (!identity) {
-      const fallback = `${userName.replace(/\s+/g, '-')}-${Math.random().toString(36).slice(2, 8)}`;
+      const fallback = `${identityName.replace(/\s+/g, '-')}-${Math.random().toString(36).slice(2, 8)}`;
       identityRef.current = fallback;
       identity = fallback;
     }
 
     const metadataPayload = {
-      displayName: userName,
-      fullName: userName,
+      displayName: identityName,
+      fullName: identityName,
       userId: user?.id ?? undefined,
     };
     const metadataParam = `&metadata=${encodeURIComponent(JSON.stringify(metadataPayload))}`;
 
     try {
       const tokenResponse = await fetch(
-        `/api/token?roomName=${encodeURIComponent(roomName)}&identity=${encodeURIComponent(identity)}&username=${encodeURIComponent(userName)}&name=${encodeURIComponent(userName)}${metadataParam}`,
+        `/api/token?roomName=${encodeURIComponent(roomName)}&identity=${encodeURIComponent(identity)}&username=${encodeURIComponent(identityName)}&name=${encodeURIComponent(identityName)}${metadataParam}`,
         { signal: abortController.signal },
       );
 
@@ -269,7 +270,7 @@ export function useLivekitConnection(options: ConnectionOptions): LivekitConnect
     roomName,
     wsUrl,
     audioOnly,
-    userName,
+    identityName,
     user,
     mergeConnectorState,
     getConnectorState,
@@ -450,7 +451,7 @@ export function useLivekitConnection(options: ConnectionOptions): LivekitConnect
     state,
     connect,
     disconnect,
-    triggerAgentJoin,
+    requestAgent,
     roomEventHandlers,
     toggleMinimized,
   };

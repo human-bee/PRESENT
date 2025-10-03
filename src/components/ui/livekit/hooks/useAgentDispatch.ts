@@ -12,9 +12,14 @@ export function useAgentDispatch(
   getState: GetStateFn,
 ) {
   const dispatchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const dispatchInFlightRef = useRef(false);
 
   // Trigger agent join
-  const triggerAgentJoin = useCallback(async () => {
+  const requestAgent = useCallback(async () => {
+    if (dispatchInFlightRef.current) {
+      return;
+    }
+    dispatchInFlightRef.current = true;
     try {
       console.log(`🤖 [LiveKitConnector-${roomName}] Triggering agent join...`);
 
@@ -75,6 +80,8 @@ export function useAgentDispatch(
         agentStatus: 'failed',
         errorMessage: error instanceof Error ? error.message : 'Unknown dispatch error',
       });
+    } finally {
+      dispatchInFlightRef.current = false;
     }
   }, [roomName, mergeState, getState]);
 
@@ -84,7 +91,7 @@ export function useAgentDispatch(
       const { roomName: requestedRoom } = event.detail;
       if (requestedRoom === roomName && connectionState === 'connected') {
         console.log(`🎯 [LiveKitConnector-${roomName}] Manual agent request received`);
-        triggerAgentJoin();
+        requestAgent();
       }
     };
 
@@ -97,9 +104,9 @@ export function useAgentDispatch(
             dispatchTimeoutRef.current = null;
           }
         };
-  }, [roomName, connectionState, triggerAgentJoin]);
+  }, [roomName, connectionState, requestAgent]);
 
-  return { triggerAgentJoin };
+  return { requestAgent };
 }
 
 /**

@@ -77,13 +77,13 @@ export function LivekitRoomConnector({
     state,
     connect,
     disconnect,
-    triggerAgentJoin,
+    requestAgent,
     roomEventHandlers,
     toggleMinimized,
   } = useLivekitConnection({
     room,
     roomName,
-    userName: effectiveUserName,
+    identityName: effectiveUserName,
     wsUrl,
     audioOnly,
     autoConnect,
@@ -109,9 +109,9 @@ export function LivekitRoomConnector({
 
   const handleRequestAgent = React.useCallback(() => {
     if (state.connectionState === 'connected') {
-      void triggerAgentJoin();
+      void requestAgent();
     }
-  }, [state.connectionState, triggerAgentJoin]);
+  }, [state.connectionState, requestAgent]);
 
   const handleCopyLink = () => {
     const id = roomName.startsWith('canvas-') ? roomName.substring('canvas-'.length) : roomName;

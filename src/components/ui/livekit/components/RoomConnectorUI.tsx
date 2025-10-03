@@ -196,18 +196,7 @@ export function RoomConnectorUI({
             <div className="flex gap-2">
               <button
                 onClick={() => {
-                  if (onRequestAgent) {
-                    onRequestAgent();
-                    return;
-                  }
-
-                  if (typeof window !== 'undefined') {
-                    window.dispatchEvent(
-                      new CustomEvent('livekit:request-agent', {
-                        detail: { roomName },
-                      }),
-                    );
-                  }
+                  onRequestAgent?.();
                 }}
                 disabled={agentStatus === 'dispatching'}
                 className={cn(

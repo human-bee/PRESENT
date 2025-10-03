@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { ConnectionState, Room, RoomEvent, DisconnectReason, Participant } from 'livekit-client';
 
 export interface RoomEventHandlers {
@@ -15,6 +15,12 @@ export function useRoomEvents(
   roomName: string,
   handlers: RoomEventHandlers,
 ) {
+  const handlersRef = useRef<RoomEventHandlers>(handlers);
+
+  useEffect(() => {
+    handlersRef.current = handlers;
+  }, [handlers]);
+
   useEffect(() => {
     if (!room) {
       console.error(`❌ [LiveKitConnector-${roomName}] No room instance available`);
@@ -22,27 +28,27 @@ export function useRoomEvents(
     }
 
     const handleConnected = () => {
-      handlers.onConnected?.(room);
+      handlersRef.current.onConnected?.(room);
     };
 
     const handleDisconnected = (reason?: DisconnectReason) => {
-      handlers.onDisconnected?.(room, reason);
+      handlersRef.current.onDisconnected?.(room, reason);
     };
 
     const handleReconnecting = () => {
-      handlers.onReconnecting?.(room);
+      handlersRef.current.onReconnecting?.(room);
     };
 
     const handleReconnected = () => {
-      handlers.onReconnected?.(room);
+      handlersRef.current.onReconnected?.(room);
     };
 
     const handleParticipantConnected = (participant: Participant) => {
-      handlers.onParticipantConnected?.(room, participant);
+      handlersRef.current.onParticipantConnected?.(room, participant);
     };
 
     const handleParticipantDisconnected = (participant: Participant) => {
-      handlers.onParticipantDisconnected?.(room, participant);
+      handlersRef.current.onParticipantDisconnected?.(room, participant);
     };
 
     // Listen to room events
@@ -75,5 +81,5 @@ export function useRoomEvents(
       room.off(RoomEvent.ParticipantConnected, handleParticipantConnected);
       room.off(RoomEvent.ParticipantDisconnected, handleParticipantDisconnected);
     };
-  }, [room, roomName, handlers]);
+  }, [room, roomName]);
 }
