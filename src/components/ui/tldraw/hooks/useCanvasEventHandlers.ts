@@ -3,12 +3,13 @@ import type { RefObject } from 'react';
 import type { Editor } from '@tldraw/tldraw';
 import type { Room } from 'livekit-client';
 import { createLiveKitBus } from '@/lib/livekit/livekit-bus';
-import {
-  attachMermaidBridge,
-  registerWindowListener,
-} from '../utils';
+import { attachMermaidBridge, registerWindowListener } from '../utils';
 import { createCanvasCreationHandlers } from '../utils/canvas-creation-handlers';
 import { createCanvasSelectionHandlers } from '../utils/canvas-selection-handlers';
+import { createCanvasPinHandlers } from '../utils/canvas-pin-handlers';
+import { createCanvasArrangementHandlers } from '../utils/canvas-arrangement-handlers';
+import { createCanvasListShapesHandlers } from '../utils/canvas-list-shapes-handlers';
+import { createCanvasNotesHandlers } from '../utils/canvas-notes-handlers';
 import { createUiStateHandlers } from '../utils/ui-state-handlers';
 
 interface UseCanvasEventHandlersOptions {
@@ -44,6 +45,10 @@ export function useCanvasEventHandlers(
     const handlerMaps = [
       createCanvasCreationHandlers({ editor, bus }),
       createCanvasSelectionHandlers({ editor }),
+      createCanvasPinHandlers({ editor }),
+      createCanvasArrangementHandlers({ editor }),
+      createCanvasListShapesHandlers({ editor }),
+      createCanvasNotesHandlers({ editor }),
       createUiStateHandlers({ editor, containerRef, bus }),
     ];
 
