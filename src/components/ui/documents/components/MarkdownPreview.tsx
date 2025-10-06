@@ -1,13 +1,15 @@
 import React from 'react';
+import type { ReactNode } from 'react';
 
-type MarkdownPreviewProps = {
-  content: string;
-};
+interface MarkdownPreviewProps {
+  children: ReactNode;
+  fontSize?: number;
+}
 
-export function MarkdownPreview({ content }: MarkdownPreviewProps) {
+export function MarkdownPreview({ children, fontSize = 16 }: MarkdownPreviewProps) {
   return (
-    <section className="prose prose-invert max-w-none px-4 py-6">
-      <div dangerouslySetInnerHTML={{ __html: content }} />
+    <section className="prose prose-invert prose-lg max-w-none" style={{ fontSize: `${fontSize}px` }}>
+      <div className="text-slate-300 leading-relaxed">{children}</div>
     </section>
   );
 }

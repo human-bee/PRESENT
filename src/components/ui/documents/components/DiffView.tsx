@@ -1,21 +1,15 @@
 import React from 'react';
+import type { ReactNode } from 'react';
 
-type DiffViewProps = {
-  before: string;
-  after: string;
-};
+interface DiffViewProps {
+  content: ReactNode;
+}
 
-export function DiffView({ before, after }: DiffViewProps) {
+export function DiffView({ content }: DiffViewProps) {
   return (
-    <section className="grid grid-cols-1 gap-4 md:grid-cols-2 px-4 py-6">
-      <article className="rounded-lg border border-slate-800 p-4">
-        <h3 className="text-xs uppercase tracking-wide text-slate-400">Before</h3>
-        <div className="prose prose-invert max-w-none mt-2" dangerouslySetInnerHTML={{ __html: before }} />
-      </article>
-      <article className="rounded-lg border border-slate-800 p-4">
-        <h3 className="text-xs uppercase tracking-wide text-slate-400">After</h3>
-        <div className="prose prose-invert max-w-none mt-2" dangerouslySetInnerHTML={{ __html: after }} />
-      </article>
-    </section>
+    <div className="mb-8 p-6 bg-slate-900 border border-slate-700 rounded-lg">
+      <h2 className="text-xl font-semibold text-white mb-4">Recent Changes</h2>
+      <div className="overflow-x-auto">{content}</div>
+    </div>
   );
 }
