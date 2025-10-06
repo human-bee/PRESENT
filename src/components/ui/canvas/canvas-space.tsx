@@ -10,9 +10,9 @@ import type { Editor } from 'tldraw';
 import { Toaster } from 'react-hot-toast';
 
 import { ComponentRegistry } from '@/lib/component-registry';
-import { CanvasLiveKitContext } from './livekit/livekit-room-connector';
+import { CanvasLiveKitContext } from '../livekit/livekit-room-connector';
 import { useRoomContext } from '@livekit/components-react';
-import { createLiveKitBus } from '../../lib/livekit/livekit-bus';
+import { createLiveKitBus } from '../../../lib/livekit/livekit-bus';
 import { components } from '@/lib/custom';
 import {
   useCanvasComponentStore,

@@ -32,7 +32,7 @@ import {
   AlertTriangle,
   Wifi,
 } from 'lucide-react';
-import { createLiveKitBus } from '../../lib/livekit/livekit-bus';
+import { createLiveKitBus } from '../../../lib/livekit/livekit-bus';
 
 // Custom Unpin icon as alternative
 const Unpin = ({ className }: { className?: string }) => (

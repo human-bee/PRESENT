@@ -10,11 +10,11 @@ import { components as customComponents } from '@/lib/custom';
 import { type VariantProps } from 'class-variance-authority';
 import { useRoomContext } from '@livekit/components-react';
 import { RoomEvent } from 'livekit-client';
-import { createLiveKitBus } from '../../lib/livekit/livekit-bus';
+import { createLiveKitBus } from '../../../lib/livekit/livekit-bus';
 import { useContextKey } from '../RoomScopedProviders';
 import { useRealtimeSessionTranscript } from '@/hooks/use-realtime-session-transcript';
 import { supabase } from '@/lib/supabase';
-import { CanvasLiveKitContext } from './livekit/livekit-room-connector';
+import { CanvasLiveKitContext } from '../livekit/livekit-room-connector';
 import { useAuth } from '@/hooks/use-auth';
 
 /**

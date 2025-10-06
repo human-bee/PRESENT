@@ -7,7 +7,7 @@ import { useRoomContext } from '@livekit/components-react';
 import type { Room } from 'livekit-client';
 import TldrawSnapshotBroadcaster from '@/components/TldrawSnapshotBroadcaster';
 import TldrawSnapshotReceiver from '@/components/TldrawSnapshotReceiver';
-import { CanvasLiveKitContext } from './livekit/livekit-room-connector';
+import { CanvasLiveKitContext } from '../livekit/livekit-room-connector';
 import { ComponentStoreContext } from './tldraw-canvas';
 import type { customShapeUtil } from './tldraw-canvas';
 import {
