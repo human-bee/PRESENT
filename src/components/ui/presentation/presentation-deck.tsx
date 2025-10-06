@@ -7,13 +7,15 @@ import {
   SlideNavigator,
   SpeakerNotes,
 } from './components';
-import { useSlideNavigation } from './hooks';
+import {
+  useDeckHotkeys,
+  useFullscreen,
+  useOverlayState,
+  useSlideNavigation,
+} from './hooks';
 import type { PresentationDeckProps } from './utils';
 
-interface PresentationUiState {
-  isFullscreen: boolean;
-  showThumbnails: boolean;
-  showNotes: boolean;
+type PresentationUiState = {
   canvasSize: { width: number; height: number };
   laserPointerActive: boolean;
   laserPointerPosition: { x: number; y: number };
@@ -23,7 +25,7 @@ interface PresentationUiState {
     transitionSpeed: 'fast' | 'normal' | 'slow';
   };
   isActive: boolean;
-}
+};
 
 export function PresentationDeck(props: PresentationDeckProps) {
   const componentId = useMemo(
@@ -32,9 +34,6 @@ export function PresentationDeck(props: PresentationDeckProps) {
   );
 
   const [uiState, setUiState] = useState<PresentationUiState>({
-    isFullscreen: false,
-    showThumbnails: false,
-    showNotes: props.showNotes ?? false,
     canvasSize: { width: 800, height: 600 },
     laserPointerActive: false,
     laserPointerPosition: { x: 50, y: 50 },
@@ -45,9 +44,12 @@ export function PresentationDeck(props: PresentationDeckProps) {
     },
     isActive: true,
   });
-
-  const containerRef = useRef<HTMLDivElement>(null);
   const [isControlsVisible, setIsControlsVisible] = useState(true);
+
+  const overlay = useOverlayState({
+    defaultNotes: props.showNotes ?? false,
+    defaultThumbnails: false,
+  });
 
   const {
     currentSlide,
@@ -66,6 +68,12 @@ export function PresentationDeck(props: PresentationDeckProps) {
     slides: props.slides,
     autoAdvance: props.autoAdvance,
     autoAdvanceInterval: props.autoAdvanceInterval,
+  });
+
+  const containerRef = useRef<HTMLDivElement>(null);
+  const { toggleFullscreen: toggleFullscreenInternal } = useFullscreen({
+    targetRef: containerRef,
+    onChange: overlay.setFullscreen,
   });
 
   const currentSlideData = props.slides[currentSlide];
@@ -91,77 +99,36 @@ export function PresentationDeck(props: PresentationDeckProps) {
     [uiState.laserPointerActive],
   );
 
+  const showComponentAnnouncedRef = useRef(false);
   useEffect(() => {
-    if (!uiState.userPreferences.keyboardShortcuts) {
+    if (typeof window === 'undefined' || showComponentAnnouncedRef.current) {
       return;
     }
 
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (['ArrowRight', ' ', 'Space', 'Enter', 'ArrowLeft'].includes(event.key)) {
-        event.preventDefault();
-      }
+    window.dispatchEvent(
+      new CustomEvent('custom:showComponent', {
+        detail: {
+          componentId,
+        },
+      }),
+    );
+    showComponentAnnouncedRef.current = true;
+  }, [componentId]);
 
-      switch (event.key) {
-        case 'ArrowRight':
-        case 'n':
-        case 'j':
-        case ' ': {
-          nextSlide();
-          break;
-        }
-        case 'ArrowLeft':
-        case 'p':
-        case 'k': {
-          previousSlide();
-          break;
-        }
-        case 'Enter': {
-          togglePlay();
-          break;
-        }
-        case 'f':
-        case 'F11': {
-          if (containerRef.current) {
-            containerRef.current.requestFullscreen().catch(() => undefined);
-            setUiState((prev) => ({ ...prev, isFullscreen: true }));
-          }
-          break;
-        }
-        case 'Escape': {
-          if (document.fullscreenElement) {
-            void document.exitFullscreen();
-            setUiState((prev) => ({ ...prev, isFullscreen: false }));
-          }
-          break;
-        }
-        case 't': {
-          setUiState((prev) => ({ ...prev, showThumbnails: !prev.showThumbnails }));
-          break;
-        }
-        case 's': {
-          setUiState((prev) => ({ ...prev, showNotes: !prev.showNotes }));
-          break;
-        }
-        case 'l': {
-          setUiState((prev) => ({ ...prev, laserPointerActive: !prev.laserPointerActive }));
-          break;
-        }
-        case 'b': {
-          toggleBookmark();
-          break;
-        }
-        case 'r': {
-          reset();
-          break;
-        }
-        default:
-          break;
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [nextSlide, previousSlide, reset, toggleBookmark, togglePlay, uiState.userPreferences.keyboardShortcuts]);
+  useDeckHotkeys(uiState.userPreferences.keyboardShortcuts, {
+    next: nextSlide,
+    prev: previousSlide,
+    togglePlay,
+    toggleNotes: overlay.toggleNotes,
+    toggleThumbnails: overlay.toggleThumbnails,
+    toggleFullscreen: toggleFullscreenInternal,
+    toggleLaserPointer: () =>
+      setUiState((prev) => ({ ...prev, laserPointerActive: !prev.laserPointerActive })),
+    toggleBookmark,
+    reset,
+    goToFirst: () => goToSlide(0),
+    goToLast: () => goToSlide(props.slides.length - 1),
+  });
 
   useEffect(() => {
     if (!uiState.userPreferences.autoHideControls) {
@@ -187,17 +154,6 @@ export function PresentationDeck(props: PresentationDeckProps) {
       }
     };
   }, [uiState.userPreferences.autoHideControls]);
-
-  useEffect(() => {
-    window.dispatchEvent(
-      new CustomEvent('custom:showComponent', {
-        detail: {
-          messageId: componentId,
-          component: <PresentationDeck {...props} />,
-        },
-      }),
-    );
-  }, [componentId, props]);
 
   useEffect(() => {
     const handleCanvasEvent = (event: Event) => {
@@ -226,34 +182,11 @@ export function PresentationDeck(props: PresentationDeckProps) {
     return () => window.removeEventListener('custom:canvas:interaction', handleCanvasEvent);
   }, [componentId, setPlaying]);
 
-  const toggleFullscreen = useCallback(() => {
-    if (!containerRef.current) {
-      return;
-    }
-
-    if (!document.fullscreenElement) {
-      containerRef.current.requestFullscreen().catch(() => undefined);
-      setUiState((prev) => ({ ...prev, isFullscreen: true }));
-      return;
-    }
-
-    document.exitFullscreen().catch(() => undefined);
-    setUiState((prev) => ({ ...prev, isFullscreen: false }));
-  }, []);
-
-  const toggleThumbnails = useCallback(() => {
-    setUiState((prev) => ({ ...prev, showThumbnails: !prev.showThumbnails }));
-  }, []);
-
-  const toggleNotes = useCallback(() => {
-    setUiState((prev) => ({ ...prev, showNotes: !prev.showNotes }));
-  }, []);
-
   const toggleLaserPointer = useCallback(() => {
     setUiState((prev) => ({ ...prev, laserPointerActive: !prev.laserPointerActive }));
   }, []);
 
-  const containerStyles = uiState.isFullscreen
+  const containerStyles = overlay.isFullscreen
     ? { width: '100vw', height: '100dvh', minWidth: '100%', minHeight: '100%' }
     : {
         width: uiState.canvasSize.width,
@@ -265,7 +198,7 @@ export function PresentationDeck(props: PresentationDeckProps) {
   return (
     <div
       ref={containerRef}
-      className={`relative bg-slate-950 rounded-lg overflow-hidden ${uiState.isFullscreen ? 'fixed inset-0 z-50' : ''}`}
+      className={`relative bg-slate-950 rounded-lg overflow-hidden ${overlay.isFullscreen ? 'fixed inset-0 z-50' : ''}`}
       style={containerStyles}
       onPointerMove={handleMouseMove}
     >
@@ -276,7 +209,12 @@ export function PresentationDeck(props: PresentationDeckProps) {
             {props.author && <p className="text-sm text-slate-400">by {props.author}</p>}
           </div>
           {props.showProgress && (
-            <ProgressIndicator current={currentSlide} total={totalSlides} showTime={isPlaying} elapsedTime={elapsedTime} />
+            <ProgressIndicator
+              current={currentSlide}
+              total={totalSlides}
+              showTime={isPlaying}
+              elapsedTime={elapsedTime}
+            />
           )}
         </div>
       </div>
@@ -285,7 +223,7 @@ export function PresentationDeck(props: PresentationDeckProps) {
         <SlideNavigator
           slides={props.slides}
           currentIndex={currentSlide}
-          visible={uiState.showThumbnails}
+          visible={overlay.thumbnailsOpen}
           onSelect={goToSlide}
         />
 
@@ -302,7 +240,7 @@ export function PresentationDeck(props: PresentationDeckProps) {
             />
           </div>
 
-          {uiState.showNotes && currentSlideData.notes && (
+          {overlay.notesOpen && currentSlideData.notes && (
             <div className="px-6 pb-4">
               <SpeakerNotes notes={currentSlideData.notes} />
             </div>
@@ -319,21 +257,21 @@ export function PresentationDeck(props: PresentationDeckProps) {
             onPrevious={previousSlide}
             onNext={nextSlide}
             onTogglePlay={togglePlay}
-            onFullscreen={toggleFullscreen}
-            onToggleThumbnails={toggleThumbnails}
-            onToggleNotes={toggleNotes}
+            onFullscreen={toggleFullscreenInternal}
+            onToggleThumbnails={overlay.toggleThumbnails}
+            onToggleNotes={overlay.toggleNotes}
             onToggleLaserPointer={toggleLaserPointer}
             onBookmark={toggleBookmark}
             onReset={reset}
-            showThumbnails={uiState.showThumbnails}
-            showNotes={uiState.showNotes}
+            showThumbnails={overlay.thumbnailsOpen}
+            showNotes={overlay.notesOpen}
             laserPointerActive={uiState.laserPointerActive}
             isBookmarked={isBookmarked}
           />
         </div>
       )}
 
-      <OverlayLayer showShortcuts={uiState.isFullscreen} />
+      <OverlayLayer showShortcuts={overlay.isFullscreen} />
     </div>
   );
 }
