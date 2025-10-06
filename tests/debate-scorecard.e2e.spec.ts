@@ -69,11 +69,13 @@ async function driveDebate(page: any) {
 }
 
 async function verifyLedgerAndMap(page: any) {
-  await expect(page.locator('table tbody tr').first()).toBeVisible();
-  await expect(page.locator('table tbody tr')).toHaveCountGreaterThan(1);
+  const ledgerRows = page.locator('table tbody tr');
+  await expect(ledgerRows.first()).toBeVisible();
+  await expect(ledgerRows.nth(1)).toBeVisible();
   await page.getByRole('button', { name: 'Map' }).click();
   await page.waitForTimeout(1_000);
-  await expect(page.getByText('Argument map is empty').first()).not.toBeVisible({ timeout: 0 }).catch(() => {});
+  const fallbackMessage = page.getByText('Argument map is empty').first();
+  await expect(fallbackMessage).not.toBeVisible();
 }
 
 async function verifyJudgeRFDAccess(page: any) {
