@@ -16,7 +16,7 @@ import { z } from 'zod';
 import { cn } from '@/lib/utils';
 import { Play, Pause, RotateCcw, Clock } from 'lucide-react';
 import { useComponentProgressiveLoading, LoadingState } from '@/lib/with-progressive-loading';
-import { LoadingWrapper, SkeletonPatterns } from '@/components/ui/loading-states';
+import { LoadingWrapper, SkeletonPatterns } from '@/components/ui/shared/loading-states';
 
 // Enhanced schema with better defaults + custom message ID support
 export const retroTimerEnhancedSchema = z.object({

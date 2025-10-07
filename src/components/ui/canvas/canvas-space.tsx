@@ -26,7 +26,7 @@ import {
 
 const TldrawWithCollaboration = dynamic(
   () =>
-    import('./tldraw-with-collaboration').then((mod) => ({
+    import('@/components/ui/tldraw/tldraw-with-collaboration').then((mod) => ({
       default: mod.TldrawWithCollaboration,
     })),
   {
@@ -38,7 +38,7 @@ const TldrawWithCollaboration = dynamic(
 );
 
 // Import types statically (they don't add to bundle size)
-import { customShapeUtil, ToolboxShapeUtil, MermaidStreamShapeUtil } from './tldraw-canvas';
+import { customShapeUtil, ToolboxShapeUtil, MermaidStreamShapeUtil } from '@/components/ui/tldraw/tldraw-canvas';
 
 // Suppress development noise and repetitive warnings
 if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {

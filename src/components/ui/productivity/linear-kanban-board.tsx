@@ -5,7 +5,7 @@ import { useCallback, useEffect, useId, useState, useMemo } from 'react';
 import { useComponentRegistration } from '@/lib/component-registry';
 import { cn } from '@/lib/utils';
 import { LoadingState } from '@/lib/with-progressive-loading';
-import { LoadingWrapper, SkeletonPatterns, Skeleton } from '@/components/ui/loading-states';
+import { LoadingWrapper, SkeletonPatterns, Skeleton } from '@/components/ui/shared/loading-states';
 import { useComponentSubAgent, SubAgentPresets } from '@/lib/component-subagent';
 
 /* --------------------------------------------------------------------------

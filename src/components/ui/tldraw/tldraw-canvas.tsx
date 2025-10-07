@@ -22,13 +22,13 @@ import {
   useState,
 } from 'react';
 import React from 'react';
-import { CanvasSyncAdapter } from '../CanvasSyncAdapter';
+import { CanvasSyncAdapter } from '@/components/CanvasSyncAdapter';
 import { nanoid } from 'nanoid';
 // 1. Import ComponentToolbox
-import { ComponentToolbox } from './component-toolbox';
+import { ComponentToolbox } from '@/components/ui/shared/component-toolbox';
 import { getComponentSizeInfo } from '@/lib/component-sizing';
 import { TLResizeInfo } from 'tldraw';
-import MermaidStreamRenderer, { MermaidCompileState } from './mermaid-stream-renderer';
+import MermaidStreamRenderer, { MermaidCompileState } from '@/components/ui/mermaid-stream-renderer';
 
 // Create context for component store
 export const ComponentStoreContext = createContext<Map<string, ReactNode> | null>(null);

@@ -23,7 +23,7 @@ import LiveCaptions, { liveCaptionsSchema } from '@/components/LiveCaptions';
 import LinearKanbanBoard, { linearKanbanSchema } from '@/components/ui/productivity/linear-kanban-board';
 import { OnboardingGuide, onboardingGuideSchema } from '@/components/ui/onboarding/onboarding-guide';
 import { Message } from '@/components/ui/messaging/message';
-import { ComponentToolbox } from '@/components/ui/component-toolbox';
+import { ComponentToolbox } from '@/components/ui/shared/component-toolbox';
 
 // Add debate scorecard @debate-scorecard.tsx
 import DebateScorecard, { debateScoreCardSchema } from '@/components/ui/productivity/debate-scorecard';

@@ -18,7 +18,7 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import { LoadingState } from '@/lib/with-progressive-loading';
-import { LoadingWrapper, SkeletonPatterns } from '@/components/ui/loading-states';
+import { LoadingWrapper, SkeletonPatterns } from '@/components/ui/shared/loading-states';
 import { useComponentSubAgent, SubAgentPresets } from '@/lib/component-subagent';
 import { normalizeWeatherForecast } from '@/lib/mcp-normalizers';
 import { useComponentIsolation } from '@/lib/component-isolation';

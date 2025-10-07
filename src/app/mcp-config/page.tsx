@@ -14,7 +14,7 @@
 'use client';
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
-import { McpStatusIndicator } from '@/components/ui/mcp-status-indicator';
+import { McpStatusIndicator } from '@/components/ui/mcp/mcp-status-indicator';
 import { useValidatedcustom } from '@/hooks/use-validated-custom';
 import { computeMcpMappings, listRegistryTools, listWindowMcpTools } from '@/lib/mcp-introspection';
 

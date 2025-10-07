@@ -3,7 +3,7 @@
 import { cn } from '@/lib/utils';
 import { useEffect, useRef, useState } from 'react';
 import { z } from 'zod';
-import { CanvasSyncAdapter } from '../CanvasSyncAdapter';
+import { CanvasSyncAdapter } from '@/components/CanvasSyncAdapter';
 
 // Define the component props schema with Zod
 export const retroTimerSchema = z.object({

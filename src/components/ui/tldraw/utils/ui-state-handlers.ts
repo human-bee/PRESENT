@@ -1,4 +1,4 @@
-import type { Editor } from '@tldraw/tldraw';
+import type { Editor } from 'tldraw';
 import type { RefObject } from 'react';
 import type { CanvasEventMap, LiveKitBus } from './types';
 import { createCanvasNavigationHandlers } from './canvas-navigation-handlers';

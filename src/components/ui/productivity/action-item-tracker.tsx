@@ -48,7 +48,7 @@ import {
   X,
 } from 'lucide-react';
 import { LoadingState } from '@/lib/with-progressive-loading';
-import { LoadingWrapper, SkeletonPatterns } from '@/components/ui/loading-states';
+import { LoadingWrapper, SkeletonPatterns } from '@/components/ui/shared/loading-states';
 import { useComponentSubAgent, SubAgentPresets } from '@/lib/component-subagent';
 
 // Define priority levels

@@ -8,7 +8,7 @@
 
 import React, { ComponentType, useState, useEffect } from 'react';
 import { useProgressiveLoading, LoadingState, ComponentLoadingStates } from './progressive-loading';
-import { LoadingWrapper, Skeleton, SkeletonPatterns } from '@/components/ui/loading-states';
+import { LoadingWrapper, Skeleton, SkeletonPatterns } from '@/components/ui/shared/loading-states';
 
 // Re-export LoadingState for component usage
 export { LoadingState } from './progressive-loading';

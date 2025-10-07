@@ -1,6 +1,6 @@
 'use client';
 
-import { createMarkdownComponents } from '@/components/ui/markdownComponents';
+import { createMarkdownComponents } from '@/components/ui/shared/markdown-components';
 import { cn } from '@/lib/utils';
 import type { customThreadMessage } from '@custom-ai/react';
 import { cva, type VariantProps } from 'class-variance-authority';

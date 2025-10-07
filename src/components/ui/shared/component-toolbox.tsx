@@ -6,8 +6,8 @@ import {
   getAvailableComponents,
   type ComponentIconMapping,
 } from '@/lib/component-icons';
-import { Button } from '@/components/ui/button';
-import { Tooltip, TooltipProvider } from '@/components/ui/tooltip';
+import { Button } from '@/components/ui/shared/button';
+import { Tooltip, TooltipProvider } from '@/components/ui/shared/tooltip';
 import { cn } from '@/lib/utils';
 import { stopEventPropagation } from 'tldraw';
 

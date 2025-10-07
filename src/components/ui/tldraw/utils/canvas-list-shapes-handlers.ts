@@ -1,4 +1,4 @@
-import type { Editor } from '@tldraw/tldraw';
+import type { Editor } from 'tldraw';
 import type { CanvasEventMap } from './types';
 
 interface ListHandlersDeps {
