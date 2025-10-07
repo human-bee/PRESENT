@@ -40,10 +40,10 @@ export const defaultCustomComponents: Array<{
 
 export const defaultCapabilities: SystemCapabilities = {
   tools: [
-    { name: 'generate_ui_component', description: 'Generate a UI component', examples: ['create a timer', 'show weather'] },
+    { name: 'create_component', description: 'Create a UI component', examples: ['create a timer', 'show weather'] },
     { name: 'youtube_search', description: 'Search YouTube videos', examples: ['search youtube for cats'] },
     { name: 'mcp_tool', description: 'Call an MCP tool by name', examples: ['mcp weather', 'mcp searchVideos'] },
-    { name: 'ui_update', description: 'Update existing UI components', examples: ['update timer to 10 minutes'] },
+    { name: 'update_component', description: 'Update existing UI components', examples: ['update timer to 10 minutes'] },
     { name: 'list_components', description: 'List all components and their IDs' },
     { name: 'web_search', description: 'Search the web' },
     { name: 'respond_with_voice', description: 'Send a text response (voice disabled)' },

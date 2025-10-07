@@ -49,8 +49,8 @@ export interface EnhancedDecisionResult {
   hasActionableRequest: boolean;
   intent:
   | 'document_retrieval'
-  | 'ui_generation'
-  | 'ui_update'
+  | 'create_component'
+  | 'update_component'
   | 'youtube_search'
   | 'list_components'
   | 'general_conversation';
@@ -499,13 +499,13 @@ Analyze the current speaker's statement in full conversational context.`;
           );
         return {
           hasActionableRequest: hasActionable,
-          intent: hasActionable ? 'ui_generation' : 'general_conversation',
+          intent: hasActionable ? 'create_component' : 'general_conversation',
           toolCalls: hasActionable
             ? [
               {
-                tool: 'generate_ui_component',
+                tool: 'create_component',
                 params: {
-                  component_type: 'LivekitParticipantTile',
+                  type: 'LivekitParticipantTile',
                   request: transcript,
                 },
                 priority: 1,
@@ -540,12 +540,12 @@ Analyze the current speaker's statement in full conversational context.`;
       if (isParticipantTileRequest || isComponentRequest) {
         return {
           hasActionableRequest: true,
-          intent: 'ui_generation',
+          intent: 'create_component',
           toolCalls: [
             {
-              tool: 'generate_ui_component',
+              tool: 'create_component',
               params: {
-                component_type: isParticipantTileRequest ? 'LivekitParticipantTile' : 'unknown',
+                type: isParticipantTileRequest ? 'LivekitParticipantTile' : 'unknown',
                 request: transcript,
               },
               priority: 1,
@@ -643,7 +643,7 @@ Analyze the current speaker's statement in full conversational context.`;
     }
 
     // UI component detection
-    const uiKeywords = this.config.keywords?.generate_ui_component || [
+    const uiKeywords = this.config.keywords?.create_component || [
       'component',
       'timer',
       'chart',

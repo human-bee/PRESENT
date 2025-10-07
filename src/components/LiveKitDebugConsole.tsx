@@ -34,7 +34,7 @@ export function LiveKitDebugConsole({ enabled = true }: { enabled?: boolean }) {
     const offToolErr = bus.on('tool_error', (m) => log('tool_error', m));
     const offEditor = bus.on('editor_action', (m) => log('editor_action', m));
     const offCapability = bus.on('capability_query', (m) => log('capability', m));
-    const offUiUpdate = bus.on('ui_update', (m) => log('ui_update', m));
+    const offUpdateComponent = bus.on('update_component', (m) => log('update_component', m));
 
     return () => {
       offDecision?.();
@@ -43,7 +43,7 @@ export function LiveKitDebugConsole({ enabled = true }: { enabled?: boolean }) {
       offToolErr?.();
       offEditor?.();
       offCapability?.();
-      offUiUpdate?.();
+      offUpdateComponent?.();
     };
   }, [enabled, room, bus]);
 

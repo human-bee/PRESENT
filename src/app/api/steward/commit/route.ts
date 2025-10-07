@@ -24,13 +24,13 @@ export async function POST(req: NextRequest) {
 
     const svc = new RoomServiceClient(String(livekitHost), String(apiKey), String(apiSecret));
     const event = {
-      type: 'ui_update',
+      type: 'update_component',
       componentId,
       patch: { flowchartDoc, format, version },
       timestamp: Date.now(),
     };
     const data = new TextEncoder().encode(JSON.stringify(event));
-    await svc.sendData(String(room), data, DataPacket_Kind.RELIABLE, { topic: 'ui_update' });
+    await svc.sendData(String(room), data, DataPacket_Kind.RELIABLE, { topic: 'update_component' });
     return NextResponse.json({ ok: true });
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || 'Unknown error' }, { status: 500 });

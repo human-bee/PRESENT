@@ -43,7 +43,7 @@ function updateMermaidSession(normalizedText: string, lastOverride?: string) {
 export function attachMermaidBridge({ editor, bus, lastTimestampsRef }: MermaidBridgeOptions) {
   const cleanupFns: Array<() => void> = [];
 
-  const offUiUpdate = bus.on('ui_update', (payload: any) => {
+  const offUpdateComponent = bus.on('update_component', (payload: any) => {
     try {
       if (!payload || typeof payload !== 'object') return;
       const componentId = String(payload.componentId || '');
@@ -96,7 +96,7 @@ export function attachMermaidBridge({ editor, bus, lastTimestampsRef }: MermaidB
     }
   });
 
-  cleanupFns.push(offUiUpdate ?? (() => {}));
+  cleanupFns.push(offUpdateComponent ?? (() => {}));
 
   const shapePatchCleanup = registerSingletonWindowListener(
     '__present_mermaid_shapePatch_handler',
@@ -107,7 +107,7 @@ export function attachMermaidBridge({ editor, bus, lastTimestampsRef }: MermaidB
       const patch = (detail.patch || {}) as Record<string, unknown>;
       if (!shapeId || !patch) return;
       const ts = Date.now();
-      bus.send('ui_update', { componentId: shapeId, patch, timestamp: ts });
+      bus.send('update_component', { componentId: shapeId, patch, timestamp: ts });
     },
   );
   cleanupFns.push(shapePatchCleanup);

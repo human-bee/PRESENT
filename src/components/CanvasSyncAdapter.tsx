@@ -39,7 +39,7 @@ export function CanvasSyncAdapter({
 
   const sendPatch = useCallback(
     (patch: Record<string, unknown>) => {
-      bus.send('ui_update', {
+      bus.send('update_component', {
         componentId,
         patch,
         timestamp: Date.now(),
@@ -65,7 +65,7 @@ export function CanvasSyncAdapter({
 
   // Listen for remote patches
   useEffect(() => {
-    const off = bus.on('ui_update', (msg: any) => {
+    const off = bus.on('update_component', (msg: any) => {
       if (msg?.componentId === componentId && msg?.patch) {
         onRemotePatch?.(msg.patch);
       }

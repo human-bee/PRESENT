@@ -17,15 +17,25 @@
 
 ## Build, Test, and Development Commands
 
+### Development
+
 - `npm install`: Install dependencies.
-- `npm run agent:build`: Build the (legacy) TypeScript agent worker.
-- `npm run build`: Build the Next.js app.
-- `npm run agent:realtime`: Run the LiveKit Realtime voice agent (start this first).
-- `npm run agent:conductor`: Run the Agents SDK conductor/stewards process.
-- `npm run dev`: Run the web app at `http://localhost:3000`.
-- Prod: `npm run agent:run` (legacy pipeline) and `npm run start`.
-- Tests: `npm test` (Jest) or `npm run test:watch`.
-- Lint: `npm run lint` (ESLint/Next rules).
+- `npm run agent:realtime`: Run the LiveKit Realtime voice agent (terminal 1 - start first).
+- `npm run agent:conductor`: Run the Agents SDK conductor/stewards (terminal 2).
+- `npm run dev`: Run the web app at `http://localhost:3000` (terminal 3).
+
+### Production
+
+- `npm run build`: Build the Next.js app (one-time).
+- `npm run agent:realtime`: Run the voice agent (terminal 1).
+- `npm run agent:conductor`: Run the conductor/stewards (terminal 2).
+- `npm run start`: Run the production Next.js server (terminal 3).
+
+### Testing & Quality
+
+- `npm test`: Run Jest tests.
+- `npm run test:watch`: Run tests in watch mode.
+- `npm run lint`: Run ESLint/Next rules.
 
 ## Coding Style & Naming Conventions
 

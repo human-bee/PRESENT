@@ -205,7 +205,7 @@ export default function LinearKanbanBoard({
     [state, setState],
   );
 
-  /* 4. Component registration for ui_update */
+  /* 4. Component registration for update_component */
   useComponentRegistration(
     messageId,
     'LinearKanbanBoard',

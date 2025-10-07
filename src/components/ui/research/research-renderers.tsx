@@ -143,8 +143,8 @@ function QuickActions({ result }: { result: ResearchResult }) {
       <button
         className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800"
         onClick={() =>
-          fire('generate_ui_component', {
-            componentType: 'message_thread',
+          fire('create_component', {
+            type: 'message_thread',
             prompt: `Discuss research finding: ${result.title}`,
           })
         }
@@ -154,8 +154,8 @@ function QuickActions({ result }: { result: ResearchResult }) {
       <button
         className="flex items-center gap-1 text-xs text-green-600 hover:text-green-800"
         onClick={() =>
-          fire('generate_ui_component', {
-            componentType: 'summary',
+          fire('create_component', {
+            type: 'summary',
             prompt: `Summarize research finding: ${result.title}`,
           })
         }
@@ -165,8 +165,8 @@ function QuickActions({ result }: { result: ResearchResult }) {
       <button
         className="flex items-center gap-1 text-xs text-purple-600 hover:text-purple-800"
         onClick={() =>
-          fire('generate_ui_component', {
-            componentType: 'presentation_deck',
+          fire('create_component', {
+            type: 'presentation_deck',
             prompt: `Add slide for research finding: ${result.title}`,
           })
         }

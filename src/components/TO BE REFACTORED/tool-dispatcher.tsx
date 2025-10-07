@@ -6,7 +6,7 @@
  *
  * Responsibilities now:
  * - Provide `useToolDispatcher()` with `executeToolCall` function
- * - For `generate_ui_component`, dispatch a browser event that the
+ * - For `create_component`, dispatch a browser event that the
  *   thread UI listens to (custom:showComponent)
  * - Optionally expose a global bridge used by the MCP layer
  */
@@ -204,72 +204,71 @@ export function ToolDispatcher({
           }
         };
 
-        // When steward flowchart mode is enabled, enforce the minimal tool contract
-        if (STEWARD_FLOWCHART) {
-          if (tool === 'create_component') {
-            // Map to existing generate_ui_component path
-            const componentType = String((params as any)?.type || 'Message');
-            const providedId = String((params as any)?.messageId || '') || undefined;
-            const messageId = providedId || `ui-${componentType.toLowerCase()}-${Date.now()}`;
-            try {
-              window.dispatchEvent(
-                new CustomEvent('custom:showComponent', {
-                  detail: {
-                    messageId,
-                    component: {
-                      type: componentType,
-                      // Carry the steward-provided spec onto props for component-specific hydration
-                      props: { _custom_displayMessage: true, ...(params as any), spec: (params as any)?.spec },
-                    },
-                    contextKey,
+        // Handle new tool names (create_component / update_component) unconditionally
+        if (tool === 'create_component') {
+          const componentType = String((params as any)?.type || 'Message');
+          const providedId = String((params as any)?.messageId || '') || undefined;
+          const messageId = providedId || `ui-${componentType.toLowerCase()}-${Date.now()}`;
+          try {
+            window.dispatchEvent(
+              new CustomEvent('custom:showComponent', {
+                detail: {
+                  messageId,
+                  component: {
+                    type: componentType,
+                    props: { _custom_displayMessage: true, ...(params as any), spec: (params as any)?.spec },
                   },
-                }),
-              );
-            } catch {}
+                  contextKey,
+                },
+              }),
+            );
+          } catch {}
+          try {
+            bus.send('tool_result', {
+              type: 'tool_result',
+              id: call.id,
+              tool,
+              result: { status: 'SUCCESS', messageId, componentType },
+              timestamp: Date.now(),
+              source: 'dispatcher',
+            });
+          } catch {}
+          return { status: 'SUCCESS', message: `Rendered ${componentType}`, messageId } as any;
+        }
+        
+        if (tool === 'update_component') {
+          const messageId = String((params as any)?.componentId || (params as any)?.messageId || '');
+          const patch = (params as any)?.patch;
+          if (!messageId) {
+            const msg = 'update_component requires componentId';
             try {
-              bus.send('tool_result', {
-                type: 'tool_result',
+              bus.send('tool_error', {
+                type: 'tool_error',
                 id: call.id,
                 tool,
-                result: { status: 'SUCCESS', messageId, componentType },
+                error: msg,
                 timestamp: Date.now(),
                 source: 'dispatcher',
               });
             } catch {}
-            return { status: 'SUCCESS', message: `Rendered ${componentType}`, messageId } as any;
+            return { status: 'ERROR', message: msg } as any;
           }
-          if (tool === 'update_component') {
-            // Map to existing ui_update path while preserving semantics
-            const messageId = String((params as any)?.componentId || (params as any)?.messageId || '');
-            const patch = (params as any)?.patch;
-            if (!messageId) {
-              const msg = 'update_component requires componentId';
-              try {
-                bus.send('tool_error', {
-                  type: 'tool_error',
-                  id: call.id,
-                  tool,
-                  error: msg,
-                  timestamp: Date.now(),
-                  source: 'dispatcher',
-                });
-              } catch {}
-              return { status: 'ERROR', message: msg } as any;
-            }
-            // Reuse the ui_update handler by calling ComponentRegistry.update directly
-            const res = await ComponentRegistry.update(messageId, typeof patch === 'string' ? { instruction: patch } : patch);
-            try {
-              bus.send('tool_result', {
-                type: 'tool_result',
-                id: call.id,
-                tool,
-                result: { ...(res as any), messageId },
-                timestamp: Date.now(),
-                source: 'dispatcher',
-              });
-            } catch {}
-            return { status: 'SUCCESS', message: 'Component updated', ...(res as any) } as any;
-          }
+          const res = await ComponentRegistry.update(messageId, typeof patch === 'string' ? { instruction: patch } : patch);
+          try {
+            bus.send('tool_result', {
+              type: 'tool_result',
+              id: call.id,
+              tool,
+              result: { ...(res as any), messageId },
+              timestamp: Date.now(),
+              source: 'dispatcher',
+            });
+          } catch {}
+          return { status: 'SUCCESS', message: 'Component updated', ...(res as any) } as any;
+        }
+
+        // When steward flowchart mode is enabled, limit available canvas tools
+        if (STEWARD_FLOWCHART) {
           if (tool === 'canvas_create_mermaid_stream') {
             return dispatchTL('tldraw:create_mermaid_stream', params);
           }
@@ -462,113 +461,6 @@ export function ToolDispatcher({
             break;
         }
 
-        if (tool === 'generate_ui_component') {
-          const componentType = String((params as any)?.componentType || 'Message');
-          const providedId = String((params as any)?.messageId || '') || undefined;
-          const messageId = providedId || `ui-${componentType.toLowerCase()}-${Date.now()}`;
-          // Let the thread listener materialize this component
-          try {
-            window.dispatchEvent(
-              new CustomEvent('custom:showComponent', {
-                detail: {
-                  messageId,
-                  component: {
-                    type: componentType,
-                    props: { _custom_displayMessage: true, ...(params as any) },
-                  },
-                  contextKey,
-                },
-              }),
-            );
-          } catch {}
-          // Opportunistically populate certain components after mount
-          try {
-            if (componentType === 'WeatherForecast') {
-              const locRaw = String((params as any)?.location || (params as any)?.city || '')
-                .replace(/\s+on the canvas\b/i, '')
-                .trim();
-              if (locRaw) {
-                void (async () => {
-                  for (let attempt = 0; attempt < 5; attempt++) {
-                    const ok = await populateWeather(messageId, locRaw);
-                    if (ok) break;
-                    await new Promise((r) => setTimeout(r, 250 * (attempt + 1)));
-                  }
-                })();
-              }
-            }
-          } catch {}
-          // Emit tool_result so agents can correlate
-          try {
-            bus.send('tool_result', {
-              type: 'tool_result',
-              id: call.id,
-              tool,
-              result: { status: 'SUCCESS', messageId, componentType },
-              timestamp: Date.now(),
-              source: 'dispatcher',
-            });
-          } catch {}
-          return { status: 'SUCCESS', message: `Rendered ${componentType}`, messageId } as any;
-        }
-
-        if (tool === 'ui_update') {
-          const messageId = String((params as any)?.messageId || (params as any)?.id || '');
-          const patch = { ...((params as any)?.patch || {}) };
-          if (!messageId) {
-            const msg = 'ui_update requires messageId';
-            try {
-              bus.send('tool_error', {
-                type: 'tool_error',
-                id: call.id,
-                tool,
-                error: msg,
-                timestamp: Date.now(),
-                source: 'dispatcher',
-              });
-            } catch {}
-            return { status: 'ERROR', message: msg } as any;
-          }
-          // If patch contains factCheck(s) but no score deltas, synthesize small deltas for visibility
-          try {
-            const hasDeltas = !!(patch as any).p1Delta || !!(patch as any).p2Delta || !!(patch as any).p1 || !!(patch as any).p2;
-            const rawFactChecks = (patch as any).factCheck
-              ? [(patch as any).factCheck]
-              : Array.isArray((patch as any).factChecks)
-                ? (patch as any).factChecks
-                : [];
-            if (!hasDeltas && rawFactChecks.length > 0) {
-              const latest = rawFactChecks[rawFactChecks.length - 1] || {};
-              const verdict = String(latest.verdict || '').toLowerCase();
-              const confidence = Number(latest.confidence || 0);
-              const boost = (v: number) => (confidence >= 80 ? Math.round(v * 1.5) : v);
-              if (verdict === 'supported') {
-                (patch as any).p1Delta = { factualAccuracy: boost(20), bsMeter: -boost(10) };
-              } else if (verdict === 'refuted') {
-                (patch as any).p1Delta = { factualAccuracy: -boost(20), bsMeter: boost(20) };
-              } else if (verdict === 'partial') {
-                (patch as any).p1Delta = { factualAccuracy: boost(10), bsMeter: -boost(5) };
-              }
-            }
-          } catch {}
-
-          const res = await ComponentRegistry.update(messageId, patch);
-          try {
-            console.log('[ToolDispatcher][ui_update] result', JSON.stringify({ messageId, res }));
-          } catch {}
-          // Emit result back
-          try {
-            bus.send('tool_result', {
-              type: 'tool_result',
-              id: call.id,
-              tool,
-              result: { ...(res as any), messageId },
-              timestamp: Date.now(),
-              source: 'dispatcher',
-            });
-          } catch {}
-          return { status: 'SUCCESS', message: 'Component updated', ...(res as any) } as any;
-        }
 
         if (tool.startsWith('mcp_')) {
           try {
@@ -656,12 +548,12 @@ export function ToolDispatcher({
                   }
                   const uiRes = await ComponentRegistry.update(messageId, patch);
                   try {
-                    console.log('[ToolDispatcher][mcp→ui_update] patched scorecard', JSON.stringify({ messageId, uiRes, patch }));
+                    console.log('[ToolDispatcher][mcp→update_component] patched scorecard', JSON.stringify({ messageId, uiRes, patch }));
                   } catch {}
                 }
               }
             } catch (e) {
-              console.warn('[ToolDispatcher] exa-to-ui_update synthesis failed', e);
+              console.warn('[ToolDispatcher] exa-to-update_component synthesis failed', e);
             }
             return { status: 'SUCCESS', message: 'MCP tool executed', result } as any;
           } catch (e) {
@@ -786,8 +678,8 @@ export function ToolDispatcher({
             id: message.id || `${Date.now()}`,
             type: 'tool_call',
             payload: {
-              tool: 'generate_ui_component',
-              params: { componentType: 'RetroTimerEnhanced', initialMinutes: minutes },
+              tool: 'create_component',
+              params: { type: 'RetroTimerEnhanced', initialMinutes: minutes },
             },
             timestamp: Date.now(),
             source: 'dispatcher',
@@ -849,8 +741,8 @@ export function ToolDispatcher({
             id: message.id || `${Date.now()}`,
             type: 'tool_call',
             payload: {
-              tool: 'generate_ui_component',
-              params: { componentType: 'WeatherForecast', location },
+              tool: 'create_component',
+              params: { type: 'WeatherForecast', location },
             },
             timestamp: Date.now(),
             source: 'dispatcher',
@@ -915,56 +807,6 @@ function parseMinutesFromText(text: string): number | null {
     if (total > 0) return total;
   }
   return null;
-}
-
-async function populateWeather(messageId: string, location: string): Promise<boolean> {
-  try {
-    const geoRes = await fetch(
-      `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(location)}&count=1&language=en&format=json`,
-    );
-    const geocode = await geoRes.json().catch(() => null);
-    const first = geocode?.results?.[0];
-    if (!first) return false;
-
-    const { latitude, longitude, name, country_code } = first;
-    const locLabel = `${name}${country_code ? ', ' + country_code : ''}`;
-
-    const wxRes = await fetch(
-      `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,wind_speed_10m,wind_direction_10m,relative_humidity_2m&hourly=precipitation_probability&timezone=auto`,
-    );
-    const wx = await wxRes.json().catch(() => null);
-    if (!wx?.current) return false;
-
-    const temp = wx.current.temperature_2m;
-    const windSpd = wx.current.wind_speed_10m;
-    const windDir = wx.current.wind_direction_10m;
-    const humidity = wx.current.relative_humidity_2m;
-    const precipProb = wx.hourly?.precipitation_probability?.[0] ?? null;
-
-    const toCompass = (deg: number) => {
-      if (typeof deg !== 'number') return 'N';
-      const dirs = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
-      return dirs[Math.round(deg / 45) % 8];
-    };
-
-    const periods = [
-      {
-        name: 'Now',
-        temperature: `${Math.round(temp)}°`,
-        wind: { speed: `${Math.round(windSpd)} mph`, direction: toCompass(windDir) },
-        condition: 'Current conditions',
-        humidity: typeof humidity === 'number' ? Math.round(humidity) : undefined,
-        precipitation: typeof precipProb === 'number' ? Math.round(precipProb) : undefined,
-      },
-    ];
-
-    const patch = { location: locLabel, periods, viewType: 'current' } as any;
-    const res = await ComponentRegistry.update(messageId, patch);
-    return Boolean((res as any)?.success);
-  } catch (e) {
-    console.warn('[ToolDispatcher] populateWeather failed', e);
-    return false;
-  }
 }
 
 export function normalizeMermaidText(text: string): string {
