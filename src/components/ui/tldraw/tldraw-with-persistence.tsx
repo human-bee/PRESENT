@@ -188,8 +188,8 @@ function CustomMainMenu({ readOnly = false }: { readOnly?: boolean } & any) {
     } catch (e) {
       console.warn('[NewCanvas] Fallback to resolver flow', e);
     }
-    // Fallback: go to resolver (will create on load)
-    router.push('/canvas');
+    // Fallback: force full page reload to trigger canvas creation
+    window.location.href = '/canvas';
   };
 
   const handleMcpConfig = () => {
