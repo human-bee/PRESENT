@@ -347,13 +347,24 @@ export class DebateJudgeManager {
       async execute({ claimId, summary, tags, evidenceRefs }) {
         const claim = manager.state.claims.find((c) => c.id === claimId);
         if (!claim) return { status: 'NOT_FOUND', claimId };
+        const normalizedRefs: EvidenceRef[] = Array.isArray(evidenceRefs)
+          ? evidenceRefs.map((ref) => {
+              const id = ref.id && ref.id !== null ? ref.id : randomId('src');
+              return {
+                id,
+                title: ref.title ?? undefined,
+                url: ref.url ?? undefined,
+                credibility: ref.credibility ?? 'UNKNOWN',
+                type: ref.type ?? 'Academic',
+                lastVerified: ref.lastVerified ?? undefined,
+              };
+            })
+          : [];
         const note: FactCheckNote = {
           id: randomId('fc'),
           summary,
           tags: Array.isArray(tags) ? tags : [],
-          evidenceRefs: Array.isArray(evidenceRefs)
-            ? evidenceRefs.map((ref) => (ref.id && ref.id !== null ? ref.id : randomId('src')))
-            : [],
+          evidenceRefs: normalizedRefs.map((ref) => ref.id),
         };
         const updatedClaim: Claim = {
           ...claim,
@@ -361,16 +372,8 @@ export class DebateJudgeManager {
           updatedAt: now(),
         };
         let sources = manager.state.sources;
-        if (Array.isArray(evidenceRefs) && evidenceRefs.length) {
-          const normalized: EvidenceRef[] = evidenceRefs.map((ref) => ({
-            id: ref.id && ref.id !== null ? ref.id : randomId('src'),
-            title: ref.title ?? undefined,
-            url: ref.url ?? undefined,
-            credibility: ref.credibility ?? 'UNKNOWN',
-            type: ref.type ?? 'Academic',
-            lastVerified: ref.lastVerified ?? undefined,
-          }));
-          sources = mergeArraysById(sources, normalized);
+        if (normalizedRefs.length) {
+          sources = mergeArraysById(sources, normalizedRefs);
         }
         await manager.applyPatch({
           claims: mergeArraysById(manager.state.claims, [updatedClaim]),
