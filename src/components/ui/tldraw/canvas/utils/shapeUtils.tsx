@@ -3,10 +3,11 @@
 import {
   BaseBoxShapeUtil,
   HTMLContainer as TldrawHTMLContainer,
+  T,
+  type RecordProps,
   type TLBaseShape,
   type TLResizeInfo,
-} from '@tldraw/editor';
-import { T, type RecordProps } from '@tldraw/tldraw';
+} from '@tldraw/tldraw';
 import { getComponentSizeInfo } from '@/lib/component-sizing';
 import type { customShapeProps, MermaidStreamShapeProps } from './types';
 import { CustomShapeComponent } from '../components/CustomShapeComponent';

@@ -110,6 +110,9 @@ Each hook lives under `src/components/ui/canvas/hooks/` and exposes typed APIs f
 | `livekit-room-connector.tsx` | 1,220 | 94 | Pure orchestrator — delegates to connection/agent hooks and `RoomConnectorUI`. |
 | `tldraw-with-collaboration.tsx` | 1,254 | 137 | Orchestrator composes session hooks, bridge, and overlay; no window state. |
 | `useCanvasEventHandlers.ts` | 640+ | 66 | Now only wires handler maps from `utils/` and mermaid bridge. |
+| `tldraw-canvas.tsx` (Wave 2) | 1,064 | 189 | Orchestrator composes extracted hooks, HUD/toolbar/rulers, delegates side-effects to hooks. |
+| `tool-dispatcher.tsx` (Wave 2) | 1,015 | 43 | Thin orchestrator wiring typed registry/queue/runner hooks; UI is fully presentational. |
+| `decision-engine.ts` (Wave 2 core) | 770 | 0 (core files) | Pure pipeline relocated to `core/{normalize,rules,scoring,plan}.ts`; legacy class wraps the facade. |
 
 Our guardrail remains **≤300 LOC** per orchestrator and ≤160 LOC per hook. When a file approaches those limits, extract helpers immediately.
 
@@ -137,6 +140,70 @@ The same pattern applies to LiveKit: `useLivekitConnection` owns token fetch + c
 - Tests can target pure utilities (`pinned-shapes`, `mermaid-bridge`, `window-listeners`).
 - TLDraw snapshots/broadcasters receive the editor instance via props instead of digging through globals, shrinking cross-module coupling.
 - Adding new canvas events means writing a handler factory in `utils/` and plugging it into the hook — zero orchestrator churn.
+
+### Wave 2 Module Diagrams
+
+#### TLDraw Canvas
+
+```
+TldrawCanvas (orchestrator)
+ ├─ hooks/
+ │   ├─ useCanvasStore          (selectors + derived state)
+ │   ├─ useCanvasShortcuts      (key bindings, memoised handlers)
+ │   ├─ useRulersAndGrid        (ruler/grid math, visibility)
+ │   ├─ useExportImport         (PNG/SVG/JSON export + import)
+ │   └─ useUrlSync              (optional URL state sync)
+ ├─ components/
+ │   ├─ CanvasToolbar
+ │   ├─ CanvasHUD
+ │   ├─ Rulers
+ │   └─ GridLayer
+ └─ utils/
+     ├─ canvasMath              (snap/scale helpers; unit tested)
+     ├─ exporters               (pure transforms; unit tested)
+     ├─ urlState                (parse/serialize)
+     └─ constants/shapeUtils    (constructor exports only)
+```
+
+#### Tool Dispatcher
+
+```
+ToolDispatcher (orchestrator)
+ ├─ hooks/
+ │   ├─ useToolRegistry         (typed descriptors, barrel exported)
+ │   ├─ useToolEvents           (bus subscribe/emit, returns unsubscribe)
+ │   ├─ useToolQueue            (state machine via reducer; tested)
+ │   └─ useToolRunner           (executes tool with timeout/log streaming)
+ ├─ components/
+ │   ├─ ToolList                (pure picker UI)
+ │   ├─ JobCard                 (status)
+ │   └─ JobLog                  (stream output)
+ └─ utils/
+     ├─ toolTypes               (enums + shared types)
+     ├─ queueReducer            (pure reducer; jest)
+     ├─ resultNormalizers       (idempotent transforms; jest)
+     └─ constants               (topics/timeouts)
+```
+
+#### Decision Engine
+
+```
+decide() facade
+ ├─ core/
+ │   ├─ normalize.ts            (input canonicalisation)
+ │   ├─ rules.ts                (intent + heuristics)
+ │   ├─ scoring.ts              (confidence blending)
+ │   └─ plan.ts                 (PlanOutput selection)
+ ├─ adapters/                   (reserved for LiveKit/TLDraw IO)
+ └─ legacy class (decision-engine.ts)
+     └─ delegates to facade for all heuristics; retains meeting buffers & OpenAI call
+```
+
+Tests now live alongside the pure modules:
+
+- `src/components/ui/tldraw/canvas/utils/{canvasMath,exporters}.test.ts`
+- `src/components/tool-dispatcher/utils/{queueReducer,resultNormalizers}.test.ts`
+- `src/lib/decision-engine/__tests__/{rules,scoring,plan,facade}.test.ts`
 
 ### Remaining Modularization Targets
 

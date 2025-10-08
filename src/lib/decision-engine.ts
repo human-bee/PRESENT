@@ -38,6 +38,19 @@
  */
 
 import { getPrompt } from './prompt-loader';
+import {
+  choosePlan,
+  computeScore,
+  detectIntent as coreDetectIntent,
+  evaluateRules,
+  normalizeTranscript,
+  type DecisionEngineConfig,
+  type IntentResult,
+  type NormalizedTranscript,
+  type PlanOutput,
+  type RuleEvaluation,
+  type ScoreBreakdown,
+} from './decision-engine/index';
 
 export interface Decision {
   should_send: boolean;
@@ -59,6 +72,7 @@ export interface EnhancedDecisionResult {
   hasActionableRequest: boolean;
   intent:
   | 'document_retrieval'
+  | 'ui_generation'
   | 'create_component'
   | 'update_component'
   | 'youtube_search'
@@ -95,6 +109,14 @@ export interface MeetingContext {
   lastDecisionTime: number;
   pendingCollaborativeRequest?: string;
 }
+
+type PipelineResult = {
+  normalized: NormalizedTranscript;
+  intent: IntentResult;
+  evaluation: RuleEvaluation;
+  score: ScoreBreakdown;
+  plan: PlanOutput;
+};
 
 // Build dynamic system prompt based on available capabilities
 const buildSystemPrompt = (config: DecisionEngineConfig): string => {
@@ -150,14 +172,14 @@ EXAMPLES:
 
   if (config.intents && Object.keys(config.intents).length > 0) {
     dynamicSection += '\n\nAVAILABLE INTENTS:\n';
-    Object.entries(config.intents).forEach(([tool, intents]) => {
+    (Object.entries(config.intents) as Array<[string, string[]]>).forEach(([tool, intents]) => {
       dynamicSection += `- ${tool}: ${intents.join(', ')}\n`;
     });
   }
 
   if (config.keywords && Object.keys(config.keywords).length > 0) {
     dynamicSection += '\n\nTRIGGER KEYWORDS:\n';
-    Object.entries(config.keywords).forEach(([tool, keywords]) => {
+    (Object.entries(config.keywords) as Array<[string, string[]]>).forEach(([tool, keywords]) => {
       dynamicSection += `- ${tool}: ${keywords.slice(0, 5).join(', ')}${keywords.length > 5 ? '...' : ''}\n`;
     });
   }
@@ -173,11 +195,6 @@ Return JSON:
 
   return basePrompt + dynamicSection + endPrompt;
 };
-
-export interface DecisionEngineConfig {
-  intents?: Record<string, string[]>;
-  keywords?: Record<string, string[]>;
-}
 
 export class DecisionEngine {
   private apiKey: string;
@@ -204,6 +221,30 @@ export class DecisionEngine {
   constructor(apiKey: string, config: DecisionEngineConfig = {}) {
     this.apiKey = apiKey;
     this.config = config;
+  }
+
+  private runPipeline(transcript: string): PipelineResult {
+    const normalized = normalizeTranscript(transcript);
+    const intent = coreDetectIntent(normalized, this.config);
+    const evaluation = evaluateRules(normalized);
+    const score = computeScore(evaluation);
+    const plan = choosePlan(normalized, intent, evaluation, score);
+    return { normalized, intent, evaluation, score, plan };
+  }
+
+  private planToDecision(plan: PlanOutput): Decision {
+    return {
+      should_send: plan.shouldSend,
+      summary: plan.summary,
+      confidence: plan.confidence,
+      reason: plan.reason,
+      intent: plan.intent,
+      structuredContext: plan.structuredContext,
+    };
+  }
+
+  public pipeline(transcript: string): PipelineResult {
+    return this.runPipeline(transcript);
   }
 
   /**
@@ -379,11 +420,16 @@ Analyze the current speaker's statement in full conversational context.`;
         /\b(create|show|generate|display|make|timer|slider|chart|button|form|document|presentation|edit|change|update|add)\b/i.test(
           combined,
         );
+      const pipelineFallback = this.runPipeline(combined);
+      const heuristicDecision = this.planToDecision(pipelineFallback.plan);
       const fallbackDecision: Decision = {
-        should_send: hasUIWords,
-        summary: combined,
-        confidence: hasUIWords ? 70 : 20,
-        reason: hasUIWords ? 'Contains UI keywords (fallback)' : 'No clear intent (fallback)',
+        ...heuristicDecision,
+        should_send: hasUIWords ? true : heuristicDecision.should_send,
+        summary: heuristicDecision.summary || combined,
+        confidence: hasUIWords ? Math.max(heuristicDecision.confidence, 70) : 20,
+        reason: hasUIWords
+          ? 'Contains UI keywords (fallback)'
+          : heuristicDecision.reason || 'No clear intent (fallback)',
       };
 
       if (this.decisionCallback) {
@@ -579,166 +625,104 @@ Analyze the current speaker's statement in full conversational context.`;
   /**
    * Detect intent and extract structured context from transcript
    */
-  private detectIntent(transcript: string): {
-    intent: 'youtube_search' | 'ui_component' | 'general';
-    structuredContext?: {
-      rawQuery?: string;
-      wantsLatest?: boolean;
-      wantsOfficial?: boolean;
-      contentType?: string;
-      artist?: string;
-    };
-  } {
-    const lowerTranscript = transcript.toLowerCase();
-
-    // Use dynamic keywords if available, otherwise fallback to defaults
-    const youtubeKeywords = this.config.keywords?.youtube_search || [
-      'youtube',
-      'video',
-      'music video',
-      'song',
-      'artist',
-      'channel',
-      'search for',
-      'find',
-      'show me',
-      'play',
-      'watch',
-      'latest',
-      'newest',
-    ];
-
-    const hasYoutubeIntent =
-      youtubeKeywords.some((keyword) => lowerTranscript.includes(keyword)) ||
-      /\b(show|find|search|play)\b.*\b(video|song|music|artist)\b/.test(lowerTranscript);
-
-    if (hasYoutubeIntent) {
-      const wantsLatest = /\b(latest|newest|recent|new|today|this week)\b/.test(lowerTranscript);
-      const wantsOfficial = /\b(official|vevo|verified)\b/.test(lowerTranscript);
-
-      // Extract potential artist names or search terms
-      let rawQuery = transcript;
-      const searchMatch = transcript.match(/(?:search for|find|show me|play)\s+"?([^"]+)"?/i);
-      if (searchMatch) {
-        rawQuery = searchMatch[1];
-      }
-
-      // Detect known artists
-      let artist = '';
-      if (
-        lowerTranscript.includes('pinkpantheress') ||
-        lowerTranscript.includes('pink pantheress')
-      ) {
-        artist = 'PinkPantheress';
-      }
-
-      // Detect content type
-      let contentType = 'video';
-      if (lowerTranscript.includes('music video') || lowerTranscript.includes('song')) {
-        contentType = 'music';
-      } else if (lowerTranscript.includes('tutorial')) {
-        contentType = 'tutorial';
-      }
-
-      return {
-        intent: 'youtube_search',
-        structuredContext: {
-          rawQuery,
-          wantsLatest,
-          wantsOfficial,
-          contentType,
-          artist,
-        },
-      };
-    }
-
-    // UI component detection
-    const uiKeywords = this.config.keywords?.create_component || [
-      'component',
-      'timer',
-      'chart',
-      'button',
-      'form',
-      'create',
-      'generate',
-      'display',
-      'show',
-      'make',
-      'add',
-      'build',
-    ];
-
-    const hasUIIntent = uiKeywords.some((keyword) => lowerTranscript.includes(keyword));
-
-    if (hasUIIntent) {
-      return { intent: 'ui_component' };
-    }
-
-    return { intent: 'general' };
-  }
-
-  /**
-   * Let AI make the decision
-   */
   private async makeAIDecision(transcript: string): Promise<Decision> {
-    // First detect intent locally for speed and reliability
-    const intentAnalysis = this.detectIntent(transcript);
+    const pipeline = this.runPipeline(transcript);
+    const planDecision = this.planToDecision(pipeline.plan);
 
-    // For single-word utterances, be more conservative
-    const wordCount = transcript.trim().split(/\s+/).length;
+    // For single-word utterances, be more conservative unless explicit action keywords exist.
     if (
-      wordCount <= 2 &&
-      !['search', 'find', 'play', 'show'].some((w) => transcript.toLowerCase().includes(w))
+      pipeline.evaluation.isSingleWord &&
+      !['search', 'find', 'play', 'show'].some((keyword) =>
+        pipeline.normalized.lower.includes(keyword),
+      )
     ) {
       return {
-        should_send: false,
-        summary: transcript,
-        confidence: 25,
-        reason: 'Single word utterance without actionable keyword',
-        intent: intentAnalysis.intent,
-        structuredContext: intentAnalysis.structuredContext,
+        ...planDecision,
+        summary: planDecision.summary || pipeline.normalized.trimmed || transcript,
+        intent: pipeline.intent.intent,
+        structuredContext: pipeline.intent.structuredContext,
       };
     }
 
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${this.apiKey}`,
-      },
-      body: JSON.stringify({
-        model: 'gpt-4o-mini',
-        temperature: 0.1,
-        response_format: { type: 'json_object' },
-        messages: [
-          { role: 'system', content: buildSystemPrompt(this.config) },
-          { role: 'user', content: transcript },
-        ],
-      }),
-    });
+    try {
+      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${this.apiKey}`,
+        },
+        body: JSON.stringify({
+          model: 'gpt-4o-mini',
+          temperature: 0.1,
+          response_format: { type: 'json_object' },
+          messages: [
+            { role: 'system', content: buildSystemPrompt(this.config) },
+            { role: 'user', content: transcript },
+          ],
+        }),
+      });
 
-    if (!response.ok) {
-      throw new Error(`OpenAI API error: ${response.status}`);
+      if (!response.ok) {
+        throw new Error(`OpenAI API error: ${response.status}`);
+      }
+
+      const data = (await response.json()) as {
+        choices: Array<{
+          message: {
+            content: string;
+          };
+        }>;
+      };
+
+      let content = data.choices[0].message.content || '{}';
+      const fenced = content.match(/```(?:json)?\n([\s\S]*?)\n```/i);
+      if (fenced && fenced[1]) {
+        content = fenced[1];
+      }
+
+      let parsed: Record<string, unknown>;
+      try {
+        parsed = JSON.parse(content);
+      } catch (parseError) {
+        throw new Error(`OpenAI response parse failure: ${String(parseError)}`);
+      }
+
+      return {
+        should_send:
+          typeof parsed.should_send === 'boolean'
+            ? (parsed.should_send as boolean)
+            : planDecision.should_send,
+        summary: String(parsed.summary || planDecision.summary || transcript).trim(),
+        confidence:
+          typeof parsed.confidence === 'number'
+            ? Number(parsed.confidence)
+            : planDecision.confidence,
+        reason: String(parsed.reason || planDecision.reason || 'AI decision'),
+        intent: pipeline.intent.intent,
+        structuredContext: pipeline.intent.structuredContext,
+      };
+    } catch (error) {
+      console.error('❌ [DecisionEngine] AI decision failed:', error);
+
+      const hasUIWords =
+        /\b(create|show|generate|display|make|timer|slider|chart|button|form|document|presentation|edit|change|update|add)\b/i.test(
+          transcript,
+        );
+
+      const fallbackDecision: Decision = {
+        ...planDecision,
+        should_send: hasUIWords ? true : planDecision.should_send,
+        summary: planDecision.summary || transcript,
+        confidence: hasUIWords ? Math.max(planDecision.confidence, 70) : 20,
+        reason: hasUIWords
+          ? 'Contains UI keywords (fallback)'
+          : planDecision.reason || 'No clear intent (fallback)',
+        intent: pipeline.intent.intent,
+        structuredContext: pipeline.intent.structuredContext,
+      };
+
+      return fallbackDecision;
     }
-
-    const data = (await response.json()) as {
-      choices: Array<{
-        message: {
-          content: string;
-        };
-      }>;
-    };
-    const decision = JSON.parse(data.choices[0].message.content);
-
-    // Validate and return with enhanced context
-    return {
-      should_send: Boolean(decision.should_send),
-      summary: String(decision.summary || transcript).trim(),
-      confidence: Number(decision.confidence || 50),
-      reason: String(decision.reason || 'AI decision'),
-      intent: intentAnalysis.intent,
-      structuredContext: intentAnalysis.structuredContext,
-    };
   }
 
   /**
