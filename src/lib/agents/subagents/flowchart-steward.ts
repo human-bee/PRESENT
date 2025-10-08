@@ -2,6 +2,12 @@ import { Agent, tool, run } from '@openai/agents';
 import { z } from 'zod';
 import { getFlowchartDoc, commitFlowchartDoc, getTranscriptWindow } from '../shared/supabase-context';
 
+const logWithTs = <T extends Record<string, unknown>>(label: string, payload: T) => {
+  try {
+    console.log(label, { ts: new Date().toISOString(), ...payload });
+  } catch {}
+};
+
 const GetCurrentArgs = z.object({ room: z.string(), docId: z.string() });
 // All fields must be required for Responses/Agents tools; use nullable for optional semantics
 const GetContextArgs = z.object({
@@ -13,39 +19,51 @@ const CommitArgs = z.object({
   docId: z.string(),
   format: z.enum(['streamdown', 'markdown', 'mermaid']),
   doc: z.string().max(20000),
-  rationale: z.string().nullable(),
+  rationale: z.string(),
   prevVersion: z.number().nullable(),
 });
 
-const get_current_flowchart = tool({
+export const get_current_flowchart = tool({
   name: 'get_current_flowchart',
   description: 'Fetch current flowchart doc for a room/docId from Supabase.',
   parameters: GetCurrentArgs,
   async execute({ room, docId }) {
+    const start = Date.now();
     const doc = await getFlowchartDoc(room, docId);
     try {
-      console.log('📄 [Steward] get_current_flowchart', { room, docId, version: doc?.version ?? 0 });
+      logWithTs('📄 [Steward] get_current_flowchart', {
+        room,
+        docId,
+        version: doc?.version ?? 0,
+        durationMs: Date.now() - start,
+      });
     } catch {}
     return doc;
   },
 });
 
-const get_context = tool({
+export const get_context = tool({
   name: 'get_context',
   description: 'Fetch recent transcript lines for a room.',
   parameters: GetContextArgs,
   async execute({ room, windowMs }) {
     const spanMs = typeof windowMs === 'number' ? windowMs : 60000;
+    const start = Date.now();
     const window = await getTranscriptWindow(room, spanMs);
     try {
       const count = Array.isArray(window?.transcript) ? window.transcript.length : 0;
-      console.log('📝 [Steward] get_context', { room, windowMs: spanMs, lines: count });
+      logWithTs('📝 [Steward] get_context', {
+        room,
+        windowMs: spanMs,
+        lines: count,
+        durationMs: Date.now() - start,
+      });
     } catch {}
     return window;
   },
 });
 
-const commit_flowchart = tool({
+export const commit_flowchart = tool({
   name: 'commit_flowchart',
   description: 'Commit a new version of the flowchart with optimistic concurrency.',
   parameters: CommitArgs,
@@ -87,37 +105,73 @@ const commit_flowchart = tool({
     };
 
     let expectedPrev = typeof prevVersion === 'number' ? prevVersion : undefined;
+    const normalizedRationale =
+      typeof rationale === 'string' && rationale.trim() !== '' ? rationale : undefined;
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
+        const commitStart = Date.now();
         const res = await commitFlowchartDoc(room, docId, {
           format,
           doc,
           prevVersion: expectedPrev,
-          rationale: typeof rationale === 'string' ? rationale : undefined,
+          rationale: normalizedRationale,
         });
         try {
-          console.log('🧾 [Steward] commit_flowchart', { room, docId, prevVersion: expectedPrev ?? null, nextVersion: res.version });
+          logWithTs('🧾 [Steward] commit_flowchart', {
+            room,
+            docId,
+            prevVersion: expectedPrev ?? null,
+            nextVersion: res.version,
+            commitDurationMs: Date.now() - commitStart,
+          });
         } catch {}
 
         const broadcastUrl = resolveBroadcastUrl();
         if (broadcastUrl) {
+          const broadcastStart = Date.now();
           try {
-            await fetch(broadcastUrl, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ room, componentId: docId, flowchartDoc: doc, format, version: res.version }),
+            logWithTs('📡 [Steward] broadcast_scheduled', {
+              room,
+              docId,
+              version: res.version,
+              url: broadcastUrl,
             });
+          } catch {}
+          void (async () => {
             try {
-              console.log('📡 [Steward] broadcast_flowchart', { room, docId, version: res.version, url: broadcastUrl });
-            } catch {}
-          } catch (err) {
-            try {
-              console.error('⚠️ [Steward] broadcast failed', { room, docId, error: err instanceof Error ? err.message : err });
-            } catch {}
-          }
+              await fetch(broadcastUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ room, componentId: docId, flowchartDoc: doc, format, version: res.version }),
+              });
+              try {
+                logWithTs('📡 [Steward] broadcast_flowchart', {
+                  room,
+                  docId,
+                  version: res.version,
+                  url: broadcastUrl,
+                  broadcastDurationMs: Date.now() - broadcastStart,
+                });
+              } catch {}
+            } catch (err) {
+              try {
+                logWithTs('⚠️ [Steward] broadcast failed', {
+                  room,
+                  docId,
+                  version: res.version,
+                  url: broadcastUrl,
+                  durationMs: Date.now() - broadcastStart,
+                  error: err instanceof Error ? err.message : err,
+                });
+              } catch {}
+            }
+          })();
         } else {
           try {
-            console.warn('⚠️ [Steward] broadcast URL unavailable, skipping LiveKit patch');
+            logWithTs('⚠️ [Steward] broadcast URL unavailable, skipping LiveKit patch', {
+              room,
+              docId,
+            });
           } catch {}
         }
         return res;
@@ -125,7 +179,12 @@ const commit_flowchart = tool({
         if (attempt === 0 && error instanceof Error && error.message === 'CONFLICT') {
           const latest = await getFlowchartDoc(room, docId);
           try {
-            console.warn('⚠️ [Steward] commit conflict', { room, docId, attemptedPrev: expectedPrev, latestVersion: latest.version });
+            logWithTs('⚠️ [Steward] commit conflict', {
+              room,
+              docId,
+              attemptedPrev: expectedPrev,
+              latestVersion: latest.version,
+            });
           } catch {}
           expectedPrev = latest.version;
           continue;
@@ -137,25 +196,37 @@ const commit_flowchart = tool({
   },
 });
 
+export const FLOWCHART_STEWARD_INSTRUCTIONS =
+  'You are the single writer for flowcharts. Fetch the current doc and transcript; reason holistically; output the entire doc each turn. Then commit via commit_flowchart. If you lack a rationale, send an empty string (never use null). Keep a concise status sentence.';
+
 export const flowchartSteward = new Agent({
   name: 'FlowchartSteward',
   model: 'gpt-5-mini',
-  instructions:
-    'You are the single writer for flowcharts. Fetch the current doc and transcript; reason holistically; output the entire doc each turn. Then commit via commit_flowchart. Keep a concise status sentence.',
+  instructions: FLOWCHART_STEWARD_INSTRUCTIONS,
   tools: [get_current_flowchart, get_context, commit_flowchart],
 });
 
 export async function runFlowchartSteward(params: { room: string; docId: string; windowMs?: number }) {
   const windowMs = params.windowMs ?? 60000;
+  const overallStart = Date.now();
   try {
-    console.log('🚀 [Steward] runFlowchartSteward.start', { room: params.room, docId: params.docId, windowMs });
+    logWithTs('🚀 [Steward] runFlowchartSteward.start', {
+      room: params.room,
+      docId: params.docId,
+      windowMs,
+    });
   } catch {}
   const prompt = `Update the flowchart for room ${params.room} doc ${params.docId} with params: ${JSON.stringify({ ...params, windowMs })}`;
   const result = await run(flowchartSteward, prompt);
   try {
     const preview = typeof result.finalOutput === 'string' ? result.finalOutput.slice(0, 200) : null;
-    console.log('✅ [Steward] runFlowchartSteward.complete', { room: params.room, docId: params.docId, windowMs, preview });
+    logWithTs('✅ [Steward] runFlowchartSteward.complete', {
+      room: params.room,
+      docId: params.docId,
+      windowMs,
+      preview,
+      durationMs: Date.now() - overallStart,
+    });
   } catch {}
   return result.finalOutput;
 }
-

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse, after } from 'next/server';
-import { runFlowchartSteward } from '@/lib/agents/subagents/flowchart-steward';
+import { runActiveFlowchartSteward } from '@/lib/agents/subagents/flowchart-steward-registry';
 
 export async function POST(req: NextRequest) {
   try {
@@ -27,7 +27,11 @@ export async function POST(req: NextRequest) {
           docId: trimmedDocId,
           windowMs: resolvedWindow,
         });
-        await runFlowchartSteward({ room: trimmedRoom, docId: trimmedDocId, windowMs: resolvedWindow });
+        await runActiveFlowchartSteward({
+          room: trimmedRoom,
+          docId: trimmedDocId,
+          windowMs: resolvedWindow,
+        });
         console.log('[Steward][run] completed', {
           room: trimmedRoom,
           docId: trimmedDocId,

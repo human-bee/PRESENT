@@ -1,6 +1,6 @@
 import { Agent, run, tool } from '@openai/agents';
 import { z } from 'zod';
-import { flowchartSteward } from '../subagents/flowchart-steward';
+import { activeFlowchartSteward } from '../subagents/flowchart-steward-registry';
 
 // Thin router: receives dispatch_to_conductor and hands off to stewards
 
@@ -14,7 +14,7 @@ const dispatchToConductor = tool({
   async execute({ task, params }: { task: string; params: Record<string, unknown> }) {
     if (task.startsWith('flowchart.')) {
       // Delegate to Flowchart Steward
-      const result = await run(flowchartSteward, JSON.stringify({ task, params }));
+      const result = await run(activeFlowchartSteward, JSON.stringify({ task, params }));
       return result.finalOutput;
     }
     throw new Error(`No steward for task: ${task}`);
@@ -39,5 +39,4 @@ if (import.meta.url.startsWith('file:') && process.argv[1].endsWith('index.ts'))
   console.log('[Conductor] Ready. Waiting for handoffs...');
   setInterval(() => {}, 1 << 30);
 }
-
 

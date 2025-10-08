@@ -17,7 +17,11 @@ if (!url || !anonKey) {
 
 const supabaseKey = serviceRoleKey || anonKey;
 
-if (!serviceRoleKey && process.env.NODE_ENV === 'development') {
+const shouldBypassSupabase =
+  process.env.STEWARDS_SUPABASE_BYPASS === '1' ||
+  (process.env.NODE_ENV !== 'production' && process.env.STEWARDS_SUPABASE_BYPASS !== '0');
+
+if (!serviceRoleKey && process.env.NODE_ENV === 'development' && !shouldBypassSupabase) {
   try {
     console.warn(
       '⚠️ [StewardSupabase] Using anon key for Supabase access. Provide SUPABASE_SERVICE_ROLE_KEY for full access.',
@@ -28,6 +32,15 @@ if (!serviceRoleKey && process.env.NODE_ENV === 'development') {
 const supabase = createClient(url, supabaseKey, {
   auth: { persistSession: false },
 });
+
+let bypassLogged = false;
+const logBypass = (scope: string) => {
+  if (bypassLogged || !shouldBypassSupabase) return;
+  bypassLogged = true;
+  try {
+    console.info(`ℹ️ [StewardSupabase] Dev bypass active (${scope}); using in-memory store only.`);
+  } catch {}
+};
 
 type FlowchartDocRecord = {
   doc: string;
@@ -118,6 +131,10 @@ export const appendTranscriptCache = (
 
 export async function getFlowchartDoc(room: string, docId: string) {
   const fallback = readFallback(room, docId);
+  if (shouldBypassSupabase) {
+    logBypass('getFlowchartDoc');
+    return fallback;
+  }
   try {
     const { data, error } = await supabase
       .from('canvases')
@@ -167,41 +184,45 @@ export async function commitFlowchartDoc(
 
   let supabaseUpdated = false;
 
-  try {
-    const { data: canvas, error: fetchErr } = await supabase
-      .from('canvases')
-      .select('id, document')
-      .ilike('name', `%${room}%`)
-      .limit(1)
-      .maybeSingle();
+  if (shouldBypassSupabase) {
+    logBypass('commitFlowchartDoc');
+  } else {
+    try {
+      const { data: canvas, error: fetchErr } = await supabase
+        .from('canvases')
+        .select('id, document')
+        .ilike('name', `%${room}%`)
+        .limit(1)
+        .maybeSingle();
 
-    if (fetchErr || !canvas) {
-      throw fetchErr || new Error('NOT_FOUND');
+      if (fetchErr || !canvas) {
+        throw fetchErr || new Error('NOT_FOUND');
+      }
+
+      const document = canvas.document || {};
+      document.components = document.components || {};
+      document.components[docId] = {
+        ...(document.components[docId] || {}),
+        flowchartDoc: payload.doc,
+        format: payload.format,
+        version: nextVersion,
+        rationale: payload.rationale,
+        updated_at: Date.now(),
+      };
+
+      const { error: updateErr } = await supabase
+        .from('canvases')
+        .update({ document })
+        .eq('id', canvas.id);
+
+      if (updateErr) {
+        throw updateErr;
+      }
+
+      supabaseUpdated = true;
+    } catch (err) {
+      warnFallback('commit', err);
     }
-
-    const document = canvas.document || {};
-    document.components = document.components || {};
-    document.components[docId] = {
-      ...(document.components[docId] || {}),
-      flowchartDoc: payload.doc,
-      format: payload.format,
-      version: nextVersion,
-      rationale: payload.rationale,
-      updated_at: Date.now(),
-    };
-
-    const { error: updateErr } = await supabase
-      .from('canvases')
-      .update({ document })
-      .eq('id', canvas.id);
-
-    if (updateErr) {
-      throw updateErr;
-    }
-
-    supabaseUpdated = true;
-  } catch (err) {
-    warnFallback('commit', err);
   }
 
   writeFallback(room, docId, nextRecord);
@@ -217,6 +238,16 @@ export async function getTranscriptWindow(room: string, windowMs: number) {
     const now = Date.now();
     const filtered = cache.transcript.filter((l) => now - (l.timestamp || 0) <= windowMs);
     return { transcript: filtered };
+  }
+
+  if (shouldBypassSupabase) {
+    logBypass('getTranscriptWindow');
+    if (cache) {
+      const now = Date.now();
+      const filtered = cache.transcript.filter((l) => now - (l.timestamp || 0) <= windowMs);
+      return { transcript: filtered };
+    }
+    return { transcript: [] };
   }
 
   try {
