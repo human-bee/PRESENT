@@ -42,6 +42,7 @@ export function MermaidStreamRenderer({
   const lastGoodSvgRef = useRef<string>('');
   const lastErrorRef = useRef<string | null>(null);
   const compileIdRef = useRef<number>(0);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mountedRef = useRef(true);
 
   // Ensure mermaid script present (CDN). Avoid duplicate loads.
@@ -140,9 +141,13 @@ export function MermaidStreamRenderer({
   }, [ensureMermaid, keepLastGood, onCompileStateChange, onFitMeasured, sanitizeInput]);
 
   const schedule = useCallback((text: string) => {
-    if (timerRef.current) clearTimeout(timerRef.current);
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
     const myId = ++compileIdRef.current;
     timerRef.current = setTimeout(() => {
+      timerRef.current = null;
       // Coalesce rapid updates; only the last scheduled id should render
       if (myId === compileIdRef.current) renderMermaid(text);
     }, Math.max(60, debounceMs));
@@ -152,7 +157,10 @@ export function MermaidStreamRenderer({
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
-      if (timerRef.current) clearTimeout(timerRef.current);
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+        timerRef.current = null;
+      }
     };
   }, []);
 
@@ -187,4 +195,3 @@ export function MermaidStreamRenderer({
 }
 
 export default MermaidStreamRenderer;
-
