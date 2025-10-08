@@ -1,5 +1,5 @@
 import { toPlainText } from './rich-text';
-import type { Editor } from 'tldraw';
+import type { Editor } from '@tldraw/tldraw';
 
 export function resolveTargetShapeId(
   editor: Editor,

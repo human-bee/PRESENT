@@ -1,4 +1,4 @@
-import type { Editor } from 'tldraw';
+import type { Editor } from '@tldraw/tldraw';
 import type { RefObject } from 'react';
 import type { CanvasEventMap } from './types';
 

@@ -14,7 +14,7 @@ import {
   DefaultContextMenuContent,
   TLUiContextMenuProps,
   useValue,
-} from 'tldraw';
+} from '@tldraw/tldraw';
 import { ReactNode, createContext, useState, useCallback, useEffect } from 'react';
 import { User } from 'lucide-react';
 import { useCanvasPersistence } from '@/hooks/use-canvas-persistence';
@@ -22,7 +22,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { toast } from 'react-hot-toast';
 import { customShapeUtil, ComponentStoreContext } from './tldraw-canvas';
 import type { customShape } from './tldraw-canvas';
-import type { Editor } from 'tldraw';
+import type { Editor } from '@tldraw/tldraw';
 import { useRouter } from 'next/navigation';
 import * as React from 'react';
 import TldrawSnapshotBroadcaster from '@/components/TldrawSnapshotBroadcaster';

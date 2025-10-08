@@ -2,7 +2,7 @@
 
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode, RefObject } from 'react';
-import { Tldraw, TLComponents, Editor } from 'tldraw';
+import { Tldraw, TLComponents, Editor } from '@tldraw/tldraw';
 import { useRoomContext } from '@livekit/components-react';
 import type { Room } from 'livekit-client';
 import TldrawSnapshotBroadcaster from '@/components/TldrawSnapshotBroadcaster';
@@ -78,6 +78,21 @@ export function TldrawWithCollaboration({
   const handleEditorReady = useCallback((editor: Editor) => {
     setEditorInstance(editor);
   }, []);
+
+  // Handle keyboard shortcut for transcript (Cmd+K or Ctrl+K)
+  useEffect(() => {
+    if (!onTranscriptToggle) return;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key === 'k') {
+        event.preventDefault();
+        onTranscriptToggle();
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [onTranscriptToggle]);
 
   const showOverlay = collaboration.status !== 'ready';
 

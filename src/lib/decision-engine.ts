@@ -25,6 +25,16 @@
  * - Dynamic configuration from SystemRegistry
  *
  * See docs/THREE_AGENT_ARCHITECTURE.md for complete details.
+ *
+ * TODO Modularization Map (Wave 2)
+ * - Input normalization, transcript window shaping → `core/normalize.ts` with typed helpers.
+ * - Rule evaluation (intent detection, heuristics, guardrails) → `core/rules.ts` returning typed results.
+ * - Scoring aggregation, weighting, confidence blending → `core/scoring.ts`.
+ * - Plan/decision selection and tool call composition → `core/plan.ts`.
+ * - Shared domain types (DecisionInput, RuleResult, Score, Plan) → `core/types.ts`.
+ * - Facade `decide()` orchestrating normalize → rules → scoring → plan → `index.ts`.
+ * - Adapter layers for LiveKit/TLDraw/system integrations kept in `adapters/` with side effects.
+ * - Unit tests per pure module (`__tests__/rules.test.ts`, etc.) to lock existing behavior.
  */
 
 import { getPrompt } from './prompt-loader';

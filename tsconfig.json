@@ -26,7 +26,8 @@
     "paths": {
       "@/*": ["./src/*"],
       "@custom-ai/react": ["./src/lib/shims/custom-react.ts"],
-      "@custom-ai/react/mcp": ["./src/lib/shims/custom-react-mcp.tsx"]
+      "@custom-ai/react/mcp": ["./src/lib/shims/custom-react-mcp.tsx"],
+      "@tldraw/tldraw": ["./src/lib/tldraw-shim"]
     }
   },
   "include": [

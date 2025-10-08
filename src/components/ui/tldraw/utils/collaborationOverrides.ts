@@ -1,6 +1,6 @@
  
 
-import { TLUiOverrides } from 'tldraw';
+import { TLUiOverrides } from '@tldraw/tldraw';
 import type { customShape } from '../tldraw-canvas';
 
 /**

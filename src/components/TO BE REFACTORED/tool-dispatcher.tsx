@@ -9,6 +9,15 @@
  * - For `create_component`, dispatch a browser event that the
  *   thread UI listens to (custom:showComponent)
  * - Optionally expose a global bridge used by the MCP layer
+ *
+ * TODO Modularization Map (Wave 2)
+ * - Tool metadata/config registration, discovery → `useToolRegistry` hook + `toolTypes`/`constants` utils.
+ * - LiveKit bus subscription + browser event wiring → `useToolEvents` hook with typed topics.
+ * - Queueing, dedupe, cancellation logic → `useToolQueue` hook exposing reducer-driven state.
+ * - Execution lifecycle, logging, timeout management → `useToolRunner` hook using typed job states.
+ * - Presentational UI (lists, cards, logs) → extracted `ToolList`, `JobCard`, `JobLog` components.
+ * - Result/response normalization, error shaping → `resultNormalizers` + `errorMap` utils.
+ * - Context provider orchestrating hooks and exposing API → slim `tool-dispatcher.tsx` orchestrator.
  */
 
 'use client';

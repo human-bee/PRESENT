@@ -2,7 +2,7 @@ import React from 'react';
 import { render, act, cleanup } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { customShapeUtil, customShape, TldrawCanvasProps, TldrawCanvas } from './tldraw-canvas'; // Assuming customShape type is exported
-import { Editor, TLBaseShape } from 'tldraw';
+import { Editor, TLBaseShape } from '@tldraw/tldraw';
 
 // --- Mocks ---
 

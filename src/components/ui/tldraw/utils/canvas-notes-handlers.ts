@@ -1,5 +1,5 @@
-import { toRichText } from 'tldraw';
-import type { Editor } from 'tldraw';
+import { toRichText } from '@tldraw/tldraw';
+import type { Editor } from '@tldraw/tldraw';
 import type { CanvasEventMap } from './types';
 import { getNoteShapes, resolveTargetShapeId } from './canvas-selection-shared';
 import { toPlainText } from './rich-text';

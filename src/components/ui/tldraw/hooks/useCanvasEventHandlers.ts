@@ -19,7 +19,7 @@ interface UseCanvasEventHandlersOptions {
 export function useCanvasEventHandlers(
   editor: Editor | null,
   room: Room | undefined,
-  containerRef: RefObject<HTMLDivElement>,
+  containerRef: RefObject<HTMLDivElement | null>,
   options?: UseCanvasEventHandlersOptions,
 ) {
   const { enabled = true } = options ?? {};

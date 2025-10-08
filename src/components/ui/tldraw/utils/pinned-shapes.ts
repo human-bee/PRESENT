@@ -1,4 +1,4 @@
-import type { Editor } from 'tldraw';
+import type { Editor } from '@tldraw/tldraw';
 import type { customShape } from '../tldraw-canvas';
 
 type ViewportBounds = { width: number; height: number };

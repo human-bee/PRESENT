@@ -1,6 +1,6 @@
  
 import { nanoid } from 'nanoid';
-import { Editor, createShapeId } from 'tldraw';
+import { Editor, createShapeId } from '@tldraw/tldraw';
 import { normalizeMermaidText, getMermaidLastNode } from '@/components/TO BE REFACTORED/tool-dispatcher';
 import type { MutableRefObject } from 'react';
 import { registerSingletonWindowListener, registerWindowListener } from './window-listeners';

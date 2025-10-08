@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useEditor, Editor } from 'tldraw';
+import { useEditor, Editor } from '@tldraw/tldraw';
 
 interface EditorReadyResult {
   editor: Editor | null;

@@ -1,5 +1,5 @@
 import { nanoid } from 'nanoid';
-import { createShapeId, Editor, toRichText } from 'tldraw';
+import { createShapeId, Editor, toRichText } from '@tldraw/tldraw';
 import type { CanvasEventMap, LiveKitBus } from './types';
 
 interface CreateHandlersDeps {
