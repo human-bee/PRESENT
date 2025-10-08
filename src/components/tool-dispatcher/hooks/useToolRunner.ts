@@ -35,19 +35,27 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
   } = events;
 
   const stewardPendingRef = useRef(false);
-  const queuedRunRef = useRef<{ room: string; docId: string; windowMs?: number } | null>(null);
+  const queuedRunRef = useRef<
+    { room: string; docId: string; windowMs?: number; options?: { mode?: 'auto' | 'fast' | 'slow'; reason?: string } }
+    | null
+  >(null);
   const stewardWindowTimerRef = useRef<number | null>(null);
   const stewardDelayTimerRef = useRef<number | null>(null);
 
   const triggerStewardRun = useCallback(
-    (roomName: string, docId: string, windowMs = TOOL_STEWARD_WINDOW_MS) => {
+    (
+      roomName: string,
+      docId: string,
+      windowMs = TOOL_STEWARD_WINDOW_MS,
+      options?: { mode?: 'auto' | 'fast' | 'slow'; reason?: string },
+    ) => {
       if (!stewardEnabled) return;
       const normalizedRoom = roomName.trim();
       const normalizedDoc = docId.trim();
       if (!normalizedRoom || !normalizedDoc) return;
 
       if (stewardPendingRef.current) {
-        queuedRunRef.current = { room: normalizedRoom, docId: normalizedDoc, windowMs };
+        queuedRunRef.current = { room: normalizedRoom, docId: normalizedDoc, windowMs, options };
         log('steward_run: requested while pending; queued for later', queuedRunRef.current);
         return;
       }
@@ -61,7 +69,7 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
         queuedRunRef.current = null;
         if (queued) {
           log('steward_run: starting queued run', queued);
-          triggerStewardRun(queued.room, queued.docId, queued.windowMs);
+          triggerStewardRun(queued.room, queued.docId, queued.windowMs, queued.options);
         }
       };
 
@@ -82,18 +90,35 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
         }
       };
 
-      log('steward_run: starting', { room: normalizedRoom, docId: normalizedDoc, windowMs });
+      log('steward_run: starting', {
+        room: normalizedRoom,
+        docId: normalizedDoc,
+        windowMs,
+        mode: options?.mode ?? 'auto',
+        reason: options?.reason,
+      });
       void (async () => {
         try {
           log('steward_run: posting /api/steward/run', {
             room: normalizedRoom,
             docId: normalizedDoc,
             windowMs,
+            mode: options?.mode ?? 'auto',
+            reason: options?.reason,
           });
+          const payload: Record<string, unknown> = {
+            room: normalizedRoom,
+            docId: normalizedDoc,
+          };
+          if (!Number.isNaN(windowMs) && windowMs !== undefined) {
+            payload.windowMs = windowMs;
+          }
+          if (options?.mode) payload.mode = options.mode;
+          if (options?.reason) payload.reason = options.reason;
           const res = await fetch('/api/steward/run', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ room: normalizedRoom, docId: normalizedDoc, windowMs }),
+            body: JSON.stringify(payload),
           });
           if (!res.ok) {
             let text = '';
@@ -104,7 +129,7 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
             scheduleCompletion();
             return;
           }
-          log('steward_run: dispatched', { status: res.status });
+          log('steward_run: dispatched', { status: res.status, mode: options?.mode ?? 'auto' });
           scheduleCompletion(windowMs);
         } catch (error) {
           console.warn('[ToolDispatcher] steward run error', error);
@@ -541,6 +566,68 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
       offDecision();
     };
   }, [bus, executeToolCall, log, room, scheduleStewardRun, stewardEnabled]);
+
+  useEffect(() => {
+    if (!stewardEnabled) return;
+    const fallbackDebounce = new Map<string, number>();
+    const resolveRoomNameFromWindow = (): string | undefined => {
+      if (typeof window === 'undefined') return undefined;
+      const globalAny = window as any;
+      const candidate: unknown =
+        globalAny?.__present?.livekitRoomName ??
+        globalAny?.__present_roomName ??
+        globalAny?.__present_canvas_room;
+      const name = typeof candidate === 'string' ? candidate.trim() : '';
+      return name || undefined;
+    };
+
+    const handleFallback = (event: Event) => {
+      try {
+        const detail = (event as CustomEvent).detail || {};
+        const docIdRaw =
+          (typeof detail.docId === 'string' && detail.docId) ||
+          (typeof detail.shapeId === 'string' && detail.shapeId) ||
+          '';
+        const docId = docIdRaw.trim();
+        if (!docId) return;
+        const roomFromDetail =
+          typeof detail.room === 'string' && detail.room.trim().length > 0
+            ? String(detail.room).trim()
+            : undefined;
+        const roomFromContext =
+          typeof room?.name === 'string' && room.name.trim().length > 0
+            ? room.name.trim()
+            : undefined;
+        const resolvedRoom = roomFromDetail || roomFromContext || resolveRoomNameFromWindow();
+        if (!resolvedRoom) return;
+        const key = `${resolvedRoom}:${docId}`;
+        const now = Date.now();
+        const last = fallbackDebounce.get(key) ?? 0;
+        if (now - last < 12000) {
+          log('steward_run: fallback skipped (debounced)', { room: resolvedRoom, docId });
+          return;
+        }
+        fallbackDebounce.set(key, now);
+        log('steward_run: fallback triggered', {
+          room: resolvedRoom,
+          docId,
+          error: detail?.error,
+        });
+        triggerStewardRun(resolvedRoom, docId, TOOL_STEWARD_WINDOW_MS, {
+          mode: 'slow',
+          reason: 'mermaid_compile_error',
+        });
+      } catch (error) {
+        console.warn('[ToolDispatcher] failed to process flowchart fallback event', error);
+      }
+    };
+
+    window.addEventListener('present:flowchart-fallback', handleFallback as EventListener);
+    return () => {
+      window.removeEventListener('present:flowchart-fallback', handleFallback as EventListener);
+      fallbackDebounce.clear();
+    };
+  }, [log, room, stewardEnabled, triggerStewardRun]);
 
   useEffect(() => {
     const globalAny = window as any;

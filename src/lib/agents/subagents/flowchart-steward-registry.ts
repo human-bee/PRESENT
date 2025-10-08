@@ -34,9 +34,26 @@ export const activeFlowchartSteward: Agent = isFlowchartStewardFastActive
   ? flowchartStewardFast
   : flowchartSteward;
 
-export async function runActiveFlowchartSteward(params: { room: string; docId: string; windowMs?: number }) {
-  if (isFlowchartStewardFastActive) {
-    return runFlowchartStewardFast(params);
+export type FlowchartStewardMode = 'auto' | 'fast' | 'slow';
+
+export async function runActiveFlowchartSteward(params: {
+  room: string;
+  docId: string;
+  windowMs?: number;
+  mode?: FlowchartStewardMode;
+}) {
+  const { mode = 'auto', ...rest } = params;
+  if (mode === 'slow') {
+    return runFlowchartSteward(rest);
   }
-  return runFlowchartSteward(params);
+  if (mode === 'fast') {
+    if (flowchartStewardFastReady) {
+      return runFlowchartStewardFast(rest);
+    }
+    return runFlowchartSteward(rest);
+  }
+  if (isFlowchartStewardFastActive) {
+    return runFlowchartStewardFast(rest);
+  }
+  return runFlowchartSteward(rest);
 }
