@@ -3,11 +3,11 @@ export const TOOL_STEWARD_WINDOW_MS = 60_000;
 export const TOOL_STEWARD_DELAY_MS = 2_000;
 
 export const TOOL_EVENT_TOPICS = {
-  request: 'tool:request',
+  request: 'tool_call',
   started: 'tool:started',
   update: 'tool:update',
-  done: 'tool:done',
-  error: 'tool:error',
+  done: 'tool_result',
+  error: 'tool_error',
   editorAction: 'editor_action',
   decision: 'decision',
 } as const;
