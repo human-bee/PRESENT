@@ -294,9 +294,17 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
         }
 
         if (tool.startsWith('mcp_')) {
-      const result = await runMcpTool(tool, params);
-          queue.markComplete(call.id, result?.message);
-          return result;
+          const result = await runMcpTool(tool, params);
+          const normalizedResult = result ?? { status: 'IGNORED' };
+          if (normalizedResult.status === 'ERROR') {
+            const message = normalizedResult.message ?? `MCP tool error: ${tool}`;
+            queue.markError(call.id, message);
+            emitError(call, normalizedResult);
+          } else {
+            queue.markComplete(call.id, normalizedResult.message);
+            emitDone(call, normalizedResult);
+          }
+          return normalizedResult;
         }
 
         if (tool === 'youtube_search') {

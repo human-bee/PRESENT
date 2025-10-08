@@ -19,20 +19,24 @@ export interface ToolDispatcherProps {
   children: ReactNode;
   contextKey?: string;
   enableLogging?: boolean;
+  stewardEnabled?: boolean;
 }
 
 export function ToolDispatcher({
   children,
   contextKey,
   enableLogging = false,
+  stewardEnabled,
 }: ToolDispatcherProps) {
   const room = useRoomContext();
   const events = useToolEvents(room, { enableLogging });
+  const resolvedStewardEnabled =
+    stewardEnabled ?? process.env.NEXT_PUBLIC_STEWARD_FLOWCHART_ENABLED === 'true';
   const { executeToolCall } = useToolRunner({
     contextKey,
     events,
     room,
-    stewardEnabled: true,
+    stewardEnabled: resolvedStewardEnabled,
   });
 
   const value = useMemo<DispatcherContext>(() => ({ executeToolCall }), [executeToolCall]);
