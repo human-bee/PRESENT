@@ -52,12 +52,6 @@ npm install
   NEXT_PUBLIC_SUPABASE_ANON_KEY=
   ```
 
-4. **Build the agent (TypeScript)**
-
-```bash
-npm run agent:build
-```
-
 ### Running the Application
 
 #### Development Mode (Recommended)
@@ -88,11 +82,23 @@ Visit `http://localhost:3000`
 
 #### Production Mode
 
+**Terminal 1 - Voice Agent:**
+
 ```bash
-npm run build
-npm run agent:build
-npm start          # Terminal 1
-npm run agent:run  # Terminal 2
+npm run agent:realtime
+```
+
+**Terminal 2 - Conductor:**
+
+```bash
+npm run agent:conductor
+```
+
+**Terminal 3 - Next.js App:**
+
+```bash
+npm run build    # Build once
+npm run start    # Run production server
 ```
 
 ## 📱 Key Features & Pages

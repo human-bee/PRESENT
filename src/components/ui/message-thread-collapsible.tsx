@@ -1,8 +1,8 @@
 'use client';
 
-import type { messageVariants } from '@/components/ui/message';
-import { ThreadDropdown } from '@/components/ui/thread-dropdown';
-import { ScrollableMessageContainer } from '@/components/ui/scrollable-message-container';
+import type { messageVariants } from '@/components/ui/messaging/message';
+import { ThreadDropdown } from '@/components/ui/messaging/thread-dropdown';
+import { ScrollableMessageContainer } from '@/components/ui/messaging/scrollable-message-container';
 import { cn } from '@/lib/utils';
 import { FileText } from 'lucide-react';
 import * as React from 'react';
@@ -11,10 +11,10 @@ import { type VariantProps } from 'class-variance-authority';
 import { useRoomContext } from '@livekit/components-react';
 import { RoomEvent } from 'livekit-client';
 import { createLiveKitBus } from '../../lib/livekit/livekit-bus';
-import { useContextKey } from '../RoomScopedProviders';
+import { useContextKey } from '@/components/RoomScopedProviders';
 import { useRealtimeSessionTranscript } from '@/hooks/use-realtime-session-transcript';
 import { supabase } from '@/lib/supabase';
-import { CanvasLiveKitContext } from './livekit-room-connector';
+import { CanvasLiveKitContext } from './livekit/livekit-room-connector';
 import { useAuth } from '@/hooks/use-auth';
 
 /**

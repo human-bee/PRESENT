@@ -36,8 +36,8 @@ Rules:
 
 Important tool selection rules:
 - YouTube-related: use 'youtube_search'.
-- Create new components: 'generate_ui_component'.
-- Update existing: 'ui_update'.
+- Create new components: 'create_component'.
+- Update existing: 'update_component'.
 - Canvas interactions: 'canvas_*' tools.
 
 Always respond with text for Q&A or confirmations. Never duplicate UI requests as text.

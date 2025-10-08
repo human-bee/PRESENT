@@ -44,11 +44,11 @@ export interface SystemCapability {
 // Static capabilities that are always available
 export const STATIC_CAPABILITIES: SystemCapability[] = [
   {
-    id: 'generate_ui_component',
+    id: 'create_component',
     type: 'tool',
-    name: 'Generate UI Component',
+    name: 'Create Component',
     description: 'Create any UI component from custom registry',
-    agentToolName: 'generate_ui_component',
+    agentToolName: 'create_component',
     intents: ['ui_generation', 'create_component'],
     keywords: ['create', 'generate', 'make', 'build', 'show', 'display'],
     examples: ['Create a timer', 'Show me a weather widget', 'Build a chart for this data'],

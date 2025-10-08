@@ -20,7 +20,7 @@ export interface ToolResult {
 export type ToolName =
   | 'do_nothing'
   | 'respond_with_voice'
-  | 'generate_ui_component'
+  | 'create_component'
   | 'youtube_search'
   | 'mcp_tool';
 
@@ -139,17 +139,17 @@ export async function dispatchToolCall(
 }
 
 /**
- * Generate a UI component using custom's generative UI system
+ * Create a UI component using custom's generative UI system
  */
-export async function generateUIComponent(
+export async function createUIComponent(
   job: JobContext,
   componentType: string = 'auto',
   prompt: string,
 ): Promise<ToolResult> {
-  console.log(`🎨 [Agent] Tool "generate_ui_component" called for ${componentType}`);
+  console.log(`🎨 [Agent] Tool "create_component" called for ${componentType}`);
 
-  return dispatchToolCall(job, 'generate_ui_component', {
-    componentType,
+  return dispatchToolCall(job, 'create_component', {
+    type: componentType,
     prompt,
   });
 }
@@ -195,7 +195,7 @@ export async function callMcpTool(
 export const AVAILABLE_TOOLS = [
   'do_nothing',
   'respond_with_voice',
-  'generate_ui_component',
+  'create_component',
   'youtube_search',
   'mcp_tool',
 ] as const;
@@ -221,8 +221,8 @@ export async function executeTool(
         String(params.justification_for_speaking || params.justificationForSpeaking || ''),
       );
 
-    case 'generate_ui_component':
-      return await generateUIComponent(
+    case 'create_component':
+      return await createUIComponent(
         job,
         String(params.component_type || params.componentType || 'auto'),
         String(params.prompt || ''),

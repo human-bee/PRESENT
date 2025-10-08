@@ -7,6 +7,7 @@ try {
 } catch {}
 import * as openai from '@livekit/agents-plugin-openai';
 import { appendTranscriptCache } from '@/lib/agents/shared/supabase-context';
+import { DebateJudgeManager, isStartDebate } from '@/lib/agents/debate-judge';
 
 export default defineAgent({
   entry: async (job: JobContext) => {
@@ -30,6 +31,29 @@ Always return to tool calls rather than long monologues.`;
     const session = await agent.start(job.room);
     // Allow text-only responses without attempting to recover to audio
     try { (session as unknown as { recoverFromTextResponse?: (itemId?: string) => void }).recoverFromTextResponse = () => {}; } catch {}
+
+    const debateJudgeManager = new DebateJudgeManager(job.room as any, job.room.name || 'room');
+    const debateKeywordRegex = /\b(aff|affirmative|neg|negative|contention|rebuttal|voter|judge|debate|scorecard|flow|argument|claim|evidence)\b/;
+
+    const maybeHandleDebate = async (text: string) => {
+      const trimmed = (text || '').trim();
+      if (!trimmed) return;
+      const lower = trimmed.toLowerCase();
+      try {
+        if (isStartDebate(trimmed)) {
+          const topicMatch = trimmed.match(/debate(?: analysis| scorecard)?(?: for| about| on)?\s*(.*)$/i);
+          const topic = topicMatch && topicMatch[1] ? topicMatch[1].trim() : 'Live Debate';
+          await debateJudgeManager.ensureScorecard(topic || 'Live Debate');
+          await debateJudgeManager.runPrompt(trimmed);
+          return;
+        }
+        if (debateJudgeManager.isActive() && debateKeywordRegex.test(lower)) {
+          await debateJudgeManager.runPrompt(trimmed);
+        }
+      } catch (err) {
+        console.warn('[VoiceAgent] Debate judge handling failed', err);
+      }
+    };
 
     session.on('response_function_call_completed', async (evt: { call_id: string; name: string; arguments: string }) => {
       try {
@@ -68,6 +92,7 @@ Always return to tool calls rather than long monologues.`;
           text: evt.transcript,
           timestamp: Date.now(),
         });
+        void maybeHandleDebate(evt.transcript);
       } catch {}
       // Debounced steward trigger example (2-4s window)
       try {
@@ -131,6 +156,7 @@ Always return to tool calls rather than long monologues.`;
               );
             }, 2500);
           } catch {}
+          void maybeHandleDebate(msg.text);
         }
       } catch {}
     });

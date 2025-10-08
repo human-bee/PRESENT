@@ -143,3 +143,6 @@ Use this doc as a living template—copy sections into new steward folders (e.g.
 - [ ] Logging surfaces compile/render errors clearly.
 
 Happy stewarding! Add notes or variants to this file as you build more canvas-native agents.
+
+
+

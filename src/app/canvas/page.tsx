@@ -12,27 +12,26 @@
 // export const dynamic = 'force-dynamic';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { CanvasSpace } from '@/components/ui/canvas-space';
-import { MessageThreadCollapsible } from '@/components/ui/message-thread-collapsible';
-import { CanvasLiveKitContext } from '@/components/ui/livekit-room-connector';
+import { CanvasSpace } from '@/components/ui/canvas/canvas-space';
+import { MessageThreadCollapsible } from '@/components/ui/messaging/message-thread-collapsible';
+import { CanvasLiveKitContext } from '@/components/ui/livekit/livekit-room-connector';
 import SessionSync from '@/components/SessionSync';
 import {
   loadMcpServers,
   suppressDevelopmentWarnings,
   suppressViolationWarnings,
 } from '@/lib/mcp-utils';
-import { EnhancedMcpProvider } from '@/components/ui/enhanced-mcp-provider';
+import { EnhancedMcpProvider } from '@/components/ui/mcp/enhanced-mcp-provider';
 import { Room, ConnectionState, RoomEvent, VideoPresets, RoomOptions } from 'livekit-client';
 import { RoomContext } from '@livekit/components-react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/use-auth';
 import { ToolDispatcher } from '@/components/tool-dispatcher';
-import { SystemRegistrySync } from '@/components/ui/system-registry-sync';
+import { SystemRegistrySync } from '@/components/ui/diagnostics/system-registry-sync';
 import { initializeMCPBridge } from '@/lib/mcp-bridge';
-import { AgentCapabilitiesBridge } from '@/components/ui/agent-capabilities-bridge';
+import { AgentCapabilitiesBridge } from '@/components/ui/integrations/agent-capabilities-bridge';
 import { LiveKitStateBridge } from '@/lib/livekit/livekit-state-bridge';
 import LiveKitDebugConsole from '@/components/LiveKitDebugConsole';
-import DevEventFeed from '@/components/ui/dev-event-feed';
 // TODO: Investigate best way to "go back" to CanvasSpace once we have a better way to handle adding/updating/managing the state of multiple components on the canvas simultaneously
 
 // Suppress development warnings for cleaner console
@@ -331,9 +330,6 @@ export default function Canvas() {
                   onTranscriptToggle={toggleTranscript}
                 />
 
-                {/* Dev Event Feed overlay */}
-                <DevEventFeed />
-
                 <SessionSync roomName={roomName} />
 
                 {/* LiveKit connection is now controlled from the Transcript sidebar */}
@@ -372,9 +368,6 @@ export default function Canvas() {
                   className="absolute inset-0 w-full h-full ios-vh"
                   onTranscriptToggle={toggleTranscript}
                 />
-
-                {/* Dev Event Feed overlay */}
-                <DevEventFeed />
 
                 <SessionSync roomName={roomName} />
 
