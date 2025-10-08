@@ -26,7 +26,7 @@ import { Room, ConnectionState, RoomEvent, VideoPresets, RoomOptions } from 'liv
 import { RoomContext } from '@livekit/components-react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/use-auth';
-import { ToolDispatcher } from '@/components/TO BE REFACTORED/tool-dispatcher';
+import { ToolDispatcher } from '@/components/tool-dispatcher';
 import { SystemRegistrySync } from '@/components/ui/diagnostics/system-registry-sync';
 import { initializeMCPBridge } from '@/lib/mcp-bridge';
 import { AgentCapabilitiesBridge } from '@/components/ui/integrations/agent-capabilities-bridge';

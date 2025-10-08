@@ -13,7 +13,7 @@ import {
   FileText,
   Layout,
 } from 'lucide-react';
-import { useToolDispatcher } from '../../TO BE REFACTORED/tool-dispatcher';
+import { useToolDispatcher } from '@/components/tool-dispatcher';
 
 // Dynamic import for YouTube embed - only load when needed
 const YoutubeEmbed = dynamic(
