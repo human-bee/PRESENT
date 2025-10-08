@@ -41,6 +41,8 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
   >(null);
   const stewardWindowTimerRef = useRef<number | null>(null);
   const stewardDelayTimerRef = useRef<number | null>(null);
+  const stewardCompleteRef = useRef<(() => void) | null>(null);
+  const slowReleaseTimerRef = useRef<number | null>(null);
 
   const triggerStewardRun = useCallback(
     (
@@ -72,6 +74,7 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
           triggerStewardRun(queued.room, queued.docId, queued.windowMs, queued.options);
         }
       };
+      stewardCompleteRef.current = complete;
 
       const scheduleCompletion = (duration?: number) => {
         if (stewardWindowTimerRef.current) {
@@ -617,6 +620,22 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
           mode: 'slow',
           reason: 'mermaid_compile_error',
         });
+        if (stewardPendingRef.current && stewardCompleteRef.current) {
+          if (slowReleaseTimerRef.current) {
+            try {
+              window.clearTimeout(slowReleaseTimerRef.current);
+            } catch {}
+            slowReleaseTimerRef.current = null;
+          }
+          slowReleaseTimerRef.current = window.setTimeout(() => {
+            slowReleaseTimerRef.current = null;
+            try {
+              stewardCompleteRef.current?.();
+            } catch (err) {
+              console.warn('[ToolDispatcher] failed to flush steward pending state after fallback', err);
+            }
+          }, 1500);
+        }
       } catch (error) {
         console.warn('[ToolDispatcher] failed to process flowchart fallback event', error);
       }
@@ -626,6 +645,12 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
     return () => {
       window.removeEventListener('present:flowchart-fallback', handleFallback as EventListener);
       fallbackDebounce.clear();
+      if (slowReleaseTimerRef.current) {
+        try {
+          window.clearTimeout(slowReleaseTimerRef.current);
+        } catch {}
+        slowReleaseTimerRef.current = null;
+      }
     };
   }, [log, room, stewardEnabled, triggerStewardRun]);
 
