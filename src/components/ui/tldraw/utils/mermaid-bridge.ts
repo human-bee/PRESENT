@@ -6,8 +6,7 @@ import type { MutableRefObject } from 'react';
 import { registerSingletonWindowListener, registerWindowListener } from './window-listeners';
 import type { LiveKitBus } from './types';
 
-const STEWARD_FLOWCHART =
-  typeof process !== 'undefined' && process.env.NEXT_PUBLIC_STEWARD_FLOWCHART_ENABLED === 'true';
+const STEWARD_FLOWCHART = true;
 
 declare global {
   interface Window {
@@ -42,6 +41,28 @@ function updateMermaidSession(normalizedText: string, lastOverride?: string) {
 
 export function attachMermaidBridge({ editor, bus, lastTimestampsRef }: MermaidBridgeOptions) {
   const cleanupFns: Array<() => void> = [];
+  const pendingPatches = new Map<
+    string,
+    { patch: Record<string, unknown>; timestamp: number }
+  >();
+
+  // On mount, recover the last mermaid shape id if the page already had one.
+  if (typeof window !== 'undefined') {
+    try {
+      if (!window.__present_mermaid_last_shape_id) {
+        const shapes = editor.getCurrentPageShapes?.() ?? [];
+        for (let i = shapes.length - 1; i >= 0; i -= 1) {
+          const shape = shapes[i];
+          if (shape?.type === 'mermaid_stream' && typeof shape?.id === 'string') {
+            window.__present_mermaid_last_shape_id = shape.id;
+            break;
+          }
+        }
+      }
+    } catch {
+      // ignore recovery failures
+    }
+  }
 
   const offUpdateComponent = bus.on('update_component', (payload: any) => {
     try {
@@ -52,7 +73,14 @@ export function attachMermaidBridge({ editor, bus, lastTimestampsRef }: MermaidB
       if (!componentId || !patch) return;
 
       const shape = editor.getShape(componentId as any) as any;
-      if (!shape || shape.type !== 'mermaid_stream') return;
+      if (!shape || shape.type !== 'mermaid_stream') {
+        pendingPatches.set(componentId, { patch, timestamp: ts });
+        const existing = lastTimestampsRef.current.get(componentId) || 0;
+        if (ts > existing) {
+          lastTimestampsRef.current.set(componentId, ts);
+        }
+        return;
+      }
 
       const lastTs = lastTimestampsRef.current.get(componentId) || 0;
       if (ts < lastTs) return;
@@ -152,6 +180,47 @@ export function attachMermaidBridge({ editor, bus, lastTimestampsRef }: MermaidB
           window.__present_mermaid_last_shape_id = id;
         }
         updateMermaidSession(normalized);
+
+        const queued = pendingPatches.get(id);
+        if (queued) {
+          pendingPatches.delete(id);
+          const queuedTs = queued.timestamp;
+          const lastTs = lastTimestampsRef.current.get(id) || 0;
+          if (queuedTs >= lastTs) {
+            lastTimestampsRef.current.set(id, queuedTs);
+            const nextProps: Record<string, unknown> = {};
+            if (STEWARD_FLOWCHART) {
+              const doc = (queued.patch as any).flowchartDoc as string | undefined;
+              const formatRaw = (queued.patch as any).format as string | undefined;
+              const format = typeof formatRaw === 'string' ? formatRaw.toLowerCase() : undefined;
+              if (typeof doc === 'string' && doc.length > 0) {
+                let mermaidText: string | undefined;
+                if (format === 'mermaid') {
+                  mermaidText = doc;
+                } else if (format === 'markdown' || format === 'streamdown') {
+                  const match = doc.match(/```mermaid\s*([\s\S]*?)```/i);
+                  mermaidText = match ? match[1] : doc;
+                } else {
+                  mermaidText = doc;
+                }
+                if (typeof mermaidText === 'string') nextProps.mermaidText = mermaidText;
+              }
+            } else {
+              Object.assign(nextProps, queued.patch);
+            }
+            if (Object.keys(nextProps).length > 0) {
+              editor.updateShapes([{ id: id as any, type: 'mermaid_stream' as any, props: nextProps }]);
+              if (STEWARD_FLOWCHART) {
+                try {
+                  window.__present_mermaid_last_shape_id = id;
+                  if (window.__present_mermaid_session) delete window.__present_mermaid_session;
+                } catch {
+                  // ignore
+                }
+              }
+            }
+          }
+        }
       } finally {
         if (typeof window !== 'undefined') {
           window.setTimeout(() => {

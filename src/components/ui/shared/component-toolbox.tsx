@@ -9,7 +9,9 @@ import {
 import { Button } from '@/components/ui/shared/button';
 import { Tooltip, TooltipProvider } from '@/components/ui/shared/tooltip';
 import { cn } from '@/lib/utils';
-import { stopEventPropagation } from 'tldraw';
+const stopPointerPropagation: React.PointerEventHandler<HTMLButtonElement> = (event) => {
+  event.stopPropagation();
+};
 
 interface ComponentToolboxProps {
   onComponentCreate: (componentType: string) => void;
@@ -123,7 +125,7 @@ const ComponentItem: React.FC<ComponentItemProps> = ({
             onDragStart(componentName);
           }}
           onClick={() => onClick(componentName)}
-          onPointerDown={stopEventPropagation}
+          onPointerDown={stopPointerPropagation}
           className={cn(
             'group h-9 w-9 select-none p-0 rounded-md border border-border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 transition-colors',
             isDark ? 'bg-zinc-900 text-white' : 'bg-white text-black',

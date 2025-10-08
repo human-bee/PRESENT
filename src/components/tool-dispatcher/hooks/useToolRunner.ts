@@ -383,10 +383,29 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
               globalAny.__present_steward_active = true;
             } catch {}
             const roomName = (typeof message.roomId === 'string' && message.roomId) || room?.name || '';
-            const existingDocId =
+            let existingDocId =
               typeof globalAny.__present_mermaid_last_shape_id === 'string'
                 ? globalAny.__present_mermaid_last_shape_id
                 : '';
+
+            // Fallback: if the global tracker is missing (e.g. after reload), recover the latest mermaid shape
+            if (!existingDocId) {
+              try {
+                const editor = globalAny.__present?.tldrawEditor;
+                const shapes = editor?.getCurrentPageShapes?.() ?? [];
+                for (let i = shapes.length - 1; i >= 0; i -= 1) {
+                  const shape = shapes[i];
+                  if (shape?.type === 'mermaid_stream' && typeof shape?.id === 'string') {
+                    existingDocId = shape.id;
+                    globalAny.__present_mermaid_last_shape_id = shape.id;
+                    break;
+                  }
+                }
+              } catch (err) {
+                log('steward_run: failed to recover existing mermaid shape', err);
+              }
+            }
+
             log('steward trigger decision received', {
               room: roomName || 'unknown',
               docId: existingDocId || 'pending',

@@ -295,8 +295,8 @@ export const MessageThreadCollapsible = React.forwardRef<
   // Keep transcript tab mirrored to Supabase session
   React.useEffect(() => {
     if (!Array.isArray(sessionTranscript)) return;
-    const nextList = sessionTranscript.map((t) => ({
-      id: `${t.participantId}-${Number(t.timestamp)}`,
+    const nextList = sessionTranscript.map((t, index) => ({
+      id: `${t.participantId || 'Unknown'}-${Number(t.timestamp)}-${index}`,
       speaker: t.participantId || 'Unknown',
       text: t.text,
       timestamp: Number(t.timestamp),

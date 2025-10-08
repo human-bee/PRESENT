@@ -58,6 +58,11 @@ const commit_flowchart = tool({
     }
 
     const resolveBroadcastUrl = () => {
+      const derivedPort = process.env.PORT || process.env.NEXT_PUBLIC_PORT;
+      const derivedLocal =
+        derivedPort && Number.isFinite(Number(derivedPort))
+          ? `http://127.0.0.1:${derivedPort}`
+          : undefined;
       const candidates = [
         process.env.STEWARD_COMMIT_BASE_URL,
         process.env.NEXT_PUBLIC_BASE_URL,
@@ -65,6 +70,8 @@ const commit_flowchart = tool({
         process.env.NEXT_PUBLIC_SITE_URL,
         process.env.SITE_URL,
         process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : undefined,
+        derivedLocal,
+        'http://127.0.0.1:3001',
         'http://127.0.0.1:3000',
       ];
       for (const candidate of candidates) {
@@ -151,5 +158,4 @@ export async function runFlowchartSteward(params: { room: string; docId: string;
   } catch {}
   return result.finalOutput;
 }
-
 

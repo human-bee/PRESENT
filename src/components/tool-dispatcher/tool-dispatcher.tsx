@@ -19,14 +19,12 @@ export interface ToolDispatcherProps {
   children: ReactNode;
   contextKey?: string;
   enableLogging?: boolean;
-  stewardMode?: boolean;
 }
 
 export function ToolDispatcher({
   children,
   contextKey,
   enableLogging = false,
-  stewardMode = false,
 }: ToolDispatcherProps) {
   const room = useRoomContext();
   const events = useToolEvents(room, { enableLogging });
@@ -34,7 +32,7 @@ export function ToolDispatcher({
     contextKey,
     events,
     room,
-    stewardEnabled: stewardMode,
+    stewardEnabled: true,
   });
 
   const value = useMemo<DispatcherContext>(() => ({ executeToolCall }), [executeToolCall]);
