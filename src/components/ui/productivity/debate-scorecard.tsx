@@ -503,7 +503,22 @@ function SourcesView({ sources }: { sources: EvidenceRef[] }) {
 }
 
 function Timeline({ events }: { events: TimelineEvent[] }) {
-  if (!events.length) return null;
+  const timelineItems = useMemo(() => {
+    const seen = new Set<string>();
+    return events
+      .slice()
+      .sort((a, b) => a.timestamp - b.timestamp)
+      .filter((event) => {
+        const key = event.id || `${event.timestamp}-${event.text}`;
+        if (seen.has(key)) {
+          return false;
+        }
+        seen.add(key);
+        return true;
+      });
+  }, [events]);
+
+  if (!timelineItems.length) return null;
   return (
     <div className="mt-8">
       <h3 className="text-white font-medium flex items-center gap-2 text-sm">
@@ -511,15 +526,15 @@ function Timeline({ events }: { events: TimelineEvent[] }) {
         Timeline
       </h3>
       <ul className="mt-3 space-y-2 text-xs text-white/70">
-        {events
-          .slice()
-          .sort((a, b) => a.timestamp - b.timestamp)
-          .map((event) => (
-            <li key={event.id} className="flex items-start gap-2">
+        {timelineItems.map((event, index) => {
+          const key = event.id || `${event.timestamp}-${index}`;
+          return (
+            <li key={key} className="flex items-start gap-2">
               <span className="text-white/30">{new Date(event.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
               <span className="text-white/80">{event.text}</span>
             </li>
-          ))}
+          );
+        })}
       </ul>
     </div>
   );

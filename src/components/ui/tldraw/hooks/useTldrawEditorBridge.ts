@@ -38,6 +38,10 @@ export function useTldrawEditorBridge(editor: Editor | null, options?: TldrawEdi
     }
 
     const namespace = ensureBridgeNamespace();
+    const legacyNamespace =
+      ((window as any).__present as Record<string, unknown> | undefined) ??
+      (((window as any).__present = {}) as Record<string, unknown>);
+
     const bridge: TldrawBridge = {
       editorId: editor.getInstanceId?.() ?? 'tldraw-editor',
       dispatch: (eventName, detail) => {
@@ -46,9 +50,15 @@ export function useTldrawEditorBridge(editor: Editor | null, options?: TldrawEdi
     };
 
     namespace.tldraw = bridge;
+    try {
+      (legacyNamespace as Record<string, unknown> & { tldrawEditor?: Editor }).tldrawEditor = editor;
+    } catch {
+      // ignore assignment issues from readonly globals
+    }
 
     try {
       window.dispatchEvent(new CustomEvent('tldraw:editor-mounted', { detail: { editorId: bridge.editorId } }));
+      window.dispatchEvent(new CustomEvent('present:editor-mounted', { detail: { editor } }));
     } catch {
       // Swallow errors triggered by consumer environments without CustomEvent support
     }
@@ -72,6 +82,14 @@ export function useTldrawEditorBridge(editor: Editor | null, options?: TldrawEdi
       window.clearTimeout(timerId);
       if (namespace.tldraw?.editorId === bridge.editorId) {
         delete namespace.tldraw;
+      }
+      try {
+        const legacy = (window as any).__present as { tldrawEditor?: Editor } | undefined;
+        if (legacy?.tldrawEditor === editor) {
+          delete legacy.tldrawEditor;
+        }
+      } catch {
+        // ignore cleanup failures
       }
     };
   }, [editor, onMount, rehydrateDelayMs]);
