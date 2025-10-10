@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import type { Room } from 'livekit-client';
-import { useToolRegistry } from './useToolRegistry';
+import { useToolRegistry, STEWARD_ALLOWED_TOOLS } from './useToolRegistry';
 import { useToolQueue } from './useToolQueue';
 import type { ToolCall, ToolParameters, ToolRunResult } from '../utils/toolTypes';
 import { TOOL_STEWARD_DELAY_MS, TOOL_STEWARD_WINDOW_MS } from '../utils/constants';
@@ -296,7 +296,7 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
 
       try {
         if (stewardEnabled) {
-          const allowedTools = new Set(['canvas_create_mermaid_stream', 'canvas_focus', 'canvas_zoom_all']);
+          const allowedTools = new Set<string>(STEWARD_ALLOWED_TOOLS);
           if (!allowedTools.has(tool)) {
             const message = `Unsupported tool in steward mode: ${tool}`;
             emitError(call, message);
@@ -414,68 +414,91 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
 
         if (stewardEnabled) {
           const stewardSummary = rawSummary.trim();
-          if (decision.should_send && stewardSummary === 'steward_trigger') {
-            try {
-              globalAny.__present_steward_active = true;
-            } catch {}
-            const roomName = (typeof message.roomId === 'string' && message.roomId) || room?.name || '';
-            let existingDocId =
-              typeof globalAny.__present_mermaid_last_shape_id === 'string'
-                ? globalAny.__present_mermaid_last_shape_id
-                : '';
-
-            // Fallback: if the global tracker is missing (e.g. after reload), recover the latest mermaid shape
-            if (!existingDocId) {
+          if (decision.should_send) {
+            if (stewardSummary === 'steward_trigger' || stewardSummary === 'steward_trigger_flowchart') {
               try {
-                const editor = globalAny.__present?.tldrawEditor;
-                const shapes = editor?.getCurrentPageShapes?.() ?? [];
-                for (let i = shapes.length - 1; i >= 0; i -= 1) {
-                  const shape = shapes[i];
-                  if (shape?.type === 'mermaid_stream' && typeof shape?.id === 'string') {
-                    existingDocId = shape.id;
-                    globalAny.__present_mermaid_last_shape_id = shape.id;
-                    break;
-                  }
-                }
-              } catch (err) {
-                log('steward_run: failed to recover existing mermaid shape', err);
-              }
-            }
+                globalAny.__present_steward_active = true;
+              } catch {}
+              const roomName = (typeof message.roomId === 'string' && message.roomId) || room?.name || '';
+              let existingDocId =
+                typeof globalAny.__present_mermaid_last_shape_id === 'string'
+                  ? globalAny.__present_mermaid_last_shape_id
+                  : '';
 
-            log('steward trigger decision received', {
-              room: roomName || 'unknown',
-              docId: existingDocId || 'pending',
-            });
-            if (!existingDocId) {
-              log('steward trigger creating mermaid stream shape');
-              await executeToolCall({
-                id: message.id || `${Date.now()}`,
-                type: 'tool_call',
-                payload: { tool: 'canvas_create_mermaid_stream', params: { text: 'graph TD;\nA-->B;' } },
-                timestamp: Date.now(),
-                source: 'dispatcher',
-                roomId: message.roomId,
-              } as ToolCall);
-            }
-            const docId =
-              typeof globalAny.__present_mermaid_last_shape_id === 'string'
-                ? globalAny.__present_mermaid_last_shape_id
-                : '';
-            if (roomName) {
-              if (docId) {
-                scheduleStewardRun(roomName, docId);
-              } else {
-                window.setTimeout(() => {
-                  try {
-                    const fallbackId = String((window as any).__present_mermaid_last_shape_id || '');
-                    if (fallbackId) {
-                      scheduleStewardRun(roomName, fallbackId);
+              if (!existingDocId) {
+                try {
+                  const editor = globalAny.__present?.tldrawEditor;
+                  const shapes = editor?.getCurrentPageShapes?.() ?? [];
+                  for (let i = shapes.length - 1; i >= 0; i -= 1) {
+                    const shape = shapes[i];
+                    if (shape?.type === 'mermaid_stream' && typeof shape?.id === 'string') {
+                      existingDocId = shape.id;
+                      globalAny.__present_mermaid_last_shape_id = shape.id;
+                      break;
                     }
-                  } catch {}
-                }, 150);
+                  }
+                } catch (err) {
+                  log('steward_run: failed to recover existing mermaid shape', err);
+                }
               }
+
+              log('steward trigger decision received', {
+                room: roomName || 'unknown',
+                docId: existingDocId || 'pending',
+              });
+              if (!existingDocId) {
+                log('steward trigger creating mermaid stream shape');
+                await executeToolCall({
+                  id: message.id || `${Date.now()}`,
+                  type: 'tool_call',
+                  payload: { tool: 'canvas_create_mermaid_stream', params: { text: 'graph TD;\nA-->B;' } },
+                  timestamp: Date.now(),
+                  source: 'dispatcher',
+                  roomId: message.roomId,
+                } as ToolCall);
+              }
+              const docId =
+                typeof globalAny.__present_mermaid_last_shape_id === 'string'
+                  ? globalAny.__present_mermaid_last_shape_id
+                  : '';
+              if (roomName) {
+                if (docId) {
+                  scheduleStewardRun(roomName, docId);
+                } else {
+                  window.setTimeout(() => {
+                    try {
+                      const fallbackId = String((window as any).__present_mermaid_last_shape_id || '');
+                      if (fallbackId) {
+                        scheduleStewardRun(roomName, fallbackId);
+                      }
+                    } catch {}
+                  }, 150);
+                }
+              }
+              return;
             }
-            return;
+            if (stewardSummary === 'steward_trigger_canvas') {
+              try {
+                globalAny.__present_canvas_steward_active = true;
+              } catch {}
+              const roomName = (typeof message.roomId === 'string' && message.roomId) || room?.name || '';
+              if (roomName) {
+                log('canvas steward trigger decision received', { room: roomName });
+                try {
+                  await fetch('/api/conductor/dispatch', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      task: 'canvas.autodraw',
+                      params: { room: roomName, request: originalText || rawSummary },
+                    }),
+                  });
+                } catch (err) {
+                  console.warn('[ToolDispatcher] canvas steward dispatch failed', err);
+                }
+              }
+              return;
+            }
           }
           return;
         }

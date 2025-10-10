@@ -278,3 +278,131 @@ export async function getTranscriptWindow(room: string, windowMs: number) {
     return { transcript: [] };
   }
 }
+
+export type CanvasStateSummaryShape = {
+  id: string;
+  type: string;
+  index?: string;
+  x?: number;
+  y?: number;
+  w?: number;
+  h?: number;
+  text?: string;
+  label?: string;
+};
+
+export type CanvasStateSummary = {
+  shapes: CanvasStateSummaryShape[];
+  shapeCount: number;
+  updatedAt: number;
+};
+
+type CanvasSnapshotRecord = {
+  snapshot: Record<string, unknown> | null;
+  summary: CanvasStateSummary;
+};
+
+const CANVAS_MEMORY_STORE_KEY = '__present_canvas_snapshot_memory__';
+const canvasMemoryStore: Map<string, CanvasSnapshotRecord> =
+  (GLOBAL_APEX[CANVAS_MEMORY_STORE_KEY] as Map<string, CanvasSnapshotRecord> | undefined) ||
+  new Map<string, CanvasSnapshotRecord>();
+
+if (!GLOBAL_APEX[CANVAS_MEMORY_STORE_KEY]) {
+  GLOBAL_APEX[CANVAS_MEMORY_STORE_KEY] = canvasMemoryStore;
+}
+
+const defaultCanvasSummary = (): CanvasSnapshotRecord => ({
+  snapshot: null,
+  summary: { shapes: [], shapeCount: 0, updatedAt: Date.now() },
+});
+
+const canvasFallbackKey = (room: string) => room.trim().toLowerCase();
+
+const readCanvasFallback = (room: string): CanvasSnapshotRecord => {
+  return canvasMemoryStore.get(canvasFallbackKey(room)) ?? defaultCanvasSummary();
+};
+
+const writeCanvasFallback = (room: string, record: CanvasSnapshotRecord) => {
+  canvasMemoryStore.set(canvasFallbackKey(room), record);
+};
+
+const extractCanvasShapes = (snapshot: unknown, limit: number): CanvasStateSummaryShape[] => {
+  if (!snapshot || typeof snapshot !== 'object') return [];
+  const store = (snapshot as Record<string, unknown>).store;
+  if (!store || typeof store !== 'object') return [];
+
+  const shapes: CanvasStateSummaryShape[] = [];
+  for (const value of Object.values(store as Record<string, unknown>)) {
+    if (!value || typeof value !== 'object') continue;
+    const record = value as Record<string, unknown>;
+    if (record.typeName !== 'shape') continue;
+    const id = typeof record.id === 'string' ? record.id : '';
+    if (!id) continue;
+    const type = typeof record.type === 'string' ? record.type : 'shape';
+    const props = (record.props || {}) as Record<string, unknown>;
+    const text =
+      typeof props.text === 'string'
+        ? props.text
+        : typeof props.name === 'string'
+          ? props.name
+          : typeof props.label === 'string'
+            ? props.label
+            : undefined;
+    const entry: CanvasStateSummaryShape = {
+      id,
+      type,
+      index: typeof record.index === 'string' ? record.index : undefined,
+      x: typeof record.x === 'number' ? record.x : undefined,
+      y: typeof record.y === 'number' ? record.y : undefined,
+      w: typeof props.w === 'number' ? props.w : undefined,
+      h: typeof props.h === 'number' ? props.h : undefined,
+      text,
+      label: typeof props.label === 'string' ? props.label : undefined,
+    };
+    shapes.push(entry);
+    if (shapes.length >= limit) break;
+  }
+
+  shapes.sort((a, b) => {
+    if (a.index && b.index && a.index !== b.index) return a.index.localeCompare(b.index);
+    return a.id.localeCompare(b.id);
+  });
+
+  return shapes;
+};
+
+export function summarizeCanvasSnapshot(snapshot: unknown, maxShapes = 120): CanvasStateSummary {
+  const shapes = extractCanvasShapes(snapshot, Math.max(1, Math.min(maxShapes, 300)));
+  return { shapes, shapeCount: shapes.length, updatedAt: Date.now() };
+}
+
+export async function getCanvasSnapshot(room: string, maxShapes = 120) {
+  const fallback = readCanvasFallback(room);
+  if (shouldBypassSupabase) {
+    logBypass('getCanvasSnapshot');
+    return fallback;
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('canvases')
+      .select('document, updated_at, id')
+      .ilike('name', `%${room}%`)
+      .order('updated_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (error) {
+      throw error;
+    }
+
+    const snapshot = (data?.document as Record<string, unknown> | null) ?? fallback.snapshot;
+    const summary = summarizeCanvasSnapshot(snapshot, maxShapes);
+    const record: CanvasSnapshotRecord = { snapshot, summary };
+    writeCanvasFallback(room, record);
+    return record;
+  } catch (err) {
+    warnFallback('canvas_snapshot', err);
+    return fallback;
+  }
+}

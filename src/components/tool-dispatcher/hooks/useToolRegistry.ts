@@ -25,7 +25,7 @@ export interface ToolRegistryApi {
   listTools: () => string[];
 }
 
-const CANVAS_TOOLS: Record<string, string> = {
+export const CANVAS_TOOL_EVENT_MAP: Record<string, string> = {
   canvas_focus: 'tldraw:canvas_focus',
   canvas_zoom_all: 'tldraw:canvas_zoom_all',
   canvas_create_note: 'tldraw:create_note',
@@ -51,6 +51,14 @@ const CANVAS_TOOLS: Record<string, string> = {
   canvas_label_arrow: 'tldraw:labelArrow',
 };
 
+export const STEWARD_ALLOWED_TOOLS = [
+  'dispatch_to_conductor',
+  'canvas_create_mermaid_stream',
+  'canvas_update_mermaid_stream',
+  'canvas_list_shapes',
+  ...Object.keys(CANVAS_TOOL_EVENT_MAP),
+] as const;
+
 export function useToolRegistry(deps: ToolRegistryDeps): ToolRegistryApi {
   const { contextKey } = deps;
 
@@ -58,7 +66,7 @@ export function useToolRegistry(deps: ToolRegistryDeps): ToolRegistryApi {
     const map = new Map<string, ToolHandler>();
 
     // Canvas dispatch helpers
-    Object.entries(CANVAS_TOOLS).forEach(([tool, eventName]) => {
+    Object.entries(CANVAS_TOOL_EVENT_MAP).forEach(([tool, eventName]) => {
       map.set(tool, async ({ dispatchTL, params }) => dispatchTL(eventName, params));
     });
 
@@ -127,6 +135,37 @@ export function useToolRegistry(deps: ToolRegistryDeps): ToolRegistryApi {
       );
       emitEditorAction({ type: 'canvas_command', command: 'tldraw:listShapes', callId: call.id });
       return { status: 'ACK', message: 'Listing shapes' };
+    });
+
+    map.set('dispatch_to_conductor', async ({ params }) => {
+      const task = typeof params?.task === 'string' ? params.task.trim() : '';
+      const taskParams =
+        params && typeof params === 'object' && typeof params.params === 'object' ? (params.params as Record<string, unknown>) : {};
+      if (!task) {
+        return { status: 'ERROR', message: 'dispatch_to_conductor requires task' };
+      }
+      try {
+        const res = await fetch('/api/conductor/dispatch', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ task, params: taskParams }),
+        });
+        if (!res.ok) {
+          let errText = '';
+          try {
+            errText = await res.text();
+          } catch {}
+          return { status: 'ERROR', message: errText || `Conductor dispatch failed (${res.status})` };
+        }
+        let json: any = null;
+        try {
+          json = await res.json();
+        } catch {}
+        const message = typeof json?.finalOutput === 'string' && json.finalOutput.trim() ? json.finalOutput.trim() : 'Dispatched to conductor';
+        return { status: 'SUCCESS', message, response: json };
+      } catch (error) {
+        return { status: 'ERROR', message: error instanceof Error ? error.message : String(error) };
+      }
     });
 
     return map;

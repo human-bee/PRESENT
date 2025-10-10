@@ -21,6 +21,8 @@ TOOLS (JSON schemas):
    - Update an existing component with a natural-language patch or structured fields.
 3) dispatch_to_conductor({ task: string, params: object })
    - Ask the conductor to run a steward/sub-agent task on your behalf.
+   - Use task 'flowchart.update' for Mermaid diagrams (params: { room, docId, summary }).
+   - Use task 'canvas.autodraw' for TLDraw canvas work (params: { room, request, summary }).
 
 Always return to tool calls rather than long monologues.`;
     const model = new openai.realtime.RealtimeModel({ model: 'gpt-realtime', instructions, modalities: ['text'] });
