@@ -148,6 +148,40 @@ Always return to tool calls rather than long monologues.`;
     session.on('response_content_done', async (evt: { contentType: string; text: string; itemId: string }) => {
       try {
         if (evt.contentType === 'text' && evt.text) {
+          // Guard: if model outputs JSON that looks like a tool call, convert it to an actual tool call
+          const trimmed = evt.text.trim();
+          if (trimmed.startsWith('{') && trimmed.includes('"task"')) {
+            try {
+              const parsed = JSON.parse(trimmed);
+              if (parsed.task && typeof parsed.task === 'string') {
+                console.log('[VoiceAgent] Intercepted JSON tool description, converting to dispatch_to_conductor call');
+                const toolCallEvent = {
+                  id: `synthetic-${Date.now()}`,
+                  roomId: job.room.name || 'unknown',
+                  type: 'tool_call',
+                  payload: {
+                    tool: 'dispatch_to_conductor',
+                    params: {
+                      task: parsed.task,
+                      params: parsed.params || {},
+                    },
+                    context: { source: 'voice-guard', timestamp: Date.now() },
+                  },
+                  timestamp: Date.now(),
+                  source: 'voice' as const,
+                };
+                await job.room.localParticipant?.publishData(
+                  new TextEncoder().encode(JSON.stringify(toolCallEvent)),
+                  { reliable: true, topic: 'tool_call' },
+                );
+                // Don't mirror this to transcript since it's not a conversational response
+                return;
+              }
+            } catch {
+              // Not valid JSON or doesn't match pattern; treat as normal text
+            }
+          }
+          
           const payload = { type: 'live_transcription', text: evt.text, speaker: 'voice-agent', timestamp: Date.now(), is_final: true };
           await job.room.localParticipant?.publishData(new TextEncoder().encode(JSON.stringify(payload)), { reliable: true, topic: 'transcription' });
           try {
