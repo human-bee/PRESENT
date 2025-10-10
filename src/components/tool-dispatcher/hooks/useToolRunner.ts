@@ -295,7 +295,62 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
       const handler = registry.getHandler(tool);
 
       try {
-        if (stewardEnabled) {
+        if (tool === 'dispatch_to_conductor') {
+          const task = typeof params?.task === 'string' ? params.task.trim() : '';
+          if (!task) {
+            const message = 'dispatch_to_conductor requires task';
+            emitError(call, message);
+            queue.markError(call.id, message);
+            return { status: 'ERROR', message };
+          }
+
+          const nestedParams =
+            params?.params && typeof params.params === 'object'
+              ? ({ ...(params.params as Record<string, unknown>) } as Record<string, unknown>)
+              : ({} as Record<string, unknown>);
+          const candidateRooms = [
+            typeof params?.room === 'string' ? params.room : undefined,
+            typeof params?.roomId === 'string' ? params.roomId : undefined,
+            typeof nestedParams.room === 'string' ? (nestedParams.room as string) : undefined,
+            typeof nestedParams.roomId === 'string' ? (nestedParams.roomId as string) : undefined,
+            typeof call.roomId === 'string' ? call.roomId : undefined,
+            typeof room?.name === 'string' ? room.name : undefined,
+          ];
+          const resolvedRoom = candidateRooms
+            .map((value) => (typeof value === 'string' ? value.trim() : ''))
+            .find((value) => value.length > 0);
+          if (resolvedRoom && resolvedRoom.length > 0) {
+            nestedParams.room = resolvedRoom;
+          }
+
+          try {
+            const res = await fetch('/api/conductor/dispatch', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ task, params: nestedParams, room: resolvedRoom }),
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+              const message = typeof data?.error === 'string' ? data.error : `Conductor dispatch failed (${res.status})`;
+              queue.markError(call.id, message);
+              emitError(call, message);
+              return { status: 'ERROR', message };
+            }
+            const message = typeof data?.status === 'string' ? `Conductor ${data.status}` : 'Conductor scheduled';
+            const result = { status: 'SUCCESS', message, task, room: resolvedRoom } as ToolRunResult;
+            queue.markComplete(call.id, result.message);
+            emitDone(call, result);
+            return result;
+          } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            queue.markError(call.id, message);
+            emitError(call, message);
+            return { status: 'ERROR', message };
+          }
+        }
+
+        const voiceSources = new Set(['voice', 'voice-subagent']);
+        if (stewardEnabled && voiceSources.has(String(call.source || ''))) {
           const allowedTools = new Set(['canvas_create_mermaid_stream', 'canvas_focus', 'canvas_zoom_all']);
           if (!allowedTools.has(tool)) {
             const message = `Unsupported tool in steward mode: ${tool}`;
@@ -414,6 +469,7 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
 
         if (stewardEnabled) {
           const stewardSummary = rawSummary.trim();
+          const stewardSummaryLower = stewardSummary.toLowerCase();
           if (decision.should_send && stewardSummary === 'steward_trigger') {
             try {
               globalAny.__present_steward_active = true;
@@ -476,6 +532,34 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
               }
             }
             return;
+          }
+          return;
+        }
+
+        const canvasTriggerSummaries = new Set([
+          'steward_trigger_canvas',
+          'steward_trigger_drawing',
+          'canvas_steward_trigger',
+          'steward_canvas',
+        ]);
+        if (decision.should_send && canvasTriggerSummaries.has(stewardSummaryLower)) {
+          const roomName = (typeof message.roomId === 'string' && message.roomId) || room?.name || '';
+          const promptText =
+            typeof (decision as any)?.prompt === 'string' && (decision as any).prompt.trim().length > 0
+              ? (decision as any).prompt.trim()
+              : (originalText || rawSummary || '').toString();
+          if (roomName) {
+            await executeToolCall({
+              id: message.id || `${Date.now()}`,
+              type: 'tool_call',
+              payload: {
+                tool: 'dispatch_to_conductor',
+                params: { task: 'canvas.draw', params: { prompt: promptText, room: roomName } },
+              },
+              timestamp: Date.now(),
+              source: 'dispatcher',
+              roomId: roomName,
+            } as ToolCall);
           }
           return;
         }

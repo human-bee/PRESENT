@@ -22,6 +22,10 @@ TOOLS (JSON schemas):
 3) dispatch_to_conductor({ task: string, params: object })
    - Ask the conductor to run a steward/sub-agent task on your behalf.
 
+Use dispatch_to_conductor for complex artifacts:
+- For flowcharts or Mermaid updates, call task "flowchart.update" with the relevant docId and room.
+- For TLDraw drawings (shapes, layout, styling), call task "canvas.draw" and include { prompt: <latest request> }.
+
 Always return to tool calls rather than long monologues.`;
     const model = new openai.realtime.RealtimeModel({ model: 'gpt-realtime', instructions, modalities: ['text'] });
     // Configure the agent for text-only output. We set maxTextResponseRetries to Infinity so

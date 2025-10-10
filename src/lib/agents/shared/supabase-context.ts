@@ -65,12 +65,38 @@ const transcriptStore: Map<string, TranscriptRecord> =
   (GLOBAL_APEX[TRANSCRIPT_STORE_KEY] as Map<string, TranscriptRecord> | undefined) ||
   new Map<string, TranscriptRecord>();
 
+type CanvasShapeSummary = {
+  id: string;
+  type: string;
+  name?: string;
+  text?: string;
+  parentId?: string;
+  x?: number;
+  y?: number;
+  props?: Record<string, unknown>;
+};
+
+type CanvasSummaryRecord = {
+  shapes: CanvasShapeSummary[];
+  totalShapes: number;
+  fetchedAt: number;
+};
+
+const CANVAS_SUMMARY_STORE_KEY = '__present_canvas_summary_store__';
+const canvasSummaryStore: Map<string, CanvasSummaryRecord> =
+  (GLOBAL_APEX[CANVAS_SUMMARY_STORE_KEY] as Map<string, CanvasSummaryRecord> | undefined) ||
+  new Map<string, CanvasSummaryRecord>();
+
 if (!GLOBAL_APEX[MEMORY_STORE_KEY]) {
   GLOBAL_APEX[MEMORY_STORE_KEY] = memoryStore;
 }
 
 if (!GLOBAL_APEX[TRANSCRIPT_STORE_KEY]) {
   GLOBAL_APEX[TRANSCRIPT_STORE_KEY] = transcriptStore;
+}
+
+if (!GLOBAL_APEX[CANVAS_SUMMARY_STORE_KEY]) {
+  GLOBAL_APEX[CANVAS_SUMMARY_STORE_KEY] = canvasSummaryStore;
 }
 
 const fallbackKey = (room: string, docId: string) => `${room}::${docId}`;
@@ -127,6 +153,146 @@ export const appendTranscriptCache = (
   } else {
     transcriptStore.set(room, { transcript: [entry], cachedAt: Date.now() });
   }
+};
+
+const readCanvasSummaryFallback = (room: string): CanvasSummaryRecord => {
+  return (
+    canvasSummaryStore.get(room) ?? {
+      shapes: [],
+      totalShapes: 0,
+      fetchedAt: Date.now(),
+    }
+  );
+};
+
+const writeCanvasSummaryFallback = (room: string, summary: CanvasSummaryRecord) => {
+  canvasSummaryStore.set(room, summary);
+};
+
+const SHAPE_KEY_PREFIX = 'shape:';
+
+const deriveRichText = (value: unknown): string | undefined => {
+  if (!value) return undefined;
+  if (typeof value === 'string') {
+    return value;
+  }
+  if (Array.isArray(value)) {
+    const merged = value
+      .map((entry) => {
+        if (typeof entry === 'string') return entry;
+        if (entry && typeof entry === 'object' && typeof (entry as Record<string, unknown>).text === 'string') {
+          return String((entry as Record<string, unknown>).text);
+        }
+        return '';
+      })
+      .join('')
+      .trim();
+    return merged || undefined;
+  }
+  if (typeof value === 'object') {
+    const text = (value as Record<string, unknown>).text;
+    if (typeof text === 'string') {
+      return text;
+    }
+    const spans = (value as Record<string, unknown>).spans;
+    if (Array.isArray(spans)) {
+      const merged = spans
+        .map((span) => {
+          if (typeof span === 'string') return span;
+          if (span && typeof span === 'object' && typeof (span as Record<string, unknown>).text === 'string') {
+            return String((span as Record<string, unknown>).text);
+          }
+          return '';
+        })
+        .join('')
+        .trim();
+      return merged || undefined;
+    }
+  }
+  return undefined;
+};
+
+const INTERESTING_PROP_KEYS = new Set([
+  'text',
+  'label',
+  'name',
+  'geo',
+  'color',
+  'fill',
+  'stroke',
+  'size',
+  'opacity',
+  'w',
+  'h',
+  'icon',
+  'url',
+  'align',
+  'justify',
+  'font',
+]);
+
+const extractCanvasShapes = (snapshot: Record<string, unknown> | null | undefined) => {
+  const store = snapshot && typeof snapshot === 'object' ? (snapshot as Record<string, unknown>).store : undefined;
+  const container = store && typeof store === 'object' ? (store as Record<string, unknown>) : undefined;
+  if (!container) return [] as CanvasShapeSummary[];
+
+  const shapes: CanvasShapeSummary[] = [];
+  for (const [key, value] of Object.entries(container)) {
+    if (!key.startsWith(SHAPE_KEY_PREFIX)) continue;
+    if (!value || typeof value !== 'object') continue;
+
+    const record = value as Record<string, unknown>;
+    const idRaw = typeof record.id === 'string' ? record.id : key.slice(SHAPE_KEY_PREFIX.length);
+    const typeRaw =
+      typeof record.type === 'string'
+        ? record.type
+        : typeof record.typeName === 'string'
+          ? (record.typeName as string)
+          : 'unknown';
+    const parentId = typeof record.parentId === 'string' ? record.parentId : undefined;
+    const x = typeof record.x === 'number' ? record.x : undefined;
+    const y = typeof record.y === 'number' ? record.y : undefined;
+
+    const props = record.props && typeof record.props === 'object' ? (record.props as Record<string, unknown>) : undefined;
+    const textProp = props && typeof props.text === 'string' ? props.text : undefined;
+    const nameProp = props && typeof props.name === 'string' ? props.name : undefined;
+    const labelProp = props && typeof props.label === 'string' ? props.label : undefined;
+    const richText = props ? deriveRichText(props.richText) : undefined;
+    const summaryProps: Record<string, unknown> = {};
+
+    if (props) {
+      for (const keyName of INTERESTING_PROP_KEYS) {
+        if (keyName in props) {
+          const valueEntry = props[keyName];
+          if (valueEntry !== undefined) {
+            summaryProps[keyName] = valueEntry;
+          }
+        }
+      }
+    }
+
+    const summary: CanvasShapeSummary = {
+      id: idRaw,
+      type: typeRaw,
+      parentId,
+      x,
+      y,
+    };
+
+    const derivedText = textProp || nameProp || labelProp || richText;
+    if (derivedText && derivedText.trim() !== '') {
+      summary.text = derivedText;
+    }
+    if (nameProp && nameProp.trim() !== '') {
+      summary.name = nameProp;
+    }
+    if (props && Object.keys(summaryProps).length > 0) {
+      summary.props = summaryProps;
+    }
+
+    shapes.push(summary);
+  }
+  return shapes;
 };
 
 export async function getFlowchartDoc(room: string, docId: string) {
@@ -276,5 +442,52 @@ export async function getTranscriptWindow(room: string, windowMs: number) {
       return { transcript: filtered };
     }
     return { transcript: [] };
+  }
+}
+
+export async function getCanvasSummary(room: string, options?: { limit?: number }) {
+  const fallback = readCanvasSummaryFallback(room);
+  const limit = options?.limit && Number.isFinite(options.limit) ? Math.max(1, Math.min(200, options.limit)) : 60;
+
+  if (shouldBypassSupabase) {
+    logBypass('getCanvasSummary');
+    return {
+      shapes: fallback.shapes.slice(0, limit),
+      totalShapes: fallback.totalShapes,
+      fetchedAt: new Date(fallback.fetchedAt).toISOString(),
+    };
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('canvases')
+      .select('document')
+      .ilike('name', `%${room}%`)
+      .limit(1)
+      .maybeSingle();
+
+    if (error) {
+      throw error;
+    }
+
+    const shapes = extractCanvasShapes(data?.document as Record<string, unknown> | null | undefined);
+    const summary: CanvasSummaryRecord = {
+      shapes,
+      totalShapes: shapes.length,
+      fetchedAt: Date.now(),
+    };
+    writeCanvasSummaryFallback(room, summary);
+    return {
+      shapes: shapes.slice(0, limit),
+      totalShapes: shapes.length,
+      fetchedAt: new Date(summary.fetchedAt).toISOString(),
+    };
+  } catch (err) {
+    warnFallback('canvas_summary', err);
+    return {
+      shapes: fallback.shapes.slice(0, limit),
+      totalShapes: fallback.totalShapes,
+      fetchedAt: new Date(fallback.fetchedAt).toISOString(),
+    };
   }
 }

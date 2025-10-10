@@ -13,6 +13,7 @@ User speaks/types → Voice Agent → ToolDispatcher → Steward → Supabase �
 Key repos paths:
 - Voice agent: `src/lib/agents/realtime/voice-agent.ts`
 - Steward template: `src/lib/agents/subagents/flowchart-steward.ts`
+- Canvas steward: `src/lib/agents/subagents/canvas-steward.ts`
 - Supabase helpers: `src/lib/agents/shared/supabase-context.ts`
 - Tool dispatcher + canvas bridge: `src/components/tool-dispatcher.tsx`
 - TLDraw mermaid component: `src/components/ui/tldraw-canvas.tsx`
@@ -57,6 +58,7 @@ npm run dev
 
 2. **Steward Agent**
    - Template resides in `flowchart-steward.ts`.
+   - TLDraw steward lives in `canvas-steward.ts` and uses `dispatch_canvas_action` to call browser TLDraw events via `/api/steward/dispatch`.
    - Tools pattern:
      ```ts
      const get_current_doc = tool(...)          // fetch component state
@@ -68,6 +70,7 @@ npm run dev
 
 3. **Conductor**
    - The `/api/steward/run` endpoint simply calls `runFlowchartSteward`. When adding new stewards, export additional `runSomethingSteward` helpers and register handoffs inside the conductor worker.
+   - `/api/conductor/dispatch` lets the voice agent forward `dispatch_to_conductor` calls (e.g. `canvas.draw`) without blocking the UI thread.
 
 ---
 
@@ -85,9 +88,10 @@ When cloning this pattern tailor both `get*` and `commit*` helpers in `src/lib/a
 
 ## 4. Trigger Flow
 
-1. User speech is transcribed by OpenAI → voice agent publishes `decision` (`summary: 'steward_trigger'`). Manual typed text now shares the same debounce.
-2. ToolDispatcher listens for `decision` events (lines ~720–780) and schedules `/api/steward/run` once the mermaid shape exists.
-3. Steward completes task, `commit_flowchart` POSTs `/api/steward/commit` → LiveKit emits `ui_update` → TLDraw shape updates.
+1. User speech is transcribed by OpenAI → voice agent publishes `decision` (`summary: 'steward_trigger'` for Mermaid, `steward_trigger_canvas` for TLDraw). Manual typed text now shares the same debounce.
+2. ToolDispatcher listens for `decision` events (lines ~720–780) and either schedules `/api/steward/run` once the mermaid shape exists or forwards `dispatch_to_conductor` with `task: 'canvas.draw'`.
+3. Flowchart steward completes task, `commit_flowchart` POSTs `/api/steward/commit` → LiveKit emits `ui_update` → TLDraw shape updates.
+4. Canvas steward issues `dispatch_canvas_action` calls which `/api/steward/dispatch` broadcasts to the TLDraw bridge.
 4. Canvas logs show every step (`[ToolDispatcher]`, `[Canvas][ui_update]`, `[Steward]` etc.).
 
 > Tip: watch `logs/agent-realtime.log` for `decision` timestamps and tool call outputs; check browser console for `[Canvas][ui_update]` and TLDraw warnings like “Mermaid error – keeping last good render”.
@@ -137,6 +141,7 @@ Use this doc as a living template—copy sections into new steward folders (e.g.
 - [ ] Steward agent template cloned with `get_current_*`, `get_context`, `commit_*` tools.
 - [ ] Supabase helpers updated for new component schema.
 - [ ] Voice agent instructions mention new tool/intent; debounce triggers verified for speech and manual text.
+- [ ] `/api/conductor/dispatch` handles `dispatch_to_conductor` hand-offs (e.g. `canvas.draw`).
 - [ ] `/api/steward/run` route points to new `run*Steward` helper (if needed).
 - [ ] LiveKit broadcast (ui_update) decoded by the component.
 - [ ] Tests cover create + update path.
