@@ -16,23 +16,23 @@ const logWithTs = <T extends Record<string, unknown>>(label: string, payload: T)
 const TOOL_PREFIX = 'canvas_';
 
 const CanvasStateArgs = z.object({
-  room: z.string().min(1),
+  room: z.string(),
 });
 
 const ContextArgs = z.object({
-  room: z.string().min(1),
-  windowMs: z.number().min(1_000).max(600_000).optional(),
+  room: z.string(),
+  windowMs: z.number().min(1_000).max(600_000).nullable(),
 });
 
 const BroadcastArgs = z.object({
-  room: z.string().min(1),
-  tool: z.string().min(1),
-  params: z.record(z.any()).optional(),
+  room: z.string(),
+  tool: z.string(),
+  params: z.record(z.any()).nullable(),
 });
 
 const ShapeActionArgs = z.object({
-  room: z.string().min(1),
-  params: z.record(z.any()).optional(),
+  room: z.string(),
+  params: z.record(z.any()).nullable(),
 });
 
 const createCanvasTool = (name: string, description: string) =>
@@ -97,8 +97,9 @@ export const dispatch_canvas_tool = tool({
     if (!toolName.startsWith(TOOL_PREFIX)) {
       throw new Error(`Canvas tools must start with ${TOOL_PREFIX}`);
     }
-    await broadcastCanvasAction({ room: trimmedRoom, tool: toolName, params });
-    logWithTs('🛠️ [CanvasSteward] dispatch', { room: trimmedRoom, tool: toolName, params });
+    const payloadParams = params ?? {};
+    await broadcastCanvasAction({ room: trimmedRoom, tool: toolName, params: payloadParams });
+    logWithTs('🛠️ [CanvasSteward] dispatch', { room: trimmedRoom, tool: toolName, params: payloadParams });
     return { status: 'OK' };
   },
 });
