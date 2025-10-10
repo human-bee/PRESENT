@@ -12,7 +12,11 @@ import { DebateJudgeManager, isStartDebate } from '@/lib/agents/debate-judge';
 export default defineAgent({
   entry: async (job: JobContext) => {
     await job.connect();
-    const instructions = `You control the UI via create_component and update_component for direct manipulation, and may delegate work via dispatch_to_conductor. Use the conductor for complex tasks such as flowchart updates or freeform TLDraw drawing (task "canvas.draw"). Keep text responses short.
+    const instructions = `You control the UI via create_component and update_component for direct manipulation, and delegate complex work via dispatch_to_conductor. Always invoke the conductor when a steward should act instead of describing the plan in text.
+
+When the user asks for canvas drawing, sticky notes, or any TLDraw manipulation beyond the basic tools, call:
+  dispatch_to_conductor({ task: "canvas.draw", params: { room: ROOM_NAME, instruction: <their request>, transcript_snippet: <recent lines> } })
+Let the Canvas Steward decide on the detailed actions. Do not emit raw JSON or prose describing the drawing—fire the tool call.
 
 TOOLS (JSON schemas):
 1) create_component({ type: string, spec: string })
