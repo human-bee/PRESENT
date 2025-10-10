@@ -100,7 +100,11 @@ Always return to tool calls rather than long monologues.`;
         clearTimeout(g.__steward_timer__);
         g.__steward_timer__ = setTimeout(async () => {
           // Emit a decision/status hint; in production, call the conductor with flowchart.update here
-          const hint = { type: 'decision', payload: { decision: { should_send: true, summary: 'steward_trigger' } }, timestamp: Date.now() };
+          const hint = {
+            type: 'decision',
+            payload: { decision: { should_send: true, summary: 'steward_trigger' }, originalText: evt.transcript },
+            timestamp: Date.now(),
+          };
           await job.room.localParticipant?.publishData(new TextEncoder().encode(JSON.stringify(hint)), { reliable: true, topic: 'decision' });
         }, 2500);
       } catch {}
@@ -147,7 +151,13 @@ Always return to tool calls rather than long monologues.`;
             g.__steward_timer__ = setTimeout(async () => {
               const hint = {
                 type: 'decision',
-                payload: { decision: { should_send: true, summary: 'steward_trigger' } },
+                payload: {
+                  decision: {
+                    should_send: true,
+                    summary: 'steward_trigger',
+                  },
+                  originalText: msg.text,
+                },
                 timestamp: Date.now(),
               };
               await job.room.localParticipant?.publishData(

@@ -282,33 +282,6 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
     [],
   );
 
-  const dispatchCanvasSteward = useCallback(
-    async (
-      roomName: string,
-      payload: { task?: string; params?: Record<string, unknown>; summary?: string },
-    ) => {
-      try {
-        const body = {
-          room: roomName,
-          task: payload.task ?? 'canvas.draw',
-          params: payload.params,
-          summary: payload.summary,
-        };
-        const res = await fetch('/api/steward/runCanvas', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body),
-        });
-        if (!res.ok) {
-          log('canvas steward request failed', { status: res.status, task: body.task });
-        }
-      } catch (error) {
-        log('canvas steward request error', error);
-      }
-    },
-    [log],
-  );
-
   const executeToolCall = useCallback(
     async (call: ToolCall): Promise<ToolRunResult> => {
       const tool = call.payload.tool;
@@ -328,6 +301,7 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
             'update_component',
             'list_components',
             'youtube_search',
+            'dispatch_to_conductor',
           ]);
           const isCanvasTool = tool.startsWith('canvas_');
           if (!isCanvasTool && !allowedNonCanvasTools.has(tool)) {
@@ -352,6 +326,53 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
           queue.markComplete(call.id, result.message);
           emitDone(call, result);
           return result;
+        }
+
+        if (tool === 'dispatch_to_conductor') {
+          const task = typeof params?.task === 'string' ? params.task.trim() : '';
+          const dispatchParams = (params?.params as Record<string, unknown>) || {};
+
+          if (!task) {
+            const message = 'dispatch_to_conductor requires a task value';
+            queue.markError(call.id, message);
+            emitError(call, message);
+            return { status: 'ERROR', message };
+          }
+
+          if (stewardEnabled && task.startsWith('canvas.')) {
+            try {
+              const res = await fetch('/api/steward/runCanvas', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  room: call.roomId || room?.name,
+                  task,
+                  params: dispatchParams,
+                  summary: typeof params?.summary === 'string' ? params.summary : undefined,
+                }),
+              });
+              if (!res.ok) {
+                const message = `Canvas steward dispatch failed: HTTP ${res.status}`;
+                queue.markError(call.id, message);
+                emitError(call, message);
+                return { status: 'ERROR', message };
+              }
+              const result = { status: 'SUCCESS', message: 'Dispatched canvas steward' } as ToolRunResult;
+              queue.markComplete(call.id, result.message);
+              emitDone(call, result);
+              return result;
+            } catch (error) {
+              const message = `Canvas steward dispatch error: ${error instanceof Error ? error.message : String(error)}`;
+              queue.markError(call.id, message);
+              emitError(call, message);
+              return { status: 'ERROR', message };
+            }
+          }
+
+          const message = `Unsupported dispatch task in this mode: ${task}`;
+          queue.markError(call.id, message);
+          emitError(call, message);
+          return { status: 'ERROR', message };
         }
 
         if (tool.startsWith('mcp_')) {
@@ -447,6 +468,7 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
 
         if (stewardEnabled) {
           const stewardSummary = rawSummary.trim();
+          // TODO: voice agent should emit explicit decision summaries for each steward instead of legacy fallback values.
           if (decision.should_send && stewardSummary === 'steward_trigger') {
             try {
               globalAny.__present_steward_active = true;
@@ -511,6 +533,7 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
             return;
           }
           if (decision.should_send && stewardSummary === 'steward_trigger_canvas') {
+            // TODO: Replace this heuristic-based steward trigger with an LLM-driven routing signal.
             const roomName = (typeof message.roomId === 'string' && message.roomId) || room?.name || '';
             if (!roomName) {
               log('canvas steward trigger ignored: missing room');
@@ -518,12 +541,28 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
             }
             const intentSummary = typeof originalText === 'string' && originalText.trim() ? originalText.trim() : summary;
             log('canvas steward trigger received', { room: roomName, summary: intentSummary });
-            await dispatchCanvasSteward(roomName, {
+            const body = {
+              room: roomName,
+              task: 'canvas.draw',
               params: {
                 room: roomName,
                 summary: intentSummary,
               },
-            });
+              summary: intentSummary,
+            };
+            try {
+              // TODO: move steward dispatch to a typed conductor task instead of direct fetch.
+              const res = await fetch('/api/steward/runCanvas', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
+              });
+              if (!res.ok) {
+                log('canvas steward request failed', { status: res.status });
+              }
+            } catch (error) {
+              log('canvas steward request error', error);
+            }
             return;
           }
           return;
@@ -617,7 +656,7 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
       offTool();
       offDecision();
     };
-  }, [bus, executeToolCall, log, room, scheduleStewardRun, stewardEnabled, dispatchCanvasSteward]);
+  }, [bus, executeToolCall, log, room, scheduleStewardRun, stewardEnabled]);
 
   useEffect(() => {
     if (!stewardEnabled) return;
