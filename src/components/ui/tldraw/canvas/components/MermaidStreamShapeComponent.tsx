@@ -21,6 +21,7 @@ export function MermaidStreamShapeComponent({ shape }: { shape: MermaidStreamSha
     message: null,
     timestamp: 0,
   });
+  const isEditingRef = useRef(false);
 
   useEffect(() => {
     setLocalText(String(shape.props.mermaidText || ''));
@@ -46,9 +47,14 @@ export function MermaidStreamShapeComponent({ shape }: { shape: MermaidStreamSha
     }
   }, []);
 
+  useEffect(() => {
+    isEditingRef.current = isEditing;
+  }, [isEditing]);
+
   const maybeTriggerFallback = useCallback(
     (errorMessage: string | null | undefined) => {
       if (typeof window === 'undefined') return;
+      if (isEditingRef.current) return;
       const normalized =
         typeof errorMessage === 'string' && errorMessage.trim().length > 0
           ? errorMessage.trim()
