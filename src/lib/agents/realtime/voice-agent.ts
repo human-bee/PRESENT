@@ -57,8 +57,12 @@ Always return to tool calls rather than long monologues.`;
       instructions, 
       modalities: ['text'],
     });
+    
+    console.log('[VoiceAgent] Starting agent with FunctionContext:', Object.keys(fncCtx));
     const agent = new multimodal.MultimodalAgent({ model, fncCtx, maxTextResponseRetries: Number.POSITIVE_INFINITY });
     const session = await agent.start(job.room);
+    console.log('[VoiceAgent] Session started. FunctionContext:', session.fncCtx ? Object.keys(session.fncCtx) : 'NONE');
+    
     // Allow text-only responses without attempting to recover to audio
     try { (session as unknown as { recoverFromTextResponse?: (itemId?: string) => void }).recoverFromTextResponse = () => {}; } catch {}
 
