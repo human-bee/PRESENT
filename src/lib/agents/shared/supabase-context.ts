@@ -65,12 +65,40 @@ const transcriptStore: Map<string, TranscriptRecord> =
   (GLOBAL_APEX[TRANSCRIPT_STORE_KEY] as Map<string, TranscriptRecord> | undefined) ||
   new Map<string, TranscriptRecord>();
 
+type CanvasShapeSummary = {
+  id: string;
+  type: string;
+  name?: string;
+  text?: string;
+  geo?: string;
+  w?: number;
+  h?: number;
+  meta?: Record<string, unknown>;
+};
+
+type CanvasStateRecord = {
+  canvasId?: string;
+  name?: string;
+  lastModified?: string | null;
+  shapes: CanvasShapeSummary[];
+  snapshot: unknown;
+};
+
+const CANVAS_STATE_STORE_KEY = '__present_canvas_state_store__';
+const canvasStateStore: Map<string, CanvasStateRecord> =
+  (GLOBAL_APEX[CANVAS_STATE_STORE_KEY] as Map<string, CanvasStateRecord> | undefined) ||
+  new Map<string, CanvasStateRecord>();
+
 if (!GLOBAL_APEX[MEMORY_STORE_KEY]) {
   GLOBAL_APEX[MEMORY_STORE_KEY] = memoryStore;
 }
 
 if (!GLOBAL_APEX[TRANSCRIPT_STORE_KEY]) {
   GLOBAL_APEX[TRANSCRIPT_STORE_KEY] = transcriptStore;
+}
+
+if (!GLOBAL_APEX[CANVAS_STATE_STORE_KEY]) {
+  GLOBAL_APEX[CANVAS_STATE_STORE_KEY] = canvasStateStore;
 }
 
 const fallbackKey = (room: string, docId: string) => `${room}::${docId}`;
@@ -114,6 +142,69 @@ const warnFallback = (scope: string, error: unknown) => {
 
 const setTranscriptCache = (room: string, transcript: TranscriptRecord['transcript']) => {
   transcriptStore.set(room, { transcript, cachedAt: Date.now() });
+};
+
+const readCanvasFallback = (room: string): CanvasStateRecord => {
+  return (
+    canvasStateStore.get(room) ?? {
+      shapes: [],
+      snapshot: null,
+    }
+  );
+};
+
+const writeCanvasFallback = (room: string, record: CanvasStateRecord) => {
+  canvasStateStore.set(room, record);
+};
+
+const summarizeCanvasSnapshot = (snapshot: unknown): CanvasShapeSummary[] => {
+  if (!snapshot || typeof snapshot !== 'object') {
+    return [];
+  }
+  const store = (snapshot as Record<string, unknown>).store;
+  if (!store || typeof store !== 'object') {
+    return [];
+  }
+  const entries = Object.entries(store as Record<string, unknown>);
+  const shapes: CanvasShapeSummary[] = [];
+  for (const [key, value] of entries) {
+    if (!key.startsWith('shape:')) continue;
+    if (!value || typeof value !== 'object') continue;
+    const shape = value as Record<string, unknown>;
+    const type = typeof shape.type === 'string' ? shape.type : 'unknown';
+    const id = typeof shape.id === 'string' ? shape.id : key.slice('shape:'.length);
+    const summary: CanvasShapeSummary = { id, type };
+    try {
+      if (typeof shape.meta === 'object' && shape.meta) {
+        const meta = shape.meta as Record<string, unknown>;
+        summary.meta = Object.fromEntries(
+          Object.entries(meta).filter(([prop]) => typeof prop === 'string').slice(0, 8),
+        );
+      }
+      const props = shape.props as Record<string, unknown> | undefined;
+      if (props && typeof props === 'object') {
+        if (typeof props.name === 'string') summary.name = props.name;
+        if (typeof props.customComponent === 'string' && !summary.name) {
+          summary.name = props.customComponent;
+        }
+        if (typeof props.text === 'string') summary.text = props.text;
+        if (typeof props.richText === 'object') {
+          const rich = props.richText as { spans?: Array<{ text?: string }> };
+          const spanText = Array.isArray(rich.spans)
+            ? rich.spans
+                .map((span) => (span && typeof span.text === 'string' ? span.text : ''))
+                .join('')
+            : undefined;
+          if (spanText) summary.text = spanText;
+        }
+        if (typeof props.geo === 'string') summary.geo = props.geo;
+        if (typeof props.w === 'number') summary.w = props.w;
+        if (typeof props.h === 'number') summary.h = props.h;
+      }
+    } catch {}
+    shapes.push(summary);
+  }
+  return shapes;
 };
 
 export const appendTranscriptCache = (
@@ -228,6 +319,51 @@ export async function commitFlowchartDoc(
   writeFallback(room, docId, nextRecord);
 
   return { version: nextVersion };
+}
+
+export async function getCanvasState(room: string) {
+  const fallback = readCanvasFallback(room);
+  const trimmed = room.trim();
+  if (!trimmed) {
+    return fallback;
+  }
+
+  if (shouldBypassSupabase) {
+    logBypass('getCanvasState');
+    return fallback;
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('canvases')
+      .select('id, name, document, last_modified, updated_at')
+      .ilike('name', `%${trimmed}%`)
+      .limit(1)
+      .maybeSingle();
+
+    if (error) {
+      throw error;
+    }
+
+    if (!data) {
+      return fallback;
+    }
+
+    const snapshot = data.document ?? null;
+    const shapes = summarizeCanvasSnapshot(snapshot);
+    const record: CanvasStateRecord = {
+      canvasId: typeof data.id === 'string' ? data.id : undefined,
+      name: typeof data.name === 'string' ? data.name : undefined,
+      lastModified: typeof data.last_modified === 'string' ? data.last_modified : data.updated_at ?? null,
+      shapes,
+      snapshot,
+    };
+    writeCanvasFallback(trimmed, record);
+    return record;
+  } catch (error) {
+    warnFallback('get_canvas_state', error);
+    return fallback;
+  }
 }
 
 export async function getTranscriptWindow(room: string, windowMs: number) {

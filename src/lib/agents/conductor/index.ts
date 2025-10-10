@@ -1,6 +1,7 @@
 import { Agent, run, tool } from '@openai/agents';
 import { z } from 'zod';
 import { activeFlowchartSteward } from '../subagents/flowchart-steward-registry';
+import { runCanvasSteward } from '../subagents/canvas-steward';
 
 // Thin router: receives dispatch_to_conductor and hands off to stewards
 
@@ -16,6 +17,39 @@ const dispatchToConductor = tool({
       // Delegate to Flowchart Steward
       const result = await run(activeFlowchartSteward, JSON.stringify({ task, params }));
       return result.finalOutput;
+    }
+    if (task.startsWith('canvas.')) {
+      const payload = (params && typeof params === 'object' ? params : {}) as Record<string, unknown>;
+      const roomCandidate =
+        typeof payload.room === 'string'
+          ? payload.room
+          : typeof payload.roomId === 'string'
+            ? payload.roomId
+            : typeof payload.roomName === 'string'
+              ? payload.roomName
+              : '';
+      const requestCandidate =
+        typeof payload.request === 'string'
+          ? payload.request
+          : typeof payload.prompt === 'string'
+            ? payload.prompt
+            : typeof payload.goal === 'string'
+              ? payload.goal
+              : undefined;
+      const windowMsCandidate =
+        typeof payload.windowMs === 'number' && Number.isFinite(payload.windowMs)
+          ? payload.windowMs
+          : undefined;
+      const normalizedRoom = roomCandidate.trim();
+      if (!normalizedRoom) {
+        throw new Error('Canvas steward requires a room identifier.');
+      }
+      const finalOutput = await runCanvasSteward({
+        room: normalizedRoom,
+        request: requestCandidate,
+        windowMs: windowMsCandidate,
+      });
+      return finalOutput;
     }
     throw new Error(`No steward for task: ${task}`);
   },

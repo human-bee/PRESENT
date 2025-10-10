@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import type { Room } from 'livekit-client';
-import { useToolRegistry } from './useToolRegistry';
+import { useToolRegistry, CANVAS_TOOL_NAMES } from './useToolRegistry';
 import { useToolQueue } from './useToolQueue';
 import type { ToolCall, ToolParameters, ToolRunResult } from '../utils/toolTypes';
 import { TOOL_STEWARD_DELAY_MS, TOOL_STEWARD_WINDOW_MS } from '../utils/constants';
@@ -296,7 +296,12 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
 
       try {
         if (stewardEnabled) {
-          const allowedTools = new Set(['canvas_create_mermaid_stream', 'canvas_focus', 'canvas_zoom_all']);
+          const allowedTools = new Set<string>([
+            'dispatch_to_conductor',
+            'canvas_create_mermaid_stream',
+            'canvas_update_mermaid_stream',
+            ...CANVAS_TOOL_NAMES,
+          ]);
           if (!allowedTools.has(tool)) {
             const message = `Unsupported tool in steward mode: ${tool}`;
             emitError(call, message);
@@ -414,7 +419,7 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
 
         if (stewardEnabled) {
           const stewardSummary = rawSummary.trim();
-          if (decision.should_send && stewardSummary === 'steward_trigger') {
+          if (decision.should_send && (stewardSummary === 'steward_trigger' || stewardSummary === 'steward_trigger_flowchart')) {
             try {
               globalAny.__present_steward_active = true;
             } catch {}
@@ -473,6 +478,27 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
                     }
                   } catch {}
                 }, 150);
+              }
+            }
+            return;
+          }
+          if (decision.should_send && stewardSummary === 'steward_trigger_canvas') {
+            try {
+              globalAny.__present_steward_active = true;
+            } catch {}
+            const roomName = (typeof message.roomId === 'string' && message.roomId) || room?.name || '';
+            const requestText = typeof originalText === 'string' && originalText.trim()
+              ? originalText.trim()
+              : summary.trim();
+            if (roomName && requestText) {
+              try {
+                await fetch('/api/steward/handoff', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ task: 'canvas.draw', params: { room: roomName, request: requestText } }),
+                });
+              } catch (error) {
+                console.warn('[ToolDispatcher] failed to trigger canvas steward via decision', error);
               }
             }
             return;

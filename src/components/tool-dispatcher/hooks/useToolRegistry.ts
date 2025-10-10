@@ -25,7 +25,7 @@ export interface ToolRegistryApi {
   listTools: () => string[];
 }
 
-const CANVAS_TOOLS: Record<string, string> = {
+export const CANVAS_TOOLS: Record<string, string> = {
   canvas_focus: 'tldraw:canvas_focus',
   canvas_zoom_all: 'tldraw:canvas_zoom_all',
   canvas_create_note: 'tldraw:create_note',
@@ -51,11 +51,28 @@ const CANVAS_TOOLS: Record<string, string> = {
   canvas_label_arrow: 'tldraw:labelArrow',
 };
 
+export const CANVAS_TOOL_NAMES = Object.keys(CANVAS_TOOLS);
+
 export function useToolRegistry(deps: ToolRegistryDeps): ToolRegistryApi {
   const { contextKey } = deps;
 
   const handlers = useMemo(() => {
     const map = new Map<string, ToolHandler>();
+
+    const resolveRoomFromWindow = () => {
+      try {
+        const globalAny = window as any;
+        const candidates: unknown[] = [
+          globalAny?.__present?.livekitRoomName,
+          globalAny?.__present_roomName,
+          globalAny?.__present_canvas_room,
+        ];
+        const match = candidates.find((value) => typeof value === 'string' && value.trim().length > 0);
+        return match ? String(match).trim() : undefined;
+      } catch {
+        return undefined;
+      }
+    };
 
     // Canvas dispatch helpers
     Object.entries(CANVAS_TOOLS).forEach(([tool, eventName]) => {
@@ -127,6 +144,66 @@ export function useToolRegistry(deps: ToolRegistryDeps): ToolRegistryApi {
       );
       emitEditorAction({ type: 'canvas_command', command: 'tldraw:listShapes', callId: call.id });
       return { status: 'ACK', message: 'Listing shapes' };
+    });
+
+    map.set('dispatch_to_conductor', async ({ call, params, emitEditorAction }) => {
+      const task = typeof params?.task === 'string' ? params.task.trim() : '';
+      const nested =
+        params?.params && typeof params.params === 'object' && !Array.isArray(params.params)
+          ? { ...(params.params as Record<string, unknown>) }
+          : {};
+      if (params && typeof params === 'object' && !Array.isArray(params)) {
+        Object.entries(params as Record<string, unknown>).forEach(([key, value]) => {
+          if (key === 'task' || key === 'params' || value === undefined) return;
+          nested[key] = value as unknown;
+        });
+      }
+      const directRoom =
+        typeof (params as Record<string, unknown> | undefined)?.room === 'string'
+          ? String((params as Record<string, unknown>).room)
+          : undefined;
+      const resolvedRoom =
+        (directRoom && directRoom.trim()) ||
+        (typeof nested.room === 'string' && nested.room.trim()) ||
+        (typeof call.roomId === 'string' && call.roomId.trim()) ||
+        resolveRoomFromWindow();
+      if (resolvedRoom) {
+        nested.room = resolvedRoom.trim();
+      }
+
+      if (!task) {
+        return { status: 'ERROR', message: 'dispatch_to_conductor requires task' };
+      }
+
+      try {
+        const res = await fetch('/api/steward/handoff', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ task, params: nested }),
+        });
+        if (!res.ok) {
+          let text = '';
+          try {
+            text = await res.text();
+          } catch {}
+          return {
+            status: 'ERROR',
+            message: text || `Failed to hand off task ${task}`,
+          };
+        }
+        emitEditorAction({
+          type: 'conductor_handoff',
+          task,
+          room: nested.room,
+          timestamp: Date.now(),
+        });
+        return { status: 'SUCCESS', message: 'Conductor handoff scheduled', task };
+      } catch (error) {
+        return {
+          status: 'ERROR',
+          message: error instanceof Error ? error.message : String(error),
+        };
+      }
     });
 
     return map;
