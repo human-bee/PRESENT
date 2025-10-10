@@ -15,19 +15,16 @@ export default defineAgent({
     const instructions = `You control the UI via create_component and update_component for direct manipulation, and delegate complex work via dispatch_to_conductor. Always invoke the conductor when a steward should act instead of describing the plan in text.
 
 When the user asks for canvas drawing, sticky notes, or any TLDraw manipulation beyond the basic tools, call:
-  dispatch_to_conductor({ task: "canvas.draw", params: { room: ROOM_NAME, instruction: <their request>, transcript_snippet: <recent lines> } })
+  dispatch_to_conductor({ task: "canvas.draw", params: { instruction: <their request> } })
 Let the Canvas Steward decide on the detailed actions. Do not emit raw JSON or prose describing the drawing—fire the tool call.
 
-TOOLS (JSON schemas):
-1) create_component({ type: string, spec: string })
-   - Create a new component on the canvas. 'type' is the component type, 'spec' is the initial content.
-2) update_component({ componentId: string, patch: string })
-   - Update an existing component with a natural-language patch or structured fields.
-3) dispatch_to_conductor({ task: string, params: object })
-   - Ask the conductor to run a steward/sub-agent task on your behalf.
-
 Always return to tool calls rather than long monologues.`;
-    const model = new openai.realtime.RealtimeModel({ model: 'gpt-realtime', instructions, modalities: ['text'] });
+
+    const model = new openai.realtime.RealtimeModel({ 
+      model: 'gpt-realtime', 
+      instructions, 
+      modalities: ['text'],
+    });
     // Configure the agent for text-only output. We set maxTextResponseRetries to Infinity so
     // it never throws when the model responds with text (expected for speech-to-UI), and we
     // no-op the recovery path below.
@@ -35,6 +32,58 @@ Always return to tool calls rather than long monologues.`;
     const session = await agent.start(job.room);
     // Allow text-only responses without attempting to recover to audio
     try { (session as unknown as { recoverFromTextResponse?: (itemId?: string) => void }).recoverFromTextResponse = () => {}; } catch {}
+
+    // Configure tools for the session
+    try {
+      const sessionAny = session as any;
+      if (sessionAny.session?.updateSession) {
+        await sessionAny.session.updateSession({
+          tools: [
+            {
+              type: 'function',
+              name: 'create_component',
+              description: 'Create a new component on the canvas.',
+              parameters: {
+                type: 'object',
+                properties: {
+                  type: { type: 'string', description: 'Component type' },
+                  spec: { type: 'string', description: 'Initial content or props' },
+                },
+                required: ['type', 'spec'],
+              },
+            },
+            {
+              type: 'function',
+              name: 'update_component',
+              description: 'Update an existing component with a patch.',
+              parameters: {
+                type: 'object',
+                properties: {
+                  componentId: { type: 'string', description: 'Component ID to update' },
+                  patch: { type: 'string', description: 'Natural-language patch or structured fields' },
+                },
+                required: ['componentId', 'patch'],
+              },
+            },
+            {
+              type: 'function',
+              name: 'dispatch_to_conductor',
+              description: 'Ask the conductor to run a steward for complex tasks like flowcharts or canvas drawing.',
+              parameters: {
+                type: 'object',
+                properties: {
+                  task: { type: 'string', description: 'Task identifier (e.g., canvas.draw, flowchart.update)' },
+                  params: { type: 'object', description: 'Task parameters' },
+                },
+                required: ['task', 'params'],
+              },
+            },
+          ],
+        });
+      }
+    } catch (err) {
+      console.warn('[VoiceAgent] Failed to configure session tools', err);
+    }
 
     const debateJudgeManager = new DebateJudgeManager(job.room as any, job.room.name || 'room');
     const debateKeywordRegex = /\b(aff|affirmative|neg|negative|contention|rebuttal|voter|judge|debate|scorecard|flow|argument|claim|evidence)\b/;
