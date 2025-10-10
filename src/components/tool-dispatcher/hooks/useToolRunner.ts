@@ -282,6 +282,33 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
     [],
   );
 
+  const dispatchCanvasSteward = useCallback(
+    async (
+      roomName: string,
+      payload: { task?: string; params?: Record<string, unknown>; summary?: string },
+    ) => {
+      try {
+        const body = {
+          room: roomName,
+          task: payload.task ?? 'canvas.draw',
+          params: payload.params,
+          summary: payload.summary,
+        };
+        const res = await fetch('/api/steward/runCanvas', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        if (!res.ok) {
+          log('canvas steward request failed', { status: res.status, task: body.task });
+        }
+      } catch (error) {
+        log('canvas steward request error', error);
+      }
+    },
+    [log],
+  );
+
   const executeToolCall = useCallback(
     async (call: ToolCall): Promise<ToolRunResult> => {
       const tool = call.payload.tool;
@@ -296,8 +323,14 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
 
       try {
         if (stewardEnabled) {
-          const allowedTools = new Set(['canvas_create_mermaid_stream', 'canvas_focus', 'canvas_zoom_all']);
-          if (!allowedTools.has(tool)) {
+          const allowedNonCanvasTools = new Set([
+            'create_component',
+            'update_component',
+            'list_components',
+            'youtube_search',
+          ]);
+          const isCanvasTool = tool.startsWith('canvas_');
+          if (!isCanvasTool && !allowedNonCanvasTools.has(tool)) {
             const message = `Unsupported tool in steward mode: ${tool}`;
             emitError(call, message);
             queue.markError(call.id, message);
@@ -477,6 +510,22 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
             }
             return;
           }
+          if (decision.should_send && stewardSummary === 'steward_trigger_canvas') {
+            const roomName = (typeof message.roomId === 'string' && message.roomId) || room?.name || '';
+            if (!roomName) {
+              log('canvas steward trigger ignored: missing room');
+              return;
+            }
+            const intentSummary = typeof originalText === 'string' && originalText.trim() ? originalText.trim() : summary;
+            log('canvas steward trigger received', { room: roomName, summary: intentSummary });
+            await dispatchCanvasSteward(roomName, {
+              params: {
+                room: roomName,
+                summary: intentSummary,
+              },
+            });
+            return;
+          }
           return;
         }
 
@@ -568,7 +617,7 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
       offTool();
       offDecision();
     };
-  }, [bus, executeToolCall, log, room, scheduleStewardRun, stewardEnabled]);
+  }, [bus, executeToolCall, log, room, scheduleStewardRun, stewardEnabled, dispatchCanvasSteward]);
 
   useEffect(() => {
     if (!stewardEnabled) return;

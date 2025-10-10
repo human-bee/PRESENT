@@ -82,7 +82,7 @@ If it doesn't move the canvas, it doesn't belong in the voice agent. This docume
 - **Conductor (Agents SDK, Node)**
   A tiny router that delegates to **steward** subagents via handoffs. No business logic.
 - **Stewards (Agents SDK, Node)**
-  Domain owners (e.g., **Flowchart Steward**, **YouTube Steward**). They read context (Supabase), produce a complete artifact, and emit one UI patch or component creation.
+  Domain owners (e.g., **Flowchart Steward**, **Canvas Steward**, **YouTube Steward**). They read context (Supabase), produce a complete artifact, and emit one UI patch or component creation.
 - **Browser ToolDispatcher (React, client)**
   A bridge, not an agent. Executes `create_component` and `update_component`. Sends `tool_result`/`tool_error`. Dispatches TLDraw DOM events when needed.
 - **Supabase**

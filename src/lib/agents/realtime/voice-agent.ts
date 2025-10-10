@@ -12,7 +12,7 @@ import { DebateJudgeManager, isStartDebate } from '@/lib/agents/debate-judge';
 export default defineAgent({
   entry: async (job: JobContext) => {
     await job.connect();
-    const instructions = `You control the UI via create_component and update_component for direct manipulation, and may delegate work via dispatch_to_conductor. Keep text responses short.
+    const instructions = `You control the UI via create_component and update_component for direct manipulation, and may delegate work via dispatch_to_conductor. Use the conductor for complex tasks such as flowchart updates or freeform TLDraw drawing (task "canvas.draw"). Keep text responses short.
 
 TOOLS (JSON schemas):
 1) create_component({ type: string, spec: string })
