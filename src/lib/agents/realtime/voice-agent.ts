@@ -14,6 +14,10 @@ export default defineAgent({
     await job.connect();
     const instructions = `You control the UI via create_component and update_component for direct manipulation, and may delegate work via dispatch_to_conductor. Keep text responses short.
 
+Use dispatch_to_conductor for steward handoffs:
+- flowchart.* tasks for mermaid diagrams (after you create or identify the target component id)
+- canvas.* tasks for freeform TLDraw editing (always include the room name and a concise prompt in params)
+
 TOOLS (JSON schemas):
 1) create_component({ type: string, spec: string })
    - Create a new component on the canvas. 'type' is the component type, 'spec' is the initial content.
@@ -58,6 +62,14 @@ Always return to tool calls rather than long monologues.`;
     session.on('response_function_call_completed', async (evt: { call_id: string; name: string; arguments: string }) => {
       try {
         const args = JSON.parse(evt.arguments || '{}');
+        if (evt.name === 'dispatch_to_conductor') {
+          const roomName = job.room?.name ? String(job.room.name) : undefined;
+          const params =
+            args && typeof args.params === 'object' && args.params !== null ? args.params : (args.params = {});
+          if (roomName && typeof params.room !== 'string') {
+            params.room = roomName;
+          }
+        }
         if (evt.name !== 'create_component' && evt.name !== 'update_component' && evt.name !== 'dispatch_to_conductor') {
           session.conversation.item.create({ type: 'function_call_output', call_id: evt.call_id, output: JSON.stringify({ status: 'ERROR', message: `Unsupported tool: ${evt.name}` }) });
           return;

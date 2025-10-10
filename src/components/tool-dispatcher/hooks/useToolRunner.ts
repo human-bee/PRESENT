@@ -2,12 +2,14 @@
 
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import type { Room } from 'livekit-client';
-import { useToolRegistry } from './useToolRegistry';
+import { STEWARD_SAFE_TOOL_NAMES, useToolRegistry } from './useToolRegistry';
 import { useToolQueue } from './useToolQueue';
 import type { ToolCall, ToolParameters, ToolRunResult } from '../utils/toolTypes';
 import { TOOL_STEWARD_DELAY_MS, TOOL_STEWARD_WINDOW_MS } from '../utils/constants';
 import type { ToolEventsApi } from './useToolEvents';
 import { ComponentRegistry } from '@/lib/component-registry';
+
+const stewardSafeToolSet = new Set(STEWARD_SAFE_TOOL_NAMES);
 
 interface UseToolRunnerOptions {
   contextKey?: string;
@@ -296,8 +298,8 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
 
       try {
         if (stewardEnabled) {
-          const allowedTools = new Set(['canvas_create_mermaid_stream', 'canvas_focus', 'canvas_zoom_all']);
-          if (!allowedTools.has(tool)) {
+          const allowedTools = stewardEnabled ? stewardSafeToolSet : null;
+          if (allowedTools && !allowedTools.has(tool)) {
             const message = `Unsupported tool in steward mode: ${tool}`;
             emitError(call, message);
             queue.markError(call.id, message);

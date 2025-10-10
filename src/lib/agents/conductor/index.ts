@@ -1,6 +1,7 @@
 import { Agent, run, tool } from '@openai/agents';
 import { z } from 'zod';
 import { activeFlowchartSteward } from '../subagents/flowchart-steward-registry';
+import { runCanvasSteward } from '../subagents/canvas-steward';
 
 // Thin router: receives dispatch_to_conductor and hands off to stewards
 
@@ -16,6 +17,32 @@ const dispatchToConductor = tool({
       // Delegate to Flowchart Steward
       const result = await run(activeFlowchartSteward, JSON.stringify({ task, params }));
       return result.finalOutput;
+    }
+    if (task.startsWith('canvas.')) {
+      const recordParams = (params || {}) as Record<string, unknown>;
+      const room = typeof recordParams.room === 'string' ? recordParams.room.trim() : '';
+      const requestString =
+        typeof recordParams.prompt === 'string'
+          ? (recordParams.prompt as string)
+          : typeof recordParams.request === 'string'
+            ? (recordParams.request as string)
+            : typeof recordParams.description === 'string'
+              ? (recordParams.description as string)
+              : `Run ${task}`;
+      if (!room) {
+        throw new Error('Canvas steward requires params.room');
+      }
+      const windowMs = typeof recordParams.windowMs === 'number' ? (recordParams.windowMs as number) : undefined;
+      const maxShapes = typeof recordParams.maxShapes === 'number' ? (recordParams.maxShapes as number) : undefined;
+      const finalOutput = await runCanvasSteward({
+        room,
+        request: requestString,
+        task,
+        windowMs,
+        maxShapes,
+        rawParams: recordParams,
+      });
+      return finalOutput;
     }
     throw new Error(`No steward for task: ${task}`);
   },

@@ -51,6 +51,16 @@ const CANVAS_TOOLS: Record<string, string> = {
   canvas_label_arrow: 'tldraw:labelArrow',
 };
 
+const SAFE_TOOL_NAMES = [
+  'dispatch_to_conductor',
+  'canvas_create_mermaid_stream',
+  'canvas_update_mermaid_stream',
+  'canvas_list_shapes',
+  ...Object.keys(CANVAS_TOOLS),
+];
+
+export const STEWARD_SAFE_TOOL_NAMES = SAFE_TOOL_NAMES;
+
 export function useToolRegistry(deps: ToolRegistryDeps): ToolRegistryApi {
   const { contextKey } = deps;
 
@@ -128,6 +138,59 @@ export function useToolRegistry(deps: ToolRegistryDeps): ToolRegistryApi {
       emitEditorAction({ type: 'canvas_command', command: 'tldraw:listShapes', callId: call.id });
       return { status: 'ACK', message: 'Listing shapes' };
     });
+
+    map.set(
+      'dispatch_to_conductor',
+      async ({ params, stewardEnabled, emitEditorAction }) => {
+        if (!stewardEnabled) {
+          return { status: 'IGNORED', message: 'Stewards disabled' };
+        }
+
+        const task = typeof params?.task === 'string' ? params.task.trim() : '';
+        const payload =
+          params && typeof params.params === 'object' && params.params !== null
+            ? (params.params as Record<string, unknown>)
+            : {};
+
+        if (!task) {
+          return { status: 'ERROR', message: 'dispatch_to_conductor requires a task' };
+        }
+
+        emitEditorAction({
+          type: 'dispatch_to_conductor',
+          task,
+          payload,
+          timestamp: Date.now(),
+        });
+
+        if (!task.startsWith('canvas.')) {
+          return { status: 'IGNORED', message: `No handler for conductor task: ${task}` };
+        }
+
+        try {
+          const res = await fetch('/api/conductor/dispatch', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ task, params: payload }),
+          });
+
+          if (!res.ok) {
+            const text = await res.text().catch(() => '');
+            return {
+              status: 'ERROR',
+              message: text || `Failed conductor dispatch (${res.status})`,
+            };
+          }
+
+          return { status: 'SUCCESS', message: 'Conductor dispatch scheduled' };
+        } catch (error) {
+          return {
+            status: 'ERROR',
+            message: error instanceof Error ? error.message : String(error),
+          };
+        }
+      },
+    );
 
     return map;
   }, [contextKey]);

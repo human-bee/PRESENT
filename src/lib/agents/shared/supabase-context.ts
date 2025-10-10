@@ -73,6 +73,20 @@ if (!GLOBAL_APEX[TRANSCRIPT_STORE_KEY]) {
   GLOBAL_APEX[TRANSCRIPT_STORE_KEY] = transcriptStore;
 }
 
+type CanvasSnapshotRecord = {
+  document: Record<string, unknown> | null;
+  updatedAt: number | null;
+};
+
+const CANVAS_MEMORY_KEY = '__present_canvas_snapshot_store__';
+const canvasSnapshotStore: Map<string, CanvasSnapshotRecord> =
+  (GLOBAL_APEX[CANVAS_MEMORY_KEY] as Map<string, CanvasSnapshotRecord> | undefined) ||
+  new Map<string, CanvasSnapshotRecord>();
+
+if (!GLOBAL_APEX[CANVAS_MEMORY_KEY]) {
+  GLOBAL_APEX[CANVAS_MEMORY_KEY] = canvasSnapshotStore;
+}
+
 const fallbackKey = (room: string, docId: string) => `${room}::${docId}`;
 
 const readFallback = (room: string, docId: string): FlowchartDocRecord => {
@@ -104,6 +118,14 @@ const normalizeRecord = (room: string, docId: string, entry: Record<string, unkn
   return next;
 };
 
+const readCanvasSnapshot = (room: string): CanvasSnapshotRecord => {
+  return canvasSnapshotStore.get(room) ?? { document: null, updatedAt: null };
+};
+
+const writeCanvasSnapshot = (room: string, record: CanvasSnapshotRecord) => {
+  canvasSnapshotStore.set(room, record);
+};
+
 const warnFallback = (scope: string, error: unknown) => {
   if (process.env.NODE_ENV !== 'development') return;
   const message = error instanceof Error ? error.message : String(error);
@@ -111,6 +133,186 @@ const warnFallback = (scope: string, error: unknown) => {
     console.warn(`⚠️ [StewardSupabase] ${scope} fell back to in-memory store`, { message });
   } catch {}
 };
+
+export type CanvasShapeSummary = {
+  id: string;
+  type: string;
+  name?: string;
+  text?: string;
+  geo?: string;
+  pageId?: string;
+  childIndex?: number;
+};
+
+export interface CanvasSummary {
+  shapes: CanvasShapeSummary[];
+  totalShapes: number;
+  pageCount: number;
+  components: number;
+  lastUpdated: number | string | null;
+}
+
+const coerceLimit = (limit?: number | null) => {
+  if (typeof limit !== 'number' || Number.isNaN(limit)) return undefined;
+  const clamped = Math.max(1, Math.min(200, Math.floor(limit)));
+  return clamped;
+};
+
+const safeObjectKeys = (value: unknown) => {
+  if (!value || typeof value !== 'object') return [] as string[];
+  try {
+    return Object.keys(value as Record<string, unknown>);
+  } catch {
+    return [] as string[];
+  }
+};
+
+const extractFirstString = (entry: Record<string, unknown> | undefined, keys: string[]) => {
+  if (!entry) return undefined;
+  for (const key of keys) {
+    const raw = entry[key];
+    if (typeof raw === 'string' && raw.trim()) {
+      return raw.trim();
+    }
+  }
+  return undefined;
+};
+
+export function summarizeCanvasDocument(
+  document: unknown,
+  options: { maxShapes?: number | null } = {},
+): { shapes: CanvasShapeSummary[]; totalShapes: number; pageCount: number; components: number } {
+  const limit = coerceLimit(options.maxShapes ?? undefined);
+  const doc = (document && typeof document === 'object' ? (document as Record<string, unknown>) : {}) ?? {};
+  const store = (doc.store && typeof doc.store === 'object' ? (doc.store as Record<string, unknown>) : {}) ?? {};
+
+  const shapes: CanvasShapeSummary[] = [];
+  let totalShapes = 0;
+
+  for (const [key, rawValue] of Object.entries(store)) {
+    if (!key.startsWith('shape:')) continue;
+    if (!rawValue || typeof rawValue !== 'object') continue;
+    totalShapes += 1;
+    if (limit && shapes.length >= limit) {
+      continue;
+    }
+
+    const value = rawValue as Record<string, unknown>;
+    const shapeIdRaw = typeof value.id === 'string' && value.id.trim() ? value.id.trim() : key.replace(/^shape:/, '');
+    const type = extractFirstString(value, ['type']) ?? 'unknown';
+    const props = value.props && typeof value.props === 'object' ? (value.props as Record<string, unknown>) : undefined;
+    const meta = value.meta && typeof value.meta === 'object' ? (value.meta as Record<string, unknown>) : undefined;
+
+    const summary: CanvasShapeSummary = {
+      id: shapeIdRaw,
+      type,
+    };
+
+    const parentId = extractFirstString(value, ['parentId', 'pageId']);
+    if (parentId) {
+      summary.pageId = parentId;
+    }
+
+    if (typeof value.childIndex === 'number' && Number.isFinite(value.childIndex)) {
+      summary.childIndex = value.childIndex;
+    }
+
+    summary.name = extractFirstString(meta, ['name', 'title']) ?? extractFirstString(props, ['name']);
+
+    const textCandidate =
+      extractFirstString(props, ['text', 'label', 'richText']) || extractFirstString(meta, ['label', 'text']);
+    if (textCandidate) {
+      summary.text = textCandidate;
+    }
+
+    const geo = extractFirstString(props, ['geo', 'shape']);
+    if (geo) {
+      summary.geo = geo;
+    }
+
+    shapes.push(summary);
+  }
+
+  const pages = doc.pages && typeof doc.pages === 'object' ? (doc.pages as Record<string, unknown>) : undefined;
+  const components =
+    doc.components && typeof doc.components === 'object' ? (doc.components as Record<string, unknown>) : undefined;
+
+  return {
+    shapes,
+    totalShapes,
+    pageCount: pages ? safeObjectKeys(pages).length : 0,
+    components: components ? safeObjectKeys(components).length : 0,
+  };
+}
+
+export async function getCanvasSummary(
+  room: string,
+  options: { maxShapes?: number | null } = {},
+): Promise<CanvasSummary> {
+  const normalizedRoom = room.trim();
+  const snapshot = readCanvasSnapshot(normalizedRoom);
+
+  const fallbackSummary = {
+    ...summarizeCanvasDocument(snapshot.document, options),
+    lastUpdated: snapshot.updatedAt,
+  } as CanvasSummary;
+
+  if (!normalizedRoom) {
+    return fallbackSummary;
+  }
+
+  if (shouldBypassSupabase) {
+    logBypass('getCanvasSummary');
+    return fallbackSummary;
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('canvases')
+      .select('document, updated_at, last_modified')
+      .ilike('name', `%${normalizedRoom}%`)
+      .limit(1)
+      .maybeSingle();
+
+    if (error) {
+      throw error;
+    }
+
+    if (!data) {
+      return fallbackSummary;
+    }
+
+    const document = (data as any)?.document ?? null;
+    const summaryCore = summarizeCanvasDocument(document, options);
+    const updatedAtRaw = (data as any)?.updated_at ?? (data as any)?.last_modified ?? null;
+    const updatedAtNumber =
+      typeof updatedAtRaw === 'string' && updatedAtRaw
+        ? Number.isFinite(Date.parse(updatedAtRaw))
+          ? Date.parse(updatedAtRaw)
+          : null
+        : typeof updatedAtRaw === 'number'
+          ? updatedAtRaw
+          : null;
+
+    writeCanvasSnapshot(normalizedRoom, {
+      document,
+      updatedAt: updatedAtNumber ?? Date.now(),
+    });
+
+    return {
+      ...summaryCore,
+      lastUpdated: updatedAtRaw ?? updatedAtNumber ?? Date.now(),
+    };
+  } catch (error) {
+    warnFallback('canvasSummary', error);
+    const latestSnapshot = readCanvasSnapshot(normalizedRoom);
+    const summaryCore = summarizeCanvasDocument(latestSnapshot.document, options);
+    return {
+      ...summaryCore,
+      lastUpdated: latestSnapshot.updatedAt,
+    };
+  }
+}
 
 const setTranscriptCache = (room: string, transcript: TranscriptRecord['transcript']) => {
   transcriptStore.set(room, { transcript, cachedAt: Date.now() });
