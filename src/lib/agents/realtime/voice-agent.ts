@@ -16,19 +16,18 @@ export default defineAgent({
     const instructions = `You control the UI via create_component and update_component for direct manipulation, and delegate complex work via dispatch_to_conductor. Always invoke the conductor when a steward should act instead of describing the plan in text.
 
 When the user asks for canvas drawing, sticky notes, or any TLDraw manipulation beyond the basic tools, call:
-  dispatch_to_conductor({ task: "canvas.draw", params: { instruction: <their request> } })
+  dispatch_to_conductor({ task: "canvas.draw", params: { instruction: <their request>, transcript_snippet: <recent transcript> } })
 Let the Canvas Steward decide on the detailed actions. Do not emit raw JSON or prose describing the drawing—fire the tool call.
 
 Always return to tool calls rather than long monologues.`;
+
+    const structuredRecord = z.object({}).catchall(z.any());
 
     // Define FunctionContext for tool registration
     const fncCtx: llm.FunctionContext = {
       create_component: {
         description: 'Create a new component on the canvas.',
-        parameters: z.object({
-          type: z.string(),
-          spec: z.string(),
-        }),
+        parameters: z.object({ type: z.string(), spec: z.string() }),
         execute: async () => {
           // No-op: actual execution happens in response_function_call_completed handler
           return { status: 'queued' };
@@ -36,10 +35,7 @@ Always return to tool calls rather than long monologues.`;
       },
       update_component: {
         description: 'Update an existing component with a patch.',
-        parameters: z.object({
-          componentId: z.string(),
-          patch: z.string(),
-        }),
+        parameters: z.object({ componentId: z.string(), patch: z.string() }),
         execute: async () => {
           return { status: 'queued' };
         },
@@ -48,7 +44,7 @@ Always return to tool calls rather than long monologues.`;
         description: 'Ask the conductor to run a steward for complex tasks like flowcharts or canvas drawing.',
         parameters: z.object({
           task: z.string(),
-          params: z.record(z.any()),
+          params: structuredRecord,
         }),
         execute: async () => {
           return { status: 'queued' };
