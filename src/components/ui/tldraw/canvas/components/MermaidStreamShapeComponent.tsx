@@ -13,10 +13,69 @@ export function MermaidStreamShapeComponent({ shape }: { shape: MermaidStreamSha
   const lastMeasuredRef = useRef<{ w: number; h: number } | null>(null);
   const streamTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const editDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const fallbackStateRef = useRef<{ message: string | null; triggeredAt: number }>({
+    message: null,
+    triggeredAt: 0,
+  });
+  const lastErrorEventRef = useRef<{ message: string | null; timestamp: number }>({
+    message: null,
+    timestamp: 0,
+  });
+  const isEditingRef = useRef(false);
 
   useEffect(() => {
     setLocalText(String(shape.props.mermaidText || ''));
   }, [shape.props.mermaidText]);
+
+  const resolveRoomName = useCallback((): string | undefined => {
+    if (typeof window === 'undefined') return undefined;
+    const globalAny = window as any;
+    const candidate: unknown =
+      globalAny?.__present?.livekitRoomName ??
+      globalAny?.__present_roomName ??
+      globalAny?.__present_canvas_room;
+    const name = typeof candidate === 'string' ? candidate.trim() : '';
+    return name || undefined;
+  }, []);
+
+  const emitCanvasEvent = useCallback((eventName: string, detail: Record<string, unknown>) => {
+    if (typeof window === 'undefined') return;
+    try {
+      window.dispatchEvent(new CustomEvent(eventName, { detail }));
+    } catch {
+      // ignore dispatch errors
+    }
+  }, []);
+
+  useEffect(() => {
+    isEditingRef.current = isEditing;
+  }, [isEditing]);
+
+  const maybeTriggerFallback = useCallback(
+    (errorMessage: string | null | undefined) => {
+      if (typeof window === 'undefined') return;
+      if (isEditingRef.current) return;
+      const normalized =
+        typeof errorMessage === 'string' && errorMessage.trim().length > 0
+          ? errorMessage.trim()
+          : 'Mermaid render failed';
+      const now = Date.now();
+      const last = fallbackStateRef.current;
+      if (last.message === normalized && now - last.triggeredAt < 15000) {
+        return;
+      }
+      fallbackStateRef.current = { message: normalized, triggeredAt: now };
+      const roomName = resolveRoomName();
+      const detail: Record<string, unknown> = {
+        shapeId: shape.id,
+        docId: shape.id,
+        error: normalized,
+      };
+      if (roomName) detail.room = roomName;
+      emitCanvasEvent('present:flowchart-fallback', detail);
+    },
+    [emitCanvasEvent, resolveRoomName, shape.id],
+  );
 
   const handleState = useCallback(
     (state: MermaidCompileState, info?: { ms?: number; error?: string }) => {
@@ -33,9 +92,33 @@ export function MermaidStreamShapeComponent({ shape }: { shape: MermaidStreamSha
           if (state === 'ok' && info?.ms) console.debug('[Mermaid] compiled in', info.ms, 'ms');
           if (state === 'error' && info?.error) console.debug('[Mermaid] error', info.error);
         }
+        if (state === 'error') {
+          const normalized =
+            typeof info?.error === 'string' && info.error.trim()
+              ? info.error.trim()
+              : 'Mermaid render failed';
+          const now = Date.now();
+          const lastEvent = lastErrorEventRef.current;
+          if (lastEvent.message !== normalized || now - lastEvent.timestamp > 250) {
+            lastErrorEventRef.current = { message: normalized, timestamp: now };
+            const roomName = resolveRoomName();
+            const detail: Record<string, unknown> = {
+              shapeId: shape.id,
+              docId: shape.id,
+              error: normalized,
+            };
+            if (roomName) detail.room = roomName;
+            emitCanvasEvent('present:mermaid-error', detail);
+          }
+          maybeTriggerFallback(normalized);
+        } else if (state === 'ok') {
+          lastErrorEventRef.current = { message: null, timestamp: Date.now() };
+          fallbackStateRef.current = { message: null, triggeredAt: 0 };
+          emitCanvasEvent('present:mermaid-ok', { shapeId: shape.id, docId: shape.id });
+        }
       } catch {}
     },
-    [editor, shape.id],
+    [editor, emitCanvasEvent, maybeTriggerFallback, resolveRoomName, shape.id],
   );
 
   const handleFit = useCallback(
@@ -127,6 +210,7 @@ export function MermaidStreamShapeComponent({ shape }: { shape: MermaidStreamSha
         keepLastGood={shape.props.keepLastGood !== false}
         onCompileStateChange={handleState}
         onFitMeasured={handleFit}
+        showInlineErrorBadge={false}
       />
       <div
         style={{

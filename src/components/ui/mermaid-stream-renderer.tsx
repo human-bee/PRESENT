@@ -16,6 +16,8 @@ export interface MermaidStreamRendererProps {
   onFitMeasured?: (size: { w: number; h: number }) => void;
   /** Debounce in ms for rendering; defaults to 160 */
   debounceMs?: number;
+  /** Whether to display the inline error badge within the canvas (defaults to true) */
+  showInlineErrorBadge?: boolean;
 }
 
 declare global {
@@ -37,6 +39,7 @@ export function MermaidStreamRenderer({
   onCompileStateChange,
   onFitMeasured,
   debounceMs = 160,
+  showInlineErrorBadge = true,
 }: MermaidStreamRendererProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const lastGoodSvgRef = useRef<string>('');
@@ -170,10 +173,13 @@ export function MermaidStreamRenderer({
   }, [mermaidText, schedule]);
 
   return (
-    <div className={className} style={{ width: '100%', height: '100%', overflow: 'auto' }}>
+    <div
+      className={className}
+      style={{ width: '100%', height: '100%', overflow: 'auto', position: 'relative' }}
+    >
       <div ref={containerRef} />
       {/* Subtle inline error badge (non-intrusive) */}
-      {lastErrorRef.current && (
+      {showInlineErrorBadge && lastErrorRef.current && (
         <div
           style={{
             position: 'absolute',
