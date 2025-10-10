@@ -1,6 +1,7 @@
 import { defineAgent, JobContext, multimodal, cli, WorkerOptions, llm } from '@livekit/agents';
 import { config } from 'dotenv';
 import { join } from 'path';
+import { z } from 'zod';
 
 try {
   config({ path: join(process.cwd(), '.env.local') });
@@ -20,70 +21,50 @@ Let the Canvas Steward decide on the detailed actions. Do not emit raw JSON or p
 
 Always return to tool calls rather than long monologues.`;
 
+    // Define FunctionContext for tool registration
+    const fncCtx: llm.FunctionContext = {
+      create_component: {
+        description: 'Create a new component on the canvas.',
+        parameters: z.object({
+          type: z.string(),
+          spec: z.string(),
+        }),
+        execute: async () => {
+          // No-op: actual execution happens in response_function_call_completed handler
+          return { status: 'queued' };
+        },
+      },
+      update_component: {
+        description: 'Update an existing component with a patch.',
+        parameters: z.object({
+          componentId: z.string(),
+          patch: z.string(),
+        }),
+        execute: async () => {
+          return { status: 'queued' };
+        },
+      },
+      dispatch_to_conductor: {
+        description: 'Ask the conductor to run a steward for complex tasks like flowcharts or canvas drawing.',
+        parameters: z.object({
+          task: z.string(),
+          params: z.record(z.any()),
+        }),
+        execute: async () => {
+          return { status: 'queued' };
+        },
+      },
+    };
+
     const model = new openai.realtime.RealtimeModel({ 
       model: 'gpt-realtime', 
       instructions, 
       modalities: ['text'],
     });
-    // Configure the agent for text-only output. We set maxTextResponseRetries to Infinity so
-    // it never throws when the model responds with text (expected for speech-to-UI), and we
-    // no-op the recovery path below.
-    const agent = new multimodal.MultimodalAgent({ model, maxTextResponseRetries: Number.POSITIVE_INFINITY });
+    const agent = new multimodal.MultimodalAgent({ model, fncCtx, maxTextResponseRetries: Number.POSITIVE_INFINITY });
     const session = await agent.start(job.room);
     // Allow text-only responses without attempting to recover to audio
     try { (session as unknown as { recoverFromTextResponse?: (itemId?: string) => void }).recoverFromTextResponse = () => {}; } catch {}
-
-    // Configure tools for the session
-    try {
-      const sessionAny = session as any;
-      if (sessionAny.session?.updateSession) {
-        await sessionAny.session.updateSession({
-          tools: [
-            {
-              type: 'function',
-              name: 'create_component',
-              description: 'Create a new component on the canvas.',
-              parameters: {
-                type: 'object',
-                properties: {
-                  type: { type: 'string', description: 'Component type' },
-                  spec: { type: 'string', description: 'Initial content or props' },
-                },
-                required: ['type', 'spec'],
-              },
-            },
-            {
-              type: 'function',
-              name: 'update_component',
-              description: 'Update an existing component with a patch.',
-              parameters: {
-                type: 'object',
-                properties: {
-                  componentId: { type: 'string', description: 'Component ID to update' },
-                  patch: { type: 'string', description: 'Natural-language patch or structured fields' },
-                },
-                required: ['componentId', 'patch'],
-              },
-            },
-            {
-              type: 'function',
-              name: 'dispatch_to_conductor',
-              description: 'Ask the conductor to run a steward for complex tasks like flowcharts or canvas drawing.',
-              parameters: {
-                type: 'object',
-                properties: {
-                  task: { type: 'string', description: 'Task identifier (e.g., canvas.draw, flowchart.update)' },
-                  params: { type: 'object', description: 'Task parameters' },
-                },
-                required: ['task', 'params'],
-              },
-            },
-          ],
-        });
-      }
-    } catch (err) {
-      console.warn('[VoiceAgent] Failed to configure session tools', err);
-    }
 
     const debateJudgeManager = new DebateJudgeManager(job.room as any, job.room.name || 'room');
     const debateKeywordRegex = /\b(aff|affirmative|neg|negative|contention|rebuttal|voter|judge|debate|scorecard|flow|argument|claim|evidence)\b/;
@@ -194,7 +175,7 @@ Always return to tool calls rather than long monologues.`;
             session.conversation.item.create(
               new llm.ChatMessage({ role: llm.ChatRole.USER, content: String(msg.text) }),
             );
-            session.response.create();
+            (session as any).response.create();
           } catch (err) {
             console.error('[VoiceAgent] Failed to forward manual text to OpenAI session', err);
           }
