@@ -135,20 +135,6 @@ Your only output is function calls. Never use plain text unless absolutely neces
         });
         void maybeHandleDebate(evt.transcript);
       } catch {}
-      // Debounced steward trigger example (2-4s window)
-      try {
-        const g: any = globalThis as any;
-        clearTimeout(g.__steward_timer__);
-        g.__steward_timer__ = setTimeout(async () => {
-          // Emit a decision/status hint; in production, call the conductor with flowchart.update here
-          const hint = {
-            type: 'decision',
-            payload: { decision: { should_send: true, summary: 'steward_trigger' }, originalText: evt.transcript },
-            timestamp: Date.now(),
-          };
-          await job.room.localParticipant?.publishData(new TextEncoder().encode(JSON.stringify(hint)), { reliable: true, topic: 'decision' });
-        }, 2500);
-      } catch {}
     });
 
     // Mirror assistant text responses to UI transcript as well
@@ -220,27 +206,6 @@ Your only output is function calls. Never use plain text unless absolutely neces
           } catch (err) {
             console.error('[VoiceAgent] Failed to forward manual text to OpenAI session', err);
           }
-          try {
-            const g: any = globalThis as any;
-            clearTimeout(g.__steward_timer__);
-            g.__steward_timer__ = setTimeout(async () => {
-              const hint = {
-                type: 'decision',
-                payload: {
-                  decision: {
-                    should_send: true,
-                    summary: 'steward_trigger',
-                  },
-                  originalText: msg.text,
-                },
-                timestamp: Date.now(),
-              };
-              await job.room.localParticipant?.publishData(
-                new TextEncoder().encode(JSON.stringify(hint)),
-                { reliable: true, topic: 'decision' },
-              );
-            }, 2500);
-          } catch {}
           void maybeHandleDebate(msg.text);
         }
       } catch {}
