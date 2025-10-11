@@ -340,6 +340,7 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
           }
 
           if (stewardEnabled && task.startsWith('canvas.')) {
+            log('dispatch_to_conductor forwarding canvas task', { task, params: dispatchParams, room: call.roomId || room?.name });
             try {
               const res = await fetch('/api/steward/runCanvas', {
                 method: 'POST',

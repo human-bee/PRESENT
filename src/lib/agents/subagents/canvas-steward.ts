@@ -24,15 +24,17 @@ const ContextArgs = z.object({
   windowMs: z.number().min(1_000).max(600_000).nullable(),
 });
 
+const LooseParams = z.object({}).catchall(z.unknown());
+
 const BroadcastArgs = z.object({
   room: z.string(),
   tool: z.string(),
-  params: z.record(z.any()).nullable(),
+  params: LooseParams,
 });
 
 const ShapeActionArgs = z.object({
   room: z.string(),
-  params: z.record(z.any()).nullable(),
+  params: LooseParams,
 });
 
 const createCanvasTool = (name: string, description: string) =>

@@ -9,13 +9,21 @@ import { createLogger } from '@/lib/utils';
  * @param shapeUtils - Optional shape utilities to register
  * @returns TLDraw store with sync status
  */
+function normalizeHost(rawHost?: string | null) {
+  if (!rawHost) return null;
+  const trimmed = rawHost.trim();
+  if (!trimmed || trimmed === 'null' || trimmed === 'undefined') return null;
+  return trimmed;
+}
+
 export function useTLDrawSync(
   roomName: string,
   shapeUtils?: readonly (typeof customShapeUtil)[],
 ): RemoteTLStoreWithStatus {
   // Determine sync host from environment
-  const envHost =
-    process.env.NEXT_PUBLIC_TLDRAW_SYNC_URL || process.env.NEXT_PUBLIC_TLDRAW_SYNC_HOST;
+  const envHost = normalizeHost(
+    process.env.NEXT_PUBLIC_TLDRAW_SYNC_URL || process.env.NEXT_PUBLIC_TLDRAW_SYNC_HOST,
+  );
 
   const computedHost = useMemo(() => {
     if (!envHost) return 'https://demo.tldraw.xyz';
@@ -50,9 +58,9 @@ export function useTLDrawSync(
     [shapeUtils],
   );
 
-  type UseSyncDemoOptionsWithHost = Parameters<typeof useSyncDemo>[0] & { host?: string };
+  type UseSyncDemoOptionsWithSafeHost = Parameters<typeof useSyncDemo>[0] & { host?: string };
 
-  const syncOptions = useMemo<UseSyncDemoOptionsWithHost>(
+  const syncOptions = useMemo<UseSyncDemoOptionsWithSafeHost>(
     () => ({
       roomId: roomName,
       ...(resolvedShapeUtils ? { shapeUtils: resolvedShapeUtils } : {}),

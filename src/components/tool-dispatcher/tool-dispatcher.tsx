@@ -25,13 +25,14 @@ export interface ToolDispatcherProps {
 export function ToolDispatcher({
   children,
   contextKey,
-  enableLogging = false,
+  enableLogging = true,
   stewardEnabled,
 }: ToolDispatcherProps) {
   const room = useRoomContext();
   const events = useToolEvents(room, { enableLogging });
-  const resolvedStewardEnabled =
-    stewardEnabled ?? process.env.NEXT_PUBLIC_STEWARD_FLOWCHART_ENABLED === 'true';
+  const envFlag = process.env.NEXT_PUBLIC_STEWARD_FLOWCHART_ENABLED;
+  const defaultStewardEnabled = envFlag === undefined ? true : envFlag === 'true';
+  const resolvedStewardEnabled = stewardEnabled ?? defaultStewardEnabled;
   const { executeToolCall } = useToolRunner({
     contextKey,
     events,

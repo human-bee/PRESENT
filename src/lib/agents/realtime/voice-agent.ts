@@ -1,15 +1,18 @@
-import { defineAgent, JobContext, multimodal, cli, WorkerOptions, llm } from '@livekit/agents';
+import { defineAgent, JobContext, cli, WorkerOptions, llm, voice } from '@livekit/agents';
 import { config } from 'dotenv';
+import { randomUUID } from 'crypto';
 import { join } from 'path';
 import { z } from 'zod';
 
 try {
   config({ path: join(process.cwd(), '.env.local') });
 } catch {}
-import * as openai from '@livekit/agents-plugin-openai';
+import { realtime as openaiRealtime } from '@livekit/agents-plugin-openai';
 import { appendTranscriptCache } from '@/lib/agents/shared/supabase-context';
+import { createLogger } from '@/lib/utils';
 import { DebateJudgeManager, isStartDebate } from '@/lib/agents/debate-judge';
 
+/** I replace the entire entry implementation with manual AgentSession handling and reroute listeners to the session. */
 export default defineAgent({
   entry: async (job: JobContext) => {
     await job.connect();
@@ -28,50 +31,70 @@ Examples:
 
 Your only output is function calls. Never use plain text unless absolutely necessary.`;
 
-    const structuredRecord = z.object({}).catchall(z.any());
-
-    // Define FunctionContext for tool registration
-    const fncCtx: llm.FunctionContext = {
-      create_component: {
-        description: 'Create a new component on the canvas.',
-        parameters: z.object({ type: z.string(), spec: z.string() }),
-        execute: async () => {
-          // No-op: actual execution happens in response_function_call_completed handler
-          return { status: 'queued' };
-        },
-      },
-      update_component: {
-        description: 'Update an existing component with a patch.',
-        parameters: z.object({ componentId: z.string(), patch: z.string() }),
-        execute: async () => {
-          return { status: 'queued' };
-        },
-      },
-      dispatch_to_conductor: {
-        description: 'Ask the conductor to run a steward for complex tasks like flowcharts or canvas drawing.',
-        parameters: z.object({
-          task: z.string(),
-          params: structuredRecord,
-        }),
-        execute: async () => {
-          return { status: 'queued' };
-        },
-      },
+    const sendToolCall = async (tool: string, params: Record<string, unknown>) => {
+      const toolEvent = {
+        id: randomUUID(),
+        roomId: job.room.name || 'unknown',
+        type: 'tool_call' as const,
+        payload: { tool, params, context: { source: 'voice', timestamp: Date.now() } },
+        timestamp: Date.now(),
+        source: 'voice' as const,
+      };
+      const participantExists = !!job.room.localParticipant;
+      console.log('[VoiceAgent] tool_call ready (from execute)', { participantExists, tool, params });
+      await job.room.localParticipant?.publishData(new TextEncoder().encode(JSON.stringify(toolEvent)), {
+        reliable: true,
+        topic: 'tool_call',
+      });
+      if (!participantExists) {
+        console.warn('[VoiceAgent] localParticipant missing, tool_call not sent');
+      }
     };
 
-    const model = new openai.realtime.RealtimeModel({ 
-      model: 'gpt-realtime', 
-      instructions, 
-      modalities: ['text'],
+    const toolParameters = z.object({}).catchall(z.any());
+    const toolContext: llm.ToolContext = {
+      create_component: llm.tool({
+        description: 'Create a new component on the canvas.',
+        parameters: z.object({ type: z.string(), spec: z.string() }),
+        execute: async (args) => {
+          await sendToolCall('create_component', args);
+          return { status: 'queued' };
+        },
+      }),
+      update_component: llm.tool({
+        description: 'Update an existing component with a patch.',
+        parameters: z.object({ componentId: z.string(), patch: z.string() }),
+        execute: async (args) => {
+          await sendToolCall('update_component', args);
+          return { status: 'queued' };
+        },
+      }),
+      dispatch_to_conductor: llm.tool({
+        description: 'Ask the conductor to run a steward for complex tasks like flowcharts or canvas drawing.',
+        parameters: z.object({ task: z.string(), params: toolParameters }),
+        execute: async (args) => {
+          await sendToolCall('dispatch_to_conductor', args);
+          return { status: 'queued' };
+        },
+      }),
+    };
+
+    const realtimeModel = new openaiRealtime.RealtimeModel({
+      model: 'gpt-realtime',
+      toolChoice: 'required',
+      inputAudioTranscription: null,
+      turnDetection: null,
     });
-    
-    console.log('[VoiceAgent] Starting agent with FunctionContext:', Object.keys(fncCtx));
-    const agent = new multimodal.MultimodalAgent({ model, fncCtx, maxTextResponseRetries: Number.POSITIVE_INFINITY });
-    const session = await agent.start(job.room);
-    console.log('[VoiceAgent] Session started. FunctionContext:', session.fncCtx ? Object.keys(session.fncCtx) : 'NONE');
-    
-    // Allow text-only responses without attempting to recover to audio
-    try { (session as unknown as { recoverFromTextResponse?: (itemId?: string) => void }).recoverFromTextResponse = () => {}; } catch {}
+
+    const agent = new voice.Agent({
+      instructions,
+      tools: toolContext,
+    });
+
+    const session = new voice.AgentSession({
+      llm: realtimeModel,
+      turnDetection: 'manual',
+    });
 
     const debateJudgeManager = new DebateJudgeManager(job.room as any, job.room.name || 'room');
     const debateKeywordRegex = /\b(aff|affirmative|neg|negative|contention|rebuttal|voter|judge|debate|scorecard|flow|argument|claim|evidence)\b/;
@@ -96,123 +119,134 @@ Your only output is function calls. Never use plain text unless absolutely neces
       }
     };
 
-    session.on('response_function_call_completed', async (evt: { call_id: string; name: string; arguments: string }) => {
+    session.on(voice.AgentSessionEventTypes.FunctionCall, async (event) => {
+      const fnCall = event.call;
+      if (!fnCall) return;
+      console.log('[VoiceAgent] FunctionCall event', { name: fnCall.name, args: fnCall.args });
       try {
-        const args = JSON.parse(evt.arguments || '{}');
-        if (evt.name !== 'create_component' && evt.name !== 'update_component' && evt.name !== 'dispatch_to_conductor') {
-          session.conversation.item.create({ type: 'function_call_output', call_id: evt.call_id, output: JSON.stringify({ status: 'ERROR', message: `Unsupported tool: ${evt.name}` }) });
+        const args = JSON.parse(fnCall.args || '{}');
+        if (!['create_component', 'update_component', 'dispatch_to_conductor'].includes(fnCall.name)) {
           return;
         }
-        const toolCallEvent = {
-          id: evt.call_id,
+        const toolEvent = {
+          id: fnCall.id,
           roomId: job.room.name || 'unknown',
           type: 'tool_call',
-          payload: { tool: evt.name, params: args, context: { source: 'voice', timestamp: Date.now() } },
+          payload: { tool: fnCall.name, params: args, context: { source: 'voice', timestamp: Date.now() } },
           timestamp: Date.now(),
           source: 'voice' as const,
         };
-        await job.room.localParticipant?.publishData(new TextEncoder().encode(JSON.stringify(toolCallEvent)), { reliable: true, topic: 'tool_call' });
-        session.conversation.item.create({ type: 'function_call_output', call_id: evt.call_id, output: JSON.stringify({ status: 'DISPATCHED' }) });
+        const participantExists = !!job.room.localParticipant;
+        console.log('[VoiceAgent] tool_call ready', { participantExists, toolEvent });
+        await job.room.localParticipant?.publishData(new TextEncoder().encode(JSON.stringify(toolEvent)), {
+          reliable: true,
+          topic: 'tool_call',
+        });
+        if (!participantExists) {
+          console.warn('[VoiceAgent] localParticipant missing, tool_call not sent');
+        }
+      } catch (error) {
+        console.error('[VoiceAgent] Tool call handling failed', error);
+      }
+    });
+
+    session.on(voice.AgentSessionEventTypes.FunctionToolsExecuted, async (event) => {
+      const calls = event.functionCalls ?? [];
+      console.log('[VoiceAgent] FunctionToolsExecuted', {
+        count: calls.length,
+        callNames: calls.map((c) => c.name),
+      });
+      console.log('[VoiceAgent] FunctionToolsExecuted raw', event);
+      for (const fnCall of calls) {
         try {
-          (session as any).response?.create?.({ instructions: 'continue' });
-        } catch {}
-      } catch (e) {
-        session.conversation.item.create({ type: 'function_call_output', call_id: evt.call_id, output: JSON.stringify({ status: 'ERROR', message: String(e) }) });
+          const args = JSON.parse(fnCall.args || '{}');
+          if (!['create_component', 'update_component', 'dispatch_to_conductor'].includes(fnCall.name)) {
+            continue;
+          }
+          const toolEvent = {
+            id: fnCall.id,
+            roomId: job.room.name || 'unknown',
+            type: 'tool_call',
+            payload: { tool: fnCall.name, params: args, context: { source: 'voice', timestamp: Date.now() } },
+            timestamp: Date.now(),
+            source: 'voice' as const,
+          };
+          const participantExists = !!job.room.localParticipant;
+          console.log('[VoiceAgent] tool_call ready', { participantExists, toolEvent });
+          await job.room.localParticipant?.publishData(new TextEncoder().encode(JSON.stringify(toolEvent)), {
+            reliable: true,
+            topic: 'tool_call',
+          });
+          if (!participantExists) {
+            console.warn('[VoiceAgent] localParticipant missing, tool_call not sent');
+          }
+        } catch (error) {
+          console.error('[VoiceAgent] Tool call handling failed', error);
+        }
+      }
+    });
+
+    session.on(voice.AgentSessionEventTypes.UserInputTranscribed, async (event) => {
+      const payload = { type: 'live_transcription', text: event.transcript, speaker: 'user', timestamp: Date.now(), is_final: event.isFinal };
+      await job.room.localParticipant?.publishData(new TextEncoder().encode(JSON.stringify(payload)), {
+        reliable: event.isFinal,
+        topic: 'transcription',
+      });
+      if (event.isFinal) {
         try {
-          (session as any).response?.create?.({ instructions: 'continue' });
+          appendTranscriptCache(job.room.name || 'unknown', {
+            participantId: 'user',
+            text: event.transcript,
+            timestamp: Date.now(),
+          });
+          void maybeHandleDebate(event.transcript);
         } catch {}
       }
     });
 
-    session.on('input_speech_transcription_completed', async (evt: { transcript: string }) => {
-      const payload = { type: 'live_transcription', text: evt.transcript, speaker: 'user', timestamp: Date.now(), is_final: true };
-      await job.room.localParticipant?.publishData(new TextEncoder().encode(JSON.stringify(payload)), { reliable: true, topic: 'transcription' });
+    session.on(voice.AgentSessionEventTypes.ConversationItemAdded, async (event) => {
+      console.log('[VoiceAgent] ConversationItem', {
+        type: event.item.type,
+        role: event.item.role,
+        hasFunctionCall: !!(event.item as any).functionCall,
+        contentKinds: Array.isArray((event.item as any).content)
+          ? (event.item as any).content.map((c: any) => c.type)
+          : undefined,
+      });
+      if (event.item.role !== 'assistant') return;
+      const text = event.item.textContent ?? '';
+      if (!text.trim()) return;
+
+      const payload = { type: 'live_transcription', text, speaker: 'voice-agent', timestamp: Date.now(), is_final: true };
+      await job.room.localParticipant?.publishData(new TextEncoder().encode(JSON.stringify(payload)), {
+        reliable: true,
+        topic: 'transcription',
+      });
       try {
         appendTranscriptCache(job.room.name || 'unknown', {
-          participantId: 'user',
-          text: evt.transcript,
+          participantId: 'voice-agent',
+          text,
           timestamp: Date.now(),
         });
-        void maybeHandleDebate(evt.transcript);
-      } catch {}
-      try {
-        (session as any).response?.create?.();
       } catch {}
     });
 
-    // Mirror assistant text responses to UI transcript as well
-    session.on('response_content_done', async (evt: { contentType: string; text: string; itemId: string }) => {
-      try {
-        if (evt.contentType === 'text' && evt.text) {
-          // Guard: if model outputs JSON that looks like a tool call, convert it to an actual tool call
-          const trimmed = evt.text.trim();
-          if (trimmed.startsWith('{') && trimmed.includes('"task"')) {
-            try {
-              const parsed = JSON.parse(trimmed);
-              if (parsed.task && typeof parsed.task === 'string') {
-                console.log('[VoiceAgent] Intercepted JSON tool description, converting to dispatch_to_conductor call');
-                const toolCallEvent = {
-                  id: `synthetic-${Date.now()}`,
-                  roomId: job.room.name || 'unknown',
-                  type: 'tool_call',
-                  payload: {
-                    tool: 'dispatch_to_conductor',
-                    params: {
-                      task: parsed.task,
-                      params: parsed.params || {},
-                    },
-                    context: { source: 'voice-guard', timestamp: Date.now() },
-                  },
-                  timestamp: Date.now(),
-                  source: 'voice' as const,
-                };
-                await job.room.localParticipant?.publishData(
-                  new TextEncoder().encode(JSON.stringify(toolCallEvent)),
-                  { reliable: true, topic: 'tool_call' },
-                );
-                // Don't mirror this to transcript since it's not a conversational response
-                return;
-              }
-            } catch {
-              // Not valid JSON or doesn't match pattern; treat as normal text
-            }
-          }
-          
-          const payload = { type: 'live_transcription', text: evt.text, speaker: 'voice-agent', timestamp: Date.now(), is_final: true };
-          await job.room.localParticipant?.publishData(new TextEncoder().encode(JSON.stringify(payload)), { reliable: true, topic: 'transcription' });
-          try {
-            appendTranscriptCache(job.room.name || 'unknown', {
-              participantId: 'voice-agent',
-              text: evt.text,
-              timestamp: Date.now(),
-            });
-          } catch {}
-        }
-      } catch {}
+    session.on(voice.AgentSessionEventTypes.Error, (event) => {
+      console.error('[VoiceAgent] session error', event.error);
     });
 
-    job.room.on('dataReceived', (data, _participant, _kind, topic) => {
-      if (topic !== 'transcription') return;
-      try {
-        const msg = JSON.parse(new TextDecoder().decode(data));
-        if (msg?.manual === true && typeof msg.text === 'string') {
-          appendTranscriptCache(job.room.name || 'unknown', {
-            participantId: msg.speaker || 'user',
-            text: msg.text,
-            timestamp: typeof msg.timestamp === 'number' ? msg.timestamp : Date.now(),
-          });
-          try {
-            session.conversation.item.create(
-              new llm.ChatMessage({ role: llm.ChatRole.USER, content: String(msg.text) }),
-            );
-            (session as any).response.create();
-          } catch (err) {
-            console.error('[VoiceAgent] Failed to forward manual text to OpenAI session', err);
-          }
-          void maybeHandleDebate(msg.text);
-        }
-      } catch {}
+    session.on(voice.AgentSessionEventTypes.Close, (event) => {
+      console.log('[VoiceAgent] session closed', event.reason);
     });
+
+    await session.start({
+      agent,
+      room: job.room,
+      inputOptions: { audioEnabled: true },
+      outputOptions: { audioEnabled: false, transcriptionEnabled: false },
+    });
+
+    session.generateReply();
   },
 });
 
