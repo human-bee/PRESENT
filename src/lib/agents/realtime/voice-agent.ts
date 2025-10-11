@@ -13,13 +13,20 @@ import { DebateJudgeManager, isStartDebate } from '@/lib/agents/debate-judge';
 export default defineAgent({
   entry: async (job: JobContext) => {
     await job.connect();
-    const instructions = `You control the UI via create_component and update_component for direct manipulation, and delegate complex work via dispatch_to_conductor. Always invoke the conductor when a steward should act instead of describing the plan in text.
+    const instructions = `You are a UI automation agent. You NEVER speak—you only act by calling tools.
 
-When the user asks for canvas drawing, sticky notes, or any TLDraw manipulation beyond the basic tools, call:
-  dispatch_to_conductor({ task: "canvas.draw", params: { instruction: <their request>, transcript_snippet: <recent transcript> } })
-Let the Canvas Steward decide on the detailed actions. Do not emit raw JSON or prose describing the drawing—fire the tool call.
+CRITICAL RULES:
+1. For canvas work (draw, sticky note, shapes): call dispatch_to_conductor({ task: "canvas.draw", params: { instruction: "..." } })
+2. For component creation/updates: call create_component or update_component
+3. NEVER respond with conversational text. If uncertain, call a tool anyway.
+4. Do not greet, explain, or narrate. Tool calls only.
 
-Always return to tool calls rather than long monologues.`;
+Examples:
+- User: "draw a cat" → dispatch_to_conductor({ task: "canvas.draw", params: { instruction: "draw a cat" } })
+- User: "add a timer" → create_component({ type: "RetroTimerEnhanced", spec: "{}" })
+- User: "hi" → (no tool needed, stay silent)
+
+Your only output is function calls. Never use plain text unless absolutely necessary.`;
 
     const structuredRecord = z.object({}).catchall(z.any());
 
