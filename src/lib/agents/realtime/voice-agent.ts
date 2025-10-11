@@ -135,6 +135,9 @@ Your only output is function calls. Never use plain text unless absolutely neces
         });
         void maybeHandleDebate(evt.transcript);
       } catch {}
+      try {
+        (session as any).response?.create?.();
+      } catch {}
     });
 
     // Mirror assistant text responses to UI transcript as well
