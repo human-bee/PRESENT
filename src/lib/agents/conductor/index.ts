@@ -1,5 +1,6 @@
 import { Agent, run, tool } from '@openai/agents';
 import { z } from 'zod';
+import { jsonObjectSchema, type JsonObject } from '@/lib/utils/json-schema';
 import { activeFlowchartSteward } from '../subagents/flowchart-steward-registry';
 import { runCanvasSteward } from '../subagents/canvas-steward';
 
@@ -10,9 +11,9 @@ const dispatchToConductor = tool({
   description: 'Ask the Conductor to run a steward for a complex component/task.',
   parameters: z.object({
     task: z.string().describe('Task identifier, e.g., flowchart.update'),
-    params: z.record(z.any()).describe('Task parameters'),
+    params: jsonObjectSchema.describe('Task parameters').default({}),
   }),
-  async execute({ task, params }: { task: string; params: Record<string, unknown> }) {
+  async execute({ task, params }: { task: string; params: JsonObject }) {
     if (task.startsWith('flowchart.')) {
       // Delegate to Flowchart Steward
       const result = await run(activeFlowchartSteward, JSON.stringify({ task, params }));
@@ -34,7 +35,7 @@ export const conductor = new Agent({
   tools: [dispatchToConductor],
 });
 
-export async function callConductor(task: string, params: Record<string, unknown>) {
+export async function callConductor(task: string, params: JsonObject) {
   const resp = await run(conductor, `Run ${task} with params: ${JSON.stringify(params)}`);
   return resp.finalOutput;
 }
@@ -44,4 +45,3 @@ if (import.meta.url.startsWith('file:') && process.argv[1].endsWith('index.ts'))
   console.log('[Conductor] Ready. Waiting for handoffs...');
   setInterval(() => {}, 1 << 30);
 }
-

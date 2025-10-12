@@ -6,6 +6,7 @@ import {
   getCanvasShapeSummary,
   getTranscriptWindow,
 } from '@/lib/agents/shared/supabase-context';
+import { jsonValueSchema, type JsonValue } from '@/lib/utils/json-schema';
 
 const logWithTs = <T extends Record<string, unknown>>(label: string, payload: T) => {
   try {
@@ -24,17 +25,21 @@ const ContextArgs = z.object({
   windowMs: z.number().min(1_000).max(600_000).nullable(),
 });
 
-const LooseParams = z.object({}).catchall(z.unknown());
+const ParamEntry = z.object({
+  key: z.string(),
+  value: jsonValueSchema,
+});
+type ParamEntryType = { key: string; value: JsonValue };
 
 const BroadcastArgs = z.object({
   room: z.string(),
   tool: z.string(),
-  params: LooseParams,
+  params: z.array(ParamEntry).describe('Array of { key, value } pairs to apply to the target tool.'),
 });
 
 const ShapeActionArgs = z.object({
   room: z.string(),
-  params: LooseParams,
+  params: z.array(ParamEntry).describe('Array of { key, value } pairs to apply to the target tool.'),
 });
 
 const createCanvasTool = (name: string, description: string) =>
@@ -42,10 +47,10 @@ const createCanvasTool = (name: string, description: string) =>
     name: `${TOOL_PREFIX}${name}`,
     description,
     parameters: ShapeActionArgs,
-    async execute({ room, params }) {
+    async execute({ room, params }: { room: string; params: ParamEntryType[] }) {
       const trimmedRoom = room.trim();
       if (!trimmedRoom) throw new Error('Room is required');
-      const payloadParams = params ?? {};
+      const payloadParams = entriesToObject(params);
       const toolName = `${TOOL_PREFIX}${name}`;
       await broadcastCanvasAction({ room: trimmedRoom, tool: toolName, params: payloadParams });
       logWithTs('🖌️ [CanvasSteward] action', { room: trimmedRoom, tool: toolName, params: payloadParams });
@@ -93,13 +98,17 @@ export const dispatch_canvas_tool = tool({
   name: 'dispatch_canvas_tool',
   description: 'Broadcast a specific canvas tool event with parameters.',
   parameters: BroadcastArgs,
-  async execute({ room, tool: targetTool, params }) {
+  async execute({
+    room,
+    tool: targetTool,
+    params,
+  }: { room: string; tool: string; params: ParamEntryType[] }) {
     const trimmedRoom = room.trim();
     const toolName = targetTool.trim();
     if (!toolName.startsWith(TOOL_PREFIX)) {
       throw new Error(`Canvas tools must start with ${TOOL_PREFIX}`);
     }
-    const payloadParams = params ?? {};
+    const payloadParams = entriesToObject(params);
     await broadcastCanvasAction({ room: trimmedRoom, tool: toolName, params: payloadParams });
     logWithTs('🛠️ [CanvasSteward] dispatch', { room: trimmedRoom, tool: toolName, params: payloadParams });
     return { status: 'OK' };
@@ -170,7 +179,7 @@ Workflow:
 
 Constraints:
 - Execute real actions via tool calls; do not merely describe intent.
-- Use only tools prefixed with canvas_. Ensure parameters are explicit.
+- Use only tools prefixed with canvas_. Provide tool parameters as an array of { key, value } entries.
 - Preserve existing shapes unless instructed to modify or remove them.`;
 
 export const canvasSteward = new Agent({
@@ -185,11 +194,22 @@ export const canvasSteward = new Agent({
   ],
 });
 
-export async function runCanvasSteward(params: { task: string; params: Record<string, unknown> }) {
+const entriesToObject = (entries: ParamEntryType[]) =>
+  Object.fromEntries((entries ?? []).map(({ key, value }) => [key, value]));
+
+const objectToEntries = (obj: JsonObject | ParamEntryType[] | undefined): ParamEntryType[] => {
+  if (!obj) return [];
+  if (Array.isArray(obj)) return obj as ParamEntryType[];
+  return Object.entries(obj).map(([key, value]) => ({ key, value: value as JsonValue }));
+};
+
+export async function runCanvasSteward(params: { task: string; params: JsonObject | ParamEntryType[] }) {
   const { task, params: inputParams } = params;
-  const prompt = `Handle ${task} with params: ${JSON.stringify(inputParams ?? {})}`;
+  const normalizedEntries = objectToEntries(inputParams);
+  const promptPayload = entriesToObject(normalizedEntries);
+  const prompt = `Handle ${task} with params: ${JSON.stringify(promptPayload ?? {})}`;
   const start = Date.now();
-  logWithTs('🚀 [CanvasSteward] run.start', { task, payloadKeys: Object.keys(inputParams || {}) });
+  logWithTs('🚀 [CanvasSteward] run.start', { task, payloadKeys: Object.keys(promptPayload || {}) });
   const result = await run(canvasSteward, prompt);
   try {
     logWithTs('✅ [CanvasSteward] run.complete', {

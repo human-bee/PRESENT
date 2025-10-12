@@ -11,6 +11,7 @@ import { realtime as openaiRealtime } from '@livekit/agents-plugin-openai';
 import { appendTranscriptCache } from '@/lib/agents/shared/supabase-context';
 import { createLogger } from '@/lib/utils';
 import { DebateJudgeManager, isStartDebate } from '@/lib/agents/debate-judge';
+import { jsonObjectSchema, type JsonObject } from '@/lib/utils/json-schema';
 
 /** I replace the entire entry implementation with manual AgentSession handling and reroute listeners to the session. */
 export default defineAgent({
@@ -31,7 +32,7 @@ Examples:
 
 Your only output is function calls. Never use plain text unless absolutely necessary.`;
 
-    const sendToolCall = async (tool: string, params: Record<string, unknown>) => {
+    const sendToolCall = async (tool: string, params: JsonObject) => {
       const toolEvent = {
         id: randomUUID(),
         roomId: job.room.name || 'unknown',
@@ -51,7 +52,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
       }
     };
 
-    const toolParameters = z.object({}).catchall(z.any());
+    const toolParameters = jsonObjectSchema.default({});
     const toolContext: llm.ToolContext = {
       create_component: llm.tool({
         description: 'Create a new component on the canvas.',

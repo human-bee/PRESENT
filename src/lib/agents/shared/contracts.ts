@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { jsonObjectSchema } from '@/lib/utils/json-schema';
 
 export const CreateComponent = z.object({
   type: z.string(),
@@ -7,7 +8,7 @@ export const CreateComponent = z.object({
 
 export const UpdateComponent = z.object({
   componentId: z.string(),
-  patch: z.union([z.string(), z.record(z.any())]),
+  patch: z.union([z.string(), jsonObjectSchema]),
 });
 
 export const FlowchartCommit = z.object({
@@ -17,5 +18,4 @@ export const FlowchartCommit = z.object({
   format: z.enum(['streamdown', 'markdown', 'mermaid']),
   doc: z.string(),
 });
-
 

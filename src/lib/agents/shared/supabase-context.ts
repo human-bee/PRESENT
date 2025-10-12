@@ -2,6 +2,7 @@ import { createClient } from '@supabase/supabase-js';
 import { config } from 'dotenv';
 import { join } from 'path';
 import { RoomServiceClient, DataPacket_Kind } from 'livekit-server-sdk';
+import type { JsonObject } from '@/lib/utils/json-schema';
 
 // Ensure .env.local is loaded when running stewards/conductor in Node
 try {
@@ -359,7 +360,7 @@ export async function getCanvasShapeSummary(room: string) {
 export async function broadcastCanvasAction(event: {
   room: string;
   tool: string;
-  params?: Record<string, unknown>;
+  params?: JsonObject;
 }) {
   const { room, tool, params } = event;
   const action = { tool, params, timestamp: Date.now() };
