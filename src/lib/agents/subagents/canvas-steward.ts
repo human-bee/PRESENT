@@ -6,7 +6,7 @@ import {
   getCanvasShapeSummary,
   getTranscriptWindow,
 } from '@/lib/agents/shared/supabase-context';
-import { jsonValueSchema, type JsonValue } from '@/lib/utils/json-schema';
+import { jsonValueSchema, type JsonValue, type JsonObject } from '@/lib/utils/json-schema';
 
 const logWithTs = <T extends Record<string, unknown>>(label: string, payload: T) => {
   try {
