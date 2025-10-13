@@ -184,7 +184,7 @@ Constraints:
 
 export const canvasSteward = new Agent({
   name: 'CanvasSteward',
-  model: 'gpt-5-mini',
+  model: 'gpt-4.1',
   instructions: CANVAS_STEWARD_INSTRUCTIONS,
   tools: [
     get_canvas_state,

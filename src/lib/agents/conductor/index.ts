@@ -1,10 +1,65 @@
 import { Agent, run, tool } from '@openai/agents';
+import { randomUUID } from 'crypto';
 import { z } from 'zod';
 import { jsonObjectSchema, type JsonObject } from '@/lib/utils/json-schema';
+import {
+  broadcastAgentPrompt,
+  type CanvasAgentPromptPayload,
+} from '@/lib/agents/shared/supabase-context';
 import { activeFlowchartSteward } from '../subagents/flowchart-steward-registry';
-import { runCanvasSteward } from '../subagents/canvas-steward';
 
 // Thin router: receives dispatch_to_conductor and hands off to stewards
+
+const CanvasAgentPromptSchema = z
+  .object({
+    room: z.string().min(1, 'room is required'),
+    message: z.string().min(1, 'message is required'),
+    requestId: z.string().min(1).optional(),
+    bounds: z
+      .object({
+        x: z.number(),
+        y: z.number(),
+        w: z.number(),
+        h: z.number(),
+      })
+      .partial({ w: true, h: true })
+      .optional(),
+    selectionIds: z.array(z.string().min(1)).optional(),
+    metadata: jsonObjectSchema.optional(),
+  })
+  .passthrough();
+
+async function handleCanvasAgentPrompt(rawParams: JsonObject) {
+  const parsed = CanvasAgentPromptSchema.parse(rawParams);
+  const requestId = (parsed.requestId || randomUUID()).trim();
+  const payload: CanvasAgentPromptPayload = {
+    message: parsed.message.trim(),
+    requestId,
+    bounds: parsed.bounds,
+    selectionIds: parsed.selectionIds,
+    metadata: parsed.metadata ?? null,
+  };
+
+  await broadcastAgentPrompt({
+    room: parsed.room.trim(),
+    payload,
+  });
+
+  return { status: 'queued', requestId };
+}
+
+export async function dispatchConductorTask(task: string, params: JsonObject) {
+  if (task.startsWith('flowchart.')) {
+    const result = await run(activeFlowchartSteward, JSON.stringify({ task, params }));
+    return result.finalOutput;
+  }
+
+  if (task === 'canvas.agent_prompt') {
+    return handleCanvasAgentPrompt(params);
+  }
+
+  throw new Error(`No steward for task: ${task}`);
+}
 
 const dispatchToConductor = tool({
   name: 'dispatch_to_conductor',
@@ -14,16 +69,7 @@ const dispatchToConductor = tool({
     params: jsonObjectSchema.describe('Task parameters').default({}),
   }),
   async execute({ task, params }: { task: string; params: JsonObject }) {
-    if (task.startsWith('flowchart.')) {
-      // Delegate to Flowchart Steward
-      const result = await run(activeFlowchartSteward, JSON.stringify({ task, params }));
-      return result.finalOutput;
-    }
-    if (task.startsWith('canvas.')) {
-      const result = await runCanvasSteward({ task, params });
-      return result.finalOutput;
-    }
-    throw new Error(`No steward for task: ${task}`);
+    return dispatchConductorTask(task, params);
   },
 });
 
@@ -36,12 +82,16 @@ export const conductor = new Agent({
 });
 
 export async function callConductor(task: string, params: JsonObject) {
-  const resp = await run(conductor, `Run ${task} with params: ${JSON.stringify(params)}`);
-  return resp.finalOutput;
+  return dispatchConductorTask(task, params);
 }
 
 // Simple CLI to keep the process alive for local dev
-if (import.meta.url.startsWith('file:') && process.argv[1].endsWith('index.ts')) {
+const isDirectExecution =
+  import.meta.url.startsWith('file:') &&
+  typeof process.argv[1] === 'string' &&
+  /index\.(ts|js)$/.test(process.argv[1]);
+
+if (isDirectExecution) {
   console.log('[Conductor] Ready. Waiting for handoffs...');
   setInterval(() => {}, 1 << 30);
 }

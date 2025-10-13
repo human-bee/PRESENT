@@ -23,6 +23,9 @@
 - `npm run agent:realtime`: Run the LiveKit Realtime voice agent (terminal 1 - start first).
 - `npm run agent:conductor`: Run the Agents SDK conductor/stewards (terminal 2).
 - `npm run dev`: Run the web app at `http://localhost:3000` (terminal 3).
+- `npm run sync:dev`: Run the TLDraw sync server locally.
+
+> 💡 **Tip:** For quick local testing (including Chrome DevTools automation), you can launch the entire stack in the background with log files via `npm run stack:start`. The helper script starts `sync:dev`, `agent:conductor`, `agent:realtime`, and `npm run dev`, writing to `logs/*.log` so you can tail them while driving the canvas.
 
 ### Production
 
@@ -36,6 +39,8 @@
 - `npm test`: Run Jest tests.
 - `npm run test:watch`: Run tests in watch mode.
 - `npm run lint`: Run ESLint/Next rules.
+
+> 💡 **Tip:** For Testing the UI use the chrome-devtools mcp - 'cmd+k' to open the chat sidebar. connect to the livekit room, request the agent, and send a text message to the voice-agent to test user experience with new features, workflows, stewards, components, etc.
 
 ## Coding Style & Naming Conventions
 

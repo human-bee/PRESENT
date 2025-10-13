@@ -97,6 +97,7 @@ export const MessageThreadCollapsible = React.forwardRef<
   const [typedMessage, setTypedMessage] = React.useState<string>('');
   const [isSending, setIsSending] = React.useState<boolean>(false);
   const [connBusy, setConnBusy] = React.useState<boolean>(false);
+  const debugTextEnabled = process.env.NEXT_PUBLIC_AGENT_DEBUG_TEXT === '1';
 
   // Helper: detect if an agent participant is present in the room
   const isAgentPresent = React.useCallback(() => {
@@ -628,24 +629,33 @@ export const MessageThreadCollapsible = React.forwardRef<
             {/* Manual text input for sending messages to the LiveKit agent */}
             <div className="p-4 border-t border-gray-200">
               <form
-                onSubmit={async (e) => {
-                  e.preventDefault();
+                data-debug-source="ui-message-form"
+                onSubmit={async (event) => {
+                  event.preventDefault();
                   const message = typedMessage.trim();
-                  if (!message) return;
+                  if (!message || isSending) return;
                   setIsSending(true);
+
+                  const speaker =
+                    room?.localParticipant?.identity ||
+                    user?.user_metadata?.full_name ||
+                    user?.user_metadata?.name ||
+                    user?.email ||
+                    'Canvas-User';
+
+                  const payload = {
+                    type: 'live_transcription',
+                    text: message,
+                    speaker,
+                    timestamp: Date.now(),
+                    is_final: true,
+                    manual: true,
+                  } as const;
+
+                  let completed = false;
+
                   try {
-                    // Broadcast the text as a live transcription so the UI stays consistent
-                    const speaker = room?.localParticipant?.identity || 'Canvas-User';
-                    const payload = {
-                      type: 'live_transcription',
-                      text: message,
-                      speaker,
-                      timestamp: Date.now(),
-                      is_final: true,
-                      manual: true,
-                    } as const;
                     try {
-                      // Only send when connected; skip otherwise (no buffering server-side)
                       if (room?.state === 'connected') {
                         bus.send('transcription', payload);
                       } else {
@@ -653,7 +663,6 @@ export const MessageThreadCollapsible = React.forwardRef<
                       }
                     } catch {}
 
-                    // Also mirror to canvas live captions immediately for the local user
                     try {
                       window.dispatchEvent(
                         new CustomEvent('livekit:transcription-replay', {
@@ -674,15 +683,63 @@ export const MessageThreadCollapsible = React.forwardRef<
                       );
                     } catch {}
 
-                    setTypedMessage('');
-                    // Scroll to bottom after send
-                    setTimeout(() => {
-                      if (transcriptContainerRef.current) {
-                        transcriptContainerRef.current.scrollTop =
-                          transcriptContainerRef.current.scrollHeight;
+                    if (debugTextEnabled) {
+                      const roomName = livekitCtx?.roomName || room?.name || '';
+                      if (!roomName) {
+                        throw new Error('Cannot send debug prompt without a LiveKit room name');
                       }
-                    }, 10);
+                      const requestId =
+                        typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+                          ? crypto.randomUUID()
+                          : Math.random().toString(36).slice(2);
+                      try {
+                        console.debug('[Transcript] Debug agent prompt', {
+                          room: roomName,
+                          requestId,
+                          message,
+                        });
+                        if (typeof window !== 'undefined') {
+                          const globalWindow = window as unknown as Record<string, unknown>;
+                          globalWindow.__lastCanvasAgentPrompt = {
+                            room: roomName,
+                            requestId,
+                            message,
+                            timestamp: Date.now(),
+                          };
+                        }
+                      } catch {}
+                      const res = await fetch('/api/steward/runCanvas', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          room: roomName,
+                          task: 'canvas.agent_prompt',
+                          params: {
+                            room: roomName,
+                            message,
+                            requestId,
+                          },
+                        }),
+                      });
+                      if (!res.ok) {
+                        const detail = await res.text();
+                        throw new Error(`Debug agent prompt failed (${res.status}): ${detail}`);
+                      }
+                    }
+
+                    completed = true;
+                  } catch (error) {
+                    console.error('[Transcript] Failed to send agent prompt', error);
                   } finally {
+                    if (completed) {
+                      setTypedMessage('');
+                      setTimeout(() => {
+                        if (transcriptContainerRef.current) {
+                          transcriptContainerRef.current.scrollTop =
+                            transcriptContainerRef.current.scrollHeight;
+                        }
+                      }, 10);
+                    }
                     setIsSending(false);
                   }
                 }}
@@ -695,11 +752,15 @@ export const MessageThreadCollapsible = React.forwardRef<
                   placeholder={room?.state === 'connected' ? 'Type a message for the agent…' : 'Connecting to LiveKit…'}
                   className="flex-1 px-3 py-2 rounded border border-gray-300 bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
                   aria-label="Type a message for the agent"
-                  disabled={isSending || room?.state !== 'connected'}
+                  disabled={isSending || (!debugTextEnabled && room?.state !== 'connected')}
                 />
                 <button
                   type="submit"
-                  disabled={isSending || !typedMessage.trim() || room?.state !== 'connected'}
+                  disabled={
+                    isSending ||
+                    !typedMessage.trim() ||
+                    (!debugTextEnabled && room?.state !== 'connected')
+                  }
                   className={cn(
                     'px-3 py-2 rounded bg-primary text-primary-foreground disabled:opacity-50',
                   )}
@@ -708,7 +769,9 @@ export const MessageThreadCollapsible = React.forwardRef<
                 </button>
               </form>
               <div className="text-[11px] text-muted-foreground mt-1 flex items-center gap-2">
-                {agentPresent ? (
+                {debugTextEnabled ? (
+                  <span>Debug text mode enabled — prompts dispatch directly to the canvas agent.</span>
+                ) : agentPresent ? (
                   <span>Sends as “you” over LiveKit to the voice agent</span>
                 ) : (
                   <>

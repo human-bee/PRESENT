@@ -2,7 +2,7 @@ import fastify from 'fastify';
 import websocketPlugin from '@fastify/websocket';
 import cors from '@fastify/cors';
 import type { RawData } from 'ws';
-import { makeOrLoadRoom } from './rooms';
+import { makeOrLoadRoom, resetRoom } from './rooms';
 import { loadAsset, storeAsset } from './storage';
 
 const PORT = Number(process.env.TLDRAW_SYNC_PORT ?? 3100);
@@ -55,6 +55,12 @@ async function buildServer() {
       return;
     }
     reply.header('Content-Type', 'application/octet-stream').send(data);
+  });
+
+  app.post('/admin/reset-room/:roomId', async (request, reply) => {
+    const { roomId } = request.params as { roomId: string };
+    await resetRoom(roomId);
+    reply.send({ ok: true });
   });
 
   return app;

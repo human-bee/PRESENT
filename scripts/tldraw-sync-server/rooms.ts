@@ -1,5 +1,5 @@
 import { TLSocketRoom, type RoomSnapshot } from '@tldraw/sync-core';
-import { mkdir, readFile, writeFile } from 'fs/promises';
+import { mkdir, readFile, writeFile, unlink } from 'fs/promises';
 import { join, resolve } from 'path';
 
 const ROOM_DIR = resolve('.tldraw-local/rooms');
@@ -61,6 +61,19 @@ export async function makeOrLoadRoom(roomId: string) {
   const err = await mutex;
   if (err) throw err;
   return rooms.get(roomId)!.room;
+}
+
+export async function resetRoom(roomId: string) {
+  const state = rooms.get(roomId);
+  if (state) {
+    try {
+      state.room.close();
+    } catch {}
+    rooms.delete(roomId);
+  }
+  try {
+    await unlink(join(ROOM_DIR, roomId));
+  } catch {}
 }
 
 setInterval(() => {

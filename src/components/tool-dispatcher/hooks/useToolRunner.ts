@@ -340,6 +340,17 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
           }
 
           if (stewardEnabled && task.startsWith('canvas.')) {
+            if (task === 'canvas.agent_prompt') {
+              if (!dispatchParams.message && typeof params?.message === 'string') {
+                dispatchParams.message = params.message;
+              }
+              if (!dispatchParams.message && typeof params?.instruction === 'string') {
+                dispatchParams.message = params.instruction;
+              }
+              if (!dispatchParams.requestId && typeof params?.requestId === 'string') {
+                dispatchParams.requestId = params.requestId;
+              }
+            }
             log('dispatch_to_conductor forwarding canvas task', { task, params: dispatchParams, room: call.roomId || room?.name });
             try {
               const res = await fetch('/api/steward/runCanvas', {

@@ -26,9 +26,11 @@
     "agent:fixed": "npx tsx src/lib/livekit-agent-worker-fixed.ts dev",
     "agent:realtime": "npx tsx src/lib/agents/realtime/voice-agent.ts",
     "agent:conductor": "npx tsx src/lib/agents/conductor/index.ts",
-    "sync:dev": "npx tsx scripts/tldraw-sync-server/server.ts"
+    "sync:dev": "npx tsx scripts/tldraw-sync-server/server.ts",
+    "stack:start": "bash scripts/start-dev-stack.sh"
   },
   "dependencies": {
+    "@ai-sdk/openai": "^2.0.24",
     "@cerebras/cerebras_cloud_sdk": "^1.50.0",
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/sortable": "^10.0.0",
@@ -45,6 +47,7 @@
     "@tldraw/sync-core": "^4.0.2",
     "@tldraw/tlschema": "^4.0.2",
     "@uidotdev/usehooks": "^2.4.1",
+    "ai": "^5.0.15",
     "class-variance-authority": "^0.7.1",
     "codex": "^0.2.3",
     "dompurify": "^3.0.6",
@@ -64,7 +67,8 @@
     "react-markdown": "^10.1.0",
     "recharts": "^2.15.3",
     "tldraw": "^4.0.2",
-    "zod": "^3.25.49"
+    "zod": "^3.25.49",
+    "zod-to-json-schema": "^3.24.6"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.2.2",

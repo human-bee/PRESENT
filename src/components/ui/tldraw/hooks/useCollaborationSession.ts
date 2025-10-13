@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Room } from 'livekit-client';
 import type { customShapeUtil } from '../tldraw-canvas';
 import { useCollaborationRole } from './useCollaborationRole';
@@ -22,6 +22,7 @@ export function useCollaborationSession({
   const role = useCollaborationRole(room);
   const store = useTLDrawSync(roomName, shapeUtils);
   const [active, setActive] = useState(true);
+  const resetInProgressRef = useRef(false);
 
   const collaborationStatus: CollaborationStatus = useMemo(() => {
     if (!active) {
@@ -46,6 +47,42 @@ export function useCollaborationSession({
     }
     onError(store.error?.message ?? 'Unable to connect to collaboration session');
   }, [collaborationStatus, store, onError]);
+
+  useEffect(() => {
+    if (store.status !== 'error') {
+      resetInProgressRef.current = false;
+      return;
+    }
+
+    const reasonRaw = (store.error as any)?.reason || (store.error?.message ?? '').toUpperCase();
+    const isInvalidRecord = typeof reasonRaw === 'string' && reasonRaw.includes('INVALID_RECORD');
+    if (!isInvalidRecord || resetInProgressRef.current) {
+      return;
+    }
+
+    resetInProgressRef.current = true;
+
+    void (async () => {
+      try {
+        await fetch('/api/tldraw/reset-room', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ room: roomName }),
+        });
+      } catch (error) {
+        console.warn('[CollaborationSession] failed to reset room snapshot', error);
+      }
+
+      if (typeof window !== 'undefined') {
+        try {
+          window.localStorage.removeItem('tldraw');
+          window.localStorage.removeItem('tldraw-state');
+          window.sessionStorage.removeItem('tldraw');
+        } catch {}
+        window.location.reload();
+      }
+    })();
+  }, [roomName, store.status, store.error]);
 
   const start = useCallback(() => {
     setActive(true);

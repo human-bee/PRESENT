@@ -67,6 +67,21 @@ type CanvasStateRecord = {
   lastUpdated: number;
 };
 
+export type CanvasAgentPromptBounds = {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+};
+
+export type CanvasAgentPromptPayload = {
+  message: string;
+  requestId: string;
+  bounds?: CanvasAgentPromptBounds;
+  selectionIds?: string[];
+  metadata?: JsonObject | null;
+};
+
 const GLOBAL_APEX = globalThis as Record<string, unknown>;
 const MEMORY_STORE_KEY = '__present_flowchart_memory_store__';
 const memoryStore: Map<string, FlowchartDocRecord> =
@@ -99,6 +114,89 @@ if (!GLOBAL_APEX[TRANSCRIPT_STORE_KEY]) {
 if (!GLOBAL_APEX[CANVAS_STATE_STORE_KEY]) {
   GLOBAL_APEX[CANVAS_STATE_STORE_KEY] = canvasStateStore;
 }
+
+export function normalizeRoomName(name: string) {
+  return name.trim();
+}
+
+const LIVEKIT_ROOM_WAIT_TIMEOUT_MS = Number(process.env.LIVEKIT_ROOM_WAIT_TIMEOUT_MS ?? 5000);
+const LIVEKIT_ROOM_WAIT_INTERVAL_MS = Number(process.env.LIVEKIT_ROOM_WAIT_INTERVAL_MS ?? 250);
+
+let cachedRoomServiceClient: RoomServiceClient | null = null;
+let cachedLivekitRestUrl: string | null = null;
+
+const resolveLivekitRestUrl = () => {
+  const raw =
+    process.env.LIVEKIT_REST_URL ||
+    process.env.LIVEKIT_URL ||
+    process.env.NEXT_PUBLIC_LK_SERVER_URL ||
+    process.env.LIVEKIT_HOST;
+
+  if (!raw) {
+    throw new Error('LiveKit server credentials missing for REST broadcast');
+  }
+
+  let url = raw.trim();
+  if (url.startsWith('wss://')) {
+    url = `https://${url.slice(6)}`;
+  } else if (url.startsWith('ws://')) {
+    url = `http://${url.slice(5)}`;
+  } else if (!/^https?:\/\//i.test(url)) {
+    url = `https://${url.replace(/^\/+/, '')}`;
+  }
+
+  return url.replace(/\/+$/, '');
+};
+
+const getRoomServiceClient = () => {
+  if (cachedRoomServiceClient) {
+    return cachedRoomServiceClient;
+  }
+
+  const apiKey = process.env.LIVEKIT_API_KEY;
+  const apiSecret = process.env.LIVEKIT_API_SECRET;
+
+  if (!apiKey || !apiSecret) {
+    throw new Error('LiveKit API key/secret missing for REST broadcast');
+  }
+
+  const restUrl = resolveLivekitRestUrl();
+  cachedLivekitRestUrl = restUrl;
+  cachedRoomServiceClient = new RoomServiceClient(restUrl, apiKey, apiSecret);
+  return cachedRoomServiceClient;
+};
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const ensureLivekitRoom = async (room: string) => {
+  const client = getRoomServiceClient();
+  const normalized = normalizeRoomName(room);
+  const deadline = Date.now() + LIVEKIT_ROOM_WAIT_TIMEOUT_MS;
+  let lastError: unknown;
+
+  while (Date.now() < deadline) {
+    try {
+      const rooms = await client.listRooms({ names: [normalized] });
+      if (rooms?.some((entry) => entry?.name === normalized)) {
+        return { client, normalizedRoom: normalized };
+      }
+    } catch (error) {
+      lastError = error;
+    }
+    await sleep(LIVEKIT_ROOM_WAIT_INTERVAL_MS);
+  }
+
+  const context = {
+    room: normalized,
+    rest: cachedLivekitRestUrl,
+    error: lastError instanceof Error ? lastError.message : lastError,
+  };
+
+  try {
+    console.error('[LiveKit] Room not found before timeout', context);
+  } catch {}
+  throw new Error(`LiveKit room not found before timeout: ${normalized}`);
+};
 
 const fallbackKey = (room: string, docId: string) => `${room}::${docId}`;
 const canvasStateKey = (room: string) => `${room}`;
@@ -365,19 +463,52 @@ export async function broadcastCanvasAction(event: {
   const { room, tool, params } = event;
   const action = { tool, params, timestamp: Date.now() };
 
-  const livekitHost =
-    process.env.LIVEKIT_URL || process.env.NEXT_PUBLIC_LK_SERVER_URL || process.env.LIVEKIT_HOST;
-  const apiKey = process.env.LIVEKIT_API_KEY;
-  const apiSecret = process.env.LIVEKIT_API_SECRET;
-  if (!livekitHost || !apiKey || !apiSecret) {
-    throw new Error('LiveKit server credentials missing for canvas action broadcast');
-  }
-
-  const svc = new RoomServiceClient(String(livekitHost), String(apiKey), String(apiSecret));
+  const { client, normalizedRoom } = await ensureLivekitRoom(room);
   const data = new TextEncoder().encode(
     JSON.stringify({ type: 'tool_call', payload: action, source: 'canvas-steward', timestamp: Date.now() }),
   );
-  await svc.sendData(String(room), data, DataPacket_Kind.RELIABLE, { topic: 'tool_call' });
+  await client.sendData(normalizedRoom, data, DataPacket_Kind.RELIABLE, { topic: 'tool_call' });
+}
+
+export async function broadcastAgentPrompt(event: {
+  room: string;
+  payload: CanvasAgentPromptPayload;
+}) {
+  const { room, payload } = event;
+  const trimmedRoom = normalizeRoomName(room);
+  if (!trimmedRoom) {
+    throw new Error('Room is required for agent prompt broadcast');
+  }
+
+  const now = Date.now();
+  const sanitizedPayload: CanvasAgentPromptPayload = {
+    message: String(payload?.message ?? '').trim(),
+    requestId: String(payload?.requestId ?? '').trim(),
+    bounds: payload?.bounds,
+    selectionIds: Array.isArray(payload?.selectionIds)
+      ? payload.selectionIds.filter((id) => typeof id === 'string' && id.trim().length > 0)
+      : undefined,
+    metadata: payload?.metadata ?? null,
+  };
+
+  if (!sanitizedPayload.message) {
+    throw new Error('Agent prompt requires a message');
+  }
+  if (!sanitizedPayload.requestId) {
+    throw new Error('Agent prompt requires a requestId');
+  }
+
+  const data = new TextEncoder().encode(
+    JSON.stringify({
+      type: 'agent_prompt',
+      payload: sanitizedPayload,
+      source: 'conductor',
+      timestamp: now,
+    }),
+  );
+
+  const { client, normalizedRoom } = await ensureLivekitRoom(trimmedRoom);
+  await client.sendData(normalizedRoom, data, DataPacket_Kind.RELIABLE, { topic: 'agent_prompt' });
 }
 
 export async function getTranscriptWindow(room: string, windowMs: number) {
