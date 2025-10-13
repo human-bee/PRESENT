@@ -2,7 +2,7 @@
 
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode, RefObject } from 'react';
-import { Tldraw, TLComponents, Editor } from '@tldraw/tldraw';
+import { Tldraw, TLComponents, Editor, TldrawUiToastsProvider } from '@tldraw/tldraw';
 import { useRoomContext } from '@livekit/components-react';
 import type { Room } from 'livekit-client';
 import TldrawSnapshotBroadcaster from '@/components/TldrawSnapshotBroadcaster';
@@ -20,6 +20,7 @@ import {
 import { createCollaborationOverrides } from './utils';
 import { CustomMainMenu, CustomToolbarWithTranscript } from './tldraw-with-persistence';
 import { CollaborationLoadingOverlay } from './components';
+import { CanvasAgentController } from './canvas/canvas-agent-controller';
 
 interface TldrawWithCollaborationProps {
   onMount?: (editor: Editor) => void;
@@ -98,24 +99,26 @@ export function TldrawWithCollaboration({
 
   return (
     <div ref={containerRef} className={className} style={{ position: 'absolute', inset: 0 }}>
-      <ComponentStoreContext.Provider value={componentStore || null}>
-        <Tldraw
-          store={collaboration.store}
-          shapeUtils={shapeUtils}
-          components={components}
-          overrides={overrides}
-          forceMobile
-        >
-          <CollaborationEditorEffects
-            room={room}
-            containerRef={containerRef}
-            onEditorReady={handleEditorReady}
-            onMount={onMount}
-          />
-        </Tldraw>
-        <TldrawSnapshotBroadcaster editor={editorInstance} />
-        <TldrawSnapshotReceiver editor={editorInstance} />
-      </ComponentStoreContext.Provider>
+      <TldrawUiToastsProvider>
+        <ComponentStoreContext.Provider value={componentStore || null}>
+          <Tldraw
+            store={collaboration.store}
+            shapeUtils={shapeUtils}
+            components={components}
+            overrides={overrides}
+            forceMobile
+          >
+            <CollaborationEditorEffects
+              room={room}
+              containerRef={containerRef}
+              onEditorReady={handleEditorReady}
+              onMount={onMount}
+            />
+          </Tldraw>
+          <TldrawSnapshotBroadcaster editor={editorInstance} />
+          <TldrawSnapshotReceiver editor={editorInstance} />
+        </ComponentStoreContext.Provider>
+      </TldrawUiToastsProvider>
 
       {showOverlay && <CollaborationLoadingOverlay status={collaboration.status} />}
     </div>
@@ -143,10 +146,25 @@ function CollaborationEditorEffects({
 
   useEffect(() => {
     if (!ready || !editor) return;
+    if (process.env.NODE_ENV !== 'production' && typeof window !== 'undefined') {
+      (window as any).__tldrawEditor = editor;
+    }
     onEditorReady?.(editor);
   }, [editor, ready, onEditorReady]);
 
-  return null;
+  useEffect(() => {
+    return () => {
+      if (process.env.NODE_ENV !== 'production' && typeof window !== 'undefined') {
+        delete (window as any).__tldrawEditor;
+      }
+    };
+  }, []);
+
+  if (!ready || !editor) {
+    return null;
+  }
+
+  return <CanvasAgentController editor={editor} room={room} />;
 }
 
 export default TldrawWithCollaboration;
