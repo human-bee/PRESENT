@@ -5,6 +5,8 @@ import type { RawData } from 'ws';
 import { makeOrLoadRoom, resetRoom } from './rooms';
 import { loadAsset, storeAsset } from './storage';
 
+console.log('[tldraw-sync] booting development sync server');
+
 const PORT = Number(process.env.TLDRAW_SYNC_PORT ?? 3100);
 
 /**

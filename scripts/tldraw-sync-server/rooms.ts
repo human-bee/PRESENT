@@ -2,6 +2,9 @@ import { TLSocketRoom, type RoomSnapshot } from '@tldraw/sync-core';
 import { mkdir, readFile, writeFile, unlink } from 'fs/promises';
 import { join, resolve } from 'path';
 
+import { createTLSchema, defaultBindingSchemas, defaultShapeSchemas } from '@tldraw/tlschema';
+import { T } from '@tldraw/validate';
+
 const ROOM_DIR = resolve('.tldraw-local/rooms');
 
 interface RoomState {
@@ -9,6 +12,45 @@ interface RoomState {
   id: string;
   needsPersist: boolean;
 }
+
+const customShapeProps = {
+  w: T.number,
+  h: T.number,
+  customComponent: T.any,
+  name: T.string,
+  pinned: T.optional(T.boolean),
+  pinnedX: T.optional(T.number),
+  pinnedY: T.optional(T.number),
+  userResized: T.optional(T.boolean),
+  state: T.optional(T.any),
+};
+
+const mermaidStreamShapeProps = {
+  w: T.number,
+  h: T.number,
+  name: T.string,
+  mermaidText: T.string,
+  compileState: T.optional(T.string),
+  renderState: T.optional(T.string),
+  streamId: T.optional(T.string),
+  keepLastGood: T.optional(T.boolean),
+};
+
+const toolboxShapeProps = {
+  w: T.number,
+  h: T.number,
+  name: T.string,
+};
+
+const appSchema = createTLSchema({
+  shapes: {
+    ...defaultShapeSchemas,
+    custom: { props: customShapeProps },
+    mermaid_stream: { props: mermaidStreamShapeProps },
+    toolbox: { props: toolboxShapeProps },
+  },
+  bindings: defaultBindingSchemas,
+});
 
 const rooms = new Map<string, RoomState>();
 let mutex: Promise<Error | null> = Promise.resolve(null);
@@ -38,6 +80,7 @@ export async function makeOrLoadRoom(roomId: string) {
       const initialSnapshot = await readSnapshot(roomId);
       const roomState: RoomState = {
         room: new TLSocketRoom({
+          schema: appSchema,
           initialSnapshot,
           onSessionRemoved(room, { sessionId, numSessionsRemaining }) {
             room.log?.debug?.('session removed', { sessionId, numSessionsRemaining });
