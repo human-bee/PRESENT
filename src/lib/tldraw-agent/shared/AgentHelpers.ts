@@ -129,25 +129,39 @@ export class AgentHelpers {
 	 * Apply the offset of this request to a shape partial.
 	 */
 	applyOffsetToShapePartial(shape: Partial<SimpleShape>): Partial<SimpleShape> {
-		if ('x' in shape && shape.x !== undefined) {
-			return { ...shape, x: shape.x + this.offset.x }
+		const updates: Partial<SimpleShape> = {}
+		let changed = false
+
+		if ('x' in shape && typeof shape.x === 'number') {
+			updates.x = shape.x + this.offset.x
+			changed = true
 		}
-		if ('y' in shape && shape.y !== undefined) {
-			return { ...shape, y: shape.y + this.offset.y }
+		if ('y' in shape && typeof shape.y === 'number') {
+			updates.y = shape.y + this.offset.y
+			changed = true
 		}
-		if ('x1' in shape && shape.x1 !== undefined) {
-			return { ...shape, x1: shape.x1 + this.offset.x }
+		if ('x1' in shape && typeof shape.x1 === 'number') {
+			updates.x1 = shape.x1 + this.offset.x
+			changed = true
 		}
-		if ('y1' in shape && shape.y1 !== undefined) {
-			return { ...shape, y1: shape.y1 + this.offset.y }
+		if ('y1' in shape && typeof shape.y1 === 'number') {
+			updates.y1 = shape.y1 + this.offset.y
+			changed = true
 		}
-		if ('x2' in shape && shape.x2 !== undefined) {
-			return { ...shape, x2: shape.x2 + this.offset.x }
+		if ('x2' in shape && typeof shape.x2 === 'number') {
+			updates.x2 = shape.x2 + this.offset.x
+			changed = true
 		}
-		if ('y2' in shape && shape.y2 !== undefined) {
-			return { ...shape, y2: shape.y2 + this.offset.y }
+		if ('y2' in shape && typeof shape.y2 === 'number') {
+			updates.y2 = shape.y2 + this.offset.y
+			changed = true
 		}
-		return shape
+
+		if (!changed) {
+			return shape
+		}
+
+		return { ...shape, ...updates }
 	}
 
 	/**

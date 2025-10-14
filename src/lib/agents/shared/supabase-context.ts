@@ -176,7 +176,7 @@ const ensureLivekitRoom = async (room: string) => {
 
   while (Date.now() < deadline) {
     try {
-      const rooms = await client.listRooms({ names: [normalized] });
+      const rooms = await client.listRooms([normalized]);
       if (rooms?.some((entry) => entry?.name === normalized)) {
         return { client, normalizedRoom: normalized };
       }
@@ -347,8 +347,6 @@ export async function commitFlowchartDoc(
     rationale: payload.rationale,
   };
 
-  let supabaseUpdated = false;
-
   if (shouldBypassSupabase) {
     logBypass('commitFlowchartDoc');
   } else {
@@ -383,8 +381,6 @@ export async function commitFlowchartDoc(
       if (updateErr) {
         throw updateErr;
       }
-
-      supabaseUpdated = true;
     } catch (err) {
       warnFallback('commit', err);
     }
