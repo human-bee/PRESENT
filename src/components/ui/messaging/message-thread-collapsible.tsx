@@ -48,6 +48,25 @@ export interface MessageThreadCollapsibleProps extends React.HTMLAttributes<HTML
   onClose?: () => void;
 }
 
+const SUPPORTED_SLASH_COMMANDS = new Set(['canvas']);
+
+type ParsedSlashCommand = {
+  command: string;
+  body: string;
+};
+
+const parseSlashCommand = (input: string): ParsedSlashCommand | null => {
+  if (!input) return null;
+  const trimmed = input.trim();
+  if (!trimmed.startsWith('/')) return null;
+  const remainder = trimmed.slice(1).trim();
+  if (!remainder) return null;
+  const firstSpace = remainder.indexOf(' ');
+  const command = (firstSpace === -1 ? remainder : remainder.slice(0, firstSpace)).toLowerCase();
+  const body = (firstSpace === -1 ? '' : remainder.slice(firstSpace + 1)).trim();
+  return { command, body };
+};
+
 /**
  * A collapsible chat thread component with keyboard shortcuts and thread management
  * @component
@@ -97,7 +116,11 @@ export const MessageThreadCollapsible = React.forwardRef<
   const [typedMessage, setTypedMessage] = React.useState<string>('');
   const [isSending, setIsSending] = React.useState<boolean>(false);
   const [connBusy, setConnBusy] = React.useState<boolean>(false);
-  const debugTextEnabled = process.env.NEXT_PUBLIC_AGENT_DEBUG_TEXT === '1';
+  const slashCommand = React.useMemo(() => parseSlashCommand(typedMessage), [typedMessage]);
+  const isRecognizedSlashCommand = Boolean(
+    slashCommand && SUPPORTED_SLASH_COMMANDS.has(slashCommand.command),
+  );
+  const slashCommandBodyMissing = Boolean(isRecognizedSlashCommand && !slashCommand?.body);
 
   // Helper: detect if an agent participant is present in the room
   const isAgentPresent = React.useCallback(() => {
@@ -207,6 +230,65 @@ export const MessageThreadCollapsible = React.forwardRef<
     if (!room) return;
     try { await room.disconnect(); } catch {}
   }, [room]);
+
+  const sendCanvasAgentPrompt = React.useCallback(
+    async (message: string) => {
+      const roomName = livekitCtx?.roomName || room?.name || '';
+      if (!roomName) {
+        throw new Error('Cannot dispatch to canvas steward without a LiveKit room name');
+      }
+      const requestId =
+        typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+          ? crypto.randomUUID()
+          : Math.random().toString(36).slice(2);
+      try {
+        console.debug('[Transcript] Canvas steward prompt', {
+          room: roomName,
+          requestId,
+        });
+        if (typeof window !== 'undefined') {
+          const globalWindow = window as unknown as Record<string, unknown>;
+          globalWindow.__lastCanvasAgentPrompt = {
+            room: roomName,
+            requestId,
+            message,
+            timestamp: Date.now(),
+          };
+        }
+      } catch {}
+      const res = await fetch('/api/steward/runCanvas', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          room: roomName,
+          task: 'canvas.agent_prompt',
+          params: {
+            room: roomName,
+            message,
+            requestId,
+          },
+        }),
+      });
+      if (!res.ok) {
+        const detail = await res.text();
+        throw new Error(`Canvas steward prompt failed (${res.status}): ${detail}`);
+      }
+    },
+    [livekitCtx?.roomName, room],
+  );
+
+  const runSlashCommand = React.useCallback(
+    async (command: string, body: string) => {
+      switch (command) {
+        case 'canvas':
+          await sendCanvasAgentPrompt(body);
+          return;
+        default:
+          throw new Error(`Unsupported slash command: /${command}`);
+      }
+    },
+    [sendCanvasAgentPrompt],
+  );
 
   const ingestTranscription = React.useCallback(
     (transcriptionData: {
@@ -630,12 +712,18 @@ export const MessageThreadCollapsible = React.forwardRef<
             <div className="p-4 border-t border-gray-200">
               {(() => {
                 const isRoomConnected = room?.state === 'connected';
-                const inputDisabled = isSending || (!debugTextEnabled && !isRoomConnected);
+                const trimmedMessage = typedMessage.trim();
+                const inputDisabled = isSending || (!isRecognizedSlashCommand && !isRoomConnected);
                 const sendDisabled =
-                  isSending || !typedMessage.trim() || (!debugTextEnabled && !isRoomConnected);
+                  isSending ||
+                  !trimmedMessage ||
+                  (!isRecognizedSlashCommand && !isRoomConnected) ||
+                  (isRecognizedSlashCommand && slashCommandBodyMissing);
                 try {
                   console.log('[Transcript] render state', {
-                    debugTextEnabled,
+                    slashCommand: slashCommand?.command,
+                    isRecognizedSlashCommand,
+                    slashCommandBodyMissing,
                     isSending,
                     isRoomConnected,
                     sendDisabled,
@@ -648,16 +736,18 @@ export const MessageThreadCollapsible = React.forwardRef<
                 data-debug-source="messaging-message-form"
                 onSubmit={async (event) => {
                   event.preventDefault();
-                  const message = typedMessage.trim();
-                  try {
-                    console.log('[Transcript] onSubmit', {
-                      message,
-                      debugTextEnabled,
-                      isSending,
-                      connected: room?.state,
-                    });
-                  } catch {}
-                  if (!message || isSending) return;
+                  const trimmed = typedMessage.trim();
+                  if (!trimmed || isSending) return;
+                  const parsedCommand = parseSlashCommand(trimmed);
+                  const slashActive = Boolean(
+                    parsedCommand && SUPPORTED_SLASH_COMMANDS.has(parsedCommand.command),
+                  );
+                  if (slashActive && !parsedCommand?.body) {
+                    try {
+                      console.warn('[Transcript] Slash command requires a message body', parsedCommand);
+                    } catch {}
+                    return;
+                  }
                   setIsSending(true);
 
                   const speaker =
@@ -667,9 +757,11 @@ export const MessageThreadCollapsible = React.forwardRef<
                     user?.email ||
                     'Canvas-User';
 
+                  const textForDispatch = slashActive && parsedCommand ? parsedCommand.body : trimmed;
+
                   const payload = {
                     type: 'live_transcription',
-                    text: message,
+                    text: textForDispatch,
                     speaker,
                     timestamp: Date.now(),
                     is_final: true,
@@ -679,20 +771,22 @@ export const MessageThreadCollapsible = React.forwardRef<
                   let completed = false;
 
                   try {
-                    try {
+                    if (slashActive && parsedCommand) {
+                      await runSlashCommand(parsedCommand.command, parsedCommand.body);
+                    } else {
                       if (room?.state === 'connected') {
                         bus.send('transcription', payload);
                       } else {
                         console.warn('[Transcript] Room not connected; skipping send');
                       }
-                    } catch {}
+                    }
 
                     try {
                       window.dispatchEvent(
                         new CustomEvent('livekit:transcription-replay', {
                           detail: {
                             speaker,
-                            text: message,
+                            text: textForDispatch,
                             timestamp: Date.now(),
                           },
                         }),
@@ -706,50 +800,6 @@ export const MessageThreadCollapsible = React.forwardRef<
                         }),
                       );
                     } catch {}
-
-                    if (debugTextEnabled) {
-                      const roomName = livekitCtx?.roomName || room?.name || '';
-                      if (!roomName) {
-                        throw new Error('Cannot send debug prompt without a LiveKit room name');
-                      }
-                      const requestId =
-                        typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
-                          ? crypto.randomUUID()
-                          : Math.random().toString(36).slice(2);
-                      try {
-                        console.log('[Transcript] Debug agent prompt', {
-                          room: roomName,
-                          requestId,
-                          message,
-                        });
-                        if (typeof window !== 'undefined') {
-                          const globalWindow = window as unknown as Record<string, unknown>;
-                          globalWindow.__lastCanvasAgentPrompt = {
-                            room: roomName,
-                            requestId,
-                            message,
-                            timestamp: Date.now(),
-                          };
-                        }
-                      } catch {}
-                      const res = await fetch('/api/steward/runCanvas', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                          room: roomName,
-                          task: 'canvas.agent_prompt',
-                          params: {
-                            room: roomName,
-                            message,
-                            requestId,
-                          },
-                        }),
-                      });
-                      if (!res.ok) {
-                        const detail = await res.text();
-                        throw new Error(`Debug agent prompt failed (${res.status}): ${detail}`);
-                      }
-                    }
 
                     completed = true;
                   } catch (error) {
@@ -773,7 +823,13 @@ export const MessageThreadCollapsible = React.forwardRef<
                   type="text"
                   value={typedMessage}
                   onChange={(e) => setTypedMessage(e.target.value)}
-                  placeholder={room?.state === 'connected' ? 'Type a message for the agent…' : 'Connecting to LiveKit…'}
+                  placeholder={
+                    isRecognizedSlashCommand
+                      ? 'Dispatching directly to the Canvas steward…'
+                      : room?.state === 'connected'
+                        ? 'Type a message for the agent…'
+                        : 'Connecting to LiveKit…'
+                  }
                   className="flex-1 px-3 py-2 rounded border border-gray-300 bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
                   aria-label="Type a message for the agent"
                   disabled={inputDisabled}
@@ -790,35 +846,38 @@ export const MessageThreadCollapsible = React.forwardRef<
               </form>
                 );
               })()}
-              <div className="text-[11px] text-muted-foreground mt-1 flex items-center gap-2">
-                {debugTextEnabled ? (
-                  <span>Debug text mode enabled — prompts dispatch directly to the canvas agent.</span>
-                ) : agentPresent ? (
-                  <span>Sends as “you” over LiveKit to the voice agent</span>
-                ) : (
-                  <>
-                    <span>Agent not joined</span>
-                    <button
-                      className="underline disabled:opacity-50"
-                      disabled={agentJoining || room?.state !== 'connected'}
-                      onClick={async () => {
-                        if (!livekitCtx?.roomName || room?.state !== 'connected') return;
-                        setAgentJoining(true);
-                        try {
-                          await fetch('/api/agent/dispatch', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ roomName: livekitCtx.roomName }),
-                          });
-                        } finally {
-                          // We'll flip to enabled when presence updates via room events
-                          setTimeout(() => setAgentJoining(false), 1500);
-                        }
-                      }}
-                    >
-                      {agentJoining ? 'Requesting agent…' : 'Request agent'}
-                    </button>
-                  </>
+              <div className="text-[11px] text-muted-foreground mt-1 flex items-center gap-2 flex-wrap">
+                <span>
+                  {isRecognizedSlashCommand
+                    ? 'Slash command active — prompt dispatches directly to the Canvas steward.'
+                    : agentPresent
+                      ? 'Sends as “you” over LiveKit to the voice agent.'
+                      : 'Agent not joined'}
+                </span>
+                {!agentPresent && !isRecognizedSlashCommand && (
+                  <button
+                    className="underline disabled:opacity-50"
+                    disabled={agentJoining || room?.state !== 'connected'}
+                    onClick={async () => {
+                      if (!livekitCtx?.roomName || room?.state !== 'connected') return;
+                      setAgentJoining(true);
+                      try {
+                        await fetch('/api/agent/dispatch', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ roomName: livekitCtx.roomName }),
+                        });
+                      } finally {
+                        // We'll flip to enabled when presence updates via room events
+                        setTimeout(() => setAgentJoining(false), 1500);
+                      }
+                    }}
+                  >
+                    {agentJoining ? 'Requesting agent…' : 'Request agent'}
+                  </button>
+                )}
+                {!isRecognizedSlashCommand && (
+                  <span className="opacity-80">Use `/canvas …` to message the Canvas steward directly.</span>
                 )}
               </div>
             </div>
