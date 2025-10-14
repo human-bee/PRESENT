@@ -80,6 +80,32 @@ Visit `http://localhost:3000`
 
 > Important: Start the agents before the web app to ensure proper connection.
 
+**Optional - TLDraw Sync Server:**
+
+```bash
+npm run sync:dev
+```
+
+Runs the local TLDraw sync server so the canvas stays in sync across sessions.
+
+#### Launch Entire Stack at Once
+
+Prefer running everything in the background? Use the helper script:
+
+```bash
+npm run stack:start
+```
+
+This boots `sync:dev`, `agent:conductor`, `agent:realtime`, and `next dev` concurrently, writing output to `logs/*.log` so you can tail the services you care about.
+
+To stop all background services cleanly, run:
+
+```bash
+npm run stack:stop
+```
+
+The script reads the PID files in `logs/` and terminates each dev process, removing stale entries along the way.
+
 #### Production Mode
 
 **Terminal 1 - Voice Agent:**

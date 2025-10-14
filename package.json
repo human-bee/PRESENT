@@ -27,7 +27,8 @@
     "agent:realtime": "npx tsx src/lib/agents/realtime/voice-agent.ts",
     "agent:conductor": "npx tsx src/lib/agents/conductor/index.ts",
     "sync:dev": "npx tsx scripts/tldraw-sync-server/server.ts",
-    "stack:start": "bash scripts/start-dev-stack.sh"
+    "stack:start": "bash scripts/start-dev-stack.sh",
+    "stack:stop": "bash scripts/stop-dev-stack.sh"
   },
   "dependencies": {
     "@ai-sdk/openai": "^2.0.24",

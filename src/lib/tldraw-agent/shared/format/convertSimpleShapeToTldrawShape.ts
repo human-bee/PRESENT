@@ -509,15 +509,45 @@ function convertDrawShapeToTldrawShape(
 ): { shape: TLShape } {
 	const shapeId = convertSimpleIdToTldrawId(simpleShape.shapeId)
 	const defaultDrawShape = defaultShape as TLDrawShape
+	const defaultProps = defaultDrawShape.props ?? {}
 
 	// Handle fill properly - simpleShape takes priority
 	let fill
 	if (simpleShape.fill !== undefined) {
 		fill = convertSimpleFillToTldrawFill(simpleShape.fill)
-	} else if (defaultDrawShape.props?.fill) {
-		fill = defaultDrawShape.props.fill
+	} else if (defaultProps.fill) {
+		fill = defaultProps.fill
 	} else {
 		fill = convertSimpleFillToTldrawFill('none')
+	}
+
+	const fallbackSegment = {
+		type: 'free' as const,
+		points: [
+			{ x: 0, y: 0, z: 0.5 },
+			{ x: 1, y: 0, z: 0.5 },
+		],
+	}
+
+	const clonedSegments = (defaultProps.segments ?? [fallbackSegment]).map((segment) => {
+		const points = segment.points?.map((point) => ({ ...point })) ?? []
+		if (points.length >= 2) {
+			return {
+				type: segment.type ?? fallbackSegment.type,
+				points,
+			}
+		}
+		return {
+			type: segment.type ?? fallbackSegment.type,
+			points: fallbackSegment.points.map((point) => ({ ...point })),
+		}
+	})
+
+	if (clonedSegments.length === 0) {
+		clonedSegments.push({
+			type: fallbackSegment.type,
+			points: fallbackSegment.points.map((point) => ({ ...point })),
+		})
 	}
 
 	return {
@@ -533,11 +563,19 @@ function convertDrawShapeToTldrawShape(
 			isLocked: defaultDrawShape.isLocked ?? false,
 			opacity: defaultDrawShape.opacity ?? 1,
 			props: {
-				color: asColor(simpleShape.color ?? defaultDrawShape.props?.color ?? 'black'),
+				dash: defaultProps.dash ?? 'draw',
+				size: defaultProps.size ?? 'm',
+				segments: clonedSegments,
+				isComplete: defaultProps.isComplete ?? true,
+				isClosed: defaultProps.isClosed ?? false,
+				isPen: defaultProps.isPen ?? false,
+				scale: defaultProps.scale ?? 1,
+				color: asColor(simpleShape.color ?? defaultProps.color ?? 'black'),
 				fill,
 			},
 			meta: {
-				note: simpleShape.note ?? defaultDrawShape.meta?.note ?? '',
+				...(defaultDrawShape.meta ?? {}),
+				note: simpleShape.note ?? (defaultDrawShape.meta?.note ?? ''),
 			},
 		},
 	}
