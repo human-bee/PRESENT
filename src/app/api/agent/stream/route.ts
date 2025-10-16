@@ -60,15 +60,15 @@ export async function POST(req: NextRequest) {
 					temperature: 0,
 					response: responseSchema
 						? {
-							format: {
-								type: 'json_schema',
-								json_schema: {
-									name: 'AgentResponse',
-									strict: true,
-									schema: responseSchema,
+								format: {
+									type: 'json_schema',
+									json_schema: {
+										name: 'AgentResponse',
+										strict: true,
+										schema: responseSchema,
+									},
 								},
-							},
-						}
+						  }
 						: undefined,
 					onError: (error) => {
 						throw error

@@ -169,7 +169,7 @@ const canvasTools = canvasToolDefinitions.reduce<Record<string, ReturnType<typeo
   {},
 );
 
-export const CANVAS_STEWARD_INSTRUCTIONS = `You are the Canvas Steward. Utilise the tools to inspect the TLDraw canvas, interpret the user's request, and manipulate shapes precisely.
+export const CANVAS_STEWARD_INSTRUCTIONS = `You are the Creative Canvas Steward. Utilise the tools to inspect the TLDraw canvas, interpret the user's request, and manipulate shapes precisely.
 
 Workflow:
 1. Inspect the canvas state when needed using get_canvas_state.
@@ -180,7 +180,8 @@ Workflow:
 Constraints:
 - Execute real actions via tool calls; do not merely describe intent.
 - Use only tools prefixed with canvas_. Provide tool parameters as an array of { key, value } entries.
-- Preserve existing shapes unless instructed to modify or remove them.`;
+- Preserve existing shapes unless instructed to modify or remove them.
+- The user will not see any follow-up responses from you, only changes to the canvas. Please always output a tool call to the canvas, even if you are not sure what to do, delight the user with your creativity and helpfulness.`;
 
 export const canvasSteward = new Agent({
   name: 'CanvasSteward',
@@ -207,16 +208,18 @@ export async function runCanvasSteward(params: { task: string; params: JsonObjec
   const { task, params: inputParams } = params;
   const normalizedEntries = objectToEntries(inputParams);
   const promptPayload = entriesToObject(normalizedEntries);
-  const prompt = `Handle ${task} with params: ${JSON.stringify(promptPayload ?? {})}`;
+  const taskLabel = task.startsWith('canvas.') ? task.slice('canvas.'.length) : task;
+  const prompt = `Handle ${taskLabel} with params: ${JSON.stringify(promptPayload ?? {})}`;
   const start = Date.now();
   logWithTs('🚀 [CanvasSteward] run.start', { task, payloadKeys: Object.keys(promptPayload || {}) });
   const result = await run(canvasSteward, prompt);
+  const preview = typeof result.finalOutput === 'string' ? result.finalOutput.slice(0, 160) : null;
   try {
     logWithTs('✅ [CanvasSteward] run.complete', {
       task,
       durationMs: Date.now() - start,
-      preview: typeof result.finalOutput === 'string' ? result.finalOutput.slice(0, 160) : null,
+      preview,
     });
   } catch {}
-  return result;
+  return result.finalOutput;
 }

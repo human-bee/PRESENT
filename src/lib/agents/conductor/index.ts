@@ -7,6 +7,7 @@ import {
   type CanvasAgentPromptPayload,
 } from '@/lib/agents/shared/supabase-context';
 import { activeFlowchartSteward } from '../subagents/flowchart-steward-registry';
+import { runCanvasSteward } from '../subagents/canvas-steward';
 
 // Thin router: receives dispatch_to_conductor and hands off to stewards
 
@@ -45,7 +46,7 @@ async function handleCanvasAgentPrompt(rawParams: JsonObject) {
     payload,
   });
 
-  return { status: 'queued', requestId };
+  return { status: 'queued', requestId, room: parsed.room.trim(), payload };
 }
 
 export async function dispatchConductorTask(task: string, params: JsonObject) {
@@ -55,7 +56,22 @@ export async function dispatchConductorTask(task: string, params: JsonObject) {
   }
 
   if (task === 'canvas.agent_prompt') {
-    return handleCanvasAgentPrompt(params);
+    const promptResult = await handleCanvasAgentPrompt(params);
+    const stewardParams: JsonObject = {
+      ...params,
+      room: promptResult.room,
+      message: promptResult.payload.message,
+      requestId: promptResult.payload.requestId,
+      bounds: promptResult.payload.bounds ?? undefined,
+      selectionIds: promptResult.payload.selectionIds ?? undefined,
+      metadata: promptResult.payload.metadata ?? undefined,
+    };
+    const stewardResult = await runCanvasSteward({ task, params: stewardParams });
+    return { ...promptResult, steward: stewardResult };
+  }
+
+  if (task.startsWith('canvas.')) {
+    return runCanvasSteward({ task, params });
   }
 
   throw new Error(`No steward for task: ${task}`);
