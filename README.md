@@ -50,6 +50,8 @@ npm install
   OPENAI_API_KEY=
   NEXT_PUBLIC_SUPABASE_URL=
   NEXT_PUBLIC_SUPABASE_ANON_KEY=
+  # Optional: override voice transcription routing (default: realtime)
+  VOICE_AGENT_TRANSCRIPTION_MODE=realtime | manual
   ```
 
 ### Running the Application
@@ -197,6 +199,7 @@ The production pipeline now runs as two lightweight Node processes plus the clie
    - Uses the LiveKit Agents Realtime API.
    - Listens to room audio, transcribes, and calls exactly two UI tools: `create_component` and `update_component`.
    - Can optionally hand off server-side work by calling `dispatch_to_conductor`.
+   - Supports two transcription modes. By default the agent relies on the realtime model's native speech recognition. Set `VOICE_AGENT_TRANSCRIPTION_MODE=manual` to route transcripts from the client data channel instead (legacy behaviour).
 
 2. **Conductor + Stewards** – `src/lib/agents/conductor/` and `src/lib/agents/subagents/`
    - Conductor is a tiny router (Agents SDK) that delegates to domain stewards via handoffs.

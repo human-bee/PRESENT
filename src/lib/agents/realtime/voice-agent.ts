@@ -9,7 +9,6 @@ try {
 } catch {}
 import { realtime as openaiRealtime } from '@livekit/agents-plugin-openai';
 import { appendTranscriptCache } from '@/lib/agents/shared/supabase-context';
-import { createLogger } from '@/lib/utils';
 import { DebateJudgeManager, isStartDebate } from '@/lib/agents/debate-judge';
 import { jsonObjectSchema, type JsonObject } from '@/lib/utils/json-schema';
 import { RoomEvent, RemoteParticipant, RemoteTrackPublication, Track } from 'livekit-client';
@@ -61,21 +60,29 @@ export default defineAgent({
     job.room.on(RoomEvent.ParticipantConnected, (participant) => subscribeToParticipant(participant));
     job.room.on(RoomEvent.TrackPublished, (_publication, participant) => subscribeToParticipant(participant));
 
-    job.room.on(RoomEvent.DataReceived, async (payload, participant, _, topic) => {
-      if (topic !== 'transcription') return;
-      try {
-        const message = JSON.parse(new TextDecoder().decode(payload));
-        const text = typeof message?.text === 'string' ? message.text.trim() : '';
-        const isManual = Boolean(message?.manual);
-        const isReplay = Boolean(message?.replay);
-        const speaker = typeof message?.speaker === 'string' ? message.speaker : participant?.identity;
-        if (!text || isReplay) return;
-        if (!isManual && speaker === 'voice-agent') return;
-        await session.generateReply({ userInput: text });
-      } catch (error) {
-        console.warn('[VoiceAgent] failed to handle data transcription', error);
-      }
-    });
+    const transcriptionMode = (process.env.VOICE_AGENT_TRANSCRIPTION_MODE || 'realtime').toLowerCase();
+    const manualTranscription = transcriptionMode === 'manual';
+
+    if (manualTranscription) {
+      console.log('[VoiceAgent] running in manual transcription mode');
+      job.room.on(RoomEvent.DataReceived, async (payload, participant, _, topic) => {
+        if (topic !== 'transcription') return;
+        try {
+          const message = JSON.parse(new TextDecoder().decode(payload));
+          const text = typeof message?.text === 'string' ? message.text.trim() : '';
+          const isManual = Boolean(message?.manual);
+          const isReplay = Boolean(message?.replay);
+          const speaker = typeof message?.speaker === 'string' ? message.speaker : participant?.identity;
+          if (!text || isReplay) return;
+          if (!isManual && speaker === 'voice-agent') return;
+          await session.generateReply({ userInput: text });
+        } catch (error) {
+          console.warn('[VoiceAgent] failed to handle data transcription', error);
+        }
+      });
+    } else {
+      console.log('[VoiceAgent] running in realtime transcription mode');
+    }
     const instructions = `You are a UI automation agent. You NEVER speak—you only act by calling tools.
 
 CRITICAL RULES:
@@ -165,7 +172,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
     const realtimeModel = new openaiRealtime.RealtimeModel({
       model: 'gpt-realtime',
       toolChoice: 'required',
-      inputAudioTranscription: null,
+      ...(manualTranscription ? { inputAudioTranscription: null } : {}),
       turnDetection: null,
     });
 
@@ -335,7 +342,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
       agent,
       room: job.room,
       inputOptions: { audioEnabled: true },
-      outputOptions: { audioEnabled: false, transcriptionEnabled: false },
+      outputOptions: { audioEnabled: false, transcriptionEnabled: !manualTranscription },
     });
 
   },
