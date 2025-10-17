@@ -17,6 +17,8 @@ interface CanvasAgentControllerProps {
 }
 
 const isDevEnv = typeof process !== 'undefined' && process.env.NODE_ENV !== 'production';
+const isClientAgentEnabled =
+  typeof process !== 'undefined' && process.env.NEXT_PUBLIC_CANVAS_AGENT_CLIENT_ENABLED === 'true';
 
 const debugLog = (...args: Parameters<typeof console.log>) => {
   if (isDevEnv) {
@@ -94,6 +96,15 @@ async function sendAgentTelemetry(event: 'agent_begin' | 'agent_end', payload: R
 }
 
 export function CanvasAgentController({ editor, room }: CanvasAgentControllerProps) {
+  if (!isClientAgentEnabled) {
+    try {
+      if (isDevEnv) {
+        console.log('[CanvasAgent] client agent disabled via NEXT_PUBLIC_CANVAS_AGENT_CLIENT_ENABLED');
+      }
+    } catch {}
+    return null;
+  }
+
   const agent = useTldrawAgent(editor, 'present-canvas-agent');
   const { isHost, hostId } = useIsAgentHost(room);
   const bus = useMemo(() => (room ? createLiveKitBus(room) : null), [room]);
