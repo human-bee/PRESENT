@@ -475,18 +475,22 @@ export const MessageThreadCollapsible = React.forwardRef<
         import('@/lib/component-registry')
           .then(({ ComponentRegistry }) => {
             try {
+              const existing = ComponentRegistry.get(messageId);
+              if (existing) {
+                console.log(
+                  `ℹ️ [MessageThread] Component ${messageId} already registered; skipping duplicate registry entry.`,
+                );
+                return;
+              }
+
               ComponentRegistry.register({
                 messageId,
                 componentType,
                 props: ((normalized as any)?.props || {}) as Record<string, unknown>,
                 contextKey: effectiveContextKey || 'default',
                 timestamp: Date.now(),
-                updateCallback: (patch) => {
-                  console.log(`✅ [MessageThread] Component ${messageId} received update:`, patch);
-                  // The component should handle its own updates via the registry wrapper
-                },
               });
-              console.log(`✅ [MessageThread] Successfully registered component: ${messageId}`);
+              console.log(`✅ [MessageThread] Registered component with registry: ${messageId}`);
             } catch (error) {
               console.warn(`⚠️ [MessageThread] Failed to register component ${messageId}:`, error);
             }
@@ -719,18 +723,20 @@ export const MessageThreadCollapsible = React.forwardRef<
                   !trimmedMessage ||
                   (!isRecognizedSlashCommand && !isRoomConnected) ||
                   (isRecognizedSlashCommand && slashCommandBodyMissing);
-                try {
-                  console.log('[Transcript] render state', {
-                    slashCommand: slashCommand?.command,
-                    isRecognizedSlashCommand,
-                    slashCommandBodyMissing,
-                    isSending,
-                    isRoomConnected,
-                    sendDisabled,
-                    inputDisabled,
-                    messageLength: typedMessage.length,
-                  });
-                } catch {}
+                if (process.env.NODE_ENV !== 'production') {
+                  try {
+                    console.debug('[Transcript] render state', {
+                      slashCommand: slashCommand?.command,
+                      isRecognizedSlashCommand,
+                      slashCommandBodyMissing,
+                      isSending,
+                      isRoomConnected,
+                      sendDisabled,
+                      inputDisabled,
+                      messageLength: typedMessage.length,
+                    });
+                  } catch {}
+                }
                 return (
               <form
                 data-debug-source="messaging-message-form"
