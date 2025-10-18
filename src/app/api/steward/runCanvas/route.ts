@@ -1,9 +1,11 @@
-import { NextRequest, NextResponse, after } from 'next/server';
-import { dispatchConductorTask } from '@/lib/agents/conductor';
+import { NextRequest, NextResponse } from 'next/server';
+import { AgentTaskQueue } from '@/lib/agents/shared/queue';
+
+const queue = new AgentTaskQueue();
 
 export async function POST(req: NextRequest) {
   try {
-    const { room, task, params, summary, message } = await req.json();
+    const { room, task, params, summary, message, requestId } = await req.json();
     if (typeof room !== 'string' || room.trim().length === 0) {
       return NextResponse.json({ error: 'Missing room' }, { status: 400 });
     }
@@ -37,17 +39,17 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Missing message for canvas.agent_prompt' }, { status: 400 });
     }
 
-    after(async () => {
-      try {
-        await dispatchConductorTask(normalizedTask, normalizedParams);
-      } catch (error) {
-        console.error('[Steward][runCanvas] error', error);
-      }
+    const enqueueResult = await queue.enqueueTask({
+      room: trimmedRoom,
+      task: normalizedTask,
+      params: normalizedParams,
+      requestId,
+      resourceKeys: [`room:${trimmedRoom}`],
     });
 
-    return NextResponse.json({ status: 'scheduled' }, { status: 202 });
+    return NextResponse.json({ status: 'queued', task: enqueueResult }, { status: 202 });
   } catch (error) {
-    console.error('Invalid request to steward/runCanvas', error);
+    console.error('[Steward][runCanvas] error', error);
     return NextResponse.json({ error: 'Bad Request' }, { status: 400 });
   }
 }
