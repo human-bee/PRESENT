@@ -15,6 +15,7 @@ import { resolveIntent, getObject, getString } from './intent-resolver';
 
 const queue = new AgentTaskQueue();
 const ROOM_CONCURRENCY = Number(process.env.TASK_DEFAULT_CONCURRENCY ?? 1);
+const TASK_LEASE_TTL_MS = Number(process.env.TASK_LEASE_TTL_MS ?? 60_000);
 
 const CanvasAgentPromptSchema = z
   .object({
@@ -143,9 +144,30 @@ function resolveIntentText(params: JsonObject): string {
   return 'Please assist on the canvas';
 }
 
+function createLeaseExtender(taskId: string, leaseToken: string) {
+  const intervalMs = Math.max(1_000, Math.floor(TASK_LEASE_TTL_MS * 0.6));
+  let stopped = false;
+
+  const intervalId = setInterval(() => {
+    if (stopped) return;
+    void queue.extendLease(taskId, leaseToken, TASK_LEASE_TTL_MS).catch((error) => {
+      const message = error instanceof Error ? error.message : String(error);
+      console.warn('[Conductor] failed to extend lease', { taskId, error: message });
+    });
+  }, intervalMs);
+
+  return () => {
+    stopped = true;
+    clearInterval(intervalId);
+  };
+}
+
 async function workerLoop() {
   while (true) {
-    const { leaseToken, tasks } = await queue.claimTasks({ limit: Number(process.env.TASK_DEFAULT_CONCURRENCY ?? 10) });
+    const { leaseToken, tasks } = await queue.claimTasks({
+      limit: Number(process.env.TASK_DEFAULT_CONCURRENCY ?? 10),
+      leaseTtlMs: TASK_LEASE_TTL_MS,
+    });
 
     if (tasks.length === 0) {
       await delay(500);
@@ -167,6 +189,7 @@ async function workerLoop() {
           while (queueList.length > 0) {
             const task = queueList.shift();
             if (!task) break;
+            const stopLeaseExtender = createLeaseExtender(task.id, leaseToken);
             try {
               const startedAt = Date.now();
               const result = await executeTask(task.task, task.params);
@@ -178,6 +201,8 @@ async function workerLoop() {
               const retryAt = task.attempt < 3 ? new Date(Date.now() + Math.pow(2, task.attempt) * 1000) : undefined;
               console.warn('[Conductor] task failed', { roomKey, taskId: task.id, task: task.task, attempt: task.attempt, retryAt, error: message });
               await queue.failTask(task.id, leaseToken, { error: message, retryAt });
+            } finally {
+              stopLeaseExtender();
             }
           }
         });
