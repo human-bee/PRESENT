@@ -7,6 +7,7 @@ import {
   getTranscriptWindow,
 } from '@/lib/agents/shared/supabase-context';
 import { jsonValueSchema, type JsonValue, type JsonObject } from '@/lib/utils/json-schema';
+import { debounceByKey } from '@/lib/utils/debounce';
 
 const logWithTs = <T extends Record<string, unknown>>(label: string, payload: T) => {
   try {
@@ -47,10 +48,11 @@ const createCanvasTool = (name: string, description: string) =>
     name: `${TOOL_PREFIX}${name}`,
     description,
     parameters: ShapeActionArgs,
-    async execute({ room, params }: { room: string; params: ParamEntryType[] }) {
-      const trimmedRoom = room.trim();
+    async execute(input: any) {
+      const trimmedRoom = String(input.room).trim();
       if (!trimmedRoom) throw new Error('Room is required');
-      const payloadParams = entriesToObject(params);
+      const params = Array.isArray(input.params) ? input.params : [];
+      const payloadParams = entriesToObject(params as ParamEntryType[]);
       const toolName = `${TOOL_PREFIX}${name}`;
       await broadcastCanvasAction({ room: trimmedRoom, tool: toolName, params: payloadParams });
       logWithTs('🖌️ [CanvasSteward] action', { room: trimmedRoom, tool: toolName, params: payloadParams });
@@ -98,17 +100,14 @@ export const dispatch_canvas_tool = tool({
   name: 'dispatch_canvas_tool',
   description: 'Broadcast a specific canvas tool event with parameters.',
   parameters: BroadcastArgs,
-  async execute({
-    room,
-    tool: targetTool,
-    params,
-  }: { room: string; tool: string; params: ParamEntryType[] }) {
-    const trimmedRoom = room.trim();
-    const toolName = targetTool.trim();
+  async execute(input: any) {
+    const trimmedRoom = String(input.room).trim();
+    const toolName = String(input.tool).trim();
     if (!toolName.startsWith(TOOL_PREFIX)) {
       throw new Error(`Canvas tools must start with ${TOOL_PREFIX}`);
     }
-    const payloadParams = entriesToObject(params);
+    const params = Array.isArray(input.params) ? input.params : [];
+    const payloadParams = entriesToObject(params as ParamEntryType[]);
     await broadcastCanvasAction({ room: trimmedRoom, tool: toolName, params: payloadParams });
     logWithTs('🛠️ [CanvasSteward] dispatch', { room: trimmedRoom, tool: toolName, params: payloadParams });
     return { status: 'OK' };
@@ -222,4 +221,21 @@ export async function runCanvasSteward(params: { task: string; params: JsonObjec
     });
   } catch {}
   return result.finalOutput;
+}
+
+const queueDebounce = debounceByKey(300);
+
+export async function enqueueCanvasPrompt(params: { room: string; message: string; requestId: string; metadata?: JsonObject }) {
+  const { room, message, requestId, metadata } = params;
+  await queueDebounce(room, async () => {
+    await runCanvasSteward({
+      task: 'canvas.agent_prompt',
+      params: {
+        room,
+        message,
+        requestId,
+        metadata,
+      },
+    });
+  });
 }
