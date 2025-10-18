@@ -7,9 +7,9 @@
   - `src/components/ui/canvas/hooks/`: TLDraw canvas hooks (component store, rehydration, LiveKit event wiring).
 - `src/lib/`: Agent workers, tools, and utilities.
   - `src/lib/agents/realtime/voice-agent.ts`: Primary LiveKit agent (Realtime API).
-  - `src/lib/agents/conductor/`: Router agent with handoffs.
-  - `src/lib/agents/subagents/`: Domain-specific stewards (flowchart, youtube, …).
-  - `src/lib/agents/shared/`: Shared contracts and Supabase helpers.
+  - `src/lib/agents/conductor/`: Queue-driven router + steward runners.
+  - `src/lib/agents/subagents/`: Domain-specific stewards (flowchart, canvas, youtube, …).
+  - `src/lib/agents/shared/`: Shared contracts, Supabase queue helpers.
   - `src/lib/archived-agents/`: Legacy agents for reference.
 - `public/`: Static assets. `docs/`: additional project docs.
 - Tests are colocated as `*.test.ts(x)` or under `__tests__/`; mocks live in `__mocks__/`.
@@ -21,18 +21,18 @@
 
 - `npm install`: Install dependencies.
 - `npm run agent:realtime`: Run the LiveKit Realtime voice agent (terminal 1 - start first).
-- `npm run agent:conductor`: Run the Agents SDK conductor/stewards (terminal 2).
+- `npm run agent:conductor`: Run the queue worker + stewards (terminal 2).
 - `npm run dev`: Run the web app at `http://localhost:3000` (terminal 3).
 - `npm run sync:dev`: Run the TLDraw sync server locally.
 
-> 💡 **Tip:** For quick local testing (including Chrome DevTools automation), you can launch the entire stack in the background with log files via `npm run stack:start`. The helper script starts `sync:dev`, `agent:conductor`, `agent:realtime`, and `npm run dev`, writing to `logs/*.log` so you can tail them while driving the canvas.
+> 💡 **Tip:** `npm run stack:start` launches the full stack (voice agent + conductor + sync server + web) with logs in `logs/*.log`.
 
 ### Production
 
 - `npm run build`: Build the Next.js app (one-time).
-- `npm run agent:realtime`: Run the voice agent (terminal 1).
-- `npm run agent:conductor`: Run the conductor/stewards (terminal 2).
-- `npm run start`: Run the production Next.js server (terminal 3).
+- `npm run agent:realtime`: Run the voice agent.
+- `npm run agent:conductor`: Run the conductor queue workers.
+- `npm run start`: Run the production Next.js server.
 
 ### Testing & Quality
 
@@ -40,57 +40,83 @@
 - `npm run test:watch`: Run tests in watch mode.
 - `npm run lint`: Run ESLint/Next rules.
 
-> 💡 **Tip:** For Testing the UI use the chrome-devtools mcp - 'cmd+k' to open the chat sidebar. connect to the livekit room, request the agent, and send a text message to the voice-agent to test user experience with new features, workflows, stewards, components, etc.
+> 💡 **Tip:** To test end-to-end, connect to LiveKit, request the agent, and speak/text requests; watch queue throughput in `logs/agent-conductor.log`.
 
 ## Coding Style & Naming Conventions
 
-- TypeScript across app and agent. Prefer explicit types on public APIs.
+- TypeScript across app and agents. Prefer explicit types on public APIs.
 - 2-space indentation; single quotes; consistent semicolons.
 - Components: PascalCase (`UserMenu.tsx`); hooks/utils: camelCase; non-component files/folders: kebab-case.
 - Keep modules small; colocate component styles and tests with the implementation.
-- All files aim for ≤200 LoC. Extract helpers early.Keep Repo Clean and Nested
+- All files aim for ≤200 LoC. Extract helpers early. Keep repo clean.
 
 ## Testing Guidelines
 
-- Framework: Jest with `jsdom` and Testing Library for React.
+- Framework: Jest with `jsdom` + Testing Library for React.
 - Location: `*.test.ts(x)` next to code or in `__tests__/`.
-- Mocks: use `__mocks__/` and `jest.mock` where appropriate.
-- Run `npm test` before PRs; cover critical paths (agent tools, LiveKit flows, UI actions).
-- Test agent contracts with mock LiveKit data channel messages.
+- Mocks: `__mocks__/`, use `jest.mock`.
+- Run `npm test` before PRs; cover agent queue contracts, LiveKit flows, UI actions.
+- Test agent contracts with mock LiveKit data channel messages + queue operations.
 
-## Commit & Pull Request Guidelines
+## Commit & PR Guidelines
 
-- Commits: Clear, imperative messages (e.g., "fix: handle LiveKit reconnect").
-- PRs: Include summary, linked issues, UI screenshots (when applicable), and notes for agent changes (logs or sample transcript).
-- Requirements: Passing tests and lint (`npm test`, `npm run lint`); no uncommitted changes.
+- Commits: Imperative ("fix: handle LiveKit reconnect").
+- PRs: Include summary, linked issues, screenshots/logs for agent changes.
+- Requirements: Passing `npm test`, `npm run lint`; no uncommitted changes.
 
-## Agent-Specific Instructions & Security
+## Agent Runtime & Security
 
-- Always start the agent before the web app. Look for "registered worker" and then "Job received!" in agent logs.
-- Secrets live in `.env.local` (never commit). Required keys include LiveKit, OpenAI, custom, and Supabase.
-- Dispatch is automatic: the agent joins all rooms in your LiveKit project.
+- Start agents before the web app. Voice agent should log "session started"; conductor logs queue throughput.
+- Secrets live in `.env.local` (never commit). Required: LiveKit, OpenAI, Supabase, etc.
+- Voice agent enqueues tasks; conductor fetches from Supabase.
 
 # Agents: Runtime, Roles & Contracts
 
-If it doesn't move the canvas, it doesn't belong in the voice agent. This document defines the small set of agents we actually run, the messages they speak, and the contracts the browser must honor—no more heuristic soup.
+If it doesn't move the canvas, it doesn't belong in the voice agent. We separate real-time audio responsiveness from heavy reasoning.
 
-## Startup scripts (new architecture)
+## Startup Scripts (queue architecture)
 
-- `npm run agent:realtime`: Starts the LiveKit Realtime voice agent (`src/lib/agents/realtime/voice-agent.ts`). It listens to the room, transcribes, and emits only two UI tools: `create_component` and `update_component`.
-- `npm run agent:conductor`: Starts the Conductor (Agents SDK). It routes `dispatch_to_conductor` requests to stewards (e.g., Flowchart Steward) using handoffs.
-- Both must be running for the steward-managed flowchart pipeline.
+- `npm run agent:realtime`: LiveKit voice agent. Listens, transcribes, **enqueues** tasks (fire-and-forget). No direct tool calls.
+- `npm run agent:conductor`: Queue workers that claim `agent_tasks` rows, execute stewards (canvas, flowchart, youtube), and emit tool events back to the browser.
+- Both must be running for steward-managed workflows.
 
-## Topology (one screen's worth)
+## Topology
 
 - **Voice Agent (Realtime, Node)**
-  Listens to the room, transcribes, and calls exactly two UI tools via LiveKit data channel. May hand off server-side work to the Conductor.
-- **Conductor (Agents SDK, Node)**
-  A tiny router that delegates to **steward** subagents via handoffs. No business logic.
-- **Stewards (Agents SDK, Node)**
-  Domain owners (e.g., **Flowchart Steward**, **Canvas Steward**, **YouTube Steward**). They read context (Supabase), produce a complete artifact, and emit one UI patch or component creation.
-- **Browser ToolDispatcher (React, client)**
-  A bridge, not an agent. Executes `create_component` and `update_component`. Sends `tool_result`/`tool_error`. Dispatches TLDraw DOM events when needed.
+  - Streaming STT → LLM (gpt-realtime) → `enqueue_task` tool.
+  - Emits `tool_call` events only to confirm queueing. Never calls canvas tools directly.
+- **Conductor Workers (Node)**
+  - Poll `agent_tasks` table, respect per-room/resource locks, execute appropriate steward, write results/logs.
+- **Stewards**
+  - Flowchart, Canvas, YouTube, etc. Each receives stable params from the conductor. Canvas steward still owns internal scheduling.
+- **Browser ToolDispatcher**
+  - Listens for steward outputs (`tool_call`, `tool_result`), applies UI changes, publishes status.
 - **Supabase**
-  Source of truth for transcripts and flowchart docs (format + version).
+  - Queue storage (`agent_tasks`), transcripts, flowchart documents.
 
-Check /docs for more tips
+## Queue Fundamentals
+
+- Table: `agent_tasks` with `status`, `priority`, `resource_keys`, `request_id` (idempotency), `lease_token` (worker locks).
+- Voice Agent enqueues with `task: "conductor.dispatch"` + metadata.
+- Workers claim tasks (`claim_agent_tasks` RPC) with lease TTL.
+- Failures use exponential backoff (attempt count); after max retries mark `failed`.
+- Resource keys ensure per-room ordering but allow cross-room parallelism.
+
+## Environment Variables
+
+- `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` (required for queue workers).
+- Optional tuning:
+  - `TASK_DEFAULT_CONCURRENCY`
+  - `TASK_MAX_CONCURRENCY_CANVAS`
+  - `TASK_MAX_CONCURRENCY_FLOWCHART`
+  - `TASK_MAX_CONCURRENCY_YOUTUBE`
+  - `TASK_DEBOUNCE_MS_CANVAS`
+
+## Operational Checklist
+
+- Voice agent latency: <600–800 ms for enqueue acknowledgement.
+- Conductor logs show claimed/completed tasks; monitor queue depth.
+- Canvas prompts should coalesce—latest wins.
+- Parallel tasks across different rooms/components run concurrently.
+
+Check `/docs` for steward-specific playbooks.

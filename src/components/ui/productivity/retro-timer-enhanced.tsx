@@ -101,6 +101,12 @@ export function RetroTimerEnhanced({
 
   // Local timer state
   const [state, setState] = useState<TimerState>(initialState);
+  const [configuredDuration, setConfiguredDuration] = useState(initialTimeInSeconds);
+
+  // Keep configuredDuration in sync with props when the component mounts or props change
+  useEffect(() => {
+    setConfiguredDuration(initialTimeInSeconds);
+  }, [initialTimeInSeconds]);
 
   // Use the exact custom message ID if provided, otherwise create a stable one
   const effectiveMessageId = React.useMemo(() => {
@@ -130,50 +136,96 @@ export function RetroTimerEnhanced({
   );
 
   // Handle AI updates via the new component registry - stable callback
+  const coerceNumber = useCallback((value: unknown): number | null => {
+    if (typeof value === 'number' && Number.isFinite(value)) return value;
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      if (!trimmed) return null;
+      const parsed = Number.parseFloat(trimmed.replace(/[^0-9.+-]/g, ''));
+      if (Number.isFinite(parsed)) return parsed;
+    }
+    return null;
+  }, []);
+
+  const coerceBoolean = useCallback((value: unknown): boolean | null => {
+    if (typeof value === 'boolean') return value;
+    if (typeof value === 'number') {
+      if (value === 1) return true;
+      if (value === 0) return false;
+    }
+    if (typeof value === 'string') {
+      const normalized = value.trim().toLowerCase();
+      if (!normalized) return null;
+      if (['true', 'yes', 'start', 'go', 'run', 'play', 'resume', '1'].includes(normalized)) return true;
+      if (['false', 'no', 'stop', 'pause', 'halt', '0'].includes(normalized)) return false;
+    }
+    return null;
+  }, []);
+
   const handleAIUpdate = React.useCallback(
     (patch: Record<string, unknown>) => {
       console.log(`[RetroTimerEnhanced] ✅ AI UPDATE RECEIVED:`, patch);
 
-      // Handle initialMinutes update
-      if ('initialMinutes' in patch && typeof patch.initialMinutes === 'number') {
-        const patchSeconds = (patch.initialSeconds as number) || 0;
-        const newTimeInSeconds = patch.initialMinutes * 60 + patchSeconds;
+      const rawMinutes = 'initialMinutes' in patch ? coerceNumber(patch.initialMinutes) : null;
+      const rawSeconds = 'initialSeconds' in patch ? coerceNumber(patch.initialSeconds) : null;
+      const normalizedMinutes =
+        rawMinutes !== null ? Math.min(Math.max(Math.round(rawMinutes), 1), 120) : null;
+      const normalizedSeconds =
+        rawSeconds !== null ? Math.min(Math.max(Math.round(rawSeconds), 0), 59) : null;
+      const durationWasUpdated = normalizedMinutes !== null || normalizedSeconds !== null;
+
+      const resolvedMinutes =
+        normalizedMinutes !== null
+          ? normalizedMinutes
+          : Math.max(1, Math.floor(configuredDuration / 60));
+      const resolvedSeconds =
+        normalizedSeconds !== null ? normalizedSeconds : Math.max(0, configuredDuration % 60);
+      const nextDurationSeconds = resolvedMinutes * 60 + resolvedSeconds;
+
+      if (durationWasUpdated) {
         console.log(
-          `[RetroTimerEnhanced] 🔄 Updating timer: ${patch.initialMinutes} minutes (${newTimeInSeconds} seconds)`,
+          `[RetroTimerEnhanced] 🔄 Updating timer: ${resolvedMinutes}m ${resolvedSeconds}s (${nextDurationSeconds} seconds)`,
         );
+        setConfiguredDuration(nextDurationSeconds);
+      }
 
-        setState((prev) =>
-          prev
-            ? {
-              ...prev,
-              timeLeft: newTimeInSeconds,
-              isFinished: false,
-              isRunning: false, // Reset to stopped state
+      const autoStartPatch = 'autoStart' in patch ? coerceBoolean(patch.autoStart) : null;
+
+      setState((prev) => {
+        const base: TimerState =
+          prev ?? {
+            timeLeft: configuredDuration,
+            isRunning: false,
+            isFinished: false,
+          };
+        let next = { ...base };
+
+        if (durationWasUpdated) {
+          next = {
+            ...next,
+            timeLeft: nextDurationSeconds,
+            isFinished: false,
+            // default to stopped unless autoStart explicitly turns it on
+            isRunning: autoStartPatch === true ? true : false,
+          };
+        }
+
+        if (autoStartPatch !== null) {
+          if (autoStartPatch) {
+            if (!durationWasUpdated && next.timeLeft <= 0) {
+              next.timeLeft = configuredDuration;
             }
-            : {
-              timeLeft: newTimeInSeconds,
-              isRunning: false,
-              isFinished: false,
-            },
-        );
-      }
+            next.isRunning = true;
+            next.isFinished = false;
+          } else {
+            next.isRunning = false;
+          }
+        }
 
-      // Handle other updates
-      if ('autoStart' in patch && patch.autoStart === true) {
-        console.log(`[RetroTimerEnhanced] 🚀 Auto-starting timer`);
-        setState((prev) => {
-          const currentInitialTime = initialMinutes * 60 + initialSeconds;
-          return prev
-            ? { ...prev, isRunning: true }
-            : {
-              timeLeft: currentInitialTime,
-              isRunning: true,
-              isFinished: false,
-            };
-        });
-      }
+        return next;
+      });
     },
-    [setState, initialMinutes, initialSeconds],
+    [coerceBoolean, coerceNumber, configuredDuration, setConfiguredDuration, setState],
   );
 
   useComponentRegistration(
@@ -227,21 +279,23 @@ export function RetroTimerEnhanced({
 
   const reset = React.useCallback(() => {
     setState({
-      timeLeft: initialTimeInSeconds,
+      timeLeft: configuredDuration,
       isRunning: false,
       isFinished: false,
     });
-  }, [setState, initialTimeInSeconds]);
+  }, [setState, configuredDuration]);
 
   const setPresetTime = React.useCallback(
     (minutes: number) => {
+      const nextSeconds = minutes * 60;
+      setConfiguredDuration(nextSeconds);
       setState({
-        timeLeft: minutes * 60,
+        timeLeft: nextSeconds,
         isRunning: false,
         isFinished: false,
       });
     },
-    [setState],
+    [setState, setConfiguredDuration],
   );
 
   if (!state) {
@@ -294,7 +348,9 @@ export function RetroTimerEnhanced({
         <div className="text-center mb-6">
           <div className="flex items-center justify-center gap-2 mb-2">
             <Clock className="w-5 h-5 text-blue-400" />
-            <h3 className="text-lg font-semibold">{title || `${initialMinutes} Minute Timer`}</h3>
+            <h3 className="text-lg font-semibold">
+              {title || `${Math.max(1, Math.round(configuredDuration / 60))} Minute Timer`}
+            </h3>
           </div>
           <div className="text-xs text-gray-400">Enhanced with AI Updates • {componentId}</div>
         </div>

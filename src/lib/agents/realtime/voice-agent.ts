@@ -9,57 +9,109 @@ try {
 } catch {}
 import { realtime as openaiRealtime } from '@livekit/agents-plugin-openai';
 import { appendTranscriptCache } from '@/lib/agents/shared/supabase-context';
-import { createLogger } from '@/lib/utils';
 import { DebateJudgeManager, isStartDebate } from '@/lib/agents/debate-judge';
 import { jsonObjectSchema, type JsonObject } from '@/lib/utils/json-schema';
-import { RoomEvent, RemoteParticipant, RemoteTrackPublication, Track } from 'livekit-client';
+import { AgentTaskQueue } from '@/lib/agents/shared/queue';
+import { RoomEvent } from 'livekit-client';
 
-/** I replace the entire entry implementation with manual AgentSession handling and reroute listeners to the session. */
+const enqueueQueue = new AgentTaskQueue();
+
 export default defineAgent({
   entry: async (job: JobContext) => {
     await job.connect();
+    console.log('[VoiceAgent] Connected to room:', job.room.name);
 
-    const subscribeToParticipant = (participant?: RemoteParticipant) => {
-      if (!participant) return;
+    const enqueueTask = async (payload: JsonObject) => {
+      const room = job.room.name || 'unknown';
+      const requestId = typeof payload?.requestId === 'string' ? payload.requestId : randomUUID();
+      const resourceKeys = Array.isArray(payload?.resourceKeys) ? payload.resourceKeys : [`room:${room}`];
+      const taskName = typeof payload?.task === 'string' ? payload.task : 'conductor.dispatch';
+      const params = (payload?.params as JsonObject) ?? payload;
 
-      const publicationMaps: Array<Map<string, RemoteTrackPublication> | undefined> = [
-        (participant as any).trackPublications,
-        (participant as any).tracks,
-      ];
+      await enqueueQueue.enqueueTask({
+        room,
+        task: taskName,
+        params: { ...params, room },
+        requestId,
+        resourceKeys,
+      });
 
-      let subscribed = false;
-      for (const map of publicationMaps) {
-        if (!map || typeof map.forEach !== 'function') continue;
-        map.forEach((publication: RemoteTrackPublication) => {
-          if (publication.kind === Track.Kind.Audio && !publication.isSubscribed) {
-            try {
-              publication.setSubscribed(true);
-              subscribed = true;
-            } catch (error) {
-              console.warn('[VoiceAgent] failed to subscribe to audio track', error);
-            }
-          }
-        });
-        if (subscribed) return;
-      }
+      const event = {
+        id: requestId,
+        roomId: room,
+        type: 'tool_call' as const,
+        payload: { tool: 'enqueue_task', params: payload, context: { source: 'voice', timestamp: Date.now() } },
+        timestamp: Date.now(),
+        source: 'voice' as const,
+      };
 
-      const publications = participant.getTrackPublications?.();
-      if (Array.isArray(publications)) {
-        publications.forEach((publication: RemoteTrackPublication) => {
-          if (publication.kind === Track.Kind.Audio && !publication.isSubscribed) {
-            try {
-              publication.setSubscribed(true);
-            } catch (error) {
-              console.warn('[VoiceAgent] failed to subscribe to audio track', error);
-            }
-          }
-        });
-      }
+      await job.room.localParticipant?.publishData(new TextEncoder().encode(JSON.stringify(event)), {
+        reliable: true,
+        topic: 'tool_call',
+      });
     };
 
-    job.room.remoteParticipants.forEach((participant) => subscribeToParticipant(participant));
-    job.room.on(RoomEvent.ParticipantConnected, (participant) => subscribeToParticipant(participant));
-    job.room.on(RoomEvent.TrackPublished, (_publication, participant) => subscribeToParticipant(participant));
+    const instructions = `You are a lightweight voice interface for a multi-participant canvas room.
+
+When you detect an actionable intent (explicit or implicit), immediately enqueue a task for the Conductor and return. Do not wait for the Conductor or stewards to finish.
+
+How to respond:
+1. Capture the user's request or inferred task.
+2. Call enqueue_task({ intent: "short description", transcript: FULL_TEXT, participants: LIST, metadata? })
+3. Always include the exact transcript snippet you used.
+4. Do not set specific tasks; send full transcript so the conductor can infer the right steward or component.
+5. Never create components or call tools directly.
+6. Stay silent otherwise (no natural language responses).
+`;
+
+    const toolContext: llm.ToolContext = {
+      enqueue_task: llm.tool({
+        description: 'Enqueue a task for the Conductor to process asynchronously.',
+        parameters: z.object({
+          intent: z.string().min(1),
+          transcript: z.string().min(1),
+          participants: z.array(z.string()).default([]),
+          metadata: jsonObjectSchema.optional(),
+          requestId: z.string().optional(),
+          resourceKeys: z.array(z.string()).optional(),
+          task: z.string().optional(),
+          params: jsonObjectSchema.optional(),
+        }),
+        execute: async (args) => {
+          const normalized = { ...args } as JsonObject;
+          normalized.task = 'auto';
+          if (normalized.metadata === null || typeof normalized.metadata !== 'object') {
+            delete normalized.metadata;
+          }
+          normalized.params = {
+            intent: normalized.intent,
+            transcript: normalized.transcript,
+            participants: normalized.participants,
+            message: normalized.transcript,
+            ...(normalized.metadata ? { metadata: normalized.metadata } : {}),
+          } as JsonObject;
+          await enqueueTask(normalized);
+          return { status: 'queued' };
+        },
+      }),
+    };
+
+    const realtimeModel = new openaiRealtime.RealtimeModel({
+      model: 'gpt-realtime',
+      toolChoice: 'required',
+      inputAudioTranscription: { model: 'whisper-1' },
+      turnDetection: { type: 'server_vad' },
+    });
+
+    const agent = new voice.Agent({
+      instructions,
+      tools: toolContext,
+    });
+
+    const session = new voice.AgentSession({
+      llm: realtimeModel,
+      turnDetection: 'manual' as any, // Model has server_vad enabled; session uses manual
+    });
 
     job.room.on(RoomEvent.DataReceived, async (payload, participant, _, topic) => {
       if (topic !== 'transcription') return;
@@ -71,112 +123,15 @@ export default defineAgent({
         const speaker = typeof message?.speaker === 'string' ? message.speaker : participant?.identity;
         if (!text || isReplay) return;
         if (!isManual && speaker === 'voice-agent') return;
-        await session.generateReply({ userInput: text });
+        await enqueueTask({
+          intent: `manual_text:${text.slice(0, 64)}`,
+          transcript: text,
+          participants: speaker ? [speaker] : [],
+          metadata: { manual: true },
+        });
       } catch (error) {
-        console.warn('[VoiceAgent] failed to handle data transcription', error);
+        console.warn('[VoiceAgent] failed to handle manual transcription', error);
       }
-    });
-    const instructions = `You are a UI automation agent. You NEVER speak—you only act by calling tools.
-
-CRITICAL RULES:
-1. For canvas work (draw, sticky note, shapes): call dispatch_to_conductor({ task: "canvas.agent_prompt", params: { room: CURRENT_ROOM, message: "<user request>", requestId: "<uuid>", bounds?, selectionIds? } }). Generate a fresh UUID when you create requestId.
-2. For component creation/updates: call create_component or update_component.
-3. NEVER respond with conversational text. If uncertain, call a tool anyway.
-4. Do not greet, explain, or narrate. Tool calls only.
-
-Examples:
-- User: "draw a cat" → dispatch_to_conductor({ task: "canvas.agent_prompt", params: { room: CURRENT_ROOM, message: "draw a cat", requestId: "..." } })
-- User: "focus on the selected rectangles" → dispatch_to_conductor({ task: "canvas.agent_prompt", params: { room: CURRENT_ROOM, message: "focus on the selected rectangles", requestId: "...", selectionIds: CURRENT_SELECTION_IDS } })
-- User: "add a timer" → create_component({ type: "RetroTimerEnhanced", spec: "{}" })
-- User: "hi" → (no tool needed, stay silent)
-
-Your only output is function calls. Never use plain text unless absolutely necessary.`;
-
-    const sendToolCall = async (tool: string, params: JsonObject) => {
-      const toolEvent = {
-        id: randomUUID(),
-        roomId: job.room.name || 'unknown',
-        type: 'tool_call' as const,
-        payload: { tool, params, context: { source: 'voice', timestamp: Date.now() } },
-        timestamp: Date.now(),
-        source: 'voice' as const,
-      };
-      const participantExists = !!job.room.localParticipant;
-      console.log('[VoiceAgent] tool_call ready (from execute)', { participantExists, tool, params });
-      await job.room.localParticipant?.publishData(new TextEncoder().encode(JSON.stringify(toolEvent)), {
-        reliable: true,
-        topic: 'tool_call',
-      });
-      if (!participantExists) {
-        console.warn('[VoiceAgent] localParticipant missing, tool_call not sent');
-      }
-    };
-
-    const toolParameters = jsonObjectSchema.default({});
-    const toolContext: llm.ToolContext = {
-      create_component: llm.tool({
-        description: 'Create a new component on the canvas.',
-        parameters: z.object({ type: z.string(), spec: z.string() }),
-        execute: async (args) => {
-          await sendToolCall('create_component', args);
-          return { status: 'queued' };
-        },
-      }),
-      update_component: llm.tool({
-        description: 'Update an existing component with a patch.',
-        parameters: z.object({ componentId: z.string(), patch: z.string() }),
-        execute: async (args) => {
-          await sendToolCall('update_component', args);
-          return { status: 'queued' };
-        },
-      }),
-      dispatch_to_conductor: llm.tool({
-        description: 'Ask the conductor to run a steward for complex tasks like flowcharts or canvas drawing.',
-        parameters: z.object({ task: z.string(), params: toolParameters }),
-        execute: async (args) => {
-          const roomName = job.room.name || '';
-          const params = (args?.params as JsonObject) || {};
-          const enrichedParams: JsonObject = { ...params };
-
-          if (!enrichedParams.room && roomName) {
-            enrichedParams.room = roomName;
-          }
-
-          if (
-            (!enrichedParams.message || typeof enrichedParams.message !== 'string') &&
-            typeof (params as Record<string, unknown>)?.instruction === 'string'
-          ) {
-            enrichedParams.message = String((params as Record<string, unknown>).instruction);
-          }
-
-          if (!enrichedParams.requestId) {
-            enrichedParams.requestId = randomUUID();
-          }
-
-          await sendToolCall('dispatch_to_conductor', {
-            ...args,
-            params: enrichedParams,
-          });
-          return { status: 'queued' };
-        },
-      }),
-    };
-
-    const realtimeModel = new openaiRealtime.RealtimeModel({
-      model: 'gpt-realtime',
-      toolChoice: 'required',
-      inputAudioTranscription: null,
-      turnDetection: null,
-    });
-
-    const agent = new voice.Agent({
-      instructions,
-      tools: toolContext,
-    });
-
-    const session = new voice.AgentSession({
-      llm: realtimeModel,
-      turnDetection: 'manual',
     });
 
     const debateJudgeManager = new DebateJudgeManager(job.room as any, job.room.name || 'room');
@@ -202,73 +157,6 @@ Your only output is function calls. Never use plain text unless absolutely neces
       }
     };
 
-    session.on(voice.AgentSessionEventTypes.FunctionCall, async (event) => {
-      const fnCall = event.call;
-      if (!fnCall) return;
-      console.log('[VoiceAgent] FunctionCall event', { name: fnCall.name, args: fnCall.args });
-      try {
-        const args = JSON.parse(fnCall.args || '{}');
-        if (!['create_component', 'update_component', 'dispatch_to_conductor'].includes(fnCall.name)) {
-          return;
-        }
-        const toolEvent = {
-          id: fnCall.id,
-          roomId: job.room.name || 'unknown',
-          type: 'tool_call',
-          payload: { tool: fnCall.name, params: args, context: { source: 'voice', timestamp: Date.now() } },
-          timestamp: Date.now(),
-          source: 'voice' as const,
-        };
-        const participantExists = !!job.room.localParticipant;
-        console.log('[VoiceAgent] tool_call ready', { participantExists, toolEvent });
-        await job.room.localParticipant?.publishData(new TextEncoder().encode(JSON.stringify(toolEvent)), {
-          reliable: true,
-          topic: 'tool_call',
-        });
-        if (!participantExists) {
-          console.warn('[VoiceAgent] localParticipant missing, tool_call not sent');
-        }
-      } catch (error) {
-        console.error('[VoiceAgent] Tool call handling failed', error);
-      }
-    });
-
-    session.on(voice.AgentSessionEventTypes.FunctionToolsExecuted, async (event) => {
-      const calls = event.functionCalls ?? [];
-      console.log('[VoiceAgent] FunctionToolsExecuted', {
-        count: calls.length,
-        callNames: calls.map((c) => c.name),
-      });
-      console.log('[VoiceAgent] FunctionToolsExecuted raw', event);
-      for (const fnCall of calls) {
-        try {
-          const args = JSON.parse(fnCall.args || '{}');
-          if (!['create_component', 'update_component', 'dispatch_to_conductor'].includes(fnCall.name)) {
-            continue;
-          }
-          const toolEvent = {
-            id: fnCall.id,
-            roomId: job.room.name || 'unknown',
-            type: 'tool_call',
-            payload: { tool: fnCall.name, params: args, context: { source: 'voice', timestamp: Date.now() } },
-            timestamp: Date.now(),
-            source: 'voice' as const,
-          };
-          const participantExists = !!job.room.localParticipant;
-          console.log('[VoiceAgent] tool_call ready', { participantExists, toolEvent });
-          await job.room.localParticipant?.publishData(new TextEncoder().encode(JSON.stringify(toolEvent)), {
-            reliable: true,
-            topic: 'tool_call',
-          });
-          if (!participantExists) {
-            console.warn('[VoiceAgent] localParticipant missing, tool_call not sent');
-          }
-        } catch (error) {
-          console.error('[VoiceAgent] Tool call handling failed', error);
-        }
-      }
-    });
-
     session.on(voice.AgentSessionEventTypes.UserInputTranscribed, async (event) => {
       const payload = { type: 'live_transcription', text: event.transcript, speaker: 'user', timestamp: Date.now(), is_final: event.isFinal };
       await job.room.localParticipant?.publishData(new TextEncoder().encode(JSON.stringify(payload)), {
@@ -284,43 +172,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
           });
           void maybeHandleDebate(event.transcript);
         } catch {}
-
-        const trimmed = event.transcript?.trim();
-        if (trimmed) {
-          try {
-            await session.generateReply();
-          } catch (error) {
-            console.error('[VoiceAgent] failed to generate reply after transcript', error);
-          }
-        }
       }
-    });
-
-    session.on(voice.AgentSessionEventTypes.ConversationItemAdded, async (event) => {
-      console.log('[VoiceAgent] ConversationItem', {
-        type: event.item.type,
-        role: event.item.role,
-        hasFunctionCall: !!(event.item as any).functionCall,
-        contentKinds: Array.isArray((event.item as any).content)
-          ? (event.item as any).content.map((c: any) => c.type)
-          : undefined,
-      });
-      if (event.item.role !== 'assistant') return;
-      const text = event.item.textContent ?? '';
-      if (!text.trim()) return;
-
-      const payload = { type: 'live_transcription', text, speaker: 'voice-agent', timestamp: Date.now(), is_final: true };
-      await job.room.localParticipant?.publishData(new TextEncoder().encode(JSON.stringify(payload)), {
-        reliable: true,
-        topic: 'transcription',
-      });
-      try {
-        appendTranscriptCache(job.room.name || 'unknown', {
-          participantId: 'voice-agent',
-          text,
-          timestamp: Date.now(),
-        });
-      } catch {}
     });
 
     session.on(voice.AgentSessionEventTypes.Error, (event) => {
@@ -335,13 +187,11 @@ Your only output is function calls. Never use plain text unless absolutely neces
       agent,
       room: job.room,
       inputOptions: { audioEnabled: true },
-      outputOptions: { audioEnabled: false, transcriptionEnabled: false },
+      outputOptions: { audioEnabled: false, transcriptionEnabled: true },
     });
-
   },
 });
 
-// CLI runner for local dev
 if (import.meta.url.startsWith('file:') && process.argv[1].endsWith('voice-agent.ts')) {
   if (process.argv.length < 3) {
     process.argv.push('dev');

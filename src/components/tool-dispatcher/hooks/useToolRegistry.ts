@@ -72,13 +72,54 @@ export function useToolRegistry(deps: ToolRegistryDeps): ToolRegistryApi {
       const messageId = String(params?.messageId || params?.componentId || '') || `ui-${Date.now().toString(36)}`;
 
       try {
+        const { spec, props, ...rest } = (params || {}) as Record<string, unknown>;
+        let normalizedProps: Record<string, unknown> = { ...rest };
+        if (spec && typeof spec === 'string') {
+          try {
+            const parsedSpec = JSON.parse(spec as string);
+            if (parsedSpec && typeof parsedSpec === 'object') {
+              normalizedProps = { ...normalizedProps, ...parsedSpec };
+            }
+          } catch {
+            normalizedProps.spec = spec;
+          }
+        } else if (spec && typeof spec === 'object') {
+          normalizedProps = { ...normalizedProps, ...(spec as Record<string, unknown>) };
+        }
+        if (props && typeof props === 'object') {
+          normalizedProps = { ...normalizedProps, ...(props as Record<string, unknown>) };
+        }
+        normalizedProps = Object.fromEntries(
+          Object.entries(normalizedProps).filter(([, value]) => value !== undefined && value !== null),
+        );
+        normalizedProps.type = componentType;
+        normalizedProps.messageId = messageId;
+        if (!('__custom_message_id' in normalizedProps)) {
+          normalizedProps.__custom_message_id = messageId;
+        }
+        if (!('componentId' in normalizedProps)) {
+          normalizedProps.componentId = messageId;
+        }
+
+        const payloadProps: Record<string, unknown> = {
+          ...rest,
+          type: componentType,
+          messageId,
+        };
+        if (spec !== undefined) {
+          payloadProps.spec = spec;
+        }
+        if (props !== undefined) {
+          payloadProps.props = props;
+        }
+
         window.dispatchEvent(
           new CustomEvent('custom:showComponent', {
             detail: {
               messageId,
               component: {
                 type: componentType,
-                props: params,
+                props: normalizedProps,
               },
               contextKey,
             },
@@ -98,7 +139,17 @@ export function useToolRegistry(deps: ToolRegistryDeps): ToolRegistryApi {
         return { status: 'ERROR', message: 'update_component requires componentId' };
       }
       const nextPatch =
-        typeof patch === 'string' ? { instruction: patch } : ((patch as Record<string, unknown> | undefined) ?? {});
+        typeof patch === 'string'
+          ? (() => {
+              try {
+                const parsed = JSON.parse(patch);
+                if (parsed && typeof parsed === 'object') {
+                  return parsed as Record<string, unknown>;
+                }
+              } catch {}
+              return { instruction: patch } as Record<string, unknown>;
+            })()
+          : ((patch as Record<string, unknown> | undefined) ?? {});
       const result = await ComponentRegistry.update(messageId, nextPatch);
       return { status: 'SUCCESS', message: 'Component updated', ...result };
     });
