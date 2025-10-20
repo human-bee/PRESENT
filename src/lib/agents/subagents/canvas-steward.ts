@@ -6,7 +6,7 @@ import {
   getTranscriptWindow,
 } from '@/lib/agents/shared/supabase-context';
 import { jsonObjectSchema, jsonValueSchema, type JsonObject, type JsonValue } from '@/lib/utils/json-schema';
-import { CanvasAgentService, type CanvasPlan } from './canvas-agent-service';
+import { getCanvasAgentService, type CanvasPlan } from './canvas-agent-service';
 import { resolveCanvasModelName } from './canvas-models';
 
 const logWithTs = <T extends Record<string, unknown>>(label: string, payload: T) => {
@@ -15,15 +15,23 @@ const logWithTs = <T extends Record<string, unknown>>(label: string, payload: T)
   } catch {}
 };
 
-const serviceSingleton = (() => {
-  let instance: CanvasAgentService | null = null;
-  return () => {
-    if (!instance) {
-      instance = new CanvasAgentService();
-    }
-    return instance;
-  };
-})();
+const CANVAS_STEWARD_DEBUG = process.env.CANVAS_STEWARD_DEBUG === 'true';
+const debugLog = (...args: unknown[]) => {
+  if (CANVAS_STEWARD_DEBUG) {
+    try {
+      console.log('[CanvasSteward]', ...args);
+    } catch {}
+  }
+};
+const debugJson = (label: string, value: unknown, max = 2000) => {
+  if (!CANVAS_STEWARD_DEBUG) return;
+  try {
+    const json = JSON.stringify(value, null, 2);
+    debugLog(label, json.length > max ? `${json.slice(0, max)}… (truncated ${json.length - max} chars)` : json);
+  } catch (error) {
+    debugLog(label, value);
+  }
+};
 
 const ParamEntry = z.object({
   key: z.string(),
@@ -136,20 +144,36 @@ export async function runCanvasSteward(args: RunCanvasStewardArgs) {
     shapeCount: canvasState.shapes.length,
     transcriptLines: Array.isArray(context?.transcript) ? context.transcript.length : 0,
   });
+  debugLog('promptPreview', prompt.slice(0, 400));
+  debugJson('promptPayload', payload);
+  debugJson('promptContext', {
+    canvasState: {
+      version: canvasState.version,
+      shapeSample: canvasState.shapes.slice(0, 5),
+      totalShapes: canvasState.shapes.length,
+    },
+    transcriptSample: Array.isArray(context?.transcript) ? context.transcript.slice(-10) : undefined,
+  });
 
-  const service = serviceSingleton();
-  const plan = await service.generatePlan({
+  const service = getCanvasAgentService();
+  const { plan, modelName: resolvedModelName } = await service.generatePlan({
     modelName,
     system: CANVAS_STEWARD_SYSTEM_PROMPT,
     prompt,
   });
+
+  debugLog('plan.received', {
+    actions: plan.actions.length,
+    summary: plan.summary,
+  });
+  debugJson('plan.actions', plan.actions);
 
   await applyCanvasPlan(room, plan);
 
   try {
     logWithTs('✅ [CanvasSteward] run.complete', {
       task,
-      modelName,
+      modelName: resolvedModelName,
       room,
       actionCount: plan.actions.length,
       durationMs: Date.now() - start,
@@ -229,12 +253,18 @@ function buildPrompt(options: {
 }
 
 async function applyCanvasPlan(room: string, plan: CanvasPlan) {
+  if (plan.actions.length === 0) {
+    debugLog('plan.actions empty – nothing to apply', { room, summary: plan.summary });
+    return;
+  }
+
   for (const action of plan.actions) {
     const tool = action.tool.trim();
     if (!tool.startsWith('canvas_')) {
       throw new Error(`Invalid canvas tool: ${tool}`);
     }
     const params = jsonObjectSchema.parse(action.params ?? {});
+    debugLog('plan.action', { room, tool, params, rationale: action.rationale });
     await broadcastCanvasAction({ room, tool, params });
     try {
       logWithTs('🖌️ [CanvasSteward] action', {

@@ -1,7 +1,7 @@
-export const DEFAULT_MODEL_NAME = 'gpt-4.1'
+export const DEFAULT_MODEL_NAME = 'claude-haiku-4-5'
 
 export type AgentModelName = keyof typeof AGENT_MODEL_DEFINITIONS
-export type AgentModelProvider = 'openai'
+export type AgentModelProvider = 'openai' | 'anthropic'
 
 export interface AgentModelDefinition {
 	name: AgentModelName
@@ -26,14 +26,34 @@ export function getAgentModelDefinition(modelName: AgentModelName): AgentModelDe
 }
 
 export const AGENT_MODEL_DEFINITIONS = {
-	'gpt-4o': {
-		name: 'gpt-4o',
-		id: 'gpt-4o',
-		provider: 'openai',
+	'claude-haiku-4-5': {
+		name: 'claude-haiku-4-5',
+		id: 'claude-haiku-4-5-20251001',
+		provider: 'anthropic',
+	},
+	'claude-4.5-sonnet': {
+		name: 'claude-4.5-sonnet',
+		id: 'claude-sonnet-4-5',
+		provider: 'anthropic',
+	},
+	'claude-4-sonnet': {
+		name: 'claude-4-sonnet',
+		id: 'claude-sonnet-4-0',
+		provider: 'anthropic',
+	},
+	'claude-3.5-sonnet': {
+		name: 'claude-3.5-sonnet',
+		id: 'claude-3-5-sonnet-latest',
+		provider: 'anthropic',
 	},
 	'gpt-4.1': {
 		name: 'gpt-4.1',
 		id: 'gpt-4.1-mini',
+		provider: 'openai',
+	},
+	'gpt-4o': {
+		name: 'gpt-4o',
+		id: 'gpt-4o',
 		provider: 'openai',
 	},
 } as const

@@ -18,7 +18,9 @@ interface CanvasAgentControllerProps {
 
 const isDevEnv = typeof process !== 'undefined' && process.env.NODE_ENV !== 'production';
 const isClientAgentEnabled =
-  typeof process !== 'undefined' && process.env.NEXT_PUBLIC_CANVAS_AGENT_CLIENT_ENABLED === 'true';
+  typeof process === 'undefined'
+    ? true
+    : process.env.NEXT_PUBLIC_CANVAS_AGENT_CLIENT_ENABLED !== 'false';
 
 const debugLog = (...args: Parameters<typeof console.log>) => {
   if (isDevEnv) {
@@ -97,11 +99,11 @@ async function sendAgentTelemetry(event: 'agent_begin' | 'agent_end', payload: R
 
 export function CanvasAgentController({ editor, room }: CanvasAgentControllerProps) {
   if (!isClientAgentEnabled) {
-    try {
-      if (isDevEnv) {
+    if (isDevEnv) {
+      try {
         console.log('[CanvasAgent] client agent disabled via NEXT_PUBLIC_CANVAS_AGENT_CLIENT_ENABLED');
-      }
-    } catch {}
+      } catch {}
+    }
     return null;
   }
 

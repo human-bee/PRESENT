@@ -10,6 +10,7 @@ import { activeFlowchartSteward } from '../subagents/flowchart-steward-registry'
 import { runCanvasSteward } from '../subagents/canvas-steward';
 
 // Thin router: receives dispatch_to_conductor and hands off to stewards
+const SERVER_CANVAS_EXECUTION_ENABLED = process.env.CANVAS_STEWARD_SERVER_EXECUTION === 'true';
 
 const CanvasAgentPromptSchema = z
   .object({
@@ -57,6 +58,9 @@ export async function dispatchConductorTask(task: string, params: JsonObject) {
 
   if (task === 'canvas.agent_prompt') {
     const promptResult = await handleCanvasAgentPrompt(params);
+    if (!SERVER_CANVAS_EXECUTION_ENABLED) {
+      return promptResult;
+    }
     const stewardParams: JsonObject = {
       ...params,
       room: promptResult.room,
@@ -71,6 +75,9 @@ export async function dispatchConductorTask(task: string, params: JsonObject) {
   }
 
   if (task.startsWith('canvas.')) {
+    if (!SERVER_CANVAS_EXECUTION_ENABLED) {
+      throw new Error(`Canvas steward server execution disabled for task: ${task}`);
+    }
     return runCanvasSteward({ task, params });
   }
 
