@@ -69,6 +69,11 @@
 - Always start the agent before the web app. Look for "registered worker" and then "Job received!" in agent logs.
 - Secrets live in `.env.local` (never commit). Required keys include LiveKit, OpenAI, custom, and Supabase.
 - Dispatch is automatic: the agent joins all rooms in your LiveKit project.
+- Canvas-specific runtime flags:
+  - `CANVAS_STEWARD_MODEL` selects the preferred Canvas steward model (`claude-haiku-4-5` by default) and gracefully falls back to other providers if the preferred API key is missing.
+  - `CANVAS_STEWARD_SERVER_EXECUTION` controls whether the server steward runs alongside the browser TLDraw agent (set `false` when you only want in-browser execution).
+  - `NEXT_PUBLIC_CANVAS_AGENT_CLIENT_ENABLED` toggles the TLDraw browser agent; keep it `true` to mirror the tldraw template.
+  - `CANVAS_STEWARD_DEBUG=true` enables verbose Anthropic/OpenAI request + streaming logs for both server and browser execution paths.
 
 # Agents: Runtime, Roles & Contracts
 
