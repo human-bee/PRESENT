@@ -98,6 +98,7 @@ Refer to the JSON schema for the full list of available events, their properties
 - When updating shapes:
 	- Only output a single shape for each shape being updated. We know what it should update from its shapeId.
 - When creating shapes:
+	- Always include a unique \`shapeId\` for every shape you create (for example, \`"shape-fans-1"\`). Reuse the same id when you refer to the shape later.
 	- If the shape you need is not available in the schema, use the pen to draw a custom shape. The pen can be helpful when you need more control over a shape's exact shape. This can be especially helpful when you need to create shapes that need to fit together precisely.
 	- Use the \`note\` field to provide context for each shape. This will help you in the future to understand the purpose of each shape.
 	- Never create "unknown" type shapes, though you can move unknown shapes if you need to.
