@@ -77,21 +77,14 @@ export function resolveCanvasModelName(options?: {
   const { explicit, allowOverride } = options ?? {};
 
   const envModel = parseCanvasModelName(process.env[CANVAS_STEWARD_MODEL_ENV]);
+  const explicitModel = parseCanvasModelName(explicit);
 
-  if (allowOverride) {
-    const overrideModel = parseCanvasModelName(explicit);
-    if (overrideModel) {
-      return overrideModel;
-    }
+  if (allowOverride === true && explicitModel) {
+    return explicitModel;
   }
 
   if (envModel) {
     return envModel;
-  }
-
-  if (allowOverride) {
-    const fallback = parseCanvasModelName(explicit);
-    if (fallback) return fallback;
   }
 
   return DEFAULT_CANVAS_MODEL;
