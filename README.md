@@ -106,7 +106,7 @@ Prefer running everything in the background? Use the helper script:
 npm run stack:start
 ```
 
-This boots `sync:dev`, `agent:conductor`, `agent:realtime`, and `next dev` concurrently, writing output to `logs/*.log` so you can tail the services you care about.
+This boots `livekit-server --dev` (as `lk:server:dev`), `sync:dev`, `agent:conductor`, `agent:realtime`, and `next dev` concurrently, writing output to `logs/*.log` so you can tail the services you care about.
 
 To stop all background services cleanly, run:
 

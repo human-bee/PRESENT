@@ -29,6 +29,7 @@ start_process() {
   echo "[$label] pid=$pid log=$LOG_DIR/$logfile"
 }
 
+start_process "LiveKit server" "lk:server:dev" "livekit-server.log"
 start_process "Sync server" "sync:dev" "sync-dev.log"
 start_process "Conductor" "agent:conductor" "agent-conductor.log"
 start_process "Realtime agent" "agent:realtime" "agent-realtime.log"

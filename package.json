@@ -26,6 +26,7 @@
     "agent:fixed": "npx tsx src/lib/livekit-agent-worker-fixed.ts dev",
     "agent:realtime": "npx tsx src/lib/agents/realtime/voice-agent.ts",
     "agent:conductor": "npx tsx src/lib/agents/conductor/index.ts",
+    "lk:server:dev": "bash scripts/run-livekit-dev.sh",
     "sync:dev": "npx tsx scripts/tldraw-sync-server/server.ts",
     "stack:start": "bash scripts/start-dev-stack.sh",
     "stack:stop": "bash scripts/stop-dev-stack.sh"

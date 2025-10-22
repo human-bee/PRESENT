@@ -25,7 +25,7 @@
 - `npm run dev`: Run the web app at `http://localhost:3000` (terminal 3).
 - `npm run sync:dev`: Run the TLDraw sync server locally.
 
-> 💡 **Tip:** For quick local testing (including Chrome DevTools automation), you can launch the entire stack in the background with log files via `npm run stack:start`. The helper script starts `sync:dev`, `agent:conductor`, `agent:realtime`, and `npm run dev`, writing to `logs/*.log` so you can tail them while driving the canvas.
+> 💡 **Tip:** For quick local testing (including Chrome DevTools automation), you can launch the entire stack in the background with log files via `npm run stack:start`. The helper script starts `lk:server:dev` (runs `livekit-server --dev`), `sync:dev`, `agent:conductor`, `agent:realtime`, and `npm run dev`, writing to `logs/*.log` so you can tail them while driving the canvas.
 
 ### Production
 
