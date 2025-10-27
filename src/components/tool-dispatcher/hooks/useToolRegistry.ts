@@ -25,31 +25,7 @@ export interface ToolRegistryApi {
   listTools: () => string[];
 }
 
-const CANVAS_TOOLS: Record<string, string> = {
-  canvas_focus: 'tldraw:canvas_focus',
-  canvas_zoom_all: 'tldraw:canvas_zoom_all',
-  canvas_create_note: 'tldraw:create_note',
-  canvas_pin_selected: 'tldraw:pinSelected',
-  canvas_unpin_selected: 'tldraw:unpinSelected',
-  canvas_lock_selected: 'tldraw:lockSelected',
-  canvas_unlock_selected: 'tldraw:unlockSelected',
-  canvas_arrange_grid: 'tldraw:arrangeGrid',
-  canvas_create_rectangle: 'tldraw:createRectangle',
-  canvas_create_ellipse: 'tldraw:createEllipse',
-  canvas_align_selected: 'tldraw:alignSelected',
-  canvas_distribute_selected: 'tldraw:distributeSelected',
-  canvas_draw_smiley: 'tldraw:drawSmiley',
-  canvas_toggle_grid: 'tldraw:toggleGrid',
-  canvas_set_background: 'tldraw:setBackground',
-  canvas_set_theme: 'tldraw:setTheme',
-  canvas_select: 'tldraw:select',
-  canvas_select_by_note: 'tldraw:selectNote',
-  canvas_color_shape: 'tldraw:colorShape',
-  canvas_delete_shape: 'tldraw:deleteShape',
-  canvas_rename_note: 'tldraw:renameNote',
-  canvas_connect_shapes: 'tldraw:connectShapes',
-  canvas_label_arrow: 'tldraw:labelArrow',
-};
+const CANVAS_TOOLS: Record<string, string> = {};
 
 export function useToolRegistry(deps: ToolRegistryDeps): ToolRegistryApi {
   const { contextKey } = deps;
@@ -57,10 +33,7 @@ export function useToolRegistry(deps: ToolRegistryDeps): ToolRegistryApi {
   const handlers = useMemo(() => {
     const map = new Map<string, ToolHandler>();
 
-    // Canvas dispatch helpers
-    Object.entries(CANVAS_TOOLS).forEach(([tool, eventName]) => {
-      map.set(tool, async ({ dispatchTL, params }) => dispatchTL(eventName, params));
-    });
+    // Legacy canvas_* tools removed for unified Canvas Agent
 
     map.set('list_components', async () => {
       const components = ComponentRegistry.list(contextKey);
@@ -103,14 +76,14 @@ export function useToolRegistry(deps: ToolRegistryDeps): ToolRegistryApi {
       return { status: 'SUCCESS', message: 'Component updated', ...result };
     });
 
-    map.set('canvas_create_mermaid_stream', async ({ params, dispatchTL }) => {
+    map.set('mermaid_create_stream', async ({ params, dispatchTL }) => {
       const text = typeof params?.text === 'string' ? params.text : 'graph TD; A-->B;';
       const normalized = normalizeMermaidText(text);
       const result = dispatchTL('tldraw:create_mermaid_stream', { text: normalized });
       return { ...result, normalized }; // merge status+message from dispatch
     });
 
-    map.set('canvas_update_mermaid_stream', async ({ params, dispatchTL }) => {
+    map.set('mermaid_update_stream', async ({ params, dispatchTL }) => {
       const shapeId = typeof params?.shapeId === 'string' ? params.shapeId : undefined;
       if (!shapeId) {
         return { status: 'ERROR', message: 'Missing shapeId' };

@@ -69,11 +69,14 @@
 - Always start the agent before the web app. Look for "registered worker" and then "Job received!" in agent logs.
 - Secrets live in `.env.local` (never commit). Required keys include LiveKit, OpenAI, custom, and Supabase.
 - Dispatch is automatic: the agent joins all rooms in your LiveKit project.
-- Canvas-specific runtime flags:
-  - `CANVAS_STEWARD_MODEL` selects the preferred Canvas steward model (`claude-haiku-4-5` by default) and gracefully falls back to other providers if the preferred API key is missing.
-  - `CANVAS_STEWARD_SERVER_EXECUTION` controls whether the server steward runs alongside the browser TLDraw agent (set `false` when you only want in-browser execution).
-  - `NEXT_PUBLIC_CANVAS_AGENT_CLIENT_ENABLED` toggles the TLDraw browser agent; keep it `true` to mirror the tldraw template.
-  - `CANVAS_STEWARD_DEBUG=true` enables verbose Anthropic/OpenAI request + streaming logs for both server and browser execution paths.
+- Canvas Agent runtime flags (see `docs/canvas-agent.md` for full details):
+  - `CANVAS_AGENT_UNIFIED=true` enables the unified server-centric Canvas Agent (default).
+  - `CANVAS_STEWARD_MODEL` selects the model provider (`debug/fake` by default; use `anthropic:claude-3-5-sonnet-20241022` for production).
+  - `CANVAS_STEWARD_DEBUG=true` enables verbose request + streaming logs.
+  - `CANVAS_AGENT_SCREENSHOT_TIMEOUT_MS=300` screenshot RPC timeout in milliseconds.
+  - `CANVAS_AGENT_TTFB_SLO_MS=200` target time-to-first-byte for first action envelope.
+  - `NEXT_PUBLIC_CANVAS_AGENT_CLIENT_ENABLED=true` toggles legacy client-side TLDraw agent (keep true for backward compat during transition).
+  - `CANVAS_AGENT_MAX_FOLLOWUPS=3` max bounded depth for add_detail follow-up loops.
 
 # Agents: Runtime, Roles & Contracts
 
@@ -88,14 +91,16 @@ If it doesn't move the canvas, it doesn't belong in the voice agent. This docume
 ## Topology (one screen's worth)
 
 - **Voice Agent (Realtime, Node)**
-  Listens to the room, transcribes, and calls exactly two UI tools via LiveKit data channel. May hand off server-side work to the Conductor.
+  Listens to the room, transcribes, and calls UI tools (`create_component`, `update_component`) or delegates canvas work via `dispatch_to_conductor`.
+- **Canvas Agent (Unified, Node)**
+  Server-centric "brain" that handles all TLDraw canvas operations. Builds prompts, calls models (streaming), sanitizes actions, and broadcasts TLDraw-native action envelopes to clients. Browser acts as "eyes and hands" only (viewport/selection/screenshot + action execution). See `docs/canvas-agent.md` for full architecture.
 - **Conductor (Agents SDK, Node)**
   A tiny router that delegates to **steward** subagents via handoffs. No business logic.
 - **Stewards (Agents SDK, Node)**
-  Domain owners (e.g., **Flowchart Steward**, **Canvas Steward**, **YouTube Steward**). They read context (Supabase), produce a complete artifact, and emit one UI patch or component creation.
+  Domain owners (e.g., **Flowchart Steward**, **YouTube Steward**). They read context (Supabase), produce a complete artifact, and emit one UI patch or component creation.
 - **Browser ToolDispatcher (React, client)**
-  A bridge, not an agent. Executes `create_component` and `update_component`. Sends `tool_result`/`tool_error`. Dispatches TLDraw DOM events when needed.
+  A bridge, not an agent. Executes `create_component`, `update_component`, and TLDraw-native actions streamed from Canvas Agent. Sends acks and tool results. Dispatches TLDraw DOM events when needed.
 - **Supabase**
-  Source of truth for transcripts and flowchart docs (format + version).
+  Source of truth for transcripts, flowchart docs, canvas shapes, and Canvas Agent todos.
 
 Check /docs for more tips

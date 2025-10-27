@@ -3,23 +3,23 @@ import { config } from 'dotenv';
 import { randomUUID } from 'crypto';
 import { join } from 'path';
 import { z } from 'zod';
+// Removed temporary Responses API fallback for routing
 
 try {
   config({ path: join(process.cwd(), '.env.local') });
 } catch {}
 import { realtime as openaiRealtime } from '@livekit/agents-plugin-openai';
 import { appendTranscriptCache } from '@/lib/agents/shared/supabase-context';
-import { createLogger } from '@/lib/utils';
 import { DebateJudgeManager, isStartDebate } from '@/lib/agents/debate-judge';
 import { jsonObjectSchema, type JsonObject } from '@/lib/utils/json-schema';
-import { RoomEvent, RemoteParticipant, RemoteTrackPublication, Track } from 'livekit-client';
+import { RoomEvent, RemoteTrackPublication, Track } from 'livekit-client';
 
 /** I replace the entire entry implementation with manual AgentSession handling and reroute listeners to the session. */
 export default defineAgent({
   entry: async (job: JobContext) => {
     await job.connect();
 
-    const subscribeToParticipant = (participant?: RemoteParticipant) => {
+    const subscribeToParticipant = (participant?: any) => {
       if (!participant) return;
 
       const publicationMaps: Array<Map<string, RemoteTrackPublication> | undefined> = [
@@ -30,10 +30,10 @@ export default defineAgent({
       let subscribed = false;
       for (const map of publicationMaps) {
         if (!map || typeof map.forEach !== 'function') continue;
-        map.forEach((publication: RemoteTrackPublication) => {
+        map.forEach((publication: any) => {
           if (publication.kind === Track.Kind.Audio && !publication.isSubscribed) {
             try {
-              publication.setSubscribed(true);
+              publication.setSubscribed?.(true);
               subscribed = true;
             } catch (error) {
               console.warn('[VoiceAgent] failed to subscribe to audio track', error);
@@ -45,10 +45,10 @@ export default defineAgent({
 
       const publications = participant.getTrackPublications?.();
       if (Array.isArray(publications)) {
-        publications.forEach((publication: RemoteTrackPublication) => {
+        publications.forEach((publication: any) => {
           if (publication.kind === Track.Kind.Audio && !publication.isSubscribed) {
             try {
-              publication.setSubscribed(true);
+              publication.setSubscribed?.(true);
             } catch (error) {
               console.warn('[VoiceAgent] failed to subscribe to audio track', error);
             }
@@ -58,24 +58,9 @@ export default defineAgent({
     };
 
     job.room.remoteParticipants.forEach((participant) => subscribeToParticipant(participant));
-    job.room.on(RoomEvent.ParticipantConnected, (participant) => subscribeToParticipant(participant));
-    job.room.on(RoomEvent.TrackPublished, (_publication, participant) => subscribeToParticipant(participant));
+    job.room.on(RoomEvent.ParticipantConnected, (participant) => subscribeToParticipant(participant as any));
+    job.room.on(RoomEvent.TrackPublished, (_publication, participant) => subscribeToParticipant(participant as any));
 
-    job.room.on(RoomEvent.DataReceived, async (payload, participant, _, topic) => {
-      if (topic !== 'transcription') return;
-      try {
-        const message = JSON.parse(new TextDecoder().decode(payload));
-        const text = typeof message?.text === 'string' ? message.text.trim() : '';
-        const isManual = Boolean(message?.manual);
-        const isReplay = Boolean(message?.replay);
-        const speaker = typeof message?.speaker === 'string' ? message.speaker : participant?.identity;
-        if (!text || isReplay) return;
-        if (!isManual && speaker === 'voice-agent') return;
-        await session.generateReply({ userInput: text });
-      } catch (error) {
-        console.warn('[VoiceAgent] failed to handle data transcription', error);
-      }
-    });
     const instructions = `You are a UI automation agent. You NEVER speak—you only act by calling tools.
 
 CRITICAL RULES:
@@ -202,10 +187,14 @@ Your only output is function calls. Never use plain text unless absolutely neces
       }
     };
 
-    session.on(voice.AgentSessionEventTypes.FunctionCall, async (event) => {
+    session.on((voice as any).AgentSessionEventTypes.FunctionCall, async (event: any) => {
       const fnCall = event.call;
-      if (!fnCall) return;
-      console.log('[VoiceAgent] FunctionCall event', { name: fnCall.name, args: fnCall.args });
+      console.log('[VoiceAgent] FunctionCall event received', { fnCall, eventKeys: Object.keys(event) });
+      if (!fnCall) {
+        console.warn('[VoiceAgent] FunctionCall event has NO call object!', event);
+        return;
+      }
+      console.log('[VoiceAgent] FunctionCall VALID', { name: fnCall.name, args: fnCall.args });
       try {
         const args = JSON.parse(fnCall.args || '{}');
         if (!['create_component', 'update_component', 'dispatch_to_conductor'].includes(fnCall.name)) {
@@ -233,7 +222,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
       }
     });
 
-    session.on(voice.AgentSessionEventTypes.FunctionToolsExecuted, async (event) => {
+    session.on((voice as any).AgentSessionEventTypes.FunctionToolsExecuted, async (event: any) => {
       const calls = event.functionCalls ?? [];
       console.log('[VoiceAgent] FunctionToolsExecuted', {
         count: calls.length,
@@ -297,10 +286,14 @@ Your only output is function calls. Never use plain text unless absolutely neces
     });
 
     session.on(voice.AgentSessionEventTypes.ConversationItemAdded, async (event) => {
-      console.log('[VoiceAgent] ConversationItem', {
+      console.log('[VoiceAgent] ConversationItem FULL', {
         type: event.item.type,
         role: event.item.role,
         hasFunctionCall: !!(event.item as any).functionCall,
+        functionCall: (event.item as any).functionCall,
+        functionCallId: (event.item as any).function_call_id,
+        toolCalls: (event.item as any).tool_calls,
+        content: (event.item as any).content,
         contentKinds: Array.isArray((event.item as any).content)
           ? (event.item as any).content.map((c: any) => c.type)
           : undefined,
@@ -329,6 +322,29 @@ Your only output is function calls. Never use plain text unless absolutely neces
 
     session.on(voice.AgentSessionEventTypes.Close, (event) => {
       console.log('[VoiceAgent] session closed', event.reason);
+    });
+
+    job.room.on(RoomEvent.DataReceived, async (payload, participant, _, topic) => {
+      if (topic !== 'transcription') return;
+      try {
+        const message = JSON.parse(new TextDecoder().decode(payload));
+        const text = typeof message?.text === 'string' ? message.text.trim() : '';
+        const isManual = Boolean(message?.manual);
+        const isReplay = Boolean(message?.replay);
+        const speaker = typeof message?.speaker === 'string' ? message.speaker : participant?.identity;
+        console.log('[VoiceAgent] DataReceived transcription', { text, isManual, isReplay, speaker, topic });
+        if (!text || isReplay) return;
+        if (!isManual && speaker === 'voice-agent') return;
+        // Native Realtime tool-calling path
+        console.log('[VoiceAgent] calling generateReply with userInput:', text);
+        try {
+          await session.generateReply({ userInput: text });
+        } catch (err) {
+          console.error('[VoiceAgent] generateReply error:', err);
+        }
+      } catch (error) {
+        console.error('[VoiceAgent] failed to handle data transcription', error);
+      }
     });
 
     await session.start({

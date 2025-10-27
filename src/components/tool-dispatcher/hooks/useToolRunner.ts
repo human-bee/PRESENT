@@ -295,22 +295,7 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
       const handler = registry.getHandler(tool);
 
       try {
-        if (stewardEnabled) {
-          const allowedNonCanvasTools = new Set([
-            'create_component',
-            'update_component',
-            'list_components',
-            'youtube_search',
-            'dispatch_to_conductor',
-          ]);
-          const isCanvasTool = tool.startsWith('canvas_');
-          if (!isCanvasTool && !allowedNonCanvasTools.has(tool)) {
-            const message = `Unsupported tool in steward mode: ${tool}`;
-            emitError(call, message);
-            queue.markError(call.id, message);
-            return { status: 'ERROR', message };
-          }
-        }
+        // Unified Canvas Agent: remove canvas_* gating; only non-canvas tools stay available here
 
         if (handler) {
           const result =
@@ -518,7 +503,7 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
               await executeToolCall({
                 id: message.id || `${Date.now()}`,
                 type: 'tool_call',
-                payload: { tool: 'canvas_create_mermaid_stream', params: { text: 'graph TD;\nA-->B;' } },
+                payload: { tool: 'mermaid_create_stream', params: { text: 'graph TD;\nA-->B;' } },
                 timestamp: Date.now(),
                 source: 'dispatcher',
                 roomId: message.roomId,
@@ -624,7 +609,7 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
           await executeToolCall({
             id: message.id || `${Date.now()}`,
             type: 'tool_call',
-            payload: { tool: 'canvas_update_mermaid_stream', params: { shapeId: lastShapeId, text: merged } },
+            payload: { tool: 'mermaid_update_stream', params: { shapeId: lastShapeId, text: merged } },
             timestamp: Date.now(),
             source: 'dispatcher',
             roomId: message.roomId,
@@ -636,7 +621,7 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
           await executeToolCall({
             id: message.id || `${Date.now()}`,
             type: 'tool_call',
-            payload: { tool: 'canvas_create_mermaid_stream', params: { text: 'graph TD; A-->B' } },
+            payload: { tool: 'mermaid_create_stream', params: { text: 'graph TD; A-->B' } },
             timestamp: Date.now(),
             source: 'dispatcher',
             roomId: message.roomId,

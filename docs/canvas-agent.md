@@ -1,0 +1,388 @@
+# Unified Canvas Agent
+
+The **Canvas Agent** is a server-centric architecture that achieves full TLDraw Agent Starter Kit parity. The server handles all planning, scheduling, and model interactions, while the browser acts purely as "eyes and hands"—providing viewport/selection context and executing streamed actions.
+
+## Architecture Overview
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                         VOICE AGENT                              │
+│  (dispatch_to_conductor with task: "canvas.agent_prompt")       │
+└────────────────────────────┬────────────────────────────────────┘
+                             │
+                             ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                    CANVAS AGENT RUNNER                           │
+│  • Build prompt context (shapes, transcript, viewport)           │
+│  • Call model (streaming)                                        │
+│  • Parse & sanitize TLDraw-native actions                        │
+│  • Broadcast action envelopes via LiveKit                        │
+│  • Handle meta actions (think, todo, add_detail)                 │
+│  • Queue follow-ups & todos                                      │
+└────────────────────────────┬────────────────────────────────────┘
+                             │ LiveKit Data Channel
+                             │
+        ┌────────────────────┼────────────────────┐
+        │                    │                    │
+        ▼                    ▼                    ▼
+┌──────────────┐    ┌──────────────┐    ┌──────────────┐
+│  BROWSER 1   │    │  BROWSER 2   │    │  BROWSER N   │
+│              │    │              │    │              │
+│  Connectors: │    │  Connectors: │    │  Connectors: │
+│  • Viewport  │    │  • Viewport  │    │  • Viewport  │
+│  • Selection │    │  • Selection │    │  • Selection │
+│  • Screenshot│    │  • Screenshot│    │  • Screenshot│
+│              │    │              │    │              │
+│  Executors:  │    │  Executors:  │    │  Executors:  │
+│  • Apply     │    │  • Apply     │    │  • Apply     │
+│    actions   │    │    actions   │    │    actions   │
+│  • Send ack  │    │  • Send ack  │    │  • Send ack  │
+└──────────────┘    └──────────────┘    └──────────────┘
+```
+
+## Server Components
+
+### Runner (`src/lib/agents/canvas-agent/server/runner.ts`)
+
+Main orchestration loop:
+
+1. **Status**: `waiting_context`
+2. Build prompt parts (shapes, transcript, viewport)
+3. **Status**: `calling_model`
+4. Invoke model with streaming
+5. **Status**: `streaming`
+6. Parse incremental TLDraw-native actions
+7. Sanitize actions
+8. Broadcast action envelopes (with `seq`, `partial`)
+9. Handle meta actions:
+   - `think` → `agent:chat` message
+   - `todo` → persist to Supabase
+   - `add_detail` → enqueue follow-up
+10. On stream end:
+    - If queue not empty → `scheduled` & loop next
+    - Else → `done`
+
+### Wire (`src/lib/agents/canvas-agent/server/wire.ts`)
+
+LiveKit data channel helpers:
+
+- `sendActionsEnvelope(room, sessionId, seq, actions, {partial?})`
+- `sendChat(room, sessionId, message)`
+- `sendStatus(room, sessionId, state, detail?)`
+- `requestScreenshot(room, request)` (orchestrated by runner with response listener)
+
+### Context Builder (`src/lib/agents/canvas-agent/server/context.ts`)
+
+Assembles prompt parts:
+
+- Transcript window (last 60s by default)
+- Canvas shapes (cap at 300 blurry shapes)
+- Viewport bounds
+- Selection IDs
+- Document version (for screenshot cache key)
+
+### Models (`src/lib/agents/canvas-agent/server/models.ts`)
+
+Provider registry with streaming interface:
+
+- Default: `debug/fake` (smoke testing)
+- Production: Anthropic/OpenAI/Google (add your provider)
+- Per-request override support
+
+### Sanitizer (`src/lib/agents/canvas-agent/server/sanitize.ts`)
+
+Validates and sanitizes model outputs:
+
+- Check shape existence; drop invalid refs
+- Clamp numeric bounds (NaN/Infinity guards)
+- Validate enums (color, fill, style)
+- Generate agent shape IDs (`ag:{nanoid}`)
+- Reorder dependent actions (create before update)
+
+### Scheduler & Todos (`src/lib/agents/canvas-agent/server/scheduler.ts`, `todos.ts`)
+
+Task queue and todo management:
+
+- Per-session FIFO queue with bounded depth (`CANVAS_AGENT_MAX_FOLLOWUPS=3`)
+- Watchdog timer (60s) to prevent runaway loops
+- Persist todos to Supabase `canvas_agent_todos` table
+- Reflect changes via `agent:chat`
+
+## Client Components
+
+### Connectors (Read-Only)
+
+**Viewport/Selection Publisher** (`useViewportSelectionPublisher.ts`)
+
+- Publishes viewport bounds + selection IDs at 80ms debounce
+- Active only when agent session is running
+
+**Screenshot Request Handler** (`useScreenshotRequestHandler.ts`)
+
+- Listens for `agent:screenshot_request`
+- Calls `editor.toImage()` with size limits (800px default)
+- Returns `{dataUrl, bounds, viewport, selection, docVersion}`
+
+### Executors (Write-Only)
+
+**TLDraw Action Handlers** (`handlers/tldraw-actions.ts`)
+
+Implements all TLDraw-native actions via editor API:
+
+- **Core**: `create_shape`, `update_shape`, `delete_shape`, `draw_pen`
+- **Transform**: `move`, `resize`, `rotate`, `group`, `ungroup`
+- **Layout**: `align`, `distribute`, `stack`, `reorder`
+- **Meta**: `think` (append to chat UI), `todo` (update UI list), `set_viewport` (host-only smooth pan/zoom), `add_detail` (no-op on client)
+
+**Tool Dispatcher** (`tool-dispatcher.tsx`)
+
+Routes `agent:action` envelopes:
+
+- Gate by `v:'tldraw-actions/1'`
+- Enforce per-session `(action.id)` idempotency
+- Emit `agent:ack` after apply
+- Host election for viewport actions
+
+## Wire Protocol
+
+### Action Envelopes (Server → Client)
+
+```typescript
+type AgentActionEnvelope = {
+  v: 'tldraw-actions/1';      // schema version
+  sessionId: string;          // one per agent run
+  seq: number;                // strictly increasing per session
+  partial?: boolean;          // streaming fragments
+  actions: Array<{
+    id: string;               // stable per logical action across partials
+    name: ActionName;         // TLDraw-native names
+    params: unknown;          // validated server-side (Zod)
+  }>;
+  ts: number;
+}
+```
+
+**Topic**: `agent:action`
+
+### Ack (Client → Server)
+
+```typescript
+{ type: 'agent:ack', sessionId: string, seq: number, clientId: string }
+```
+
+- Server retries if no ack within N ms (bounded)
+- Clients must treat `(sessionId, action.id)` as **idempotent**, ignoring duplicates
+
+### Screenshot RPC
+
+**Request** (Server → Client)
+
+```typescript
+{
+  type: 'agent:screenshot_request',
+  sessionId: string,
+  requestId: string,
+  bounds?: { x, y, w, h },
+  maxSize?: { w, h }
+}
+```
+
+**Response** (Client → Server)
+
+```typescript
+{
+  type: 'agent:screenshot',
+  sessionId: string,
+  requestId: string,
+  image: { mime: 'image/png', dataUrl: string, bytes: number },
+  bounds: { x, y, w, h },
+  viewport: { x, y, w, h },
+  selection: string[],
+  docVersion: string
+}
+```
+
+**Topic**: `agent:screenshot_request` / `agent:screenshot`
+
+### Chat / Status (Server → Client)
+
+```typescript
+{ type: 'agent:chat', sessionId: string, message: { role: 'assistant'|'system', text: string } }
+{ type: 'agent:status', sessionId: string, state: 'waiting_context'|'calling_model'|'streaming'|'scheduled'|'done'|'canceled'|'error', detail?: unknown }
+```
+
+**Topics**: `agent:chat`, `agent:status`
+
+## TLDraw-native Action Vocabulary
+
+All actions follow the TLDraw Agent Starter Kit naming:
+
+- **Core**: `create_shape`, `update_shape`, `delete_shape`, `draw_pen`
+- **Transform**: `move`, `resize`, `rotate`, `group`, `ungroup`
+- **Layout**: `align`, `distribute`, `stack`, `reorder`
+- **Meta**: `think`, `todo`, `add_detail`, `set_viewport`
+
+> **No `canvas_*` names**. All legacy `canvas_*` tools have been removed.
+
+## Configuration
+
+Environment variables (see `example.env.local`):
+
+```bash
+CANVAS_AGENT_UNIFIED=true
+CANVAS_STEWARD_MODEL=debug/fake
+# Or use a real provider: anthropic:claude-3-5-sonnet-20241022
+CANVAS_STEWARD_DEBUG=false
+CANVAS_AGENT_SCREENSHOT_TIMEOUT_MS=300
+CANVAS_AGENT_TTFB_SLO_MS=200
+NEXT_PUBLIC_CANVAS_AGENT_CLIENT_ENABLED=true
+CANVAS_AGENT_MAX_FOLLOWUPS=3
+```
+
+## Service Level Objectives (SLOs)
+
+- **TTFB ≤ 200ms** (first action envelope)
+- **Screenshot ≤ 150ms** (thumbnail, ≤800px long side)
+- **95p apply jitter ≤ 50ms** (host client)
+
+## Observability
+
+Per-session structured logs:
+
+- Prompt token estimate, shape counts, image bytes, docVersion
+- TTFB to first action, time to first applied
+- Stream chunk count, retries/acks, queue depth, follow-up count
+- Redact user content & image payloads by default
+
+## Reliability & Degrade Scenarios
+
+**Out-of-Order Envelopes**
+
+- Clients ignore envelopes with `seq` less than last applied
+
+**Duplicate Envelopes**
+
+- Clients maintain per-session applied action ID set
+- Idempotent ignore on duplicate `action.id`
+
+**Ack Retry**
+
+- Server retries bounded times
+- Failure surfaces error status
+
+**No Screenshot (Timeout)**
+
+- Runner continues with text-only prompt parts
+- Log degraded run
+
+**Host Loss Mid-Run**
+
+- Re-elect host among remaining clients
+- If none, continue text-only (no viewport/screenshot)
+
+**Stale Selection**
+
+- Proceed with viewport only
+
+## Database Schema
+
+### `canvas_agent_todos` Table
+
+```sql
+create table public.canvas_agent_todos (
+  id uuid primary key default gen_random_uuid(),
+  session_id text not null,
+  text text not null,
+  status text not null default 'open' check (status in ('open', 'done', 'skipped')),
+  position int not null default 0,
+  created_at timestamptz not null default now(),
+  resolved_at timestamptz
+);
+
+create index canvas_agent_todos_session_idx
+  on public.canvas_agent_todos(session_id, status, position);
+```
+
+See `docs/migrations/001_canvas_agent_todos.sql` for full migration.
+
+## API Routes
+
+### `POST /api/canvas-agent/run`
+
+```typescript
+{
+  roomId: string;
+  message: string;
+  model?: string;
+  viewport?: { x, y, w, h };
+}
+```
+
+Returns `{ ok: true }` on success.
+
+## Testing Strategy
+
+### Unit Tests
+
+- Parsers: validate all action schemas + envelope
+- Sanitizer: malformed action handling
+- Scheduler: queue depth, watchdog, cancellation
+- IDs: ID generation format
+
+### Integration (E2E)
+
+- Two-client same room: all core/transform/layout actions apply identically
+- Meta actions: think → chat, todo → persist/UI, add_detail → follow-up loop
+- Host-only `set_viewport` behavior
+- Degrade scenarios: no screenshot, stale viewport, host loss
+
+### Performance
+
+- TTFB, screenshot time, apply jitter within SLOs
+- Alert on regression
+
+## Troubleshooting
+
+**Agent not running**
+
+- Verify `npm run agent:realtime` is running
+- Check agent logs: `tail -f logs/agent-realtime.log`
+- Ensure LiveKit server is running: `npm run lk:server:dev`
+
+**Actions not applying**
+
+- Check browser console for `present:agent_actions` events
+- Verify action envelopes have correct `v:'tldraw-actions/1'`
+- Check for TypeScript errors in action handlers
+
+**Screenshot timeout**
+
+- Increase `CANVAS_AGENT_SCREENSHOT_TIMEOUT_MS`
+- Check network latency
+- Verify host election (only host responds to screenshot requests)
+
+**Model errors**
+
+- Check provider API keys in `.env.local`
+- Review `CANVAS_STEWARD_MODEL` value
+- Enable `CANVAS_STEWARD_DEBUG=true` for verbose logs
+
+## Future Enhancements
+
+- **Coordinate offsets**: maintain chat origin offset across turns (TLDraw kit pattern)
+- **BlurryShapes & PeripheralClusters**: token-bounded shape summaries (implement prompt parts from kit)
+- **Screenshot cache**: keyed by `{docVersion, boundsKey}`, TTL 10-30s
+- **Real provider integrations**: Anthropic Claude, OpenAI GPT-4, Google Gemini
+- **Advanced layout actions**: full align/distribute/stack implementations
+- **Pen tool**: draw_pen action with point arrays
+- **Client-side TLDraw agent deprecation**: remove legacy `agent_prompt` path once unified agent is proven
+
+## References
+
+- [TLDraw Agent Starter Kit](https://tldraw.dev/starter-kits/agent)
+- [TLDraw Editor API](https://tldraw.dev/reference/editor/Editor)
+- [TLDraw v4.0 Release Notes](https://tldraw.dev/releases/v4.0.0)
+
+
+
+

@@ -46,6 +46,7 @@ export default function Canvas() {
   // Authentication check
   const { user, loading } = useAuth();
   const router = useRouter();
+  const bypassAuth = process.env.NEXT_PUBLIC_CANVAS_DEV_BYPASS === 'true';
   // Track resolved canvas id and room name; do not render until resolved
   const [, setCanvasId] = useState<string | null>(null);
   const [roomName, setRoomName] = useState<string>('');
@@ -192,10 +193,10 @@ export default function Canvas() {
   // Redirect to sign in if not authenticated
   useEffect(() => {
     if (loading) return;
-    if (!user) {
+    if (!user && !bypassAuth) {
       router.push('/auth/signin');
     }
-  }, [user, loading, router]);
+  }, [user, loading, router, bypassAuth]);
 
   // Load MCP server configurations
   const mcpServers = loadMcpServers();
@@ -297,7 +298,7 @@ export default function Canvas() {
   }
 
   // If not authenticated, don't render the canvas
-  if (!user) {
+  if (!user && !bypassAuth) {
     return null;
   }
 

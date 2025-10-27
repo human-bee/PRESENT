@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, type ReactNode, useMemo } from 'react';
+import { createContext, useContext, type ReactNode, useMemo, useEffect } from 'react';
 import { useRoomContext } from '@livekit/components-react';
 import type { DispatcherContext } from './utils';
 import { useToolEvents, useToolRunner } from './hooks';
@@ -39,6 +39,27 @@ export function ToolDispatcher({
     room,
     stewardEnabled: resolvedStewardEnabled,
   });
+
+  // Listen for unified Canvas Agent action envelopes and ack
+  // Idempotency set lives within the TLDraw canvas bridge; here we route envelopes to window for handlers
+  useEffect(() => {
+    const off = events.bus.on('agent:action', async (message: any) => {
+      try {
+        if (!message || message.type !== 'agent:action') return;
+        const envelope = message.envelope;
+        window.dispatchEvent(new CustomEvent('present:agent_actions', { detail: envelope }));
+        // Post ack to server inbox with (sessionId, seq)
+        try {
+          await fetch('/api/canvas-agent/ack', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sessionId: envelope.sessionId, seq: envelope.seq }),
+          });
+        } catch {}
+      } catch {}
+    });
+    return () => { off?.(); };
+  }, [events.bus]);
 
   const value = useMemo<DispatcherContext>(() => ({ executeToolCall }), [executeToolCall]);
 
