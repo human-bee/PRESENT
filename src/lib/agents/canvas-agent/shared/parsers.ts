@@ -6,7 +6,13 @@ const boundsSchema = z.object({ x: z.number(), y: z.number(), w: z.number(), h: 
 const pointSchema = z.object({ x: z.number(), y: z.number() });
 
 export const actionParamSchemas: Record<string, z.ZodTypeAny> = {
-  create_shape: z.object({ type: z.string(), id: z.string().optional(), props: z.record(z.unknown()).optional() }),
+  create_shape: z.object({
+    type: z.string(),
+    id: z.string().optional(),
+    x: z.number().finite().optional(),
+    y: z.number().finite().optional(),
+    props: z.record(z.unknown()).optional(),
+  }),
   update_shape: z.object({ id: z.string(), props: z.record(z.unknown()) }),
   delete_shape: z.object({ ids: z.array(z.string()).min(1) }),
   draw_pen: z.object({ points: z.array(pointSchema).min(2), id: z.string().optional() }),
@@ -35,7 +41,6 @@ export function parseAction(action: { id: string; name: string; params: unknown 
 export function parseEnvelope(input: unknown) {
   return AgentActionEnvelopeSchema.parse(input);
 }
-
 
 
 

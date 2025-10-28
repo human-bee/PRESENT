@@ -58,10 +58,10 @@ function applyAction(ctx: ApplyContext, action: AgentAction) {
 
   switch (action.name) {
     case 'create_shape': {
-      const { id, type, props } = action.params as any;
+      const { id, type, x, y, props } = action.params as any;
       const rawType = String(type || '').toLowerCase();
       const textContent = String((props?.text ?? props?.label ?? props?.content ?? '') || '');
-      const normalized = normalizeCreate({ id, type, props });
+      const normalized = normalizeCreate({ id, type, x, y, props });
       try { editor.createShape(normalized as any); } catch {}
       if ((rawType === 'note' || rawType === 'text') && textContent) {
         try {
@@ -190,5 +190,4 @@ function applyAction(ctx: ApplyContext, action: AgentAction) {
       break;
   }
 }
-
 

@@ -8,11 +8,11 @@ describe('Canvas Agent Parsers', () => {
       const result = parseAction({
         id: 'test-1',
         name: 'create_shape',
-        params: { type: 'geo', id: 'shape:test', props: { geo: 'rectangle' } },
+        params: { type: 'geo', id: 'shape:test', x: 120, y: 80, props: { geo: 'rectangle' } },
       });
       expect(result.id).toBe('test-1');
       expect(result.name).toBe('create_shape');
-      expect(result.params).toMatchObject({ type: 'geo' });
+      expect(result.params).toMatchObject({ type: 'geo', x: 120, y: 80 });
     });
 
     it('should parse valid move action', () => {
@@ -157,7 +157,6 @@ describe('Canvas Agent Parsers', () => {
     });
   });
 });
-
 
 
 
