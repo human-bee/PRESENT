@@ -255,13 +255,17 @@ const normalizeShapeSummary = (shapeEntry: Record<string, any>): CanvasShapeSumm
   const type = typeof shapeEntry.type === 'string' ? shapeEntry.type : undefined;
   if (!id || !type) return null;
   const summary: CanvasShapeSummary = { id, type };
+  const meta: Record<string, unknown> = {};
+  if (typeof shapeEntry.x === 'number') meta.x = shapeEntry.x;
+  if (typeof shapeEntry.y === 'number') meta.y = shapeEntry.y;
+  if (typeof shapeEntry.w === 'number') meta.width = shapeEntry.w;
+  if (typeof shapeEntry.h === 'number') meta.height = shapeEntry.h;
   if (typeof shapeEntry.name === 'string') summary.name = shapeEntry.name;
   if (typeof shapeEntry.label === 'string') summary.label = shapeEntry.label;
   if (typeof shapeEntry.text === 'string') summary.text = shapeEntry.text;
   if (typeof shapeEntry.parentId === 'string') summary.parentId = shapeEntry.parentId;
   if (shapeEntry.props && typeof shapeEntry.props === 'object') {
     const props = shapeEntry.props as Record<string, unknown>;
-    const meta: Record<string, unknown> = {};
     const candidateText = props.text ?? props.name ?? props.label ?? props.rawText;
     if (typeof candidateText === 'string') summary.text = candidateText;
     if (typeof props.geometricId === 'string') meta.geometricId = props.geometricId;
@@ -272,8 +276,8 @@ const normalizeShapeSummary = (shapeEntry: Record<string, any>): CanvasShapeSumm
     if (typeof props.fill === 'string') meta.fill = props.fill;
     if (typeof props.label === 'string' && !summary.label) summary.label = props.label;
     if (typeof props.parentId === 'string' && !summary.parentId) summary.parentId = props.parentId;
-    if (Object.keys(meta).length > 0) summary.meta = meta;
   }
+  if (Object.keys(meta).length > 0) summary.meta = meta;
   return summary;
 };
 

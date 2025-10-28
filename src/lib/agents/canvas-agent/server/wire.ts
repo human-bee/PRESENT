@@ -2,6 +2,7 @@ import { RoomServiceClient, DataPacket_Kind } from 'livekit-server-sdk';
 import { join } from 'path';
 import { config as dotenvConfig } from 'dotenv';
 import { ACTION_VERSION, type AgentAction, type AgentActionEnvelope, type ScreenshotRequest, type AgentChatMessage } from '../shared/types';
+import { getAck } from '@/server/inboxes/ack';
 
 try {
   dotenvConfig({ path: join(process.cwd(), '.env.local') });
@@ -71,10 +72,20 @@ export async function requestScreenshot(room: string, request: Omit<ScreenshotRe
   await client.sendData(normalizedRoom, data, DataPacket_Kind.RELIABLE, { topic: 'agent:screenshot_request' });
 }
 
-export async function awaitAck(_room: string, _sessionId: string, _seq: number, _timeoutMs: number) {
-  // Runner should implement ack tracking; this is a placeholder for parity with the plan.
-  return true;
-}
+const ACK_BACKOFF_MS = [150, 300, 600, 1000];
 
+export async function awaitAck(opts: { sessionId: string; seq: number; deadlineMs?: number }) {
+  const start = Date.now();
+  const deadline = start + (opts.deadlineMs ?? 1500);
+  let attempt = 0;
+  while (Date.now() < deadline) {
+    const ack = getAck(opts.sessionId, opts.seq);
+    if (ack) return ack;
+    const wait = ACK_BACKOFF_MS[Math.min(attempt, ACK_BACKOFF_MS.length - 1)];
+    attempt += 1;
+    await new Promise((resolve) => setTimeout(resolve, wait));
+  }
+  return null;
+}
 
 

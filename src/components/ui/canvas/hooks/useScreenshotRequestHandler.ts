@@ -25,12 +25,16 @@ export function useScreenshotRequestHandler(editor: Editor | undefined, room: Ro
         const selection = editor.getSelectedShapeIds();
         const docVersion = String((window as any).__present_tldraw_doc_version || 0);
         try {
+          const token = (window as any).__presentCanvasAgentToken as string | undefined;
+          const roomId = room?.name || '';
           await fetch('/api/canvas-agent/screenshot', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               sessionId,
               requestId,
+              roomId,
+              token,
               image: { mime: 'image/png', dataUrl, bytes, width, height },
               bounds: { x: target.x, y: target.y, w: target.w, h: target.h },
               viewport: { x: viewport.x, y: viewport.y, w: viewport.w, h: viewport.h },
@@ -44,5 +48,4 @@ export function useScreenshotRequestHandler(editor: Editor | undefined, room: Ro
     return () => { off?.(); };
   }, [editor, room]);
 }
-
 

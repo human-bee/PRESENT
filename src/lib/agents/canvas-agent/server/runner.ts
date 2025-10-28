@@ -2,10 +2,9 @@ import { randomUUID } from 'crypto';
 import { selectModel } from './models';
 import { buildPromptParts } from './context';
 import { sanitizeActions } from './sanitize';
-import { requestScreenshot, sendActionsEnvelope, sendChat, sendStatus } from './wire';
+import { requestScreenshot, sendActionsEnvelope, sendChat, sendStatus, awaitAck } from './wire';
 import { OffsetManager, interpretBounds } from './offset';
 import { handleStructuredStreaming } from './streaming';
-import * as AckInbox from '@/server/inboxes/ack';
 import type { AgentAction } from '../shared/types';
 import { parseAction } from '../shared/parsers';
 import { SessionScheduler } from './scheduler';
@@ -145,6 +144,15 @@ export async function runCanvasAgent(args: RunArgs) {
         const interpreted = offset.interpret({ x: Number((nextParams as any).x), y: Number((nextParams as any).y) });
         nextParams.x = interpreted.x;
         nextParams.y = interpreted.y;
+        mutated = true;
+      }
+      if (action.name === 'draw_pen' && Array.isArray((nextParams as any).points)) {
+        const points = (nextParams as any).points.map((point: any) => {
+          if (!point || typeof point.x !== 'number' || typeof point.y !== 'number') return point;
+          const interpreted = offset.interpret({ x: Number(point.x), y: Number(point.y) });
+          return { ...point, x: interpreted.x, y: interpreted.y };
+        });
+        nextParams.points = points;
         mutated = true;
       }
       const bounds = (nextParams as any).bounds;
@@ -309,13 +317,11 @@ export async function runCanvasAgent(args: RunArgs) {
 
       metrics.actionCount += worldActions.length;
       await sendActionsEnvelope(roomId, sessionId, seqNumber, worldActions, { partial });
-      const ackTimeoutMs = 500;
-      const started = Date.now();
-      while (Date.now() - started < ackTimeoutMs && !AckInbox.hasAck?.(sessionId, seqNumber)) {
-        await new Promise((resolve) => setTimeout(resolve, 20));
-      }
-      if (!AckInbox.hasAck?.(sessionId, seqNumber)) {
+      const ack = await awaitAck({ sessionId, seq: seqNumber, deadlineMs: 1200 });
+      if (!ack) {
+        metrics.retryCount++;
         await sendActionsEnvelope(roomId, sessionId, seqNumber, worldActions, { partial });
+        await awaitAck({ sessionId, seq: seqNumber, deadlineMs: 800 });
       }
 
       for (const action of worldActions) {

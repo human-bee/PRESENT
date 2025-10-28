@@ -50,16 +50,27 @@ export function ToolDispatcher({
         window.dispatchEvent(new CustomEvent('present:agent_actions', { detail: envelope }));
         // Post ack to server inbox with (sessionId, seq)
         try {
+          const clientId = room?.localParticipant?.identity || 'unknown';
+          const roomId = room?.name || '';
+          const token = (window as any).__presentCanvasAgentToken as string | undefined;
           await fetch('/api/canvas-agent/ack', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ sessionId: envelope.sessionId, seq: envelope.seq }),
+            body: JSON.stringify({
+              sessionId: envelope.sessionId,
+              seq: envelope.seq,
+              clientId,
+              roomId,
+              token,
+              ts: Date.now(),
+            }),
+            keepalive: true,
           });
         } catch {}
       } catch {}
     });
     return () => { off?.(); };
-  }, [events.bus]);
+  }, [events.bus, room]);
 
   const value = useMemo<DispatcherContext>(() => ({ executeToolCall }), [executeToolCall]);
 

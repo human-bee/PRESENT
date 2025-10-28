@@ -29,12 +29,14 @@ export function useViewportSelectionPublisher(editor: Editor | undefined, room: 
           });
           if (now - lastHttpSent >= 300) {
             lastHttpSent = now;
+            const token = (window as any).__presentCanvasAgentToken as string | undefined;
             const payload = {
               roomId: room.name,
               sessionId: room.sid ?? 'unknown',
               viewport: { x: bounds.x, y: bounds.y, w: bounds.w, h: bounds.h },
               selection,
               ts: now,
+              token,
             };
             fetch('/api/canvas-agent/viewport', {
               method: 'POST',
@@ -52,7 +54,6 @@ export function useViewportSelectionPublisher(editor: Editor | undefined, room: 
     return () => { if (raf) window.cancelAnimationFrame(raf); };
   }, [editor, room, active]);
 }
-
 
 
 
