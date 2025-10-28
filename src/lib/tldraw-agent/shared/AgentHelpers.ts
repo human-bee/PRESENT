@@ -311,7 +311,20 @@ export class AgentHelpers {
 	 * @returns The array of ids, with imaginary ids removed.
 	 */
 	ensureShapeIdsExist(ids: string[]): string[] {
-		return ids.map((id) => this.ensureShapeIdExists(id)).filter((v) => v !== null)
+		const uniqueIds: string[] = []
+		const seen = new Set<string>()
+
+		for (const id of ids) {
+			const existingId = this.ensureShapeIdExists(id)
+			if (!existingId || seen.has(existingId)) {
+				continue
+			}
+
+			seen.add(existingId)
+			uniqueIds.push(existingId)
+		}
+
+		return uniqueIds
 	}
 
 	/**

@@ -5,13 +5,24 @@ export const CANVAS_STEWARD_MODEL_ENV = 'CANVAS_STEWARD_MODEL';
 const canvasModelNameSchema = z.enum(
   [
     'claude-haiku-4-5',
-    'claude-4.5-sonnet',
-    'claude-4-sonnet',
-    'claude-3.5-sonnet',
-    'gpt-4.1',
-    'gpt-4o',
+    'claude-sonnet-4-5',
+    'gpt-5',
+    'gpt-5-mini',
   ] as const,
 );
+
+const MODEL_ALIASES: Record<string, CanvasModelName> = {
+  'claude-sonnet-4-5': 'claude-sonnet-4-5',
+  'claude-sonnet-4-5-20250929': 'claude-sonnet-4-5',
+  'claude-4-5-sonnet': 'claude-sonnet-4-5',
+  'claude-4.5-sonnet': 'claude-sonnet-4-5',
+  'claude-4-sonnet': 'claude-sonnet-4-5',
+  'claude-3.5-sonnet': 'claude-sonnet-4-5',
+  'claude-3-5-sonnet': 'claude-sonnet-4-5',
+  'claude-sonnet-3.5': 'claude-sonnet-4-5',
+  'gpt-4o': 'gpt-5-mini',
+  'gpt-4.1': 'gpt-5-mini',
+};
 
 export type CanvasModelName = z.infer<typeof canvasModelNameSchema>;
 export type CanvasModelProvider = 'anthropic' | 'openai';
@@ -29,29 +40,19 @@ const CANVAS_MODEL_DEFINITIONS: Record<CanvasModelName, CanvasModelDefinition> =
     id: 'claude-haiku-4-5-20251001',
     provider: 'anthropic',
   },
-  'claude-4.5-sonnet': {
-    name: 'claude-4.5-sonnet',
-    id: 'claude-sonnet-4-5',
+  'claude-sonnet-4-5': {
+    name: 'claude-sonnet-4-5',
+    id: 'claude-sonnet-4-5-20250929',
     provider: 'anthropic',
   },
-  'claude-4-sonnet': {
-    name: 'claude-4-sonnet',
-    id: 'claude-sonnet-4-0',
-    provider: 'anthropic',
-  },
-  'claude-3.5-sonnet': {
-    name: 'claude-3.5-sonnet',
-    id: 'claude-3-5-sonnet-latest',
-    provider: 'anthropic',
-  },
-  'gpt-4.1': {
-    name: 'gpt-4.1',
-    id: 'gpt-4.1-mini',
+  'gpt-5': {
+    name: 'gpt-5',
+    id: 'gpt-5',
     provider: 'openai',
   },
-  'gpt-4o': {
-    name: 'gpt-4o',
-    id: 'gpt-4o',
+  'gpt-5-mini': {
+    name: 'gpt-5-mini',
+    id: 'gpt-5-mini',
     provider: 'openai',
   },
 };
@@ -79,12 +80,12 @@ export function resolveCanvasModelName(options?: {
   const envModel = parseCanvasModelName(process.env[CANVAS_STEWARD_MODEL_ENV]);
   const explicitModel = parseCanvasModelName(explicit);
 
-  if (allowOverride === true && explicitModel) {
-    return explicitModel;
-  }
-
   if (envModel) {
     return envModel;
+  }
+
+  if (allowOverride === true && explicitModel) {
+    return explicitModel;
   }
 
   return DEFAULT_CANVAS_MODEL;
@@ -97,6 +98,9 @@ function parseCanvasModelName(raw: unknown): CanvasModelName | null {
 
   const normalized = trimmed.replace(/\s+/g, '').toLowerCase();
   const withoutPrefix = normalized.replace(/^(anthropic|openai|google)[:/]/, '');
+
+  const alias = MODEL_ALIASES[withoutPrefix];
+  if (alias) return alias;
 
   const direct = tryParseName(withoutPrefix);
   if (direct) return direct;

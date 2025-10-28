@@ -112,30 +112,69 @@ class FakeProvider implements StreamingProvider {
 
 const registry = new Map<string, StreamingProvider>();
 
-// Initialize providers using Vercel AI SDK
-if (process.env.ANTHROPIC_API_KEY) {
-  registry.set('anthropic', new AiSdkProvider('anthropic', 'claude-3-5-sonnet-20241022'));
-  registry.set('anthropic:claude-3-5-sonnet-20241022', new AiSdkProvider('anthropic', 'claude-3-5-sonnet-20241022'));
-  registry.set('anthropic:claude-3-5-haiku-20241022', new AiSdkProvider('anthropic', 'claude-3-5-haiku-20241022'));
-}
-if (process.env.OPENAI_API_KEY) {
-  registry.set('openai', new AiSdkProvider('openai', 'gpt-4o-2024-11-20'));
-  registry.set('openai:gpt-4o', new AiSdkProvider('openai', 'gpt-4o-2024-11-20'));
-  registry.set('openai:gpt-4o-mini', new AiSdkProvider('openai', 'gpt-4o-mini'));
-}
+const registerProvider = (key: string, provider: 'anthropic' | 'openai', modelId: string) => {
+  if (!registry.has(key)) {
+    registry.set(key, new AiSdkProvider(provider, modelId));
+  }
+};
 
-// Always register fake provider for testing
-registry.set('debug/fake', new FakeProvider());
+// Initialize commonly used providers using Vercel AI SDK
+const bootstrapProviders = () => {
+  if (process.env.ANTHROPIC_API_KEY) {
+    registerProvider('anthropic:claude-sonnet-4-5', 'anthropic', 'claude-sonnet-4-5');
+    registerProvider('anthropic:claude-haiku-4-5', 'anthropic', 'claude-haiku-4-5');
+    registry.set('anthropic', registry.get('anthropic:claude-sonnet-4-5')!);
+  }
+  if (process.env.OPENAI_API_KEY) {
+    registerProvider('openai:gpt-5', 'openai', 'gpt-5');
+    registerProvider('openai:gpt-5-mini', 'openai', 'gpt-5-mini');
+    registry.set('openai', registry.get('openai:gpt-5')!);
+  }
+  registry.set('debug/fake', new FakeProvider());
+};
+
+const ensureDynamicProvider = (name: string): StreamingProvider | null => {
+  const trimmed = name.trim();
+  if (!trimmed) return null;
+  if (registry.has(trimmed)) return registry.get(trimmed)!;
+
+  const create = (provider: 'anthropic' | 'openai', modelId: string, key?: string) => {
+    const hasAuth = provider === 'anthropic' ? !!process.env.ANTHROPIC_API_KEY : !!process.env.OPENAI_API_KEY;
+    if (!hasAuth) return null;
+    const registryKey = key ?? `${provider}:${modelId}`;
+    registerProvider(registryKey, provider, modelId);
+    return registry.get(registryKey) ?? null;
+  };
+
+  if (trimmed.includes(':')) {
+    const [providerAlias, ...rest] = trimmed.split(':');
+    const modelId = rest.join(':');
+    if (!modelId) return null;
+    if (providerAlias === 'anthropic') return create('anthropic', modelId, trimmed);
+    if (providerAlias === 'openai') return create('openai', modelId, trimmed);
+    return null;
+  }
+
+  if (trimmed.startsWith('claude')) return create('anthropic', trimmed, `anthropic:${trimmed}`);
+  if (trimmed.startsWith('gpt')) return create('openai', trimmed, `openai:${trimmed}`);
+
+  return null;
+};
+
+bootstrapProviders();
 
 export function selectModel(preferred?: string): StreamingProvider {
-  const name = preferred?.trim() || process.env.CANVAS_STEWARD_MODEL || 'debug/fake';
-  const provider = registry.get(name);
-  if (provider) return provider;
-  
-  // Try fallbacks
+  const envPreferred = preferred?.trim() || process.env.CANVAS_STEWARD_MODEL || 'debug/fake';
+  const resolved = ensureDynamicProvider(envPreferred);
+  if (resolved) return resolved;
+
+  if (process.env.CANVAS_STEWARD_MODEL) {
+    const secondary = ensureDynamicProvider(process.env.CANVAS_STEWARD_MODEL);
+    if (secondary) return secondary;
+  }
+
   if (registry.get('anthropic')) return registry.get('anthropic')!;
   if (registry.get('openai')) return registry.get('openai')!;
-  
-  // Final fallback to fake
+
   return registry.get('debug/fake')!;
 }
