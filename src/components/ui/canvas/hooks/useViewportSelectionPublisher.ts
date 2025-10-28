@@ -11,6 +11,7 @@ export function useViewportSelectionPublisher(editor: Editor | undefined, room: 
     const bus = createLiveKitBus(room);
     let raf: number | null = null;
     let lastSent = 0;
+    let lastHttpSent = 0;
 
     const tick = () => {
       const now = Date.now();
@@ -26,6 +27,22 @@ export function useViewportSelectionPublisher(editor: Editor | undefined, room: 
             selection,
             ts: now,
           });
+          if (now - lastHttpSent >= 300) {
+            lastHttpSent = now;
+            const payload = {
+              roomId: room.name,
+              sessionId: room.sid ?? 'unknown',
+              viewport: { x: bounds.x, y: bounds.y, w: bounds.w, h: bounds.h },
+              selection,
+              ts: now,
+            };
+            fetch('/api/canvas-agent/viewport', {
+              method: 'POST',
+              headers: { 'content-type': 'application/json' },
+              body: JSON.stringify(payload),
+              keepalive: true,
+            }).catch(() => {});
+          }
         } catch {}
       }
       raf = window.requestAnimationFrame(tick);
@@ -35,7 +52,6 @@ export function useViewportSelectionPublisher(editor: Editor | undefined, room: 
     return () => { if (raf) window.cancelAnimationFrame(raf); };
   }, [editor, room, active]);
 }
-
 
 
 

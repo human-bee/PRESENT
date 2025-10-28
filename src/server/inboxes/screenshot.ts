@@ -17,9 +17,10 @@ export function storeScreenshot(payload: ScreenshotPayload) {
 
 export function takeScreenshot(sessionId: string, requestId: string): ScreenshotPayload | null {
   const key = `${sessionId}::${requestId}`;
-  return inbox.get(key) || null;
+  const payload = inbox.get(key) || null;
+  if (payload) inbox.delete(key);
+  return payload;
 }
-
 
 
 

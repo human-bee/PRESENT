@@ -1,13 +1,18 @@
+import { randomUUID } from 'crypto';
 import { selectModel } from './models';
 import { buildPromptParts } from './context';
 import { sanitizeActions } from './sanitize';
-import { sendActionsEnvelope, sendChat, sendStatus } from './wire';
+import { requestScreenshot, sendActionsEnvelope, sendChat, sendStatus } from './wire';
+import { OffsetManager, interpretBounds } from './offset';
+import { handleStructuredStreaming } from './streaming';
 import * as AckInbox from '@/server/inboxes/ack';
 import type { AgentAction } from '../shared/types';
 import { parseAction } from '../shared/parsers';
 import { SessionScheduler } from './scheduler';
 import { addTodo } from './todos';
 import { getCanvasShapeSummary } from '@/lib/agents/shared/supabase-context';
+import type { ScreenshotPayload } from '@/server/inboxes/screenshot';
+import * as ScreenshotInbox from '@/server/inboxes/screenshot';
 
 
 type RunArgs = { roomId: string; userMessage: string; model?: string; initialViewport?: { x: number; y: number; w: number; h: number } };
@@ -54,6 +59,12 @@ type SessionMetrics = {
   followupCount: number;
   retryCount: number;
   ttfb?: number;
+  screenshotRequestId?: string;
+  screenshotRequestedAt?: number;
+  screenshotReceivedAt?: number;
+  screenshotTimeoutMs?: number;
+  screenshotRtt?: number;
+  screenshotResult?: 'received' | 'timeout' | 'error';
 };
 
 function getEnvConfig() {
@@ -68,7 +79,7 @@ function getEnvConfig() {
   } as const;
 }
 
-function logMetrics(metrics: SessionMetrics, event: 'start' | 'context' | 'ttfb' | 'complete' | 'error', detail?: unknown) {
+function logMetrics(metrics: SessionMetrics, event: 'start' | 'context' | 'ttfb' | 'complete' | 'error' | 'screenshot', detail?: unknown) {
   const cfg = getEnvConfig();
   if (!cfg.debug) return;
   const payload: Record<string, unknown> = { event, sessionId: metrics.sessionId, roomId: metrics.roomId, ts: Date.now() };
@@ -76,6 +87,13 @@ function logMetrics(metrics: SessionMetrics, event: 'start' | 'context' | 'ttfb'
     payload.ttfb = metrics.ttfb;
     payload.slo_met = metrics.ttfb <= cfg.ttfbSloMs;
     payload.slo_target = cfg.ttfbSloMs;
+  }
+  if (event === 'screenshot') {
+    payload.request_id = metrics.screenshotRequestId;
+    payload.timeout_ms = metrics.screenshotTimeoutMs;
+    if (typeof metrics.imageBytes === 'number') payload.image_bytes = metrics.imageBytes;
+    if (typeof metrics.screenshotRtt === 'number') payload.rtt = metrics.screenshotRtt;
+    payload.result = metrics.screenshotResult ?? detail ?? 'unknown';
   }
   if (event === 'complete') {
     payload.duration = metrics.completedAt ? metrics.completedAt - metrics.startedAt : 0;
@@ -96,6 +114,12 @@ export async function runCanvasAgent(args: RunArgs) {
   const sessionId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const cfg = getEnvConfig();
   const scheduler = new SessionScheduler({ maxDepth: cfg.maxFollowups });
+  const offset = new OffsetManager();
+
+  if (args.initialViewport) {
+    const { x, y, w, h } = args.initialViewport;
+    offset.setOrigin({ x: x + w / 2, y: y + h / 2 });
+  }
 
   const metrics: SessionMetrics = {
     sessionId,
@@ -109,9 +133,105 @@ export async function runCanvasAgent(args: RunArgs) {
 
   logMetrics(metrics, 'start');
 
+  let latestScreenshot: ScreenshotPayload | null = null;
+
+  const applyOffsetToActions = (actions: AgentAction[]): AgentAction[] => {
+    return actions.map((action) => {
+      const params = (action as any).params;
+      if (!params || typeof params !== 'object') return action;
+      const nextParams: Record<string, unknown> = { ...params };
+      let mutated = false;
+      if (typeof (nextParams as any).x === 'number' && typeof (nextParams as any).y === 'number') {
+        const interpreted = offset.interpret({ x: Number((nextParams as any).x), y: Number((nextParams as any).y) });
+        nextParams.x = interpreted.x;
+        nextParams.y = interpreted.y;
+        mutated = true;
+      }
+      const bounds = (nextParams as any).bounds;
+      if (
+        bounds &&
+        typeof bounds.x === 'number' &&
+        typeof bounds.y === 'number' &&
+        typeof bounds.w === 'number' &&
+        typeof bounds.h === 'number'
+      ) {
+        nextParams.bounds = interpretBounds(bounds, offset);
+        mutated = true;
+      }
+      return mutated ? { ...action, params: nextParams } : action;
+    });
+  };
   try {
     await sendStatus(roomId, sessionId, 'waiting_context');
-    const parts = await buildPromptParts(roomId, { windowMs: 60000, viewport: args.initialViewport, selection: [], sessionId });
+    const screenshotRequestId = randomUUID();
+    metrics.screenshotRequestId = screenshotRequestId;
+    metrics.screenshotTimeoutMs = cfg.screenshotTimeoutMs;
+
+    try {
+      metrics.screenshotRequestedAt = Date.now();
+      await requestScreenshot(roomId, {
+        sessionId,
+        requestId: screenshotRequestId,
+        bounds: args.initialViewport,
+        maxSize: { w: 800, h: 800 },
+      });
+
+      const timeoutAt = metrics.screenshotRequestedAt + cfg.screenshotTimeoutMs;
+      while (Date.now() < timeoutAt) {
+        const maybeScreenshot = ScreenshotInbox.takeScreenshot?.(sessionId, screenshotRequestId) ?? null;
+        if (maybeScreenshot) {
+          latestScreenshot = maybeScreenshot;
+          metrics.screenshotReceivedAt = Date.now();
+          metrics.imageBytes = maybeScreenshot.image?.bytes;
+          if (typeof metrics.screenshotRequestedAt === 'number') {
+            metrics.screenshotRtt = metrics.screenshotReceivedAt - metrics.screenshotRequestedAt;
+          }
+          metrics.screenshotResult = 'received';
+          break;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      }
+
+      if (!latestScreenshot) {
+        metrics.screenshotResult = 'timeout';
+      }
+    } catch (screenshotError) {
+      metrics.screenshotResult = 'error';
+      if (cfg.debug) {
+        console.warn('[CanvasAgent:Screenshot]', 'Failed to orchestrate screenshot', screenshotError);
+      }
+    } finally {
+      logMetrics(metrics, 'screenshot', latestScreenshot ? 'received' : metrics.screenshotResult ?? 'none');
+    }
+
+    if (!latestScreenshot && cfg.debug) {
+      console.warn('[CanvasAgent:Screenshot]', `No screenshot available within ${cfg.screenshotTimeoutMs}ms; continuing without screenshot`);
+    }
+
+    const originViewport = latestScreenshot?.viewport ?? args.initialViewport;
+    if (originViewport) {
+      const { x, y, w, h } = originViewport;
+      offset.setOrigin({ x: x + w / 2, y: y + h / 2 });
+    }
+
+    const parts = await buildPromptParts(roomId, {
+      windowMs: 60000,
+      viewport: latestScreenshot?.viewport ?? args.initialViewport,
+      selection: latestScreenshot?.selection ?? [],
+      sessionId,
+      screenshot: latestScreenshot
+        ? {
+            image: latestScreenshot.image,
+            viewport: latestScreenshot.viewport,
+            selection: latestScreenshot.selection,
+            docVersion: latestScreenshot.docVersion,
+            bounds: latestScreenshot.bounds,
+            requestId: latestScreenshot.requestId,
+            receivedAt: metrics.screenshotReceivedAt,
+          }
+        : undefined,
+      offset,
+    });
     const prompt = JSON.stringify({ user: userMessage, parts });
 
     metrics.contextBuiltAt = Date.now();
@@ -143,53 +263,112 @@ export async function runCanvasAgent(args: RunArgs) {
       }
     };
 
-    await sendStatus(roomId, sessionId, 'streaming');
-    for await (const chunk of provider.stream(prompt, { system: CANVAS_AGENT_SYSTEM_PROMPT })) {
-      metrics.chunkCount++;
-      if (chunk.type === 'json') {
-        const actionsRaw = (chunk.data as any)?.actions;
-        if (Array.isArray(actionsRaw)) {
-          const parsed: AgentAction[] = [];
-          for (const a of actionsRaw) {
-            try { parsed.push(parseAction({ id: String(a.id || `${Date.now()}`), name: a.name, params: a.params })); } catch {}
-          }
-          const canvas = await getCanvasShapeSummary(roomId);
-          const exists = (id: string) => sessionCreatedIds.has(id) || canvas.shapes.some((s) => s.id === id);
-          const clean = sanitizeActions(parsed, exists);
-          rememberCreatedIds(clean);
+    const makeDetailEnqueuer = (baseMessage: string) => (params: Record<string, unknown>) => {
+      const hint = typeof params.hint === 'string' ? params.hint.trim() : '';
+      const detailInput: Record<string, unknown> = {
+        message: hint || baseMessage,
+        originalMessage: baseMessage,
+      };
+      if (hint) detailInput.hint = hint;
+      const targetIds = Array.isArray(params.targetIds)
+        ? params.targetIds.filter((id: unknown): id is string => typeof id === 'string' && id.length > 0)
+        : [];
+      if (targetIds.length > 0) detailInput.targetIds = targetIds;
+      scheduler.enqueue(sessionId, { input: detailInput });
+      metrics.followupCount++;
+    };
 
-          if (!metrics.firstActionAt && clean.length > 0) {
-            metrics.firstActionAt = Date.now();
-            metrics.ttfb = metrics.firstActionAt - metrics.startedAt;
-            logMetrics(metrics, 'ttfb');
-          }
+    const processActions = async (
+      rawActions: unknown,
+      seqNumber: number,
+      partial: boolean,
+      enqueueDetail: (params: Record<string, unknown>) => void,
+    ) => {
+      if (!Array.isArray(rawActions) || rawActions.length === 0) return 0;
+      const parsed: AgentAction[] = [];
+      for (const a of rawActions) {
+        try {
+          parsed.push(parseAction({ id: String((a as any)?.id || `${Date.now()}`), name: (a as any)?.name, params: (a as any)?.params }));
+        } catch {}
+      }
+      if (parsed.length === 0) return 0;
+      const canvas = await getCanvasShapeSummary(roomId);
+      const exists = (id: string) => sessionCreatedIds.has(id) || canvas.shapes.some((s) => s.id === id);
+      const clean = sanitizeActions(parsed, exists);
+      rememberCreatedIds(clean);
+      if (clean.length === 0) return 0;
 
-          metrics.actionCount += clean.length;
-          const currentSeq = seq++;
-          await sendActionsEnvelope(roomId, sessionId, currentSeq, clean, { partial: true });
-          const ackTimeoutMs = 500;
-          const started = Date.now();
-          while (Date.now() - started < ackTimeoutMs && !AckInbox.hasAck?.(sessionId, currentSeq)) {
-            await new Promise((r) => setTimeout(r, 20));
-          }
-          if (!AckInbox.hasAck?.(sessionId, currentSeq)) {
-            await sendActionsEnvelope(roomId, sessionId, currentSeq, clean, { partial: true });
-          }
+      if (!metrics.firstActionAt && clean.length > 0) {
+        metrics.firstActionAt = Date.now();
+        metrics.ttfb = metrics.firstActionAt - metrics.startedAt;
+        logMetrics(metrics, 'ttfb');
+      }
 
-          for (const action of clean) {
-            if (action.name === 'think') {
-              await sendChat(roomId, sessionId, { role: 'assistant', text: String((action as any).params?.text || '') });
-            }
-            if (action.name === 'todo') {
-              const text = String((action as any).params?.text || '');
-              if (text) await addTodo(sessionId, text);
-            }
-            if (action.name === 'add_detail') {
-              scheduler.enqueue(sessionId, { input: { message: userMessage } });
-              metrics.followupCount++;
-            }
-          }
+      const worldActions = applyOffsetToActions(clean);
+      if (worldActions.length === 0) return 0;
+
+      metrics.actionCount += worldActions.length;
+      await sendActionsEnvelope(roomId, sessionId, seqNumber, worldActions, { partial });
+      const ackTimeoutMs = 500;
+      const started = Date.now();
+      while (Date.now() - started < ackTimeoutMs && !AckInbox.hasAck?.(sessionId, seqNumber)) {
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      }
+      if (!AckInbox.hasAck?.(sessionId, seqNumber)) {
+        await sendActionsEnvelope(roomId, sessionId, seqNumber, worldActions, { partial });
+      }
+
+      for (const action of worldActions) {
+        if (action.name === 'think') {
+          await sendChat(roomId, sessionId, { role: 'assistant', text: String((action as any).params?.text || '') });
         }
+        if (action.name === 'todo') {
+          const text = String((action as any).params?.text || '');
+          if (text) await addTodo(sessionId, text);
+        }
+        if (action.name === 'add_detail') {
+          enqueueDetail(((action as any).params ?? {}) as Record<string, unknown>);
+        }
+      }
+
+      return worldActions.length;
+    };
+
+    await sendStatus(roomId, sessionId, 'streaming');
+    const streamingEnabled = typeof provider.streamStructured === 'function' && process.env.CANVAS_AGENT_STREAMING !== 'false';
+    const enqueueDetail = makeDetailEnqueuer(userMessage);
+
+    if (streamingEnabled) {
+      const structured = await provider.streamStructured?.(prompt, { system: CANVAS_AGENT_SYSTEM_PROMPT });
+      if (structured) {
+        let rawProcessed = 0;
+        await handleStructuredStreaming(
+          structured,
+          async (delta) => {
+            if (!Array.isArray(delta) || delta.length === 0) return;
+            metrics.chunkCount++;
+            const currentSeq = seq++;
+            await processActions(delta, currentSeq, true, enqueueDetail);
+            rawProcessed += delta.length;
+          },
+          async (finalActions) => {
+            if (!Array.isArray(finalActions) || finalActions.length === 0) return;
+            const pending = finalActions.slice(rawProcessed);
+            rawProcessed = finalActions.length;
+            if (pending.length === 0) return;
+            const currentSeq = seq++;
+            await processActions(pending, currentSeq, false, enqueueDetail);
+          },
+        );
+      }
+    } else {
+      for await (const chunk of provider.stream(prompt, { system: CANVAS_AGENT_SYSTEM_PROMPT })) {
+        if (chunk.type !== 'json') continue;
+        const actionsRaw = (chunk.data as any)?.actions;
+        if (!Array.isArray(actionsRaw) || actionsRaw.length === 0) continue;
+        metrics.chunkCount++;
+        const currentSeq = seq++;
+        await processActions(actionsRaw, currentSeq, true, enqueueDetail);
       }
     }
 
@@ -197,26 +376,123 @@ export async function runCanvasAgent(args: RunArgs) {
     let loops = 0;
     while (next && loops < cfg.maxFollowups) {
       loops++;
-      await sendStatus(roomId, sessionId, 'scheduled');
-      const followParts = await buildPromptParts(roomId, { windowMs: 60000, viewport: args.initialViewport, selection: [], sessionId });
-      const followPrompt = JSON.stringify({ user: userMessage, parts: followParts });
-      let followSeq = 0;
-      for await (const chunk of selectModel(model || cfg.modelName).stream(followPrompt, { system: CANVAS_AGENT_SYSTEM_PROMPT })) {
-        if (chunk.type !== 'json') continue;
-        const actionsRaw = (chunk.data as any)?.actions;
-        if (!Array.isArray(actionsRaw)) continue;
-        const parsed: AgentAction[] = [];
-        for (const a of actionsRaw) {
-          try { parsed.push(parseAction({ id: String(a.id || `${Date.now()}`), name: a.name, params: a.params })); } catch {}
+      const followInput = (next.input || {}) as Record<string, unknown>;
+      const followTargetIds = Array.isArray((followInput as any).targetIds)
+        ? (followInput as any).targetIds.filter((id: unknown): id is string => typeof id === 'string' && id.length > 0)
+        : [];
+      const followMessageRaw = typeof (followInput as any).message === 'string' ? (followInput as any).message : undefined;
+      const followMessage = followMessageRaw && followMessageRaw.trim().length > 0 ? followMessageRaw : userMessage;
+
+      let followScreenshot: ScreenshotPayload | null = null;
+      const followBounds = latestScreenshot?.bounds ?? latestScreenshot?.viewport ?? args.initialViewport;
+      if (cfg.clientEnabled && followBounds) {
+        try {
+          const followRequestId = randomUUID();
+          metrics.screenshotRequestId = followRequestId;
+          metrics.screenshotTimeoutMs = cfg.screenshotTimeoutMs;
+          metrics.screenshotRequestedAt = Date.now();
+          await requestScreenshot(roomId, {
+            sessionId,
+            requestId: followRequestId,
+            bounds: followBounds,
+            maxSize: { w: 800, h: 800 },
+          });
+          const timeoutAt = metrics.screenshotRequestedAt + cfg.screenshotTimeoutMs;
+          while (Date.now() < timeoutAt) {
+            const maybeScreenshot = ScreenshotInbox.takeScreenshot?.(sessionId, followRequestId) ?? null;
+            if (maybeScreenshot) {
+              followScreenshot = maybeScreenshot;
+              metrics.screenshotReceivedAt = Date.now();
+              metrics.imageBytes = maybeScreenshot.image?.bytes;
+              if (typeof metrics.screenshotRequestedAt === 'number') {
+                metrics.screenshotRtt = metrics.screenshotReceivedAt - metrics.screenshotRequestedAt;
+              }
+              metrics.screenshotResult = 'received';
+              break;
+            }
+            await new Promise((resolve) => setTimeout(resolve, 20));
+          }
+          if (!followScreenshot) {
+            metrics.screenshotResult = 'timeout';
+          }
+        } catch (followScreenshotError) {
+          metrics.screenshotResult = 'error';
+          if (cfg.debug) {
+            console.warn('[CanvasAgent:Screenshot]', 'Follow-up screenshot failed', followScreenshotError);
+          }
+        } finally {
+          logMetrics(metrics, 'screenshot', followScreenshot ? 'received' : metrics.screenshotResult ?? 'none');
         }
-        const canvas = await getCanvasShapeSummary(roomId);
-        const exists = (id: string) => sessionCreatedIds.has(id) || canvas.shapes.some((s) => s.id === id);
-        const clean = sanitizeActions(parsed, exists);
-        rememberCreatedIds(clean);
-        if (clean.length === 0) continue;
-        metrics.actionCount += clean.length;
-        const currentSeq = followSeq++;
-        await sendActionsEnvelope(roomId, sessionId, currentSeq, clean, { partial: true });
+      }
+
+      if (followScreenshot) {
+        latestScreenshot = followScreenshot;
+        const { x, y, w, h } = followScreenshot.viewport;
+        offset.setOrigin({ x: x + w / 2, y: y + h / 2 });
+      }
+
+      await sendStatus(roomId, sessionId, 'scheduled');
+      const followParts = await buildPromptParts(roomId, {
+        windowMs: 60000,
+        viewport: followScreenshot?.viewport ?? args.initialViewport,
+        selection: followTargetIds.length > 0 ? followTargetIds : followScreenshot?.selection ?? [],
+        sessionId,
+        screenshot: followScreenshot
+          ? {
+              image: followScreenshot.image,
+              viewport: followScreenshot.viewport,
+              selection: followScreenshot.selection,
+              docVersion: followScreenshot.docVersion,
+              bounds: followScreenshot.bounds,
+              requestId: followScreenshot.requestId,
+              receivedAt: metrics.screenshotReceivedAt,
+            }
+          : undefined,
+        offset,
+      });
+
+      const followPayload: Record<string, unknown> = { user: followMessage, parts: followParts };
+      if (Object.keys(followInput).length > 0) {
+        followPayload.followup = followInput;
+      }
+      const followPrompt = JSON.stringify(followPayload);
+      const followProvider = selectModel(model || cfg.modelName);
+      let followSeq = 0;
+      const followEnqueueDetail = makeDetailEnqueuer(followMessage);
+      const followStreamingEnabled = typeof followProvider.streamStructured === 'function' && process.env.CANVAS_AGENT_STREAMING !== 'false';
+
+      if (followStreamingEnabled) {
+        const structuredFollow = await followProvider.streamStructured?.(followPrompt, { system: CANVAS_AGENT_SYSTEM_PROMPT });
+        if (structuredFollow) {
+          let followRawProcessed = 0;
+          await handleStructuredStreaming(
+            structuredFollow,
+            async (delta) => {
+              if (!Array.isArray(delta) || delta.length === 0) return;
+              metrics.chunkCount++;
+              const currentSeq = followSeq++;
+              await processActions(delta, currentSeq, true, followEnqueueDetail);
+              followRawProcessed += delta.length;
+            },
+            async (finalActions) => {
+              if (!Array.isArray(finalActions) || finalActions.length === 0) return;
+              const pending = finalActions.slice(followRawProcessed);
+              followRawProcessed = finalActions.length;
+              if (pending.length === 0) return;
+              const currentSeq = followSeq++;
+              await processActions(pending, currentSeq, false, followEnqueueDetail);
+            },
+          );
+        }
+      } else {
+        for await (const chunk of followProvider.stream(followPrompt, { system: CANVAS_AGENT_SYSTEM_PROMPT })) {
+          if (chunk.type !== 'json') continue;
+          const actionsRaw = (chunk.data as any)?.actions;
+          if (!Array.isArray(actionsRaw) || actionsRaw.length === 0) continue;
+          metrics.chunkCount++;
+          const currentSeq = followSeq++;
+          await processActions(actionsRaw, currentSeq, true, followEnqueueDetail);
+        }
       }
       next = scheduler.dequeue(sessionId);
     }
@@ -231,5 +507,3 @@ export async function runCanvasAgent(args: RunArgs) {
     throw error;
   }
 }
-
-
