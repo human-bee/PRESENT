@@ -56,6 +56,12 @@ describe('buildPromptParts', () => {
     expect(Array.isArray(data.blurryShapes)).toBe(true);
     expect(Array.isArray(data.peripheralClusters)).toBe(true);
     expect(Array.isArray(data.recentActions)).toBe(true);
+    expect(data.promptBudget).toMatchObject({
+      blurryCount: expect.any(Number),
+      peripheralCount: expect.any(Number),
+      maxTokens: expect.any(Number),
+      transcriptTokens: expect.any(Number),
+    });
   });
 
   it('falls back to provided viewport and selection when screenshot missing', async () => {
@@ -71,5 +77,6 @@ describe('buildPromptParts', () => {
     expect(data.screenshot).toBeUndefined();
     expect(data.blurryShapes).toBeDefined();
     expect(data.peripheralClusters).toBeDefined();
+    expect(data.promptBudget).toBeDefined();
   });
 });

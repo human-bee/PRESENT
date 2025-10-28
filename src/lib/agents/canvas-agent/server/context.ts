@@ -62,6 +62,13 @@ export async function buildPromptParts(room: string, options: BuildPromptOptions
     },
   );
 
+  const promptBudget = {
+    maxTokens: Number.isFinite(maxTokens) ? maxTokens : 8000,
+    transcriptTokens,
+    blurryCount: budgeted.blurry.length,
+    peripheralCount: budgeted.clusters.length,
+  };
+
   const parts: Record<string, unknown> = {
     room,
     shapes: shapes.slice(0, 300),
@@ -74,6 +81,7 @@ export async function buildPromptParts(room: string, options: BuildPromptOptions
     recentActions: Array.isArray((canvas as any).recentActions)
       ? (canvas as any).recentActions.slice(-8)
       : [],
+    promptBudget,
   };
 
   if (effectiveViewport) {

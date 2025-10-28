@@ -12,7 +12,7 @@ export function useScreenshotRequestHandler(editor: Editor | undefined, room: Ro
     const off = bus.on('agent:screenshot_request', async (message: any) => {
       try {
         if (!message || message.type !== 'agent:screenshot_request') return;
-        const { sessionId, requestId, bounds, maxSize } = message;
+        const { sessionId, requestId, bounds, maxSize, token: requestToken, roomId: messageRoomId } = message;
         const viewBounds = editor.getViewportPageBounds();
         const target = bounds || { x: viewBounds.x, y: viewBounds.y, w: viewBounds.w, h: viewBounds.h };
         const size = maxSize || { w: 800, h: 800 };
@@ -25,8 +25,9 @@ export function useScreenshotRequestHandler(editor: Editor | undefined, room: Ro
         const selection = editor.getSelectedShapeIds();
         const docVersion = String((window as any).__present_tldraw_doc_version || 0);
         try {
-          const token = (window as any).__presentCanvasAgentToken as string | undefined;
-          const roomId = room?.name || '';
+          const fallbackToken = (window as any).__presentCanvasAgentToken as string | undefined;
+          const token = typeof requestToken === 'string' ? requestToken : fallbackToken;
+          const roomId = typeof messageRoomId === 'string' && messageRoomId ? messageRoomId : room?.name || '';
           await fetch('/api/canvas-agent/screenshot', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -48,4 +49,3 @@ export function useScreenshotRequestHandler(editor: Editor | undefined, room: Ro
     return () => { off?.(); };
   }, [editor, room]);
 }
-

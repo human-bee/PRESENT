@@ -21,13 +21,31 @@ export const actionParamSchemas: Record<string, z.ZodTypeAny> = {
   rotate: z.object({ ids: z.array(z.string()).min(1), angle: z.number() }),
   group: z.object({ ids: z.array(z.string()).min(2), groupId: z.string().optional() }),
   ungroup: z.object({ id: z.string() }),
-  align: z.object({ ids: z.array(z.string()).min(2), mode: z.enum(['left', 'right', 'top', 'bottom', 'center', 'middle']) }),
-  distribute: z.object({ ids: z.array(z.string()).min(3), axis: z.enum(['x', 'y']) }),
-  stack: z.object({ ids: z.array(z.string()).min(2), direction: z.enum(['horizontal', 'vertical']), gap: z.number().nonnegative().optional() }),
-  reorder: z.object({ ids: z.array(z.string()).min(1), mode: z.enum(['bring_to_front', 'send_to_back', 'forward', 'backward']) }),
+  align: z.object({
+    ids: z.array(z.string()).min(2),
+    axis: z.enum(['x', 'y']),
+    mode: z.enum(['start', 'center', 'end']).default('start'),
+  }),
+  distribute: z.object({
+    ids: z.array(z.string()).min(3),
+    axis: z.enum(['x', 'y']),
+  }),
+  stack: z.object({
+    ids: z.array(z.string()).min(2),
+    direction: z.enum(['row', 'column']),
+    gap: z.number().nonnegative().optional(),
+  }),
+  reorder: z.object({
+    ids: z.array(z.string()).min(1),
+    where: z.enum(['front', 'back', 'forward', 'backward']),
+  }),
   think: z.object({ text: z.string() }),
   todo: z.object({ text: z.string() }),
-  add_detail: z.object({ targetIds: z.array(z.string()).optional(), hint: z.string().optional() }),
+  add_detail: z.object({
+    targetIds: z.array(z.string()).optional(),
+    hint: z.string().optional(),
+    depth: z.number().int().nonnegative().optional(),
+  }),
   set_viewport: z.object({ bounds: boundsSchema, smooth: z.boolean().optional() }),
 };
 
@@ -41,7 +59,6 @@ export function parseAction(action: { id: string; name: string; params: unknown 
 export function parseEnvelope(input: unknown) {
   return AgentActionEnvelopeSchema.parse(input);
 }
-
 
 
 

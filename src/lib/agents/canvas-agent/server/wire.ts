@@ -2,6 +2,7 @@ import { RoomServiceClient, DataPacket_Kind } from 'livekit-server-sdk';
 import { join } from 'path';
 import { config as dotenvConfig } from 'dotenv';
 import { ACTION_VERSION, type AgentAction, type AgentActionEnvelope, type ScreenshotRequest, type AgentChatMessage } from '../shared/types';
+import { mintAgentToken } from './auth/agentTokens';
 import { getAck } from '@/server/inboxes/ack';
 
 try {
@@ -67,7 +68,15 @@ export async function sendStatus(room: string, sessionId: string, state: 'waitin
 }
 
 export async function requestScreenshot(room: string, request: Omit<ScreenshotRequest, 'type'>): Promise<void> {
-  const data = new TextEncoder().encode(JSON.stringify({ ...request, type: 'agent:screenshot_request' }));
+  const token = mintAgentToken({
+    sessionId: request.sessionId,
+    roomId: room,
+    requestId: request.requestId,
+    exp: Date.now() + 60_000,
+  });
+  const data = new TextEncoder().encode(
+    JSON.stringify({ ...request, type: 'agent:screenshot_request', token, roomId: room }),
+  );
   const { client, normalizedRoom } = await ensureRoom(room);
   await client.sendData(normalizedRoom, data, DataPacket_Kind.RELIABLE, { topic: 'agent:screenshot_request' });
 }
@@ -87,5 +96,4 @@ export async function awaitAck(opts: { sessionId: string; seq: number; deadlineM
   }
   return null;
 }
-
 

@@ -58,6 +58,11 @@ type SessionMetrics = {
   followupCount: number;
   retryCount: number;
   ttfb?: number;
+  blurryCount?: number;
+  peripheralCount?: number;
+  tokenBudgetMax?: number;
+  transcriptTokenEstimate?: number;
+  firstAckLatencyMs?: number;
   screenshotRequestId?: string;
   screenshotRequestedAt?: number;
   screenshotReceivedAt?: number;
@@ -87,6 +92,12 @@ function logMetrics(metrics: SessionMetrics, event: 'start' | 'context' | 'ttfb'
     payload.slo_met = metrics.ttfb <= cfg.ttfbSloMs;
     payload.slo_target = cfg.ttfbSloMs;
   }
+  if (event === 'context') {
+    if (metrics.blurryCount !== undefined) payload.blurry_count = metrics.blurryCount;
+    if (metrics.peripheralCount !== undefined) payload.peripheral_count = metrics.peripheralCount;
+    if (metrics.tokenBudgetMax !== undefined) payload.token_budget_max = metrics.tokenBudgetMax;
+    if (metrics.transcriptTokenEstimate !== undefined) payload.transcript_tokens = metrics.transcriptTokenEstimate;
+  }
   if (event === 'screenshot') {
     payload.request_id = metrics.screenshotRequestId;
     payload.timeout_ms = metrics.screenshotTimeoutMs;
@@ -101,6 +112,10 @@ function logMetrics(metrics: SessionMetrics, event: 'start' | 'context' | 'ttfb'
     payload.followupCount = metrics.followupCount;
     payload.shapeCount = metrics.shapeCount;
     payload.transcriptLines = metrics.transcriptLines;
+    payload.retryCount = metrics.retryCount;
+    if (metrics.firstAckLatencyMs !== undefined) payload.first_ack_ms = metrics.firstAckLatencyMs;
+    if (metrics.blurryCount !== undefined) payload.blurry_count = metrics.blurryCount;
+    if (metrics.peripheralCount !== undefined) payload.peripheral_count = metrics.peripheralCount;
   }
   if (event === 'error') {
     payload.error = detail;
@@ -240,6 +255,13 @@ export async function runCanvasAgent(args: RunArgs) {
         : undefined,
       offset,
     });
+    const budgetMeta = (parts as any).promptBudget;
+    if (budgetMeta) {
+      metrics.tokenBudgetMax = budgetMeta.maxTokens;
+      metrics.transcriptTokenEstimate = budgetMeta.transcriptTokens;
+      metrics.blurryCount = budgetMeta.blurryCount;
+      metrics.peripheralCount = budgetMeta.peripheralCount;
+    }
     const prompt = JSON.stringify({ user: userMessage, parts });
 
     metrics.contextBuiltAt = Date.now();
@@ -271,19 +293,24 @@ export async function runCanvasAgent(args: RunArgs) {
       }
     };
 
-    const makeDetailEnqueuer = (baseMessage: string) => (params: Record<string, unknown>) => {
+    const makeDetailEnqueuer = (baseMessage: string, baseDepth: number) => (params: Record<string, unknown>) => {
       const hint = typeof params.hint === 'string' ? params.hint.trim() : '';
+      const previousDepth = typeof params.depth === 'number' ? Number(params.depth) : baseDepth;
+      const nextDepth = previousDepth + 1;
+      if (nextDepth > cfg.maxFollowups) return;
       const detailInput: Record<string, unknown> = {
         message: hint || baseMessage,
         originalMessage: baseMessage,
+        depth: nextDepth,
+        enqueuedAt: Date.now(),
       };
       if (hint) detailInput.hint = hint;
       const targetIds = Array.isArray(params.targetIds)
         ? params.targetIds.filter((id: unknown): id is string => typeof id === 'string' && id.length > 0)
         : [];
       if (targetIds.length > 0) detailInput.targetIds = targetIds;
-      scheduler.enqueue(sessionId, { input: detailInput });
-      metrics.followupCount++;
+      const accepted = scheduler.enqueue(sessionId, { input: detailInput, depth: nextDepth });
+      if (accepted) metrics.followupCount++;
     };
 
     const processActions = async (
@@ -318,10 +345,16 @@ export async function runCanvasAgent(args: RunArgs) {
       metrics.actionCount += worldActions.length;
       await sendActionsEnvelope(roomId, sessionId, seqNumber, worldActions, { partial });
       const ack = await awaitAck({ sessionId, seq: seqNumber, deadlineMs: 1200 });
+      if (ack && metrics.firstAckLatencyMs === undefined) {
+        metrics.firstAckLatencyMs = Date.now() - metrics.startedAt;
+      }
       if (!ack) {
         metrics.retryCount++;
         await sendActionsEnvelope(roomId, sessionId, seqNumber, worldActions, { partial });
-        await awaitAck({ sessionId, seq: seqNumber, deadlineMs: 800 });
+        const retryAck = await awaitAck({ sessionId, seq: seqNumber, deadlineMs: 800 });
+        if (retryAck && metrics.firstAckLatencyMs === undefined) {
+          metrics.firstAckLatencyMs = Date.now() - metrics.startedAt;
+        }
       }
 
       for (const action of worldActions) {
@@ -342,7 +375,7 @@ export async function runCanvasAgent(args: RunArgs) {
 
     await sendStatus(roomId, sessionId, 'streaming');
     const streamingEnabled = typeof provider.streamStructured === 'function' && process.env.CANVAS_AGENT_STREAMING !== 'false';
-    const enqueueDetail = makeDetailEnqueuer(userMessage);
+    const enqueueDetail = makeDetailEnqueuer(userMessage, 0);
 
     if (streamingEnabled) {
       const structured = await provider.streamStructured?.(prompt, { system: CANVAS_AGENT_SYSTEM_PROMPT });
@@ -382,12 +415,17 @@ export async function runCanvasAgent(args: RunArgs) {
     let loops = 0;
     while (next && loops < cfg.maxFollowups) {
       loops++;
-      const followInput = (next.input || {}) as Record<string, unknown>;
+      const followInputRaw = (next.input || {}) as Record<string, unknown>;
+      const followInput = { ...followInputRaw };
       const followTargetIds = Array.isArray((followInput as any).targetIds)
         ? (followInput as any).targetIds.filter((id: unknown): id is string => typeof id === 'string' && id.length > 0)
         : [];
       const followMessageRaw = typeof (followInput as any).message === 'string' ? (followInput as any).message : undefined;
       const followMessage = followMessageRaw && followMessageRaw.trim().length > 0 ? followMessageRaw : userMessage;
+      const followBaseDepth =
+        typeof (followInput as any).depth === 'number'
+          ? Number((followInput as any).depth)
+          : next.depth ?? loops;
 
       let followScreenshot: ScreenshotPayload | null = null;
       const followBounds = latestScreenshot?.bounds ?? latestScreenshot?.viewport ?? args.initialViewport;
@@ -457,6 +495,17 @@ export async function runCanvasAgent(args: RunArgs) {
         offset,
       });
 
+      const followBudget = (followParts as any).promptBudget;
+      if (followBudget) {
+        metrics.tokenBudgetMax = followBudget.maxTokens;
+        metrics.transcriptTokenEstimate = followBudget.transcriptTokens;
+        metrics.blurryCount = followBudget.blurryCount;
+        metrics.peripheralCount = followBudget.peripheralCount;
+      }
+      metrics.transcriptLines = (followParts as any).transcript?.length ?? metrics.transcriptLines;
+      metrics.shapeCount = (followParts as any).shapes?.length ?? metrics.shapeCount;
+      metrics.docVersion = (followParts as any).docVersion ?? metrics.docVersion;
+
       const followPayload: Record<string, unknown> = { user: followMessage, parts: followParts };
       if (Object.keys(followInput).length > 0) {
         followPayload.followup = followInput;
@@ -464,7 +513,7 @@ export async function runCanvasAgent(args: RunArgs) {
       const followPrompt = JSON.stringify(followPayload);
       const followProvider = selectModel(model || cfg.modelName);
       let followSeq = 0;
-      const followEnqueueDetail = makeDetailEnqueuer(followMessage);
+      const followEnqueueDetail = makeDetailEnqueuer(followMessage, followBaseDepth);
       const followStreamingEnabled = typeof followProvider.streamStructured === 'function' && process.env.CANVAS_AGENT_STREAMING !== 'false';
 
       if (followStreamingEnabled) {

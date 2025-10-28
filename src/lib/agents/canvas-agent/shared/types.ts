@@ -57,6 +57,8 @@ export type ScreenshotRequest = {
   requestId: string;
   bounds?: { x: number; y: number; w: number; h: number };
   maxSize?: { w: number; h: number };
+  token?: string;
+  roomId?: string;
 };
 
 export type ScreenshotResponse = {
@@ -69,7 +71,6 @@ export type ScreenshotResponse = {
   selection: string[];
   docVersion: string;
 };
-
 
 
 
