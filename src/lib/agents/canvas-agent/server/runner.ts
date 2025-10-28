@@ -123,7 +123,25 @@ export async function runCanvasAgent(args: RunArgs) {
     await sendStatus(roomId, sessionId, 'calling_model');
     const provider = selectModel(model || cfg.modelName);
     let seq = 0;
+    const sessionCreatedIds = new Set<string>();
     metrics.modelCalledAt = Date.now();
+
+    const rememberCreatedIds = (actions: AgentAction[]) => {
+      for (const action of actions) {
+        if (action.name === 'create_shape') {
+          const id = String((action as any).params?.id ?? '');
+          if (id) sessionCreatedIds.add(id);
+        }
+        if (action.name === 'draw_pen') {
+          const id = String((action as any).params?.id ?? '');
+          if (id) sessionCreatedIds.add(id);
+        }
+        if (action.name === 'group') {
+          const id = String((action as any).params?.groupId ?? '');
+          if (id) sessionCreatedIds.add(id);
+        }
+      }
+    };
 
     await sendStatus(roomId, sessionId, 'streaming');
     for await (const chunk of provider.stream(prompt, { system: CANVAS_AGENT_SYSTEM_PROMPT })) {
@@ -136,8 +154,9 @@ export async function runCanvasAgent(args: RunArgs) {
             try { parsed.push(parseAction({ id: String(a.id || `${Date.now()}`), name: a.name, params: a.params })); } catch {}
           }
           const canvas = await getCanvasShapeSummary(roomId);
-          const exists = (id: string) => canvas.shapes.some((s) => s.id === id);
+          const exists = (id: string) => sessionCreatedIds.has(id) || canvas.shapes.some((s) => s.id === id);
           const clean = sanitizeActions(parsed, exists);
+          rememberCreatedIds(clean);
 
           if (!metrics.firstActionAt && clean.length > 0) {
             metrics.firstActionAt = Date.now();
@@ -191,8 +210,9 @@ export async function runCanvasAgent(args: RunArgs) {
           try { parsed.push(parseAction({ id: String(a.id || `${Date.now()}`), name: a.name, params: a.params })); } catch {}
         }
         const canvas = await getCanvasShapeSummary(roomId);
-        const exists = (id: string) => canvas.shapes.some((s) => s.id === id);
+        const exists = (id: string) => sessionCreatedIds.has(id) || canvas.shapes.some((s) => s.id === id);
         const clean = sanitizeActions(parsed, exists);
+        rememberCreatedIds(clean);
         if (clean.length === 0) continue;
         metrics.actionCount += clean.length;
         const currentSeq = followSeq++;
@@ -211,6 +231,5 @@ export async function runCanvasAgent(args: RunArgs) {
     throw error;
   }
 }
-
 
 
