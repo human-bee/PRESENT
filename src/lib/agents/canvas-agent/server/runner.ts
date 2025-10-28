@@ -12,6 +12,7 @@ import { addTodo } from './todos';
 import { getCanvasShapeSummary } from '@/lib/agents/shared/supabase-context';
 import type { ScreenshotPayload } from '@/server/inboxes/screenshot';
 import * as ScreenshotInbox from '@/server/inboxes/screenshot';
+import { getModelTuning, resolvePreset, resolveFollowupDepth } from './model/presets';
 
 
 type RunArgs = { roomId: string; userMessage: string; model?: string; initialViewport?: { x: number; y: number; w: number; h: number } };
@@ -69,17 +70,22 @@ type SessionMetrics = {
   screenshotTimeoutMs?: number;
   screenshotRtt?: number;
   screenshotResult?: 'received' | 'timeout' | 'error';
+  preset?: string;
+  selectedCount?: number;
+  examplesCount?: number;
 };
 
 function getEnvConfig() {
   const env = process.env;
+  const preset = resolvePreset(env);
   return {
     modelName: env.CANVAS_STEWARD_MODEL,
     debug: env.CANVAS_STEWARD_DEBUG === 'true',
     screenshotTimeoutMs: Number(env.CANVAS_AGENT_SCREENSHOT_TIMEOUT_MS ?? 300),
     ttfbSloMs: Number(env.CANVAS_AGENT_TTFB_SLO_MS ?? 200),
     clientEnabled: env.NEXT_PUBLIC_CANVAS_AGENT_CLIENT_ENABLED !== 'false',
-    maxFollowups: Number(env.CANVAS_AGENT_MAX_FOLLOWUPS ?? 3),
+    maxFollowups: resolveFollowupDepth(env, preset),
+    preset,
   } as const;
 }
 
@@ -87,6 +93,7 @@ function logMetrics(metrics: SessionMetrics, event: 'start' | 'context' | 'ttfb'
   const cfg = getEnvConfig();
   if (!cfg.debug) return;
   const payload: Record<string, unknown> = { event, sessionId: metrics.sessionId, roomId: metrics.roomId, ts: Date.now() };
+  if (metrics.preset) payload.preset = metrics.preset;
   if (event === 'ttfb' && metrics.ttfb !== undefined) {
     payload.ttfb = metrics.ttfb;
     payload.slo_met = metrics.ttfb <= cfg.ttfbSloMs;
@@ -97,6 +104,8 @@ function logMetrics(metrics: SessionMetrics, event: 'start' | 'context' | 'ttfb'
     if (metrics.peripheralCount !== undefined) payload.peripheral_count = metrics.peripheralCount;
     if (metrics.tokenBudgetMax !== undefined) payload.token_budget_max = metrics.tokenBudgetMax;
     if (metrics.transcriptTokenEstimate !== undefined) payload.transcript_tokens = metrics.transcriptTokenEstimate;
+    if (metrics.selectedCount !== undefined) payload.selected_count = metrics.selectedCount;
+    if (metrics.examplesCount !== undefined) payload.examples_count = metrics.examplesCount;
   }
   if (event === 'screenshot') {
     payload.request_id = metrics.screenshotRequestId;
@@ -143,6 +152,7 @@ export async function runCanvasAgent(args: RunArgs) {
     actionCount: 0,
     followupCount: 0,
     retryCount: 0,
+    preset: cfg.preset,
   };
 
   logMetrics(metrics, 'start');
@@ -196,7 +206,6 @@ export async function runCanvasAgent(args: RunArgs) {
         sessionId,
         requestId: screenshotRequestId,
         bounds: args.initialViewport,
-        maxSize: { w: 800, h: 800 },
       });
 
       const timeoutAt = metrics.screenshotRequestedAt + cfg.screenshotTimeoutMs;
@@ -237,6 +246,7 @@ export async function runCanvasAgent(args: RunArgs) {
       offset.setOrigin({ x: x + w / 2, y: y + h / 2 });
     }
 
+    const partsBuildStartedAt = Date.now();
     const parts = await buildPromptParts(roomId, {
       windowMs: 60000,
       viewport: latestScreenshot?.viewport ?? args.initialViewport,
@@ -255,12 +265,36 @@ export async function runCanvasAgent(args: RunArgs) {
         : undefined,
       offset,
     });
+    const partsBuildMs = Date.now() - partsBuildStartedAt;
     const budgetMeta = (parts as any).promptBudget;
     if (budgetMeta) {
       metrics.tokenBudgetMax = budgetMeta.maxTokens;
       metrics.transcriptTokenEstimate = budgetMeta.transcriptTokens;
       metrics.blurryCount = budgetMeta.blurryCount;
       metrics.peripheralCount = budgetMeta.peripheralCount;
+      metrics.selectedCount = budgetMeta.selectedCount;
+    }
+    if (Array.isArray((parts as any)?.fewShotExamples)) {
+      metrics.examplesCount = (parts as any).fewShotExamples.length;
+    }
+    if (cfg.debug) {
+      const screenshotBytes = (parts as any)?.screenshot?.bytes ?? metrics.imageBytes ?? 0;
+      const selectedCount = Array.isArray((parts as any)?.selectedSimpleShapes)
+        ? (parts as any).selectedSimpleShapes.length
+        : 0;
+      const blurryCount = Array.isArray((parts as any)?.blurryShapes) ? (parts as any).blurryShapes.length : 0;
+      const peripheralCount = Array.isArray((parts as any)?.peripheralClusters)
+        ? (parts as any).peripheralClusters.length
+        : 0;
+      console.log('[CanvasAgent:PromptParts]', JSON.stringify({
+        sessionId,
+        roomId,
+        buildMs: partsBuildMs,
+        blurryCount,
+        peripheralCount,
+        selectedCount,
+        screenshotBytes,
+      }));
     }
     const prompt = JSON.stringify({ user: userMessage, parts });
 
@@ -272,6 +306,7 @@ export async function runCanvasAgent(args: RunArgs) {
 
     await sendStatus(roomId, sessionId, 'calling_model');
     const provider = selectModel(model || cfg.modelName);
+    const tuning = getModelTuning(cfg.preset);
     let seq = 0;
     const sessionCreatedIds = new Set<string>();
     metrics.modelCalledAt = Date.now();
@@ -378,13 +413,28 @@ export async function runCanvasAgent(args: RunArgs) {
     const enqueueDetail = makeDetailEnqueuer(userMessage, 0);
 
     if (streamingEnabled) {
-      const structured = await provider.streamStructured?.(prompt, { system: CANVAS_AGENT_SYSTEM_PROMPT });
+      const streamStartedAt = Date.now();
+      let firstPartialLogged = false;
+      const structured = await provider.streamStructured?.(prompt, {
+        system: CANVAS_AGENT_SYSTEM_PROMPT,
+        tuning,
+      });
       if (structured) {
         let rawProcessed = 0;
         await handleStructuredStreaming(
           structured,
           async (delta) => {
             if (!Array.isArray(delta) || delta.length === 0) return;
+            if (!firstPartialLogged) {
+              firstPartialLogged = true;
+              if (cfg.debug) {
+                console.log('[CanvasAgent:FirstPartial]', JSON.stringify({
+                  sessionId,
+                  roomId,
+                  ms: Date.now() - streamStartedAt,
+                }));
+              }
+            }
             metrics.chunkCount++;
             const currentSeq = seq++;
             await processActions(delta, currentSeq, true, enqueueDetail);
@@ -401,10 +451,22 @@ export async function runCanvasAgent(args: RunArgs) {
         );
       }
     } else {
-      for await (const chunk of provider.stream(prompt, { system: CANVAS_AGENT_SYSTEM_PROMPT })) {
+      const streamStartedAt = Date.now();
+      let firstPartialLogged = false;
+      for await (const chunk of provider.stream(prompt, { system: CANVAS_AGENT_SYSTEM_PROMPT, tuning })) {
         if (chunk.type !== 'json') continue;
         const actionsRaw = (chunk.data as any)?.actions;
         if (!Array.isArray(actionsRaw) || actionsRaw.length === 0) continue;
+        if (!firstPartialLogged) {
+          firstPartialLogged = true;
+          if (cfg.debug) {
+            console.log('[CanvasAgent:FirstPartial]', JSON.stringify({
+              sessionId,
+              roomId,
+              ms: Date.now() - streamStartedAt,
+            }));
+          }
+        }
         metrics.chunkCount++;
         const currentSeq = seq++;
         await processActions(actionsRaw, currentSeq, true, enqueueDetail);
@@ -439,7 +501,6 @@ export async function runCanvasAgent(args: RunArgs) {
             sessionId,
             requestId: followRequestId,
             bounds: followBounds,
-            maxSize: { w: 800, h: 800 },
           });
           const timeoutAt = metrics.screenshotRequestedAt + cfg.screenshotTimeoutMs;
           while (Date.now() < timeoutAt) {

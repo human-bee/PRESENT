@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { storeScreenshot } from '@/server/inboxes/screenshot';
 import { verifyAgentToken } from '@/lib/agents/canvas-agent/server/auth/agentTokens';
 
+const REQUIRE_AGENT_TOKEN = process.env.CANVAS_AGENT_REQUIRE_TOKEN === 'true';
+
 export async function POST(req: NextRequest) {
   try {
     const contentLength = Number(req.headers.get('content-length') || '0');
@@ -17,8 +19,10 @@ export async function POST(req: NextRequest) {
     if (!key || key === '::') {
       return NextResponse.json({ error: 'Invalid screenshot payload' }, { status: 400 });
     }
-    const authorized = verifyAgentToken(token, { sessionId, roomId, requestId });
-    if (!authorized) {
+    if (REQUIRE_AGENT_TOKEN && !token) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    if (token && !verifyAgentToken(token, { sessionId, roomId, requestId })) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
     storeScreenshot(body as any);

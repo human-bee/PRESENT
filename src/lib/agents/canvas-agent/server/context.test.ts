@@ -56,11 +56,15 @@ describe('buildPromptParts', () => {
     expect(Array.isArray(data.blurryShapes)).toBe(true);
     expect(Array.isArray(data.peripheralClusters)).toBe(true);
     expect(Array.isArray(data.recentActions)).toBe(true);
+    expect(Array.isArray(data.selectedSimpleShapes)).toBe(true);
+    expect(Array.isArray(data.fewShotExamples)).toBe(true);
+    expect(typeof data.styleInstructions).toBe('object');
     expect(data.promptBudget).toMatchObject({
       blurryCount: expect.any(Number),
       peripheralCount: expect.any(Number),
       maxTokens: expect.any(Number),
       transcriptTokens: expect.any(Number),
+      selectedCount: expect.any(Number),
     });
   });
 
@@ -78,5 +82,12 @@ describe('buildPromptParts', () => {
     expect(data.blurryShapes).toBeDefined();
     expect(data.peripheralClusters).toBeDefined();
     expect(data.promptBudget).toBeDefined();
+    expect(Array.isArray(data.selectedSimpleShapes)).toBe(true);
+    expect(Array.isArray(data.fewShotExamples)).toBe(true);
+    expect(data.promptBudget).toEqual(
+      expect.objectContaining({
+        selectedCount: expect.any(Number),
+      }),
+    );
   });
 });

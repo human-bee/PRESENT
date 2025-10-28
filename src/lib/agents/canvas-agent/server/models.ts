@@ -4,13 +4,14 @@ import { generateObject, streamObject } from 'ai';
 import { z } from 'zod';
 import { AgentActionSchema } from '../shared/types';
 import type { StructuredStream } from './streaming';
+import type { ModelTuning } from './model/presets';
 
 export type StreamChunk = { type: 'json'; data: unknown } | { type: 'text'; data: string };
 
 export interface StreamingProvider {
   name: string;
-  stream(prompt: string, options?: { system?: string }): AsyncIterable<StreamChunk>;
-  streamStructured?: (prompt: string, options?: { system?: string }) => Promise<StructuredStream>;
+  stream(prompt: string, options?: { system?: string; tuning?: ModelTuning }): AsyncIterable<StreamChunk>;
+  streamStructured?: (prompt: string, options?: { system?: string; tuning?: ModelTuning }) => Promise<StructuredStream>;
 }
 
 class AiSdkProvider implements StreamingProvider {
@@ -24,7 +25,7 @@ class AiSdkProvider implements StreamingProvider {
     this.modelId = modelId;
   }
 
-  async *stream(prompt: string, options?: { system?: string }): AsyncIterable<StreamChunk> {
+  async *stream(prompt: string, options?: { system?: string; tuning?: ModelTuning }): AsyncIterable<StreamChunk> {
     const structured = await this.streamStructured?.(prompt, options);
     if (structured) {
       for await (const partial of structured.partialObjectStream) {
@@ -43,7 +44,7 @@ class AiSdkProvider implements StreamingProvider {
     }
   }
 
-  async streamStructured(prompt: string, options?: { system?: string }): Promise<StructuredStream> {
+  async streamStructured(prompt: string, options?: { system?: string; tuning?: ModelTuning }): Promise<StructuredStream> {
     const model = this.resolveModel();
     const schema = z.object({ actions: z.array(AgentActionSchema.extend({ id: z.string().optional() })) });
     return streamObject({
@@ -51,7 +52,9 @@ class AiSdkProvider implements StreamingProvider {
       system: options?.system || 'You are a helpful assistant.',
       prompt,
       schema,
-      temperature: 0,
+      temperature: options?.tuning?.temperature ?? 0,
+      topP: options?.tuning?.topP,
+      maxOutputTokens: options?.tuning?.maxOutputTokens,
     });
   }
 
@@ -63,7 +66,7 @@ class AiSdkProvider implements StreamingProvider {
     return modelFn(this.modelId);
   }
 
-  private async generateOnce(prompt: string, options?: { system?: string }) {
+  private async generateOnce(prompt: string, options?: { system?: string; tuning?: ModelTuning }) {
     const model = this.resolveModel();
     const schema = z.object({ actions: z.array(AgentActionSchema.extend({ id: z.string().optional() })) });
     const { object } = await generateObject({
@@ -71,7 +74,9 @@ class AiSdkProvider implements StreamingProvider {
       system: options?.system || 'You are a helpful assistant.',
       prompt,
       schema,
-      temperature: 0,
+      temperature: options?.tuning?.temperature ?? 0,
+      topP: options?.tuning?.topP,
+      maxOutputTokens: options?.tuning?.maxOutputTokens,
     });
     return object;
   }
@@ -79,7 +84,7 @@ class AiSdkProvider implements StreamingProvider {
 
 class FakeProvider implements StreamingProvider {
   name = 'debug/fake';
-  async *stream(_prompt: string): AsyncIterable<StreamChunk> {
+  async *stream(_prompt: string, _options?: { system?: string; tuning?: ModelTuning }): AsyncIterable<StreamChunk> {
     // Emit a trivial action stream for smoke testing
     const action = {
       id: `a-${Date.now()}`,
@@ -89,7 +94,7 @@ class FakeProvider implements StreamingProvider {
     yield { type: 'json', data: { actions: [action] } } as StreamChunk;
   }
 
-  async streamStructured(): Promise<StructuredStream> {
+  async streamStructured(_prompt: string, _options?: { system?: string; tuning?: ModelTuning }): Promise<StructuredStream> {
     const action = {
       id: `a-${Date.now()}`,
       name: 'think',
@@ -134,5 +139,3 @@ export function selectModel(preferred?: string): StreamingProvider {
   // Final fallback to fake
   return registry.get('debug/fake')!;
 }
-
-

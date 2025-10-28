@@ -3,6 +3,8 @@ import { z } from 'zod';
 import { saveViewportSelection } from '@/lib/agents/canvas-agent/server/inboxes/viewport';
 import { verifyAgentToken } from '@/lib/agents/canvas-agent/server/auth/agentTokens';
 
+const REQUIRE_AGENT_TOKEN = process.env.CANVAS_AGENT_REQUIRE_TOKEN === 'true';
+
 const Payload = z.object({
   sessionId: z.string(),
   roomId: z.string(),
@@ -20,8 +22,11 @@ export async function POST(req: NextRequest) {
   }
 
   const { sessionId, roomId, token } = parsed.data;
-  const allowed = verifyAgentToken(token, { sessionId, roomId });
-  if (!allowed) {
+  if (REQUIRE_AGENT_TOKEN && !token) {
+    return NextResponse.json({ ok: false, error: 'unauthorized' }, { status: 401 });
+  }
+
+  if (token && !verifyAgentToken(token, { sessionId, roomId })) {
     return NextResponse.json({ ok: false, error: 'unauthorized' }, { status: 401 });
   }
 

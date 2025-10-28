@@ -2,6 +2,8 @@ import { getCanvasShapeSummary, getTranscriptWindow } from '@/lib/agents/shared/
 import { applyTokenBudget } from './context-utils/budget';
 import { shapesInViewport, toBlurryShape, type ShapeLike } from './context-utils/geometry';
 import { peripheralClusters } from './context-utils/peripheral';
+import { simpleSelected } from './context-utils/selected';
+import { creativeFewShots, styleInstructions } from './context-utils/examples';
 import { OffsetManager, serializeBounds } from './offset';
 
 export type Viewport = { x: number; y: number; w: number; h: number };
@@ -43,6 +45,7 @@ export async function buildPromptParts(room: string, options: BuildPromptOptions
 
   const blurryCandidates = shapesInViewport(shapes as ShapeLike[], effectiveViewport, 300).map(toBlurryShape);
   const peripheral = peripheralClusters(shapes as ShapeLike[], effectiveViewport, 320, 24);
+  const selectedSimple = simpleSelected(shapes as ShapeLike[], selection, 24);
   const transcriptTokens = transcriptEntries.reduce((sum, entry) => {
     const text = typeof entry.text === 'string' ? entry.text : '';
     return sum + Math.ceil(text.length / 4) + 4;
@@ -67,6 +70,7 @@ export async function buildPromptParts(room: string, options: BuildPromptOptions
     transcriptTokens,
     blurryCount: budgeted.blurry.length,
     peripheralCount: budgeted.clusters.length,
+    selectedCount: selectedSimple.length,
   };
 
   const parts: Record<string, unknown> = {
@@ -81,6 +85,9 @@ export async function buildPromptParts(room: string, options: BuildPromptOptions
     recentActions: Array.isArray((canvas as any).recentActions)
       ? (canvas as any).recentActions.slice(-8)
       : [],
+    selectedSimpleShapes: selectedSimple,
+    fewShotExamples: creativeFewShots(),
+    styleInstructions: styleInstructions(),
     promptBudget,
   };
 

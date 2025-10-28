@@ -68,28 +68,49 @@ function alignShapes(editor: Editor, ids: string[], axis: 'x' | 'y', mode: 'star
 }
 
 function distributeShapes(editor: Editor, ids: string[], axis: 'x' | 'y', collect: BatchCollector) {
-  const snapshots = ids
-    .map((id) => getShapeSnapshot(editor, withPrefix(id)))
+  const prefixedIds = withPrefixes(ids);
+  if (typeof editor.distributeShapes === 'function') {
+    try {
+      editor.distributeShapes(prefixedIds as any, axis === 'x' ? 'horizontal' : 'vertical');
+      return;
+    } catch {}
+  }
+
+  const snapshots = prefixedIds
+    .map((id) => getShapeSnapshot(editor, id))
     .filter((snapshot): snapshot is ShapeSnapshot => Boolean(snapshot));
   if (snapshots.length < 3) return;
 
-  const sorted = snapshots.slice().sort((a, b) => (axis === 'x' ? a.x - b.x : a.y - b.y));
+  const dimension: 'x' | 'y' = axis === 'x' ? 'x' : 'y';
+  const extent: 'w' | 'h' = axis === 'x' ? 'w' : 'h';
+  const sorted = snapshots.slice().sort((a, b) => a[dimension] - b[dimension]);
   const first = sorted[0];
-  const last = sorted[sorted.length - 1];
-  const min = axis === 'x' ? first.x : first.y;
-  const max = axis === 'x' ? last.x : last.y;
-  const span = max - min;
-  if (!Number.isFinite(span) || span === 0) return;
+  const startEdge = first[dimension];
+  const endEdge = sorted.reduce((max, snapshot) => {
+    const trailingEdge = snapshot[dimension] + snapshot[extent];
+    return trailingEdge > max ? trailingEdge : max;
+  }, Number.NEGATIVE_INFINITY);
+  const gaps = sorted.length - 1;
+  if (!Number.isFinite(startEdge) || !Number.isFinite(endEdge) || gaps <= 0) return;
 
-  const step = span / (sorted.length - 1);
-  for (let i = 1; i < sorted.length - 1; i++) {
-    const snapshot = sorted[i];
-    const targetStart = min + step * i;
-    const nx = axis === 'x' ? targetStart : snapshot.x;
-    const ny = axis === 'y' ? targetStart : snapshot.y;
-    if (Math.abs(nx - snapshot.x) > 0.01 || Math.abs(ny - snapshot.y) > 0.01) {
-      collect.updates.push({ id: snapshot.id, type: snapshot.type, x: nx, y: ny });
+  const totalExtent = sorted.reduce((sum, snapshot) => sum + snapshot[extent], 0);
+  const available = endEdge - startEdge - totalExtent;
+  if (!Number.isFinite(available)) return;
+  const gap = available / gaps;
+
+  let cursor = startEdge;
+  for (const snapshot of sorted) {
+    const target = cursor;
+    if (axis === 'x') {
+      if (Math.abs(target - snapshot.x) > 0.01) {
+        collect.updates.push({ id: snapshot.id, type: snapshot.type, x: target });
+      }
+    } else {
+      if (Math.abs(target - snapshot.y) > 0.01) {
+        collect.updates.push({ id: snapshot.id, type: snapshot.type, y: target });
+      }
     }
+    cursor = target + snapshot[extent] + gap;
   }
 }
 
@@ -382,4 +403,3 @@ export function applyAction(ctx: ApplyContext, action: AgentAction, batch?: Batc
     flushBatch(editor, localBatch);
   }
 }
-

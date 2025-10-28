@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { recordAck } from '@/server/inboxes/ack';
 import { verifyAgentToken } from '@/lib/agents/canvas-agent/server/auth/agentTokens';
 
+const REQUIRE_AGENT_TOKEN = process.env.CANVAS_AGENT_REQUIRE_TOKEN === 'true';
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
@@ -14,8 +16,10 @@ export async function POST(req: NextRequest) {
     if (!sessionId || !Number.isFinite(seq)) {
       return NextResponse.json({ error: 'Invalid ack' }, { status: 400 });
     }
-    const authorized = verifyAgentToken(token, { sessionId, roomId });
-    if (!authorized) {
+    if (REQUIRE_AGENT_TOKEN && !token) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    if (token && !verifyAgentToken(token, { sessionId, roomId })) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
     recordAck(sessionId, seq, clientId || 'unknown', Number.isFinite(ts) ? ts : Date.now());

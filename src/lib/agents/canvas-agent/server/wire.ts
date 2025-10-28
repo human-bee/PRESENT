@@ -68,15 +68,25 @@ export async function sendStatus(room: string, sessionId: string, state: 'waitin
 }
 
 export async function requestScreenshot(room: string, request: Omit<ScreenshotRequest, 'type'>): Promise<void> {
+  const maxEdge = clampEdge(Number(process.env.CANVAS_AGENT_SCREENSHOT_MAX_SIZE ?? 1024));
   const token = mintAgentToken({
     sessionId: request.sessionId,
     roomId: room,
     requestId: request.requestId,
     exp: Date.now() + 60_000,
   });
-  const data = new TextEncoder().encode(
-    JSON.stringify({ ...request, type: 'agent:screenshot_request', token, roomId: room }),
-  );
+  const payload: ScreenshotRequest = {
+    type: 'agent:screenshot_request',
+    sessionId: request.sessionId,
+    requestId: request.requestId,
+    bounds: sanitizeBounds(request.bounds),
+    maxSize: request.maxSize
+      ? { w: clampEdge(request.maxSize.w), h: clampEdge(request.maxSize.h) }
+      : { w: maxEdge, h: maxEdge },
+    token,
+    roomId: room,
+  };
+  const data = new TextEncoder().encode(JSON.stringify(payload));
   const { client, normalizedRoom } = await ensureRoom(room);
   await client.sendData(normalizedRoom, data, DataPacket_Kind.RELIABLE, { topic: 'agent:screenshot_request' });
 }
@@ -97,3 +107,17 @@ export async function awaitAck(opts: { sessionId: string; seq: number; deadlineM
   return null;
 }
 
+function clampEdge(edge: number): number {
+  if (!Number.isFinite(edge) || edge <= 0) return 1024;
+  return Math.max(64, Math.min(4096, Math.floor(edge)));
+}
+
+function sanitizeBounds(bounds?: { x: number; y: number; w: number; h: number }) {
+  if (!bounds) return undefined;
+  return {
+    x: Number.isFinite(bounds.x) ? Math.floor(bounds.x) : 0,
+    y: Number.isFinite(bounds.y) ? Math.floor(bounds.y) : 0,
+    w: Number.isFinite(bounds.w) ? Math.max(32, Math.floor(bounds.w)) : 512,
+    h: Number.isFinite(bounds.h) ? Math.max(32, Math.floor(bounds.h)) : 512,
+  };
+}
