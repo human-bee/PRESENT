@@ -3,7 +3,13 @@ import { join } from 'path';
 import { config as dotenvConfig } from 'dotenv';
 import { ACTION_VERSION, type AgentAction, type AgentActionEnvelope, type ScreenshotRequest, type AgentChatMessage } from '../shared/types';
 import { mintAgentToken } from './auth/agentTokens';
-import { getAck } from '@/server/inboxes/ack';
+import * as ackInbox from '@/server/inboxes/ack';
+
+type AckRecord = {
+  seq: number;
+  clientId: string;
+  ts: number;
+};
 
 try {
   dotenvConfig({ path: join(process.cwd(), '.env.local') });
@@ -94,6 +100,12 @@ export async function requestScreenshot(room: string, request: Omit<ScreenshotRe
 const ACK_BACKOFF_MS = [150, 300, 600, 1000];
 
 export async function awaitAck(opts: { sessionId: string; seq: number; deadlineMs?: number }) {
+  const getAck = typeof ackInbox.getAck === 'function'
+    ? (ackInbox.getAck as (sessionId: string, seq: number) => AckRecord | null)
+    : null;
+  if (!getAck) {
+    throw new Error('Ack inbox missing getAck implementation; ensure server inbox is up to date.');
+  }
   const start = Date.now();
   const deadline = start + (opts.deadlineMs ?? 1500);
   let attempt = 0;
