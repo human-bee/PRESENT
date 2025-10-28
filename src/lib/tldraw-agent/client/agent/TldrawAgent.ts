@@ -149,7 +149,7 @@ export class TldrawAgent {
 
 		persistAtomInLocalStorage(this.$chatHistory, `${id}:chat-history`)
 		persistAtomInLocalStorage(this.$chatOrigin, `${id}:chat-origin`)
-		persistAtomInLocalStorage(this.$modelName, `${id}:model-name`)
+		persistAtomInLocalStorage(this.$modelName, `${id}:model-name:v2`)
 		persistAtomInLocalStorage(this.$todoList, `${id}:todo-items`)
 		persistAtomInLocalStorage(this.$contextItems, `${id}:context-items`)
 

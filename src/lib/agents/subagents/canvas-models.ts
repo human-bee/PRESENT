@@ -77,8 +77,8 @@ export function resolveCanvasModelName(options?: {
 }): CanvasModelName {
   const { explicit, allowOverride } = options ?? {};
 
-  const envModel = parseCanvasModelName(process.env[CANVAS_STEWARD_MODEL_ENV]);
-  const explicitModel = parseCanvasModelName(explicit);
+  const envModel = normalizeCanvasModelName(process.env[CANVAS_STEWARD_MODEL_ENV]);
+  const explicitModel = normalizeCanvasModelName(explicit);
 
   if (envModel) {
     return envModel;
@@ -90,8 +90,7 @@ export function resolveCanvasModelName(options?: {
 
   return DEFAULT_CANVAS_MODEL;
 }
-
-function parseCanvasModelName(raw: unknown): CanvasModelName | null {
+export function normalizeCanvasModelName(raw: unknown): CanvasModelName | null {
   if (typeof raw !== 'string') return null;
   const trimmed = raw.trim();
   if (!trimmed) return null;

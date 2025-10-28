@@ -1,4 +1,4 @@
-export const DEFAULT_MODEL_NAME = 'claude-haiku-4-5'
+import { normalizeCanvasModelName } from '@/lib/agents/subagents/canvas-models'
 
 export type AgentModelName = keyof typeof AGENT_MODEL_DEFINITIONS
 export type AgentModelProvider = 'openai' | 'anthropic'
@@ -47,3 +47,6 @@ export const AGENT_MODEL_DEFINITIONS = {
 		provider: 'openai',
 	},
 } as const
+
+export const DEFAULT_MODEL_NAME: AgentModelName =
+	(normalizeCanvasModelName(process.env.CANVAS_STEWARD_MODEL) as AgentModelName | null) ?? 'claude-sonnet-4-5'
