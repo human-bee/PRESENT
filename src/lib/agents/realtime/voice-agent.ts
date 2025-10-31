@@ -19,6 +19,35 @@ export default defineAgent({
   entry: async (job: JobContext) => {
     await job.connect();
 
+    const coerceBooleanFromEnv = (value?: string | null) => {
+      if (!value) return undefined;
+      const normalized = value.trim().toLowerCase();
+      if (!normalized) return undefined;
+      if (['true', '1', 'yes', 'on'].includes(normalized)) return true;
+      if (['false', '0', 'no', 'off'].includes(normalized)) return false;
+      return undefined;
+    };
+
+    const envInputTranscriptionModel = process.env.VOICE_AGENT_INPUT_TRANSCRIPTION_MODEL?.trim();
+    const fallbackInputTranscriptionModel = process.env.AGENT_STT_MODEL?.trim();
+    const envTranscriptionLanguage = process.env.VOICE_AGENT_TRANSCRIPTION_LANGUAGE?.trim();
+    const fallbackTranscriptionLanguage = process.env.AGENT_STT_LANGUAGE?.trim();
+    const resolvedInputTranscriptionModel = envInputTranscriptionModel || fallbackInputTranscriptionModel || undefined;
+    const transcriptionEnabledFlag = coerceBooleanFromEnv(process.env.VOICE_AGENT_TRANSCRIPTION_ENABLED);
+    const transcriptionEnabled = transcriptionEnabledFlag ?? Boolean(resolvedInputTranscriptionModel);
+    const resolvedTranscriptionLanguage = envTranscriptionLanguage || fallbackTranscriptionLanguage || undefined;
+    const inputAudioTranscription = transcriptionEnabled
+      ? {
+          model: resolvedInputTranscriptionModel || 'gpt-4o-mini-transcribe',
+          ...(resolvedTranscriptionLanguage ? { language: resolvedTranscriptionLanguage } : {}),
+        }
+      : null;
+
+    console.log('[VoiceAgent] transcription config', {
+      transcriptionEnabled,
+      inputAudioTranscription,
+    });
+
     const subscribeToParticipant = (participant?: any) => {
       if (!participant) return;
 
@@ -150,7 +179,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
     const realtimeModel = new openaiRealtime.RealtimeModel({
       model: 'gpt-realtime',
       toolChoice: 'required',
-      inputAudioTranscription: null,
+      inputAudioTranscription,
       turnDetection: null,
     });
 
@@ -351,7 +380,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
       agent,
       room: job.room,
       inputOptions: { audioEnabled: true },
-      outputOptions: { audioEnabled: false, transcriptionEnabled: false },
+      outputOptions: { audioEnabled: false, transcriptionEnabled },
     });
 
   },
