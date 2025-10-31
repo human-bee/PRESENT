@@ -77,6 +77,19 @@ export function useCanvasComponentStore(
           ts: Date.now(),
           origin: 'browser',
         });
+        try {
+          window.dispatchEvent(
+            new CustomEvent('present:component-registered', {
+              detail: {
+                messageId,
+                componentName: componentName || `Component ${messageId}`,
+                status: 'updated',
+              },
+            }),
+          );
+        } catch {
+          /* noop */
+        }
         return;
       }
 
@@ -127,6 +140,19 @@ export function useCanvasComponentStore(
         ts: Date.now(),
         origin: 'browser',
       });
+      try {
+        window.dispatchEvent(
+          new CustomEvent('present:component-registered', {
+            detail: {
+              messageId,
+              componentName: componentName || `Component ${messageId}`,
+              status: 'created',
+            },
+          }),
+        );
+      } catch {
+        /* noop */
+      }
     },
     [editor, logger, messageIdToShapeIdMap],
   );
@@ -206,6 +232,8 @@ export function useMergeComponentStateBridge(
   messageIdToShapeIdMap: Map<string, TLShapeId>,
   setMessageIdToShapeIdMap: React.Dispatch<React.SetStateAction<Map<string, TLShapeId>>>,
 ) {
+  const pendingPatchesRef = useRef(new Map<string, Record<string, unknown>>());
+
   useEffect(() => {
     if (!editor) return;
 
@@ -234,9 +262,23 @@ export function useMergeComponentStateBridge(
 
       if (!shapeId) {
         logger.warn('merge_component_state: shape not found for messageId', messageId);
+        const queued = pendingPatchesRef.current.get(messageId) || {};
+        pendingPatchesRef.current.set(messageId, {
+          ...queued,
+          ...(patch as Record<string, unknown>),
+        });
         return;
       }
 
+      const queued = pendingPatchesRef.current.get(messageId);
+      if (queued) {
+        pendingPatchesRef.current.delete(messageId);
+        try {
+          mergeComponentState(editor, messageId, queued, shapeId);
+        } catch (error) {
+          logger.warn('merge_component_state flush pending failed', { messageId, error });
+        }
+      }
       try {
         mergeComponentState(editor, messageId, patch, shapeId);
       } catch (error) {
@@ -247,6 +289,49 @@ export function useMergeComponentStateBridge(
     window.addEventListener(MERGE_EVENT_NAME, handler as EventListener);
     return () => {
       window.removeEventListener(MERGE_EVENT_NAME, handler as EventListener);
+    };
+  }, [editor, logger, messageIdToShapeIdMap, setMessageIdToShapeIdMap]);
+
+  useEffect(() => {
+    if (!editor) return;
+
+    const handleRegistered = (event: Event) => {
+      const detail = (event as CustomEvent<{ messageId?: string }>).detail;
+      const messageId = detail?.messageId;
+      if (!messageId) return;
+
+      const pending = pendingPatchesRef.current.get(messageId);
+      if (!pending) return;
+
+      let shapeId = messageIdToShapeIdMap.get(messageId);
+      if (!shapeId) {
+        const candidate = (editor.getCurrentPageShapes?.() as any[] | undefined)?.find(
+          (shape) => shape?.type === 'custom' && shape?.props?.customComponent === messageId,
+        );
+        if (candidate?.id) {
+          shapeId = candidate.id as TLShapeId;
+          setMessageIdToShapeIdMap((prev) => {
+            if (prev.get(messageId) === shapeId) return prev;
+            const next = new Map(prev);
+            next.set(messageId, shapeId);
+            return next;
+          });
+        }
+      }
+
+      if (!shapeId) return;
+
+      pendingPatchesRef.current.delete(messageId);
+      try {
+        mergeComponentState(editor, messageId, pending, shapeId);
+      } catch (error) {
+        logger.warn('merge_component_state pending flush failed', { messageId, error });
+      }
+    };
+
+    window.addEventListener('present:component-registered', handleRegistered as EventListener);
+    return () => {
+      window.removeEventListener('present:component-registered', handleRegistered as EventListener);
     };
   }, [editor, logger, messageIdToShapeIdMap, setMessageIdToShapeIdMap]);
 }

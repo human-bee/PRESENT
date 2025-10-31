@@ -204,7 +204,7 @@ export default function Canvas() {
   // Feature flag to gate MCP in canvas to isolate invalid external tool names if needed
   const enableMcp = process.env.NEXT_PUBLIC_ENABLE_MCP_IN_CANVAS === 'true';
   // Local flags for logs / debug console
-  const enableDispatcherLogs = process.env.NEXT_PUBLIC_TOOL_DISPATCHER_LOGS !== 'false' ? true : false;
+  const enableDispatcherLogs = process.env.NEXT_PUBLIC_TOOL_DISPATCHER_LOGS === 'true';
   const enableDebugConsole = process.env.NODE_ENV !== 'production';
 
   // Create LiveKit room instance for the canvas

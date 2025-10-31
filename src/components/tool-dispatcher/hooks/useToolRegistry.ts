@@ -32,6 +32,35 @@ export function useToolRegistry(deps: ToolRegistryDeps): ToolRegistryApi {
 
   const handlers = useMemo(() => {
     const map = new Map<string, ToolHandler>();
+    const pendingUpdates = new Map<string, { patch: Record<string, unknown> }>();
+    let frameHandle: number | null = null;
+    let lastDispatch: ((eventName: string, detail?: unknown) => ToolRunResult) | null = null;
+
+    const flushPending = () => {
+      if (!lastDispatch) {
+        pendingUpdates.clear();
+        return;
+      }
+      const dispatch = lastDispatch;
+      for (const [messageId, entry] of pendingUpdates.entries()) {
+        pendingUpdates.delete(messageId);
+        dispatch('tldraw:merge_component_state', {
+          messageId,
+          patch: entry.patch,
+          meta: { source: 'update_component' },
+        });
+        void ComponentRegistry.update(messageId, entry.patch);
+      }
+    };
+
+    const scheduleFlush = (dispatchTL: (eventName: string, detail?: unknown) => ToolRunResult) => {
+      lastDispatch = dispatchTL;
+      if (frameHandle !== null) return;
+      frameHandle = window.requestAnimationFrame(() => {
+        frameHandle = null;
+        flushPending();
+      });
+    };
 
     // Legacy canvas_* tools removed for unified Canvas Agent
 
@@ -123,13 +152,11 @@ export function useToolRegistry(deps: ToolRegistryDeps): ToolRegistryApi {
         runtimePatch.initialMinutes = minutes;
         runtimePatch.initialSeconds = seconds;
       }
-      dispatchTL('tldraw:merge_component_state', {
-        messageId,
-        patch: runtimePatch,
-        meta: { source: 'update_component' },
-      });
-      const result = await ComponentRegistry.update(messageId, runtimePatch);
-      return { status: 'SUCCESS', message: 'Component updated', ...result };
+      const existing = pendingUpdates.get(messageId);
+      const combined = existing ? { ...existing.patch, ...runtimePatch } : runtimePatch;
+      pendingUpdates.set(messageId, { patch: combined });
+      scheduleFlush(dispatchTL);
+      return { status: 'SUCCESS', message: 'Component update queued' };
     });
 
     map.set('mermaid_create_stream', async ({ params, dispatchTL }) => {

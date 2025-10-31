@@ -92,10 +92,13 @@ If it doesn't move the canvas, it doesn't belong in the voice agent. This docume
 
 - **Voice Agent (Realtime, Node)**
   Listens to the room, transcribes, and calls UI tools (`create_component`, `update_component`) or delegates canvas work via `dispatch_to_conductor`.
+  - Normalizes patches before they hit the browser (e.g., `"7m"` → `420` seconds, boolean/string coercion).
+  - Suppresses duplicate `create_component` payloads by fingerprinting recent requests and reusing the existing componentId.
+  - Emits data-channel messages only after local validation; all deduping happens here so the ToolDispatcher can stay dumb.
 - **Canvas Agent (Unified, Node)**
   Server-centric "brain" that handles all TLDraw canvas operations. Builds prompts, calls models (streaming), sanitizes actions, and broadcasts TLDraw-native action envelopes to clients. Browser acts as "eyes and hands" only (viewport/selection/screenshot + action execution). See `docs/canvas-agent.md` for full architecture.
 - **Conductor (Agents SDK, Node)**
-  A tiny router that delegates to **steward** subagents via handoffs. No business logic.
+  A tiny router that delegates to **steward** subagents via handoffs. No business logic. Runs on the OpenAI Agents SDK (which wraps the Responses API) so stewards can opt into Responses features without rewriting the router.
 - **Stewards (Agents SDK, Node)**
   Domain owners (e.g., **Flowchart Steward**, **YouTube Steward**). They read context (Supabase), produce a complete artifact, and emit one UI patch or component creation.
 - **Browser ToolDispatcher (React, client)**

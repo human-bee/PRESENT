@@ -29,7 +29,8 @@
     "lk:server:dev": "bash scripts/run-livekit-dev.sh",
     "sync:dev": "npx tsx scripts/tldraw-sync-server/server.ts",
     "stack:start": "bash scripts/start-dev-stack.sh",
-    "stack:stop": "bash scripts/stop-dev-stack.sh"
+    "stack:stop": "bash scripts/stop-dev-stack.sh",
+    "stack:restart": "npm run stack:stop && npm run stack:start"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^2.0.31",
