@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useRef, useState, useEffect } from 'react';
 import { nanoid } from 'nanoid';
 import type { Editor, TLShapeId } from 'tldraw';
 import { createShapeId } from 'tldraw';
@@ -150,6 +150,8 @@ export function useCanvasComponentStore(
     [addComponentToCanvas, editor, logger],
   );
 
+  useMergeComponentStateBridge(editor, logger, messageIdToShapeIdMap, setMessageIdToShapeIdMap);
+
   return {
     componentStore,
     pendingComponentsRef,
@@ -163,4 +165,88 @@ export function useCanvasComponentStore(
   };
 }
 
+type MergeComponentStateDetail = {
+  messageId: string;
+  patch: Record<string, unknown>;
+  meta?: Record<string, unknown>;
+};
 
+const MERGE_EVENT_NAME = 'tldraw:merge_component_state';
+
+function mergeComponentState(
+  editor: Editor | null,
+  messageId: string,
+  patch: Record<string, unknown>,
+  shapeId: TLShapeId,
+) {
+  if (!editor) return;
+  const shape = editor.getShape?.(shapeId) as any;
+  if (!shape || !shape.props) return;
+
+  const prevState = (shape.props.state as Record<string, unknown>) || {};
+  const nextState = { ...prevState, ...patch };
+
+  const nextProps = {
+    ...shape.props,
+    state: nextState,
+  };
+
+  editor.updateShapes?.([
+    {
+      id: shapeId,
+      type: shape.type ?? 'custom',
+      props: nextProps,
+    } as any,
+  ]);
+}
+
+export function useMergeComponentStateBridge(
+  editor: Editor | null,
+  logger: CanvasLogger,
+  messageIdToShapeIdMap: Map<string, TLShapeId>,
+  setMessageIdToShapeIdMap: React.Dispatch<React.SetStateAction<Map<string, TLShapeId>>>,
+) {
+  useEffect(() => {
+    if (!editor) return;
+
+    const handler = (event: Event) => {
+      const custom = event as CustomEvent<MergeComponentStateDetail>;
+      if (!custom?.detail) return;
+      const { messageId, patch } = custom.detail;
+      if (!messageId || !patch || typeof patch !== 'object') return;
+
+      let shapeId = messageIdToShapeIdMap.get(messageId);
+
+      if (!shapeId) {
+        const candidate = (editor.getCurrentPageShapes?.() as any[] | undefined)?.find(
+          (shape) => shape?.type === 'custom' && shape?.props?.customComponent === messageId,
+        );
+        if (candidate?.id) {
+          shapeId = candidate.id as TLShapeId;
+          setMessageIdToShapeIdMap((prev) => {
+            if (prev.get(messageId) === shapeId) return prev;
+            const next = new Map(prev);
+            next.set(messageId, shapeId);
+            return next;
+          });
+        }
+      }
+
+      if (!shapeId) {
+        logger.warn('merge_component_state: shape not found for messageId', messageId);
+        return;
+      }
+
+      try {
+        mergeComponentState(editor, messageId, patch, shapeId);
+      } catch (error) {
+        logger.warn('merge_component_state failed', { messageId, error });
+      }
+    };
+
+    window.addEventListener(MERGE_EVENT_NAME, handler as EventListener);
+    return () => {
+      window.removeEventListener(MERGE_EVENT_NAME, handler as EventListener);
+    };
+  }, [editor, logger, messageIdToShapeIdMap, setMessageIdToShapeIdMap]);
+}

@@ -64,15 +64,71 @@ export function useToolRegistry(deps: ToolRegistryDeps): ToolRegistryApi {
       }
     });
 
-    map.set('update_component', async ({ params }) => {
+    map.set('update_component', async ({ params, dispatchTL }) => {
       const messageId = String(params?.componentId || params?.messageId || '');
       const patch = params?.patch;
       if (!messageId) {
         return { status: 'ERROR', message: 'update_component requires componentId' };
       }
-      const nextPatch =
-        typeof patch === 'string' ? { instruction: patch } : ((patch as Record<string, unknown> | undefined) ?? {});
-      const result = await ComponentRegistry.update(messageId, nextPatch);
+      let nextPatch: Record<string, unknown>;
+      if (typeof patch === 'string') {
+        try {
+          const parsed = JSON.parse(patch);
+          nextPatch = parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : { instruction: patch };
+        } catch {
+          nextPatch = { instruction: patch };
+        }
+      } else {
+        nextPatch = (patch as Record<string, unknown> | undefined) ?? {};
+      }
+      const runtimePatch: Record<string, unknown> = { ...nextPatch };
+      const timestamp = Date.now();
+      if (typeof runtimePatch.updatedAt !== 'number') {
+        runtimePatch.updatedAt = timestamp;
+      }
+      if (typeof runtimePatch.duration === 'number' && Number.isFinite(runtimePatch.duration)) {
+        const durationSeconds = Math.max(1, Math.round(runtimePatch.duration as number));
+        const minutes = Math.floor(durationSeconds / 60);
+        const seconds = durationSeconds % 60;
+        runtimePatch.configuredDuration = durationSeconds;
+        if (typeof runtimePatch.timeLeft !== 'number') {
+          runtimePatch.timeLeft = durationSeconds;
+        }
+        runtimePatch.initialMinutes = minutes;
+        runtimePatch.initialSeconds = seconds;
+        delete runtimePatch.duration;
+      }
+      if (typeof runtimePatch.durationSeconds === 'number' && Number.isFinite(runtimePatch.durationSeconds as number)) {
+        const durationSeconds = Math.max(1, Math.round(runtimePatch.durationSeconds as number));
+        const minutes = Math.floor(durationSeconds / 60);
+        const seconds = durationSeconds % 60;
+        runtimePatch.configuredDuration = durationSeconds;
+        if (typeof runtimePatch.timeLeft !== 'number') {
+          runtimePatch.timeLeft = durationSeconds;
+        }
+        runtimePatch.initialMinutes = minutes;
+        runtimePatch.initialSeconds = seconds;
+      }
+      if (
+        typeof runtimePatch.initialMinutes === 'number' &&
+        typeof runtimePatch.initialSeconds === 'number'
+      ) {
+        const minutes = Math.max(1, Math.round(runtimePatch.initialMinutes as number));
+        const seconds = Math.max(0, Math.min(59, Math.round(runtimePatch.initialSeconds as number)));
+        const durationSeconds = minutes * 60 + seconds;
+        runtimePatch.configuredDuration = durationSeconds;
+        if (typeof runtimePatch.timeLeft !== 'number') {
+          runtimePatch.timeLeft = durationSeconds;
+        }
+        runtimePatch.initialMinutes = minutes;
+        runtimePatch.initialSeconds = seconds;
+      }
+      dispatchTL('tldraw:merge_component_state', {
+        messageId,
+        patch: runtimePatch,
+        meta: { source: 'update_component' },
+      });
+      const result = await ComponentRegistry.update(messageId, runtimePatch);
       return { status: 'SUCCESS', message: 'Component updated', ...result };
     });
 

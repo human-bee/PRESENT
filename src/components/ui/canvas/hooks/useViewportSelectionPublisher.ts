@@ -15,6 +15,10 @@ export function useViewportSelectionPublisher(editor: Editor | undefined, room: 
 
     const tick = () => {
       const now = Date.now();
+      if (!editor || !room || room.state !== 'connected') {
+        raf = window.requestAnimationFrame(tick);
+        return;
+      }
       if (now - lastSent >= 80) {
         lastSent = now;
         try {
@@ -59,6 +63,5 @@ export function useViewportSelectionPublisher(editor: Editor | undefined, room: 
     return () => { if (raf) window.cancelAnimationFrame(raf); };
   }, [editor, room, active]);
 }
-
 
 

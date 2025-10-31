@@ -106,6 +106,13 @@ Examples:
 
 Your only output is function calls. Never use plain text unless absolutely necessary.`;
 
+    const componentRegistry = new Map<
+      string,
+      { type: string; createdAt: number; props: JsonObject; state: JsonObject }
+    >();
+    const lastComponentByType = new Map<string, string>();
+    let lastCreatedComponentId: string | null = null;
+
     const sendToolCall = async (tool: string, params: JsonObject) => {
       const toolEvent = {
         id: randomUUID(),
@@ -126,22 +133,250 @@ Your only output is function calls. Never use plain text unless absolutely neces
       }
     };
 
+    const coerceComponentPatch = (raw: unknown) => {
+      if (!raw) return {};
+      if (typeof raw === 'string') {
+        try {
+          const parsed = JSON.parse(raw);
+          return parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : { instruction: raw };
+        } catch {
+          return { instruction: raw };
+        }
+      }
+      if (typeof raw === 'object') {
+        return { ...(raw as Record<string, unknown>) };
+      }
+      return {};
+    };
+
+    const normalizeComponentPatch = (patch: Record<string, unknown>) => {
+      const next = { ...patch };
+      const timestamp = Date.now();
+      next.updatedAt = typeof next.updatedAt === 'number' ? next.updatedAt : timestamp;
+
+      const coerceBoolean = (value: unknown): boolean | undefined => {
+        if (typeof value === 'boolean') return value;
+        if (typeof value === 'number') {
+          if (value === 1) return true;
+          if (value === 0) return false;
+        }
+        if (typeof value === 'string') {
+          const normalized = value.trim().toLowerCase();
+          if (!normalized) return undefined;
+          if (['true', 'yes', 'start', 'run', 'running', 'resume', 'play', 'on', '1'].includes(normalized)) {
+            return true;
+          }
+          if (['false', 'no', 'stop', 'stopped', 'pause', 'paused', 'halt', 'off', '0'].includes(normalized)) {
+            return false;
+          }
+        }
+        return undefined;
+      };
+
+      if (typeof next.duration === 'number' && Number.isFinite(next.duration)) {
+        const durationSeconds = Math.max(1, Math.round(next.duration));
+        const minutes = Math.floor(durationSeconds / 60);
+        const seconds = durationSeconds % 60;
+        next.configuredDuration = durationSeconds;
+        if (typeof next.timeLeft !== 'number') {
+          next.timeLeft = durationSeconds;
+        }
+        next.initialMinutes = minutes;
+        next.initialSeconds = seconds;
+        delete next.duration;
+      }
+      if (typeof next.durationSeconds === 'number' && Number.isFinite(next.durationSeconds)) {
+        const durationSeconds = Math.max(1, Math.round(next.durationSeconds));
+        const minutes = Math.floor(durationSeconds / 60);
+        const seconds = durationSeconds % 60;
+        next.configuredDuration = durationSeconds;
+        if (typeof next.timeLeft !== 'number') {
+          next.timeLeft = durationSeconds;
+        }
+        next.initialMinutes = minutes;
+        next.initialSeconds = seconds;
+      }
+      if (typeof next.initialMinutes === 'number' && typeof next.initialSeconds === 'number') {
+        const clampMinutes = Math.max(1, Math.round(next.initialMinutes));
+        const clampSeconds = Math.max(0, Math.min(59, Math.round(next.initialSeconds)));
+        const totalSeconds = clampMinutes * 60 + clampSeconds;
+        next.configuredDuration = totalSeconds;
+        if (typeof next.timeLeft !== 'number') {
+          next.timeLeft = totalSeconds;
+        }
+        next.initialMinutes = clampMinutes;
+        next.initialSeconds = clampSeconds;
+      }
+
+      const runningValue =
+        'running' in next ? coerceBoolean(next.running) : undefined;
+      if (runningValue !== undefined) {
+        next.isRunning = runningValue;
+        if (runningValue) {
+          next.isFinished = false;
+          if (typeof next.timeLeft !== 'number' && typeof next.configuredDuration === 'number') {
+            next.timeLeft = next.configuredDuration;
+          }
+        }
+        delete next.running;
+      }
+
+      const autoStartValue =
+        'autoStart' in next ? coerceBoolean(next.autoStart) : undefined;
+      if (autoStartValue !== undefined) {
+        next.autoStart = autoStartValue;
+        next.isRunning = autoStartValue;
+        if (autoStartValue) {
+          next.isFinished = false;
+          if (typeof next.timeLeft !== 'number' && typeof next.configuredDuration === 'number') {
+            next.timeLeft = next.configuredDuration;
+          }
+        }
+      }
+
+      const statusValue =
+        'status' in next ? coerceBoolean(next.status) : undefined;
+      if (statusValue !== undefined && next.isRunning === undefined) {
+        next.isRunning = statusValue;
+        if (statusValue) {
+          next.isFinished = false;
+          if (typeof next.timeLeft !== 'number' && typeof next.configuredDuration === 'number') {
+            next.timeLeft = next.configuredDuration;
+          }
+        }
+      }
+
+      return next;
+    };
+
     const toolParameters = jsonObjectSchema.default({});
     const toolContext: llm.ToolContext = {
       create_component: llm.tool({
         description: 'Create a new component on the canvas.',
-        parameters: z.object({ type: z.string(), spec: z.string() }),
+        parameters: z.object({
+          type: z.string(),
+          spec: z.union([z.string(), z.record(z.any())]).nullish(),
+          props: z.record(z.any()).nullish(),
+          messageId: z.string().nullish(),
+        }),
         execute: async (args) => {
-          await sendToolCall('create_component', args);
-          return { status: 'queued' };
+          const componentType = String(args.type || '').trim();
+          if (!componentType) {
+            return { status: 'ERROR', message: 'create_component requires type' };
+          }
+
+          if (args.spec === null) {
+            delete (args as any).spec;
+          }
+          if (args.props === null) {
+            delete (args as any).props;
+          }
+          if (args.messageId === null) {
+            delete (args as any).messageId;
+          }
+
+          const messageId =
+            typeof args.messageId === 'string' && args.messageId.trim().length > 0
+              ? args.messageId.trim()
+              : `ui-${randomUUID()}`;
+          args.messageId = messageId;
+
+          let normalizedSpec: Record<string, unknown> = {};
+          if (typeof args.spec === 'string') {
+            try {
+              const parsed = JSON.parse(args.spec);
+              if (parsed && typeof parsed === 'object') {
+                normalizedSpec = parsed as Record<string, unknown>;
+              }
+            } catch {
+              /* keep normalizedSpec empty */
+            }
+          } else if (args.spec && typeof args.spec === 'object') {
+            normalizedSpec = { ...(args.spec as Record<string, unknown>) };
+          }
+
+          const initialProps =
+            args.props && typeof args.props === 'object'
+              ? ({ ...args.props } as Record<string, unknown>)
+              : {};
+
+          const mergedProps = {
+            ...normalizedSpec,
+            ...initialProps,
+          };
+
+          componentRegistry.set(messageId, {
+            type: componentType,
+            createdAt: Date.now(),
+            props: mergedProps as JsonObject,
+            state: {} as JsonObject,
+          });
+          lastComponentByType.set(componentType, messageId);
+          lastCreatedComponentId = messageId;
+
+          const payload: JsonObject = {
+            type: componentType,
+            messageId,
+          };
+          if (args.spec !== undefined && args.spec !== null) {
+            payload.spec = args.spec as JsonObject;
+          }
+          if (args.props && typeof args.props === 'object') {
+            payload.props = args.props as JsonObject;
+          }
+
+          if (!('spec' in payload) && Object.keys(mergedProps).length > 0) {
+            payload.spec = mergedProps as JsonObject;
+          }
+
+          await sendToolCall('create_component', payload);
+          return { status: 'queued', messageId };
         },
       }),
       update_component: llm.tool({
         description: 'Update an existing component with a patch.',
-        parameters: z.object({ componentId: z.string(), patch: z.string() }),
+        parameters: z.object({
+          componentId: z.string().nullish(),
+          type: z.string().nullish(),
+          patch: z.union([z.string(), z.record(z.any())]).nullish(),
+        }),
         execute: async (args) => {
-          await sendToolCall('update_component', args);
-          return { status: 'queued' };
+          let resolvedId =
+            typeof args.componentId === 'string' && args.componentId.trim().length > 0
+              ? args.componentId.trim()
+              : '';
+
+          if (!resolvedId && typeof args.type === 'string' && args.type.trim()) {
+            const byType = lastComponentByType.get(args.type.trim());
+            if (byType) resolvedId = byType;
+          }
+
+          if (!resolvedId && lastCreatedComponentId) {
+            resolvedId = lastCreatedComponentId;
+          }
+
+          if (!resolvedId) {
+            console.warn('[VoiceAgent] update_component missing componentId and no recent component found', args);
+            return { status: 'ERROR', message: 'Missing componentId for update_component' };
+          }
+
+          const rawPatch = coerceComponentPatch(args.patch);
+          const patch = normalizeComponentPatch(rawPatch);
+
+          const payload: JsonObject = {
+            componentId: resolvedId,
+            patch,
+          };
+
+          await sendToolCall('update_component', payload);
+
+          const existing = componentRegistry.get(resolvedId);
+          if (existing) {
+            existing.props = { ...existing.props, ...patch };
+          }
+          lastCreatedComponentId = resolvedId;
+
+          return { status: 'queued', componentId: resolvedId };
         },
       }),
       dispatch_to_conductor: llm.tool({
@@ -216,40 +451,31 @@ Your only output is function calls. Never use plain text unless absolutely neces
       }
     };
 
-    session.on((voice as any).AgentSessionEventTypes.FunctionCall, async (event: any) => {
-      const fnCall = event.call;
-      console.log('[VoiceAgent] FunctionCall event received', { fnCall, eventKeys: Object.keys(event) });
-      if (!fnCall) {
-        console.warn('[VoiceAgent] FunctionCall event has NO call object!', event);
-        return;
+    const resolveComponentId = (args: Record<string, unknown>) => {
+      const rawId = typeof args.componentId === 'string' ? args.componentId.trim() : '';
+      if (rawId) return rawId;
+      const rawType =
+        typeof args.type === 'string'
+          ? args.type.trim()
+          : typeof args.componentType === 'string'
+            ? args.componentType.trim()
+            : '';
+      if (rawType) {
+        const byType = lastComponentByType.get(rawType);
+        if (byType) return byType;
       }
-      console.log('[VoiceAgent] FunctionCall VALID', { name: fnCall.name, args: fnCall.args });
-      try {
-        const args = JSON.parse(fnCall.args || '{}');
-        if (!['create_component', 'update_component', 'dispatch_to_conductor'].includes(fnCall.name)) {
-          return;
+      if (rawType) {
+        for (const [id, info] of componentRegistry.entries()) {
+          if (info.type === rawType) {
+            return id;
+          }
         }
-        const toolEvent = {
-          id: fnCall.id,
-          roomId: job.room.name || 'unknown',
-          type: 'tool_call',
-          payload: { tool: fnCall.name, params: args, context: { source: 'voice', timestamp: Date.now() } },
-          timestamp: Date.now(),
-          source: 'voice' as const,
-        };
-        const participantExists = !!job.room.localParticipant;
-        console.log('[VoiceAgent] tool_call ready', { participantExists, toolEvent });
-        await job.room.localParticipant?.publishData(new TextEncoder().encode(JSON.stringify(toolEvent)), {
-          reliable: true,
-          topic: 'tool_call',
-        });
-        if (!participantExists) {
-          console.warn('[VoiceAgent] localParticipant missing, tool_call not sent');
-        }
-      } catch (error) {
-        console.error('[VoiceAgent] Tool call handling failed', error);
       }
-    });
+      if (lastCreatedComponentId) {
+        return lastCreatedComponentId;
+      }
+      return '';
+    };
 
     session.on((voice as any).AgentSessionEventTypes.FunctionToolsExecuted, async (event: any) => {
       const calls = event.functionCalls ?? [];
@@ -260,9 +486,56 @@ Your only output is function calls. Never use plain text unless absolutely neces
       console.log('[VoiceAgent] FunctionToolsExecuted raw', event);
       for (const fnCall of calls) {
         try {
-          const args = JSON.parse(fnCall.args || '{}');
+          const args = JSON.parse(fnCall.args || '{}') as Record<string, unknown>;
           if (!['create_component', 'update_component', 'dispatch_to_conductor'].includes(fnCall.name)) {
             continue;
+          }
+          if (fnCall.name === 'create_component') {
+            if (args.spec === null) {
+              delete args.spec;
+            }
+            if (args.props === null) {
+              delete args.props;
+            }
+            if (args.messageId === null || typeof args.messageId !== 'string' || !args.messageId.trim()) {
+              args.messageId = `ui-${randomUUID()}`;
+            }
+            const componentType = typeof args.type === 'string' ? args.type.trim() : '';
+            const messageId =
+              typeof args.messageId === 'string' && args.messageId.trim().length > 0
+                ? args.messageId.trim()
+                : '';
+            if (componentType && messageId) {
+              lastComponentByType.set(componentType, messageId);
+              lastCreatedComponentId = messageId;
+              if (!componentRegistry.has(messageId)) {
+                componentRegistry.set(messageId, {
+                  type: componentType,
+                  createdAt: Date.now(),
+                  props: {} as JsonObject,
+                  state: {} as JsonObject,
+                });
+              }
+            }
+          }
+          if (fnCall.name === 'update_component') {
+            const resolvedId = resolveComponentId(args);
+            if (!resolvedId) {
+              console.warn('[VoiceAgent] Skipping update_component without componentId', args);
+              continue;
+            }
+            args.componentId = resolvedId;
+            const rawPatch = coerceComponentPatch(args.patch);
+            args.patch = normalizeComponentPatch(rawPatch);
+            const existing = componentRegistry.get(resolvedId);
+            if (existing) {
+              existing.props = { ...existing.props, ...(args.patch as Record<string, unknown>) };
+            }
+            lastCreatedComponentId = resolvedId;
+          } else if (fnCall.name === 'create_component') {
+            if (!args.messageId || typeof args.messageId !== 'string' || !args.messageId.trim()) {
+              args.messageId = randomUUID();
+            }
           }
           const toolEvent = {
             id: fnCall.id,
