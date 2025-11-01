@@ -5,6 +5,9 @@ import { nanoid } from 'nanoid';
 import type { Editor } from '@tldraw/tldraw';
 import type { Room, Participant } from 'livekit-client';
 import { useTldrawAgent } from '@/lib/tldraw-agent';
+import { applyEnvelope } from '@/components/tool-dispatcher/handlers/tldraw-actions';
+import { useViewportSelectionPublisher } from '@/components/ui/canvas/hooks/useViewportSelectionPublisher';
+import { useScreenshotRequestHandler } from '@/components/ui/canvas/hooks/useScreenshotRequestHandler';
 import { createLiveKitBus } from '@/lib/livekit/livekit-bus';
 import { convertTldrawShapeToSimpleShape } from '@/lib/tldraw-agent/shared/format/convertTldrawShapeToSimpleShape';
 import type { SimpleShape } from '@/lib/tldraw-agent/shared/format/SimpleShape';
@@ -98,21 +101,17 @@ async function sendAgentTelemetry(event: 'agent_begin' | 'agent_end', payload: R
 }
 
 export function CanvasAgentController({ editor, room }: CanvasAgentControllerProps) {
-  if (!isClientAgentEnabled) {
-    if (isDevEnv) {
-      try {
-        console.log('[CanvasAgent] client agent disabled via NEXT_PUBLIC_CANVAS_AGENT_CLIENT_ENABLED');
-      } catch {}
-    }
-    return null;
-  }
-
   const agent = useTldrawAgent(editor, 'present-canvas-agent');
   const { isHost, hostId } = useIsAgentHost(room);
   const bus = useMemo(() => (room ? createLiveKitBus(room) : null), [room]);
 
   const processedIdsRef = useRef<Set<string>>(new Set());
   const currentRequestRef = useRef<string | null>(null);
+  const appliedActionIdsRef = useRef<Set<string>>(new Set());
+
+  // Mount connectors regardless of client agent enablement
+  useViewportSelectionPublisher(editor, room, true);
+  useScreenshotRequestHandler(editor, room);
 
   useEffect(() => {
     if (!bus) return;
@@ -122,7 +121,7 @@ export function CanvasAgentController({ editor, room }: CanvasAgentControllerPro
       try {
         debugLog('[AgentBridge] agent_prompt', message);
       } catch {}
-      if (!isHost) {
+      if (!isHost || !isClientAgentEnabled) {
         try {
           debugLog('[AgentBridge] ignoring agent_prompt (not host)');
         } catch {}
@@ -168,9 +167,9 @@ export function CanvasAgentController({ editor, room }: CanvasAgentControllerPro
 
       const selectedShapes: SimpleShape[] = selectionIds
         ? selectionIds
-            .map((id) => editor.getShape(id))
-            .filter((shape): shape is NonNullable<typeof shape> => !!shape)
-            .map((shape) => convertTldrawShapeToSimpleShape(editor, shape))
+            .map((id) => editor.getShape(id as any) as any)
+            .filter((shape): shape is any => !!shape)
+            .map((shape) => convertTldrawShapeToSimpleShape(editor as any, shape))
         : [];
 
       const contextItems: ContextItem[] = [];
@@ -194,7 +193,7 @@ export function CanvasAgentController({ editor, room }: CanvasAgentControllerPro
       const run = async () => {
         currentRequestRef.current = requestId;
         try {
-          agent.cancel();
+          if (isClientAgentEnabled) agent.cancel();
           try {
             debugLog('[AgentBridge] starting client TLDraw agent prompt', {
               requestId,
@@ -207,7 +206,9 @@ export function CanvasAgentController({ editor, room }: CanvasAgentControllerPro
             message: text,
           });
 
+          if (isClientAgentEnabled) {
           await agent.prompt(input);
+          }
 
           await sendAgentTelemetry('agent_end', {
             requestId,
@@ -235,9 +236,21 @@ export function CanvasAgentController({ editor, room }: CanvasAgentControllerPro
     return () => {
       unsubscribe?.();
       currentRequestRef.current = null;
-      agent.cancel();
+      if (isClientAgentEnabled) agent.cancel();
     };
   }, [agent, bus, editor, isHost, room?.name]);
+
+  useEffect(() => {
+    const handler = (evt: Event) => {
+      try {
+        const env = (evt as CustomEvent).detail;
+        if (!env) return;
+        applyEnvelope({ editor, isHost, appliedIds: appliedActionIdsRef.current }, env);
+      } catch {}
+    };
+    window.addEventListener('present:agent_actions', handler as EventListener);
+    return () => { window.removeEventListener('present:agent_actions', handler as EventListener); };
+  }, [editor, isHost]);
 
   useEffect(() => {
     if (!isDevEnv) return;
@@ -246,7 +259,7 @@ export function CanvasAgentController({ editor, room }: CanvasAgentControllerPro
       return;
     }
 
-    const participants: Participant[] = [room.localParticipant, ...Array.from(room.remoteParticipants.values())].filter(
+    const participants: Participant[] = [room.localParticipant as unknown as Participant, ...Array.from(room.remoteParticipants.values()) as unknown as Participant[]].filter(
       (participant): participant is Participant => Boolean(participant),
     );
     const hostParticipant = participants.find((participant) => (participant.identity || participant.sid || '') === hostId);

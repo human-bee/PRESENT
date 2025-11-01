@@ -7,6 +7,13 @@
 
 import React from 'react';
 
+const isDevEnvironment =
+  !(
+    typeof process !== 'undefined' &&
+    process.env &&
+    process.env.NODE_ENV === 'production'
+  );
+
 export interface ComponentInfo {
   messageId: string;
   componentType: string;
@@ -49,8 +56,28 @@ function diffProps(
 class ComponentStore {
   private components = new Map<string, ComponentInfo>();
   private listeners: Set<() => void> = new Set();
+  private warnedTypeMessages = new Set<string>();
+  private warnedCallbackMessages = new Set<string>();
 
   register(info: ComponentInfo) {
+    const existing = this.components.get(info.messageId);
+    if (
+      existing &&
+      isDevEnvironment &&
+      typeof console !== 'undefined' &&
+      existing.componentType !== info.componentType &&
+      !this.warnedTypeMessages.has(info.messageId)
+    ) {
+      const warning = {
+        messageId: info.messageId,
+        previousType: existing.componentType,
+        nextType: info.componentType,
+      };
+      try {
+        console.warn('⚠️ [ComponentRegistry] Duplicate registration detected', warning);
+      } catch {}
+      this.warnedTypeMessages.add(info.messageId);
+    }
     this.components.set(info.messageId, {
       ...info,
       timestamp: Date.now(),
@@ -68,6 +95,23 @@ class ComponentStore {
   ) {
     const component = this.components.get(messageId);
     if (component) {
+      if (
+        updateCallback &&
+        component.updateCallback &&
+        component.updateCallback !== updateCallback &&
+        isDevEnvironment &&
+        typeof console !== 'undefined' &&
+        !this.warnedCallbackMessages.has(messageId)
+      ) {
+        try {
+          console.warn('⚠️ [ComponentRegistry] Update callback replaced via updatePropsOnly', {
+            messageId,
+            previousCallback: component.updateCallback.name || 'anonymous',
+            nextCallback: updateCallback.name || 'anonymous',
+          });
+        } catch {}
+        this.warnedCallbackMessages.add(messageId);
+      }
       const updatedComponent = {
         ...component,
         props,
@@ -135,6 +179,8 @@ class ComponentStore {
 
   remove(messageId: string) {
     this.components.delete(messageId);
+    this.warnedTypeMessages.delete(messageId);
+    this.warnedCallbackMessages.delete(messageId);
     console.log(`[ComponentRegistry] Removed ${messageId}`);
     this.notifyListeners();
   }
@@ -147,6 +193,8 @@ class ComponentStore {
       for (const [id, component] of this.components) {
         if (component.contextKey === contextKey) {
           this.components.delete(id);
+          this.warnedTypeMessages.delete(id);
+          this.warnedCallbackMessages.delete(id);
         }
       }
       console.log(`[ComponentRegistry] Cleared components for context: ${contextKey}`);

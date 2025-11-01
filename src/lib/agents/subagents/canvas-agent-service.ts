@@ -167,14 +167,12 @@ function sanitizeParams(params: JsonObject | undefined): JsonObject {
 }
 
 function getModelPreferenceList(preferred: CanvasModelName): CanvasModelName[] {
-	const FALLBACK_ORDER: CanvasModelName[] = [
-		'claude-haiku-4-5',
-		'claude-4.5-sonnet',
-		'claude-3.5-sonnet',
-		'claude-4-sonnet',
-		'gpt-4.1',
-		'gpt-4o',
-	];
+  const FALLBACK_ORDER: CanvasModelName[] = [
+    'claude-sonnet-4-5',
+    'claude-haiku-4-5',
+    'gpt-5',
+    'gpt-5-mini',
+  ];
 
 	return [preferred, ...FALLBACK_ORDER.filter((name) => name !== preferred)];
 }

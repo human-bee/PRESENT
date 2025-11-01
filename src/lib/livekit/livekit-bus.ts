@@ -87,6 +87,15 @@ export function createLiveKitBus(room: Room | null | undefined) {
   const logger = createLogger('LiveKitBus');
   let lastWarnedDisconnectedAt = 0;
   const DISCONNECT_WARN_THROTTLE_MS = 5000;
+
+  const handlePublishResult = (result: unknown, topic: string, context?: Record<string, unknown>) => {
+    if (result && typeof (result as PromiseLike<unknown>).then === 'function') {
+      (result as PromiseLike<unknown>).catch((err) => {
+        logger.error('Failed to send', { topic, ...context }, err);
+      });
+    }
+  };
+
   return {
     /** Publish a JSON-serialisable payload under the given topic */
     send(topic: string, payload: unknown) {
@@ -123,10 +132,11 @@ export function createLiveKitBus(room: Room | null | undefined) {
 
       if (bytes.length <= MAX_DATA_CHANNEL_BYTES) {
         try {
-          room.localParticipant?.publishData(bytes, {
+          const result = room.localParticipant?.publishData(bytes, {
             reliable: true,
             topic,
           });
+          handlePublishResult(result, topic);
         } catch (err) {
           logger.error('Failed to send', topic, err);
         }
@@ -157,10 +167,11 @@ export function createLiveKitBus(room: Room | null | undefined) {
         };
 
         try {
-          room.localParticipant?.publishData(encodeUtf8(JSON.stringify(chunkPayload)), {
+          const result = room.localParticipant?.publishData(encodeUtf8(JSON.stringify(chunkPayload)), {
             reliable: true,
             topic,
           });
+          handlePublishResult(result, topic, { messageId, index });
         } catch (err) {
           logger.error('Failed to send chunk', { topic, messageId, index }, err);
           break;

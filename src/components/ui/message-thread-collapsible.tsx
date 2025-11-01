@@ -469,41 +469,6 @@ export const MessageThreadCollapsible = React.forwardRef<
         return updated;
       });
 
-      // ✅ ComponentRegistry integration re-enabled with enhanced stability
-      // Register with the new ComponentRegistry system
-      if (normalized && React.isValidElement(normalized)) {
-        const componentType =
-          typeof component.type === 'function'
-            ? (component.type as { displayName?: string; name?: string }).displayName ||
-            (component.type as { displayName?: string; name?: string }).name ||
-            'UnknownComponent'
-            : 'UnknownComponent';
-
-        // Import ComponentRegistry dynamically to avoid circular imports
-        import('@/lib/component-registry')
-          .then(({ ComponentRegistry }) => {
-            try {
-              ComponentRegistry.register({
-                messageId,
-                componentType,
-                props: ((normalized as any)?.props || {}) as Record<string, unknown>,
-                contextKey: effectiveContextKey || 'default',
-                timestamp: Date.now(),
-                updateCallback: (patch) => {
-                  console.log(`✅ [MessageThread] Component ${messageId} received update:`, patch);
-                  // The component should handle its own updates via the registry wrapper
-                },
-              });
-              console.log(`✅ [MessageThread] Successfully registered component: ${messageId}`);
-            } catch (error) {
-              console.warn(`⚠️ [MessageThread] Failed to register component ${messageId}:`, error);
-            }
-          })
-          .catch((error) => {
-            console.warn(`⚠️ [MessageThread] Failed to import ComponentRegistry:`, error);
-          });
-      }
-
       // Also add system call to transcript
       const systemCall = {
         id: `system-${Date.now()}-${Math.random()}`,

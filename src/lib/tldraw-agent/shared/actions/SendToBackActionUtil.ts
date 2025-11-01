@@ -34,9 +34,12 @@ export class SendToBackActionUtil extends AgentActionUtil<SendToBackAction> {
 	}
 
 	override applyAction(action: Streaming<SendToBackAction>) {
+		if (!action.complete) return
 		if (!this.agent) return
 
-		if (!action.shapeIds) return
-		this.agent.editor.sendToBack(action.shapeIds.map((shapeId) => `shape:${shapeId}` as TLShapeId))
+		const shapeIds = action.shapeIds ?? []
+		if (shapeIds.length === 0) return
+
+		this.agent.editor.sendToBack(shapeIds.map((shapeId) => `shape:${shapeId}` as TLShapeId))
 	}
 }

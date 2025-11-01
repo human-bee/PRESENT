@@ -13,10 +13,16 @@
     "noEmit": false,
     "outDir": "dist",
     "rootDir": "src",
-    "sourceMap": true
+    "sourceMap": true,
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/*"]
+    }
   },
   "include": [
-    "src/lib/agents/livekit-agent-worker.ts"
+    "src/lib/agents/**/*.ts",
+    "src/lib/agents/**/*.tsx",
+    "src/server/**/*.ts"
   ],
   "exclude": [
     "node_modules",
