@@ -2,6 +2,8 @@
 
 The **Canvas Agent** is a server-centric architecture that achieves full TLDraw Agent Starter Kit parity. The server handles all planning, scheduling, and model interactions, while the browser acts purely as "eyes and hands"—providing viewport/selection context and executing streamed actions.
 
+> Building or updating components/stewards? See the companion [Component & Steward Integration Guide](./component-steward-guide.md) for contracts, perf budgets, and testing checklists.
+
 ## Architecture Overview
 
 ```
@@ -382,7 +384,6 @@ Returns `{ ok: true }` on success.
 - [TLDraw Agent Starter Kit](https://tldraw.dev/starter-kits/agent)
 - [TLDraw Editor API](https://tldraw.dev/reference/editor/Editor)
 - [TLDraw v4.0 Release Notes](https://tldraw.dev/releases/v4.0.0)
-
 
 
 

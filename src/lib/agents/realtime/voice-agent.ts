@@ -34,6 +34,7 @@ export default defineAgent({
     const envTranscriptionLanguage = process.env.VOICE_AGENT_TRANSCRIPTION_LANGUAGE?.trim();
     const fallbackTranscriptionLanguage = process.env.AGENT_STT_LANGUAGE?.trim();
     const resolvedInputTranscriptionModel = envInputTranscriptionModel || fallbackInputTranscriptionModel || undefined;
+    const envTurnDetection = process.env.VOICE_AGENT_TURN_DETECTION?.trim().toLowerCase();
     const transcriptionEnabledFlag = coerceBooleanFromEnv(process.env.VOICE_AGENT_TRANSCRIPTION_ENABLED);
     const transcriptionEnabled = transcriptionEnabledFlag ?? Boolean(resolvedInputTranscriptionModel);
     const resolvedTranscriptionLanguage = envTranscriptionLanguage || fallbackTranscriptionLanguage || undefined;
@@ -43,10 +44,23 @@ export default defineAgent({
           ...(resolvedTranscriptionLanguage ? { language: resolvedTranscriptionLanguage } : {}),
         }
       : null;
+    const turnDetectionOption = (() => {
+      if (!transcriptionEnabled) return null;
+      if (!envTurnDetection) return undefined; // fall back to agent default (server VAD)
+      if (envTurnDetection === 'none') return null;
+      if (envTurnDetection === 'semantic_vad') {
+        return { type: 'semantic_vad' as const };
+      }
+      if (envTurnDetection === 'server_vad') {
+        return { type: 'server_vad' as const };
+      }
+      return undefined;
+    })();
 
     console.log('[VoiceAgent] transcription config', {
       transcriptionEnabled,
       inputAudioTranscription,
+      turnDetectionOption,
     });
 
     const subscribeToParticipant = (participant?: any) => {
@@ -109,10 +123,88 @@ Your only output is function calls. Never use plain text unless absolutely neces
 
     const componentRegistry = new Map<
       string,
-      { type: string; createdAt: number; props: JsonObject; state: JsonObject; intentId?: string }
+      {
+        type: string;
+        createdAt: number;
+        props: JsonObject;
+        state: JsonObject;
+        intentId?: string;
+        slot?: string;
+      }
     >();
     const lastComponentByType = new Map<string, string>();
     let lastCreatedComponentId: string | null = null;
+    type IntentLedgerEntry = {
+      intentId: string;
+      messageId: string;
+      componentType: string;
+      slot?: string;
+      reservedAt: number;
+      updatedAt: number;
+      state: 'reserved' | 'created' | 'updated';
+    };
+    const intentLedger = new Map<string, IntentLedgerEntry>();
+    const slotLedger = new Map<string, string>();
+    const messageToIntent = new Map<string, string>();
+    const LEDGER_TTL_MS = 5 * 60 * 1000;
+
+    const cleanupLedger = () => {
+      const now = Date.now();
+      for (const [intentId, entry] of intentLedger.entries()) {
+        if (now - entry.updatedAt > LEDGER_TTL_MS) {
+          intentLedger.delete(intentId);
+          if (entry.slot) {
+            const currentIntent = slotLedger.get(entry.slot);
+            if (currentIntent === intentId) {
+              slotLedger.delete(entry.slot);
+            }
+          }
+          const mappedIntent = messageToIntent.get(entry.messageId);
+          if (mappedIntent === intentId) {
+            messageToIntent.delete(entry.messageId);
+          }
+        }
+      }
+    };
+
+    const registerLedgerEntry = (entry: {
+      intentId: string;
+      messageId: string;
+      componentType: string;
+      slot?: string;
+      state?: IntentLedgerEntry['state'];
+    }) => {
+      const now = Date.now();
+      const existing = intentLedger.get(entry.intentId);
+      const next: IntentLedgerEntry = {
+        intentId: entry.intentId,
+        messageId: entry.messageId,
+        componentType: entry.componentType,
+        slot: entry.slot ?? existing?.slot,
+        reservedAt: existing?.reservedAt ?? now,
+        updatedAt: now,
+        state: entry.state ?? existing?.state ?? 'reserved',
+      };
+      if (entry.slot) {
+        next.slot = entry.slot;
+      }
+      intentLedger.set(next.intentId, next);
+      messageToIntent.set(next.messageId, next.intentId);
+      if (next.slot) {
+        slotLedger.set(next.slot, next.intentId);
+      }
+      cleanupLedger();
+      return next;
+    };
+
+    const findLedgerEntryByMessage = (messageId: string) => {
+      const intentId = messageToIntent.get(messageId);
+      if (intentId) {
+        return intentLedger.get(intentId);
+      }
+      return undefined;
+    };
+
     // Duplicate suppression across turns: track last create by component type.
     // We suppress duplicates aggressively within the same user turn, and apply
     // a longer global TTL to catch late replays from the model/stack.
@@ -120,7 +212,14 @@ Your only output is function calls. Never use plain text unless absolutely neces
     let activeResponse = false;
     const recentCreateFingerprints = new Map<
       string,
-      { fingerprint: string; messageId: string; createdAt: number; turnId: number; intentId: string }
+      {
+        fingerprint: string;
+        messageId: string;
+        createdAt: number;
+        turnId: number;
+        intentId: string;
+        slot?: string;
+      }
     >();
 
     const bumpTurn = () => {
@@ -166,6 +265,22 @@ Your only output is function calls. Never use plain text unless absolutely neces
         }
       }
       if (typeof raw === 'object') {
+        return { ...(raw as Record<string, unknown>) };
+      }
+      return {};
+    };
+
+    const normalizeSpecInput = (raw: unknown): Record<string, unknown> => {
+      if (!raw) return {};
+      if (typeof raw === 'string') {
+        try {
+          const parsed = JSON.parse(raw);
+          return parsed && typeof parsed === 'object' ? { ...(parsed as Record<string, unknown>) } : {};
+        } catch {
+          return {};
+        }
+      }
+      if (raw && typeof raw === 'object') {
         return { ...(raw as Record<string, unknown>) };
       }
       return {};
@@ -351,19 +466,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
             delete (args as any).messageId;
           }
 
-          let normalizedSpec: Record<string, unknown> = {};
-          if (typeof args.spec === 'string') {
-            try {
-              const parsed = JSON.parse(args.spec);
-              if (parsed && typeof parsed === 'object') {
-                normalizedSpec = parsed as Record<string, unknown>;
-              }
-            } catch {
-              /* keep normalizedSpec empty */
-            }
-          } else if (args.spec && typeof args.spec === 'object') {
-            normalizedSpec = { ...(args.spec as Record<string, unknown>) };
-          }
+          const normalizedSpec = normalizeSpecInput(args.spec);
 
           const initialProps =
             args.props && typeof args.props === 'object'
@@ -397,14 +500,17 @@ Your only output is function calls. Never use plain text unless absolutely neces
           args.spec = mergedProps;
           args.messageId = messageId;
 
-          const sortedFingerprint = JSON.stringify(
-            Object.keys(mergedProps)
-              .sort()
-              .reduce<Record<string, unknown>>((acc, key) => {
-                acc[key] = mergedProps[key];
-                return acc;
-              }, {}),
-          );
+          const fingerprintPayload = Object.keys(mergedProps)
+            .sort()
+            .reduce<Record<string, unknown>>((acc, key) => {
+              acc[key] = mergedProps[key];
+              return acc;
+            }, {});
+          if (slot) {
+            fingerprintPayload.__slot = slot;
+          }
+          fingerprintPayload.__type = componentType;
+          const sortedFingerprint = JSON.stringify(fingerprintPayload);
           const recentCreate = recentCreateFingerprints.get(componentType);
           const now = Date.now();
           const TTL_MS = 30000; // 30s window to absorb late replays
@@ -415,7 +521,9 @@ Your only output is function calls. Never use plain text unless absolutely neces
           const withinGlobalTtl =
             !!recentCreate && recentCreate.fingerprint === sortedFingerprint && now - recentCreate.createdAt < TTL_MS;
           const intentMatches = !!recentCreate && recentCreate.intentId === intentId;
-          if (intentMatches && (sameTurnDuplicate || withinGlobalTtl)) {
+          const slotMatches =
+            !slot || !recentCreate ? true : recentCreate.slot === slot;
+          if (intentMatches && slotMatches && (sameTurnDuplicate || withinGlobalTtl)) {
             console.log('[VoiceAgent] suppressing duplicate create_component', {
               componentType,
               recentMessageId: recentCreate.messageId,
@@ -461,6 +569,18 @@ Your only output is function calls. Never use plain text unless absolutely neces
               ...mergedProps,
             };
             existingComponent.intentId = intentId;
+            if (slot) {
+              existingComponent.slot = slot;
+            }
+            if (intentId) {
+              registerLedgerEntry({
+                intentId,
+                messageId,
+                componentType,
+                slot,
+                state: 'updated',
+              });
+            }
             lastComponentByType.set(componentType, messageId);
             lastCreatedComponentId = messageId;
             recentCreateFingerprints.set(componentType, {
@@ -469,6 +589,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
               createdAt: now,
               turnId: currentTurnId,
               intentId,
+              slot,
             });
             return { status: 'queued', messageId, reusedExisting: true };
           }
@@ -479,7 +600,17 @@ Your only output is function calls. Never use plain text unless absolutely neces
             props: mergedProps as JsonObject,
             state: {} as JsonObject,
             intentId,
+            slot,
           });
+          if (intentId) {
+            registerLedgerEntry({
+              intentId,
+              messageId,
+              componentType,
+              slot,
+              state: 'created',
+            });
+          }
           lastComponentByType.set(componentType, messageId);
           lastCreatedComponentId = messageId;
           recentCreateFingerprints.set(componentType, {
@@ -488,6 +619,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
             createdAt: now,
             turnId: currentTurnId,
             intentId,
+            slot,
           });
 
           const payload: JsonObject = {
@@ -508,6 +640,168 @@ Your only output is function calls. Never use plain text unless absolutely neces
 
           await sendToolCall('create_component', payload);
           return { status: 'queued', messageId };
+        },
+      }),
+      reserve_component: llm.tool({
+        description: 'Reserve a component intent prior to creation to ensure deterministic IDs.',
+        parameters: z.object({
+          type: z.string().nullish(),
+          spec: z.union([z.string(), z.record(z.any())]).nullish(),
+          props: z.record(z.any()).nullish(),
+          messageId: z.string().nullish(),
+          intentId: z.string().nullish(),
+          slot: z.string().nullish(),
+        }),
+        execute: async (args) => {
+          const componentType = String(args.type || '').trim();
+          if (!componentType) {
+            return { status: 'ERROR', message: 'reserve_component requires type' };
+          }
+
+          if (args.spec === null) {
+            delete (args as any).spec;
+          }
+          if (args.props === null) {
+            delete (args as any).props;
+          }
+          if (args.messageId === null) {
+            delete (args as any).messageId;
+          }
+          if (args.intentId === null) {
+            delete (args as any).intentId;
+          }
+
+          const normalizedSpec = normalizeSpecInput(args.spec);
+          const initialProps =
+            args.props && typeof args.props === 'object'
+              ? ({ ...args.props } as Record<string, unknown>)
+              : {};
+          const mergedProps = { ...normalizedSpec, ...initialProps };
+          const slot = typeof args.slot === 'string' && args.slot.trim().length > 0 ? args.slot.trim() : undefined;
+
+          const fingerprintPayload = Object.keys(mergedProps)
+            .sort()
+            .reduce<Record<string, unknown>>((acc, key) => {
+              acc[key] = mergedProps[key];
+              return acc;
+            }, {});
+          if (slot) {
+            fingerprintPayload.__slot = slot;
+          }
+          fingerprintPayload.__type = componentType;
+
+          const { intentId: autoIntentId, messageId: autoMessageId } = deriveComponentIntent({
+            roomName: job.room.name || '',
+            turnId: currentTurnId,
+            componentType,
+            spec: mergedProps,
+            slot,
+          });
+
+          const intentId =
+            typeof args.intentId === 'string' && args.intentId.trim().length > 0
+              ? args.intentId.trim()
+              : autoIntentId;
+          const messageId =
+            typeof args.messageId === 'string' && args.messageId.trim().length > 0
+              ? args.messageId.trim()
+              : autoMessageId;
+
+          args.intentId = intentId;
+          args.messageId = messageId;
+
+          const existingComponent = componentRegistry.get(messageId);
+          if (existingComponent) {
+            existingComponent.intentId = intentId;
+            if (slot) {
+              existingComponent.slot = slot;
+            }
+          }
+
+          const entry = registerLedgerEntry({
+            intentId,
+            messageId,
+            componentType,
+            slot,
+            state: existingComponent ? 'updated' : 'reserved',
+          });
+
+          lastComponentByType.set(componentType, messageId);
+          lastCreatedComponentId = messageId;
+          recentCreateFingerprints.set(componentType, {
+            fingerprint: JSON.stringify(fingerprintPayload),
+            messageId,
+            createdAt: Date.now(),
+            turnId: currentTurnId,
+            intentId,
+            slot,
+          });
+
+          await sendToolCall('reserve_component', {
+            componentType,
+            intentId,
+            messageId,
+            slot,
+            snapshot: mergedProps as JsonObject,
+            state: entry.state,
+          });
+
+          return {
+            status: existingComponent ? 'acknowledged_existing' : 'reserved',
+            messageId,
+            intentId,
+            componentExists: Boolean(existingComponent),
+          };
+        },
+      }),
+      resolve_component: llm.tool({
+        description: 'Resolve an existing componentId using intent, slot, or type hints.',
+        parameters: z.object({
+          componentId: z.string().nullish(),
+          intentId: z.string().nullish(),
+          type: z.string().nullish(),
+          slot: z.string().nullish(),
+          allowLast: z.boolean().nullish(),
+        }),
+        execute: async (args) => {
+          const resolvedId = resolveComponentId(args as Record<string, unknown>);
+          if (!resolvedId) {
+            return { status: 'NOT_FOUND', message: 'No component matched the provided hints' };
+          }
+
+          const existing = componentRegistry.get(resolvedId);
+          const intentId =
+            typeof args.intentId === 'string' && args.intentId.trim().length > 0
+              ? args.intentId.trim()
+              : existing?.intentId ?? findLedgerEntryByMessage(resolvedId)?.intentId;
+          const slot =
+            typeof args.slot === 'string' && args.slot.trim().length > 0
+              ? args.slot.trim()
+              : existing?.slot ?? findLedgerEntryByMessage(resolvedId)?.slot;
+          const componentType =
+            typeof args.type === 'string' && args.type.trim().length > 0
+              ? args.type.trim()
+              : existing?.type ?? 'unknown';
+
+          if (intentId) {
+            registerLedgerEntry({
+              intentId,
+              messageId: resolvedId,
+              componentType,
+              slot,
+              state: existing ? 'updated' : 'reserved',
+            });
+          }
+          if (componentType && resolvedId) {
+            lastComponentByType.set(componentType, resolvedId);
+          }
+          lastCreatedComponentId = resolvedId;
+
+          return {
+            status: 'RESOLVED',
+            componentId: resolvedId,
+            intentId: intentId ?? null,
+          };
         },
       }),
       update_component: llm.tool({
@@ -574,6 +868,21 @@ Your only output is function calls. Never use plain text unless absolutely neces
             if (intentId) {
               existingAfter.intentId = intentId;
             }
+            if (slot) {
+              existingAfter.slot = slot;
+            }
+          }
+          if (intentId) {
+            const componentTypeHint =
+              existingAfter?.type ||
+              (typeof args.type === 'string' && args.type.trim().length > 0 ? args.type.trim() : 'unknown');
+            registerLedgerEntry({
+              intentId,
+              messageId: resolvedId,
+              componentType: componentTypeHint,
+              slot,
+              state: 'updated',
+            });
           }
           lastCreatedComponentId = resolvedId;
 
@@ -616,7 +925,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
       model: 'gpt-realtime',
       toolChoice: 'required',
       inputAudioTranscription,
-      turnDetection: null,
+      turnDetection: turnDetectionOption,
     });
 
     const agent = new voice.Agent({
@@ -668,6 +977,36 @@ Your only output is function calls. Never use plain text unless absolutely neces
     const resolveComponentId = (args: Record<string, unknown>) => {
       const rawId = typeof args.componentId === 'string' ? args.componentId.trim() : '';
       if (rawId) return rawId;
+
+      const rawIntent = typeof args.intentId === 'string' ? args.intentId.trim() : '';
+      if (rawIntent) {
+        const entry = intentLedger.get(rawIntent);
+        if (entry) {
+          return entry.messageId;
+        }
+        for (const [id, info] of componentRegistry.entries()) {
+          if (info.intentId === rawIntent) {
+            return id;
+          }
+        }
+      }
+
+      const rawSlot = typeof args.slot === 'string' ? args.slot.trim() : '';
+      if (rawSlot) {
+        const slotIntent = slotLedger.get(rawSlot);
+        if (slotIntent) {
+          const entry = intentLedger.get(slotIntent);
+          if (entry) {
+            return entry.messageId;
+          }
+        }
+        for (const [id, info] of componentRegistry.entries()) {
+          if (info.slot === rawSlot) {
+            return id;
+          }
+        }
+      }
+
       const rawType =
         typeof args.type === 'string'
           ? args.type.trim()
@@ -701,7 +1040,15 @@ Your only output is function calls. Never use plain text unless absolutely neces
       for (const fnCall of calls) {
         try {
           const args = JSON.parse(fnCall.args || '{}') as Record<string, unknown>;
-          if (!['create_component', 'update_component', 'dispatch_to_conductor'].includes(fnCall.name)) {
+          if (
+            ![
+              'create_component',
+              'update_component',
+              'dispatch_to_conductor',
+              'reserve_component',
+              'resolve_component',
+            ].includes(fnCall.name)
+          ) {
             continue;
           }
           if (fnCall.name === 'create_component') {
@@ -746,6 +1093,9 @@ Your only output is function calls. Never use plain text unless absolutely neces
               const existing = componentRegistry.get(messageId);
               if (existing) {
                 existing.intentId = intentId;
+                if (slot) {
+                  existing.slot = slot;
+                }
               } else {
                 componentRegistry.set(messageId, {
                   type: componentType,
@@ -753,6 +1103,16 @@ Your only output is function calls. Never use plain text unless absolutely neces
                   props: {} as JsonObject,
                   state: {} as JsonObject,
                   intentId,
+                  slot,
+                });
+              }
+              if (intentId) {
+                registerLedgerEntry({
+                  intentId,
+                  messageId,
+                  componentType,
+                  slot,
+                  state: existing ? 'updated' : 'created',
                 });
               }
             }
@@ -777,8 +1137,65 @@ Your only output is function calls. Never use plain text unless absolutely neces
               if (typeof args.intentId === 'string' && args.intentId.trim().length > 0) {
                 existingAfterFT.intentId = args.intentId.trim();
               }
+              if (typeof args.slot === 'string' && args.slot.trim().length > 0) {
+                existingAfterFT.slot = args.slot.trim();
+              }
+            }
+            if (typeof args.intentId === 'string' && args.intentId.trim().length > 0) {
+              const componentType =
+                existingAfterFT?.type ||
+                (typeof args.type === 'string' && args.type.trim().length > 0 ? args.type.trim() : 'unknown');
+              registerLedgerEntry({
+                intentId: args.intentId.trim(),
+                messageId: resolvedId,
+                componentType,
+                slot: typeof args.slot === 'string' && args.slot.trim().length > 0 ? args.slot.trim() : existingAfterFT?.slot,
+                state: existingAfterFT ? 'updated' : 'reserved',
+              });
             }
             lastCreatedComponentId = resolvedId;
+          }
+          if (fnCall.name === 'reserve_component') {
+            const componentType = typeof args.type === 'string' ? args.type.trim() : '';
+            const intentId = typeof args.intentId === 'string' ? args.intentId.trim() : '';
+            const messageId = typeof args.messageId === 'string' ? args.messageId.trim() : '';
+            const slot = typeof args.slot === 'string' && args.slot.trim().length > 0 ? args.slot.trim() : undefined;
+            if (componentType && messageId) {
+              lastComponentByType.set(componentType, messageId);
+              lastCreatedComponentId = messageId;
+            }
+            if (intentId && messageId && componentType) {
+              registerLedgerEntry({
+                intentId,
+                messageId,
+                componentType,
+                slot,
+                state: componentRegistry.has(messageId) ? 'updated' : 'reserved',
+              });
+            }
+          }
+          if (fnCall.name === 'resolve_component') {
+            const resolvedId = typeof args.componentId === 'string' ? args.componentId.trim() : '';
+            if (resolvedId) {
+              lastCreatedComponentId = resolvedId;
+            }
+            const intentId = typeof args.intentId === 'string' ? args.intentId.trim() : '';
+            const componentType =
+              typeof args.type === 'string'
+                ? args.type.trim()
+                : typeof args.componentType === 'string'
+                  ? args.componentType.trim()
+                  : '';
+            const slot = typeof args.slot === 'string' && args.slot.trim().length > 0 ? args.slot.trim() : undefined;
+            if (intentId && resolvedId && componentType) {
+              registerLedgerEntry({
+                intentId,
+                messageId: resolvedId,
+                componentType,
+                slot,
+                state: componentRegistry.has(resolvedId) ? 'updated' : 'reserved',
+              });
+            }
           }
           console.debug('[VoiceAgent] FunctionToolsExecuted acknowledged', {
             name: fnCall.name,

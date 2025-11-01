@@ -59,6 +59,9 @@ export type CanvasShapeSummary = {
   text?: string;
   parentId?: string;
   meta?: Record<string, unknown>;
+  state?: Record<string, unknown> | Array<unknown>;
+  stateBytes?: number;
+  stateTruncated?: boolean;
 };
 
 type CanvasStateRecord = {
@@ -250,6 +253,51 @@ const warnFallback = (scope: string, error: unknown) => {
   } catch {}
 };
 
+const parseStateValue = (value: unknown): unknown => {
+  if (!value || typeof value !== 'object') return null;
+  try {
+    // Deep-clone via JSON to discard funcs/undefined/cycles.
+    return JSON.parse(JSON.stringify(value));
+  } catch {
+    return null;
+  }
+};
+
+const parsedStateLimit = Number.parseInt(process.env.CANVAS_AGENT_SHAPE_STATE_LIMIT || '4096', 10);
+const MAX_SHAPE_STATE_BYTES = Number.isFinite(parsedStateLimit) && parsedStateLimit > 0 ? parsedStateLimit : 4096;
+
+const sanitizeShapeState = (
+  raw: unknown,
+  limitBytes: number,
+): { state: Record<string, unknown> | Array<unknown>; bytes: number; truncated: boolean } | null => {
+  const clone = parseStateValue(raw);
+  if (!clone) return null;
+  try {
+    const json = JSON.stringify(clone);
+    const bytes = json.length;
+    if (bytes <= limitBytes) {
+      return { state: clone, bytes, truncated: false };
+    }
+
+    const keys = Array.isArray(clone)
+      ? Array.from({ length: Math.min(clone.length, 12) }, (_, idx) => idx)
+      : Object.keys(clone as Record<string, unknown>).slice(0, 12);
+    const preview = json.slice(0, Math.max(0, limitBytes));
+    return {
+      state: {
+        __truncated: true,
+        preview,
+        keys,
+        originalBytes: bytes,
+      } as Record<string, unknown>,
+      bytes,
+      truncated: true,
+    };
+  } catch {
+    return null;
+  }
+};
+
 const normalizeShapeSummary = (shapeEntry: Record<string, any>): CanvasShapeSummary | null => {
   const id = typeof shapeEntry.id === 'string' ? shapeEntry.id : undefined;
   const type = typeof shapeEntry.type === 'string' ? shapeEntry.type : undefined;
@@ -276,6 +324,14 @@ const normalizeShapeSummary = (shapeEntry: Record<string, any>): CanvasShapeSumm
     if (typeof props.fill === 'string') meta.fill = props.fill;
     if (typeof props.label === 'string' && !summary.label) summary.label = props.label;
     if (typeof props.parentId === 'string' && !summary.parentId) summary.parentId = props.parentId;
+    if (props.state && typeof MAX_SHAPE_STATE_BYTES === 'number' && Number.isFinite(MAX_SHAPE_STATE_BYTES)) {
+      const sanitized = sanitizeShapeState(props.state, Math.max(512, MAX_SHAPE_STATE_BYTES));
+      if (sanitized) {
+        summary.state = sanitized.state;
+        summary.stateBytes = sanitized.bytes;
+        summary.stateTruncated = sanitized.truncated;
+      }
+    }
   }
   if (Object.keys(meta).length > 0) summary.meta = meta;
   return summary;
