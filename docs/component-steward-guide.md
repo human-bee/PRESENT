@@ -65,5 +65,38 @@ Keep the voice agent lean; heavy analysis or multi-step planning should run via 
 - [ ] Keep `shape.props.state` ≤ `CANVAS_AGENT_SHAPE_STATE_LIMIT` (default 4 KB).
 - [ ] Verify dispatcher metrics stay under latency budget (<1.5 s send→paint for create/update).
 - [ ] Document any new steward/component pairing in this guide when shipping.
+- [ ] If the flow depends on MCP, verify servers in `/mcp-config` and confirm `mcp_*` tools appear in the Capability Inspector.
+
+---
+
+## 8. MCP Tooling & Agent SDK Integration
+
+> TL;DR – the `/mcp-config` UI feeds `EnhancedMcpProvider`, which syncs discovered tools into the system registry. Stewards and the Voice Agent can then invoke them via `mcp_*` tools.
+
+1. **Register servers (UI):**
+   - Visit `/mcp-config`, add HTTP/SSE endpoints, and click **Verify & Map**. Configs persist in `localStorage` under `mcp-servers`.
+   - The `McpStatusIndicator` should show each server as *Connected*.
+
+2. **Bridge to the browser:**
+   - `EnhancedMcpProvider` (mounted in `/canvas`) reads the saved configs, instantiates clients, and exposes `window.callMcpTool(name, params)`.
+   - It also emits `custom:mcpToolResponse` events consumed by `useToolRunner`’s `runMcpTool` helper.
+
+3. **Expose tools to agents:**
+   - `syncMcpToolsToRegistry` (see `src/lib/system-registry.ts`) promotes discovered MCP tools into the shared capability registry.
+   - Tools appear twice: raw (`mcp_weather`) and mapped (`youtube_search`, etc.) when a shortcut exists.
+   - Voice Agent + stewards can call `mcp_*` tools directly. Example in `useToolRunner`: if the tool name starts with `mcp_`, the dispatcher automatically forwards the request to the window bridge.
+
+4. **Agent SDK usage:**
+   - Inside a steward, define tools with `llm.tool({ name: 'mcp_weather', ... execute: async args => { ... } })` or pass through via `llm.mcpTool('weather')` helper if you use the Agents SDK sugar.
+   - Remember to include MCP tools in the steward’s instructions/manifest so the model knows they exist (`systemRegistry.getToolRouting` resolves mappings at runtime).
+
+5. **User-entered tools:**
+   - New servers added by users are available immediately to both browser-side helpers and server-side stewards because the registry sync runs on every connect.
+   - Encourage users to provide descriptive names; these surface in logs and the Capability Inspector (`/canvas` → “MCP Tools” panel).
+
+6. **Debugging:**
+   - Enable `NEXT_PUBLIC_TOOL_DISPATCHER_METRICS=true` and watch for `[ToolDispatcher][mcp]` logs.
+   - Check `window.__custom_mcp_tools` in the console to see the current MCP tool catalog.
+   - If a steward call fails, inspect `logs/agent-conductor.log` for the tool payload and the MCP server’s response.
 
 *Last updated: 2025-11-01*

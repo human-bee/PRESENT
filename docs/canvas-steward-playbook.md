@@ -1,6 +1,6 @@
 # Canvas Steward Playbook
 
-This playbook captures the workflow we used to wire the Mermaid flowchart steward into the canvas. Follow it as a template when cloning the pattern for other canvas components (tables, dashboards, live transcripts, etc.).
+This playbook captures the workflow we used to wire the Mermaid flowchart steward into the canvas. Follow it as a template when cloning the pattern for other canvas components (tables, dashboards, live transcripts, etc.). Pair it with the [Component & Steward Integration Guide](./component-steward-guide.md) for a concise contract checklist.
 
 ---
 
@@ -14,9 +14,11 @@ Key repos paths:
 - Voice agent: `src/lib/agents/realtime/voice-agent.ts`
 - Steward template: `src/lib/agents/subagents/flowchart-steward.ts`
 - Supabase helpers: `src/lib/agents/shared/supabase-context.ts`
-- Tool dispatcher + canvas bridge: `src/components/tool-dispatcher.tsx`
+- Tool dispatcher + canvas bridge: `src/components/tool-dispatcher/tool-dispatcher.tsx`
 - TLDraw mermaid component: `src/components/ui/tldraw-canvas.tsx`
 - Transcript sidebar: `src/components/ui/message-thread-collapsible.tsx`
+- Dispatcher metrics harness: `tests/timer-perf.e2e.spec.ts`
+- MCP configuration UI: `/mcp-config` (syncs user-entered servers via EnhancedMcpProvider)
 
 Run the stack with:
 ```bash
@@ -34,12 +36,17 @@ npm run dev
    - Register it with the component registry so the dispatcher can `create_component` / `update_component` against it.
    - Example registration lives in `src/components/ui/tldraw-with-collaboration.tsx` (Mermaid shape) and `src/lib/component-registry.ts`.
 
-2. **Implement `create_component` mapping**
-   - In steward mode we only allow `create_component`/`update_component` (ToolDispatcher, lines ~205–320).
+2. **Implement intent reservation**
+   - Voice agent & stewards should call `reserve_component` with `intentId`, `messageId`, and optional `slot` before emitting a `create_component` call.
+   - ToolDispatcher maintains a ledger so late tool calls can resolve the correct ID deterministically.
+
+3. **Implement `create_component` mapping**
+   - ToolDispatcher maps the request to `custom:showComponent` and queues patches until the shape exists.
    - Constrain the spec so the steward can only set safe props. For Mermaid we keep `mermaidText` + sizing.
 
-3. **Implement `update_component` mapping**
+4. **Implement `update_component` mapping**
    - ToolDispatcher forwards patches to `ComponentRegistry.update`.
+   - Dispatcher now normalizes durations, booleans, and status fields before merging TLDraw state.
    - Custom shapes can capture patch callbacks; see `MermaidStreamRenderer` for compile status handling.
 
 > Tip: keep component props serializable and < 20k characters to fit LiveKit/Supabase payload budgets.
@@ -53,7 +60,11 @@ npm run dev
    - Realtime event hooks:
      - `input_speech_transcription_completed`: broadcasts decisions after a debounce.
      - `response_function_call_completed`: forwards tool calls to browser.
-     - **Manual text bridge** (added for keyboard input): we create a `llm.ChatMessage` and re-use the same debounce.
+     - **Manual text bridge**: keyboard input shares the same path as speech.
+   - Deterministic tools:
+     - `reserve_component` creates/updates the ledger entry with `intentId`, `messageId`, `slot`.
+     - `resolve_component` recovers IDs by intent/type when the model omits `componentId`.
+     - `update_component` emits lossy data channel packets for latency-sensitive patches.
 
 2. **Steward Agent**
    - Template resides in `flowchart-steward.ts`.
@@ -64,7 +75,8 @@ npm run dev
      const commit_doc = tool(...)               // optimistic commit + LiveKit broadcast
      ```
    - Build instructions to (a) fetch state/context, (b) synthesize full doc, (c) commit.
-   - Model choice is `gpt-5-mini`, but you can swap. Responses API follwong OpenAI's Agent JS SDK.
+   - Model choice is `gpt-5-mini`, but you can swap. Responses API follwong OpenAI's Agents SDK.
+   - **MCP access:** include relevant `mcp_*` tools in the steward manifest. The registry pulls tool definitions from `/mcp-config` → `EnhancedMcpProvider`, so user-entered servers are available automatically.
 
 3. **Conductor**
    - The `/api/steward/run` endpoint simply calls `runFlowchartSteward`. When adding new stewards, export additional `runSomethingSteward` helpers and register handoffs inside the conductor worker.
@@ -101,6 +113,7 @@ When cloning this pattern tailor both `get*` and `commit*` helpers in `src/lib/a
   - `logs/agent-realtime.log`: agent job state, tool call outputs, manual text bridge, steward debounce.
   - `logs/agent-conductor.log`: steward start/finish, preview of `finalOutput`.
   - Browser console: all `ToolDispatcher` events and sanitised mermaid compile logs.
+- **Latency metrics:** enable `NEXT_PUBLIC_TOOL_DISPATCHER_METRICS=true` (or set `window.__presentDispatcherMetrics = true`) to log `tSend`, `tArrive`, `tPaint` per component. The Playwright timer spec exercises this path.
 
 When adding a new steward, copy the Playwright test, adjust selectors/tool payloads, and add assertions for the expected UI state.
 
@@ -113,6 +126,8 @@ When adding a new steward, copy the Playwright test, adjust selectors/tool paylo
 - **Debounce**: the 2.5 s window prevents hammering the steward on every token. Tune per component.
 - **Concurrency**: `commitFlowchartDoc` retries once on conflict; scale this if multiple stewards may write the same doc simultaneously.
 - **Decision granularity**: If the voice agent should trigger different stewards, adjust the `summary` and add routing logic in ToolDispatcher.
+- **Prompt volume**: TLDraw `shape.props.state` is included in the Canvas Agent prompt (capped by `CANVAS_AGENT_SHAPE_STATE_LIMIT` env). Trim state to stay within budget.
+- **MCP wiring**: Confirm new servers via `/mcp-config` and re-run `Verify & Map`. Check `window.__custom_mcp_tools` or the Capability Inspector to ensure the steward can see the tool before invoking it.
 
 ---
 
@@ -143,6 +158,3 @@ Use this doc as a living template—copy sections into new steward folders (e.g.
 - [ ] Logging surfaces compile/render errors clearly.
 
 Happy stewarding! Add notes or variants to this file as you build more canvas-native agents.
-
-
-

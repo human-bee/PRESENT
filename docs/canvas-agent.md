@@ -239,6 +239,8 @@ CANVAS_AGENT_SCREENSHOT_TIMEOUT_MS=300
 CANVAS_AGENT_TTFB_SLO_MS=200
 NEXT_PUBLIC_CANVAS_AGENT_CLIENT_ENABLED=true
 CANVAS_AGENT_MAX_FOLLOWUPS=3
+# Upper bound for serialized TLDraw shape state appended to prompts (bytes)
+CANVAS_AGENT_SHAPE_STATE_LIMIT=4096
 ```
 
 ## Service Level Objectives (SLOs)
@@ -252,6 +254,7 @@ CANVAS_AGENT_MAX_FOLLOWUPS=3
 Per-session structured logs:
 
 - Prompt token estimate, shape counts, image bytes, docVersion
+- `shapeStateStats` (count, bytes, truncated) for TLDraw runtime state included in prompts
 - TTFB to first action, time to first applied
 - Stream chunk count, retries/acks, queue depth, follow-up count
 - Redact user content & image payloads by default
@@ -384,6 +387,4 @@ Returns `{ ok: true }` on success.
 - [TLDraw Agent Starter Kit](https://tldraw.dev/starter-kits/agent)
 - [TLDraw Editor API](https://tldraw.dev/reference/editor/Editor)
 - [TLDraw v4.0 Release Notes](https://tldraw.dev/releases/v4.0.0)
-
-
 
