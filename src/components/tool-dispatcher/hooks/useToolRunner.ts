@@ -482,6 +482,80 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
             }
           }
 
+          if (task.startsWith('scorecard.')) {
+            const targetRoom = call.roomId || room?.name;
+            const componentId =
+              (dispatchParams.componentId as string) ??
+              (params?.componentId as string) ??
+              undefined;
+
+            if (!targetRoom || typeof targetRoom !== 'string') {
+              const message = 'scorecard dispatch requires a room';
+              queue.markError(call.id, message);
+              emitError(call, message);
+              return { status: 'ERROR', message };
+            }
+
+            if (!componentId || typeof componentId !== 'string') {
+              const message = 'scorecard dispatch requires componentId';
+              queue.markError(call.id, message);
+              emitError(call, message);
+              return { status: 'ERROR', message };
+            }
+
+            const body = {
+              room: targetRoom,
+              componentId,
+              windowMs:
+                typeof dispatchParams.windowMs === 'number'
+                  ? dispatchParams.windowMs
+                  : typeof params?.windowMs === 'number'
+                    ? params.windowMs
+                    : undefined,
+              summary:
+                typeof params?.summary === 'string'
+                  ? params.summary
+                  : typeof dispatchParams.summary === 'string'
+                    ? (dispatchParams.summary as string)
+                    : undefined,
+              prompt:
+                typeof params?.prompt === 'string'
+                  ? params.prompt
+                  : typeof dispatchParams.prompt === 'string'
+                    ? (dispatchParams.prompt as string)
+                    : undefined,
+              intent:
+                typeof dispatchParams.intent === 'string'
+                  ? (dispatchParams.intent as string)
+                  : typeof params?.intent === 'string'
+                    ? params.intent
+                    : task,
+            };
+
+            try {
+              const res = await fetch('/api/steward/runScorecard', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
+              });
+              if (!res.ok) {
+                const message = `Scorecard steward dispatch failed: HTTP ${res.status}`;
+                queue.markError(call.id, message);
+                emitError(call, message);
+                return { status: 'ERROR', message };
+              }
+              const result = { status: 'SUCCESS', message: 'Dispatched scorecard steward' } as ToolRunResult;
+              queue.markComplete(call.id, result.message);
+              emitDone(call, result);
+              return result;
+            } catch (error) {
+              const message = `Scorecard steward dispatch error: ${error instanceof Error ? error.message : String(error)}`;
+              queue.markError(call.id, message);
+              emitError(call, message);
+              return { status: 'ERROR', message };
+            }
+          }
+
           const message = `Unsupported dispatch task in this mode: ${task}`;
           queue.markError(call.id, message);
           emitError(call, message);

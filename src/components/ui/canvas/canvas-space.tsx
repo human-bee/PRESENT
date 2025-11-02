@@ -68,6 +68,12 @@ if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
         return; // Skip after showing 3 times
       }
     }
+    if (
+      message.includes('[Transcript] render state') ||
+      message.includes('[RetroTimerEnhanced] Using provided custom message ID')
+    ) {
+      return;
+    }
     originalLog.apply(console, args);
   };
 }

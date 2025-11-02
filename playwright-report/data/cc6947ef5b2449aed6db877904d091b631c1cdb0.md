@@ -1,0 +1,93 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e1]:
+  - generic [ref=e2]:
+    - application "tldraw" [ref=e6]:
+      - generic [ref=e7]:
+        - img
+      - generic:
+        - button "Move focus to canvas" [ref=e11] [cursor=pointer]
+        - generic:
+          - generic:
+            - navigation:
+              - generic:
+                - button "Menu" [ref=e12] [cursor=pointer]:
+                  - img [ref=e13] [cursor=pointer]
+                - button "Page 1" [ref=e14] [cursor=pointer]:
+                  - generic [ref=e15] [cursor=pointer]: Page 1
+                  - img [ref=e16] [cursor=pointer]
+        - generic:
+          - generic:
+            - generic:
+              - generic:
+                - generic:
+                  - toolbar "Actions" [ref=e17]:
+                    - button "Undo — Ctrl + Z" [disabled] [ref=e18]:
+                      - img [ref=e19]
+                    - button "Redo — Ctrl + ⇧ + Z" [disabled] [ref=e20]:
+                      - img [ref=e21]
+                    - button "Delete — ⌫" [disabled] [ref=e22]:
+                      - img [ref=e23]
+                    - button "Duplicate — Ctrl + D" [disabled] [ref=e24]:
+                      - img [ref=e25]
+                    - button "Actions" [ref=e27] [cursor=pointer]:
+                      - img [ref=e28] [cursor=pointer]
+                  - toolbar "Tools" [ref=e29]:
+                    - generic [ref=e30]:
+                      - button "Select — V" [pressed] [ref=e31] [cursor=pointer]:
+                        - img [ref=e32] [cursor=pointer]
+                      - button "Hand — H" [ref=e33] [cursor=pointer]:
+                        - img [ref=e34] [cursor=pointer]
+                      - button "Draw — D" [ref=e35] [cursor=pointer]:
+                        - img [ref=e36] [cursor=pointer]
+                      - button "Eraser — E" [ref=e37] [cursor=pointer]:
+                        - img [ref=e38] [cursor=pointer]
+                      - button "Arrow — A" [ref=e39] [cursor=pointer]:
+                        - img [ref=e40] [cursor=pointer]
+                      - button "Text — T" [ref=e41] [cursor=pointer]:
+                        - img [ref=e42] [cursor=pointer]
+                      - button "Note — N" [ref=e43] [cursor=pointer]:
+                        - img [ref=e44] [cursor=pointer]
+                      - button "Media — Ctrl + U" [ref=e45] [cursor=pointer]:
+                        - img [ref=e46] [cursor=pointer]
+                      - button "Rectangle — R" [ref=e47] [cursor=pointer]:
+                        - img [ref=e48] [cursor=pointer]
+                    - button "More" [ref=e50] [cursor=pointer]:
+                      - img [ref=e51] [cursor=pointer]
+                - button "Styles" [ref=e54] [cursor=pointer]:
+                  - img [ref=e55] [cursor=pointer]
+        - region "Notifications (F8)":
+          - list
+      - button "Get a license for production" [ref=e57] [cursor=pointer]
+    - generic:
+      - generic:
+        - generic:
+          - generic:
+            - generic: Transcript
+          - button "Close"
+        - generic:
+          - generic:
+            - generic:
+              - img
+              - paragraph: No activity yet
+              - paragraph: Voice conversations and components will appear here
+        - generic:
+          - generic:
+            - textbox "Type a message for the agent" [active]: Let's start a debate on whether remote work boosts productivity. Please create the scorecard.
+            - button "Send"
+          - generic:
+            - generic: Sends as “you” over LiveKit to the voice agent.
+            - generic: "Use `/canvas …` to message the Canvas steward directly."
+        - generic:
+          - generic:
+            - generic:
+              - generic: Connected
+              - generic: canvas-e2e-1762105618981
+            - generic:
+              - button "Disconnect"
+              - button "Copy Link"
+  - button "Open Next.js Dev Tools" [ref=e63] [cursor=pointer]:
+    - img [ref=e64] [cursor=pointer]
+  - alert [ref=e67]
+```

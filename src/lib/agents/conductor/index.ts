@@ -9,9 +9,10 @@ import {
   type CanvasAgentPromptPayload,
 } from '@/lib/agents/shared/supabase-context';
 import { activeFlowchartSteward } from '../subagents/flowchart-steward-registry';
-import { runCanvasSteward, enqueueCanvasPrompt } from '../subagents/canvas-steward';
+import { runCanvasSteward } from '../subagents/canvas-steward';
 import { AgentTaskQueue } from '@/lib/agents/shared/queue';
 import { resolveIntent, getObject, getString } from './intent-resolver';
+import { runDebateScorecardSteward } from '@/lib/agents/debate-judge';
 
 // Thin router: receives dispatch_to_conductor and hands off to stewards
 const SERVER_CANVAS_EXECUTION_ENABLED = process.env.CANVAS_STEWARD_SERVER_EXECUTION === 'true';
@@ -35,6 +36,17 @@ const CanvasAgentPromptSchema = z
       .optional(),
     selectionIds: z.array(z.string().min(1)).optional(),
     metadata: jsonObjectSchema.optional(),
+  })
+  .passthrough();
+
+const ScorecardTaskArgs = z
+  .object({
+    room: z.string().min(1, 'room is required'),
+    componentId: z.string().min(1, 'componentId is required'),
+    windowMs: z.number().min(1_000).max(600_000).optional(),
+    intent: z.string().optional(),
+    summary: z.string().optional(),
+    prompt: z.string().optional(),
   })
   .passthrough();
 
@@ -86,6 +98,19 @@ async function executeTask(taskName: string, params: JsonObject) {
   if (taskName.startsWith('flowchart.')) {
     const result = await run(activeFlowchartSteward, JSON.stringify({ task: taskName, params }));
     return result.finalOutput;
+  }
+
+  if (taskName.startsWith('scorecard.')) {
+    const parsed = ScorecardTaskArgs.parse(params);
+    const output = await runDebateScorecardSteward({
+      room: parsed.room,
+      componentId: parsed.componentId,
+      windowMs: parsed.windowMs,
+      intent: parsed.intent ?? taskName,
+      summary: parsed.summary,
+      prompt: parsed.prompt,
+    });
+    return { status: 'completed', output };
   }
 
   if (taskName === 'canvas.agent_prompt') {

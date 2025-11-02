@@ -13,9 +13,10 @@ import { appendTranscriptCache } from '@/lib/agents/shared/supabase-context';
 import { buildVoiceAgentInstructions } from '@/lib/agents/instructions';
 import { queryCapabilities, defaultCapabilities } from '@/lib/agents/capabilities';
 import { deriveComponentIntent } from '@/lib/agents/shared/deterministic-ids';
-import { DebateJudgeManager, isStartDebate } from '@/lib/agents/debate-judge';
+import { isStartDebate } from '@/lib/agents/debate-judge';
 import { jsonObjectSchema, type JsonObject } from '@/lib/utils/json-schema';
 import { RoomEvent, RemoteTrackPublication, Track } from 'livekit-client';
+import { createDefaultScorecardState } from '@/lib/agents/debate-scorecard-schema';
 
 export default defineAgent({
   entry: async (job: JobContext) => {
@@ -859,6 +860,31 @@ Your only output is function calls. Never use plain text unless absolutely neces
             payload.slot = slot;
           }
 
+          const isDebateScorecardTarget =
+            existing?.type === 'DebateScorecard' ||
+            (typeof args.type === 'string' && args.type.trim() === 'DebateScorecard') ||
+            (activeScorecard && activeScorecard.componentId === resolvedId);
+
+          if (isDebateScorecardTarget) {
+            const conductorPayload: JsonObject = {
+              componentId: resolvedId,
+              room: job.room.name || '',
+              windowMs: 60_000,
+            };
+            if (intentId) {
+              conductorPayload.intent = intentId;
+            }
+            if (lastUserPrompt && lastUserPrompt.trim().length > 0) {
+              conductorPayload.prompt = lastUserPrompt;
+              conductorPayload.summary = lastUserPrompt.slice(0, 200);
+            }
+            await sendToolCall('dispatch_to_conductor', {
+              task: 'scorecard.run',
+              params: conductorPayload,
+            });
+            return { status: 'REDIRECTED', componentId: resolvedId };
+          }
+
           await sendToolCall('update_component', payload, { reliable: false });
 
           const existingAfter = componentRegistry.get(resolvedId);
@@ -935,6 +961,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
     });
 
     let pendingReply: { userInput?: string } | null = null;
+    let lastUserPrompt: string | null = null;
     const generateReplySafely = async (options?: { userInput?: string }) => {
       if (activeResponse) {
         // Defer this request until the current response settles
@@ -962,23 +989,90 @@ Your only output is function calls. Never use plain text unless absolutely neces
       }
     };
 
-    const debateJudgeManager = new DebateJudgeManager(job.room as any, job.room.name || 'room');
-    const debateKeywordRegex = /\b(aff|affirmative|neg|negative|contention|rebuttal|voter|judge|debate|scorecard|flow|argument|claim|evidence)\b/;
+    let activeScorecard: { componentId: string; intentId: string; topic: string } | null = null;
+    const debateKeywordRegex =
+      /\b(aff|affirmative|neg|negative|contention|rebuttal|voter|judge|debate|scorecard|flow|argument|claim|evidence|verify|fact|counter)\b/;
+
+    const ensureDebateScorecard = async (topic?: string, contextText?: string) => {
+      const normalizedTopic = topic && topic.trim().length ? topic.trim() : undefined;
+      if (
+        activeScorecard &&
+        (!normalizedTopic || activeScorecard.topic.toLowerCase() === normalizedTopic.toLowerCase())
+      ) {
+        return activeScorecard;
+      }
+      const topicLabel = normalizedTopic ?? activeScorecard?.topic ?? 'Live Debate';
+      const intentId = `debate-scorecard-${Date.now()}`;
+      const messageId = intentId;
+      const initialState = createDefaultScorecardState(topicLabel);
+      if (contextText && contextText.trim().length > 0) {
+        const affMatch = contextText.match(/affirmative(?: team| side| camp)?\s*(?:is|=|:)\s*([^.;]+)/i);
+        const negMatch = contextText.match(/negative(?: team| side| camp)?\s*(?:is|=|:)\s*([^.;]+)/i);
+        if (affMatch?.[1]) {
+          initialState.players[0].label = affMatch[1].trim();
+        }
+        if (negMatch?.[1]) {
+          initialState.players[1].label = negMatch[1].trim();
+        }
+        initialState.status.lastAction = `Initialized debate${topicLabel ? ` on ${topicLabel}` : ''} with ${initialState.players[0].label} vs ${initialState.players[1].label}.`;
+      }
+      initialState.componentId = messageId;
+      initialState.version = 0;
+      initialState.lastUpdated = Date.now();
+
+      await sendToolCall('reserve_component', {
+        type: 'DebateScorecard',
+        intentId,
+        messageId,
+        spec: initialState as JsonObject,
+      });
+
+      await sendToolCall('create_component', {
+        type: 'DebateScorecard',
+        componentId: messageId,
+        messageId,
+        spec: initialState as JsonObject,
+      });
+
+      activeScorecard = { componentId: messageId, intentId, topic: topicLabel };
+      return activeScorecard;
+    };
 
     const maybeHandleDebate = async (text: string) => {
       const trimmed = (text || '').trim();
       if (!trimmed) return;
       const lower = trimmed.toLowerCase();
+      const roomName = job.room.name || 'room';
       try {
+        lastUserPrompt = trimmed;
         if (isStartDebate(trimmed)) {
           const topicMatch = trimmed.match(/debate(?: analysis| scorecard)?(?: for| about| on)?\s*(.*)$/i);
           const topic = topicMatch && topicMatch[1] ? topicMatch[1].trim() : 'Live Debate';
-          await debateJudgeManager.ensureScorecard(topic || 'Live Debate');
-          await debateJudgeManager.runPrompt(trimmed);
+          const scorecard = await ensureDebateScorecard(topic || 'Live Debate', trimmed);
+          await sendToolCall('dispatch_to_conductor', {
+            task: 'scorecard.run',
+            params: {
+              room: roomName,
+              componentId: scorecard.componentId,
+              summary: `initialize debate scorecard for ${scorecard.topic}`,
+              intent: 'scorecard.init',
+              prompt: trimmed,
+            } as JsonObject,
+          });
           return;
         }
-        if (debateJudgeManager.isActive() && debateKeywordRegex.test(lower)) {
-          await debateJudgeManager.runPrompt(trimmed);
+        if (debateKeywordRegex.test(lower)) {
+          const scorecard = activeScorecard ?? (await ensureDebateScorecard(undefined, trimmed));
+          await sendToolCall('dispatch_to_conductor', {
+            task: 'scorecard.run',
+            params: {
+              room: roomName,
+              componentId: scorecard.componentId,
+              summary: trimmed.slice(0, 180),
+              intent: 'scorecard.update',
+              prompt: trimmed,
+            } as JsonObject,
+          });
         }
       } catch (err) {
         console.warn('[VoiceAgent] Debate judge handling failed', err);
@@ -1299,6 +1393,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
         console.log('[VoiceAgent] DataReceived transcription', { text, isManual, isReplay, speaker, topic });
         if (!text || isReplay) return;
         if (!isManual && speaker === 'voice-agent') return;
+        lastUserPrompt = text;
         // Native Realtime tool-calling path
         console.log('[VoiceAgent] calling generateReply with userInput:', text);
         try {

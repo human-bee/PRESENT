@@ -3,6 +3,11 @@ import { config } from 'dotenv';
 import { join } from 'path';
 import { RoomServiceClient, DataPacket_Kind } from 'livekit-server-sdk';
 import type { JsonObject } from '@/lib/utils/json-schema';
+import {
+  createDefaultScorecardState,
+  debateScorecardStateSchema,
+  type DebateScorecardState,
+} from '@/lib/agents/debate-scorecard-schema';
 
 // Ensure .env.local is loaded when running stewards/conductor in Node
 try {
@@ -91,6 +96,17 @@ const memoryStore: Map<string, FlowchartDocRecord> =
   (GLOBAL_APEX[MEMORY_STORE_KEY] as Map<string, FlowchartDocRecord> | undefined) ||
   new Map<string, FlowchartDocRecord>();
 
+type ScorecardRecord = {
+  state: DebateScorecardState;
+  version: number;
+  lastUpdated: number;
+};
+
+const SCORECARD_MEMORY_KEY = '__present_debate_scorecard_store__';
+const scorecardStore: Map<string, ScorecardRecord> =
+  (GLOBAL_APEX[SCORECARD_MEMORY_KEY] as Map<string, ScorecardRecord> | undefined) ||
+  new Map<string, ScorecardRecord>();
+
 const CANVAS_STATE_STORE_KEY = '__present_canvas_state_store__';
 const canvasStateStore: Map<string, CanvasStateRecord> =
   (GLOBAL_APEX[CANVAS_STATE_STORE_KEY] as Map<string, CanvasStateRecord> | undefined) ||
@@ -108,6 +124,10 @@ const transcriptStore: Map<string, TranscriptRecord> =
 
 if (!GLOBAL_APEX[MEMORY_STORE_KEY]) {
   GLOBAL_APEX[MEMORY_STORE_KEY] = memoryStore;
+}
+
+if (!GLOBAL_APEX[SCORECARD_MEMORY_KEY]) {
+  GLOBAL_APEX[SCORECARD_MEMORY_KEY] = scorecardStore;
 }
 
 if (!GLOBAL_APEX[TRANSCRIPT_STORE_KEY]) {
@@ -203,6 +223,7 @@ const ensureLivekitRoom = async (room: string) => {
 
 const fallbackKey = (room: string, docId: string) => `${room}::${docId}`;
 const canvasStateKey = (room: string) => `${room}`;
+const scorecardMemoryKey = (room: string, componentId: string) => `${room}::${componentId}`;
 
 const readFallback = (room: string, docId: string): FlowchartDocRecord => {
   return (memoryStore.get(fallbackKey(room, docId)) ?? {
@@ -214,6 +235,24 @@ const readFallback = (room: string, docId: string): FlowchartDocRecord => {
 
 const writeFallback = (room: string, docId: string, record: FlowchartDocRecord) => {
   memoryStore.set(fallbackKey(room, docId), record);
+};
+
+const readScorecardFallback = (room: string, componentId: string): ScorecardRecord => {
+  const key = scorecardMemoryKey(room, componentId);
+  const existing = scorecardStore.get(key);
+  if (existing) return existing;
+  const state = createDefaultScorecardState();
+  state.componentId = componentId;
+  const record: ScorecardRecord = { state, version: 0, lastUpdated: Date.now() };
+  scorecardStore.set(key, record);
+  return record;
+};
+
+const writeScorecardFallback = (room: string, componentId: string, record: ScorecardRecord) => {
+  scorecardStore.set(scorecardMemoryKey(room, componentId), {
+    ...record,
+    lastUpdated: Date.now(),
+  });
 };
 
 const defaultCanvasState = (room: string): CanvasStateRecord => {
@@ -243,6 +282,43 @@ const normalizeRecord = (room: string, docId: string, entry: Record<string, unkn
   };
   writeFallback(room, docId, next);
   return next;
+};
+
+const normalizeScorecardRecord = (room: string, componentId: string, entry: Record<string, unknown>) => {
+  const fallback = readScorecardFallback(room, componentId);
+  const base = entry?.scorecard && typeof entry.scorecard === 'object' ? (entry.scorecard as Record<string, unknown>) : entry;
+  const stateInput =
+    base && typeof base === 'object' && 'state' in base && typeof (base as Record<string, unknown>).state === 'object'
+      ? (base as Record<string, unknown>).state
+      : base;
+
+  const parsed = debateScorecardStateSchema.safeParse(
+    stateInput && typeof stateInput === 'object'
+      ? { ...(stateInput as JsonObject), componentId }
+      : { ...fallback.state, componentId },
+  );
+
+  const state = parsed.success ? parsed.data : fallback.state;
+  const version =
+    (base && typeof base === 'object' && typeof (base as Record<string, unknown>).version === 'number'
+      ? (base as Record<string, unknown>).version
+      : typeof entry.version === 'number'
+        ? entry.version
+        : fallback.version) ?? 0;
+
+  const normalized: ScorecardRecord = {
+    state: {
+      ...state,
+      componentId,
+      version,
+      lastUpdated: Date.now(),
+    },
+    version,
+    lastUpdated: Date.now(),
+  };
+
+  writeScorecardFallback(room, componentId, normalized);
+  return normalized;
 };
 
 const warnFallback = (scope: string, error: unknown) => {
@@ -449,6 +525,110 @@ export async function commitFlowchartDoc(
   writeFallback(room, docId, nextRecord);
 
   return { version: nextVersion };
+}
+
+export async function getDebateScorecard(room: string, componentId: string) {
+  const fallback = readScorecardFallback(room, componentId);
+  if (shouldBypassSupabase) {
+    logBypass('getDebateScorecard');
+    return fallback;
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('canvases')
+      .select('document, id')
+      .ilike('name', `%${room}%`)
+      .limit(1)
+      .maybeSingle();
+
+    if (error) throw error;
+    if (!data || !data.document) {
+      return fallback;
+    }
+
+    const components = (data.document?.components || {}) as Record<string, Record<string, unknown>>;
+    const entry = components[componentId];
+    if (!entry) {
+      return fallback;
+    }
+    return normalizeScorecardRecord(room, componentId, entry);
+  } catch (error) {
+    warnFallback('getDebateScorecard', error);
+    return fallback;
+  }
+}
+
+export async function commitDebateScorecard(
+  room: string,
+  componentId: string,
+  payload: { state: DebateScorecardState; prevVersion?: number },
+) {
+  const current = await getDebateScorecard(room, componentId);
+  if (typeof payload.prevVersion === 'number' && payload.prevVersion !== current.version) {
+    throw new Error('CONFLICT');
+  }
+
+  const parsed = debateScorecardStateSchema.parse({
+    ...payload.state,
+    componentId,
+    version: (current.version || 0) + 1,
+    lastUpdated: Date.now(),
+  });
+
+  const nextVersion = parsed.version;
+  const sanitizedState = JSON.parse(JSON.stringify(parsed)) as DebateScorecardState;
+
+  if (shouldBypassSupabase) {
+    logBypass('commitDebateScorecard');
+  } else {
+    try {
+      const { data: canvas, error: fetchErr } = await supabase
+        .from('canvases')
+        .select('id, document')
+        .ilike('name', `%${room}%`)
+        .limit(1)
+        .maybeSingle();
+
+      if (fetchErr || !canvas) {
+        throw fetchErr || new Error('NOT_FOUND');
+      }
+
+      const document = canvas.document || {};
+      document.components = document.components || {};
+      const componentEntry = document.components[componentId] || {};
+      document.components[componentId] = {
+        ...componentEntry,
+        ...sanitizedState,
+        scorecard: {
+          state: sanitizedState,
+          version: nextVersion,
+          updated_at: Date.now(),
+        },
+        version: nextVersion,
+        updated_at: Date.now(),
+      };
+
+      const { error: updateErr } = await supabase
+        .from('canvases')
+        .update({ document })
+        .eq('id', canvas.id);
+
+      if (updateErr) {
+        throw updateErr;
+      }
+    } catch (error) {
+      warnFallback('commitDebateScorecard', error);
+    }
+  }
+
+  const record: ScorecardRecord = {
+    state: sanitizedState,
+    version: nextVersion,
+    lastUpdated: Date.now(),
+  };
+  writeScorecardFallback(room, componentId, record);
+  return record;
 }
 
 export async function getCanvasShapeSummary(room: string) {

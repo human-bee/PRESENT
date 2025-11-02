@@ -142,7 +142,11 @@ export const commit_flowchart = tool({
               await fetch(broadcastUrl, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ room, componentId: docId, flowchartDoc: doc, format, version: res.version }),
+                body: JSON.stringify({
+                  room,
+                  componentId: docId,
+                  patch: { flowchartDoc: doc, format, version: res.version },
+                }),
               });
               try {
                 logWithTs('📡 [Steward] broadcast_flowchart', {

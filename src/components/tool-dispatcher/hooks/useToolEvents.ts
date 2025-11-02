@@ -3,6 +3,7 @@
 import { useEffect, useMemo } from 'react';
 import type { Room } from 'livekit-client';
 import { createLiveKitBus } from '@/lib/livekit/livekit-bus';
+import { ComponentRegistry } from '@/lib/component-registry';
 import { createObservabilityBridge } from '@/lib/observability-bridge';
 import { TOOL_EVENT_TOPICS } from '../utils/constants';
 import type { ToolRunResult, ToolCall } from '../utils/toolTypes';
@@ -55,6 +56,50 @@ export function useToolEvents(room: Room | undefined, options: UseToolEventsOpti
       }
     }
   };
+
+  useEffect(() => {
+    const off = bus.on('update_component', async (message: any) => {
+      try {
+        if (!message || typeof message !== 'object') return;
+        const componentId =
+          typeof message.componentId === 'string' && message.componentId.trim().length
+            ? message.componentId.trim()
+            : undefined;
+        const patch = message.patch && typeof message.patch === 'object' ? message.patch : undefined;
+        if (!componentId || !patch) return;
+
+        await ComponentRegistry.update(componentId, patch as Record<string, unknown>).catch((error) => {
+          if (enableLogging) {
+            console.warn('[ToolDispatcher] registry update failed', { componentId, error });
+          }
+        });
+
+        try {
+          window.dispatchEvent(
+            new CustomEvent('tldraw:merge_component_state', {
+              detail: {
+                messageId: componentId,
+                patch,
+                meta: { source: 'livekit:update_component', summary: message.summary },
+              },
+            }),
+          );
+        } catch (error) {
+          if (enableLogging) {
+            console.warn('[ToolDispatcher] merge_component_state dispatch failed', { componentId, error });
+          }
+        }
+      } catch (error) {
+        if (enableLogging) {
+          console.warn('[ToolDispatcher] update_component handling error', error);
+        }
+      }
+    });
+
+    return () => {
+      off?.();
+    };
+  }, [bus, enableLogging]);
 
   const emitRequest = (call: ToolCall) => emit(TOOL_EVENT_TOPICS.request, { id: call.id, tool: call.payload.tool, timestamp: Date.now() });
   const emitStarted = (call: ToolCall) => emit(TOOL_EVENT_TOPICS.started, { id: call.id, tool: call.payload.tool, timestamp: Date.now() });

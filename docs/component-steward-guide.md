@@ -100,3 +100,15 @@ Keep the voice agent lean; heavy analysis or multi-step planning should run via 
    - If a steward call fails, inspect `logs/agent-conductor.log` for the tool payload and the MCP server’s response.
 
 *Last updated: 2025-11-01*
+
+---
+
+## 9. Example: Debate Scorecard Steward
+
+- **Schema** – `src/lib/agents/debate-scorecard-schema.ts` holds the shared Zod models for claims, players, achievements, and timeline events.
+- **Steward** – `src/lib/agents/debate-judge.ts` now exposes `debateScorecardSteward` with `get_current_scorecard`, `get_context`, and `commit_scorecard` tools.
+- **UI Component** – `src/components/ui/productivity/debate-scorecard.tsx` renders the scoreboard (scores, momentum, achievements, live timeline) and registers via `useComponentRegistration`.
+- **Voice Agent** – `src/lib/agents/realtime/voice-agent.ts` reserves/creates the scorecard component and dispatches `scorecard.run` jobs to the conductor when debate intents are detected.
+- **Conductor Routing** – `src/lib/agents/conductor/index.ts` handles `scorecard.*` tasks and forwards them to `runDebateScorecardSteward`.
+
+Use this as a reference when cloning the steward pattern for other multi-surface widgets.

@@ -10,8 +10,18 @@ try {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { room, componentId, flowchartDoc, format, version } = body || {};
-    if (!room || !componentId || typeof flowchartDoc !== 'string' || !format || typeof version !== 'number') {
+    const { room, componentId, patch: rawPatch, summary } = body || {};
+
+    let patch = rawPatch;
+    if (!patch && typeof body?.flowchartDoc === 'string') {
+      const { flowchartDoc, format, version } = body;
+      if (!format || typeof version !== 'number') {
+        return NextResponse.json({ error: 'Missing fields' }, { status: 400 });
+      }
+      patch = { flowchartDoc, format, version };
+    }
+
+    if (!room || !componentId || !patch || typeof patch !== 'object') {
       return NextResponse.json({ error: 'Missing fields' }, { status: 400 });
     }
 
@@ -26,7 +36,8 @@ export async function POST(req: NextRequest) {
     const event = {
       type: 'update_component',
       componentId,
-      patch: { flowchartDoc, format, version },
+      patch,
+      summary: typeof summary === 'string' ? summary : undefined,
       timestamp: Date.now(),
     };
     const data = new TextEncoder().encode(JSON.stringify(event));
@@ -36,5 +47,4 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: e?.message || 'Unknown error' }, { status: 500 });
   }
 }
-
 
