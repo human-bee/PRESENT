@@ -111,4 +111,12 @@ Keep the voice agent lean; heavy analysis or multi-step planning should run via 
 - **Voice Agent** – `src/lib/agents/realtime/voice-agent.ts` reserves/creates the scorecard component and dispatches `scorecard.run` jobs to the conductor when debate intents are detected.
 - **Conductor Routing** – `src/lib/agents/conductor/index.ts` handles `scorecard.*` tasks and forwards them to `runDebateScorecardSteward`.
 
+### Lessons from the scorecard rollout
+
+- **Let the steward finish the job.** Once the voice agent calls `dispatch_to_conductor({ task: 'scorecard.run', ... })`, bail out of the `update_component` branch. Returning `{ status: 'REDIRECTED' }` keeps the voice agent from spamming literal `update_component` calls while the steward is mid-run.
+- **Broadcast every commit.** The steward must POST its final state through `/api/steward/commit`; that LiveKit broadcast is what keeps every browser in sync. Local `ComponentRegistry` updates alone are not enough.
+- **Design for expansion, not aspect ratios.** The scorecard originally lived inside a fixed 16×9 frame, which clipped long ledgers/timelines. A flexible two-column shell (sidebar + scrollable main pane) handled large steward patches without layout hacks.
+- **Mirror LiveKit updates into the TLDraw store.** After `ComponentRegistry.update`, emit a `custom:showComponent` + `tldraw:merge_component_state` so the TLDraw shape, transcript preview, and registry stay aligned.
+- **Stress-test with synthetic patches.** Before relying on the steward pipeline, fire a manual `custom:showComponent` event containing a heavy payload (multiple claims, fact checks, timeline items). It’s a quick way to surface layout issues or schema mismatches.
+
 Use this as a reference when cloning the steward pattern for other multi-surface widgets.
