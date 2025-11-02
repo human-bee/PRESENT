@@ -15,6 +15,9 @@ import { resolveIntent, getObject, getString } from './intent-resolver';
 
 // Thin router: receives dispatch_to_conductor and hands off to stewards
 const SERVER_CANVAS_EXECUTION_ENABLED = process.env.CANVAS_STEWARD_SERVER_EXECUTION === 'true';
+const TASK_LEASE_TTL_MS = Number(process.env.TASK_LEASE_TTL_MS ?? 15_000);
+const ROOM_CONCURRENCY = Number(process.env.ROOM_CONCURRENCY ?? 2);
+const queue = new AgentTaskQueue();
 
 const CanvasAgentPromptSchema = z
   .object({
@@ -96,15 +99,17 @@ async function executeTask(taskName: string, params: JsonObject) {
       message: promptResult.payload.message,
       requestId: promptResult.payload.requestId,
       metadata: promptResult.payload.metadata ?? undefined,
-    });
-    return { ...promptResult, status: 'debounced' };
+    };
+    // Execute via Canvas Steward on the server to ensure action even without a client host
+    await runCanvasSteward({ task: 'canvas.agent_prompt', params: stewardParams });
+    return { ...promptResult, status: 'queued' };
   }
 
-  if (task.startsWith('canvas.')) {
+  if (taskName.startsWith('canvas.')) {
     if (!SERVER_CANVAS_EXECUTION_ENABLED) {
-      throw new Error(`Canvas steward server execution disabled for task: ${task}`);
+      throw new Error(`Canvas steward server execution disabled for task: ${taskName}`);
     }
-    return runCanvasSteward({ task, params });
+    return runCanvasSteward({ task: taskName, params });
   }
 
   throw new Error(`No steward for task: ${taskName}`);

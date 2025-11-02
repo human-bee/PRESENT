@@ -7,6 +7,10 @@
 
 import React from 'react';
 
+const LOGS =
+  typeof process !== 'undefined' &&
+  !!(process.env && process.env.NEXT_PUBLIC_TOOL_DISPATCHER_LOGS === 'true');
+
 const isDevEnvironment =
   !(
     typeof process !== 'undefined' &&
@@ -58,6 +62,8 @@ class ComponentStore {
   private listeners: Set<() => void> = new Set();
   private warnedTypeMessages = new Set<string>();
   private warnedCallbackMessages = new Set<string>();
+  private callbackMap = new Map<string, Map<symbol, (patch: Record<string, unknown>) => void>>();
+  private registrationCounts = new Map<string, number>();
 
   register(info: ComponentInfo) {
     const existing = this.components.get(info.messageId);
@@ -74,22 +80,44 @@ class ComponentStore {
         nextType: info.componentType,
       };
       try {
-        console.warn('⚠️ [ComponentRegistry] Duplicate registration detected', warning);
+        if (LOGS) console.warn('⚠️ [ComponentRegistry] Duplicate registration detected', warning);
       } catch {}
       this.warnedTypeMessages.add(info.messageId);
     }
-    this.components.set(info.messageId, {
-      ...info,
-      props: { ...(existing?.props ?? {}), ...(info.props ?? {}) },
+
+    const originalProps = existing?.originalProps ?? existing?.props ?? info.props ?? {};
+    const mergedProps = { ...(existing?.props ?? {}), ...(info.props ?? {}) };
+    const mergedDiffHistory = [
+      ...(existing?.diffHistory ?? []),
+      ...diffProps(existing?.props ?? {}, mergedProps),
+    ];
+
+    const token = Symbol(info.messageId);
+    if (info.updateCallback) {
+      this.addCallback(info.messageId, token, info.updateCallback);
+    }
+    const aggregatedCallback = this.getAggregatedCallback(info.messageId) ?? info.updateCallback;
+
+    const nextComponent: ComponentInfo = {
+      messageId: info.messageId,
+      componentType: info.componentType,
+      props: mergedProps,
+      contextKey: info.contextKey,
+      timestamp: Date.now(),
+      updateCallback: aggregatedCallback,
       originalProps,
       diffHistory: mergedDiffHistory,
-      updateCallback: aggregatedCallback,
-      timestamp: Date.now(),
     };
 
     this.components.set(info.messageId, nextComponent);
-    console.log(`🧩 [ComponentRegistry] Registered ${info.componentType} at ${info.messageId}`);
-    console.log(`🧩 [ComponentRegistry] Total components: ${this.components.size}`);
+    const count = (this.registrationCounts.get(info.messageId) ?? 0) + 1;
+    this.registrationCounts.set(info.messageId, count);
+    if (LOGS) {
+      try {
+        console.log(`🧩 [ComponentRegistry] Registered ${info.componentType} at ${info.messageId}`);
+        console.log(`🧩 [ComponentRegistry] Total components: ${this.components.size}`);
+      } catch {}
+    }
     this.notifyListeners();
     return token;
   }
@@ -112,22 +140,28 @@ class ComponentStore {
         !this.warnedCallbackMessages.has(messageId)
       ) {
         try {
-          console.warn('⚠️ [ComponentRegistry] Update callback replaced via updatePropsOnly', {
-            messageId,
-            previousCallback: component.updateCallback.name || 'anonymous',
-            nextCallback: updateCallback.name || 'anonymous',
-          });
+          if (LOGS)
+            console.warn('⚠️ [ComponentRegistry] Update callback replaced via updatePropsOnly', {
+              messageId,
+              previousCallback: (component.updateCallback as any)?.name || 'anonymous',
+              nextCallback: (updateCallback as any)?.name || 'anonymous',
+            });
         } catch {}
         this.warnedCallbackMessages.add(messageId);
       }
-      const updatedComponent = {
+      // If caller provides a registrationToken, ensure callback map is updated
+      if (registrationToken && updateCallback) {
+        this.addCallback(messageId, registrationToken, updateCallback);
+      }
+      const aggregatedCallback = this.getAggregatedCallback(messageId) ?? updateCallback;
+      const updatedComponent: ComponentInfo = {
         ...component,
         props,
-        updateCallback: updateCallback || aggregatedCallback,
+        updateCallback: aggregatedCallback,
         timestamp: Date.now(),
       };
       this.components.set(messageId, updatedComponent);
-      // Don't call notifyListeners() to avoid re-renders during props updates
+      // Silent props refresh to avoid extra renders; listeners notified by state-changing updates
     }
   }
 
@@ -161,7 +195,7 @@ class ComponentStore {
       return callbackResult;
     }
 
-    console.log(`[ComponentRegistry] Updated ${messageId} props${callbackResult.invoked ? '' : ' (no callback)'}`);
+    if (LOGS) console.log(`[ComponentRegistry] Updated ${messageId} props${callbackResult.invoked ? '' : ' (no callback)'}`);
     this.notifyListeners();
     return { success: true };
   }
@@ -176,7 +210,7 @@ class ComponentStore {
     this.components.delete(messageId);
     this.warnedTypeMessages.delete(messageId);
     this.warnedCallbackMessages.delete(messageId);
-    console.log(`[ComponentRegistry] Removed ${messageId}`);
+    if (LOGS) console.log(`[ComponentRegistry] Removed ${messageId}`);
     this.notifyListeners();
   }
 
@@ -194,7 +228,7 @@ class ComponentStore {
       if (nextCount <= 0) {
         this.registrationCounts.delete(messageId);
         this.components.delete(messageId);
-        console.log(`[ComponentRegistry] Removed ${messageId}`);
+        if (LOGS) console.log(`[ComponentRegistry] Removed ${messageId}`);
         this.notifyListeners();
         return;
       }
@@ -219,7 +253,7 @@ class ComponentStore {
       this.components.clear();
       this.callbackMap.clear();
       this.registrationCounts.clear();
-      console.log(`[ComponentRegistry] Cleared all components`);
+      if (LOGS) console.log(`[ComponentRegistry] Cleared all components`);
     } else {
       for (const [id, component] of this.components) {
         if (component.contextKey === contextKey) {
@@ -228,7 +262,7 @@ class ComponentStore {
           this.warnedCallbackMessages.delete(id);
         }
       }
-      console.log(`[ComponentRegistry] Cleared components for context: ${contextKey}`);
+      if (LOGS) console.log(`[ComponentRegistry] Cleared components for context: ${contextKey}`);
     }
     this.notifyListeners();
   }
@@ -304,9 +338,11 @@ class UpdateCircuitBreaker {
     const now = Date.now();
 
     if (lastUpdate && now - lastUpdate < this.COOLDOWN_MS) {
-      console.log(
-        `🛑 [CircuitBreaker] Preventing duplicate update for ${componentId} (last update ${now - lastUpdate}ms ago)`,
-      );
+      if (LOGS) {
+        console.log(
+          `🛑 [CircuitBreaker] Preventing duplicate update for ${componentId} (last update ${now - lastUpdate}ms ago)`,
+        );
+      }
       return false;
     }
 

@@ -250,7 +250,7 @@ export const MessageThreadCollapsible = React.forwardRef<
           ? crypto.randomUUID()
           : Math.random().toString(36).slice(2);
       try {
-        console.debug('[Transcript] Canvas steward prompt', {
+        if (process.env.NEXT_PUBLIC_TOOL_DISPATCHER_LOGS === 'true') console.debug('[Transcript] Canvas steward prompt', {
           room: roomName,
           requestId,
         });
@@ -694,7 +694,7 @@ export const MessageThreadCollapsible = React.forwardRef<
                     parsedCommand && SUPPORTED_SLASH_COMMANDS.has(parsedCommand.command),
                   );
                   if (slashActive && !parsedCommand?.body) {
-                    console.warn('[Transcript] Slash command requires a message body', parsedCommand);
+                    if (process.env.NEXT_PUBLIC_TOOL_DISPATCHER_LOGS === 'true') console.warn('[Transcript] Slash command requires a message body', parsedCommand);
                     return;
                   }
                   setIsSending(true);
@@ -725,7 +725,7 @@ export const MessageThreadCollapsible = React.forwardRef<
                     } else if (room?.state === 'connected') {
                       bus.send('transcription', payload);
                     } else {
-                      console.warn('[Transcript] Room not connected; skipping send');
+                      if (process.env.NEXT_PUBLIC_TOOL_DISPATCHER_LOGS === 'true') console.warn('[Transcript] Room not connected; skipping send');
                     }
 
                     try {
@@ -750,7 +750,7 @@ export const MessageThreadCollapsible = React.forwardRef<
 
                     completed = true;
                   } catch (error) {
-                    console.error('[Transcript] Failed to send agent prompt', error);
+                    if (process.env.NEXT_PUBLIC_TOOL_DISPATCHER_LOGS === 'true') console.error('[Transcript] Failed to send agent prompt', error);
                   } finally {
                     if (completed) {
                       setTypedMessage('');

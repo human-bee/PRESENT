@@ -61,6 +61,7 @@ export function EnhancedMcpProvider({
   const [lastConnectionTime, setLastConnectionTime] = useState<number>(0);
 
   // Monitor connection status
+  const LOGS = typeof process !== 'undefined' && process.env.NEXT_PUBLIC_TOOL_DISPATCHER_LOGS === 'true';
   const updateConnectionStatus = useCallback(() => {
     const statuses = getMcpServerStatuses();
     const connected = Array.from(statuses.values()).filter((s) => s.status === 'connected').length;
@@ -77,7 +78,7 @@ export function EnhancedMcpProvider({
   // Enhanced error boundary for MCP connections
   const handleMcpError = useCallback(
     (error: Error, serverUrl?: string) => {
-      if (process.env.NODE_ENV === 'development') {
+      if (process.env.NODE_ENV === 'development' && LOGS) {
         console.warn(
           `[Enhanced MCP] Connection error${serverUrl ? ` for ${serverUrl}` : ''}:`,
           error.message,
@@ -96,7 +97,7 @@ export function EnhancedMcpProvider({
   // Handle successful connections
   const handleMcpSuccess = useCallback(
     (serverUrl: string) => {
-      if (process.env.NODE_ENV === 'development') {
+      if (process.env.NODE_ENV === 'development' && LOGS) {
         console.log(`[Enhanced MCP] Successfully connected to ${serverUrl}`);
       }
 
@@ -113,7 +114,7 @@ export function EnhancedMcpProvider({
 
     // If it's been more than 10 minutes since last connection attempt, reset failures
     if (timeSinceLastConnection > 10 * 60 * 1000 && connectionAttempts > 0) {
-      if (process.env.NODE_ENV === 'development') {
+      if (process.env.NODE_ENV === 'development' && LOGS) {
         console.log('[Enhanced MCP] Resetting connection failures after 10 minutes');
       }
       resetMcpServerFailures();
@@ -131,7 +132,7 @@ export function EnhancedMcpProvider({
 
   // Log connection summary
   useEffect(() => {
-    if (process.env.NODE_ENV === 'development' && mcpServers.length > 0) {
+    if (process.env.NODE_ENV === 'development' && LOGS && mcpServers.length > 0) {
       const activeServers = mcpServers.filter((server) => {
         const url = typeof server === 'string' ? server : server.url;
         const statuses = getMcpServerStatuses();
@@ -149,7 +150,7 @@ export function EnhancedMcpProvider({
 
   // If no servers are available, render children without MCP
   if (mcpServers.length === 0) {
-    if (process.env.NODE_ENV === 'development' && !loggedNoServersOnce) {
+    if (process.env.NODE_ENV === 'development' && LOGS && !loggedNoServersOnce) {
       console.log('[Enhanced MCP] No MCP servers available, rendering without MCP functionality');
       loggedNoServersOnce = true;
     }
@@ -186,7 +187,7 @@ class MCPErrorBoundary extends React.Component<
   }
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
-    if (process.env.NODE_ENV === 'development') {
+    if (process.env.NODE_ENV === 'development' && LOGS) {
       console.warn('[Enhanced MCP] Error boundary caught MCP error:', error);
     }
 

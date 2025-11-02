@@ -165,7 +165,9 @@ export const MessageThreadCollapsible = React.forwardRef<
       setCanvasComponents(nextEntries);
     } catch (error) {
       if (process.env.NODE_ENV !== 'production') {
-        console.warn('[Transcript] Failed to refresh canvas components', error);
+        if (process.env.NEXT_PUBLIC_TOOL_DISPATCHER_LOGS === 'true') {
+          console.warn('[Transcript] Failed to refresh canvas components', error);
+        }
       }
     }
   }, []);

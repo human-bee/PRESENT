@@ -202,6 +202,7 @@ export function RetroTimerEnhanced({
   state: injectedState,
   updateState,
 }: RetroTimerEnhancedInjectedProps) {
+  const DEBUG = typeof process !== 'undefined' && process.env.NEXT_PUBLIC_TOOL_DISPATCHER_LOGS === 'true';
   const initialTimeInSeconds = useMemo(
     () => Math.max(1, Math.round(initialMinutes * 60 + initialSeconds)),
     [initialMinutes, initialSeconds],
@@ -302,13 +303,13 @@ export function RetroTimerEnhanced({
   const effectiveMessageId = useMemo(() => {
     if (__custom_message_id) {
       if (RETRO_TIMER_DEBUG) {
-        console.debug('[RetroTimerEnhanced] Using provided custom message ID', __custom_message_id);
+        if (DEBUG) console.debug('[RetroTimerEnhanced] Using provided custom message ID', __custom_message_id);
       }
       return __custom_message_id;
     }
     const fallbackId = `timer-${componentId}-${initialMinutes}min`;
     if (RETRO_TIMER_DEBUG) {
-      console.debug('[RetroTimerEnhanced] Using fallback message ID', fallbackId);
+      if (DEBUG) console.debug('[RetroTimerEnhanced] Using fallback message ID', fallbackId);
     }
     return fallbackId;
   }, [__custom_message_id, componentId, initialMinutes]);
@@ -328,7 +329,7 @@ export function RetroTimerEnhanced({
   const handleAIUpdate = useCallback(
     (patch: Record<string, unknown>) => {
       if (RETRO_TIMER_DEBUG) {
-        console.debug('[RetroTimerEnhanced] AI update received', patch);
+        if (DEBUG) console.debug('[RetroTimerEnhanced] AI update received', patch);
       }
 
       const rawMinutes = 'initialMinutes' in patch ? coerceNumber((patch as any).initialMinutes) : null;

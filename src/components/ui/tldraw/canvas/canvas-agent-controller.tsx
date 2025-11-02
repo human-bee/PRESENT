@@ -25,14 +25,16 @@ const isClientAgentEnabled =
     ? true
     : process.env.NEXT_PUBLIC_CANVAS_AGENT_CLIENT_ENABLED !== 'false';
 
+const LOGS_ENABLED =
+  typeof process !== 'undefined' && process.env.NEXT_PUBLIC_TOOL_DISPATCHER_LOGS === 'true';
 const debugLog = (...args: Parameters<typeof console.log>) => {
-  if (isDevEnv) {
+  if (isDevEnv && LOGS_ENABLED) {
     console.log(...args);
   }
 };
 
 const debugWarn = (...args: Parameters<typeof console.warn>) => {
-  if (isDevEnv) {
+  if (isDevEnv && LOGS_ENABLED) {
     console.warn(...args);
   }
 };

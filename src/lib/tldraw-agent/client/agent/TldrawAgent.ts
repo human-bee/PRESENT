@@ -38,15 +38,16 @@ import { buildMessages } from '../../worker/prompt/buildMessages'
 import { $agentsAtom } from './agentsAtom'
 
 const isDevEnv = typeof process !== 'undefined' && process.env.NODE_ENV !== 'production'
+const LOGS_ENABLED = typeof process !== 'undefined' && process.env.NEXT_PUBLIC_TOOL_DISPATCHER_LOGS === 'true'
 
 const debugLog = (...args: Parameters<typeof console.log>) => {
-	if (isDevEnv) {
+	if (isDevEnv && LOGS_ENABLED) {
 		console.log(...args)
 	}
 }
 
 const assignDebugStats = (stats: unknown) => {
-	if (!isDevEnv) return
+	if (!(isDevEnv && LOGS_ENABLED)) return
 	if (typeof window === 'undefined') return
 	try {
 		;(window as any).__canvasAgentStats = stats

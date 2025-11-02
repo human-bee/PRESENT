@@ -10,6 +10,8 @@ try {
 } catch {}
 import { realtime as openaiRealtime } from '@livekit/agents-plugin-openai';
 import { appendTranscriptCache } from '@/lib/agents/shared/supabase-context';
+import { buildVoiceAgentInstructions } from '@/lib/agents/instructions';
+import { queryCapabilities, defaultCapabilities } from '@/lib/agents/capabilities';
 import { deriveComponentIntent } from '@/lib/agents/shared/deterministic-ids';
 import { DebateJudgeManager, isStartDebate } from '@/lib/agents/debate-judge';
 import { jsonObjectSchema, type JsonObject } from '@/lib/utils/json-schema';
@@ -19,21 +21,6 @@ export default defineAgent({
   entry: async (job: JobContext) => {
     await job.connect();
     console.log('[VoiceAgent] Connected to room:', job.room.name);
-
-    const enqueueTask = async (payload: JsonObject) => {
-      const room = job.room.name || 'unknown';
-      const requestId = typeof payload?.requestId === 'string' ? payload.requestId : randomUUID();
-      const resourceKeys = Array.isArray(payload?.resourceKeys) ? payload.resourceKeys : [`room:${room}`];
-      const taskName = typeof payload?.task === 'string' ? payload.task : 'conductor.dispatch';
-      const params = (payload?.params as JsonObject) ?? payload;
-
-      await enqueueQueue.enqueueTask({
-        room,
-        task: taskName,
-        params: { ...params, room },
-        requestId,
-        resourceKeys,
-      });
 
     const coerceBooleanFromEnv = (value?: string | null) => {
       if (!value) return undefined;
@@ -120,7 +107,7 @@ export default defineAgent({
     job.room.on(RoomEvent.ParticipantConnected, (participant) => subscribeToParticipant(participant as any));
     job.room.on(RoomEvent.TrackPublished, (_publication, participant) => subscribeToParticipant(participant as any));
 
-    const instructions = `You are a UI automation agent. You NEVER speak—you only act by calling tools.
+    let instructions = `You are a UI automation agent. You NEVER speak—you only act by calling tools.
 
 CRITICAL RULES:
 1. For canvas work (draw, sticky note, shapes): call dispatch_to_conductor({ task: "canvas.agent_prompt", params: { room: CURRENT_ROOM, message: "<user request>", requestId: "<uuid>", bounds?, selectionIds? } }). Generate a fresh UUID when you create requestId.
@@ -254,7 +241,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
         id: randomUUID(),
         roomId: job.room.name || 'unknown',
         type: 'tool_call' as const,
-        payload: { tool: 'enqueue_task', params: payload, context: { source: 'voice', timestamp: Date.now() } },
+        payload: { tool, params, context: { source: 'voice', timestamp: Date.now() } },
         timestamp: Date.now(),
         source: 'voice' as const,
       };
@@ -909,90 +896,50 @@ Your only output is function calls. Never use plain text unless absolutely neces
           const params = (args?.params as JsonObject) || {};
           const enrichedParams: JsonObject = { ...params };
 
-When you detect an actionable intent (explicit or implicit), immediately enqueue a task for the Conductor and return. Do not wait for the Conductor or stewards to finish.
-
-How to respond:
-1. Capture the user's request or inferred task.
-2. Call enqueue_task({ intent: "short description", transcript: FULL_TEXT, participants: LIST, metadata? })
-3. Always include the exact transcript snippet you used.
-4. Do not set specific tasks; send full transcript so the conductor can infer the right steward or component.
-5. Never create components or call tools directly.
-6. Stay silent otherwise (no natural language responses).
-`;
-
-    const toolContext: llm.ToolContext = {
-      enqueue_task: llm.tool({
-        description: 'Enqueue a task for the Conductor to process asynchronously.',
-        parameters: z.object({
-          intent: z.string().min(1),
-          transcript: z.string().min(1),
-          participants: z.array(z.string()).default([]),
-          metadata: jsonObjectSchema.optional(),
-          requestId: z.string().optional(),
-          resourceKeys: z.array(z.string()).optional(),
-          task: z.string().optional(),
-          params: jsonObjectSchema.optional(),
-        }),
-        execute: async (args) => {
-          const normalized = { ...args } as JsonObject;
-          normalized.task = 'auto';
-          if (normalized.metadata === null || typeof normalized.metadata !== 'object') {
-            delete normalized.metadata;
+          if (!enrichedParams.room && roomName) {
+            enrichedParams.room = roomName;
           }
-          normalized.params = {
-            intent: normalized.intent,
-            transcript: normalized.transcript,
-            participants: normalized.participants,
-            message: normalized.transcript,
-            ...(normalized.metadata ? { metadata: normalized.metadata } : {}),
-          } as JsonObject;
-          await enqueueTask(normalized);
+
+          if (
+            (!enrichedParams.message || typeof enrichedParams.message !== 'string') &&
+            typeof (params as Record<string, unknown>)?.instruction === 'string'
+          ) {
+            enrichedParams.message = String((params as Record<string, unknown>).instruction);
+          }
+
+          if (!enrichedParams.requestId) {
+            enrichedParams.requestId = randomUUID();
+          }
+
+          await sendToolCall('dispatch_to_conductor', {
+            ...args,
+            params: enrichedParams,
+          });
           return { status: 'queued' };
         },
       }),
     };
 
-    const realtimeModel = new openaiRealtime.RealtimeModel({
-      model: 'gpt-realtime',
-      toolChoice: 'required',
-      inputAudioTranscription,
-      turnDetection: turnDetectionOption,
-    });
+    // Build instructions and instantiate Agent + Session for Realtime
+    const systemCapabilities = await queryCapabilities(job.room as any).catch(() => defaultCapabilities);
+    instructions = buildVoiceAgentInstructions(systemCapabilities, systemCapabilities.components || []);
 
     const agent = new voice.Agent({
+      name: 'voice-agent',
       instructions,
       tools: toolContext,
     });
 
     const session = new voice.AgentSession({
-      llm: realtimeModel,
-      turnDetection: 'manual' as any, // Model has server_vad enabled; session uses manual
+      llm: new openaiRealtime.RealtimeModel({}),
     });
 
-    job.room.on(RoomEvent.DataReceived, async (payload, participant, _, topic) => {
-      if (topic !== 'transcription') return;
-      try {
-        const message = JSON.parse(new TextDecoder().decode(payload));
-        const text = typeof message?.text === 'string' ? message.text.trim() : '';
-        const isManual = Boolean(message?.manual);
-        const isReplay = Boolean(message?.replay);
-        const speaker = typeof message?.speaker === 'string' ? message.speaker : participant?.identity;
-        if (!text || isReplay) return;
-        if (!isManual && speaker === 'voice-agent') return;
-        await enqueueTask({
-          intent: `manual_text:${text.slice(0, 64)}`,
-          transcript: text,
-          participants: speaker ? [speaker] : [],
-          metadata: { manual: true },
-        });
-      } catch (error) {
-        console.warn('[VoiceAgent] failed to handle manual transcription', error);
-      }
-    });
-
+    let pendingReply: { userInput?: string } | null = null;
     const generateReplySafely = async (options?: { userInput?: string }) => {
       if (activeResponse) {
-        console.log('[VoiceAgent] Skipping generateReply; active response in progress');
+        // Defer this request until the current response settles
+        pendingReply = options ?? {};
+        console.log('[VoiceAgent] Queueing generateReply; active response in progress');
         return;
       }
       activeResponse = true;
@@ -1000,6 +947,18 @@ How to respond:
         await session.generateReply(options as any);
       } finally {
         activeResponse = false;
+        if (pendingReply) {
+          const next = pendingReply;
+          pendingReply = null;
+          activeResponse = true;
+          try {
+            await session.generateReply(next as any);
+          } catch (err) {
+            console.error('[VoiceAgent] queued generateReply failed', err);
+          } finally {
+            activeResponse = false;
+          }
+        }
       }
     };
 
