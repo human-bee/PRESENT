@@ -104,8 +104,21 @@ export function useLkToken(params: UseLkTokenParams): LivekitTokenApi {
         mergeState,
         getState,
         scheduleAgentJoin,
+        signal: abortController.signal,
       });
     } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        mergeState({
+          connectionState: 'disconnected',
+          participantCount: 0,
+          agentStatus: 'not-requested',
+          agentIdentity: null,
+          errorMessage: null,
+          token: null,
+        });
+        return;
+      }
+
       console.error(`❌ [LiveKitConnector-${roomName}] Connection failed:`, error);
       mergeState({
         connectionState: 'error',
@@ -135,6 +148,10 @@ export function useLkToken(params: UseLkTokenParams): LivekitTokenApi {
     if (!room) {
       return;
     }
+
+    tokenRequestAbortRef.current?.abort();
+    tokenRequestAbortRef.current = null;
+    tokenFetchInProgressRef.current = false;
 
     try {
       await room.disconnect();

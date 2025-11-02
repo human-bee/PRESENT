@@ -9,6 +9,18 @@ import { TOOL_STEWARD_DELAY_MS, TOOL_STEWARD_WINDOW_MS } from '../utils/constant
 import type { ToolEventsApi } from './useToolEvents';
 import { ComponentRegistry } from '@/lib/component-registry';
 
+type ToolMetricEntry = {
+  callId: string;
+  tool: string;
+  messageIds: Set<string>;
+  metaByMessage: Map<string, { componentType?: string }>;
+  sendContextTs?: number;
+  sendGeneratedAt?: number;
+  arriveAt?: number;
+  arrivePerf?: number;
+  loggedMessages: Set<string>;
+};
+
 interface UseToolRunnerOptions {
   contextKey?: string;
   events: ToolEventsApi;
@@ -24,7 +36,111 @@ export interface ToolRunnerApi {
 export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
   const { contextKey, events, room, stewardEnabled } = options;
   const queue = useToolQueue();
-  const registry = useToolRegistry({ contextKey });
+  const runtimeMetricsFlag =
+    typeof window !== 'undefined' && (window as any).__presentDispatcherMetrics === true;
+  const metricsEnabled =
+    process.env.NEXT_PUBLIC_TOOL_DISPATCHER_METRICS === 'true' || runtimeMetricsFlag;
+  const metricsByCallRef = useRef<Map<string, ToolMetricEntry>>(new Map());
+  const messageToCallsRef = useRef<Map<string, Set<string>>>(new Map());
+  const metricsAdapter = useMemo(() => {
+    if (!metricsEnabled) return undefined;
+    return {
+      associateCallWithMessage: (
+        callId: string,
+        messageId: string,
+        meta?: { tool: string; componentType?: string },
+      ) => {
+        const trimmedId = (messageId || '').trim();
+        if (!trimmedId) return;
+        let entry = metricsByCallRef.current.get(callId);
+        if (!entry) {
+          entry = {
+            callId,
+            tool: meta?.tool || 'unknown',
+            messageIds: new Set(),
+            metaByMessage: new Map(),
+            loggedMessages: new Set(),
+          };
+          metricsByCallRef.current.set(callId, entry);
+        } else if (meta?.tool) {
+          entry.tool = meta.tool;
+        }
+        entry.messageIds.add(trimmedId);
+        entry.metaByMessage.set(trimmedId, { componentType: meta?.componentType });
+        if (entry.sendContextTs === undefined) {
+          entry.sendContextTs = Date.now();
+        }
+        if (entry.arriveAt === undefined) {
+          entry.arriveAt = Date.now();
+        }
+        const existingSet = messageToCallsRef.current.get(trimmedId);
+        if (existingSet) {
+          existingSet.add(callId);
+        } else {
+          messageToCallsRef.current.set(trimmedId, new Set([callId]));
+        }
+      },
+      markPaintForMessage: (
+        messageId: string,
+        meta?: { tool: string; componentType?: string },
+      ) => {
+        const trimmedId = (messageId || '').trim();
+        if (!trimmedId) return;
+        const callSet = messageToCallsRef.current.get(trimmedId);
+        if (!callSet || callSet.size === 0) return;
+        callSet.forEach((callId) => {
+          const entry = metricsByCallRef.current.get(callId);
+          if (!entry) return;
+          if (!entry.messageIds.has(trimmedId)) {
+            entry.messageIds.add(trimmedId);
+          }
+          if (meta?.componentType && !entry.metaByMessage.has(trimmedId)) {
+            entry.metaByMessage.set(trimmedId, { componentType: meta.componentType });
+          }
+          if (!entry.loggedMessages.has(trimmedId)) {
+            const paintAt = Date.now();
+            const nowPerf = typeof performance !== 'undefined' ? performance.now() : undefined;
+            const paintMs =
+              nowPerf !== undefined && entry.arrivePerf !== undefined
+                ? Math.max(0, Math.round(nowPerf - entry.arrivePerf))
+                : entry.arriveAt !== undefined
+                  ? Math.max(0, paintAt - entry.arriveAt)
+                  : undefined;
+            const sendTs = entry.sendContextTs ?? entry.sendGeneratedAt;
+            const networkMs =
+              sendTs !== undefined && entry.arriveAt !== undefined
+                ? Math.max(0, entry.arriveAt - sendTs)
+                : undefined;
+            const details = {
+              callId,
+              tool: entry.tool,
+              messageId: trimmedId,
+              componentType: entry.metaByMessage.get(trimmedId)?.componentType,
+              tSend: sendTs ?? null,
+              tArrive: entry.arriveAt ?? null,
+              tPaint: paintAt,
+              dtNetworkMs: networkMs,
+              dtPaintMs: paintMs,
+            };
+            try {
+              console.log('[ToolDispatcher][metrics]', details);
+            } catch {}
+            if (typeof window !== 'undefined') {
+              try {
+                window.dispatchEvent(new CustomEvent('present:tool_metrics', { detail: details }));
+              } catch {}
+            }
+            entry.loggedMessages.add(trimmedId);
+            if (entry.messageIds.size === entry.loggedMessages.size) {
+              metricsByCallRef.current.delete(callId);
+            }
+          }
+        });
+        messageToCallsRef.current.delete(trimmedId);
+      },
+    };
+  }, [metricsEnabled]);
+  const registry = useToolRegistry({ contextKey, metrics: metricsAdapter });
   const {
     emitRequest,
     emitDone,
@@ -295,15 +411,7 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
       const handler = registry.getHandler(tool);
 
       try {
-        if (stewardEnabled) {
-          const allowedTools = new Set(['canvas_create_mermaid_stream', 'canvas_focus', 'canvas_zoom_all']);
-          if (!allowedTools.has(tool)) {
-            const message = `Unsupported tool in steward mode: ${tool}`;
-            emitError(call, message);
-            queue.markError(call.id, message);
-            return { status: 'ERROR', message };
-          }
-        }
+        // Unified Canvas Agent: remove canvas_* gating; only non-canvas tools stay available here
 
         if (handler) {
           const result =
@@ -319,6 +427,65 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
           queue.markComplete(call.id, result.message);
           emitDone(call, result);
           return result;
+        }
+
+        if (tool === 'dispatch_to_conductor') {
+          const task = typeof params?.task === 'string' ? params.task.trim() : '';
+          const dispatchParams = (params?.params as Record<string, unknown>) || {};
+
+          if (!task) {
+            const message = 'dispatch_to_conductor requires a task value';
+            queue.markError(call.id, message);
+            emitError(call, message);
+            return { status: 'ERROR', message };
+          }
+
+          if (stewardEnabled && task.startsWith('canvas.')) {
+            if (task === 'canvas.agent_prompt') {
+              if (!dispatchParams.message && typeof params?.message === 'string') {
+                dispatchParams.message = params.message;
+              }
+              if (!dispatchParams.message && typeof params?.instruction === 'string') {
+                dispatchParams.message = params.instruction;
+              }
+              if (!dispatchParams.requestId && typeof params?.requestId === 'string') {
+                dispatchParams.requestId = params.requestId;
+              }
+            }
+            log('dispatch_to_conductor forwarding canvas task', { task, params: dispatchParams, room: call.roomId || room?.name });
+            try {
+              const res = await fetch('/api/steward/runCanvas', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  room: call.roomId || room?.name,
+                  task,
+                  params: dispatchParams,
+                  summary: typeof params?.summary === 'string' ? params.summary : undefined,
+                }),
+              });
+              if (!res.ok) {
+                const message = `Canvas steward dispatch failed: HTTP ${res.status}`;
+                queue.markError(call.id, message);
+                emitError(call, message);
+                return { status: 'ERROR', message };
+              }
+              const result = { status: 'SUCCESS', message: 'Dispatched canvas steward' } as ToolRunResult;
+              queue.markComplete(call.id, result.message);
+              emitDone(call, result);
+              return result;
+            } catch (error) {
+              const message = `Canvas steward dispatch error: ${error instanceof Error ? error.message : String(error)}`;
+              queue.markError(call.id, message);
+              emitError(call, message);
+              return { status: 'ERROR', message };
+            }
+          }
+
+          const message = `Unsupported dispatch task in this mode: ${task}`;
+          queue.markError(call.id, message);
+          emitError(call, message);
+          return { status: 'ERROR', message };
         }
 
         if (tool.startsWith('mcp_')) {
@@ -382,14 +549,51 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
   );
 
   useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const globalAny = window as any;
+    globalAny.__presentToolDispatcherExecute = executeToolCall;
+    return () => {
+      if (globalAny.__presentToolDispatcherExecute === executeToolCall) {
+        delete globalAny.__presentToolDispatcherExecute;
+      }
+    };
+  }, [executeToolCall]);
+
+  useEffect(() => {
     const offTool = bus.on('tool_call', (message: any) => {
       try {
         if (!message || message.type !== 'tool_call') return;
         const tool = message.payload?.tool;
         const params = message.payload?.params || {};
+        const callId = message.id || `${Date.now()}`;
+        if (metricsEnabled) {
+          const existing = metricsByCallRef.current.get(callId);
+          const next: ToolMetricEntry = existing ?? {
+            callId,
+            tool: tool || existing?.tool || 'unknown',
+            messageIds: existing?.messageIds ?? new Set(),
+            metaByMessage: existing?.metaByMessage ?? new Map(),
+            loggedMessages: existing?.loggedMessages ?? new Set(),
+          };
+          next.tool = tool || next.tool;
+          const contextTs =
+            typeof message.payload?.context?.timestamp === 'number'
+              ? message.payload.context.timestamp
+              : undefined;
+          if (contextTs !== undefined) {
+            next.sendContextTs = contextTs;
+          }
+          const generatedTs = typeof message.timestamp === 'number' ? message.timestamp : undefined;
+          if (generatedTs !== undefined) {
+            next.sendGeneratedAt = generatedTs;
+          }
+          next.arriveAt = Date.now();
+          next.arrivePerf = typeof performance !== 'undefined' ? performance.now() : next.arrivePerf;
+          metricsByCallRef.current.set(callId, next);
+        }
         log('received tool_call from data channel:', tool, params);
         void executeToolCall({
-          id: message.id || `${Date.now()}`,
+          id: callId,
           type: 'tool_call',
           payload: { tool, params },
           timestamp: message.timestamp || Date.now(),
@@ -414,6 +618,7 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
 
         if (stewardEnabled) {
           const stewardSummary = rawSummary.trim();
+          // TODO: voice agent should emit explicit decision summaries for each steward instead of legacy fallback values.
           if (decision.should_send && stewardSummary === 'steward_trigger') {
             try {
               globalAny.__present_steward_active = true;
@@ -451,7 +656,7 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
               await executeToolCall({
                 id: message.id || `${Date.now()}`,
                 type: 'tool_call',
-                payload: { tool: 'canvas_create_mermaid_stream', params: { text: 'graph TD;\nA-->B;' } },
+                payload: { tool: 'mermaid_create_stream', params: { text: 'graph TD;\nA-->B;' } },
                 timestamp: Date.now(),
                 source: 'dispatcher',
                 roomId: message.roomId,
@@ -474,6 +679,39 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
                   } catch {}
                 }, 150);
               }
+            }
+            return;
+          }
+          if (decision.should_send && stewardSummary === 'steward_trigger_canvas') {
+            // TODO: Replace this heuristic-based steward trigger with an LLM-driven routing signal.
+            const roomName = (typeof message.roomId === 'string' && message.roomId) || room?.name || '';
+            if (!roomName) {
+              log('canvas steward trigger ignored: missing room');
+              return;
+            }
+            const intentSummary = typeof originalText === 'string' && originalText.trim() ? originalText.trim() : summary;
+            log('canvas steward trigger received', { room: roomName, summary: intentSummary });
+            const body = {
+              room: roomName,
+              task: 'canvas.draw',
+              params: {
+                room: roomName,
+                summary: intentSummary,
+              },
+              summary: intentSummary,
+            };
+            try {
+              // TODO: move steward dispatch to a typed conductor task instead of direct fetch.
+              const res = await fetch('/api/steward/runCanvas', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
+              });
+              if (!res.ok) {
+                log('canvas steward request failed', { status: res.status });
+              }
+            } catch (error) {
+              log('canvas steward request error', error);
             }
             return;
           }
@@ -524,7 +762,7 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
           await executeToolCall({
             id: message.id || `${Date.now()}`,
             type: 'tool_call',
-            payload: { tool: 'canvas_update_mermaid_stream', params: { shapeId: lastShapeId, text: merged } },
+            payload: { tool: 'mermaid_update_stream', params: { shapeId: lastShapeId, text: merged } },
             timestamp: Date.now(),
             source: 'dispatcher',
             roomId: message.roomId,
@@ -536,7 +774,7 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
           await executeToolCall({
             id: message.id || `${Date.now()}`,
             type: 'tool_call',
-            payload: { tool: 'canvas_create_mermaid_stream', params: { text: 'graph TD; A-->B' } },
+            payload: { tool: 'mermaid_create_stream', params: { text: 'graph TD; A-->B' } },
             timestamp: Date.now(),
             source: 'dispatcher',
             roomId: message.roomId,

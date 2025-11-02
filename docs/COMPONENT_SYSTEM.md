@@ -15,6 +15,7 @@ This document is the single source of truth for how UI components are rendered, 
 | **list_components** tool | `src/lib/custom.ts` | Enumerate current IDs/types so AI can target updates |
 | **useComponentRegistration** | `src/lib/component-registry.ts` | Hook run by each component to self-register |
 | **PropertyDiffViewer** | `src/components/ui/property-diff-viewer.tsx` | Generic UI for showing prop changes |
+| **Integration Guide** | `docs/component-steward-guide.md` | Checklist for steward + widget contracts, perf, and testing |
 
 ---
 

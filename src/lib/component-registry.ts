@@ -7,6 +7,13 @@
 
 import React from 'react';
 
+const isDevEnvironment =
+  !(
+    typeof process !== 'undefined' &&
+    process.env &&
+    process.env.NODE_ENV === 'production'
+  );
+
 export interface ComponentInfo {
   messageId: string;
   componentType: string;
@@ -49,15 +56,42 @@ function diffProps(
 class ComponentStore {
   private components = new Map<string, ComponentInfo>();
   private listeners: Set<() => void> = new Set();
+  private warnedTypeMessages = new Set<string>();
+  private warnedCallbackMessages = new Set<string>();
 
   register(info: ComponentInfo) {
+    const existing = this.components.get(info.messageId);
+    if (
+      existing &&
+      isDevEnvironment &&
+      typeof console !== 'undefined' &&
+      existing.componentType !== info.componentType &&
+      !this.warnedTypeMessages.has(info.messageId)
+    ) {
+      const warning = {
+        messageId: info.messageId,
+        previousType: existing.componentType,
+        nextType: info.componentType,
+      };
+      try {
+        console.warn('⚠️ [ComponentRegistry] Duplicate registration detected', warning);
+      } catch {}
+      this.warnedTypeMessages.add(info.messageId);
+    }
     this.components.set(info.messageId, {
       ...info,
+      props: { ...(existing?.props ?? {}), ...(info.props ?? {}) },
+      originalProps,
+      diffHistory: mergedDiffHistory,
+      updateCallback: aggregatedCallback,
       timestamp: Date.now(),
-    });
+    };
+
+    this.components.set(info.messageId, nextComponent);
     console.log(`🧩 [ComponentRegistry] Registered ${info.componentType} at ${info.messageId}`);
     console.log(`🧩 [ComponentRegistry] Total components: ${this.components.size}`);
     this.notifyListeners();
+    return token;
   }
 
   // Silent update that doesn't log registration message (for props updates)
@@ -65,13 +99,31 @@ class ComponentStore {
     messageId: string,
     props: Record<string, unknown>,
     updateCallback?: (patch: Record<string, unknown>) => void,
+    registrationToken?: symbol,
   ) {
     const component = this.components.get(messageId);
     if (component) {
+      if (
+        updateCallback &&
+        component.updateCallback &&
+        component.updateCallback !== updateCallback &&
+        isDevEnvironment &&
+        typeof console !== 'undefined' &&
+        !this.warnedCallbackMessages.has(messageId)
+      ) {
+        try {
+          console.warn('⚠️ [ComponentRegistry] Update callback replaced via updatePropsOnly', {
+            messageId,
+            previousCallback: component.updateCallback.name || 'anonymous',
+            nextCallback: updateCallback.name || 'anonymous',
+          });
+        } catch {}
+        this.warnedCallbackMessages.add(messageId);
+      }
       const updatedComponent = {
         ...component,
         props,
-        updateCallback: updateCallback || component.updateCallback,
+        updateCallback: updateCallback || aggregatedCallback,
         timestamp: Date.now(),
       };
       this.components.set(messageId, updatedComponent);
@@ -101,28 +153,15 @@ class ComponentStore {
       originalProps: component.originalProps || component.props,
       diffHistory: [...(component.diffHistory || []), ...propDiffs],
     } as ComponentInfo;
+    updatedComponent.updateCallback = this.getAggregatedCallback(messageId);
     this.components.set(messageId, updatedComponent);
 
-    // Call the component's update callback if available
-    if (component.updateCallback) {
-      try {
-        component.updateCallback(patch);
-        try {
-          // eslint-disable-next-line no-console
-          console.log(`[ComponentRegistry] Updated ${messageId} with`, patch);
-        } catch {}
-        this.notifyListeners();
-        return { success: true };
-      } catch (error) {
-        console.error(`[ComponentRegistry] Update callback failed for ${messageId}:`, error);
-        return {
-          success: false,
-          error: `Update callback failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
-        };
-      }
+    const callbackResult = this.runCallbacks(messageId, patch);
+    if (!callbackResult.success) {
+      return callbackResult;
     }
 
-    console.log(`[ComponentRegistry] Updated ${messageId} props (no callback)`);
+    console.log(`[ComponentRegistry] Updated ${messageId} props${callbackResult.invoked ? '' : ' (no callback)'}`);
     this.notifyListeners();
     return { success: true };
   }
@@ -135,18 +174,58 @@ class ComponentStore {
 
   remove(messageId: string) {
     this.components.delete(messageId);
+    this.warnedTypeMessages.delete(messageId);
+    this.warnedCallbackMessages.delete(messageId);
     console.log(`[ComponentRegistry] Removed ${messageId}`);
     this.notifyListeners();
+  }
+
+  release(messageId: string, token: symbol) {
+    const callbacks = this.callbackMap.get(messageId);
+    if (callbacks) {
+      callbacks.delete(token);
+      if (callbacks.size === 0) {
+        this.callbackMap.delete(messageId);
+      }
+    }
+
+    if (this.registrationCounts.has(messageId)) {
+      const nextCount = (this.registrationCounts.get(messageId) ?? 1) - 1;
+      if (nextCount <= 0) {
+        this.registrationCounts.delete(messageId);
+        this.components.delete(messageId);
+        console.log(`[ComponentRegistry] Removed ${messageId}`);
+        this.notifyListeners();
+        return;
+      }
+      this.registrationCounts.set(messageId, nextCount);
+    }
+
+    const component = this.components.get(messageId);
+    if (component) {
+      const aggregatedCallback = this.getAggregatedCallback(messageId);
+      const updatedComponent: ComponentInfo = {
+        ...component,
+        updateCallback: aggregatedCallback,
+        timestamp: Date.now(),
+      };
+      this.components.set(messageId, updatedComponent);
+      this.notifyListeners();
+    }
   }
 
   clear(contextKey?: string) {
     if (!contextKey) {
       this.components.clear();
+      this.callbackMap.clear();
+      this.registrationCounts.clear();
       console.log(`[ComponentRegistry] Cleared all components`);
     } else {
       for (const [id, component] of this.components) {
         if (component.contextKey === contextKey) {
           this.components.delete(id);
+          this.warnedTypeMessages.delete(id);
+          this.warnedCallbackMessages.delete(id);
         }
       }
       console.log(`[ComponentRegistry] Cleared components for context: ${contextKey}`);
@@ -157,6 +236,56 @@ class ComponentStore {
   subscribe(listener: () => void) {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
+  }
+  private addCallback(
+    messageId: string,
+    token: symbol,
+    callback: (patch: Record<string, unknown>) => void,
+  ) {
+    let callbacks = this.callbackMap.get(messageId);
+    if (!callbacks) {
+      callbacks = new Map();
+      this.callbackMap.set(messageId, callbacks);
+    }
+    callbacks.set(token, callback);
+  }
+
+  private getAggregatedCallback(
+    messageId: string,
+  ): ((patch: Record<string, unknown>) => void) | undefined {
+    const callbacks = this.callbackMap.get(messageId);
+    if (!callbacks || callbacks.size === 0) {
+      return undefined;
+    }
+    return (patch: Record<string, unknown>) => {
+      this.runCallbacks(messageId, patch);
+    };
+  }
+
+  private runCallbacks(messageId: string, patch: Record<string, unknown>) {
+    const callbacks = this.callbackMap.get(messageId);
+    if (!callbacks || callbacks.size === 0) {
+      return { success: true, invoked: false as const };
+    }
+    let error: unknown;
+    for (const callback of callbacks.values()) {
+      try {
+        callback(patch);
+      } catch (err) {
+        console.error(`[ComponentRegistry] Update callback failed for ${messageId}:`, err);
+        if (!error) {
+          error = err;
+        }
+      }
+    }
+    if (error) {
+      return {
+        success: false,
+        error:
+          error instanceof Error ? `Update callback failed: ${error.message}` : 'Unknown error',
+      };
+    }
+    return { success: true, invoked: true as const };
   }
 
   private notifyListeners() {
@@ -201,7 +330,7 @@ const updateCircuitBreaker = new UpdateCircuitBreaker();
 // Global registry instance for tools to use
 export class ComponentRegistry {
   static register(info: ComponentInfo) {
-    componentStore.register(info);
+    return componentStore.register(info);
   }
 
   static async update(messageId: string, patch: Record<string, unknown>) {
@@ -230,6 +359,10 @@ export class ComponentRegistry {
     componentStore.remove(messageId);
   }
 
+  static release(messageId: string, token: symbol) {
+    componentStore.release(messageId, token);
+  }
+
   static clear(contextKey?: string) {
     componentStore.clear(contextKey);
   }
@@ -244,13 +377,14 @@ export function useComponentRegistration(
   updateCallback?: (patch: Record<string, unknown>) => void,
 ) {
   const [, forceUpdate] = React.useReducer((x) => x + 1, 0);
+  const registrationTokenRef = React.useRef<symbol | null>(null);
 
   // Stabilize the updateCallback to prevent infinite loops
   const stableUpdateCallback = React.useCallback(updateCallback || (() => { }), [updateCallback]);
 
   React.useEffect(() => {
     // Register the component
-    ComponentRegistry.register({
+    const token = ComponentRegistry.register({
       messageId,
       componentType,
       props,
@@ -258,6 +392,7 @@ export function useComponentRegistration(
       timestamp: Date.now(),
       updateCallback: stableUpdateCallback,
     });
+    registrationTokenRef.current = token ?? null;
 
     // Subscribe to changes, but filter out changes for this component to prevent loops
     const unsubscribe = componentStore.subscribe(() => {
@@ -270,14 +405,24 @@ export function useComponentRegistration(
 
     return () => {
       // Remove component and unsubscribe
-      ComponentRegistry.remove(messageId);
+      if (registrationTokenRef.current) {
+        ComponentRegistry.release(messageId, registrationTokenRef.current);
+        registrationTokenRef.current = null;
+      } else {
+        ComponentRegistry.remove(messageId);
+      }
       unsubscribe();
     };
   }, [messageId, componentType, contextKey]); // Remove updateCallback from deps to prevent loops
 
   // Update props and callback when they change using silent update (no re-registration logs)
   React.useEffect(() => {
-    componentStore.updatePropsOnly(messageId, props, stableUpdateCallback);
+    componentStore.updatePropsOnly(
+      messageId,
+      props,
+      stableUpdateCallback,
+      registrationTokenRef.current ?? undefined,
+    );
   }, [props, stableUpdateCallback, messageId]);
 }
 

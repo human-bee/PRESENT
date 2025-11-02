@@ -107,6 +107,9 @@ const Message = React.memo(
         [role, variant, isLoading, message],
       );
 
+      const domProps = { ...props } as Record<string, unknown>;
+      delete (domProps as any).updateState;
+
       return (
         <MessageContext.Provider value={contextValue}>
           <div
@@ -114,7 +117,7 @@ const Message = React.memo(
             className={cn(messageVariants({ variant }), className)}
             data-message-role={role}
             data-message-id={message?.id ?? 'unknown'}
-            {...props}
+            {...(domProps as React.HTMLAttributes<HTMLDivElement>)}
           >
             {children}
           </div>

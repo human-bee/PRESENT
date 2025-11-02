@@ -6,7 +6,6 @@ import { ScrollableMessageContainer } from '@/components/ui/messaging/scrollable
 import { cn } from '@/lib/utils';
 import { FileText } from 'lucide-react';
 import * as React from 'react';
-import { components as customComponents } from '@/lib/custom';
 import { type VariantProps } from 'class-variance-authority';
 import { useRoomContext } from '@livekit/components-react';
 import { RoomEvent } from 'livekit-client';
@@ -48,6 +47,33 @@ export interface MessageThreadCollapsibleProps extends React.HTMLAttributes<HTML
   onClose?: () => void;
 }
 
+const SUPPORTED_SLASH_COMMANDS = new Set(['canvas']);
+
+type ParsedSlashCommand = {
+  command: string;
+  body: string;
+};
+
+type CanvasComponentEntry = {
+  messageId: string;
+  componentType: string;
+  state: Record<string, unknown>;
+  title: string;
+  updatedAt?: number;
+};
+
+const parseSlashCommand = (input: string): ParsedSlashCommand | null => {
+  if (!input) return null;
+  const trimmed = input.trim();
+  if (!trimmed.startsWith('/')) return null;
+  const remainder = trimmed.slice(1).trim();
+  if (!remainder) return null;
+  const firstSpace = remainder.indexOf(' ');
+  const command = (firstSpace === -1 ? remainder : remainder.slice(0, firstSpace)).toLowerCase();
+  const body = (firstSpace === -1 ? '' : remainder.slice(firstSpace + 1)).trim();
+  return { command, body };
+};
+
 /**
  * A collapsible chat thread component with keyboard shortcuts and thread management
  * @component
@@ -66,9 +92,7 @@ export const MessageThreadCollapsible = React.forwardRef<
   MessageThreadCollapsibleProps
 >(({ className, contextKey, onTranscriptChange, onClose, ...props }, ref) => {
   // Conversations tab removed; Transcript is the only view
-  const [componentStore, setComponentStore] = React.useState(
-    new Map<string, { component: React.ReactNode; contextKey: string }>(),
-  );
+  const [canvasComponents, setCanvasComponents] = React.useState<CanvasComponentEntry[]>([]);
   const [transcriptions, setTranscriptions] = React.useState<
     Array<{
       id: string;
@@ -93,10 +117,92 @@ export const MessageThreadCollapsible = React.forwardRef<
   const { transcript: sessionTranscript } = useRealtimeSessionTranscript(livekitCtx?.roomName);
   const { user } = useAuth();
 
+  const refreshCanvasComponents = React.useCallback(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const globalAny = window as any;
+      const editor =
+        globalAny?.__present?.tldrawEditor ??
+        globalAny?.__present_tldrawEditor ??
+        globalAny?.tldrawEditor ??
+        globalAny?.__PRESENT_TLDRAW_EDITOR ??
+        null;
+      if (!editor || typeof editor.getCurrentPageShapes !== 'function') {
+        return;
+      }
+      const shapes = editor.getCurrentPageShapes?.() ?? [];
+      const nextEntries: CanvasComponentEntry[] = [];
+      for (const shape of shapes as any[]) {
+        if (!shape || shape.type !== 'custom') continue;
+        const messageId =
+          typeof shape?.props?.customComponent === 'string' ? shape.props.customComponent.trim() : '';
+        if (!messageId) continue;
+        const componentType =
+          typeof shape?.props?.name === 'string' && shape.props.name.trim().length > 0
+            ? shape.props.name
+            : 'CustomComponent';
+        const rawState = shape?.props?.state;
+        const state =
+          rawState && typeof rawState === 'object' ? (rawState as Record<string, unknown>) : {};
+        const titleCandidate =
+          typeof state.title === 'string' && state.title.trim().length > 0
+            ? state.title
+            : typeof state.label === 'string' && state.label.trim().length > 0
+              ? state.label
+              : componentType;
+        const updatedAt =
+          typeof state.updatedAt === 'number' && Number.isFinite(state.updatedAt)
+            ? state.updatedAt
+            : undefined;
+        nextEntries.push({
+          messageId,
+          componentType,
+          state,
+          title: titleCandidate,
+          updatedAt,
+        });
+      }
+      setCanvasComponents(nextEntries);
+    } catch (error) {
+      if (process.env.NODE_ENV !== 'production') {
+        console.warn('[Transcript] Failed to refresh canvas components', error);
+      }
+    }
+  }, []);
+
   // Local text input state for sending manual messages to the agent from Transcript tab
   const [typedMessage, setTypedMessage] = React.useState<string>('');
   const [isSending, setIsSending] = React.useState<boolean>(false);
   const [connBusy, setConnBusy] = React.useState<boolean>(false);
+  const slashCommand = React.useMemo(() => parseSlashCommand(typedMessage), [typedMessage]);
+  const isRecognizedSlashCommand = Boolean(
+    slashCommand && SUPPORTED_SLASH_COMMANDS.has(slashCommand.command),
+  );
+  const slashCommandBodyMissing = Boolean(isRecognizedSlashCommand && !slashCommand?.body);
+
+  React.useEffect(() => {
+    refreshCanvasComponents();
+  }, [refreshCanvasComponents]);
+
+  React.useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const handleImmediate: EventListener = () => {
+      refreshCanvasComponents();
+    };
+    const handleRaf: EventListener = () => {
+      window.requestAnimationFrame(() => refreshCanvasComponents());
+    };
+    window.addEventListener('present:component-registered', handleImmediate);
+    window.addEventListener('present:component-store-updated', handleImmediate);
+    window.addEventListener('present:canvas-id-changed', handleImmediate);
+    window.addEventListener('tldraw:merge_component_state', handleRaf);
+    return () => {
+      window.removeEventListener('present:component-registered', handleImmediate);
+      window.removeEventListener('present:component-store-updated', handleImmediate);
+      window.removeEventListener('present:canvas-id-changed', handleImmediate);
+      window.removeEventListener('tldraw:merge_component_state', handleRaf);
+    };
+  }, [refreshCanvasComponents]);
 
   // Helper: detect if an agent participant is present in the room
   const isAgentPresent = React.useCallback(() => {
@@ -206,6 +312,65 @@ export const MessageThreadCollapsible = React.forwardRef<
     if (!room) return;
     try { await room.disconnect(); } catch {}
   }, [room]);
+
+  const sendCanvasAgentPrompt = React.useCallback(
+    async (message: string) => {
+      const roomName = livekitCtx?.roomName || room?.name || '';
+      if (!roomName) {
+        throw new Error('Cannot dispatch to canvas steward without a LiveKit room name');
+      }
+      const requestId =
+        typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+          ? crypto.randomUUID()
+          : Math.random().toString(36).slice(2);
+      try {
+        console.debug('[Transcript] Canvas steward prompt', {
+          room: roomName,
+          requestId,
+        });
+        if (typeof window !== 'undefined') {
+          const globalWindow = window as unknown as Record<string, unknown>;
+          globalWindow.__lastCanvasAgentPrompt = {
+            room: roomName,
+            requestId,
+            message,
+            timestamp: Date.now(),
+          };
+        }
+      } catch {}
+      const res = await fetch('/api/steward/runCanvas', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          room: roomName,
+          task: 'canvas.agent_prompt',
+          params: {
+            room: roomName,
+            message,
+            requestId,
+          },
+        }),
+      });
+      if (!res.ok) {
+        const detail = await res.text();
+        throw new Error(`Canvas steward prompt failed (${res.status}): ${detail}`);
+      }
+    },
+    [livekitCtx?.roomName, room],
+  );
+
+  const runSlashCommand = React.useCallback(
+    async (command: string, body: string) => {
+      switch (command) {
+        case 'canvas':
+          await sendCanvasAgentPrompt(body);
+          return;
+        default:
+          throw new Error(`Unsupported slash command: /${command}`);
+      }
+    },
+    [sendCanvasAgentPrompt],
+  );
 
   const ingestTranscription = React.useCallback(
     (transcriptionData: {
@@ -332,88 +497,10 @@ export const MessageThreadCollapsible = React.forwardRef<
   // Listen for custom component creation - register with new system
   const handlecustomComponent = React.useCallback(
     (event: CustomEvent) => {
-      const { messageId, component } = event.detail as {
-        messageId: string;
-        component: unknown;
+      const detail = event.detail as {
+        messageId?: string;
       };
-
-      // Normalize component: ensure it's a valid React element if possible
-      let normalized: React.ReactNode = component as React.ReactNode;
-      if (!React.isValidElement(normalized)) {
-        const maybe = component as {
-          type?: string;
-          props?: Record<string, unknown>;
-        };
-        if (maybe && typeof maybe === 'object' && typeof maybe.type === 'string') {
-          const compDef = customComponents.find((c) => c.name === maybe.type);
-          if (compDef) {
-            try {
-              normalized = React.createElement(compDef.component as any, {
-                __custom_message_id: messageId,
-                ...(maybe.props || {}),
-              });
-            } catch {
-              // keep fallback
-            }
-          }
-        }
-      }
-
-      // If still not a valid element, use a safe fallback instead of crashing
-      if (!React.isValidElement(normalized)) {
-        normalized = (
-          <div className="p-3 text-xs bg-red-50 border border-red-200 text-red-700 rounded">
-            Unsupported component payload. Please check registry and event format.
-          </div>
-        );
-      }
-
-      // Store the component for this thread/context (for transcript display)
-      setComponentStore((prev) => {
-        const updated = new Map(prev);
-        updated.set(messageId, {
-          component: normalized,
-          contextKey: effectiveContextKey || 'default',
-        });
-        return updated;
-      });
-
-      // ✅ ComponentRegistry integration re-enabled with enhanced stability
-      // Register with the new ComponentRegistry system
-      if (normalized && React.isValidElement(normalized)) {
-        const componentType =
-          typeof component.type === 'function'
-            ? (component.type as { displayName?: string; name?: string }).displayName ||
-            (component.type as { displayName?: string; name?: string }).name ||
-            'UnknownComponent'
-            : 'UnknownComponent';
-
-        // Import ComponentRegistry dynamically to avoid circular imports
-        import('@/lib/component-registry')
-          .then(({ ComponentRegistry }) => {
-            try {
-              ComponentRegistry.register({
-                messageId,
-                componentType,
-                props: ((normalized as any)?.props || {}) as Record<string, unknown>,
-                contextKey: effectiveContextKey || 'default',
-                timestamp: Date.now(),
-                updateCallback: (patch) => {
-                  console.log(`✅ [MessageThread] Component ${messageId} received update:`, patch);
-                  // The component should handle its own updates via the registry wrapper
-                },
-              });
-              console.log(`✅ [MessageThread] Successfully registered component: ${messageId}`);
-            } catch (error) {
-              console.warn(`⚠️ [MessageThread] Failed to register component ${messageId}:`, error);
-            }
-          })
-          .catch((error) => {
-            console.warn(`⚠️ [MessageThread] Failed to import ComponentRegistry:`, error);
-          });
-      }
-
-      // Also add system call to transcript
+      const messageId = typeof detail?.messageId === 'string' ? detail.messageId : 'unknown-component';
       const systemCall = {
         id: `system-${Date.now()}-${Math.random()}`,
         speaker: 'voice-agent',
@@ -425,8 +512,9 @@ export const MessageThreadCollapsible = React.forwardRef<
       };
 
       setTranscriptions((prev) => [...prev, systemCall]);
+      window.requestAnimationFrame(() => refreshCanvasComponents());
     },
-    [effectiveContextKey],
+    [refreshCanvasComponents],
   );
 
   React.useEffect(() => {
@@ -517,6 +605,67 @@ export const MessageThreadCollapsible = React.forwardRef<
     });
   };
 
+  const formatDurationLabel = React.useCallback((seconds: number) => {
+    if (!Number.isFinite(seconds)) return 'n/a';
+    const clamped = Math.max(0, Math.round(seconds));
+    const minutes = Math.floor(clamped / 60);
+    const secs = clamped % 60;
+    if (minutes && secs) return `${minutes}m ${secs}s`;
+    if (minutes) return `${minutes}m`;
+    return `${secs}s`;
+  }, []);
+
+  const renderComponentPreview = React.useCallback(
+    (entry: CanvasComponentEntry) => {
+      const state = entry.state || {};
+      const coerceNumber = (value: unknown): number | undefined =>
+        typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+      const configuredDuration =
+        coerceNumber((state as any).configuredDuration) ??
+        coerceNumber((state as any).durationSeconds) ??
+        (() => {
+          const minutes = coerceNumber((state as any).initialMinutes) ?? 5;
+          const seconds = coerceNumber((state as any).initialSeconds) ?? 0;
+          return Math.max(1, Math.round(minutes * 60 + seconds));
+        })();
+      const timeLeft =
+        coerceNumber((state as any).timeLeft) ??
+        coerceNumber((state as any).remainingSeconds) ??
+        configuredDuration;
+      const clamped = Math.max(0, Math.round(timeLeft));
+      const minutes = Math.floor(clamped / 60);
+      const secs = clamped % 60;
+      const formattedTime = `${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+      const statusLabel =
+        (state as any).isRunning === true
+          ? 'Running'
+          : (state as any).isFinished === true
+            ? 'Finished'
+            : 'Paused';
+
+      switch (entry.componentType) {
+        case 'RetroTimerEnhanced': {
+          return (
+            <div className="p-3 space-y-2">
+              <div className="text-sm font-semibold">{entry.title}</div>
+              <div className="text-3xl font-mono tracking-tight">{formattedTime}</div>
+              <div className="text-xs text-muted-foreground">
+                {statusLabel} · Configured {formatDurationLabel(configuredDuration)}
+              </div>
+            </div>
+          );
+        }
+        default:
+          return (
+            <pre className="p-3 text-[11px] leading-snug whitespace-pre-wrap break-words bg-muted/40 rounded">
+              {JSON.stringify(state, null, 2)}
+            </pre>
+          );
+      }
+    },
+    [formatDurationLabel],
+  );
+
   React.useEffect(() => {
     if (onTranscriptChange && transcriptions.length > 0) {
       onTranscriptChange(transcriptions);
@@ -556,43 +705,39 @@ export const MessageThreadCollapsible = React.forwardRef<
             {/* Transcript Content */}
             <ScrollableMessageContainer className="flex-1 p-4" ref={transcriptContainerRef}>
               <div className="space-y-2">
-                {/* Filter components for current context */}
                 {(() => {
-                  const contextComponents = Array.from(componentStore.entries()).filter(
-                    ([, data]) => data.contextKey === effectiveContextKey,
-                  );
-
-                  return contextComponents.length === 0 && transcriptions.length === 0 ? (
-                    <div className="text-center text-muted-foreground py-8">
-                      <FileText className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                      <p>No activity yet</p>
-                      <p className="text-sm mt-1">
-                        Voice conversations and components will appear here
-                      </p>
-                    </div>
-                  ) : (
+                  const noActivity = canvasComponents.length === 0 && transcriptions.length === 0;
+                  if (noActivity) {
+                    return (
+                      <div className="text-center text-muted-foreground py-8">
+                        <FileText className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                        <p>No activity yet</p>
+                        <p className="text-sm mt-1">
+                          Voice conversations and components will appear here
+                        </p>
+                      </div>
+                    );
+                  }
+                  return (
                     <>
-                      {/* Show generated components first */}
-                      {contextComponents.map(([messageId, data]) => (
+                      {canvasComponents.map((entry) => (
                         <div
-                          key={messageId}
+                          key={entry.messageId}
                           className="mb-4 p-3 rounded-lg border bg-purple-50 dark:bg-purple-900/20 border-purple-200 dark:border-purple-800"
                         >
                           <div className="text-xs text-purple-600 dark:text-purple-400 mb-2">
-                            Component: {messageId}
+                            Component: {entry.messageId} · {entry.componentType}
                           </div>
-                          <div className="bg-white dark:bg-gray-800 rounded border">
-                            {React.isValidElement(data.component) ? (
-                              data.component
-                            ) : (
-                              <div className="p-3 text-xs text-red-700 bg-red-50 border border-red-200 rounded">
-                                Invalid component payload
+                          <div className="bg-white dark:bg-gray-800 rounded border overflow-hidden">
+                            {renderComponentPreview(entry)}
+                            {typeof entry.updatedAt === 'number' && Number.isFinite(entry.updatedAt) && (
+                              <div className="px-3 pb-3 text-[10px] text-muted-foreground">
+                                Updated {formatTime(entry.updatedAt)}
                               </div>
                             )}
                           </div>
                         </div>
                       ))}
-                      {/* Then show transcriptions */}
                       {transcriptions.map((transcription) => (
                         <div
                           key={transcription.id}
@@ -627,39 +772,71 @@ export const MessageThreadCollapsible = React.forwardRef<
 
             {/* Manual text input for sending messages to the LiveKit agent */}
             <div className="p-4 border-t border-gray-200">
+              {(() => {
+                const isRoomConnected = room?.state === 'connected';
+                const trimmedMessage = typedMessage.trim();
+                const inputDisabled = isSending || (!isRecognizedSlashCommand && !isRoomConnected);
+                const sendDisabled =
+                  isSending ||
+                  !trimmedMessage ||
+                  (!isRecognizedSlashCommand && !isRoomConnected) ||
+                  (isRecognizedSlashCommand && slashCommandBodyMissing);
+                return (
               <form
-                onSubmit={async (e) => {
-                  e.preventDefault();
-                  const message = typedMessage.trim();
-                  if (!message) return;
-                  setIsSending(true);
-                  try {
-                    // Broadcast the text as a live transcription so the UI stays consistent
-                    const speaker = room?.localParticipant?.identity || 'Canvas-User';
-                    const payload = {
-                      type: 'live_transcription',
-                      text: message,
-                      speaker,
-                      timestamp: Date.now(),
-                      is_final: true,
-                      manual: true,
-                    } as const;
+                data-debug-source="messaging-message-form"
+                onSubmit={async (event) => {
+                  event.preventDefault();
+                  const trimmed = typedMessage.trim();
+                  if (!trimmed || isSending) return;
+                  const parsedCommand = parseSlashCommand(trimmed);
+                  const slashActive = Boolean(
+                    parsedCommand && SUPPORTED_SLASH_COMMANDS.has(parsedCommand.command),
+                  );
+                  if (slashActive && !parsedCommand?.body) {
                     try {
-                      // Only send when connected; skip otherwise (no buffering server-side)
+                      console.warn('[Transcript] Slash command requires a message body', parsedCommand);
+                    } catch {}
+                    return;
+                  }
+                  setIsSending(true);
+
+                  const speaker =
+                    room?.localParticipant?.identity ||
+                    user?.user_metadata?.full_name ||
+                    user?.user_metadata?.name ||
+                    user?.email ||
+                    'Canvas-User';
+
+                  const textForDispatch = slashActive && parsedCommand ? parsedCommand.body : trimmed;
+
+                  const payload = {
+                    type: 'live_transcription',
+                    text: textForDispatch,
+                    speaker,
+                    timestamp: Date.now(),
+                    is_final: true,
+                    manual: true,
+                  } as const;
+
+                  let completed = false;
+
+                  try {
+                    if (slashActive && parsedCommand) {
+                      await runSlashCommand(parsedCommand.command, parsedCommand.body);
+                    } else {
                       if (room?.state === 'connected') {
                         bus.send('transcription', payload);
                       } else {
                         console.warn('[Transcript] Room not connected; skipping send');
                       }
-                    } catch {}
+                    }
 
-                    // Also mirror to canvas live captions immediately for the local user
                     try {
                       window.dispatchEvent(
                         new CustomEvent('livekit:transcription-replay', {
                           detail: {
                             speaker,
-                            text: message,
+                            text: textForDispatch,
                             timestamp: Date.now(),
                           },
                         }),
@@ -674,15 +851,19 @@ export const MessageThreadCollapsible = React.forwardRef<
                       );
                     } catch {}
 
-                    setTypedMessage('');
-                    // Scroll to bottom after send
-                    setTimeout(() => {
-                      if (transcriptContainerRef.current) {
-                        transcriptContainerRef.current.scrollTop =
-                          transcriptContainerRef.current.scrollHeight;
-                      }
-                    }, 10);
+                    completed = true;
+                  } catch (error) {
+                    console.error('[Transcript] Failed to send agent prompt', error);
                   } finally {
+                    if (completed) {
+                      setTypedMessage('');
+                      setTimeout(() => {
+                        if (transcriptContainerRef.current) {
+                          transcriptContainerRef.current.scrollTop =
+                            transcriptContainerRef.current.scrollHeight;
+                        }
+                      }, 10);
+                    }
                     setIsSending(false);
                   }
                 }}
@@ -692,14 +873,20 @@ export const MessageThreadCollapsible = React.forwardRef<
                   type="text"
                   value={typedMessage}
                   onChange={(e) => setTypedMessage(e.target.value)}
-                  placeholder={room?.state === 'connected' ? 'Type a message for the agent…' : 'Connecting to LiveKit…'}
+                  placeholder={
+                    isRecognizedSlashCommand
+                      ? 'Dispatching directly to the Canvas steward…'
+                      : room?.state === 'connected'
+                        ? 'Type a message for the agent…'
+                        : 'Connecting to LiveKit…'
+                  }
                   className="flex-1 px-3 py-2 rounded border border-gray-300 bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
                   aria-label="Type a message for the agent"
-                  disabled={isSending || room?.state !== 'connected'}
+                  disabled={inputDisabled}
                 />
                 <button
                   type="submit"
-                  disabled={isSending || !typedMessage.trim() || room?.state !== 'connected'}
+                  disabled={sendDisabled}
                   className={cn(
                     'px-3 py-2 rounded bg-primary text-primary-foreground disabled:opacity-50',
                   )}
@@ -707,33 +894,40 @@ export const MessageThreadCollapsible = React.forwardRef<
                   {isSending ? 'Sending…' : 'Send'}
                 </button>
               </form>
-              <div className="text-[11px] text-muted-foreground mt-1 flex items-center gap-2">
-                {agentPresent ? (
-                  <span>Sends as “you” over LiveKit to the voice agent</span>
-                ) : (
-                  <>
-                    <span>Agent not joined</span>
-                    <button
-                      className="underline disabled:opacity-50"
-                      disabled={agentJoining || room?.state !== 'connected'}
-                      onClick={async () => {
-                        if (!livekitCtx?.roomName || room?.state !== 'connected') return;
-                        setAgentJoining(true);
-                        try {
-                          await fetch('/api/agent/dispatch', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ roomName: livekitCtx.roomName }),
-                          });
-                        } finally {
-                          // We'll flip to enabled when presence updates via room events
-                          setTimeout(() => setAgentJoining(false), 1500);
-                        }
-                      }}
-                    >
-                      {agentJoining ? 'Requesting agent…' : 'Request agent'}
-                    </button>
-                  </>
+                );
+              })()}
+              <div className="text-[11px] text-muted-foreground mt-1 flex items-center gap-2 flex-wrap">
+                <span>
+                  {isRecognizedSlashCommand
+                    ? 'Slash command active — prompt dispatches directly to the Canvas steward.'
+                    : agentPresent
+                      ? 'Sends as “you” over LiveKit to the voice agent.'
+                      : 'Agent not joined'}
+                </span>
+                {!agentPresent && !isRecognizedSlashCommand && (
+                  <button
+                    className="underline disabled:opacity-50"
+                    disabled={agentJoining || room?.state !== 'connected'}
+                    onClick={async () => {
+                      if (!livekitCtx?.roomName || room?.state !== 'connected') return;
+                      setAgentJoining(true);
+                      try {
+                        await fetch('/api/agent/dispatch', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ roomName: livekitCtx.roomName }),
+                        });
+                      } finally {
+                        // We'll flip to enabled when presence updates via room events
+                        setTimeout(() => setAgentJoining(false), 1500);
+                      }
+                    }}
+                  >
+                    {agentJoining ? 'Requesting agent…' : 'Request agent'}
+                  </button>
+                )}
+                {!isRecognizedSlashCommand && (
+                  <span className="opacity-80">Use `/canvas …` to message the Canvas steward directly.</span>
                 )}
               </div>
             </div>

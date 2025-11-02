@@ -49,25 +49,45 @@ export function CustomShapeComponent({ shape }: { shape: CustomShape }) {
 
   const [naturalSize, setNaturalSize] = useState<{ w: number; h: number } | null>(null);
   const autoFittedRef = useRef(false);
+  const lastMeasuredSizeRef = useRef<{ w: number; h: number } | null>(null);
 
   useEffect(() => {
     const el = contentInnerRef.current;
     if (!el) return;
 
+    let frame: number | null = null;
+
     const measure = () => {
-      const w = Math.max(el.scrollWidth, el.getBoundingClientRect().width);
-      const h = Math.max(el.scrollHeight, el.getBoundingClientRect().height);
-      if (!naturalSize || Math.abs(naturalSize.w - w) > 1 || Math.abs(naturalSize.h - h) > 1) {
+      // Use layout metrics that are stable under CSS transforms so we do not chase our own scaling
+      const widthCandidate = Math.max(el.scrollWidth, el.offsetWidth, el.clientWidth);
+      const heightCandidate = Math.max(el.scrollHeight, el.offsetHeight, el.clientHeight);
+      const w = Math.ceil(Number.isFinite(widthCandidate) ? widthCandidate : 0);
+      const h = Math.ceil(Number.isFinite(heightCandidate) ? heightCandidate : 0);
+      const prev = lastMeasuredSizeRef.current;
+      if (!prev || Math.abs(prev.w - w) > 1 || Math.abs(prev.h - h) > 1) {
+        lastMeasuredSizeRef.current = { w, h };
         setNaturalSize({ w, h });
       }
     };
 
-    const observer = new ResizeObserver(() => measure());
-    observer.observe(el);
-    measure();
+    const observer = new ResizeObserver(() => {
+      if (frame !== null) cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(measure);
+    });
 
-    return () => observer.disconnect();
-  }, [naturalSize]);
+    observer.observe(el);
+    frame = requestAnimationFrame(measure);
+
+    return () => {
+      if (frame !== null) cancelAnimationFrame(frame);
+      observer.disconnect();
+    };
+  }, []);
+
+  useEffect(() => {
+    lastMeasuredSizeRef.current = null;
+    setNaturalSize(null);
+  }, [shape.props.customComponent]);
 
   useEffect(() => {
     const rerender = () => setRenderTick((x) => x + 1);
@@ -102,12 +122,12 @@ export function CustomShapeComponent({ shape }: { shape: CustomShape }) {
       const allowMultiple = policy === 'always_fit';
       if (changed && (allowMultiple || !autoFittedRef.current)) {
         unsafeEditor.updateShapes?.([
-          { id: shape.id as any, type: 'custom', props: { ...shape.props, w: nw, h: nh } },
+          { id: shape.id as any, type: 'custom', props: { w: nw, h: nh } },
         ]);
         if (!allowMultiple) autoFittedRef.current = true;
       }
     }
-  }, [editor, naturalSize, shape.id, shape.props]);
+  }, [editor, naturalSize, shape.id, shape.props.name, shape.props.userResized, shape.props.w, shape.props.h]);
 
   const sizeInfo = getComponentSizeInfo(shape.props.name);
   const baseW = naturalSize?.w ?? sizeInfo.naturalWidth;

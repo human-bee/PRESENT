@@ -1,36 +1,1007 @@
-import { defineAgent, JobContext, multimodal, cli, WorkerOptions, llm } from '@livekit/agents';
+import { defineAgent, JobContext, cli, WorkerOptions, llm, voice } from '@livekit/agents';
 import { config } from 'dotenv';
+import { randomUUID } from 'crypto';
 import { join } from 'path';
+import { z } from 'zod';
+// Removed temporary Responses API fallback for routing
 
 try {
   config({ path: join(process.cwd(), '.env.local') });
 } catch {}
-import * as openai from '@livekit/agents-plugin-openai';
+import { realtime as openaiRealtime } from '@livekit/agents-plugin-openai';
 import { appendTranscriptCache } from '@/lib/agents/shared/supabase-context';
+import { deriveComponentIntent } from '@/lib/agents/shared/deterministic-ids';
 import { DebateJudgeManager, isStartDebate } from '@/lib/agents/debate-judge';
+import { jsonObjectSchema, type JsonObject } from '@/lib/utils/json-schema';
+import { RoomEvent, RemoteTrackPublication, Track } from 'livekit-client';
 
 export default defineAgent({
   entry: async (job: JobContext) => {
     await job.connect();
-    const instructions = `You control the UI via create_component and update_component for direct manipulation, and may delegate work via dispatch_to_conductor. Keep text responses short.
+    console.log('[VoiceAgent] Connected to room:', job.room.name);
 
-TOOLS (JSON schemas):
-1) create_component({ type: string, spec: string })
-   - Create a new component on the canvas. 'type' is the component type, 'spec' is the initial content.
-2) update_component({ componentId: string, patch: string })
-   - Update an existing component with a natural-language patch or structured fields.
-3) dispatch_to_conductor({ task: string, params: object })
-   - Ask the conductor to run a steward/sub-agent task on your behalf.
+    const enqueueTask = async (payload: JsonObject) => {
+      const room = job.room.name || 'unknown';
+      const requestId = typeof payload?.requestId === 'string' ? payload.requestId : randomUUID();
+      const resourceKeys = Array.isArray(payload?.resourceKeys) ? payload.resourceKeys : [`room:${room}`];
+      const taskName = typeof payload?.task === 'string' ? payload.task : 'conductor.dispatch';
+      const params = (payload?.params as JsonObject) ?? payload;
 
-Always return to tool calls rather than long monologues.`;
-    const model = new openai.realtime.RealtimeModel({ model: 'gpt-realtime', instructions, modalities: ['text'] });
-    // Configure the agent for text-only output. We set maxTextResponseRetries to Infinity so
-    // it never throws when the model responds with text (expected for speech-to-UI), and we
-    // no-op the recovery path below.
-    const agent = new multimodal.MultimodalAgent({ model, maxTextResponseRetries: Number.POSITIVE_INFINITY });
-    const session = await agent.start(job.room);
-    // Allow text-only responses without attempting to recover to audio
-    try { (session as unknown as { recoverFromTextResponse?: (itemId?: string) => void }).recoverFromTextResponse = () => {}; } catch {}
+      await enqueueQueue.enqueueTask({
+        room,
+        task: taskName,
+        params: { ...params, room },
+        requestId,
+        resourceKeys,
+      });
+
+    const coerceBooleanFromEnv = (value?: string | null) => {
+      if (!value) return undefined;
+      const normalized = value.trim().toLowerCase();
+      if (!normalized) return undefined;
+      if (['true', '1', 'yes', 'on'].includes(normalized)) return true;
+      if (['false', '0', 'no', 'off'].includes(normalized)) return false;
+      return undefined;
+    };
+
+    const envInputTranscriptionModel = process.env.VOICE_AGENT_INPUT_TRANSCRIPTION_MODEL?.trim();
+    const fallbackInputTranscriptionModel = process.env.AGENT_STT_MODEL?.trim();
+    const envTranscriptionLanguage = process.env.VOICE_AGENT_TRANSCRIPTION_LANGUAGE?.trim();
+    const fallbackTranscriptionLanguage = process.env.AGENT_STT_LANGUAGE?.trim();
+    const resolvedInputTranscriptionModel = envInputTranscriptionModel || fallbackInputTranscriptionModel || undefined;
+    const envTurnDetection = process.env.VOICE_AGENT_TURN_DETECTION?.trim().toLowerCase();
+    const transcriptionEnabledFlag = coerceBooleanFromEnv(process.env.VOICE_AGENT_TRANSCRIPTION_ENABLED);
+    const transcriptionEnabled = transcriptionEnabledFlag ?? Boolean(resolvedInputTranscriptionModel);
+    const resolvedTranscriptionLanguage = envTranscriptionLanguage || fallbackTranscriptionLanguage || undefined;
+    const inputAudioTranscription = transcriptionEnabled
+      ? {
+          model: resolvedInputTranscriptionModel || 'gpt-4o-mini-transcribe',
+          ...(resolvedTranscriptionLanguage ? { language: resolvedTranscriptionLanguage } : {}),
+        }
+      : null;
+    const turnDetectionOption = (() => {
+      if (!transcriptionEnabled) return null;
+      if (!envTurnDetection) return undefined; // fall back to agent default (server VAD)
+      if (envTurnDetection === 'none') return null;
+      if (envTurnDetection === 'semantic_vad') {
+        return { type: 'semantic_vad' as const };
+      }
+      if (envTurnDetection === 'server_vad') {
+        return { type: 'server_vad' as const };
+      }
+      return undefined;
+    })();
+
+    console.log('[VoiceAgent] transcription config', {
+      transcriptionEnabled,
+      inputAudioTranscription,
+      turnDetectionOption,
+    });
+
+    const subscribeToParticipant = (participant?: any) => {
+      if (!participant) return;
+
+      const publicationMaps: Array<Map<string, RemoteTrackPublication> | undefined> = [
+        (participant as any).trackPublications,
+        (participant as any).tracks,
+      ];
+
+      let subscribed = false;
+      for (const map of publicationMaps) {
+        if (!map || typeof map.forEach !== 'function') continue;
+        map.forEach((publication: any) => {
+          if (publication.kind === Track.Kind.Audio && !publication.isSubscribed) {
+            try {
+              publication.setSubscribed?.(true);
+              subscribed = true;
+            } catch (error) {
+              console.warn('[VoiceAgent] failed to subscribe to audio track', error);
+            }
+          }
+        });
+        if (subscribed) return;
+      }
+
+      const publications = participant.getTrackPublications?.();
+      if (Array.isArray(publications)) {
+        publications.forEach((publication: any) => {
+          if (publication.kind === Track.Kind.Audio && !publication.isSubscribed) {
+            try {
+              publication.setSubscribed?.(true);
+            } catch (error) {
+              console.warn('[VoiceAgent] failed to subscribe to audio track', error);
+            }
+          }
+        });
+      }
+    };
+
+    job.room.remoteParticipants.forEach((participant) => subscribeToParticipant(participant));
+    job.room.on(RoomEvent.ParticipantConnected, (participant) => subscribeToParticipant(participant as any));
+    job.room.on(RoomEvent.TrackPublished, (_publication, participant) => subscribeToParticipant(participant as any));
+
+    const instructions = `You are a UI automation agent. You NEVER speak—you only act by calling tools.
+
+CRITICAL RULES:
+1. For canvas work (draw, sticky note, shapes): call dispatch_to_conductor({ task: "canvas.agent_prompt", params: { room: CURRENT_ROOM, message: "<user request>", requestId: "<uuid>", bounds?, selectionIds? } }). Generate a fresh UUID when you create requestId.
+2. For component creation/updates: call create_component or update_component.
+3. NEVER respond with conversational text. If uncertain, call a tool anyway.
+4. Do not greet, explain, or narrate. Tool calls only.
+
+Examples:
+- User: "draw a cat" → dispatch_to_conductor({ task: "canvas.agent_prompt", params: { room: CURRENT_ROOM, message: "draw a cat", requestId: "..." } })
+- User: "focus on the selected rectangles" → dispatch_to_conductor({ task: "canvas.agent_prompt", params: { room: CURRENT_ROOM, message: "focus on the selected rectangles", requestId: "...", selectionIds: CURRENT_SELECTION_IDS } })
+- User: "add a timer" → create_component({ type: "RetroTimerEnhanced", spec: "{}" })
+- User: "hi" → (no tool needed, stay silent)
+
+Your only output is function calls. Never use plain text unless absolutely necessary.`;
+
+    const componentRegistry = new Map<
+      string,
+      {
+        type: string;
+        createdAt: number;
+        props: JsonObject;
+        state: JsonObject;
+        intentId?: string;
+        slot?: string;
+      }
+    >();
+    const lastComponentByType = new Map<string, string>();
+    let lastCreatedComponentId: string | null = null;
+    type IntentLedgerEntry = {
+      intentId: string;
+      messageId: string;
+      componentType: string;
+      slot?: string;
+      reservedAt: number;
+      updatedAt: number;
+      state: 'reserved' | 'created' | 'updated';
+    };
+    const intentLedger = new Map<string, IntentLedgerEntry>();
+    const slotLedger = new Map<string, string>();
+    const messageToIntent = new Map<string, string>();
+    const LEDGER_TTL_MS = 5 * 60 * 1000;
+
+    const cleanupLedger = () => {
+      const now = Date.now();
+      for (const [intentId, entry] of intentLedger.entries()) {
+        if (now - entry.updatedAt > LEDGER_TTL_MS) {
+          intentLedger.delete(intentId);
+          if (entry.slot) {
+            const currentIntent = slotLedger.get(entry.slot);
+            if (currentIntent === intentId) {
+              slotLedger.delete(entry.slot);
+            }
+          }
+          const mappedIntent = messageToIntent.get(entry.messageId);
+          if (mappedIntent === intentId) {
+            messageToIntent.delete(entry.messageId);
+          }
+        }
+      }
+    };
+
+    const registerLedgerEntry = (entry: {
+      intentId: string;
+      messageId: string;
+      componentType: string;
+      slot?: string;
+      state?: IntentLedgerEntry['state'];
+    }) => {
+      const now = Date.now();
+      const existing = intentLedger.get(entry.intentId);
+      const next: IntentLedgerEntry = {
+        intentId: entry.intentId,
+        messageId: entry.messageId,
+        componentType: entry.componentType,
+        slot: entry.slot ?? existing?.slot,
+        reservedAt: existing?.reservedAt ?? now,
+        updatedAt: now,
+        state: entry.state ?? existing?.state ?? 'reserved',
+      };
+      if (entry.slot) {
+        next.slot = entry.slot;
+      }
+      intentLedger.set(next.intentId, next);
+      messageToIntent.set(next.messageId, next.intentId);
+      if (next.slot) {
+        slotLedger.set(next.slot, next.intentId);
+      }
+      cleanupLedger();
+      return next;
+    };
+
+    const findLedgerEntryByMessage = (messageId: string) => {
+      const intentId = messageToIntent.get(messageId);
+      if (intentId) {
+        return intentLedger.get(intentId);
+      }
+      return undefined;
+    };
+
+    // Duplicate suppression across turns: track last create by component type.
+    // We suppress duplicates aggressively within the same user turn, and apply
+    // a longer global TTL to catch late replays from the model/stack.
+    let currentTurnId = 0;
+    let activeResponse = false;
+    const recentCreateFingerprints = new Map<
+      string,
+      {
+        fingerprint: string;
+        messageId: string;
+        createdAt: number;
+        turnId: number;
+        intentId: string;
+        slot?: string;
+      }
+    >();
+
+    const bumpTurn = () => {
+      currentTurnId += 1;
+    };
+
+    const enableLossyUpdates = process.env.VOICE_AGENT_UPDATE_LOSSY !== 'false';
+
+    const sendToolCall = async (tool: string, params: JsonObject, options: { reliable?: boolean } = {}) => {
+      const reliable =
+        options.reliable !== undefined
+          ? options.reliable
+          : tool === 'update_component' && enableLossyUpdates
+            ? false
+            : true;
+      const toolEvent = {
+        id: randomUUID(),
+        roomId: job.room.name || 'unknown',
+        type: 'tool_call' as const,
+        payload: { tool: 'enqueue_task', params: payload, context: { source: 'voice', timestamp: Date.now() } },
+        timestamp: Date.now(),
+        source: 'voice' as const,
+      };
+      const participantExists = !!job.room.localParticipant;
+      console.log('[VoiceAgent] tool_call ready (from execute)', { participantExists, tool, params });
+      await job.room.localParticipant?.publishData(new TextEncoder().encode(JSON.stringify(toolEvent)), {
+        reliable,
+        topic: 'tool_call',
+      });
+    };
+
+    const coerceComponentPatch = (raw: unknown) => {
+      if (!raw) return {};
+      if (typeof raw === 'string') {
+        try {
+          const parsed = JSON.parse(raw);
+          return parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : { instruction: raw };
+        } catch {
+          return { instruction: raw };
+        }
+      }
+      if (typeof raw === 'object') {
+        return { ...(raw as Record<string, unknown>) };
+      }
+      return {};
+    };
+
+    const normalizeSpecInput = (raw: unknown): Record<string, unknown> => {
+      if (!raw) return {};
+      if (typeof raw === 'string') {
+        try {
+          const parsed = JSON.parse(raw);
+          return parsed && typeof parsed === 'object' ? { ...(parsed as Record<string, unknown>) } : {};
+        } catch {
+          return {};
+        }
+      }
+      if (raw && typeof raw === 'object') {
+        return { ...(raw as Record<string, unknown>) };
+      }
+      return {};
+    };
+
+    const normalizeComponentPatch = (patch: Record<string, unknown>, fallbackSeconds: number) => {
+      const next = { ...patch };
+      const timestamp = Date.now();
+      next.updatedAt = typeof next.updatedAt === 'number' ? next.updatedAt : timestamp;
+
+      const coerceBoolean = (value: unknown): boolean | undefined => {
+        if (typeof value === 'boolean') return value;
+        if (typeof value === 'number') {
+          if (value === 1) return true;
+          if (value === 0) return false;
+        }
+        if (typeof value === 'string') {
+          const normalized = value.trim().toLowerCase();
+          if (!normalized) return undefined;
+          if (['true', 'yes', 'start', 'run', 'running', 'resume', 'play', 'on', '1'].includes(normalized)) {
+            return true;
+          }
+          if (['false', 'no', 'stop', 'stopped', 'pause', 'paused', 'halt', 'off', '0'].includes(normalized)) {
+            return false;
+          }
+        }
+        return undefined;
+      };
+
+      const coerceDurationValue = (value: unknown, fallbackSeconds: number) => {
+        if (typeof value === 'number' && Number.isFinite(value)) {
+          return Math.max(1, Math.round(value));
+        }
+        if (typeof value === 'string') {
+          const cleaned = value.trim().toLowerCase();
+          if (!cleaned) return fallbackSeconds;
+          const parsed = Number.parseFloat(cleaned);
+          if (!Number.isFinite(parsed)) return fallbackSeconds;
+          const isMinutes =
+            cleaned.includes('min') ||
+            cleaned.endsWith('m') ||
+            cleaned.endsWith('minutes') ||
+            cleaned.endsWith('minute');
+          const seconds = isMinutes ? parsed * 60 : parsed;
+          return Math.max(1, Math.round(seconds));
+        }
+        return fallbackSeconds;
+      };
+
+      const coerceIntValue = (value: unknown, fallback: number) => {
+        if (typeof value === 'number' && Number.isFinite(value)) {
+          return Math.round(value);
+        }
+        if (typeof value === 'string') {
+          const parsed = Number.parseFloat(value);
+          if (Number.isFinite(parsed)) {
+            return Math.round(parsed);
+          }
+        }
+        return fallback;
+      };
+
+      if (next.duration !== undefined) {
+        const durationSeconds = coerceDurationValue(
+          next.duration,
+          Math.max(1, Math.round((next as any).configuredDuration ?? fallbackSeconds)),
+        );
+        const minutes = Math.floor(durationSeconds / 60);
+        const seconds = durationSeconds % 60;
+        next.configuredDuration = durationSeconds;
+        if (typeof next.timeLeft !== 'number') {
+          next.timeLeft = durationSeconds;
+        }
+        next.initialMinutes = minutes;
+        next.initialSeconds = seconds;
+        delete next.duration;
+      }
+      if (next.durationSeconds !== undefined) {
+        const durationSeconds = coerceDurationValue(
+          (next as any).durationSeconds,
+          Math.max(1, Math.round((next as any).configuredDuration ?? fallbackSeconds)),
+        );
+        const minutes = Math.floor(durationSeconds / 60);
+        const seconds = durationSeconds % 60;
+        next.configuredDuration = durationSeconds;
+        if (typeof next.timeLeft !== 'number') {
+          next.timeLeft = durationSeconds;
+        }
+        next.initialMinutes = minutes;
+        next.initialSeconds = seconds;
+      }
+      if (next.initialMinutes !== undefined || next.initialSeconds !== undefined) {
+        const clampMinutes = Math.max(
+          1,
+          coerceIntValue(
+            (next as any).initialMinutes,
+            Math.floor((((next as any).configuredDuration ?? fallbackSeconds) as number) / 60),
+          ),
+        );
+        const clampSecondsRaw =
+          (next as any).initialSeconds !== undefined
+            ? coerceIntValue(
+                (next as any).initialSeconds,
+                (((next as any).configuredDuration ?? fallbackSeconds) as number) % 60,
+              )
+            : ((((next as any).configuredDuration ?? fallbackSeconds) as number) % 60);
+        const clampSeconds = Math.max(0, Math.min(59, clampSecondsRaw));
+        const totalSeconds = clampMinutes * 60 + clampSeconds;
+        next.configuredDuration = totalSeconds;
+        if (typeof next.timeLeft !== 'number') {
+          next.timeLeft = totalSeconds;
+        }
+        next.initialMinutes = clampMinutes;
+        next.initialSeconds = clampSeconds;
+      }
+
+      const runningValue =
+        'running' in next ? coerceBoolean(next.running) : undefined;
+      if (runningValue !== undefined) {
+        next.isRunning = runningValue;
+        if (runningValue) {
+          next.isFinished = false;
+          if (typeof next.timeLeft !== 'number' && typeof next.configuredDuration === 'number') {
+            next.timeLeft = next.configuredDuration;
+          }
+        }
+        delete next.running;
+      }
+
+      const autoStartValue =
+        'autoStart' in next ? coerceBoolean(next.autoStart) : undefined;
+      if (autoStartValue !== undefined) {
+        next.autoStart = autoStartValue;
+        next.isRunning = autoStartValue;
+        if (autoStartValue) {
+          next.isFinished = false;
+          if (typeof next.timeLeft !== 'number' && typeof next.configuredDuration === 'number') {
+            next.timeLeft = next.configuredDuration;
+          }
+        }
+      }
+
+      const statusValue =
+        'status' in next ? coerceBoolean(next.status) : undefined;
+      if (statusValue !== undefined && next.isRunning === undefined) {
+        next.isRunning = statusValue;
+        if (statusValue) {
+          next.isFinished = false;
+          if (typeof next.timeLeft !== 'number' && typeof next.configuredDuration === 'number') {
+            next.timeLeft = next.configuredDuration;
+          }
+        }
+      }
+
+      return next;
+    };
+
+    const toolParameters = jsonObjectSchema.default({});
+    const toolContext: llm.ToolContext = {
+      create_component: llm.tool({
+        description: 'Create a new component on the canvas.',
+        parameters: z.object({
+          type: z.string(),
+          spec: z.union([z.string(), z.record(z.any())]).nullish(),
+          props: z.record(z.any()).nullish(),
+          messageId: z.string().nullish(),
+          intentId: z.string().nullish(),
+          slot: z.string().nullish(),
+        }),
+        execute: async (args) => {
+          const componentType = String(args.type || '').trim();
+          if (!componentType) {
+            return { status: 'ERROR', message: 'create_component requires type' };
+          }
+
+          if (args.spec === null) {
+            delete (args as any).spec;
+          }
+          if (args.props === null) {
+            delete (args as any).props;
+          }
+          if (args.messageId === null) {
+            delete (args as any).messageId;
+          }
+
+          const normalizedSpec = normalizeSpecInput(args.spec);
+
+          const initialProps =
+            args.props && typeof args.props === 'object'
+              ? ({ ...args.props } as Record<string, unknown>)
+              : {};
+
+          const mergedProps = {
+            ...normalizedSpec,
+            ...initialProps,
+          };
+
+          const slot = typeof args.slot === 'string' && args.slot.trim().length > 0 ? args.slot.trim() : undefined;
+          const { intentId: autoIntentId, messageId: autoMessageId } = deriveComponentIntent({
+            roomName: job.room.name || '',
+            turnId: currentTurnId,
+            componentType,
+            spec: mergedProps,
+            slot,
+          });
+
+          const intentId =
+            typeof args.intentId === 'string' && args.intentId.trim().length > 0
+              ? args.intentId.trim()
+              : autoIntentId;
+          const messageId =
+            typeof args.messageId === 'string' && args.messageId.trim().length > 0
+              ? args.messageId.trim()
+              : autoMessageId;
+
+          args.intentId = intentId;
+          args.spec = mergedProps;
+          args.messageId = messageId;
+
+          const fingerprintPayload = Object.keys(mergedProps)
+            .sort()
+            .reduce<Record<string, unknown>>((acc, key) => {
+              acc[key] = mergedProps[key];
+              return acc;
+            }, {});
+          if (slot) {
+            fingerprintPayload.__slot = slot;
+          }
+          fingerprintPayload.__type = componentType;
+          const sortedFingerprint = JSON.stringify(fingerprintPayload);
+          const recentCreate = recentCreateFingerprints.get(componentType);
+          const now = Date.now();
+          const TTL_MS = 30000; // 30s window to absorb late replays
+          const sameTurnDuplicate =
+            !!recentCreate &&
+            recentCreate.fingerprint === sortedFingerprint &&
+            recentCreate.turnId === currentTurnId;
+          const withinGlobalTtl =
+            !!recentCreate && recentCreate.fingerprint === sortedFingerprint && now - recentCreate.createdAt < TTL_MS;
+          const intentMatches = !!recentCreate && recentCreate.intentId === intentId;
+          const slotMatches =
+            !slot || !recentCreate ? true : recentCreate.slot === slot;
+          if (intentMatches && slotMatches && (sameTurnDuplicate || withinGlobalTtl)) {
+            console.log('[VoiceAgent] suppressing duplicate create_component', {
+              componentType,
+              recentMessageId: recentCreate.messageId,
+            });
+            lastComponentByType.set(componentType, recentCreate.messageId);
+            lastCreatedComponentId = recentCreate.messageId;
+            args.intentId = recentCreate.intentId;
+            args.messageId = recentCreate.messageId;
+            return { status: 'duplicate_skipped', messageId: recentCreate.messageId };
+          }
+
+          const existingComponent = componentRegistry.get(messageId);
+          if (existingComponent) {
+            const fallbackSeconds =
+              typeof existingComponent?.props?.configuredDuration === 'number' &&
+              Number.isFinite(existingComponent.props.configuredDuration)
+                ? (existingComponent.props.configuredDuration as number)
+                : 300;
+            const normalizedPatch = normalizeComponentPatch(mergedProps as Record<string, unknown>, fallbackSeconds);
+            if (Object.keys(normalizedPatch).length === 0) {
+              console.debug('[VoiceAgent] duplicate create_component with no changes; skipping', {
+                messageId,
+                componentType,
+              });
+              return { status: 'duplicate_skipped', messageId };
+            }
+            console.log('[VoiceAgent] coalescing duplicate create_component into update_component', {
+              messageId,
+              componentType,
+            });
+            await sendToolCall(
+              'update_component',
+              {
+                componentId: messageId,
+                patch: normalizedPatch as JsonObject,
+                intentId,
+                slot,
+              },
+              { reliable: false },
+            );
+            existingComponent.props = {
+              ...existingComponent.props,
+              ...mergedProps,
+            };
+            existingComponent.intentId = intentId;
+            if (slot) {
+              existingComponent.slot = slot;
+            }
+            if (intentId) {
+              registerLedgerEntry({
+                intentId,
+                messageId,
+                componentType,
+                slot,
+                state: 'updated',
+              });
+            }
+            lastComponentByType.set(componentType, messageId);
+            lastCreatedComponentId = messageId;
+            recentCreateFingerprints.set(componentType, {
+              fingerprint: sortedFingerprint,
+              messageId,
+              createdAt: now,
+              turnId: currentTurnId,
+              intentId,
+              slot,
+            });
+            return { status: 'queued', messageId, reusedExisting: true };
+          }
+
+          componentRegistry.set(messageId, {
+            type: componentType,
+            createdAt: Date.now(),
+            props: mergedProps as JsonObject,
+            state: {} as JsonObject,
+            intentId,
+            slot,
+          });
+          if (intentId) {
+            registerLedgerEntry({
+              intentId,
+              messageId,
+              componentType,
+              slot,
+              state: 'created',
+            });
+          }
+          lastComponentByType.set(componentType, messageId);
+          lastCreatedComponentId = messageId;
+          recentCreateFingerprints.set(componentType, {
+            fingerprint: sortedFingerprint,
+            messageId,
+            createdAt: now,
+            turnId: currentTurnId,
+            intentId,
+            slot,
+          });
+
+          const payload: JsonObject = {
+            type: componentType,
+            messageId,
+          };
+          payload.spec = mergedProps as JsonObject;
+          if (initialProps && Object.keys(initialProps).length > 0) {
+            payload.props = initialProps as JsonObject;
+          }
+
+          if (intentId) {
+            payload.intentId = intentId;
+          }
+          if (slot) {
+            payload.slot = slot;
+          }
+
+          await sendToolCall('create_component', payload);
+          return { status: 'queued', messageId };
+        },
+      }),
+      reserve_component: llm.tool({
+        description: 'Reserve a component intent prior to creation to ensure deterministic IDs.',
+        parameters: z.object({
+          type: z.string().nullish(),
+          spec: z.union([z.string(), z.record(z.any())]).nullish(),
+          props: z.record(z.any()).nullish(),
+          messageId: z.string().nullish(),
+          intentId: z.string().nullish(),
+          slot: z.string().nullish(),
+        }),
+        execute: async (args) => {
+          const componentType = String(args.type || '').trim();
+          if (!componentType) {
+            return { status: 'ERROR', message: 'reserve_component requires type' };
+          }
+
+          if (args.spec === null) {
+            delete (args as any).spec;
+          }
+          if (args.props === null) {
+            delete (args as any).props;
+          }
+          if (args.messageId === null) {
+            delete (args as any).messageId;
+          }
+          if (args.intentId === null) {
+            delete (args as any).intentId;
+          }
+
+          const normalizedSpec = normalizeSpecInput(args.spec);
+          const initialProps =
+            args.props && typeof args.props === 'object'
+              ? ({ ...args.props } as Record<string, unknown>)
+              : {};
+          const mergedProps = { ...normalizedSpec, ...initialProps };
+          const slot = typeof args.slot === 'string' && args.slot.trim().length > 0 ? args.slot.trim() : undefined;
+
+          const fingerprintPayload = Object.keys(mergedProps)
+            .sort()
+            .reduce<Record<string, unknown>>((acc, key) => {
+              acc[key] = mergedProps[key];
+              return acc;
+            }, {});
+          if (slot) {
+            fingerprintPayload.__slot = slot;
+          }
+          fingerprintPayload.__type = componentType;
+
+          const { intentId: autoIntentId, messageId: autoMessageId } = deriveComponentIntent({
+            roomName: job.room.name || '',
+            turnId: currentTurnId,
+            componentType,
+            spec: mergedProps,
+            slot,
+          });
+
+          const intentId =
+            typeof args.intentId === 'string' && args.intentId.trim().length > 0
+              ? args.intentId.trim()
+              : autoIntentId;
+          const messageId =
+            typeof args.messageId === 'string' && args.messageId.trim().length > 0
+              ? args.messageId.trim()
+              : autoMessageId;
+
+          args.intentId = intentId;
+          args.messageId = messageId;
+
+          const existingComponent = componentRegistry.get(messageId);
+          if (existingComponent) {
+            existingComponent.intentId = intentId;
+            if (slot) {
+              existingComponent.slot = slot;
+            }
+          }
+
+          const entry = registerLedgerEntry({
+            intentId,
+            messageId,
+            componentType,
+            slot,
+            state: existingComponent ? 'updated' : 'reserved',
+          });
+
+          lastComponentByType.set(componentType, messageId);
+          lastCreatedComponentId = messageId;
+          recentCreateFingerprints.set(componentType, {
+            fingerprint: JSON.stringify(fingerprintPayload),
+            messageId,
+            createdAt: Date.now(),
+            turnId: currentTurnId,
+            intentId,
+            slot,
+          });
+
+          await sendToolCall('reserve_component', {
+            componentType,
+            intentId,
+            messageId,
+            slot,
+            snapshot: mergedProps as JsonObject,
+            state: entry.state,
+          });
+
+          return {
+            status: existingComponent ? 'acknowledged_existing' : 'reserved',
+            messageId,
+            intentId,
+            componentExists: Boolean(existingComponent),
+          };
+        },
+      }),
+      resolve_component: llm.tool({
+        description: 'Resolve an existing componentId using intent, slot, or type hints.',
+        parameters: z.object({
+          componentId: z.string().nullish(),
+          intentId: z.string().nullish(),
+          type: z.string().nullish(),
+          slot: z.string().nullish(),
+          allowLast: z.boolean().nullish(),
+        }),
+        execute: async (args) => {
+          const resolvedId = resolveComponentId(args as Record<string, unknown>);
+          if (!resolvedId) {
+            return { status: 'NOT_FOUND', message: 'No component matched the provided hints' };
+          }
+
+          const existing = componentRegistry.get(resolvedId);
+          const intentId =
+            typeof args.intentId === 'string' && args.intentId.trim().length > 0
+              ? args.intentId.trim()
+              : existing?.intentId ?? findLedgerEntryByMessage(resolvedId)?.intentId;
+          const slot =
+            typeof args.slot === 'string' && args.slot.trim().length > 0
+              ? args.slot.trim()
+              : existing?.slot ?? findLedgerEntryByMessage(resolvedId)?.slot;
+          const componentType =
+            typeof args.type === 'string' && args.type.trim().length > 0
+              ? args.type.trim()
+              : existing?.type ?? 'unknown';
+
+          if (intentId) {
+            registerLedgerEntry({
+              intentId,
+              messageId: resolvedId,
+              componentType,
+              slot,
+              state: existing ? 'updated' : 'reserved',
+            });
+          }
+          if (componentType && resolvedId) {
+            lastComponentByType.set(componentType, resolvedId);
+          }
+          lastCreatedComponentId = resolvedId;
+
+          return {
+            status: 'RESOLVED',
+            componentId: resolvedId,
+            intentId: intentId ?? null,
+          };
+        },
+      }),
+      update_component: llm.tool({
+        description: 'Update an existing component with a patch.',
+        parameters: z.object({
+          componentId: z.string().nullish(),
+          type: z.string().nullish(),
+          patch: z.union([z.string(), z.record(z.any())]).nullish(),
+          intentId: z.string().nullish(),
+          slot: z.string().nullish(),
+        }),
+        execute: async (args) => {
+          let resolvedId =
+            typeof args.componentId === 'string' && args.componentId.trim().length > 0
+              ? args.componentId.trim()
+              : '';
+
+          if (!resolvedId && typeof args.type === 'string' && args.type.trim()) {
+            const byType = lastComponentByType.get(args.type.trim());
+            if (byType) resolvedId = byType;
+          }
+
+          if (!resolvedId && lastCreatedComponentId) {
+            resolvedId = lastCreatedComponentId;
+          }
+
+          if (!resolvedId) {
+            console.warn('[VoiceAgent] update_component missing componentId and no recent component found', args);
+            return { status: 'ERROR', message: 'Missing componentId for update_component' };
+          }
+
+          const slot = typeof args.slot === 'string' && args.slot.trim().length > 0 ? args.slot.trim() : undefined;
+          const rawPatch = coerceComponentPatch(args.patch);
+          const existing = componentRegistry.get(resolvedId);
+          const intentId =
+            typeof args.intentId === 'string' && args.intentId.trim().length > 0
+              ? args.intentId.trim()
+              : existing?.intentId;
+          if (intentId) {
+            args.intentId = intentId;
+          }
+          const fallbackSeconds =
+            typeof existing?.props?.configuredDuration === 'number' && Number.isFinite(existing.props.configuredDuration)
+              ? (existing.props.configuredDuration as number)
+              : 300;
+          const patch = normalizeComponentPatch(rawPatch, fallbackSeconds);
+
+          const payload: JsonObject = {
+            componentId: resolvedId,
+            patch,
+          };
+          if (intentId) {
+            payload.intentId = intentId;
+          }
+          if (slot) {
+            payload.slot = slot;
+          }
+
+          await sendToolCall('update_component', payload, { reliable: false });
+
+          const existingAfter = componentRegistry.get(resolvedId);
+          if (existingAfter) {
+            existingAfter.props = { ...existingAfter.props, ...patch };
+            if (intentId) {
+              existingAfter.intentId = intentId;
+            }
+            if (slot) {
+              existingAfter.slot = slot;
+            }
+          }
+          if (intentId) {
+            const componentTypeHint =
+              existingAfter?.type ||
+              (typeof args.type === 'string' && args.type.trim().length > 0 ? args.type.trim() : 'unknown');
+            registerLedgerEntry({
+              intentId,
+              messageId: resolvedId,
+              componentType: componentTypeHint,
+              slot,
+              state: 'updated',
+            });
+          }
+          lastCreatedComponentId = resolvedId;
+
+          return { status: 'queued', componentId: resolvedId };
+        },
+      }),
+      dispatch_to_conductor: llm.tool({
+        description: 'Ask the conductor to run a steward for complex tasks like flowcharts or canvas drawing.',
+        parameters: z.object({ task: z.string(), params: toolParameters }),
+        execute: async (args) => {
+          const roomName = job.room.name || '';
+          const params = (args?.params as JsonObject) || {};
+          const enrichedParams: JsonObject = { ...params };
+
+When you detect an actionable intent (explicit or implicit), immediately enqueue a task for the Conductor and return. Do not wait for the Conductor or stewards to finish.
+
+How to respond:
+1. Capture the user's request or inferred task.
+2. Call enqueue_task({ intent: "short description", transcript: FULL_TEXT, participants: LIST, metadata? })
+3. Always include the exact transcript snippet you used.
+4. Do not set specific tasks; send full transcript so the conductor can infer the right steward or component.
+5. Never create components or call tools directly.
+6. Stay silent otherwise (no natural language responses).
+`;
+
+    const toolContext: llm.ToolContext = {
+      enqueue_task: llm.tool({
+        description: 'Enqueue a task for the Conductor to process asynchronously.',
+        parameters: z.object({
+          intent: z.string().min(1),
+          transcript: z.string().min(1),
+          participants: z.array(z.string()).default([]),
+          metadata: jsonObjectSchema.optional(),
+          requestId: z.string().optional(),
+          resourceKeys: z.array(z.string()).optional(),
+          task: z.string().optional(),
+          params: jsonObjectSchema.optional(),
+        }),
+        execute: async (args) => {
+          const normalized = { ...args } as JsonObject;
+          normalized.task = 'auto';
+          if (normalized.metadata === null || typeof normalized.metadata !== 'object') {
+            delete normalized.metadata;
+          }
+          normalized.params = {
+            intent: normalized.intent,
+            transcript: normalized.transcript,
+            participants: normalized.participants,
+            message: normalized.transcript,
+            ...(normalized.metadata ? { metadata: normalized.metadata } : {}),
+          } as JsonObject;
+          await enqueueTask(normalized);
+          return { status: 'queued' };
+        },
+      }),
+    };
+
+    const realtimeModel = new openaiRealtime.RealtimeModel({
+      model: 'gpt-realtime',
+      toolChoice: 'required',
+      inputAudioTranscription,
+      turnDetection: turnDetectionOption,
+    });
+
+    const agent = new voice.Agent({
+      instructions,
+      tools: toolContext,
+    });
+
+    const session = new voice.AgentSession({
+      llm: realtimeModel,
+      turnDetection: 'manual' as any, // Model has server_vad enabled; session uses manual
+    });
+
+    job.room.on(RoomEvent.DataReceived, async (payload, participant, _, topic) => {
+      if (topic !== 'transcription') return;
+      try {
+        const message = JSON.parse(new TextDecoder().decode(payload));
+        const text = typeof message?.text === 'string' ? message.text.trim() : '';
+        const isManual = Boolean(message?.manual);
+        const isReplay = Boolean(message?.replay);
+        const speaker = typeof message?.speaker === 'string' ? message.speaker : participant?.identity;
+        if (!text || isReplay) return;
+        if (!isManual && speaker === 'voice-agent') return;
+        await enqueueTask({
+          intent: `manual_text:${text.slice(0, 64)}`,
+          transcript: text,
+          participants: speaker ? [speaker] : [],
+          metadata: { manual: true },
+        });
+      } catch (error) {
+        console.warn('[VoiceAgent] failed to handle manual transcription', error);
+      }
+    });
+
+    const generateReplySafely = async (options?: { userInput?: string }) => {
+      if (activeResponse) {
+        console.log('[VoiceAgent] Skipping generateReply; active response in progress');
+        return;
+      }
+      activeResponse = true;
+      try {
+        await session.generateReply(options as any);
+      } finally {
+        activeResponse = false;
+      }
+    };
 
     const debateJudgeManager = new DebateJudgeManager(job.room as any, job.room.name || 'room');
     const debateKeywordRegex = /\b(aff|affirmative|neg|negative|contention|rebuttal|voter|judge|debate|scorecard|flow|argument|claim|evidence)\b/;
@@ -55,115 +1026,345 @@ Always return to tool calls rather than long monologues.`;
       }
     };
 
-    session.on('response_function_call_completed', async (evt: { call_id: string; name: string; arguments: string }) => {
-      try {
-        const args = JSON.parse(evt.arguments || '{}');
-        if (evt.name !== 'create_component' && evt.name !== 'update_component' && evt.name !== 'dispatch_to_conductor') {
-          session.conversation.item.create({ type: 'function_call_output', call_id: evt.call_id, output: JSON.stringify({ status: 'ERROR', message: `Unsupported tool: ${evt.name}` }) });
-          return;
+    const resolveComponentId = (args: Record<string, unknown>) => {
+      const rawId = typeof args.componentId === 'string' ? args.componentId.trim() : '';
+      if (rawId) return rawId;
+
+      const rawIntent = typeof args.intentId === 'string' ? args.intentId.trim() : '';
+      if (rawIntent) {
+        const entry = intentLedger.get(rawIntent);
+        if (entry) {
+          return entry.messageId;
         }
-        const toolCallEvent = {
-          id: evt.call_id,
-          roomId: job.room.name || 'unknown',
-          type: 'tool_call',
-          payload: { tool: evt.name, params: args, context: { source: 'voice', timestamp: Date.now() } },
-          timestamp: Date.now(),
-          source: 'voice' as const,
-        };
-        await job.room.localParticipant?.publishData(new TextEncoder().encode(JSON.stringify(toolCallEvent)), { reliable: true, topic: 'tool_call' });
-        session.conversation.item.create({ type: 'function_call_output', call_id: evt.call_id, output: JSON.stringify({ status: 'DISPATCHED' }) });
+        for (const [id, info] of componentRegistry.entries()) {
+          if (info.intentId === rawIntent) {
+            return id;
+          }
+        }
+      }
+
+      const rawSlot = typeof args.slot === 'string' ? args.slot.trim() : '';
+      if (rawSlot) {
+        const slotIntent = slotLedger.get(rawSlot);
+        if (slotIntent) {
+          const entry = intentLedger.get(slotIntent);
+          if (entry) {
+            return entry.messageId;
+          }
+        }
+        for (const [id, info] of componentRegistry.entries()) {
+          if (info.slot === rawSlot) {
+            return id;
+          }
+        }
+      }
+
+      const rawType =
+        typeof args.type === 'string'
+          ? args.type.trim()
+          : typeof args.componentType === 'string'
+            ? args.componentType.trim()
+            : '';
+      if (rawType) {
+        const byType = lastComponentByType.get(rawType);
+        if (byType) return byType;
+      }
+      if (rawType) {
+        for (const [id, info] of componentRegistry.entries()) {
+          if (info.type === rawType) {
+            return id;
+          }
+        }
+      }
+      if (lastCreatedComponentId) {
+        return lastCreatedComponentId;
+      }
+      return '';
+    };
+
+    session.on((voice as any).AgentSessionEventTypes.FunctionToolsExecuted, async (event: any) => {
+      const calls = event.functionCalls ?? [];
+      console.log('[VoiceAgent] FunctionToolsExecuted', {
+        count: calls.length,
+        callNames: calls.map((c) => c.name),
+      });
+      console.log('[VoiceAgent] FunctionToolsExecuted raw', event);
+      for (const fnCall of calls) {
         try {
-          (session as any).response?.create?.({ instructions: 'continue' });
-        } catch {}
-      } catch (e) {
-        session.conversation.item.create({ type: 'function_call_output', call_id: evt.call_id, output: JSON.stringify({ status: 'ERROR', message: String(e) }) });
-        try {
-          (session as any).response?.create?.({ instructions: 'continue' });
-        } catch {}
+          const args = JSON.parse(fnCall.args || '{}') as Record<string, unknown>;
+          if (
+            ![
+              'create_component',
+              'update_component',
+              'dispatch_to_conductor',
+              'reserve_component',
+              'resolve_component',
+            ].includes(fnCall.name)
+          ) {
+            continue;
+          }
+          if (fnCall.name === 'create_component') {
+            if (args.spec === null) {
+              delete args.spec;
+            }
+            if (args.props === null) {
+              delete args.props;
+            }
+            const componentType = typeof args.type === 'string' ? args.type.trim() : '';
+            const slot = typeof args.slot === 'string' && args.slot.trim().length > 0 ? args.slot.trim() : undefined;
+            const mergedSpec =
+              args.spec && typeof args.spec === 'object'
+                ? (args.spec as Record<string, unknown>)
+                : {};
+            const mergedProps =
+              args.props && typeof args.props === 'object'
+                ? { ...mergedSpec, ...(args.props as Record<string, unknown>) }
+                : { ...mergedSpec };
+            const fallbackIds = deriveComponentIntent({
+              roomName: job.room.name || '',
+              turnId: currentTurnId,
+              componentType,
+              spec: mergedProps,
+              slot,
+            });
+            const intentId =
+              typeof args.intentId === 'string' && args.intentId.trim().length > 0
+                ? args.intentId.trim()
+                : fallbackIds.intentId;
+            const messageId =
+              typeof args.messageId === 'string' && args.messageId.trim().length > 0
+                ? args.messageId.trim()
+                : fallbackIds.messageId;
+
+            args.intentId = intentId;
+            args.messageId = messageId;
+
+            if (componentType && messageId) {
+              lastComponentByType.set(componentType, messageId);
+              lastCreatedComponentId = messageId;
+              const existing = componentRegistry.get(messageId);
+              if (existing) {
+                existing.intentId = intentId;
+                if (slot) {
+                  existing.slot = slot;
+                }
+              } else {
+                componentRegistry.set(messageId, {
+                  type: componentType,
+                  createdAt: Date.now(),
+                  props: {} as JsonObject,
+                  state: {} as JsonObject,
+                  intentId,
+                  slot,
+                });
+              }
+              if (intentId) {
+                registerLedgerEntry({
+                  intentId,
+                  messageId,
+                  componentType,
+                  slot,
+                  state: existing ? 'updated' : 'created',
+                });
+              }
+            }
+          }
+          if (fnCall.name === 'update_component') {
+            const resolvedId = resolveComponentId(args);
+            if (!resolvedId) {
+              console.warn('[VoiceAgent] Skipping update_component without componentId', args);
+              continue;
+            }
+            args.componentId = resolvedId;
+            const rawPatch = coerceComponentPatch(args.patch);
+            const existingFT = componentRegistry.get(resolvedId);
+            const fallbackSeconds =
+              typeof existingFT?.props?.configuredDuration === 'number' && Number.isFinite(existingFT.props.configuredDuration)
+                ? (existingFT.props.configuredDuration as number)
+                : 300;
+            args.patch = normalizeComponentPatch(rawPatch, fallbackSeconds);
+            const existingAfterFT = componentRegistry.get(resolvedId);
+            if (existingAfterFT) {
+              existingAfterFT.props = { ...existingAfterFT.props, ...(args.patch as Record<string, unknown>) };
+              if (typeof args.intentId === 'string' && args.intentId.trim().length > 0) {
+                existingAfterFT.intentId = args.intentId.trim();
+              }
+              if (typeof args.slot === 'string' && args.slot.trim().length > 0) {
+                existingAfterFT.slot = args.slot.trim();
+              }
+            }
+            if (typeof args.intentId === 'string' && args.intentId.trim().length > 0) {
+              const componentType =
+                existingAfterFT?.type ||
+                (typeof args.type === 'string' && args.type.trim().length > 0 ? args.type.trim() : 'unknown');
+              registerLedgerEntry({
+                intentId: args.intentId.trim(),
+                messageId: resolvedId,
+                componentType,
+                slot: typeof args.slot === 'string' && args.slot.trim().length > 0 ? args.slot.trim() : existingAfterFT?.slot,
+                state: existingAfterFT ? 'updated' : 'reserved',
+              });
+            }
+            lastCreatedComponentId = resolvedId;
+          }
+          if (fnCall.name === 'reserve_component') {
+            const componentType = typeof args.type === 'string' ? args.type.trim() : '';
+            const intentId = typeof args.intentId === 'string' ? args.intentId.trim() : '';
+            const messageId = typeof args.messageId === 'string' ? args.messageId.trim() : '';
+            const slot = typeof args.slot === 'string' && args.slot.trim().length > 0 ? args.slot.trim() : undefined;
+            if (componentType && messageId) {
+              lastComponentByType.set(componentType, messageId);
+              lastCreatedComponentId = messageId;
+            }
+            if (intentId && messageId && componentType) {
+              registerLedgerEntry({
+                intentId,
+                messageId,
+                componentType,
+                slot,
+                state: componentRegistry.has(messageId) ? 'updated' : 'reserved',
+              });
+            }
+          }
+          if (fnCall.name === 'resolve_component') {
+            const resolvedId = typeof args.componentId === 'string' ? args.componentId.trim() : '';
+            if (resolvedId) {
+              lastCreatedComponentId = resolvedId;
+            }
+            const intentId = typeof args.intentId === 'string' ? args.intentId.trim() : '';
+            const componentType =
+              typeof args.type === 'string'
+                ? args.type.trim()
+                : typeof args.componentType === 'string'
+                  ? args.componentType.trim()
+                  : '';
+            const slot = typeof args.slot === 'string' && args.slot.trim().length > 0 ? args.slot.trim() : undefined;
+            if (intentId && resolvedId && componentType) {
+              registerLedgerEntry({
+                intentId,
+                messageId: resolvedId,
+                componentType,
+                slot,
+                state: componentRegistry.has(resolvedId) ? 'updated' : 'reserved',
+              });
+            }
+          }
+          console.debug('[VoiceAgent] FunctionToolsExecuted acknowledged', {
+            name: fnCall.name,
+            id: fnCall.id,
+            resolvedComponentId: args.componentId,
+          });
+        } catch (error) {
+          console.error('[VoiceAgent] Tool call handling failed', error);
+        }
       }
     });
 
-    session.on('input_speech_transcription_completed', async (evt: { transcript: string }) => {
-      const payload = { type: 'live_transcription', text: evt.transcript, speaker: 'user', timestamp: Date.now(), is_final: true };
-      await job.room.localParticipant?.publishData(new TextEncoder().encode(JSON.stringify(payload)), { reliable: true, topic: 'transcription' });
+    session.on(voice.AgentSessionEventTypes.UserInputTranscribed, async (event) => {
+      const payload = { type: 'live_transcription', text: event.transcript, speaker: 'user', timestamp: Date.now(), is_final: event.isFinal };
+      await job.room.localParticipant?.publishData(new TextEncoder().encode(JSON.stringify(payload)), {
+        reliable: event.isFinal,
+        topic: 'transcription',
+      });
+      if (event.isFinal) {
+        try {
+          appendTranscriptCache(job.room.name || 'unknown', {
+            participantId: 'user',
+            text: event.transcript,
+            timestamp: Date.now(),
+          });
+          void maybeHandleDebate(event.transcript);
+        } catch {}
+
+        // New user turn begins on a final transcript
+        bumpTurn();
+
+        const trimmed = event.transcript?.trim();
+        if (trimmed) {
+          try {
+            await generateReplySafely();
+          } catch (error) {
+            console.error('[VoiceAgent] failed to generate reply after transcript', error);
+          }
+        }
+      }
+    });
+
+    session.on(voice.AgentSessionEventTypes.ConversationItemAdded, async (event) => {
+      console.log('[VoiceAgent] ConversationItem FULL', {
+        type: event.item.type,
+        role: event.item.role,
+        hasFunctionCall: !!(event.item as any).functionCall,
+        functionCall: (event.item as any).functionCall,
+        functionCallId: (event.item as any).function_call_id,
+        toolCalls: (event.item as any).tool_calls,
+        content: (event.item as any).content,
+        contentKinds: Array.isArray((event.item as any).content)
+          ? (event.item as any).content.map((c: any) => c.type)
+          : undefined,
+      });
+      if (event.item.role !== 'assistant') return;
+      const text = event.item.textContent ?? '';
+      if (!text.trim()) return;
+
+      const payload = { type: 'live_transcription', text, speaker: 'voice-agent', timestamp: Date.now(), is_final: true };
+      await job.room.localParticipant?.publishData(new TextEncoder().encode(JSON.stringify(payload)), {
+        reliable: true,
+        topic: 'transcription',
+      });
       try {
         appendTranscriptCache(job.room.name || 'unknown', {
-          participantId: 'user',
-          text: evt.transcript,
+          participantId: 'voice-agent',
+          text,
           timestamp: Date.now(),
         });
-        void maybeHandleDebate(evt.transcript);
-      } catch {}
-      // Debounced steward trigger example (2-4s window)
-      try {
-        const g: any = globalThis as any;
-        clearTimeout(g.__steward_timer__);
-        g.__steward_timer__ = setTimeout(async () => {
-          // Emit a decision/status hint; in production, call the conductor with flowchart.update here
-          const hint = { type: 'decision', payload: { decision: { should_send: true, summary: 'steward_trigger' } }, timestamp: Date.now() };
-          await job.room.localParticipant?.publishData(new TextEncoder().encode(JSON.stringify(hint)), { reliable: true, topic: 'decision' });
-        }, 2500);
       } catch {}
     });
 
-    // Mirror assistant text responses to UI transcript as well
-    session.on('response_content_done', async (evt: { contentType: string; text: string; itemId: string }) => {
-      try {
-        if (evt.contentType === 'text' && evt.text) {
-          const payload = { type: 'live_transcription', text: evt.text, speaker: 'voice-agent', timestamp: Date.now(), is_final: true };
-          await job.room.localParticipant?.publishData(new TextEncoder().encode(JSON.stringify(payload)), { reliable: true, topic: 'transcription' });
-          try {
-            appendTranscriptCache(job.room.name || 'unknown', {
-              participantId: 'voice-agent',
-              text: evt.text,
-              timestamp: Date.now(),
-            });
-          } catch {}
-        }
-      } catch {}
+    session.on(voice.AgentSessionEventTypes.Error, (event) => {
+      console.error('[VoiceAgent] session error', event.error);
     });
 
-    job.room.on('dataReceived', (data, _participant, _kind, topic) => {
+    session.on(voice.AgentSessionEventTypes.Close, (event) => {
+      console.log('[VoiceAgent] session closed', event.reason);
+    });
+
+    job.room.on(RoomEvent.DataReceived, async (payload, participant, _, topic) => {
       if (topic !== 'transcription') return;
       try {
-        const msg = JSON.parse(new TextDecoder().decode(data));
-        if (msg?.manual === true && typeof msg.text === 'string') {
-          appendTranscriptCache(job.room.name || 'unknown', {
-            participantId: msg.speaker || 'user',
-            text: msg.text,
-            timestamp: typeof msg.timestamp === 'number' ? msg.timestamp : Date.now(),
-          });
-          try {
-            session.conversation.item.create(
-              new llm.ChatMessage({ role: llm.ChatRole.USER, content: String(msg.text) }),
-            );
-            session.response.create();
-          } catch (err) {
-            console.error('[VoiceAgent] Failed to forward manual text to OpenAI session', err);
+        const message = JSON.parse(new TextDecoder().decode(payload));
+        const text = typeof message?.text === 'string' ? message.text.trim() : '';
+        const isManual = Boolean(message?.manual);
+        const isReplay = Boolean(message?.replay);
+        const speaker = typeof message?.speaker === 'string' ? message.speaker : participant?.identity;
+        console.log('[VoiceAgent] DataReceived transcription', { text, isManual, isReplay, speaker, topic });
+        if (!text || isReplay) return;
+        if (!isManual && speaker === 'voice-agent') return;
+        // Native Realtime tool-calling path
+        console.log('[VoiceAgent] calling generateReply with userInput:', text);
+        try {
+          if (isManual) {
+            // Treat manual messages as their own turn to avoid cross-talk
+            bumpTurn();
           }
-          try {
-            const g: any = globalThis as any;
-            clearTimeout(g.__steward_timer__);
-            g.__steward_timer__ = setTimeout(async () => {
-              const hint = {
-                type: 'decision',
-                payload: { decision: { should_send: true, summary: 'steward_trigger' } },
-                timestamp: Date.now(),
-              };
-              await job.room.localParticipant?.publishData(
-                new TextEncoder().encode(JSON.stringify(hint)),
-                { reliable: true, topic: 'decision' },
-              );
-            }, 2500);
-          } catch {}
-          void maybeHandleDebate(msg.text);
+          await generateReplySafely({ userInput: text });
+        } catch (err) {
+          console.error('[VoiceAgent] generateReply error:', err);
         }
-      } catch {}
+      } catch (error) {
+        console.error('[VoiceAgent] failed to handle data transcription', error);
+      }
+    });
+
+    await session.start({
+      agent,
+      room: job.room,
+      inputOptions: { audioEnabled: true },
+      outputOptions: { audioEnabled: false, transcriptionEnabled },
     });
   },
 });
 
-// CLI runner for local dev
 if (import.meta.url.startsWith('file:') && process.argv[1].endsWith('voice-agent.ts')) {
   if (process.argv.length < 3) {
     process.argv.push('dev');

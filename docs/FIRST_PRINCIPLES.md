@@ -112,6 +112,9 @@ A: Voice hears + calls 2 tools. Stewards think + write full artifacts. Browser e
 * One LiveKit Cloud Agent Per User
 * Listens to LiveKit room audio and transcribes speech
 * Makes function calls to exactly **two** UI tools via LiveKit data channel
+  * Normalizes patches (duration/booleans) before sending them downstream
+  * Fingerprints recent `create_component` calls to avoid duplicate canvas inserts
+  * Delegates heavier work to the Conductor via `dispatch_to_conductor`
 * May hand off server-side work to the Conductor
 * Follows [OpenAI Realtime API](https://platform.openai.com/docs/guides/realtime) patterns
 
@@ -119,7 +122,7 @@ A: Voice hears + calls 2 tools. Stewards think + write full artifacts. Browser e
 
 * Tiny router that delegates to steward subagents via handoffs
 * No business logic - pure routing
-* Uses [OpenAI Agents SDK](https://openai.github.io/openai-agents-js/) patterns
+* Uses [OpenAI Agents SDK](https://openai.github.io/openai-agents-js/) patterns (which layer on the Responses API so stewards can opt in without extra plumbing)
 
 ### Stewards (Agents SDK)
 

@@ -48,8 +48,20 @@ npm install
   LIVEKIT_API_SECRET=
   LIVEKIT_URL=
   OPENAI_API_KEY=
+  ANTHROPIC_API_KEY=           # optional, enables Claude models for the canvas steward
   NEXT_PUBLIC_SUPABASE_URL=
   NEXT_PUBLIC_SUPABASE_ANON_KEY=
+  # Optional: override voice transcription routing (default: realtime)
+  VOICE_AGENT_TRANSCRIPTION_MODE=realtime | manual
+  ```
+
+- Optional canvas steward controls:
+
+  ```
+  CANVAS_STEWARD_MODEL=claude-haiku-4-5        # override the default model (falls back if provider unavailable)
+  CANVAS_STEWARD_SERVER_EXECUTION=false        # set true to run the server-side steward alongside the browser agent
+  NEXT_PUBLIC_CANVAS_AGENT_CLIENT_ENABLED=true # set false to disable the browser TLDraw agent (use server execution only)
+  CANVAS_STEWARD_DEBUG=false                   # set true to dump prompts/actions to the server logs
   ```
 
 ### Running the Application
@@ -79,6 +91,32 @@ npm run dev
 Visit `http://localhost:3000`
 
 > Important: Start the agents before the web app to ensure proper connection.
+
+**Optional - TLDraw Sync Server:**
+
+```bash
+npm run sync:dev
+```
+
+Runs the local TLDraw sync server so the canvas stays in sync across sessions.
+
+#### Launch Entire Stack at Once
+
+Prefer running everything in the background? Use the helper script:
+
+```bash
+npm run stack:start
+```
+
+This boots `livekit-server --dev` (as `lk:server:dev`), `sync:dev`, `agent:conductor`, `agent:realtime`, and `next dev` concurrently, writing output to `logs/*.log` so you can tail the services you care about.
+
+To stop all background services cleanly, run:
+
+```bash
+npm run stack:stop
+```
+
+The script reads the PID files in `logs/` and terminates each dev process, removing stale entries along the way.
 
 #### Production Mode
 
@@ -171,6 +209,7 @@ The production pipeline now runs as two lightweight Node processes plus the clie
    - Uses the LiveKit Agents Realtime API.
    - Listens to room audio, transcribes, and calls exactly two UI tools: `create_component` and `update_component`.
    - Can optionally hand off server-side work by calling `dispatch_to_conductor`.
+   - Supports two transcription modes. By default the agent relies on the realtime model's native speech recognition. Set `VOICE_AGENT_TRANSCRIPTION_MODE=manual` to route transcripts from the client data channel instead (legacy behaviour).
 
 2. **Conductor + Stewards** – `src/lib/agents/conductor/` and `src/lib/agents/subagents/`
    - Conductor is a tiny router (Agents SDK) that delegates to domain stewards via handoffs.

@@ -1,6 +1,7 @@
 import { nanoid } from 'nanoid';
 import { createShapeId, Editor, toRichText } from '@tldraw/tldraw';
 import type { CanvasEventMap, LiveKitBus } from './types';
+import { createLogger } from '@/lib/utils';
 
 interface CreateHandlersDeps {
   editor: Editor;
@@ -8,6 +9,8 @@ interface CreateHandlersDeps {
 }
 
 export function createCanvasCreationHandlers({ editor, bus }: CreateHandlersDeps): CanvasEventMap {
+  const logger = createLogger('CanvasCreationHandlers');
+
   const handleCreateNote: EventListener = (event) => {
     const detail = (event as CustomEvent).detail || {};
     const text: string = (detail.text || '').toString().trim() || 'Note';
@@ -51,7 +54,7 @@ export function createCanvasCreationHandlers({ editor, bus }: CreateHandlersDeps
         // ignore telemetry send issues
       }
     } catch (error) {
-      console.warn('[CanvasControl] create_note error', error);
+      logger.warn('create_note error', error);
     }
   };
 
@@ -73,7 +76,7 @@ export function createCanvasCreationHandlers({ editor, bus }: CreateHandlersDeps
         props: { w, h, geo: 'rectangle' },
       } as any);
     } catch (error) {
-      console.warn('[CanvasControl] create_rectangle error', error);
+      logger.warn('create_rectangle error', error);
     }
   };
 
@@ -95,7 +98,48 @@ export function createCanvasCreationHandlers({ editor, bus }: CreateHandlersDeps
         props: { w, h, geo: 'ellipse' },
       } as any);
     } catch (error) {
-      console.warn('[CanvasControl] create_ellipse error', error);
+      logger.warn('create_ellipse error', error);
+    }
+  };
+
+  const handleCreateArrow: EventListener = (event) => {
+    const detail = (event as CustomEvent).detail || {};
+    const from = typeof detail.from === 'string' ? detail.from : undefined;
+    const to = typeof detail.to === 'string' ? detail.to : undefined;
+    const label = typeof detail.label === 'string' ? detail.label : undefined;
+    const start = detail.start;
+    const end = detail.end;
+
+    try {
+      const arrowId = createShapeId(`arrow-${nanoid()}`);
+      const props: Record<string, unknown> = {};
+      if (label) props.text = label;
+      if (from) props.start = { type: 'binding', boundShapeId: from };
+      if (to) props.end = { type: 'binding', boundShapeId: to };
+      if (!from && !start) {
+        props.start = { type: 'point', x: 0, y: 0 };
+      } else if (start && typeof start === 'object') {
+        props.start = start;
+      }
+      if (!to && !end) {
+        props.end = { type: 'point', x: 320, y: 0 };
+      } else if (end && typeof end === 'object') {
+        props.end = end;
+      }
+
+      const viewport = editor.getViewportPageBounds();
+      const cx = viewport ? viewport.midX : 0;
+      const cy = viewport ? viewport.midY : 0;
+
+      editor.createShape({
+        id: arrowId,
+        type: 'arrow' as any,
+        x: cx,
+        y: cy,
+        props,
+      } as any);
+    } catch (error) {
+      logger.warn('create_arrow error', error);
     }
   };
 
@@ -170,7 +214,7 @@ export function createCanvasCreationHandlers({ editor, bus }: CreateHandlersDeps
         // ignore telemetry send issues
       }
     } catch (error) {
-      console.warn('[CanvasControl] draw_smiley error', error);
+      logger.warn('draw_smiley error', error);
     }
   };
 
@@ -178,6 +222,7 @@ export function createCanvasCreationHandlers({ editor, bus }: CreateHandlersDeps
     'tldraw:create_note': handleCreateNote,
     'tldraw:createRectangle': handleCreateRectangle,
     'tldraw:createEllipse': handleCreateEllipse,
+    'tldraw:createArrow': handleCreateArrow,
     'tldraw:drawSmiley': handleDrawSmiley,
   };
 }

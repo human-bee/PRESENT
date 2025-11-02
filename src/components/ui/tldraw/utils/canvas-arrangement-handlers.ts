@@ -1,12 +1,15 @@
 import type { Editor } from '@tldraw/tldraw';
 import type { CanvasEventMap } from './types';
 import { getSelectedCustomShapes } from './canvas-selection-shared';
+import { createLogger } from '@/lib/utils';
 
 interface ArrangementHandlersDeps {
   editor: Editor;
 }
 
 export function createCanvasArrangementHandlers({ editor }: ArrangementHandlersDeps): CanvasEventMap {
+  const logger = createLogger('CanvasArrangementHandlers');
+
   const handleArrangeGrid: EventListener = (event) => {
     try {
       const detail = (event as CustomEvent).detail || {};
@@ -45,7 +48,7 @@ export function createCanvasArrangementHandlers({ editor }: ArrangementHandlersD
 
       editor.updateShapes(updates as any);
     } catch (error) {
-      console.warn('[CanvasControl] arrange_grid error', error);
+      logger.warn('arrange_grid error', error);
     }
   };
 
@@ -88,7 +91,7 @@ export function createCanvasArrangementHandlers({ editor }: ArrangementHandlersD
         editor.updateShapes(updates as any);
       }
     } catch (error) {
-      console.warn('[CanvasControl] align_selected error', error);
+      logger.warn('align_selected error', error);
     }
   };
 
@@ -122,7 +125,7 @@ export function createCanvasArrangementHandlers({ editor }: ArrangementHandlersD
         editor.updateShapes(updates as any);
       }
     } catch (error) {
-      console.warn('[CanvasControl] distribute_selected error', error);
+      logger.warn('distribute_selected error', error);
     }
   };
 

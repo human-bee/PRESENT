@@ -64,3 +64,9 @@ node_modules/
 # Task files
 tasks.json
 tasks/ 
+
+# TLDraw local rooms
+.tldraw-local/
+
+# Temporary working copies of external templates
+.tmp/
