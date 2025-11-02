@@ -1,13 +1,17 @@
-import { Agent, run, tool } from '@openai/agents';
-import { randomUUID } from 'crypto';
+import { Agent, run } from '@openai/agents';
+import { randomUUID } from 'node:crypto';
+import { setTimeout as delay } from 'node:timers/promises';
 import { z } from 'zod';
 import { jsonObjectSchema, type JsonObject } from '@/lib/utils/json-schema';
 import {
   broadcastAgentPrompt,
+  broadcastToolCall,
   type CanvasAgentPromptPayload,
 } from '@/lib/agents/shared/supabase-context';
 import { activeFlowchartSteward } from '../subagents/flowchart-steward-registry';
-import { runCanvasSteward } from '../subagents/canvas-steward';
+import { runCanvasSteward, enqueueCanvasPrompt } from '../subagents/canvas-steward';
+import { AgentTaskQueue } from '@/lib/agents/shared/queue';
+import { resolveIntent, getObject, getString } from './intent-resolver';
 
 // Thin router: receives dispatch_to_conductor and hands off to stewards
 const SERVER_CANVAS_EXECUTION_ENABLED = process.env.CANVAS_STEWARD_SERVER_EXECUTION === 'true';
@@ -50,13 +54,38 @@ async function handleCanvasAgentPrompt(rawParams: JsonObject) {
   return { status: 'queued', requestId, room: parsed.room.trim(), payload };
 }
 
-export async function dispatchConductorTask(task: string, params: JsonObject) {
-  if (task.startsWith('flowchart.')) {
-    const result = await run(activeFlowchartSteward, JSON.stringify({ task, params }));
+async function executeTask(taskName: string, params: JsonObject) {
+  if (!taskName || taskName === 'auto') {
+    const resolution = resolveIntent(params);
+    if (resolution) {
+      if (resolution.kind === 'tool_call') {
+        const room = resolveRoom(params);
+        await broadcastToolCall({ room, tool: resolution.tool, params: resolution.params });
+        return { status: 'handled', tool: resolution.tool };
+      }
+      if (resolution.kind === 'task') {
+        const nextParams = resolution.params ? { ...params, ...resolution.params } : params;
+        return executeTask(resolution.task, nextParams);
+      }
+    }
+    const fallbackParams = params.message
+      ? params
+      : { ...params, message: resolveIntentText(params) };
+    return executeTask('canvas.agent_prompt', fallbackParams);
+  }
+
+  if (taskName === 'conductor.dispatch') {
+    const nextTask = typeof params?.task === 'string' ? params.task : 'auto';
+    const payload = (params?.params as JsonObject) ?? params;
+    return executeTask(nextTask, payload ?? {});
+  }
+
+  if (taskName.startsWith('flowchart.')) {
+    const result = await run(activeFlowchartSteward, JSON.stringify({ task: taskName, params }));
     return result.finalOutput;
   }
 
-  if (task === 'canvas.agent_prompt') {
+  if (taskName === 'canvas.agent_prompt') {
     const promptResult = await handleCanvasAgentPrompt(params);
     if (!SERVER_CANVAS_EXECUTION_ENABLED) {
       return promptResult;
@@ -66,12 +95,9 @@ export async function dispatchConductorTask(task: string, params: JsonObject) {
       room: promptResult.room,
       message: promptResult.payload.message,
       requestId: promptResult.payload.requestId,
-      bounds: promptResult.payload.bounds ?? undefined,
-      selectionIds: promptResult.payload.selectionIds ?? undefined,
       metadata: promptResult.payload.metadata ?? undefined,
-    };
-    const stewardResult = await runCanvasSteward({ task, params: stewardParams });
-    return { ...promptResult, steward: stewardResult };
+    });
+    return { ...promptResult, status: 'debounced' };
   }
 
   if (task.startsWith('canvas.')) {
@@ -81,40 +107,123 @@ export async function dispatchConductorTask(task: string, params: JsonObject) {
     return runCanvasSteward({ task, params });
   }
 
-  throw new Error(`No steward for task: ${task}`);
+  throw new Error(`No steward for task: ${taskName}`);
 }
 
-const dispatchToConductor = tool({
-  name: 'dispatch_to_conductor',
-  description: 'Ask the Conductor to run a steward for a complex component/task.',
-  parameters: z.object({
-    task: z.string().describe('Task identifier, e.g., flowchart.update'),
-    params: jsonObjectSchema.describe('Task parameters').default({}),
-  }),
-  async execute({ task, params }: { task: string; params: JsonObject }) {
-    return dispatchConductorTask(task, params);
-  },
+function resolveRoom(params: JsonObject): string {
+  const direct = getString(params, 'room');
+  if (direct) return direct;
+  const metadata = getObject(params, 'metadata');
+  const metaRoom = metadata ? getString(metadata, 'room') : undefined;
+  if (metaRoom) return metaRoom;
+  const participants = params.participants;
+  if (typeof participants === 'string') {
+    const trimmed = participants.trim();
+    if (trimmed) return trimmed;
+  }
+  if (Array.isArray(participants)) {
+    for (const entry of participants) {
+      if (typeof entry === 'string') {
+        const trimmed = entry.trim();
+        if (trimmed) return trimmed;
+      }
+      if (typeof entry === 'object' && entry !== null && typeof entry.room === 'string') {
+        const trimmed = entry.room.trim();
+        if (trimmed) return trimmed;
+      }
+    }
+  }
+  throw new Error('Room is required for conductor execution');
+}
+
+function resolveIntentText(params: JsonObject): string {
+  const transcript = getString(params, 'transcript');
+  if (transcript) return transcript;
+  const metadata = getObject(params, 'metadata');
+  const metaMessage = metadata ? getString(metadata, 'message') : undefined;
+  if (metaMessage) return metaMessage;
+  const intent = getString(params, 'intent');
+  if (intent) return intent;
+  const message = getString(params, 'message');
+  if (message) return message;
+  return 'Please assist on the canvas';
+}
+
+function createLeaseExtender(taskId: string, leaseToken: string) {
+  const intervalMs = Math.max(1_000, Math.floor(TASK_LEASE_TTL_MS * 0.6));
+  let stopped = false;
+
+  const intervalId = setInterval(() => {
+    if (stopped) return;
+    void queue.extendLease(taskId, leaseToken, TASK_LEASE_TTL_MS).catch((error) => {
+      const message = error instanceof Error ? error.message : String(error);
+      console.warn('[Conductor] failed to extend lease', { taskId, error: message });
+    });
+  }, intervalMs);
+
+  return () => {
+    stopped = true;
+    clearInterval(intervalId);
+  };
+}
+
+async function workerLoop() {
+  while (true) {
+    const { leaseToken, tasks } = await queue.claimTasks({
+      limit: Number(process.env.TASK_DEFAULT_CONCURRENCY ?? 10),
+      leaseTtlMs: TASK_LEASE_TTL_MS,
+    });
+
+    if (tasks.length === 0) {
+      await delay(500);
+      continue;
+    }
+
+    const roomBuckets = tasks.reduce<Record<string, typeof tasks>>((acc, task) => {
+      const roomKey = task.resource_keys.find((key) => key.startsWith('room:')) || 'room:default';
+      if (!acc[roomKey]) acc[roomKey] = [];
+      acc[roomKey].push(task);
+      return acc;
+    }, {});
+
+    await Promise.allSettled(
+      Object.entries(roomBuckets).map(async ([roomKey, roomTasks]) => {
+        const concurrency = ROOM_CONCURRENCY;
+        const queueList = [...roomTasks];
+        const workers = Array.from({ length: concurrency }).map(async () => {
+          while (queueList.length > 0) {
+            const task = queueList.shift();
+            if (!task) break;
+            const stopLeaseExtender = createLeaseExtender(task.id, leaseToken);
+            try {
+              const startedAt = Date.now();
+              const result = await executeTask(task.task, task.params);
+              await queue.completeTask(task.id, leaseToken, result as JsonObject);
+              const durationMs = Date.now() - startedAt;
+              console.log('[Conductor] task completed', { roomKey, taskId: task.id, durationMs });
+            } catch (error) {
+              const message = error instanceof Error ? error.message : String(error);
+              const retryAt = task.attempt < 3 ? new Date(Date.now() + Math.pow(2, task.attempt) * 1000) : undefined;
+              console.warn('[Conductor] task failed', { roomKey, taskId: task.id, task: task.task, attempt: task.attempt, retryAt, error: message });
+              await queue.failTask(task.id, leaseToken, { error: message, retryAt });
+            } finally {
+              stopLeaseExtender();
+            }
+          }
+        });
+        await Promise.allSettled(workers);
+      }),
+    );
+  }
+}
+
+void workerLoop().catch((err) => {
+  console.error('[Conductor] worker failed', err);
 });
 
 export const conductor = new Agent({
   name: 'Conductor',
   model: 'gpt-5-mini',
-  instructions:
-    'You are the Conductor. You own no business logic. When asked, hand off to the correct steward and return their final output.',
-  tools: [dispatchToConductor],
+  instructions: 'Queue-driven conductor. See worker loop for logic.',
+  tools: [],
 });
-
-export async function callConductor(task: string, params: JsonObject) {
-  return dispatchConductorTask(task, params);
-}
-
-// Simple CLI to keep the process alive for local dev
-const isDirectExecution =
-  import.meta.url.startsWith('file:') &&
-  typeof process.argv[1] === 'string' &&
-  /index\.(ts|js)$/.test(process.argv[1]);
-
-if (isDirectExecution) {
-  console.log('[Conductor] Ready. Waiting for handoffs...');
-  setInterval(() => {}, 1 << 30);
-}

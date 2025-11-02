@@ -222,13 +222,54 @@ export function useToolRegistry(deps: ToolRegistryDeps): ToolRegistryApi {
       const slot = typeof params?.slot === 'string' ? params.slot.trim() : undefined;
 
       try {
+        const { spec, props, ...rest } = (params || {}) as Record<string, unknown>;
+        let normalizedProps: Record<string, unknown> = { ...rest };
+        if (spec && typeof spec === 'string') {
+          try {
+            const parsedSpec = JSON.parse(spec as string);
+            if (parsedSpec && typeof parsedSpec === 'object') {
+              normalizedProps = { ...normalizedProps, ...parsedSpec };
+            }
+          } catch {
+            normalizedProps.spec = spec;
+          }
+        } else if (spec && typeof spec === 'object') {
+          normalizedProps = { ...normalizedProps, ...(spec as Record<string, unknown>) };
+        }
+        if (props && typeof props === 'object') {
+          normalizedProps = { ...normalizedProps, ...(props as Record<string, unknown>) };
+        }
+        normalizedProps = Object.fromEntries(
+          Object.entries(normalizedProps).filter(([, value]) => value !== undefined && value !== null),
+        );
+        normalizedProps.type = componentType;
+        normalizedProps.messageId = messageId;
+        if (!('__custom_message_id' in normalizedProps)) {
+          normalizedProps.__custom_message_id = messageId;
+        }
+        if (!('componentId' in normalizedProps)) {
+          normalizedProps.componentId = messageId;
+        }
+
+        const payloadProps: Record<string, unknown> = {
+          ...rest,
+          type: componentType,
+          messageId,
+        };
+        if (spec !== undefined) {
+          payloadProps.spec = spec;
+        }
+        if (props !== undefined) {
+          payloadProps.props = props;
+        }
+
         window.dispatchEvent(
           new CustomEvent('custom:showComponent', {
             detail: {
               messageId,
               component: {
                 type: componentType,
-                props: params,
+                props: normalizedProps,
               },
               contextKey,
             },

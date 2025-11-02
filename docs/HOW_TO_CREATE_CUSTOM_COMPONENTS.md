@@ -158,3 +158,10 @@ The following patterns are **obsolete** and should not be used any more:
 ---
 
 Happy building! 🚀
+
+
+  - A common pitfall when updating custom components is letting the last component to register overwrite the
+    shared update callback in the registry. The symptom is that only one surface (usually the transcript preview)
+    reacts to patches while the canvas component stays stale. The fix is to fan out patches to every registered
+    instance—track each registration with a token, aggregate their callbacks, and release them on unmount—so every
+    clone receives the same update payload synchronously.

@@ -526,6 +526,22 @@ export async function broadcastCanvasAction(event: {
   await client.sendData(normalizedRoom, data, DataPacket_Kind.RELIABLE, { topic: 'tool_call' });
 }
 
+export async function broadcastToolCall(event: {
+  room: string;
+  tool: string;
+  params?: JsonObject;
+  source?: string;
+}) {
+  const { room, tool, params, source = 'conductor' } = event;
+  const action = { tool, params, timestamp: Date.now() };
+
+  const { client, normalizedRoom } = await ensureLivekitRoom(room);
+  const data = new TextEncoder().encode(
+    JSON.stringify({ type: 'tool_call', payload: action, source, timestamp: Date.now() }),
+  );
+  await client.sendData(normalizedRoom, data, DataPacket_Kind.RELIABLE, { topic: 'tool_call' });
+}
+
 export async function broadcastAgentPrompt(event: {
   room: string;
   payload: CanvasAgentPromptPayload;

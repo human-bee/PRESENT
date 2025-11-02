@@ -57,6 +57,12 @@ export class ObservabilityBridge {
     toolCallsBySource: {},
     recentEvents: [],
   };
+  private queueMetrics = {
+    enqueued: 0,
+    completed: 0,
+    failed: 0,
+    avgDurationMs: 0,
+  };
   private maxEvents = 100; // Keep last 100 events in memory
   private listeners: Set<(event: ToolCallEvent) => void> = new Set();
   private pendingToolCalls = new Map<string, { startTime: number; event: ToolCallEvent }>();
@@ -140,6 +146,7 @@ export class ObservabilityBridge {
       err: this.metrics.failedToolCalls,
       avgMs: this.metrics.averageExecutionTime,
       byType: this.metrics.toolCallsByType,
+      queue: this.queueMetrics,
     });
   }
 
@@ -252,6 +259,19 @@ export class ObservabilityBridge {
     };
     this.pendingToolCalls.clear();
     this.logger.log('📊 Observability data cleared');
+  }
+
+  addQueueEvent(event: { type: 'queued' | 'completed' | 'failed'; durationMs?: number }) {
+    if (event.type === 'queued') this.queueMetrics.enqueued += 1;
+    if (event.type === 'completed') {
+      this.queueMetrics.completed += 1;
+      if (typeof event.durationMs === 'number' && !Number.isNaN(event.durationMs)) {
+        const prev = this.queueMetrics.avgDurationMs;
+        const n = this.queueMetrics.completed;
+        this.queueMetrics.avgDurationMs = prev + (event.durationMs - prev) / Math.max(1, n);
+      }
+    }
+    if (event.type === 'failed') this.queueMetrics.failed += 1;
   }
 
   // ──────────────────────────────────────────────
