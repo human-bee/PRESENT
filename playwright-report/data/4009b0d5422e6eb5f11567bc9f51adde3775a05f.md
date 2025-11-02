@@ -83,7 +83,7 @@
           - generic:
             - generic:
               - generic: Connected
-              - generic: canvas-e2e-1762105618981
+              - generic: canvas-e2e-1762121055447
             - generic:
               - button "Disconnect"
               - button "Copy Link"

@@ -68,11 +68,34 @@ export function useToolEvents(room: Room | undefined, options: UseToolEventsOpti
         const patch = message.patch && typeof message.patch === 'object' ? message.patch : undefined;
         if (!componentId || !patch) return;
 
-        await ComponentRegistry.update(componentId, patch as Record<string, unknown>).catch((error) => {
-          if (enableLogging) {
-            console.warn('[ToolDispatcher] registry update failed', { componentId, error });
-          }
-        });
+        await ComponentRegistry.update(componentId, patch as Record<string, unknown>)
+          .then(() => {
+            const refreshed = ComponentRegistry.get(componentId);
+            if (refreshed?.props && refreshed.componentType) {
+              try {
+                window.dispatchEvent(
+                  new CustomEvent('custom:showComponent', {
+                    detail: {
+                      messageId: componentId,
+                      component: {
+                        type: refreshed.componentType,
+                        props: refreshed.props,
+                      },
+                    },
+                  }),
+                );
+              } catch (error) {
+                if (enableLogging) {
+                  console.warn('[ToolDispatcher] refresh showComponent dispatch failed', { componentId, error });
+                }
+              }
+            }
+          })
+          .catch((error) => {
+            if (enableLogging) {
+              console.warn('[ToolDispatcher] registry update failed', { componentId, error });
+            }
+          });
 
         try {
           window.dispatchEvent(

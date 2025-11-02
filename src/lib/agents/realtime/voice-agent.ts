@@ -849,6 +849,20 @@ Your only output is function calls. Never use plain text unless absolutely neces
               : 300;
           const patch = normalizeComponentPatch(rawPatch, fallbackSeconds);
 
+          const isDebateScorecardTarget =
+            existing?.type === 'DebateScorecard' ||
+            (typeof args.type === 'string' && args.type.trim() === 'DebateScorecard') ||
+            (activeScorecard && (!resolvedId || activeScorecard.componentId === resolvedId));
+
+          if (isDebateScorecardTarget && !resolvedId && activeScorecard?.componentId) {
+            resolvedId = activeScorecard.componentId;
+          }
+
+          if (!resolvedId) {
+            console.warn('[VoiceAgent] update_component missing componentId after resolution', args);
+            return { status: 'ERROR', message: 'Missing componentId for update_component' };
+          }
+
           const payload: JsonObject = {
             componentId: resolvedId,
             patch,
@@ -859,11 +873,6 @@ Your only output is function calls. Never use plain text unless absolutely neces
           if (slot) {
             payload.slot = slot;
           }
-
-          const isDebateScorecardTarget =
-            existing?.type === 'DebateScorecard' ||
-            (typeof args.type === 'string' && args.type.trim() === 'DebateScorecard') ||
-            (activeScorecard && activeScorecard.componentId === resolvedId);
 
           if (isDebateScorecardTarget) {
             const conductorPayload: JsonObject = {

@@ -999,234 +999,228 @@ export function DebateScorecard(props: DebateScorecardProps) {
   );
 
   return (
-    <div className="w-full rounded-2xl border border-white/5 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.08),transparent_55%)] p-6 md:p-8 text-white font-sans">
-      <header className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
-        <div className="space-y-1">
-          <p className="text-xs uppercase tracking-[0.25em] text-white/40">Debate Analysis</p>
-          <h2 className="text-2xl md:text-3xl font-semibold text-white">{parsed.topic}</h2>
-          <p className="text-sm text-white/50">{parsed.round}</p>
-          {lastAction && <p className="text-xs text-white/40 mt-2">Latest action: {lastAction}</p>}
-        </div>
-        <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-5 py-3 text-right">
-          <p className="text-xs uppercase tracking-wide text-white/40">Scoreboard</p>
-          <div className="flex items-center justify-end gap-3 text-2xl font-semibold text-white">
-            {scoreline.entries.map((entry, index) => (
-              <React.Fragment key={entry.label}>
-                <span>{entry.score}</span>
-                {index < scoreline.entries.length - 1 && (
-                  <span className="text-white/30 text-xl">·</span>
-                )}
-              </React.Fragment>
-            ))}
+    <div className="w-[960px] max-w-full">
+      <div className="rounded-3xl border border-white/5 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.08),transparent_55%)] shadow-lg text-white font-sans p-6 md:p-8 flex flex-col gap-6">
+        <header className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+          <div className="space-y-1">
+            <p className="text-xs uppercase tracking-[0.25em] text-white/40">Debate Analysis</p>
+            <h2 className="text-2xl md:text-3xl font-semibold text-white">{parsed.topic}</h2>
+            <p className="text-sm text-white/50">{parsed.round}</p>
+            {lastAction && <p className="text-xs text-white/40 mt-2">Latest action: {lastAction}</p>}
           </div>
-          <p className="text-xs text-white/40 mt-1">Total points exchanged: {scoreline.total}</p>
-        </div>
-      </header>
-
-      {activeAchievement && (
-        <AchievementToast award={activeAchievement} onDismiss={() => setActiveAchievement(null)} />
-      )}
-
-      <div className="mt-6 grid gap-4 md:grid-cols-3">
-        {playerSummaries.map((summary, index) => (
-          <PlayerCard
-            key={summary.player.id}
-            summary={summary}
-            opponentScore={
-              playerSummaries[(index + 1) % playerSummaries.length]?.player.score ?? 0
-            }
-          />
-        ))}
-        <ScoreSummaryCard
-          lastAction={lastAction}
-          pendingVerifications={parsed.status?.pendingVerifications}
-          players={parsed.players}
-        />
-      </div>
-
-     <MetricsStrip metrics={parsed.metrics} show={parsed.showMetricsStrip} />
-
-     <div className="mt-6 flex flex-wrap gap-2 text-xs">
-       {[
-         { key: 'ledger', label: 'Ledger', icon: FileText },
-         { key: 'map', label: 'Map', icon: MapIcon },
-         { key: 'rfd', label: 'Judge RFD', icon: Gavel },
-         { key: 'sources', label: 'Sources', icon: BookOpen },
-         { key: 'timeline', label: 'Timeline', icon: History },
-       ].map((tab) => {
-         const Icon = tab.icon;
-         const active = localFilters.activeTab === tab.key;
-         return (
-           <button
-             key={tab.key}
-             type="button"
-             onClick={() =>
-               setLocalFilters((prev) => ({
-                 ...prev,
-                 activeTab: tab.key as DebateScorecardState['filters']['activeTab'],
-               }))
-             }
-             className={cn(
-               'inline-flex items-center gap-2 px-3 py-2 rounded-full border transition',
-               active
-                 ? 'border-white/40 bg-white/[0.12]'
-                 : 'border-white/10 bg-white/[0.04] hover:bg-white/[0.08]',
-             )}
-           >
-             <Icon className="w-4 h-4" />
-             {tab.label}
-           </button>
-         );
-       })}
-     </div>
-
-      <div className="mt-6 grid gap-3 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-        <div className="flex flex-wrap items-center gap-2 text-xs">
-          <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-2">
-            <Filter className="w-4 h-4" />
-            <select
-              className="bg-transparent text-white/80 text-xs focus:outline-none"
-              value={localFilters.speaker || 'ALL'}
-              onChange={(e) =>
-                setLocalFilters((prev) => ({ ...prev, speaker: e.target.value as any }))
-              }
-            >
-              {['ALL', 'AFF', 'NEG', '1AC', '1NC', '2AC', '2NC', '1AR', '1NR', '2AR', '2NR'].map(
-                (value) => (
-                  <option key={value} value={value} className="text-black">
-                    {value}
-                  </option>
-                ),
-              )}
-            </select>
-          </div>
-          <label className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-2 cursor-pointer">
-            <ShieldCheck className="w-4 h-4" />
-            <span className="font-medium text-white/70">Fact-check notes</span>
-            <input
-              type="checkbox"
-              className="accent-emerald-400"
-              checked={factCheckToggle}
-              onChange={(e) => setFactCheckToggle(e.target.checked)}
-            />
-          </label>
-          <div className="flex flex-wrap items-center gap-2">
-            {statusOptions.map((status) => {
-              const active = (localFilters.statuses || []).includes(status);
-              return (
-                <button
-                  key={status}
-                  type="button"
-                  onClick={() =>
-                    setLocalFilters((prev) => {
-                      const current = new Set(prev.statuses || []);
-                      if (current.has(status)) {
-                        current.delete(status);
-                      } else {
-                        current.add(status);
-                      }
-                      return { ...prev, statuses: Array.from(current) as ClaimStatus[] };
-                    })
-                  }
-                  className={cn(
-                    'inline-flex items-center gap-2 rounded-full border px-2 py-1 transition',
-                    active
-                      ? 'border-white/40 bg-white/[0.12]'
-                      : 'border-white/10 bg-white/[0.04] hover:bg-white/[0.08]',
-                  )}
-                >
-                  {statusBadge(status)}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-        <div className="flex gap-2 justify-end">
-          <div className="relative flex-1">
-            <Search className="w-4 h-4 text-white/30 absolute left-3 top-1/2 -translate-y-1/2" />
-            <input
-              type="search"
-              placeholder="Search claims, evidence, notes"
-              value={localFilters.searchQuery ?? ''}
-              onChange={(e) => setLocalFilters((prev) => ({ ...prev, searchQuery: e.target.value }))}
-              className="w-full rounded-full border border-white/10 bg-white/[0.05] pl-9 pr-3 py-2 text-xs focus:outline-none focus:border-white/30"
-            />
-          </div>
-          <button className="inline-flex items-center gap-2 px-3 py-2 rounded-full border border-white/10 bg-white/[0.04] hover:bg-white/[0.07] text-xs">
-            <FileOutput className="w-4 h-4" /> Export
-          </button>
-        </div>
-      </div>
-
-      <div className="mt-6">
-        {localFilters.activeTab === 'timeline' ? (
-          <Timeline events={parsed.timeline} players={parsed.players} />
-        ) : (
-          <>
-            {localFilters.activeTab === 'ledger' && (
-              <LedgerTable
-                claims={filteredClaims}
-                factCheckEnabled={factCheckToggle}
-                playerColorBySide={playerColorBySide as Map<'AFF' | 'NEG', string>}
-              />
-            )}
-            {localFilters.activeTab === 'map' && (
-              <MapView nodes={parsed.map.nodes} edges={parsed.map.edges} />
-            )}
-            {localFilters.activeTab === 'rfd' && (
-              <RFDView summary={parsed.rfd.summary} links={parsed.rfd.links} claims={parsed.claims} />
-            )}
-            {localFilters.activeTab === 'sources' && <SourcesView sources={parsed.sources} />}
-          </>
-        )}
-      </div>
-
-      <div className="mt-10 grid gap-4 md:grid-cols-3 text-xs text-white/70">
-        <div className="rounded-xl border border-white/5 bg-white/[0.03] p-4 space-y-2">
-          <p className="text-white font-medium flex items-center gap-2 text-sm">
-            <ShieldAlert className="w-4 h-4" /> Verdict legend
-          </p>
-          <div className="flex flex-wrap gap-2">
-            {verdictEnum.options.map((value) => {
-              const cfg = verdictConfig[value];
-              return (
-                <span
-                  key={value}
-                  className={cn('px-2 py-1 rounded-full text-[11px] font-medium', cfg.className)}
-                >
-                  {cfg.label}
-                </span>
-              );
-            })}
-          </div>
-        </div>
-        <div className="rounded-xl border border-white/5 bg-white/[0.03] p-4 space-y-2">
-          <p className="text-white font-medium flex items-center gap-2 text-sm">
-            <Info className="w-4 h-4" /> How to use
-          </p>
-          <ol className="list-decimal list-inside space-y-1 text-white/70">
-            <li>Record arguments verbatim with speaker and speech.</li>
-            <li>Verify claims, attach sources, and mark status.</li>
-            <li>Use the map to surface clash and supporting warrants.</li>
-            <li>Keep the RFD aligned with linked voters.</li>
-          </ol>
-        </div>
-        <div className="rounded-xl border border-white/5 bg-white/[0.03] p-4 space-y-2">
-          <p className="text-white font-medium flex items-center gap-2 text-sm">
-            <Sparkles className="w-4 h-4" /> Achievements earned
-          </p>
-          {unlockedAchievements.length === 0 ? (
-            <p className="text-xs text-white/40">No achievements yet. Keep debating!</p>
-          ) : (
-            <div className="flex flex-wrap gap-2">
-              {unlockedAchievements.map((award) => (
-                <AchievementBadge key={award.id} award={award} />
+          <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-5 py-3 text-right">
+            <p className="text-xs uppercase tracking-wide text-white/40">Scoreboard</p>
+            <div className="flex items-center justify-end gap-3 text-2xl font-semibold text-white">
+              {scoreline.entries.map((entry, index) => (
+                <React.Fragment key={entry.label}>
+                  <span>{entry.score}</span>
+                  {index < scoreline.entries.length - 1 && <span className="text-white/30 text-xl">·</span>}
+                </React.Fragment>
               ))}
             </div>
-          )}
+            <p className="text-xs text-white/40 mt-1">Total points exchanged: {scoreline.total}</p>
+          </div>
+        </header>
+
+        {activeAchievement && (
+          <AchievementToast award={activeAchievement} onDismiss={() => setActiveAchievement(null)} />
+        )}
+
+        <div className="flex flex-col gap-6 lg:flex-row">
+          <aside className="w-full space-y-4 lg:w-[320px] xl:w-[360px] flex-shrink-0">
+            <div className="grid gap-4">
+              {playerSummaries.map((summary, index) => (
+                <PlayerCard
+                  key={summary.player.id}
+                  summary={summary}
+                  opponentScore={playerSummaries[(index + 1) % playerSummaries.length]?.player.score ?? 0}
+                />
+              ))}
+              <ScoreSummaryCard
+                lastAction={lastAction}
+                pendingVerifications={parsed.status?.pendingVerifications}
+                players={parsed.players}
+              />
+            </div>
+
+            <MetricsStrip metrics={parsed.metrics} show={parsed.showMetricsStrip} />
+
+            <div className="grid gap-4 text-xs text-white/70">
+              <div className="rounded-xl border border-white/5 bg-white/[0.03] p-4 space-y-2">
+                <p className="text-white font-medium flex items-center gap-2 text-sm">
+                  <ShieldAlert className="w-4 h-4" /> Verdict legend
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {verdictEnum.options.map((value) => {
+                    const cfg = verdictConfig[value];
+                    return (
+                      <span key={value} className={cn('px-2 py-1 rounded-full text-[11px] font-medium', cfg.className)}>
+                        {cfg.label}
+                      </span>
+                    );
+                  })}
+                </div>
+              </div>
+              <div className="rounded-xl border border-white/5 bg-white/[0.03] p-4 space-y-2">
+                <p className="text-white font-medium flex items-center gap-2 text-sm">
+                  <Info className="w-4 h-4" /> How to use
+                </p>
+                <ol className="list-decimal list-inside space-y-1 text-white/70">
+                  <li>Record arguments verbatim with speaker and speech.</li>
+                  <li>Verify claims, attach sources, and mark status.</li>
+                  <li>Use the map to surface clash and supporting warrants.</li>
+                  <li>Keep the RFD aligned with linked voters.</li>
+                </ol>
+              </div>
+              <div className="rounded-xl border border-white/5 bg-white/[0.03] p-4 space-y-2">
+                <p className="text-white font-medium flex items-center gap-2 text-sm">
+                  <Sparkles className="w-4 h-4" /> Achievements earned
+                </p>
+                {unlockedAchievements.length === 0 ? (
+                  <p className="text-xs text-white/40">No achievements yet. Keep debating!</p>
+                ) : (
+                  <div className="flex flex-wrap gap-2">
+                    {unlockedAchievements.map((award) => (
+                      <AchievementBadge key={award.id} award={award} />
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </aside>
+
+          <main className="flex-1 flex flex-col gap-4">
+            <div className="flex flex-wrap gap-2 text-xs">
+              {[
+                { key: 'ledger', label: 'Ledger', icon: FileText },
+                { key: 'map', label: 'Map', icon: MapIcon },
+                { key: 'rfd', label: 'Judge RFD', icon: Gavel },
+                { key: 'sources', label: 'Sources', icon: BookOpen },
+                { key: 'timeline', label: 'Timeline', icon: History },
+              ].map((tab) => {
+                const Icon = tab.icon;
+                const active = localFilters.activeTab === tab.key;
+                return (
+                  <button
+                    key={tab.key}
+                    type="button"
+                    onClick={() =>
+                      setLocalFilters((prev) => ({
+                        ...prev,
+                        activeTab: tab.key as DebateScorecardState['filters']['activeTab'],
+                      }))
+                    }
+                    className={cn(
+                      'inline-flex items-center gap-2 px-3 py-2 rounded-full border transition',
+                      active
+                        ? 'border-white/40 bg-white/[0.12]'
+                        : 'border-white/10 bg-white/[0.04] hover:bg-white/[0.08]',
+                    )}
+                  >
+                    <Icon className="w-4 h-4" />
+                    {tab.label}
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="grid gap-3 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+              <div className="flex flex-wrap items-center gap-2 text-xs">
+                <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-2">
+                  <Filter className="w-4 h-4" />
+                  <select
+                    className="bg-transparent text-white/80 text-xs focus:outline-none"
+                    value={localFilters.speaker || 'ALL'}
+                    onChange={(e) => setLocalFilters((prev) => ({ ...prev, speaker: e.target.value as any }))}
+                  >
+                    {['ALL', 'AFF', 'NEG', '1AC', '1NC', '2AC', '2NC', '1AR', '1NR', '2AR', '2NR'].map((value) => (
+                      <option key={value} value={value} className="text-black">
+                        {value}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <label className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-2 cursor-pointer">
+                  <ShieldCheck className="w-4 h-4" />
+                  <span className="font-medium text-white/70">Fact-check notes</span>
+                  <input
+                    type="checkbox"
+                    className="accent-emerald-400"
+                    checked={factCheckToggle}
+                    onChange={(e) => setFactCheckToggle(e.target.checked)}
+                  />
+                </label>
+                <div className="flex flex-wrap items-center gap-2">
+                  {statusOptions.map((status) => {
+                    const active = (localFilters.statuses || []).includes(status);
+                    return (
+                      <button
+                        key={status}
+                        type="button"
+                        onClick={() =>
+                          setLocalFilters((prev) => {
+                            const current = new Set(prev.statuses || []);
+                            if (current.has(status)) {
+                              current.delete(status);
+                            } else {
+                              current.add(status);
+                            }
+                            return { ...prev, statuses: Array.from(current) as ClaimStatus[] };
+                          })
+                        }
+                        className={cn(
+                          'inline-flex items-center gap-2 rounded-full border px-2 py-1 transition',
+                          active
+                            ? 'border-white/40 bg-white/[0.12]'
+                            : 'border-white/10 bg-white/[0.04] hover:bg-white/[0.08]',
+                        )}
+                      >
+                        {statusBadge(status)}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              <div className="flex gap-2 justify-end">
+                <div className="relative flex-1">
+                  <Search className="w-4 h-4 text-white/30 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="search"
+                    placeholder="Search claims, evidence, notes"
+                    value={localFilters.searchQuery ?? ''}
+                    onChange={(e) => setLocalFilters((prev) => ({ ...prev, searchQuery: e.target.value }))}
+                    className="w-full rounded-full border border-white/10 bg-white/[0.05] pl-9 pr-3 py-2 text-xs focus:outline-none focus:border-white/30"
+                  />
+                </div>
+                <button className="inline-flex items-center gap-2 px-3 py-2 rounded-full border border-white/10 bg-white/[0.04] hover:bg-white/[0.07] text-xs">
+                  <FileOutput className="w-4 h-4" /> Export
+                </button>
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-4">
+              {localFilters.activeTab === 'timeline' ? (
+                <Timeline events={parsed.timeline} players={parsed.players} />
+              ) : (
+                <>
+                  {localFilters.activeTab === 'ledger' && (
+                    <LedgerTable
+                      claims={filteredClaims}
+                      factCheckEnabled={factCheckToggle}
+                      playerColorBySide={playerColorBySide as Map<'AFF' | 'NEG', string>}
+                    />
+                  )}
+                  {localFilters.activeTab === 'map' && <MapView nodes={parsed.map.nodes} edges={parsed.map.edges} />}
+                  {localFilters.activeTab === 'rfd' && (
+                    <RFDView summary={parsed.rfd.summary} links={parsed.rfd.links} claims={parsed.claims} />
+                  )}
+                  {localFilters.activeTab === 'sources' && <SourcesView sources={parsed.sources} />}
+                </>
+              )}
+            </div>
+          </main>
         </div>
       </div>
-
     </div>
   );
 }

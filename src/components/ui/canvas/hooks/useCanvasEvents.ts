@@ -36,6 +36,21 @@ export function useCanvasEvents({
     ) => {
       try {
         let node: React.ReactNode = event.detail.component as React.ReactNode;
+        if (process.env.NODE_ENV !== 'production') {
+          try {
+            logger.debug('🎬 custom:showComponent received', {
+              messageId: event.detail.messageId,
+              hasEditor: Boolean(editor),
+              inferredType:
+                (React.isValidElement(node) && (node.type as any)?.name) ||
+                (typeof (event.detail.component as any)?.type === 'string'
+                  ? (event.detail.component as any).type
+                  : undefined),
+            });
+          } catch {
+            /* noop */
+          }
+        }
         let inferredName: string | undefined = 'Rendered Component';
         if (!editor) {
           if (!React.isValidElement(node)) {

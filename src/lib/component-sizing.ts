@@ -131,6 +131,15 @@ export const componentSizeInfo: Record<string, ComponentSizeInfo> = {
     resizeMode: 'free',
     sizingPolicy: 'scale_only',
   },
+  DebateScorecard: {
+    naturalWidth: 960,
+    naturalHeight: 540,
+    minWidth: 720,
+    minHeight: 405,
+    aspectRatio: 16 / 9,
+    resizeMode: 'aspect-locked',
+    sizingPolicy: 'fit_until_user_resize',
+  },
   // Default fallback for unregistered components
   Default: {
     naturalWidth: 300,

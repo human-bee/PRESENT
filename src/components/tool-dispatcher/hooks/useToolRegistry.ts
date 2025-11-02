@@ -155,16 +155,43 @@ export function useToolRegistry(deps: ToolRegistryDeps): ToolRegistryApi {
       const dispatch = lastDispatch;
       for (const [messageId, entry] of pendingUpdates.entries()) {
         pendingUpdates.delete(messageId);
-        const componentInfo = ComponentRegistry.get(messageId);
-        dispatch('tldraw:merge_component_state', {
-          messageId,
-          patch: entry.patch,
-          meta: { source: 'update_component' },
-        });
-        void ComponentRegistry.update(messageId, entry.patch);
-        metrics?.markPaintForMessage?.(messageId, {
-          tool: 'update_component',
-          componentType: componentInfo?.componentType,
+      const componentInfo = ComponentRegistry.get(messageId);
+      dispatch('tldraw:merge_component_state', {
+        messageId,
+        patch: entry.patch,
+        meta: { source: 'update_component' },
+      });
+      void ComponentRegistry.update(messageId, entry.patch)
+        .then(() => {
+          const refreshedInfo = ComponentRegistry.get(messageId);
+          if (refreshedInfo?.props && refreshedInfo.componentType) {
+            try {
+              window.dispatchEvent(
+                new CustomEvent('custom:showComponent', {
+                  detail: {
+                    messageId,
+                    component: {
+                      type: refreshedInfo.componentType,
+                      props: refreshedInfo.props,
+                    },
+                    contextKey,
+                  },
+                }),
+              );
+            } catch {
+              /* noop */
+            }
+          }
+          metrics?.markPaintForMessage?.(messageId, {
+            tool: 'update_component',
+            componentType: refreshedInfo?.componentType ?? componentInfo?.componentType,
+          });
+        })
+        .catch(() => {
+          metrics?.markPaintForMessage?.(messageId, {
+            tool: 'update_component',
+            componentType: componentInfo?.componentType,
+          });
         });
       }
     };
