@@ -66,4 +66,7 @@ tasks.json
 tasks/ 
 
 # TLDraw local rooms
-.tldraw-local/ 
+.tldraw-local/
+
+# Temporary working copies of external templates
+.tmp/

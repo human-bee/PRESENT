@@ -48,10 +48,20 @@ npm install
   LIVEKIT_API_SECRET=
   LIVEKIT_URL=
   OPENAI_API_KEY=
+  ANTHROPIC_API_KEY=           # optional, enables Claude models for the canvas steward
   NEXT_PUBLIC_SUPABASE_URL=
   NEXT_PUBLIC_SUPABASE_ANON_KEY=
   # Optional: override voice transcription routing (default: realtime)
   VOICE_AGENT_TRANSCRIPTION_MODE=realtime | manual
+  ```
+
+- Optional canvas steward controls:
+
+  ```
+  CANVAS_STEWARD_MODEL=claude-haiku-4-5        # override the default model (falls back if provider unavailable)
+  CANVAS_STEWARD_SERVER_EXECUTION=false        # set true to run the server-side steward alongside the browser agent
+  NEXT_PUBLIC_CANVAS_AGENT_CLIENT_ENABLED=true # set false to disable the browser TLDraw agent (use server execution only)
+  CANVAS_STEWARD_DEBUG=false                   # set true to dump prompts/actions to the server logs
   ```
 
 ### Running the Application
@@ -98,7 +108,7 @@ Prefer running everything in the background? Use the helper script:
 npm run stack:start
 ```
 
-This boots `sync:dev`, `agent:conductor`, `agent:realtime`, and `next dev` concurrently, writing output to `logs/*.log` so you can tail the services you care about.
+This boots `livekit-server --dev` (as `lk:server:dev`), `sync:dev`, `agent:conductor`, `agent:realtime`, and `next dev` concurrently, writing output to `logs/*.log` so you can tail the services you care about.
 
 To stop all background services cleanly, run:
 

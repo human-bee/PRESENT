@@ -38,6 +38,19 @@ export class CreateActionUtil extends AgentActionUtil<CreateAction> {
 		if (!action.complete) return action
 
 		const { shape } = action
+		const hasValidId = typeof shape.shapeId === 'string' && shape.shapeId.trim().length > 0
+		if (!hasValidId) {
+			const fallbackId = helpers.generateFallbackSimpleShapeId()
+			if (process.env.NODE_ENV !== 'production') {
+				console.warn('[CanvasAgent] Missing shapeId for create action. Generated fallback id.', {
+					fallbackId,
+					intent: action.intent,
+				})
+			}
+			shape.shapeId = fallbackId
+		} else if (shape.shapeId !== shape.shapeId.trim()) {
+			shape.shapeId = shape.shapeId.trim()
+		}
 
 		// Ensure the created shape has a unique ID
 		shape.shapeId = helpers.ensureShapeIdIsUnique(shape.shapeId)

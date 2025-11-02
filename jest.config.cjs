@@ -6,12 +6,13 @@ module.exports = {
     '^.+\\.(ts|tsx)$': [
       'ts-jest',
       {
-        tsconfig: 'tsconfig.json',
+        tsconfig: 'tsconfig.test.json',
       },
     ],
   },
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/src/$1',
+    '^.+\\.(css|less|scss)$': '<rootDir>/tests/__mocks__/styleMock.js',
   },
   testPathIgnorePatterns: ['/node_modules/', '/dist/'],
 };

@@ -13,9 +13,8 @@ import { runCanvasSteward, enqueueCanvasPrompt } from '../subagents/canvas-stewa
 import { AgentTaskQueue } from '@/lib/agents/shared/queue';
 import { resolveIntent, getObject, getString } from './intent-resolver';
 
-const queue = new AgentTaskQueue();
-const ROOM_CONCURRENCY = Number(process.env.TASK_DEFAULT_CONCURRENCY ?? 1);
-const TASK_LEASE_TTL_MS = Number(process.env.TASK_LEASE_TTL_MS ?? 60_000);
+// Thin router: receives dispatch_to_conductor and hands off to stewards
+const SERVER_CANVAS_EXECUTION_ENABLED = process.env.CANVAS_STEWARD_SERVER_EXECUTION === 'true';
 
 const CanvasAgentPromptSchema = z
   .object({
@@ -88,8 +87,11 @@ async function executeTask(taskName: string, params: JsonObject) {
 
   if (taskName === 'canvas.agent_prompt') {
     const promptResult = await handleCanvasAgentPrompt(params);
-    // Use coalescing queue to debounce rapid canvas prompts
-    await enqueueCanvasPrompt({
+    if (!SERVER_CANVAS_EXECUTION_ENABLED) {
+      return promptResult;
+    }
+    const stewardParams: JsonObject = {
+      ...params,
       room: promptResult.room,
       message: promptResult.payload.message,
       requestId: promptResult.payload.requestId,
@@ -98,8 +100,11 @@ async function executeTask(taskName: string, params: JsonObject) {
     return { ...promptResult, status: 'debounced' };
   }
 
-  if (taskName.startsWith('canvas.')) {
-    return runCanvasSteward({ task: taskName, params });
+  if (task.startsWith('canvas.')) {
+    if (!SERVER_CANVAS_EXECUTION_ENABLED) {
+      throw new Error(`Canvas steward server execution disabled for task: ${task}`);
+    }
+    return runCanvasSteward({ task, params });
   }
 
   throw new Error(`No steward for task: ${taskName}`);

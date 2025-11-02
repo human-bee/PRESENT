@@ -1,21 +1,25 @@
 import { NextRequest } from 'next/server'
-import { createOpenAI } from '@ai-sdk/openai'
 import { streamText, type CoreMessage } from 'ai'
 import type { AgentStreamPayload } from '@/lib/tldraw-agent/shared/types/AgentStreamPayload'
 import { getAgentModelDefinition } from '@/lib/tldraw-agent/worker/models'
 import { closeAndParseJson } from '@/lib/tldraw-agent/worker/do/closeAndParseJson'
+import { getCanvasAgentService } from '@/lib/agents/subagents/canvas-agent-service'
+import { resolveCanvasModelName } from '@/lib/agents/subagents/canvas-models'
 
-const openaiKey = process.env.OPENAI_API_KEY
-const openai = openaiKey ? createOpenAI({ apiKey: openaiKey }) : null
 const isDevEnv = process.env.NODE_ENV !== 'production'
+const service = getCanvasAgentService()
+const CANVAS_STEWARD_DEBUG = process.env.CANVAS_STEWARD_DEBUG === 'true'
+const debugLog = (...args: unknown[]) => {
+	if (CANVAS_STEWARD_DEBUG) {
+		try {
+			console.log('[AgentStream]', ...args)
+		} catch {}
+	}
+}
 
 export const runtime = 'nodejs'
 
 export async function POST(req: NextRequest) {
-	if (!openai) {
-		return jsonError('Missing OPENAI_API_KEY', 500)
-	}
-
 	let payload: AgentStreamPayload
 	try {
 		payload = (await req.json()) as AgentStreamPayload
@@ -37,10 +41,18 @@ export async function POST(req: NextRequest) {
 		return jsonError('messages must be a non-empty array', 400)
 	}
 
-	const definition = getAgentModelDefinition(modelName)
-	if (definition.provider !== 'openai') {
-		return jsonError(`Unsupported model provider: ${definition.provider}`, 501)
-	}
+	const requestedDefinition = getAgentModelDefinition(modelName)
+	const desiredModel = resolveCanvasModelName({
+		explicit: requestedDefinition.name,
+		allowOverride: true,
+	})
+	const { model, modelDefinition, providerOptions } = service.getModelForStreaming(desiredModel)
+	debugLog('stream.start', {
+		requestedModel: modelName,
+		resolvedModel: modelDefinition.name,
+		provider: modelDefinition.provider,
+		messageCount: messages.length,
+	})
 
 	const encoder = new TextEncoder()
 	const stream = new ReadableStream<Uint8Array>({
@@ -53,13 +65,15 @@ export async function POST(req: NextRequest) {
 				} as CoreMessage)
 
 				const { textStream } = streamText({
-					model: openai(definition.id),
+					model,
 					system,
 					messages: conversation,
 					maxOutputTokens: 8_192,
 					temperature: 0,
-					response: responseSchema
-						? {
+					providerOptions,
+					response:
+						modelDefinition.provider === 'openai' && responseSchema
+							? {
 								format: {
 									type: 'json_schema',
 									json_schema: {
@@ -71,14 +85,20 @@ export async function POST(req: NextRequest) {
 						  }
 						: undefined,
 					onError: (error) => {
+						debugLog('stream.error', error instanceof Error ? error.message : error)
 						throw error
 					},
 				})
 
-				let buffer = ''
+				const providerId = (model as { provider?: string } | undefined)?.provider ?? ''
+				const canForceResponseStart =
+					providerId === 'anthropic.messages' || providerId === 'google.generative-ai'
+
+				let buffer = canForceResponseStart ? '{"actions": [{"_type":' : ''
 				let cursor = 0
 				let maybeIncompleteAction: Record<string, unknown> | null = null
 				let startTime = Date.now()
+				let emittedChunks = 0
 
 				for await (const text of textStream) {
 					buffer += text
@@ -93,6 +113,7 @@ export async function POST(req: NextRequest) {
 						if (baseCompleted) {
 							const completed = cloneAction(baseCompleted)
 							controller.enqueue(encoder.encode(makeChunk(completed, true, startTime)))
+							emittedChunks += 1
 							maybeIncompleteAction = null
 						}
 						cursor++
@@ -110,14 +131,30 @@ export async function POST(req: NextRequest) {
 					}
 					maybeIncompleteAction = snapshot
 					controller.enqueue(encoder.encode(makeChunk(snapshot, false, startTime)))
+					emittedChunks += 1
 				}
 
 				if (maybeIncompleteAction) {
 					controller.enqueue(encoder.encode(makeChunk(maybeIncompleteAction, true, startTime)))
+					emittedChunks += 1
+				}
+
+				if (emittedChunks === 0) {
+					const preview = buffer.slice(0, 2_000)
+					debugLog('stream.noActions', {
+						model: modelDefinition.name,
+						bufferPreview: preview,
+						bufferLength: buffer.length,
+					})
+					const errChunk = `data: ${JSON.stringify({
+						error: 'Canvas agent did not return any actions',
+					})}\n\n`
+					controller.enqueue(encoder.encode(errChunk))
 				}
 
 				controller.close()
 			} catch (error: any) {
+				debugLog('stream.exception', error?.message ?? error)
 				const errChunk = `data: ${JSON.stringify({ error: error?.message ?? 'Agent error' })}\n\n`
 				controller.enqueue(encoder.encode(errChunk))
 				controller.close()
@@ -140,7 +177,7 @@ function cloneAction(action: Record<string, unknown>) {
 }
 
 function makeChunk(action: Record<string, unknown>, complete: boolean, startTime: number) {
-	const payload = {
+ const payload = {
 		...action,
 		complete,
 		time: Date.now() - startTime,
@@ -150,6 +187,7 @@ function makeChunk(action: Record<string, unknown>, complete: boolean, startTime
 			console.log('[AgentStream] complete chunk', payload)
 		} catch {}
 	}
+	debugLog('stream.chunk', { complete, time: payload.time, keys: Object.keys(action) })
 	return `data: ${JSON.stringify(payload)}\n\n`
 }
 

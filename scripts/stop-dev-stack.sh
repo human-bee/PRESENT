@@ -48,5 +48,6 @@ stop_process "Sync server" "sync:dev"
 stop_process "Conductor" "agent:conductor"
 stop_process "Realtime agent" "agent:realtime"
 stop_process "Next dev" "dev"
+stop_process "LiveKit server" "lk:server:dev"
 
 echo "All dev services stopped (or no pid files found)."

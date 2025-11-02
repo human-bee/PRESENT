@@ -40,6 +40,8 @@ interface EnhancedMcpProviderProps {
 /**
  * Enhanced MCP Provider with smart error handling and connection management
  */
+let loggedNoServersOnce = false;
+
 export function EnhancedMcpProvider({
   children,
   mcpServers,
@@ -147,8 +149,9 @@ export function EnhancedMcpProvider({
 
   // If no servers are available, render children without MCP
   if (mcpServers.length === 0) {
-    if (process.env.NODE_ENV === 'development') {
+    if (process.env.NODE_ENV === 'development' && !loggedNoServersOnce) {
       console.log('[Enhanced MCP] No MCP servers available, rendering without MCP functionality');
+      loggedNoServersOnce = true;
     }
     return <>{children}</>;
   }

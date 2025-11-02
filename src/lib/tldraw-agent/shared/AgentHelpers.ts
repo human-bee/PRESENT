@@ -1,4 +1,4 @@
-import { BoxModel, Editor, TLShapeId, VecModel } from 'tldraw'
+import { BoxModel, Editor, TLShapeId, VecModel, createShapeId } from 'tldraw'
 import type { TldrawAgent } from '../client/agent/TldrawAgent'
 import { SimpleFill, SimpleFillSchema } from './format/SimpleFill'
 import { SimpleShape } from './format/SimpleShape'
@@ -57,6 +57,11 @@ export class AgentHelpers {
 	 * These are used to restore the original values of rounded numbers.
 	 */
 	roundingDiffMap = new Map<string, number>()
+
+	/**
+	 * Counter used when generating fallback ids for missing or invalid shape ids.
+	 */
+	private fallbackIdCounter = 0
 
 	/**
 	 * Apply the offset of this request to a position.
@@ -306,7 +311,20 @@ export class AgentHelpers {
 	 * @returns The array of ids, with imaginary ids removed.
 	 */
 	ensureShapeIdsExist(ids: string[]): string[] {
-		return ids.map((id) => this.ensureShapeIdExists(id)).filter((v) => v !== null)
+		const uniqueIds: string[] = []
+		const seen = new Set<string>()
+
+		for (const id of ids) {
+			const existingId = this.ensureShapeIdExists(id)
+			if (!existingId || seen.has(existingId)) {
+				continue
+			}
+
+			seen.add(existingId)
+			uniqueIds.push(existingId)
+		}
+
+		return uniqueIds
 	}
 
 	/**
@@ -520,5 +538,16 @@ export class AgentHelpers {
 		vecModel.x = Math.round(vecModel.x)
 		vecModel.y = Math.round(vecModel.y)
 		return vecModel
+	}
+
+	/**
+	 * Generate a simple (prefix-free) shape id for use when the model omits one.
+	 * The returned id intentionally excludes the `shape:` prefix so it can be used
+	 * directly in simple shape payloads before being converted to a TL shape id.
+	 */
+	generateFallbackSimpleShapeId(prefix = 'agent-shape'): string {
+		this.fallbackIdCounter += 1
+		const rawId = createShapeId(`${prefix}-${Date.now()}-${this.fallbackIdCounter}`)
+		return rawId.startsWith('shape:') ? rawId.slice(6) : rawId
 	}
 }

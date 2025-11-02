@@ -1,7 +1,7 @@
-export const DEFAULT_MODEL_NAME = 'gpt-4.1'
+import { normalizeCanvasModelName } from '@/lib/agents/subagents/canvas-models'
 
 export type AgentModelName = keyof typeof AGENT_MODEL_DEFINITIONS
-export type AgentModelProvider = 'openai'
+export type AgentModelProvider = 'openai' | 'anthropic'
 
 export interface AgentModelDefinition {
 	name: AgentModelName
@@ -26,14 +26,27 @@ export function getAgentModelDefinition(modelName: AgentModelName): AgentModelDe
 }
 
 export const AGENT_MODEL_DEFINITIONS = {
-	'gpt-4o': {
-		name: 'gpt-4o',
-		id: 'gpt-4o',
+	'claude-haiku-4-5': {
+		name: 'claude-haiku-4-5',
+		id: 'claude-haiku-4-5-20251001',
+		provider: 'anthropic',
+	},
+	'claude-sonnet-4-5': {
+		name: 'claude-sonnet-4-5',
+		id: 'claude-sonnet-4-5-20250929',
+		provider: 'anthropic',
+	},
+	'gpt-5': {
+		name: 'gpt-5',
+		id: 'gpt-5',
 		provider: 'openai',
 	},
-	'gpt-4.1': {
-		name: 'gpt-4.1',
-		id: 'gpt-4.1-mini',
+	'gpt-5-mini': {
+		name: 'gpt-5-mini',
+		id: 'gpt-5-mini',
 		provider: 'openai',
 	},
 } as const
+
+export const DEFAULT_MODEL_NAME: AgentModelName =
+	(normalizeCanvasModelName(process.env.CANVAS_STEWARD_MODEL) as AgentModelName | null) ?? 'claude-sonnet-4-5'
