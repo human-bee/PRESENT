@@ -124,6 +124,27 @@ const mergeFactChecks = (
   incoming?: readonly FactCheckNote[] | null,
 ) => mergeById(current, incoming);
 
+const dedupeFactChecks = (notes: readonly FactCheckNote[] | null | undefined): FactCheckNote[] => {
+  if (!notes || notes.length === 0) return [];
+  const seen = new Map<string, FactCheckNote>();
+  for (const note of notes) {
+    const key = note.id?.trim() ? note.id : note.summary?.trim() || cryptoKeyFromObject(note);
+    if (!key) continue;
+    if (!seen.has(key)) {
+      seen.set(key, { ...note });
+    }
+  }
+  return Array.from(seen.values());
+};
+
+const cryptoKeyFromObject = (value: FactCheckNote): string => {
+  try {
+    return JSON.stringify({ summary: value.summary, refs: value.evidenceRefs?.slice(0, 5) || [] });
+  } catch {
+    return Math.random().toString(36).slice(2);
+  }
+};
+
 const mergePlayers = (
   current?: readonly DebatePlayer[] | null,
   incoming?: readonly DebatePlayer[] | null,
@@ -141,11 +162,13 @@ const mergePlayers = (
         ? {
             ...existing,
             ...player,
-            achievements: mergeById(existing.achievements, player.achievements),
+            achievements: dedupeAchievements(
+              mergeById(existing.achievements, player.achievements),
+            ),
           }
         : {
             ...player,
-            achievements: mergeById([], player.achievements),
+            achievements: dedupeAchievements(mergeById([], player.achievements)),
           },
     );
     seen.add(player.id);
@@ -155,7 +178,7 @@ const mergePlayers = (
     if (!seen.has(player.id)) {
       merged.push({
         ...player,
-        achievements: mergeById(player.achievements, []),
+        achievements: dedupeAchievements(mergeById(player.achievements, [])),
       });
     }
   }
@@ -215,6 +238,101 @@ const mergeAchievementsQueue = (
   incoming?: readonly AchievementAward[] | null,
 ) => mergeById(current, incoming);
 
+const dedupeAchievements = (awards: readonly AchievementAward[] | null | undefined): AchievementAward[] => {
+  if (!awards || awards.length === 0) return [];
+  const merged = new Map<string, AchievementAward>();
+  for (const award of awards) {
+    const claimKey = (award.claimId ?? '').toLowerCase();
+    const key = `${award.key}:${claimKey}:${award.side ?? ''}`;
+    const existing = merged.get(key);
+    if (!existing || (award.awardedAt ?? 0) > (existing.awardedAt ?? 0)) {
+      merged.set(key, { ...award });
+    }
+  }
+  return Array.from(merged.values());
+};
+
+const dedupeSources = (sources: readonly EvidenceRef[] | null | undefined): EvidenceRef[] => {
+  if (!sources || sources.length === 0) return [];
+  const map = new Map<string, EvidenceRef>();
+  for (const source of sources) {
+    const key = source.id || `${source.title ?? ''}:${source.url ?? ''}`;
+    if (!map.has(key)) {
+      map.set(key, { ...source, id: source.id || `source-${key}` });
+    }
+  }
+  return Array.from(map.values());
+};
+
+const sortTimelineChronologically = (
+  events: readonly DebateTimelineEvent[] | null | undefined,
+): DebateTimelineEvent[] => {
+  if (!events || events.length === 0) return [];
+  return [...events].sort((a, b) => {
+    const aTs = a.timestamp ?? 0;
+    const bTs = b.timestamp ?? 0;
+    if (aTs !== bTs) return aTs - bTs;
+    return (a.id ?? '').localeCompare(b.id ?? '');
+  });
+};
+
+const collectPendingVerificationIds = (
+  claims: readonly Claim[] | undefined,
+  ...additionalLists: (readonly string[] | undefined)[]
+): string[] => {
+  const pending = new Set<string>();
+  const claimById = new Map((claims ?? []).map((claim) => [claim.id, claim]));
+  for (const claim of claims ?? []) {
+    if (claim.status === 'CHECKING' && claim.id) {
+      pending.add(claim.id);
+    }
+  }
+  for (const list of additionalLists) {
+    if (!Array.isArray(list)) continue;
+    for (const id of list) {
+      if (!id) continue;
+      const claim = claimById.get(id);
+      if (claim && claim.status === 'CHECKING') {
+        pending.add(id);
+      }
+    }
+  }
+  return Array.from(pending.values());
+};
+
+const normalizeScorecardState = (state: DebateScorecardState): DebateScorecardState => {
+  const normalizedPlayers = state.players.map((player) => ({
+    ...player,
+    achievements: dedupeAchievements(player.achievements),
+  }));
+
+  const normalizedClaims = state.claims.map((claim) => ({
+    ...claim,
+    factChecks: dedupeFactChecks(claim.factChecks),
+  }));
+
+  const normalizedSources = dedupeSources(state.sources);
+  const normalizedAchievementsQueue = dedupeAchievements(state.achievementsQueue);
+  const normalizedTimeline = sortTimelineChronologically(state.timeline);
+  const pendingVerifications = collectPendingVerificationIds(
+    normalizedClaims,
+    state.status?.pendingVerifications,
+  );
+
+  return {
+    ...state,
+    players: normalizedPlayers,
+    claims: normalizedClaims,
+    sources: normalizedSources,
+    achievementsQueue: normalizedAchievementsQueue,
+    timeline: normalizedTimeline,
+    status: {
+      ...state.status,
+      pendingVerifications,
+    },
+  };
+};
+
 const mergeRfdLinks = (current?: readonly RfdLink[] | null, incoming?: readonly RfdLink[] | null) =>
   mergeById(current, incoming);
 
@@ -251,11 +369,17 @@ const mergeScorecardStates = (
 ): DebateScorecardState => {
   const mergedPlayers = mergePlayers(current.players, incoming.players);
   const mergedClaims = mergeClaims(current.claims, incoming.claims);
+  const normalizedClaims = mergedClaims.map((claim) => ({
+    ...claim,
+    factChecks: dedupeFactChecks(claim.factChecks),
+  }));
   const mergedTimeline = mergeTimeline(current.timeline, incoming.timeline);
-  const mergedSources = mergeSources(current.sources, incoming.sources);
-  const mergedAchievementsQueue = mergeAchievementsQueue(
-    current.achievementsQueue,
-    incoming.achievementsQueue,
+  const mergedSources = dedupeSources(mergeSources(current.sources, incoming.sources));
+  const mergedAchievementsQueue = dedupeAchievements(
+    mergeAchievementsQueue(
+      current.achievementsQueue,
+      incoming.achievementsQueue,
+    ),
   );
   const mergedMapNodes = mergeMapNodes(current.map?.nodes, incoming.map?.nodes);
   const mergedMapEdges = mergeMapEdges(current.map?.edges, incoming.map?.edges);
@@ -266,7 +390,7 @@ const mergeScorecardStates = (
   };
 
   const claimsById = new Map(mergedClaims.map((claim) => [claim.id, claim]));
-  const isPendingStatus = (status?: Claim['status']) => status === 'CHECKING';
+  const isPendingStatus = (status?: Claim['status']) => status === claimStatusEnum.enum.CHECKING;
 
   const buildPending = () => {
     const pendingSet = new Set<string>();
@@ -310,8 +434,8 @@ const mergeScorecardStates = (
     ...incoming,
     componentId: incoming.componentId ?? current.componentId,
     players: mergedPlayers,
-    claims: mergedClaims,
-    timeline: mergedTimeline,
+    claims: normalizedClaims,
+    timeline: sortTimelineChronologically(mergedTimeline),
     sources: mergedSources,
     achievementsQueue: mergedAchievementsQueue,
     map: {
@@ -325,7 +449,7 @@ const mergeScorecardStates = (
     lastUpdated: Math.max(current.lastUpdated ?? 0, incoming.lastUpdated ?? Date.now()),
   };
 
-  return merged;
+  return normalizeScorecardState(merged);
 };
 
 export const get_current_scorecard = tool({
@@ -424,10 +548,12 @@ export const commit_scorecard = tool({
       throw new Error('INVALID_STATE_JSON');
     }
 
-    let parsedState = debateScorecardStateSchema.parse({
-      ...(typeof rawState === 'object' && rawState ? (rawState as Record<string, unknown>) : {}),
-      componentId,
-    });
+    let parsedState = normalizeScorecardState(
+      debateScorecardStateSchema.parse({
+        ...(typeof rawState === 'object' && rawState ? (rawState as Record<string, unknown>) : {}),
+        componentId,
+      }),
+    );
     for (let attempt = 0; attempt < 2; attempt += 1) {
       try {
         const commitStart = Date.now();
@@ -481,7 +607,7 @@ export const commit_scorecard = tool({
         if (attempt === 0 && error instanceof Error && error.message === 'CONFLICT') {
           const latest = await getDebateScorecard(room, componentId);
           expectedPrev = latest.version;
-          parsedState = debateScorecardStateSchema.parse(
+          parsedState = normalizeScorecardState(
             mergeScorecardStates(latest.state, parsedState),
           );
           logWithTs('⚠️ [DebateSteward] commit_conflict', {
@@ -499,12 +625,15 @@ export const commit_scorecard = tool({
   },
 });
 
+const STATUS_VALUES = claimStatusEnum.options.join(', ');
+const ACHIEVEMENT_VALUES = debateAchievementEnum.options.join(', ');
+
 const DEBATE_SCORECARD_INSTRUCTIONS = `You are the debate scorekeeper steward embedded in a live TLDraw canvas.
 
 Workflow each turn:
 1. Call get_current_scorecard to obtain the latest canonical state (claims, players, timeline).
 2. Call get_context(windowMs=60000) to read the recent transcript for new claims, challenges, or moderator guidance.
-3. Before declaring a claim VERIFIED or REFUTED, call search_evidence (maxResults 2-3) to gather live supporting sources. Record the returned hits in sources[] (unique ids) and attach relevant snippets + URLs to claim.factChecks.
+3. Before declaring a claim VERIFIED or REFUTED, call search_evidence (maxResults 2-3) to gather live supporting sources. Record the returned hits in sources[] (use their id/title/url), add concise factChecks[], and set each factCheck.evidenceRefs to the IDs of supporting sources.
 4. Update the scorecard state atomically:
    - Add or edit claims with side, speech, quote, status, strength, evidenceCount, upvotes.
    - When fact-checking, set claim.status ("CHECKING" → "VERIFIED"/"REFUTED"), update confidence, factChecks, and evidence references.
@@ -518,15 +647,15 @@ Workflow each turn:
 Additional guidance:
 - Never invent component IDs; use componentId from inputs or the fetched state.
 - Prefer precise JSON edits: keep arrays sorted by creation time, preserve existing IDs, and avoid removing historical data unless instructed.
-- Coerce numeric fields (scores, counts, momentum) to sensible ranges: scores are integers, momentum/bsMeter/learningScore ∈ [0,1].
-- Use claimStatusEnum values exactly; this controls client UI spinners.
-- When awarding achievements (debateAchievementEnum), append to player.achievements with structured objects ({ id, key, label, description?, awardedAt, side, claimId }) and push an "achievement" timeline entry referencing the same award id.
-- If no update is necessary, still return a short acknowledgement like "No new debate events detected."`;
+ - Coerce numeric fields (scores, counts, momentum) to sensible ranges: scores are integers, momentum/bsMeter/learningScore ∈ [0,1].
+ - Use claimStatusEnum values exactly (${STATUS_VALUES}); this controls client UI spinners.
+ - When awarding achievements (keys: ${ACHIEVEMENT_VALUES}), append to player.achievements with structured objects ({ id, key, label, description?, awardedAt, side, claimId }) and push an "achievement" timeline entry referencing the same award id.
+ - If no update is necessary, still return a short acknowledgement like "No new debate events detected."`;
 
 export const debateScorecardSteward = new Agent({
   name: 'DebateScorecardSteward',
   model: 'gpt-5-mini',
-  reasoning: { effort: 'low' },
+  modelSettings: { providerData: { reasoning: { effort: 'low' } } },
   instructions: DEBATE_SCORECARD_INSTRUCTIONS,
   tools: [get_current_scorecard, get_context, search_evidence, commit_scorecard],
 });

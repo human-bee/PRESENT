@@ -50,6 +50,24 @@ describe('commit_scorecard', () => {
           status: 'CHECKING',
         },
       ],
+      players: [
+        {
+          id: 'player-aff',
+          label: 'Affirmative',
+          side: 'AFF',
+          color: '#38bdf8',
+          achievements: [
+            {
+              id: 'achv-dup-1',
+              key: 'firstBlood',
+              label: 'First Verified Claim',
+              awardedAt: 10,
+              claimId: 'claim-1',
+              side: 'AFF',
+            },
+          ],
+        },
+      ],
       timeline: [
         { id: 'evt-initial', timestamp: 1, text: 'Initial timeline', type: 'moderation' },
         { id: 'evt-steward', timestamp: 2, text: 'Steward update', type: 'argument' },
@@ -76,6 +94,24 @@ describe('commit_scorecard', () => {
             speech: '2AC',
             quote: 'Parallel update',
             status: 'CHECKING',
+          },
+        ],
+        players: [
+          {
+            id: 'player-aff',
+            label: 'Affirmative',
+            side: 'AFF',
+            color: '#38bdf8',
+            achievements: [
+              {
+                id: 'achv-dup-2',
+                key: 'firstBlood',
+                label: 'First Verified Claim',
+                awardedAt: 5,
+                claimId: 'CLAIM-1',
+                side: 'AFF',
+              },
+            ],
           },
         ],
         timeline: [
@@ -121,5 +157,8 @@ describe('commit_scorecard', () => {
     expect(retryState.timeline.map((evt) => evt.id)).toEqual(['evt-initial', 'evt-steward', 'evt-other']);
     expect(new Set(retryState.status.pendingVerifications)).toEqual(new Set(['claim-2', 'claim-3']));
     expect(retryState.status.lastAction).toBe('Steward wrote update');
+    const achievements = retryState.players[0]?.achievements ?? [];
+    expect(achievements).toHaveLength(1);
+    expect(achievements[0]?.key).toBe('firstBlood');
   });
 });

@@ -50,6 +50,47 @@ function coerceArray<T>(value: unknown): T[] {
   return [];
 }
 
+const collectTextCandidates = (
+  response: OpenAI.Responses.Response,
+  rawText?: string | null,
+): string[] => {
+  const candidates: string[] = [];
+  if (rawText && rawText.trim()) candidates.push(rawText.trim());
+  const outputItems = Array.isArray((response as any)?.output) ? (response as any).output : [];
+  for (const item of outputItems) {
+    if (!item || typeof item !== 'object') continue;
+    if (typeof (item as any).text === 'string' && (item as any).text.trim()) {
+      candidates.push((item as any).text.trim());
+    }
+    const content = Array.isArray((item as any).content) ? (item as any).content : [];
+    for (const chunk of content) {
+      if (chunk && typeof chunk.text === 'string' && chunk.text.trim()) {
+        candidates.push(chunk.text.trim());
+      }
+    }
+  }
+  return candidates;
+};
+
+const tryParseJsonCandidate = (candidate: string): any | null => {
+  const trimmed = candidate.trim().replace(/\u0000/g, '');
+  if (!trimmed) return null;
+  const attempts: string[] = [trimmed];
+  const first = trimmed.indexOf('{');
+  const last = trimmed.lastIndexOf('}');
+  if (first !== -1 && last !== -1 && last > first) {
+    attempts.push(trimmed.slice(first, last + 1));
+  }
+  for (const attempt of attempts) {
+    try {
+      return JSON.parse(attempt);
+    } catch {
+      continue;
+    }
+  }
+  return null;
+};
+
 export async function performWebSearch(args: WebSearchArgs): Promise<WebSearchResponse> {
   const parsed = webSearchArgsSchema.parse(args);
   const client = getClient();
@@ -86,29 +127,31 @@ Instructions: Cite recent facts (<= 18 months old when possible). Provide direct
       { role: 'user', content: userPrompt },
     ],
     tools: [{ type: 'web_search' }],
-    max_output_tokens: 500,
+    max_output_tokens: 600,
   });
 
-  const outputText = response.output_text?.trim();
-  if (!outputText) {
-    throw new Error('WEB_SEARCH_EMPTY_OUTPUT');
-  }
-
-  let parsedJson: unknown;
-  try {
-    parsedJson = JSON.parse(outputText);
-  } catch {
-    const maybeJson = response.output
-      .flatMap((item) => ('content' in item ? item.content : []))
-      .find((block) => block.type === 'output_text');
-    if (!maybeJson || !('text' in maybeJson)) {
-      throw new Error('WEB_SEARCH_INVALID_OUTPUT');
+  const structured = (() => {
+    const candidates = collectTextCandidates(response, response.output_text);
+    for (const candidate of candidates) {
+      const parsedCandidate = tryParseJsonCandidate(candidate);
+      if (parsedCandidate && typeof parsedCandidate === 'object') {
+        return parsedCandidate;
+      }
     }
-    parsedJson = JSON.parse((maybeJson as any).text);
+    return null;
+  })();
+
+  if (!structured || typeof structured !== 'object') {
+    const error = new Error('WEB_SEARCH_INVALID_OUTPUT');
+    (error as Error & { metadata?: unknown }).metadata = {
+      outputText: response.output_text,
+      output: (response as any).output,
+    };
+    throw error;
   }
 
-  const hits = coerceArray<Partial<WebSearchHit>>((parsedJson as any)?.hits ?? []);
-  const summary = typeof (parsedJson as any)?.summary === 'string' ? (parsedJson as any).summary : '';
+  const hits = coerceArray<Partial<WebSearchHit>>((structured as any)?.hits ?? []);
+  const summary = typeof (structured as any)?.summary === 'string' ? (structured as any).summary : '';
 
   const normalizedHits: WebSearchHit[] = hits
     .map((hit) => ({
