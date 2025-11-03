@@ -124,17 +124,15 @@ Examples:
 
 Your only output is function calls. Never use plain text unless absolutely necessary.`;
 
-    const componentRegistry = new Map<
-      string,
-      {
-        type: string;
-        createdAt: number;
-        props: JsonObject;
-        state: JsonObject;
-        intentId?: string;
-        slot?: string;
-      }
-    >();
+    type ComponentRegistryEntry = {
+      type: string;
+      createdAt: number;
+      props: JsonObject;
+      state: JsonObject;
+      intentId?: string;
+      slot?: string;
+    };
+    const componentRegistry = new Map<string, ComponentRegistryEntry>();
     const lastComponentByType = new Map<string, string>();
     let lastCreatedComponentId: string | null = null;
     type IntentLedgerEntry = {
@@ -150,6 +148,9 @@ Your only output is function calls. Never use plain text unless absolutely neces
     const slotLedger = new Map<string, string>();
     const messageToIntent = new Map<string, string>();
     const LEDGER_TTL_MS = 5 * 60 * 1000;
+    const recentDebatePrompts = new Map<string, number>();
+    const DEBATE_PROMPT_DEBOUNCE_MS = 2000;
+    const DEBATE_PROMPT_HISTORY_MS = 60_000;
 
     const cleanupLedger = () => {
       const now = Date.now();
@@ -206,6 +207,23 @@ Your only output is function calls. Never use plain text unless absolutely neces
         return intentLedger.get(intentId);
       }
       return undefined;
+    };
+
+    const shouldSkipDebatePrompt = (prompt: string) => {
+      const normalized = prompt.replace(/\s+/g, ' ').trim().toLowerCase();
+      if (!normalized) return true;
+      const now = Date.now();
+      for (const [key, timestamp] of recentDebatePrompts.entries()) {
+        if (now - timestamp > DEBATE_PROMPT_HISTORY_MS) {
+          recentDebatePrompts.delete(key);
+        }
+      }
+      const last = recentDebatePrompts.get(normalized);
+      if (last && now - last < DEBATE_PROMPT_DEBOUNCE_MS) {
+        return true;
+      }
+      recentDebatePrompts.set(normalized, now);
+      return false;
     };
 
     // Duplicate suppression across turns: track last create by component type.
@@ -999,58 +1017,132 @@ Your only output is function calls. Never use plain text unless absolutely neces
     };
 
     let activeScorecard: { componentId: string; intentId: string; topic: string } | null = null;
+    let ensureScorecardPromise: Promise<{ componentId: string; intentId: string; topic: string }> | null = null;
     const debateKeywordRegex =
       /\b(aff|affirmative|neg|negative|contention|rebuttal|voter|judge|debate|scorecard|flow|argument|claim|evidence|verify|fact|counter)\b/;
 
+    const findExistingScorecard = (topic?: string) => {
+      const normalized = topic?.trim().toLowerCase();
+      let fallback: { id: string; info: ComponentRegistryEntry; topic?: string } | null = null;
+      for (const [id, info] of componentRegistry.entries()) {
+        if (info.type !== 'DebateScorecard') continue;
+        const infoTopic =
+          typeof info.props?.topic === 'string' && info.props.topic.trim().length > 0
+            ? info.props.topic.trim()
+            : typeof info.state?.topic === 'string' && info.state.topic.trim().length > 0
+              ? info.state.topic.trim()
+              : undefined;
+        if (!fallback || info.createdAt > fallback.info.createdAt) {
+          fallback = { id, info, topic: infoTopic };
+        }
+        if (normalized && infoTopic?.toLowerCase() === normalized) {
+          return { id, info, topic: infoTopic };
+        }
+      }
+      return fallback;
+    };
+
     const ensureDebateScorecard = async (topic?: string, contextText?: string) => {
       const normalizedTopic = topic && topic.trim().length ? topic.trim() : undefined;
+      const normalizedLower = normalizedTopic?.toLowerCase();
+
+      if (ensureScorecardPromise) {
+        const pending = await ensureScorecardPromise;
+        if (!normalizedLower || pending.topic.toLowerCase() === normalizedLower) {
+          return pending;
+        }
+      }
+
       if (
         activeScorecard &&
-        (!normalizedTopic || activeScorecard.topic.toLowerCase() === normalizedTopic.toLowerCase())
+        (!normalizedLower || activeScorecard.topic.toLowerCase() === normalizedLower)
       ) {
         return activeScorecard;
       }
-      const topicLabel = normalizedTopic ?? activeScorecard?.topic ?? 'Live Debate';
-      const intentId = `debate-scorecard-${Date.now()}`;
-      const messageId = intentId;
-      const initialState = createDefaultScorecardState(topicLabel);
-      if (contextText && contextText.trim().length > 0) {
-        const affMatch = contextText.match(/affirmative(?: team| side| camp)?\s*(?:is|=|:)\s*([^.;]+)/i);
-        const negMatch = contextText.match(/negative(?: team| side| camp)?\s*(?:is|=|:)\s*([^.;]+)/i);
-        if (affMatch?.[1]) {
-          initialState.players[0].label = affMatch[1].trim();
-        }
-        if (negMatch?.[1]) {
-          initialState.players[1].label = negMatch[1].trim();
-        }
-        initialState.status.lastAction = `Initialized debate${topicLabel ? ` on ${topicLabel}` : ''} with ${initialState.players[0].label} vs ${initialState.players[1].label}.`;
+
+      const existing = findExistingScorecard(normalizedTopic);
+      if (existing) {
+        const ledgerEntry = findLedgerEntryByMessage(existing.id);
+        const inferredTopic = normalizedTopic ?? existing.topic ?? activeScorecard?.topic ?? 'Live Debate';
+        const intentId =
+          existing.info.intentId?.trim() ||
+          ledgerEntry?.intentId ||
+          `debate-scorecard-${existing.id}`;
+        existing.info.intentId = intentId;
+        registerLedgerEntry({
+          intentId,
+          messageId: existing.id,
+          componentType: 'DebateScorecard',
+          slot: existing.info.slot,
+          state: 'updated',
+        });
+        lastComponentByType.set('DebateScorecard', existing.id);
+        lastCreatedComponentId = existing.id;
+        activeScorecard = { componentId: existing.id, intentId, topic: inferredTopic };
+        return activeScorecard;
       }
-      initialState.componentId = messageId;
-      initialState.version = 0;
-      initialState.lastUpdated = Date.now();
 
-      await sendToolCall('reserve_component', {
-        type: 'DebateScorecard',
-        intentId,
-        messageId,
-        spec: initialState as JsonObject,
-      });
+      const createScorecard = async () => {
+        const topicLabel = normalizedTopic ?? activeScorecard?.topic ?? 'Live Debate';
+        const intentId = `debate-scorecard-${Date.now()}`;
+        const messageId = intentId;
+        const initialState = createDefaultScorecardState(topicLabel);
+        if (contextText && contextText.trim().length > 0) {
+          const affMatch = contextText.match(/affirmative(?: team| side| camp)?\s*(?:is|=|:)\s*([^.;]+)/i);
+          const negMatch = contextText.match(/negative(?: team| side| camp)?\s*(?:is|=|:)\s*([^.;]+)/i);
+          if (affMatch?.[1]) {
+            initialState.players[0].label = affMatch[1].trim();
+          }
+          if (negMatch?.[1]) {
+            initialState.players[1].label = negMatch[1].trim();
+          }
+          initialState.status.lastAction = `Initialized debate${topicLabel ? ` on ${topicLabel}` : ''} with ${initialState.players[0].label} vs ${initialState.players[1].label}.`;
+        }
+        initialState.componentId = messageId;
+        initialState.version = 0;
+        initialState.lastUpdated = Date.now();
 
-      await sendToolCall('create_component', {
-        type: 'DebateScorecard',
-        componentId: messageId,
-        messageId,
-        spec: initialState as JsonObject,
-      });
+        await sendToolCall('reserve_component', {
+          type: 'DebateScorecard',
+          intentId,
+          messageId,
+          spec: initialState as JsonObject,
+        });
 
-      activeScorecard = { componentId: messageId, intentId, topic: topicLabel };
-      return activeScorecard;
+        await sendToolCall('create_component', {
+          type: 'DebateScorecard',
+          componentId: messageId,
+          messageId,
+          spec: initialState as JsonObject,
+        });
+
+        activeScorecard = { componentId: messageId, intentId, topic: topicLabel };
+        lastComponentByType.set('DebateScorecard', messageId);
+        lastCreatedComponentId = messageId;
+        registerLedgerEntry({
+          intentId,
+          messageId,
+          componentType: 'DebateScorecard',
+          state: 'created',
+        });
+        return activeScorecard;
+      };
+
+      ensureScorecardPromise = createScorecard();
+      try {
+        return await ensureScorecardPromise;
+      } finally {
+        ensureScorecardPromise = null;
+      }
     };
 
     const maybeHandleDebate = async (text: string) => {
       const trimmed = (text || '').trim();
       if (!trimmed) return;
       const lower = trimmed.toLowerCase();
+      if (shouldSkipDebatePrompt(trimmed)) {
+        return;
+      }
       const roomName = job.room.name || 'room';
       try {
         lastUserPrompt = trimmed;

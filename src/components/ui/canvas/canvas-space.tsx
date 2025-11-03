@@ -45,6 +45,8 @@ if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
   const originalWarn = console.warn;
   const originalLog = console.log;
   let mcpLoadingCount = 0;
+  const dispatcherLogsEnabled =
+    typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_TOOL_DISPATCHER_LOGS === 'true';
 
   console.warn = (...args) => {
     const message = args.join(' ');
@@ -70,7 +72,8 @@ if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
     }
     if (
       message.includes('[Transcript] render state') ||
-      message.includes('[RetroTimerEnhanced] Using provided custom message ID')
+      message.includes('[RetroTimerEnhanced] Using provided custom message ID') ||
+      (!dispatcherLogsEnabled && message.includes('[ComponentRegistry] '))
     ) {
       return;
     }
