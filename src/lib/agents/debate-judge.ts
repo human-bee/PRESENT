@@ -10,7 +10,17 @@ import {
   claimStatusEnum,
   debateAchievementEnum,
   type DebateScorecardState,
+  type DebatePlayer,
+  type Claim,
+  type DebateTimelineEvent,
+  type MapNode,
+  type MapEdge,
+  type EvidenceRef,
+  type AchievementAward,
+  type FactCheckNote,
+  type RfdLink,
 } from '@/lib/agents/debate-scorecard-schema';
+import { performWebSearch, webSearchArgsSchema } from '@/lib/agents/tools/web-search';
 
 const logWithTs = (label: string, payload: Record<string, unknown>) => {
   try {
@@ -42,6 +52,19 @@ const CommitScorecardArgs = z.object({
   statusNote: z.string().max(500).nullish(),
 });
 
+const SearchEvidenceArgs = z
+  .object({
+    room: z.string(),
+    componentId: z.string(),
+  })
+  .merge(
+    webSearchArgsSchema.pick({
+      query: true,
+      maxResults: true,
+      includeAnswer: true,
+    }),
+  );
+
 function resolveCommitUrl() {
   const port = process.env.PORT || process.env.NEXT_PUBLIC_PORT;
   const derivedLocal =
@@ -68,6 +91,242 @@ function resolveCommitUrl() {
   }
   return null;
 }
+
+type WithId = { id: string };
+
+const mergeById = <T extends WithId>(
+  current?: readonly T[] | null,
+  incoming?: readonly T[] | null,
+): T[] => {
+  const base = Array.isArray(current) ? current : [];
+  const next = Array.isArray(incoming) ? incoming : [];
+  const baseMap = new Map(base.map((item) => [item.id, item]));
+  const merged: T[] = [];
+  const seen = new Set<string>();
+
+  for (const item of next) {
+    const existing = baseMap.get(item.id);
+    merged.push(existing ? ({ ...existing, ...item } as T) : ({ ...item } as T));
+    seen.add(item.id);
+  }
+
+  for (const item of base) {
+    if (!seen.has(item.id)) {
+      merged.push({ ...item });
+    }
+  }
+
+  return merged;
+};
+
+const mergeFactChecks = (
+  current?: readonly FactCheckNote[] | null,
+  incoming?: readonly FactCheckNote[] | null,
+) => mergeById(current, incoming);
+
+const mergePlayers = (
+  current?: readonly DebatePlayer[] | null,
+  incoming?: readonly DebatePlayer[] | null,
+): DebatePlayer[] => {
+  const base = Array.isArray(current) ? current : [];
+  const next = Array.isArray(incoming) ? incoming : [];
+  const baseMap = new Map(base.map((player) => [player.id, player]));
+  const merged: DebatePlayer[] = [];
+  const seen = new Set<string>();
+
+  for (const player of next) {
+    const existing = baseMap.get(player.id);
+    merged.push(
+      existing
+        ? {
+            ...existing,
+            ...player,
+            achievements: mergeById(existing.achievements, player.achievements),
+          }
+        : {
+            ...player,
+            achievements: mergeById([], player.achievements),
+          },
+    );
+    seen.add(player.id);
+  }
+
+  for (const player of base) {
+    if (!seen.has(player.id)) {
+      merged.push({
+        ...player,
+        achievements: mergeById(player.achievements, []),
+      });
+    }
+  }
+
+  return merged;
+};
+
+const mergeClaims = (
+  current?: readonly Claim[] | null,
+  incoming?: readonly Claim[] | null,
+): Claim[] => {
+  const base = Array.isArray(current) ? current : [];
+  const next = Array.isArray(incoming) ? incoming : [];
+  const baseMap = new Map(base.map((claim) => [claim.id, claim]));
+  const merged: Claim[] = [];
+  const seen = new Set<string>();
+
+  for (const claim of next) {
+    const existing = baseMap.get(claim.id);
+    merged.push(
+      existing
+        ? {
+            ...existing,
+            ...claim,
+            factChecks: mergeFactChecks(existing.factChecks, claim.factChecks),
+          }
+        : {
+            ...claim,
+            factChecks: mergeFactChecks([], claim.factChecks),
+          },
+    );
+    seen.add(claim.id);
+  }
+
+  for (const claim of base) {
+    if (!seen.has(claim.id)) {
+      merged.push({
+        ...claim,
+        factChecks: mergeFactChecks(claim.factChecks, []),
+      });
+    }
+  }
+
+  return merged;
+};
+
+const mergeTimeline = (
+  current?: readonly DebateTimelineEvent[] | null,
+  incoming?: readonly DebateTimelineEvent[] | null,
+) => mergeById(current, incoming);
+
+const mergeSources = (current?: readonly EvidenceRef[] | null, incoming?: readonly EvidenceRef[] | null) =>
+  mergeById(current, incoming);
+
+const mergeAchievementsQueue = (
+  current?: readonly AchievementAward[] | null,
+  incoming?: readonly AchievementAward[] | null,
+) => mergeById(current, incoming);
+
+const mergeRfdLinks = (current?: readonly RfdLink[] | null, incoming?: readonly RfdLink[] | null) =>
+  mergeById(current, incoming);
+
+const mergeMapNodes = (current?: readonly MapNode[] | null, incoming?: readonly MapNode[] | null) =>
+  mergeById(current, incoming);
+
+const mergeMapEdges = (current?: readonly MapEdge[] | null, incoming?: readonly MapEdge[] | null): MapEdge[] => {
+  const base = Array.isArray(current) ? current : [];
+  const next = Array.isArray(incoming) ? incoming : [];
+  const baseMap = new Map(base.map((edge) => [`${edge.from}->${edge.to}`, edge]));
+  const merged: MapEdge[] = [];
+  const seen = new Set<string>();
+
+  for (const edge of next) {
+    const key = `${edge.from}->${edge.to}`;
+    const existing = baseMap.get(key);
+    merged.push(existing ? { ...existing, ...edge } : { ...edge });
+    seen.add(key);
+  }
+
+  for (const edge of base) {
+    const key = `${edge.from}->${edge.to}`;
+    if (!seen.has(key)) {
+      merged.push({ ...edge });
+    }
+  }
+
+  return merged;
+};
+
+const mergeScorecardStates = (
+  current: DebateScorecardState,
+  incoming: DebateScorecardState,
+): DebateScorecardState => {
+  const mergedPlayers = mergePlayers(current.players, incoming.players);
+  const mergedClaims = mergeClaims(current.claims, incoming.claims);
+  const mergedTimeline = mergeTimeline(current.timeline, incoming.timeline);
+  const mergedSources = mergeSources(current.sources, incoming.sources);
+  const mergedAchievementsQueue = mergeAchievementsQueue(
+    current.achievementsQueue,
+    incoming.achievementsQueue,
+  );
+  const mergedMapNodes = mergeMapNodes(current.map?.nodes, incoming.map?.nodes);
+  const mergedMapEdges = mergeMapEdges(current.map?.edges, incoming.map?.edges);
+  const mergedRfd = {
+    ...current.rfd,
+    ...incoming.rfd,
+    links: mergeRfdLinks(current.rfd?.links, incoming.rfd?.links),
+  };
+
+  const claimsById = new Map(mergedClaims.map((claim) => [claim.id, claim]));
+  const isPendingStatus = (status?: Claim['status']) => status === 'CHECKING';
+
+  const buildPending = () => {
+    const pendingSet = new Set<string>();
+    const incomingStatus = incoming.status ?? {};
+    const currentStatus = current.status ?? {};
+    const incomingPending = Array.isArray(incomingStatus.pendingVerifications)
+      ? incomingStatus.pendingVerifications
+      : [];
+    const currentPending = Array.isArray(currentStatus.pendingVerifications)
+      ? currentStatus.pendingVerifications
+      : [];
+    const incomingHasPending = Object.prototype.hasOwnProperty.call(
+      incomingStatus,
+      'pendingVerifications',
+    );
+
+    const addIfPending = (id: string | undefined | null) => {
+      if (!id) return;
+      if (pendingSet.has(id)) return;
+      const claim = claimsById.get(id);
+      if (!claim) return;
+      if (!isPendingStatus(claim.status)) return;
+      pendingSet.add(id);
+    };
+
+    const seeds = incomingHasPending ? incomingPending : currentPending;
+    for (const id of seeds) addIfPending(id);
+    for (const id of currentPending) addIfPending(id);
+
+    return Array.from(pendingSet);
+  };
+
+  const mergedStatus = {
+    ...current.status,
+    ...incoming.status,
+    pendingVerifications: buildPending(),
+  };
+
+  const merged: DebateScorecardState = {
+    ...current,
+    ...incoming,
+    componentId: incoming.componentId ?? current.componentId,
+    players: mergedPlayers,
+    claims: mergedClaims,
+    timeline: mergedTimeline,
+    sources: mergedSources,
+    achievementsQueue: mergedAchievementsQueue,
+    map: {
+      nodes: mergedMapNodes,
+      edges: mergedMapEdges,
+    },
+    rfd: mergedRfd,
+    status: mergedStatus,
+    filters: { ...current.filters, ...incoming.filters },
+    metrics: { ...current.metrics, ...incoming.metrics },
+    lastUpdated: Math.max(current.lastUpdated ?? 0, incoming.lastUpdated ?? Date.now()),
+  };
+
+  return merged;
+};
 
 export const get_current_scorecard = tool({
   name: 'get_current_scorecard',
@@ -104,6 +363,47 @@ export const get_context = tool({
   },
 });
 
+export const search_evidence = tool({
+  name: 'search_evidence',
+  description:
+    'Perform a live web search to collect supporting or refuting evidence. Returns a summary and top sources.',
+  parameters: SearchEvidenceArgs,
+  async execute({ room, componentId, query, maxResults, includeAnswer }) {
+    try {
+      const result = await performWebSearch({
+        query,
+        maxResults,
+        includeAnswer,
+      });
+      logWithTs('🔍 [DebateSteward] search_evidence', {
+        room,
+        componentId,
+        query,
+        hits: result.hits.length,
+      });
+      return {
+        status: 'ok',
+        summary: result.summary,
+        hits: result.hits,
+        model: result.model,
+        query: result.query,
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      logWithTs('⚠️ [DebateSteward] search_evidence_failed', {
+        room,
+        componentId,
+        query,
+        error: message,
+      });
+      return {
+        status: 'error',
+        error: message,
+      };
+    }
+  },
+});
+
 export const commit_scorecard = tool({
   name: 'commit_scorecard',
   description:
@@ -124,7 +424,7 @@ export const commit_scorecard = tool({
       throw new Error('INVALID_STATE_JSON');
     }
 
-    const parsedState = debateScorecardStateSchema.parse({
+    let parsedState = debateScorecardStateSchema.parse({
       ...(typeof rawState === 'object' && rawState ? (rawState as Record<string, unknown>) : {}),
       componentId,
     });
@@ -181,10 +481,14 @@ export const commit_scorecard = tool({
         if (attempt === 0 && error instanceof Error && error.message === 'CONFLICT') {
           const latest = await getDebateScorecard(room, componentId);
           expectedPrev = latest.version;
+          parsedState = debateScorecardStateSchema.parse(
+            mergeScorecardStates(latest.state, parsedState),
+          );
           logWithTs('⚠️ [DebateSteward] commit_conflict', {
             room,
             componentId,
             latestVersion: latest.version,
+            resolvedWith: 'merge',
           });
           continue;
         }
@@ -200,15 +504,16 @@ const DEBATE_SCORECARD_INSTRUCTIONS = `You are the debate scorekeeper steward em
 Workflow each turn:
 1. Call get_current_scorecard to obtain the latest canonical state (claims, players, timeline).
 2. Call get_context(windowMs=60000) to read the recent transcript for new claims, challenges, or moderator guidance.
-3. Update the scorecard state atomically:
+3. Before declaring a claim VERIFIED or REFUTED, call search_evidence (maxResults 2-3) to gather live supporting sources. Record the returned hits in sources[] (unique ids) and attach relevant snippets + URLs to claim.factChecks.
+4. Update the scorecard state atomically:
    - Add or edit claims with side, speech, quote, status, strength, evidenceCount, upvotes.
    - When fact-checking, set claim.status ("CHECKING" → "VERIFIED"/"REFUTED"), update confidence, factChecks, and evidence references.
    - Maintain players[].score, streakCount, momentum, bsMeter, learningScore. Unlock achievements (debateAchievementEnum) when thresholds are met.
    - Append timeline events describing key actions. Use type "achievement" when celebrating awards, "fact_check" for verification results, and include claimId/side metadata.
    - Keep status.pendingVerifications in sync (claim IDs still under review) and set status.lastAction to a concise scoreboard update (<= 160 characters).
-4. Persist the *entire* updated state by calling commit_scorecard with stateJson (a JSON string of the full state). Always send prevVersion from get_current_scorecard to enforce optimistic concurrency.
+5. Persist the *entire* updated state by calling commit_scorecard with stateJson (a JSON string of the full state). Always send prevVersion from get_current_scorecard to enforce optimistic concurrency.
    - Serialize the state with JSON.stringify; do not wrap it in Markdown or include commentary inside the string.
-5. Your final natural language reply must be short (<= 1 sentence) and summarize the visible change (e.g., "Verified AFF-2; score now 32–28").
+6. Your final natural language reply must be short (<= 1 sentence) and summarize the visible change (e.g., "Verified AFF-2; score now 32–28").
 
 Additional guidance:
 - Never invent component IDs; use componentId from inputs or the fetched state.
@@ -221,8 +526,9 @@ Additional guidance:
 export const debateScorecardSteward = new Agent({
   name: 'DebateScorecardSteward',
   model: 'gpt-5-mini',
+  reasoning: { effort: 'low' },
   instructions: DEBATE_SCORECARD_INSTRUCTIONS,
-  tools: [get_current_scorecard, get_context, commit_scorecard],
+  tools: [get_current_scorecard, get_context, search_evidence, commit_scorecard],
 });
 
 export async function runDebateScorecardSteward(params: {

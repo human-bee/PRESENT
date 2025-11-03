@@ -120,3 +120,16 @@ Keep the voice agent lean; heavy analysis or multi-step planning should run via 
 - **Stress-test with synthetic patches.** Before relying on the steward pipeline, fire a manual `custom:showComponent` event containing a heavy payload (multiple claims, fact checks, timeline items). It’s a quick way to surface layout issues or schema mismatches.
 
 Use this as a reference when cloning the steward pattern for other multi-surface widgets.
+
+#### Evidence search & citations (new in November 2025)
+
+- `search_evidence` (`src/lib/agents/debate-judge.ts`) is the canonical tool for live web lookups. It wraps `performWebSearch` (`src/lib/agents/tools/web-search.ts`) which hits OpenAI Responses with the built-in `web_search` capability and normalises hits into `{ id, title, url, snippet, publishedAt?, source? }`.
+- We inject the tool into the steward manifest (`tools: [get_current_scorecard, get_context, search_evidence, commit_scorecard]`) and require the steward to call it before switching a claim from `CHECKING` → `VERIFIED`/`REFUTED`.
+- Returned hits should be copied into both `claim.factChecks[].evidenceRefs` and the global `sources[]` array so the UI can display a bibliography. Each entry already includes stable `source-${sha1(url)}` IDs—reuse them to avoid dupes.
+- When merging optimistic concurrency conflicts we reconcile `sources` and `factChecks` by ID (see `mergeById` helpers). Any new steward should follow this pattern so citations survive retries.
+- The helper will throw if the Responses API rejects the payload. Keep prompts JSON-only (no markdown) and avoid unsupported model options such as `reasoning.effort` unless the target model documents them.
+- Smoke-testing checklist for any new evidence-driven steward:
+  1. Trigger the steward on a fresh `/canvas` board.
+  2. Confirm `🔍 [Steward] search_evidence` logs appear with non-zero `hits`.
+  3. Reload the board; `sources[]` should persist and the Sources tab should show the recorded URLs/snippets.
+  4. Verify pending-verification IDs clear when a claim is marked `VERIFIED`.
