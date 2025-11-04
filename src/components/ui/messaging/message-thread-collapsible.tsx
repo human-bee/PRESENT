@@ -45,6 +45,8 @@ export interface MessageThreadCollapsibleProps extends React.HTMLAttributes<HTML
   ) => void;
   /** Optional close handler for mobile to minimize the panel */
   onClose?: () => void;
+  /** Controls open/closed state for styling; not forwarded to the DOM */
+  isOpen?: boolean;
 }
 
 const SUPPORTED_SLASH_COMMANDS = new Set(['canvas']);
@@ -90,7 +92,7 @@ const parseSlashCommand = (input: string): ParsedSlashCommand | null => {
 export const MessageThreadCollapsible = React.forwardRef<
   HTMLDivElement,
   MessageThreadCollapsibleProps
->(({ className, contextKey, onTranscriptChange, onClose, ...props }, ref) => {
+>(({ className, contextKey, onTranscriptChange, onClose, isOpen, ...restProps }, ref) => {
   // Conversations tab removed; Transcript is the only view
   const [canvasComponents, setCanvasComponents] = React.useState<CanvasComponentEntry[]>([]);
   const [transcriptions, setTranscriptions] = React.useState<
@@ -680,11 +682,12 @@ export const MessageThreadCollapsible = React.forwardRef<
   return (
     <div
       ref={ref}
+      data-state={typeof isOpen === 'boolean' ? (isOpen ? 'open' : 'closed') : undefined}
       className={cn(
         'bg-background border-l border-gray-200 shadow-lg h-full overflow-hidden flex flex-col',
         className,
       )}
-      {...props}
+      {...restProps}
     >
       <div className="h-full flex flex-col overscroll-contain">
         {/* Header with title and close button */}
