@@ -10,14 +10,14 @@
 
 ## 2) Verbatim > "smart"
 
-* Componenets are **fully authored** by the steward and applied **verbatim**.
+* Components are **fully authored** by the steward and applied **verbatim after reducers replay their `_ops`**.
 * No normalization passes. No keyword lists. No hidden "fixers."
 
 ## 3) Two UI tools in production
 
 * `create_component({ type, spec })`
 * `update_component({ componentId, patch })`
-  Everything else is either a handoff to a steward or a TLDraw DOM event.
+  Everything else is either a handoff to a steward or a TLDraw DOM event. Payloads should prefer `_ops` arrays that describe the logical change; residual props are optional.
 
 ## 4) One LLM call per trigger
 
@@ -112,7 +112,7 @@ A: Voice hears + calls 2 tools. Stewards think + write full artifacts. Browser e
 * One LiveKit Cloud Agent Per User
 * Listens to LiveKit room audio and transcribes speech
 * Makes function calls to exactly **two** UI tools via LiveKit data channel
-  * Normalizes patches (duration/booleans) before sending them downstream
+  * Emits `_ops` plus convenience patch hints (duration/booleans) before sending them downstream
   * Fingerprints recent `create_component` calls to avoid duplicate canvas inserts
   * Delegates heavier work to the Conductor via `dispatch_to_conductor`
 * May hand off server-side work to the Conductor

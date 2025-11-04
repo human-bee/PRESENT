@@ -156,15 +156,28 @@ export function useToolRegistry(deps: ToolRegistryDeps): ToolRegistryApi {
       for (const [messageId, entry] of pendingUpdates.entries()) {
         pendingUpdates.delete(messageId);
       const componentInfo = ComponentRegistry.get(messageId);
+      const patchRecord = entry.patch;
+      const patchVersion =
+        typeof patchRecord.version === 'number' ? patchRecord.version : undefined;
+      const patchTimestamp =
+        typeof patchRecord.lastUpdated === 'number'
+          ? patchRecord.lastUpdated
+          : typeof patchRecord.updatedAt === 'number'
+            ? patchRecord.updatedAt
+            : undefined;
       dispatch('tldraw:merge_component_state', {
         messageId,
-        patch: entry.patch,
+        patch: patchRecord,
         meta: { source: 'update_component' },
       });
-      void ComponentRegistry.update(messageId, entry.patch)
-        .then(() => {
+      void ComponentRegistry.update(messageId, patchRecord, {
+        version: patchVersion ?? null,
+        timestamp: patchTimestamp ?? Date.now(),
+        source: 'tool:update_component',
+      })
+        .then((result) => {
           const refreshedInfo = ComponentRegistry.get(messageId);
-          if (refreshedInfo?.props && refreshedInfo.componentType) {
+          if (!result?.ignored && refreshedInfo?.props && refreshedInfo.componentType) {
             try {
               window.dispatchEvent(
                 new CustomEvent('custom:showComponent', {

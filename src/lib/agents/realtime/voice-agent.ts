@@ -1017,6 +1017,42 @@ Your only output is function calls. Never use plain text unless absolutely neces
             enrichedParams.requestId = randomUUID();
           }
 
+          const componentTypeHint =
+            typeof enrichedParams.type === 'string'
+              ? enrichedParams.type
+              : typeof enrichedParams.componentType === 'string'
+                ? enrichedParams.componentType
+                : typeof args?.params?.type === 'string'
+                  ? (args.params as Record<string, unknown>).type
+                  : undefined;
+
+          if (!enrichedParams.componentId) {
+            const resolved = resolveComponentId({
+              componentId: enrichedParams.componentId,
+              intentId:
+                typeof enrichedParams.intentId === 'string' ? enrichedParams.intentId : undefined,
+              slot: typeof enrichedParams.slot === 'string' ? enrichedParams.slot : undefined,
+              type: componentTypeHint,
+            });
+            if (resolved) {
+              enrichedParams.componentId = resolved;
+            }
+          }
+
+          if (
+            !enrichedParams.componentId &&
+            componentTypeHint === 'DebateScorecard' &&
+            activeScorecard?.componentId
+          ) {
+            enrichedParams.componentId = activeScorecard.componentId;
+          }
+
+          if (!enrichedParams.componentId && args.task === 'scorecard.run') {
+            console.warn('[VoiceAgent] dispatch_to_conductor missing componentId for scorecard task', {
+              params,
+            });
+          }
+
           await sendToolCall('dispatch_to_conductor', {
             ...args,
             params: enrichedParams,

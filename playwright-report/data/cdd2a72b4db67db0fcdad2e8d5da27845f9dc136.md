@@ -13,10 +13,10 @@
             - navigation:
               - generic:
                 - button "Menu" [ref=e12] [cursor=pointer]:
-                  - img [ref=e13] [cursor=pointer]
+                  - img [ref=e13]
                 - button "Page 1" [ref=e14] [cursor=pointer]:
-                  - generic [ref=e15] [cursor=pointer]: Page 1
-                  - img [ref=e16] [cursor=pointer]
+                  - generic [ref=e15]: Page 1
+                  - img [ref=e16]
         - generic:
           - generic:
             - generic:
@@ -32,31 +32,31 @@
                     - button "Duplicate — Ctrl + D" [disabled] [ref=e24]:
                       - img [ref=e25]
                     - button "Actions" [ref=e27] [cursor=pointer]:
-                      - img [ref=e28] [cursor=pointer]
+                      - img [ref=e28]
                   - toolbar "Tools" [ref=e29]:
                     - generic [ref=e30]:
                       - button "Select — V" [pressed] [ref=e31] [cursor=pointer]:
-                        - img [ref=e32] [cursor=pointer]
+                        - img [ref=e32]
                       - button "Hand — H" [ref=e33] [cursor=pointer]:
-                        - img [ref=e34] [cursor=pointer]
+                        - img [ref=e34]
                       - button "Draw — D" [ref=e35] [cursor=pointer]:
-                        - img [ref=e36] [cursor=pointer]
+                        - img [ref=e36]
                       - button "Eraser — E" [ref=e37] [cursor=pointer]:
-                        - img [ref=e38] [cursor=pointer]
+                        - img [ref=e38]
                       - button "Arrow — A" [ref=e39] [cursor=pointer]:
-                        - img [ref=e40] [cursor=pointer]
+                        - img [ref=e40]
                       - button "Text — T" [ref=e41] [cursor=pointer]:
-                        - img [ref=e42] [cursor=pointer]
+                        - img [ref=e42]
                       - button "Note — N" [ref=e43] [cursor=pointer]:
-                        - img [ref=e44] [cursor=pointer]
+                        - img [ref=e44]
                       - button "Media — Ctrl + U" [ref=e45] [cursor=pointer]:
-                        - img [ref=e46] [cursor=pointer]
+                        - img [ref=e46]
                       - button "Rectangle — R" [ref=e47] [cursor=pointer]:
-                        - img [ref=e48] [cursor=pointer]
+                        - img [ref=e48]
                     - button "More" [ref=e50] [cursor=pointer]:
-                      - img [ref=e51] [cursor=pointer]
+                      - img [ref=e51]
                 - button "Styles" [ref=e54] [cursor=pointer]:
-                  - img [ref=e55] [cursor=pointer]
+                  - img [ref=e55]
         - region "Notifications (F8)":
           - list
       - button "Get a license for production" [ref=e57] [cursor=pointer]
@@ -69,13 +69,16 @@
         - generic:
           - generic:
             - generic:
-              - img
-              - paragraph: No activity yet
-              - paragraph: Voice conversations and components will appear here
+              - generic:
+                - generic: user-9zp516
+                - generic:
+                  - generic: 22:37:17
+              - generic: Let's start a debate on whether remote work boosts productivity. Please create the scorecard.
         - generic:
           - generic:
-            - textbox "Type a message for the agent" [active]: Let's start a debate on whether remote work boosts productivity. Please create the scorecard.
-            - button "Send"
+            - textbox "Type a message for the agent" [active]:
+              - /placeholder: Type a message for the agent…
+            - button "Send" [disabled]
           - generic:
             - generic: Sends as “you” over LiveKit to the voice agent.
             - generic: "Use `/canvas …` to message the Canvas steward directly."
@@ -83,11 +86,12 @@
           - generic:
             - generic:
               - generic: Connected
-              - generic: canvas-e2e-1762121055447
+              - generic: canvas-e2e-1762238232141
             - generic:
               - button "Disconnect"
               - button "Copy Link"
+              - button "Clear"
   - button "Open Next.js Dev Tools" [ref=e63] [cursor=pointer]:
-    - img [ref=e64] [cursor=pointer]
+    - img [ref=e64]
   - alert [ref=e67]
 ```

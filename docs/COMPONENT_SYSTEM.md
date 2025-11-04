@@ -10,8 +10,9 @@ This document is the single source of truth for how UI components are rendered, 
 
 | Concept | File | Summary |
 |---------|------|---------|
-| **ComponentRegistry** | `src/lib/component-registry.ts` | Global map of every live component on the canvas – ID, props, diff history, update callback |
-| **ui_update** tool | `src/lib/custom.ts` | AI‐facing function for patching any component’s props |
+| **ComponentRegistry** | `src/lib/component-registry.ts` | Versioned cache of every live component on the canvas – ID, props, diff history, reducer metadata |
+| **Component reducers** | `src/lib/component-reducers/` | Delta handlers (`_ops`) that apply steward/agent operations before props merge |
+| **ui_update** tool | `src/lib/custom.ts` | AI-facing function for sending deltas/patches to any component |
 | **list_components** tool | `src/lib/custom.ts` | Enumerate current IDs/types so AI can target updates |
 | **useComponentRegistration** | `src/lib/component-registry.ts` | Hook run by each component to self-register |
 | **PropertyDiffViewer** | `src/components/ui/property-diff-viewer.tsx` | Generic UI for showing prop changes |
@@ -25,18 +26,22 @@ This document is the single source of truth for how UI components are rendered, 
 sequenceDiagram
     participant Comp as Component
     participant Reg as ComponentRegistry
-    participant AI as Voice/Chat Agent
+    participant Red as Reducers
+    participant Agent as Voice/Steward
 
     Comp->>Reg: register(id, props, callback)
-    AI->>Reg: ui_update(id, patch)
-    Reg->>Comp: callback(patch)
-    Comp->>Comp: setState(patch)
+    Agent->>Reg: ui_update(id, { _ops, patch, version })
+    Reg->>Red: apply(componentType, _ops)
+    Red-->>Reg: reduced state
+    Reg->>Comp: callback(diff)
+    Comp->>Comp: render(parsedProps)
 ```
 
-1. **Register** – on mount, component calls the hook which stores a `ComponentInfo` entry. Initial `originalProps` are captured.
-2. **Update** – any party (AI, collaborative tool, local user) can call `ui_update` which forwards to `ComponentRegistry.update`.
-3. **Diff log** – `update()` merges props, computes shallow `PropertyDiff[]`, appends to `diffHistory`.
-4. **Callback** – optional `updateCallback` lets component react immediately.
+1. **Register** – on mount, the component calls the hook which stores a `ComponentInfo` entry (props, version, history, callback).
+2. **Send delta** – agents send `_ops` + optional patch fields through `ui_update`. Include `version`/`lastUpdated` so the registry can drop stale packets.
+3. **Reduce** – registry forwards `_ops` to the component-specific reducer (e.g., debate scorecard ops) before applying any residual patch.
+4. **Diff log** – merged props are diffed for auditing and stored along with updated version metadata.
+5. **Callback / render** – components receive the fully reduced props via `updateCallback` and re-render.
 
 ---
 
@@ -73,4 +78,4 @@ Large components (e.g. tldraw, video tiles) still use LiveKit bus topics for phy
 
 ---
 
-*Last updated 2025-07-08*
+*Last updated 2025-11-04*

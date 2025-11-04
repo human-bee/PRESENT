@@ -6,6 +6,114 @@
  */
 
 import React from 'react';
+import { applyComponentOps } from '@/lib/component-reducers';
+
+type ComponentUpdateOptions = {
+  source?: string;
+  version?: number | null;
+  timestamp?: number | null;
+  replace?: boolean;
+};
+
+const cloneValue = <T,>(value: T): T => {
+  if (typeof structuredClone === 'function') {
+    return structuredClone(value);
+  }
+  return JSON.parse(JSON.stringify(value)) as T;
+};
+
+const toFiniteNumber = (value: unknown): number | undefined => {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return undefined;
+    const parsed = Number(trimmed);
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+  return undefined;
+};
+
+const extractVersion = (value: Record<string, unknown> | undefined): number | undefined => {
+  if (!value) return undefined;
+  return (
+    toFiniteNumber(value.version) ??
+    toFiniteNumber(value._version) ??
+    toFiniteNumber((value as any).__version)
+  );
+};
+
+const extractTimestamp = (value: Record<string, unknown> | undefined): number | undefined => {
+  if (!value) return undefined;
+  return (
+    toFiniteNumber(value.lastUpdated) ??
+    toFiniteNumber(value.updatedAt) ??
+    toFiniteNumber(value.timestamp)
+  );
+};
+
+const shouldAcceptUpdate = (
+  existingVersion: number | null | undefined,
+  existingTimestamp: number | null | undefined,
+  incomingVersion: number | null | undefined,
+  incomingTimestamp: number | null | undefined,
+) => {
+  if (incomingVersion == null && incomingTimestamp == null) {
+    return true;
+  }
+
+  if (incomingVersion != null) {
+    if (existingVersion == null) return true;
+    if (incomingVersion > existingVersion) return true;
+    if (incomingVersion < existingVersion) return false;
+    // versions equal
+    if (incomingTimestamp != null && existingTimestamp != null) {
+      return incomingTimestamp >= existingTimestamp;
+    }
+    return true;
+  }
+
+  if (incomingTimestamp != null && existingTimestamp != null) {
+    return incomingTimestamp >= existingTimestamp;
+  }
+
+  return true;
+};
+
+const mergeState = (
+  base: Record<string, unknown>,
+  patch: Record<string, unknown>,
+  replace = false,
+): Record<string, unknown> => {
+  if (replace) {
+    return cloneValue(patch);
+  }
+
+  const result: Record<string, unknown> = { ...base };
+  for (const [key, value] of Object.entries(patch)) {
+    if (value === undefined) {
+      continue;
+    }
+    if (Array.isArray(value)) {
+      result[key] = value.slice();
+      continue;
+    }
+    if (value && typeof value === 'object') {
+      const existing = result[key];
+      if (existing && typeof existing === 'object' && !Array.isArray(existing)) {
+        result[key] = mergeState(existing as Record<string, unknown>, value as Record<string, unknown>);
+      } else {
+        result[key] = { ...(value as Record<string, unknown>) };
+      }
+      continue;
+    }
+    result[key] = value;
+  }
+  return result;
+};
 
 const LOGS =
   typeof process !== 'undefined' &&
@@ -22,6 +130,8 @@ export interface ComponentInfo {
   messageId: string;
   componentType: string;
   props: Record<string, unknown>;
+  version?: number | null;
+  lastUpdated?: number | null;
   contextKey: string;
   timestamp: number;
   updateCallback?: (patch: Record<string, unknown>) => void;
@@ -85,12 +195,9 @@ class ComponentStore {
       this.warnedTypeMessages.add(info.messageId);
     }
 
-    const originalProps = existing?.originalProps ?? existing?.props ?? info.props ?? {};
-    const mergedProps = { ...(existing?.props ?? {}), ...(info.props ?? {}) };
-    const mergedDiffHistory = [
-      ...(existing?.diffHistory ?? []),
-      ...diffProps(existing?.props ?? {}, mergedProps),
-    ];
+    const incomingProps = cloneValue(info.props ?? {});
+    const incomingVersion = extractVersion(incomingProps);
+    const incomingTimestamp = extractTimestamp(incomingProps) ?? Date.now();
 
     const token = Symbol(info.messageId);
     if (info.updateCallback) {
@@ -98,18 +205,48 @@ class ComponentStore {
     }
     const aggregatedCallback = this.getAggregatedCallback(info.messageId) ?? info.updateCallback;
 
-    const nextComponent: ComponentInfo = {
-      messageId: info.messageId,
-      componentType: info.componentType,
-      props: mergedProps,
-      contextKey: info.contextKey,
-      timestamp: Date.now(),
-      updateCallback: aggregatedCallback,
-      originalProps,
-      diffHistory: mergedDiffHistory,
-    };
+    let record: ComponentInfo;
+    if (existing) {
+      const accept = shouldAcceptUpdate(
+        existing.version,
+        existing.lastUpdated,
+        incomingVersion,
+        incomingTimestamp,
+      );
 
-    this.components.set(info.messageId, nextComponent);
+      const nextProps = accept ? mergeState(existing.props, incomingProps) : existing.props;
+
+      record = {
+        ...existing,
+        componentType: info.componentType || existing.componentType,
+        contextKey: info.contextKey ?? existing.contextKey,
+        props: nextProps,
+        version: accept ? incomingVersion ?? existing.version ?? null : existing.version ?? null,
+        lastUpdated: accept ? incomingTimestamp ?? existing.lastUpdated ?? null : existing.lastUpdated ?? null,
+        timestamp: Date.now(),
+        updateCallback: aggregatedCallback ?? existing.updateCallback,
+        originalProps: existing.originalProps ?? cloneValue(existing.props),
+        diffHistory: [
+          ...(existing.diffHistory ?? []),
+          ...diffProps(existing.props, nextProps),
+        ],
+      };
+    } else {
+      record = {
+        messageId: info.messageId,
+        componentType: info.componentType,
+        props: incomingProps,
+        version: incomingVersion ?? null,
+        lastUpdated: incomingTimestamp ?? null,
+        contextKey: info.contextKey,
+        timestamp: Date.now(),
+        updateCallback: aggregatedCallback,
+        originalProps: cloneValue(incomingProps),
+        diffHistory: [],
+      };
+    }
+
+    this.components.set(info.messageId, record);
     const count = (this.registrationCounts.get(info.messageId) ?? 0) + 1;
     this.registrationCounts.set(info.messageId, count);
     if (LOGS) {
@@ -131,6 +268,9 @@ class ComponentStore {
   ) {
     const component = this.components.get(messageId);
     if (component) {
+      const incomingProps = cloneValue(props ?? {});
+      const incomingVersion = extractVersion(incomingProps);
+      const incomingTimestamp = extractTimestamp(incomingProps) ?? Date.now();
       if (
         updateCallback &&
         component.updateCallback &&
@@ -154,18 +294,31 @@ class ComponentStore {
         this.addCallback(messageId, registrationToken, updateCallback);
       }
       const aggregatedCallback = this.getAggregatedCallback(messageId) ?? updateCallback;
+      const accept = shouldAcceptUpdate(
+        component.version,
+        component.lastUpdated,
+        incomingVersion,
+        incomingTimestamp,
+      );
+      const nextProps = accept ? mergeState(component.props, incomingProps) : component.props;
       const updatedComponent: ComponentInfo = {
         ...component,
-        props,
+        props: nextProps,
+        version: accept ? incomingVersion ?? component.version ?? null : component.version ?? null,
+        lastUpdated: accept ? incomingTimestamp ?? component.lastUpdated ?? null : component.lastUpdated ?? null,
         updateCallback: aggregatedCallback,
         timestamp: Date.now(),
+        diffHistory: [
+          ...(component.diffHistory ?? []),
+          ...diffProps(component.props, nextProps),
+        ],
       };
       this.components.set(messageId, updatedComponent);
       // Silent props refresh to avoid extra renders; listeners notified by state-changing updates
     }
   }
 
-  async update(messageId: string, patch: Record<string, unknown>) {
+  async update(messageId: string, patch: Record<string, unknown>, options: ComponentUpdateOptions = {}) {
     const component = this.components.get(messageId);
 
     if (!component) {
@@ -175,7 +328,50 @@ class ComponentStore {
       };
     }
 
-    const mergedProps = { ...component.props, ...patch };
+    const incomingVersion =
+      options.version ?? toFiniteNumber(patch.version) ?? component.version ?? null;
+    const incomingTimestamp =
+      options.timestamp ??
+      toFiniteNumber((patch as any)?.lastUpdated) ??
+      toFiniteNumber((patch as any)?.updatedAt) ??
+      Date.now();
+
+    const accept = shouldAcceptUpdate(
+      component.version,
+      component.lastUpdated,
+      incomingVersion,
+      incomingTimestamp,
+    );
+
+    if (!accept) {
+      if (LOGS)
+        console.log(
+          `[ComponentRegistry] Ignored update for ${messageId} (older version/timestamp)`,
+          {
+            incomingVersion,
+            incomingTimestamp,
+            existingVersion: component.version,
+            existingTimestamp: component.lastUpdated,
+          },
+        );
+      return { success: true, ignored: true as const };
+    }
+
+    const rawOps = Array.isArray((patch as any)?._ops) ? ((patch as any)._ops as unknown[]) : [];
+    const sanitizedPatch = { ...cloneValue(patch) } as Record<string, unknown>;
+    if ('_ops' in sanitizedPatch) {
+      delete (sanitizedPatch as Record<string, unknown>)._ops;
+    }
+
+    const stateAfterOps = rawOps.length
+      ? applyComponentOps(component.componentType, component.props, rawOps)
+      : component.props;
+
+    const mergedProps = mergeState(
+      stateAfterOps,
+      sanitizedPatch,
+      options.replace === true,
+    );
 
     // Compute diffs
     const propDiffs = diffProps(component.props, mergedProps);
@@ -183,6 +379,8 @@ class ComponentStore {
     const updatedComponent = {
       ...component,
       props: mergedProps,
+      version: incomingVersion,
+      lastUpdated: incomingTimestamp,
       timestamp: Date.now(),
       originalProps: component.originalProps || component.props,
       diffHistory: [...(component.diffHistory || []), ...propDiffs],
@@ -190,7 +388,14 @@ class ComponentStore {
     updatedComponent.updateCallback = this.getAggregatedCallback(messageId);
     this.components.set(messageId, updatedComponent);
 
-    const callbackResult = this.runCallbacks(messageId, patch);
+    const callbackPayload: Record<string, unknown> = {
+      ...sanitizedPatch,
+      __mergedProps: mergedProps,
+      __version: incomingVersion,
+      __timestamp: incomingTimestamp,
+    };
+
+    const callbackResult = this.runCallbacks(messageId, callbackPayload);
     if (!callbackResult.success) {
       return callbackResult;
     }
@@ -369,7 +574,11 @@ export class ComponentRegistry {
     return componentStore.register(info);
   }
 
-  static async update(messageId: string, patch: Record<string, unknown>) {
+  static async update(
+    messageId: string,
+    patch: Record<string, unknown>,
+    options: ComponentUpdateOptions = {},
+  ) {
     // Check circuit breaker
     if (!updateCircuitBreaker.canUpdate(messageId, patch)) {
       return {
@@ -380,7 +589,7 @@ export class ComponentRegistry {
       };
     }
 
-    return componentStore.update(messageId, patch);
+    return componentStore.update(messageId, patch, options);
   }
 
   static get(messageId: string): ComponentInfo | undefined {

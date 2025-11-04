@@ -68,8 +68,25 @@ export function useToolEvents(room: Room | undefined, options: UseToolEventsOpti
         const patch = message.patch && typeof message.patch === 'object' ? message.patch : undefined;
         if (!componentId || !patch) return;
 
-        await ComponentRegistry.update(componentId, patch as Record<string, unknown>)
-          .then(() => {
+        const patchRecord = patch as Record<string, unknown>;
+        const patchVersion =
+          typeof patchRecord.version === 'number' ? patchRecord.version : undefined;
+        const patchTimestamp =
+          typeof patchRecord.lastUpdated === 'number'
+            ? patchRecord.lastUpdated
+            : typeof patchRecord.updatedAt === 'number'
+              ? patchRecord.updatedAt
+              : undefined;
+        const eventTimestamp = typeof message.timestamp === 'number' ? message.timestamp : Date.now();
+
+        try {
+          const updateResult = await ComponentRegistry.update(componentId, patchRecord, {
+            version: patchVersion ?? null,
+            timestamp: patchTimestamp ?? eventTimestamp,
+            source: 'livekit:update_component',
+          });
+
+          if (!updateResult?.ignored) {
             const refreshed = ComponentRegistry.get(componentId);
             if (refreshed?.props && refreshed.componentType) {
               try {
@@ -90,12 +107,12 @@ export function useToolEvents(room: Room | undefined, options: UseToolEventsOpti
                 }
               }
             }
-          })
-          .catch((error) => {
-            if (enableLogging) {
-              console.warn('[ToolDispatcher] registry update failed', { componentId, error });
-            }
-          });
+          }
+        } catch (error) {
+          if (enableLogging) {
+            console.warn('[ToolDispatcher] registry update failed', { componentId, error });
+          }
+        }
 
         try {
           window.dispatchEvent(

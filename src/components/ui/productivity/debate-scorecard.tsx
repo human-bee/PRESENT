@@ -33,7 +33,7 @@ import {
   Target,
   Trophy,
 } from 'lucide-react';
-import { useComponentRegistration } from '@/lib/component-registry';
+import { ComponentRegistry, useComponentRegistration } from '@/lib/component-registry';
 import { cn } from '@/lib/utils';
 import {
   debateScorecardStateSchema as debateScorecardSchema,
@@ -198,6 +198,55 @@ const timelineMeta: Record<
   score_change: { icon: Trophy, className: 'text-amber-300', label: 'Score Change' },
   moderation: { icon: Info, className: 'text-slate-300', label: 'Moderation' },
   achievement: { icon: Sparkles, className: 'text-pink-300', label: 'Achievement' },
+};
+
+const coerceFiniteNumber = (value: unknown): number | null => {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+  return null;
+};
+
+const statesDiffer = (prev: DebateScorecardState, next: DebateScorecardState): boolean => {
+  if (prev === next) return false;
+  try {
+    return JSON.stringify(prev) !== JSON.stringify(next);
+  } catch {
+    return true;
+  }
+};
+
+const shouldPromoteScorecard = (
+  current: DebateScorecardState,
+  candidate: DebateScorecardState,
+): boolean => {
+  if (candidate.componentId && candidate.componentId !== current.componentId) {
+    return true;
+  }
+
+  const nextVersion = coerceFiniteNumber(candidate.version);
+  const currentVersion = coerceFiniteNumber(current.version);
+  if (nextVersion != null) {
+    if (currentVersion == null || nextVersion > currentVersion) {
+      return true;
+    }
+    if (nextVersion < currentVersion) {
+      return false;
+    }
+  }
+
+  const nextTimestamp = coerceFiniteNumber(candidate.lastUpdated);
+  const currentTimestamp = coerceFiniteNumber(current.lastUpdated);
+  if (nextTimestamp != null) {
+    if (currentTimestamp == null || nextTimestamp > currentTimestamp) {
+      return true;
+    }
+    if (nextTimestamp < currentTimestamp) {
+      return false;
+    }
+  }
+
+  return statesDiffer(current, candidate);
 };
 
 function formatDate(value?: string | number) {
@@ -887,97 +936,38 @@ function Timeline({
 }
 
 export function DebateScorecard(props: DebateScorecardProps) {
-  const initialState = useMemo(() => debateScorecardSchema.parse(props), [props]);
-  const [scorecard, setScorecard] = useState<DebateScorecardState>(initialState);
-  const lastAppliedRef = useRef({
-    componentId: initialState.componentId,
-    version: initialState.version ?? 0,
-    lastUpdated: initialState.lastUpdated ?? 0,
-  });
+  const parsed = useMemo(() => debateScorecardSchema.parse(props), [props]);
+  const parsedRef = useRef(parsed);
+  useEffect(() => {
+    parsedRef.current = parsed;
+  }, [parsed]);
 
-  const mergeScorecardPatch = useCallback(
-    (prev: DebateScorecardState, patch: Record<string, unknown>) => {
-      const next: Partial<DebateScorecardState> = {
-        ...prev,
-        ...(patch as Partial<DebateScorecardState>),
-      };
+  const [scorecard, setScorecard] = useState(parsed);
 
-      if (patch.filters && typeof patch.filters === 'object') {
-        next.filters = {
-          ...prev.filters,
-          ...(patch.filters as Partial<DebateScorecardState['filters']>),
-        };
-      }
+  const explicitMessageId =
+    typeof (props as any).__custom_message_id === 'string' ? (props as any).__custom_message_id.trim() : '';
 
-      if (patch.metrics && typeof patch.metrics === 'object') {
-        next.metrics = {
-          ...prev.metrics,
-          ...(patch.metrics as Partial<DebateScorecardState['metrics']>),
-        };
-      }
+  const messageId = useMemo(() => {
+    const stateId = scorecard.componentId?.trim() || parsed.componentId?.trim();
+    return explicitMessageId || stateId || 'debate-scorecard';
+  }, [explicitMessageId, parsed.componentId, scorecard.componentId]);
 
-      if (patch.map && typeof patch.map === 'object') {
-        const incoming = patch.map as Partial<DebateScorecardState['map']>;
-        next.map = {
-          nodes: Array.isArray(incoming.nodes) ? incoming.nodes : prev.map.nodes,
-          edges: Array.isArray(incoming.edges) ? incoming.edges : prev.map.edges,
-        };
-      }
-
-      if (patch.rfd && typeof patch.rfd === 'object') {
-        next.rfd = {
-          ...prev.rfd,
-          ...(patch.rfd as Partial<DebateScorecardState['rfd']>),
-        };
-      }
-
-      if (patch.status && typeof patch.status === 'object') {
-        next.status = {
-          ...prev.status,
-          ...(patch.status as Partial<DebateScorecardState['status']>),
-        };
-      }
-
-      return debateScorecardSchema.parse(next);
+  const handleRegistryUpdate = useCallback(
+    (_patch: Record<string, unknown>) => {
+      const info = ComponentRegistry.get(messageId);
+      if (!info?.props) return;
+      const candidate = debateScorecardSchema.parse(info.props);
+      setScorecard((prev) => (shouldPromoteScorecard(prev, candidate) ? candidate : prev));
     },
-    [],
+    [messageId],
   );
 
-  const handleUpdate = useCallback(
-    (patch: Record<string, unknown>) => {
-      setScorecard((prev) => {
-        const next = mergeScorecardPatch(prev, patch);
-        lastAppliedRef.current = {
-          componentId: next.componentId,
-          version: next.version ?? lastAppliedRef.current.version,
-          lastUpdated: next.lastUpdated ?? Date.now(),
-        };
-        return next;
-      });
-    },
-    [mergeScorecardPatch],
-  );
-
-  const messageId = (props as any).__custom_message_id || scorecard.componentId || 'debate-scorecard';
-  useComponentRegistration(messageId, 'DebateScorecard', scorecard, 'canvas', handleUpdate);
+  useComponentRegistration(messageId, 'DebateScorecard', scorecard, 'canvas', handleRegistryUpdate);
 
   useEffect(() => {
-    const applied = lastAppliedRef.current;
-    const incomingVersion = initialState.version ?? 0;
-    const incomingUpdated = initialState.lastUpdated ?? 0;
-    const baselineChanged = initialState.componentId !== applied.componentId;
-    const versionAdvanced = incomingVersion > applied.version;
-    const fresherTimestamp = incomingVersion === applied.version && incomingUpdated > applied.lastUpdated;
-
-    if (baselineChanged || versionAdvanced || fresherTimestamp) {
-      setScorecard(initialState);
-      lastAppliedRef.current = {
-        componentId: initialState.componentId,
-        version: incomingVersion,
-        lastUpdated: incomingUpdated,
-      };
-    }
-  }, [initialState]);
+    const incoming = parsedRef.current;
+    setScorecard((prev) => (shouldPromoteScorecard(prev, incoming) ? incoming : prev));
+  }, [parsed.componentId, parsed.version, parsed.lastUpdated]);
 
   const [localFilters, setLocalFilters] = useState(scorecard.filters);
   const [factCheckToggle, setFactCheckToggle] = useState(scorecard.factCheckEnabled);
@@ -1126,8 +1116,8 @@ export function DebateScorecard(props: DebateScorecardProps) {
                 lastAction={lastAction}
                 pendingVerifications={scorecard.status?.pendingVerifications}
                 players={scorecard.players}
-              />
-            </div>
+            />
+          </div>
 
             <MetricsStrip metrics={scorecard.metrics} show={scorecard.showMetricsStrip} />
 

@@ -33,12 +33,17 @@ export async function POST(req: NextRequest) {
     }
 
     const svc = new RoomServiceClient(String(livekitHost), String(apiKey), String(apiSecret));
+    const eventTimestamp =
+      typeof (patch as any)?.lastUpdated === 'number'
+        ? Number((patch as any).lastUpdated)
+        : Date.now();
+
     const event = {
       type: 'update_component',
       componentId,
       patch,
       summary: typeof summary === 'string' ? summary : undefined,
-      timestamp: Date.now(),
+      timestamp: eventTimestamp,
     };
     const data = new TextEncoder().encode(JSON.stringify(event));
     await svc.sendData(String(room), data, DataPacket_Kind.RELIABLE, { topic: 'update_component' });
@@ -47,4 +52,3 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: e?.message || 'Unknown error' }, { status: 500 });
   }
 }
-

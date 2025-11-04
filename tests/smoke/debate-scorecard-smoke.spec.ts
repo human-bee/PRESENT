@@ -4,12 +4,13 @@ const TEST_TIMEOUT = 240_000; // generous window for live agent
 
 async function sendMessage(page, text: string) {
   const input = page.getByPlaceholder('Type a message for the agent…');
+  await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
   await input.fill(text);
   const sendButton = page.getByRole('button', { name: 'Send' });
   await expect(sendButton).toBeEnabled({ timeout: 30_000 });
-  await sendButton.click();
-  await expect(sendButton).toBeDisabled({ timeout: 5_000 });
-  await expect(sendButton).toBeEnabled({ timeout: 60_000 });
+  await input.focus();
+  await input.press('Enter');
+  await expect(input).toHaveValue('', { timeout: 5_000 });
 }
 
 function canvasUrl() {

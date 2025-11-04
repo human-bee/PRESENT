@@ -7,7 +7,7 @@ This playbook captures the workflow we used to wire the Mermaid flowchart stewar
 ## High-Level Loop
 
 ```
-User speaks/types → Voice Agent → ToolDispatcher → Steward → Supabase → LiveKit ui_update → Canvas component
+User speaks/types → Voice Agent → ToolDispatcher → Steward → Supabase → LiveKit ui_update (with `_ops`) → Canvas component
 ```
 
 Key repos paths:
@@ -45,8 +45,8 @@ npm run dev
    - Constrain the spec so the steward can only set safe props. For Mermaid we keep `mermaidText` + sizing.
 
 4. **Implement `update_component` mapping**
-   - ToolDispatcher forwards patches to `ComponentRegistry.update`.
-   - Dispatcher now normalizes durations, booleans, and status fields before merging TLDraw state.
+   - ToolDispatcher forwards deltas (`_ops`) + residual patches to `ComponentRegistry.update`.
+   - Dispatcher still normalizes ergonomic fields (durations, booleans) before they hit reducers.
    - Custom shapes can capture patch callbacks; see `MermaidStreamRenderer` for compile status handling.
 
 > Tip: keep component props serializable and < 20k characters to fit LiveKit/Supabase payload budgets.
@@ -61,10 +61,10 @@ npm run dev
      - `input_speech_transcription_completed`: broadcasts decisions after a debounce.
      - `response_function_call_completed`: forwards tool calls to browser.
      - **Manual text bridge**: keyboard input shares the same path as speech.
-   - Deterministic tools:
-     - `reserve_component` creates/updates the ledger entry with `intentId`, `messageId`, `slot`.
-     - `resolve_component` recovers IDs by intent/type when the model omits `componentId`.
-     - `update_component` emits lossy data channel packets for latency-sensitive patches.
+  - Deterministic tools:
+    - `reserve_component` creates/updates the ledger entry with `intentId`, `messageId`, `slot`.
+    - `resolve_component` recovers IDs by intent/type when the model omits `componentId`.
+    - `update_component` emits `_ops` (plus any helper fields) over the data channel for latency-sensitive patches.
 
 2. **Steward Agent**
    - Template resides in `flowchart-steward.ts`.
@@ -99,7 +99,7 @@ When cloning this pattern tailor both `get*` and `commit*` helpers in `src/lib/a
 
 1. User speech is transcribed by OpenAI → voice agent publishes `decision` (`summary: 'steward_trigger'`). Manual typed text now shares the same debounce.
 2. ToolDispatcher listens for `decision` events (lines ~720–780) and schedules `/api/steward/run` once the mermaid shape exists.
-3. Steward completes task, `commit_flowchart` POSTs `/api/steward/commit` → LiveKit emits `ui_update` → TLDraw shape updates.
+3. Steward completes task, `commit_flowchart` POSTs `/api/steward/commit` (include `_ops` + version) → LiveKit emits `ui_update` → TLDraw shape updates.
 4. Canvas logs show every step (`[ToolDispatcher]`, `[Canvas][ui_update]`, `[Steward]` etc.).
 
 > Tip: watch `logs/agent-realtime.log` for `decision` timestamps and tool call outputs; check browser console for `[Canvas][ui_update]` and TLDraw warnings like “Mermaid error – keeping last good render”.

@@ -383,7 +383,10 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
               ],
             };
             try {
-              await ComponentRegistry.update(messageId, patch);
+              await ComponentRegistry.update(messageId, patch, {
+                timestamp: Date.now(),
+                source: 'tool:exa',
+              });
             } catch (error) {
               console.warn('[ToolDispatcher] exa-to-update_component synthesis failed', error);
             }
