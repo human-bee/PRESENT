@@ -67,6 +67,10 @@ Keep the voice agent lean; heavy analysis or multi-step planning should run via 
 - [ ] Document any new steward/component pairing in this guide when shipping.
 - [ ] If the flow depends on MCP, verify servers in `/mcp-config` and confirm `mcp_*` tools appear in the Capability Inspector.
 
+### Release Notes
+
+- **2025-11-04:** Upgraded the OpenAI Agents JS SDK stack (`@openai/agents*`) to **v0.2.1**. This unlocks richer tool outputs (attachments / provider data) and aligns our harness with the current release window. Keep the `openai` client on `^6.x` and stay on **Zod v3** until the SDK officially supports Zod 4. No steward code changes required, but browser/voice-agent logs now surface non-text tool payloads—ignore them unless your component explicitly handles attachments.
+
 ---
 
 ## 8. MCP Tooling & Agent SDK Integration

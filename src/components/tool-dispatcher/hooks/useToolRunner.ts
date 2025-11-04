@@ -430,15 +430,8 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
         }
 
         if (tool === 'dispatch_to_conductor') {
-          let task = typeof params?.task === 'string' ? params.task.trim() : '';
+          const task = typeof params?.task === 'string' ? params.task.trim() : '';
           const dispatchParams = (params?.params as Record<string, unknown>) || {};
-
-          if (task === 'display_message_on_canvas') {
-            task = 'canvas.agent_prompt';
-            if (!dispatchParams.message && typeof params?.message === 'string') {
-              dispatchParams.message = params.message;
-            }
-          }
 
           if (!task) {
             const message = 'dispatch_to_conductor requires a task value';
