@@ -6,8 +6,8 @@
     "node": ">=22"
   },
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
+    "dev": "next dev --webpack",
+    "build": "next build --webpack",
     "analyze": "ANALYZE=true next build",
     "start": "next start",
     "lint": "next lint",
