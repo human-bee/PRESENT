@@ -93,6 +93,23 @@ const tryParseJsonCandidate = (candidate: string): any | null => {
 
 export async function performWebSearch(args: WebSearchArgs): Promise<WebSearchResponse> {
   const parsed = webSearchArgsSchema.parse(args);
+  if (process.env.MOCK_WEB_SEARCH === 'true') {
+    const hashed = hashId(parsed.query);
+    const hits = Array.from({ length: parsed.maxResults }).map((_, index) => ({
+      id: `mock-${index + 1}-${hashed}`,
+      title: `Mock evidence #${index + 1} for ${parsed.query}`,
+      url: `https://example.com/mock/${hashed}/${index + 1}`,
+      snippet: `Synthetic snippet ${index + 1} supporting fact-checking for "${parsed.query}".`,
+      publishedAt: new Date(2024, 0, 1 + index).toISOString(),
+      source: 'MockSearch',
+    }));
+    return {
+      summary: `Mock summary for "${parsed.query}"`,
+      hits,
+      query: parsed.query,
+      model: 'mock-web-search',
+    };
+  }
   const client = getClient();
   const model =
     process.env.CANVAS_STEWARD_SEARCH_MODEL ||

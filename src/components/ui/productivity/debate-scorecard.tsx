@@ -953,10 +953,11 @@ export function DebateScorecard(props: DebateScorecardProps) {
   }, [explicitMessageId, parsed.componentId, scorecard.componentId]);
 
   const handleRegistryUpdate = useCallback(
-    (_patch: Record<string, unknown>) => {
-      const info = ComponentRegistry.get(messageId);
-      if (!info?.props) return;
-      const candidate = debateScorecardSchema.parse(info.props);
+    (patch: Record<string, unknown>) => {
+      const mergedProps = (patch as any)?.__mergedProps;
+      const source = mergedProps ?? ComponentRegistry.get(messageId)?.props;
+      if (!source) return;
+      const candidate = debateScorecardSchema.parse(source);
       setScorecard((prev) => (shouldPromoteScorecard(prev, candidate) ? candidate : prev));
     },
     [messageId],

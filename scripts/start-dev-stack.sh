@@ -7,6 +7,43 @@ LOG_DIR="$ROOT_DIR/logs"
 
 mkdir -p "$LOG_DIR"
 
+ensure_port_free() {
+  local port="$1"
+  if ! command -v lsof >/dev/null 2>&1; then
+    return
+  fi
+
+  # Kill TCP listeners on the port.
+  local tcp_pids
+  tcp_pids=$(lsof -tiTCP:"$port" -sTCP:LISTEN 2>/dev/null || echo "")
+  tcp_pids=${tcp_pids//$'\n'/ }
+  for pid in $tcp_pids; do
+    if [[ -n "$pid" ]]; then
+      echo "[PortGuard] killing TCP listener $pid on :$port"
+      kill "$pid" 2>/dev/null || true
+      sleep 0.2
+      if ps -p "$pid" >/dev/null 2>&1; then
+        kill -9 "$pid" 2>/dev/null || true
+      fi
+    fi
+  done
+
+  # Kill UDP listeners on the port.
+  local udp_pids
+  udp_pids=$(lsof -tiUDP:"$port" 2>/dev/null || echo "")
+  udp_pids=${udp_pids//$'\n'/ }
+  for pid in $udp_pids; do
+    if [[ -n "$pid" ]]; then
+      echo "[PortGuard] killing UDP listener $pid on :$port"
+      kill "$pid" 2>/dev/null || true
+      sleep 0.2
+      if ps -p "$pid" >/dev/null 2>&1; then
+        kill -9 "$pid" 2>/dev/null || true
+      fi
+    fi
+  done
+}
+
 start_process() {
   local label="$1"
   local script="$2"
@@ -59,6 +96,8 @@ start_process() {
 
 failures=0
 
+ensure_port_free 7880
+ensure_port_free 7882
 start_process "LiveKit server" "lk:server:dev" "livekit-server.log" 7880 || failures=1
 start_process "Sync server" "sync:dev" "sync-dev.log" || failures=1
 start_process "Conductor" "agent:conductor" "agent-conductor.log" || failures=1

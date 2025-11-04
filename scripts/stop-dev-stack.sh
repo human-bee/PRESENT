@@ -50,4 +50,28 @@ stop_process "Realtime agent" "agent:realtime"
 stop_process "Next dev" "dev"
 stop_process "LiveKit server" "lk:server:dev"
 
+# Ensure LiveKit ports are freed even if a stray process was running outside the stack scripts.
+if command -v lsof >/dev/null 2>&1; then
+  for port in 7880 7881 7882; do
+    pids=$(lsof -tiTCP:"$port" -sTCP:LISTEN 2>/dev/null || true)
+    for pid in $pids; do
+      echo "[PortGuard] killing TCP listener $pid on :$port"
+      kill "$pid" 2>/dev/null || true
+      sleep 0.2
+      if ps -p "$pid" >/dev/null 2>&1; then
+        kill -9 "$pid" 2>/dev/null || true
+      fi
+    done
+    pids=$(lsof -tiUDP:"$port" 2>/dev/null || true)
+    for pid in $pids; do
+      echo "[PortGuard] killing UDP listener $pid on :$port"
+      kill "$pid" 2>/dev/null || true
+      sleep 0.2
+      if ps -p "$pid" >/dev/null 2>&1; then
+        kill -9 "$pid" 2>/dev/null || true
+      fi
+    done
+  done
+fi
+
 echo "All dev services stopped (or no pid files found)."

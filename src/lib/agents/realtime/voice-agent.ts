@@ -249,6 +249,19 @@ Your only output is function calls. Never use plain text unless absolutely neces
 
     const enableLossyUpdates = process.env.VOICE_AGENT_UPDATE_LOSSY !== 'false';
 
+    const awaitParticipant = async () => {
+      const maxWaitMs = Number(process.env.VOICE_AGENT_LIVEKIT_WAIT_MS ?? 5_000);
+      const intervalMs = 100;
+      const started = Date.now();
+      while (!job.room.localParticipant || job.room.state !== 'connected') {
+        if (Date.now() - started > maxWaitMs) {
+          return false;
+        }
+        await new Promise((resolve) => setTimeout(resolve, intervalMs));
+      }
+      return true;
+    };
+
     const sendToolCall = async (tool: string, params: JsonObject, options: { reliable?: boolean } = {}) => {
       const reliable =
         options.reliable !== undefined
@@ -264,8 +277,12 @@ Your only output is function calls. Never use plain text unless absolutely neces
         timestamp: Date.now(),
         source: 'voice' as const,
       };
-      const participantExists = !!job.room.localParticipant;
-      console.log('[VoiceAgent] tool_call ready (from execute)', { participantExists, tool, params });
+      const ready = await awaitParticipant();
+      if (!ready) {
+        console.warn('[VoiceAgent] tool_call dropped (participant not connected)', { tool, params });
+        return;
+      }
+      console.log('[VoiceAgent] tool_call ready (from execute)', { participant: job.room.localParticipant?.identity, tool, params });
       await job.room.localParticipant?.publishData(new TextEncoder().encode(JSON.stringify(toolEvent)), {
         reliable,
         topic: 'tool_call',

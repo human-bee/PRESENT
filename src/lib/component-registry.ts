@@ -7,6 +7,7 @@
 
 import React from 'react';
 import { applyComponentOps } from '@/lib/component-reducers';
+import { clearOps, filterNewOps, recordOps } from '@/lib/component-crdt';
 
 type ComponentUpdateOptions = {
   source?: string;
@@ -358,13 +359,16 @@ class ComponentStore {
     }
 
     const rawOps = Array.isArray((patch as any)?._ops) ? ((patch as any)._ops as unknown[]) : [];
+    const dedupedOps = rawOps.length
+      ? filterNewOps(component.messageId, rawOps, { version: incomingVersion ?? null, timestamp: incomingTimestamp ?? null })
+      : [];
     const sanitizedPatch = { ...cloneValue(patch) } as Record<string, unknown>;
     if ('_ops' in sanitizedPatch) {
       delete (sanitizedPatch as Record<string, unknown>)._ops;
     }
 
-    const stateAfterOps = rawOps.length
-      ? applyComponentOps(component.componentType, component.props, rawOps)
+    const stateAfterOps = dedupedOps.length
+      ? applyComponentOps(component.componentType, component.props, dedupedOps)
       : component.props;
 
     const mergedProps = mergeState(
@@ -385,6 +389,12 @@ class ComponentStore {
       originalProps: component.originalProps || component.props,
       diffHistory: [...(component.diffHistory || []), ...propDiffs],
     } as ComponentInfo;
+    if (dedupedOps.length) {
+      recordOps(component.messageId, dedupedOps, {
+        version: incomingVersion ?? null,
+        timestamp: incomingTimestamp ?? null,
+      });
+    }
     updatedComponent.updateCallback = this.getAggregatedCallback(messageId);
     this.components.set(messageId, updatedComponent);
 
@@ -415,6 +425,7 @@ class ComponentStore {
     this.components.delete(messageId);
     this.warnedTypeMessages.delete(messageId);
     this.warnedCallbackMessages.delete(messageId);
+    clearOps(messageId);
     if (LOGS) console.log(`[ComponentRegistry] Removed ${messageId}`);
     this.notifyListeners();
   }
@@ -434,6 +445,7 @@ class ComponentStore {
         this.registrationCounts.delete(messageId);
         this.components.delete(messageId);
         if (LOGS) console.log(`[ComponentRegistry] Removed ${messageId}`);
+        clearOps(messageId);
         this.notifyListeners();
         return;
       }
@@ -458,6 +470,7 @@ class ComponentStore {
       this.components.clear();
       this.callbackMap.clear();
       this.registrationCounts.clear();
+      clearOps();
       if (LOGS) console.log(`[ComponentRegistry] Cleared all components`);
     } else {
       for (const [id, component] of this.components) {
@@ -465,6 +478,7 @@ class ComponentStore {
           this.components.delete(id);
           this.warnedTypeMessages.delete(id);
           this.warnedCallbackMessages.delete(id);
+          clearOps(id);
         }
       }
       if (LOGS) console.log(`[ComponentRegistry] Cleared components for context: ${contextKey}`);

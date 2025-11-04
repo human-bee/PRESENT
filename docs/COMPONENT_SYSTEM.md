@@ -12,6 +12,7 @@ This document is the single source of truth for how UI components are rendered, 
 |---------|------|---------|
 | **ComponentRegistry** | `src/lib/component-registry.ts` | Versioned cache of every live component on the canvas – ID, props, diff history, reducer metadata |
 | **Component reducers** | `src/lib/component-reducers/` | Delta handlers (`_ops`) that apply steward/agent operations before props merge |
+| **Component CRDT store** | `src/lib/component-crdt.ts` | Deduplicates labeled ops per component and keeps a rolling log for catch-up |
 | **ui_update** tool | `src/lib/custom.ts` | AI-facing function for sending deltas/patches to any component |
 | **list_components** tool | `src/lib/custom.ts` | Enumerate current IDs/types so AI can target updates |
 | **useComponentRegistration** | `src/lib/component-registry.ts` | Hook run by each component to self-register |
@@ -42,6 +43,7 @@ sequenceDiagram
 3. **Reduce** – registry forwards `_ops` to the component-specific reducer (e.g., debate scorecard ops) before applying any residual patch.
 4. **Diff log** – merged props are diffed for auditing and stored along with updated version metadata.
 5. **Callback / render** – components receive the fully reduced props via `updateCallback` and re-render.
+6. **CRDT log** – `_ops` are recorded via `component-crdt` so late joiners can replay the last ~200 ops deterministically.
 
 ---
 

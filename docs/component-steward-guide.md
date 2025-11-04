@@ -32,6 +32,8 @@ Keep the voice agent lean; heavy analysis or multi-step planning should run via 
 - **Emit deltas:** send `_ops` arrays that describe the logical change (e.g., `UPSERT_CLAIMS`, `UPDATE_METRICS`) alongside any derived props. The dispatcher reduces the ops into the canonical state before re-rendering clients.
 - **Validation:** sanitize input (minutes, URLs, etc.) before calling downstream tools. Emit user-facing errors via `agent:chat` rather than failing silently.
 - **Streaming etiquette:** long tasks should stream interim status (`analysis_started`, `analysis_complete`) so the browser can surface progress.
+- **Offline runs:** set `MOCK_WEB_SEARCH=true` when running smoketests without outbound network access. The steward will return deterministic evidence hits so latency stays predictable.
+- **CRDT-friendly ops:** `_ops` are now deduped and logged (see `src/lib/component-crdt.ts`). Make sure every steward emits stable, idempotent operations—late subscribers will replay the last 200 ops to catch up.
 
 ---
 
