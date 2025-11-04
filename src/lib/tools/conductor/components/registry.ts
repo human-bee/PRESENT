@@ -22,13 +22,12 @@ import {
 import LiveCaptions, { liveCaptionsSchema } from '@/components/LiveCaptions';
 import LinearKanbanBoard, { linearKanbanSchema } from '@/components/ui/productivity/linear-kanban-board';
 import { OnboardingGuide, onboardingGuideSchema } from '@/components/ui/onboarding/onboarding-guide';
-import { Message } from '@/components/ui/messaging/message';
 import { ComponentToolbox } from '@/components/ui/shared/component-toolbox';
 
 // Add debate scorecard @debate-scorecard.tsx
 import DebateScorecard, { debateScoreCardSchema } from '@/components/ui/productivity/debate-scorecard';
 
-import { aiResponseSchema, componentToolboxSchema } from "@/lib/custom";
+import { componentToolboxSchema } from "@/lib/custom";
 
 const extendedSchema = <T extends z.AnyZodObject>(schema: T) => {
   return schema.extend({
@@ -143,13 +142,6 @@ export const components: any = [
       'A draggable, resizable toolbox of all custom components. Drag from here to the canvas to create new components.',
     component: ComponentToolbox,
     propsSchema: extendedSchema(componentToolboxSchema),
-  },
-  {
-    name: 'AIResponse',
-    description:
-      'Displays AI-generated responses and messages with markdown support. Perfect for showing assistant replies, AI analysis, or any text-based AI output.',
-    component: Message,
-    propsSchema: extendedSchema(aiResponseSchema),
   },
   {
     name: 'DebateScorecard',

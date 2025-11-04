@@ -1,12 +1,27 @@
-/** @type {import('ts-jest').JestConfigWithTsJest} */
+/** @type {import('jest').Config} */
 module.exports = {
-  preset: 'ts-jest',
   testEnvironment: 'jsdom',
   transform: {
-    '^.+\\.(ts|tsx)$': [
-      'ts-jest',
+    '^.+\\.(t|j)sx?$': [
+      '@swc/jest',
       {
-        tsconfig: 'tsconfig.test.json',
+        module: {
+          type: 'commonjs',
+        },
+        jsc: {
+          target: 'es2022',
+          parser: {
+            syntax: 'typescript',
+            tsx: true,
+            decorators: false,
+          },
+          transform: {
+            react: {
+              runtime: 'automatic',
+              development: process.env.NODE_ENV === 'test',
+            },
+          },
+        },
       },
     ],
   },

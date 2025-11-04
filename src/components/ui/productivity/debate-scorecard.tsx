@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertTriangle,
   ArrowRightLeft,
@@ -887,29 +887,117 @@ function Timeline({
 }
 
 export function DebateScorecard(props: DebateScorecardProps) {
-  const parsed = useMemo(() => debateScorecardSchema.parse(props), [props]);
-  const messageId = (props as any).__custom_message_id || parsed.componentId || 'debate-scorecard';
-  useComponentRegistration(messageId, 'DebateScorecard', parsed, 'canvas');
+  const initialState = useMemo(() => debateScorecardSchema.parse(props), [props]);
+  const [scorecard, setScorecard] = useState<DebateScorecardState>(initialState);
+  const lastAppliedRef = useRef({
+    componentId: initialState.componentId,
+    version: initialState.version ?? 0,
+    lastUpdated: initialState.lastUpdated ?? 0,
+  });
 
-  const [localFilters, setLocalFilters] = useState(parsed.filters);
-  const [factCheckToggle, setFactCheckToggle] = useState(parsed.factCheckEnabled);
+  const mergeScorecardPatch = useCallback(
+    (prev: DebateScorecardState, patch: Record<string, unknown>) => {
+      const next: Partial<DebateScorecardState> = {
+        ...prev,
+        ...(patch as Partial<DebateScorecardState>),
+      };
+
+      if (patch.filters && typeof patch.filters === 'object') {
+        next.filters = {
+          ...prev.filters,
+          ...(patch.filters as Partial<DebateScorecardState['filters']>),
+        };
+      }
+
+      if (patch.metrics && typeof patch.metrics === 'object') {
+        next.metrics = {
+          ...prev.metrics,
+          ...(patch.metrics as Partial<DebateScorecardState['metrics']>),
+        };
+      }
+
+      if (patch.map && typeof patch.map === 'object') {
+        const incoming = patch.map as Partial<DebateScorecardState['map']>;
+        next.map = {
+          nodes: Array.isArray(incoming.nodes) ? incoming.nodes : prev.map.nodes,
+          edges: Array.isArray(incoming.edges) ? incoming.edges : prev.map.edges,
+        };
+      }
+
+      if (patch.rfd && typeof patch.rfd === 'object') {
+        next.rfd = {
+          ...prev.rfd,
+          ...(patch.rfd as Partial<DebateScorecardState['rfd']>),
+        };
+      }
+
+      if (patch.status && typeof patch.status === 'object') {
+        next.status = {
+          ...prev.status,
+          ...(patch.status as Partial<DebateScorecardState['status']>),
+        };
+      }
+
+      return debateScorecardSchema.parse(next);
+    },
+    [],
+  );
+
+  const handleUpdate = useCallback(
+    (patch: Record<string, unknown>) => {
+      setScorecard((prev) => {
+        const next = mergeScorecardPatch(prev, patch);
+        lastAppliedRef.current = {
+          componentId: next.componentId,
+          version: next.version ?? lastAppliedRef.current.version,
+          lastUpdated: next.lastUpdated ?? Date.now(),
+        };
+        return next;
+      });
+    },
+    [mergeScorecardPatch],
+  );
+
+  const messageId = (props as any).__custom_message_id || scorecard.componentId || 'debate-scorecard';
+  useComponentRegistration(messageId, 'DebateScorecard', scorecard, 'canvas', handleUpdate);
 
   useEffect(() => {
-    setLocalFilters(parsed.filters);
-  }, [parsed.filters]);
+    const applied = lastAppliedRef.current;
+    const incomingVersion = initialState.version ?? 0;
+    const incomingUpdated = initialState.lastUpdated ?? 0;
+    const baselineChanged = initialState.componentId !== applied.componentId;
+    const versionAdvanced = incomingVersion > applied.version;
+    const fresherTimestamp = incomingVersion === applied.version && incomingUpdated > applied.lastUpdated;
+
+    if (baselineChanged || versionAdvanced || fresherTimestamp) {
+      setScorecard(initialState);
+      lastAppliedRef.current = {
+        componentId: initialState.componentId,
+        version: incomingVersion,
+        lastUpdated: incomingUpdated,
+      };
+    }
+  }, [initialState]);
+
+  const [localFilters, setLocalFilters] = useState(scorecard.filters);
+  const [factCheckToggle, setFactCheckToggle] = useState(scorecard.factCheckEnabled);
 
   useEffect(() => {
-    setFactCheckToggle(parsed.factCheckEnabled);
-  }, [parsed.factCheckEnabled]);
+    setLocalFilters(scorecard.filters);
+  }, [scorecard.filters]);
+
+  useEffect(() => {
+    setFactCheckToggle(scorecard.factCheckEnabled);
+  }, [scorecard.factCheckEnabled]);
 
   const playerColorBySide = useMemo(() => {
-    return new Map(parsed.players.map((player) => [player.side, player.color || '#38bdf8']));
-  }, [parsed.players]);
+    return new Map(scorecard.players.map((player) => [player.side, player.color || '#38bdf8']));
+  }, [scorecard.players]);
 
   const playerSummaries = useMemo<PlayerSummary[]>(
     () =>
-      parsed.players.map((player) => {
-        const claims = parsed.claims.filter((claim) => claim.side === player.side);
+      scorecard.players.map((player) => {
+        const claims = scorecard.claims.filter((claim) => claim.side === player.side);
         const verified = claims.filter((c) => c.status === 'VERIFIED').length;
         const refuted = claims.filter((c) => c.status === 'REFUTED').length;
         const checking = claims.filter((c) => c.status === 'CHECKING').length;
@@ -923,7 +1011,7 @@ export function DebateScorecard(props: DebateScorecardProps) {
           totalClaims: claims.length,
         };
       }),
-    [parsed.players, parsed.claims],
+    [scorecard.players, scorecard.claims],
   );
 
   const filteredClaims = useMemo(() => {
@@ -932,7 +1020,7 @@ export function DebateScorecard(props: DebateScorecardProps) {
     const searchQuery = (localFilters.searchQuery || '').trim().toLowerCase();
     const speaker = localFilters.speaker || 'ALL';
 
-    return parsed.claims.filter((claim) => {
+    return scorecard.claims.filter((claim) => {
       if (speaker && speaker !== 'ALL') {
         if (speaker === 'AFF' && claim.side !== 'AFF') return false;
         if (speaker === 'NEG' && claim.side !== 'NEG') return false;
@@ -944,18 +1032,16 @@ export function DebateScorecard(props: DebateScorecardProps) {
         }
       }
 
-      if (verdictFilter.size > 0) {
-        if (!claim.verdict || !verdictFilter.has(claim.verdict as Verdict)) {
-          return false;
-        }
+      if (verdictFilter.size > 0 && claim.verdict && !verdictFilter.has(claim.verdict)) {
+        return false;
       }
 
       if (statusFilter.size > 0 && !statusFilter.has(claim.status)) {
         return false;
       }
 
-      if (searchQuery.length > 1) {
-        const haystack = `${claim.quote} ${claim.evidenceInline ?? ''}`.toLowerCase();
+      if (searchQuery) {
+        const haystack = `${claim.quote} ${claim.summary ?? ''} ${claim.speaker ?? ''}`.toLowerCase();
         if (!haystack.includes(searchQuery)) {
           return false;
         }
@@ -963,12 +1049,12 @@ export function DebateScorecard(props: DebateScorecardProps) {
 
       return true;
     });
-  }, [parsed.claims, localFilters]);
+  }, [scorecard.claims, localFilters]);
 
   const [activeAchievement, setActiveAchievement] = useState<AchievementAward | null>(null);
   const latestAchievement =
-    parsed.achievementsQueue.length > 0
-      ? parsed.achievementsQueue[parsed.achievementsQueue.length - 1]
+    scorecard.achievementsQueue.length > 0
+      ? scorecard.achievementsQueue[scorecard.achievementsQueue.length - 1]
       : null;
 
   useEffect(() => {
@@ -990,8 +1076,8 @@ export function DebateScorecard(props: DebateScorecardProps) {
     { total: 0, entries: [] as { label: string; score: number }[] },
   );
 
-  const lastAction = parsed.status?.lastAction;
-  const unlockedAchievements = parsed.players.flatMap((player) =>
+  const lastAction = scorecard.status?.lastAction;
+  const unlockedAchievements = scorecard.players.flatMap((player) =>
     (player.achievements || []).map((award) => ({
       ...award,
       playerLabel: player.label,
@@ -1004,8 +1090,8 @@ export function DebateScorecard(props: DebateScorecardProps) {
         <header className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
           <div className="space-y-1">
             <p className="text-xs uppercase tracking-[0.25em] text-white/40">Debate Analysis</p>
-            <h2 className="text-2xl md:text-3xl font-semibold text-white">{parsed.topic}</h2>
-            <p className="text-sm text-white/50">{parsed.round}</p>
+            <h2 className="text-2xl md:text-3xl font-semibold text-white">{scorecard.topic}</h2>
+            <p className="text-sm text-white/50">{scorecard.round}</p>
             {lastAction && <p className="text-xs text-white/40 mt-2">Latest action: {lastAction}</p>}
           </div>
           <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-5 py-3 text-right">
@@ -1038,12 +1124,12 @@ export function DebateScorecard(props: DebateScorecardProps) {
               ))}
               <ScoreSummaryCard
                 lastAction={lastAction}
-                pendingVerifications={parsed.status?.pendingVerifications}
-                players={parsed.players}
+                pendingVerifications={scorecard.status?.pendingVerifications}
+                players={scorecard.players}
               />
             </div>
 
-            <MetricsStrip metrics={parsed.metrics} show={parsed.showMetricsStrip} />
+            <MetricsStrip metrics={scorecard.metrics} show={scorecard.showMetricsStrip} />
 
             <div className="grid gap-4 text-xs text-white/70">
               <div className="rounded-xl border border-white/5 bg-white/[0.03] p-4 space-y-2">
@@ -1200,7 +1286,7 @@ export function DebateScorecard(props: DebateScorecardProps) {
 
             <div className="flex flex-col gap-4">
               {localFilters.activeTab === 'timeline' ? (
-                <Timeline events={parsed.timeline} players={parsed.players} />
+                <Timeline events={scorecard.timeline} players={scorecard.players} />
               ) : (
                 <>
                   {localFilters.activeTab === 'ledger' && (
@@ -1210,11 +1296,17 @@ export function DebateScorecard(props: DebateScorecardProps) {
                       playerColorBySide={playerColorBySide as Map<'AFF' | 'NEG', string>}
                     />
                   )}
-                  {localFilters.activeTab === 'map' && <MapView nodes={parsed.map.nodes} edges={parsed.map.edges} />}
-                  {localFilters.activeTab === 'rfd' && (
-                    <RFDView summary={parsed.rfd.summary} links={parsed.rfd.links} claims={parsed.claims} />
+                  {localFilters.activeTab === 'map' && (
+                    <MapView nodes={scorecard.map.nodes} edges={scorecard.map.edges} />
                   )}
-                  {localFilters.activeTab === 'sources' && <SourcesView sources={parsed.sources} />}
+                  {localFilters.activeTab === 'rfd' && (
+                    <RFDView
+                      summary={scorecard.rfd.summary}
+                      links={scorecard.rfd.links}
+                      claims={scorecard.claims}
+                    />
+                  )}
+                  {localFilters.activeTab === 'sources' && <SourcesView sources={scorecard.sources} />}
                 </>
               )}
             </div>

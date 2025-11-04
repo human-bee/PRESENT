@@ -474,6 +474,59 @@ Your only output is function calls. Never use plain text unless absolutely neces
             return { status: 'ERROR', message: 'create_component requires type' };
           }
 
+          const normalizedType = componentType.toLowerCase();
+          if (normalizedType === 'airesponse') {
+            const roomName = job.room.name || '';
+            if (!roomName) {
+              return { status: 'ERROR', message: 'canvas room unavailable' };
+            }
+
+            const candidateTexts: Array<string | undefined> = [];
+            if (args.props && typeof args.props === 'object') {
+              const propsRecord = args.props as Record<string, unknown>;
+              if (typeof propsRecord.text === 'string') candidateTexts.push(propsRecord.text);
+              if (typeof propsRecord.content === 'string') candidateTexts.push(propsRecord.content);
+              if (typeof propsRecord.label === 'string') candidateTexts.push(propsRecord.label);
+            }
+            if (args.spec && typeof args.spec === 'object') {
+              const specRecord = args.spec as Record<string, unknown>;
+              if (typeof specRecord.text === 'string') candidateTexts.push(specRecord.text);
+              if (typeof specRecord.content === 'string') candidateTexts.push(specRecord.content);
+            }
+            if (typeof args.spec === 'string') candidateTexts.push(args.spec);
+
+            const text = candidateTexts.find((value) => typeof value === 'string' && value.trim().length > 0)?.trim();
+            if (!text) {
+              return { status: 'ERROR', message: 'AIResponse requires text content' };
+            }
+
+            const requestId = typeof args.messageId === 'string' && args.messageId.trim().length > 0
+              ? args.messageId.trim()
+              : randomUUID();
+
+            const quickTextParams: JsonObject = {
+              room: roomName,
+              text,
+              requestId,
+            };
+            if (args.props && typeof args.props === 'object') {
+              const propsRecord = args.props as Record<string, unknown>;
+              if (typeof propsRecord.x === 'number' && Number.isFinite(propsRecord.x)) {
+                quickTextParams.x = propsRecord.x as number;
+              }
+              if (typeof propsRecord.y === 'number' && Number.isFinite(propsRecord.y)) {
+                quickTextParams.y = propsRecord.y as number;
+              }
+            }
+
+            await sendToolCall('dispatch_to_conductor', {
+              task: 'canvas.quick_text',
+              params: quickTextParams,
+            });
+
+            return { status: 'queued', messageId: requestId };
+          }
+
           if (args.spec === null) {
             delete (args as any).spec;
           }

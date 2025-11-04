@@ -40,6 +40,7 @@ Important tool selection rules:
 - Update existing: 'update_component'.
 - Canvas interactions: call 'dispatch_to_conductor' with task "canvas.agent_prompt" and params { room, message, requestId, ... }.
 - Debate scorecard work: call 'dispatch_to_conductor' with task "scorecard.run" and params { room, componentId, prompt/summary, intent }.
+- Quick canvas notes: call 'dispatch_to_conductor' with task "canvas.quick_text" and params { room, text, requestId }.
 - Never invent other task names (for example, never use "display_message_on_canvas").
 - When creating/updating custom components (LiveKit tiles, timers, etc.), always go through 'create_component' / 'update_component' with the schema defined in the component registry.
 
