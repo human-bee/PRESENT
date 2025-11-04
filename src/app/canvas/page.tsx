@@ -56,7 +56,23 @@ export default function Canvas() {
     // Resolve canvas id from URL, localStorage fallback, or create a new canvas row
     const resolveCanvasId = async () => {
       const url = new URL(window.location.href);
-      const idParam = url.searchParams.get('id');
+      const isSyntheticDevId = (value: string | null) => !!value && value.startsWith('dev-');
+
+      let idParam = url.searchParams.get('id');
+      if (isSyntheticDevId(idParam) && user) {
+        url.searchParams.delete('id');
+        window.history.replaceState({}, '', url.toString());
+        setCanvasId(null);
+        setRoomName('');
+        try {
+          localStorage.removeItem('present:lastCanvasId');
+        } catch {}
+        try {
+          window.dispatchEvent(new Event('present:canvas-id-changed'));
+        } catch {}
+        idParam = null;
+      }
+
       if (idParam) {
         setCanvasId(idParam);
         setRoomName(`canvas-${idParam}`);
@@ -74,6 +90,13 @@ export default function Canvas() {
       try {
         lastId = localStorage.getItem('present:lastCanvasId');
       } catch {}
+      if (isSyntheticDevId(lastId) && user) {
+        try {
+          localStorage.removeItem('present:lastCanvasId');
+        } catch {}
+        lastId = null;
+      }
+
       if (lastId) {
         url.searchParams.set('id', lastId);
         window.history.replaceState({}, '', url.toString());
@@ -86,8 +109,41 @@ export default function Canvas() {
       }
 
       // No id known: create a new canvas row immediately so URL + room are stable
-      // Defer creation until user is authenticated
-      if (!user) return;
+      // In dev bypass mode, synthesize a stable local canvas id even without auth.
+      if (!user) {
+        if (bypassAuth) {
+          try {
+            const devKey = 'present:lastCanvasId';
+            const w = window as any;
+            const existingDevId = localStorage.getItem(devKey);
+            let generatedId = existingDevId;
+            if (!generatedId) {
+              const randomSuffix = typeof crypto !== 'undefined' && crypto.randomUUID
+                ? crypto.randomUUID()
+                : Math.random().toString(36).slice(2, 10);
+              generatedId = `dev-${randomSuffix}`;
+            }
+
+            url.searchParams.set('id', generatedId);
+            window.history.replaceState({}, '', url.toString());
+            setCanvasId(generatedId);
+            setRoomName(`canvas-${generatedId}`);
+            try {
+              localStorage.setItem(devKey, generatedId);
+            } catch {}
+            try {
+              w.__present = w.__present || {};
+              w.__present.creatingCanvas = false;
+            } catch {}
+            try {
+              window.dispatchEvent(new Event('present:canvas-id-changed'));
+            } catch {}
+          } catch (err) {
+            console.warn('⚠️ [Canvas] Failed to synthesize dev canvas id:', err);
+          }
+        }
+        return;
+      }
 
       // Guard against duplicate inserts (React StrictMode / fast refresh / rapid re-entry)
       try {
@@ -181,7 +237,7 @@ export default function Canvas() {
     };
     window.addEventListener('present:canvas-id-changed', handleCanvasIdChanged);
     return () => window.removeEventListener('present:canvas-id-changed', handleCanvasIdChanged);
-  }, [user]);
+  }, [user, bypassAuth]);
 
   // Transcript panel state
   const [isTranscriptOpen, setIsTranscriptOpen] = useState(false);

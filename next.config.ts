@@ -30,7 +30,8 @@ const nextConfig: NextConfig = {
     if (!isServer) {
       config.resolve.alias = {
         ...config.resolve.alias,
-        tldraw: require.resolve('tldraw'),
+        // Prefer ESM build to avoid dist-cjs richText path in the browser
+        tldraw: path.resolve(__dirname, 'node_modules/tldraw/dist-esm/index.mjs'),
         // Force ESM entries for tldraw subpackages to avoid dual CJS/ESM imports in dev
         // TODO: TLDraw v4 exposes ESM entrypoints by default—confirm and remove these aliases when safe.
         '@tldraw/utils': path.resolve(__dirname, 'node_modules/@tldraw/utils/dist-esm/index.mjs'),
