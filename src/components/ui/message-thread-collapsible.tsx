@@ -770,6 +770,23 @@ export const MessageThreadCollapsible = React.forwardRef<
                   type="text"
                   value={typedMessage}
                   onChange={(e) => setTypedMessage(e.target.value)}
+                  onPaste={(e) => {
+                    const text = e.clipboardData?.getData('text');
+                    if (typeof text === 'string' && text.length > 0) {
+                      e.preventDefault();
+                      const target = e.currentTarget;
+                      const { selectionStart, selectionEnd } = target;
+                      const start = selectionStart ?? typedMessage.length;
+                      const end = selectionEnd ?? typedMessage.length;
+                      const nextValue = `${typedMessage.slice(0, start)}${text}${typedMessage.slice(end)}`;
+                      setTypedMessage(nextValue);
+                      // Manually trigger form validity updates so the send button re-evaluates immediately.
+                      queueMicrotask(() => {
+                        const event = new Event('input', { bubbles: true, cancelable: true });
+                        target.dispatchEvent(event);
+                      });
+                    }
+                  }}
                   placeholder={
                     isRecognizedSlashCommand
                       ? 'Dispatching directly to the Canvas steward…'
