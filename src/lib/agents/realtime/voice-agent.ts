@@ -250,7 +250,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
     const enableLossyUpdates = process.env.VOICE_AGENT_UPDATE_LOSSY !== 'false';
 
     const awaitParticipant = async () => {
-      const maxWaitMs = Number(process.env.VOICE_AGENT_LIVEKIT_WAIT_MS ?? 5_000);
+      const maxWaitMs = Number(process.env.VOICE_AGENT_LIVEKIT_WAIT_MS ?? 10_000);
       const intervalMs = 100;
       const started = Date.now();
       while (!job.room.localParticipant || job.room.state !== 'connected') {
@@ -261,6 +261,19 @@ Your only output is function calls. Never use plain text unless absolutely neces
       }
       return true;
     };
+
+    type QueuedCall = {
+      event: {
+        id: string;
+        roomId: string;
+        type: 'tool_call';
+        payload: JsonObject;
+        timestamp: number;
+        source: 'voice';
+      };
+      reliable: boolean;
+    };
+    const queuedToolCalls: QueuedCall[] = [];
 
     const sendToolCall = async (tool: string, params: JsonObject, options: { reliable?: boolean } = {}) => {
       const reliable =
@@ -279,7 +292,8 @@ Your only output is function calls. Never use plain text unless absolutely neces
       };
       const ready = await awaitParticipant();
       if (!ready) {
-        console.warn('[VoiceAgent] tool_call dropped (participant not connected)', { tool, params });
+        console.warn('[VoiceAgent] tool_call participant not connected after wait; queueing retry', { tool, params });
+        queuedToolCalls.push({ event: toolEvent, reliable });
         return;
       }
       console.log('[VoiceAgent] tool_call ready (from execute)', { participant: job.room.localParticipant?.identity, tool, params });
@@ -288,6 +302,37 @@ Your only output is function calls. Never use plain text unless absolutely neces
         topic: 'tool_call',
       });
     };
+
+    const flushQueuedToolCalls = async () => {
+      if (!queuedToolCalls.length) return;
+      if (!job.room.localParticipant || job.room.state !== 'connected') return;
+      while (queuedToolCalls.length > 0) {
+        const next = queuedToolCalls.shift();
+        if (!next) break;
+        try {
+          console.log('[VoiceAgent] flushing queued tool_call', { tool: next.event.payload?.tool, id: next.event.id });
+          await job.room.localParticipant.publishData(new TextEncoder().encode(JSON.stringify(next.event)), {
+            reliable: next.reliable,
+            topic: 'tool_call',
+          });
+        } catch (error) {
+          console.error('[VoiceAgent] failed to flush queued tool_call', error);
+          break;
+        }
+      }
+    };
+
+    job.room
+      .on(RoomEvent.ConnectionStateChanged, () => {
+        if (job.room.state === 'connected') {
+          void flushQueuedToolCalls();
+        }
+      })
+      .on(RoomEvent.ParticipantConnected, (participant) => {
+        if (participant?.identity === job.room.localParticipant?.identity && job.room.state === 'connected') {
+          void flushQueuedToolCalls();
+        }
+      });
 
     const coerceComponentPatch = (raw: unknown) => {
       if (!raw) return {};

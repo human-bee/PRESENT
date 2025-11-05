@@ -1,6 +1,6 @@
 export type { DataMessage } from '@livekit/components-react';
 
-import { Room } from 'livekit-client';
+import { Room, RoomEvent } from 'livekit-client';
 import { createLogger } from '@/lib/utils';
 
 type ChunkEnvelope = {
@@ -88,6 +88,8 @@ export function createLiveKitBus(room: Room | null | undefined) {
   let lastWarnedDisconnectedAt = 0;
   const DISCONNECT_WARN_THROTTLE_MS = 5000;
 
+  const pending: { topic: string; payload: Record<string, unknown> }[] = [];
+
   const handlePublishResult = (result: unknown, topic: string, context?: Record<string, unknown>) => {
     if (result && typeof (result as PromiseLike<unknown>).then === 'function') {
       (result as PromiseLike<unknown>).catch((err) => {
@@ -96,49 +98,66 @@ export function createLiveKitBus(room: Room | null | undefined) {
     }
   };
 
+  const trySend = (topic: string, payload: Record<string, unknown>, { enqueueOnFailure } = { enqueueOnFailure: true }) => {
+    if (!room || room.state !== 'connected' || !room.localParticipant) {
+      if (enqueueOnFailure) {
+        pending.push({ topic, payload });
+        logger.debug('Queueing payload until room is connected.', { topic, pending: pending.length });
+      }
+      return false;
+    }
+    try {
+      const json = JSON.stringify(payload);
+      const bytes = encodeUtf8(json);
+      const result = room.localParticipant.publishData(bytes, { reliable: true, topic });
+      handlePublishResult(result, topic);
+      return true;
+    } catch (err) {
+      logger.error('Failed to send', topic, err);
+      if (enqueueOnFailure) pending.push({ topic, payload });
+      return false;
+    }
+  };
+
+  const flushPending = () => {
+    if (!room || room.state !== 'connected' || !room.localParticipant) {
+      return;
+    }
+    while (pending.length > 0) {
+      const next = pending.shift();
+      if (!next) break;
+      trySend(next.topic, next.payload, { enqueueOnFailure: false });
+    }
+  };
+
+  if (room) {
+    room
+      .on(RoomEvent.ConnectionStateChanged, () => {
+        if (room.state === 'connected') {
+          flushPending();
+        }
+      })
+      .on(RoomEvent.ParticipantConnected, flushPending);
+  }
+
   return {
     /** Publish a JSON-serialisable payload under the given topic */
     send(topic: string, payload: unknown) {
-      // Guard against stale or disconnected rooms. Calling publishData when
-      // the underlying PeerConnection is already closed will throw
-      // `UnexpectedConnectionState: PC manager is closed` inside livekit-client.
-      // See https://github.com/livekit/components-js/issues/XXX (example) for details.
-
-      // 1. Room reference must exist.
       if (!room) return;
-
-      // 2. Only attempt to publish when the room is fully connected. The room
-      //    state is managed internally by livekit-client and will be one of
-      //    'connected' | 'connecting' | 'reconnecting' | 'disconnected'. We
-      //    publish ONLY when connected to avoid race-conditions during
-      //    teardown.
-      //    Ref: https://docs.livekit.io/client-sdk-js/interfaces/Room.html#state
-      if (room.state !== 'connected') {
-        const now = Date.now();
-        if (now - lastWarnedDisconnectedAt > DISCONNECT_WARN_THROTTLE_MS) {
-          lastWarnedDisconnectedAt = now;
-          logger.info('Skipping publishData – room not connected.', {
-            topic,
-            currentState: room.state,
-          });
-        } else {
-          logger.debug('Skipping publishData (throttled) – room not connected.', topic);
-        }
-        return;
-      }
-
       const json = JSON.stringify(payload);
       const bytes = encodeUtf8(json);
 
       if (bytes.length <= MAX_DATA_CHANNEL_BYTES) {
-        try {
-          const result = room.localParticipant?.publishData(bytes, {
-            reliable: true,
-            topic,
-          });
-          handlePublishResult(result, topic);
-        } catch (err) {
-          logger.error('Failed to send', topic, err);
+        const sent = trySend(topic, payload);
+        if (!sent) {
+          const now = Date.now();
+          if (now - lastWarnedDisconnectedAt > DISCONNECT_WARN_THROTTLE_MS) {
+            lastWarnedDisconnectedAt = now;
+            logger.info('Queueing payload – room not connected.', {
+              topic,
+              currentState: room?.state,
+            });
+          }
         }
         return;
       }
@@ -166,14 +185,22 @@ export function createLiveKitBus(room: Room | null | undefined) {
           encoding: 'base64',
         };
 
-        try {
-          const result = room.localParticipant?.publishData(encodeUtf8(JSON.stringify(chunkPayload)), {
-            reliable: true,
-            topic,
-          });
-          handlePublishResult(result, topic, { messageId, index });
-        } catch (err) {
-          logger.error('Failed to send chunk', { topic, messageId, index }, err);
+        const success = trySend(topic, chunkPayload, { enqueueOnFailure: false });
+        if (!success) {
+          for (let pendingIndex = index; pendingIndex < totalChunks; pendingIndex++) {
+            const pendingStart = pendingIndex * MAX_CHUNK_STRING_LENGTH;
+            const pendingEnd = pendingStart + MAX_CHUNK_STRING_LENGTH;
+            const pendingPayload: ChunkEnvelope = {
+              __chunked: true,
+              id: messageId,
+              index: pendingIndex,
+              total: totalChunks,
+              chunk: base64.slice(pendingStart, pendingEnd),
+              encoding: 'base64',
+            };
+            pending.push({ topic, payload: pendingPayload });
+          }
+          logger.info('Queued remaining chunks until connection resumes.', { topic, messageId, fromIndex: index });
           break;
         }
       }

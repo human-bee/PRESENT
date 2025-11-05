@@ -123,11 +123,10 @@ export const MessageThreadCollapsible = React.forwardRef<
   const slashCommandBodyMissing = Boolean(isRecognizedSlashCommand && !slashCommand?.body);
   const trimmedTypedMessage = typedMessage.trim();
   const isRoomConnected = room?.state === 'connected';
-  const inputDisabled = isSending || (!isRecognizedSlashCommand && !isRoomConnected);
+  const inputDisabled = isSending;
   const sendDisabled =
     isSending ||
     !trimmedTypedMessage ||
-    (!isRecognizedSlashCommand && !isRoomConnected) ||
     (isRecognizedSlashCommand && slashCommandBodyMissing);
 
   // Helper: detect if an agent participant is present in the room
@@ -722,10 +721,11 @@ export const MessageThreadCollapsible = React.forwardRef<
                   try {
                     if (slashActive && parsedCommand) {
                       await runSlashCommand(parsedCommand.command, parsedCommand.body);
-                    } else if (room?.state === 'connected') {
-                      bus.send('transcription', payload);
                     } else {
-                      if (process.env.NEXT_PUBLIC_TOOL_DISPATCHER_LOGS === 'true') console.warn('[Transcript] Room not connected; skipping send');
+                      if (room?.state !== 'connected' && process.env.NEXT_PUBLIC_TOOL_DISPATCHER_LOGS === 'true') {
+                        console.info('[Transcript] Room not connected; queueing payload for delivery once connected');
+                      }
+                      bus.send('transcription', payload);
                     }
 
                     try {

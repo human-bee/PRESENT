@@ -77,8 +77,8 @@ function resolveCommitUrl() {
     process.env.SITE_URL,
     process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : undefined,
     derivedLocal,
-    'http://127.0.0.1:3001',
     'http://127.0.0.1:3000',
+    'http://127.0.0.1:3001',
   ];
   for (const candidate of candidates) {
     if (!candidate) continue;
