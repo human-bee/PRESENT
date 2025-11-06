@@ -144,6 +144,9 @@ export function normalizeRoomName(name: string) {
   return name.trim();
 }
 
+const UUID_V4_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const isUuid = (value: string) => UUID_V4_REGEX.test(value);
+
 const deriveCanvasLookup = (room: string) => {
   const normalized = normalizeRoomName(room);
   const match = normalized.match(/^canvas-([a-zA-Z0-9_-]+)$/);
@@ -450,7 +453,7 @@ export async function getFlowchartDoc(room: string, docId: string) {
   try {
     const lookup = deriveCanvasLookup(room);
     const canvasQuery = supabase.from('canvases').select('document, id');
-    if (lookup.canvasId) {
+    if (lookup.canvasId && isUuid(lookup.canvasId)) {
       canvasQuery.eq('id', lookup.canvasId);
     } else {
       canvasQuery.ilike('name', `%${lookup.fallback}%`);
@@ -598,7 +601,7 @@ export async function commitDebateScorecard(
     try {
       const lookup = deriveCanvasLookup(room);
       const canvasQuery = supabase.from('canvases').select('id, document');
-      if (lookup.canvasId) {
+      if (lookup.canvasId && isUuid(lookup.canvasId)) {
         canvasQuery.eq('id', lookup.canvasId);
       } else {
         canvasQuery.ilike('name', `%${lookup.fallback}%`);
@@ -660,7 +663,7 @@ export async function getCanvasShapeSummary(room: string) {
   try {
     const lookup = deriveCanvasLookup(room);
     const canvasQuery = supabase.from('canvases').select('document, id');
-    if (lookup.canvasId) {
+    if (lookup.canvasId && isUuid(lookup.canvasId)) {
       canvasQuery.eq('id', lookup.canvasId);
     } else {
       canvasQuery.ilike('name', `%${lookup.fallback}%`);

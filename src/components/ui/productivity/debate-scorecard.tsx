@@ -1023,8 +1023,15 @@ export function DebateScorecard(props: DebateScorecardProps) {
         }
       }
 
-      if (verdictFilter.size > 0 && claim.verdict && !verdictFilter.has(claim.verdict)) {
-        return false;
+      if (verdictFilter.size > 0) {
+        const claimVerdict = claim.verdict;
+        if (!claimVerdict) {
+          return false;
+        }
+
+        if (!verdictFilter.has(claimVerdict)) {
+          return false;
+        }
       }
 
       if (statusFilter.size > 0 && !statusFilter.has(claim.status)) {
