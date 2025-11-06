@@ -34,7 +34,7 @@ export function useCanvasRehydration({
       if (!logger) {
         return;
       }
-      logger.once('rehydrate-start', '🔄 Starting component rehydration...');
+      logger.debug('🔄 Starting component rehydration...');
       const customShapes = editor
         .getCurrentPageShapes()
         .filter((shape) => shape.type === 'custom') as CustomShape[];
@@ -94,17 +94,25 @@ export function useCanvasRehydration({
               ? normalizedProps.componentId
               : messageId;
           if (shapeState) {
-            if (
+            const existingState =
+              normalizedProps.state &&
               typeof normalizedProps.state === 'object' &&
-              normalizedProps.state !== null &&
               !Array.isArray(normalizedProps.state)
-            ) {
-              normalizedProps.state = {
-                ...(normalizedProps.state as Record<string, unknown>),
-                ...shapeState,
-              };
-            } else if (!('state' in normalizedProps)) {
-              normalizedProps.state = shapeState;
+                ? (normalizedProps.state as Record<string, unknown>)
+                : {};
+            normalizedProps.state = {
+              ...existingState,
+              ...shapeState,
+            };
+
+            const reservedKeys = new Set(['state']);
+            for (const [key, value] of Object.entries(shapeState)) {
+              if (reservedKeys.has(key)) {
+                continue;
+              }
+              if (normalizedProps[key] === undefined) {
+                normalizedProps[key] = value;
+              }
             }
           }
 

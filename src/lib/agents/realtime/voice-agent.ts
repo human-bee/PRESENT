@@ -411,6 +411,45 @@ Your only output is function calls. Never use plain text unless absolutely neces
       });
     };
 
+    const normalizeOutgoingParams = (tool: string, params: JsonObject): JsonObject => {
+      if (tool === 'update_component') {
+        const nextParams: JsonObject = { ...params };
+        const componentId =
+          typeof nextParams.componentId === 'string' && nextParams.componentId.trim().length > 0
+            ? nextParams.componentId.trim()
+            : '';
+        const existing = componentId ? getComponentEntry(componentId) : undefined;
+
+        const fallbackSeconds =
+          typeof existing?.props?.configuredDuration === 'number' &&
+          Number.isFinite(existing.props.configuredDuration)
+            ? (existing.props.configuredDuration as number)
+            : 300;
+
+        const normalizedPatch = normalizeComponentPatch(
+          coerceComponentPatch((nextParams as any).patch),
+          fallbackSeconds,
+        );
+
+        nextParams.patch = normalizedPatch as JsonObject;
+        if (componentId) {
+          nextParams.componentId = componentId;
+        }
+        return nextParams;
+      }
+
+      if (tool === 'create_component') {
+        if (params && typeof (params as any).spec !== 'undefined') {
+          const specRecord = normalizeSpecInput((params as any).spec);
+          if (Object.keys(specRecord).length > 0) {
+            return { ...params, spec: specRecord as JsonObject };
+          }
+        }
+      }
+
+      return params;
+    };
+
     const sendToolCall = async (tool: string, params: JsonObject, options: { reliable?: boolean } = {}) => {
       const reliable =
         options.reliable !== undefined
@@ -419,7 +458,8 @@ Your only output is function calls. Never use plain text unless absolutely neces
             ? false
             : true;
       ensureToolCallListeners();
-      const entry = { event: buildToolEvent(tool, params), reliable };
+      const normalizedParams = normalizeOutgoingParams(tool, params);
+      const entry = { event: buildToolEvent(tool, normalizedParams), reliable };
       if (!job.room.localParticipant) {
         pendingToolCalls.push(entry);
         console.info('[VoiceAgent] queueing tool_call until room connects', {
@@ -547,6 +587,50 @@ Your only output is function calls. Never use plain text unless absolutely neces
         return fallback;
       };
 
+      if (next.durationMinutes !== undefined) {
+        const minutesValue = coerceIntValue(
+          (next as any).durationMinutes,
+          Math.max(1, Math.round(((next as any).configuredDuration ?? fallbackSeconds) as number / 60)),
+        );
+        const durationSeconds = Math.max(1, minutesValue) * 60;
+        const seconds = durationSeconds % 60;
+        const minutes = Math.floor(durationSeconds / 60);
+        next.configuredDuration = durationSeconds;
+        if (typeof next.timeLeft !== 'number') {
+          next.timeLeft = durationSeconds;
+        }
+        next.initialMinutes = minutes;
+        next.initialSeconds = seconds;
+        delete (next as any).durationMinutes;
+      }
+
+      if (next.update && typeof (next as any).update === 'object' && !Array.isArray((next as any).update)) {
+        const update = (next as any).update as Record<string, unknown>;
+        const defaultMinutes = Math.max(0, Math.floor(fallbackSeconds / 60));
+        const defaultSeconds = fallbackSeconds % 60;
+        const minutesCandidate =
+          'minutes' in update ? coerceIntValue(update.minutes, defaultMinutes) : null;
+        const secondsCandidate =
+          'seconds' in update ? coerceIntValue(update.seconds, defaultSeconds) : null;
+        if (minutesCandidate !== null || secondsCandidate !== null) {
+          const minutes =
+            minutesCandidate !== null
+              ? Math.max(0, minutesCandidate)
+              : secondsCandidate !== null
+              ? 0
+              : defaultMinutes;
+          const seconds = secondsCandidate !== null ? Math.max(0, Math.min(59, secondsCandidate)) : defaultSeconds;
+          const durationSeconds = Math.max(1, minutes * 60 + seconds);
+          next.configuredDuration = durationSeconds;
+          next.timeLeft = durationSeconds;
+          next.initialMinutes = minutes;
+          next.initialSeconds = seconds;
+          next.isFinished = false;
+          next.isRunning = false;
+        }
+        delete (next as any).update;
+      }
+
       if (next.duration !== undefined) {
         const durationSeconds = coerceDurationValue(
           next.duration,
@@ -577,28 +661,36 @@ Your only output is function calls. Never use plain text unless absolutely neces
         next.initialSeconds = seconds;
       }
       if (next.initialMinutes !== undefined || next.initialSeconds !== undefined) {
-        const clampMinutes = Math.max(
-          1,
-          coerceIntValue(
-            (next as any).initialMinutes,
-            Math.floor((((next as any).configuredDuration ?? fallbackSeconds) as number) / 60),
-          ),
+        const hasMinutesField = (next as any).initialMinutes !== undefined;
+        const hasSecondsField = (next as any).initialSeconds !== undefined;
+        const defaultMinutes = Math.max(
+          0,
+          Math.floor((((next as any).configuredDuration ?? fallbackSeconds) as number) / 60),
         );
-        const clampSecondsRaw =
-          (next as any).initialSeconds !== undefined
-            ? coerceIntValue(
-                (next as any).initialSeconds,
-                (((next as any).configuredDuration ?? fallbackSeconds) as number) % 60,
-              )
-            : ((((next as any).configuredDuration ?? fallbackSeconds) as number) % 60);
-        const clampSeconds = Math.max(0, Math.min(59, clampSecondsRaw));
-        const totalSeconds = clampMinutes * 60 + clampSeconds;
-        next.configuredDuration = totalSeconds;
-        if (typeof next.timeLeft !== 'number') {
-          next.timeLeft = totalSeconds;
+        const defaultSeconds = (((next as any).configuredDuration ?? fallbackSeconds) as number) % 60;
+        const minutesCandidate = hasMinutesField
+          ? coerceIntValue((next as any).initialMinutes, defaultMinutes)
+          : null;
+        const secondsCandidate = hasSecondsField
+          ? coerceIntValue((next as any).initialSeconds, defaultSeconds)
+          : null;
+        if (minutesCandidate !== null || secondsCandidate !== null) {
+          const minutes =
+            minutesCandidate !== null
+              ? Math.max(0, minutesCandidate)
+              : secondsCandidate !== null
+              ? 0
+              : defaultMinutes;
+          const seconds =
+            secondsCandidate !== null ? Math.max(0, Math.min(59, secondsCandidate)) : Math.max(0, Math.min(59, defaultSeconds));
+          const totalSeconds = Math.max(1, minutes * 60 + seconds);
+          next.configuredDuration = totalSeconds;
+          if (typeof next.timeLeft !== 'number') {
+            next.timeLeft = totalSeconds;
+          }
+          next.initialMinutes = minutes;
+          next.initialSeconds = seconds;
         }
-        next.initialMinutes = clampMinutes;
-        next.initialSeconds = clampSeconds;
       }
 
       const runningValue =
@@ -636,6 +728,46 @@ Your only output is function calls. Never use plain text unless absolutely neces
           if (typeof next.timeLeft !== 'number' && typeof next.configuredDuration === 'number') {
             next.timeLeft = next.configuredDuration;
           }
+        }
+      }
+
+      if (typeof (next as any).action === 'string') {
+        const action = ((next as any).action as string).trim().toLowerCase();
+        delete (next as any).action;
+        if (action === 'start' || action === 'resume' || action === 'run' || action === 'play') {
+          next.isRunning = true;
+          next.isFinished = false;
+          if (typeof next.timeLeft !== 'number' || next.timeLeft <= 0) {
+            const durationSeconds = typeof next.configuredDuration === 'number' ? next.configuredDuration : fallbackSeconds;
+            next.timeLeft = Math.max(1, Math.round(durationSeconds));
+          }
+        } else if (action === 'pause' || action === 'stop' || action === 'halt') {
+          next.isRunning = false;
+        } else if (action === 'reset') {
+          const durationSeconds = typeof next.configuredDuration === 'number' ? next.configuredDuration : fallbackSeconds;
+          next.timeLeft = Math.max(1, Math.round(durationSeconds));
+          next.isRunning = false;
+          next.isFinished = false;
+        }
+      }
+
+      if (typeof (next as any).command === 'string') {
+        const command = ((next as any).command as string).trim().toLowerCase();
+        delete (next as any).command;
+        if (command === 'start' || command === 'resume' || command === 'run' || command === 'play') {
+          next.isRunning = true;
+          next.isFinished = false;
+          if (typeof next.timeLeft !== 'number' || next.timeLeft <= 0) {
+            const durationSeconds = typeof next.configuredDuration === 'number' ? next.configuredDuration : fallbackSeconds;
+            next.timeLeft = Math.max(1, Math.round(durationSeconds));
+          }
+        } else if (command === 'pause' || command === 'stop' || command === 'halt') {
+          next.isRunning = false;
+        } else if (command === 'reset') {
+          const durationSeconds = typeof next.configuredDuration === 'number' ? next.configuredDuration : fallbackSeconds;
+          next.timeLeft = Math.max(1, Math.round(durationSeconds));
+          next.isRunning = false;
+          next.isFinished = false;
         }
       }
 
