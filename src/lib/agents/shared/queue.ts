@@ -79,6 +79,16 @@ export class AgentTaskQueue {
 
     const resourceKeySet = new Set(resourceKeys.length ? resourceKeys : [`room:${room}`]);
 
+    // TEMP instrumentation to trace steward enqueue issues.
+    console.debug('[AgentTaskQueue][debug] enqueueTask', {
+      room,
+      task,
+      requestId,
+      dedupeKey,
+      resourceKeys: Array.from(resourceKeySet),
+      hasSupabase: Boolean(this.supabase),
+    });
+
     const { data, error } = await this.supabase
       .from<AgentTask>('agent_tasks')
       .insert({
@@ -98,10 +108,14 @@ export class AgentTaskQueue {
 
     if (error) {
       if (error.code === '23505') {
+        console.debug('[AgentTaskQueue][debug] enqueueTask dedupe hit', { room, task, requestId });
         return null; // idempotent duplicate
       }
+      console.error('[AgentTaskQueue][debug] enqueueTask error', { room, task, error });
       throw error;
     }
+
+    console.debug('[AgentTaskQueue][debug] enqueueTask inserted', { id: data?.id, room, task });
 
     return data;
   }

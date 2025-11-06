@@ -18,7 +18,7 @@ interface LiveTranscriptionProps {
 export function LiveTranscription({ room, onTranscription }: LiveTranscriptionProps) {
   const [isProcessing] = useState(false);
   const [status, setStatus] = useState<string>('Waiting for room connection...');
-  const bus = createLiveKitBus(room);
+  const bus = React.useMemo(() => createLiveKitBus(room), [room]);
   const linesRef = useRef<number>(0);
 
   useEffect(() => {

@@ -49,7 +49,7 @@ export function useCanvasPersistence(editor: Editor | null, enabled: boolean = t
           if (error) throw error;
 
           if (canvas) {
-            logger.info('🎨 Loading canvas:', canvas.id, canvas.name);
+            logger.debug('🎨 Loading canvas:', canvas.id, canvas.name);
             logger.debug(
               'Canvas document has shapes:',
               Object.keys(canvas.document?.store?.['shape:custom'] || {}),
@@ -92,12 +92,12 @@ export function useCanvasPersistence(editor: Editor | null, enabled: boolean = t
               );
             }
 
-            logger.info('🎨 Canvas loaded successfully - shapes should appear');
+            logger.debug('🎨 Canvas loaded successfully - shapes should appear');
 
             // CRITICAL: Rehydrate component store after canvas loads
             // The canvas document contains shapes, but componentStore is empty on reload
             setTimeout(() => {
-              logger.info('🔄 Starting component rehydration...');
+              logger.debug('🔄 Starting component rehydration...');
               window.dispatchEvent(
                 new CustomEvent('custom:rehydrateComponents', {
                   detail: { canvasId: canvas.id, conversationKey: canvas.conversation_key },

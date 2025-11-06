@@ -105,7 +105,7 @@ export const MessageThreadCollapsible = React.forwardRef<
 
   // LiveKit room context and bus for transcript functionality
   const room = useRoomContext();
-  const bus = createLiveKitBus(room);
+  const bus = React.useMemo(() => createLiveKitBus(room), [room]);
   const roomContextKey = useContextKey();
   const effectiveContextKey = contextKey || roomContextKey;
   const livekitCtx = React.useContext(CanvasLiveKitContext);

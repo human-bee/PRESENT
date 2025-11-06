@@ -3,6 +3,7 @@ import type { Editor } from 'tldraw';
 import React from 'react';
 
 import { components } from '@/lib/custom';
+import { ComponentRegistry } from '@/lib/component-registry';
 
 import type { customShape as CustomShape } from '../tldraw-canvas';
 import type { CanvasLogger } from './useCanvasComponentStore';
@@ -30,7 +31,10 @@ export function useCanvasRehydration({
         return;
       }
 
-      logger.info('🔄 Starting component rehydration...');
+      if (!logger) {
+        return;
+      }
+      logger.once('rehydrate-start', '🔄 Starting component rehydration...');
       const customShapes = editor
         .getCurrentPageShapes()
         .filter((shape) => shape.type === 'custom') as CustomShape[];
@@ -38,8 +42,10 @@ export function useCanvasRehydration({
       logger.debug(`Found ${customShapes.length} custom shapes to rehydrate`);
 
       customShapes.forEach((shape) => {
-        let componentName = shape.props.name;
         const messageId = shape.props.customComponent;
+
+        const registryEntry = ComponentRegistry.get(messageId);
+        let componentName = registryEntry?.componentType || shape.props.name;
 
         logger.debug(`Rehydrating ${componentName} (${messageId})`);
 
@@ -66,16 +72,43 @@ export function useCanvasRehydration({
 
         if (componentDef) {
           const Component = componentDef.component;
-          const componentInstance = React.createElement(Component, {
-            __custom_message_id: messageId,
-            state: (shape.props as any).state || {},
-            updateState: (patch: Record<string, unknown> | ((prev: any) => any)) => {
-              if (!editor) return;
-              const prev = ((shape.props as any).state as Record<string, unknown>) || {};
-              const next = typeof patch === 'function' ? (patch as any)(prev) : { ...prev, ...patch };
-              editor.updateShapes([{ id: shape.id, type: 'custom', props: { state: next } }]);
-            },
-          });
+          const registryProps =
+            (registryEntry?.props && typeof registryEntry.props === 'object'
+              ? { ...(registryEntry.props as Record<string, unknown>) }
+              : undefined) ??
+            undefined;
+
+          const normalizedProps: Record<string, unknown> = { ...(registryProps ?? {}) };
+          const shapeState =
+            shape.props && typeof (shape.props as any).state === 'object'
+              ? { ...((shape.props as any).state as Record<string, unknown>) }
+              : undefined;
+
+          normalizedProps.type = (registryProps?.type as string) || componentName;
+          normalizedProps.__custom_message_id =
+            typeof normalizedProps.__custom_message_id === 'string'
+              ? normalizedProps.__custom_message_id
+              : messageId;
+          normalizedProps.componentId =
+            typeof normalizedProps.componentId === 'string' && normalizedProps.componentId.length
+              ? normalizedProps.componentId
+              : messageId;
+          if (shapeState) {
+            if (
+              typeof normalizedProps.state === 'object' &&
+              normalizedProps.state !== null &&
+              !Array.isArray(normalizedProps.state)
+            ) {
+              normalizedProps.state = {
+                ...(normalizedProps.state as Record<string, unknown>),
+                ...shapeState,
+              };
+            } else if (!('state' in normalizedProps)) {
+              normalizedProps.state = shapeState;
+            }
+          }
+
+          const componentInstance = React.createElement(Component, normalizedProps);
           componentStore.current.set(messageId, componentInstance);
           try {
             window.dispatchEvent(new Event('present:component-store-updated'));
@@ -138,7 +171,7 @@ export function useCanvasRehydration({
         }
       });
 
-      logger.info(
+      logger.debug(
         `🎯 Rehydration complete! ComponentStore now has ${componentStore.current.size} components`,
       );
     };

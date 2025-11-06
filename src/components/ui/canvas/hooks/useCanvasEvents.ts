@@ -27,6 +27,8 @@ export function useCanvasEvents({
   bus,
   logger,
 }: CanvasEventsParams) {
+  const lastPayloadSignatureRef = React.useRef(new Map<string, string>());
+
   useEffect(() => {
     const handleShowComponent = (
       event: CustomEvent<{
@@ -49,6 +51,25 @@ export function useCanvasEvents({
             });
           } catch {
             /* noop */
+          }
+        }
+        const messageId = event.detail.messageId;
+        if (!messageId) return;
+
+        if (!React.isValidElement(node) && node && typeof node === 'object') {
+          let signature: string | null = null;
+          try {
+            signature = JSON.stringify(node);
+          } catch {
+            signature = null;
+          }
+          if (signature) {
+            const previous = lastPayloadSignatureRef.current.get(messageId);
+            if (previous === signature) {
+              logger.debug('⏭️  Skipping duplicate showComponent payload', { messageId });
+              return;
+            }
+            lastPayloadSignatureRef.current.set(messageId, signature);
           }
         }
         let inferredName: string | undefined = 'Rendered Component';

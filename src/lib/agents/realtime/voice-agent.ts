@@ -131,10 +131,11 @@ Your only output is function calls. Never use plain text unless absolutely neces
       state: JsonObject;
       intentId?: string;
       slot?: string;
+      room: string;
     };
     const componentRegistry = new Map<string, ComponentRegistryEntry>();
-    const lastComponentByType = new Map<string, string>();
-    let lastCreatedComponentId: string | null = null;
+    const lastComponentByTypeByRoom = new Map<string, Map<string, string>>();
+    const lastCreatedComponentIdByRoom = new Map<string, string>();
     type IntentLedgerEntry = {
       intentId: string;
       messageId: string;
@@ -231,17 +232,84 @@ Your only output is function calls. Never use plain text unless absolutely neces
     // a longer global TTL to catch late replays from the model/stack.
     let currentTurnId = 0;
     let activeResponse = false;
-    const recentCreateFingerprints = new Map<
+    const recentCreateFingerprintsByRoom = new Map<
       string,
-      {
+      Map<
+        string,
+        {
+          fingerprint: string;
+          messageId: string;
+          createdAt: number;
+          turnId: number;
+          intentId: string;
+          slot?: string;
+        }
+      >
+    >();
+    const roomKey = () => job.room.name || 'room';
+    const getLastComponentMap = () => {
+      const key = roomKey();
+      let map = lastComponentByTypeByRoom.get(key);
+      if (!map) {
+        map = new Map<string, string>();
+        lastComponentByTypeByRoom.set(key, map);
+      }
+      return map;
+    };
+    const getLastComponentForType = (type: string) => getLastComponentMap().get(type);
+    const setLastComponentForType = (type: string, messageId: string) => getLastComponentMap().set(type, messageId);
+    const getLastCreatedComponentId = () => {
+      const key = roomKey();
+      return lastCreatedComponentIdByRoom.get(key) ?? null;
+    };
+    const setLastCreatedComponentId = (messageId: string | null) => {
+      const key = roomKey();
+      if (!messageId) {
+        lastCreatedComponentIdByRoom.delete(key);
+        return;
+      }
+      lastCreatedComponentIdByRoom.set(key, messageId);
+    };
+    const getRecentCreateMap = () => {
+      const key = roomKey();
+      let map = recentCreateFingerprintsByRoom.get(key);
+      if (!map) {
+        map = new Map<
+          string,
+          {
+            fingerprint: string;
+            messageId: string;
+            createdAt: number;
+            turnId: number;
+            intentId: string;
+            slot?: string;
+          }
+        >();
+        recentCreateFingerprintsByRoom.set(key, map);
+      }
+      return map;
+    };
+    const getRecentCreateFingerprint = (type: string) => getRecentCreateMap().get(type);
+    const setRecentCreateFingerprint = (
+      type: string,
+      fingerprint: {
         fingerprint: string;
         messageId: string;
         createdAt: number;
         turnId: number;
         intentId: string;
         slot?: string;
-      }
-    >();
+      },
+    ) => {
+      getRecentCreateMap().set(type, fingerprint);
+    };
+    const getComponentEntry = (id: string) => {
+      const entry = componentRegistry.get(id);
+      if (!entry) return undefined;
+      const key = roomKey();
+      if (entry.room && entry.room !== key) return undefined;
+      return entry;
+    };
 
     const bumpTurn = () => {
       currentTurnId += 1;
@@ -249,17 +317,98 @@ Your only output is function calls. Never use plain text unless absolutely neces
 
     const enableLossyUpdates = process.env.VOICE_AGENT_UPDATE_LOSSY !== 'false';
 
-    const awaitParticipant = async () => {
-      const maxWaitMs = Number(process.env.VOICE_AGENT_LIVEKIT_WAIT_MS ?? 5_000);
-      const intervalMs = 100;
-      const started = Date.now();
-      while (!job.room.localParticipant || job.room.state !== 'connected') {
-        if (Date.now() - started > maxWaitMs) {
-          return false;
-        }
-        await new Promise((resolve) => setTimeout(resolve, intervalMs));
+    type ToolEvent = {
+      id: string;
+      roomId: string;
+      type: 'tool_call';
+      payload: { tool: string; params: JsonObject; context: { source: 'voice'; timestamp: number } };
+      timestamp: number;
+      source: 'voice';
+    };
+
+    const buildToolEvent = (tool: string, params: JsonObject): ToolEvent => ({
+      id: randomUUID(),
+      roomId: job.room.name || 'unknown',
+      type: 'tool_call' as const,
+      payload: { tool, params, context: { source: 'voice', timestamp: Date.now() } },
+      timestamp: Date.now(),
+      source: 'voice' as const,
+    });
+
+    const pendingToolCalls: Array<{ event: ToolEvent; reliable: boolean }> = [];
+    let toolCallListenersAttached = false;
+    let flushToolCallsHandle: ReturnType<typeof setTimeout> | null = null;
+
+    const publishToolCall = async (entry: { event: ToolEvent; reliable: boolean }) => {
+      const participant = job.room.localParticipant;
+      if (!participant) {
+        console.info('[VoiceAgent] deferring tool_call publish; local participant unavailable', {
+          tool: entry.event.payload.tool,
+        });
+        return false;
       }
+      const payloadBytes = new TextEncoder().encode(JSON.stringify(entry.event));
+      console.debug('[VoiceAgent][debug] publish data', {
+        tool: entry.event.payload.tool,
+        reliable: entry.reliable,
+        roomState: job.room.state,
+        participant: participant.identity,
+        payloadSize: payloadBytes.byteLength,
+      });
+      const publishResult = participant.publishData(payloadBytes, {
+        reliable: entry.reliable,
+        topic: 'tool_call',
+      });
+      if (publishResult && typeof (publishResult as PromiseLike<unknown>).then === 'function') {
+        await publishResult;
+      }
+      console.log('[VoiceAgent] tool_call publish complete', {
+        tool: entry.event.payload.tool,
+        reliable: entry.reliable,
+      });
       return true;
+    };
+
+    const flushPendingToolCalls = async () => {
+      if (job.room.state && job.room.state !== 'connected') return;
+      while (pendingToolCalls.length > 0) {
+        const next = pendingToolCalls.shift();
+        if (!next) continue;
+        try {
+          const sent = await publishToolCall(next);
+          if (!sent) {
+            pendingToolCalls.unshift(next);
+            if (!flushToolCallsHandle) {
+              flushToolCallsHandle = setTimeout(() => {
+                flushToolCallsHandle = null;
+                void flushPendingToolCalls();
+              }, 250);
+            }
+            break;
+          }
+        } catch (error) {
+          console.warn('[VoiceAgent] failed to flush pending tool_call, re-queueing', {
+            tool: next.event.payload.tool,
+            error,
+          });
+          pendingToolCalls.unshift(next);
+          if (!flushToolCallsHandle) {
+            flushToolCallsHandle = setTimeout(() => {
+              flushToolCallsHandle = null;
+              void flushPendingToolCalls();
+            }, 250);
+          }
+          break;
+        }
+      }
+    };
+
+    const ensureToolCallListeners = () => {
+      if (toolCallListenersAttached) return;
+      toolCallListenersAttached = true;
+      job.room.on(RoomEvent.ConnectionStateChanged, () => {
+        void flushPendingToolCalls();
+      });
     };
 
     const sendToolCall = async (tool: string, params: JsonObject, options: { reliable?: boolean } = {}) => {
@@ -269,24 +418,44 @@ Your only output is function calls. Never use plain text unless absolutely neces
           : tool === 'update_component' && enableLossyUpdates
             ? false
             : true;
-      const toolEvent = {
-        id: randomUUID(),
-        roomId: job.room.name || 'unknown',
-        type: 'tool_call' as const,
-        payload: { tool, params, context: { source: 'voice', timestamp: Date.now() } },
-        timestamp: Date.now(),
-        source: 'voice' as const,
-      };
-      const ready = await awaitParticipant();
-      if (!ready) {
-        console.warn('[VoiceAgent] tool_call dropped (participant not connected)', { tool, params });
+      ensureToolCallListeners();
+      const entry = { event: buildToolEvent(tool, params), reliable };
+      if (!job.room.localParticipant) {
+        pendingToolCalls.push(entry);
+        console.info('[VoiceAgent] queueing tool_call until room connects', {
+          tool,
+          queueLength: pendingToolCalls.length,
+          state: job.room.state,
+        });
+        if (!flushToolCallsHandle) {
+          flushToolCallsHandle = setTimeout(() => {
+            flushToolCallsHandle = null;
+            void flushPendingToolCalls();
+          }, 250);
+        }
         return;
       }
-      console.log('[VoiceAgent] tool_call ready (from execute)', { participant: job.room.localParticipant?.identity, tool, params });
-      await job.room.localParticipant?.publishData(new TextEncoder().encode(JSON.stringify(toolEvent)), {
-        reliable,
-        topic: 'tool_call',
-      });
+      try {
+        const sent = await publishToolCall(entry);
+        if (!sent) {
+          pendingToolCalls.push(entry);
+          if (!flushToolCallsHandle) {
+            flushToolCallsHandle = setTimeout(() => {
+              flushToolCallsHandle = null;
+              void flushPendingToolCalls();
+            }, 250);
+          }
+        }
+      } catch (error) {
+        console.error('[VoiceAgent] publishData threw', { tool, error });
+        pendingToolCalls.unshift(entry);
+        if (!flushToolCallsHandle) {
+          flushToolCallsHandle = setTimeout(() => {
+            flushToolCallsHandle = null;
+            void flushPendingToolCalls();
+          }, 250);
+        }
+      }
     };
 
     const coerceComponentPatch = (raw: unknown) => {
@@ -599,7 +768,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
           }
           fingerprintPayload.__type = componentType;
           const sortedFingerprint = JSON.stringify(fingerprintPayload);
-          const recentCreate = recentCreateFingerprints.get(componentType);
+          const recentCreate = getRecentCreateFingerprint(componentType);
           const now = Date.now();
           const TTL_MS = 30000; // 30s window to absorb late replays
           const sameTurnDuplicate =
@@ -616,14 +785,14 @@ Your only output is function calls. Never use plain text unless absolutely neces
               componentType,
               recentMessageId: recentCreate.messageId,
             });
-            lastComponentByType.set(componentType, recentCreate.messageId);
-            lastCreatedComponentId = recentCreate.messageId;
+            setLastComponentForType(componentType, recentCreate.messageId);
+            setLastCreatedComponentId(recentCreate.messageId);
             args.intentId = recentCreate.intentId;
             args.messageId = recentCreate.messageId;
             return { status: 'duplicate_skipped', messageId: recentCreate.messageId };
           }
 
-          const existingComponent = componentRegistry.get(messageId);
+          const existingComponent = getComponentEntry(messageId);
           if (existingComponent) {
             const fallbackSeconds =
               typeof existingComponent?.props?.configuredDuration === 'number' &&
@@ -669,9 +838,9 @@ Your only output is function calls. Never use plain text unless absolutely neces
                 state: 'updated',
               });
             }
-            lastComponentByType.set(componentType, messageId);
-            lastCreatedComponentId = messageId;
-            recentCreateFingerprints.set(componentType, {
+            setLastComponentForType(componentType, messageId);
+            setLastCreatedComponentId(messageId);
+            setRecentCreateFingerprint(componentType, {
               fingerprint: sortedFingerprint,
               messageId,
               createdAt: now,
@@ -689,6 +858,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
             state: {} as JsonObject,
             intentId,
             slot,
+            room: job.room.name || 'room',
           });
           if (intentId) {
             registerLedgerEntry({
@@ -699,9 +869,9 @@ Your only output is function calls. Never use plain text unless absolutely neces
               state: 'created',
             });
           }
-          lastComponentByType.set(componentType, messageId);
-          lastCreatedComponentId = messageId;
-          recentCreateFingerprints.set(componentType, {
+          setLastComponentForType(componentType, messageId);
+          setLastCreatedComponentId(messageId);
+          setRecentCreateFingerprint(componentType, {
             fingerprint: sortedFingerprint,
             messageId,
             createdAt: now,
@@ -798,7 +968,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
           args.intentId = intentId;
           args.messageId = messageId;
 
-          const existingComponent = componentRegistry.get(messageId);
+          const existingComponent = getComponentEntry(messageId);
           if (existingComponent) {
             existingComponent.intentId = intentId;
             if (slot) {
@@ -814,9 +984,9 @@ Your only output is function calls. Never use plain text unless absolutely neces
             state: existingComponent ? 'updated' : 'reserved',
           });
 
-          lastComponentByType.set(componentType, messageId);
-          lastCreatedComponentId = messageId;
-          recentCreateFingerprints.set(componentType, {
+          setLastComponentForType(componentType, messageId);
+          setLastCreatedComponentId(messageId);
+          setRecentCreateFingerprint(componentType, {
             fingerprint: JSON.stringify(fingerprintPayload),
             messageId,
             createdAt: Date.now(),
@@ -857,7 +1027,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
             return { status: 'NOT_FOUND', message: 'No component matched the provided hints' };
           }
 
-          const existing = componentRegistry.get(resolvedId);
+          const existing = getComponentEntry(resolvedId);
           const intentId =
             typeof args.intentId === 'string' && args.intentId.trim().length > 0
               ? args.intentId.trim()
@@ -881,9 +1051,9 @@ Your only output is function calls. Never use plain text unless absolutely neces
             });
           }
           if (componentType && resolvedId) {
-            lastComponentByType.set(componentType, resolvedId);
+            setLastComponentForType(componentType, resolvedId);
           }
-          lastCreatedComponentId = resolvedId;
+          setLastCreatedComponentId(resolvedId);
 
           return {
             status: 'RESOLVED',
@@ -908,12 +1078,15 @@ Your only output is function calls. Never use plain text unless absolutely neces
               : '';
 
           if (!resolvedId && typeof args.type === 'string' && args.type.trim()) {
-            const byType = lastComponentByType.get(args.type.trim());
+            const byType = getLastComponentForType(args.type.trim());
             if (byType) resolvedId = byType;
           }
 
-          if (!resolvedId && lastCreatedComponentId) {
-            resolvedId = lastCreatedComponentId;
+          if (!resolvedId) {
+            const lastCreated = getLastCreatedComponentId();
+            if (lastCreated) {
+              resolvedId = lastCreated;
+            }
           }
 
           if (!resolvedId) {
@@ -923,7 +1096,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
 
           const slot = typeof args.slot === 'string' && args.slot.trim().length > 0 ? args.slot.trim() : undefined;
           const rawPatch = coerceComponentPatch(args.patch);
-          const existing = componentRegistry.get(resolvedId);
+          const existing = getComponentEntry(resolvedId);
           const intentId =
             typeof args.intentId === 'string' && args.intentId.trim().length > 0
               ? args.intentId.trim()
@@ -984,7 +1157,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
 
           await sendToolCall('update_component', payload, { reliable: false });
 
-          const existingAfter = componentRegistry.get(resolvedId);
+          const existingAfter = getComponentEntry(resolvedId);
           if (existingAfter) {
             existingAfter.props = { ...existingAfter.props, ...patch };
             if (intentId) {
@@ -1006,7 +1179,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
               state: 'updated',
             });
           }
-          lastCreatedComponentId = resolvedId;
+          setLastCreatedComponentId(resolvedId);
 
           return { status: 'queued', componentId: resolvedId };
         },
@@ -1034,7 +1207,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
             enrichedParams.requestId = randomUUID();
           }
 
-          const componentTypeHint =
+          let componentTypeHint =
             typeof enrichedParams.type === 'string'
               ? enrichedParams.type
               : typeof enrichedParams.componentType === 'string'
@@ -1042,6 +1215,10 @@ Your only output is function calls. Never use plain text unless absolutely neces
                 : typeof args?.params?.type === 'string'
                   ? (args.params as Record<string, unknown>).type
                   : undefined;
+
+          if (!componentTypeHint && args.task === 'scorecard.run') {
+            componentTypeHint = 'DebateScorecard';
+          }
 
           if (!enrichedParams.componentId) {
             const resolved = resolveComponentId({
@@ -1062,6 +1239,32 @@ Your only output is function calls. Never use plain text unless absolutely neces
             activeScorecard?.componentId
           ) {
             enrichedParams.componentId = activeScorecard.componentId;
+          }
+
+          if (!enrichedParams.componentId && args.task === 'scorecard.run') {
+            const topicHint =
+              typeof enrichedParams.topic === 'string' && enrichedParams.topic.trim().length > 0
+                ? enrichedParams.topic.trim()
+                : undefined;
+            const promptContext =
+              typeof enrichedParams.prompt === 'string' && enrichedParams.prompt.trim().length > 0
+                ? enrichedParams.prompt.trim()
+                : undefined;
+            try {
+              const ensured = await ensureDebateScorecard(topicHint, promptContext);
+              enrichedParams.componentId = ensured.componentId;
+              enrichedParams.intentId = ensured.intentId;
+              enrichedParams.topic = ensured.topic;
+              if (!enrichedParams.room) {
+                enrichedParams.room = roomName;
+              }
+            } catch (error) {
+              console.warn('[VoiceAgent] ensureDebateScorecard failed during dispatch', {
+                topicHint,
+                promptContext,
+                error,
+              });
+            }
           }
 
           if (!enrichedParams.componentId && args.task === 'scorecard.run') {
@@ -1128,10 +1331,12 @@ Your only output is function calls. Never use plain text unless absolutely neces
       /\b(aff|affirmative|neg|negative|contention|rebuttal|voter|judge|debate|scorecard|flow|argument|claim|evidence|verify|fact|counter)\b/;
 
     const findExistingScorecard = (topic?: string) => {
+      const currentRoom = roomKey();
       const normalized = topic?.trim().toLowerCase();
       let fallback: { id: string; info: ComponentRegistryEntry; topic?: string } | null = null;
       for (const [id, info] of componentRegistry.entries()) {
         if (info.type !== 'DebateScorecard') continue;
+        if (info.room && info.room !== currentRoom) continue;
         const infoTopic =
           typeof info.props?.topic === 'string' && info.props.topic.trim().length > 0
             ? info.props.topic.trim()
@@ -1149,6 +1354,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
     };
 
     const ensureDebateScorecard = async (topic?: string, contextText?: string) => {
+      const currentRoom = roomKey();
       const normalizedTopic = topic && topic.trim().length ? topic.trim() : undefined;
       const normalizedLower = normalizedTopic?.toLowerCase();
 
@@ -1175,6 +1381,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
           ledgerEntry?.intentId ||
           `debate-scorecard-${existing.id}`;
         existing.info.intentId = intentId;
+        existing.info.room = currentRoom;
         registerLedgerEntry({
           intentId,
           messageId: existing.id,
@@ -1182,8 +1389,8 @@ Your only output is function calls. Never use plain text unless absolutely neces
           slot: existing.info.slot,
           state: 'updated',
         });
-        lastComponentByType.set('DebateScorecard', existing.id);
-        lastCreatedComponentId = existing.id;
+        setLastComponentForType('DebateScorecard', existing.id);
+        setLastCreatedComponentId(existing.id);
         activeScorecard = { componentId: existing.id, intentId, topic: inferredTopic };
         return activeScorecard;
       }
@@ -1223,8 +1430,8 @@ Your only output is function calls. Never use plain text unless absolutely neces
         });
 
         activeScorecard = { componentId: messageId, intentId, topic: topicLabel };
-        lastComponentByType.set('DebateScorecard', messageId);
-        lastCreatedComponentId = messageId;
+        setLastComponentForType('DebateScorecard', messageId);
+        setLastCreatedComponentId(messageId);
         registerLedgerEntry({
           intentId,
           messageId,
@@ -1290,15 +1497,26 @@ Your only output is function calls. Never use plain text unless absolutely neces
       const rawId = typeof args.componentId === 'string' ? args.componentId.trim() : '';
       if (rawId) return rawId;
 
+      const currentRoom = roomKey();
+      const typeHint = typeof args.type === 'string' ? args.type.trim() : typeof args.componentType === 'string' ? args.componentType.trim() : '';
+      const acceptCandidate = (candidateId: string | undefined | null) => {
+        if (!candidateId) return '';
+        const entry = getComponentEntry(candidateId);
+        if (!entry) return '';
+        if (typeHint && entry.type !== typeHint) return '';
+        return candidateId;
+      };
       const rawIntent = typeof args.intentId === 'string' ? args.intentId.trim() : '';
       if (rawIntent) {
         const entry = intentLedger.get(rawIntent);
         if (entry) {
-          return entry.messageId;
+          const accepted = acceptCandidate(entry.messageId);
+          if (accepted) return accepted;
         }
         for (const [id, info] of componentRegistry.entries()) {
-          if (info.intentId === rawIntent) {
-            return id;
+          if (info.intentId === rawIntent && (!info.room || info.room === currentRoom)) {
+            const accepted = acceptCandidate(id);
+            if (accepted) return accepted;
           }
         }
       }
@@ -1309,35 +1527,33 @@ Your only output is function calls. Never use plain text unless absolutely neces
         if (slotIntent) {
           const entry = intentLedger.get(slotIntent);
           if (entry) {
-            return entry.messageId;
+            const accepted = acceptCandidate(entry.messageId);
+            if (accepted) return accepted;
           }
         }
         for (const [id, info] of componentRegistry.entries()) {
-          if (info.slot === rawSlot) {
-            return id;
+          if (info.slot === rawSlot && (!info.room || info.room === currentRoom)) {
+            const accepted = acceptCandidate(id);
+            if (accepted) return accepted;
           }
         }
       }
 
-      const rawType =
-        typeof args.type === 'string'
-          ? args.type.trim()
-          : typeof args.componentType === 'string'
-            ? args.componentType.trim()
-            : '';
-      if (rawType) {
-        const byType = lastComponentByType.get(rawType);
-        if (byType) return byType;
-      }
-      if (rawType) {
+      if (typeHint) {
+        const byType = getLastComponentForType(typeHint);
+        const accepted = acceptCandidate(byType);
+        if (accepted) return accepted;
         for (const [id, info] of componentRegistry.entries()) {
-          if (info.type === rawType) {
-            return id;
+          if (info.type === typeHint && (!info.room || info.room === currentRoom)) {
+            const acceptedCandidate = acceptCandidate(id);
+            if (acceptedCandidate) return acceptedCandidate;
           }
         }
       }
-      if (lastCreatedComponentId) {
-        return lastCreatedComponentId;
+      const lastCreated = getLastCreatedComponentId();
+      const acceptedLast = acceptCandidate(lastCreated);
+      if (acceptedLast) {
+        return acceptedLast;
       }
       return '';
     };
@@ -1400,14 +1616,15 @@ Your only output is function calls. Never use plain text unless absolutely neces
             args.messageId = messageId;
 
             if (componentType && messageId) {
-              lastComponentByType.set(componentType, messageId);
-              lastCreatedComponentId = messageId;
-              const existing = componentRegistry.get(messageId);
+              setLastComponentForType(componentType, messageId);
+              setLastCreatedComponentId(messageId);
+              const existing = getComponentEntry(messageId);
               if (existing) {
                 existing.intentId = intentId;
                 if (slot) {
                   existing.slot = slot;
                 }
+                existing.room = job.room.name || 'room';
               } else {
                 componentRegistry.set(messageId, {
                   type: componentType,
@@ -1416,6 +1633,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
                   state: {} as JsonObject,
                   intentId,
                   slot,
+                  room: job.room.name || 'room',
                 });
               }
               if (intentId) {
@@ -1429,7 +1647,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
               }
             }
           }
-          if (fnCall.name === 'update_component') {
+            if (fnCall.name === 'update_component') {
             const resolvedId = resolveComponentId(args);
             if (!resolvedId) {
               console.warn('[VoiceAgent] Skipping update_component without componentId', args);
@@ -1437,13 +1655,13 @@ Your only output is function calls. Never use plain text unless absolutely neces
             }
             args.componentId = resolvedId;
             const rawPatch = coerceComponentPatch(args.patch);
-            const existingFT = componentRegistry.get(resolvedId);
+            const existingFT = getComponentEntry(resolvedId);
             const fallbackSeconds =
               typeof existingFT?.props?.configuredDuration === 'number' && Number.isFinite(existingFT.props.configuredDuration)
                 ? (existingFT.props.configuredDuration as number)
                 : 300;
             args.patch = normalizeComponentPatch(rawPatch, fallbackSeconds);
-            const existingAfterFT = componentRegistry.get(resolvedId);
+            const existingAfterFT = getComponentEntry(resolvedId);
             if (existingAfterFT) {
               existingAfterFT.props = { ...existingAfterFT.props, ...(args.patch as Record<string, unknown>) };
               if (typeof args.intentId === 'string' && args.intentId.trim().length > 0) {
@@ -1465,7 +1683,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
                 state: existingAfterFT ? 'updated' : 'reserved',
               });
             }
-            lastCreatedComponentId = resolvedId;
+            setLastCreatedComponentId(resolvedId);
           }
           if (fnCall.name === 'reserve_component') {
             const componentType = typeof args.type === 'string' ? args.type.trim() : '';
@@ -1473,8 +1691,8 @@ Your only output is function calls. Never use plain text unless absolutely neces
             const messageId = typeof args.messageId === 'string' ? args.messageId.trim() : '';
             const slot = typeof args.slot === 'string' && args.slot.trim().length > 0 ? args.slot.trim() : undefined;
             if (componentType && messageId) {
-              lastComponentByType.set(componentType, messageId);
-              lastCreatedComponentId = messageId;
+              setLastComponentForType(componentType, messageId);
+              setLastCreatedComponentId(messageId);
             }
             if (intentId && messageId && componentType) {
               registerLedgerEntry({
@@ -1489,7 +1707,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
           if (fnCall.name === 'resolve_component') {
             const resolvedId = typeof args.componentId === 'string' ? args.componentId.trim() : '';
             if (resolvedId) {
-              lastCreatedComponentId = resolvedId;
+              setLastCreatedComponentId(resolvedId);
             }
             const intentId = typeof args.intentId === 'string' ? args.intentId.trim() : '';
             const componentType =

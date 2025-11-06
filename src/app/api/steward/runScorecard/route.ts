@@ -28,6 +28,15 @@ export async function POST(req: NextRequest) {
     const normalizedIntent =
       typeof intent === 'string' && intent.trim().length > 0 ? intent.trim() : undefined;
 
+    // TEMP instrumentation while debugging steward dispatch pipeline.
+    console.debug('[runScorecard][debug] POST received', {
+      room: trimmedRoom,
+      componentId: trimmedComponentId,
+      windowMs: resolvedWindow,
+      summary: normalizedSummary,
+      intent: normalizedIntent,
+    });
+
     after(async () => {
       try {
         console.log('[Steward][runScorecard] scheduled', {

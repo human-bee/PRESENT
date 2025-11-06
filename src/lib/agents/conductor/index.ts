@@ -92,6 +92,10 @@ async function executeTask(taskName: string, params: JsonObject) {
   if (taskName === 'conductor.dispatch') {
     const nextTask = typeof params?.task === 'string' ? params.task : 'auto';
     const payload = (params?.params as JsonObject) ?? params;
+    console.log('[Conductor] dispatch_to_conductor routed', {
+      nextTask,
+      hasPayload: payload != null,
+    });
     return executeTask(nextTask, payload ?? {});
   }
 
@@ -102,6 +106,12 @@ async function executeTask(taskName: string, params: JsonObject) {
 
   if (taskName.startsWith('scorecard.')) {
     const parsed = ScorecardTaskArgs.parse(params);
+    console.log('[Conductor] dispatching scorecard task', {
+      taskName,
+      room: parsed.room,
+      componentId: parsed.componentId,
+      intent: parsed.intent ?? taskName,
+    });
     const output = await runDebateScorecardSteward({
       room: parsed.room,
       componentId: parsed.componentId,
@@ -109,6 +119,12 @@ async function executeTask(taskName: string, params: JsonObject) {
       intent: parsed.intent ?? taskName,
       summary: parsed.summary,
       prompt: parsed.prompt,
+    });
+    console.log('[Conductor] scorecard steward completed', {
+      taskName,
+      room: parsed.room,
+      componentId: parsed.componentId,
+      ok: true,
     });
     return { status: 'completed', output };
   }
@@ -208,6 +224,11 @@ async function workerLoop() {
       await delay(500);
       continue;
     }
+
+    console.log('[Conductor] claimed tasks', {
+      count: tasks.length,
+      taskNames: tasks.map((task) => task.task),
+    });
 
     const roomBuckets = tasks.reduce<Record<string, typeof tasks>>((acc, task) => {
       const roomKey = task.resource_keys.find((key) => key.startsWith('room:')) || 'room:default';

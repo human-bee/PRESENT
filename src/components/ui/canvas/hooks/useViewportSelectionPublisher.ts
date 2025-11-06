@@ -1,14 +1,14 @@
 "use client";
 
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import type { Editor } from '@tldraw/tldraw';
 import type { Room } from 'livekit-client';
 import { createLiveKitBus } from '@/lib/livekit/livekit-bus';
 
 export function useViewportSelectionPublisher(editor: Editor | undefined, room: Room | undefined, active: boolean) {
+  const bus = useMemo(() => (room ? createLiveKitBus(room) : null), [room]);
   useEffect(() => {
-    if (!editor || !room || !active) return;
-    const bus = createLiveKitBus(room);
+    if (!editor || !room || !active || !bus) return;
     let raf: number | null = null;
     let lastSent = 0;
     let lastHttpSent = 0;
@@ -61,7 +61,6 @@ export function useViewportSelectionPublisher(editor: Editor | undefined, room: 
 
     raf = window.requestAnimationFrame(tick);
     return () => { if (raf) window.cancelAnimationFrame(raf); };
-  }, [editor, room, active]);
+  }, [editor, room, active, bus]);
 }
-
 

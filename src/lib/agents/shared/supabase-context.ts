@@ -24,9 +24,11 @@ if (!url || !anonKey) {
 
 const supabaseKey = serviceRoleKey || anonKey;
 
+const hasServiceRoleKey = Boolean(serviceRoleKey);
+const bypassFlag = process.env.STEWARDS_SUPABASE_BYPASS;
 const shouldBypassSupabase =
-  process.env.STEWARDS_SUPABASE_BYPASS === '1' ||
-  (process.env.NODE_ENV !== 'production' && process.env.STEWARDS_SUPABASE_BYPASS !== '0');
+  bypassFlag === '1' ||
+  (!hasServiceRoleKey && bypassFlag !== '0' && process.env.NODE_ENV !== 'production');
 
 if (!serviceRoleKey && process.env.NODE_ENV === 'development' && !shouldBypassSupabase) {
   try {
@@ -141,6 +143,15 @@ if (!GLOBAL_APEX[CANVAS_STATE_STORE_KEY]) {
 export function normalizeRoomName(name: string) {
   return name.trim();
 }
+
+const deriveCanvasLookup = (room: string) => {
+  const normalized = normalizeRoomName(room);
+  const match = normalized.match(/^canvas-([a-zA-Z0-9_-]+)$/);
+  if (match?.[1]) {
+    return { canvasId: match[1], fallback: normalized } as const;
+  }
+  return { canvasId: null, fallback: normalized } as const;
+};
 
 const LIVEKIT_ROOM_WAIT_TIMEOUT_MS = Number(process.env.LIVEKIT_ROOM_WAIT_TIMEOUT_MS ?? 5000);
 const LIVEKIT_ROOM_WAIT_INTERVAL_MS = Number(process.env.LIVEKIT_ROOM_WAIT_INTERVAL_MS ?? 250);
@@ -437,12 +448,14 @@ export async function getFlowchartDoc(room: string, docId: string) {
     return fallback;
   }
   try {
-    const { data, error } = await supabase
-      .from('canvases')
-      .select('document, id')
-      .ilike('name', `%${room}%`)
-      .limit(1)
-      .maybeSingle();
+    const lookup = deriveCanvasLookup(room);
+    const canvasQuery = supabase.from('canvases').select('document, id');
+    if (lookup.canvasId) {
+      canvasQuery.eq('id', lookup.canvasId);
+    } else {
+      canvasQuery.ilike('name', `%${lookup.fallback}%`);
+    }
+    const { data, error } = await canvasQuery.limit(1).maybeSingle();
 
     if (error) {
       throw error;
@@ -583,12 +596,14 @@ export async function commitDebateScorecard(
     logBypass('commitDebateScorecard');
   } else {
     try {
-      const { data: canvas, error: fetchErr } = await supabase
-        .from('canvases')
-        .select('id, document')
-        .ilike('name', `%${room}%`)
-        .limit(1)
-        .maybeSingle();
+      const lookup = deriveCanvasLookup(room);
+      const canvasQuery = supabase.from('canvases').select('id, document');
+      if (lookup.canvasId) {
+        canvasQuery.eq('id', lookup.canvasId);
+      } else {
+        canvasQuery.ilike('name', `%${lookup.fallback}%`);
+      }
+      const { data: canvas, error: fetchErr } = await canvasQuery.limit(1).maybeSingle();
 
       if (fetchErr || !canvas) {
         throw fetchErr || new Error('NOT_FOUND');
@@ -643,12 +658,14 @@ export async function getCanvasShapeSummary(room: string) {
   }
 
   try {
-    const { data, error } = await supabase
-      .from('canvases')
-      .select('document, id')
-      .ilike('name', `%${room}%`)
-      .limit(1)
-      .maybeSingle();
+    const lookup = deriveCanvasLookup(room);
+    const canvasQuery = supabase.from('canvases').select('document, id');
+    if (lookup.canvasId) {
+      canvasQuery.eq('id', lookup.canvasId);
+    } else {
+      canvasQuery.ilike('name', `%${lookup.fallback}%`);
+    }
+    const { data, error } = await canvasQuery.limit(1).maybeSingle();
 
     if (error) {
       throw error;

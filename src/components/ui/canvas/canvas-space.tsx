@@ -21,6 +21,7 @@ import {
   useCanvasEvents,
   useCanvasInteractions,
 } from './hooks';
+import { useTldrawBranding } from './hooks';
 
 // Dynamic imports for heavy tldraw components - only load when needed
 
@@ -108,8 +109,45 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
   const previousThreadId = useRef<string | null>(null);
   const livekitCtx = React.useContext(CanvasLiveKitContext);
   const room = useRoomContext();
-  const bus = createLiveKitBus(room);
+  const bus = React.useMemo(() => createLiveKitBus(room), [room]);
   const logger = createLogger('CanvasSpace');
+  // A balanced "brutalist orange"-anchored palette while keeping a full color wheel.
+  // Based on well-known, high-contrast material hues (orange/deep-orange anchor).
+  // Toggle off via paletteEnabled: false to keep TLDraw defaults.
+  const BRAND_ORANGE_WHEEL = {
+    // neutrals
+    black: '#000000',
+    grey: '#9E9E9E',
+    // purple/violet
+    'light-violet': '#EDE7F6', // deep purple 50
+    violet: '#673AB7', // deep purple 500
+    // blues
+    'light-blue': '#E3F2FD', // blue 50
+    blue: '#2196F3', // blue 500
+    // greens
+    'light-green': '#E8F5E9', // green 50
+    green: '#4CAF50', // green 500
+    // orange anchor mapped onto TL's yellow slots
+    'light-yellow': '#FFF3E0', // orange 50
+    yellow: '#FF9800', // orange 500 (anchor)
+    // warm accent mapped onto TL's red slots (deep orange)
+    'light-red': '#FFCCBC', // deep orange 100
+    red: '#FF5722', // deep orange 500
+  } as const;
+
+  const branding = useTldrawBranding({
+    defaultFont: 'mono',
+    defaultSize: 'm',
+    defaultDash: 'dotted',
+    defaultColor: 'red',
+    palette: BRAND_ORANGE_WHEEL as any,
+    paletteEnabled: true, // set to false to revert to TLDraw defaults quickly
+    selectionCssVars: {
+      // Orange selection highlight
+      '--tl-color-selection': '#ff6a0033',
+      '--tl-color-selection-stroke': '#ff6a00',
+    },
+  });
 
   const {
     componentStore,
@@ -274,7 +312,10 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
       >
         <TldrawWithCollaboration
           key={livekitCtx?.roomName || 'no-room'}
-          onMount={setEditor}
+          onMount={(ed) => {
+            setEditor(ed)
+            branding.onMount(ed)
+          }}
           shapeUtils={customShapeUtils as any}
           componentStore={componentStore.current}
           className="absolute inset-0"

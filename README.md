@@ -201,6 +201,46 @@ const components: customComponent[] = [
 
 You can find more information about the options [here](https://custom.co/docs/concepts/registering-components)
 
+### Canvas branding (TLDraw defaults and tiny UI tweaks)
+
+Set TLDraw’s default look-and-feel and a few tasteful UI tweaks via a focused hook.
+
+- Hook: `src/components/ui/canvas/hooks/useTldrawBranding.ts`
+- Used at: `src/components/ui/canvas/canvas-space.tsx:~280` (passed to `onMount`)
+
+What it sets by default
+
+- “Next shape” defaults on editor mount: `font: 'sans'`, `size: 'm'`, `dash: 'solid'`, `color: 'violet'`.
+- Optional: remap built-in color names (e.g., change what “violet” points to), and nudge selection highlight via CSS variables.
+
+Change the defaults
+
+Edit the `useTldrawBranding` call in `src/components/ui/canvas/canvas-space.tsx` and pass your preferences:
+
+```ts
+// src/components/ui/canvas/canvas-space.tsx
+const branding = useTldrawBranding({
+  defaultFont: 'serif',     // 'draw' | 'mono' | 'sans' | 'serif'
+  defaultSize: 'm',         // 's' | 'm' | 'l' | 'xl'
+  defaultDash: 'solid',     // 'solid' | 'dashed' | 'dotted'
+  defaultColor: 'violet',   // see TLColor union in the hook
+  palette: {
+    violet: '#6a5acd',      // optional: remap built-in named colors
+    blue: '#2563eb',
+  },
+  selectionCssVars: {
+    '--tl-color-selection': '#7b66dc33',
+    '--tl-color-selection-stroke': '#7b66dc',
+  },
+})
+```
+
+Scope & notes
+
+- Uses TLDraw v4 Editor APIs (`editor.setStyleForNextShapes`) and v4 theme palette (`DefaultColorThemePalette`).
+- Palette remaps apply once per page load and affect all canvases on the page (intended).
+- For deeper menu/control edits, compose TLDraw `components` and `overrides`. We already apply collaboration overrides at `src/components/ui/tldraw/utils/collaborationOverrides.ts`.
+
 ## 🎙️ Voice + Steward Architecture
 
 The production pipeline now runs as two lightweight Node processes plus the client dispatcher:
