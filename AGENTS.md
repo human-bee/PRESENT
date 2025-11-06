@@ -64,6 +64,11 @@
 - PRs: Include summary, linked issues, screenshots/logs for agent changes.
 - Requirements: Passing `npm test`, `npm run lint`; no uncommitted changes.
 
+## Data Compatibility & Persistence
+
+- Optimize for forward compatibility. When schemas change, expect to reseed storage (Supabase, local JSON, etc.) rather than preserving legacy shapes.
+- Call out intentional backwards-compat breaks in code comments and PR notes so future reviewers don’t block forward-looking work.
+
 ## Agent Runtime & Security
 
 - Always start the agent before the web app. Look for "registered worker" and then "Job received!" in agent logs.

@@ -69,6 +69,7 @@ export const claimSchema = z.object({
   verdict: verdictEnum.optional(),
   impact: impactEnum.optional(),
   mapNodeId: z.string().optional(),
+  // We intentionally dropped legacy string timestamps; scorecards are re-seeded with numeric epochs.
   createdAt: z.number().optional(),
   updatedAt: z.number().optional(),
 });

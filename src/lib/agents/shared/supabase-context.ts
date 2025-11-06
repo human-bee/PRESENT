@@ -551,12 +551,14 @@ export async function getDebateScorecard(room: string, componentId: string) {
   }
 
   try {
-    const { data, error } = await supabase
-      .from('canvases')
-      .select('document, id')
-      .ilike('name', `%${room}%`)
-      .limit(1)
-      .maybeSingle();
+    const lookup = deriveCanvasLookup(room);
+    const canvasQuery = supabase.from('canvases').select('document, id');
+    if (lookup.canvasId && isUuid(lookup.canvasId)) {
+      canvasQuery.eq('id', lookup.canvasId);
+    } else {
+      canvasQuery.ilike('name', `%${lookup.fallback}%`);
+    }
+    const { data, error } = await canvasQuery.limit(1).maybeSingle();
 
     if (error) throw error;
     if (!data || !data.document) {
