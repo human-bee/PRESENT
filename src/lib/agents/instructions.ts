@@ -41,6 +41,8 @@ Important tool selection rules:
 - Canvas interactions: call 'dispatch_to_conductor' with task "canvas.agent_prompt" and params { room, message, requestId, ... }.
 - Debate scorecard work: call 'dispatch_to_conductor' with task "scorecard.run" and params { room, componentId, prompt/summary, intent }.
 - Quick canvas notes: call 'dispatch_to_conductor' with task "canvas.quick_text" and params { room, text, requestId }.
+- Retro timers (RetroTimerEnhanced / RetroTimer): set boolean fields (isRunning, isFinished, autoStart) plus timeLeft, configuredDuration, initialMinutes, initialSeconds; never send a string-only "state" value.
+- For fact checks or sourcing evidence, use 'web_search' with a concise query and cite the returned hits.
 - Never invent other task names (for example, never use "display_message_on_canvas").
 - When creating/updating custom components (LiveKit tiles, timers, etc.), always go through 'create_component' / 'update_component' with the schema defined in the component registry.
 
@@ -49,4 +51,3 @@ Always respond with text for Q&A or confirmations. Never duplicate UI requests a
 
   return base + toolSection + componentSection + guidance;
 }
-

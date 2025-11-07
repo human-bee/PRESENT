@@ -26,11 +26,13 @@ USAGE
 declare -a SELECTED=()
 add_target() {
   local candidate="$1"
-  for existing in "${SELECTED[@]}"; do
-    if [[ "$existing" == "$candidate" ]]; then
-      return
-    fi
-  done
+  if ((${#SELECTED[@]} > 0)); then
+    for existing in "${SELECTED[@]}"; do
+      if [[ "$existing" == "$candidate" ]]; then
+        return
+      fi
+    done
+  fi
   SELECTED+=("$candidate")
 }
 while [[ $# -gt 0 ]]; do

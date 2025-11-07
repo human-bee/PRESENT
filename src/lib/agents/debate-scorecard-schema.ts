@@ -69,7 +69,8 @@ export const claimSchema = z.object({
   verdict: verdictEnum.optional(),
   impact: impactEnum.optional(),
   mapNodeId: z.string().optional(),
-  // We intentionally dropped legacy string timestamps; scorecards are re-seeded with numeric epochs.
+  // 2025-11-07: Supabase scorecards were re-seeded; timestamps are stored as numeric epochs.
+  // If legacy ISO strings ever reappear, add a coercion schema before relaxing these types.
   createdAt: z.number().optional(),
   updatedAt: z.number().optional(),
 });

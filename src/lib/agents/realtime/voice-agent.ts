@@ -14,6 +14,7 @@ import { buildVoiceAgentInstructions } from '@/lib/agents/instructions';
 import { queryCapabilities, defaultCapabilities } from '@/lib/agents/capabilities';
 import { deriveComponentIntent } from '@/lib/agents/shared/deterministic-ids';
 import { isStartDebate } from '@/lib/agents/debate-judge';
+import { performWebSearch } from '@/lib/agents/tools/web-search';
 import { jsonObjectSchema, type JsonObject } from '@/lib/utils/json-schema';
 import { RoomEvent, RemoteTrackPublication, Track } from 'livekit-client';
 import { createDefaultScorecardState } from '@/lib/agents/debate-scorecard-schema';
@@ -227,11 +228,13 @@ Your only output is function calls. Never use plain text unless absolutely neces
       return false;
     };
 
+    const SCORECARD_SUPPRESS_WINDOW_MS = 10_000;
     // Duplicate suppression across turns: track last create by component type.
     // We suppress duplicates aggressively within the same user turn, and apply
     // a longer global TTL to catch late replays from the model/stack.
     let currentTurnId = 0;
     let activeResponse = false;
+    let lastScorecardProvisionedAt = 0;
     const recentCreateFingerprintsByRoom = new Map<
       string,
       Map<
@@ -309,6 +312,18 @@ Your only output is function calls. Never use plain text unless absolutely neces
       const key = roomKey();
       if (entry.room && entry.room !== key) return undefined;
       return entry;
+    };
+    const findLatestScorecardEntryInRoom = () => {
+      const key = roomKey();
+      let latest: { id: string; entry: ComponentRegistryEntry } | null = null;
+      for (const [id, entry] of componentRegistry.entries()) {
+        if (entry.type !== 'DebateScorecard') continue;
+        if (entry.room && entry.room !== key) continue;
+        if (!latest || entry.createdAt > latest.entry.createdAt) {
+          latest = { id, entry };
+        }
+      }
+      return latest;
     };
 
     const bumpTurn = () => {
@@ -693,6 +708,45 @@ Your only output is function calls. Never use plain text unless absolutely neces
         }
       }
 
+      if (typeof (next as any).state === 'string') {
+        const stateLabel = ((next as any).state as string).trim().toLowerCase();
+        delete (next as any).state;
+        const markRunning = () => {
+          next.isRunning = true;
+          next.isFinished = false;
+          if (typeof next.timeLeft !== 'number' || next.timeLeft <= 0) {
+            const durationSeconds = typeof next.configuredDuration === 'number' ? next.configuredDuration : fallbackSeconds;
+            next.timeLeft = Math.max(1, Math.round(durationSeconds));
+          }
+        };
+        const markStopped = (finished: boolean) => {
+          next.isRunning = false;
+          if (finished) {
+            next.isFinished = true;
+            if (typeof next.timeLeft !== 'number' || next.timeLeft < 0) {
+              next.timeLeft = 0;
+            }
+          }
+        };
+        if (
+          ['run', 'running', 'start', 'started', 'resume', 'resumed', 'play', 'playing', 'active'].includes(
+            stateLabel,
+          )
+        ) {
+          markRunning();
+        } else if (
+          ['paused', 'pause', 'stop', 'stopped', 'halt', 'idle', 'ready', 'standby'].includes(stateLabel)
+        ) {
+          markStopped(false);
+        } else if (
+          ['finished', 'complete', 'completed', 'done', 'expired', "time's up", 'time up', 'timeup'].includes(
+            stateLabel,
+          )
+        ) {
+          markStopped(true);
+        }
+      }
+
       const runningValue =
         'running' in next ? coerceBoolean(next.running) : undefined;
       if (runningValue !== undefined) {
@@ -867,7 +921,36 @@ Your only output is function calls. Never use plain text unless absolutely neces
             ...initialProps,
           };
 
+          const now = Date.now();
+          const explicitMessageId = typeof args.messageId === 'string' ? args.messageId.trim() : '';
+          const explicitIntentId = typeof args.intentId === 'string' ? args.intentId.trim() : '';
+          const hasExplicitMessageId = explicitMessageId.length > 0;
+          const hasExplicitIntentId = explicitIntentId.length > 0;
           const slot = typeof args.slot === 'string' && args.slot.trim().length > 0 ? args.slot.trim() : undefined;
+          const isDebateScorecard = componentType === 'DebateScorecard';
+          const isBareScorecardRequest = isDebateScorecard && Object.keys(mergedProps).length === 0;
+          let preseededScorecardId: string | undefined;
+          let preseededScorecardIntent: string | undefined;
+          if (
+            isBareScorecardRequest &&
+            !hasExplicitMessageId &&
+            !hasExplicitIntentId &&
+            lastScorecardProvisionedAt > 0 &&
+            now - lastScorecardProvisionedAt < SCORECARD_SUPPRESS_WINDOW_MS
+          ) {
+            const latestScorecard = findLatestScorecardEntryInRoom();
+            preseededScorecardId =
+              activeScorecard?.componentId ||
+              getLastComponentForType('DebateScorecard') ||
+              latestScorecard?.id;
+            if (preseededScorecardId) {
+              const ledger = findLedgerEntryByMessage(preseededScorecardId);
+              preseededScorecardIntent = ledger?.intentId || activeScorecard?.intentId || undefined;
+              console.log('[VoiceAgent] reusing pre-seeded DebateScorecard for create_component call', {
+                componentId: preseededScorecardId,
+              });
+            }
+          }
           const { intentId: autoIntentId, messageId: autoMessageId } = deriveComponentIntent({
             roomName: job.room.name || '',
             turnId: currentTurnId,
@@ -876,14 +959,8 @@ Your only output is function calls. Never use plain text unless absolutely neces
             slot,
           });
 
-          const intentId =
-            typeof args.intentId === 'string' && args.intentId.trim().length > 0
-              ? args.intentId.trim()
-              : autoIntentId;
-          const messageId =
-            typeof args.messageId === 'string' && args.messageId.trim().length > 0
-              ? args.messageId.trim()
-              : autoMessageId;
+          const intentId = hasExplicitIntentId ? explicitIntentId : preseededScorecardIntent ?? autoIntentId;
+          const messageId = hasExplicitMessageId ? explicitMessageId : preseededScorecardId ?? autoMessageId;
 
           args.intentId = intentId;
           args.spec = mergedProps;
@@ -901,7 +978,6 @@ Your only output is function calls. Never use plain text unless absolutely neces
           fingerprintPayload.__type = componentType;
           const sortedFingerprint = JSON.stringify(fingerprintPayload);
           const recentCreate = getRecentCreateFingerprint(componentType);
-          const now = Date.now();
           const TTL_MS = 30000; // 30s window to absorb late replays
           const sameTurnDuplicate =
             !!recentCreate &&
@@ -1142,6 +1218,40 @@ Your only output is function calls. Never use plain text unless absolutely neces
             intentId,
             componentExists: Boolean(existingComponent),
           };
+        },
+      }),
+      web_search: llm.tool({
+        description: 'Perform a live web search to fact-check claims or gather evidence.',
+        parameters: z.object({
+          query: z.string().min(4),
+          maxResults: z.number().int().min(1).max(5).nullish(),
+          includeAnswer: z.boolean().nullish(),
+        }),
+        execute: async (args) => {
+          const query = args.query.trim();
+          if (!query) {
+            return { status: 'ERROR', message: 'web_search requires a non-empty query' };
+          }
+          const maxResults = typeof args.maxResults === 'number' ? args.maxResults : 3;
+          const includeAnswer = args.includeAnswer ?? true;
+          try {
+            const result = await performWebSearch({
+              query,
+              maxResults,
+              includeAnswer,
+            });
+            return {
+              status: 'SUCCESS',
+              summary: result.summary,
+              hits: result.hits,
+              query: result.query,
+              model: result.model,
+            } as JsonObject;
+          } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            console.warn('[VoiceAgent] web_search failed', { query, error: message });
+            return { status: 'ERROR', message };
+          }
         },
       }),
       resolve_component: llm.tool({
@@ -1545,7 +1655,8 @@ Your only output is function calls. Never use plain text unless absolutely neces
         }
         initialState.componentId = messageId;
         initialState.version = 0;
-        initialState.lastUpdated = Date.now();
+        const createdAt = Date.now();
+        initialState.lastUpdated = createdAt;
 
         await sendToolCall('reserve_component', {
           type: 'DebateScorecard',
@@ -1561,6 +1672,15 @@ Your only output is function calls. Never use plain text unless absolutely neces
           spec: initialState as JsonObject,
         });
 
+        componentRegistry.set(messageId, {
+          type: 'DebateScorecard',
+          createdAt,
+          props: initialState as JsonObject,
+          state: initialState as JsonObject,
+          intentId,
+          room: currentRoom,
+        });
+        lastScorecardProvisionedAt = createdAt;
         activeScorecard = { componentId: messageId, intentId, topic: topicLabel };
         setLastComponentForType('DebateScorecard', messageId);
         setLastCreatedComponentId(messageId);
