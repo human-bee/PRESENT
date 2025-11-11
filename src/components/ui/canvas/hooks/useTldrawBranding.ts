@@ -60,9 +60,17 @@ export interface TldrawBrandingOptions {
   palette?: Partial<Record<TLColor, string>>
   // Toggle brand palette remapping on/off quickly (keep TL defaults)
   paletteEnabled?: boolean
-  // Optional CSS vars nudges (e.g., selection color)
+  // Optional CSS vars nudges (e.g., selection + hover colors)
+  // Common TLDraw v4 vars seen on .tl-container (dark theme shown here):
+  //   --tl-color-focus               → hover / focused outline (defaults to blue)
+  //   --tl-color-selected           → selected handles/outline accent
+  //   --tl-color-selection-fill     → marquee / selection fill
+  //   --tl-color-selection-stroke   → marquee / selection stroke
+  // You can pass any subset; values should be CSS colors.
   selectionCssVars?: Partial<{
-    '--tl-color-selection': string
+    '--tl-color-focus': string
+    '--tl-color-selected': string
+    '--tl-color-selection-fill': string
     '--tl-color-selection-stroke': string
   }>
 }
@@ -139,7 +147,7 @@ export function useTldrawBranding(user?: Partial<TldrawBrandingOptions>) {
     }
   }, [opts.palette])
 
-  // Optionally apply CSS variable tweaks globally (selection colors, etc.)
+  // Optionally apply CSS variable tweaks globally (selection / hover colors, etc.)
   useEffect(() => {
     if (!opts.selectionCssVars || cssApplied.current) return
     const el = typeof document !== 'undefined' ? document.documentElement : undefined

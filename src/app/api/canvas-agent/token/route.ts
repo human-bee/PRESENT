@@ -7,7 +7,13 @@ const QuerySchema = z.object({
   roomId: z.string().min(1),
 });
 
+const CLIENT_AGENT_ENABLED = process.env.NEXT_PUBLIC_CANVAS_AGENT_CLIENT_ENABLED === 'true';
+
 export async function GET(req: NextRequest) {
+  if (!CLIENT_AGENT_ENABLED) {
+    return NextResponse.json({ ok: false, error: 'disabled' }, { status: 403 });
+  }
+
   const url = new URL(req.url);
   const parsed = QuerySchema.safeParse({
     sessionId: url.searchParams.get('sessionId'),
@@ -21,4 +27,3 @@ export async function GET(req: NextRequest) {
   const token = mintAgentToken({ ...parsed.data, exp });
   return NextResponse.json({ ok: true, token, exp });
 }
-

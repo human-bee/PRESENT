@@ -68,6 +68,7 @@
 
 - Optimize for forward compatibility. When schemas change, expect to reseed storage (Supabase, local JSON, etc.) rather than preserving legacy shapes.
 - Call out intentional backwards-compat breaks in code comments and PR notes so future reviewers don’t block forward-looking work.
+- This product is still unreleased—avoid adding feature gates/flags or "legacy" pathways for backwards compatibility. Prefer a single source of truth and remove old flows instead of toggling them.
 
 ## Agent Runtime & Security
 
@@ -80,7 +81,8 @@
   - `CANVAS_STEWARD_DEBUG=true` enables verbose request + streaming logs.
   - `CANVAS_AGENT_SCREENSHOT_TIMEOUT_MS=300` screenshot RPC timeout in milliseconds.
   - `CANVAS_AGENT_TTFB_SLO_MS=200` target time-to-first-byte for first action envelope.
-  - `NEXT_PUBLIC_CANVAS_AGENT_CLIENT_ENABLED=true` toggles legacy client-side TLDraw agent (keep true for backward compat during transition).
+  - `NEXT_PUBLIC_CANVAS_AGENT_CLIENT_ENABLED=false` keeps the legacy browser TLDraw agent off; only enable this buried fallback for emergency debugging, and the conductor will then skip the server steward so you avoid duplicate execution.
+  - `NEXT_PUBLIC_CANVAS_AGENT_THEME_ENABLED=true` keeps the TLDraw branding enabled even when the legacy client agent is off.
   - `CANVAS_AGENT_MAX_FOLLOWUPS=3` max bounded depth for add_detail follow-up loops.
 
 # Agents: Runtime, Roles & Contracts

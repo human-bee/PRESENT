@@ -83,7 +83,7 @@ function getEnvConfig() {
     debug: env.CANVAS_STEWARD_DEBUG === 'true',
     screenshotTimeoutMs: Number(env.CANVAS_AGENT_SCREENSHOT_TIMEOUT_MS ?? 300),
     ttfbSloMs: Number(env.CANVAS_AGENT_TTFB_SLO_MS ?? 200),
-    clientEnabled: env.NEXT_PUBLIC_CANVAS_AGENT_CLIENT_ENABLED !== 'false',
+    clientEnabled: env.NEXT_PUBLIC_CANVAS_AGENT_CLIENT_ENABLED === 'true',
     maxFollowups: resolveFollowupDepth(env, preset),
     preset,
   } as const;

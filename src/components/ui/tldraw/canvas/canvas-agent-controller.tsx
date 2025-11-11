@@ -22,8 +22,9 @@ interface CanvasAgentControllerProps {
 const isDevEnv = typeof process !== 'undefined' && process.env.NODE_ENV !== 'production';
 const isClientAgentEnabled =
   typeof process === 'undefined'
-    ? true
-    : process.env.NEXT_PUBLIC_CANVAS_AGENT_CLIENT_ENABLED !== 'false';
+    ? false
+    : process.env.NEXT_PUBLIC_CANVAS_AGENT_CLIENT_ENABLED === 'true';
+// The legacy DOM TLDraw agent is archived; this flag should only be true in emergencies.
 
 const LOGS_ENABLED =
   typeof process !== 'undefined' && process.env.NEXT_PUBLIC_TOOL_DISPATCHER_LOGS === 'true';

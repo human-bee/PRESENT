@@ -28,10 +28,53 @@ const logWithTs = (label: string, payload: Record<string, unknown>) => {
   } catch {}
 };
 
+type ScorecardSeedRecord = {
+  state: DebateScorecardState;
+  version: number;
+  lastUpdated: number;
+};
+
+const scorecardSeedCache = new Map<string, ScorecardSeedRecord>();
+
+const seedCacheKey = (room: string, componentId: string) => `${room}::${componentId}`;
+
+export function seedScorecardState(
+  room: string,
+  componentId: string,
+  record: { state: DebateScorecardState; version: number; lastUpdated?: number },
+) {
+  const key = seedCacheKey(room, componentId);
+  scorecardSeedCache.set(key, {
+    state: record.state,
+    version: record.version,
+    lastUpdated: record.lastUpdated ?? Date.now(),
+  });
+}
+
 export function isStartDebate(text: string): boolean {
   const lower = (text || '').toLowerCase();
   if (!/\bdebate\b/.test(lower)) return false;
   return /\b(start|begin|launch|create|open|setup|set\s*up|initiate|kick\s*off|analysis|scorecard)\b/.test(lower);
+}
+
+const FACT_CHECK_PHRASES = ['fact check', 'fact-check', 'factcheck', 'run a fact check', 'request a fact check'];
+const FACT_CHECK_VERBS = ['fact check', 'fact-check', 'factcheck', 'verify', 'confirm', 'double check', 'double-check'];
+const FACT_CHECK_TARGETS = ['claim', 'argument', 'statement', 'fact', 'evidence', 'assertion'];
+const FACT_CHECK_REQUEST_CUES = ['can you', 'could you', 'please', 'would you', 'need you to', 'i want you to', 'let\'s'];
+
+export function isExplicitFactCheckRequest(text: string): boolean {
+  const normalized = (text || '').toLowerCase().replace(/\s+/g, ' ').trim();
+  if (!normalized) return false;
+  if (FACT_CHECK_PHRASES.some((phrase) => normalized.includes(phrase))) {
+    return true;
+  }
+  const hasVerb = FACT_CHECK_VERBS.some((verb) => normalized.includes(verb));
+  if (!hasVerb) return false;
+  const hasTarget = FACT_CHECK_TARGETS.some((target) => normalized.includes(target));
+  if (!hasTarget) return false;
+  const hasCue = FACT_CHECK_REQUEST_CUES.some((cue) => normalized.includes(cue)) || /^(?:fact\s*[-]?check|verify|confirm|double\s*[-]?check)\b/.test(normalized);
+  if (hasCue) return true;
+  return normalized.includes('?');
 }
 
 const GetScorecardArgs = z.object({
@@ -458,6 +501,23 @@ export const get_current_scorecard = tool({
   parameters: GetScorecardArgs,
   async execute({ room, componentId }) {
     const start = Date.now();
+    const cacheKey = seedCacheKey(room, componentId);
+    const seeded = scorecardSeedCache.get(cacheKey);
+    if (seeded) {
+      scorecardSeedCache.delete(cacheKey);
+      logWithTs('📊 [DebateSteward] get_current_scorecard (seeded)', {
+        room,
+        componentId,
+        version: seeded.version,
+        ms: Date.now() - start,
+      });
+      return {
+        state: seeded.state,
+        version: seeded.version,
+        lastUpdated: seeded.lastUpdated,
+      };
+    }
+
     const record = await getDebateScorecard(room, componentId);
     logWithTs('📊 [DebateSteward] get_current_scorecard', {
       room,
@@ -645,6 +705,7 @@ Workflow each turn:
 6. Your final natural language reply must be short (<= 1 sentence) and summarize the visible change (e.g., "Verified AFF-2; score now 32–28").
 
 Additional guidance:
+- If intent === 'scorecard.fact_check', prioritize moving any pending or newly mentioned claims into CHECKING, run search_evidence immediately, then advance statuses with concise factChecks and evidence links before responding.
 - Never invent component IDs; use componentId from inputs or the fetched state.
 - Prefer precise JSON edits: keep arrays sorted by creation time, preserve existing IDs, and avoid removing historical data unless instructed.
  - Coerce numeric fields (scores, counts, momentum) to sensible ranges: scores are integers, momentum/bsMeter/learningScore ∈ [0,1].

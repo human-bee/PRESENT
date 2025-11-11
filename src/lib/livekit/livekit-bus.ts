@@ -95,6 +95,21 @@ const stubBus: BusInstance = {
 };
 type ListenerEntry = { room: Room; onState: () => void; onParticipant: () => void };
 const listenerRegistryBySid = new Map<string, ListenerEntry>();
+const listenerRegistryByRoom = new WeakMap<Room, ListenerEntry>();
+
+const registerSidEntry = (sid: string, entry: ListenerEntry) => {
+  const existing = listenerRegistryBySid.get(sid);
+  if (existing && existing.room !== entry.room) {
+    existing.room.off(RoomEvent.ConnectionStateChanged, existing.onState);
+    existing.room.off(RoomEvent.ParticipantConnected, existing.onParticipant);
+    listenerRegistryByRoom.delete(existing.room);
+  }
+  listenerRegistryBySid.set(sid, entry);
+  const cached = busCacheByRoom.get(entry.room);
+  if (cached) {
+    busCacheBySid.set(sid, { bus: cached, room: entry.room });
+  }
+};
 
 function createLiveKitBusInstance(room: Room | null | undefined) {
   const logger = createLogger('LiveKitBus');
@@ -200,19 +215,14 @@ function createLiveKitBusInstance(room: Room | null | undefined) {
 
   const ensureListeners = () => {
     if (!room || listenersAttached) return;
-    const sid = room.sid;
-    if (!sid) return; // wait until room announces its sid
 
-    const existing = listenerRegistryBySid.get(sid);
+    const existing = listenerRegistryByRoom.get(room);
     if (existing) {
-      if (existing.room !== room) {
-        existing.room.off(RoomEvent.ConnectionStateChanged, existing.onState);
-        existing.room.off(RoomEvent.ParticipantConnected, existing.onParticipant);
-        listenerRegistryBySid.delete(sid);
-      } else {
-        listenersAttached = true;
-        return;
+      listenersAttached = true;
+      if (room.sid) {
+        registerSidEntry(room.sid, existing);
       }
+      return;
     }
 
     const entry: ListenerEntry = {
@@ -223,12 +233,21 @@ function createLiveKitBusInstance(room: Room | null | undefined) {
 
     room.on(RoomEvent.ConnectionStateChanged, entry.onState);
     room.on(RoomEvent.ParticipantConnected, entry.onParticipant);
-    listenerRegistryBySid.set(sid, entry);
-    const cached = busCacheByRoom.get(room);
-    if (cached) {
-      busCacheBySid.set(sid, { bus: cached, room });
-    }
+    listenerRegistryByRoom.set(room, entry);
     listenersAttached = true;
+
+    const attachWhenSidReady = () => {
+      if (!room.sid) return;
+      room.off(RoomEvent.ConnectionStateChanged, attachWhenSidReady);
+      registerSidEntry(room.sid, entry);
+    };
+
+    if (room.sid) {
+      registerSidEntry(room.sid, entry);
+    } else {
+      room.on(RoomEvent.ConnectionStateChanged, attachWhenSidReady);
+    }
+
     flushPending();
   };
   ensureListeners();

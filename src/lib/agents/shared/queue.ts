@@ -90,7 +90,7 @@ export class AgentTaskQueue {
     });
 
     const { data, error } = await this.supabase
-      .from<AgentTask>('agent_tasks')
+      .from('agent_tasks')
       .insert({
         room,
         task,
@@ -182,7 +182,7 @@ export class AgentTaskQueue {
 
   async listPending(room: string) {
     const { data, error } = await this.supabase
-      .from<AgentTask>('agent_tasks')
+      .from('agent_tasks')
       .select('*')
       .eq('room', room)
       .in('status', ['queued', 'running'])

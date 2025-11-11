@@ -9,19 +9,116 @@ try {
   config({ path: join(process.cwd(), '.env.local') });
 } catch {}
 import { realtime as openaiRealtime } from '@livekit/agents-plugin-openai';
-import { appendTranscriptCache } from '@/lib/agents/shared/supabase-context';
+import { appendTranscriptCache, getTranscriptWindow, listCanvasComponents } from '@/lib/agents/shared/supabase-context';
 import { buildVoiceAgentInstructions } from '@/lib/agents/instructions';
 import { queryCapabilities, defaultCapabilities } from '@/lib/agents/capabilities';
 import { deriveComponentIntent } from '@/lib/agents/shared/deterministic-ids';
-import { isStartDebate } from '@/lib/agents/debate-judge';
-import { performWebSearch } from '@/lib/agents/tools/web-search';
+import { isExplicitFactCheckRequest, isStartDebate } from '@/lib/agents/debate-judge';
 import { jsonObjectSchema, type JsonObject } from '@/lib/utils/json-schema';
 import { RoomEvent, RemoteTrackPublication, Track } from 'livekit-client';
 import { createDefaultScorecardState } from '@/lib/agents/debate-scorecard-schema';
 
+const RATE_LIMIT_HEADER_KEYS = [
+  'retry-after',
+  'x-ratelimit-limit-requests',
+  'x-ratelimit-remaining-requests',
+  'x-ratelimit-reset-requests',
+  'x-request-id',
+];
+
+const readHeaderValue = (headers: unknown, key: string): string | undefined => {
+  if (!headers) return undefined;
+  try {
+    if (typeof (headers as Headers).get === 'function') {
+      const direct = (headers as Headers).get(key);
+      if (direct && String(direct).trim()) return String(direct);
+      const lower = (headers as Headers).get(key.toLowerCase());
+      return lower && String(lower).trim() ? String(lower) : undefined;
+    }
+  } catch {}
+  if (typeof headers === 'object' && headers !== null) {
+    const candidate = (headers as Record<string, unknown>)[key] ?? (headers as Record<string, unknown>)[key.toLowerCase()];
+    if (typeof candidate === 'string' && candidate.trim()) return candidate;
+    if (typeof candidate === 'number') return candidate.toString();
+    if (Array.isArray(candidate) && candidate.length > 0) {
+      const first = candidate.find((entry) => typeof entry === 'string' && entry.trim());
+      if (first && typeof first === 'string') return first;
+    }
+  }
+  return undefined;
+};
+
+const extractRateLimitHeaders = (headers: unknown) => {
+  const info: Record<string, string> = {};
+  for (const key of RATE_LIMIT_HEADER_KEYS) {
+    const value = readHeaderValue(headers, key);
+    if (value) {
+      info[key] = value;
+    }
+  }
+  return Object.keys(info).length ? info : undefined;
+};
+
+const logRealtimeError = (context: string, error: unknown) => {
+  if (!error) {
+    console.error(`[VoiceAgent] ${context}`, { message: 'Unknown error' });
+    return;
+  }
+  const payload: Record<string, unknown> = { context };
+  if (error instanceof Error) {
+    payload.message = error.message;
+    payload.name = error.name;
+  } else if (typeof error === 'string') {
+    payload.message = error;
+  } else {
+    const directMessage = (error as { message?: unknown })?.message;
+    if (typeof directMessage === 'string' && directMessage.trim()) {
+      payload.message = directMessage;
+    } else {
+      try {
+        payload.message = JSON.stringify(error);
+      } catch {
+        payload.message = String(error);
+      }
+    }
+  }
+  const status = (error as { status?: number; statusCode?: number })?.status ?? (error as { statusCode?: number })?.statusCode;
+  if (typeof status !== 'undefined') payload.status = status;
+  const code = (error as { code?: string | number; errorCode?: string | number })?.code ?? (error as { errorCode?: string | number })?.errorCode;
+  if (typeof code !== 'undefined') payload.code = code;
+  const responseData = (error as { response?: { data?: Record<string, unknown>; headers?: unknown } })?.response?.data ?? (error as { data?: Record<string, unknown> })?.data;
+  if (responseData && typeof responseData === 'object') {
+    const detailPayload: Record<string, unknown> = {};
+    const detailMessage = (responseData as { message?: string }).message;
+    if (detailMessage) detailPayload.message = detailMessage;
+    const detailType = (responseData as { type?: string }).type;
+    if (detailType) detailPayload.type = detailType;
+    const detailCode = (responseData as { code?: string }).code;
+    if (detailCode) detailPayload.detailCode = detailCode;
+    if (Object.keys(detailPayload).length > 0) {
+      payload.detail = detailPayload;
+    }
+  }
+  const headers = (error as { response?: { headers?: unknown } })?.response?.headers ?? (error as { headers?: unknown })?.headers;
+  const rateLimit = extractRateLimitHeaders(headers);
+  if (rateLimit) {
+    payload.rateLimit = rateLimit;
+  }
+  const stack = (error as Error)?.stack;
+  if (stack) {
+    payload.stack = stack.split('\n').slice(0, 5).join('\n');
+  }
+  console.error('[VoiceAgent] realtime error', payload);
+};
+
 export default defineAgent({
   entry: async (job: JobContext) => {
-    await job.connect();
+    try {
+      await job.connect();
+    } catch (error) {
+      logRealtimeError('failed to connect to LiveKit room', error);
+      throw error;
+    }
     console.log('[VoiceAgent] Connected to room:', job.room.name);
 
     const coerceBooleanFromEnv = (value?: string | null) => {
@@ -153,6 +250,94 @@ Your only output is function calls. Never use plain text unless absolutely neces
     const recentDebatePrompts = new Map<string, number>();
     const DEBATE_PROMPT_DEBOUNCE_MS = 2000;
     const DEBATE_PROMPT_HISTORY_MS = 60_000;
+    let lastResearchPanelId: string | null = null;
+    let activeScorecard: { componentId: string; intentId: string; topic: string } | null = null;
+    const getLastComponentMap = () => {
+      const key = job.room.name || 'room';
+      let map = lastComponentByTypeByRoom.get(key);
+      if (!map) {
+        map = new Map<string, string>();
+        lastComponentByTypeByRoom.set(key, map);
+      }
+      return map;
+    };
+    const getLastComponentForType = (type: string) => getLastComponentMap().get(type);
+    const setLastComponentForType = (type: string, messageId: string) => getLastComponentMap().set(type, messageId);
+
+  const rememberResearchPanel = (candidate?: string | null) => {
+    if (typeof candidate !== 'string') return;
+    const trimmed = candidate.trim();
+    if (!trimmed) return;
+    lastResearchPanelId = trimmed;
+  };
+
+
+    const buildResearchPlaceholderSpec = (query: string): JsonObject => {
+      const trimmed = query.trim();
+      const shortened = trimmed.length > 120 ? `${trimmed.slice(0, 117)}...` : trimmed;
+      const spec: JsonObject = {
+        title: shortened ? `Research: ${shortened}` : 'Research Results',
+        results: [],
+        isLive: true,
+        showCredibilityFilter: true,
+      };
+      if (shortened) {
+        spec.currentTopic = shortened;
+      }
+      return spec;
+    };
+
+    const ensureResearchPanelProvisioned = async (query: string) => {
+      const spec = buildResearchPlaceholderSpec(query);
+      const { intentId, messageId } = deriveComponentIntent({
+        roomName: job.room.name || '',
+        turnId: currentTurnId,
+        componentType: 'ResearchPanel',
+        spec,
+      });
+      const existing = getComponentEntry(messageId);
+      if (!existing) {
+        componentRegistry.set(messageId, {
+          type: 'ResearchPanel',
+          createdAt: Date.now(),
+          props: spec,
+          state: {} as JsonObject,
+          intentId,
+          slot: undefined,
+          room: job.room.name || 'room',
+        });
+      } else {
+        existing.intentId = intentId;
+        existing.props = { ...existing.props, ...spec };
+      }
+      if (intentId) {
+        registerLedgerEntry({
+          intentId,
+          messageId,
+          componentType: 'ResearchPanel',
+          state: existing ? 'updated' : 'created',
+        });
+      }
+      setLastComponentForType('ResearchPanel', messageId);
+      setLastCreatedComponentId(messageId);
+      rememberResearchPanel(messageId);
+      setRecentCreateFingerprint('ResearchPanel', {
+        fingerprint: JSON.stringify({ ...spec, __type: 'ResearchPanel' }),
+        messageId,
+        createdAt: Date.now(),
+        turnId: currentTurnId,
+        intentId,
+      });
+      if (!existing) {
+        await sendToolCall('create_component', {
+          type: 'ResearchPanel',
+          messageId,
+          intentId,
+          spec,
+        });
+      }
+      return { componentId: messageId, intentId };
+    };
 
     const cleanupLedger = () => {
       const now = Date.now();
@@ -211,6 +396,154 @@ Your only output is function calls. Never use plain text unless absolutely neces
       return undefined;
     };
 
+    const hydrateComponentsFromCanvas = async () => {
+      const roomName = job.room.name || '';
+      if (!roomName) return;
+      try {
+        const snapshot = await listCanvasComponents(roomName);
+        if (!Array.isArray(snapshot)) return;
+        console.log('[VoiceAgent] loaded canvas component snapshot', {
+          room: roomName,
+          total: snapshot.length,
+        });
+        if (snapshot.length === 0) return;
+        const restored: Array<{ componentId: string; componentType: string; lastUpdated?: number | null; intentId?: string | null; state?: JsonObject | null; props: JsonObject } > = [];
+        for (const entry of snapshot) {
+          if (!entry?.componentId) continue;
+          if (componentRegistry.has(entry.componentId)) continue;
+          const componentType = entry.componentType?.trim() || 'unknown';
+          if (!componentType || componentType === 'unknown') continue;
+          const safeProps = entry.props && typeof entry.props === 'object' ? (entry.props as JsonObject) : {};
+          const safeState = entry.state && typeof entry.state === 'object' ? (entry.state as JsonObject) : null;
+          const intentId = entry.intentId?.trim() || (typeof safeProps.intentId === 'string' ? (safeProps.intentId as string) : undefined);
+          componentRegistry.set(entry.componentId, {
+            type: componentType,
+            createdAt: entry.lastUpdated ?? Date.now(),
+            props: safeProps,
+            state: safeState ?? safeProps,
+            intentId,
+            room: roomName,
+          });
+          if (intentId) {
+            registerLedgerEntry({ intentId, messageId: entry.componentId, componentType, state: 'updated' });
+          }
+          setLastComponentForType(componentType, entry.componentId);
+          restored.push(entry);
+        }
+
+        const existingScorecard = restored
+          .filter((item) => item.componentType === 'DebateScorecard')
+          .sort((a, b) => (b.lastUpdated ?? 0) - (a.lastUpdated ?? 0))[0];
+        if (existingScorecard) {
+          const state = existingScorecard.state || existingScorecard.props;
+          const topic =
+            (state && typeof state.topic === 'string' && state.topic.trim())
+              ? state.topic.trim()
+              : (typeof existingScorecard.props?.topic === 'string' && existingScorecard.props.topic.trim())
+                ? (existingScorecard.props.topic as string).trim()
+                : 'Live Debate';
+          const resolvedIntentId =
+            existingScorecard.intentId?.trim() || `debate-scorecard-${existingScorecard.componentId}`;
+          activeScorecard = {
+            componentId: existingScorecard.componentId,
+            intentId: resolvedIntentId,
+            topic,
+          };
+          registerLedgerEntry({
+            intentId: resolvedIntentId,
+            messageId: existingScorecard.componentId,
+            componentType: 'DebateScorecard',
+            state: 'updated',
+          });
+          setLastComponentForType('DebateScorecard', existingScorecard.componentId);
+        }
+
+        if (restored.length > 0) {
+          console.log('[VoiceAgent] hydrated component registry from canvas', {
+            room: roomName,
+            restored: restored.length,
+            hasDebateScorecard: Boolean(existingScorecard),
+          });
+        }
+      } catch (error) {
+        console.warn('[VoiceAgent] failed to hydrate components from canvas', error);
+      }
+    };
+
+    await hydrateComponentsFromCanvas();
+    const requestComponentSnapshot = () => {
+      try {
+        const payload = {
+          type: 'component_snapshot_request',
+          room: job.room.name || '',
+          timestamp: Date.now(),
+        };
+        job.room.localParticipant?.publishData(new TextEncoder().encode(JSON.stringify(payload)), {
+          reliable: true,
+          topic: 'component_snapshot_request',
+        });
+      } catch (error) {
+        console.warn('[VoiceAgent] failed to request component snapshot', error);
+      }
+    };
+
+    const applyComponentSnapshotMessage = (message: any) => {
+      const entries = Array.isArray(message?.components) ? message.components : [];
+      if (!entries || entries.length === 0) return;
+      let restoredScorecard = false;
+      for (const entry of entries) {
+        const componentId = typeof entry?.componentId === 'string' ? entry.componentId.trim() : '';
+        if (!componentId) continue;
+        const componentType =
+          typeof entry.componentType === 'string' && entry.componentType.trim()
+            ? entry.componentType.trim()
+            : 'unknown';
+        const props = entry.props && typeof entry.props === 'object' ? (entry.props as JsonObject) : {};
+        const state = entry.state && typeof entry.state === 'object' ? (entry.state as JsonObject) : props;
+        const intentId =
+          typeof entry.intentId === 'string' && entry.intentId.trim().length > 0
+            ? entry.intentId.trim()
+            : undefined;
+        componentRegistry.set(componentId, {
+          type: componentType,
+          createdAt: typeof entry.lastUpdated === 'number' ? entry.lastUpdated : Date.now(),
+          props,
+          state,
+          intentId,
+          room: job.room.name || '',
+        });
+        setLastComponentForType(componentType, componentId);
+        if (intentId) {
+          registerLedgerEntry({
+            intentId,
+            messageId: componentId,
+            componentType,
+            state: 'updated',
+          });
+        }
+        if (componentType === 'DebateScorecard') {
+          const topicCandidate =
+            (state?.topic && typeof state.topic === 'string' && state.topic.trim())
+              ? state.topic.trim()
+              : (props?.topic && typeof props.topic === 'string' && props.topic.trim())
+                ? (props.topic as string).trim()
+                : 'Live Debate';
+          const resolvedIntentId = intentId ?? `debate-scorecard-${componentId}`;
+          activeScorecard = {
+            componentId,
+            intentId: resolvedIntentId,
+            topic: topicCandidate,
+          };
+          restoredScorecard = true;
+        }
+      }
+      if (restoredScorecard) {
+        console.log('[VoiceAgent] restored DebateScorecard via component_snapshot');
+      }
+    };
+
+    requestComponentSnapshot();
+
     const shouldSkipDebatePrompt = (prompt: string) => {
       const normalized = prompt.replace(/\s+/g, ' ').trim().toLowerCase();
       if (!normalized) return true;
@@ -250,17 +583,6 @@ Your only output is function calls. Never use plain text unless absolutely neces
       >
     >();
     const roomKey = () => job.room.name || 'room';
-    const getLastComponentMap = () => {
-      const key = roomKey();
-      let map = lastComponentByTypeByRoom.get(key);
-      if (!map) {
-        map = new Map<string, string>();
-        lastComponentByTypeByRoom.set(key, map);
-      }
-      return map;
-    };
-    const getLastComponentForType = (type: string) => getLastComponentMap().get(type);
-    const setLastComponentForType = (type: string, messageId: string) => getLastComponentMap().set(type, messageId);
     const getLastCreatedComponentId = () => {
       const key = roomKey();
       return lastCreatedComponentIdByRoom.get(key) ?? null;
@@ -366,7 +688,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
       console.debug('[VoiceAgent][debug] publish data', {
         tool: entry.event.payload.tool,
         reliable: entry.reliable,
-        roomState: job.room.state,
+        roomState: job.room.connectionState,
         participant: participant.identity,
         payloadSize: payloadBytes.byteLength,
       });
@@ -385,7 +707,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
     };
 
     const flushPendingToolCalls = async () => {
-      if (job.room.state && job.room.state !== 'connected') return;
+      if (!job.room.isConnected) return;
       while (pendingToolCalls.length > 0) {
         const next = pendingToolCalls.shift();
         if (!next) continue;
@@ -480,7 +802,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
         console.info('[VoiceAgent] queueing tool_call until room connects', {
           tool,
           queueLength: pendingToolCalls.length,
-          state: job.room.state,
+          state: job.room.connectionState,
         });
         if (!flushToolCallsHandle) {
           flushToolCallsHandle = setTimeout(() => {
@@ -513,40 +835,49 @@ Your only output is function calls. Never use plain text unless absolutely neces
       }
     };
 
-    const coerceComponentPatch = (raw: unknown) => {
+    const safeCloneJson = (value: unknown): JsonObject => {
+      if (!value || typeof value !== 'object') return {};
+      try {
+        return JSON.parse(JSON.stringify(value)) as JsonObject;
+      } catch {
+        return {};
+      }
+    };
+
+    const coerceComponentPatch = (raw: unknown): JsonObject => {
       if (!raw) return {};
       if (typeof raw === 'string') {
         try {
           const parsed = JSON.parse(raw);
-          return parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : { instruction: raw };
+          return parsed && typeof parsed === 'object' ? safeCloneJson(parsed) : { instruction: raw };
         } catch {
-          return { instruction: raw };
+          return { instruction: raw } as JsonObject;
         }
       }
       if (typeof raw === 'object') {
-        return { ...(raw as Record<string, unknown>) };
+        return safeCloneJson(raw);
       }
       return {};
     };
 
-    const normalizeSpecInput = (raw: unknown): Record<string, unknown> => {
+    const normalizeSpecInput = (raw: unknown): JsonObject => {
       if (!raw) return {};
       if (typeof raw === 'string') {
         try {
           const parsed = JSON.parse(raw);
-          return parsed && typeof parsed === 'object' ? { ...(parsed as Record<string, unknown>) } : {};
+          return parsed && typeof parsed === 'object' ? safeCloneJson(parsed) : {};
         } catch {
           return {};
         }
       }
       if (raw && typeof raw === 'object') {
-        return { ...(raw as Record<string, unknown>) };
+        return safeCloneJson(raw);
       }
       return {};
     };
 
-    const normalizeComponentPatch = (patch: Record<string, unknown>, fallbackSeconds: number) => {
-      const next = { ...patch };
+    const normalizeComponentPatch = (patch: JsonObject, fallbackSeconds: number): JsonObject => {
+      const next: JsonObject = { ...patch };
       const timestamp = Date.now();
       next.updatedAt = typeof next.updatedAt === 'number' ? next.updatedAt : timestamp;
 
@@ -910,13 +1241,9 @@ Your only output is function calls. Never use plain text unless absolutely neces
           }
 
           const normalizedSpec = normalizeSpecInput(args.spec);
+          const initialProps = normalizeSpecInput(args.props);
 
-          const initialProps =
-            args.props && typeof args.props === 'object'
-              ? ({ ...args.props } as Record<string, unknown>)
-              : {};
-
-          const mergedProps = {
+          const mergedProps: JsonObject = {
             ...normalizedSpec,
             ...initialProps,
           };
@@ -1007,7 +1334,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
               Number.isFinite(existingComponent.props.configuredDuration)
                 ? (existingComponent.props.configuredDuration as number)
                 : 300;
-            const normalizedPatch = normalizeComponentPatch(mergedProps as Record<string, unknown>, fallbackSeconds);
+            const normalizedPatch = normalizeComponentPatch(mergedProps, fallbackSeconds);
             if (Object.keys(normalizedPatch).length === 0) {
               console.debug('[VoiceAgent] duplicate create_component with no changes; skipping', {
                 messageId,
@@ -1019,16 +1346,17 @@ Your only output is function calls. Never use plain text unless absolutely neces
               messageId,
               componentType,
             });
-            await sendToolCall(
-              'update_component',
-              {
-                componentId: messageId,
-                patch: normalizedPatch as JsonObject,
-                intentId,
-                slot,
-              },
-              { reliable: false },
-            );
+            const updateParams: JsonObject = {
+              componentId: messageId,
+              patch: normalizedPatch,
+            };
+            if (intentId) {
+              updateParams.intentId = intentId;
+            }
+            if (slot) {
+              updateParams.slot = slot;
+            }
+            await sendToolCall('update_component', updateParams, { reliable: false });
             existingComponent.props = {
               ...existingComponent.props,
               ...mergedProps,
@@ -1087,6 +1415,31 @@ Your only output is function calls. Never use plain text unless absolutely neces
             intentId,
             slot,
           });
+
+          // Reroute misuse: if model asks for LiveCaptions while the last user prompt
+          // clearly describes drawing/styling/layout, dispatch to canvas agent instead.
+          try {
+            const drawingLexicon =
+              /\b(draw|create|place|insert|add|sketch|shape|rectangle|box|note|sticky|arrow|line|circle|ellipse|diamond|star|text|align|group|distribute|stack|mono|serif|sans|dotted|dashed|solid|fill|stroke|font|color|size|viewport)\b/i;
+            if (
+              componentType === 'LiveCaptions' &&
+              typeof lastUserPrompt === 'string' &&
+              drawingLexicon.test(lastUserPrompt)
+            ) {
+              const roomName = job.room.name || '';
+              if (roomName) {
+                await sendToolCall('dispatch_to_conductor', {
+                  task: 'canvas.agent_prompt',
+                  params: {
+                    room: roomName,
+                    message: lastUserPrompt,
+                    requestId: randomUUID(),
+                  } as JsonObject,
+                });
+                return { status: 'rerouted', task: 'canvas.agent_prompt' };
+              }
+            }
+          } catch {}
 
           const payload: JsonObject = {
             type: componentType,
@@ -1203,54 +1556,105 @@ Your only output is function calls. Never use plain text unless absolutely neces
             slot,
           });
 
-          await sendToolCall('reserve_component', {
+          const reserveParams: JsonObject = {
             componentType,
-            intentId,
             messageId,
-            slot,
             snapshot: mergedProps as JsonObject,
             state: entry.state,
-          });
-
-          return {
-            status: existingComponent ? 'acknowledged_existing' : 'reserved',
-            messageId,
-            intentId,
-            componentExists: Boolean(existingComponent),
           };
-        },
-      }),
-      web_search: llm.tool({
-        description: 'Perform a live web search to fact-check claims or gather evidence.',
+          if (intentId) {
+            reserveParams.intentId = intentId;
+          }
+          if (slot) {
+            reserveParams.slot = slot;
+          }
+          await sendToolCall('reserve_component', reserveParams);
+
+      return {
+        status: existingComponent ? 'acknowledged_existing' : 'reserved',
+        messageId,
+        intentId,
+        componentExists: Boolean(existingComponent),
+      };
+    },
+  }),
+      research_search: llm.tool({
+        description: 'Run a general research query and render/update a ResearchPanel.',
         parameters: z.object({
-          query: z.string().min(4),
-          maxResults: z.number().int().min(1).max(5).nullish(),
-          includeAnswer: z.boolean().nullish(),
+          query: z.string().min(3),
+          componentId: z.string().nullish(),
         }),
         execute: async (args) => {
-          const query = args.query.trim();
+          const query = typeof args.query === 'string' ? args.query.trim() : '';
           if (!query) {
-            return { status: 'ERROR', message: 'web_search requires a non-empty query' };
+            return { status: 'ERROR', message: 'research_search requires query text' };
           }
-          const maxResults = typeof args.maxResults === 'number' ? args.maxResults : 3;
-          const includeAnswer = args.includeAnswer ?? true;
-          try {
-            const result = await performWebSearch({
+          const roomName = job.room.name || '';
+          let componentId =
+            typeof args.componentId === 'string' && args.componentId.trim().length > 0
+              ? args.componentId.trim()
+              : undefined;
+          if (!componentId) {
+            const provisioned = await ensureResearchPanelProvisioned(query);
+            componentId = provisioned.componentId;
+          } else {
+            rememberResearchPanel(componentId);
+          }
+          await sendToolCall('dispatch_to_conductor', {
+            task: 'search.general',
+            params: {
+              room: roomName,
               query,
-              maxResults,
-              includeAnswer,
-            });
+              componentId,
+            },
+          });
+          if (componentId) {
+            rememberResearchPanel(componentId);
+          }
+          return { status: 'queued', query, componentId };
+        },
+      }),
+      transcript_search: llm.tool({
+        description: 'Return recent conversation segments from this room.',
+        parameters: z
+          .object({
+            query: z.string().trim().nullish(),
+            windowMs: z.number().int().min(3_000).max(300_000).nullish(),
+          })
+          .passthrough(),
+        execute: async (args) => {
+          const roomName = job.room.name;
+          if (!roomName) {
+            return { status: 'ERROR', message: 'No room context available' };
+          }
+          const windowMs = Math.min(Math.max(args.windowMs ?? 60_000, 3_000), 300_000);
+          try {
+            const { transcript } = await getTranscriptWindow(roomName, windowMs);
+            const query = typeof args.query === 'string' ? args.query.trim().toLowerCase() : '';
+            const hits = transcript
+              .filter((entry) => {
+                if (!query) return true;
+                return typeof entry.text === 'string' && entry.text.toLowerCase().includes(query);
+              })
+              .slice(0, 8)
+              .map((entry) => ({
+                speaker: entry.participantId ?? 'speaker',
+                text: entry.text ?? '',
+                timestamp: entry.timestamp ?? Date.now(),
+              }));
+            const summary = hits
+              .map((hit) => `${new Date(hit.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} ${hit.speaker}: ${hit.text}`)
+              .join(' | ');
             return {
-              status: 'SUCCESS',
-              summary: result.summary,
-              hits: result.hits,
-              query: result.query,
-              model: result.model,
-            } as JsonObject;
+              status: 'queued',
+              query: query || null,
+              windowMs,
+              count: hits.length,
+              summary: summary || 'No matching transcript entries found.',
+              hits,
+            };
           } catch (error) {
-            const message = error instanceof Error ? error.message : String(error);
-            console.warn('[VoiceAgent] web_search failed', { query, error: message });
-            return { status: 'ERROR', message };
+            return { status: 'ERROR', message: 'Transcript lookup failed', detail: String(error) };
           }
         },
       }),
@@ -1294,6 +1698,9 @@ Your only output is function calls. Never use plain text unless absolutely neces
           }
           if (componentType && resolvedId) {
             setLastComponentForType(componentType, resolvedId);
+          }
+          if (componentType === 'ResearchPanel') {
+            rememberResearchPanel(resolvedId);
           }
           setLastCreatedComponentId(resolvedId);
 
@@ -1350,7 +1757,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
             typeof existing?.props?.configuredDuration === 'number' && Number.isFinite(existing.props.configuredDuration)
               ? (existing.props.configuredDuration as number)
               : 300;
-          const patch = normalizeComponentPatch(rawPatch, fallbackSeconds);
+            const patch = normalizeComponentPatch(rawPatch, fallbackSeconds);
 
           const isDebateScorecardTarget =
             existing?.type === 'DebateScorecard' ||
@@ -1454,8 +1861,8 @@ Your only output is function calls. Never use plain text unless absolutely neces
               ? enrichedParams.type
               : typeof enrichedParams.componentType === 'string'
                 ? enrichedParams.componentType
-                : typeof args?.params?.type === 'string'
-                  ? (args.params as Record<string, unknown>).type
+                : typeof (params as Record<string, unknown>).type === 'string'
+                  ? ((params as Record<string, unknown>).type as string)
                   : undefined;
 
           if (!componentTypeHint && args.task === 'scorecard.run') {
@@ -1529,7 +1936,6 @@ Your only output is function calls. Never use plain text unless absolutely neces
     instructions = buildVoiceAgentInstructions(systemCapabilities, systemCapabilities.components || []);
 
     const agent = new voice.Agent({
-      name: 'voice-agent',
       instructions,
       tools: toolContext,
     });
@@ -1559,7 +1965,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
           try {
             await session.generateReply(next as any);
           } catch (err) {
-            console.error('[VoiceAgent] queued generateReply failed', err);
+            logRealtimeError('queued generateReply failed', err);
           } finally {
             activeResponse = false;
           }
@@ -1567,13 +1973,12 @@ Your only output is function calls. Never use plain text unless absolutely neces
       }
     };
 
-    let activeScorecard: { componentId: string; intentId: string; topic: string } | null = null;
     let ensureScorecardPromise: Promise<{ componentId: string; intentId: string; topic: string }> | null = null;
     const debateKeywordRegex =
       /\b(aff|affirmative|neg|negative|contention|rebuttal|voter|judge|debate|scorecard|flow|argument|claim|evidence|verify|fact|counter)\b/;
 
     const findExistingScorecard = (topic?: string) => {
-      const currentRoom = roomKey();
+      const currentRoom = roomKey() || job.room?.name || 'room';
       const normalized = topic?.trim().toLowerCase();
       let fallback: { id: string; info: ComponentRegistryEntry; topic?: string } | null = null;
       for (const [id, info] of componentRegistry.entries()) {
@@ -1596,7 +2001,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
     };
 
     const ensureDebateScorecard = async (topic?: string, contextText?: string) => {
-      const currentRoom = roomKey();
+      const currentRoom = roomKey() || job.room?.name || 'room';
       const normalizedTopic = topic && topic.trim().length ? topic.trim() : undefined;
       const normalizedLower = normalizedTopic?.toLowerCase();
 
@@ -1727,6 +2132,22 @@ Your only output is function calls. Never use plain text unless absolutely neces
           });
           return;
         }
+        const wantsFactCheck = isExplicitFactCheckRequest(trimmed);
+        if (wantsFactCheck) {
+          const scorecard = activeScorecard ?? (await ensureDebateScorecard(undefined, trimmed));
+          await sendToolCall('dispatch_to_conductor', {
+            task: 'scorecard.fact_check',
+            params: {
+              room: roomName,
+              componentId: scorecard.componentId,
+              summary: `fact check request: ${trimmed.slice(0, 120)}`,
+              intent: 'scorecard.fact_check',
+              prompt: trimmed,
+            } as JsonObject,
+          });
+          return;
+        }
+
         if (debateKeywordRegex.test(lower)) {
           const scorecard = activeScorecard ?? (await ensureDebateScorecard(undefined, trimmed));
           await sendToolCall('dispatch_to_conductor', {
@@ -1749,8 +2170,9 @@ Your only output is function calls. Never use plain text unless absolutely neces
       const rawId = typeof args.componentId === 'string' ? args.componentId.trim() : '';
       if (rawId) return rawId;
 
-      const currentRoom = roomKey();
+      const currentRoom = roomKey() || job.room?.name || 'room';
       const typeHint = typeof args.type === 'string' ? args.type.trim() : typeof args.componentType === 'string' ? args.componentType.trim() : '';
+      const allowLast = typeof args.allowLast === 'boolean' ? args.allowLast : false;
       const acceptCandidate = (candidateId: string | undefined | null) => {
         if (!candidateId) return '';
         const entry = getComponentEntry(candidateId);
@@ -1800,6 +2222,12 @@ Your only output is function calls. Never use plain text unless absolutely neces
             const acceptedCandidate = acceptCandidate(id);
             if (acceptedCandidate) return acceptedCandidate;
           }
+        }
+      }
+      if ((typeHint === 'ResearchPanel' || allowLast) && lastResearchPanelId) {
+        const acceptedResearchPanel = acceptCandidate(lastResearchPanelId);
+        if (acceptedResearchPanel) {
+          return acceptedResearchPanel;
         }
       }
       const lastCreated = getLastCreatedComponentId();
@@ -1870,6 +2298,9 @@ Your only output is function calls. Never use plain text unless absolutely neces
             if (componentType && messageId) {
               setLastComponentForType(componentType, messageId);
               setLastCreatedComponentId(messageId);
+              if (componentType === 'ResearchPanel') {
+                rememberResearchPanel(messageId);
+              }
               const existing = getComponentEntry(messageId);
               if (existing) {
                 existing.intentId = intentId;
@@ -1914,8 +2345,14 @@ Your only output is function calls. Never use plain text unless absolutely neces
                 : 300;
             args.patch = normalizeComponentPatch(rawPatch, fallbackSeconds);
             const existingAfterFT = getComponentEntry(resolvedId);
+            const componentTypeAfterUpdate =
+              existingAfterFT?.type ||
+              (typeof args.type === 'string' && args.type.trim().length > 0 ? args.type.trim() : '');
+            if (componentTypeAfterUpdate === 'ResearchPanel') {
+              rememberResearchPanel(resolvedId);
+            }
             if (existingAfterFT) {
-              existingAfterFT.props = { ...existingAfterFT.props, ...(args.patch as Record<string, unknown>) };
+              existingAfterFT.props = { ...existingAfterFT.props, ...(args.patch as JsonObject) };
               if (typeof args.intentId === 'string' && args.intentId.trim().length > 0) {
                 existingAfterFT.intentId = args.intentId.trim();
               }
@@ -1924,13 +2361,10 @@ Your only output is function calls. Never use plain text unless absolutely neces
               }
             }
             if (typeof args.intentId === 'string' && args.intentId.trim().length > 0) {
-              const componentType =
-                existingAfterFT?.type ||
-                (typeof args.type === 'string' && args.type.trim().length > 0 ? args.type.trim() : 'unknown');
               registerLedgerEntry({
                 intentId: args.intentId.trim(),
                 messageId: resolvedId,
-                componentType,
+                componentType: componentTypeAfterUpdate || 'unknown',
                 slot: typeof args.slot === 'string' && args.slot.trim().length > 0 ? args.slot.trim() : existingAfterFT?.slot,
                 state: existingAfterFT ? 'updated' : 'reserved',
               });
@@ -1945,6 +2379,9 @@ Your only output is function calls. Never use plain text unless absolutely neces
             if (componentType && messageId) {
               setLastComponentForType(componentType, messageId);
               setLastCreatedComponentId(messageId);
+              if (componentType === 'ResearchPanel') {
+                rememberResearchPanel(messageId);
+              }
             }
             if (intentId && messageId && componentType) {
               registerLedgerEntry({
@@ -1958,16 +2395,19 @@ Your only output is function calls. Never use plain text unless absolutely neces
           }
           if (fnCall.name === 'resolve_component') {
             const resolvedId = typeof args.componentId === 'string' ? args.componentId.trim() : '';
-            if (resolvedId) {
-              setLastCreatedComponentId(resolvedId);
-            }
-            const intentId = typeof args.intentId === 'string' ? args.intentId.trim() : '';
             const componentType =
               typeof args.type === 'string'
                 ? args.type.trim()
                 : typeof args.componentType === 'string'
                   ? args.componentType.trim()
                   : '';
+            if (resolvedId) {
+              setLastCreatedComponentId(resolvedId);
+              if (componentType === 'ResearchPanel') {
+                rememberResearchPanel(resolvedId);
+              }
+            }
+            const intentId = typeof args.intentId === 'string' ? args.intentId.trim() : '';
             const slot = typeof args.slot === 'string' && args.slot.trim().length > 0 ? args.slot.trim() : undefined;
             if (intentId && resolvedId && componentType) {
               registerLedgerEntry({
@@ -2014,7 +2454,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
           try {
             await generateReplySafely();
           } catch (error) {
-            console.error('[VoiceAgent] failed to generate reply after transcript', error);
+            logRealtimeError('generateReply after transcript failed', error);
           }
         }
       }
@@ -2052,17 +2492,37 @@ Your only output is function calls. Never use plain text unless absolutely neces
     });
 
     session.on(voice.AgentSessionEventTypes.Error, (event) => {
-      console.error('[VoiceAgent] session error', event.error);
+      logRealtimeError('session error', event.error);
     });
 
     session.on(voice.AgentSessionEventTypes.Close, (event) => {
-      console.log('[VoiceAgent] session closed', event.reason);
+      const payload: Record<string, unknown> = {
+        reason: event.reason,
+        code: (event as { code?: number }).code,
+      };
+      console.log('[VoiceAgent] session closed', payload);
+      if (event.error) {
+        logRealtimeError('session close error', event.error as unknown);
+      }
     });
 
     job.room.on(RoomEvent.DataReceived, async (payload, participant, _, topic) => {
-      if (topic !== 'transcription') return;
+      let message: any;
       try {
-        const message = JSON.parse(new TextDecoder().decode(payload));
+        message = JSON.parse(new TextDecoder().decode(payload));
+      } catch (error) {
+        logRealtimeError('failed to parse data payload', error);
+        return;
+      }
+
+      if (topic === 'component_snapshot') {
+        applyComponentSnapshotMessage(message);
+        return;
+      }
+
+      if (topic !== 'transcription') return;
+
+      try {
         const text = typeof message?.text === 'string' ? message.text.trim() : '';
         const isManual = Boolean(message?.manual);
         const isReplay = Boolean(message?.replay);
@@ -2071,19 +2531,17 @@ Your only output is function calls. Never use plain text unless absolutely neces
         if (!text || isReplay) return;
         if (!isManual && speaker === 'voice-agent') return;
         lastUserPrompt = text;
-        // Native Realtime tool-calling path
         console.log('[VoiceAgent] calling generateReply with userInput:', text);
         try {
           if (isManual) {
-            // Treat manual messages as their own turn to avoid cross-talk
             bumpTurn();
           }
           await generateReplySafely({ userInput: text });
         } catch (err) {
-          console.error('[VoiceAgent] generateReply error:', err);
+          logRealtimeError('generateReply from manual input failed', err);
         }
       } catch (error) {
-        console.error('[VoiceAgent] failed to handle data transcription', error);
+        logRealtimeError('failed to handle DataReceived payload', error);
       }
     });
 

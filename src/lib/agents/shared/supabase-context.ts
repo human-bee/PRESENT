@@ -77,6 +77,15 @@ type CanvasStateRecord = {
   lastUpdated: number;
 };
 
+export type CanvasComponentSnapshot = {
+  componentId: string;
+  componentType: string;
+  props: JsonObject;
+  state?: JsonObject | null;
+  intentId?: string | null;
+  lastUpdated?: number | null;
+};
+
 export type CanvasAgentPromptBounds = {
   x: number;
   y: number;
@@ -98,7 +107,7 @@ const memoryStore: Map<string, FlowchartDocRecord> =
   (GLOBAL_APEX[MEMORY_STORE_KEY] as Map<string, FlowchartDocRecord> | undefined) ||
   new Map<string, FlowchartDocRecord>();
 
-type ScorecardRecord = {
+export type ScorecardRecord = {
   state: DebateScorecardState;
   version: number;
   lastUpdated: number;
@@ -313,12 +322,13 @@ const normalizeScorecardRecord = (room: string, componentId: string, entry: Reco
   );
 
   const state = parsed.success ? parsed.data : fallback.state;
-  const version =
+  const versionSource =
     (base && typeof base === 'object' && typeof (base as Record<string, unknown>).version === 'number'
       ? (base as Record<string, unknown>).version
       : typeof entry.version === 'number'
         ? entry.version
-        : fallback.version) ?? 0;
+        : fallback.version);
+  const version = typeof versionSource === 'number' && Number.isFinite(versionSource) ? versionSource : 0;
 
   const normalized: ScorecardRecord = {
     state: {
@@ -361,17 +371,20 @@ const sanitizeShapeState = (
   limitBytes: number,
 ): { state: Record<string, unknown> | Array<unknown>; bytes: number; truncated: boolean } | null => {
   const clone = parseStateValue(raw);
-  if (!clone) return null;
+  if (!clone || typeof clone !== 'object') return null;
+  const normalizedState = Array.isArray(clone)
+    ? (clone as Array<unknown>)
+    : (clone as Record<string, unknown>);
   try {
     const json = JSON.stringify(clone);
     const bytes = json.length;
     if (bytes <= limitBytes) {
-      return { state: clone, bytes, truncated: false };
+      return { state: normalizedState, bytes, truncated: false };
     }
 
     const keys = Array.isArray(clone)
       ? Array.from({ length: Math.min(clone.length, 12) }, (_, idx) => idx)
-      : Object.keys(clone as Record<string, unknown>).slice(0, 12);
+      : Object.keys(normalizedState as Record<string, unknown>).slice(0, 12);
     const preview = json.slice(0, Math.max(0, limitBytes));
     return {
       state: {
@@ -543,7 +556,7 @@ export async function commitFlowchartDoc(
   return { version: nextVersion };
 }
 
-export async function getDebateScorecard(room: string, componentId: string) {
+export async function getDebateScorecard(room: string, componentId: string): Promise<ScorecardRecord> {
   const fallback = readScorecardFallback(room, componentId);
   if (shouldBypassSupabase) {
     logBypass('getDebateScorecard');
@@ -561,7 +574,7 @@ export async function getDebateScorecard(room: string, componentId: string) {
     const { data, error } = await canvasQuery.limit(1).maybeSingle();
 
     if (error) throw error;
-    if (!data || !data.document) {
+    if (!data || typeof data.document !== 'object' || data.document === null) {
       return fallback;
     }
 
@@ -581,7 +594,7 @@ export async function commitDebateScorecard(
   room: string,
   componentId: string,
   payload: { state: DebateScorecardState; prevVersion?: number },
-) {
+): Promise<ScorecardRecord> {
   const current = await getDebateScorecard(room, componentId);
   if (typeof payload.prevVersion === 'number' && payload.prevVersion !== current.version) {
     throw new Error('CONFLICT');
@@ -681,6 +694,16 @@ export async function getCanvasShapeSummary(room: string) {
     }
 
     const store = (data.document?.store || {}) as Record<string, any>;
+    if (process.env.NODE_ENV !== 'production') {
+      try {
+        const storeKeys = Object.keys(store);
+        if (storeKeys.length === 0) {
+          console.log('[StewardSupabase] listCanvasComponents store empty store payload', {
+            room,
+          });
+        }
+      } catch {}
+    }
     const shapes: CanvasShapeSummary[] = [];
 
     const pushShape = (entry: any) => {
@@ -710,6 +733,151 @@ export async function getCanvasShapeSummary(room: string) {
   } catch (err) {
     warnFallback('getCanvasShapeSummary', err);
     return defaultCanvasState(room);
+  }
+}
+
+export async function listCanvasComponents(room: string): Promise<CanvasComponentSnapshot[]> {
+  if (!room) return [];
+
+  if (shouldBypassSupabase) {
+    logBypass('listCanvasComponents');
+    return [];
+  }
+
+  try {
+    const lookup = deriveCanvasLookup(room);
+    const canvasQuery = supabase.from('canvases').select('document, id');
+    if (lookup.canvasId && isUuid(lookup.canvasId)) {
+      canvasQuery.eq('id', lookup.canvasId);
+    } else {
+      canvasQuery.ilike('name', `%${lookup.fallback}%`);
+    }
+    const { data, error } = await canvasQuery.limit(1).maybeSingle();
+
+    if (error) throw error;
+    if (!data || typeof data.document !== 'object' || data.document === null) {
+      return [];
+    }
+    const document = data.document as {
+      components?: Record<string, Record<string, unknown>>;
+      store?: Record<string, any>;
+      schemaVersion?: number;
+    };
+    const snapshots: CanvasComponentSnapshot[] = [];
+    const seen = new Set<string>();
+
+    const pushSnapshot = (entry: CanvasComponentSnapshot) => {
+      if (!entry.componentId || seen.has(entry.componentId)) return;
+      seen.add(entry.componentId);
+      snapshots.push(entry);
+    };
+
+    const components = (document.components || {}) as Record<string, Record<string, unknown>>;
+
+    for (const [componentId, entry] of Object.entries(components)) {
+      if (!entry || typeof entry !== 'object') continue;
+      const props =
+        entry.props && typeof entry.props === 'object'
+          ? (entry.props as JsonObject)
+          : (entry as JsonObject);
+      const stateCandidate = (() => {
+        if (entry.state && typeof entry.state === 'object' && !Array.isArray(entry.state)) {
+          return entry.state as JsonObject;
+        }
+        const scorecard = (entry as { scorecard?: { state?: JsonObject } }).scorecard;
+        if (scorecard?.state && typeof scorecard.state === 'object') {
+          return scorecard.state;
+        }
+        return undefined;
+      })();
+
+      const componentType = (() => {
+        if (typeof (entry as { componentType?: unknown }).componentType === 'string') {
+          return (entry as { componentType: string }).componentType;
+        }
+        if (typeof (entry as { type?: unknown }).type === 'string') {
+          return (entry as { type: string }).type;
+        }
+        if (typeof props?.type === 'string') {
+          return props.type as string;
+        }
+        if (stateCandidate && typeof stateCandidate.type === 'string') {
+          return stateCandidate.type as string;
+        }
+        return 'unknown';
+      })();
+
+      const intentId = (() => {
+        if (typeof (entry as { intentId?: unknown }).intentId === 'string') {
+          return (entry as { intentId: string }).intentId;
+        }
+        if (typeof props?.intentId === 'string') {
+          return props.intentId as string;
+        }
+        return undefined;
+      })();
+
+      pushSnapshot({
+        componentId,
+        componentType,
+        props,
+        state: stateCandidate ?? null,
+        intentId: intentId ?? null,
+        lastUpdated:
+          typeof (entry as { lastUpdated?: unknown }).lastUpdated === 'number'
+            ? ((entry as { lastUpdated: number }).lastUpdated as number)
+            : typeof (entry as { updated_at?: unknown }).updated_at === 'number'
+              ? ((entry as { updated_at: number }).updated_at as number)
+              : null,
+      });
+    }
+
+    const store = (document.store || {}) as Record<string, any>;
+    const considerShapeEntry = (raw: any) => {
+      if (!raw || typeof raw !== 'object') return;
+      const props = raw.props && typeof raw.props === 'object' ? (raw.props as Record<string, any>) : null;
+      if (!props) return;
+      const componentId = typeof props.customComponent === 'string' ? props.customComponent : null;
+      if (!componentId || seen.has(componentId)) return;
+      const stateCandidate =
+        props.state && typeof props.state === 'object' && !Array.isArray(props.state)
+          ? (props.state as JsonObject)
+          : undefined;
+      const componentType = (() => {
+        if (typeof props.name === 'string' && props.name.trim()) return props.name.trim();
+        if (stateCandidate && typeof stateCandidate.type === 'string') return (stateCandidate.type as string).trim();
+        if (typeof props.type === 'string') return props.type.trim();
+        return 'unknown';
+      })();
+      pushSnapshot({
+        componentId,
+        componentType,
+        props: stateCandidate ?? (props as JsonObject),
+        state: stateCandidate ?? null,
+        intentId: typeof props.intentId === 'string' ? props.intentId : null,
+        lastUpdated:
+          typeof props.updatedAt === 'number'
+            ? (props.updatedAt as number)
+            : typeof props.lastUpdated === 'number'
+              ? (props.lastUpdated as number)
+              : null,
+      });
+    };
+
+    const rawShapeCollection = store['shape'] || store.shapes;
+    if (Array.isArray(rawShapeCollection)) {
+      rawShapeCollection.forEach(considerShapeEntry);
+    } else if (rawShapeCollection && typeof rawShapeCollection === 'object') {
+      Object.values(rawShapeCollection as Record<string, any>).forEach(considerShapeEntry);
+    }
+    Object.keys(store)
+      .filter((key) => key.startsWith('shape:'))
+      .forEach((key) => considerShapeEntry(store[key]));
+
+    return snapshots;
+  } catch (error) {
+    warnFallback('listCanvasComponents', error);
+    return [];
   }
 }
 

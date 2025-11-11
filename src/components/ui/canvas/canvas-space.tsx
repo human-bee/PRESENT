@@ -110,6 +110,69 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
   const livekitCtx = React.useContext(CanvasLiveKitContext);
   const room = useRoomContext();
   const bus = React.useMemo(() => createLiveKitBus(room), [room]);
+  const emitComponentSnapshot = React.useCallback(
+    (reason: string) => {
+      if (!room || room.state !== 'connected') return;
+      const currentRoom = livekitCtx?.roomName || room.name;
+      if (!currentRoom) return;
+      const entries = ComponentRegistry.list();
+      const focusTypes = new Set([
+        'DebateScorecard',
+        'ResearchPanel',
+        'RetroTimerEnhanced',
+        'RetroTimer',
+        'LivekitParticipantTile',
+      ]);
+      const selected = entries.filter((entry) => focusTypes.has(entry.componentType));
+      if (selected.length === 0) return;
+      const componentsPayload = selected.map((entry) => {
+        let clonedProps: Record<string, unknown> = {};
+        try {
+          clonedProps = JSON.parse(JSON.stringify(entry.props ?? {}));
+        } catch {
+          clonedProps = { ...(entry.props ?? {}) };
+        }
+        const intentId =
+          typeof (clonedProps as Record<string, unknown>).intentId === 'string'
+            ? ((clonedProps as Record<string, string>).intentId as string)
+            : null;
+        return {
+          componentId: entry.messageId,
+          componentType: entry.componentType,
+          intentId,
+          lastUpdated: entry.lastUpdated ?? entry.timestamp ?? Date.now(),
+          props: clonedProps,
+        };
+      });
+      bus.send('component_snapshot', {
+        type: 'component_snapshot',
+        room: currentRoom,
+        components: componentsPayload,
+        reason,
+        timestamp: Date.now(),
+      });
+    },
+    [bus, livekitCtx?.roomName, room],
+  );
+
+  useEffect(() => {
+    const handler = () => emitComponentSnapshot('component_store_update');
+    window.addEventListener('present:component-store-updated', handler);
+    emitComponentSnapshot('initial_mount');
+    return () => window.removeEventListener('present:component-store-updated', handler);
+  }, [emitComponentSnapshot]);
+
+  useEffect(() => {
+    const off = bus.on('component_snapshot_request', (msg: any) => {
+      const targetRoom = typeof msg?.room === 'string' ? msg.room : null;
+      const currentRoom = livekitCtx?.roomName || room?.name;
+      if (targetRoom && currentRoom && targetRoom !== currentRoom) {
+        return;
+      }
+      emitComponentSnapshot('request');
+    });
+    return off;
+  }, [bus, emitComponentSnapshot, livekitCtx?.roomName, room?.name]);
   const logger = createLogger('CanvasSpace');
   // A balanced "brutalist orange"-anchored palette while keeping a full color wheel.
   // Based on well-known, high-contrast material hues (orange/deep-orange anchor).
@@ -135,18 +198,29 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
     red: '#FF5722', // deep orange 500
   } as const;
 
+  const canvasAgentThemeFlag =
+    typeof process === 'undefined'
+      ? 'true'
+      : process.env.NEXT_PUBLIC_CANVAS_AGENT_THEME_ENABLED ??
+        process.env.NEXT_PUBLIC_CANVAS_AGENT_CLIENT_ENABLED;
+  const canvasAgentThemeEnabled = canvasAgentThemeFlag === undefined ? true : canvasAgentThemeFlag === 'true';
+
   const branding = useTldrawBranding({
     defaultFont: 'mono',
     defaultSize: 'm',
     defaultDash: 'dotted',
     defaultColor: 'red',
     palette: BRAND_ORANGE_WHEEL as any,
-    paletteEnabled: true, // set to false to revert to TLDraw defaults quickly
-    selectionCssVars: {
-      // Orange selection highlight
-      '--tl-color-selection': '#ff6a0033',
-      '--tl-color-selection-stroke': '#ff6a00',
-    },
+    paletteEnabled: canvasAgentThemeEnabled, // tied to the @canvas-agent toggle (env)
+    selectionCssVars: canvasAgentThemeEnabled
+      ? {
+          // Orange selection + hover highlights
+          '--tl-color-selection-fill': '#ff6a0033',
+          '--tl-color-selection-stroke': '#ff6a00',
+          '--tl-color-focus': '#ff6a00',
+          '--tl-color-selected': '#ff6a00',
+        }
+      : undefined,
   });
 
   const {
@@ -197,9 +271,16 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
     return [customShapeUtil, ToolboxShapeUtil, MermaidStreamShapeUtil] as any[];
   }, []);
 
+  const hasReconciledRegistry = useRef(false);
+
   // On first editor ready, reconcile with ComponentRegistry in case events were missed
   useEffect(() => {
-    if (!editor) return;
+    if (!editor) {
+      hasReconciledRegistry.current = false;
+      return;
+    }
+    if (hasReconciledRegistry.current) return;
+    hasReconciledRegistry.current = true;
     const existing = ComponentRegistry.list();
     if (!existing || existing.length === 0) return;
     logger.info(`🧭 Reconciling ${existing.length} components from registry`);

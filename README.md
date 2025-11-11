@@ -55,12 +55,12 @@ npm install
   VOICE_AGENT_TRANSCRIPTION_MODE=realtime | manual
   ```
 
-- Optional canvas steward controls:
+  # Optional canvas steward controls (the legacy browser TLDraw agent is archived and disabled by default):
 
   ```
   CANVAS_STEWARD_MODEL=claude-haiku-4-5        # override the default model (falls back if provider unavailable)
-  CANVAS_STEWARD_SERVER_EXECUTION=false        # set true to run the server-side steward alongside the browser agent
-  NEXT_PUBLIC_CANVAS_AGENT_CLIENT_ENABLED=true # set false to disable the browser TLDraw agent (use server execution only)
+  NEXT_PUBLIC_CANVAS_AGENT_CLIENT_ENABLED=false # legacy DOM TLDraw agent (leave false unless debugging an edge case; enabling also skips the server steward so the browser is the sole executor)
+  NEXT_PUBLIC_CANVAS_AGENT_THEME_ENABLED=true   # keep TLDraw branding even when the client agent is disabled
   CANVAS_STEWARD_DEBUG=false                   # set true to dump prompts/actions to the server logs
   ```
 
@@ -210,8 +210,8 @@ Set TLDraw’s default look-and-feel and a few tasteful UI tweaks via a focused 
 
 What it sets by default
 
-- “Next shape” defaults on editor mount: `font: 'sans'`, `size: 'm'`, `dash: 'solid'`, `color: 'violet'`.
-- Optional: remap built-in color names (e.g., change what “violet” points to), and nudge selection highlight via CSS variables.
+- “Next shape” defaults on editor mount: `font: 'mono'`, `size: 'm'`, `dash: 'dotted'`, `color: 'red'` (mapped to the brutalist deep-orange swatch).
+- Optional: remap built-in color names (e.g., change what “violet” points to), and nudge selection highlight via CSS variables (currently orange by default).
 
 Change the defaults
 
@@ -228,6 +228,7 @@ const branding = useTldrawBranding({
     violet: '#6a5acd',      // optional: remap built-in named colors
     blue: '#2563eb',
   },
+  paletteEnabled: true,     // tie this to the @canvas-agent toggle if needed
   selectionCssVars: {
     '--tl-color-selection': '#7b66dc33',
     '--tl-color-selection-stroke': '#7b66dc',
@@ -239,6 +240,7 @@ Scope & notes
 
 - Uses TLDraw v4 Editor APIs (`editor.setStyleForNextShapes`) and v4 theme palette (`DefaultColorThemePalette`).
 - Palette remaps apply once per page load and affect all canvases on the page (intended).
+- Branding respects the `@canvas-agent` toggle via `NEXT_PUBLIC_CANVAS_AGENT_THEME_ENABLED` (falls back to `NEXT_PUBLIC_CANVAS_AGENT_CLIENT_ENABLED` for legacy behaviour). Set either env to `false` to revert instantly to TLDraw stock colors and selection styles.
 - For deeper menu/control edits, compose TLDraw `components` and `overrides`. We already apply collaboration overrides at `src/components/ui/tldraw/utils/collaborationOverrides.ts`.
 
 ## 🎙️ Voice + Steward Architecture

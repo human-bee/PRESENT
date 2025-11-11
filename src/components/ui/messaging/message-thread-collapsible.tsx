@@ -182,6 +182,11 @@ export const MessageThreadCollapsible = React.forwardRef<
   const isRecognizedSlashCommand = Boolean(
     slashCommand && SUPPORTED_SLASH_COMMANDS.has(slashCommand.command),
   );
+  const mentionMatchesCanvasAgent = React.useMemo(() => {
+    if (isRecognizedSlashCommand) return false;
+    if (!typedMessage) return false;
+    return /@canvas-agent/gi.test(typedMessage);
+  }, [isRecognizedSlashCommand, typedMessage]);
   const slashCommandBodyMissing = Boolean(isRecognizedSlashCommand && !slashCommand?.body);
 
   React.useEffect(() => {
@@ -780,11 +785,12 @@ export const MessageThreadCollapsible = React.forwardRef<
               {(() => {
                 const isRoomConnected = room?.state === 'connected';
                 const trimmedMessage = typedMessage.trim();
-                const inputDisabled = isSending || (!isRecognizedSlashCommand && !isRoomConnected);
+                const inputDisabled =
+                  isSending || (!isRecognizedSlashCommand && !mentionMatchesCanvasAgent && !isRoomConnected);
                 const sendDisabled =
                   isSending ||
                   !trimmedMessage ||
-                  (!isRecognizedSlashCommand && !isRoomConnected) ||
+                  (!isRecognizedSlashCommand && !mentionMatchesCanvasAgent && !isRoomConnected) ||
                   (isRecognizedSlashCommand && slashCommandBodyMissing);
                 return (
               <form
@@ -797,6 +803,7 @@ export const MessageThreadCollapsible = React.forwardRef<
                   const slashActive = Boolean(
                     parsedCommand && SUPPORTED_SLASH_COMMANDS.has(parsedCommand.command),
                   );
+                  const mentionActive = Boolean(!slashActive && mentionMatchesCanvasAgent);
                   if (slashActive && !parsedCommand?.body) {
                     try {
                       console.warn('[Transcript] Slash command requires a message body', parsedCommand);
@@ -812,7 +819,10 @@ export const MessageThreadCollapsible = React.forwardRef<
                     user?.email ||
                     'Canvas-User';
 
-                  const textForDispatch = slashActive && parsedCommand ? parsedCommand.body : trimmed;
+                  const mentionBody = mentionActive
+                    ? trimmed.replace(/@canvas-agent/gi, '').trim() || trimmed
+                    : trimmed;
+                  const textForDispatch = slashActive && parsedCommand ? parsedCommand.body : mentionBody;
 
                   const payload = {
                     type: 'live_transcription',
@@ -828,6 +838,8 @@ export const MessageThreadCollapsible = React.forwardRef<
                   try {
                     if (slashActive && parsedCommand) {
                       await runSlashCommand(parsedCommand.command, parsedCommand.body);
+                    } else if (mentionActive) {
+                      await sendCanvasAgentPrompt(textForDispatch);
                     } else {
                       if (room?.state === 'connected') {
                         bus.send('transcription', payload);
@@ -905,9 +917,11 @@ export const MessageThreadCollapsible = React.forwardRef<
                 <span>
                   {isRecognizedSlashCommand
                     ? 'Slash command active — prompt dispatches directly to the Canvas steward.'
-                    : agentPresent
-                      ? 'Sends as “you” over LiveKit to the voice agent.'
-                      : 'Agent not joined'}
+                    : mentionMatchesCanvasAgent
+                      ? '“@canvas-agent” detected — prompt dispatches directly to the Canvas steward.'
+                      : agentPresent
+                        ? 'Sends as “you” over LiveKit to the voice agent.'
+                        : 'Agent not joined'}
                 </span>
                 {!agentPresent && !isRecognizedSlashCommand && (
                   <button

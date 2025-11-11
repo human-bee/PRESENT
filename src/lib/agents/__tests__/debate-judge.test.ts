@@ -4,7 +4,7 @@ jest.mock('@openai/agents', () => ({
   run: jest.fn(),
 }));
 
-import { commit_scorecard } from '@/lib/agents/debate-judge';
+import { commit_scorecard, isExplicitFactCheckRequest } from '@/lib/agents/debate-judge';
 import { debateScorecardStateSchema } from '@/lib/agents/debate-scorecard-schema';
 
 jest.mock('@/lib/agents/shared/supabase-context', () => ({
@@ -160,5 +160,25 @@ describe('commit_scorecard', () => {
     const achievements = retryState.players[0]?.achievements ?? [];
     expect(achievements).toHaveLength(1);
     expect(achievements[0]?.key).toBe('firstBlood');
+  });
+});
+
+describe('isExplicitFactCheckRequest', () => {
+  it('accepts direct fact-check phrases', () => {
+    expect(isExplicitFactCheckRequest('Fact check the NEG solvency claim.')).toBe(true);
+    expect(isExplicitFactCheckRequest('Can you run a fact-check on their argument?')).toBe(true);
+  });
+
+  it('accepts verify requests that target a claim', () => {
+    expect(isExplicitFactCheckRequest('Please verify this claim is accurate with sources.')).toBe(true);
+    expect(isExplicitFactCheckRequest('Could you double check that statement?')).toBe(true);
+  });
+
+  it('ignores routine debate narration', () => {
+    expect(
+      isExplicitFactCheckRequest('AFF brings new evidence and verifies their contention with data.'),
+    ).toBe(false);
+    expect(isExplicitFactCheckRequest('NEG cross applies evidence in rebuttal.')).toBe(false);
+    expect(isExplicitFactCheckRequest('Evidence and citations were discussed earlier.')).toBe(false);
   });
 });

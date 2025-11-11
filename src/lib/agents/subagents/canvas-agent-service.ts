@@ -6,6 +6,7 @@ import {
 } from '@ai-sdk/google';
 import { createOpenAI, type OpenAIProvider } from '@ai-sdk/openai';
 import { generateObject, type LanguageModel } from 'ai';
+import type { ProviderOptions } from '@ai-sdk/provider-utils';
 import { z } from 'zod';
 import { jsonValueSchema, type JsonObject, type JsonValue } from '@/lib/utils/json-schema';
 import { getCanvasModelDefinition, type CanvasModelDefinition, type CanvasModelName } from './canvas-models';
@@ -25,6 +26,8 @@ const canvasPlanSchema = z.object({
 	actions: z.array(canvasActionSchema).min(1, 'At least one tool action is required'),
 	summary: z.string().min(1, 'Provide a short summary for the user'),
 });
+
+const canvasPlanRuntimeSchema = canvasPlanSchema as z.ZodTypeAny;
 
 export type CanvasPlan = z.infer<typeof canvasPlanSchema>;
 
@@ -53,6 +56,8 @@ const debugJson = (label: string, value: unknown, max = 2000) => {
 		debugLog(label, value);
 	}
 };
+
+const unsafeGenerateObject = generateObject as unknown as (args: any) => Promise<{ object: any }>;
 
 export interface CanvasPlanRequest {
 	modelName: CanvasModelName;
@@ -91,11 +96,11 @@ export class CanvasAgentService {
 			prompt,
 		});
 
-		const { object } = await generateObject({
+		const { object } = await unsafeGenerateObject({
 			model,
 			system,
 			prompt,
-			schema: canvasPlanSchema,
+			schema: canvasPlanRuntimeSchema,
 			temperature: 0,
 			maxOutputTokens: maxOutputTokens ?? 4096,
 			providerOptions: buildProviderOptions(modelDefinition.provider),
@@ -177,22 +182,24 @@ function getModelPreferenceList(preferred: CanvasModelName): CanvasModelName[] {
 	return [preferred, ...FALLBACK_ORDER.filter((name) => name !== preferred)];
 }
 
-function buildProviderOptions(provider: CanvasModelDefinition['provider']) {
-	if (provider === 'anthropic') {
-		return {
-			anthropic: {
-				thinking: { type: 'disabled' },
-			} satisfies AnthropicProviderOptions,
-		};
-	}
-	if (provider === 'google') {
-		return {
-			google: {
-				thinkingConfig: { thinkingBudget: 0 },
-			} satisfies GoogleGenerativeAIProviderOptions,
-		};
-	}
-	return undefined;
+function buildProviderOptions(provider: CanvasModelDefinition['provider']): ProviderOptions | undefined {
+  if (provider === 'anthropic') {
+    const options: ProviderOptions = {
+      anthropic: {
+        thinking: { type: 'disabled' },
+      } satisfies AnthropicProviderOptions,
+    };
+    return options;
+  }
+  if (provider === 'google') {
+    const options: ProviderOptions = {
+      google: {
+        thinkingConfig: { thinkingBudget: 0 },
+      } satisfies GoogleGenerativeAIProviderOptions,
+    };
+    return options;
+  }
+  return undefined;
 }
 
 let singleton: CanvasAgentService | null = null;

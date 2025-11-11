@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import type { Editor } from 'tldraw';
 import React from 'react';
 
@@ -24,8 +24,11 @@ export function useCanvasRehydration({
   setAddedMessageIds,
   logger,
 }: RehydrationParams) {
+  const lastSignatureRef = useRef<string>('');
+  const lastRunAtRef = useRef<number>(0);
+  const hasHydratedOnceRef = useRef(false);
   useEffect(() => {
-    const handleRehydration = () => {
+    const handleRehydration = (event?: Event) => {
       if (!editor) {
         logger.debug('Editor not ready for rehydration, skipping...');
         return;
@@ -34,10 +37,45 @@ export function useCanvasRehydration({
       if (!logger) {
         return;
       }
-      logger.debug('🔄 Starting component rehydration...');
+      const forceHydrate = Boolean((event as CustomEvent<{ force?: boolean }>)?.detail?.force);
       const customShapes = editor
         .getCurrentPageShapes()
         .filter((shape) => shape.type === 'custom') as CustomShape[];
+
+      const shapeSignature = customShapes
+        .map((shape) => {
+          const props = shape.props as Record<string, unknown>;
+          const componentId =
+            typeof props?.customComponent === 'string' ? (props.customComponent as string) : 'unknown';
+          const shapeUpdatedAt = typeof props?.updatedAt === 'number' ? (props.updatedAt as number) : 0;
+          const state = props?.state && typeof props.state === 'object' ? (props.state as { updatedAt?: number }) : null;
+          const stateUpdatedAt = state && typeof state.updatedAt === 'number' ? state.updatedAt : 0;
+          return `${shape.id}:${componentId}:${shapeUpdatedAt}:${stateUpdatedAt}`;
+        })
+        .sort()
+        .join('|');
+
+      const registrySignature = ComponentRegistry.list()
+        .map((entry) => `${entry.messageId}:${entry.version ?? 'null'}:${entry.lastUpdated ?? 'null'}`)
+        .sort()
+        .join('|');
+
+      const signature = `${shapeSignature}::${registrySignature}`;
+      const now = Date.now();
+      const shouldSkipRehydration =
+        !forceHydrate &&
+        hasHydratedOnceRef.current &&
+        signature === lastSignatureRef.current &&
+        now - lastRunAtRef.current < 2_000;
+      if (shouldSkipRehydration) {
+        logger.debug('♻️ Skipping rehydration (no component deltas detected)');
+        return;
+      }
+      lastSignatureRef.current = signature;
+      lastRunAtRef.current = now;
+      hasHydratedOnceRef.current = true;
+
+      logger.debug('🔄 Starting component rehydration...');
 
       logger.debug(`Found ${customShapes.length} custom shapes to rehydrate`);
 

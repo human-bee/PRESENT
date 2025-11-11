@@ -24,7 +24,7 @@ const CanvasAgentEnvSchema = z
   NEXT_PUBLIC_CANVAS_AGENT_CLIENT_ENABLED: z
     .string()
     .optional()
-    .transform((v) => v === undefined ? true : v === 'true'),
+    .transform((v) => v === 'true'),
   CANVAS_AGENT_MAX_FOLLOWUPS: z
     .string()
     .optional()
@@ -57,9 +57,8 @@ export function getCanvasAgentConfig(): CanvasAgentConfig {
     debug: Boolean(env.CANVAS_STEWARD_DEBUG ?? false),
     screenshotTimeoutMs: Number(env.CANVAS_AGENT_SCREENSHOT_TIMEOUT_MS ?? 300),
     ttfbSloMs: Number(env.CANVAS_AGENT_TTFB_SLO_MS ?? 200),
-    clientEnabled: Boolean(env.NEXT_PUBLIC_CANVAS_AGENT_CLIENT_ENABLED ?? true),
+    clientEnabled: Boolean(env.NEXT_PUBLIC_CANVAS_AGENT_CLIENT_ENABLED ?? false),
     maxFollowups: Number(env.CANVAS_AGENT_MAX_FOLLOWUPS ?? 3),
   };
 }
-
 
