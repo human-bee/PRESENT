@@ -1,0 +1,40 @@
+uid=29_0 RootWebArea "Create Next App" url="http://localhost:3000/canvas?id=d54861d6-8486-4038-b038-232706f65bd8"
+  uid=29_1 application "tldraw" focusable focused
+    uid=29_2 button "Move focus to canvas"
+    uid=29_3 navigation
+      uid=29_4 button "Menu" haspopup="menu"
+      uid=29_5 button "Page 1" haspopup="dialog"
+    uid=29_6 toolbar "Actions" orientation="horizontal"
+      uid=29_7 button "Undo — ⌘ Z"
+      uid=29_8 button "Redo — ⌘ ⇧ Z" disableable disabled
+      uid=29_9 button "Delete — ⌫" disableable disabled
+      uid=29_10 button "Duplicate — ⌘ D" disableable disabled
+      uid=29_11 button "Actions" haspopup="dialog"
+    uid=29_12 toolbar "Tools" orientation="horizontal"
+      uid=29_13 button "Select — V" pressed
+      uid=29_14 button "Hand — H"
+      uid=29_15 button "Draw — D"
+      uid=29_16 button "Eraser — E"
+      uid=29_17 button "Arrow — A"
+      uid=29_18 button "Text — T"
+      uid=29_19 button "Note — N"
+      uid=29_20 button "Media — ⌘ U"
+      uid=29_21 button "Rectangle — R"
+      uid=29_22 button "More" haspopup="dialog"
+    uid=29_23 button "Styles" haspopup="dialog"
+    uid=29_24 region "Notifications (F8)"
+      uid=29_25 list
+    uid=29_26 button "Get a license for production" description="The tldraw SDK requires a license key to work in production. You can get a free 100-day trial license at tldraw.dev/pricing."
+  uid=29_27 StaticText "Transcript"
+  uid=29_28 button "Close"
+  uid=29_29 StaticText "No activity yet"
+  uid=29_30 StaticText "Voice conversations and components will appear here"
+  uid=29_31 textbox "Type a message for the agent"
+  uid=29_32 button "Send" disableable disabled
+  uid=29_33 StaticText "Sends as “you” over LiveKit to the voice agent."
+  uid=29_34 StaticText "Use `/canvas …` to message the Canvas steward directly."
+  uid=29_35 StaticText "Connected"
+  uid=29_36 StaticText "canvas-d54861d6-8486-4038-b038-232706f65bd8"
+  uid=29_37 button "Disconnect"
+  uid=29_38 button "Copy Link"
+  uid=29_39 button "Open Next.js Dev Tools" haspopup="menu"

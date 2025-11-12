@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { AgentTaskQueue } from '@/lib/agents/shared/queue';
+import { runCanvasSteward } from '@/lib/agents/subagents/canvas-steward';
+import { broadcastAgentPrompt } from '@/lib/agents/shared/supabase-context';
+import { randomUUID } from 'crypto';
 
 const queue = new AgentTaskQueue();
+const QUEUE_DIRECT_FALLBACK_ENABLED = process.env.CANVAS_QUEUE_DIRECT_FALLBACK === 'true';
 
 export async function POST(req: NextRequest) {
   try {
@@ -39,15 +43,69 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Missing message for canvas.agent_prompt' }, { status: 400 });
     }
 
-    const enqueueResult = await queue.enqueueTask({
-      room: trimmedRoom,
-      task: normalizedTask,
-      params: normalizedParams,
-      requestId,
-      resourceKeys: [`room:${trimmedRoom}`],
-    });
+    try {
+      const enqueueResult = await queue.enqueueTask({
+        room: trimmedRoom,
+        task: normalizedTask,
+        params: normalizedParams,
+        requestId,
+        resourceKeys: [`room:${trimmedRoom}`],
+      });
+      if (normalizedTask === 'canvas.agent_prompt') {
+        try {
+          const rid = (requestId && String(requestId).trim()) || randomUUID();
+          await broadcastAgentPrompt({
+            room: trimmedRoom,
+            payload: {
+              message: String(normalizedParams.message || '').trim(),
+              requestId: rid,
+              bounds: normalizedParams.bounds,
+              selectionIds: normalizedParams.selectionIds,
+              metadata: normalizedParams.metadata ?? null,
+            },
+          });
+        } catch (e) {
+          console.warn('[Steward][runCanvas] broadcast agent prompt failed (post-enqueue)', e);
+        }
+      }
+      return NextResponse.json({ status: 'queued', task: enqueueResult }, { status: 202 });
+    } catch (error) {
+      // Graceful fallback: if Supabase is unavailable (e.g., Cloudflare 5xx), run immediately server-side
+      const msg = error instanceof Error ? error.message : String(error);
+      console.warn('[Steward][runCanvas] queue enqueue failed, falling back to direct run', msg);
 
-    return NextResponse.json({ status: 'queued', task: enqueueResult }, { status: 202 });
+      if (!QUEUE_DIRECT_FALLBACK_ENABLED) {
+        return NextResponse.json({ error: 'Queue unavailable' }, { status: 503 });
+      }
+
+      // 1) If it's an agent prompt, still broadcast the prompt for the client bridge
+      if (normalizedTask === 'canvas.agent_prompt') {
+        try {
+          const rid = (requestId && String(requestId).trim()) || randomUUID();
+          await broadcastAgentPrompt({
+            room: trimmedRoom,
+            payload: {
+              message: String(normalizedParams.message || '').trim(),
+              requestId: rid,
+              bounds: normalizedParams.bounds,
+              selectionIds: normalizedParams.selectionIds,
+              metadata: normalizedParams.metadata ?? null,
+            },
+          });
+        } catch (e) {
+          console.warn('[Steward][runCanvas] broadcast agent prompt failed in fallback', e);
+        }
+      }
+
+      // 2) Execute the canvas steward right away so the canvas updates even during queue outages
+      try {
+        await runCanvasSteward({ task: normalizedTask, params: normalizedParams });
+        return NextResponse.json({ status: 'executed_fallback' }, { status: 202 });
+      } catch (e) {
+        console.error('[Steward][runCanvas] fallback execution failed', e);
+        return NextResponse.json({ error: 'Dispatch failed' }, { status: 502 });
+      }
+    }
   } catch (error) {
     console.error('[Steward][runCanvas] error', error);
     return NextResponse.json({ error: 'Bad Request' }, { status: 400 });

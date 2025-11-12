@@ -49,6 +49,7 @@ next-env.d.ts
 logs
 *.log
 dev-debug.log
+.present/
 # Dependency directories
 node_modules/
 # Environment variables

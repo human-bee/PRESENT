@@ -115,20 +115,40 @@ class AiSdkProvider implements StreamingProvider {
 class FakeProvider implements StreamingProvider {
   name = 'debug/fake';
   async *stream(_prompt: string, _options?: { system?: string; tuning?: ModelTuning }): AsyncIterable<StreamChunk> {
-    // Emit a trivial action stream for smoke testing
-    const action = {
-      id: `a-${Date.now()}`,
-      name: 'think',
-      params: { text: 'planning canvas change (debug/fake provider)' },
+    const now = Date.now();
+    const rect = {
+      id: `rect-${now.toString(36)}`,
+      name: 'create_shape',
+      params: {
+        id: `rect-${now.toString(36)}`,
+        type: 'rectangle',
+        x: 0,
+        y: 0,
+        props: {
+          w: 280,
+          h: 180,
+          dash: 'dotted',
+          size: 'm',
+          color: 'red',
+          fill: 'none',
+        },
+      },
     };
-    yield { type: 'json', data: { actions: [action] } } as StreamChunk;
+    yield { type: 'json', data: { actions: [rect] } } as StreamChunk;
   }
 
   async streamStructured(_prompt: string, _options?: { system?: string; tuning?: ModelTuning }): Promise<StructuredStream> {
+    const now = Date.now();
     const action = {
-      id: `a-${Date.now()}`,
-      name: 'think',
-      params: { text: 'planning canvas change (debug/fake provider)' },
+      id: `rect-${now.toString(36)}`,
+      name: 'create_shape',
+      params: {
+        id: `rect-${now.toString(36)}`,
+        type: 'rectangle',
+        x: 0,
+        y: 0,
+        props: { w: 280, h: 180, dash: 'dotted', size: 'm', color: 'red', fill: 'none' },
+      },
     };
     async function* partial() {
       yield { actions: [action] };

@@ -22,6 +22,7 @@ import {
   useCanvasInteractions,
 } from './hooks';
 import { useTldrawBranding } from './hooks';
+import { BrandGridOverlay } from './BrandGridOverlay';
 
 // Dynamic imports for heavy tldraw components - only load when needed
 
@@ -110,8 +111,9 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
   const livekitCtx = React.useContext(CanvasLiveKitContext);
   const room = useRoomContext();
   const bus = React.useMemo(() => createLiveKitBus(room), [room]);
+  const snapshotTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const emitComponentSnapshot = React.useCallback(
-    (reason: string) => {
+    (reason: string, opts?: { force?: boolean }) => {
       if (!room || room.state !== 'connected') return;
       const currentRoom = livekitCtx?.roomName || room.name;
       if (!currentRoom) return;
@@ -144,13 +146,32 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
           props: clonedProps,
         };
       });
-      bus.send('component_snapshot', {
-        type: 'component_snapshot',
-        room: currentRoom,
-        components: componentsPayload,
-        reason,
-        timestamp: Date.now(),
-      });
+      const sendSnapshot = () => {
+        bus.send('component_snapshot', {
+          type: 'component_snapshot',
+          room: currentRoom,
+          components: componentsPayload,
+          reason,
+          timestamp: Date.now(),
+        });
+      };
+
+      if (opts?.force) {
+        if (snapshotTimerRef.current) {
+          clearTimeout(snapshotTimerRef.current);
+          snapshotTimerRef.current = null;
+        }
+        sendSnapshot();
+        return;
+      }
+
+      if (snapshotTimerRef.current) {
+        clearTimeout(snapshotTimerRef.current);
+      }
+      snapshotTimerRef.current = setTimeout(() => {
+        snapshotTimerRef.current = null;
+        sendSnapshot();
+      }, 150);
     },
     [bus, livekitCtx?.roomName, room],
   );
@@ -158,8 +179,14 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
   useEffect(() => {
     const handler = () => emitComponentSnapshot('component_store_update');
     window.addEventListener('present:component-store-updated', handler);
-    emitComponentSnapshot('initial_mount');
-    return () => window.removeEventListener('present:component-store-updated', handler);
+    emitComponentSnapshot('initial_mount', { force: true });
+    return () => {
+      window.removeEventListener('present:component-store-updated', handler);
+      if (snapshotTimerRef.current) {
+        clearTimeout(snapshotTimerRef.current);
+        snapshotTimerRef.current = null;
+      }
+    };
   }, [emitComponentSnapshot]);
 
   useEffect(() => {
@@ -169,7 +196,7 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
       if (targetRoom && currentRoom && targetRoom !== currentRoom) {
         return;
       }
-      emitComponentSnapshot('request');
+      emitComponentSnapshot('request', { force: true });
     });
     return off;
   }, [bus, emitComponentSnapshot, livekitCtx?.roomName, room?.name]);
@@ -198,29 +225,20 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
     red: '#FF5722', // deep orange 500
   } as const;
 
-  const canvasAgentThemeFlag =
-    typeof process === 'undefined'
-      ? 'true'
-      : process.env.NEXT_PUBLIC_CANVAS_AGENT_THEME_ENABLED ??
-        process.env.NEXT_PUBLIC_CANVAS_AGENT_CLIENT_ENABLED;
-  const canvasAgentThemeEnabled = canvasAgentThemeFlag === undefined ? true : canvasAgentThemeFlag === 'true';
-
   const branding = useTldrawBranding({
     defaultFont: 'mono',
     defaultSize: 'm',
     defaultDash: 'dotted',
     defaultColor: 'red',
     palette: BRAND_ORANGE_WHEEL as any,
-    paletteEnabled: canvasAgentThemeEnabled, // tied to the @canvas-agent toggle (env)
-    selectionCssVars: canvasAgentThemeEnabled
-      ? {
-          // Orange selection + hover highlights
-          '--tl-color-selection-fill': '#ff6a0033',
-          '--tl-color-selection-stroke': '#ff6a00',
-          '--tl-color-focus': '#ff6a00',
-          '--tl-color-selected': '#ff6a00',
-        }
-      : undefined,
+    paletteEnabled: true,
+    selectionCssVars: {
+      // Orange selection + hover highlights
+      '--tl-color-selection-fill': '#ff6a0033',
+      '--tl-color-selection-stroke': '#ff6a00',
+      '--tl-color-focus': '#ff6a00',
+      '--tl-color-selected': '#ff6a00',
+    },
   });
 
   const {
@@ -391,6 +409,8 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
         onDragOver={onDragOver}
         onDrop={onDrop}
       >
+        {/* Subtle brand grid overlay (8px base, orange every 32px) */}
+        <BrandGridOverlay editor={editor} />
         <TldrawWithCollaboration
           key={livekitCtx?.roomName || 'no-room'}
           onMount={(ed) => {

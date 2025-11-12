@@ -61,6 +61,7 @@ npm install
   CANVAS_STEWARD_MODEL=claude-haiku-4-5        # override the default model (falls back if provider unavailable)
   NEXT_PUBLIC_CANVAS_AGENT_CLIENT_ENABLED=false # legacy DOM TLDraw agent (leave false unless debugging an edge case; enabling also skips the server steward so the browser is the sole executor)
   NEXT_PUBLIC_CANVAS_AGENT_THEME_ENABLED=true   # keep TLDraw branding even when the client agent is disabled
+  CANVAS_QUEUE_DIRECT_FALLBACK=false            # set true to execute the steward immediately when queue inserts fail (may duplicate actions)
   CANVAS_STEWARD_DEBUG=false                   # set true to dump prompts/actions to the server logs
   ```
 

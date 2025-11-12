@@ -3,6 +3,8 @@ import { selectModel } from './models';
 import { buildPromptParts } from './context';
 import { sanitizeActions } from './sanitize';
 import { requestScreenshot, sendActionsEnvelope, sendChat, sendStatus, awaitAck } from './wire';
+import { broadcastToolCall } from '@/lib/agents/shared/supabase-context';
+import { ACTION_VERSION } from '../shared/types';
 import { OffsetManager, interpretBounds } from './offset';
 import { handleStructuredStreaming } from './streaming';
 import type { AgentAction } from '../shared/types';
@@ -11,36 +13,215 @@ import { SessionScheduler } from './scheduler';
 import { addTodo } from './todos';
 import { getCanvasShapeSummary } from '@/lib/agents/shared/supabase-context';
 import type { ScreenshotPayload } from '@/server/inboxes/screenshot';
-import * as ScreenshotInbox from '@/server/inboxes/screenshot';
 import { getModelTuning, resolvePreset, resolveFollowupDepth } from './model/presets';
 
 
 type RunArgs = { roomId: string; userMessage: string; model?: string; initialViewport?: { x: number; y: number; w: number; h: number } };
 
-const CANVAS_AGENT_SYSTEM_PROMPT = `You are a creative canvas agent with access to the TLDraw canvas.
+const DEFAULT_SCREENSHOT_TIMEOUT_MS = 3500;
+const MIN_SCREENSHOT_TIMEOUT_MS = 2500;
+let screenshotInboxPromise: Promise<typeof import('@/server/inboxes/screenshot')> | null = null;
 
-You can see the current canvas state including shapes, their positions, sizes, colors, and the user's viewport.
-You receive user requests and respond by emitting TLDraw-native actions to create, modify, or delete shapes.
+function loadScreenshotInbox() {
+  if (!screenshotInboxPromise) {
+    screenshotInboxPromise = import('@/server/inboxes/screenshot');
+  }
+  return screenshotInboxPromise;
+}
 
-Available actions:
-- create_shape: Create rectangles, ellipses, arrows, notes, text, images, and more
-- update_shape: Modify existing shapes (position, size, color, text, props)
-- delete_shape: Remove shapes by ID
-- draw_pen: Draw freehand pen strokes
-- move/resize/rotate: Transform shapes
-- group/ungroup: Organize shapes into groups
-- align/distribute/stack/reorder: Arrange multiple shapes
-- think: Share your reasoning with the user (appears in chat)
-- todo: Create a persistent task for later follow-up
-- add_detail: Request a follow-up turn to add more detail to specific shapes
-- set_viewport: Pan/zoom the canvas to focus on specific content
+const coerceScreenshotTimeout = (value?: string): number => {
+  const parsed = value ? Number.parseInt(value, 10) : DEFAULT_SCREENSHOT_TIMEOUT_MS;
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return DEFAULT_SCREENSHOT_TIMEOUT_MS;
+  }
+  return Math.max(parsed, MIN_SCREENSHOT_TIMEOUT_MS);
+};
 
-Always respond with JSON containing an "actions" array. Each action must have:
-- id: unique identifier (string)
-- name: action name from the list above
-- params: object with action-specific parameters
+const CANVAS_AGENT_SYSTEM_PROMPT = `You are the Canvas Agent for a TLDraw-based board with brand styling.
 
-Be creative, precise, and considerate of existing canvas content. When in doubt, make reasonable assumptions.`;
+Goal
+- Execute drawing, editing, styling, and layout commands by emitting TLDraw-native actions.
+- Prefer doing over narrating. If a placement detail is missing, make a reasonable assumption and act.
+
+Available actions
+- create_shape · update_shape · delete_shape · draw_pen
+- move · resize · rotate · group · ungroup
+- align · distribute · stack · reorder · set_viewport
+- think · todo · add_detail (sparingly)
+
+Action format
+- Always return JSON with an "actions" array. Each action has { id, name, params }.
+
+Brand defaults (for next created shapes)
+- font: mono, size: m, dash: dotted, color: red (mapped to deep orange).
+- Selection & hover colors are orange (handled by CSS); no action required.
+
+Style macros (interpret user phrases and apply via update_shape props)
+- Macros: Hero, Callout, Quiet, Wire, Label.
+- Mapping to TLDraw props (color keys follow TLDraw's palette names):
+  • Hero   → { font: 'mono', size: 'xl', dash: 'solid',  color: 'red',   fill: 'none' }
+  • Callout→ { font: 'mono', size: 'm',  dash: 'dotted', color: 'yellow',fill: 'semi' }
+  • Quiet  → { font: 'sans', size: 's',  dash: 'solid',  color: 'grey',  fill: 'none' }
+  • Wire   → { font: 'mono', size: 'm',  dash: 'solid',  color: 'grey',  fill: 'none' }
+  • Label  → { font: 'mono', size: 's',  dash: 'solid',  color: 'red',   fill: 'solid' }
+
+Macro behavior
+- If shapes are selected, apply macro styles to the selection with a single update_shape per shape (coalesce props).
+- If nothing is selected and the user invokes a macro (e.g. “create a Hero note”), create_shape with those props.
+- Synonyms: "quiet" (Quiet), "wireframe"/"wire" (Wire), "tag" (Label), "callout" (Callout), "headline/hero" (Hero).
+
+Layout & alignment
+- When asked to align/stack/distribute, use 8px base spacing and prefer 32px rhythm offsets.
+
+General rules
+- Be creative but minimal: fewer, well-formed actions beat many small mutations.
+- Keep color names within TLDraw keys (red/yellow/blue/green/violet/grey/black).
+- For text, set { props: { text } } and convert to richText if needed later.
+`;
+
+const TL_COLOR_KEYS = new Set([
+  'black',
+  'grey',
+  'light-violet',
+  'violet',
+  'blue',
+  'light-blue',
+  'yellow',
+  'orange',
+  'green',
+  'light-green',
+  'light-red',
+  'red',
+  'white',
+]);
+
+const BRAND_COLOR_MAP: Record<string, string> = {
+  'brutalist-orange': 'orange',
+  'brutal-orange': 'orange',
+  'burnt-orange': 'orange',
+  'burntorange': 'orange',
+  'deep-orange': 'red',
+  'deeporange': 'red',
+  'charcoal': 'black',
+  'ink': 'black',
+  'graphite': 'grey',
+  'smoke': 'grey',
+  'ash': 'grey',
+  'accent-blue': 'blue',
+  'accent-green': 'green',
+  'accent-violet': 'violet',
+  'citrus': 'yellow',
+};
+
+const TL_FILL_KEYS = new Set(['none', 'solid', 'semi', 'pattern']);
+const FILL_SYNONYMS: Record<string, string> = {
+  transparent: 'none',
+  hollow: 'none',
+  outline: 'none',
+  filled: 'solid',
+  solid: 'solid',
+  semi: 'semi',
+  'semi-solid': 'semi',
+  pattern: 'pattern',
+};
+
+const TL_DASH_KEYS = new Set(['solid', 'dashed', 'dotted']);
+const DASH_SYNONYMS: Record<string, string> = {
+  dash: 'dashed',
+  dashed: 'dashed',
+  dot: 'dotted',
+  dotted: 'dotted',
+  solid: 'solid',
+  outline: 'solid',
+};
+
+const TL_FONT_KEYS = new Set(['mono', 'sans', 'serif']);
+const FONT_SYNONYMS: Record<string, string> = {
+  monospace: 'mono',
+  monospaced: 'mono',
+  mono: 'mono',
+  'sans-serif': 'sans',
+  sansserif: 'sans',
+  sans: 'sans',
+  serif: 'serif',
+};
+
+const TL_SIZE_KEYS = new Set(['xs', 's', 'm', 'l', 'xl']);
+const SIZE_SYNONYMS: Record<string, string> = {
+  xsmall: 'xs',
+  xs: 'xs',
+  small: 's',
+  s: 's',
+  medium: 'm',
+  md: 'm',
+  m: 'm',
+  large: 'l',
+  lg: 'l',
+  l: 'l',
+  xl: 'xl',
+  'x-large': 'xl',
+  headline: 'xl',
+};
+
+const normalizeEnumValue = (value: unknown, allowed: Set<string>, aliases: Record<string, string>): string | undefined => {
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (!normalized) return undefined;
+    if (allowed.has(normalized)) return normalized;
+    if (aliases[normalized]) return aliases[normalized];
+  }
+  return undefined;
+};
+
+const resolveColorName = (value: unknown): string | undefined => {
+  if (typeof value !== 'string') return undefined;
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) return undefined;
+  if (TL_COLOR_KEYS.has(normalized)) return normalized;
+  if (BRAND_COLOR_MAP[normalized]) return BRAND_COLOR_MAP[normalized];
+  if (normalized.startsWith('burnt-') || normalized.startsWith('burntorange')) return 'orange';
+  if (normalized.startsWith('deep-')) return 'red';
+  return undefined;
+};
+
+const stripUnsupportedProps = (props: Record<string, unknown>, shapeType: string) => {
+  if (shapeType === 'text') {
+    delete props.dash;
+    delete props.fill;
+    delete props.strokeWidth;
+  }
+  return props;
+};
+
+const sanitizeProps = (rawProps: Record<string, unknown>, shapeType: string) => {
+  const next: Record<string, unknown> = { ...rawProps };
+
+  const color = resolveColorName(next.color ?? next.stroke ?? next.strokeColor);
+  if (color) next.color = color;
+  else delete next.color;
+
+  const fill = normalizeEnumValue(next.fill, TL_FILL_KEYS, FILL_SYNONYMS);
+  if (fill) next.fill = fill;
+  else delete next.fill;
+
+  const dash = normalizeEnumValue(next.dash ?? next.strokeStyle, TL_DASH_KEYS, DASH_SYNONYMS);
+  if (dash) next.dash = dash;
+  else delete next.dash;
+
+  const font = normalizeEnumValue(next.font, TL_FONT_KEYS, FONT_SYNONYMS);
+  if (font) next.font = font;
+  else delete next.font;
+
+  const size = normalizeEnumValue(next.size, TL_SIZE_KEYS, SIZE_SYNONYMS);
+  if (size) next.size = size;
+  else delete next.size;
+
+  if (typeof next.text === 'string' && next.text.trim().length === 0) {
+    delete next.text;
+  }
+
+  return stripUnsupportedProps(next, shapeType);
+};
 
 type SessionMetrics = {
   sessionId: string;
@@ -81,7 +262,7 @@ function getEnvConfig() {
   return {
     modelName: env.CANVAS_STEWARD_MODEL,
     debug: env.CANVAS_STEWARD_DEBUG === 'true',
-    screenshotTimeoutMs: Number(env.CANVAS_AGENT_SCREENSHOT_TIMEOUT_MS ?? 300),
+    screenshotTimeoutMs: coerceScreenshotTimeout(env.CANVAS_AGENT_SCREENSHOT_TIMEOUT_MS),
     ttfbSloMs: Number(env.CANVAS_AGENT_TTFB_SLO_MS ?? 200),
     clientEnabled: env.NEXT_PUBLIC_CANVAS_AGENT_CLIENT_ENABLED === 'true',
     maxFollowups: resolveFollowupDepth(env, preset),
@@ -138,6 +319,7 @@ export async function runCanvasAgent(args: RunArgs) {
   const cfg = getEnvConfig();
   const scheduler = new SessionScheduler({ maxDepth: cfg.maxFollowups });
   const offset = new OffsetManager();
+  const screenshotInbox = await loadScreenshotInbox();
 
   if (args.initialViewport) {
     const { x, y, w, h } = args.initialViewport;
@@ -210,7 +392,7 @@ export async function runCanvasAgent(args: RunArgs) {
 
       const timeoutAt = metrics.screenshotRequestedAt + cfg.screenshotTimeoutMs;
       while (Date.now() < timeoutAt) {
-        const maybeScreenshot = ScreenshotInbox.takeScreenshot?.(sessionId, screenshotRequestId) ?? null;
+        const maybeScreenshot = screenshotInbox.takeScreenshot?.(sessionId, screenshotRequestId) ?? null;
         if (maybeScreenshot) {
           latestScreenshot = maybeScreenshot;
           metrics.screenshotReceivedAt = Date.now();
@@ -305,8 +487,22 @@ export async function runCanvasAgent(args: RunArgs) {
     logMetrics(metrics, 'context');
 
     await sendStatus(roomId, sessionId, 'calling_model');
-    const provider = selectModel(model || cfg.modelName);
+    const requestedModel = model || cfg.modelName;
+    const provider = selectModel(requestedModel);
     const tuning = getModelTuning(cfg.preset);
+    if (cfg.debug) {
+      try {
+        console.log('[CanvasAgent:Model]', JSON.stringify({
+          sessionId,
+          roomId,
+          requestedModel,
+          provider: provider.name,
+          streamingCapable: typeof provider.streamStructured === 'function',
+          preset: cfg.preset,
+          tuning,
+        }));
+      } catch {}
+    }
     let seq = 0;
     const sessionCreatedIds = new Set<string>();
     metrics.modelCalledAt = Date.now();
@@ -348,17 +544,158 @@ export async function runCanvasAgent(args: RunArgs) {
       if (accepted) metrics.followupCount++;
     };
 
+const TL_SHAPE_TYPES = new Set([
+  'note',
+  'text',
+  'rectangle',
+  'ellipse',
+  'diamond',
+  'line',
+  'arrow',
+  'draw',
+  'highlight',
+  'frame',
+  'group',
+  'star',
+  'cloud',
+]);
+
+const SHAPE_TYPE_SYNONYMS: Record<string, string> = {
+  box: 'note',
+  sticky: 'note',
+  sticky_note: 'note',
+  card: 'note',
+  hero: 'text',
+  headline: 'text',
+  caption: 'text',
+  rect: 'rectangle',
+  square: 'rectangle',
+  circle: 'ellipse',
+  oval: 'ellipse',
+  connector: 'arrow',
+  arrowhead: 'arrow',
+  wire: 'line',
+};
+
+const resolveShapeType = (value?: string): string | undefined => {
+  if (typeof value !== 'string') return undefined;
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) return undefined;
+  if (TL_SHAPE_TYPES.has(normalized)) return normalized;
+  if (SHAPE_TYPE_SYNONYMS[normalized]) return SHAPE_TYPE_SYNONYMS[normalized];
+  return undefined;
+};
+
+    const coerceNumeric = (value: unknown): number | undefined => {
+      if (typeof value === 'number' && Number.isFinite(value)) return value;
+      if (typeof value === 'string') {
+        const parsed = Number.parseFloat(value);
+        if (Number.isFinite(parsed)) return parsed;
+      }
+      return undefined;
+    };
+
+    const normalizeRawAction = (raw: unknown) => {
+      if (!raw || typeof raw !== 'object') return raw;
+      const action = raw as Record<string, any>;
+      if (action.name !== 'create_shape') return action;
+      const params = typeof action.params === 'object' && action.params !== null ? { ...(action.params as Record<string, any>) } : {};
+      const kindValue = typeof params.kind === 'string' ? params.kind.trim().toLowerCase() : undefined;
+      if (!params.type && kindValue) {
+        params.type = SHAPE_TYPE_SYNONYMS[kindValue] || kindValue;
+      }
+      delete params.kind;
+
+      if (typeof params.type === 'string') {
+        const resolvedType = resolveShapeType(params.type);
+        if (resolvedType) {
+          params.type = resolvedType;
+        } else {
+          return null; // Skip partial/unknown types until the model finishes emitting them
+        }
+      } else {
+        return null;
+      }
+
+      const props = typeof params.props === 'object' && params.props !== null ? { ...(params.props as Record<string, any>) } : {};
+      const moveToProps = (source: string, target?: string) => {
+        if (!(source in params)) return;
+        const value = params[source];
+        if (value === undefined || value === null) {
+          delete params[source];
+          return;
+        }
+        if (typeof value === 'string' && value.trim().length === 0) {
+          delete params[source];
+          return;
+        }
+        props[target ?? source] = value;
+        delete params[source];
+      };
+
+      const moveNumericToProps = (source: string, target?: string) => {
+        const coerced = coerceNumeric(params[source]);
+        if (coerced === undefined) {
+          delete params[source];
+          return;
+        }
+        props[target ?? source] = coerced;
+        delete params[source];
+      };
+
+      moveNumericToProps('w');
+      moveNumericToProps('width', 'w');
+      moveNumericToProps('h');
+      moveNumericToProps('height', 'h');
+      moveNumericToProps('rx');
+      moveNumericToProps('ry');
+      moveToProps('text');
+      moveToProps('label', 'text');
+      moveToProps('font');
+      moveToProps('size');
+      moveToProps('color');
+      moveToProps('fill');
+      moveToProps('dash');
+
+      if (Object.keys(props).length > 0) {
+        const sanitized = sanitizeProps(props, params.type);
+        if (Object.keys(sanitized).length > 0) {
+          params.props = sanitized;
+        } else {
+          delete params.props;
+        }
+      } else {
+        delete params.props;
+      }
+
+      return { ...action, params };
+    };
+
     const processActions = async (
       rawActions: unknown,
       seqNumber: number,
       partial: boolean,
       enqueueDetail: (params: Record<string, unknown>) => void,
     ) => {
+      if (cfg.debug) {
+        try {
+          console.log('[CanvasAgent:ActionsChunk]', JSON.stringify({
+            sessionId,
+            roomId,
+            seq: seqNumber,
+            partial,
+            rawCount: Array.isArray(rawActions) ? rawActions.length : 0,
+            raw: rawActions,
+          }));
+        } catch {}
+      }
       if (!Array.isArray(rawActions) || rawActions.length === 0) return 0;
       const parsed: AgentAction[] = [];
       for (const a of rawActions) {
+        const normalized = normalizeRawAction(a);
+        if (!normalized) continue;
         try {
-          parsed.push(parseAction({ id: String((a as any)?.id || `${Date.now()}`), name: (a as any)?.name, params: (a as any)?.params }));
+          parsed.push(parseAction({ id: String((normalized as any)?.id || `${Date.now()}`), name: (normalized as any)?.name, params: (normalized as any)?.params }));
         } catch {}
       }
       if (parsed.length === 0) return 0;
@@ -372,6 +709,18 @@ export async function runCanvasAgent(args: RunArgs) {
         metrics.firstActionAt = Date.now();
         metrics.ttfb = metrics.firstActionAt - metrics.startedAt;
         logMetrics(metrics, 'ttfb');
+      }
+
+      if (cfg.debug) {
+        try {
+          console.log('[CanvasAgent:ActionsRaw]', JSON.stringify({
+            sessionId,
+            roomId,
+            seq: seqNumber,
+            partial,
+            actions: clean,
+          }));
+        } catch {}
       }
 
       const worldActions = applyOffsetToActions(clean);
@@ -412,13 +761,45 @@ export async function runCanvasAgent(args: RunArgs) {
     const streamingEnabled = typeof provider.streamStructured === 'function' && process.env.CANVAS_AGENT_STREAMING !== 'false';
     const enqueueDetail = makeDetailEnqueuer(userMessage, 0);
 
+    if (cfg.debug) {
+      try {
+        console.log('[CanvasAgent:StreamingMode]', JSON.stringify({
+          sessionId,
+          roomId,
+          streamingEnabled,
+          provider: provider.name,
+        }));
+      } catch {}
+    }
+
     if (streamingEnabled) {
       const streamStartedAt = Date.now();
       let firstPartialLogged = false;
+      if (cfg.debug) {
+        try {
+          console.log('[CanvasAgent:ModelCall]', JSON.stringify({
+            sessionId,
+            roomId,
+            provider: provider.name,
+            mode: 'structured',
+          }));
+        } catch {}
+      }
       const structured = await provider.streamStructured?.(prompt, {
         system: CANVAS_AGENT_SYSTEM_PROMPT,
         tuning,
       });
+      if (!structured && cfg.debug) {
+        try {
+          console.log('[CanvasAgent:ModelCall]', JSON.stringify({
+            sessionId,
+            roomId,
+            provider: provider.name,
+            mode: 'structured',
+            result: 'no-structured-stream',
+          }));
+        } catch {}
+      }
       if (structured) {
         let rawProcessed = 0;
         await handleStructuredStreaming(
@@ -453,6 +834,16 @@ export async function runCanvasAgent(args: RunArgs) {
     } else {
       const streamStartedAt = Date.now();
       let firstPartialLogged = false;
+      if (cfg.debug) {
+        try {
+          console.log('[CanvasAgent:ModelCall]', JSON.stringify({
+            sessionId,
+            roomId,
+            provider: provider.name,
+            mode: 'fallback-stream',
+          }));
+        } catch {}
+      }
       for await (const chunk of provider.stream(prompt, { system: CANVAS_AGENT_SYSTEM_PROMPT, tuning })) {
         if (chunk.type !== 'json') continue;
         const actionsRaw = (chunk.data as any)?.actions;
@@ -504,7 +895,7 @@ export async function runCanvasAgent(args: RunArgs) {
           });
           const timeoutAt = metrics.screenshotRequestedAt + cfg.screenshotTimeoutMs;
           while (Date.now() < timeoutAt) {
-            const maybeScreenshot = ScreenshotInbox.takeScreenshot?.(sessionId, followRequestId) ?? null;
+            const maybeScreenshot = screenshotInbox.takeScreenshot?.(sessionId, followRequestId) ?? null;
             if (maybeScreenshot) {
               followScreenshot = maybeScreenshot;
               metrics.screenshotReceivedAt = Date.now();
@@ -611,6 +1002,65 @@ export async function runCanvasAgent(args: RunArgs) {
         }
       }
       next = scheduler.dequeue(sessionId);
+    }
+
+    // Guarantee at least one visible action for simple create prompts if the model emitted nothing.
+    if (metrics.actionCount === 0) {
+      const fallbackId = `rect-${Date.now().toString(36)}`;
+      const fallback = [
+        {
+          id: fallbackId,
+          name: 'create_shape' as const,
+          params: {
+            id: fallbackId,
+            type: 'rectangle',
+            x: 0,
+            y: 0,
+            props: { w: 280, h: 180, dash: 'dotted', size: 'm', color: 'red', fill: 'none', font: 'mono' },
+          },
+        },
+        {
+          id: `vp-${Date.now().toString(36)}`,
+          name: 'set_viewport' as const,
+          params: { bounds: { x: -140, y: -90, w: 560, h: 360 } },
+        },
+      ];
+      const currentSeq = seq++;
+      let envelopeDispatched = false;
+      try {
+        await sendActionsEnvelope(roomId, sessionId, currentSeq, fallback);
+        envelopeDispatched = true;
+        const ack = await awaitAck({ sessionId, seq: currentSeq, deadlineMs: 1200 });
+        if (!ack) {
+          await sendActionsEnvelope(roomId, sessionId, currentSeq, fallback);
+        }
+      } catch (error) {
+        console.warn('[CanvasAgent] fallback envelope send failed', {
+          roomId,
+          sessionId,
+          seq: currentSeq,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+      metrics.actionCount += fallback.length;
+      // Also broadcast as a tool_call so clients that don’t listen for agent:action still apply it (or when LiveKit send fails).
+      try {
+        await broadcastToolCall({
+          room: roomId,
+          tool: 'tldraw_envelope',
+          params: {
+            envelope: { v: ACTION_VERSION, sessionId, seq: currentSeq, actions: fallback, ts: Date.now() },
+            source: envelopeDispatched ? 'livekit' : 'broadcast-only',
+          },
+        });
+      } catch (error) {
+        console.warn('[CanvasAgent] fallback envelope broadcast failed', {
+          roomId,
+          sessionId,
+          seq: currentSeq,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
     }
     await sendStatus(roomId, sessionId, 'done');
 

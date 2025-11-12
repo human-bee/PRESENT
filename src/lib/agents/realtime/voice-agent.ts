@@ -15,8 +15,9 @@ import { queryCapabilities, defaultCapabilities } from '@/lib/agents/capabilitie
 import { deriveComponentIntent } from '@/lib/agents/shared/deterministic-ids';
 import { isExplicitFactCheckRequest, isStartDebate } from '@/lib/agents/debate-judge';
 import { jsonObjectSchema, type JsonObject } from '@/lib/utils/json-schema';
-import { RoomEvent, RemoteTrackPublication, Track } from 'livekit-client';
+import { ConnectionState, RoomEvent, RemoteTrackPublication, Track } from 'livekit-client';
 import { createDefaultScorecardState } from '@/lib/agents/debate-scorecard-schema';
+import { createLiveKitBus } from '@/lib/livekit/livekit-bus';
 
 const RATE_LIMIT_HEADER_KEYS = [
   'retry-after',
@@ -120,6 +121,7 @@ export default defineAgent({
       throw error;
     }
     console.log('[VoiceAgent] Connected to room:', job.room.name);
+    const liveKitBus = createLiveKitBus(job.room);
 
     const coerceBooleanFromEnv = (value?: string | null) => {
       if (!value) return undefined;
@@ -542,6 +544,14 @@ Your only output is function calls. Never use plain text unless absolutely neces
       }
     };
 
+    const cleanupComponentSnapshotListener = liveKitBus.on('component_snapshot', (message: unknown) => {
+      try {
+        applyComponentSnapshotMessage(message);
+      } catch (error) {
+        console.warn('[VoiceAgent] failed to apply component_snapshot via bus', error);
+      }
+    });
+
     requestComponentSnapshot();
 
     const shouldSkipDebatePrompt = (prompt: string) => {
@@ -707,7 +717,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
     };
 
     const flushPendingToolCalls = async () => {
-      if (!job.room.isConnected) return;
+      if (job.room.state !== ConnectionState.Connected) return;
       while (pendingToolCalls.length > 0) {
         const next = pendingToolCalls.shift();
         if (!next) continue;
@@ -787,6 +797,9 @@ Your only output is function calls. Never use plain text unless absolutely neces
       return params;
     };
 
+    const recentCanvasDispatches = new Map<string, { ts: number; requestId?: string }>();
+    const CANVAS_DISPATCH_SUPPRESS_MS = 3000;
+
     const sendToolCall = async (tool: string, params: JsonObject, options: { reliable?: boolean } = {}) => {
       const reliable =
         options.reliable !== undefined
@@ -796,6 +809,44 @@ Your only output is function calls. Never use plain text unless absolutely neces
             : true;
       ensureToolCallListeners();
       const normalizedParams = normalizeOutgoingParams(tool, params);
+
+      if (tool === 'dispatch_to_conductor') {
+        const task = typeof (normalizedParams as any)?.task === 'string' ? String((normalizedParams as any).task).trim() : '';
+        if (task === 'canvas.agent_prompt') {
+          const canvasParams = ((normalizedParams as any)?.params ?? {}) as Record<string, unknown>;
+          const roomName = typeof canvasParams.room === 'string' && canvasParams.room.trim()
+            ? canvasParams.room.trim()
+            : job.room?.name || roomKey() || 'room';
+          const message = typeof canvasParams.message === 'string' ? canvasParams.message.trim() : '';
+          const requestId = typeof canvasParams.requestId === 'string' ? canvasParams.requestId.trim() : undefined;
+          const key = `${roomName}::${message}`;
+          const existing = recentCanvasDispatches.get(key);
+          const nowTs = Date.now();
+          if (
+            message &&
+            existing &&
+            nowTs - existing.ts < CANVAS_DISPATCH_SUPPRESS_MS &&
+            (existing.requestId === undefined || existing.requestId === requestId)
+          ) {
+            console.info('[VoiceAgent] suppressing duplicate canvas.agent_prompt dispatch', {
+              room: roomName,
+              message,
+              requestId,
+            });
+            return;
+          }
+          recentCanvasDispatches.set(key, { ts: nowTs, requestId });
+          // prune stale entries occasionally
+          if (recentCanvasDispatches.size > 20) {
+            for (const [mapKey, entry] of recentCanvasDispatches) {
+              if (nowTs - entry.ts > CANVAS_DISPATCH_SUPPRESS_MS) {
+                recentCanvasDispatches.delete(mapKey);
+              }
+            }
+          }
+        }
+      }
+
       const entry = { event: buildToolEvent(tool, normalizedParams), reliable };
       if (!job.room.localParticipant) {
         pendingToolCalls.push(entry);
@@ -2512,11 +2563,6 @@ Your only output is function calls. Never use plain text unless absolutely neces
         message = JSON.parse(new TextDecoder().decode(payload));
       } catch (error) {
         logRealtimeError('failed to parse data payload', error);
-        return;
-      }
-
-      if (topic === 'component_snapshot') {
-        applyComponentSnapshotMessage(message);
         return;
       }
 

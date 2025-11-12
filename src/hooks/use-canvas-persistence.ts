@@ -44,7 +44,7 @@ export function useCanvasPersistence(editor: Editor | null, enabled: boolean = t
             .from('canvases')
             .select('*')
             .eq('id', canvasIdParam)
-            .single();
+            .maybeSingle();
 
           if (error) throw error;
 
@@ -104,6 +104,8 @@ export function useCanvasPersistence(editor: Editor | null, enabled: boolean = t
                 }),
               );
             }, 100); // Small delay to ensure editor is fully loaded
+          } else {
+            setCanWrite(false);
           }
         } catch (error) {
           console.warn(

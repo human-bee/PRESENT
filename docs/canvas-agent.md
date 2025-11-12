@@ -101,6 +101,16 @@ Validates and sanitizes model outputs:
 - Generate agent shape IDs (`ag:{nanoid}`)
 - Reorder dependent actions (create before update)
 
+### Brand palette + TLDraw colors
+
+- Models are allowed to mention either the TLDraw palette (`red`, `orange`, `blue`, …) or branded names (`brutalist-orange`, `burnt orange`, `charcoal`).
+- `runner.ts` normalizes every streamed action before TLDraw sees it:
+  - Partial strings (e.g., `"r"`, `"yel"`) are dropped until the model emits a valid color name, preventing validation crashes.
+  - Brand aliases are mapped to the closest TLDraw key (brutalist/burnt orange → `orange`, deep orange → `red`, charcoal/ink → `black`, etc.).
+  - Dash, fill, font, and size props are also coerced to TLDraw’s enums, and blanks are removed.
+  - Shape kinds (`box`, `sticky`, `headline`, …) are mapped to TLDraw shape types, and any action with an unknown/partial `type` (e.g., `"r"`) is ignored until the model finishes spelling it out. This keeps TLDraw from throwing “No shape util found for type ‘r’”.
+- Result: the agent prefers our brutalist palette but still has the full TLDraw color wheel available when a request requires it.
+
 ### Scheduler & Todos (`src/lib/agents/canvas-agent/server/scheduler.ts`, `todos.ts`)
 
 Task queue and todo management:
@@ -228,6 +238,10 @@ All actions follow the TLDraw Agent Starter Kit naming:
 
 ## Configuration
 
+> Archived client agent
+>
+> The TLDraw client agent is archived. Leave `NEXT_PUBLIC_CANVAS_AGENT_CLIENT_ENABLED=false` in all environments. The unified server steward is the single source of truth; enabling the client agent will bypass the server steward and can cause divergent behavior.
+
 Environment variables (see `example.env.local`):
 
 ```bash
@@ -235,16 +249,17 @@ CANVAS_AGENT_UNIFIED=true
 CANVAS_STEWARD_MODEL=debug/fake
 # Or use a real provider: anthropic:claude-3-5-sonnet-20241022
 CANVAS_STEWARD_DEBUG=false
-CANVAS_AGENT_SCREENSHOT_TIMEOUT_MS=300
+CANVAS_AGENT_SCREENSHOT_TIMEOUT_MS=3500
 CANVAS_AGENT_TTFB_SLO_MS=200
 NEXT_PUBLIC_CANVAS_AGENT_CLIENT_ENABLED=false  # legacy client agent (archived, leave false unless forced fallback)
 NEXT_PUBLIC_CANVAS_AGENT_THEME_ENABLED=true
+CANVAS_QUEUE_DIRECT_FALLBACK=false
 CANVAS_AGENT_MAX_FOLLOWUPS=3
 # Upper bound for serialized TLDraw shape state appended to prompts (bytes)
 CANVAS_AGENT_SHAPE_STATE_LIMIT=4096
 ```
 
-> The server-side canvas steward is the primary execution path. Setting `NEXT_PUBLIC_CANVAS_AGENT_CLIENT_ENABLED=true` is a last-resort debug switch that also disables the server steward, so do not flip this flag unless absolutely necessary.
+> The server-side canvas steward is the only supported execution path. Setting `NEXT_PUBLIC_CANVAS_AGENT_CLIENT_ENABLED=true` is a last-resort debug switch that also disables the server steward; do not flip this flag unless absolutely necessary.
 
 ## Service Level Objectives (SLOs)
 
@@ -365,7 +380,7 @@ Returns `{ ok: true }` on success.
 
 **Screenshot timeout**
 
-- Increase `CANVAS_AGENT_SCREENSHOT_TIMEOUT_MS`
+- Increase `CANVAS_AGENT_SCREENSHOT_TIMEOUT_MS` (minimum enforced: 2500 ms)
 - Check network latency
 - Verify host election (only host responds to screenshot requests)
 

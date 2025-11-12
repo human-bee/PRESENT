@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useRef } from 'react'
 import * as TL from 'tldraw'
 import type { Editor } from 'tldraw'
+import type { PresetName } from '../../tldraw/brand-presets'
+import { BRAND_PRESETS } from '../../tldraw/brand-presets'
 
 /**
  * TLDraw style presets you can choose from out of the box:
@@ -147,15 +149,22 @@ export function useTldrawBranding(user?: Partial<TldrawBrandingOptions>) {
     }
   }, [opts.palette])
 
-  // Optionally apply CSS variable tweaks globally (selection / hover colors, etc.)
+  // Optionally apply CSS variable tweaks directly via a lightweight style tag scoped to TLDraw containers.
   useEffect(() => {
     if (!opts.selectionCssVars || cssApplied.current) return
-    const el = typeof document !== 'undefined' ? document.documentElement : undefined
-    if (!el) return
-    for (const [k, v] of Object.entries(opts.selectionCssVars)) {
-      if (v) el.style.setProperty(k, v)
-    }
+    if (typeof document === 'undefined') return
+    const entries = Object.entries(opts.selectionCssVars).filter(([, value]) => Boolean(value))
+    if (entries.length === 0) return
+    const rules = entries.map(([key, value]) => `${key}: ${value};`).join('\n')
+    const style = document.createElement('style')
+    style.setAttribute('data-present-canvas-branding', 'selection-vars')
+    style.textContent = `.tl-container {\n${rules}\n}`
+    document.head.appendChild(style)
     cssApplied.current = true
+    return () => {
+      cssApplied.current = false
+      style.remove()
+    }
   }, [opts.selectionCssVars])
 
   function onMount(editor: Editor) {
@@ -169,5 +178,33 @@ export function useTldrawBranding(user?: Partial<TldrawBrandingOptions>) {
     }
   }
 
-  return { onMount }
+  function applyPreset(editor: Editor | null | undefined, name: PresetName, preferSelected = true) {
+    if (!editor) return
+    const preset = BRAND_PRESETS[name]
+    if (!preset) return
+    const apply = (key: any, value: any, target: 'selected' | 'next') => {
+      try {
+        if (target === 'selected') editor.setStyleForSelectedShapes(key, value)
+        else editor.setStyleForNextShapes(key, value)
+      } catch {}
+    }
+    const hasSelection = (() => {
+      try {
+        return (editor as any).getSelectedShapeIds?.().length > 0
+      } catch {
+        return false
+      }
+    })()
+    const target: 'selected' | 'next' = preferSelected && hasSelection ? 'selected' : 'next'
+
+    const S = TL as any
+    if (preset.font) apply(S.DefaultFontStyle, preset.font, target)
+    if (preset.size) apply(S.DefaultSizeStyle, preset.size, target)
+    if (preset.dash) apply(S.DefaultDashStyle, preset.dash, target)
+    if (preset.color) apply(S.DefaultColorStyle, preset.color, target)
+    if (preset.fill) apply(S.DefaultFillStyle, preset.fill, target)
+    // Opacity is not a TL style token; skip unless a util exists in your build
+  }
+
+  return { onMount, applyPreset }
 }

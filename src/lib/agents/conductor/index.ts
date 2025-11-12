@@ -1,6 +1,8 @@
 import { Agent, run } from '@openai/agents';
 import { randomUUID } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
+import { join } from 'node:path';
+import { config as dotenvConfig } from 'dotenv';
 import { z } from 'zod';
 import { jsonObjectSchema, type JsonObject } from '@/lib/utils/json-schema';
 import {
@@ -16,6 +18,8 @@ import { runDebateScorecardSteward, seedScorecardState } from '@/lib/agents/deba
 import { getDebateScorecard, commitDebateScorecard } from '@/lib/agents/shared/supabase-context';
 import type { DebateScorecardState, Claim } from '@/lib/agents/debate-scorecard-schema';
 import { runSearchSteward } from '@/lib/agents/subagents/search-steward';
+
+dotenvConfig({ path: join(process.cwd(), '.env.local') });
 
 // Thin router: receives dispatch_to_conductor and hands off to stewards
 const TASK_LEASE_TTL_MS = Number(process.env.TASK_LEASE_TTL_MS ?? 15_000);
@@ -387,7 +391,6 @@ async function executeTask(taskName: string, params: JsonObject) {
   if (taskName === 'canvas.agent_prompt') {
     const promptResult = await handleCanvasAgentPrompt(params);
     const stewardParams: JsonObject = {
-      ...params,
       room: promptResult.room,
       message: promptResult.payload.message,
       requestId: promptResult.payload.requestId,

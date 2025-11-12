@@ -1,13 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Room } from 'livekit-client';
+import type { Editor } from '@tldraw/tldraw';
 import { useToolRegistry } from './useToolRegistry';
 import { useToolQueue } from './useToolQueue';
 import type { ToolCall, ToolParameters, ToolRunResult } from '../utils/toolTypes';
 import { TOOL_STEWARD_DELAY_MS, TOOL_STEWARD_WINDOW_MS } from '../utils/constants';
 import type { ToolEventsApi } from './useToolEvents';
 import { ComponentRegistry } from '@/lib/component-registry';
+import { applyEnvelope } from '@/components/tool-dispatcher/handlers/tldraw-actions';
 
 type ToolMetricEntry = {
   callId: string;
@@ -401,6 +403,12 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
     [],
   );
 
+  const activeCanvasDispatchRef = useRef<{
+    room: string;
+    message: string;
+    requestId?: string;
+  } | null>(null);
+
   const executeToolCall = useCallback(
     async (call: ToolCall): Promise<ToolRunResult> => {
       const tool = call.payload.tool;
@@ -432,6 +440,34 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
           return result;
         }
 
+        if (tool === 'tldraw_envelope') {
+          try {
+            const env = (params as any)?.envelope || { actions: (params as any)?.actions };
+            if (env && (env.actions || (Array.isArray(env) && env.length))) {
+              const envelope = Array.isArray(env)
+                ? { v: 'tldraw-actions/1', sessionId: 'svr', seq: 0, actions: env, ts: Date.now() }
+                : env;
+              const editor = getEditor();
+              if (editor) {
+                applyEnvelope({ editor, isHost: true, appliedIds: new Set() }, envelope as any);
+                const result = { status: 'SUCCESS', message: 'Applied envelope' } as ToolRunResult;
+                queue.markComplete(call.id, result.message);
+                emitDone(call, result);
+                return result;
+              }
+            }
+            const result = { status: 'IGNORED', message: 'No envelope/actions' } as ToolRunResult;
+            queue.markComplete(call.id, result.message);
+            emitDone(call, result);
+            return result;
+          } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            queue.markError(call.id, message);
+            emitError(call, message);
+            return { status: 'ERROR', message };
+          }
+        }
+
         if (tool === 'dispatch_to_conductor') {
           const task = typeof params?.task === 'string' ? params.task.trim() : '';
           const dispatchParams = (params?.params as Record<string, unknown>) || {};
@@ -454,6 +490,24 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
               if (!dispatchParams.requestId && typeof params?.requestId === 'string') {
                 dispatchParams.requestId = params.requestId;
               }
+              const currentRoom = call.roomId || room?.name || 'room';
+              const active = activeCanvasDispatchRef.current;
+              if (
+                active &&
+                active.room === currentRoom &&
+                active.message === String(dispatchParams.message || '') &&
+                (active.requestId === undefined || active.requestId === dispatchParams.requestId)
+              ) {
+                const result = { status: 'IGNORED', message: 'Canvas task already in flight' } as ToolRunResult;
+                queue.markComplete(call.id, result.message);
+                emitDone(call, result);
+                return result;
+              }
+              activeCanvasDispatchRef.current = {
+                room: currentRoom,
+                message: String(dispatchParams.message || ''),
+                requestId: typeof dispatchParams.requestId === 'string' ? dispatchParams.requestId : undefined,
+              };
             }
             log('dispatch_to_conductor forwarding canvas task', { task, params: dispatchParams, room: call.roomId || room?.name });
             try {
@@ -471,16 +525,25 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
                 const message = `Canvas steward dispatch failed: HTTP ${res.status}`;
                 queue.markError(call.id, message);
                 emitError(call, message);
+                if (task === 'canvas.agent_prompt') {
+                  activeCanvasDispatchRef.current = null;
+                }
                 return { status: 'ERROR', message };
               }
               const result = { status: 'SUCCESS', message: 'Dispatched canvas steward' } as ToolRunResult;
               queue.markComplete(call.id, result.message);
               emitDone(call, result);
+              if (task === 'canvas.agent_prompt') {
+                activeCanvasDispatchRef.current = null;
+              }
               return result;
             } catch (error) {
               const message = `Canvas steward dispatch error: ${error instanceof Error ? error.message : String(error)}`;
               queue.markError(call.id, message);
               emitError(call, message);
+              if (task === 'canvas.agent_prompt') {
+                activeCanvasDispatchRef.current = null;
+              }
               return { status: 'ERROR', message };
             }
           }
@@ -991,6 +1054,12 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
   }, [executeToolCall]);
 
   return useMemo(() => ({ executeToolCall, queue }), [executeToolCall, queue]);
+}
+
+function getEditor(): Editor | null {
+  if (typeof window === 'undefined') return null;
+  const editor = (window as any).__present?.tldrawEditor as Editor | undefined;
+  return editor ?? null;
 }
 
 function parseMinutesFromText(text: string): number | undefined {
