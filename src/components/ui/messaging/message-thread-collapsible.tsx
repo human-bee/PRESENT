@@ -45,6 +45,8 @@ export interface MessageThreadCollapsibleProps extends React.HTMLAttributes<HTML
   ) => void;
   /** Optional close handler for mobile to minimize the panel */
   onClose?: () => void;
+  /** Controls open/closed state for styling; not forwarded to the DOM */
+  isOpen?: boolean;
 }
 
 const SUPPORTED_SLASH_COMMANDS = new Set(['canvas']);
@@ -90,7 +92,7 @@ const parseSlashCommand = (input: string): ParsedSlashCommand | null => {
 export const MessageThreadCollapsible = React.forwardRef<
   HTMLDivElement,
   MessageThreadCollapsibleProps
->(({ className, contextKey, onTranscriptChange, onClose, ...props }, ref) => {
+>(({ className, contextKey, onTranscriptChange, onClose, isOpen, ...restProps }, ref) => {
   // Conversations tab removed; Transcript is the only view
   const [canvasComponents, setCanvasComponents] = React.useState<CanvasComponentEntry[]>([]);
   const [transcriptions, setTranscriptions] = React.useState<
@@ -110,7 +112,7 @@ export const MessageThreadCollapsible = React.forwardRef<
 
   // LiveKit room context and bus for transcript functionality
   const room = useRoomContext();
-  const bus = createLiveKitBus(room);
+  const bus = React.useMemo(() => createLiveKitBus(room), [room]);
   const roomContextKey = useContextKey();
   const effectiveContextKey = contextKey || roomContextKey;
   const livekitCtx = React.useContext(CanvasLiveKitContext);
@@ -180,6 +182,11 @@ export const MessageThreadCollapsible = React.forwardRef<
   const isRecognizedSlashCommand = Boolean(
     slashCommand && SUPPORTED_SLASH_COMMANDS.has(slashCommand.command),
   );
+  const mentionMatchesCanvasAgent = React.useMemo(() => {
+    if (isRecognizedSlashCommand) return false;
+    if (!typedMessage) return false;
+    return /@canvas-agent/gi.test(typedMessage);
+  }, [isRecognizedSlashCommand, typedMessage]);
   const slashCommandBodyMissing = Boolean(isRecognizedSlashCommand && !slashCommand?.body);
 
   React.useEffect(() => {
@@ -680,11 +687,12 @@ export const MessageThreadCollapsible = React.forwardRef<
   return (
     <div
       ref={ref}
+      data-state={typeof isOpen === 'boolean' ? (isOpen ? 'open' : 'closed') : undefined}
       className={cn(
         'bg-background border-l border-gray-200 shadow-lg h-full overflow-hidden flex flex-col',
         className,
       )}
-      {...props}
+      {...restProps}
     >
       <div className="h-full flex flex-col overscroll-contain">
         {/* Header with title and close button */}
@@ -777,11 +785,12 @@ export const MessageThreadCollapsible = React.forwardRef<
               {(() => {
                 const isRoomConnected = room?.state === 'connected';
                 const trimmedMessage = typedMessage.trim();
-                const inputDisabled = isSending || (!isRecognizedSlashCommand && !isRoomConnected);
+                const inputDisabled =
+                  isSending || (!isRecognizedSlashCommand && !mentionMatchesCanvasAgent && !isRoomConnected);
                 const sendDisabled =
                   isSending ||
                   !trimmedMessage ||
-                  (!isRecognizedSlashCommand && !isRoomConnected) ||
+                  (!isRecognizedSlashCommand && !mentionMatchesCanvasAgent && !isRoomConnected) ||
                   (isRecognizedSlashCommand && slashCommandBodyMissing);
                 return (
               <form
@@ -794,6 +803,7 @@ export const MessageThreadCollapsible = React.forwardRef<
                   const slashActive = Boolean(
                     parsedCommand && SUPPORTED_SLASH_COMMANDS.has(parsedCommand.command),
                   );
+                  const mentionActive = Boolean(!slashActive && mentionMatchesCanvasAgent);
                   if (slashActive && !parsedCommand?.body) {
                     try {
                       console.warn('[Transcript] Slash command requires a message body', parsedCommand);
@@ -809,7 +819,10 @@ export const MessageThreadCollapsible = React.forwardRef<
                     user?.email ||
                     'Canvas-User';
 
-                  const textForDispatch = slashActive && parsedCommand ? parsedCommand.body : trimmed;
+                  const mentionBody = mentionActive
+                    ? trimmed.replace(/@canvas-agent/gi, '').trim() || trimmed
+                    : trimmed;
+                  const textForDispatch = slashActive && parsedCommand ? parsedCommand.body : mentionBody;
 
                   const payload = {
                     type: 'live_transcription',
@@ -825,6 +838,8 @@ export const MessageThreadCollapsible = React.forwardRef<
                   try {
                     if (slashActive && parsedCommand) {
                       await runSlashCommand(parsedCommand.command, parsedCommand.body);
+                    } else if (mentionActive) {
+                      await sendCanvasAgentPrompt(textForDispatch);
                     } else {
                       if (room?.state === 'connected') {
                         bus.send('transcription', payload);
@@ -902,9 +917,11 @@ export const MessageThreadCollapsible = React.forwardRef<
                 <span>
                   {isRecognizedSlashCommand
                     ? 'Slash command active — prompt dispatches directly to the Canvas steward.'
-                    : agentPresent
-                      ? 'Sends as “you” over LiveKit to the voice agent.'
-                      : 'Agent not joined'}
+                    : mentionMatchesCanvasAgent
+                      ? '“@canvas-agent” detected — prompt dispatches directly to the Canvas steward.'
+                      : agentPresent
+                        ? 'Sends as “you” over LiveKit to the voice agent.'
+                        : 'Agent not joined'}
                 </span>
                 {!agentPresent && !isRecognizedSlashCommand && (
                   <button

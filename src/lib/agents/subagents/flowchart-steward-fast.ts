@@ -101,7 +101,10 @@ const createProviderConfig = (): ProviderConfig => {
                 toolCount: Array.isArray(sanitized.tools) ? sanitized.tools.length : 0,
                 hasStream: Boolean(sanitized.stream),
               });
-              const response = await client.chat.completions.create(sanitized, options);
+              const response = await (client.chat.completions.create as unknown as (
+                params: Record<string, any>,
+                options?: Record<string, any>,
+              ) => Promise<any>)(sanitized, options);
               logFastMetric('cerebras.request.complete', {
                 model: sanitized.model,
                 durationMs: Date.now() - requestStart,
@@ -168,7 +171,7 @@ const createLazyProviderModel = (provider: OpenAIProvider, modelName: string): M
 
 const buildModel = (): { model: Model; ready: boolean; baseURL: string } => {
   if (providerConfig.kind === 'cerebras') {
-    const model = new OpenAIChatCompletionsModel(providerConfig.client, resolvedModel);
+    const model = new OpenAIChatCompletionsModel(providerConfig.client as unknown as any, resolvedModel);
     return {
       model,
       ready: Boolean(providerConfig.apiKey),

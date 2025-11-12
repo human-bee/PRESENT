@@ -1,6 +1,6 @@
 export type { DataMessage } from '@livekit/components-react';
 
-import { Room } from 'livekit-client';
+import { Room, RoomEvent } from 'livekit-client';
 import { createLogger } from '@/lib/utils';
 
 type ChunkEnvelope = {
@@ -83,10 +83,174 @@ function decodeBase64ToUtf8(base64: string): string {
  *   bus.send('transcription', { text: 'hello' });
  *   bus.on('transcription', (msg) => { ... });
  */
-export function createLiveKitBus(room: Room | null | undefined) {
+type BusInstance = ReturnType<typeof createLiveKitBusInstance>;
+const busCacheByRoom = new WeakMap<Room, BusInstance>();
+type BusCacheEntry = { bus: BusInstance; room: Room };
+const busCacheBySid = new Map<string, BusCacheEntry>();
+const stubBus: BusInstance = {
+  send() {},
+  on() {
+    return () => {};
+  },
+};
+type ListenerEntry = { room: Room; onState: () => void; onParticipant: () => void };
+const listenerRegistryBySid = new Map<string, ListenerEntry>();
+const listenerRegistryByRoom = new WeakMap<Room, ListenerEntry>();
+
+const registerSidEntry = (sid: string, entry: ListenerEntry) => {
+  const existing = listenerRegistryBySid.get(sid);
+  if (existing && existing.room !== entry.room) {
+    existing.room.off(RoomEvent.ConnectionStateChanged, existing.onState);
+    existing.room.off(RoomEvent.ParticipantConnected, existing.onParticipant);
+    listenerRegistryByRoom.delete(existing.room);
+  }
+  listenerRegistryBySid.set(sid, entry);
+  const cached = busCacheByRoom.get(entry.room);
+  if (cached) {
+    busCacheBySid.set(sid, { bus: cached, room: entry.room });
+  }
+};
+
+function createLiveKitBusInstance(room: Room | null | undefined) {
   const logger = createLogger('LiveKitBus');
+  const shouldLogBusInit = () => process.env.NODE_ENV !== 'production' && room && room.sid;
+  if (shouldLogBusInit()) {
+    try {
+      const label = `${room!.name ?? 'unknown'}#${room!.sid}`;
+      console.debug('[LiveKitBus][debug] createLiveKitBus', { label, state: room?.state });
+      console.debug('[LiveKitBus][debug] instantiated', { label, state: room?.state });
+    } catch {}
+  }
   let lastWarnedDisconnectedAt = 0;
   const DISCONNECT_WARN_THROTTLE_MS = 5000;
+  const pendingQueue: Array<{ topic: string; payload: unknown; queuedAt: number }> = [];
+  let listenersAttached = false;
+  const handleStateChange = () => flushPending();
+
+  let flushRetryHandle: ReturnType<typeof setTimeout> | null = null;
+  const scheduleFlushRetry = () => {
+    if (!room || room.state !== 'connected') return;
+    if (flushRetryHandle) return;
+    flushRetryHandle = setTimeout(() => {
+      flushRetryHandle = null;
+      flushPending();
+    }, 250);
+  };
+
+  const publishPayload = (topic: string, payload: unknown): boolean => {
+    if (!room) return false;
+
+    const json = JSON.stringify(payload);
+    const bytes = encodeUtf8(json);
+
+    if (bytes.length <= MAX_DATA_CHANNEL_BYTES) {
+      try {
+        const result = room.localParticipant?.publishData(bytes, {
+          reliable: true,
+          topic,
+        });
+        handlePublishResult(result, topic);
+        return true;
+      } catch (err) {
+        logger.error('Failed to send', topic, err);
+        pendingQueue.unshift({ topic, payload, queuedAt: Date.now() });
+        scheduleFlushRetry();
+        return false;
+      }
+      return true;
+    }
+
+    const messageId = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+    const base64 = encodeBase64(bytes);
+    const totalChunks = Math.ceil(base64.length / MAX_CHUNK_STRING_LENGTH);
+
+    logger.warn('Payload exceeds LiveKit data channel limit, chunking message.', {
+      topic,
+      messageId,
+      totalChunks,
+      size: bytes.length,
+    });
+
+    for (let index = 0; index < totalChunks; index++) {
+      const start = index * MAX_CHUNK_STRING_LENGTH;
+      const end = start + MAX_CHUNK_STRING_LENGTH;
+      const chunkPayload: ChunkEnvelope = {
+        __chunked: true,
+        id: messageId,
+        index,
+        total: totalChunks,
+        chunk: base64.slice(start, end),
+        encoding: 'base64',
+      };
+
+      try {
+        const result = room.localParticipant?.publishData(encodeUtf8(JSON.stringify(chunkPayload)), {
+          reliable: true,
+          topic,
+        });
+        handlePublishResult(result, topic, { messageId, index });
+      } catch (err) {
+        logger.error('Failed to send chunk', { topic, messageId, index }, err);
+        pendingQueue.unshift({ topic, payload, queuedAt: Date.now() });
+        scheduleFlushRetry();
+        return false;
+      }
+    }
+    return true;
+  };
+
+  const flushPending = () => {
+    if (!room || room.state !== 'connected') return;
+    while (pendingQueue.length > 0) {
+      const next = pendingQueue.shift();
+      if (!next) break;
+      const sent = publishPayload(next.topic, next.payload);
+      if (!sent) {
+        // Leave remaining entries for a future flush once the room recovers.
+        scheduleFlushRetry();
+        break;
+      }
+    }
+  };
+
+  const ensureListeners = () => {
+    if (!room || listenersAttached) return;
+
+    const existing = listenerRegistryByRoom.get(room);
+    if (existing) {
+      listenersAttached = true;
+      if (room.sid) {
+        registerSidEntry(room.sid, existing);
+      }
+      return;
+    }
+
+    const entry: ListenerEntry = {
+      room,
+      onState: handleStateChange,
+      onParticipant: handleStateChange,
+    };
+
+    room.on(RoomEvent.ConnectionStateChanged, entry.onState);
+    room.on(RoomEvent.ParticipantConnected, entry.onParticipant);
+    listenerRegistryByRoom.set(room, entry);
+    listenersAttached = true;
+
+    const attachWhenSidReady = () => {
+      if (!room.sid) return;
+      room.off(RoomEvent.ConnectionStateChanged, attachWhenSidReady);
+      registerSidEntry(room.sid, entry);
+    };
+
+    if (room.sid) {
+      registerSidEntry(room.sid, entry);
+    } else {
+      room.on(RoomEvent.ConnectionStateChanged, attachWhenSidReady);
+    }
+
+    flushPending();
+  };
+  ensureListeners();
 
   const handlePublishResult = (result: unknown, topic: string, context?: Record<string, unknown>) => {
     if (result && typeof (result as PromiseLike<unknown>).then === 'function') {
@@ -107,76 +271,23 @@ export function createLiveKitBus(room: Room | null | undefined) {
       // 1. Room reference must exist.
       if (!room) return;
 
-      // 2. Only attempt to publish when the room is fully connected. The room
-      //    state is managed internally by livekit-client and will be one of
-      //    'connected' | 'connecting' | 'reconnecting' | 'disconnected'. We
-      //    publish ONLY when connected to avoid race-conditions during
-      //    teardown.
-      //    Ref: https://docs.livekit.io/client-sdk-js/interfaces/Room.html#state
+      ensureListeners();
+
       if (room.state !== 'connected') {
+        pendingQueue.push({ topic, payload, queuedAt: Date.now() });
         const now = Date.now();
         if (now - lastWarnedDisconnectedAt > DISCONNECT_WARN_THROTTLE_MS) {
           lastWarnedDisconnectedAt = now;
-          logger.info('Skipping publishData – room not connected.', {
+          logger.info('Queueing payload until room is connected', {
             topic,
+            queueLength: pendingQueue.length,
             currentState: room.state,
           });
-        } else {
-          logger.debug('Skipping publishData (throttled) – room not connected.', topic);
         }
         return;
       }
 
-      const json = JSON.stringify(payload);
-      const bytes = encodeUtf8(json);
-
-      if (bytes.length <= MAX_DATA_CHANNEL_BYTES) {
-        try {
-          const result = room.localParticipant?.publishData(bytes, {
-            reliable: true,
-            topic,
-          });
-          handlePublishResult(result, topic);
-        } catch (err) {
-          logger.error('Failed to send', topic, err);
-        }
-        return;
-      }
-
-      const messageId = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-      const base64 = encodeBase64(bytes);
-      const totalChunks = Math.ceil(base64.length / MAX_CHUNK_STRING_LENGTH);
-
-      logger.warn('Payload exceeds LiveKit data channel limit, chunking message.', {
-        topic,
-        messageId,
-        totalChunks,
-        size: bytes.length,
-      });
-
-      for (let index = 0; index < totalChunks; index++) {
-        const start = index * MAX_CHUNK_STRING_LENGTH;
-        const end = start + MAX_CHUNK_STRING_LENGTH;
-        const chunkPayload: ChunkEnvelope = {
-          __chunked: true,
-          id: messageId,
-          index,
-          total: totalChunks,
-          chunk: base64.slice(start, end),
-          encoding: 'base64',
-        };
-
-        try {
-          const result = room.localParticipant?.publishData(encodeUtf8(JSON.stringify(chunkPayload)), {
-            reliable: true,
-            topic,
-          });
-          handlePublishResult(result, topic, { messageId, index });
-        } catch (err) {
-          logger.error('Failed to send chunk', { topic, messageId, index }, err);
-          break;
-        }
-      }
+      publishPayload(topic, payload);
     },
 
     /**
@@ -271,4 +382,37 @@ export function createLiveKitBus(room: Room | null | undefined) {
       };
     },
   } as const;
+}
+
+export function createLiveKitBus(room: Room | null | undefined) {
+  if (!room) {
+    return stubBus;
+  }
+
+  const cachedByRoom = busCacheByRoom.get(room);
+  if (cachedByRoom) {
+    return cachedByRoom;
+  }
+
+  if (room.sid) {
+    const cachedEntry = busCacheBySid.get(room.sid);
+    if (cachedEntry) {
+      if (cachedEntry.room === room) {
+        busCacheByRoom.set(room, cachedEntry.bus);
+        return cachedEntry.bus;
+      }
+
+      const newBus = createLiveKitBusInstance(room);
+      busCacheByRoom.set(room, newBus);
+      busCacheBySid.set(room.sid, { bus: newBus, room });
+      return newBus;
+    }
+  }
+
+  const bus = createLiveKitBusInstance(room);
+  busCacheByRoom.set(room, bus);
+  if (room.sid) {
+    busCacheBySid.set(room.sid, { bus, room });
+  }
+  return bus;
 }

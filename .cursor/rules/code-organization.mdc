@@ -1,0 +1,34 @@
+---
+alwaysApply: false
+---
+# Code Organization (2025 Refactor)
+
+## Directory Map
+- `src/components/ui/canvas/`: TLDraw canvas shell
+  - `hooks/`: `useCanvasComponentStore`, `useCanvasRehydration`, `useCanvasEvents`, etc.
+  - `components/`, `utils/`: extracted UI fragments and helpers
+- `src/components/ui/livekit/`: room connector, toolbar, participant tiles
+- `src/components/ui/tldraw/`: shapes, editor bridge, collaboration overlays
+- `src/components/ui/productivity/`: timers, debate scorecard, Linear board
+- `src/components/ui/documents/`: markdown viewer/editor + diffing
+
+## Patterns
+- Orchestrators compose hooks; they do not touch `window` or own side-effects.
+- Hooks own side-effects and expose typed actions/state.
+- Presentational components stay pure and stateless.
+- Barrel exports per folder (`hooks/index.ts`, `components/index.ts`, `utils/index.ts`).
+
+## Budgets
+- Orchestrators ≤300 LOC; hooks ≤160 LOC. Extract helpers when approaching limits.
+
+## Canvas Hooks
+- `useCanvasComponentStore` manages shape/component bookkeeping and registry updates.
+- `useCanvasRehydration` restores shapes/components on load or doc change.
+- `useCanvasEvents` wires `custom:showComponent`, drains queued components, dispatches `ui_mount`.
+
+## Mini ADR — TLDraw/LiveKit Ownership
+- Push editor side-effects into hooks/utilities (`useTldrawEditorBridge`, handler maps in `utils/`).
+- LiveKit: `useLivekitConnection` for token + connection; `useAgentDispatch` for tool requests.
+
+See `docs/code-organization.md` for detailed folder snapshots and diagrams.
+

@@ -25,7 +25,7 @@ const MODEL_ALIASES: Record<string, CanvasModelName> = {
 };
 
 export type CanvasModelName = z.infer<typeof canvasModelNameSchema>;
-export type CanvasModelProvider = 'anthropic' | 'openai';
+export type CanvasModelProvider = 'anthropic' | 'openai' | 'google';
 
 export interface CanvasModelDefinition {
   name: CanvasModelName;

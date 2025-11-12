@@ -25,7 +25,7 @@ export interface ToolDispatcherProps {
 export function ToolDispatcher({
   children,
   contextKey,
-  enableLogging = true,
+  enableLogging = false,
   stewardEnabled,
 }: ToolDispatcherProps) {
   const room = useRoomContext();

@@ -249,7 +249,7 @@ export function LivekitToolbar({
 
   // MOVED ALL HOOKS OUTSIDE TRY-CATCH - ALWAYS CALL HOOKS
   const roomContext = useRoomContext();
-  const bus = createLiveKitBus(roomContext);
+  const bus = React.useMemo(() => createLiveKitBus(roomContext), [roomContext]);
 
   // Always call LiveKit hooks - handle errors with conditional logic instead
   const room = useRoomContext();

@@ -24,6 +24,7 @@
 # misc
 .DS_Store
 *.pem
+/.tools/
 
 # debug
 npm-debug.log*
@@ -48,6 +49,7 @@ next-env.d.ts
 logs
 *.log
 dev-debug.log
+.present/
 # Dependency directories
 node_modules/
 # Environment variables

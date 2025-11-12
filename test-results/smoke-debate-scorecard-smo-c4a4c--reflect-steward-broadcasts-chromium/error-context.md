@@ -1,0 +1,372 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e1]:
+  - generic [ref=e2]:
+    - application "tldraw" [ref=e6]:
+      - generic [ref=e7]:
+        - img
+        - generic [ref=e16]:
+          - banner [ref=e17]:
+            - generic [ref=e18]:
+              - paragraph [ref=e19]: Debate Analysis
+              - heading "Untitled debate" [level=2] [ref=e20]
+              - paragraph [ref=e21]: Round
+              - paragraph [ref=e22]: "Latest action: Added AFF-1 (UNTESTED): focus-at-home boosts productivity."
+            - generic [ref=e23]:
+              - paragraph [ref=e24]: Scoreboard
+              - generic [ref=e25]:
+                - generic [ref=e26]: "0"
+                - generic [ref=e27]: ·
+                - generic [ref=e28]: "0"
+              - paragraph [ref=e29]: "Total points exchanged: 0"
+          - generic [ref=e30]:
+            - complementary [ref=e31]:
+              - generic [ref=e32]:
+                - generic [ref=e33]:
+                  - generic [ref=e34]:
+                    - generic [ref=e35]:
+                      - paragraph [ref=e36]: AFF
+                      - heading "Affirmative" [level=3] [ref=e37]
+                    - generic [ref=e38]:
+                      - paragraph [ref=e39]: Score
+                      - paragraph [ref=e40]: "0"
+                      - paragraph [ref=e41]: "+0"
+                  - generic [ref=e42]:
+                    - generic [ref=e43]:
+                      - paragraph [ref=e44]: Verified
+                      - paragraph [ref=e45]: "0"
+                    - generic [ref=e46]:
+                      - paragraph [ref=e47]: Refuted
+                      - paragraph [ref=e48]: "0"
+                    - generic [ref=e49]:
+                      - paragraph [ref=e50]: Checking
+                      - paragraph [ref=e51]: "0"
+                    - generic [ref=e52]:
+                      - paragraph [ref=e53]: Untested
+                      - paragraph [ref=e54]: "1"
+                  - generic [ref=e55]:
+                    - generic [ref=e57]:
+                      - generic [ref=e58]: Momentum
+                      - generic [ref=e59]: 50%
+                    - generic [ref=e63]:
+                      - generic [ref=e64]: BS Meter
+                      - generic [ref=e65]: 8%
+                    - generic [ref=e69]:
+                      - generic [ref=e70]: Learning Score
+                      - generic [ref=e71]: 55%
+                - generic [ref=e74]:
+                  - generic [ref=e75]:
+                    - generic [ref=e76]:
+                      - paragraph [ref=e77]: NEG
+                      - heading "Negative" [level=3] [ref=e78]
+                    - generic [ref=e79]:
+                      - paragraph [ref=e80]: Score
+                      - paragraph [ref=e81]: "0"
+                      - paragraph [ref=e82]: "+0"
+                  - generic [ref=e83]:
+                    - generic [ref=e84]:
+                      - paragraph [ref=e85]: Verified
+                      - paragraph [ref=e86]: "0"
+                    - generic [ref=e87]:
+                      - paragraph [ref=e88]: Refuted
+                      - paragraph [ref=e89]: "0"
+                    - generic [ref=e90]:
+                      - paragraph [ref=e91]: Checking
+                      - paragraph [ref=e92]: "0"
+                    - generic [ref=e93]:
+                      - paragraph [ref=e94]: Untested
+                      - paragraph [ref=e95]: "0"
+                  - generic [ref=e96]:
+                    - generic [ref=e98]:
+                      - generic [ref=e99]: Momentum
+                      - generic [ref=e100]: 50%
+                    - generic [ref=e104]:
+                      - generic [ref=e105]: BS Meter
+                      - generic [ref=e106]: 8%
+                    - generic [ref=e110]:
+                      - generic [ref=e111]: Learning Score
+                      - generic [ref=e112]: 55%
+                - generic [ref=e115]:
+                  - generic [ref=e116]:
+                    - paragraph [ref=e117]: Debate Status
+                    - paragraph [ref=e118]: "Added AFF-1 (UNTESTED): focus-at-home boosts productivity."
+                  - generic [ref=e119]:
+                    - paragraph [ref=e120]: Pending verifications
+                    - paragraph [ref=e121]: No outstanding fact checks.
+                  - generic [ref=e122]:
+                    - paragraph [ref=e123]: Achievements unlocked
+                    - paragraph [ref=e124]: No achievements yet—keep the arguments flowing.
+              - generic [ref=e125]:
+                - generic [ref=e127]:
+                  - paragraph [ref=e128]: Round Score
+                  - paragraph [ref=e129]: 50%
+                - generic [ref=e134]:
+                  - paragraph [ref=e135]: Judge Lean
+                  - paragraph [ref=e136]: Neutral
+                - generic [ref=e140]:
+                  - paragraph [ref=e141]: Evidence Quality
+                  - paragraph [ref=e142]: 50%
+                - generic [ref=e145]:
+                  - paragraph [ref=e146]: Excitement
+                  - paragraph [ref=e147]: 40%
+              - generic [ref=e150]:
+                - generic [ref=e151]:
+                  - paragraph [ref=e152]:
+                    - img [ref=e153]
+                    - text: Verdict legend
+                  - generic [ref=e155]:
+                    - generic [ref=e156]: Accurate
+                    - generic [ref=e157]: Partially True
+                    - generic [ref=e158]: Unsupported
+                    - generic [ref=e159]: "False"
+                - generic [ref=e160]:
+                  - paragraph [ref=e161]:
+                    - img [ref=e162]
+                    - text: How to use
+                  - list [ref=e164]:
+                    - listitem [ref=e165]: Record arguments verbatim with speaker and speech.
+                    - listitem [ref=e166]: Verify claims, attach sources, and mark status.
+                    - listitem [ref=e167]: Use the map to surface clash and supporting warrants.
+                    - listitem [ref=e168]: Keep the RFD aligned with linked voters.
+                - generic [ref=e169]:
+                  - paragraph [ref=e170]:
+                    - img [ref=e171]
+                    - text: Achievements earned
+                  - paragraph [ref=e174]: No achievements yet. Keep debating!
+            - main [ref=e175]:
+              - generic [ref=e176]:
+                - button "Ledger" [ref=e177]:
+                  - img [ref=e178]
+                  - text: Ledger
+                - button "Map" [ref=e181]:
+                  - img [ref=e182]
+                  - text: Map
+                - button "Judge RFD" [ref=e184]:
+                  - img [ref=e185]
+                  - text: Judge RFD
+                - button "Sources" [ref=e191]:
+                  - img [ref=e192]
+                  - text: Sources
+                - button "Timeline" [ref=e194]:
+                  - img [ref=e195]
+                  - text: Timeline
+              - generic [ref=e199]:
+                - generic [ref=e200]:
+                  - generic [ref=e201]:
+                    - img [ref=e202]
+                    - combobox [ref=e204]:
+                      - option "ALL" [selected]
+                      - option "AFF"
+                      - option "NEG"
+                      - option "1AC"
+                      - option "1NC"
+                      - option "2AC"
+                      - option "2NC"
+                      - option "1AR"
+                      - option "1NR"
+                      - option "2AR"
+                      - option "2NR"
+                  - generic [ref=e205] [cursor=pointer]:
+                    - img [ref=e206]
+                    - generic [ref=e209]: Fact-check notes
+                    - checkbox "Fact-check notes" [checked] [ref=e210]
+                  - generic [ref=e211]:
+                    - button "Untested" [ref=e212]:
+                      - generic [ref=e213]:
+                        - img [ref=e214]
+                        - text: Untested
+                    - button "Checking" [ref=e217]:
+                      - generic [ref=e218]:
+                        - img [ref=e219]
+                        - text: Checking
+                    - button "Verified" [ref=e221]:
+                      - generic [ref=e222]:
+                        - img [ref=e223]
+                        - text: Verified
+                    - button "Refuted" [ref=e226]:
+                      - generic [ref=e227]:
+                        - img [ref=e228]
+                        - text: Refuted
+                - generic [ref=e232]:
+                  - generic [ref=e233]:
+                    - img [ref=e234]
+                    - searchbox "Search claims, evidence, notes" [ref=e237]
+                  - button "Export" [ref=e238]:
+                    - img [ref=e239]
+                    - text: Export
+              - table [ref=e246]:
+                - rowgroup [ref=e247]:
+                  - row "Claim Status Support Impact Updated" [ref=e248]:
+                    - cell "Claim" [ref=e249]
+                    - cell "Status" [ref=e250]
+                    - cell "Support" [ref=e251]
+                    - cell "Impact" [ref=e252]
+                    - cell "Updated" [ref=e253]
+                - rowgroup [ref=e254]:
+                  - row "AFF-1 1AC – Aff Constructive Remote work boosts productivity because employees can focus better at home. Untested Logic 50% Emotion 50% Credibility 50% Confidence 50% 0 sources 0 upvotes +0 —" [ref=e255]:
+                    - cell "AFF-1 1AC – Aff Constructive Remote work boosts productivity because employees can focus better at home." [ref=e256]:
+                      - generic [ref=e257]:
+                        - generic [ref=e258]:
+                          - generic [ref=e259]: AFF-1
+                          - generic [ref=e260]: 1AC – Aff Constructive
+                        - paragraph [ref=e261]: Remote work boosts productivity because employees can focus better at home.
+                    - cell "Untested" [ref=e262]:
+                      - generic [ref=e263]:
+                        - img [ref=e264]
+                        - text: Untested
+                    - cell "Logic 50% Emotion 50% Credibility 50% Confidence 50% 0 sources 0 upvotes +0" [ref=e267]:
+                      - generic [ref=e268]:
+                        - generic [ref=e270]:
+                          - generic [ref=e271]: Logic
+                          - generic [ref=e272]: 50%
+                        - generic [ref=e276]:
+                          - generic [ref=e277]: Emotion
+                          - generic [ref=e278]: 50%
+                        - generic [ref=e282]:
+                          - generic [ref=e283]: Credibility
+                          - generic [ref=e284]: 50%
+                        - generic [ref=e287]:
+                          - generic [ref=e288]: Confidence
+                          - generic [ref=e289]: 50%
+                      - generic [ref=e290]:
+                        - generic [ref=e291]:
+                          - img [ref=e292]
+                          - text: 0 sources
+                        - generic [ref=e295]:
+                          - img [ref=e296]
+                          - text: 0 upvotes
+                        - generic [ref=e299]:
+                          - img [ref=e300]
+                          - text: "+0"
+                    - cell [ref=e306]
+                    - cell "—" [ref=e307]
+      - generic:
+        - button "Move focus to canvas" [ref=e308] [cursor=pointer]
+        - generic:
+          - generic:
+            - navigation:
+              - generic:
+                - button "Menu" [ref=e309] [cursor=pointer]:
+                  - img [ref=e310]
+                - button "Page 1" [ref=e311] [cursor=pointer]:
+                  - generic [ref=e312]: Page 1
+                  - img [ref=e313]
+        - generic:
+          - generic:
+            - generic:
+              - generic:
+                - generic:
+                  - toolbar "Actions" [ref=e314]:
+                    - button "Undo — Ctrl + Z" [ref=e315] [cursor=pointer]:
+                      - img [ref=e316]
+                    - button "Redo — Ctrl + ⇧ + Z" [disabled] [ref=e317]:
+                      - img [ref=e318]
+                    - button "Delete — ⌫" [disabled] [ref=e319]:
+                      - img [ref=e320]
+                    - button "Duplicate — Ctrl + D" [disabled] [ref=e321]:
+                      - img [ref=e322]
+                    - button "Actions" [ref=e324] [cursor=pointer]:
+                      - img [ref=e325]
+                  - toolbar "Tools" [ref=e326]:
+                    - generic [ref=e327]:
+                      - button "Select — V" [pressed] [ref=e328] [cursor=pointer]:
+                        - img [ref=e329]
+                      - button "Hand — H" [ref=e330] [cursor=pointer]:
+                        - img [ref=e331]
+                      - button "Draw — D" [ref=e332] [cursor=pointer]:
+                        - img [ref=e333]
+                      - button "Eraser — E" [ref=e334] [cursor=pointer]:
+                        - img [ref=e335]
+                      - button "Arrow — A" [ref=e336] [cursor=pointer]:
+                        - img [ref=e337]
+                      - button "Text — T" [ref=e338] [cursor=pointer]:
+                        - img [ref=e339]
+                      - button "Note — N" [ref=e340] [cursor=pointer]:
+                        - img [ref=e341]
+                      - button "Media — Ctrl + U" [ref=e342] [cursor=pointer]:
+                        - img [ref=e343]
+                      - button "Rectangle — R" [ref=e344] [cursor=pointer]:
+                        - img [ref=e345]
+                    - button "More" [ref=e347] [cursor=pointer]:
+                      - img [ref=e348]
+                - button "Styles" [ref=e351] [cursor=pointer]:
+                  - img [ref=e352]
+        - region "Notifications (F8)":
+          - list
+      - button "Get a license for production" [ref=e354] [cursor=pointer]
+    - generic:
+      - generic:
+        - generic:
+          - generic:
+            - generic: Transcript
+          - button "Close"
+        - generic:
+          - generic:
+            - generic:
+              - generic: "Component: ui-f7oUiWxZsnPdmAhXFpwN_mOY · DebateScorecard"
+              - generic:
+                - generic: "{ \"componentId\": \"ui-f7oUiWxZsnPdmAhXFpwN_mOY\", \"version\": 1, \"topic\": \"Untitled debate\", \"round\": \"Round\", \"showMetricsStrip\": true, \"factCheckEnabled\": true, \"filters\": { \"speaker\": \"ALL\", \"verdicts\": [], \"statuses\": [], \"searchQuery\": \"\", \"activeTab\": \"ledger\" }, \"metrics\": { \"roundScore\": 0.5, \"evidenceQuality\": 0.5, \"judgeLean\": \"NEUTRAL\", \"excitement\": 0.4 }, \"players\": [ { \"id\": \"player-aff\", \"label\": \"Affirmative\", \"side\": \"AFF\", \"color\": \"#38bdf8\", \"score\": 0, \"streakCount\": 1, \"momentum\": 0.5, \"bsMeter\": 0.08, \"learningScore\": 0.55, \"achievements\": [] }, { \"id\": \"player-neg\", \"label\": \"Negative\", \"side\": \"NEG\", \"color\": \"#f87171\", \"score\": 0, \"streakCount\": 0, \"momentum\": 0.5, \"bsMeter\": 0.08, \"learningScore\": 0.55, \"achievements\": [] } ], \"claims\": [ { \"id\": \"AFF-1\", \"side\": \"AFF\", \"speech\": \"1AC\", \"quote\": \"Remote work boosts productivity because employees can focus better at home.\", \"speaker\": \"Speaker\", \"status\": \"UNTESTED\", \"strength\": { \"logos\": 0.5, \"pathos\": 0.5, \"ethos\": 0.5 }, \"confidence\": 0.5, \"evidenceCount\": 0, \"upvotes\": 0, \"scoreDelta\": 0, \"factChecks\": [], \"createdAt\": 1762287313609 } ], \"map\": { \"nodes\": [], \"edges\": [] }, \"rfd\": { \"summary\": \"Judge has not submitted an RFD yet.\", \"links\": [] }, \"sources\": [], \"timeline\": [ { \"id\": \"evt-1762287313609\", \"timestamp\": 1762287313609, \"text\": \"AFF-1 added: 'Remote work boosts productivity because employees can focus better at home.'\", \"type\": \"argument\", \"side\": \"AFF\", \"claimId\": \"AFF-1\" }, { \"id\": \"evt-1762287318989\", \"timestamp\": 1762287318989, \"text\": \"Scorecard initialized.\", \"type\": \"moderation\" } ], \"achievementsQueue\": [], \"status\": { \"lastAction\": \"Added AFF-1 (UNTESTED): focus-at-home boosts productivity.\", \"pendingVerifications\": [] }, \"lastUpdated\": 1762287353334 }"
+            - generic:
+              - generic:
+                - generic: user-czj8vt
+                - generic:
+                  - generic: 12:15:07
+              - generic: Let's start a debate on whether remote work boosts productivity. Please create the scorecard.
+            - generic:
+              - generic:
+                - generic: voice-agent → custom System
+                - generic:
+                  - generic: 12:15:08
+              - generic: "Generated component: ui-f7oUiWxZsnPdmAhXFpwN_mOY"
+            - generic:
+              - generic:
+                - generic: user-czj8vt
+                - generic:
+                  - generic: 12:15:08
+              - generic: "Affirmative argument: Remote work boosts productivity because employees can focus better at home."
+            - generic:
+              - generic:
+                - generic: voice-agent
+                - generic:
+                  - generic: 12:15:10
+              - generic: The debate scorecard is ready on the canvas. You can start your debate on whether remote work boosts productivity.
+            - generic:
+              - generic:
+                - generic: voice-agent
+                - generic:
+                  - generic: 12:15:14
+              - generic: "The affirmative argument has been added to the scorecard: focusing better at home as a reason for boosted productivity. Feel free to add more points or make your next move in the debate."
+            - generic:
+              - generic:
+                - generic: voice-agent → custom System
+                - generic:
+                  - generic: 12:15:54
+              - generic: "Generated component: ui-f7oUiWxZsnPdmAhXFpwN_mOY"
+            - generic:
+              - generic:
+                - generic: user-czj8vt
+                - generic:
+                  - generic: 12:15:54
+              - generic: "Negative argument: Remote work hurts collaboration and slows innovation."
+        - generic:
+          - generic:
+            - textbox "Type a message for the agent" [active]:
+              - /placeholder: Type a message for the agent…
+            - button "Send" [disabled]
+          - generic:
+            - generic: Sends as “you” over LiveKit to the voice agent.
+            - generic: "Use `/canvas …` to message the Canvas steward directly."
+        - generic:
+          - generic:
+            - generic:
+              - generic: Connected
+              - generic: canvas-e2e-1762287301273
+            - generic:
+              - button "Disconnect"
+              - button "Copy Link"
+              - button "Clear"
+  - button "Open Next.js Dev Tools" [ref=e360] [cursor=pointer]:
+    - img [ref=e361]
+  - alert [ref=e364]
+```

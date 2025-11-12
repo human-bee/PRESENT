@@ -29,10 +29,10 @@ describe('Canvas Agent Parsers', () => {
       const result = parseAction({
         id: 'test-3',
         name: 'align',
-        params: { ids: ['s1', 's2'], mode: 'left' },
+        params: { ids: ['s1', 's2'], axis: 'x', mode: 'start' },
       });
       expect(result.name).toBe('align');
-      expect(result.params).toMatchObject({ mode: 'left' });
+      expect(result.params).toMatchObject({ axis: 'x', mode: 'start' });
     });
 
     it('should parse valid think action', () => {

@@ -1,114 +1,84 @@
 ---
 alwaysApply: true
 ---
-# First Principles
+# First Principles (Aligned with Docs)
 
-## What Needs Doing First
+## Core Rules
 
-- Merge branches – **DONE**
-- Figure out what needs doing – **DONE**
-- TLDraw sub-agent
-- Conductor agent that takes all tools
-- Expose TLDraw agent and conductor to the primary agent as tool calls
+1) One agent hears; others think
 
-## 1. One LiveKit Agent Per User (`livekit-agent-worker.ts`)
+- Voice Agent (Realtime): ears + intent + exactly two UI tools.
+- Stewards (Agents SDK): own domain logic; return a single artifact/patch.
+- Conductor: routes only.
 
-- Agents should be able to initialize custom components, create TLDraw shapes, or manipulate the canvas through tool calls.
-- **Available tools:**
-  - Canvas subagent (natural language → TLDraw editor API calls)
-  - Pass off component creation to the conductor agent
-  - Pass off component update to the conductor agent
+2) Verbatim > "smart"
 
-## 2. One Room With Multiple Participants
+- Components are fully authored by the steward and applied verbatim.
+- No silent normalizers or magic fixers.
 
-- **DONE**
+3) Two UI tools in production
 
-## 3. Canvas Syncs State Between Participants
+- `create_component({ type, spec })`
+- `update_component({ componentId, patch })`
 
-- **DONE**
+Note: The Voice Agent may also use non-UI helpers for routing/ledger:
 
-## 5. Sub-Agent: Conductor Agent
+- `dispatch_to_conductor({...})` (handoff to Conductor/Stewards)
+- `reserve_component({...})`, `resolve_component({...})` (ID ledger)
 
-- Takes instructions from the watcher or primary agent and performs actions
-- Has access to Linear, YouTube, and all MCP tools
-- Takes natural language instructions and uses its toolbox to update components
-- In the future, there will be specialized mini agents that are experts in their component (e.g., a Linear agent that uses all of Linear's tools)
+4) One LLM call per trigger
 
-## 6. Watcher Agent
+- Realtime function call → execute → return `function_call_output` → continue.
 
-- **FUTURE**
-- Monitors the transcript and decides if a component should be updated based on the transcript
-- Sends a message to the conductor agent to update the component
+5) Supabase = source of truth
 
-## Principles
+- Transcripts and component docs (versioned) live in Supabase.
 
-- Real-time speech-to-UI platform
-- Receives transcript from the user and from other users
-- Initializes components and controls the canvas
-- Receives text input from user messages (**TODO**)
+6) Typed everything
 
-## Conductor Agent (Custom Replacement)
+- Zod for tool params and outputs; explicit JSON contracts.
 
-- Takes instructions from the primary agent:
-  - Receives tool call arguments from the primary agent and uses transcript context to understand what the user wants
-  - Calls MCPs to access real-time external information (e.g., YouTube API)
-  - Renders the component with props
-  - Components have pre-existing props
-  - Should be able to update the state of the component
-- LiveKit agent currently: Monitors the transcript and decides what to do, which will update the state of the component
+7) Small, boring files
 
-# First Principles
+- ≤200 LOC target; extract helpers early.
 
-## What Needs Doing First
+8) Prefer hosted tools
 
-- Merge branches – **DONE**
-- Figure out what needs doing – **DONE**
-- TLDraw sub-agent
-- Conductor agent that takes all tools
-- Expose TLDraw agent and conductor to the primary agent as tool calls
+- Use Responses API + MCP over bespoke clients.
 
-## 1. One LiveKit Agent Per User (`livekit-agent-worker.ts`)
+9) Debounce reality
 
-- Agents should be able to initialize custom components, create TLDraw shapes, or manipulate the canvas through tool calls.
-- **Available tools:**
-  - Canvas subagent (natural language → TLDraw editor API calls)
-  - Pass off component creation to the conductor agent
-  - Pass off component update to the conductor agent
+- Stewards run on debounced transcript windows (2–4s under load).
 
-## 2. One Room With Multiple Participants
+10) Observability before cleverness
 
-- **DONE**
+- Trace fetch → reason → commit. Log `prevVersion → nextVersion` for all commits.
 
-## 3. Canvas Syncs State Between Participants
+---
 
-- **DONE**
+## Anti-patterns
 
-## 5. Sub-Agent: Conductor Agent
+- Browser acting as agent (network calls/logic in ToolDispatcher).
+- Heuristic rat’s nest (keyword routing; hidden fixers).
+- Partial doc diffs that require local "normalizers" to patch up.
+- Duplicate prompts/instructions competing for the same model.
+- Silent failures (no `tool_error`, no trace).
 
-- Takes instructions from the watcher or primary agent and performs actions
-- Has access to Linear, YouTube, and all MCP tools
-- Takes natural language instructions and uses its toolbox to update components
-- In the future, there will be specialized mini agents that are experts in their component (e.g., a Linear agent that uses all of Linear's tools)
+---
 
-## 6. Watcher Agent
+## PR Checklist
 
-- **FUTURE**
-- Monitors the transcript and decides if a component should be updated based on the transcript
-- Sends a message to the conductor agent to update the component
+- [ ] No heuristic/keyword routing added.
+- [ ] Steward produces exactly one artifact/patch and a short text summary.
+- [ ] All new params are zod-typed.
+- [ ] Files stay ≤200 LOC (or justify).
+- [ ] Tracing visible; errors surface as `tool_error`.
+- [ ] Notes call out any required docs updates.
 
-## Principles
+---
 
-- Real-time speech-to-UI platform
-- Receives transcript from the user and from other users
-- Initializes components and controls the canvas
-- Receives text input from user messages (**TODO**)
+## Architecture (short)
 
-## Conductor Agent (Custom Replacement)
+- Voice hears + calls 2 tools. Stewards think + write full artifacts. Browser applies. Supabase remembers.
 
-- Takes instructions from the primary agent:
-  - Receives tool call arguments from the primary agent and uses transcript context to understand what the user wants
-  - Calls MCPs to access real-time external information (e.g., YouTube API)
-  - Renders the component with props
-  - Components have pre-existing props
-  - Should be able to update the state of the component
-- LiveKit agent currently: Monitors the transcript and decides what to do, which will update the state of the component
+See also: `docs/FIRST_PRINCIPLES.md` for extended rationale.

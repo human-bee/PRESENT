@@ -1,0 +1,34 @@
+---
+alwaysApply: false
+---
+# Canvas Steward Playbook (Quick Ref)
+
+## Loop
+User speech/text → Voice Agent → ToolDispatcher → Steward → Supabase → LiveKit `ui_update` → Canvas component
+
+## Contracts
+- Register component and map ToolDispatcher `create_component`/`update_component`.
+- Intent reservation: `reserve_component(intentId, messageId, slot?)` → deterministic IDs.
+- Normalize patches in dispatcher (durations/booleans); components still coerce defensively.
+
+## Agents
+- Voice Agent: debounced transcript → decisions → tool calls; `resolve_component` to recover IDs when omitted.
+- Steward: `get_current_*`, `get_context`, `commit_*` tools; stream status; commit once.
+- Conductor: routes `/api/steward/run` to the appropriate steward.
+
+## Persistence
+- Component docs in Supabase (`canvases` table); transcripts in `canvas_sessions.transcript`.
+- Local caches ensure fresh context before Supabase writes flush.
+
+## Testing & Logs
+- Run: `npm run agent:realtime`, `npm run agent:conductor`, `npm run dev`.
+- Logs: `logs/agent-realtime.log`, `logs/agent-conductor.log` and browser `[ToolDispatcher]` events.
+- Playwright: `tests/flowchart.e2e.spec.ts` validates commit → UI flow.
+
+## Guardrails
+- Sanitize inputs (e.g., mermaid) and keep last good render on failure.
+- Debounce triggers (≈2.5s default) to avoid hammering stewards.
+- Keep prompt volume bounded: trim `shape.props.state`.
+
+See `docs/canvas-steward-playbook.md` for the full template and examples.
+
