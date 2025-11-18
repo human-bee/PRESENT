@@ -71,6 +71,7 @@ class AiSdkProvider implements StreamingProvider {
       schema: agentActionListSchema,
       temperature: options?.tuning?.temperature ?? 0,
       maxOutputTokens: options?.tuning?.maxOutputTokens,
+      providerOptions: this.providerOptionsForCall(),
     } as any;
     if (this.provider !== 'anthropic' && options?.tuning?.topP !== undefined) {
       common.topP = options.tuning.topP;
@@ -103,12 +104,24 @@ class AiSdkProvider implements StreamingProvider {
       schema: agentActionListSchema,
       temperature: options?.tuning?.temperature ?? 0,
       maxOutputTokens: options?.tuning?.maxOutputTokens,
+      providerOptions: this.providerOptionsForCall(),
     } as any;
     if (this.provider !== 'anthropic' && options?.tuning?.topP !== undefined) {
       common.topP = options.tuning.topP;
     }
     const { object } = await unsafeGenerateObject(common);
     return object;
+  }
+
+  private providerOptionsForCall() {
+    if (this.provider !== 'anthropic') return undefined;
+    if (process.env.CANVAS_AGENT_DISABLE_PROMPT_CACHE === '1') return undefined;
+    const ttl = process.env.ANTHROPIC_CACHE_TTL === '5m' ? '5m' : process.env.ANTHROPIC_CACHE_TTL === '1h' ? '1h' : undefined;
+    return {
+      anthropic: {
+        cacheControl: ttl ? { type: 'ephemeral', ttl } : { type: 'ephemeral' },
+      },
+    };
   }
 }
 

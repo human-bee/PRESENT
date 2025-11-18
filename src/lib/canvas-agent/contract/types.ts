@@ -6,7 +6,6 @@ export const ActionNameSchema = z.enum([
   'create_shape',
   'update_shape',
   'delete_shape',
-  'draw_pen',
   'move',
   'resize',
   'rotate',
@@ -20,6 +19,7 @@ export const ActionNameSchema = z.enum([
   'todo',
   'add_detail',
   'set_viewport',
+  'message',
 ]);
 
 export type ActionName = z.infer<typeof ActionNameSchema>;
@@ -71,8 +71,6 @@ export type ScreenshotResponse = {
   selection: string[];
   docVersion: string;
 };
-
-
 
 
 

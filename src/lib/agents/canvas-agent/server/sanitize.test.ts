@@ -2,7 +2,7 @@ import { describe, it, expect } from '@jest/globals';
 jest.mock('nanoid', () => ({ customAlphabet: () => () => 'mockid' }));
 
 import { sanitizeActions } from './sanitize';
-import type { AgentAction } from '../shared/types';
+import type { AgentAction } from '@/lib/canvas-agent/contract/types';
 
 describe('Canvas Agent Sanitizer', () => {
   const mockExists = (id: string) => id.startsWith('shape:');
@@ -112,18 +112,6 @@ describe('Canvas Agent Sanitizer', () => {
     expect(result).toHaveLength(2);
     expect(result[0].name).toBe('create_shape');
     expect((result[1].params as any).ids).toEqual(['temp:2']);
-  });
-
-  it('should preserve draw_pen actions with explicit ids and follow-up deletes', () => {
-    const actions: AgentAction[] = [
-      { id: 'a1', name: 'draw_pen', params: { id: 'temp:pen', points: [{ x: 0, y: 0 }, { x: 10, y: 10 }] } },
-      { id: 'a2', name: 'delete_shape', params: { ids: ['temp:pen'] } },
-    ];
-
-    const result = sanitizeActions(actions, mockExists);
-    expect(result).toHaveLength(2);
-    expect(result[0].name).toBe('draw_pen');
-    expect((result[1].params as any).ids).toEqual(['temp:pen']);
   });
 
   it('should drop malformed actions silently', () => {

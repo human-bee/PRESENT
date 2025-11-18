@@ -106,6 +106,17 @@ export function ToolDispatcher({
     return () => { off?.(); };
   }, [events.bus, room]);
 
+  useEffect(() => {
+    if (!room) return;
+    const off = events.bus.on('agent:status', (message: any) => {
+      try {
+        if (!message || message.type !== 'agent:status') return;
+        window.dispatchEvent(new CustomEvent('present:agent_status', { detail: message }));
+      } catch {}
+    });
+    return () => { off?.(); };
+  }, [events.bus, room]);
+
   const value = useMemo<DispatcherContext>(() => ({ executeToolCall }), [executeToolCall]);
 
   return <ToolDispatcherContext.Provider value={value}>{children}</ToolDispatcherContext.Provider>;

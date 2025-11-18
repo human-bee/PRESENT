@@ -123,6 +123,18 @@ const canvasStateStore: Map<string, CanvasStateRecord> =
   (GLOBAL_APEX[CANVAS_STATE_STORE_KEY] as Map<string, CanvasStateRecord> | undefined) ||
   new Map<string, CanvasStateRecord>();
 
+type PromptCacheRecord = {
+  signature: string;
+  docVersion: number | string;
+  parts: Record<string, unknown>;
+  cachedAt: number;
+};
+
+const PROMPT_CACHE_STORE_KEY = '__present_canvas_prompt_cache__';
+const promptCacheStore: Map<string, PromptCacheRecord> =
+  (GLOBAL_APEX[PROMPT_CACHE_STORE_KEY] as Map<string, PromptCacheRecord> | undefined) ||
+  new Map<string, PromptCacheRecord>();
+
 type TranscriptRecord = {
   transcript: Array<{ participantId: string; text: string; timestamp: number }>;
   cachedAt: number;
@@ -147,6 +159,10 @@ if (!GLOBAL_APEX[TRANSCRIPT_STORE_KEY]) {
 
 if (!GLOBAL_APEX[CANVAS_STATE_STORE_KEY]) {
   GLOBAL_APEX[CANVAS_STATE_STORE_KEY] = canvasStateStore;
+}
+
+if (!GLOBAL_APEX[PROMPT_CACHE_STORE_KEY]) {
+  GLOBAL_APEX[PROMPT_CACHE_STORE_KEY] = promptCacheStore;
 }
 
 export function normalizeRoomName(name: string) {
@@ -288,6 +304,26 @@ const defaultCanvasState = (room: string): CanvasStateRecord => {
 
 const writeCanvasState = (room: string, record: CanvasStateRecord) => {
   canvasStateStore.set(canvasStateKey(room), { ...record, lastUpdated: Date.now() });
+};
+
+const DEFAULT_PROMPT_CACHE_TTL_MS = Number(process.env.CANVAS_AGENT_PROMPT_CACHE_TTL_MS ?? 120_000);
+
+export const readPromptCache = (room: string, signature: string, ttlMs = DEFAULT_PROMPT_CACHE_TTL_MS) => {
+  const cached = promptCacheStore.get(canvasStateKey(room));
+  if (!cached) return null;
+  if (cached.signature !== signature) return null;
+  if (Date.now() - cached.cachedAt > ttlMs) {
+    promptCacheStore.delete(canvasStateKey(room));
+    return null;
+  }
+  return cached;
+};
+
+export const writePromptCache = (
+  room: string,
+  record: { signature: string; docVersion: number | string; parts: Record<string, unknown> },
+) => {
+  promptCacheStore.set(canvasStateKey(room), { ...record, cachedAt: Date.now() });
 };
 
 const normalizeRecord = (room: string, docId: string, entry: Record<string, unknown>) => {

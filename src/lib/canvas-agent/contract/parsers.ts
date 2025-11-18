@@ -1,0 +1,127 @@
+import { z } from 'zod';
+import { ActionNameSchema, AgentActionEnvelopeSchema } from './types';
+
+// Define parameter schemas per action. Keep permissive initial version; tighten later.
+const boundsSchema = z.object({ x: z.number(), y: z.number(), w: z.number(), h: z.number() });
+
+const canonicalAlignSchema = z.object({
+  ids: z.array(z.string()).min(2),
+  axis: z.enum(['x', 'y']),
+  mode: z.enum(['start', 'center', 'end']).default('start'),
+}).passthrough();
+
+const tldrawAlignSchema = z.object({
+  shapeIds: z.array(z.string()).min(2),
+  alignment: z.enum(['top', 'bottom', 'left', 'right', 'center-horizontal', 'center-vertical']),
+  gap: z.number().optional(),
+}).passthrough();
+
+const canonicalRotateSchema = z.object({ ids: z.array(z.string()).min(1), angle: z.number() }).passthrough();
+
+const tldrawRotateSchema = z.object({
+  shapeIds: z.array(z.string()).min(1),
+  degrees: z.number(),
+  originX: z.number().optional(),
+  originY: z.number().optional(),
+  centerY: z.number().optional(),
+}).passthrough();
+
+const mapAlignmentToAxisMode = (alignment: z.infer<typeof tldrawAlignSchema>['alignment']) => {
+  switch (alignment) {
+    case 'left':
+      return { axis: 'x' as const, mode: 'start' as const };
+    case 'right':
+      return { axis: 'x' as const, mode: 'end' as const };
+    case 'center-horizontal':
+      return { axis: 'x' as const, mode: 'center' as const };
+    case 'top':
+      return { axis: 'y' as const, mode: 'start' as const };
+    case 'bottom':
+      return { axis: 'y' as const, mode: 'end' as const };
+    case 'center-vertical':
+    default:
+      return { axis: 'y' as const, mode: 'center' as const };
+  }
+};
+
+export const actionParamSchemas: Record<string, z.ZodTypeAny> = {
+  create_shape: z.object({
+    type: z.string(),
+    id: z.string().optional(),
+    x: z.number().finite().optional(),
+    y: z.number().finite().optional(),
+    props: z.record(z.unknown()).optional(),
+  }).passthrough(),
+  update_shape: z.object({ id: z.string(), props: z.record(z.unknown()) }).passthrough(),
+  delete_shape: z.object({ ids: z.array(z.string()).min(1) }).passthrough(),
+  move: z.object({ ids: z.array(z.string()).min(1), dx: z.number(), dy: z.number() }).passthrough(),
+  resize: z
+    .object({ id: z.string(), w: z.number().positive(), h: z.number().positive(), anchor: z.string().optional() })
+    .passthrough(),
+  rotate: z.union([canonicalRotateSchema, tldrawRotateSchema]).transform((value) => {
+    if ('shapeIds' in value) {
+      return {
+        ids: value.shapeIds,
+        angle: (value.degrees * Math.PI) / 180,
+      };
+    }
+    return value;
+  }),
+  group: z.object({ ids: z.array(z.string()).min(2), groupId: z.string().optional() }).passthrough(),
+  ungroup: z.object({ id: z.string() }).passthrough(),
+  align: z.union([canonicalAlignSchema, tldrawAlignSchema]).transform((value) => {
+    if ('shapeIds' in value) {
+      const { axis, mode } = mapAlignmentToAxisMode(value.alignment);
+      return { ids: value.shapeIds, axis, mode };
+    }
+    return value;
+  }),
+  distribute: z.object({
+    ids: z.array(z.string()).min(3),
+    axis: z.enum(['x', 'y']),
+  }).passthrough(),
+  stack: z.object({
+    ids: z.array(z.string()).min(2),
+    direction: z.enum(['row', 'column']),
+    gap: z.number().nonnegative().optional(),
+  }).passthrough(),
+  reorder: z
+    .object({
+      ids: z.array(z.string()).min(1),
+      where: z.enum(['front', 'back', 'forward', 'backward']).optional(),
+      position: z.enum(['front', 'back', 'forward', 'backward']).optional(),
+    })
+    .passthrough()
+    .refine((value) => Boolean((value as any).where || (value as any).position), {
+      message: 'Provide where or position when reordering shapes.',
+      path: ['where'],
+    }),
+  think: z.object({ text: z.string() }).passthrough(),
+  todo: z.object({ text: z.string() }).passthrough(),
+  add_detail: z.object({
+    targetIds: z.array(z.string()).optional(),
+    hint: z.string().optional(),
+    depth: z.number().int().nonnegative().optional(),
+  }).passthrough(),
+  set_viewport: z.object({ bounds: boundsSchema, smooth: z.boolean().optional() }).passthrough(),
+  apply_preset: z.object({
+    preset: z.string(),
+    targetIds: z.array(z.string()).optional(),
+    x: z.number().optional(),
+    y: z.number().optional(),
+    text: z.string().optional(),
+    props: z.record(z.unknown()).optional(),
+  }).passthrough(),
+  message: z.object({ text: z.string() }).passthrough(),
+};
+
+export function parseAction(action: { id: string; name: string; params: unknown }) {
+  const name = ActionNameSchema.parse(action.name);
+  const schema = actionParamSchemas[name];
+  const params = schema.parse(action.params ?? {});
+  return { id: String(action.id), name, params } as const;
+}
+
+export function parseEnvelope(input: unknown) {
+  return AgentActionEnvelopeSchema.parse(input);
+}

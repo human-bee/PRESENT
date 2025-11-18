@@ -108,8 +108,46 @@ Validates and sanitizes model outputs:
   - Partial strings (e.g., `"r"`, `"yel"`) are dropped until the model emits a valid color name, preventing validation crashes.
   - Brand aliases are mapped to the closest TLDraw key (brutalist/burnt orange → `orange`, deep orange → `red`, charcoal/ink → `black`, etc.).
   - Dash, fill, font, and size props are also coerced to TLDraw’s enums, and blanks are removed.
-  - Shape kinds (`box`, `sticky`, `headline`, …) are mapped to TLDraw shape types, and any action with an unknown/partial `type` (e.g., `"r"`) is ignored until the model finishes spelling it out. This keeps TLDraw from throwing “No shape util found for type ‘r’”.
+- Shape kinds (`box`, `sticky`, `headline`, …) are mapped to TLDraw shape types, and any action with an unknown/partial `type` (e.g., `"r"`) is ignored until the model finishes spelling it out. This keeps TLDraw from throwing “No shape util found for type ‘r’”.
 - Result: the agent prefers our brutalist palette but still has the full TLDraw color wheel available when a request requires it.
+
+### Tool catalog & brand macros
+
+- The steward accepts higher-level macro actions so the model can work faster:
+  - `apply_preset` with params `{ preset: 'Hero'|'Callout'|'Quiet'|'Wire'|'Label', targetIds?: string[], x?: number, y?: number, text?: string }`.
+  - When `targetIds` is provided we emit `update_shape` for each id; otherwise we create a new note with the brand tokens.
+  - The macro recognises synonyms (hero/headline, tag/label, etc.) and automatically maps to TLDraw colors/fonts.
+- Documented TLDraw verbs (`create_shape`, `update_shape`, `align`, `stack`, `set_viewport`, `think`, `todo`, `add_detail`) now appear in the system prompt’s tool catalog so the model stops inventing action names.
+- For freehand strokes, create a TLDraw `draw` shape: `create_shape { type: 'draw', props: { segments: [{ type: 'free', points: [{x,y,z?}] }], color, size } }`. Segments are preserved verbatim, so the model controls pen fidelity via points.
+- TLDraw-native verbs exposed to the steward: `create_shape`, `update_shape`, `delete_shape`, `move`, `resize`, `rotate`, `group`, `ungroup`, `align`, `distribute`, `stack`, `reorder`, `set_viewport`, `think`, `todo`, `add_detail`. Keeping this list in-sync with the prompt avoids “I don’t have that tool” responses.
+- Duplicate creates are ignored; once a block exists, issue `update_shape`/`move`/`resize` instead of re-running the same preset. Dedupe stats are logged as `[CanvasAgent:Dedupe]` so you can spot wasted actions in `logs/agent-conductor.log`.
+
+### Schema guard & JSON manifest
+
+- `src/lib/canvas-agent/contract/tooling/catalog.ts` builds a single source of truth for action schemas (via `zod-to-json-schema`). We embed the resulting JSON in the prompt (`toolSchema`) and log `[CanvasAgent:SchemaGuard]` whenever a malformed action hits the steward before sanitization.
+- The same module exports a machine-readable tool catalog (name, description, params, sample) that’s delivered with every prompt. This mirrors the TLDraw starter-kit mini spec so models stop guessing verb names.
+- Update this file whenever you add a verb or new param or the manifest will drift.
+
+### Prompt caching & Anthropic beta
+
+- Anthropic calls now include `cacheControl: { type: 'ephemeral', ttl: ANTROPHIC_CACHE_TTL }` so the Responses API can reuse the static system/context chunks. After the first turn in a room we see ~0.5‑1 s lower time-to-first-action.
+- The server memoizes prompt parts (minus screenshots) per `{room, docVersion, selection, viewport, transcript}` signature for ~2 minutes. Coming back to the same canvas reuses the cached chunks instantly and only requests a fresh screenshot.
+- Disable either layer via `CANVAS_AGENT_DISABLE_PROMPT_CACHE=1` or tweak `ANTHROPIC_CACHE_TTL` (`5m`/`1h`).
+
+### Screenshot reliability & retries
+
+- Screenshot capture now retries when the room has just connected or the client is momentarily busy.
+- Config via env:
+- `CANVAS_AGENT_SCREENSHOT_RETRIES` — additional attempts after the initial timeout (default `1`).
+- `CANVAS_AGENT_SCREENSHOT_RETRY_DELAY_MS` — wait between attempts (default `450` ms).
+- `CANVAS_AGENT_LOW_ACTION_THRESHOLD` — if a model run emits fewer actions than this value (default `6`), the scheduler enqueues a deterministic follow-up with stricter sampling.
+- `CANVAS_AGENT_CONFIG` — optional JSON blob that overrides the knobs above in one place (example: `{"screenshot":{"timeoutMs":5000,"retries":2},"followups":{"lowActionThreshold":4}}`). Use this to keep parity with the starter kit defaults without juggling multiple env vars.
+- Follow-up passes always request a fresh screenshot, even when the legacy client agent is disabled.
+
+### Evaluation snapshot
+
+- Run the brutalist-poster smoke test (`Connect → Request agent → “Draft a brutalist poster concept…”`).
+- Compare the result with `docs/examples/brutalist-poster.png`; the canonical output shows a hero headline, supporting block, vertical divider, and three sticky notes. Deviations point to context/screenshot regressions.
 
 ### Scheduler & Todos (`src/lib/agents/canvas-agent/server/scheduler.ts`, `todos.ts`)
 
@@ -141,7 +179,7 @@ Task queue and todo management:
 
 Implements all TLDraw-native actions via editor API:
 
-- **Core**: `create_shape`, `update_shape`, `delete_shape`, `draw_pen`
+- **Core**: `create_shape`, `update_shape`, `delete_shape`
 - **Transform**: `move`, `resize`, `rotate`, `group`, `ungroup`
 - **Layout**: `align`, `distribute`, `stack`, `reorder`
 - **Meta**: `think` (append to chat UI), `todo` (update UI list), `set_viewport` (host-only smooth pan/zoom), `add_detail` (no-op on client)
@@ -229,7 +267,7 @@ type AgentActionEnvelope = {
 
 All actions follow the TLDraw Agent Starter Kit naming:
 
-- **Core**: `create_shape`, `update_shape`, `delete_shape`, `draw_pen`
+- **Core**: `create_shape`, `update_shape`, `delete_shape` (use `type: 'draw'` + `props.segments` for pen strokes)
 - **Transform**: `move`, `resize`, `rotate`, `group`, `ungroup`
 - **Layout**: `align`, `distribute`, `stack`, `reorder`
 - **Meta**: `think`, `todo`, `add_detail`, `set_viewport`
@@ -250,6 +288,9 @@ CANVAS_STEWARD_MODEL=debug/fake
 # Or use a real provider: anthropic:claude-3-5-sonnet-20241022
 CANVAS_STEWARD_DEBUG=false
 CANVAS_AGENT_SCREENSHOT_TIMEOUT_MS=3500
+CANVAS_AGENT_SCREENSHOT_RETRIES=1
+CANVAS_AGENT_SCREENSHOT_RETRY_DELAY_MS=450
+CANVAS_AGENT_LOW_ACTION_THRESHOLD=6
 CANVAS_AGENT_TTFB_SLO_MS=200
 NEXT_PUBLIC_CANVAS_AGENT_CLIENT_ENABLED=false  # legacy client agent (archived, leave false unless forced fallback)
 NEXT_PUBLIC_CANVAS_AGENT_THEME_ENABLED=true
@@ -397,7 +438,7 @@ Returns `{ ok: true }` on success.
 - **Screenshot cache**: keyed by `{docVersion, boundsKey}`, TTL 10-30s
 - **Real provider integrations**: Anthropic Claude, OpenAI GPT-4, Google Gemini
 - **Advanced layout actions**: full align/distribute/stack implementations
-- **Pen tool**: draw_pen action with point arrays
+- **Freehand strokes**: `create_shape` + `type:'draw'` with `props.segments[{ type:'free', points:[{x,y,z?}] }]`
 - **Client-side TLDraw agent deprecation**: remove legacy `agent_prompt` path once unified agent is proven
 
 ## References

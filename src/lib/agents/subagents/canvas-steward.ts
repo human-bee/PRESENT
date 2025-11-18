@@ -4,7 +4,7 @@ import { getTranscriptWindow } from '@/lib/agents/shared/supabase-context';
 import { jsonObjectSchema, jsonValueSchema, type JsonObject, type JsonValue } from '@/lib/utils/json-schema';
 import { runCanvasAgent } from '@/lib/agents/canvas-agent/server/runner';
 import { sendActionsEnvelope } from '@/lib/agents/canvas-agent/server/wire';
-import type { AgentAction } from '@/lib/agents/canvas-agent/shared/types';
+import type { AgentAction } from '@/lib/canvas-agent/contract/types';
 
 const logWithTs = <T extends Record<string, unknown>>(label: string, payload: T) => {
   try {

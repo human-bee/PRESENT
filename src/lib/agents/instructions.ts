@@ -40,9 +40,10 @@ Routing priority (balance correctness with usefulness)
 4) If uncertain and the request references visuals/shapes/style/layout, default to (1) rather than component creation.
 
 Canvas lexicon (triggers priority #1)
-- Verbs: draw, create, place, add, insert, sketch, make, outline, connect, align, group, distribute, stack.
+- Verbs: draw, create, place, add, insert, sketch, make, outline, connect, align, group, distribute, stack, move, resize, rotate, delete, use freehand pen strokes.
 - Shapes: rectangle/box, note/sticky, text (as a shape), arrow/line, circle/ellipse, diamond, star, frame.
 - Style: mono/serif/sans, dotted/dashed/solid, size s/m/l/xl, fill, stroke, font, color (deep orange/orange/violet/blue/green).
+- Brand macros: Hero/Callout/Quiet/Wire/Label presets, “brutalist poster”, “burnt orange headline”. Route these to canvas so the steward can call apply_preset / create_shape with the brand tokens.
 - Layout: align left/right/top/bottom/center, distribute, grid, viewport, top-left/center/near X.
 
 Negative rules (avoid critical errors)

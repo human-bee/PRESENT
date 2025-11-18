@@ -1,6 +1,6 @@
 import type { Editor } from '@tldraw/tldraw';
 import { toRichText } from '@tldraw/tldraw';
-import { ACTION_VERSION, type AgentAction, type AgentActionEnvelope } from '@/lib/agents/canvas-agent/shared/types';
+import { ACTION_VERSION, type AgentAction, type AgentActionEnvelope } from '@/lib/canvas-agent/contract/types';
 
 type ApplyContext = {
   editor: Editor;
@@ -358,38 +358,6 @@ export function applyAction(ctx: ApplyContext, action: AgentAction, batch?: Batc
           editor.zoomToBounds(bounds, { inset: 32, animation: { duration: 120 } });
         } catch {}
       }
-      break;
-    }
-    case 'draw_pen': {
-      const { points, x = 0, y = 0, id } = (action.params as any) || {};
-      if (!Array.isArray(points) || points.length === 0) break;
-      const shapeId = withPrefix(id || editor.createShapeId?.() || `pen-${Date.now().toString(36)}`);
-      const segment = {
-        type: 'free',
-        points: points.map((p: any, index: number) => ({
-          x: Number(p?.x) || 0,
-          y: Number(p?.y) || 0,
-          z: typeof p?.z === 'number' ? p.z : index === 0 ? 0.5 : 0.6,
-        })),
-      };
-      localBatch.creates.push({
-        id: shapeId,
-        type: 'draw',
-        x: Number(x) || 0,
-        y: Number(y) || 0,
-        props: {
-          color: 'black',
-          fill: 'none',
-          dash: 'solid',
-          size: 'm',
-          segments: [segment],
-          isComplete: true,
-          isClosed: false,
-          isPen: false,
-          scale: 1,
-        },
-      });
-      mutated = true;
       break;
     }
     case 'think':

@@ -136,7 +136,6 @@ describe('Canvas Agent Parsers', () => {
         'create_shape',
         'update_shape',
         'delete_shape',
-        'draw_pen',
         'move',
         'resize',
         'rotate',
@@ -157,6 +156,5 @@ describe('Canvas Agent Parsers', () => {
     });
   });
 });
-
 
 

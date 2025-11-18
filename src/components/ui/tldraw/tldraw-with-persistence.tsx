@@ -134,6 +134,39 @@ function CustomMainMenu({ readOnly = false }: { readOnly?: boolean } & any) {
 
   // Helper to disable or no-op in read-only mode
   const disabled = readOnly;
+  const autosaveTimerRef = React.useRef<NodeJS.Timeout | null>(null);
+  const lastAutosaveSessionRef = React.useRef<string | null>(null);
+
+  React.useEffect(() => {
+    if (disabled) return;
+    const handleStatus = (event: Event) => {
+      const detail = (event as CustomEvent).detail as
+        | { sessionId?: string; state?: string; type?: string }
+        | undefined;
+      if (!detail || detail.type !== 'agent:status') return;
+      if (detail.state !== 'done') return;
+      if (lastAutosaveSessionRef.current === detail.sessionId) return;
+      lastAutosaveSessionRef.current = detail.sessionId ?? null;
+      if (autosaveTimerRef.current) {
+        clearTimeout(autosaveTimerRef.current);
+      }
+      autosaveTimerRef.current = setTimeout(() => {
+        if (process.env.NODE_ENV !== 'production') {
+          try {
+            console.debug('[CanvasPersistence] Auto-saving after agent run', detail);
+          } catch {}
+        }
+        saveCanvas();
+      }, 1500);
+    };
+    window.addEventListener('present:agent_status', handleStatus as EventListener);
+    return () => {
+      if (autosaveTimerRef.current) {
+        clearTimeout(autosaveTimerRef.current);
+      }
+      window.removeEventListener('present:agent_status', handleStatus as EventListener);
+    };
+  }, [disabled, saveCanvas]);
 
   const handleSignOut = async () => {
     try {

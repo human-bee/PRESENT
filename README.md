@@ -208,6 +208,7 @@ Set TLDraw’s default look-and-feel and a few tasteful UI tweaks via a focused 
 
 - Hook: `src/components/ui/canvas/hooks/useTldrawBranding.ts`
 - Used at: `src/components/ui/canvas/canvas-space.tsx:~280` (passed to `onMount`)
+- Server-side macros + steward capabilities live in [docs/canvas-agent.md](docs/canvas-agent.md#tool-catalog--brand-macros); review that section if you need to extend the agent’s “hands” (apply presets, retries, screenshot tuning, etc.).
 
 What it sets by default
 
