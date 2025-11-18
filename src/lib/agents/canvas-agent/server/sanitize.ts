@@ -2,6 +2,14 @@ import type { AgentAction } from '@/lib/canvas-agent/contract/types';
 import { actionParamSchemas } from '@/lib/canvas-agent/contract/parsers';
 import { newAgentShapeId } from '@/lib/canvas-agent/contract/ids';
 
+/**
+ * Canonical sanitization happens in two passes:
+ * 1. Structural parsing via the shared Zod schemas (type guardrails, defaulting).
+ * 2. Graph-aware guardrails (existence checks, ID filtering, range clamps).
+ * No semantic rewrites (e.g. changing verbs) happen here – those remain closer
+ * to the prompt bridge so we can reason about them explicitly.
+ */
+
 export type CanvasShapeExistence = (id: string) => boolean;
 
 export function sanitizeActions(actions: AgentAction[], exists: CanvasShapeExistence): AgentAction[] {

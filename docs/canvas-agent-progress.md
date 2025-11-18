@@ -188,6 +188,7 @@ This is a chronological list of *impactful* changes already in place. Add items 
 - [x] Introduced `src/lib/canvas-agent/contract/` so schemas, tool catalog, few-shots, shape prop normalization, and the base system prompt live in one shared package; server + client runners now import everything from this module.
 - [x] Expanded the system prompt + few-shot set with starter-kit style composition guidance (poster/storyboard/sticky cluster/follow-up examples), reinforcing align/distribute/stack usage and pen strokes via canonical draw shapes.
 - [x] Teacher contract + streaming buffer wiring: action names now derive from the generated TLDraw template metadata, legacy verbs map through a shared alias table, structured streaming flushes only completed actions, and a new `CANVAS_AGENT_MODE` (`present` / `tldraw-teacher` / `shadow`) flag is plumbed for upcoming parity harnesses.
+- [x] 2025-11-18T10:45 PT — Tightened teacher JSON-schema validation (Ajv + normalized refs), exposed validation coverage metrics, and documented which sanitization steps remain semantic (e.g., the `line`→`rectangle` fallback) so future parity passes can remove them deliberately.
 
 ---
 

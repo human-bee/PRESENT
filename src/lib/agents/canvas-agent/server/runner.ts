@@ -676,6 +676,13 @@ export async function runCanvasAgent(args: RunArgs) {
       if (accepted) metrics.followupCount++;
     };
 
+/**
+ * normalizeRawAction keeps create/update payloads in sync with the canonical
+ * contract before we run schema validation. Most adjustments are structural
+ * (moving props, coercing dimensions, resolving shape kinds). The lone
+ * semantic fallback is the `line` → `rectangle` rewrite noted below, which is
+ * a temporary crutch until the TLDraw contract exposes sized lines.
+ */
 const normalizeRawAction = (raw: unknown, shapeTypeById: Map<string, string>) => {
   if (!raw || typeof raw !== 'object') return raw;
   const action = raw as Record<string, any>;
@@ -695,6 +702,10 @@ const normalizeRawAction = (raw: unknown, shapeTypeById: Map<string, string>) =>
       coerceNumeric(params.h) !== undefined ||
       coerceNumeric(params.height) !== undefined;
     if (resolvedType === 'line' && hasDimension) {
+      // Semantic rewrite: TLDraw's teacher can emit `line` shapes with width &
+      // height, which PRESENT cannot render faithfully. For now we coerce
+      // those into rectangles and document the hack so a parity pass can
+      // remove it once prompts/examples converge.
       resolvedType = 'rectangle';
     }
     params.type = resolvedType;
@@ -855,6 +866,9 @@ const normalizeRawAction = (raw: unknown, shapeTypeById: Map<string, string>) =>
           const shapeId = String((normalized as any).params?.id ?? '').trim();
           if (shapeId) {
             if (knownIds.has(shapeId)) {
+              // Structural dedupe: TLDraw occasionally repeats `create`
+              // payloads. We drop the duplicates rather than mutating the
+              // params so the dispatcher never sees conflicting shapes.
               dropStats.duplicateCreates++;
               continue;
             }
