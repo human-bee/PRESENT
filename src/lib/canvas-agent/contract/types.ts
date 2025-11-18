@@ -1,8 +1,9 @@
 import { z } from 'zod';
+import { TEACHER_ACTIONS, type TeacherActionName } from './teacher';
 
 export const ACTION_VERSION = 'tldraw-actions/1' as const;
 
-export const ActionNameSchema = z.enum([
+export const LEGACY_ACTION_NAMES = [
   'create_shape',
   'update_shape',
   'delete_shape',
@@ -19,8 +20,20 @@ export const ActionNameSchema = z.enum([
   'todo',
   'add_detail',
   'set_viewport',
+  'apply_preset',
   'message',
-]);
+] as const;
+
+if (TEACHER_ACTIONS.length === 0) {
+  throw new Error('Teacher contract must define at least one action. Did you run scripts/gen-agent-contract.ts?');
+}
+
+const teacherActionTuple = TEACHER_ACTIONS as readonly [TeacherActionName, ...TeacherActionName[]];
+
+const LegacyActionNameSchema = z.enum(LEGACY_ACTION_NAMES);
+const TeacherActionNameSchema = z.enum(teacherActionTuple);
+
+export const ActionNameSchema = z.union([LegacyActionNameSchema, TeacherActionNameSchema]);
 
 export type ActionName = z.infer<typeof ActionNameSchema>;
 
@@ -71,6 +84,4 @@ export type ScreenshotResponse = {
   selection: string[];
   docVersion: string;
 };
-
-
 

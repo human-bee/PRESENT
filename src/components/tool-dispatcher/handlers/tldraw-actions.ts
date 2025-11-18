@@ -67,6 +67,24 @@ function alignShapes(editor: Editor, ids: string[], axis: 'x' | 'y', mode: 'star
   }
 }
 
+function moveShapeToAbsoluteTarget(editor: Editor, id: string, target: { x: number; y: number }) {
+  const sid = withPrefix(id);
+  const shape = editor.getShape?.(sid as any) as any;
+  if (!shape) return null;
+  const bounds = editor.getShapePageBounds?.(sid as any);
+  if (!bounds) return null;
+  const shapeX = fallbackNumber(shape.x, bounds.minX);
+  const shapeY = fallbackNumber(shape.y, bounds.minY);
+  const offsetX = shapeX - bounds.minX;
+  const offsetY = shapeY - bounds.minY;
+  return {
+    id: sid,
+    type: shape.type ?? 'geo',
+    x: target.x + offsetX,
+    y: target.y + offsetY,
+  };
+}
+
 function distributeShapes(editor: Editor, ids: string[], axis: 'x' | 'y', collect: BatchCollector) {
   const prefixedIds = withPrefixes(ids);
   if (typeof editor.distributeShapes === 'function') {
@@ -246,11 +264,22 @@ export function applyAction(ctx: ApplyContext, action: AgentAction, batch?: Batc
       break;
     }
     case 'update_shape': {
-      const { id, props } = action.params as any;
+      const { id, props, x, y } = action.params as any;
       const sid = withPrefix(id);
       const shape = editor.getShape?.(sid as any) as any;
       if (!shape) break;
-      localBatch.updates.push({ id: sid, type: shape.type ?? 'geo', props: props || {} });
+      const update: Record<string, unknown> = {
+        id: sid,
+        type: shape.type ?? 'geo',
+        props: props || {},
+      };
+      if (typeof x === 'number' && Number.isFinite(x)) {
+        update.x = x;
+      }
+      if (typeof y === 'number' && Number.isFinite(y)) {
+        update.y = y;
+      }
+      localBatch.updates.push(update);
       mutated = true;
       break;
     }
@@ -261,14 +290,25 @@ export function applyAction(ctx: ApplyContext, action: AgentAction, batch?: Batc
       break;
     }
     case 'move': {
-      const { ids, dx, dy } = action.params as any;
-      for (const sid of withPrefixes(ids as string[])) {
-        const snapshot = getShapeSnapshot(editor, sid);
-        if (!snapshot) continue;
-        const nx = snapshot.x + (dx || 0);
-        const ny = snapshot.y + (dy || 0);
-        localBatch.updates.push({ id: snapshot.id, type: snapshot.type, x: nx, y: ny });
-        mutated = true;
+      const { ids, dx, dy, target } = action.params as any;
+      const idList = Array.isArray(ids) ? (ids as string[]) : [];
+      const prefixed = withPrefixes(idList);
+      if (target && typeof target.x === 'number' && typeof target.y === 'number') {
+          for (const rawId of idList) {
+          const absoluteUpdate = moveShapeToAbsoluteTarget(editor, rawId, target);
+          if (!absoluteUpdate) continue;
+          localBatch.updates.push(absoluteUpdate);
+          mutated = true;
+        }
+      } else {
+        for (const sid of prefixed) {
+          const snapshot = getShapeSnapshot(editor, sid);
+          if (!snapshot) continue;
+          const nx = snapshot.x + (dx || 0);
+          const ny = snapshot.y + (dy || 0);
+          localBatch.updates.push({ id: snapshot.id, type: snapshot.type, x: nx, y: ny });
+          mutated = true;
+        }
       }
       break;
     }

@@ -1,48 +1,59 @@
 export type StructuredAction = Record<string, unknown>;
 
+type StructuredBufferOptions = {
+  isActionComplete?: (action: StructuredAction) => boolean;
+};
+
+const defaultCompletionPredicate = (action: StructuredAction) =>
+  Boolean(action && typeof action === 'object' && (action as { complete?: boolean }).complete === true);
+
 export class StructuredActionBuffer {
-  private snapshots: Map<number, string> = new Map();
   private actions: StructuredAction[] = [];
+  private emittedIndices = new Set<number>();
+  private readonly isActionComplete: (action: StructuredAction) => boolean;
+
+  constructor(options?: StructuredBufferOptions) {
+    this.isActionComplete = options?.isActionComplete ?? defaultCompletionPredicate;
+  }
 
   ingest(partialActions: StructuredAction[]): StructuredAction[] {
     if (!Array.isArray(partialActions) || partialActions.length === 0) {
       return [];
     }
 
-    const deltas: StructuredAction[] = [];
+    this.actions = partialActions.map((action) => (action ? { ...action } : action));
+    const completed: StructuredAction[] = [];
+    const lastIndex = this.actions.length - 1;
 
-    partialActions.forEach((action, index) => {
-      const serialized = JSON.stringify(action ?? {});
-      if (!this.snapshots.has(index)) {
-        this.snapshots.set(index, serialized);
-        this.actions[index] = action;
-        deltas.push(action);
+    this.actions.forEach((action, index) => {
+      if (this.emittedIndices.has(index)) {
         return;
       }
-
-      if (this.snapshots.get(index) !== serialized) {
-        this.snapshots.set(index, serialized);
-        this.actions[index] = action;
-        deltas.push(action);
+      const predicateComplete = this.isActionComplete(action);
+      const sequentialComplete = index < lastIndex;
+      if (predicateComplete || sequentialComplete) {
+        this.emittedIndices.add(index);
+        completed.push(action);
       }
     });
 
-    if (this.actions.length < partialActions.length) {
-      this.actions.length = partialActions.length;
-    }
-
-    return deltas;
+    return completed;
   }
 
   finalize(finalActions: StructuredAction[]): StructuredAction[] {
-    if (Array.isArray(finalActions)) {
-      this.actions = finalActions.slice();
-      this.snapshots.clear();
-      this.actions.forEach((action, index) => {
-        this.snapshots.set(index, JSON.stringify(action ?? {}));
-      });
+    if (!Array.isArray(finalActions) || finalActions.length === 0) {
+      return [];
     }
-    return this.actions.slice();
+    this.actions = finalActions.map((action) => (action ? { ...action } : action));
+    const pending: StructuredAction[] = [];
+    this.actions.forEach((action, index) => {
+      if (this.emittedIndices.has(index)) {
+        return;
+      }
+      this.emittedIndices.add(index);
+      pending.push(action);
+    });
+    return pending;
   }
 
   getAll() {

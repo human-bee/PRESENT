@@ -1,5 +1,6 @@
 import { z } from 'zod';
-import { ActionNameSchema, AgentActionEnvelopeSchema } from './types';
+import { ActionNameSchema, AgentActionEnvelopeSchema, type ActionName } from './types';
+import { TEACHER_ACTIONS, type TeacherActionName } from './teacher';
 
 // Define parameter schemas per action. Keep permissive initial version; tighten later.
 const boundsSchema = z.object({ x: z.number(), y: z.number(), w: z.number(), h: z.number() });
@@ -18,11 +19,13 @@ const drawSegmentSchema = z
   })
   .passthrough();
 
-const canonicalAlignSchema = z.object({
-  ids: z.array(z.string()).min(2),
-  axis: z.enum(['x', 'y']),
-  mode: z.enum(['start', 'center', 'end']).default('start'),
-}).passthrough();
+const canonicalAlignSchema = z
+  .object({
+    ids: z.array(z.string()).min(2),
+    axis: z.enum(['x', 'y']),
+    mode: z.enum(['start', 'center', 'end']).default('start'),
+  })
+  .passthrough();
 
 const tldrawAlignSchema = z.object({
   shapeIds: z.array(z.string()).min(2),
@@ -58,7 +61,20 @@ const mapAlignmentToAxisMode = (alignment: z.infer<typeof tldrawAlignSchema>['al
   }
 };
 
-export const actionParamSchemas: Record<string, z.ZodTypeAny> = {
+const moveDeltaSchema = z.object({ ids: z.array(z.string()).min(1), dx: z.number(), dy: z.number() }).passthrough();
+
+const moveAbsoluteSchema = z
+  .object({
+    ids: z.array(z.string()).min(1),
+    target: z.object({ x: z.number(), y: z.number() }),
+  })
+  .passthrough();
+
+const moveSingleAbsoluteSchema = z
+  .object({ shapeId: z.string(), x: z.number(), y: z.number() })
+  .transform((value) => ({ ids: [value.shapeId], target: { x: value.x, y: value.y } }));
+
+const legacyActionSchemas = {
   create_shape: z
     .object({
       type: z.string(),
@@ -91,9 +107,16 @@ export const actionParamSchemas: Record<string, z.ZodTypeAny> = {
         }
       });
     }),
-  update_shape: z.object({ id: z.string(), props: z.record(z.unknown()) }).passthrough(),
+  update_shape: z
+    .object({
+      id: z.string(),
+      props: z.record(z.unknown()).default({}),
+      x: z.number().finite().optional(),
+      y: z.number().finite().optional(),
+    })
+    .passthrough(),
   delete_shape: z.object({ ids: z.array(z.string()).min(1) }).passthrough(),
-  move: z.object({ ids: z.array(z.string()).min(1), dx: z.number(), dy: z.number() }).passthrough(),
+  move: z.union([moveDeltaSchema, moveAbsoluteSchema, moveSingleAbsoluteSchema]),
   resize: z
     .object({ id: z.string(), w: z.number().positive(), h: z.number().positive(), anchor: z.string().optional() })
     .passthrough(),
@@ -108,22 +131,28 @@ export const actionParamSchemas: Record<string, z.ZodTypeAny> = {
   }),
   group: z.object({ ids: z.array(z.string()).min(2), groupId: z.string().optional() }).passthrough(),
   ungroup: z.object({ id: z.string() }).passthrough(),
-  align: z.union([canonicalAlignSchema, tldrawAlignSchema]).transform((value) => {
-    if ('shapeIds' in value) {
-      const { axis, mode } = mapAlignmentToAxisMode(value.alignment);
-      return { ids: value.shapeIds, axis, mode };
-    }
-    return value;
-  }),
-  distribute: z.object({
-    ids: z.array(z.string()).min(3),
-    axis: z.enum(['x', 'y']),
-  }).passthrough(),
-  stack: z.object({
-    ids: z.array(z.string()).min(2),
-    direction: z.enum(['row', 'column']),
-    gap: z.number().nonnegative().optional(),
-  }).passthrough(),
+  align: z
+    .union([canonicalAlignSchema, tldrawAlignSchema])
+    .transform((value) => {
+      if ('shapeIds' in value) {
+        const { axis, mode } = mapAlignmentToAxisMode(value.alignment);
+        return { ids: value.shapeIds, axis, mode };
+      }
+      return value;
+    }),
+  distribute: z
+    .object({
+      ids: z.array(z.string()).min(3),
+      axis: z.enum(['x', 'y']),
+    })
+    .passthrough(),
+  stack: z
+    .object({
+      ids: z.array(z.string()).min(2),
+      direction: z.enum(['row', 'column']),
+      gap: z.number().nonnegative().optional(),
+    })
+    .passthrough(),
   reorder: z
     .object({
       ids: z.array(z.string()).min(1),
@@ -137,22 +166,66 @@ export const actionParamSchemas: Record<string, z.ZodTypeAny> = {
     }),
   think: z.object({ text: z.string() }).passthrough(),
   todo: z.object({ text: z.string() }).passthrough(),
-  add_detail: z.object({
-    targetIds: z.array(z.string()).optional(),
-    hint: z.string().optional(),
-    depth: z.number().int().nonnegative().optional(),
-  }).passthrough(),
+  add_detail: z
+    .object({
+      targetIds: z.array(z.string()).optional(),
+      hint: z.string().optional(),
+      depth: z.number().int().nonnegative().optional(),
+    })
+    .passthrough(),
   set_viewport: z.object({ bounds: boundsSchema, smooth: z.boolean().optional() }).passthrough(),
-  apply_preset: z.object({
-    preset: z.string(),
-    targetIds: z.array(z.string()).optional(),
-    x: z.number().optional(),
-    y: z.number().optional(),
-    text: z.string().optional(),
-    props: z.record(z.unknown()).optional(),
-  }).passthrough(),
+  apply_preset: z
+    .object({
+      preset: z.string(),
+      targetIds: z.array(z.string()).optional(),
+      x: z.number().optional(),
+      y: z.number().optional(),
+      text: z.string().optional(),
+      props: z.record(z.unknown()).optional(),
+    })
+    .passthrough(),
   message: z.object({ text: z.string() }).passthrough(),
+} satisfies Record<string, z.ZodTypeAny>;
+
+type LegacyActionKey = keyof typeof legacyActionSchemas;
+
+const unsupportedTeacherActionSchema = z.never();
+
+const teacherNameAliases: Partial<Record<TeacherActionName, LegacyActionKey>> = {
+  'add-detail': 'add_detail',
+  align: 'align',
+  bringToFront: 'reorder',
+  create: 'create_shape',
+  delete: 'delete_shape',
+  distribute: 'distribute',
+  message: 'message',
+  move: 'move',
+  pen: 'create_shape',
+  resize: 'resize',
+  rotate: 'rotate',
+  stack: 'stack',
+  sendToBack: 'reorder',
+  think: 'think',
+  update: 'update_shape',
+  'update-todo-list': 'todo',
+  setMyView: 'set_viewport',
 };
+
+const actionParamSchemasMap: Record<string, z.ZodTypeAny> = { ...legacyActionSchemas };
+
+TEACHER_ACTIONS.forEach((teacherName) => {
+  if (actionParamSchemasMap[teacherName]) {
+    return;
+  }
+  const alias = teacherNameAliases[teacherName];
+  if (alias && legacyActionSchemas[alias]) {
+    actionParamSchemasMap[teacherName] = legacyActionSchemas[alias];
+  } else {
+    actionParamSchemasMap[teacherName] = unsupportedTeacherActionSchema;
+  }
+});
+
+export const actionParamSchemas = actionParamSchemasMap as Record<ActionName, z.ZodTypeAny>;
 
 export function parseAction(action: { id: string; name: string; params: unknown }) {
   const name = ActionNameSchema.parse(action.name);

@@ -1,12 +1,17 @@
 import { z } from 'zod';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 import { actionParamSchemas } from '@/lib/canvas-agent/contract/parsers';
-import { ActionNameSchema } from '@/lib/canvas-agent/contract/types';
+import { LEGACY_ACTION_NAMES } from '@/lib/canvas-agent/contract/types';
+import { TEACHER_ACTIONS } from '@/lib/canvas-agent/contract/teacher';
 
-const ACTION_NAMES = ActionNameSchema.options;
+const ACTION_NAMES = Array.from(new Set<string>([...LEGACY_ACTION_NAMES, ...TEACHER_ACTIONS]));
+if (ACTION_NAMES.length === 0) {
+  throw new Error('Canvas agent action registry is empty. Did you run scripts/gen-agent-contract.ts?');
+}
+const ACTION_NAME_TUPLE = ACTION_NAMES as [string, ...string[]];
 
 const ActionUnionSchema = z.union(
-  ACTION_NAMES.map((actionName) =>
+  ACTION_NAME_TUPLE.map((actionName) =>
     z.object({
       id: z.union([z.string(), z.number()]).optional(),
       name: z.literal(actionName),

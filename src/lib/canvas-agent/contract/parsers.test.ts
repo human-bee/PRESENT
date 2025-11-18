@@ -1,6 +1,7 @@
 import { describe, it, expect } from '@jest/globals';
 import { parseAction, parseEnvelope, actionParamSchemas } from './parsers';
 import { ACTION_VERSION } from './types';
+import { TEACHER_ACTIONS } from './teacher';
 
 describe('Canvas Agent Parsers', () => {
   describe('parseAction', () => {
@@ -154,7 +155,12 @@ describe('Canvas Agent Parsers', () => {
         expect(actionParamSchemas[action]).toBeDefined();
       });
     });
+
+    it('should register schemas for every teacher action name', () => {
+      TEACHER_ACTIONS.forEach((name) => {
+        expect(actionParamSchemas[name]).toBeDefined();
+      });
+    });
   });
 });
-
 

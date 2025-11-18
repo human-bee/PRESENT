@@ -4,6 +4,7 @@ import { buildPromptParts } from './context';
 import { sanitizeActions } from './sanitize';
 import { requestScreenshot, sendActionsEnvelope, sendChat, sendStatus, awaitAck } from './wire';
 import { broadcastToolCall } from '@/lib/agents/shared/supabase-context';
+import type { CanvasShapeSummary } from '@/lib/agents/shared/supabase-context';
 import { ACTION_VERSION } from '@/lib/canvas-agent/contract/types';
 import { OffsetManager, interpretBounds } from './offset';
 import { handleStructuredStreaming } from './streaming';
@@ -20,9 +21,30 @@ import { validateCanonicalAction } from '@/lib/canvas-agent/contract/tooling/cat
 import { resolveShapeType, sanitizeShapeProps } from '@/lib/canvas-agent/contract/shape-utils';
 import { CANVAS_AGENT_SYSTEM_PROMPT } from '@/lib/canvas-agent/contract/system-prompt';
 import { loadCanvasAgentConfig, type CanvasAgentConfig } from './config';
+import { convertTeacherAction } from '@/lib/canvas-agent/contract/teacher-bridge';
+import { streamTeacherAgent } from '@/lib/canvas-agent/teacher-runtime/service';
+import type { TeacherPromptContext } from '@/lib/canvas-agent/teacher-runtime/prompt';
+import { buildTeacherContextItems } from '@/lib/canvas-agent/teacher-runtime/context-items';
 
 
-type RunArgs = { roomId: string; userMessage: string; model?: string; initialViewport?: { x: number; y: number; w: number; h: number } };
+export type CanvasAgentHooks = {
+  onActions?: (payload: {
+    roomId: string;
+    sessionId: string;
+    seq: number;
+    partial: boolean;
+    source: 'present' | 'teacher';
+    actions: AgentAction[];
+  }) => void;
+};
+
+type RunArgs = {
+  roomId: string;
+  userMessage: string;
+  model?: string;
+  initialViewport?: { x: number; y: number; w: number; h: number };
+  hooks?: CanvasAgentHooks;
+};
 
 let screenshotInboxPromise: Promise<typeof import('@/server/inboxes/screenshot')> | null = null;
 
@@ -251,9 +273,26 @@ function logMetrics(
 }
 
 export async function runCanvasAgent(args: RunArgs) {
-  const { roomId, userMessage, model } = args;
+  const { roomId, userMessage: rawUserMessage, model, hooks: hookOverrides } = args;
+  const hooks = hookOverrides ?? {};
+  const userMessage = rawUserMessage.trim().length > 0
+    ? rawUserMessage.trim()
+    : 'Improve the layout. Clarify hierarchy and polish typography.';
   const sessionId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const cfg = loadCanvasAgentConfig();
+  if (cfg.mode === 'tldraw-teacher') {
+    console.info('[CanvasAgent] running in tldraw-teacher mode (vendored TLDraw agent active)', {
+      mode: cfg.mode,
+      sessionId,
+      roomId,
+    });
+  } else if (cfg.mode === 'shadow') {
+    console.info('[CanvasAgent] running in shadow mode (present dispatch + teacher logging)', {
+      mode: cfg.mode,
+      sessionId,
+      roomId,
+    });
+  }
   const scheduler = new SessionScheduler({ maxDepth: cfg.followups.maxDepth });
   const shapeTypeById = new Map<string, string>();
   const offset = new OffsetManager();
@@ -732,7 +771,10 @@ const normalizeRawAction = (raw: unknown, shapeTypeById: Map<string, string>) =>
       seqNumber: number,
       partial: boolean,
       enqueueDetail: (params: Record<string, unknown>) => void,
+      options?: { dispatch?: boolean; source?: 'present' | 'teacher' },
     ) => {
+      const shouldDispatch = options?.dispatch !== false;
+      const actionSource = options?.source ?? 'present';
       if (cfg.debug) {
         try {
           console.log('[CanvasAgent:ActionsChunk]', JSON.stringify({
@@ -753,14 +795,23 @@ const normalizeRawAction = (raw: unknown, shapeTypeById: Map<string, string>) =>
       };
       const queue: unknown[] = [];
       for (const candidate of rawActions) {
-        const macros = expandMacroAction(candidate as Record<string, any>);
+        const teacherConverted = convertTeacherAction(candidate);
+        const baseCandidate = teacherConverted
+          ? {
+              id: typeof (candidate as any)?.id === 'string' ? (candidate as any).id : undefined,
+              name: teacherConverted.name,
+              params: teacherConverted.params,
+            }
+          : candidate;
+
+        const macros = expandMacroAction(baseCandidate as Record<string, any>);
         if (Array.isArray(macros)) {
           if (macros.length > 0) {
             queue.push(...macros);
           }
           continue;
         }
-        queue.push(candidate);
+        queue.push(baseCandidate);
       }
 
       const canvasSummary = await getCanvasShapeSummary(roomId);
@@ -844,10 +895,12 @@ const normalizeRawAction = (raw: unknown, shapeTypeById: Map<string, string>) =>
       const exists = (id: string) =>
         sessionCreatedIds.has(id) || chunkCreatedIds.has(id) || existingShapeIds.has(id);
       const clean = sanitizeActions(parsed, exists);
-      rememberCreatedIds(clean);
+      if (shouldDispatch) {
+        rememberCreatedIds(clean);
+      }
       if (clean.length === 0) return 0;
 
-      if (!metrics.firstActionAt && clean.length > 0) {
+      if (shouldDispatch && !metrics.firstActionAt && clean.length > 0) {
         metrics.firstActionAt = Date.now();
         metrics.ttfb = metrics.firstActionAt - metrics.startedAt;
         logMetrics(metrics, cfg, 'ttfb');
@@ -872,58 +925,70 @@ const normalizeRawAction = (raw: unknown, shapeTypeById: Map<string, string>) =>
       const chatOnlyActions = worldActions.filter((action) => action.name === 'message');
 
       if (dispatchableActions.length > 0) {
-        metrics.actionCount += dispatchableActions.length;
-        await sendActionsEnvelope(roomId, sessionId, seqNumber, dispatchableActions, { partial });
-        const ack = await awaitAck({ sessionId, seq: seqNumber, deadlineMs: 1200 });
-        if (ack && metrics.firstAckLatencyMs === undefined) {
-          metrics.firstAckLatencyMs = Date.now() - metrics.startedAt;
-        }
-        if (!ack) {
-          metrics.retryCount++;
+        hooks.onActions?.({
+          roomId,
+          sessionId,
+          seq: seqNumber,
+          partial,
+          source: actionSource,
+          actions: dispatchableActions,
+        });
+        if (shouldDispatch) {
+          metrics.actionCount += dispatchableActions.length;
           await sendActionsEnvelope(roomId, sessionId, seqNumber, dispatchableActions, { partial });
-          const retryAck = await awaitAck({ sessionId, seq: seqNumber, deadlineMs: 800 });
-          if (retryAck && metrics.firstAckLatencyMs === undefined) {
+          const ack = await awaitAck({ sessionId, seq: seqNumber, deadlineMs: 1200 });
+          if (ack && metrics.firstAckLatencyMs === undefined) {
             metrics.firstAckLatencyMs = Date.now() - metrics.startedAt;
+          }
+          if (!ack) {
+            metrics.retryCount++;
+            await sendActionsEnvelope(roomId, sessionId, seqNumber, dispatchableActions, { partial });
+            const retryAck = await awaitAck({ sessionId, seq: seqNumber, deadlineMs: 800 });
+            if (retryAck && metrics.firstAckLatencyMs === undefined) {
+              metrics.firstAckLatencyMs = Date.now() - metrics.startedAt;
+            }
           }
         }
       }
 
-      for (const action of [...dispatchableActions, ...chatOnlyActions]) {
-        if (action.name === 'think') {
-          const thought = String((action as any).params?.text || '');
-          if (thought) {
-            try {
-              await sendChat(roomId, sessionId, { role: 'assistant', text: thought });
-            } catch (chatError) {
-              console.warn('[CanvasAgent:ThinkChatError]', {
-                roomId,
-                sessionId,
-                error: chatError instanceof Error ? chatError.message : chatError,
-              });
+      if (shouldDispatch) {
+        for (const action of [...dispatchableActions, ...chatOnlyActions]) {
+          if (action.name === 'think') {
+            const thought = String((action as any).params?.text || '');
+            if (thought) {
+              try {
+                await sendChat(roomId, sessionId, { role: 'assistant', text: thought });
+              } catch (chatError) {
+                console.warn('[CanvasAgent:ThinkChatError]', {
+                  roomId,
+                  sessionId,
+                  error: chatError instanceof Error ? chatError.message : chatError,
+                });
+              }
             }
           }
-        }
-        if (action.name === 'todo') {
-          const text = String((action as any).params?.text || '');
-          if (text) {
-            try {
-              await addTodo(sessionId, text);
-            } catch (todoError) {
-              console.warn('[CanvasAgent:TodoError]', {
-                roomId,
-                sessionId,
-                error: todoError instanceof Error ? todoError.message : todoError,
-              });
+          if (action.name === 'todo') {
+            const text = String((action as any).params?.text || '');
+            if (text) {
+              try {
+                await addTodo(sessionId, text);
+              } catch (todoError) {
+                console.warn('[CanvasAgent:TodoError]', {
+                  roomId,
+                  sessionId,
+                  error: todoError instanceof Error ? todoError.message : todoError,
+                });
+              }
             }
           }
-        }
-        if (action.name === 'add_detail') {
-          enqueueDetail(((action as any).params ?? {}) as Record<string, unknown>);
-        }
-        if (action.name === 'message') {
-          const text = String((action as any).params?.text || '').trim();
-          if (text) {
-            await sendChat(roomId, sessionId, { role: 'assistant', text });
+          if (action.name === 'add_detail') {
+            enqueueDetail(((action as any).params ?? {}) as Record<string, unknown>);
+          }
+          if (action.name === 'message') {
+            const text = String((action as any).params?.text || '').trim();
+            if (text) {
+              await sendChat(roomId, sessionId, { role: 'assistant', text });
+            }
           }
         }
       }
@@ -953,6 +1018,90 @@ const normalizeRawAction = (raw: unknown, shapeTypeById: Map<string, string>) =>
           provider: provider.name,
         }));
       } catch {}
+    }
+
+    const shapesForTeacher = Array.isArray((parts as any)?.shapes)
+      ? ((parts as any).shapes as CanvasShapeSummary[])
+      : [];
+    const selectedForTeacher = Array.isArray((parts as any)?.selectedSimpleShapes)
+      ? ((parts as any).selectedSimpleShapes as Array<Record<string, unknown>>)
+      : [];
+
+    const teacherContext: TeacherPromptContext = {
+      userMessages: [userMessage],
+      requestType: 'user',
+      screenshotDataUrl:
+        latestScreenshot?.image?.dataUrl ||
+        (typeof (promptPayload.parts as any)?.screenshot?.dataUrl === 'string'
+          ? ((promptPayload.parts as any).screenshot as { dataUrl: string }).dataUrl
+          : null),
+      bounds: (latestScreenshot?.viewport ?? args.initialViewport) || null,
+      viewport: (latestScreenshot?.viewport ?? args.initialViewport) || null,
+      styleInstructions:
+        typeof (promptPayload.parts as any)?.styleInstructions === 'string'
+          ? ((promptPayload.parts as any).styleInstructions as string)
+          : undefined,
+      promptBudget:
+        typeof (promptPayload.parts as any)?.promptBudget === 'object'
+          ? ((promptPayload.parts as any).promptBudget as Record<string, unknown>)
+          : null,
+      modelName: model ?? cfg.modelName,
+      timestamp: new Date().toISOString(),
+    };
+
+    const teacherContextItems = buildTeacherContextItems({
+      shapes: shapesForTeacher,
+      selectedShapes: selectedForTeacher,
+      viewport: teacherContext.viewport ?? teacherContext.bounds ?? null,
+    });
+    if (teacherContextItems.length > 0) {
+      teacherContext.contextItems = teacherContextItems;
+    }
+
+    const runTeacherStream = async (dispatchActions: boolean) => {
+      const streamStartedAt = Date.now();
+      let seqTeacher = 1;
+      let firstPartialLogged = false;
+      for await (const event of streamTeacherAgent(teacherContext)) {
+        if (!firstPartialLogged) {
+          firstPartialLogged = true;
+          if (cfg.debug) {
+            console.log('[CanvasAgent:FirstPartial]', JSON.stringify({
+              sessionId,
+              roomId,
+              ms: Date.now() - streamStartedAt,
+              source: 'teacher',
+              dispatch: dispatchActions,
+            }));
+          }
+        }
+        if (dispatchActions) {
+          metrics.chunkCount++;
+        }
+        if (!event?.complete) continue;
+        const currentSeq = seqTeacher++;
+        await processActions([event], currentSeq, false, enqueueDetail, {
+          dispatch: dispatchActions,
+          source: 'teacher',
+        });
+      }
+    };
+
+    let shadowTeacherPromise: Promise<void> | null = null;
+
+    if (cfg.mode === 'tldraw-teacher') {
+      await runTeacherStream(true);
+      return;
+    }
+
+    if (cfg.mode === 'shadow') {
+      shadowTeacherPromise = runTeacherStream(false).catch((error) => {
+        console.warn('[CanvasAgent:ShadowTeacherError]', {
+          roomId,
+          sessionId,
+          error: error instanceof Error ? error.message : error,
+        });
+      });
     }
 
     const invokeModel = async () => {
@@ -1262,6 +1411,9 @@ const normalizeRawAction = (raw: unknown, shapeTypeById: Map<string, string>) =>
 
     metrics.completedAt = Date.now();
     logMetrics(metrics, cfg, 'complete');
+    if (shadowTeacherPromise) {
+      await shadowTeacherPromise;
+    }
   } catch (error) {
     const detail =
       error instanceof Error

@@ -66,12 +66,15 @@ export type FollowupConfig = {
   lowActionThreshold: number;
 };
 
+export type CanvasAgentMode = 'present' | 'tldraw-teacher' | 'shadow';
+
 export type CanvasAgentConfig = {
   modelName?: string;
   debug: boolean;
   preset: CanvasAgentPreset;
   clientEnabled: boolean;
   ttfbSloMs: number;
+  mode: CanvasAgentMode;
   screenshot: ScreenshotConfig;
   prompt: PromptConfig;
   followups: FollowupConfig;
@@ -96,6 +99,13 @@ const parseOverrides = (raw?: string): ConfigOverrides => {
   return {};
 };
 
+const parseAgentMode = (raw?: string): CanvasAgentMode => {
+  const value = (raw ?? '').toLowerCase();
+  if (value === 'teacher' || value === 'tldraw-teacher') return 'tldraw-teacher';
+  if (value === 'shadow') return 'shadow';
+  return 'present';
+};
+
 export function loadCanvasAgentConfig(env: NodeJS.ProcessEnv = process.env): CanvasAgentConfig {
   const preset = resolvePreset(env);
   const screenshotMaxEdge = clampScreenshotEdge(env.CANVAS_AGENT_SCREENSHOT_MAX_SIZE);
@@ -114,6 +124,7 @@ export function loadCanvasAgentConfig(env: NodeJS.ProcessEnv = process.env): Can
     preset,
     clientEnabled: env.NEXT_PUBLIC_CANVAS_AGENT_CLIENT_ENABLED === 'true',
     ttfbSloMs: Number(env.CANVAS_AGENT_TTFB_SLO_MS ?? 200),
+    mode: parseAgentMode(env.CANVAS_AGENT_MODE),
     screenshot: {
       timeoutMs: coerceScreenshotTimeout(env.CANVAS_AGENT_SCREENSHOT_TIMEOUT_MS),
       retries: Math.max(0, Number.parseInt(env.CANVAS_AGENT_SCREENSHOT_RETRIES ?? '1', 10) || 0),

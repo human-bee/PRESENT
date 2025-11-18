@@ -58,6 +58,7 @@
     "@tldraw/tlschema": "4.1.2",
     "@uidotdev/usehooks": "^2.4.1",
     "ai": "5.0.87",
+    "ajv": "^8.17.1",
     "class-variance-authority": "^0.7.1",
     "codex": "^0.2.3",
     "dompurify": "3.3.0",
@@ -113,11 +114,11 @@
     "sharp": "0.34.4",
     "tailwind-merge": "^3.0.2",
     "tailwindcss": "4.1.16",
+    "ts-jest": "29.4.5",
     "tsx": "4.20.6",
     "typescript": "5.9.3",
     "unfurl.js": "^6.4.0",
-    "ws": "^8.18.3",
-    "ts-jest": "29.4.5"
+    "ws": "^8.18.3"
   },
   "optionalDependencies": {
     "@livekit/rtc-node-darwin-arm64": "0.13.14"

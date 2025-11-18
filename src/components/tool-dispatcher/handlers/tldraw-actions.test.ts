@@ -47,6 +47,13 @@ function createMockEditor(initial: ShapeRecord[] = []) {
     bringForward: (ids: any) => calls.push(['bringForward', ids]),
     sendBackward: (ids: any) => calls.push(['sendBackward', ids]),
     getShape: (id: string) => shapeMap.get(id) ?? null,
+    getShapePageBounds: (id: string) => {
+      const shape = shapeMap.get(id);
+      if (!shape) return null;
+      const w = typeof shape.props?.w === 'number' ? shape.props.w : 0;
+      const h = typeof shape.props?.h === 'number' ? shape.props.h : 0;
+      return { minX: shape.x ?? 0, minY: shape.y ?? 0, maxX: (shape.x ?? 0) + w, maxY: (shape.y ?? 0) + h };
+    },
     createShapeId: () => 'generated-id',
     _shapes: shapeMap,
   } as any;
@@ -188,5 +195,42 @@ describe('tldraw action handlers', () => {
     expect(updateCall).toBeTruthy();
     const updates = updateCall[1];
     expect(updates.length).toBeGreaterThan(0);
+  });
+
+  it('honors absolute targets for move actions', () => {
+    const editor = createMockEditor([
+      { id: 'shape:a', type: 'geo', x: 10, y: 20, props: { w: 50, h: 40 } },
+    ]);
+    applyEnvelope(
+      { editor, isHost: true, appliedIds: new Set() },
+      makeEnvelope({
+        id: 'move-absolute',
+        name: 'move',
+        params: { ids: ['a'], target: { x: 200, y: 300 } },
+      }),
+    );
+    const updateCall = editor.calls.find((c: any[]) => c[0] === 'updateShapes');
+    expect(updateCall).toBeTruthy();
+    const [{ x, y }] = updateCall[1];
+    expect(x).toBeGreaterThanOrEqual(200);
+    expect(y).toBeGreaterThanOrEqual(300);
+  });
+
+  it('applies x/y overrides via update_shape', () => {
+    const editor = createMockEditor([{ id: 'shape:text1', type: 'text', x: 0, y: 0, props: { text: 'hi' } }]);
+    applyEnvelope(
+      { editor, isHost: true, appliedIds: new Set() },
+      makeEnvelope({
+        id: 'update-shape',
+        name: 'update_shape',
+        params: { id: 'text1', props: { text: 'updated' }, x: 120, y: 80 },
+      }),
+    );
+    const updateCall = editor.calls.find((c: any[]) => c[0] === 'updateShapes');
+    expect(updateCall).toBeTruthy();
+    const [{ x, y, props }] = updateCall[1];
+    expect(x).toBe(120);
+    expect(y).toBe(80);
+    expect(props.text).toBe('updated');
   });
 });

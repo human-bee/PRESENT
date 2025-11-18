@@ -15,19 +15,14 @@ export async function handleStructuredStreaming(
   for await (const partial of stream.partialObjectStream) {
     const actions = Array.isArray(partial?.actions) ? partial.actions : [];
     if (actions.length === 0) continue;
-    const delta = buffer.ingest(actions);
-    if (delta.length > 0) {
-      await onDelta(delta);
+    const completed = buffer.ingest(actions);
+    if (completed.length > 0) {
+      await onDelta(completed);
     }
   }
 
   const final = await stream.fullStream;
   const all = Array.isArray(final?.object?.actions) ? final.object.actions : [];
-  if (all.length === 0) {
-    await onFinal([]);
-    return;
-  }
-
-  const finalActions = buffer.finalize(all);
-  await onFinal(finalActions);
+  const pending = buffer.finalize(all);
+  await onFinal(pending);
 }
