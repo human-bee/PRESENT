@@ -9,6 +9,22 @@ Owner: canvas agent / steward stack (voice → conductor → canvas)
 
 ---
 
+## Vendored Upstream Code
+
+The folder `vendor/tldraw-agent-template/` contains a copy of TLDraw's official agent starter kit.
+
+This is source-of-truth input, not normal application code.
+
+**Do NOT edit files in `/vendor` directly** (except when bumping the entire upstream template).
+
+All PRESENT canvas-agent schemas/types/actions are generated from this folder via `scripts/gen-agent-contract.ts` → `generated/agent-contract.json`.
+
+When TLDraw updates their starter kit, update this folder as a single atomic replacement (e.g., delete + copy new version, or use git subtree), then re-run the generator.
+
+All PRESENT canvas-agent logic should reference teacher-derived schemas, not hand-written ones.
+
+This ensures the PRESENT canvas agent stays aligned with TLDraw's upstream action model and avoids schema drift, hidden sanitizers, or duplicated definitions.
+
 ## 1. North Star
 
 - **Goal**: Reach *practical parity* with the TLDraw SDK 4.x agent starter kit for canvas reasoning and composition, while keeping our extra layers (voice, LiveKit, Supabase queue, multi-room) as thin adapters around a **canonical canvas agent**.
@@ -19,7 +35,15 @@ Owner: canvas agent / steward stack (voice → conductor → canvas)
 
 ---
 
-## 2. Canonical Contract (What the Canvas Agent *Is*)
+## 2. Upstream Teacher Strategy (Read This First)
+
+- **Source of truth = TLDraw SDK agent starter kit.** We will vendor the starter kit into `vendor/tldraw-agent-template/` and treat its `AgentActionUtil` definitions, prompt parts, and schemas as the *teacher*. Any divergence must be argued in this doc first.
+- **Generate, don’t hand-maintain.** PRESENT’s contract under `src/lib/canvas-agent/contract/` (schemas, tool catalog, examples) must be generated from the teacher via `scripts/gen-agent-contract.ts` + `generated/agent-contract.json`. If the teacher adds or removes an action, rerun the generator; do **not** patch Zod schemas by hand.
+- **Streaming fixes live at the buffer layer.** We are building a proper chunk buffer so partially streamed actions accumulate until they pass the teacher’s schema. No more “drop-on-first-error” sanitizers.
+- **Draw validation stays in the contract.** The Polyline crash fix (≥1 segment, ≥2 finite points) now lives in `src/lib/canvas-agent/contract/parsers.ts` with tests in `src/lib/agents/canvas-agent/server/sanitize.test.ts`; keep it there so both PRESENT + teacher paths agree.
+- **Future contributors:** Before touching runtime code, re-read `AGENTS.md`, this file, and the vendor README. If you find yourself adding new env knobs or rewriting TLDraw actions server-side, you’re off the rails—fix the prompt, contract, or examples instead.
+
+## 3. Canonical Contract (What the Canvas Agent *Is*)
 
 Treat this as our local analogue to TLDraw’s `templates/agent` + `fairy-shared`:
 
@@ -73,7 +97,8 @@ Use this section to avoid re-discovering the same issues after context compressi
      - Infrastructure concerns (Supabase autosave, retries, logging),
      - Debug/diagnostic knobs.
 5. **Knob surface too large**
-  - Many env vars for screenshots, retries, thresholds, etc. Some exist to work around issues that should instead be solved in the prompt/schema.
+
+- Many env vars for screenshots, retries, thresholds, etc. Some exist to work around issues that should instead be solved in the prompt/schema.
 
 ### Upstream guardrails (2025-11-18 research refresh)
 
@@ -181,12 +206,10 @@ Quick summary; details live in `docs/canvas-agent-smoke-tests.md`.
 
 ## 8. Notes to Future Self (and Future LLMs)
 
-- If you feel tempted to add more env knobs or “just one more” sanitizer:  
-  - **Stop and ask**: can this be solved by improving the prompt, the tool catalog, or the examples instead?
-- If posters are still ugly despite valid actions:
-  - Revisit Phase B (composition guidance + few-shots) before touching runtime again.
-- When in doubt about parity:
-  - Re-read TLDraw’s `templates/agent` and fairy-related code for inspiration on *what they do not do*—their restraint is as important as their features.
+- **Read order** every time you resume work: `AGENTS.md` → `docs/canvas-agent-progress.md` (this file) → `docs/canvas-agent-smoke-tests.md` → `vendor/tldraw-agent-template/README.md`. If you skip this, you’ll reintroduce the same drift.
+- **No invisible fixes.** If you feel tempted to add more env knobs or “just one more” sanitizer, stop. Fix prompts, examples, or the generated contract. The production steward must mirror TLDraw’s starter kit behavior.
+- **Teacher diffing.** When posters still look bad, compare PRESENT vs TEACHER outputs via the parity harness before editing runtime code. Composition issues are usually prompt/example gaps, not sanitizer bugs.
+- **Voice + queue stay thin.** The canvas agent may not mutate Supabase or LiveKit state directly; it only emits TLDraw actions. Anything else belongs to the adapters.
 
 ---
 
@@ -226,6 +249,8 @@ Next actions derived from this research:
 ## 10. Work Log (Rolling)
 
 > Update this after every meaningful chunk of work. Keep entries short but specific.
+
+- **2025-11-18 @ 18:32 PT** – Vendored TLDraw’s `templates/agent` into `vendor/tldraw-agent-template/` (commit `42a4388`) with a README describing update policy, then added `scripts/gen-agent-contract.ts` + `generated/agent-contract.json`. The script patches both the CJS + ESM `zod` builds so we can evaluate the teacher’s `AgentActionUtil` schemas without editing upstream files. New helper `src/lib/canvas-agent/contract/teacher.ts` exposes the teacher action list + schema metadata so we can start wiring PRESENT’s contract off the generated JSON next.
 
 - **2025-11-18 @ 14:35 PT** – Captured upstream research (starter kit, fairy worker, branching-chat, sync) and outlined de-bloating plan: move macro/validation into shared contract, drop server-side dedupe conversions, and slim env knob surface before the next smoke test pass.
 - **2025-11-18 @ 15:05 PT** – Removed the runner’s “convert duplicate create → update” behavior; duplicates are now simply dropped with `[CanvasAgent:ActionDrops]` telemetry so the model sees the consequence in logs instead of hidden rewrites.
