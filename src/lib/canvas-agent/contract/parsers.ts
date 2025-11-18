@@ -3,6 +3,20 @@ import { ActionNameSchema, AgentActionEnvelopeSchema } from './types';
 
 // Define parameter schemas per action. Keep permissive initial version; tighten later.
 const boundsSchema = z.object({ x: z.number(), y: z.number(), w: z.number(), h: z.number() });
+const drawPointSchema = z
+  .object({
+    x: z.number().finite(),
+    y: z.number().finite(),
+    z: z.number().finite().optional(),
+  })
+  .passthrough();
+
+const drawSegmentSchema = z
+  .object({
+    type: z.string().default('free'),
+    points: z.array(drawPointSchema).min(2, { message: 'Draw segments need at least two points.' }),
+  })
+  .passthrough();
 
 const canonicalAlignSchema = z.object({
   ids: z.array(z.string()).min(2),
@@ -45,13 +59,38 @@ const mapAlignmentToAxisMode = (alignment: z.infer<typeof tldrawAlignSchema>['al
 };
 
 export const actionParamSchemas: Record<string, z.ZodTypeAny> = {
-  create_shape: z.object({
-    type: z.string(),
-    id: z.string().optional(),
-    x: z.number().finite().optional(),
-    y: z.number().finite().optional(),
-    props: z.record(z.unknown()).optional(),
-  }).passthrough(),
+  create_shape: z
+    .object({
+      type: z.string(),
+      id: z.string().optional(),
+      x: z.number().finite().optional(),
+      y: z.number().finite().optional(),
+      props: z.record(z.unknown()).optional(),
+    })
+    .passthrough()
+    .superRefine((value, ctx) => {
+      if (value.type?.toLowerCase() !== 'draw') return;
+      const segments = (value.props as any)?.segments;
+      if (!Array.isArray(segments) || segments.length === 0) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'Draw shapes must include props.segments with at least one segment.',
+          path: ['props', 'segments'],
+        });
+        return;
+      }
+
+      segments.forEach((segment, segmentIndex) => {
+        const parsed = drawSegmentSchema.safeParse(segment);
+        if (!parsed.success) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: parsed.error.issues[0]?.message ?? 'Invalid draw segment; provide ≥2 points.',
+            path: ['props', 'segments', segmentIndex],
+          });
+        }
+      });
+    }),
   update_shape: z.object({ id: z.string(), props: z.record(z.unknown()) }).passthrough(),
   delete_shape: z.object({ ids: z.array(z.string()).min(1) }).passthrough(),
   move: z.object({ ids: z.array(z.string()).min(1), dx: z.number(), dy: z.number() }).passthrough(),

@@ -114,6 +114,36 @@ describe('Canvas Agent Sanitizer', () => {
     expect((result[1].params as any).ids).toEqual(['temp:2']);
   });
 
+  it('should drop draw shapes without valid segments', () => {
+    const actions: AgentAction[] = [
+      { id: 'a1', name: 'create_shape', params: { type: 'draw', id: 'bad-draw', props: { segments: [] } } },
+      {
+        id: 'a2',
+        name: 'create_shape',
+        params: {
+          type: 'draw',
+          id: 'good-draw',
+          props: {
+            segments: [
+              {
+                type: 'free',
+                points: [
+                  { x: 0, y: 0, z: 0.5 },
+                  { x: 120, y: 12, z: 0.55 },
+                ],
+              },
+            ],
+          },
+        },
+      },
+    ];
+
+    const result = sanitizeActions(actions, mockExists);
+    expect(result).toHaveLength(1);
+    expect(result[0].name).toBe('create_shape');
+    expect((result[0].params as any).id).toBe('good-draw');
+  });
+
   it('should drop malformed actions silently', () => {
     const actions: AgentAction[] = [
       { id: 'a1', name: 'create_shape', params: null as any },

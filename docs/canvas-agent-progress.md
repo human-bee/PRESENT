@@ -132,6 +132,12 @@ Update this list as items complete or priorities change. Keep it small and reali
     - Verify no crashes,
     - Judge composition in PNGs (hierarchy, spacing, clarity),
     - Note draw usage and diversity of tools.
+- [ ] **D1a. Fix manual chat → voice pipeline**
+  - Current status: form submission never clears + conductor logs stay empty unless `/api/steward/runCanvas` is invoked. Need to trace `bus.send('transcription')` → voice agent to restore true end-to-end coverage for Tests 1/5/6/7.
+- [ ] **D1b. Finish Tests 3–8 on the fresh canvas**
+  - Capture before/after PNGs + log excerpts for each, note `[ActionDrops]` spikes, and file composition notes. Tests 3–8 remain **blocked** until voice pipeline + draw prompts are stable.
+- [ ] **D1c. TTFB budget**
+  - Bring canvas-agent `ttfb` under 2 s by warming prompt cache and overlapping screenshot capture; current runs (sessions `1763454186129-ouwny3` and `1763454280080-2a6he1`) sit at 7–8 s.
 - [ ] **D2. Optional: A/B “pure template agent” vs extended agent**
   - Add a dev-only flag to run a minimal, template-like canvas agent on the same canvas for comparison.
 
@@ -238,3 +244,8 @@ Next actions derived from this research:
 - **2025-11-18 @ 19:20 PT** – Smoke Test #1 rerun (fresh canvas, baseline/after PNGs). Actions streamed successfully (`Test 1 before/after` screenshots), but we still triggered the prompt via API due to chat input limitations—need to wire slash commands soon.
 - **2025-11-18 @ 19:25 PT** – Smoke Test #2 rerun (draw pen). No TLDraw error modals; underline + zig-zag render in the after PNG. However `[CanvasAgent:ActionDrops]` still logs partial segment chunks while the model spells out the coordinates—prompt tweaks still needed.
 - **2025-11-18 @ 18:30 PT** – Reaffirmed TLDraw parity rule: removed the server-side draw-segment sanitizer (fix prompt/examples instead) and captured in AGENTS.md + this doc that we should not post-process model actions. Still need to audit `sanitizeActions`/`normalizeRawAction` so they only enforce schema-level safety rather than rewriting content.
+- **2025-11-18 @ 20:05 PT** – Re-read TLDraw’s starter kit README, fairy worker, branching-chat, sync template, and PR #6909, then documented the upstream guardrails in §4 so future contributors keep the contract small, avoid post-processing, and focus on caching/queue layers instead of schema rewrites.
+- **2025-11-18 @ 20:25 PT** – Stopped the Polyline2d crash by validating draw shapes at the schema layer (props.segments must have ≥1 segment with ≥2 points) and added Jest coverage so bad strokes are dropped before dispatch instead of crashing TLDraw.
+- **2025-11-18 @ 20:40 PT** – Attempted to run Smoke Test #1 through the manual chat → voice pipeline, but the transcript form never cleared and no tasks hit the conductor logs until the agent joined; after requesting the agent the form still failed to dispatch (no `/api/agent/dispatch` nor `[VoiceAgent]` logs). Documented this as a blocker—falling back to `/api/steward/runCanvas` until the manual text path is debugged.
+- **2025-11-18 @ 20:55 PT** – Smoke Test #1 (session `1763454186129-ouwny3`) executed via `/api/steward/runCanvas` because of the manual voice-input bug. Result: TTFB 7.7 s, actionCount 31, `[ActionDrops.invalidSchema]` repeatedly spiked while the model spelled out IDs, and `[CanvasAgent:TodoError]` spammed due to missing Supabase service key. Screenshots saved to `docs/examples/smoke-2025-11-18-test1-{before,after}.png`; composition still weak (hero + sticky notes overlap) so mark as **fail: needs layout polish + faster TTFB**.
+- **2025-11-18 @ 21:05 PT** – Smoke Test #2 (session `1763454280080-2a6he1`): draw pen commands survived schema validation and produced two draw shapes plus a sticky explanation. However, TTFB remained 7.4 s, actionCount only 32, and logs show the model streaming dozens of incremental segment mutations before finishing. Screenshots saved to `docs/examples/smoke-2025-11-18-test2-{before,after}.png`. Still counts as **fail** because the underline/zig-zag barely show up and `[ActionDrops.duplicateCreates]` > 60.
