@@ -11,7 +11,7 @@ import { handleStructuredStreaming } from './streaming';
 import type { AgentAction } from '@/lib/canvas-agent/contract/types';
 import { parseAction } from '@/lib/canvas-agent/contract/parsers';
 import { SessionScheduler } from './scheduler';
-import { addTodo } from './todos';
+import { addTodo, listTodos, type TodoItem as StoredTodoItem } from './todos';
 import { getCanvasShapeSummary } from '@/lib/agents/shared/supabase-context';
 import type { ScreenshotPayload } from '@/server/inboxes/screenshot';
 import { getModelTuning } from './model/presets';
@@ -25,6 +25,7 @@ import { convertTeacherAction } from '@/lib/canvas-agent/contract/teacher-bridge
 import { streamTeacherAgent } from '@/lib/canvas-agent/teacher-runtime/service';
 import type { TeacherPromptContext } from '@/lib/canvas-agent/teacher-runtime/prompt';
 import { buildTeacherContextItems } from '@/lib/canvas-agent/teacher-runtime/context-items';
+import { buildTeacherChatHistory, type TranscriptEntry } from '@/lib/canvas-agent/teacher-runtime/chat-history';
 
 
 export type CanvasAgentHooks = {
@@ -98,6 +99,22 @@ const BRAND_COLOR_ALIASES: Record<string, string> = {
 
 const sanitizeProps = (rawProps: Record<string, unknown>, shapeType: string) =>
   sanitizeShapeProps(rawProps, shapeType, { colorAliases: BRAND_COLOR_ALIASES });
+
+const mapTodosToTeacherItems = (todos: StoredTodoItem[]) => {
+  return todos
+    .map((todo, index) => {
+      const text = typeof todo.text === 'string' ? todo.text.trim() : '';
+      if (!text) return null;
+      const numericId = Number.isFinite(todo.position) ? Number(todo.position) : index;
+      const status = todo.status === 'done' ? 'done' : 'todo';
+      return {
+        id: numericId,
+        text,
+        status,
+      } as { id: number; text: string; status: 'todo' | 'in-progress' | 'done' };
+    })
+    .filter((item): item is { id: number; text: string; status: 'todo' | 'in-progress' | 'done' } => Boolean(item));
+};
 
 type BrandPresetName = keyof typeof BRAND_PRESETS;
 
@@ -1056,6 +1073,20 @@ const normalizeRawAction = (raw: unknown, shapeTypeById: Map<string, string>) =>
     });
     if (teacherContextItems.length > 0) {
       teacherContext.contextItems = teacherContextItems;
+    }
+
+    const transcriptForTeacher: TranscriptEntry[] = Array.isArray((parts as any)?.transcript)
+      ? ((parts as any).transcript as TranscriptEntry[])
+      : [];
+    const teacherChatHistory = buildTeacherChatHistory({ transcript: transcriptForTeacher });
+    if (teacherChatHistory && teacherChatHistory.length > 0) {
+      teacherContext.chatHistory = teacherChatHistory;
+    }
+
+    const existingTodos = await listTodos(sessionId);
+    const teacherTodoItems = mapTodosToTeacherItems(existingTodos);
+    if (teacherTodoItems.length > 0) {
+      teacherContext.todoItems = teacherTodoItems;
     }
 
     const runTeacherStream = async (dispatchActions: boolean) => {

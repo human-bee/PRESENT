@@ -116,17 +116,32 @@ async function main() {
     console.log(`Running ${scenario.name} in ${mode} mode (room ${roomId})`);
     const { actionsLog, doc } = await runScenario(mode, roomId, message);
     const suffix = `${scenario.name}-${mode}-${timestamp}`;
-    await fs.writeFile(
-      path.join(outDir, `${suffix}-actions.json`),
-      JSON.stringify(actionsLog, null, 2),
-      'utf-8',
-    );
-    await fs.writeFile(path.join(outDir, `${suffix}-doc.json`), JSON.stringify(doc, null, 2), 'utf-8');
+    const actionsFile = path.join(outDir, `${suffix}-actions.json`);
+    const docFile = path.join(outDir, `${suffix}-doc.json`);
+    await fs.writeFile(actionsFile, JSON.stringify(actionsLog, null, 2), 'utf-8');
+    await fs.writeFile(docFile, JSON.stringify(doc, null, 2), 'utf-8');
     console.log(`Saved parity artifacts for ${mode} mode under docs/parity/${suffix}-*.json`);
+    const suggestedPng = ['docs', 'parity', `${suffix}.png`].join('/');
+    const summary = {
+      scenario: scenario.name,
+      mode,
+      roomId,
+      timestamp,
+      message,
+      actionsFile: ['docs', 'parity', `${suffix}-actions.json`].join('/'),
+      docFile: ['docs', 'parity', `${suffix}-doc.json`].join('/'),
+      suggestedPng,
+    };
+    await fs.writeFile(path.join(outDir, `${suffix}-summary.json`), JSON.stringify(summary, null, 2), 'utf-8');
+    console.log(`Suggested PNG capture for ${mode}: ${suggestedPng}`);
     if (mode === 'shadow') {
       const metrics = buildShadowMetrics(actionsLog);
       await fs.writeFile(path.join(outDir, `${suffix}-metrics.json`), JSON.stringify(metrics, null, 2), 'utf-8');
       console.log('Shadow metrics summary:', JSON.stringify(metrics, null, 2));
+      console.log(
+        `Quick diff → present actions: ${metrics.present.totalActions}, teacher actions: ${metrics.teacher.totalActions}`,
+      );
+      console.log('Layout deltas (teacher - present):', metrics.delta.layout);
     }
   }
 }

@@ -42,6 +42,13 @@
 8. **Parity reminder**
    - Never add server-side patches that rewrite TLDraw actions (e.g., “fixing” draw segments). When a test fails because the model streamed an invalid action, treat it as a contract or prompt bug and align with the TLDraw starter kit instead of mutating the stream.
 
+## Parity Harness & PNG Workflow
+
+1. Run `tsx scripts/canvas-parity.ts --scenario=poster --mode=shadow` (or `--mode=present|tldraw-teacher`) after you restart the stack.
+2. The script writes `*-actions.json`, `*-doc.json`, `*-summary.json`, and for shadow runs `*-metrics.json` to `docs/parity/`.
+3. Open `/canvas?room=<roomId>` using the `roomId` inside each `*-summary.json`, capture a PNG once autosave finishes, and save it to the `suggestedPng` path noted in that summary (e.g., `docs/parity/poster-shadow-<ts>.png`).
+4. Compare the PNGs next to the summary + metrics output to evaluate layout/verb differences before tweaking prompts or schemas.
+
 ## Test Matrix
 | # | Capability | Prompt | Expectation |
 |---|------------|--------|-------------|
