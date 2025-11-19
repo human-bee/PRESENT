@@ -26,8 +26,8 @@ import type { TeacherPromptContext } from '@/lib/canvas-agent/teacher-runtime/pr
 import { buildTeacherContextItems } from '@/lib/canvas-agent/teacher-runtime/context-items';
 import { buildTeacherChatHistory, type TranscriptEntry } from '@/lib/canvas-agent/teacher-runtime/chat-history';
 import {
-  getInProcessTeacherService,
   getTeacherRuntimeLastError,
+  getTeacherServiceForEndpoint,
   type TeacherService,
 } from '@/lib/canvas-agent/teacher-runtime/service-client';
 
@@ -1062,7 +1062,7 @@ const normalizeRawAction = (raw: unknown, shapeTypeById: Map<string, string>) =>
     let teacherServicePromise: Promise<TeacherService | null> | null = null;
     const loadTeacherService = async () => {
       if (!teacherServicePromise) {
-        teacherServicePromise = getInProcessTeacherService();
+        teacherServicePromise = getTeacherServiceForEndpoint(cfg.teacherEndpoint);
       }
       return teacherServicePromise;
     };
@@ -1128,7 +1128,9 @@ const normalizeRawAction = (raw: unknown, shapeTypeById: Map<string, string>) =>
               roomId,
               sessionId,
               mode: cfg.mode,
-              reason: getTeacherRuntimeLastError() ?? 'module import failed',
+              reason:
+                getTeacherRuntimeLastError() ??
+                (cfg.teacherEndpoint ? 'teacher endpoint unavailable' : 'module import failed'),
             });
             teacherRuntimeWarningLogged = true;
           }
@@ -1170,7 +1172,9 @@ const normalizeRawAction = (raw: unknown, shapeTypeById: Map<string, string>) =>
         console.warn('[CanvasAgent:TeacherModeDisabled]', {
           roomId,
           sessionId,
-          reason: getTeacherRuntimeLastError() ?? 'teacher runtime not available in this environment',
+          reason:
+            getTeacherRuntimeLastError() ??
+            (cfg.teacherEndpoint ? 'teacher endpoint unavailable' : 'teacher runtime not available in this environment'),
         });
         return;
       }
@@ -1190,7 +1194,9 @@ const normalizeRawAction = (raw: unknown, shapeTypeById: Map<string, string>) =>
       console.warn('[CanvasAgent:ShadowTeacherDisabled]', {
         roomId,
         sessionId,
-        reason: getTeacherRuntimeLastError() ?? 'teacher runtime not available in this environment',
+        reason:
+          getTeacherRuntimeLastError() ??
+          (cfg.teacherEndpoint ? 'teacher endpoint unavailable' : 'teacher runtime not available in this environment'),
       });
     }
 

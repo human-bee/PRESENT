@@ -115,6 +115,7 @@ export function loadCanvasAgentConfig(env: NodeJS.ProcessEnv = process.env): Can
     env.CANVAS_AGENT_SCREENSHOT_MIN_EDGE,
     Math.min(512, screenshotMaxEdge),
   );
+  const teacherEndpoint = (env.CANVAS_TEACHER_ENDPOINT ?? '').trim();
   const promptDownscaleEdges = parseDownscaleEdges(
     env.CANVAS_AGENT_PROMPT_DOWNSCALE_RATIOS,
     screenshotMaxEdge,
@@ -127,7 +128,7 @@ export function loadCanvasAgentConfig(env: NodeJS.ProcessEnv = process.env): Can
     clientEnabled: env.NEXT_PUBLIC_CANVAS_AGENT_CLIENT_ENABLED === 'true',
     ttfbSloMs: Number(env.CANVAS_AGENT_TTFB_SLO_MS ?? 200),
     mode: parseAgentMode(env.CANVAS_AGENT_MODE),
-    teacherEndpoint: undefined,
+    teacherEndpoint: teacherEndpoint.length ? teacherEndpoint : undefined,
     screenshot: {
       timeoutMs: coerceScreenshotTimeout(env.CANVAS_AGENT_SCREENSHOT_TIMEOUT_MS),
       retries: Math.max(0, Number.parseInt(env.CANVAS_AGENT_SCREENSHOT_RETRIES ?? '1', 10) || 0),

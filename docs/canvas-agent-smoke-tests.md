@@ -44,7 +44,7 @@
 
 ## Parity Harness & PNG Workflow
 
-1. Run `tsx scripts/canvas-parity.ts --scenario=poster --mode=shadow` (or `--mode=present|tldraw-teacher`) after you restart the stack.
+1. Run `tsx scripts/canvas-parity.ts --scenario=poster --mode=shadow` (or `--mode=present|tldraw-teacher`) **after** you restart the stack **and** start the teacher worker (`npm run teacher:worker`, which serves `http://localhost:8787` by default). The runner uses `CANVAS_TEACHER_ENDPOINT` to talk to that worker; if it is missing, `[CanvasAgent:TeacherRuntimeUnavailable]` shows up in logs and teacher metrics stay empty while PRESENT still records actions.
 2. The script writes `*-actions.json`, `*-doc.json`, `*-summary.json`, and for shadow runs `*-metrics.json` to `docs/parity/`.
 3. Open `/canvas?room=<roomId>` using the `roomId` inside each `*-summary.json`, capture a PNG once autosave finishes, and save it to the `suggestedPng` path noted in that summary (e.g., `docs/parity/poster-shadow-<ts>.png`).
 4. Compare the PNGs next to the summary + metrics output to evaluate layout/verb differences before tweaking prompts or schemas.
