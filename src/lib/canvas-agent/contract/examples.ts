@@ -65,6 +65,23 @@ export function creativeFewShots(): FewShotExample[] {
         { name: 'add_detail', params: { hint: 'Provide copy for the three sticky notes in the cluster.', targetIds: ['idea-note-a', 'idea-note-b', 'idea-note-c'] } },
       ],
     },
+    // Layout-focused few-shot: hero block + tidy supporting cards.
+    {
+      user: 'Drop a hero block on the left and three supporting cards on the right, then tidy them with align/distribute/stack before summarizing progress.',
+      actions: [
+        { name: 'create_shape', params: { id: 'hero-field', type: 'rectangle', x: -360, y: -160, props: { w: 320, h: 260, color: 'red', dash: 'solid', fill: 'none' } } },
+        { name: 'apply_preset', params: { preset: 'Hero', text: 'Launch Signal', x: -340, y: -120 } },
+        { name: 'create_shape', params: { id: 'card-1', type: 'note', x: 40, y: -60, props: { text: 'Driver', color: 'yellow', size: 'm' } } },
+        { name: 'create_shape', params: { id: 'card-2', type: 'note', x: 200, y: -10, props: { text: 'Tactic', color: 'yellow', size: 'm' } } },
+        { name: 'create_shape', params: { id: 'card-3', type: 'note', x: 320, y: 30, props: { text: 'Metric', color: 'yellow', size: 'm' } } },
+        { name: 'align', params: { ids: ['card-1', 'card-2', 'card-3'], axis: 'y', mode: 'center' } },
+        { name: 'stack', params: { ids: ['card-1', 'card-2', 'card-3'], direction: 'row', gap: 32 } },
+        { name: 'distribute', params: { ids: ['card-1', 'card-2', 'card-3'], axis: 'x' } },
+        { name: 'align', params: { ids: ['hero-field', 'card-1'], axis: 'y', mode: 'start' } },
+        { name: 'reorder', params: { ids: ['hero-field'], where: 'back' } },
+        { name: 'message', params: { text: 'Hero anchored on the left, card row aligned and spaced at 32px—ready for follow-up styling.' } },
+      ],
+    },
     {
       user: 'Group the sticky trio on the right, stack them with 32px gaps, then send the background frame behind everything.',
       actions: [

@@ -189,6 +189,7 @@ This is a chronological list of *impactful* changes already in place. Add items 
 - [x] Expanded the system prompt + few-shot set with starter-kit style composition guidance (poster/storyboard/sticky cluster/follow-up examples), reinforcing align/distribute/stack usage and pen strokes via canonical draw shapes.
 - [x] Teacher contract + streaming buffer wiring: action names now derive from the generated TLDraw template metadata, legacy verbs map through a shared alias table, structured streaming flushes only completed actions, and a new `CANVAS_AGENT_MODE` (`present` / `tldraw-teacher` / `shadow`) flag is plumbed for upcoming parity harnesses.
 - [x] 2025-11-18T10:45 PT — Tightened teacher JSON-schema validation (Ajv + normalized refs), exposed validation coverage metrics, and documented which sanitization steps remain semantic (e.g., the `line`→`rectangle` fallback) so future parity passes can remove them deliberately.
+- [x] 2025-11-18T14:10 PT — Re-aligned the canvas system prompt with the TLDraw starter-kit composition rules (multi-pass layout, align/distribute/stack emphasis, no overlaps) and added a layout-focused few-shot showing hero + card row tidy passes. Offline edit only; no parity/smoke/LLM runs executed.
 
 ---
 
