@@ -22,10 +22,16 @@ import { resolveShapeType, sanitizeShapeProps } from '@/lib/canvas-agent/contrac
 import { CANVAS_AGENT_SYSTEM_PROMPT } from '@/lib/canvas-agent/contract/system-prompt';
 import { loadCanvasAgentConfig, type CanvasAgentConfig } from './config';
 import { convertTeacherAction } from '@/lib/canvas-agent/contract/teacher-bridge';
-import { streamTeacherAgent } from '@/lib/canvas-agent/teacher-runtime/service';
 import type { TeacherPromptContext } from '@/lib/canvas-agent/teacher-runtime/prompt';
 import { buildTeacherContextItems } from '@/lib/canvas-agent/teacher-runtime/context-items';
 import { buildTeacherChatHistory, type TranscriptEntry } from '@/lib/canvas-agent/teacher-runtime/chat-history';
+import {
+  getInProcessTeacherService,
+  getTeacherRuntimeLastError,
+  type TeacherService,
+} from '@/lib/canvas-agent/teacher-runtime/service-client';
+
+let teacherRuntimeWarningLogged = false;
 
 
 export type CanvasAgentHooks = {
@@ -1051,101 +1057,140 @@ const normalizeRawAction = (raw: unknown, shapeTypeById: Map<string, string>) =>
       } catch {}
     }
 
-    const shapesForTeacher = Array.isArray((parts as any)?.shapes)
-      ? ((parts as any).shapes as CanvasShapeSummary[])
-      : [];
-    const selectedForTeacher = Array.isArray((parts as any)?.selectedSimpleShapes)
-      ? ((parts as any).selectedSimpleShapes as Array<Record<string, unknown>>)
-      : [];
-
-    const teacherContext: TeacherPromptContext = {
-      userMessages: [userMessage],
-      requestType: 'user',
-      screenshotDataUrl:
-        latestScreenshot?.image?.dataUrl ||
-        (typeof (promptPayload.parts as any)?.screenshot?.dataUrl === 'string'
-          ? ((promptPayload.parts as any).screenshot as { dataUrl: string }).dataUrl
-          : null),
-      bounds: (latestScreenshot?.viewport ?? args.initialViewport) || null,
-      viewport: (latestScreenshot?.viewport ?? args.initialViewport) || null,
-      styleInstructions:
-        typeof (promptPayload.parts as any)?.styleInstructions === 'string'
-          ? ((promptPayload.parts as any).styleInstructions as string)
-          : undefined,
-      promptBudget:
-        typeof (promptPayload.parts as any)?.promptBudget === 'object'
-          ? ((promptPayload.parts as any).promptBudget as Record<string, unknown>)
-          : null,
-      modelName: model ?? cfg.modelName,
-      timestamp: new Date().toISOString(),
-    };
-
-    const teacherContextItems = buildTeacherContextItems({
-      shapes: shapesForTeacher,
-      selectedShapes: selectedForTeacher,
-      viewport: teacherContext.viewport ?? teacherContext.bounds ?? null,
-    });
-    if (teacherContextItems.length > 0) {
-      teacherContext.contextItems = teacherContextItems;
-    }
-
-    const transcriptForTeacher: TranscriptEntry[] = Array.isArray((parts as any)?.transcript)
-      ? ((parts as any).transcript as TranscriptEntry[])
-      : [];
-    const teacherChatHistory = buildTeacherChatHistory({ transcript: transcriptForTeacher });
-    if (teacherChatHistory && teacherChatHistory.length > 0) {
-      teacherContext.chatHistory = teacherChatHistory;
-    }
-
-    const existingTodos = await listTodos(sessionId);
-    const teacherTodoItems = mapTodosToTeacherItems(existingTodos);
-    if (teacherTodoItems.length > 0) {
-      teacherContext.todoItems = teacherTodoItems;
-    }
-
-    const runTeacherStream = async (dispatchActions: boolean) => {
-      const streamStartedAt = Date.now();
-      let seqTeacher = 1;
-      let firstPartialLogged = false;
-      for await (const event of streamTeacherAgent(teacherContext)) {
-        if (!firstPartialLogged) {
-          firstPartialLogged = true;
-          if (cfg.debug) {
-            console.log('[CanvasAgent:FirstPartial]', JSON.stringify({
-              sessionId,
-              roomId,
-              ms: Date.now() - streamStartedAt,
-              source: 'teacher',
-              dispatch: dispatchActions,
-            }));
-          }
-        }
-        if (dispatchActions) {
-          metrics.chunkCount++;
-        }
-        if (!event?.complete) continue;
-        const currentSeq = seqTeacher++;
-        await processActions([event], currentSeq, false, enqueueDetail, {
-          dispatch: dispatchActions,
-          source: 'teacher',
-        });
+    const teacherModeRequested = cfg.mode !== 'present';
+    let teacherRunner: ((dispatchActions: boolean) => Promise<void>) | null = null;
+    let teacherServicePromise: Promise<TeacherService | null> | null = null;
+    const loadTeacherService = async () => {
+      if (!teacherServicePromise) {
+        teacherServicePromise = getInProcessTeacherService();
       }
+      return teacherServicePromise;
     };
+
+    if (teacherModeRequested) {
+      const shapesForTeacher = Array.isArray((parts as any)?.shapes)
+        ? ((parts as any).shapes as CanvasShapeSummary[])
+        : [];
+      const selectedForTeacher = Array.isArray((parts as any)?.selectedSimpleShapes)
+        ? ((parts as any).selectedSimpleShapes as Array<Record<string, unknown>>)
+        : [];
+
+      const teacherContext: TeacherPromptContext = {
+        userMessages: [userMessage],
+        requestType: 'user',
+        screenshotDataUrl:
+          latestScreenshot?.image?.dataUrl ||
+          (typeof (promptPayload.parts as any)?.screenshot?.dataUrl === 'string'
+            ? ((promptPayload.parts as any).screenshot as { dataUrl: string }).dataUrl
+            : null),
+        bounds: (latestScreenshot?.viewport ?? args.initialViewport) || null,
+        viewport: (latestScreenshot?.viewport ?? args.initialViewport) || null,
+        styleInstructions:
+          typeof (promptPayload.parts as any)?.styleInstructions === 'string'
+            ? ((promptPayload.parts as any).styleInstructions as string)
+            : undefined,
+        promptBudget:
+          typeof (promptPayload.parts as any)?.promptBudget === 'object'
+            ? ((promptPayload.parts as any).promptBudget as Record<string, unknown>)
+            : null,
+        modelName: model ?? cfg.modelName,
+        timestamp: new Date().toISOString(),
+      };
+
+      const teacherContextItems = buildTeacherContextItems({
+        shapes: shapesForTeacher,
+        selectedShapes: selectedForTeacher,
+        viewport: teacherContext.viewport ?? teacherContext.bounds ?? null,
+      });
+      if (teacherContextItems.length > 0) {
+        teacherContext.contextItems = teacherContextItems;
+      }
+
+      const transcriptForTeacher: TranscriptEntry[] = Array.isArray((parts as any)?.transcript)
+        ? ((parts as any).transcript as TranscriptEntry[])
+        : [];
+      const teacherChatHistory = buildTeacherChatHistory({ transcript: transcriptForTeacher });
+      if (teacherChatHistory && teacherChatHistory.length > 0) {
+        teacherContext.chatHistory = teacherChatHistory;
+      }
+
+      const existingTodos = await listTodos(sessionId);
+      const teacherTodoItems = mapTodosToTeacherItems(existingTodos);
+      if (teacherTodoItems.length > 0) {
+        teacherContext.todoItems = teacherTodoItems;
+      }
+
+      teacherRunner = async (dispatchActions: boolean) => {
+        const service = await loadTeacherService();
+        if (!service) {
+          if (!teacherRuntimeWarningLogged) {
+            console.warn('[CanvasAgent:TeacherRuntimeUnavailable]', {
+              roomId,
+              sessionId,
+              mode: cfg.mode,
+              reason: getTeacherRuntimeLastError() ?? 'module import failed',
+            });
+            teacherRuntimeWarningLogged = true;
+          }
+          return;
+        }
+        const streamStartedAt = Date.now();
+        let seqTeacher = 1;
+        let firstPartialLogged = false;
+        for await (const event of service.stream(teacherContext, { dispatchActions })) {
+          if (!firstPartialLogged) {
+            firstPartialLogged = true;
+            if (cfg.debug) {
+              console.log('[CanvasAgent:FirstPartial]', JSON.stringify({
+                sessionId,
+                roomId,
+                ms: Date.now() - streamStartedAt,
+                source: 'teacher',
+                dispatch: dispatchActions,
+              }));
+            }
+          }
+          if (dispatchActions) {
+            metrics.chunkCount++;
+          }
+          if (!event?.complete) continue;
+          const currentSeq = seqTeacher++;
+          await processActions([event], currentSeq, false, enqueueDetail, {
+            dispatch: dispatchActions,
+            source: 'teacher',
+          });
+        }
+      };
+    }
 
     let shadowTeacherPromise: Promise<void> | null = null;
 
     if (cfg.mode === 'tldraw-teacher') {
-      await runTeacherStream(true);
+      if (!teacherRunner) {
+        console.warn('[CanvasAgent:TeacherModeDisabled]', {
+          roomId,
+          sessionId,
+          reason: getTeacherRuntimeLastError() ?? 'teacher runtime not available in this environment',
+        });
+        return;
+      }
+      await teacherRunner(true);
       return;
     }
 
-    if (cfg.mode === 'shadow') {
-      shadowTeacherPromise = runTeacherStream(false).catch((error) => {
+    if (cfg.mode === 'shadow' && teacherRunner) {
+      shadowTeacherPromise = teacherRunner(false).catch((error) => {
         console.warn('[CanvasAgent:ShadowTeacherError]', {
           roomId,
           sessionId,
           error: error instanceof Error ? error.message : error,
         });
+      });
+    } else if (cfg.mode === 'shadow' && !teacherRunner) {
+      console.warn('[CanvasAgent:ShadowTeacherDisabled]', {
+        roomId,
+        sessionId,
+        reason: getTeacherRuntimeLastError() ?? 'teacher runtime not available in this environment',
       });
     }
 

@@ -75,6 +75,8 @@ export type CanvasAgentConfig = {
   clientEnabled: boolean;
   ttfbSloMs: number;
   mode: CanvasAgentMode;
+  /** Placeholder for upcoming HTTP-based teacher worker endpoint */
+  teacherEndpoint?: string;
   screenshot: ScreenshotConfig;
   prompt: PromptConfig;
   followups: FollowupConfig;
@@ -125,6 +127,7 @@ export function loadCanvasAgentConfig(env: NodeJS.ProcessEnv = process.env): Can
     clientEnabled: env.NEXT_PUBLIC_CANVAS_AGENT_CLIENT_ENABLED === 'true',
     ttfbSloMs: Number(env.CANVAS_AGENT_TTFB_SLO_MS ?? 200),
     mode: parseAgentMode(env.CANVAS_AGENT_MODE),
+    teacherEndpoint: undefined,
     screenshot: {
       timeoutMs: coerceScreenshotTimeout(env.CANVAS_AGENT_SCREENSHOT_TIMEOUT_MS),
       retries: Math.max(0, Number.parseInt(env.CANVAS_AGENT_SCREENSHOT_RETRIES ?? '1', 10) || 0),

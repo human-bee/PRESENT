@@ -48,6 +48,7 @@
 2. The script writes `*-actions.json`, `*-doc.json`, `*-summary.json`, and for shadow runs `*-metrics.json` to `docs/parity/`.
 3. Open `/canvas?room=<roomId>` using the `roomId` inside each `*-summary.json`, capture a PNG once autosave finishes, and save it to the `suggestedPng` path noted in that summary (e.g., `docs/parity/poster-shadow-<ts>.png`).
 4. Compare the PNGs next to the summary + metrics output to evaluate layout/verb differences before tweaking prompts or schemas.
+   - If the CLI prints `[CanvasAgent:TeacherRuntimeUnavailable]`, it just means the vendored TLDraw worker couldn’t load in this environment; PRESENT artifacts are still valid, but teacher verb counts will be zero until the worker is moved out of the Next.js runtime.
 
 ## Test Matrix
 | # | Capability | Prompt | Expectation |

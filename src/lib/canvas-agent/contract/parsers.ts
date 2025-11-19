@@ -81,7 +81,7 @@ const legacyActionSchemas = {
       id: z.string().optional(),
       x: z.number().finite().optional(),
       y: z.number().finite().optional(),
-      props: z.record(z.unknown()).optional(),
+      props: z.record(z.string(), z.unknown()).optional(),
     })
     .passthrough()
     .superRefine((value, ctx) => {
@@ -110,7 +110,7 @@ const legacyActionSchemas = {
   update_shape: z
     .object({
       id: z.string(),
-      props: z.record(z.unknown()).default({}),
+      props: z.record(z.string(), z.unknown()).default({}),
       x: z.number().finite().optional(),
       y: z.number().finite().optional(),
     })
@@ -181,7 +181,7 @@ const legacyActionSchemas = {
       x: z.number().optional(),
       y: z.number().optional(),
       text: z.string().optional(),
-      props: z.record(z.unknown()).optional(),
+      props: z.record(z.string(), z.unknown()).optional(),
     })
     .passthrough(),
   message: z.object({ text: z.string() }).passthrough(),

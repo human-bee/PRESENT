@@ -1216,8 +1216,8 @@ Your only output is function calls. Never use plain text unless absolutely neces
         description: 'Create a new component on the canvas.',
         parameters: z.object({
           type: z.string(),
-          spec: z.union([z.string(), z.record(z.any())]).nullish(),
-          props: z.record(z.any()).nullish(),
+          spec: z.union([z.string(), z.record(z.string(), z.any())]).nullish(),
+          props: z.record(z.string(), z.any()).nullish(),
           messageId: z.string().nullish(),
           intentId: z.string().nullish(),
           slot: z.string().nullish(),
@@ -1516,8 +1516,8 @@ Your only output is function calls. Never use plain text unless absolutely neces
         description: 'Reserve a component intent prior to creation to ensure deterministic IDs.',
         parameters: z.object({
           type: z.string().nullish(),
-          spec: z.union([z.string(), z.record(z.any())]).nullish(),
-          props: z.record(z.any()).nullish(),
+          spec: z.union([z.string(), z.record(z.string(), z.any())]).nullish(),
+          props: z.record(z.string(), z.any()).nullish(),
           messageId: z.string().nullish(),
           intentId: z.string().nullish(),
           slot: z.string().nullish(),
@@ -1767,7 +1767,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
         parameters: z.object({
           componentId: z.string().nullish(),
           type: z.string().nullish(),
-          patch: z.union([z.string(), z.record(z.any())]).nullish(),
+          patch: z.union([z.string(), z.record(z.string(), z.any())]).nullish(),
           intentId: z.string().nullish(),
           slot: z.string().nullish(),
         }),
