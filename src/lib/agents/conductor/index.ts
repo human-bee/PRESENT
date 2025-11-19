@@ -87,16 +87,16 @@ async function handleCanvasAgentPrompt(rawParams: JsonObject) {
     requestId,
     bounds:
       boundsCandidate &&
-      typeof boundsCandidate.x === 'number' &&
-      typeof boundsCandidate.y === 'number' &&
-      typeof boundsCandidate.w === 'number' &&
-      typeof boundsCandidate.h === 'number'
+        typeof boundsCandidate.x === 'number' &&
+        typeof boundsCandidate.y === 'number' &&
+        typeof boundsCandidate.w === 'number' &&
+        typeof boundsCandidate.h === 'number'
         ? {
-            x: boundsCandidate.x,
-            y: boundsCandidate.y,
-            w: boundsCandidate.w,
-            h: boundsCandidate.h,
-          }
+          x: boundsCandidate.x,
+          y: boundsCandidate.y,
+          w: boundsCandidate.w,
+          h: boundsCandidate.h,
+        }
         : undefined,
     selectionIds: parsed.selectionIds,
     metadata: parsed.metadata ?? null,

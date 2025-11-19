@@ -3,9 +3,8 @@ import path from 'path';
 
 const aliasMap = {
   // Prefer ESM build to avoid dist-cjs richText path in the browser
-  tldraw: path.resolve(__dirname, 'node_modules/tldraw/dist-esm/index.mjs'),
+  'tldraw$': path.resolve(__dirname, 'node_modules/tldraw/dist-esm/index.mjs'),
   // Force ESM entries for tldraw subpackages to avoid dual CJS/ESM imports in dev
-  // TODO: TLDraw v4 exposes ESM entrypoints by default—confirm and remove these aliases when safe.
   '@tldraw/utils': path.resolve(__dirname, 'node_modules/@tldraw/utils/dist-esm/index.mjs'),
   '@tldraw/state': path.resolve(__dirname, 'node_modules/@tldraw/state/dist-esm/index.mjs'),
   '@tldraw/state-react': path.resolve(
@@ -15,8 +14,10 @@ const aliasMap = {
   '@tldraw/store': path.resolve(__dirname, 'node_modules/@tldraw/store/dist-esm/index.mjs'),
   '@tldraw/validate': path.resolve(__dirname, 'node_modules/@tldraw/validate/dist-esm/index.mjs'),
   '@tldraw/tlschema': path.resolve(__dirname, 'node_modules/@tldraw/tlschema/dist-esm/index.mjs'),
-  '@custom-ai/react': path.resolve(__dirname, 'src/lib/shims/custom-react.ts'),
-  '@custom-ai/react/mcp': path.resolve(__dirname, 'src/lib/shims/custom-react-mcp.tsx'),
+  '@tldraw/editor': path.resolve(__dirname, 'node_modules/@tldraw/editor/dist-esm/index.mjs'),
+  // Force singleton React
+  // react: path.resolve(__dirname, 'node_modules/react'),
+  // 'react-dom': path.resolve(__dirname, 'node_modules/react-dom'),
 } as const;
 
 const nextConfig: NextConfig = {
@@ -36,18 +37,11 @@ const nextConfig: NextConfig = {
   skipTrailingSlashRedirect: true,
 
   // Fix tldraw multiple instances issue and alias away @custom-ai/react
-  webpack: (config, { isServer }) => {
-    const resolvedAliases = {
-      ...(config.resolve.alias ?? {}),
-      '@custom-ai/react': aliasMap['@custom-ai/react'],
-      '@custom-ai/react/mcp': aliasMap['@custom-ai/react/mcp'],
+  webpack: (config) => {
+    config.resolve.alias = {
+      ...(config.resolve.alias || {}),
+      ...aliasMap,
     };
-
-    if (!isServer) {
-      Object.assign(resolvedAliases, aliasMap);
-    }
-
-    config.resolve.alias = resolvedAliases;
     return config;
   },
 
