@@ -7,7 +7,7 @@ import { z } from 'zod';
 
 try {
   config({ path: join(process.cwd(), '.env.local') });
-} catch {}
+} catch { }
 import { realtime as openaiRealtime } from '@livekit/agents-plugin-openai';
 import { appendTranscriptCache, getTranscriptWindow, listCanvasComponents } from '@/lib/agents/shared/supabase-context';
 import { buildVoiceAgentInstructions } from '@/lib/agents/instructions';
@@ -36,7 +36,7 @@ const readHeaderValue = (headers: unknown, key: string): string | undefined => {
       const lower = (headers as Headers).get(key.toLowerCase());
       return lower && String(lower).trim() ? String(lower) : undefined;
     }
-  } catch {}
+  } catch { }
   if (typeof headers === 'object' && headers !== null) {
     const candidate = (headers as Record<string, unknown>)[key] ?? (headers as Record<string, unknown>)[key.toLowerCase()];
     if (typeof candidate === 'string' && candidate.trim()) return candidate;
@@ -143,9 +143,9 @@ export default defineAgent({
     const resolvedTranscriptionLanguage = envTranscriptionLanguage || fallbackTranscriptionLanguage || undefined;
     const inputAudioTranscription = transcriptionEnabled
       ? {
-          model: resolvedInputTranscriptionModel || 'gpt-4o-mini-transcribe',
-          ...(resolvedTranscriptionLanguage ? { language: resolvedTranscriptionLanguage } : {}),
-        }
+        model: resolvedInputTranscriptionModel || 'gpt-4o-mini-transcribe',
+        ...(resolvedTranscriptionLanguage ? { language: resolvedTranscriptionLanguage } : {}),
+      }
       : null;
     const turnDetectionOption = (() => {
       if (!transcriptionEnabled) return null;
@@ -266,12 +266,12 @@ Your only output is function calls. Never use plain text unless absolutely neces
     const getLastComponentForType = (type: string) => getLastComponentMap().get(type);
     const setLastComponentForType = (type: string, messageId: string) => getLastComponentMap().set(type, messageId);
 
-  const rememberResearchPanel = (candidate?: string | null) => {
-    if (typeof candidate !== 'string') return;
-    const trimmed = candidate.trim();
-    if (!trimmed) return;
-    lastResearchPanelId = trimmed;
-  };
+    const rememberResearchPanel = (candidate?: string | null) => {
+      if (typeof candidate !== 'string') return;
+      const trimmed = candidate.trim();
+      if (!trimmed) return;
+      lastResearchPanelId = trimmed;
+    };
 
 
     const buildResearchPlaceholderSpec = (query: string): JsonObject => {
@@ -409,7 +409,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
           total: snapshot.length,
         });
         if (snapshot.length === 0) return;
-        const restored: Array<{ componentId: string; componentType: string; lastUpdated?: number | null; intentId?: string | null; state?: JsonObject | null; props: JsonObject } > = [];
+        const restored: Array<{ componentId: string; componentType: string; lastUpdated?: number | null; intentId?: string | null; state?: JsonObject | null; props: JsonObject }> = [];
         for (const entry of snapshot) {
           if (!entry?.componentId) continue;
           if (componentRegistry.has(entry.componentId)) continue;
@@ -769,7 +769,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
 
         const fallbackSeconds =
           typeof existing?.props?.configuredDuration === 'number' &&
-          Number.isFinite(existing.props.configuredDuration)
+            Number.isFinite(existing.props.configuredDuration)
             ? (existing.props.configuredDuration as number)
             : 300;
 
@@ -1014,8 +1014,8 @@ Your only output is function calls. Never use plain text unless absolutely neces
             minutesCandidate !== null
               ? Math.max(0, minutesCandidate)
               : secondsCandidate !== null
-              ? 0
-              : defaultMinutes;
+                ? 0
+                : defaultMinutes;
           const seconds = secondsCandidate !== null ? Math.max(0, Math.min(59, secondsCandidate)) : defaultSeconds;
           const durationSeconds = Math.max(1, minutes * 60 + seconds);
           next.configuredDuration = durationSeconds;
@@ -1076,8 +1076,8 @@ Your only output is function calls. Never use plain text unless absolutely neces
             minutesCandidate !== null
               ? Math.max(0, minutesCandidate)
               : secondsCandidate !== null
-              ? 0
-              : defaultMinutes;
+                ? 0
+                : defaultMinutes;
           const seconds =
             secondsCandidate !== null ? Math.max(0, Math.min(59, secondsCandidate)) : Math.max(0, Math.min(59, defaultSeconds));
           const totalSeconds = Math.max(1, minutes * 60 + seconds);
@@ -1216,8 +1216,8 @@ Your only output is function calls. Never use plain text unless absolutely neces
         description: 'Create a new component on the canvas.',
         parameters: z.object({
           type: z.string(),
-          spec: z.union([z.string(), z.record(z.any())]).nullish(),
-          props: z.record(z.any()).nullish(),
+          spec: z.union([z.string(), z.record(z.string(), z.any())]).nullish(),
+          props: z.record(z.string(), z.any()).nullish(),
           messageId: z.string().nullish(),
           intentId: z.string().nullish(),
           slot: z.string().nullish(),
@@ -1382,7 +1382,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
           if (existingComponent) {
             const fallbackSeconds =
               typeof existingComponent?.props?.configuredDuration === 'number' &&
-              Number.isFinite(existingComponent.props.configuredDuration)
+                Number.isFinite(existingComponent.props.configuredDuration)
                 ? (existingComponent.props.configuredDuration as number)
                 : 300;
             const normalizedPatch = normalizeComponentPatch(mergedProps, fallbackSeconds);
@@ -1490,7 +1490,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
                 return { status: 'rerouted', task: 'canvas.agent_prompt' };
               }
             }
-          } catch {}
+          } catch { }
 
           const payload: JsonObject = {
             type: componentType,
@@ -1516,8 +1516,8 @@ Your only output is function calls. Never use plain text unless absolutely neces
         description: 'Reserve a component intent prior to creation to ensure deterministic IDs.',
         parameters: z.object({
           type: z.string().nullish(),
-          spec: z.union([z.string(), z.record(z.any())]).nullish(),
-          props: z.record(z.any()).nullish(),
+          spec: z.union([z.string(), z.record(z.string(), z.any())]).nullish(),
+          props: z.record(z.string(), z.any()).nullish(),
           messageId: z.string().nullish(),
           intentId: z.string().nullish(),
           slot: z.string().nullish(),
@@ -1621,14 +1621,14 @@ Your only output is function calls. Never use plain text unless absolutely neces
           }
           await sendToolCall('reserve_component', reserveParams);
 
-      return {
-        status: existingComponent ? 'acknowledged_existing' : 'reserved',
-        messageId,
-        intentId,
-        componentExists: Boolean(existingComponent),
-      };
-    },
-  }),
+          return {
+            status: existingComponent ? 'acknowledged_existing' : 'reserved',
+            messageId,
+            intentId,
+            componentExists: Boolean(existingComponent),
+          };
+        },
+      }),
       research_search: llm.tool({
         description: 'Run a general research query and render/update a ResearchPanel.',
         parameters: z.object({
@@ -1767,7 +1767,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
         parameters: z.object({
           componentId: z.string().nullish(),
           type: z.string().nullish(),
-          patch: z.union([z.string(), z.record(z.any())]).nullish(),
+          patch: z.union([z.string(), z.record(z.string(), z.any())]).nullish(),
           intentId: z.string().nullish(),
           slot: z.string().nullish(),
         }),
@@ -1808,7 +1808,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
             typeof existing?.props?.configuredDuration === 'number' && Number.isFinite(existing.props.configuredDuration)
               ? (existing.props.configuredDuration as number)
               : 300;
-            const patch = normalizeComponentPatch(rawPatch, fallbackSeconds);
+          const patch = normalizeComponentPatch(rawPatch, fallbackSeconds);
 
           const isDebateScorecardTarget =
             existing?.type === 'DebateScorecard' ||
@@ -2381,7 +2381,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
               }
             }
           }
-            if (fnCall.name === 'update_component') {
+          if (fnCall.name === 'update_component') {
             const resolvedId = resolveComponentId(args);
             if (!resolvedId) {
               console.warn('[VoiceAgent] Skipping update_component without componentId', args);
@@ -2495,7 +2495,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
             timestamp: Date.now(),
           });
           void maybeHandleDebate(event.transcript);
-        } catch {}
+        } catch { }
 
         // New user turn begins on a final transcript
         bumpTurn();
@@ -2539,7 +2539,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
           text,
           timestamp: Date.now(),
         });
-      } catch {}
+      } catch { }
     });
 
     session.on(voice.AgentSessionEventTypes.Error, (event) => {

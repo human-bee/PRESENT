@@ -16,7 +16,7 @@ const canvasActionSchema = z.object({
 		.string()
 		.min(1)
 		.regex(/^canvas_[\w.-]+$/i, 'Canvas tools must start with canvas_'),
-	params: z.record(jsonValueSchema).default({}),
+  params: z.record(z.string(), jsonValueSchema).default({}),
 	rationale: z.string().optional(),
 });
 
@@ -165,7 +165,7 @@ function sanitizeCanvasPlan(plan: CanvasPlan): CanvasPlan {
 
 function sanitizeParams(params: JsonObject | undefined): JsonObject {
 	if (!params) return {};
-	const parsed = z.record(jsonValueSchema).parse(params) as Record<string, JsonValue>;
+  const parsed = z.record(z.string(), jsonValueSchema).parse(params) as Record<string, JsonValue>;
 	return Object.fromEntries(
 		Object.entries(parsed).map(([key, value]) => [key.trim(), value]),
 	);

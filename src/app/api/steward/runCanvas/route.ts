@@ -4,6 +4,8 @@ import { runCanvasSteward } from '@/lib/agents/subagents/canvas-steward';
 import { broadcastAgentPrompt } from '@/lib/agents/shared/supabase-context';
 import { randomUUID } from 'crypto';
 
+export const runtime = 'nodejs';
+
 const queue = new AgentTaskQueue();
 const QUEUE_DIRECT_FALLBACK_ENABLED = process.env.CANVAS_QUEUE_DIRECT_FALLBACK === 'true';
 

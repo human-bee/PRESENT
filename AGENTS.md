@@ -109,6 +109,7 @@ If it doesn't move the canvas, it doesn't belong in the voice agent. We separate
   - Emits data-channel messages only after local validation; all deduping happens here so the ToolDispatcher can stay dumb.
 - **Canvas Agent (Unified, Node)**
   Server-centric "brain" that handles all TLDraw canvas operations. Builds prompts, calls models (streaming), sanitizes actions, and broadcasts TLDraw-native action envelopes to clients. Browser acts as "eyes and hands" only (viewport/selection/screenshot + action execution). See `docs/canvas-agent.md` for full architecture.
+  - **Parity rule:** Treat the TLDraw SDK agent starter kit as the source of truth. Do **not** post-process or "fix" the model’s TLDraw actions on the server; instead, update prompts, tool catalog, or few-shot examples so the model emits valid TLDraw verbs on its own. Any new validation should live in the shared contract so it mirrors the upstream kit.
 - **Conductor (Agents SDK, Node)**
   A tiny router that delegates to **steward** subagents via handoffs. No business logic. Runs on the OpenAI Agents SDK (which wraps the Responses API) so stewards can opt into Responses features without rewriting the router.
 - **Stewards (Agents SDK, Node)**

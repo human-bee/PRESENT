@@ -1,0 +1,1619 @@
+{
+  "generatedAt": "2025-11-18T10:13:02.350Z",
+  "source": "vendor/tldraw-agent-template",
+  "actions": [
+    {
+      "name": "add-detail",
+      "schema": {
+        "$ref": "properties/actions/items/definitions/add-detailAction",
+        "definitions": {
+          "add-detailAction": {
+            "type": "object",
+            "properties": {
+              "_type": {
+                "type": "string",
+                "const": "add-detail"
+              },
+              "intent": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "_type",
+              "intent"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "align",
+      "schema": {
+        "$ref": "properties/actions/items/definitions/alignAction",
+        "definitions": {
+          "alignAction": {
+            "type": "object",
+            "properties": {
+              "_type": {
+                "type": "string",
+                "const": "align"
+              },
+              "alignment": {
+                "type": "string",
+                "enum": [
+                  "top",
+                  "bottom",
+                  "left",
+                  "right",
+                  "center-horizontal",
+                  "center-vertical"
+                ]
+              },
+              "gap": {
+                "type": "number"
+              },
+              "intent": {
+                "type": "string"
+              },
+              "shapeIds": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "_type",
+              "alignment",
+              "gap",
+              "intent",
+              "shapeIds"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "bringToFront",
+      "schema": {
+        "$ref": "properties/actions/items/definitions/bringToFrontAction",
+        "definitions": {
+          "bringToFrontAction": {
+            "type": "object",
+            "properties": {
+              "_type": {
+                "type": "string",
+                "const": "bringToFront"
+              },
+              "intent": {
+                "type": "string"
+              },
+              "shapeIds": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "_type",
+              "intent",
+              "shapeIds"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "clear",
+      "schema": {
+        "$ref": "properties/actions/items/definitions/clearAction",
+        "definitions": {
+          "clearAction": {
+            "type": "object",
+            "properties": {
+              "_type": {
+                "type": "string",
+                "const": "clear"
+              }
+            },
+            "required": [
+              "_type"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "count",
+      "schema": {
+        "$ref": "properties/actions/items/definitions/countAction",
+        "definitions": {
+          "countAction": {
+            "type": "object",
+            "properties": {
+              "_type": {
+                "type": "string",
+                "const": "count"
+              },
+              "expression": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "_type",
+              "expression"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "countryInfo",
+      "schema": {
+        "$ref": "properties/actions/items/definitions/countryInfoAction",
+        "definitions": {
+          "countryInfoAction": {
+            "type": "object",
+            "properties": {
+              "_type": {
+                "type": "string",
+                "const": "countryInfo"
+              },
+              "code": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "_type",
+              "code"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "create",
+      "schema": {
+        "$ref": "properties/actions/items/definitions/createAction",
+        "definitions": {
+          "createAction": {
+            "type": "object",
+            "properties": {
+              "_type": {
+                "type": "string",
+                "const": "create"
+              },
+              "intent": {
+                "type": "string"
+              },
+              "shape": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "_type": {
+                        "type": "string",
+                        "const": "draw"
+                      },
+                      "color": {
+                        "type": "string",
+                        "enum": [
+                          "red",
+                          "light-red",
+                          "green",
+                          "light-green",
+                          "blue",
+                          "light-blue",
+                          "orange",
+                          "yellow",
+                          "black",
+                          "violet",
+                          "light-violet",
+                          "grey",
+                          "white"
+                        ]
+                      },
+                      "fill": {
+                        "type": "string",
+                        "enum": [
+                          "none",
+                          "tint",
+                          "background",
+                          "solid",
+                          "pattern"
+                        ]
+                      },
+                      "note": {
+                        "type": "string"
+                      },
+                      "shapeId": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "_type",
+                      "color",
+                      "note",
+                      "shapeId"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "_type": {
+                        "type": "string",
+                        "enum": [
+                          "rectangle",
+                          "ellipse",
+                          "triangle",
+                          "diamond",
+                          "hexagon",
+                          "pill",
+                          "cloud",
+                          "x-box",
+                          "check-box",
+                          "heart",
+                          "pentagon",
+                          "octagon",
+                          "star",
+                          "parallelogram-right",
+                          "parallelogram-left",
+                          "trapezoid",
+                          "fat-arrow-right",
+                          "fat-arrow-left",
+                          "fat-arrow-up",
+                          "fat-arrow-down"
+                        ]
+                      },
+                      "color": {
+                        "$ref": "properties/actions/items/definitions/createAction/properties/shape/anyOf/0/properties/color"
+                      },
+                      "fill": {
+                        "$ref": "properties/actions/items/definitions/createAction/properties/shape/anyOf/0/properties/fill"
+                      },
+                      "h": {
+                        "type": "number"
+                      },
+                      "note": {
+                        "type": "string"
+                      },
+                      "shapeId": {
+                        "type": "string"
+                      },
+                      "text": {
+                        "type": "string"
+                      },
+                      "textAlign": {
+                        "type": "string",
+                        "enum": [
+                          "start",
+                          "middle",
+                          "end"
+                        ]
+                      },
+                      "w": {
+                        "type": "number"
+                      },
+                      "x": {
+                        "type": "number"
+                      },
+                      "y": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "_type",
+                      "color",
+                      "fill",
+                      "h",
+                      "note",
+                      "shapeId",
+                      "w",
+                      "x",
+                      "y"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "_type": {
+                        "type": "string",
+                        "const": "line"
+                      },
+                      "color": {
+                        "$ref": "properties/actions/items/definitions/createAction/properties/shape/anyOf/0/properties/color"
+                      },
+                      "note": {
+                        "type": "string"
+                      },
+                      "shapeId": {
+                        "type": "string"
+                      },
+                      "x1": {
+                        "type": "number"
+                      },
+                      "x2": {
+                        "type": "number"
+                      },
+                      "y1": {
+                        "type": "number"
+                      },
+                      "y2": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "_type",
+                      "color",
+                      "note",
+                      "shapeId",
+                      "x1",
+                      "x2",
+                      "y1",
+                      "y2"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "_type": {
+                        "type": "string",
+                        "const": "text"
+                      },
+                      "color": {
+                        "$ref": "properties/actions/items/definitions/createAction/properties/shape/anyOf/0/properties/color"
+                      },
+                      "fontSize": {
+                        "type": "number"
+                      },
+                      "note": {
+                        "type": "string"
+                      },
+                      "shapeId": {
+                        "type": "string"
+                      },
+                      "text": {
+                        "$ref": "properties/actions/items/definitions/createAction/properties/shape/anyOf/1/properties/text"
+                      },
+                      "textAlign": {
+                        "type": "string",
+                        "enum": [
+                          "start",
+                          "middle",
+                          "end"
+                        ]
+                      },
+                      "width": {
+                        "type": "number"
+                      },
+                      "wrap": {
+                        "type": "boolean"
+                      },
+                      "x": {
+                        "type": "number"
+                      },
+                      "y": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "_type",
+                      "color",
+                      "note",
+                      "shapeId",
+                      "text",
+                      "x",
+                      "y"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "_type": {
+                        "type": "string",
+                        "const": "arrow"
+                      },
+                      "color": {
+                        "$ref": "properties/actions/items/definitions/createAction/properties/shape/anyOf/0/properties/color"
+                      },
+                      "fromId": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "note": {
+                        "type": "string"
+                      },
+                      "shapeId": {
+                        "type": "string"
+                      },
+                      "text": {
+                        "type": "string"
+                      },
+                      "toId": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "x1": {
+                        "type": "number"
+                      },
+                      "x2": {
+                        "type": "number"
+                      },
+                      "y1": {
+                        "type": "number"
+                      },
+                      "y2": {
+                        "type": "number"
+                      },
+                      "bend": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "_type",
+                      "color",
+                      "fromId",
+                      "note",
+                      "shapeId",
+                      "toId",
+                      "x1",
+                      "x2",
+                      "y1",
+                      "y2"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "_type": {
+                        "type": "string",
+                        "const": "note"
+                      },
+                      "color": {
+                        "$ref": "properties/actions/items/definitions/createAction/properties/shape/anyOf/0/properties/color"
+                      },
+                      "note": {
+                        "type": "string"
+                      },
+                      "shapeId": {
+                        "type": "string"
+                      },
+                      "text": {
+                        "$ref": "properties/actions/items/definitions/createAction/properties/shape/anyOf/1/properties/text"
+                      },
+                      "x": {
+                        "type": "number"
+                      },
+                      "y": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "_type",
+                      "color",
+                      "note",
+                      "shapeId",
+                      "x",
+                      "y"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "_type": {
+                        "type": "string",
+                        "const": "unknown"
+                      },
+                      "note": {
+                        "type": "string"
+                      },
+                      "shapeId": {
+                        "type": "string"
+                      },
+                      "subType": {
+                        "type": "string"
+                      },
+                      "x": {
+                        "type": "number"
+                      },
+                      "y": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "_type",
+                      "note",
+                      "shapeId",
+                      "subType",
+                      "x",
+                      "y"
+                    ],
+                    "additionalProperties": false
+                  }
+                ]
+              }
+            },
+            "required": [
+              "_type",
+              "intent",
+              "shape"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "delete",
+      "schema": {
+        "$ref": "properties/actions/items/definitions/deleteAction",
+        "definitions": {
+          "deleteAction": {
+            "type": "object",
+            "properties": {
+              "_type": {
+                "type": "string",
+                "const": "delete"
+              },
+              "intent": {
+                "type": "string"
+              },
+              "shapeId": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "_type",
+              "intent",
+              "shapeId"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "distribute",
+      "schema": {
+        "$ref": "properties/actions/items/definitions/distributeAction",
+        "definitions": {
+          "distributeAction": {
+            "type": "object",
+            "properties": {
+              "_type": {
+                "type": "string",
+                "const": "distribute"
+              },
+              "direction": {
+                "type": "string",
+                "enum": [
+                  "horizontal",
+                  "vertical"
+                ]
+              },
+              "intent": {
+                "type": "string"
+              },
+              "shapeIds": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "_type",
+              "direction",
+              "intent",
+              "shapeIds"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "getInspiration",
+      "schema": {
+        "$ref": "properties/actions/items/definitions/getInspirationAction",
+        "definitions": {
+          "getInspirationAction": {
+            "type": "object",
+            "properties": {
+              "_type": {
+                "type": "string",
+                "const": "getInspiration"
+              }
+            },
+            "required": [
+              "_type"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "label",
+      "schema": {
+        "$ref": "properties/actions/items/definitions/labelAction",
+        "definitions": {
+          "labelAction": {
+            "type": "object",
+            "properties": {
+              "_type": {
+                "type": "string",
+                "const": "label"
+              },
+              "intent": {
+                "type": "string"
+              },
+              "shapeId": {
+                "type": "string"
+              },
+              "text": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "_type",
+              "intent",
+              "shapeId",
+              "text"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "message",
+      "schema": {
+        "$ref": "properties/actions/items/definitions/messageAction",
+        "definitions": {
+          "messageAction": {
+            "type": "object",
+            "properties": {
+              "_type": {
+                "type": "string",
+                "const": "message"
+              },
+              "text": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "_type",
+              "text"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "move",
+      "schema": {
+        "$ref": "properties/actions/items/definitions/moveAction",
+        "definitions": {
+          "moveAction": {
+            "type": "object",
+            "properties": {
+              "_type": {
+                "type": "string",
+                "const": "move"
+              },
+              "intent": {
+                "type": "string"
+              },
+              "shapeId": {
+                "type": "string"
+              },
+              "x": {
+                "type": "number"
+              },
+              "y": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "_type",
+              "intent",
+              "shapeId",
+              "x",
+              "y"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "pen",
+      "schema": {
+        "$ref": "properties/actions/items/definitions/penAction",
+        "definitions": {
+          "penAction": {
+            "type": "object",
+            "properties": {
+              "_type": {
+                "type": "string",
+                "const": "pen"
+              },
+              "color": {
+                "type": "string",
+                "enum": [
+                  "red",
+                  "light-red",
+                  "green",
+                  "light-green",
+                  "blue",
+                  "light-blue",
+                  "orange",
+                  "yellow",
+                  "black",
+                  "violet",
+                  "light-violet",
+                  "grey",
+                  "white"
+                ]
+              },
+              "closed": {
+                "type": "boolean"
+              },
+              "fill": {
+                "type": "string",
+                "enum": [
+                  "none",
+                  "tint",
+                  "background",
+                  "solid",
+                  "pattern"
+                ]
+              },
+              "intent": {
+                "type": "string"
+              },
+              "points": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "x": {
+                      "type": "number"
+                    },
+                    "y": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "x",
+                    "y"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "style": {
+                "type": "string",
+                "enum": [
+                  "smooth",
+                  "straight"
+                ]
+              }
+            },
+            "required": [
+              "_type",
+              "color",
+              "closed",
+              "fill",
+              "intent",
+              "points",
+              "style"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "place",
+      "schema": {
+        "$ref": "properties/actions/items/definitions/placeAction",
+        "definitions": {
+          "placeAction": {
+            "type": "object",
+            "properties": {
+              "_type": {
+                "type": "string",
+                "const": "place"
+              },
+              "align": {
+                "type": "string",
+                "enum": [
+                  "start",
+                  "center",
+                  "end"
+                ]
+              },
+              "alignOffset": {
+                "type": "number"
+              },
+              "intent": {
+                "type": "string"
+              },
+              "referenceShapeId": {
+                "type": "string"
+              },
+              "side": {
+                "type": "string",
+                "enum": [
+                  "top",
+                  "bottom",
+                  "left",
+                  "right"
+                ]
+              },
+              "sideOffset": {
+                "type": "number"
+              },
+              "shapeId": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "_type",
+              "align",
+              "alignOffset",
+              "intent",
+              "referenceShapeId",
+              "side",
+              "sideOffset",
+              "shapeId"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "resize",
+      "schema": {
+        "$ref": "properties/actions/items/definitions/resizeAction",
+        "definitions": {
+          "resizeAction": {
+            "type": "object",
+            "properties": {
+              "_type": {
+                "type": "string",
+                "const": "resize"
+              },
+              "intent": {
+                "type": "string"
+              },
+              "originX": {
+                "type": "number"
+              },
+              "originY": {
+                "type": "number"
+              },
+              "scaleX": {
+                "type": "number"
+              },
+              "scaleY": {
+                "type": "number"
+              },
+              "shapeIds": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "_type",
+              "intent",
+              "originX",
+              "originY",
+              "scaleX",
+              "scaleY",
+              "shapeIds"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "review",
+      "schema": {
+        "$ref": "properties/actions/items/definitions/reviewAction",
+        "definitions": {
+          "reviewAction": {
+            "type": "object",
+            "properties": {
+              "_type": {
+                "type": "string",
+                "const": "review"
+              },
+              "intent": {
+                "type": "string"
+              },
+              "x": {
+                "type": "number"
+              },
+              "y": {
+                "type": "number"
+              },
+              "w": {
+                "type": "number"
+              },
+              "h": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "_type",
+              "intent",
+              "x",
+              "y",
+              "w",
+              "h"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "rotate",
+      "schema": {
+        "$ref": "properties/actions/items/definitions/rotateAction",
+        "definitions": {
+          "rotateAction": {
+            "type": "object",
+            "properties": {
+              "_type": {
+                "type": "string",
+                "const": "rotate"
+              },
+              "centerY": {
+                "type": "number"
+              },
+              "degrees": {
+                "type": "number"
+              },
+              "intent": {
+                "type": "string"
+              },
+              "originX": {
+                "type": "number"
+              },
+              "originY": {
+                "type": "number"
+              },
+              "shapeIds": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "_type",
+              "centerY",
+              "degrees",
+              "intent",
+              "originX",
+              "originY",
+              "shapeIds"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "sendToBack",
+      "schema": {
+        "$ref": "properties/actions/items/definitions/sendToBackAction",
+        "definitions": {
+          "sendToBackAction": {
+            "type": "object",
+            "properties": {
+              "_type": {
+                "type": "string",
+                "const": "sendToBack"
+              },
+              "intent": {
+                "type": "string"
+              },
+              "shapeIds": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "_type",
+              "intent",
+              "shapeIds"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "setMyView",
+      "schema": {
+        "$ref": "properties/actions/items/definitions/setMyViewAction",
+        "definitions": {
+          "setMyViewAction": {
+            "type": "object",
+            "properties": {
+              "_type": {
+                "type": "string",
+                "const": "setMyView"
+              },
+              "intent": {
+                "type": "string"
+              },
+              "x": {
+                "type": "number"
+              },
+              "y": {
+                "type": "number"
+              },
+              "w": {
+                "type": "number"
+              },
+              "h": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "_type",
+              "intent",
+              "x",
+              "y",
+              "w",
+              "h"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "stack",
+      "schema": {
+        "$ref": "properties/actions/items/definitions/stackAction",
+        "definitions": {
+          "stackAction": {
+            "type": "object",
+            "properties": {
+              "_type": {
+                "type": "string",
+                "const": "stack"
+              },
+              "direction": {
+                "type": "string",
+                "enum": [
+                  "vertical",
+                  "horizontal"
+                ]
+              },
+              "gap": {
+                "type": "number"
+              },
+              "intent": {
+                "type": "string"
+              },
+              "shapeIds": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "_type",
+              "direction",
+              "gap",
+              "intent",
+              "shapeIds"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "think",
+      "schema": {
+        "$ref": "properties/actions/items/definitions/thinkAction",
+        "definitions": {
+          "thinkAction": {
+            "type": "object",
+            "properties": {
+              "_type": {
+                "type": "string",
+                "const": "think"
+              },
+              "text": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "_type",
+              "text"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "update",
+      "schema": {
+        "$ref": "properties/actions/items/definitions/updateAction",
+        "definitions": {
+          "updateAction": {
+            "type": "object",
+            "properties": {
+              "_type": {
+                "type": "string",
+                "const": "update"
+              },
+              "intent": {
+                "type": "string"
+              },
+              "update": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "_type": {
+                        "type": "string",
+                        "const": "draw"
+                      },
+                      "color": {
+                        "type": "string",
+                        "enum": [
+                          "red",
+                          "light-red",
+                          "green",
+                          "light-green",
+                          "blue",
+                          "light-blue",
+                          "orange",
+                          "yellow",
+                          "black",
+                          "violet",
+                          "light-violet",
+                          "grey",
+                          "white"
+                        ]
+                      },
+                      "fill": {
+                        "type": "string",
+                        "enum": [
+                          "none",
+                          "tint",
+                          "background",
+                          "solid",
+                          "pattern"
+                        ]
+                      },
+                      "note": {
+                        "type": "string"
+                      },
+                      "shapeId": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "_type",
+                      "color",
+                      "note",
+                      "shapeId"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "_type": {
+                        "type": "string",
+                        "enum": [
+                          "rectangle",
+                          "ellipse",
+                          "triangle",
+                          "diamond",
+                          "hexagon",
+                          "pill",
+                          "cloud",
+                          "x-box",
+                          "check-box",
+                          "heart",
+                          "pentagon",
+                          "octagon",
+                          "star",
+                          "parallelogram-right",
+                          "parallelogram-left",
+                          "trapezoid",
+                          "fat-arrow-right",
+                          "fat-arrow-left",
+                          "fat-arrow-up",
+                          "fat-arrow-down"
+                        ]
+                      },
+                      "color": {
+                        "$ref": "properties/actions/items/definitions/updateAction/properties/update/anyOf/0/properties/color"
+                      },
+                      "fill": {
+                        "$ref": "properties/actions/items/definitions/updateAction/properties/update/anyOf/0/properties/fill"
+                      },
+                      "h": {
+                        "type": "number"
+                      },
+                      "note": {
+                        "type": "string"
+                      },
+                      "shapeId": {
+                        "type": "string"
+                      },
+                      "text": {
+                        "type": "string"
+                      },
+                      "textAlign": {
+                        "type": "string",
+                        "enum": [
+                          "start",
+                          "middle",
+                          "end"
+                        ]
+                      },
+                      "w": {
+                        "type": "number"
+                      },
+                      "x": {
+                        "type": "number"
+                      },
+                      "y": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "_type",
+                      "color",
+                      "fill",
+                      "h",
+                      "note",
+                      "shapeId",
+                      "w",
+                      "x",
+                      "y"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "_type": {
+                        "type": "string",
+                        "const": "line"
+                      },
+                      "color": {
+                        "$ref": "properties/actions/items/definitions/updateAction/properties/update/anyOf/0/properties/color"
+                      },
+                      "note": {
+                        "type": "string"
+                      },
+                      "shapeId": {
+                        "type": "string"
+                      },
+                      "x1": {
+                        "type": "number"
+                      },
+                      "x2": {
+                        "type": "number"
+                      },
+                      "y1": {
+                        "type": "number"
+                      },
+                      "y2": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "_type",
+                      "color",
+                      "note",
+                      "shapeId",
+                      "x1",
+                      "x2",
+                      "y1",
+                      "y2"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "_type": {
+                        "type": "string",
+                        "const": "text"
+                      },
+                      "color": {
+                        "$ref": "properties/actions/items/definitions/updateAction/properties/update/anyOf/0/properties/color"
+                      },
+                      "fontSize": {
+                        "type": "number"
+                      },
+                      "note": {
+                        "type": "string"
+                      },
+                      "shapeId": {
+                        "type": "string"
+                      },
+                      "text": {
+                        "$ref": "properties/actions/items/definitions/updateAction/properties/update/anyOf/1/properties/text"
+                      },
+                      "textAlign": {
+                        "type": "string",
+                        "enum": [
+                          "start",
+                          "middle",
+                          "end"
+                        ]
+                      },
+                      "width": {
+                        "type": "number"
+                      },
+                      "wrap": {
+                        "type": "boolean"
+                      },
+                      "x": {
+                        "type": "number"
+                      },
+                      "y": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "_type",
+                      "color",
+                      "note",
+                      "shapeId",
+                      "text",
+                      "x",
+                      "y"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "_type": {
+                        "type": "string",
+                        "const": "arrow"
+                      },
+                      "color": {
+                        "$ref": "properties/actions/items/definitions/updateAction/properties/update/anyOf/0/properties/color"
+                      },
+                      "fromId": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "note": {
+                        "type": "string"
+                      },
+                      "shapeId": {
+                        "type": "string"
+                      },
+                      "text": {
+                        "type": "string"
+                      },
+                      "toId": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "x1": {
+                        "type": "number"
+                      },
+                      "x2": {
+                        "type": "number"
+                      },
+                      "y1": {
+                        "type": "number"
+                      },
+                      "y2": {
+                        "type": "number"
+                      },
+                      "bend": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "_type",
+                      "color",
+                      "fromId",
+                      "note",
+                      "shapeId",
+                      "toId",
+                      "x1",
+                      "x2",
+                      "y1",
+                      "y2"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "_type": {
+                        "type": "string",
+                        "const": "note"
+                      },
+                      "color": {
+                        "$ref": "properties/actions/items/definitions/updateAction/properties/update/anyOf/0/properties/color"
+                      },
+                      "note": {
+                        "type": "string"
+                      },
+                      "shapeId": {
+                        "type": "string"
+                      },
+                      "text": {
+                        "$ref": "properties/actions/items/definitions/updateAction/properties/update/anyOf/1/properties/text"
+                      },
+                      "x": {
+                        "type": "number"
+                      },
+                      "y": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "_type",
+                      "color",
+                      "note",
+                      "shapeId",
+                      "x",
+                      "y"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "_type": {
+                        "type": "string",
+                        "const": "unknown"
+                      },
+                      "note": {
+                        "type": "string"
+                      },
+                      "shapeId": {
+                        "type": "string"
+                      },
+                      "subType": {
+                        "type": "string"
+                      },
+                      "x": {
+                        "type": "number"
+                      },
+                      "y": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "_type",
+                      "note",
+                      "shapeId",
+                      "subType",
+                      "x",
+                      "y"
+                    ],
+                    "additionalProperties": false
+                  }
+                ]
+              }
+            },
+            "required": [
+              "_type",
+              "intent",
+              "update"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "update-todo-list",
+      "schema": {
+        "$ref": "properties/actions/items/definitions/update-todo-listAction",
+        "definitions": {
+          "update-todo-listAction": {
+            "type": "object",
+            "properties": {
+              "_type": {
+                "type": "string",
+                "const": "update-todo-list"
+              },
+              "id": {
+                "type": "number"
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "todo",
+                  "in-progress",
+                  "done"
+                ]
+              },
+              "text": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "_type",
+              "id",
+              "status",
+              "text"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    }
+  ]
+}

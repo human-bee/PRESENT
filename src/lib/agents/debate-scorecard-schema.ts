@@ -103,7 +103,7 @@ export const debateTimelineEventSchema = z.object({
     .default('argument'),
   side: debateSideEnum.optional(),
   claimId: z.string().optional(),
-  metadata: z.record(z.any()).optional(),
+  metadata: z.record(z.string(), z.any()).optional(),
 });
 export type DebateTimelineEvent = z.infer<typeof debateTimelineEventSchema>;
 

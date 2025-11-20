@@ -182,16 +182,27 @@ export const MessageThreadCollapsible = React.forwardRef<
   const isRecognizedSlashCommand = Boolean(
     slashCommand && SUPPORTED_SLASH_COMMANDS.has(slashCommand.command),
   );
+  const slashHasBody = Boolean(slashCommand?.body && slashCommand.body.trim().length > 0);
   const mentionMatchesCanvasAgent = React.useMemo(() => {
     if (isRecognizedSlashCommand) return false;
     if (!typedMessage) return false;
     return /@canvas-agent/gi.test(typedMessage);
   }, [isRecognizedSlashCommand, typedMessage]);
-  const slashCommandBodyMissing = Boolean(isRecognizedSlashCommand && !slashCommand?.body);
+  const slashCommandBodyMissing = Boolean(isRecognizedSlashCommand && !slashHasBody);
 
   React.useEffect(() => {
     refreshCanvasComponents();
   }, [refreshCanvasComponents]);
+
+  React.useEffect(() => {
+    if (process.env.NODE_ENV !== 'production') {
+      try {
+        (window as any).__presentTypedMessage = typedMessage;
+      } catch {
+        // ignore
+      }
+    }
+  }, [typedMessage]);
 
   React.useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -792,6 +803,18 @@ export const MessageThreadCollapsible = React.forwardRef<
                   !trimmedMessage ||
                   (!isRecognizedSlashCommand && !mentionMatchesCanvasAgent && !isRoomConnected) ||
                   (isRecognizedSlashCommand && slashCommandBodyMissing);
+                if (process.env.NODE_ENV !== 'production' && process.env.NEXT_PUBLIC_TOOL_DISPATCHER_LOGS === 'true') {
+                  console.debug('[Transcript] sendDisabled check', {
+                    sendDisabled,
+                    trimmedMessageLength: trimmedMessage.length,
+                    isRecognizedSlashCommand,
+                    slashHasBody,
+                    slashCommandBodyMissing,
+                    mentionMatchesCanvasAgent,
+                    isRoomConnected,
+                    isSending,
+                  });
+                }
                 return (
               <form
                 data-debug-source="messaging-message-form"

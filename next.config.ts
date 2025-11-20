@@ -1,11 +1,10 @@
 import type { NextConfig } from 'next';
 import path from 'path';
 
-const aliasMap = {
+const clientAliasMap = {
   // Prefer ESM build to avoid dist-cjs richText path in the browser
-  tldraw: path.resolve(__dirname, 'node_modules/tldraw/dist-esm/index.mjs'),
+  'tldraw$': path.resolve(__dirname, 'node_modules/tldraw/dist-esm/index.mjs'),
   // Force ESM entries for tldraw subpackages to avoid dual CJS/ESM imports in dev
-  // TODO: TLDraw v4 exposes ESM entrypoints by default—confirm and remove these aliases when safe.
   '@tldraw/utils': path.resolve(__dirname, 'node_modules/@tldraw/utils/dist-esm/index.mjs'),
   '@tldraw/state': path.resolve(__dirname, 'node_modules/@tldraw/state/dist-esm/index.mjs'),
   '@tldraw/state-react': path.resolve(
@@ -15,9 +14,52 @@ const aliasMap = {
   '@tldraw/store': path.resolve(__dirname, 'node_modules/@tldraw/store/dist-esm/index.mjs'),
   '@tldraw/validate': path.resolve(__dirname, 'node_modules/@tldraw/validate/dist-esm/index.mjs'),
   '@tldraw/tlschema': path.resolve(__dirname, 'node_modules/@tldraw/tlschema/dist-esm/index.mjs'),
-  '@custom-ai/react': path.resolve(__dirname, 'src/lib/shims/custom-react.ts'),
-  '@custom-ai/react/mcp': path.resolve(__dirname, 'src/lib/shims/custom-react-mcp.tsx'),
+  '@tldraw/editor': path.resolve(__dirname, 'node_modules/@tldraw/editor/dist-esm/index.mjs'),
+  // Force singleton React
+  // react: path.resolve(__dirname, 'node_modules/react'),
+  // 'react-dom': path.resolve(__dirname, 'node_modules/react-dom'),
 } as const;
+
+const serverAliasMap = {} as const;
+
+const transpiledPackages = [
+  'tldraw',
+  '@tldraw/utils',
+  '@tldraw/state',
+  '@tldraw/state-react',
+  '@tldraw/store',
+  '@tldraw/validate',
+  '@tldraw/tlschema',
+  '@tldraw/editor',
+  '@tiptap/core',
+  '@tiptap/pm',
+  '@tiptap/starter-kit',
+  '@tiptap/extension-blockquote',
+  '@tiptap/extension-bold',
+  '@tiptap/extension-bubble-menu',
+  '@tiptap/extension-bullet-list',
+  '@tiptap/extension-code',
+  '@tiptap/extension-code-block',
+  '@tiptap/extension-document',
+  '@tiptap/extension-dropcursor',
+  '@tiptap/extension-floating-menu',
+  '@tiptap/extension-gapcursor',
+  '@tiptap/extension-hard-break',
+  '@tiptap/extension-heading',
+  '@tiptap/extension-highlight',
+  '@tiptap/extension-history',
+  '@tiptap/extension-horizontal-rule',
+  '@tiptap/extension-italic',
+  '@tiptap/extension-link',
+  '@tiptap/extension-list-item',
+  '@tiptap/extension-ordered-list',
+  '@tiptap/extension-paragraph',
+  '@tiptap/extension-strike',
+  '@tiptap/extension-text',
+  '@tiptap/extension-text-style',
+  '@tiptap/extension-underline',
+  '@radix-ui/react-password-toggle-field',
+] as const;
 
 const nextConfig: NextConfig = {
   // 🚨 TEMPORARY FIX FOR DEPLOYMENT - REMOVE THESE FOR PRODUCTION! 🚨
@@ -35,26 +77,21 @@ const nextConfig: NextConfig = {
   // Skip trailing slash redirect
   skipTrailingSlashRedirect: true,
 
+  transpilePackages: [...transpiledPackages],
+
   // Fix tldraw multiple instances issue and alias away @custom-ai/react
   webpack: (config, { isServer }) => {
-    const resolvedAliases = {
-      ...(config.resolve.alias ?? {}),
-      '@custom-ai/react': aliasMap['@custom-ai/react'],
-      '@custom-ai/react/mcp': aliasMap['@custom-ai/react/mcp'],
+    config.resolve.alias = {
+      ...(config.resolve.alias || {}),
+      ...(isServer ? serverAliasMap : clientAliasMap),
     };
-
-    if (!isServer) {
-      Object.assign(resolvedAliases, aliasMap);
-    }
-
-    config.resolve.alias = resolvedAliases;
     return config;
   },
 
   turbopack: {
     root: __dirname,
     resolveAlias: {
-      ...aliasMap,
+      ...clientAliasMap,
     },
   },
 

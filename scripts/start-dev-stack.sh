@@ -22,13 +22,17 @@ Options:
 
 Multiple options may be combined to start a subset of services.
 When running via npm, pass flags after "--" (e.g. npm run stack:start -- --realtime).
+
+Note: the teacher worker remains an optional separate process. Start it with
+  npm run teacher:worker
+after this script if you need teacher/shadow parity metrics.
 USAGE
 }
 
 declare -a SELECTED=()
 add_target() {
   local candidate="$1"
-  for existing in "${SELECTED[@]}"; do
+  for existing in "${SELECTED[@]:-}"; do
     if [[ "$existing" == "$candidate" ]]; then
       return
     fi
@@ -93,10 +97,11 @@ fi
 
 should_run() {
   local script="$1"
-  if [[ ${#SELECTED[@]} -eq 0 ]]; then
+  local selected_count=${#SELECTED[@]:-0}
+  if [[ "$selected_count" -eq 0 ]]; then
     return 0
   fi
-  for target in "${SELECTED[@]}"; do
+  for target in "${SELECTED[@]:-}"; do
     if [[ "$target" == "$script" ]]; then
       return 0
     fi
@@ -199,6 +204,7 @@ if should_run "lk:server:dev"; then
   start_process "LiveKit server" "lk:server:dev" "livekit-server.log" 7880 || failures=1
 fi
 if should_run "sync:dev"; then
+  ensure_port_free 3100
   start_process "Sync server" "sync:dev" "sync-dev.log" || failures=1
 fi
 if should_run "agent:conductor"; then

@@ -1,40 +1,40 @@
-uid=29_0 RootWebArea "Create Next App" url="http://localhost:3000/canvas?id=d54861d6-8486-4038-b038-232706f65bd8"
-  uid=29_1 application "tldraw" focusable focused
-    uid=29_2 button "Move focus to canvas"
-    uid=29_3 navigation
-      uid=29_4 button "Menu" haspopup="menu"
-      uid=29_5 button "Page 1" haspopup="dialog"
-    uid=29_6 toolbar "Actions" orientation="horizontal"
-      uid=29_7 button "Undo — ⌘ Z"
-      uid=29_8 button "Redo — ⌘ ⇧ Z" disableable disabled
-      uid=29_9 button "Delete — ⌫" disableable disabled
-      uid=29_10 button "Duplicate — ⌘ D" disableable disabled
-      uid=29_11 button "Actions" haspopup="dialog"
-    uid=29_12 toolbar "Tools" orientation="horizontal"
-      uid=29_13 button "Select — V" pressed
-      uid=29_14 button "Hand — H"
-      uid=29_15 button "Draw — D"
-      uid=29_16 button "Eraser — E"
-      uid=29_17 button "Arrow — A"
-      uid=29_18 button "Text — T"
-      uid=29_19 button "Note — N"
-      uid=29_20 button "Media — ⌘ U"
-      uid=29_21 button "Rectangle — R"
-      uid=29_22 button "More" haspopup="dialog"
-    uid=29_23 button "Styles" haspopup="dialog"
-    uid=29_24 region "Notifications (F8)"
-      uid=29_25 list
-    uid=29_26 button "Get a license for production" description="The tldraw SDK requires a license key to work in production. You can get a free 100-day trial license at tldraw.dev/pricing."
-  uid=29_27 StaticText "Transcript"
-  uid=29_28 button "Close"
-  uid=29_29 StaticText "No activity yet"
-  uid=29_30 StaticText "Voice conversations and components will appear here"
-  uid=29_31 textbox "Type a message for the agent"
-  uid=29_32 button "Send" disableable disabled
-  uid=29_33 StaticText "Sends as “you” over LiveKit to the voice agent."
-  uid=29_34 StaticText "Use `/canvas …` to message the Canvas steward directly."
-  uid=29_35 StaticText "Connected"
-  uid=29_36 StaticText "canvas-d54861d6-8486-4038-b038-232706f65bd8"
-  uid=29_37 button "Disconnect"
-  uid=29_38 button "Copy Link"
-  uid=29_39 button "Open Next.js Dev Tools" haspopup="menu"
+uid=60_0 RootWebArea "Create Next App" url="http://localhost:3000/canvas?fresh=1"
+  uid=60_1 application "tldraw"
+    uid=60_2 button "Move focus to canvas"
+    uid=60_3 navigation
+      uid=60_4 button "Menu" haspopup="menu"
+      uid=60_5 button "Page 1" haspopup="dialog"
+    uid=60_6 toolbar "Actions" orientation="horizontal"
+      uid=60_7 button "Undo — ⌘ Z"
+      uid=60_8 button "Redo — ⌘ ⇧ Z" disableable disabled
+      uid=60_9 button "Delete — ⌫" disableable disabled
+      uid=60_10 button "Duplicate — ⌘ D" disableable disabled
+      uid=60_11 button "Actions" haspopup="dialog"
+    uid=60_12 toolbar "Tools" orientation="horizontal"
+      uid=60_13 button "Select — V" pressed
+      uid=60_14 button "Hand — H"
+      uid=60_15 button "Draw — D"
+      uid=60_16 button "Eraser — E"
+      uid=60_17 button "Arrow — A"
+      uid=60_18 button "Text — T"
+      uid=60_19 button "Note — N"
+      uid=60_20 button "Media — ⌘ U"
+      uid=60_21 button "Rectangle — R"
+      uid=60_22 button "More" haspopup="dialog"
+    uid=60_23 button "Styles" haspopup="dialog"
+    uid=60_24 region "Notifications (F8)"
+      uid=60_25 list
+    uid=60_26 button "Get a license for production" description="The tldraw SDK requires a license key to work in production. You can get a free 100-day trial license at tldraw.dev/pricing."
+  uid=60_27 StaticText "Transcript"
+  uid=60_28 button "Close"
+  uid=60_29 StaticText "No activity yet"
+  uid=60_30 StaticText "Voice conversations and components will appear here"
+  uid=60_31 textbox "Type a message for the agent" value="Draft a brutalist poster concept: burnt orange hero, asymmetrical layout, 3 sticky notes for copy ideas."
+  uid=60_32 button "Send" disableable disabled
+  uid=60_33 StaticText "Sends as “you” over LiveKit to the voice agent."
+  uid=60_34 StaticText "Use `/canvas …` to message the Canvas steward directly."
+  uid=60_35 StaticText "Connected"
+  uid=60_36 StaticText "canvas-904a2028-d33e-4e80-b906-8ddf3c5bb90d"
+  uid=60_37 button "Disconnect"
+  uid=60_38 button "Copy Link"
+  uid=60_39 button "Open Next.js Dev Tools" haspopup="menu"

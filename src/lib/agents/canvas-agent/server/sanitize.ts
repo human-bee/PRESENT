@@ -1,6 +1,14 @@
-import type { AgentAction } from '../shared/types';
-import { actionParamSchemas } from '../shared/parsers';
-import { newAgentShapeId } from '../shared/ids';
+import type { AgentAction } from '@/lib/canvas-agent/contract/types';
+import { actionParamSchemas } from '@/lib/canvas-agent/contract/parsers';
+import { newAgentShapeId } from '@/lib/canvas-agent/contract/ids';
+
+/**
+ * Canonical sanitization happens in two passes:
+ * 1. Structural parsing via the shared Zod schemas (type guardrails, defaulting).
+ * 2. Graph-aware guardrails (existence checks, ID filtering, range clamps).
+ * No semantic rewrites (e.g. changing verbs) happen here – those remain closer
+ * to the prompt bridge so we can reason about them explicitly.
+ */
 
 export type CanvasShapeExistence = (id: string) => boolean;
 
@@ -17,10 +25,6 @@ export function sanitizeActions(actions: AgentAction[], exists: CanvasShapeExist
 
       if (action.name === 'create_shape') {
         if (!params.id) params.id = newAgentShapeId();
-        if (typeof params.id === 'string' && params.id) {
-          createdIds.add(params.id);
-        }
-      } else if (action.name === 'draw_pen') {
         if (typeof params.id === 'string' && params.id) {
           createdIds.add(params.id);
         }
@@ -47,10 +51,25 @@ export function sanitizeActions(actions: AgentAction[], exists: CanvasShapeExist
           break;
         case 'delete_shape':
         case 'move':
-        case 'rotate': {
+        case 'rotate':
+        case 'reorder': {
           const filteredIds = (params.ids as string[]).filter((id) => isKnown(id));
           if (filteredIds.length === 0) continue;
           params.ids = filteredIds;
+          break;
+        }
+        case 'group': {
+          const filtered = (params.ids as string[]).filter((id) => isKnown(id));
+          if (filtered.length < 2) continue;
+          params.ids = filtered;
+          break;
+        }
+        case 'stack':
+        case 'align':
+        case 'distribute': {
+          const filtered = (params.ids as string[]).filter((id) => isKnown(id));
+          if (filtered.length < 2) continue;
+          params.ids = filtered;
           break;
         }
         case 'ungroup':
@@ -87,6 +106,3 @@ export function sanitizeActions(actions: AgentAction[], exists: CanvasShapeExist
 
   return sanitized;
 }
-
-
-

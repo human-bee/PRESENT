@@ -32,6 +32,8 @@
     "stack:stop": "bash scripts/stop-dev-stack.sh",
     "stack:restart": "bash scripts/restart-dev-stack.sh",
     "stack:share": "bash scripts/share-dev-stack.sh"
+    "teacher:build": "esbuild scripts/teacher-worker.ts --bundle --platform=node --target=node22 --outfile=.parity-dist/teacher-worker/teacher-worker.js --tsconfig=tsconfig.teacher-worker.json",
+    "teacher:worker": "npm run teacher:build && node .parity-dist/teacher-worker/teacher-worker.js"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "2.0.41",
@@ -59,6 +61,7 @@
     "@tldraw/tlschema": "4.1.2",
     "@uidotdev/usehooks": "^2.4.1",
     "ai": "5.0.87",
+    "ajv": "^8.17.1",
     "class-variance-authority": "^0.7.1",
     "codex": "^0.2.3",
     "dompurify": "3.3.0",
@@ -78,7 +81,7 @@
     "react-markdown": "^10.1.0",
     "recharts": "^3.0.2",
     "tldraw": "4.1.2",
-    "zod": "^3.25.49",
+    "zod": "^4.1.12",
     "zod-to-json-schema": "^3.24.6"
   },
   "devDependencies": {
@@ -102,6 +105,7 @@
     "clsx": "^2.1.1",
     "depcheck": "^1.4.7",
     "dotenv": "^16.5.0",
+    "esbuild": "^0.27.0",
     "eslint": "9.39.1",
     "eslint-config-next": "^16.0.1",
     "fastify": "^5.6.1",
@@ -114,11 +118,11 @@
     "sharp": "0.34.4",
     "tailwind-merge": "^3.0.2",
     "tailwindcss": "4.1.16",
+    "ts-jest": "29.4.5",
     "tsx": "4.20.6",
     "typescript": "5.9.3",
     "unfurl.js": "^6.4.0",
-    "ws": "^8.18.3",
-    "ts-jest": "29.4.5"
+    "ws": "^8.18.3"
   },
   "optionalDependencies": {
     "@livekit/rtc-node-darwin-arm64": "0.13.14"

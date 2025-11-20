@@ -1,7 +1,13 @@
 import { RoomServiceClient, DataPacket_Kind } from 'livekit-server-sdk';
 import { join } from 'path';
 import { config as dotenvConfig } from 'dotenv';
-import { ACTION_VERSION, type AgentAction, type AgentActionEnvelope, type ScreenshotRequest, type AgentChatMessage } from '../shared/types';
+import {
+  ACTION_VERSION,
+  type AgentAction,
+  type AgentActionEnvelope,
+  type ScreenshotRequest,
+  type AgentChatMessage,
+} from '@/lib/canvas-agent/contract/types';
 import { mintAgentToken } from './auth/agentTokens';
 
 type AckRecord = {
