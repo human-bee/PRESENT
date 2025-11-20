@@ -729,7 +729,10 @@ export async function getCanvasShapeSummary(room: string) {
       return defaultCanvasState(room);
     }
 
-    const store = (data.document?.store || {}) as Record<string, any>;
+    const store = (data.document?.store ||
+      // Some saves persist the full TLDraw snapshot under `document.document`
+      data.document?.document?.store ||
+      {}) as Record<string, any>;
     if (process.env.NODE_ENV !== 'production') {
       try {
         const storeKeys = Object.keys(store);
@@ -758,6 +761,12 @@ export async function getCanvasShapeSummary(room: string) {
     Object.keys(store)
       .filter((key) => key.startsWith('shape:'))
       .forEach((key) => pushShape(store[key]));
+
+    // Also handle top-level TLDraw snapshots stored as an array of records
+    // (parity harness currently writes `{ shapes: [...], document: {...} }`).
+    if (Array.isArray((data as any).shapes)) {
+      (data as any).shapes.forEach(pushShape);
+    }
 
     const record: CanvasStateRecord = {
       version: typeof data.document?.schemaVersion === 'number' ? data.document.schemaVersion : 0,

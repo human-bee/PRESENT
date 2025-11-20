@@ -539,9 +539,20 @@ async function workerLoop() {
   }
 }
 
-void workerLoop().catch((err) => {
-  console.error('[Conductor] worker failed', err);
-});
+// Keep the worker alive even if a transient fetch/network error occurs.
+async function startWorkerLoop() {
+  for (;;) {
+    try {
+      await workerLoop();
+    } catch (err) {
+      console.error('[Conductor] worker failed', err);
+      // Small backoff before retrying to avoid hot loops on persistent outages.
+      await delay(2_000);
+    }
+  }
+}
+
+void startWorkerLoop();
 
 export const conductor = new Agent({
   name: 'Conductor',

@@ -67,6 +67,20 @@
 5. Artifacts land under `docs/parity/` as `<scenario>-<mode>-<timestamp>-{actions,doc,summary}.json`. Shadow runs also emit `*-metrics.json`. Each summary now includes `canvasId`, `canvasName`, `roomId`, `viewerPath`, and the suggested PNG path so the PNG workflow is fully deterministic.
 6. If `[CanvasAgent:TeacherRuntimeUnavailable]` shows up, it means the HTTP worker was unreachable and only PRESENT actions ran; metrics are still useful, but teacher counts will be zero.
 
+## V23 UI Smoke Results (2025-11-20)
+
+- **Test 1 – Poster (UI, chat path fixed)** — room `canvas-b23adda1-d5b7-40b9-8480-8a4c1e051c6a`, shapes persisted (`shapes.length=18`). Artifacts: `docs/parity/v22-poster-ui.png`, `docs/parity/v22-poster-ui-doc.json`.
+- **Test 2 – Pen (UI)** — room `canvas-17ba9e9b-436a-4cf3-a67d-8778fa9cad39`, `shapes.length=7`. Artifacts: `docs/parity/v22-pen-ui.png`, `docs/parity/v22-pen-ui-doc.json`.
+- **Test 4 – Layout (UI)** — room `canvas-9e4f5653-1aab-458a-b572-641feb971450`, `shapes.length=8`. Artifacts: `docs/parity/v22-layout-ui.png`, `docs/parity/v22-layout-ui-doc.json`.
+- **Test 5 – Viewport (UI)** — room `canvas-25638608-817f-4b57-bfde-389177ddef1d`. Agent emitted only `set_viewport`; `shapes.length=0` (expected for viewport-only). Artifacts: `docs/parity/v23-test5-ui.png`, `docs/parity/v23-test5-ui-doc.json`.
+- **Test 6 – Todo/add_detail (UI)** — room `canvas-26fc7c8b-4758-4cf9-8884-6fb7e8345e0d`. Created hero + notes; align/distribute; `shapes.length=8`. Todos still log RLS/cache errors (`canvas_agent_todos.session_id` missing) but shapes persist. Artifacts: `docs/parity/v23-test6-ui.png`, `docs/parity/v23-test6-ui-doc.json`.
+- **Test 7 – Transcript continuation (UI)** — room `canvas-5079b699-b8cf-402e-875d-2a797ee217f6`. Two-turn transcript; shapes accumulate; `shapes.length=6`. Artifacts: `docs/parity/v23-test7-ui.png`, `docs/parity/v23-test7-ui-doc.json`.
+- **Test 8 – Voice (UI prompt; mic UI absent)** — room `canvas-691a9677-16cf-41cb-8e3f-547bd8a70600`. Sent voice-style `/canvas` via transcript; agent created hero + “V23 voice note” + viewport; `shapes.length=3`. Artifacts: `docs/parity/v23-test8-ui.png`, `docs/parity/v23-test8-ui-doc.json`. True mic/UI voice path still TODO.
+
+## V23 Parity Sanity (Shadow)
+
+- **Poster shadow run** — TS `2025-11-20T07-30-34-3NZ`, room `canvas-45d70ff9-c3cb-4124-9a08-2b2a913cbb6f`, canvas same. Present actions: 14 (`create_shape` 11, `align` 1, `distribute` 1, `reorder` 1); Teacher actions: 34 (mostly `todo` + `create_shape`); layout deltas teacher-present: align -1, distribute -1, stack 0, reorder -1. Parity `doc.json` still `shapes.length=0`; PNG `docs/parity/poster-shadow-2025-11-20T07-30-34-3NZ.png`, metrics/summary under `docs/parity/poster-shadow-2025-11-20T07-30-34-3NZ-{metrics,summary}.json`. Needs follow-up to persist snapshots in parity harness.
+
 ## V18 Smoke Matrix Results (2025-11-19)
 
 - **Test 1 – Poster (shadow parity)** — TS `2025-11-19T21-09-34-3NZ`, room `canvas-67b94196-b8bd-45c7-a4b7-a7e6ddcaeb2e`, canvas `67b94196-b8bd-45c7-a4b7-a7e6ddcaeb2e`, viewer `/canvas?room=canvas-67b94196-b8bd-45c7-a4b7-a7e6ddcaeb2e&id=67b94196-b8bd-45c7-a4b7-a7e6ddcaeb2e&parity=1`. Artifacts: `docs/parity/poster-shadow-2025-11-19T21-09-34-3NZ-{actions,doc,summary,metrics}.json`, PNG `docs/parity/poster-shadow-2025-11-19T21-09-34-3NZ.png`. PRESENT verbs: 17 total (12 `create_shape`, `align`×1, `stack`×1, `reorder`×1, `think`×1, `todo`×1). Teacher verbs: 23 total (16 `create_shape`, `todo`×6, `think`×1); zero layout verbs. `doc.json.shapes` length: **0** (still empty; relying on PNG + metrics).

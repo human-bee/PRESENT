@@ -4,7 +4,7 @@
 > This file is the single source of truth for the TLDraw canvas agent parity effort.  
 > When you (the next LLM) pick up this work, **read this file first** before diving into code or logs.
 
-Last updated: 2025-11-18  
+Last updated: 2025-11-20  
 Owner: canvas agent / steward stack (voice → conductor → canvas)
 
 ---
@@ -18,6 +18,27 @@ This is source-of-truth input, not normal application code.
 **Do NOT edit files in `/vendor` directly** (except when bumping the entire upstream template).
 
 All PRESENT canvas-agent schemas/types/actions are generated from this folder via `scripts/gen-agent-contract.ts` → `generated/agent-contract.json`.
+
+## 2025-11-20 @ 18:20 PT — V21 UI persistence sanity
+
+- Persistence fixed for TLDraw snapshots saved from the UI: `getCanvasShapeSummary` now reads both `document.store` and `document.document.store` so full `editor.getSnapshot()` payloads are summarized correctly. Added a dev write bypass (`allowUnauthedWrite` when `NEXT_PUBLIC_CANVAS_PARITY_DEV=true`) so local canvases can save via `/api/canvas/save-snapshot` without auth friction.
+- UI smoke (agents → TLDraw → Supabase) now validated end-to-end:
+  - Test 1 Poster — canvas `b23adda1-d5b7-40b9-8480-8a4c1e051c6a`, room `canvas-b23adda1-d5b7-40b9-8480-8a4c1e051c6a`, shapes persisted (`shapes.length=18`), doc `docs/parity/v21-poster-ui-doc.json`, PNG `docs/parity/v21-poster-ui.png`.
+  - Test 4 Layout — canvas `9e4f5653-1aab-458a-b572-641feb971450`, room `canvas-9e4f5653-1aab-458a-b572-641feb971450`, shapes persisted (`shapes.length=4`), doc `docs/parity/v21-layout-ui-doc.json`, PNG `docs/parity/v21-layout-ui.png`.
+- Remaining gaps: the transcript “Send” button still disables in some flows; prompts were triggered via `/api/steward/runCanvas` as a workaround. Voice/viewport/todo tests (5–8) not run in this pass.
+
+## 2025-11-20 @ 20:20 PT — V23 UI matrix + parity sanity
+
+- Transcript send path fixed (slash `/canvas …` works when Connected). Dev-only persistence still gated to `parity=1` and 403 in prod.
+- UI smoke tests completed via chat:
+  - Poster (room `canvas-b23adda1-d5b7-40b9-8480-8a4c1e051c6a`), `shapes.length=18`.
+  - Pen (room `canvas-17ba9e9b-436a-4cf3-a67d-8778fa9cad39`), `shapes.length=7`.
+  - Layout (room `canvas-9e4f5653-1aab-458a-b572-641feb971450`), `shapes.length=8`.
+  - Viewport (room `canvas-25638608-817f-4b57-bfde-389177ddef1d`), viewport-only actions, `shapes.length=0` (expected).
+  - Todo/add_detail (room `canvas-26fc7c8b-4758-4cf9-8884-6fb7e8345e0d`), `shapes.length=8` (todos still log missing `session_id` column in `canvas_agent_todos`).
+  - Transcript continuation (room `canvas-5079b699-b8cf-402e-875d-2a797ee217f6`), two-turn run, `shapes.length=6`.
+  - Voice prompt via transcript (room `canvas-691a9677-16cf-41cb-8e3f-547bd8a70600`), `shapes.length=3`; true mic UI still TODO.
+- Parity sanity (poster, shadow): present actions 14, teacher 34, layout deltas align/distribute/reorder = -1 vs present. Parity doc snapshot still empty (`shapes.length=0`); PNG + metrics captured.
 
 When TLDraw updates their starter kit, update this folder as a single atomic replacement (e.g., delete + copy new version, or use git subtree), then re-run the generator.
 

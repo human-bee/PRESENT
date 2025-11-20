@@ -9,8 +9,15 @@ import { useAuth } from './use-auth';
 
 export function useCanvasPersistence(editor: Editor | null, enabled: boolean = true) {
   const { user } = useAuth();
-  const isParity = typeof window !== 'undefined' && new URL(window.location.href).searchParams.get('parity') === '1';
-  const allowParityWrite = isParity && process.env.NEXT_PUBLIC_CANVAS_PARITY_DEV === 'true';
+  const isParity =
+    typeof window !== 'undefined' && new URL(window.location.href).searchParams.get('parity') === '1';
+  // Dev-only escape hatch so we can persist parity/local canvases without auth friction.
+  // Never allow this in production, and only honor it for parity-tagged canvases.
+  const allowParityWrite =
+    process.env.NODE_ENV !== 'production' &&
+    isParity &&
+    process.env.NEXT_PUBLIC_CANVAS_PARITY_DEV === 'true';
+  const allowUnauthedWrite = allowParityWrite;
   const router = useRouter();
   const { thread } = usecustomThread();
   const [canvasId, setCanvasId] = useState<string | null>(null);
@@ -25,8 +32,8 @@ export function useCanvasPersistence(editor: Editor | null, enabled: boolean = t
   useEffect(() => {
     const loadCanvas = async () => {
       if (!editor) return;
-      if (!user?.id && !allowParityWrite) return;
-      if (allowParityWrite) {
+      if (!user?.id && !allowUnauthedWrite) return;
+      if (allowUnauthedWrite) {
         setCanWrite(true);
       }
 
@@ -70,7 +77,7 @@ export function useCanvasPersistence(editor: Editor | null, enabled: boolean = t
             } catch { }
 
             // Determine write permission: owner or editor membership
-            if (allowParityWrite) {
+            if (allowUnauthedWrite) {
               setCanWrite(true);
             } else if (user) {
               if (canvas.user_id === user.id) {
@@ -125,17 +132,13 @@ export function useCanvasPersistence(editor: Editor | null, enabled: boolean = t
             error,
           );
           // In parity dev mode, keep write access even if fetch fails (RLS/anon)
-          if (!allowParityWrite) {
-            setCanWrite(false);
-          } else {
-            setCanWrite(true);
-          }
+          setCanWrite(Boolean(allowUnauthedWrite));
         }
       }
     };
 
     loadCanvas();
-  }, [user, editor, router]);
+  }, [user, editor, router, allowUnauthedWrite]);
 
   // React to canvas id changes broadcast from the page to keep name in sync immediately
   useEffect(() => {
@@ -157,7 +160,8 @@ export function useCanvasPersistence(editor: Editor | null, enabled: boolean = t
     let lastError: unknown = null;
     if (!enabled) return;
     if (!editor || isSaving) return;
-    if (!canWrite) return; // respect read-only when not the owner
+    // In dev/parity flows we allow writes even when the viewer isn't the owner.
+    if (!canWrite && !allowUnauthedWrite) return; // respect read-only when not the owner
 
     setIsSaving(true);
     try {
@@ -200,32 +204,7 @@ export function useCanvasPersistence(editor: Editor | null, enabled: boolean = t
       }
 
       if (canvasId) {
-        // Always attempt server-side save first (service role), then fall back to client supabase update
-        let serverSaved = false;
-        try {
-          const res = await fetch('/api/canvas/save-snapshot', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              canvasId,
-              snapshot,
-              thumbnail,
-              conversationKey,
-              name: canvasName || defaultName,
-            }),
-          });
-          if (!res.ok) {
-            const msg = await res.text().catch(() => res.statusText);
-            throw new Error(`save-snapshot failed: ${msg}`);
-          }
-          serverSaved = true;
-        } catch (err) {
-          if (process.env.NODE_ENV !== 'production') {
-            console.warn('[CanvasPersistence] save-snapshot route failed, falling back to client supabase', err);
-          }
-        }
-
-        if (!serverSaved) {
+        // Save via Supabase client (anon or service, depending on environment)
           const { error } = await supabase
             .from('canvases')
             .update({
@@ -238,9 +217,7 @@ export function useCanvasPersistence(editor: Editor | null, enabled: boolean = t
               thumbnail,
             })
             .eq('id', canvasId);
-
           if (error) throw error;
-        }
         if (process.env.NODE_ENV !== 'production' && process.env.NEXT_PUBLIC_TOOL_DISPATCHER_LOGS === 'true') {
           try {
             console.debug('[CanvasPersistence] saved canvas', {
@@ -322,7 +299,7 @@ export function useCanvasPersistence(editor: Editor | null, enabled: boolean = t
         }
       } catch {}
     }
-  }, [editor, user, canvasId, canvasName, thread, isSaving, enabled, canWrite]);
+  }, [editor, user, canvasId, canvasName, thread, isSaving, enabled, canWrite, allowUnauthedWrite]);
 
   // Save shortly after agent actions arrive (as a backstop when editor listeners don’t fire)
   useEffect(() => {
@@ -376,7 +353,7 @@ export function useCanvasPersistence(editor: Editor | null, enabled: boolean = t
   // Manual save function
   const manualSave = useCallback(async () => {
     if (!enabled) return;
-    if (!canWrite) {
+    if (!canWrite && !allowUnauthedWrite) {
       toast.error("You don't have permission to save this canvas");
       return;
     }
@@ -385,13 +362,13 @@ export function useCanvasPersistence(editor: Editor | null, enabled: boolean = t
     }
     await saveCanvas();
     toast.success('Canvas saved!');
-  }, [saveCanvas, enabled, canWrite]);
+  }, [saveCanvas, enabled, canWrite, allowUnauthedWrite]);
 
   // Debug hook: expose manual save in dev for instrumentation
   useEffect(() => {
     if (process.env.NODE_ENV === 'production') return;
     try {
-      (window as any).__presentCanvasCanWrite = canWrite;
+      (window as any).__presentCanvasCanWrite = canWrite || allowUnauthedWrite;
     } catch {}
     try {
       (window as any).__presentManualCanvasSave = saveCanvas;
@@ -402,7 +379,7 @@ export function useCanvasPersistence(editor: Editor | null, enabled: boolean = t
         delete (window as any).__presentCanvasCanWrite;
       } catch {}
     };
-  }, [saveCanvas, canWrite]);
+  }, [saveCanvas, canWrite, allowUnauthedWrite]);
 
   // Update canvas name
   const updateCanvasName = useCallback(
