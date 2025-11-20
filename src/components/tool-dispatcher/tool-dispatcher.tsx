@@ -78,6 +78,16 @@ export function ToolDispatcher({
       try {
         if (!message || message.type !== 'agent:action') return;
         const envelope = message.envelope;
+        if (enableLogging && typeof window !== 'undefined') {
+          try {
+            console.debug('[ToolDispatcher] agent:action received', {
+              room: room?.name,
+              sessionId: envelope?.sessionId,
+              seq: envelope?.seq,
+              actionCount: Array.isArray(envelope?.actions) ? envelope.actions.length : 0,
+            });
+          } catch {}
+        }
         window.dispatchEvent(new CustomEvent('present:agent_actions', { detail: envelope }));
         void (async () => {
           const token = await ensureToken(envelope.sessionId);

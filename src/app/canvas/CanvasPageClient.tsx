@@ -5,6 +5,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { CanvasSpace } from '@/components/ui/canvas/canvas-space';
+import { CanvasParityAutopilot } from '@/components/ui/canvas/CanvasParityAutopilot';
 import { MessageThreadCollapsible } from '@/components/ui/messaging/message-thread-collapsible';
 import { CanvasLiveKitContext } from '@/components/ui/livekit/livekit-room-connector';
 import SessionSync from '@/components/SessionSync';
@@ -44,11 +45,55 @@ export function CanvasPageClient() {
   const [, setCanvasId] = useState<string | null>(null);
   const [roomName, setRoomName] = useState<string>('');
 
+  const isUuid = (value: string | null | undefined) =>
+    !!value && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+
+  const joinParityCanvas = useCallback(async (canvasId: string, room: string) => {
+    if (typeof window === 'undefined') return;
+    if (!canvasId || !room || !room.startsWith('canvas-')) return;
+    if (window.sessionStorage.getItem(`present:parity-joined:${room}`)) return;
+    try {
+      await fetch('/api/canvas/parity-join', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ canvasId, room }),
+      });
+      window.sessionStorage.setItem(`present:parity-joined:${room}`, '1');
+    } catch {
+      // non-fatal; parity flow can continue without membership
+    }
+  }, []);
+
   useEffect(() => {
     if (typeof window === 'undefined') return;
     // Resolve canvas id from URL, localStorage fallback, or create a new canvas row
     const resolveCanvasId = async () => {
       const url = new URL(window.location.href);
+      const roomOverride = url.searchParams.get('room');
+      if (roomOverride && roomOverride.trim().length > 0) {
+        const sanitized = roomOverride.trim();
+        const roomMatch = sanitized.match(/^canvas-([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i);
+        if (roomMatch?.[1] && isUuid(roomMatch[1])) {
+          const derivedCanvasId = roomMatch[1];
+          setCanvasId(derivedCanvasId);
+          setRoomName(sanitized);
+          joinParityCanvas(derivedCanvasId, sanitized);
+          if (url.searchParams.get('id') !== derivedCanvasId) {
+            url.searchParams.set('id', derivedCanvasId);
+            window.history.replaceState({}, '', url.toString());
+          }
+          try {
+            localStorage.setItem('present:lastCanvasId', derivedCanvasId);
+          } catch {}
+        } else {
+          setCanvasId(sanitized);
+          setRoomName(sanitized);
+        }
+        try {
+          window.dispatchEvent(new Event('present:canvas-id-changed'));
+        } catch {}
+        return;
+      }
       const isSyntheticDevId = (value: string | null) => !!value && value.startsWith('dev-');
 
       let idParam = url.searchParams.get('id');
@@ -367,6 +412,8 @@ export function CanvasPageClient() {
                   onTranscriptToggle={toggleTranscript}
                 />
 
+                <CanvasParityAutopilot />
+
                 <SessionSync roomName={roomName} />
 
                 <MessageThreadCollapsible
@@ -392,6 +439,8 @@ export function CanvasPageClient() {
                 onTranscriptToggle={toggleTranscript}
               />
 
+              <CanvasParityAutopilot />
+
               <SessionSync roomName={roomName} />
 
               <MessageThreadCollapsible
@@ -412,4 +461,3 @@ export function CanvasPageClient() {
 }
 
 export default CanvasPageClient;
-

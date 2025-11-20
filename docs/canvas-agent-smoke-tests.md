@@ -44,11 +44,42 @@
 
 ## Parity Harness & PNG Workflow
 
-1. Run `tsx scripts/canvas-parity.ts --scenario=poster --mode=shadow` (or `--mode=present|tldraw-teacher`) **after** you restart the stack **and** start the teacher worker (`npm run teacher:worker`, which serves `http://localhost:8787` by default). The runner uses `CANVAS_TEACHER_ENDPOINT` to talk to that worker; if it is missing, `[CanvasAgent:TeacherRuntimeUnavailable]` shows up in logs and teacher metrics stay empty while PRESENT still records actions.
-2. The script writes `*-actions.json`, `*-doc.json`, `*-summary.json`, and for shadow runs `*-metrics.json` to `docs/parity/`.
-3. Open `/canvas?room=<roomId>` using the `roomId` inside each `*-summary.json`, capture a PNG once autosave finishes, and save it to the `suggestedPng` path noted in that summary (e.g., `docs/parity/poster-shadow-<ts>.png`).
-4. Compare the PNGs next to the summary + metrics output to evaluate layout/verb differences before tweaking prompts or schemas.
-   - If the CLI prints `[CanvasAgent:TeacherRuntimeUnavailable]`, it just means the vendored TLDraw worker couldn’t load in this environment; PRESENT artifacts are still valid, but teacher verb counts will be zero until the worker is moved out of the Next.js runtime.
+1. Start infra each time:
+   ```bash
+   fnm exec --using=22.18.0 npm run stack:restart -- --livekit --sync --web
+   fnm exec --using=22.18.0 npm run teacher:worker   # serves http://127.0.0.1:8787
+   export CANVAS_TEACHER_ENDPOINT=http://127.0.0.1:8787
+   ```
+2. For each parity run, pick a timestamp (e.g. `TS=$(date -u "+%Y-%m-%dT%H-%M-%S-%3NZ")`). The CLI now provisions a real Supabase canvas row per `(scenario, mode, timestamp)` (owned by the service user `parity-worker@present.local` by default; override via `CANVAS_PARITY_OWNER_EMAIL` if you truly need a different account) and assigns the LiveKit room `canvas-<uuid>` to match.
+3. Launch the CLI with `--wait-for-client` so it can print the canonical viewer URL **before** streaming actions, e.g.:
+   ```bash
+   fnm exec --using=22.18.0 npx tsx scripts/canvas-parity.ts \
+     --scenario=<poster|pen|layout> \
+     --mode=<present|tldraw-teacher|shadow> \
+     --timestamp="$TS" \
+     --wait-for-client
+   ```
+   The script logs `Attach a TLDraw client via /canvas?room=canvas-<uuid>&id=<uuid>&parity=1` and pauses until you press Enter.
+4. Attach a client using that path **while the CLI is paused**:
+   - Manual: open `http://localhost:3000/canvas?room=canvas-<uuid>&id=<uuid>&parity=1` (auth bypass or an authenticated browser both work). The page now backfills `id=<uuid>` automatically when `room` matches `canvas-<uuid>` so Supabase autosave stays in sync.
+   - Headless + PNG capture: `fnm exec --using=22.18.0 npx tsx scripts/canvas-parity-viewer.ts --url="http://localhost:3000${VIEWER_PATH}" --duration=45000 --screenshot="docs/parity/<scenario>-<mode>-$TS.png"`. `--screenshot-wait=2500` adds extra dwell time before capture if needed.
+   After the viewer connects, press Enter in the CLI to let the agent run.
+5. Artifacts land under `docs/parity/` as `<scenario>-<mode>-<timestamp>-{actions,doc,summary}.json`. Shadow runs also emit `*-metrics.json`. Each summary now includes `canvasId`, `canvasName`, `roomId`, `viewerPath`, and the suggested PNG path so the PNG workflow is fully deterministic.
+6. If `[CanvasAgent:TeacherRuntimeUnavailable]` shows up, it means the HTTP worker was unreachable and only PRESENT actions ran; metrics are still useful, but teacher counts will be zero.
+
+## V18 Smoke Matrix Results (2025-11-19)
+
+- **Test 1 – Poster (shadow parity)** — TS `2025-11-19T21-09-34-3NZ`, room `canvas-67b94196-b8bd-45c7-a4b7-a7e6ddcaeb2e`, canvas `67b94196-b8bd-45c7-a4b7-a7e6ddcaeb2e`, viewer `/canvas?room=canvas-67b94196-b8bd-45c7-a4b7-a7e6ddcaeb2e&id=67b94196-b8bd-45c7-a4b7-a7e6ddcaeb2e&parity=1`. Artifacts: `docs/parity/poster-shadow-2025-11-19T21-09-34-3NZ-{actions,doc,summary,metrics}.json`, PNG `docs/parity/poster-shadow-2025-11-19T21-09-34-3NZ.png`. PRESENT verbs: 17 total (12 `create_shape`, `align`×1, `stack`×1, `reorder`×1, `think`×1, `todo`×1). Teacher verbs: 23 total (16 `create_shape`, `todo`×6, `think`×1); zero layout verbs. `doc.json.shapes` length: **0** (still empty; relying on PNG + metrics).
+- **Test 2 – Pen (shadow parity)** — TS `2025-11-19T21-12-13-3NZ`, room `canvas-41d57255-b0d1-4860-82e7-114882d8e812`, canvas `41d57255-b0d1-4860-82e7-114882d8e812`, viewer `/canvas?room=canvas-41d57255-b0d1-4860-82e7-114882d8e812&id=41d57255-b0d1-4860-82e7-114882d8e812&parity=1`. Artifacts: `docs/parity/pen-shadow-2025-11-19T21-12-13-3NZ-{actions,doc,summary,metrics}.json`, PNG `docs/parity/pen-shadow-2025-11-19T21-12-13-3NZ.png`. PRESENT verbs: 6 (`create_shape` draw strokes only). Teacher verbs: 10 (`create_shape`×4, `todo`×5, `think`×1). Layout verbs: none (expected for pen). `doc.json.shapes` length: **0**.
+- **Tests 3–4 – Layout (shadow parity)** — TS `2025-11-19T21-14-18-3NZ`, room `canvas-4e03370b-4c65-41b6-b727-99e043d19d74`, canvas `4e03370b-4c65-41b6-b727-99e043d19d74`, viewer `/canvas?room=canvas-4e03370b-4c65-41b6-b727-99e043d19d74&id=4e03370b-4c65-41b6-b727-99e043d19d74&parity=1`. Artifacts: `docs/parity/layout-shadow-2025-11-19T21-14-18-3NZ-{actions,doc,summary,metrics}.json`, PNG `docs/parity/layout-shadow-2025-11-19T21-14-18-3NZ.png`. PRESENT verbs: 10 total (`create_shape`×5, `align`×2, `distribute`×1, `stack`×1, `reorder`×1). Teacher verbs: 18 (`todo`×10, `think`×4, `create_shape`×3, `align`×1). Layout delta (teacher – present): `align -1`, `distribute -1`, `stack -1`, `reorder -1`. `doc.json.shapes` length: **0**.
+- **Tests 5–7 (viewport / todo-add_detail / transcript continuation)** — Not exercised in V18 (UI chat/voice path still idle; agent request remained disabled after Connect while voice/conductor stack was off). TODO for next pass once voice agent + conductor are running.
+
+## Parity Planning (V15)
+
+- Poster scenario ⇢ **Smoke Test 1**: present/teacher/shadow JSON + metrics exist for `2025-11-19T11-29..`. With the new Supabase mapping the next rerun will persist real TLDraw snapshots + PNGs (viewer path now encoded in each summary).
+- Pen scenario ⇢ **Smoke Test 2**: `--scenario=pen --mode=shadow` remains the go-to freehand baseline. Once screenshots are captured, compare draw-path fidelity between PRESENT and teacher to tune the prompt/examples if needed.
+- Layout scenario ⇢ **Smoke Tests 3–4**: config is live in `SCENARIOS.layout`. After the poster + pen reruns confirm Supabase persistence, run `--scenario=layout --mode=shadow --wait-for-client` and capture both metrics + PNGs to quantify align/distribute/stack usage.
+- Operational reminders: keep LiveKit stack + teacher worker running, set `CANVAS_TEACHER_ENDPOINT`, and rely on the CLI’s `viewerPath` hint + `scripts/canvas-parity-viewer.ts --screenshot=...` for reproducible PNG capture. Without the HTTP worker you’ll still see `[CanvasAgent:TeacherRuntimeUnavailable]` (teacher counts zero) even though PRESENT artifacts are valid.
 
 ## Test Matrix
 | # | Capability | Prompt | Expectation |

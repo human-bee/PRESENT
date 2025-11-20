@@ -73,3 +73,6 @@ tasks/
 
 # Temporary working copies of external templates
 .tmp/
+
+# Parity run artifacts (local-only)
+docs/parity/

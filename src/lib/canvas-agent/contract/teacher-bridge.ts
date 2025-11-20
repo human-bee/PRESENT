@@ -225,6 +225,17 @@ function isTeacherActionCandidate(value: unknown): value is { _type: string } {
   return Boolean(value && typeof value === 'object' && typeof (value as { _type?: unknown })._type === 'string');
 }
 
+const STREAMING_METADATA_FIELDS = new Set(['complete', 'time']);
+
+function stripStreamingMetadata<T extends Record<string, unknown>>(payload: T): T {
+  const result: Record<string, unknown> = {};
+  Object.entries(payload).forEach(([key, value]) => {
+    if (STREAMING_METADATA_FIELDS.has(key)) return;
+    result[key] = value;
+  });
+  return result as T;
+}
+
 export function convertTeacherAction(raw: unknown): CanonicalAction | null {
   if (!isTeacherActionCandidate(raw)) {
     return null;
@@ -233,7 +244,8 @@ export function convertTeacherAction(raw: unknown): CanonicalAction | null {
   if (!teacherActionSet.has(actionType)) {
     return null;
   }
-  const validation = validateTeacherActionPayload(actionType, raw);
+  const sanitized = stripStreamingMetadata(raw as Record<string, unknown>);
+  const validation = validateTeacherActionPayload(actionType, sanitized);
   if (!validation.ok) {
     console.warn('[CanvasAgent:TeacherValidationFailed]', {
       action: actionType,
@@ -246,5 +258,5 @@ export function convertTeacherAction(raw: unknown): CanonicalAction | null {
     console.warn('[CanvasAgent:TeacherActionUnsupported]', { action: actionType });
     return null;
   }
-  return converter(raw as Record<string, unknown>);
+  return converter(sanitized);
 }

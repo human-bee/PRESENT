@@ -1114,10 +1114,19 @@ const normalizeRawAction = (raw: unknown, shapeTypeById: Map<string, string>) =>
         teacherContext.chatHistory = teacherChatHistory;
       }
 
-      const existingTodos = await listTodos(sessionId);
-      const teacherTodoItems = mapTodosToTeacherItems(existingTodos);
-      if (teacherTodoItems.length > 0) {
-        teacherContext.todoItems = teacherTodoItems;
+      try {
+        const existingTodos = await listTodos(sessionId);
+        const teacherTodoItems = mapTodosToTeacherItems(existingTodos);
+        if (teacherTodoItems.length > 0) {
+          teacherContext.todoItems = teacherTodoItems;
+        }
+      } catch (todoLoadError) {
+        console.warn('[CanvasAgent:TodosUnavailable]', {
+          roomId,
+          sessionId,
+          source: 'teacher-context',
+          error: todoLoadError instanceof Error ? todoLoadError.message : todoLoadError,
+        });
       }
 
       teacherRunner = async (dispatchActions: boolean) => {

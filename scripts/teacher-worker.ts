@@ -1,6 +1,12 @@
 import http from 'node:http';
+import { join } from 'node:path';
+import { config as dotenvConfig } from 'dotenv';
 import { streamTeacherAgent } from '@/lib/canvas-agent/teacher-runtime/service';
 import type { TeacherPromptContext } from '@/lib/canvas-agent/teacher-runtime/prompt';
+
+try {
+  dotenvConfig({ path: join(process.cwd(), '.env.local') });
+} catch {}
 
 const PORT = Number(process.env.TEACHER_WORKER_PORT ?? process.env.PORT ?? 8787);
 const HOST = process.env.TEACHER_WORKER_HOST ?? '127.0.0.1';
