@@ -1,0 +1,56 @@
+'use client';
+
+import { useEffect, useMemo } from 'react';
+import { useSearchParams } from 'next/navigation';
+import { useLivekitConnection } from '@/components/ui/livekit/hooks';
+import { useCanvasLiveKit } from '@/components/ui/livekit/livekit-room-connector';
+import { createLogger } from '@/lib/utils';
+
+const logger = createLogger('CanvasParityAutopilot');
+
+export function CanvasParityAutopilot() {
+  const searchParams = useSearchParams();
+  const livekitState = useCanvasLiveKit();
+  const parityRequested = searchParams?.get('parity') === '1';
+  const roomOverride = searchParams?.get('room')?.trim() ?? '';
+
+  const resolvedRoomName = useMemo(() => {
+    if (roomOverride) {
+      return roomOverride;
+    }
+    if (livekitState?.roomName) {
+      return livekitState.roomName;
+    }
+    return '';
+  }, [roomOverride, livekitState?.roomName]);
+
+  const autopilotEnabled = parityRequested && resolvedRoomName.length > 0;
+
+  const { state, connect, disconnect } = useLivekitConnection({
+    roomName: resolvedRoomName || 'canvas-room',
+    userName: 'Canvas Parity Autopilot',
+    autoConnect: false,
+  });
+
+  useEffect(() => {
+    if (!autopilotEnabled) {
+      return;
+    }
+    if (state.connectionState === 'disconnected' || state.connectionState === 'error') {
+      logger.info('[CanvasParityAutopilot] auto-connecting to room', resolvedRoomName);
+      void connect();
+    }
+  }, [autopilotEnabled, state.connectionState, connect, resolvedRoomName]);
+
+  useEffect(() => {
+    if (!autopilotEnabled) {
+      void disconnect();
+      return;
+    }
+    if (state.connectionState === 'connected') {
+      logger.info('[CanvasParityAutopilot] connected to room', resolvedRoomName);
+    }
+  }, [autopilotEnabled, disconnect, state.connectionState, resolvedRoomName]);
+
+  return null;
+}

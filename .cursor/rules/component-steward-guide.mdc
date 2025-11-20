@@ -1,0 +1,36 @@
+---
+alwaysApply: false
+---
+# Component & Steward Integration (Checklist)
+
+## Client (Component)
+- Register on mount: `useComponentRegistration(messageId, type, props, contextKey, onAIUpdate)`.
+- Treat `shape.props.state` as source of truth; mirror local changes via `updateState`.
+- `onAIUpdate` must be idempotent; coerce durations/booleans; tolerate partials.
+- Deterministic IDs: accept `__custom_message_id` or derive stable fallback.
+- Perf: keep renders ~≤10 ms; memoize heavy work.
+
+## Server (Steward)
+- Reserve before create: `reserve_component({ type, intentId, messageId, slot? })`.
+- Resolve updates via `resolve_component` (intent/slot/type) rather than guessing IDs.
+- Validate inputs; surface errors via `agent:chat`.
+- Stream status for long tasks; commit final doc/patch once.
+
+## Canvas Agent Prompt Context
+- Runtime state included (bounded by `CANVAS_AGENT_SHAPE_STATE_LIMIT`). Keep state small and useful.
+- Store concise summaries in `shape.props.state`; trim transient fields.
+
+## Diagnostics & Testing
+- Enable dispatcher metrics: `NEXT_PUBLIC_TOOL_DISPATCHER_METRICS=true`.
+- Playwright perf spec: `tests/timer-perf.e2e.spec.ts`.
+- Manual smoke: `npm run stack:start` → `/canvas` → drive via voice/text.
+
+## Quick Checks
+- [ ] Reserved component intent before creation
+- [ ] Mirrors local runtime changes with `updateState`
+- [ ] Keeps state ≤ limit; avoids bloating prompts
+- [ ] Meets latency budgets; logs metrics
+- [ ] Documents new steward/component pairing in guide
+
+See `docs/component-steward-guide.md` for deep dive and examples.
+

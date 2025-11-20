@@ -17,6 +17,7 @@
 /.next/
 /out/
 /dist/
+/.parity-dist/
 
 # production
 /build
@@ -24,6 +25,7 @@
 # misc
 .DS_Store
 *.pem
+/.tools/
 
 # debug
 npm-debug.log*
@@ -48,6 +50,7 @@ next-env.d.ts
 logs
 *.log
 dev-debug.log
+.present/
 # Dependency directories
 node_modules/
 # Environment variables
@@ -70,3 +73,6 @@ tasks/
 
 # Temporary working copies of external templates
 .tmp/
+
+# Parity run artifacts (local-only)
+docs/parity/

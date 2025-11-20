@@ -1,10 +1,10 @@
 import { z } from 'zod';
-import {
-  getCanvasShapeSummary,
-  getTranscriptWindow,
-} from '@/lib/agents/shared/supabase-context';
+import { randomUUID } from 'crypto';
+import { getTranscriptWindow } from '@/lib/agents/shared/supabase-context';
 import { jsonObjectSchema, jsonValueSchema, type JsonObject, type JsonValue } from '@/lib/utils/json-schema';
 import { runCanvasAgent } from '@/lib/agents/canvas-agent/server/runner';
+import { sendActionsEnvelope } from '@/lib/agents/canvas-agent/server/wire';
+import type { AgentAction } from '@/lib/canvas-agent/contract/types';
 
 const logWithTs = <T extends Record<string, unknown>>(label: string, payload: T) => {
   try {
@@ -46,7 +46,6 @@ export async function runCanvasSteward(args: RunCanvasStewardArgs) {
   const normalizedEntries = objectToEntries(params);
   const payload = jsonObjectSchema.parse(entriesToObject(normalizedEntries));
   const room = extractRoom(payload);
-  const message = extractMessage(payload);
   const model = typeof payload.model === 'string' ? payload.model : undefined;
 
   const taskLabel = task.startsWith('canvas.') ? task.slice('canvas.'.length) : task;
@@ -56,10 +55,22 @@ export async function runCanvasSteward(args: RunCanvasStewardArgs) {
     task,
     taskLabel,
     room,
-    message: message.slice(0, 100),
+    message: typeof payload.message === 'string' ? payload.message.slice(0, 100) : undefined,
   });
 
   try {
+    if (task === 'canvas.quick_text') {
+      const result = await handleQuickTextTask(room, payload);
+      logWithTs('✅ [CanvasSteward] quick_text.complete', {
+        task,
+        room,
+        durationMs: Date.now() - start,
+        shapeId: result.shapeId,
+      });
+      return result;
+    }
+
+    const message = extractMessage(payload);
     // Call unified Canvas Agent server runner
     await runCanvasAgent({
       roomId: room,
@@ -99,6 +110,57 @@ function extractMessage(payload: JsonObject): string {
     return raw.trim();
   }
   throw new Error('Canvas steward requires a message parameter');
+}
+
+function extractQuickText(payload: JsonObject): string {
+  const raw = payload.text || payload.message || payload.content || payload.label;
+  if (typeof raw === 'string' && raw.trim()) {
+    return raw.trim();
+  }
+  throw new Error('canvas.quick_text requires text content');
+}
+
+async function handleQuickTextTask(room: string, payload: JsonObject) {
+  const text = extractQuickText(payload);
+  const requestId = typeof payload.requestId === 'string' && payload.requestId.trim().length > 0
+    ? payload.requestId.trim()
+    : randomUUID();
+  const sessionId = `quick-text-${requestId}`;
+  const shapeId =
+    typeof payload.shapeId === 'string' && payload.shapeId.trim().length > 0
+      ? payload.shapeId.trim()
+      : `qt_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+
+  const x = typeof payload.x === 'number' && Number.isFinite(payload.x)
+    ? payload.x
+    : Math.round((Math.random() - 0.5) * 400);
+  const y = typeof payload.y === 'number' && Number.isFinite(payload.y)
+    ? payload.y
+    : Math.round((Math.random() - 0.5) * 250);
+
+  const actions: AgentAction[] = [
+    {
+      id: `create-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
+      name: 'create_shape',
+      params: {
+        id: shapeId,
+        type: 'text',
+        x,
+        y,
+        props: {
+          text,
+        },
+      },
+    },
+  ];
+
+  await sendActionsEnvelope(room, sessionId, 0, actions);
+
+  return {
+    status: 'ok',
+    requestId,
+    shapeId,
+  } as const;
 }
 
 

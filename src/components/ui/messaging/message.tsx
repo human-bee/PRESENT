@@ -108,7 +108,11 @@ const Message = React.memo(
       );
 
       const domProps = { ...props } as Record<string, unknown>;
+      // Strip non-DOM props that may be passed through by callers
       delete (domProps as any).updateState;
+      delete (domProps as any).messageId;
+      delete (domProps as any).intentId;
+      delete (domProps as any).componentId;
 
       return (
         <MessageContext.Provider value={contextValue}>

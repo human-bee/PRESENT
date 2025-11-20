@@ -1,0 +1,211 @@
+import { z } from 'zod';
+export const debateSideEnum = z.enum(['AFF', 'NEG']);
+export const debateSpeechEnum = z.enum(['1AC', '1NC', '2AC', '2NC', '1AR', '1NR', '2AR', '2NR']);
+export const verdictEnum = z.enum(['ACCURATE', 'PARTIALLY_TRUE', 'UNSUPPORTED', 'FALSE']);
+export const impactEnum = z.enum(['KEY_VOTER', 'MAJOR', 'MINOR', 'CREDIBILITY_HIT', 'DROPPED']);
+export const claimStatusEnum = z.enum(['UNTESTED', 'CHECKING', 'VERIFIED', 'REFUTED']);
+export const debateAchievementEnum = z.enum([
+    'firstBlood',
+    'evidenceKing',
+    'streakMaster',
+    'counterPunch',
+    'tactician',
+]);
+export const evidenceRefSchema = z.object({
+    id: z.string(),
+    title: z.string().optional(),
+    url: z.string().optional(),
+    credibility: z.enum(['HIGH', 'MEDIUM', 'LOW', 'UNKNOWN']).default('UNKNOWN'),
+    type: z.enum(['Academic', 'News', 'Government', 'Think Tank', 'Blog']).default('Academic'),
+    lastVerified: z.string().optional(), // ISO string
+});
+export const factCheckNoteSchema = z.object({
+    id: z.string(),
+    summary: z.string(),
+    tags: z.array(z.string()).default([]),
+    evidenceRefs: z.array(z.string()).default([]),
+});
+export const claimStrengthSchema = z
+    .object({
+    logos: z.number().min(0).max(1).default(0.5),
+    pathos: z.number().min(0).max(1).default(0.5),
+    ethos: z.number().min(0).max(1).default(0.5),
+})
+    .default({ logos: 0.5, pathos: 0.5, ethos: 0.5 });
+export const claimSchema = z.object({
+    id: z.string(),
+    side: debateSideEnum,
+    speech: debateSpeechEnum,
+    quote: z.string(),
+    speaker: z.string().default('Speaker'),
+    summary: z.string().optional(),
+    evidenceInline: z.string().optional(),
+    status: claimStatusEnum.default('UNTESTED'),
+    strength: claimStrengthSchema,
+    confidence: z.number().min(0).max(1).default(0.5),
+    evidenceCount: z.number().min(0).default(0),
+    upvotes: z.number().min(0).default(0),
+    scoreDelta: z.number().default(0),
+    factChecks: z.array(factCheckNoteSchema).default([]),
+    verdict: verdictEnum.optional(),
+    impact: impactEnum.optional(),
+    mapNodeId: z.string().optional(),
+    // 2025-11-07: Supabase scorecards were re-seeded; timestamps are stored as numeric epochs.
+    // If legacy ISO strings ever reappear, add a coercion schema before relaxing these types.
+    createdAt: z.number().optional(),
+    updatedAt: z.number().optional(),
+});
+export const mapNodeSchema = z.object({
+    id: z.string(),
+    type: z.enum(['MAIN', 'REASON', 'OBJECTION', 'REBUTTAL']),
+    label: z.string(),
+    claimId: z.string().optional(),
+});
+export const mapEdgeSchema = z.object({ from: z.string(), to: z.string() });
+export const rfdLinkSchema = z.object({
+    id: z.string(),
+    claimId: z.string(),
+    excerpt: z.string(),
+});
+export const debateTimelineEventSchema = z.object({
+    id: z.string(),
+    timestamp: z.number(),
+    text: z.string(),
+    type: z
+        .enum(['argument', 'rebuttal', 'fact_check', 'score_change', 'moderation', 'achievement'])
+        .default('argument'),
+    side: debateSideEnum.optional(),
+    claimId: z.string().optional(),
+    metadata: z.record(z.any()).optional(),
+});
+export const achievementAwardSchema = z.object({
+    id: z.string(),
+    key: debateAchievementEnum,
+    label: z.string(),
+    description: z.string().optional(),
+    awardedAt: z.number().default(() => Date.now()),
+    claimId: z.string().optional(),
+    side: debateSideEnum.optional(),
+});
+export const debatePlayerSchema = z.object({
+    id: z.string(),
+    label: z.string(),
+    side: debateSideEnum,
+    color: z.string().default('#F87171'),
+    avatarUrl: z.string().optional(),
+    score: z.number().default(0),
+    streakCount: z.number().default(0),
+    momentum: z.number().min(0).max(1).default(0.5),
+    bsMeter: z.number().min(0).max(1).default(0.1),
+    learningScore: z.number().min(0).max(1).default(0.5),
+    achievements: z.array(achievementAwardSchema).default([]),
+    summary: z.string().optional(),
+    lastUpdated: z.number().optional(),
+});
+export const roundMetricsSchema = z.object({
+    roundScore: z.number().min(0).max(1).default(0.5),
+    evidenceQuality: z.number().min(0).max(1).default(0.5),
+    judgeLean: z.enum(['AFF', 'NEG', 'NEUTRAL']).default('NEUTRAL'),
+    excitement: z.number().min(0).max(1).default(0.4),
+});
+export const debateFiltersSchema = z.object({
+    speaker: z
+        .union([z.literal('ALL'), debateSideEnum, debateSpeechEnum])
+        .nullable()
+        .default('ALL'),
+    verdicts: z.array(verdictEnum).default([]),
+    statuses: z.array(claimStatusEnum).default([]),
+    searchQuery: z.string().default(''),
+    activeTab: z.enum(['ledger', 'map', 'rfd', 'sources', 'timeline']).default('ledger'),
+});
+export const debateScorecardStateSchema = z.object({
+    componentId: z.string().default('debate-scorecard'),
+    version: z.number().default(0),
+    topic: z.string().default('Untitled debate'),
+    round: z.string().default('Round'),
+    showMetricsStrip: z.boolean().default(true),
+    factCheckEnabled: z.boolean().default(true),
+    filters: debateFiltersSchema.default({ speaker: 'ALL', verdicts: [], statuses: [], searchQuery: '', activeTab: 'ledger' }),
+    metrics: roundMetricsSchema.default({ roundScore: 0.5, evidenceQuality: 0.5, judgeLean: 'NEUTRAL', excitement: 0.4 }),
+    players: z.array(debatePlayerSchema).default([]),
+    claims: z.array(claimSchema).default([]),
+    map: z
+        .object({ nodes: z.array(mapNodeSchema).default([]), edges: z.array(mapEdgeSchema).default([]) })
+        .default({ nodes: [], edges: [] }),
+    rfd: z
+        .object({
+        summary: z.string().default('Judge has not submitted an RFD yet.'),
+        links: z.array(rfdLinkSchema).default([]),
+    })
+        .default({ summary: 'Judge has not submitted an RFD yet.', links: [] }),
+    sources: z.array(evidenceRefSchema).default([]),
+    timeline: z.array(debateTimelineEventSchema).default([]),
+    achievementsQueue: z.array(achievementAwardSchema).default([]),
+    status: z
+        .object({
+        lastAction: z.string().optional(),
+        stewardRunId: z.string().optional(),
+        pendingVerifications: z.array(z.string()).default([]),
+    })
+        .default({ lastAction: undefined, stewardRunId: undefined, pendingVerifications: [] }),
+    lastUpdated: z.number().default(() => Date.now()),
+});
+export const debateScorecardSpecSchema = debateScorecardStateSchema.partial({
+    version: true,
+    filters: true,
+    metrics: true,
+    players: true,
+    claims: true,
+    map: true,
+    rfd: true,
+    sources: true,
+    timeline: true,
+    achievementsQueue: true,
+    status: true,
+    lastUpdated: true,
+});
+export function createDefaultPlayers() {
+    return [
+        {
+            id: 'player-aff',
+            label: 'Affirmative',
+            side: 'AFF',
+            color: '#38bdf8',
+            score: 0,
+            streakCount: 0,
+            momentum: 0.5,
+            bsMeter: 0.08,
+            learningScore: 0.55,
+            achievements: [],
+        },
+        {
+            id: 'player-neg',
+            label: 'Negative',
+            side: 'NEG',
+            color: '#f87171',
+            score: 0,
+            streakCount: 0,
+            momentum: 0.5,
+            bsMeter: 0.08,
+            learningScore: 0.55,
+            achievements: [],
+        },
+    ];
+}
+export function createDefaultScorecardState(topic) {
+    const base = debateScorecardStateSchema.parse({
+        topic: topic && topic.trim().length ? topic : 'Untitled debate',
+        players: createDefaultPlayers(),
+        timeline: [
+            {
+                id: `evt-${Date.now()}`,
+                timestamp: Date.now(),
+                text: 'Scorecard initialized.',
+                type: 'moderation',
+            },
+        ],
+    });
+    base.status.lastAction = `Debate initialized${base.topic ? ` for ${base.topic}` : ''}.`;
+    return base;
+}
+//# sourceMappingURL=debate-scorecard-schema.js.map

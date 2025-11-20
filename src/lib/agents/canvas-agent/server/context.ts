@@ -1,10 +1,16 @@
-import { getCanvasShapeSummary, getTranscriptWindow } from '@/lib/agents/shared/supabase-context';
+import {
+  getCanvasShapeSummary,
+  getTranscriptWindow,
+  readPromptCache,
+  writePromptCache,
+} from '@/lib/agents/shared/supabase-context';
 import { applyTokenBudget } from './context-utils/budget';
 import { shapesInViewport, toBlurryShape, type ShapeLike } from './context-utils/geometry';
 import { peripheralClusters } from './context-utils/peripheral';
 import { simpleSelected } from './context-utils/selected';
-import { creativeFewShots, styleInstructions } from './context-utils/examples';
+import { creativeFewShots, styleInstructions } from '@/lib/canvas-agent/contract/examples';
 import { OffsetManager, serializeBounds } from './offset';
+import { getToolCatalog, getActionSchemaJson } from '@/lib/canvas-agent/contract/tooling/catalog';
 
 export type Viewport = { x: number; y: number; w: number; h: number };
 
@@ -42,6 +48,40 @@ export async function buildPromptParts(room: string, options: BuildPromptOptions
   const transcriptEntries = Array.isArray(transcript?.transcript)
     ? transcript.transcript.filter((entry) => entry && typeof entry.text === 'string').slice(-50)
     : [];
+
+  const selectionKey = selection.slice().sort().join('|') || 'none';
+  const viewportKey = effectiveViewport
+    ? `${Math.round(effectiveViewport.x)}:${Math.round(effectiveViewport.y)}:${Math.round(effectiveViewport.w)}:${Math.round(effectiveViewport.h)}`
+    : 'none';
+  const transcriptSignature =
+    transcriptEntries.length === 0
+      ? 'empty'
+      : `${transcriptEntries.length}:${transcriptEntries[0]?.timestamp ?? 0}:${
+          transcriptEntries[transcriptEntries.length - 1]?.timestamp ?? 0
+        }`;
+  const docVersion = options.screenshot?.docVersion ?? String(canvas.version || 0);
+  const promptSignature = `${docVersion}|${selectionKey}|${viewportKey}|${transcriptSignature}`;
+
+  const cached = readPromptCache(room, promptSignature);
+  if (cached) {
+    const cachedParts = { ...cached.parts } as Record<string, unknown>;
+    if (options.screenshot?.image?.dataUrl) {
+      cachedParts.screenshot = {
+        dataUrl: options.screenshot.image.dataUrl,
+        mime: options.screenshot.image.mime,
+        bytes: options.screenshot.image.bytes,
+        width: options.screenshot.image.width,
+        height: options.screenshot.image.height,
+        bounds: options.screenshot.bounds ?? effectiveViewport,
+        receivedAt: options.screenshot.receivedAt,
+        requestId: options.screenshot.requestId,
+      };
+    }
+    cachedParts.docVersion = docVersion;
+    if (!cachedParts.toolCatalog) cachedParts.toolCatalog = getToolCatalog();
+    if (!cachedParts.toolSchema) cachedParts.toolSchema = getActionSchemaJson();
+    return cachedParts;
+  }
 
   const blurryCandidates = shapesInViewport(shapes as ShapeLike[], effectiveViewport, 300).map(toBlurryShape);
   const peripheral = peripheralClusters(shapes as ShapeLike[], effectiveViewport, 320, 24);
@@ -96,7 +136,7 @@ export async function buildPromptParts(room: string, options: BuildPromptOptions
     viewport: effectiveViewport,
     selection,
     transcript: budgeted.transcript,
-    docVersion: options.screenshot?.docVersion ?? String(canvas.version || 0),
+    docVersion,
     blurryShapes: budgeted.blurry,
     peripheralClusters: budgeted.clusters,
     recentActions: Array.isArray((canvas as any).recentActions)
@@ -105,6 +145,8 @@ export async function buildPromptParts(room: string, options: BuildPromptOptions
     selectedSimpleShapes: selectedSimple,
     fewShotExamples: creativeFewShots(),
     styleInstructions: styleInstructions(),
+    toolCatalog: getToolCatalog(),
+    toolSchema: getActionSchemaJson(),
     promptBudget,
     shapeStateStats: stateStats,
   };
@@ -130,6 +172,10 @@ export async function buildPromptParts(room: string, options: BuildPromptOptions
   }
 
   // Screenshot embedding is orchestrated by the runner and passed in through options.screenshot.
+
+  const cacheable = { ...parts };
+  delete cacheable.screenshot;
+  writePromptCache(room, { signature: promptSignature, docVersion, parts: cacheable });
 
   return parts;
 }

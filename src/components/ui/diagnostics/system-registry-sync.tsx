@@ -14,6 +14,18 @@ import { createLogger } from '@/lib/utils';
 
 const logger = createLogger('SystemRegistrySync');
 
+const globalSyncState: { fallbackSynced: boolean } = (() => {
+  if (typeof globalThis === 'undefined') {
+    return { fallbackSynced: false };
+  }
+  const key = '__presentSystemRegistrySync';
+  const existing = (globalThis as any)[key];
+  if (existing) return existing;
+  const value = { fallbackSynced: false };
+  (globalThis as any)[key] = value;
+  return value;
+})();
+
 export function SystemRegistrySync() {
   const { componentList } = usecustom();
 
@@ -25,29 +37,25 @@ export function SystemRegistrySync() {
         name: comp.name,
         description: comp.description || `${comp.name} component`,
       }));
-      logger.log(
-        '🔄 Syncing custom components to system registry:',
-        componentInfo.length,
-        'components',
-      );
+      logger.debug('🔄 Syncing custom components from provider:', componentInfo.length, 'components');
       synccustomComponentsToRegistry(componentInfo);
       return;
     }
 
     // Fallback: if custom hasn't exposed componentList yet, use our local registry
+    if (globalSyncState.fallbackSynced) return;
+
     import('@/lib/custom')
       .then(({ components }) => {
         if (!components || components.length === 0) return;
+        if (globalSyncState.fallbackSynced) return;
         const componentInfo = components.map((comp: any) => ({
           name: comp.name,
           description: comp.description || `${comp.name} component`,
         }));
-        logger.log(
-          '🔄 [Fallback] Syncing components from local registry:',
-          componentInfo.length,
-          'components',
-        );
+        logger.debug('🔄 [Fallback] Syncing components from local registry:', componentInfo.length, 'components');
         synccustomComponentsToRegistry(componentInfo);
+        globalSyncState.fallbackSynced = true;
       })
       .catch(() => { });
   }, [componentList]);
@@ -84,8 +92,7 @@ export function SystemRegistrySync() {
         };
         const sig = JSON.stringify(summary);
         if (sig !== lastSig) {
-          // Only print this when the namespace is enabled or level allows info
-          logger.info('📊 System Registry State:', summary);
+          logger.debug('📊 System Registry State:', summary);
           lastSig = sig;
         }
       };

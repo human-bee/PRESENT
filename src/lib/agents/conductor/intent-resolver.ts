@@ -14,8 +14,79 @@ const FLOWCHART_KEYWORDS = ['flowchart', 'flow chart', 'flow diagram', 'process 
 const DOCUMENT_KEYWORDS = ['document', 'doc', 'notes', 'note', 'notepad', 'scratch'];
 const TOOLBOX_KEYWORDS = ['toolbox', 'component toolbox', 'component list', 'palette'];
 const YOUTUBE_KEYWORDS = ['youtube', 'video', 'watch', 'play'];
+const DEBATE_KEYWORDS = [
+  'debate',
+  'scorecard',
+  'judge',
+  'affirmative',
+  'negative',
+  'claim',
+  'rebuttal',
+  'cross-ex',
+  'crossfire',
+  'argument',
+  'topic',
+  'round',
+  'contention',
+  'fact check',
+];
+const AFFIRMATIVE_KEYWORDS = ['affirmative', 'aff', 'pro', 'government'];
+const NEGATIVE_KEYWORDS = ['negative', 'neg', 'con', 'opposition'];
 
 const YOUTUBE_ID_REGEX = /\b([A-Za-z0-9_-]{11})\b/;
+
+function getNumber(input: JsonObject, key: string): number | undefined {
+  const value = input[key];
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === 'string') {
+    const parsed = Number.parseFloat(value);
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+  return undefined;
+}
+
+function resolveComponentId(input: JsonObject): string | undefined {
+  const direct = getString(input, 'componentId');
+  if (direct) return direct;
+  const metadata = getObject(input, 'metadata');
+  if (metadata) {
+    const metaComponent = getString(metadata, 'componentId');
+    if (metaComponent) return metaComponent;
+  }
+  return undefined;
+}
+
+function resolveRoomFromMerged(input: JsonObject): string | undefined {
+  const direct = getString(input, 'room');
+  if (direct) return direct;
+  const metadata = getObject(input, 'metadata');
+  if (metadata) {
+    const metaRoom = getString(metadata, 'room');
+    if (metaRoom) return metaRoom;
+  }
+  const participants = input.participants;
+  if (typeof participants === 'string' && participants.trim()) {
+    return participants.trim();
+  }
+  if (Array.isArray(participants)) {
+    for (const entry of participants) {
+      if (typeof entry === 'string' && entry.trim()) {
+        return entry.trim();
+      }
+      if (entry && typeof entry === 'object') {
+        const candidate = (entry as JsonObject).room;
+        if (typeof candidate === 'string' && candidate.trim()) {
+          return candidate.trim();
+        }
+      }
+    }
+  }
+  return undefined;
+}
 
 function isRecord(value: unknown): value is JsonObject {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -80,6 +151,89 @@ function mergeInput(input: JsonObject): JsonObject {
   return merged;
 }
 
+function resolveDebateIntent(merged: JsonObject, text: string): IntentResolution | null {
+  if (!text) {
+    return null;
+  }
+
+  const lower = text.toLowerCase();
+  if (!includesAny(lower, DEBATE_KEYWORDS)) {
+    return null;
+  }
+
+  const componentId = resolveComponentId(merged);
+  if (!componentId) {
+    return null;
+  }
+
+  const room = resolveRoomFromMerged(merged);
+  const mergedSummary = getString(merged, 'summary');
+  const mergedPrompt = getString(merged, 'prompt');
+  const argumentText = getString(merged, 'argument_text');
+
+  const promptSource = (argumentText && argumentText.trim().length > 0
+    ? argumentText.trim()
+    : (mergedPrompt && mergedPrompt.trim().length > 0
+      ? mergedPrompt.trim()
+      : text)).trim();
+  const summarySource = (mergedSummary && mergedSummary.trim().length > 0
+    ? mergedSummary.trim()
+    : promptSource).trim();
+
+  const params: JsonObject = {
+    componentId,
+    prompt: promptSource,
+    summary: summarySource.slice(0, 180),
+  };
+
+  if (room) {
+    params.room = room;
+  }
+
+  const windowMs =
+    getNumber(merged, 'windowMs') ??
+    getNumber(getObject(merged, 'metadata') ?? {}, 'windowMs');
+  if (windowMs && Number.isFinite(windowMs) && windowMs > 0) {
+    params.windowMs = Math.min(Math.max(1_000, Math.floor(windowMs)), 600_000);
+  }
+
+  let intent = getString(merged, 'intent');
+  if (intent) {
+    const normalizedIntent = intent.toLowerCase();
+    if (!normalizedIntent.startsWith('scorecard.')) {
+      intent = undefined;
+    }
+  }
+  if (!intent) {
+    const side = getString(merged, 'argument_side');
+    if (side) {
+      const normalized = side.toLowerCase();
+      if (normalized.startsWith('aff')) {
+        intent = 'scorecard.argument.affirmative';
+      } else if (normalized.startsWith('neg')) {
+        intent = 'scorecard.argument.negative';
+      }
+    }
+  }
+  if (!intent) {
+    if (includesAny(lower, NEGATIVE_KEYWORDS) && !includesAny(lower, AFFIRMATIVE_KEYWORDS)) {
+      intent = 'scorecard.argument.negative';
+    } else if (includesAny(lower, AFFIRMATIVE_KEYWORDS) && !includesAny(lower, NEGATIVE_KEYWORDS)) {
+      intent = 'scorecard.argument.affirmative';
+    } else if (lower.includes('topic') || lower.includes('retitle') || lower.includes('rename')) {
+      intent = 'scorecard.topic';
+    } else {
+      intent = 'scorecard.update';
+    }
+  }
+
+  if (intent) {
+    params.intent = intent;
+  }
+
+  return { kind: 'task', task: 'scorecard.run', params };
+}
+
 function extractExplicitTask(input: JsonObject): string | undefined {
   const task = getString(input, 'task');
   if (task) {
@@ -128,17 +282,36 @@ function extractText(input: JsonObject): string {
 }
 
 export function resolveIntent(input: JsonObject): IntentResolution | null {
+  const merged = mergeInput(input);
   const explicitTask = extractExplicitTask(input);
+  const explicitParams = getObject(input, 'params');
+
   if (explicitTask && explicitTask !== 'auto') {
-    const explicitParams = getObject(input, 'params');
-    return {
-      kind: 'task',
-      task: explicitTask,
-      params: explicitParams ? { ...explicitParams } : undefined,
-    };
+    const lowered = explicitTask.toLowerCase();
+    if (
+      lowered.startsWith('canvas.') ||
+      lowered.startsWith('flowchart.') ||
+      lowered.startsWith('scorecard.')
+    ) {
+      return {
+        kind: 'task',
+        task: explicitTask,
+        params: explicitParams ? { ...explicitParams } : undefined,
+      };
+    }
+
+    if (!merged.intent) {
+      merged.intent = explicitTask;
+    }
+    if (explicitParams) {
+      Object.entries(explicitParams).forEach(([key, value]) => {
+        if (merged[key] === undefined) {
+          merged[key] = value;
+        }
+      });
+    }
   }
 
-  const merged = mergeInput(input);
   const text = extractText(merged);
   if (!text) {
     const metadataTask = merged.metadata && typeof merged.metadata === 'object' ? getString(merged.metadata as JsonObject, 'task') : undefined;
@@ -151,6 +324,11 @@ export function resolveIntent(input: JsonObject): IntentResolution | null {
       };
     }
     return null;
+  }
+
+  const debateResolution = resolveDebateIntent(merged, text);
+  if (debateResolution) {
+    return debateResolution;
   }
 
   const lower = text.toLowerCase();
@@ -211,5 +389,3 @@ export function resolveIntent(input: JsonObject): IntentResolution | null {
 
   return null;
 }
-
-

@@ -1,9 +1,14 @@
 import { RoomServiceClient, DataPacket_Kind } from 'livekit-server-sdk';
 import { join } from 'path';
 import { config as dotenvConfig } from 'dotenv';
-import { ACTION_VERSION, type AgentAction, type AgentActionEnvelope, type ScreenshotRequest, type AgentChatMessage } from '../shared/types';
+import {
+  ACTION_VERSION,
+  type AgentAction,
+  type AgentActionEnvelope,
+  type ScreenshotRequest,
+  type AgentChatMessage,
+} from '@/lib/canvas-agent/contract/types';
 import { mintAgentToken } from './auth/agentTokens';
-import * as ackInbox from '@/server/inboxes/ack';
 
 type AckRecord = {
   seq: number;
@@ -98,11 +103,23 @@ export async function requestScreenshot(room: string, request: Omit<ScreenshotRe
 }
 
 const ACK_BACKOFF_MS = [150, 300, 600, 1000];
+let ackModulePromise: Promise<any> | null = null;
+
+async function loadAckModule() {
+  if (!ackModulePromise) {
+    ackModulePromise = import('@/server/inboxes/ack');
+  }
+  return ackModulePromise;
+}
 
 export async function awaitAck(opts: { sessionId: string; seq: number; deadlineMs?: number }) {
-  const getAck = typeof ackInbox.getAck === 'function'
-    ? (ackInbox.getAck as (sessionId: string, seq: number) => AckRecord | null)
-    : null;
+  const ackModule = await loadAckModule();
+  const getAck =
+    typeof ackModule?.getAck === 'function'
+      ? ackModule.getAck
+      : typeof ackModule?.default?.getAck === 'function'
+        ? ackModule.default.getAck
+        : null;
   if (!getAck) {
     throw new Error('Ack inbox missing getAck implementation; ensure server inbox is up to date.');
   }

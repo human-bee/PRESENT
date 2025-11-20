@@ -62,20 +62,16 @@ export function useSessionSync(roomName: string) {
   const cancelledRef = useRef<boolean>(false);
 
   const ensureSession = useMemo(() => {
+    const buildQuery = (canvasId: string | null) => {
+      let base = supabase.from('canvas_sessions' as any).select('*').eq('room_name', roomName);
+      return canvasId === null ? (base as any).is('canvas_id', null) : base.eq('canvas_id', canvasId);
+    };
+
     return async function ensureSession() {
-      const canvasId = getCanvasIdFromUrl();
-      canvasIdRef.current = canvasId;
+      const initialCanvasId = getCanvasIdFromUrl();
+      canvasIdRef.current = initialCanvasId;
 
-      // If no valid canvas id, we still allow a room-only session (canvas_id = null)
-
-      // Try to find existing
-      let query = supabase
-        .from('canvas_sessions' as any)
-        .select('*')
-        .eq('room_name', roomName);
-      // Use IS NULL for invalid/missing canvas ids to avoid 400 on uuid column
-      query =
-        canvasId === null ? (query as any).is('canvas_id', null) : query.eq('canvas_id', canvasId);
+      let query = buildQuery(initialCanvasId);
 
       const { data: existing, error: selectErr } = await query.limit(1).maybeSingle();
 
@@ -93,7 +89,7 @@ export function useSessionSync(roomName: string) {
       // Create new
       const participants = room ? mapParticipants(room) : [];
       const insertPayload = {
-        canvas_id: canvasId,
+        canvas_id: initialCanvasId,
         room_name: roomName,
         participants,
         transcript: [],
@@ -102,18 +98,49 @@ export function useSessionSync(roomName: string) {
       };
 
       // Use upsert to avoid conflict on unique (room_name, canvas_id)
-      const { data: created, error: insertErr } = await supabase
-        .from('canvas_sessions' as any)
-        .upsert(insertPayload as any, { onConflict: 'room_name,canvas_id' })
-        .select('*')
-        .single();
+      const attemptInsert = async (payload: typeof insertPayload) => {
+        return await supabase.from('canvas_sessions' as any).insert(payload as any).select('*').single();
+      };
+
+      const { data: created, error: insertErr } = await attemptInsert(insertPayload);
 
       if (insertErr) {
+        const code = (insertErr as { code?: string })?.code;
+        const messageString = typeof insertErr.message === 'string' ? insertErr.message.toLowerCase() : '';
+        const isDuplicate = code === '23505' || messageString.includes('duplicate key');
+        if (isDuplicate) {
+          const { data: existingAfterConflict } = await query.limit(1).maybeSingle();
+          if (existingAfterConflict?.id) {
+            if (!cancelledRef.current) {
+              setSessionId(existingAfterConflict.id);
+              transcriptRef.current = Array.isArray(existingAfterConflict.transcript)
+                ? existingAfterConflict.transcript
+                : [];
+            }
+            return;
+          }
+        }
+
+        const isMissingCanvas = code === '23503' || messageString.includes('not present in table "canvases"');
+        if (isMissingCanvas) {
+          const fallbackPayload = { ...insertPayload, canvas_id: null };
+          query = buildQuery(null);
+          const { data: fallback, error: fallbackErr } = await attemptInsert(fallbackPayload);
+          if (!fallbackErr && fallback?.id && !cancelledRef.current) {
+            setSessionId(fallback.id);
+            transcriptRef.current = [];
+            return;
+          }
+          if (fallbackErr) {
+            console.warn('[useSessionSync] Fallback session insert failed', fallbackErr);
+          }
+        }
+
         console.error('[useSessionSync] Failed to create session', insertErr);
         return;
       }
 
-      if (!cancelledRef.current) {
+      if (!cancelledRef.current && created) {
         setSessionId(created.id);
         transcriptRef.current = [];
       }

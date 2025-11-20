@@ -37,7 +37,7 @@ describe('mermaid-bridge', () => {
       lastTimestampsRef: { current: new Map() },
     });
 
-    expect(bus.on).toHaveBeenCalledWith('ui_update', expect.any(Function));
+    expect(bus.on).toHaveBeenCalledWith('update_component', expect.any(Function));
 
     cleanup();
     expect(off).toHaveBeenCalled();

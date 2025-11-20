@@ -576,3 +576,14 @@ export function RetroTimerEnhanced({
     </LoadingWrapper>
   );
 }
+
+export const retroTimerTestUtils = {
+  toFiniteNumber,
+  sanitizeDurationSeconds,
+  sanitizeTimeLeftSeconds,
+  deriveConfiguredDurationFromPatch,
+  deriveTimeLeftFromPatch,
+  buildNextSnapshot,
+  parseRuntimeState,
+  statesEqual,
+};

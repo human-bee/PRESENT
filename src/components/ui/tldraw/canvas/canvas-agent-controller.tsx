@@ -22,8 +22,9 @@ interface CanvasAgentControllerProps {
 const isDevEnv = typeof process !== 'undefined' && process.env.NODE_ENV !== 'production';
 const isClientAgentEnabled =
   typeof process === 'undefined'
-    ? true
-    : process.env.NEXT_PUBLIC_CANVAS_AGENT_CLIENT_ENABLED !== 'false';
+    ? false
+    : process.env.NEXT_PUBLIC_CANVAS_AGENT_CLIENT_ENABLED === 'true';
+// The legacy DOM TLDraw agent is archived; this flag should only be true in emergencies.
 
 const LOGS_ENABLED =
   typeof process !== 'undefined' && process.env.NEXT_PUBLIC_TOOL_DISPATCHER_LOGS === 'true';
@@ -247,12 +248,32 @@ export function CanvasAgentController({ editor, room }: CanvasAgentControllerPro
       try {
         const env = (evt as CustomEvent).detail;
         if (!env) return;
+        if (isDevEnv && LOGS_ENABLED) {
+          try {
+            console.debug('[AgentBridge] applying agent_actions', {
+              room: room?.name,
+              sessionId: env?.sessionId,
+              seq: env?.seq,
+              actionCount: Array.isArray(env?.actions) ? env.actions.length : 0,
+              isHost,
+            });
+          } catch {}
+        }
         applyEnvelope({ editor, isHost, appliedIds: appliedActionIdsRef.current }, env);
+        if (isDevEnv && LOGS_ENABLED) {
+          try {
+            const totalShapes = Array.from(editor.getCurrentPageShapeIds?.() ?? []).length;
+            const w = window as any;
+            w.__presentCanvasAgentAppliedActionCount =
+              (w.__presentCanvasAgentAppliedActionCount ?? 0) + 1;
+            w.__presentCanvasAgentLastShapeCount = totalShapes;
+          } catch {}
+        }
       } catch {}
     };
     window.addEventListener('present:agent_actions', handler as EventListener);
     return () => { window.removeEventListener('present:agent_actions', handler as EventListener); };
-  }, [editor, isHost]);
+  }, [editor, isHost, room]);
 
   useEffect(() => {
     if (!isDevEnv) return;

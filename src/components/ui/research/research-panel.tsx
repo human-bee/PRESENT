@@ -1,6 +1,7 @@
 'use client';
 
 import { cn } from '@/lib/utils';
+import { useComponentRegistration } from '@/lib/component-registry';
 import { z } from 'zod';
 import {
   ExternalLink,
@@ -13,7 +14,7 @@ import {
   Upload,
 } from 'lucide-react';
 import { getRendererForResult } from './research-renderers';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   DndContext,
   PointerSensor,
@@ -75,6 +76,10 @@ export const researchPanelSchema = z.object({
 
 export type ResearchPanelProps = z.infer<typeof researchPanelSchema>;
 export type ResearchResult = z.infer<typeof researchResultSchema>;
+const researchPanelPartialSchema = researchPanelSchema.partial();
+
+type ResearchPanelHostProps = ResearchPanelProps &
+  React.HTMLAttributes<HTMLDivElement> & { __custom_message_id?: string };
 
 // Component state type
 type ResearchPanelState = {
@@ -273,21 +278,111 @@ function ResearchResultCard({
 }
 
 // Main ResearchPanel component
-export function ResearchPanel({
-  title = 'Research Panel',
-  results = [] as ResearchResult[],
-  currentTopic,
-  isLive = false,
-  maxResults = 10,
-  showCredibilityFilter = true,
-  className,
-  ...props
-}: ResearchPanelProps & React.HTMLAttributes<HTMLDivElement>) {
+const coerceResults = (value: unknown): ResearchResult[] =>
+  Array.isArray(value) ? (value as ResearchResult[]) : ([] as ResearchResult[]);
+
+export function ResearchPanel(props: ResearchPanelHostProps) {
+  const {
+    className,
+    __custom_message_id,
+    title: incomingTitleRaw,
+    results: incomingResultsRaw,
+    currentTopic: incomingCurrentTopic,
+    isLive: incomingIsLive,
+    maxResults: incomingMaxResults,
+    showCredibilityFilter: incomingShowCredibilityFilter,
+    ...restDomProps
+  } = props;
+
   // Strip custom shape injection props so they don't leak onto the DOM
-  const domProps = { ...(props as any) } as Record<string, unknown>;
-  delete (domProps as any).updateState;
-  delete (domProps as any).state;
-  delete (domProps as any).__custom_message_id;
+  const domProps = { ...(restDomProps as Record<string, unknown>) };
+  delete domProps.updateState;
+  delete domProps.state;
+  delete domProps.__custom_message_id;
+
+  const [panelProps, setPanelProps] = useState(() => ({
+    title: incomingTitleRaw ?? 'Research Panel',
+    results: coerceResults(incomingResultsRaw),
+    currentTopic: incomingCurrentTopic,
+    isLive: incomingIsLive ?? false,
+    maxResults: typeof incomingMaxResults === 'number' ? incomingMaxResults : 10,
+    showCredibilityFilter:
+      typeof incomingShowCredibilityFilter === 'boolean' ? incomingShowCredibilityFilter : true,
+  }));
+
+  useEffect(() => {
+    const nextProps = {
+      title: incomingTitleRaw ?? 'Research Panel',
+      results: coerceResults(incomingResultsRaw),
+      currentTopic: incomingCurrentTopic,
+      isLive: incomingIsLive ?? false,
+      maxResults: typeof incomingMaxResults === 'number' ? incomingMaxResults : 10,
+      showCredibilityFilter:
+        typeof incomingShowCredibilityFilter === 'boolean' ? incomingShowCredibilityFilter : true,
+    };
+    setPanelProps((prev) => {
+      if (
+        prev.title === nextProps.title &&
+        prev.currentTopic === nextProps.currentTopic &&
+        prev.isLive === nextProps.isLive &&
+        prev.maxResults === nextProps.maxResults &&
+        prev.showCredibilityFilter === nextProps.showCredibilityFilter &&
+        prev.results === nextProps.results
+      ) {
+        return prev;
+      }
+      return nextProps;
+    });
+  }, [
+    incomingTitleRaw,
+    incomingResultsRaw,
+    incomingCurrentTopic,
+    incomingIsLive,
+    incomingMaxResults,
+    incomingShowCredibilityFilter,
+  ]);
+
+  const title = panelProps.title ?? 'Research Panel';
+  const results = panelProps.results ?? ([] as ResearchResult[]);
+  const currentTopic = panelProps.currentTopic;
+  const isLive = panelProps.isLive ?? false;
+  const maxResults = panelProps.maxResults ?? 10;
+  const showCredibilityFilter = panelProps.showCredibilityFilter ?? true;
+
+  const fallbackMessageIdRef = useRef<string>();
+  if (!fallbackMessageIdRef.current) {
+    fallbackMessageIdRef.current = `research-panel-${crypto.randomUUID()}`;
+  }
+  const messageId = (__custom_message_id?.trim() || fallbackMessageIdRef.current)!;
+
+  const handleRegistryUpdate = useCallback((patch: Record<string, unknown>) => {
+    const merged = (patch as { __mergedProps?: ResearchPanelProps }).__mergedProps;
+    const source = merged ?? patch;
+    const parsed = researchPanelPartialSchema.safeParse(source);
+    if (!parsed.success) {
+      return;
+    }
+    const data = parsed.data;
+    setPanelProps((prev) => ({
+      title: data.title ?? prev.title,
+      results: data.results ? coerceResults(data.results) : prev.results,
+      currentTopic: typeof data.currentTopic === 'string' ? data.currentTopic : prev.currentTopic,
+      isLive: typeof data.isLive === 'boolean' ? data.isLive : prev.isLive,
+      maxResults: typeof data.maxResults === 'number' ? data.maxResults : prev.maxResults,
+      showCredibilityFilter:
+        typeof data.showCredibilityFilter === 'boolean'
+          ? data.showCredibilityFilter
+          : prev.showCredibilityFilter,
+    }));
+  }, []);
+
+  const registryPayload = useMemo(
+    () => ({ title, results, currentTopic, isLive, maxResults, showCredibilityFilter }),
+    [title, results, currentTopic, isLive, maxResults, showCredibilityFilter],
+  );
+
+  useComponentRegistration(messageId, 'ResearchPanel', registryPayload, 'canvas', handleRegistryUpdate);
+
   // Local component state
   const [state, setState] = useState<ResearchPanelState>({
     bookmarkedResults: [],
@@ -314,7 +409,7 @@ export function ResearchPanel({
       });
       return next.filter((id) => ids.includes(id)); // prune removed
     });
-  }, [customResults.length, results.length]);
+  }, [customResults, results]);
 
   // DnD sensors
   const sensors = useSensors(useSensor(PointerSensor), useSensor(TouchSensor));

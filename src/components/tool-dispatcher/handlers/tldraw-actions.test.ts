@@ -3,7 +3,7 @@ jest.mock('@tldraw/tldraw', () => ({
 }), { virtual: true });
 
 import { applyEnvelope } from './tldraw-actions';
-import { ACTION_VERSION } from '@/lib/agents/canvas-agent/shared/types';
+import { ACTION_VERSION } from '@/lib/canvas-agent/contract/types';
 
 type ShapeRecord = {
   id: string;
@@ -47,6 +47,13 @@ function createMockEditor(initial: ShapeRecord[] = []) {
     bringForward: (ids: any) => calls.push(['bringForward', ids]),
     sendBackward: (ids: any) => calls.push(['sendBackward', ids]),
     getShape: (id: string) => shapeMap.get(id) ?? null,
+    getShapePageBounds: (id: string) => {
+      const shape = shapeMap.get(id);
+      if (!shape) return null;
+      const w = typeof shape.props?.w === 'number' ? shape.props.w : 0;
+      const h = typeof shape.props?.h === 'number' ? shape.props.h : 0;
+      return { minX: shape.x ?? 0, minY: shape.y ?? 0, maxX: (shape.x ?? 0) + w, maxY: (shape.y ?? 0) + h };
+    },
     createShapeId: () => 'generated-id',
     _shapes: shapeMap,
   } as any;
@@ -65,22 +72,38 @@ function makeEnvelope(action: any): any {
 }
 
 describe('tldraw action handlers', () => {
-  it('creates draw_pen shapes with free segment', () => {
+  it('creates draw shapes when type=draw', () => {
     const editor = createMockEditor();
     applyEnvelope(
       { editor, isHost: true, appliedIds: new Set() },
       makeEnvelope({
         id: 'action-1',
-        name: 'draw_pen',
-        params: { x: 10, y: 20, points: [{ x: 0, y: 0 }, { x: 5, y: 5 }] },
+        name: 'create_shape',
+        params: {
+          type: 'draw',
+          x: 10,
+          y: 20,
+          props: {
+            segments: [
+              {
+                type: 'free',
+                points: [
+                  { x: 0, y: 0, z: 0.5 },
+                  { x: 5, y: 5, z: 0.6 },
+                ],
+              },
+            ],
+            color: 'red',
+            size: 'm',
+          },
+        },
       }),
     );
     const createCall = editor.calls.find((c: any[]) => c[0] === 'createShapes');
     expect(createCall).toBeTruthy();
     const createdShape = createCall[1][0];
     expect(createdShape.type).toBe('draw');
-    expect(createdShape.props.segments[0].type).toBe('free');
-    expect(createdShape.props.segments[0].points).toHaveLength(2);
+    expect(createdShape.props.segments?.[0]?.points).toHaveLength(2);
   });
 
   it('uses zoomToBounds for set_viewport when host', () => {
@@ -172,5 +195,42 @@ describe('tldraw action handlers', () => {
     expect(updateCall).toBeTruthy();
     const updates = updateCall[1];
     expect(updates.length).toBeGreaterThan(0);
+  });
+
+  it('honors absolute targets for move actions', () => {
+    const editor = createMockEditor([
+      { id: 'shape:a', type: 'geo', x: 10, y: 20, props: { w: 50, h: 40 } },
+    ]);
+    applyEnvelope(
+      { editor, isHost: true, appliedIds: new Set() },
+      makeEnvelope({
+        id: 'move-absolute',
+        name: 'move',
+        params: { ids: ['a'], target: { x: 200, y: 300 } },
+      }),
+    );
+    const updateCall = editor.calls.find((c: any[]) => c[0] === 'updateShapes');
+    expect(updateCall).toBeTruthy();
+    const [{ x, y }] = updateCall[1];
+    expect(x).toBeGreaterThanOrEqual(200);
+    expect(y).toBeGreaterThanOrEqual(300);
+  });
+
+  it('applies x/y overrides via update_shape', () => {
+    const editor = createMockEditor([{ id: 'shape:text1', type: 'text', x: 0, y: 0, props: { text: 'hi' } }]);
+    applyEnvelope(
+      { editor, isHost: true, appliedIds: new Set() },
+      makeEnvelope({
+        id: 'update-shape',
+        name: 'update_shape',
+        params: { id: 'text1', props: { text: 'updated' }, x: 120, y: 80 },
+      }),
+    );
+    const updateCall = editor.calls.find((c: any[]) => c[0] === 'updateShapes');
+    expect(updateCall).toBeTruthy();
+    const [{ x, y, props }] = updateCall[1];
+    expect(x).toBe(120);
+    expect(y).toBe(80);
+    expect(props.text).toBe('updated');
   });
 });

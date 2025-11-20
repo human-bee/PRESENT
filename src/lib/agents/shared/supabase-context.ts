@@ -3,6 +3,11 @@ import { config } from 'dotenv';
 import { join } from 'path';
 import { RoomServiceClient, DataPacket_Kind } from 'livekit-server-sdk';
 import type { JsonObject } from '@/lib/utils/json-schema';
+import {
+  createDefaultScorecardState,
+  debateScorecardStateSchema,
+  type DebateScorecardState,
+} from '@/lib/agents/debate-scorecard-schema';
 
 // Ensure .env.local is loaded when running stewards/conductor in Node
 try {
@@ -19,9 +24,11 @@ if (!url || !anonKey) {
 
 const supabaseKey = serviceRoleKey || anonKey;
 
+const hasServiceRoleKey = Boolean(serviceRoleKey);
+const bypassFlag = process.env.STEWARDS_SUPABASE_BYPASS;
 const shouldBypassSupabase =
-  process.env.STEWARDS_SUPABASE_BYPASS === '1' ||
-  (process.env.NODE_ENV !== 'production' && process.env.STEWARDS_SUPABASE_BYPASS !== '0');
+  bypassFlag === '1' ||
+  (!hasServiceRoleKey && bypassFlag !== '0' && process.env.NODE_ENV !== 'production');
 
 if (!serviceRoleKey && process.env.NODE_ENV === 'development' && !shouldBypassSupabase) {
   try {
@@ -70,6 +77,15 @@ type CanvasStateRecord = {
   lastUpdated: number;
 };
 
+export type CanvasComponentSnapshot = {
+  componentId: string;
+  componentType: string;
+  props: JsonObject;
+  state?: JsonObject | null;
+  intentId?: string | null;
+  lastUpdated?: number | null;
+};
+
 export type CanvasAgentPromptBounds = {
   x: number;
   y: number;
@@ -91,10 +107,33 @@ const memoryStore: Map<string, FlowchartDocRecord> =
   (GLOBAL_APEX[MEMORY_STORE_KEY] as Map<string, FlowchartDocRecord> | undefined) ||
   new Map<string, FlowchartDocRecord>();
 
+export type ScorecardRecord = {
+  state: DebateScorecardState;
+  version: number;
+  lastUpdated: number;
+};
+
+const SCORECARD_MEMORY_KEY = '__present_debate_scorecard_store__';
+const scorecardStore: Map<string, ScorecardRecord> =
+  (GLOBAL_APEX[SCORECARD_MEMORY_KEY] as Map<string, ScorecardRecord> | undefined) ||
+  new Map<string, ScorecardRecord>();
+
 const CANVAS_STATE_STORE_KEY = '__present_canvas_state_store__';
 const canvasStateStore: Map<string, CanvasStateRecord> =
   (GLOBAL_APEX[CANVAS_STATE_STORE_KEY] as Map<string, CanvasStateRecord> | undefined) ||
   new Map<string, CanvasStateRecord>();
+
+type PromptCacheRecord = {
+  signature: string;
+  docVersion: number | string;
+  parts: Record<string, unknown>;
+  cachedAt: number;
+};
+
+const PROMPT_CACHE_STORE_KEY = '__present_canvas_prompt_cache__';
+const promptCacheStore: Map<string, PromptCacheRecord> =
+  (GLOBAL_APEX[PROMPT_CACHE_STORE_KEY] as Map<string, PromptCacheRecord> | undefined) ||
+  new Map<string, PromptCacheRecord>();
 
 type TranscriptRecord = {
   transcript: Array<{ participantId: string; text: string; timestamp: number }>;
@@ -110,6 +149,10 @@ if (!GLOBAL_APEX[MEMORY_STORE_KEY]) {
   GLOBAL_APEX[MEMORY_STORE_KEY] = memoryStore;
 }
 
+if (!GLOBAL_APEX[SCORECARD_MEMORY_KEY]) {
+  GLOBAL_APEX[SCORECARD_MEMORY_KEY] = scorecardStore;
+}
+
 if (!GLOBAL_APEX[TRANSCRIPT_STORE_KEY]) {
   GLOBAL_APEX[TRANSCRIPT_STORE_KEY] = transcriptStore;
 }
@@ -118,9 +161,25 @@ if (!GLOBAL_APEX[CANVAS_STATE_STORE_KEY]) {
   GLOBAL_APEX[CANVAS_STATE_STORE_KEY] = canvasStateStore;
 }
 
+if (!GLOBAL_APEX[PROMPT_CACHE_STORE_KEY]) {
+  GLOBAL_APEX[PROMPT_CACHE_STORE_KEY] = promptCacheStore;
+}
+
 export function normalizeRoomName(name: string) {
   return name.trim();
 }
+
+const UUID_V4_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const isUuid = (value: string) => UUID_V4_REGEX.test(value);
+
+const deriveCanvasLookup = (room: string) => {
+  const normalized = normalizeRoomName(room);
+  const match = normalized.match(/^canvas-([a-zA-Z0-9_-]+)$/);
+  if (match?.[1]) {
+    return { canvasId: match[1], fallback: normalized } as const;
+  }
+  return { canvasId: null, fallback: normalized } as const;
+};
 
 const LIVEKIT_ROOM_WAIT_TIMEOUT_MS = Number(process.env.LIVEKIT_ROOM_WAIT_TIMEOUT_MS ?? 5000);
 const LIVEKIT_ROOM_WAIT_INTERVAL_MS = Number(process.env.LIVEKIT_ROOM_WAIT_INTERVAL_MS ?? 250);
@@ -203,6 +262,7 @@ const ensureLivekitRoom = async (room: string) => {
 
 const fallbackKey = (room: string, docId: string) => `${room}::${docId}`;
 const canvasStateKey = (room: string) => `${room}`;
+const scorecardMemoryKey = (room: string, componentId: string) => `${room}::${componentId}`;
 
 const readFallback = (room: string, docId: string): FlowchartDocRecord => {
   return (memoryStore.get(fallbackKey(room, docId)) ?? {
@@ -216,6 +276,24 @@ const writeFallback = (room: string, docId: string, record: FlowchartDocRecord) 
   memoryStore.set(fallbackKey(room, docId), record);
 };
 
+const readScorecardFallback = (room: string, componentId: string): ScorecardRecord => {
+  const key = scorecardMemoryKey(room, componentId);
+  const existing = scorecardStore.get(key);
+  if (existing) return existing;
+  const state = createDefaultScorecardState();
+  state.componentId = componentId;
+  const record: ScorecardRecord = { state, version: 0, lastUpdated: Date.now() };
+  scorecardStore.set(key, record);
+  return record;
+};
+
+const writeScorecardFallback = (room: string, componentId: string, record: ScorecardRecord) => {
+  scorecardStore.set(scorecardMemoryKey(room, componentId), {
+    ...record,
+    lastUpdated: Date.now(),
+  });
+};
+
 const defaultCanvasState = (room: string): CanvasStateRecord => {
   const cached = canvasStateStore.get(canvasStateKey(room));
   if (cached) return cached;
@@ -226,6 +304,26 @@ const defaultCanvasState = (room: string): CanvasStateRecord => {
 
 const writeCanvasState = (room: string, record: CanvasStateRecord) => {
   canvasStateStore.set(canvasStateKey(room), { ...record, lastUpdated: Date.now() });
+};
+
+const DEFAULT_PROMPT_CACHE_TTL_MS = Number(process.env.CANVAS_AGENT_PROMPT_CACHE_TTL_MS ?? 120_000);
+
+export const readPromptCache = (room: string, signature: string, ttlMs = DEFAULT_PROMPT_CACHE_TTL_MS) => {
+  const cached = promptCacheStore.get(canvasStateKey(room));
+  if (!cached) return null;
+  if (cached.signature !== signature) return null;
+  if (Date.now() - cached.cachedAt > ttlMs) {
+    promptCacheStore.delete(canvasStateKey(room));
+    return null;
+  }
+  return cached;
+};
+
+export const writePromptCache = (
+  room: string,
+  record: { signature: string; docVersion: number | string; parts: Record<string, unknown> },
+) => {
+  promptCacheStore.set(canvasStateKey(room), { ...record, cachedAt: Date.now() });
 };
 
 const normalizeRecord = (room: string, docId: string, entry: Record<string, unknown>) => {
@@ -243,6 +341,44 @@ const normalizeRecord = (room: string, docId: string, entry: Record<string, unkn
   };
   writeFallback(room, docId, next);
   return next;
+};
+
+const normalizeScorecardRecord = (room: string, componentId: string, entry: Record<string, unknown>) => {
+  const fallback = readScorecardFallback(room, componentId);
+  const base = entry?.scorecard && typeof entry.scorecard === 'object' ? (entry.scorecard as Record<string, unknown>) : entry;
+  const stateInput =
+    base && typeof base === 'object' && 'state' in base && typeof (base as Record<string, unknown>).state === 'object'
+      ? (base as Record<string, unknown>).state
+      : base;
+
+  const parsed = debateScorecardStateSchema.safeParse(
+    stateInput && typeof stateInput === 'object'
+      ? { ...(stateInput as JsonObject), componentId }
+      : { ...fallback.state, componentId },
+  );
+
+  const state = parsed.success ? parsed.data : fallback.state;
+  const versionSource =
+    (base && typeof base === 'object' && typeof (base as Record<string, unknown>).version === 'number'
+      ? (base as Record<string, unknown>).version
+      : typeof entry.version === 'number'
+        ? entry.version
+        : fallback.version);
+  const version = typeof versionSource === 'number' && Number.isFinite(versionSource) ? versionSource : 0;
+
+  const normalized: ScorecardRecord = {
+    state: {
+      ...state,
+      componentId,
+      version,
+      lastUpdated: Date.now(),
+    },
+    version,
+    lastUpdated: Date.now(),
+  };
+
+  writeScorecardFallback(room, componentId, normalized);
+  return normalized;
 };
 
 const warnFallback = (scope: string, error: unknown) => {
@@ -271,17 +407,20 @@ const sanitizeShapeState = (
   limitBytes: number,
 ): { state: Record<string, unknown> | Array<unknown>; bytes: number; truncated: boolean } | null => {
   const clone = parseStateValue(raw);
-  if (!clone) return null;
+  if (!clone || typeof clone !== 'object') return null;
+  const normalizedState = Array.isArray(clone)
+    ? (clone as Array<unknown>)
+    : (clone as Record<string, unknown>);
   try {
     const json = JSON.stringify(clone);
     const bytes = json.length;
     if (bytes <= limitBytes) {
-      return { state: clone, bytes, truncated: false };
+      return { state: normalizedState, bytes, truncated: false };
     }
 
     const keys = Array.isArray(clone)
       ? Array.from({ length: Math.min(clone.length, 12) }, (_, idx) => idx)
-      : Object.keys(clone as Record<string, unknown>).slice(0, 12);
+      : Object.keys(normalizedState as Record<string, unknown>).slice(0, 12);
     const preview = json.slice(0, Math.max(0, limitBytes));
     return {
       state: {
@@ -361,12 +500,14 @@ export async function getFlowchartDoc(room: string, docId: string) {
     return fallback;
   }
   try {
-    const { data, error } = await supabase
-      .from('canvases')
-      .select('document, id')
-      .ilike('name', `%${room}%`)
-      .limit(1)
-      .maybeSingle();
+    const lookup = deriveCanvasLookup(room);
+    const canvasQuery = supabase.from('canvases').select('document, id');
+    if (lookup.canvasId && isUuid(lookup.canvasId)) {
+      canvasQuery.eq('id', lookup.canvasId);
+    } else {
+      canvasQuery.ilike('name', `%${lookup.fallback}%`);
+    }
+    const { data, error } = await canvasQuery.limit(1).maybeSingle();
 
     if (error) {
       throw error;
@@ -451,6 +592,114 @@ export async function commitFlowchartDoc(
   return { version: nextVersion };
 }
 
+export async function getDebateScorecard(room: string, componentId: string): Promise<ScorecardRecord> {
+  const fallback = readScorecardFallback(room, componentId);
+  if (shouldBypassSupabase) {
+    logBypass('getDebateScorecard');
+    return fallback;
+  }
+
+  try {
+    const lookup = deriveCanvasLookup(room);
+    const canvasQuery = supabase.from('canvases').select('document, id');
+    if (lookup.canvasId && isUuid(lookup.canvasId)) {
+      canvasQuery.eq('id', lookup.canvasId);
+    } else {
+      canvasQuery.ilike('name', `%${lookup.fallback}%`);
+    }
+    const { data, error } = await canvasQuery.limit(1).maybeSingle();
+
+    if (error) throw error;
+    if (!data || typeof data.document !== 'object' || data.document === null) {
+      return fallback;
+    }
+
+    const components = (data.document?.components || {}) as Record<string, Record<string, unknown>>;
+    const entry = components[componentId];
+    if (!entry) {
+      return fallback;
+    }
+    return normalizeScorecardRecord(room, componentId, entry);
+  } catch (error) {
+    warnFallback('getDebateScorecard', error);
+    return fallback;
+  }
+}
+
+export async function commitDebateScorecard(
+  room: string,
+  componentId: string,
+  payload: { state: DebateScorecardState; prevVersion?: number },
+): Promise<ScorecardRecord> {
+  const current = await getDebateScorecard(room, componentId);
+  if (typeof payload.prevVersion === 'number' && payload.prevVersion !== current.version) {
+    throw new Error('CONFLICT');
+  }
+
+  const parsed = debateScorecardStateSchema.parse({
+    ...payload.state,
+    componentId,
+    version: (current.version || 0) + 1,
+    lastUpdated: Date.now(),
+  });
+
+  const nextVersion = parsed.version;
+  const sanitizedState = JSON.parse(JSON.stringify(parsed)) as DebateScorecardState;
+
+  if (shouldBypassSupabase) {
+    logBypass('commitDebateScorecard');
+  } else {
+    try {
+      const lookup = deriveCanvasLookup(room);
+      const canvasQuery = supabase.from('canvases').select('id, document');
+      if (lookup.canvasId && isUuid(lookup.canvasId)) {
+        canvasQuery.eq('id', lookup.canvasId);
+      } else {
+        canvasQuery.ilike('name', `%${lookup.fallback}%`);
+      }
+      const { data: canvas, error: fetchErr } = await canvasQuery.limit(1).maybeSingle();
+
+      if (fetchErr || !canvas) {
+        throw fetchErr || new Error('NOT_FOUND');
+      }
+
+      const document = canvas.document || {};
+      document.components = document.components || {};
+      const componentEntry = document.components[componentId] || {};
+      document.components[componentId] = {
+        ...componentEntry,
+        ...sanitizedState,
+        scorecard: {
+          state: sanitizedState,
+          version: nextVersion,
+          updated_at: Date.now(),
+        },
+        version: nextVersion,
+        updated_at: Date.now(),
+      };
+
+      const { error: updateErr } = await supabase
+        .from('canvases')
+        .update({ document })
+        .eq('id', canvas.id);
+
+      if (updateErr) {
+        throw updateErr;
+      }
+    } catch (error) {
+      warnFallback('commitDebateScorecard', error);
+    }
+  }
+
+  const record: ScorecardRecord = {
+    state: sanitizedState,
+    version: nextVersion,
+    lastUpdated: Date.now(),
+  };
+  writeScorecardFallback(room, componentId, record);
+  return record;
+}
+
 export async function getCanvasShapeSummary(room: string) {
   const cached = canvasStateStore.get(canvasStateKey(room));
   if (cached && Date.now() - cached.lastUpdated < 5_000) {
@@ -463,12 +712,14 @@ export async function getCanvasShapeSummary(room: string) {
   }
 
   try {
-    const { data, error } = await supabase
-      .from('canvases')
-      .select('document, id')
-      .ilike('name', `%${room}%`)
-      .limit(1)
-      .maybeSingle();
+    const lookup = deriveCanvasLookup(room);
+    const canvasQuery = supabase.from('canvases').select('document, id');
+    if (lookup.canvasId && isUuid(lookup.canvasId)) {
+      canvasQuery.eq('id', lookup.canvasId);
+    } else {
+      canvasQuery.ilike('name', `%${lookup.fallback}%`);
+    }
+    const { data, error } = await canvasQuery.limit(1).maybeSingle();
 
     if (error) {
       throw error;
@@ -478,7 +729,20 @@ export async function getCanvasShapeSummary(room: string) {
       return defaultCanvasState(room);
     }
 
-    const store = (data.document?.store || {}) as Record<string, any>;
+    const store = (data.document?.store ||
+      // Some saves persist the full TLDraw snapshot under `document.document`
+      data.document?.document?.store ||
+      {}) as Record<string, any>;
+    if (process.env.NODE_ENV !== 'production') {
+      try {
+        const storeKeys = Object.keys(store);
+        if (storeKeys.length === 0) {
+          console.log('[StewardSupabase] listCanvasComponents store empty store payload', {
+            room,
+          });
+        }
+      } catch {}
+    }
     const shapes: CanvasShapeSummary[] = [];
 
     const pushShape = (entry: any) => {
@@ -498,6 +762,12 @@ export async function getCanvasShapeSummary(room: string) {
       .filter((key) => key.startsWith('shape:'))
       .forEach((key) => pushShape(store[key]));
 
+    // Also handle top-level TLDraw snapshots stored as an array of records
+    // (parity harness currently writes `{ shapes: [...], document: {...} }`).
+    if (Array.isArray((data as any).shapes)) {
+      (data as any).shapes.forEach(pushShape);
+    }
+
     const record: CanvasStateRecord = {
       version: typeof data.document?.schemaVersion === 'number' ? data.document.schemaVersion : 0,
       shapes,
@@ -508,6 +778,151 @@ export async function getCanvasShapeSummary(room: string) {
   } catch (err) {
     warnFallback('getCanvasShapeSummary', err);
     return defaultCanvasState(room);
+  }
+}
+
+export async function listCanvasComponents(room: string): Promise<CanvasComponentSnapshot[]> {
+  if (!room) return [];
+
+  if (shouldBypassSupabase) {
+    logBypass('listCanvasComponents');
+    return [];
+  }
+
+  try {
+    const lookup = deriveCanvasLookup(room);
+    const canvasQuery = supabase.from('canvases').select('document, id');
+    if (lookup.canvasId && isUuid(lookup.canvasId)) {
+      canvasQuery.eq('id', lookup.canvasId);
+    } else {
+      canvasQuery.ilike('name', `%${lookup.fallback}%`);
+    }
+    const { data, error } = await canvasQuery.limit(1).maybeSingle();
+
+    if (error) throw error;
+    if (!data || typeof data.document !== 'object' || data.document === null) {
+      return [];
+    }
+    const document = data.document as {
+      components?: Record<string, Record<string, unknown>>;
+      store?: Record<string, any>;
+      schemaVersion?: number;
+    };
+    const snapshots: CanvasComponentSnapshot[] = [];
+    const seen = new Set<string>();
+
+    const pushSnapshot = (entry: CanvasComponentSnapshot) => {
+      if (!entry.componentId || seen.has(entry.componentId)) return;
+      seen.add(entry.componentId);
+      snapshots.push(entry);
+    };
+
+    const components = (document.components || {}) as Record<string, Record<string, unknown>>;
+
+    for (const [componentId, entry] of Object.entries(components)) {
+      if (!entry || typeof entry !== 'object') continue;
+      const props =
+        entry.props && typeof entry.props === 'object'
+          ? (entry.props as JsonObject)
+          : (entry as JsonObject);
+      const stateCandidate = (() => {
+        if (entry.state && typeof entry.state === 'object' && !Array.isArray(entry.state)) {
+          return entry.state as JsonObject;
+        }
+        const scorecard = (entry as { scorecard?: { state?: JsonObject } }).scorecard;
+        if (scorecard?.state && typeof scorecard.state === 'object') {
+          return scorecard.state;
+        }
+        return undefined;
+      })();
+
+      const componentType = (() => {
+        if (typeof (entry as { componentType?: unknown }).componentType === 'string') {
+          return (entry as { componentType: string }).componentType;
+        }
+        if (typeof (entry as { type?: unknown }).type === 'string') {
+          return (entry as { type: string }).type;
+        }
+        if (typeof props?.type === 'string') {
+          return props.type as string;
+        }
+        if (stateCandidate && typeof stateCandidate.type === 'string') {
+          return stateCandidate.type as string;
+        }
+        return 'unknown';
+      })();
+
+      const intentId = (() => {
+        if (typeof (entry as { intentId?: unknown }).intentId === 'string') {
+          return (entry as { intentId: string }).intentId;
+        }
+        if (typeof props?.intentId === 'string') {
+          return props.intentId as string;
+        }
+        return undefined;
+      })();
+
+      pushSnapshot({
+        componentId,
+        componentType,
+        props,
+        state: stateCandidate ?? null,
+        intentId: intentId ?? null,
+        lastUpdated:
+          typeof (entry as { lastUpdated?: unknown }).lastUpdated === 'number'
+            ? ((entry as { lastUpdated: number }).lastUpdated as number)
+            : typeof (entry as { updated_at?: unknown }).updated_at === 'number'
+              ? ((entry as { updated_at: number }).updated_at as number)
+              : null,
+      });
+    }
+
+    const store = (document.store || {}) as Record<string, any>;
+    const considerShapeEntry = (raw: any) => {
+      if (!raw || typeof raw !== 'object') return;
+      const props = raw.props && typeof raw.props === 'object' ? (raw.props as Record<string, any>) : null;
+      if (!props) return;
+      const componentId = typeof props.customComponent === 'string' ? props.customComponent : null;
+      if (!componentId || seen.has(componentId)) return;
+      const stateCandidate =
+        props.state && typeof props.state === 'object' && !Array.isArray(props.state)
+          ? (props.state as JsonObject)
+          : undefined;
+      const componentType = (() => {
+        if (typeof props.name === 'string' && props.name.trim()) return props.name.trim();
+        if (stateCandidate && typeof stateCandidate.type === 'string') return (stateCandidate.type as string).trim();
+        if (typeof props.type === 'string') return props.type.trim();
+        return 'unknown';
+      })();
+      pushSnapshot({
+        componentId,
+        componentType,
+        props: stateCandidate ?? (props as JsonObject),
+        state: stateCandidate ?? null,
+        intentId: typeof props.intentId === 'string' ? props.intentId : null,
+        lastUpdated:
+          typeof props.updatedAt === 'number'
+            ? (props.updatedAt as number)
+            : typeof props.lastUpdated === 'number'
+              ? (props.lastUpdated as number)
+              : null,
+      });
+    };
+
+    const rawShapeCollection = store['shape'] || store.shapes;
+    if (Array.isArray(rawShapeCollection)) {
+      rawShapeCollection.forEach(considerShapeEntry);
+    } else if (rawShapeCollection && typeof rawShapeCollection === 'object') {
+      Object.values(rawShapeCollection as Record<string, any>).forEach(considerShapeEntry);
+    }
+    Object.keys(store)
+      .filter((key) => key.startsWith('shape:'))
+      .forEach((key) => considerShapeEntry(store[key]));
+
+    return snapshots;
+  } catch (error) {
+    warnFallback('listCanvasComponents', error);
+    return [];
   }
 }
 

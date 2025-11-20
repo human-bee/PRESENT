@@ -1,0 +1,50 @@
+---
+alwaysApply: false
+---
+# Unified Canvas Agent (Key Points)
+
+## Model
+- Server-centric: builds prompt (shapes, transcript, viewport), calls model (streaming), sanitizes TLDraw-native actions, broadcasts envelopes via LiveKit.
+- Browser = eyes/hands only: publishes viewport/selection/screenshot; applies actions; sends acks.
+
+## Action Envelope (server → client)
+```ts
+type AgentActionEnvelope = {
+  v: 'tldraw-actions/1';
+  sessionId: string;
+  seq: number;
+  partial?: boolean;
+  actions: Array<{ id: string; name: ActionName; params: unknown }>;
+  ts: number;
+}
+```
+Topic: `agent:action` → client replies with `{ type: 'agent:ack', sessionId, seq, clientId }`.
+
+## TLDraw-native Actions
+- Core: `create_shape`, `update_shape`, `delete_shape`, `draw_pen`
+- Transform: `move`, `resize`, `rotate`, `group`, `ungroup`
+- Layout: `align`, `distribute`, `stack`, `reorder`
+- Meta: `think`, `todo`, `add_detail`, `set_viewport`
+
+## Env & Tuning
+- `CANVAS_AGENT_UNIFIED=true`
+- `CANVAS_STEWARD_MODEL=debug/fake` (dev) or a real provider
+- `CANVAS_AGENT_SCREENSHOT_TIMEOUT_MS=300`
+- `CANVAS_AGENT_TTFB_SLO_MS=200`
+- `NEXT_PUBLIC_CANVAS_AGENT_CLIENT_ENABLED=true`
+- `CANVAS_AGENT_MAX_FOLLOWUPS=3`
+- `CANVAS_AGENT_SHAPE_STATE_LIMIT=4096`
+
+## SLOs
+- TTFB ≤ 200ms (first envelope)
+- Screenshot ≤ 150ms (≤800px long side)
+- 95p apply jitter ≤ 50ms (host client)
+
+## Reliability
+- Out-of-order: ignore older `seq`.
+- Duplicate: idempotent by `(sessionId, action.id)`.
+- No screenshot: degrade to text-only; log.
+- Host loss: re-elect; continue.
+
+See `docs/canvas-agent.md` for full details and testing strategy.
+

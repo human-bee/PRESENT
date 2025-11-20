@@ -5,6 +5,8 @@ import { ComponentRegistry } from '@/lib/component-registry';
 import type { ToolCall, ToolParameters, ToolRunResult } from '../utils/toolTypes';
 import { getMermaidLastNode, normalizeMermaidText } from '../utils';
 
+const TIMER_COMPONENT_TYPES = new Set(['RetroTimerEnhanced', 'RetroTimer']);
+
 export interface ToolRegistryMetrics {
   associateCallWithMessage?: (callId: string, messageId: string, meta: { tool: string; componentType?: string }) => void;
   markPaintForMessage?: (messageId: string, meta: { tool: string; componentType?: string }) => void;
@@ -155,16 +157,56 @@ export function useToolRegistry(deps: ToolRegistryDeps): ToolRegistryApi {
       const dispatch = lastDispatch;
       for (const [messageId, entry] of pendingUpdates.entries()) {
         pendingUpdates.delete(messageId);
-        const componentInfo = ComponentRegistry.get(messageId);
-        dispatch('tldraw:merge_component_state', {
-          messageId,
-          patch: entry.patch,
-          meta: { source: 'update_component' },
-        });
-        void ComponentRegistry.update(messageId, entry.patch);
-        metrics?.markPaintForMessage?.(messageId, {
-          tool: 'update_component',
-          componentType: componentInfo?.componentType,
+      const componentInfo = ComponentRegistry.get(messageId);
+      const patchRecord = entry.patch;
+      const patchVersion =
+        typeof patchRecord.version === 'number' ? patchRecord.version : undefined;
+      const patchTimestamp =
+        typeof patchRecord.lastUpdated === 'number'
+          ? patchRecord.lastUpdated
+          : typeof patchRecord.updatedAt === 'number'
+            ? patchRecord.updatedAt
+            : undefined;
+      dispatch('tldraw:merge_component_state', {
+        messageId,
+        patch: patchRecord,
+        meta: { source: 'update_component' },
+      });
+      void ComponentRegistry.update(messageId, patchRecord, {
+        version: patchVersion ?? null,
+        timestamp: patchTimestamp ?? Date.now(),
+        source: 'tool:update_component',
+      })
+        .then((result) => {
+          const refreshedInfo = ComponentRegistry.get(messageId);
+          if (!result?.ignored && refreshedInfo?.props && refreshedInfo.componentType) {
+            try {
+              window.dispatchEvent(
+                new CustomEvent('custom:showComponent', {
+                  detail: {
+                    messageId,
+                    component: {
+                      type: refreshedInfo.componentType,
+                      props: refreshedInfo.props,
+                    },
+                    contextKey,
+                  },
+                }),
+              );
+            } catch {
+              /* noop */
+            }
+          }
+          metrics?.markPaintForMessage?.(messageId, {
+            tool: 'update_component',
+            componentType: refreshedInfo?.componentType ?? componentInfo?.componentType,
+          });
+        })
+        .catch(() => {
+          metrics?.markPaintForMessage?.(messageId, {
+            tool: 'update_component',
+            componentType: componentInfo?.componentType,
+          });
         });
       }
     };
@@ -395,6 +437,11 @@ export function useToolRegistry(deps: ToolRegistryDeps): ToolRegistryApi {
       const existing = pendingUpdates.get(messageId);
       const combined = existing ? { ...existing.patch, ...runtimePatch } : runtimePatch;
 
+      const componentTypeHint =
+        componentInfo?.componentType ||
+        (typeof params?.type === 'string' && params.type.trim().length > 0 ? params.type.trim() : undefined);
+      const isTimerComponent = componentTypeHint ? TIMER_COMPONENT_TYPES.has(componentTypeHint) : false;
+
       const normalizeBoolean = (value: unknown): boolean | undefined => {
         if (typeof value === 'boolean') return value;
         if (typeof value === 'number') {
@@ -413,6 +460,50 @@ export function useToolRegistry(deps: ToolRegistryDeps): ToolRegistryApi {
         }
         return undefined;
       };
+
+      if (isTimerComponent && typeof combined.state === 'string') {
+        const normalizedState = combined.state.trim().toLowerCase();
+        const markRunning = () => {
+          combined.isRunning = true;
+          combined.isFinished = false;
+          if (typeof combined.timeLeft !== 'number' || combined.timeLeft <= 0) {
+            const configured =
+              typeof combined.configuredDuration === 'number' && Number.isFinite(combined.configuredDuration)
+                ? (combined.configuredDuration as number)
+                : (componentInfo?.props?.configuredDuration as number | undefined);
+            if (typeof configured === 'number' && Number.isFinite(configured)) {
+              combined.timeLeft = Math.max(1, Math.round(configured));
+            }
+          }
+        };
+        const markStopped = (finished: boolean) => {
+          combined.isRunning = false;
+          if (finished) {
+            combined.isFinished = true;
+            if (typeof combined.timeLeft !== 'number' || combined.timeLeft < 0) {
+              combined.timeLeft = 0;
+            }
+          }
+        };
+        if (
+          ['run', 'running', 'start', 'started', 'resume', 'resumed', 'play', 'playing', 'active'].includes(
+            normalizedState,
+          )
+        ) {
+          markRunning();
+        } else if (
+          ['paused', 'pause', 'stop', 'stopped', 'halt', 'idle', 'ready', 'standby'].includes(normalizedState)
+        ) {
+          markStopped(false);
+        } else if (
+          ['finished', 'complete', 'completed', 'done', 'expired', "time's up", 'time up', 'timeup'].includes(
+            normalizedState,
+          )
+        ) {
+          markStopped(true);
+        }
+        delete combined.state;
+      }
 
       const statusValue = normalizeBoolean(combined.status);
       if (combined.isRunning === undefined && statusValue !== undefined) {

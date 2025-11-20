@@ -35,7 +35,7 @@ export function CanvasSyncAdapter({
   children,
 }: CanvasSyncAdapterProps) {
   const room = useRoomContext();
-  const bus = createLiveKitBus(room);
+  const bus = React.useMemo(() => createLiveKitBus(room), [room]);
 
   const sendPatch = useCallback(
     (patch: Record<string, unknown>) => {

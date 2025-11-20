@@ -1,14 +1,49 @@
 ---
-alwaysApply: false
+alwaysApply: true
 ---
-Keep track of all codechanges, features, bug fixes, etc in linear. 
+# Project-Level Reminders (Cursor Rules)
 
-Use browsermcp to see console logs, run playright tests on canvas UI, and take screenshots to test implementations before marking an issue done in Linear
+## Build, Run, Test
 
-Consult linear to see if relevant item to request can be accessed.
+- Dev stack: `npm run stack:start` (runs LiveKit dev server, sync server, agents, Next.js)
+- Separate terminals (alt):
+  - `npm run agent:realtime`
+  - `npm run agent:conductor`
+  - `npm run dev`
+  - `npm run sync:dev`
+- Prod: `npm run build` → `npm run start` (web) + agents via `npm run agent:*`
+- Quality: `npm test`, `npm run lint`
 
-The codebase requires a lot of 'modern' agentic architecture, be mindful of using the latest subagent system design 'under the hood' of every component, feuature, etc. 
+## Environment
 
-always try and buidl each feature or logic lean and single-use, but something that is always supporting ai agents spun up in tiny terminal powering the state-sync of that component and the canvas and the transcript. and is also able interact with the canvas, etc. this is always being built with realtime in mind--reducing latenct at every interaction is key. these subagents can run at 500+ tokens per second, if we are able to give them enough advice and guardrails to use a fast model 'under the hood' the modern paradigm of coding these agentic systems is that 'awareness' needs to be built into everything. feature understandings and handoffs, they can now be very simply exicuted by the subagent, if given the right, effecient context.
+- Copy `example.env.local` → `.env.local` and fill LiveKit, OpenAI, Supabase.
+- Key flags (see docs/canvas-agent.md): `CANVAS_AGENT_UNIFIED`, `CANVAS_STEWARD_MODEL`, `NEXT_PUBLIC_CANVAS_AGENT_CLIENT_ENABLED`.
 
-This is a new mindset being introduced to the codebase, refactor as you go. Document everything in Linear, this is your meta way to communicate with the other agents and subagents building this application. Be sure to list relevant docs, life hacks, code advice, "gotchya's learned from bugs" and overall map out the spiderwebnest that is this codebase. We are building somehting new here, so as much lessons-along-the-way really helps us all code this awesome realtime meeting agentic production app!
+## Agents & Order of Operations
+
+- Start the voice agent before the web app; wait for "registered worker" then "Job received!" in logs.
+- Voice Agent enqueues; Conductor stewards execute; browser ToolDispatcher only applies `create_component` / `update_component` and TLDraw actions.
+
+Note: The Voice Agent may hand off longer work via `dispatch_to_conductor`, and uses `reserve_component` / `resolve_component` for deterministic component IDs.
+
+## Logging
+
+- Tail logs in `logs/`: `agent-realtime.log`, `agent-conductor.log`, `livekit-server.log`, `next-dev.log`.
+- Enable dispatcher metrics with `NEXT_PUBLIC_TOOL_DISPATCHER_METRICS=true` to log `tSend/tArrive/tPaint`.
+
+## Linear & Tracking
+
+- Track all code changes, features, and fixes in Linear.
+- When tasks complete, update the corresponding Linear issue with a brief summary and relevant logs/screenshots.
+
+## BrowserMCP & Testing
+
+- Use Browser MCP to inspect console logs, run Playwright tests on the canvas UI, and capture screenshots before marking issues done.
+- E2E: `npx playwright test tests/flowchart.e2e.spec.ts` and `tests/timer-perf.e2e.spec.ts`.
+
+## Architectural Guardrails
+
+- Keep files small (≤200 LOC where feasible); extract helpers early.
+- Prefer hosted tools (Responses/MCP) over custom clients.
+- Two UI tools in production: `create_component`, `update_component`.
+- Supabase is the source of truth for transcripts and component docs.

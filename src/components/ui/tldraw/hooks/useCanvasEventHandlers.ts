@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import type { RefObject } from 'react';
 import type { Editor } from '@tldraw/tldraw';
 import type { Room } from 'livekit-client';
@@ -24,13 +24,12 @@ export function useCanvasEventHandlers(
 ) {
   const { enabled = true } = options ?? {};
   const lastTimestampsRef = useRef(new Map<string, number>());
+  const bus = useMemo(() => (room ? createLiveKitBus(room) : null), [room]);
 
   useEffect(() => {
-    if (!enabled || !editor || !room) {
+    if (!enabled || !editor || !room || !bus) {
       return;
     }
-
-    const bus = createLiveKitBus(room);
     const cleanups: Array<() => void> = [];
 
     const mermaidCleanup = attachMermaidBridge({
@@ -67,5 +66,5 @@ export function useCanvasEventHandlers(
         }
       });
     };
-  }, [enabled, editor, room, containerRef]);
+  }, [enabled, editor, room, containerRef, bus]);
 }

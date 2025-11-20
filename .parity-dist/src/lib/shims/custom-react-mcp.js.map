@@ -1,0 +1,1 @@
+{"version":3,"file":"custom-react-mcp.js","sourceRoot":"","sources":["../../../../src/lib/shims/custom-react-mcp.tsx"],"names":[],"mappings":"AAAA,OAAO,KAAK,KAAK,MAAM,OAAO,CAAC;AAE/B,MAAM,UAAU,iBAAiB,CAAC,EAAE,QAAQ,EAAqD;IAC/F,IAAI,OAAO,CAAC,GAAG,CAAC,QAAQ,KAAK,aAAa;QAAE,OAAO,CAAC,GAAG,CAAC,wCAAwC,CAAC,CAAC;IAClG,OAAO,EAAE,CAAC,QAAQ,CAAC,GAAG,CAAC;AACzB,CAAC"}

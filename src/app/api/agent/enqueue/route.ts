@@ -7,7 +7,7 @@ const queue = new AgentTaskQueue();
 const requestSchema = z.object({
   room: z.string().min(1),
   task: z.string().min(1),
-  params: z.record(z.any()).default({}),
+  params: z.record(z.string(), z.any()).default({}),
   requestId: z.string().optional(),
   resourceKeys: z.array(z.string()).optional(),
   priority: z.number().int().min(0).default(0),
@@ -30,4 +30,3 @@ export async function POST(request: Request) {
     );
   }
 }
-

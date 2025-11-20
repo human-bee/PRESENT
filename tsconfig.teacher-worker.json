@@ -1,0 +1,21 @@
+{
+  "extends": "./tsconfig.agent.json",
+  "compilerOptions": {
+    "outDir": ".parity-dist/teacher-worker",
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "target": "ES2020",
+    "lib": ["es2020"],
+    "rootDir": ".",
+    "noEmit": false,
+    "tsBuildInfoFile": ".parity-dist/teacher-worker.tsbuildinfo",
+    "types": ["node"],
+    "sourceMap": false
+  },
+  "include": [
+    "scripts/teacher-worker.ts",
+    "src/lib/canvas-agent/teacher-runtime/**/*.ts",
+    "src/lib/canvas-agent/contract/**/*.ts",
+    "vendor/tldraw-agent-template/**/*.ts"
+  ]
+}

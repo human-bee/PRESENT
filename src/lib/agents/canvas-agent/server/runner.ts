@@ -3,44 +3,217 @@ import { selectModel } from './models';
 import { buildPromptParts } from './context';
 import { sanitizeActions } from './sanitize';
 import { requestScreenshot, sendActionsEnvelope, sendChat, sendStatus, awaitAck } from './wire';
+import { broadcastToolCall } from '@/lib/agents/shared/supabase-context';
+import type { CanvasShapeSummary } from '@/lib/agents/shared/supabase-context';
+import { ACTION_VERSION } from '@/lib/canvas-agent/contract/types';
 import { OffsetManager, interpretBounds } from './offset';
 import { handleStructuredStreaming } from './streaming';
-import type { AgentAction } from '../shared/types';
-import { parseAction } from '../shared/parsers';
+import type { AgentAction } from '@/lib/canvas-agent/contract/types';
+import { parseAction } from '@/lib/canvas-agent/contract/parsers';
 import { SessionScheduler } from './scheduler';
-import { addTodo } from './todos';
+import { addTodo, listTodos, type TodoItem as StoredTodoItem } from './todos';
 import { getCanvasShapeSummary } from '@/lib/agents/shared/supabase-context';
 import type { ScreenshotPayload } from '@/server/inboxes/screenshot';
-import * as ScreenshotInbox from '@/server/inboxes/screenshot';
-import { getModelTuning, resolvePreset, resolveFollowupDepth } from './model/presets';
+import { getModelTuning } from './model/presets';
+import type { CanvasAgentPreset } from './model/presets';
+import { BRAND_PRESETS } from '@/lib/brand/brand-presets';
+import { validateCanonicalAction } from '@/lib/canvas-agent/contract/tooling/catalog';
+import { resolveShapeType, sanitizeShapeProps } from '@/lib/canvas-agent/contract/shape-utils';
+import { CANVAS_AGENT_SYSTEM_PROMPT } from '@/lib/canvas-agent/contract/system-prompt';
+import { loadCanvasAgentConfig, type CanvasAgentConfig } from './config';
+import { convertTeacherAction } from '@/lib/canvas-agent/contract/teacher-bridge';
+import type { TeacherPromptContext } from '@/lib/canvas-agent/teacher-runtime/prompt';
+import { buildTeacherContextItems } from '@/lib/canvas-agent/teacher-runtime/context-items';
+import { buildTeacherChatHistory, type TranscriptEntry } from '@/lib/canvas-agent/teacher-runtime/chat-history';
+import {
+  getTeacherRuntimeLastError,
+  getTeacherServiceForEndpoint,
+  type TeacherService,
+} from '@/lib/canvas-agent/teacher-runtime/service-client';
+
+let teacherRuntimeWarningLogged = false;
 
 
-type RunArgs = { roomId: string; userMessage: string; model?: string; initialViewport?: { x: number; y: number; w: number; h: number } };
+export type CanvasAgentHooks = {
+  onActions?: (payload: {
+    roomId: string;
+    sessionId: string;
+    seq: number;
+    partial: boolean;
+    source: 'present' | 'teacher';
+    actions: AgentAction[];
+  }) => void;
+};
 
-const CANVAS_AGENT_SYSTEM_PROMPT = `You are a creative canvas agent with access to the TLDraw canvas.
+type RunArgs = {
+  roomId: string;
+  userMessage: string;
+  model?: string;
+  initialViewport?: { x: number; y: number; w: number; h: number };
+  hooks?: CanvasAgentHooks;
+};
 
-You can see the current canvas state including shapes, their positions, sizes, colors, and the user's viewport.
-You receive user requests and respond by emitting TLDraw-native actions to create, modify, or delete shapes.
+let screenshotInboxPromise: Promise<typeof import('@/server/inboxes/screenshot')> | null = null;
 
-Available actions:
-- create_shape: Create rectangles, ellipses, arrows, notes, text, images, and more
-- update_shape: Modify existing shapes (position, size, color, text, props)
-- delete_shape: Remove shapes by ID
-- draw_pen: Draw freehand pen strokes
-- move/resize/rotate: Transform shapes
-- group/ungroup: Organize shapes into groups
-- align/distribute/stack/reorder: Arrange multiple shapes
-- think: Share your reasoning with the user (appears in chat)
-- todo: Create a persistent task for later follow-up
-- add_detail: Request a follow-up turn to add more detail to specific shapes
-- set_viewport: Pan/zoom the canvas to focus on specific content
+const delay = (ms: number) =>
+  new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
 
-Always respond with JSON containing an "actions" array. Each action must have:
-- id: unique identifier (string)
-- name: action name from the list above
-- params: object with action-specific parameters
+function loadScreenshotInbox() {
+  if (!screenshotInboxPromise) {
+    screenshotInboxPromise = import('@/server/inboxes/screenshot');
+  }
+  return screenshotInboxPromise;
+}
 
-Be creative, precise, and considerate of existing canvas content. When in doubt, make reasonable assumptions.`;
+const isPromptTooLongError = (error: unknown): boolean => {
+  if (!error || typeof error !== 'object') return false;
+  const direct = typeof (error as any)?.message === 'string' ? String((error as any).message).toLowerCase() : '';
+  if (direct.includes('prompt is too long')) return true;
+  const nested = typeof (error as any)?.data?.error?.message === 'string' ? String((error as any).data.error.message).toLowerCase() : '';
+  return nested.includes('prompt is too long');
+};
+
+const BRAND_COLOR_ALIASES: Record<string, string> = {
+  'brutalist-orange': 'orange',
+  'brutalist orange': 'orange',
+  'brutal-orange': 'orange',
+  'brutal orange': 'orange',
+  brutal: 'orange',
+  'burnt-orange': 'orange',
+  'burnt orange': 'orange',
+  burnt: 'orange',
+  burntorange: 'orange',
+  'deep-orange': 'red',
+  'deep orange': 'red',
+  deep: 'red',
+  deeporange: 'red',
+  charcoal: 'black',
+  ink: 'black',
+  graphite: 'grey',
+  smoke: 'grey',
+  ash: 'grey',
+  'accent-blue': 'blue',
+  'accent blue': 'blue',
+  'accent-green': 'green',
+  'accent green': 'green',
+  'accent-violet': 'violet',
+  'accent violet': 'violet',
+  citrus: 'yellow',
+};
+
+const sanitizeProps = (rawProps: Record<string, unknown>, shapeType: string) =>
+  sanitizeShapeProps(rawProps, shapeType, { colorAliases: BRAND_COLOR_ALIASES });
+
+const mapTodosToTeacherItems = (todos: StoredTodoItem[]) => {
+  return todos
+    .map((todo, index) => {
+      const text = typeof todo.text === 'string' ? todo.text.trim() : '';
+      if (!text) return null;
+      const numericId = Number.isFinite(todo.position) ? Number(todo.position) : index;
+      const status = todo.status === 'done' ? 'done' : 'todo';
+      return {
+        id: numericId,
+        text,
+        status,
+      } as { id: number; text: string; status: 'todo' | 'in-progress' | 'done' };
+    })
+    .filter((item): item is { id: number; text: string; status: 'todo' | 'in-progress' | 'done' } => Boolean(item));
+};
+
+type BrandPresetName = keyof typeof BRAND_PRESETS;
+
+const PRESET_SYNONYMS: Record<string, BrandPresetName> = {
+  hero: 'Hero',
+  headline: 'Hero',
+  heading: 'Hero',
+  title: 'Hero',
+  callout: 'Callout',
+  calloutbox: 'Callout',
+  quiet: 'Quiet',
+  subtle: 'Quiet',
+  wire: 'Wire',
+  wireframe: 'Wire',
+  label: 'Label',
+  tag: 'Label',
+};
+
+const resolvePresetName = (raw: unknown): BrandPresetName | undefined => {
+  if (typeof raw !== 'string') return undefined;
+  const normalized = raw.trim().toLowerCase();
+  if (!normalized) return undefined;
+  const direct = Object.keys(BRAND_PRESETS).find((key) => key.toLowerCase() === normalized);
+  if (direct) return direct as BrandPresetName;
+  if (PRESET_SYNONYMS[normalized]) return PRESET_SYNONYMS[normalized];
+  return undefined;
+};
+
+const coerceNumeric = (value: unknown): number | undefined => {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string') {
+    const parsed = Number.parseFloat(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return undefined;
+};
+
+const expandMacroAction = (rawAction: Record<string, any>): Record<string, any>[] | null => {
+  if (!rawAction || typeof rawAction !== 'object') return null;
+  if (rawAction.name !== 'apply_preset') return null;
+  const params = typeof rawAction.params === 'object' && rawAction.params !== null ? { ...(rawAction.params as Record<string, any>) } : {};
+  const presetName = resolvePresetName(params.preset ?? params.name ?? params.style);
+  if (!presetName) return [];
+  const preset = BRAND_PRESETS[presetName];
+  const targetIds = Array.isArray(params.targetIds)
+    ? params.targetIds.filter((id: unknown): id is string => typeof id === 'string' && id.trim().length > 0)
+    : [];
+  const typeCandidate = resolveShapeType(params.shape ?? params.type ?? (targetIds.length === 0 ? 'note' : undefined));
+  const resolvedType = typeCandidate ?? (targetIds.length > 0 ? 'note' : 'note');
+  const overrides = typeof params.props === 'object' && params.props !== null ? params.props : {};
+  const baseProps = sanitizeProps({ ...preset, ...overrides }, resolvedType);
+
+  if (targetIds.length > 0) {
+    return targetIds.map((targetId, index) => ({
+      id: `${rawAction.id ?? `preset-${presetName}`}-${index}`,
+      name: 'update_shape',
+      params: { id: targetId, props: baseProps },
+    }));
+  }
+
+  const x = coerceNumeric(params.x) ?? 0;
+  const y = coerceNumeric(params.y) ?? 0;
+  const w = coerceNumeric(params.w ?? params.width) ?? 240;
+  const h = coerceNumeric(params.h ?? params.height) ?? 160;
+  const text = typeof params.text === 'string' && params.text.trim().length > 0 ? params.text.trim() : presetName;
+  const createId =
+    typeof params.id === 'string' && params.id.trim().length > 0
+      ? params.id.trim()
+      : `preset-${Date.now().toString(36)}-${Math.floor(Math.random() * 1000)}`;
+
+  return [
+    {
+      id: rawAction.id ?? createId,
+      name: 'create_shape',
+      params: {
+        id: createId,
+        type: resolvedType,
+        x,
+        y,
+        props: sanitizeProps({ ...baseProps, w, h, text }, resolvedType),
+      },
+    },
+  ];
+};
+
+const coerceNumber = (value: unknown): number | undefined => {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string') {
+    const parsed = Number.parseFloat(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return undefined;
+};
 
 type SessionMetrics = {
   sessionId: string;
@@ -75,22 +248,12 @@ type SessionMetrics = {
   examplesCount?: number;
 };
 
-function getEnvConfig() {
-  const env = process.env;
-  const preset = resolvePreset(env);
-  return {
-    modelName: env.CANVAS_STEWARD_MODEL,
-    debug: env.CANVAS_STEWARD_DEBUG === 'true',
-    screenshotTimeoutMs: Number(env.CANVAS_AGENT_SCREENSHOT_TIMEOUT_MS ?? 300),
-    ttfbSloMs: Number(env.CANVAS_AGENT_TTFB_SLO_MS ?? 200),
-    clientEnabled: env.NEXT_PUBLIC_CANVAS_AGENT_CLIENT_ENABLED !== 'false',
-    maxFollowups: resolveFollowupDepth(env, preset),
-    preset,
-  } as const;
-}
-
-function logMetrics(metrics: SessionMetrics, event: 'start' | 'context' | 'ttfb' | 'complete' | 'error' | 'screenshot', detail?: unknown) {
-  const cfg = getEnvConfig();
+function logMetrics(
+  metrics: SessionMetrics,
+  cfg: CanvasAgentConfig,
+  event: 'start' | 'context' | 'ttfb' | 'complete' | 'error' | 'screenshot',
+  detail?: unknown,
+) {
   if (!cfg.debug) return;
   const payload: Record<string, unknown> = { event, sessionId: metrics.sessionId, roomId: metrics.roomId, ts: Date.now() };
   if (metrics.preset) payload.preset = metrics.preset;
@@ -133,11 +296,30 @@ function logMetrics(metrics: SessionMetrics, event: 'start' | 'context' | 'ttfb'
 }
 
 export async function runCanvasAgent(args: RunArgs) {
-  const { roomId, userMessage, model } = args;
+  const { roomId, userMessage: rawUserMessage, model, hooks: hookOverrides } = args;
+  const hooks = hookOverrides ?? {};
+  const userMessage = rawUserMessage.trim().length > 0
+    ? rawUserMessage.trim()
+    : 'Improve the layout. Clarify hierarchy and polish typography.';
   const sessionId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-  const cfg = getEnvConfig();
-  const scheduler = new SessionScheduler({ maxDepth: cfg.maxFollowups });
+  const cfg = loadCanvasAgentConfig();
+  if (cfg.mode === 'tldraw-teacher') {
+    console.info('[CanvasAgent] running in tldraw-teacher mode (vendored TLDraw agent active)', {
+      mode: cfg.mode,
+      sessionId,
+      roomId,
+    });
+  } else if (cfg.mode === 'shadow') {
+    console.info('[CanvasAgent] running in shadow mode (present dispatch + teacher logging)', {
+      mode: cfg.mode,
+      sessionId,
+      roomId,
+    });
+  }
+  const scheduler = new SessionScheduler({ maxDepth: cfg.followups.maxDepth });
+  const shapeTypeById = new Map<string, string>();
   const offset = new OffsetManager();
+  const screenshotInbox = await loadScreenshotInbox();
 
   if (args.initialViewport) {
     const { x, y, w, h } = args.initialViewport;
@@ -155,9 +337,76 @@ export async function runCanvasAgent(args: RunArgs) {
     preset: cfg.preset,
   };
 
-  logMetrics(metrics, 'start');
+  logMetrics(metrics, cfg, 'start');
 
   let latestScreenshot: ScreenshotPayload | null = null;
+  let screenshotEdge = cfg.screenshot.maxEdge;
+  let lowActionRetryScheduled = false;
+  let lastDispatchedChunk: {
+    seq: number;
+    actionNames: string[];
+    partial: boolean;
+    sample?: AgentAction;
+  } | null = null;
+  let pendingViewportBounds: { x?: number; y?: number; w?: number; h?: number } | null = null;
+
+  const captureScreenshot = async (
+    label: 'primary' | 'followup',
+    bounds?: { x: number; y: number; w: number; h: number },
+    attempt = 0,
+    maxEdge = cfg.screenshot.maxEdge,
+  ): Promise<ScreenshotPayload | null> => {
+    const requestId = randomUUID();
+    metrics.screenshotRequestId = requestId;
+    metrics.screenshotTimeoutMs = cfg.screenshot.timeoutMs;
+    metrics.screenshotRequestedAt = Date.now();
+    try {
+      await requestScreenshot(roomId, {
+        sessionId,
+        requestId,
+        bounds,
+        maxSize: maxEdge ? { w: maxEdge, h: maxEdge } : undefined,
+      });
+    } catch (error) {
+      metrics.screenshotResult = 'error';
+      logMetrics(metrics, cfg, 'screenshot', `${label}:error`);
+      if (cfg.debug) {
+        console.warn('[CanvasAgent:Screenshot]', `Request failed (${label})`, error);
+      }
+      if (attempt < cfg.screenshot.retries) {
+        await delay(cfg.screenshot.retryDelayMs);
+        return captureScreenshot(label, bounds, attempt + 1, maxEdge);
+      }
+      return null;
+    }
+
+    const timeoutAt = (metrics.screenshotRequestedAt ?? Date.now()) + cfg.screenshot.timeoutMs;
+    while (Date.now() < timeoutAt) {
+      const maybeScreenshot = screenshotInbox.takeScreenshot?.(sessionId, requestId) ?? null;
+      if (maybeScreenshot) {
+        metrics.screenshotReceivedAt = Date.now();
+        metrics.imageBytes = maybeScreenshot.image?.bytes;
+        if (typeof metrics.screenshotRequestedAt === 'number') {
+          metrics.screenshotRtt = metrics.screenshotReceivedAt - metrics.screenshotRequestedAt;
+        }
+        metrics.screenshotResult = 'received';
+        logMetrics(metrics, cfg, 'screenshot', `${label}:received`);
+        return maybeScreenshot;
+      }
+      await delay(20);
+    }
+
+    metrics.screenshotResult = 'timeout';
+    logMetrics(metrics, cfg, 'screenshot', `${label}:timeout`);
+    if (attempt < cfg.screenshot.retries) {
+      if (cfg.debug) {
+        console.warn('[CanvasAgent:Screenshot]', `Retrying ${label} capture (attempt ${attempt + 2})`);
+      }
+      await delay(cfg.screenshot.retryDelayMs);
+      return captureScreenshot(label, bounds, attempt + 1, maxEdge);
+    }
+    return null;
+  };
 
   const applyOffsetToActions = (actions: AgentAction[]): AgentAction[] => {
     return actions.map((action) => {
@@ -169,15 +418,6 @@ export async function runCanvasAgent(args: RunArgs) {
         const interpreted = offset.interpret({ x: Number((nextParams as any).x), y: Number((nextParams as any).y) });
         nextParams.x = interpreted.x;
         nextParams.y = interpreted.y;
-        mutated = true;
-      }
-      if (action.name === 'draw_pen' && Array.isArray((nextParams as any).points)) {
-        const points = (nextParams as any).points.map((point: any) => {
-          if (!point || typeof point.x !== 'number' || typeof point.y !== 'number') return point;
-          const interpreted = offset.interpret({ x: Number(point.x), y: Number(point.y) });
-          return { ...point, x: interpreted.x, y: interpreted.y };
-        });
-        nextParams.points = points;
         mutated = true;
       }
       const bounds = (nextParams as any).bounds;
@@ -194,50 +434,42 @@ export async function runCanvasAgent(args: RunArgs) {
       return mutated ? { ...action, params: nextParams } : action;
     });
   };
+
+  const enforceShapeProps = (actions: AgentAction[]): AgentAction[] =>
+    actions.map((action) => {
+      if (action.name !== 'create_shape' && action.name !== 'update_shape') return action;
+      const params = (action as any).params;
+      if (!params || typeof params !== 'object') return action;
+      const nextParams: Record<string, unknown> = { ...params };
+      const targetId = typeof nextParams.id === 'string' ? nextParams.id.trim() : undefined;
+      const explicitType = typeof nextParams.type === 'string' ? resolveShapeType(nextParams.type) : undefined;
+      const inferredType = explicitType || (targetId ? shapeTypeById.get(targetId) : undefined);
+
+      if (targetId && explicitType) {
+        shapeTypeById.set(targetId, explicitType);
+      }
+
+      if (action.name === 'create_shape' && targetId && inferredType && !shapeTypeById.has(targetId)) {
+        shapeTypeById.set(targetId, inferredType);
+      }
+
+      if (inferredType && typeof nextParams.props === 'object' && nextParams.props !== null) {
+        const sanitized = sanitizeProps({ ...(nextParams.props as Record<string, unknown>) }, inferredType);
+        if (Object.keys(sanitized).length > 0) nextParams.props = sanitized;
+        else delete nextParams.props;
+      }
+
+      return { ...action, params: nextParams };
+    });
   try {
     await sendStatus(roomId, sessionId, 'waiting_context');
     const screenshotRequestId = randomUUID();
     metrics.screenshotRequestId = screenshotRequestId;
-    metrics.screenshotTimeoutMs = cfg.screenshotTimeoutMs;
+    metrics.screenshotTimeoutMs = cfg.screenshot.timeoutMs;
 
-    try {
-      metrics.screenshotRequestedAt = Date.now();
-      await requestScreenshot(roomId, {
-        sessionId,
-        requestId: screenshotRequestId,
-        bounds: args.initialViewport,
-      });
-
-      const timeoutAt = metrics.screenshotRequestedAt + cfg.screenshotTimeoutMs;
-      while (Date.now() < timeoutAt) {
-        const maybeScreenshot = ScreenshotInbox.takeScreenshot?.(sessionId, screenshotRequestId) ?? null;
-        if (maybeScreenshot) {
-          latestScreenshot = maybeScreenshot;
-          metrics.screenshotReceivedAt = Date.now();
-          metrics.imageBytes = maybeScreenshot.image?.bytes;
-          if (typeof metrics.screenshotRequestedAt === 'number') {
-            metrics.screenshotRtt = metrics.screenshotReceivedAt - metrics.screenshotRequestedAt;
-          }
-          metrics.screenshotResult = 'received';
-          break;
-        }
-        await new Promise((resolve) => setTimeout(resolve, 20));
-      }
-
-      if (!latestScreenshot) {
-        metrics.screenshotResult = 'timeout';
-      }
-    } catch (screenshotError) {
-      metrics.screenshotResult = 'error';
-      if (cfg.debug) {
-        console.warn('[CanvasAgent:Screenshot]', 'Failed to orchestrate screenshot', screenshotError);
-      }
-    } finally {
-      logMetrics(metrics, 'screenshot', latestScreenshot ? 'received' : metrics.screenshotResult ?? 'none');
-    }
-
+    latestScreenshot = await captureScreenshot('primary', args.initialViewport, 0, screenshotEdge);
     if (!latestScreenshot && cfg.debug) {
-      console.warn('[CanvasAgent:Screenshot]', `No screenshot available within ${cfg.screenshotTimeoutMs}ms; continuing without screenshot`);
+      console.warn('[CanvasAgent:Screenshot]', `No screenshot available within ${cfg.screenshot.timeoutMs}ms; continuing without screenshot`);
     }
 
     const originViewport = latestScreenshot?.viewport ?? args.initialViewport;
@@ -246,67 +478,173 @@ export async function runCanvasAgent(args: RunArgs) {
       offset.setOrigin({ x: x + w / 2, y: y + h / 2 });
     }
 
-    const partsBuildStartedAt = Date.now();
-    const parts = await buildPromptParts(roomId, {
-      windowMs: 60000,
-      viewport: latestScreenshot?.viewport ?? args.initialViewport,
-      selection: latestScreenshot?.selection ?? [],
-      sessionId,
-      screenshot: latestScreenshot
-        ? {
-            image: latestScreenshot.image,
-            viewport: latestScreenshot.viewport,
-            selection: latestScreenshot.selection,
-            docVersion: latestScreenshot.docVersion,
-            bounds: latestScreenshot.bounds,
-            requestId: latestScreenshot.requestId,
-            receivedAt: metrics.screenshotReceivedAt,
-          }
-        : undefined,
-      offset,
-    });
-    const partsBuildMs = Date.now() - partsBuildStartedAt;
-    const budgetMeta = (parts as any).promptBudget;
-    if (budgetMeta) {
-      metrics.tokenBudgetMax = budgetMeta.maxTokens;
-      metrics.transcriptTokenEstimate = budgetMeta.transcriptTokens;
-      metrics.blurryCount = budgetMeta.blurryCount;
-      metrics.peripheralCount = budgetMeta.peripheralCount;
-      metrics.selectedCount = budgetMeta.selectedCount;
-    }
-    if (Array.isArray((parts as any)?.fewShotExamples)) {
-      metrics.examplesCount = (parts as any).fewShotExamples.length;
-    }
-    if (cfg.debug) {
-      const screenshotBytes = (parts as any)?.screenshot?.bytes ?? metrics.imageBytes ?? 0;
-      const selectedCount = Array.isArray((parts as any)?.selectedSimpleShapes)
-        ? (parts as any).selectedSimpleShapes.length
-        : 0;
-      const blurryCount = Array.isArray((parts as any)?.blurryShapes) ? (parts as any).blurryShapes.length : 0;
-      const peripheralCount = Array.isArray((parts as any)?.peripheralClusters)
-        ? (parts as any).peripheralClusters.length
-        : 0;
-      console.log('[CanvasAgent:PromptParts]', JSON.stringify({
+    const buildPromptPayload = async (
+      label: 'initial' | 'downscale' | 'fallback' | 'noscreenshot',
+    ): Promise<{ parts: Record<string, unknown>; prompt: string; buildMs: number }> => {
+      const startedAt = Date.now();
+      const parts = await buildPromptParts(roomId, {
+        windowMs: 60000,
+        viewport: latestScreenshot?.viewport ?? args.initialViewport,
+        selection: latestScreenshot?.selection ?? [],
         sessionId,
-        roomId,
-        buildMs: partsBuildMs,
-        blurryCount,
-        peripheralCount,
-        selectedCount,
-        screenshotBytes,
-      }));
-    }
-    const prompt = JSON.stringify({ user: userMessage, parts });
+        screenshot: latestScreenshot
+          ? {
+              image: latestScreenshot.image,
+              viewport: latestScreenshot.viewport,
+              selection: latestScreenshot.selection,
+              docVersion: latestScreenshot.docVersion,
+              bounds: latestScreenshot.bounds,
+              requestId: latestScreenshot.requestId,
+              receivedAt: metrics.screenshotReceivedAt,
+            }
+          : undefined,
+        offset,
+      });
+      const buildMs = Date.now() - startedAt;
+      if (cfg.debug) {
+        const screenshotBytes = (parts as any)?.screenshot?.bytes ?? metrics.imageBytes ?? 0;
+        const selectedCount = Array.isArray((parts as any)?.selectedSimpleShapes)
+          ? (parts as any).selectedSimpleShapes.length
+          : 0;
+        const blurryCount = Array.isArray((parts as any)?.blurryShapes) ? (parts as any).blurryShapes.length : 0;
+        const peripheralCount = Array.isArray((parts as any)?.peripheralClusters)
+          ? (parts as any).peripheralClusters.length
+          : 0;
+        console.log('[CanvasAgent:PromptParts]', JSON.stringify({
+          sessionId,
+          roomId,
+          buildMs,
+          label,
+          blurryCount,
+          peripheralCount,
+          selectedCount,
+          screenshotBytes,
+        }));
+      }
+      return { parts, prompt: JSON.stringify({ user: userMessage, parts }), buildMs };
+    };
 
-    metrics.contextBuiltAt = Date.now();
-    metrics.shapeCount = (parts as any).shapes?.length || 0;
-    metrics.transcriptLines = (parts as any).transcript?.length || 0;
-    metrics.docVersion = (parts as any).docVersion;
-    logMetrics(metrics, 'context');
+    const downscaleEdges = cfg.prompt.downscaleEdges;
+    let downscaleCursor = 0;
+    let promptPayload = await buildPromptPayload('initial');
+    let promptLength = promptPayload.prompt.length;
+
+    const applyPromptPayload = (payload: { parts: Record<string, unknown>; prompt: string; buildMs: number }) => {
+      promptPayload = payload;
+      promptLength = payload.prompt.length;
+    };
+
+    const attemptDownscaleEdge = async (reason: 'limit' | 'api_error'): Promise<boolean> => {
+      if (!latestScreenshot) return false;
+      while (downscaleCursor < downscaleEdges.length) {
+        const nextEdge = downscaleEdges[downscaleCursor++];
+        if (nextEdge >= screenshotEdge) continue;
+        const smaller = await captureScreenshot('primary', args.initialViewport, 0, nextEdge);
+        if (!smaller) continue;
+        screenshotEdge = nextEdge;
+        latestScreenshot = smaller;
+        applyPromptPayload(await buildPromptPayload('downscale'));
+        if (cfg.debug) {
+          console.warn('[CanvasAgent:PromptTrim]', {
+            sessionId,
+            roomId,
+            reason,
+            promptChars: promptLength,
+            limit: cfg.prompt.maxChars,
+            edge: screenshotEdge,
+          });
+        }
+        return true;
+      }
+      return false;
+    };
+
+    const reducePrompt = async (reason: 'limit' | 'api_error') => {
+      let modified = false;
+      if (reason === 'api_error' && latestScreenshot) {
+        const trimmed = await attemptDownscaleEdge(reason);
+        if (trimmed) {
+          modified = true;
+        }
+      }
+      while (promptLength > cfg.prompt.maxChars && latestScreenshot) {
+        const trimmed = await attemptDownscaleEdge(reason);
+        if (!trimmed) break;
+        modified = true;
+      }
+      if (promptLength > cfg.prompt.maxChars && latestScreenshot) {
+        latestScreenshot = null;
+        applyPromptPayload(await buildPromptPayload('noscreenshot'));
+        if (cfg.debug) {
+          console.warn('[CanvasAgent:PromptTrim]', {
+            sessionId,
+            roomId,
+            action: 'dropped_screenshot',
+            reason,
+            promptChars: promptLength,
+            limit: cfg.prompt.maxChars,
+          });
+        }
+        modified = true;
+      }
+      if (promptLength > cfg.prompt.maxChars && cfg.debug) {
+        console.warn('[CanvasAgent:PromptTrim]', {
+          sessionId,
+          roomId,
+          action: 'limit_exceeded',
+          reason,
+          promptChars: promptLength,
+          limit: cfg.prompt.maxChars,
+        });
+      }
+      return modified;
+    };
+
+    await reducePrompt('limit');
+
+    let parts = promptPayload.parts;
+    let prompt = promptPayload.prompt;
+    const applyPromptMetadata = (currentParts: Record<string, unknown>) => {
+      const budgetMeta = (currentParts as any).promptBudget;
+      if (budgetMeta) {
+        metrics.tokenBudgetMax = budgetMeta.maxTokens;
+        metrics.transcriptTokenEstimate = budgetMeta.transcriptTokens;
+        metrics.blurryCount = budgetMeta.blurryCount;
+        metrics.peripheralCount = budgetMeta.peripheralCount;
+        metrics.selectedCount = budgetMeta.selectedCount;
+      }
+      if (Array.isArray((currentParts as any)?.fewShotExamples)) {
+        metrics.examplesCount = (currentParts as any).fewShotExamples.length;
+      }
+    };
+    const recordContextMetrics = () => {
+      metrics.shapeCount = (parts as any).shapes?.length || 0;
+      metrics.transcriptLines = (parts as any).transcript?.length || 0;
+      metrics.docVersion = (parts as any).docVersion;
+      metrics.contextBuiltAt = Date.now();
+      logMetrics(metrics, cfg, 'context');
+    };
+
+    applyPromptMetadata(parts);
+    recordContextMetrics();
 
     await sendStatus(roomId, sessionId, 'calling_model');
-    const provider = selectModel(model || cfg.modelName);
+    const requestedModel = model || cfg.modelName;
+    const provider = selectModel(requestedModel);
     const tuning = getModelTuning(cfg.preset);
+    if (cfg.debug) {
+      try {
+        console.log('[CanvasAgent:Model]', JSON.stringify({
+          sessionId,
+          roomId,
+          requestedModel,
+          provider: provider.name,
+          streamingCapable: typeof provider.streamStructured === 'function',
+          preset: cfg.preset,
+          tuning,
+        }));
+      } catch {}
+    }
     let seq = 0;
     const sessionCreatedIds = new Set<string>();
     metrics.modelCalledAt = Date.now();
@@ -314,10 +652,6 @@ export async function runCanvasAgent(args: RunArgs) {
     const rememberCreatedIds = (actions: AgentAction[]) => {
       for (const action of actions) {
         if (action.name === 'create_shape') {
-          const id = String((action as any).params?.id ?? '');
-          if (id) sessionCreatedIds.add(id);
-        }
-        if (action.name === 'draw_pen') {
           const id = String((action as any).params?.id ?? '');
           if (id) sessionCreatedIds.add(id);
         }
@@ -332,7 +666,7 @@ export async function runCanvasAgent(args: RunArgs) {
       const hint = typeof params.hint === 'string' ? params.hint.trim() : '';
       const previousDepth = typeof params.depth === 'number' ? Number(params.depth) : baseDepth;
       const nextDepth = previousDepth + 1;
-      if (nextDepth > cfg.maxFollowups) return;
+      if (nextDepth > cfg.followups.maxDepth) return;
       const detailInput: Record<string, unknown> = {
         message: hint || baseMessage,
         originalMessage: baseMessage,
@@ -348,111 +682,607 @@ export async function runCanvasAgent(args: RunArgs) {
       if (accepted) metrics.followupCount++;
     };
 
+/**
+ * normalizeRawAction keeps create/update payloads in sync with the canonical
+ * contract before we run schema validation. Most adjustments are structural
+ * (moving props, coercing dimensions, resolving shape kinds). The lone
+ * semantic fallback is the `line` → `rectangle` rewrite noted below, which is
+ * a temporary crutch until the TLDraw contract exposes sized lines.
+ */
+const normalizeRawAction = (raw: unknown, shapeTypeById: Map<string, string>) => {
+  if (!raw || typeof raw !== 'object') return raw;
+  const action = raw as Record<string, any>;
+  if (action.name !== 'create_shape' && action.name !== 'update_shape') return action;
+
+  if (action.name === 'create_shape') {
+    const params = typeof action.params === 'object' && action.params !== null ? { ...(action.params as Record<string, any>) } : {};
+    const kindValue = typeof params.kind === 'string' ? params.kind.trim().toLowerCase() : undefined;
+    const candidateType = typeof params.type === 'string' ? params.type : kindValue;
+    let resolvedType = candidateType ? resolveShapeType(candidateType) : undefined;
+    if (!resolvedType) {
+      return null;
+    }
+    const hasDimension =
+      coerceNumeric(params.w) !== undefined ||
+      coerceNumeric(params.width) !== undefined ||
+      coerceNumeric(params.h) !== undefined ||
+      coerceNumeric(params.height) !== undefined;
+    if (resolvedType === 'line' && hasDimension) {
+      // Semantic rewrite: TLDraw's teacher can emit `line` shapes with width &
+      // height, which PRESENT cannot render faithfully. For now we coerce
+      // those into rectangles and document the hack so a parity pass can
+      // remove it once prompts/examples converge.
+      resolvedType = 'rectangle';
+    }
+    params.type = resolvedType;
+    delete params.kind;
+
+    const props = typeof params.props === 'object' && params.props !== null ? { ...(params.props as Record<string, any>) } : {};
+    const moveToProps = (source: string, target?: string) => {
+      if (!(source in params)) return;
+      const value = params[source];
+      if (value === undefined || value === null) {
+        delete params[source];
+        return;
+      }
+      if (typeof value === 'string' && value.trim().length === 0) {
+        delete params[source];
+        return;
+      }
+      props[target ?? source] = value;
+      delete params[source];
+    };
+
+    const moveNumericToProps = (source: string, target?: string) => {
+      const coerced = coerceNumeric(params[source]);
+      if (coerced === undefined) {
+        delete params[source];
+        return;
+      }
+      props[target ?? source] = coerced;
+      delete params[source];
+    };
+
+    moveNumericToProps('w');
+    moveNumericToProps('width', 'w');
+    moveNumericToProps('h');
+    moveNumericToProps('height', 'h');
+    moveNumericToProps('rx');
+    moveNumericToProps('ry');
+    moveToProps('text');
+    moveToProps('label', 'text');
+    moveToProps('font');
+    moveToProps('size');
+    moveToProps('color');
+    moveToProps('fill');
+    moveToProps('dash');
+
+    if (Object.keys(props).length > 0) {
+      const sanitized = sanitizeProps(props, params.type);
+      if (Object.keys(sanitized).length > 0) {
+        params.props = sanitized;
+      } else {
+        delete params.props;
+      }
+    } else {
+      delete params.props;
+    }
+
+    if (typeof params.id === 'string' && params.id.trim().length > 0) {
+      shapeTypeById.set(params.id.trim(), params.type);
+    }
+
+    return { ...action, params };
+  }
+
+  // update_shape sanitization relies on previously seen create_shape entries
+  if (action.name === 'update_shape') {
+    const params = typeof action.params === 'object' && action.params !== null ? { ...(action.params as Record<string, any>) } : {};
+    const targetId = typeof params.id === 'string' ? params.id.trim() : '';
+    if (!targetId) return null;
+    let resolvedType = shapeTypeById.get(targetId);
+    const candidateType = typeof params.type === 'string' ? resolveShapeType(params.type) : undefined;
+    if (candidateType) {
+      resolvedType = candidateType;
+      shapeTypeById.set(targetId, candidateType);
+      delete params.type;
+    }
+    if (typeof params.props === 'object' && params.props !== null) {
+      const props = { ...(params.props as Record<string, unknown>) };
+      const sanitized = resolvedType ? sanitizeProps(props, resolvedType) : sanitizeProps(props, 'note');
+      if (Object.keys(sanitized).length > 0) params.props = sanitized;
+      else delete params.props;
+    }
+    params.id = targetId;
+    return { ...action, params };
+  }
+
+  return action;
+};
+
     const processActions = async (
       rawActions: unknown,
       seqNumber: number,
       partial: boolean,
       enqueueDetail: (params: Record<string, unknown>) => void,
+      options?: { dispatch?: boolean; source?: 'present' | 'teacher' },
     ) => {
-      if (!Array.isArray(rawActions) || rawActions.length === 0) return 0;
-      const parsed: AgentAction[] = [];
-      for (const a of rawActions) {
+      const shouldDispatch = options?.dispatch !== false;
+      const actionSource = options?.source ?? 'present';
+      if (cfg.debug) {
         try {
-          parsed.push(parseAction({ id: String((a as any)?.id || `${Date.now()}`), name: (a as any)?.name, params: (a as any)?.params }));
+          console.log('[CanvasAgent:ActionsChunk]', JSON.stringify({
+            sessionId,
+            roomId,
+            seq: seqNumber,
+            partial,
+            rawCount: Array.isArray(rawActions) ? rawActions.length : 0,
+            raw: rawActions,
+          }));
         } catch {}
       }
-      if (parsed.length === 0) return 0;
-      const canvas = await getCanvasShapeSummary(roomId);
-      const exists = (id: string) => sessionCreatedIds.has(id) || canvas.shapes.some((s) => s.id === id);
+      if (!Array.isArray(rawActions) || rawActions.length === 0) return 0;
+      const parsed: AgentAction[] = [];
+      const dropStats = {
+        duplicateCreates: 0,
+        invalidSchema: 0,
+      };
+      const queue: unknown[] = [];
+      for (const candidate of rawActions) {
+        const teacherConverted = convertTeacherAction(candidate);
+        const baseCandidate = teacherConverted
+          ? {
+              id: typeof (candidate as any)?.id === 'string' ? (candidate as any).id : undefined,
+              name: teacherConverted.name,
+              params: teacherConverted.params,
+            }
+          : candidate;
+
+        const macros = expandMacroAction(baseCandidate as Record<string, any>);
+        if (Array.isArray(macros)) {
+          if (macros.length > 0) {
+            queue.push(...macros);
+          }
+          continue;
+        }
+        queue.push(baseCandidate);
+      }
+
+      const canvasSummary = await getCanvasShapeSummary(roomId);
+      const existingShapeIds = new Set(canvasSummary.shapes.map((shape) => shape.id));
+      for (const shape of canvasSummary.shapes) {
+        if (!shape?.id || typeof shape.id !== 'string') continue;
+        const normalizedType = resolveShapeType(shape.type);
+        if (normalizedType) {
+          shapeTypeById.set(shape.id, normalizedType);
+        } else if (typeof shape.type === 'string' && shape.type.trim().length > 0) {
+          shapeTypeById.set(shape.id, shape.type.trim());
+        }
+      }
+      const chunkCreatedIds = new Set<string>();
+      const knownIds = new Set<string>([
+        ...existingShapeIds,
+        ...sessionCreatedIds,
+      ]);
+
+      for (const item of queue) {
+        let normalized = normalizeRawAction(item, shapeTypeById);
+        if (!normalized) continue;
+        if (normalized.name === 'create_shape') {
+          const shapeId = String((normalized as any).params?.id ?? '').trim();
+          if (shapeId) {
+            if (knownIds.has(shapeId)) {
+              // Structural dedupe: TLDraw occasionally repeats `create`
+              // payloads. We drop the duplicates rather than mutating the
+              // params so the dispatcher never sees conflicting shapes.
+              dropStats.duplicateCreates++;
+              continue;
+            }
+            knownIds.add(shapeId);
+            chunkCreatedIds.add(shapeId);
+          }
+        }
+        const schemaValidation = validateCanonicalAction(
+          normalized as { id?: string | number; name: string; params: Record<string, unknown> },
+        );
+        if (!schemaValidation.ok) {
+          dropStats.invalidSchema++;
+          if (!partial) {
+            console.warn('[CanvasAgent:SchemaGuard] Dropping invalid action', {
+              roomId,
+              sessionId,
+              seq: seqNumber,
+              name: (normalized as any)?.name,
+              issues: schemaValidation.issues,
+            });
+          }
+          continue;
+        }
+        try {
+          parsed.push(
+            parseAction({ id: String((normalized as any)?.id || `${Date.now()}`), name: (normalized as any)?.name, params: (normalized as any)?.params }),
+          );
+        } catch (parseError) {
+          if (cfg.debug) {
+            console.warn('[CanvasAgent:ParseActionError]', {
+              roomId,
+              sessionId,
+              seq: seqNumber,
+              action: (normalized as any)?.name,
+              error: parseError instanceof Error ? parseError.message : String(parseError),
+            });
+          }
+        }
+      }
+      if (dropStats.duplicateCreates || dropStats.invalidSchema) {
+        console.log(
+          '[CanvasAgent:ActionDrops]',
+          JSON.stringify({
+            sessionId,
+            roomId,
+            seq: seqNumber,
+            duplicateCreates: dropStats.duplicateCreates,
+            invalidSchema: dropStats.invalidSchema,
+          }),
+        );
+      }
+      if (parsed.length === 0) {
+        return 0;
+      }
+      const exists = (id: string) =>
+        sessionCreatedIds.has(id) || chunkCreatedIds.has(id) || existingShapeIds.has(id);
       const clean = sanitizeActions(parsed, exists);
-      rememberCreatedIds(clean);
+      if (shouldDispatch) {
+        rememberCreatedIds(clean);
+      }
       if (clean.length === 0) return 0;
 
-      if (!metrics.firstActionAt && clean.length > 0) {
+      if (shouldDispatch && !metrics.firstActionAt && clean.length > 0) {
         metrics.firstActionAt = Date.now();
         metrics.ttfb = metrics.firstActionAt - metrics.startedAt;
-        logMetrics(metrics, 'ttfb');
+        logMetrics(metrics, cfg, 'ttfb');
       }
 
-      const worldActions = applyOffsetToActions(clean);
+      if (cfg.debug) {
+        try {
+          console.log('[CanvasAgent:ActionsRaw]', JSON.stringify({
+            sessionId,
+            roomId,
+            seq: seqNumber,
+            partial,
+            actions: clean,
+          }));
+        } catch {}
+      }
+
+      const worldActions = applyOffsetToActions(enforceShapeProps(clean));
       if (worldActions.length === 0) return 0;
 
-      metrics.actionCount += worldActions.length;
-      await sendActionsEnvelope(roomId, sessionId, seqNumber, worldActions, { partial });
-      const ack = await awaitAck({ sessionId, seq: seqNumber, deadlineMs: 1200 });
-      if (ack && metrics.firstAckLatencyMs === undefined) {
-        metrics.firstAckLatencyMs = Date.now() - metrics.startedAt;
-      }
-      if (!ack) {
-        metrics.retryCount++;
-        await sendActionsEnvelope(roomId, sessionId, seqNumber, worldActions, { partial });
-        const retryAck = await awaitAck({ sessionId, seq: seqNumber, deadlineMs: 800 });
-        if (retryAck && metrics.firstAckLatencyMs === undefined) {
-          metrics.firstAckLatencyMs = Date.now() - metrics.startedAt;
+      const dispatchableActions = worldActions.filter((action) => action.name !== 'message');
+      const chatOnlyActions = worldActions.filter((action) => action.name === 'message');
+
+      if (dispatchableActions.length > 0) {
+        hooks.onActions?.({
+          roomId,
+          sessionId,
+          seq: seqNumber,
+          partial,
+          source: actionSource,
+          actions: dispatchableActions,
+        });
+        if (shouldDispatch) {
+          metrics.actionCount += dispatchableActions.length;
+          await sendActionsEnvelope(roomId, sessionId, seqNumber, dispatchableActions, { partial });
+          const ack = await awaitAck({ sessionId, seq: seqNumber, deadlineMs: 1200 });
+          if (ack && metrics.firstAckLatencyMs === undefined) {
+            metrics.firstAckLatencyMs = Date.now() - metrics.startedAt;
+          }
+          if (!ack) {
+            metrics.retryCount++;
+            await sendActionsEnvelope(roomId, sessionId, seqNumber, dispatchableActions, { partial });
+            const retryAck = await awaitAck({ sessionId, seq: seqNumber, deadlineMs: 800 });
+            if (retryAck && metrics.firstAckLatencyMs === undefined) {
+              metrics.firstAckLatencyMs = Date.now() - metrics.startedAt;
+            }
+          }
         }
       }
 
-      for (const action of worldActions) {
-        if (action.name === 'think') {
-          await sendChat(roomId, sessionId, { role: 'assistant', text: String((action as any).params?.text || '') });
-        }
-        if (action.name === 'todo') {
-          const text = String((action as any).params?.text || '');
-          if (text) await addTodo(sessionId, text);
-        }
-        if (action.name === 'add_detail') {
-          enqueueDetail(((action as any).params ?? {}) as Record<string, unknown>);
+      if (shouldDispatch) {
+        for (const action of [...dispatchableActions, ...chatOnlyActions]) {
+          if (action.name === 'think') {
+            const thought = String((action as any).params?.text || '');
+            if (thought) {
+              try {
+                await sendChat(roomId, sessionId, { role: 'assistant', text: thought });
+              } catch (chatError) {
+                console.warn('[CanvasAgent:ThinkChatError]', {
+                  roomId,
+                  sessionId,
+                  error: chatError instanceof Error ? chatError.message : chatError,
+                });
+              }
+            }
+          }
+          if (action.name === 'todo') {
+            const text = String((action as any).params?.text || '');
+            if (text) {
+              try {
+                await addTodo(sessionId, text);
+              } catch (todoError) {
+                console.warn('[CanvasAgent:TodoError]', {
+                  roomId,
+                  sessionId,
+                  error: todoError instanceof Error ? todoError.message : todoError,
+                });
+              }
+            }
+          }
+          if (action.name === 'add_detail') {
+            enqueueDetail(((action as any).params ?? {}) as Record<string, unknown>);
+          }
+          if (action.name === 'message') {
+            const text = String((action as any).params?.text || '').trim();
+            if (text) {
+              await sendChat(roomId, sessionId, { role: 'assistant', text });
+            }
+          }
         }
       }
 
-      return worldActions.length;
+      if (dispatchableActions.length > 0) {
+        lastDispatchedChunk = {
+          seq: seqNumber,
+          actionNames: dispatchableActions.map((action) => action.name),
+          partial,
+          sample: dispatchableActions[0],
+        };
+      }
+
+      return dispatchableActions.length;
     };
 
     await sendStatus(roomId, sessionId, 'streaming');
     const streamingEnabled = typeof provider.streamStructured === 'function' && process.env.CANVAS_AGENT_STREAMING !== 'false';
     const enqueueDetail = makeDetailEnqueuer(userMessage, 0);
 
-    if (streamingEnabled) {
-      const streamStartedAt = Date.now();
-      let firstPartialLogged = false;
-      const structured = await provider.streamStructured?.(prompt, {
-        system: CANVAS_AGENT_SYSTEM_PROMPT,
-        tuning,
-      });
-      if (structured) {
-        let rawProcessed = 0;
-        await handleStructuredStreaming(
-          structured,
-          async (delta) => {
-            if (!Array.isArray(delta) || delta.length === 0) return;
-            if (!firstPartialLogged) {
-              firstPartialLogged = true;
-              if (cfg.debug) {
-                console.log('[CanvasAgent:FirstPartial]', JSON.stringify({
-                  sessionId,
-                  roomId,
-                  ms: Date.now() - streamStartedAt,
-                }));
-              }
-            }
-            metrics.chunkCount++;
-            const currentSeq = seq++;
-            await processActions(delta, currentSeq, true, enqueueDetail);
-            rawProcessed += delta.length;
-          },
-          async (finalActions) => {
-            if (!Array.isArray(finalActions) || finalActions.length === 0) return;
-            const pending = finalActions.slice(rawProcessed);
-            rawProcessed = finalActions.length;
-            if (pending.length === 0) return;
-            const currentSeq = seq++;
-            await processActions(pending, currentSeq, false, enqueueDetail);
-          },
-        );
+    if (cfg.debug) {
+      try {
+        console.log('[CanvasAgent:StreamingMode]', JSON.stringify({
+          sessionId,
+          roomId,
+          streamingEnabled,
+          provider: provider.name,
+        }));
+      } catch {}
+    }
+
+    const teacherModeRequested = cfg.mode !== 'present';
+    let teacherRunner: ((dispatchActions: boolean) => Promise<void>) | null = null;
+    let teacherServicePromise: Promise<TeacherService | null> | null = null;
+    const loadTeacherService = async () => {
+      if (!teacherServicePromise) {
+        teacherServicePromise = getTeacherServiceForEndpoint(cfg.teacherEndpoint);
       }
-    } else {
+      return teacherServicePromise;
+    };
+
+    if (teacherModeRequested) {
+      const shapesForTeacher = Array.isArray((parts as any)?.shapes)
+        ? ((parts as any).shapes as CanvasShapeSummary[])
+        : [];
+      const selectedForTeacher = Array.isArray((parts as any)?.selectedSimpleShapes)
+        ? ((parts as any).selectedSimpleShapes as Array<Record<string, unknown>>)
+        : [];
+
+      const teacherContext: TeacherPromptContext = {
+        userMessages: [userMessage],
+        requestType: 'user',
+        screenshotDataUrl:
+          latestScreenshot?.image?.dataUrl ||
+          (typeof (promptPayload.parts as any)?.screenshot?.dataUrl === 'string'
+            ? ((promptPayload.parts as any).screenshot as { dataUrl: string }).dataUrl
+            : null),
+        bounds: (latestScreenshot?.viewport ?? args.initialViewport) || null,
+        viewport: (latestScreenshot?.viewport ?? args.initialViewport) || null,
+        styleInstructions:
+          typeof (promptPayload.parts as any)?.styleInstructions === 'string'
+            ? ((promptPayload.parts as any).styleInstructions as string)
+            : undefined,
+        promptBudget:
+          typeof (promptPayload.parts as any)?.promptBudget === 'object'
+            ? ((promptPayload.parts as any).promptBudget as Record<string, unknown>)
+            : null,
+        modelName: model ?? cfg.modelName,
+        timestamp: new Date().toISOString(),
+      };
+
+      const teacherContextItems = buildTeacherContextItems({
+        shapes: shapesForTeacher,
+        selectedShapes: selectedForTeacher,
+        viewport: teacherContext.viewport ?? teacherContext.bounds ?? null,
+      });
+      if (teacherContextItems.length > 0) {
+        teacherContext.contextItems = teacherContextItems;
+      }
+
+      const transcriptForTeacher: TranscriptEntry[] = Array.isArray((parts as any)?.transcript)
+        ? ((parts as any).transcript as TranscriptEntry[])
+        : [];
+      const teacherChatHistory = buildTeacherChatHistory({ transcript: transcriptForTeacher });
+      if (teacherChatHistory && teacherChatHistory.length > 0) {
+        teacherContext.chatHistory = teacherChatHistory;
+      }
+
+      try {
+        const existingTodos = await listTodos(sessionId);
+        const teacherTodoItems = mapTodosToTeacherItems(existingTodos);
+        if (teacherTodoItems.length > 0) {
+          teacherContext.todoItems = teacherTodoItems;
+        }
+      } catch (todoLoadError) {
+        console.warn('[CanvasAgent:TodosUnavailable]', {
+          roomId,
+          sessionId,
+          source: 'teacher-context',
+          error: todoLoadError instanceof Error ? todoLoadError.message : todoLoadError,
+        });
+      }
+
+      teacherRunner = async (dispatchActions: boolean) => {
+        const service = await loadTeacherService();
+        if (!service) {
+          if (!teacherRuntimeWarningLogged) {
+            console.warn('[CanvasAgent:TeacherRuntimeUnavailable]', {
+              roomId,
+              sessionId,
+              mode: cfg.mode,
+              reason:
+                getTeacherRuntimeLastError() ??
+                (cfg.teacherEndpoint ? 'teacher endpoint unavailable' : 'module import failed'),
+            });
+            teacherRuntimeWarningLogged = true;
+          }
+          return;
+        }
+        const streamStartedAt = Date.now();
+        let seqTeacher = 1;
+        let firstPartialLogged = false;
+        for await (const event of service.stream(teacherContext, { dispatchActions })) {
+          if (!firstPartialLogged) {
+            firstPartialLogged = true;
+            if (cfg.debug) {
+              console.log('[CanvasAgent:FirstPartial]', JSON.stringify({
+                sessionId,
+                roomId,
+                ms: Date.now() - streamStartedAt,
+                source: 'teacher',
+                dispatch: dispatchActions,
+              }));
+            }
+          }
+          if (dispatchActions) {
+            metrics.chunkCount++;
+          }
+          if (!event?.complete) continue;
+          const currentSeq = seqTeacher++;
+          await processActions([event], currentSeq, false, enqueueDetail, {
+            dispatch: dispatchActions,
+            source: 'teacher',
+          });
+        }
+      };
+    }
+
+    let shadowTeacherPromise: Promise<void> | null = null;
+
+    if (cfg.mode === 'tldraw-teacher') {
+      if (!teacherRunner) {
+        console.warn('[CanvasAgent:TeacherModeDisabled]', {
+          roomId,
+          sessionId,
+          reason:
+            getTeacherRuntimeLastError() ??
+            (cfg.teacherEndpoint ? 'teacher endpoint unavailable' : 'teacher runtime not available in this environment'),
+        });
+        return;
+      }
+      await teacherRunner(true);
+      return;
+    }
+
+    if (cfg.mode === 'shadow' && teacherRunner) {
+      shadowTeacherPromise = teacherRunner(false).catch((error) => {
+        console.warn('[CanvasAgent:ShadowTeacherError]', {
+          roomId,
+          sessionId,
+          error: error instanceof Error ? error.message : error,
+        });
+      });
+    } else if (cfg.mode === 'shadow' && !teacherRunner) {
+      console.warn('[CanvasAgent:ShadowTeacherDisabled]', {
+        roomId,
+        sessionId,
+        reason:
+          getTeacherRuntimeLastError() ??
+          (cfg.teacherEndpoint ? 'teacher endpoint unavailable' : 'teacher runtime not available in this environment'),
+      });
+    }
+
+    const invokeModel = async () => {
+      if (streamingEnabled) {
+        const streamStartedAt = Date.now();
+        let firstPartialLogged = false;
+        if (cfg.debug) {
+          try {
+            console.log('[CanvasAgent:ModelCall]', JSON.stringify({
+              sessionId,
+              roomId,
+              provider: provider.name,
+              mode: 'structured',
+            }));
+          } catch {}
+        }
+        const structured = await provider.streamStructured?.(prompt, {
+          system: CANVAS_AGENT_SYSTEM_PROMPT,
+          tuning,
+        });
+        if (!structured && cfg.debug) {
+          try {
+            console.log('[CanvasAgent:ModelCall]', JSON.stringify({
+              sessionId,
+              roomId,
+              provider: provider.name,
+              mode: 'structured',
+              result: 'no-structured-stream',
+            }));
+          } catch {}
+        }
+        if (structured) {
+          let rawProcessed = 0;
+          await handleStructuredStreaming(
+            structured,
+            async (delta) => {
+              if (!Array.isArray(delta) || delta.length === 0) return;
+              if (!firstPartialLogged) {
+                firstPartialLogged = true;
+                if (cfg.debug) {
+                  console.log('[CanvasAgent:FirstPartial]', JSON.stringify({
+                    sessionId,
+                    roomId,
+                    ms: Date.now() - streamStartedAt,
+                  }));
+                }
+              }
+              metrics.chunkCount++;
+              const currentSeq = seq++;
+              await processActions(delta, currentSeq, true, enqueueDetail);
+              rawProcessed += delta.length;
+            },
+            async (finalActions) => {
+              if (!Array.isArray(finalActions) || finalActions.length === 0) return;
+              const pending = finalActions.slice(rawProcessed);
+              rawProcessed = finalActions.length;
+              if (pending.length === 0) return;
+              const currentSeq = seq++;
+              await processActions(pending, currentSeq, false, enqueueDetail);
+            },
+          );
+        }
+        return;
+      }
       const streamStartedAt = Date.now();
       let firstPartialLogged = false;
+      if (cfg.debug) {
+        try {
+          console.log('[CanvasAgent:ModelCall]', JSON.stringify({
+            sessionId,
+            roomId,
+            provider: provider.name,
+            mode: 'fallback-stream',
+          }));
+        } catch {}
+      }
       for await (const chunk of provider.stream(prompt, { system: CANVAS_AGENT_SYSTEM_PROMPT, tuning })) {
         if (chunk.type !== 'json') continue;
         const actionsRaw = (chunk.data as any)?.actions;
@@ -471,11 +1301,52 @@ export async function runCanvasAgent(args: RunArgs) {
         const currentSeq = seq++;
         await processActions(actionsRaw, currentSeq, true, enqueueDetail);
       }
+    };
+
+    while (true) {
+      try {
+        await invokeModel();
+        break;
+      } catch (error) {
+        if (isPromptTooLongError(error)) {
+          const trimmed = await reducePrompt('api_error');
+          if (trimmed) {
+            parts = promptPayload.parts;
+            prompt = promptPayload.prompt;
+            applyPromptMetadata(parts);
+            recordContextMetrics();
+            continue;
+          }
+        }
+        throw error;
+      }
+    }
+
+    if (!lowActionRetryScheduled && metrics.actionCount < cfg.followups.lowActionThreshold) {
+      const retryHint =
+        'Add more layout detail: ensure there is a headline block, supporting shapes, and three sticky notes with copy ideas.';
+      const enqueued = scheduler.enqueue(sessionId, {
+        input: {
+          message: `${userMessage}\n\nFocus on finishing the layout, not narration.`,
+          hint: retryHint,
+          strict: true,
+          reason: 'low_action',
+        },
+        depth: 1,
+      });
+      lowActionRetryScheduled = enqueued;
+      if (enqueued && cfg.debug) {
+        console.log('[CanvasAgent] Scheduled low-action follow-up', {
+          roomId,
+          sessionId,
+          threshold: cfg.followups.lowActionThreshold,
+        });
+      }
     }
 
     let next = scheduler.dequeue(sessionId);
     let loops = 0;
-    while (next && loops < cfg.maxFollowups) {
+    while (next && loops < cfg.followups.maxDepth) {
       loops++;
       const followInputRaw = (next.input || {}) as Record<string, unknown>;
       const followInput = { ...followInputRaw };
@@ -491,43 +1362,8 @@ export async function runCanvasAgent(args: RunArgs) {
 
       let followScreenshot: ScreenshotPayload | null = null;
       const followBounds = latestScreenshot?.bounds ?? latestScreenshot?.viewport ?? args.initialViewport;
-      if (cfg.clientEnabled && followBounds) {
-        try {
-          const followRequestId = randomUUID();
-          metrics.screenshotRequestId = followRequestId;
-          metrics.screenshotTimeoutMs = cfg.screenshotTimeoutMs;
-          metrics.screenshotRequestedAt = Date.now();
-          await requestScreenshot(roomId, {
-            sessionId,
-            requestId: followRequestId,
-            bounds: followBounds,
-          });
-          const timeoutAt = metrics.screenshotRequestedAt + cfg.screenshotTimeoutMs;
-          while (Date.now() < timeoutAt) {
-            const maybeScreenshot = ScreenshotInbox.takeScreenshot?.(sessionId, followRequestId) ?? null;
-            if (maybeScreenshot) {
-              followScreenshot = maybeScreenshot;
-              metrics.screenshotReceivedAt = Date.now();
-              metrics.imageBytes = maybeScreenshot.image?.bytes;
-              if (typeof metrics.screenshotRequestedAt === 'number') {
-                metrics.screenshotRtt = metrics.screenshotReceivedAt - metrics.screenshotRequestedAt;
-              }
-              metrics.screenshotResult = 'received';
-              break;
-            }
-            await new Promise((resolve) => setTimeout(resolve, 20));
-          }
-          if (!followScreenshot) {
-            metrics.screenshotResult = 'timeout';
-          }
-        } catch (followScreenshotError) {
-          metrics.screenshotResult = 'error';
-          if (cfg.debug) {
-            console.warn('[CanvasAgent:Screenshot]', 'Follow-up screenshot failed', followScreenshotError);
-          }
-        } finally {
-          logMetrics(metrics, 'screenshot', followScreenshot ? 'received' : metrics.screenshotResult ?? 'none');
-        }
+      if (followBounds) {
+        followScreenshot = await captureScreenshot('followup', followBounds, 0, screenshotEdge);
       }
 
       if (followScreenshot) {
@@ -576,9 +1412,14 @@ export async function runCanvasAgent(args: RunArgs) {
       let followSeq = 0;
       const followEnqueueDetail = makeDetailEnqueuer(followMessage, followBaseDepth);
       const followStreamingEnabled = typeof followProvider.streamStructured === 'function' && process.env.CANVAS_AGENT_STREAMING !== 'false';
+      const followPresetName = (followInput.strict ? 'precise' : cfg.preset) as CanvasAgentPreset;
+      const followTuning = getModelTuning(followPresetName);
 
       if (followStreamingEnabled) {
-        const structuredFollow = await followProvider.streamStructured?.(followPrompt, { system: CANVAS_AGENT_SYSTEM_PROMPT });
+        const structuredFollow = await followProvider.streamStructured?.(followPrompt, {
+          system: CANVAS_AGENT_SYSTEM_PROMPT,
+          tuning: followTuning,
+        });
         if (structuredFollow) {
           let followRawProcessed = 0;
           await handleStructuredStreaming(
@@ -601,7 +1442,7 @@ export async function runCanvasAgent(args: RunArgs) {
           );
         }
       } else {
-        for await (const chunk of followProvider.stream(followPrompt, { system: CANVAS_AGENT_SYSTEM_PROMPT })) {
+        for await (const chunk of followProvider.stream(followPrompt, { system: CANVAS_AGENT_SYSTEM_PROMPT, tuning: followTuning })) {
           if (chunk.type !== 'json') continue;
           const actionsRaw = (chunk.data as any)?.actions;
           if (!Array.isArray(actionsRaw) || actionsRaw.length === 0) continue;
@@ -612,14 +1453,93 @@ export async function runCanvasAgent(args: RunArgs) {
       }
       next = scheduler.dequeue(sessionId);
     }
+
+    // Guarantee at least one visible action for simple create prompts if the model emitted nothing.
+    if (metrics.actionCount === 0) {
+      const fallbackId = `rect-${Date.now().toString(36)}`;
+      const fallback = [
+        {
+          id: fallbackId,
+          name: 'create_shape' as const,
+          params: {
+            id: fallbackId,
+            type: 'rectangle',
+            x: 0,
+            y: 0,
+            props: { w: 280, h: 180, dash: 'dotted', size: 'm', color: 'red', fill: 'none', font: 'mono' },
+          },
+        },
+        {
+          id: `vp-${Date.now().toString(36)}`,
+          name: 'set_viewport' as const,
+          params: { bounds: { x: -140, y: -90, w: 560, h: 360 } },
+        },
+      ];
+      const currentSeq = seq++;
+      let envelopeDispatched = false;
+      try {
+        await sendActionsEnvelope(roomId, sessionId, currentSeq, fallback);
+        envelopeDispatched = true;
+        const ack = await awaitAck({ sessionId, seq: currentSeq, deadlineMs: 1200 });
+        if (!ack) {
+          await sendActionsEnvelope(roomId, sessionId, currentSeq, fallback);
+        }
+      } catch (error) {
+        console.warn('[CanvasAgent] fallback envelope send failed', {
+          roomId,
+          sessionId,
+          seq: currentSeq,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+      metrics.actionCount += fallback.length;
+      // Also broadcast as a tool_call so clients that don’t listen for agent:action still apply it (or when LiveKit send fails).
+      try {
+        await broadcastToolCall({
+          room: roomId,
+          tool: 'tldraw_envelope',
+          params: {
+            envelope: { v: ACTION_VERSION, sessionId, seq: currentSeq, actions: fallback, ts: Date.now() },
+            source: envelopeDispatched ? 'livekit' : 'broadcast-only',
+          },
+        });
+      } catch (error) {
+        console.warn('[CanvasAgent] fallback envelope broadcast failed', {
+          roomId,
+          sessionId,
+          seq: currentSeq,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
     await sendStatus(roomId, sessionId, 'done');
 
     metrics.completedAt = Date.now();
-    logMetrics(metrics, 'complete');
+    logMetrics(metrics, cfg, 'complete');
+    if (shadowTeacherPromise) {
+      await shadowTeacherPromise;
+    }
   } catch (error) {
+    const detail =
+      error instanceof Error
+        ? `${error.name}: ${error.message}`
+        : (() => {
+            try {
+              return JSON.stringify(error);
+            } catch {
+              return String(error);
+            }
+          })();
+    console.error('[CanvasAgent] run failed', {
+      roomId,
+      sessionId,
+      detail,
+      stack: error instanceof Error ? error.stack : undefined,
+      lastDispatchedChunk,
+    });
     metrics.completedAt = Date.now();
-    logMetrics(metrics, 'error', error instanceof Error ? error.message : String(error));
-    await sendStatus(roomId, sessionId, 'error', error instanceof Error ? error.message : String(error));
+    logMetrics(metrics, cfg, 'error', detail);
+    await sendStatus(roomId, sessionId, 'error', detail);
     throw error;
   }
 }

@@ -105,7 +105,7 @@ export const MessageThreadCollapsible = React.forwardRef<
 
   // LiveKit room context and bus for transcript functionality
   const room = useRoomContext();
-  const bus = createLiveKitBus(room);
+  const bus = React.useMemo(() => createLiveKitBus(room), [room]);
   const roomContextKey = useContextKey();
   const effectiveContextKey = contextKey || roomContextKey;
   const livekitCtx = React.useContext(CanvasLiveKitContext);
@@ -123,11 +123,10 @@ export const MessageThreadCollapsible = React.forwardRef<
   const slashCommandBodyMissing = Boolean(isRecognizedSlashCommand && !slashCommand?.body);
   const trimmedTypedMessage = typedMessage.trim();
   const isRoomConnected = room?.state === 'connected';
-  const inputDisabled = isSending || (!isRecognizedSlashCommand && !isRoomConnected);
+  const inputDisabled = isSending;
   const sendDisabled =
     isSending ||
     !trimmedTypedMessage ||
-    (!isRecognizedSlashCommand && !isRoomConnected) ||
     (isRecognizedSlashCommand && slashCommandBodyMissing);
 
   // Helper: detect if an agent participant is present in the room
@@ -722,10 +721,11 @@ export const MessageThreadCollapsible = React.forwardRef<
                   try {
                     if (slashActive && parsedCommand) {
                       await runSlashCommand(parsedCommand.command, parsedCommand.body);
-                    } else if (room?.state === 'connected') {
-                      bus.send('transcription', payload);
                     } else {
-                      if (process.env.NEXT_PUBLIC_TOOL_DISPATCHER_LOGS === 'true') console.warn('[Transcript] Room not connected; skipping send');
+                      if (room?.state !== 'connected' && process.env.NEXT_PUBLIC_TOOL_DISPATCHER_LOGS === 'true') {
+                        console.info('[Transcript] Room not connected; queueing payload for delivery once connected');
+                      }
+                      bus.send('transcription', payload);
                     }
 
                     try {
@@ -770,6 +770,23 @@ export const MessageThreadCollapsible = React.forwardRef<
                   type="text"
                   value={typedMessage}
                   onChange={(e) => setTypedMessage(e.target.value)}
+                  onPaste={(e) => {
+                    const text = e.clipboardData?.getData('text');
+                    if (typeof text === 'string' && text.length > 0) {
+                      e.preventDefault();
+                      const target = e.currentTarget;
+                      const { selectionStart, selectionEnd } = target;
+                      const start = selectionStart ?? typedMessage.length;
+                      const end = selectionEnd ?? typedMessage.length;
+                      const nextValue = `${typedMessage.slice(0, start)}${text}${typedMessage.slice(end)}`;
+                      setTypedMessage(nextValue);
+                      // Manually trigger form validity updates so the send button re-evaluates immediately.
+                      queueMicrotask(() => {
+                        const event = new Event('input', { bubbles: true, cancelable: true });
+                        target.dispatchEvent(event);
+                      });
+                    }
+                  }}
                   placeholder={
                     isRecognizedSlashCommand
                       ? 'Dispatching directly to the Canvas steward…'

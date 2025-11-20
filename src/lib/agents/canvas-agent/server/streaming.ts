@@ -1,3 +1,5 @@
+import { StructuredActionBuffer } from './structured-buffer';
+
 export type StructuredStream = {
   partialObjectStream: AsyncIterable<any>;
   fullStream: Promise<{ object: any }>;
@@ -8,23 +10,19 @@ export async function handleStructuredStreaming(
   onDelta: (delta: any[]) => Promise<void>,
   onFinal: (finalActions: any[]) => Promise<void>,
 ) {
-  let last = 0;
+  const buffer = new StructuredActionBuffer();
+
   for await (const partial of stream.partialObjectStream) {
-    const actions = partial?.actions ?? [];
-    if (Array.isArray(actions) && actions.length > last) {
-      const delta = actions.slice(last);
-      await onDelta(delta);
-      last = actions.length;
+    const actions = Array.isArray(partial?.actions) ? partial.actions : [];
+    if (actions.length === 0) continue;
+    const completed = buffer.ingest(actions);
+    if (completed.length > 0) {
+      await onDelta(completed);
     }
   }
-  const final = await stream.fullStream;
-  const all = final?.object?.actions ?? [];
-  if (Array.isArray(all) && all.length > last) {
-    await onFinal(all);
-  } else if (Array.isArray(all) && all.length > 0 && last === all.length) {
-    await onFinal(all);
-  } else if (!Array.isArray(all)) {
-    await onFinal([]);
-  }
-}
 
+  const final = await stream.fullStream;
+  const all = Array.isArray(final?.object?.actions) ? final.object.actions : [];
+  const pending = buffer.finalize(all);
+  await onFinal(pending);
+}

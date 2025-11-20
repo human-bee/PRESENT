@@ -64,7 +64,17 @@
 - PRs: Include summary, linked issues, screenshots/logs for agent changes.
 - Requirements: Passing `npm test`, `npm run lint`; no uncommitted changes.
 
+## Data Compatibility & Persistence
+
+- Optimize for forward compatibility. When schemas change, expect to reseed storage (Supabase, local JSON, etc.) rather than preserving legacy shapes.
+- Call out intentional backwards-compat breaks in code comments and PR notes so future reviewers don’t block forward-looking work.
+- This product is still unreleased—avoid adding feature gates/flags or "legacy" pathways for backwards compatibility. Prefer a single source of truth and remove old flows instead of toggling them.
+
 ## Agent Runtime & Security
+
+> IMPORTANT — Client Canvas Agent is Archived
+>
+> The browser‑side TLDraw “client agent” is deprecated and must remain OFF. All canvas reasoning and generation runs on the server steward via the Conductor. Do not enable the client agent in dev or prod; it is a last‑ditch debug escape hatch only.
 
 - Always start the agent before the web app. Look for "registered worker" and then "Job received!" in agent logs.
 - Secrets live in `.env.local` (never commit). Required keys include LiveKit, OpenAI, custom, and Supabase.
@@ -73,9 +83,11 @@
   - `CANVAS_AGENT_UNIFIED=true` enables the unified server-centric Canvas Agent (default).
   - `CANVAS_STEWARD_MODEL` selects the model provider (`debug/fake` by default; use `anthropic:claude-3-5-sonnet-20241022` for production).
   - `CANVAS_STEWARD_DEBUG=true` enables verbose request + streaming logs.
-  - `CANVAS_AGENT_SCREENSHOT_TIMEOUT_MS=300` screenshot RPC timeout in milliseconds.
+  - `CANVAS_AGENT_SCREENSHOT_TIMEOUT_MS=3500` screenshot RPC timeout in milliseconds (floored at 2500ms so the steward reliably receives frames before giving up, even when back-to-back screenshot requests queue up).
   - `CANVAS_AGENT_TTFB_SLO_MS=200` target time-to-first-byte for first action envelope.
-  - `NEXT_PUBLIC_CANVAS_AGENT_CLIENT_ENABLED=true` toggles legacy client-side TLDraw agent (keep true for backward compat during transition).
+  - `NEXT_PUBLIC_CANVAS_AGENT_CLIENT_ENABLED=false` (archived) — keep this false. Turning it on disables the server steward and routes execution to the legacy browser agent. Do not enable except for one‑off emergency debugging.
+  - `NEXT_PUBLIC_CANVAS_AGENT_THEME_ENABLED=true` keeps the TLDraw branding enabled even when the legacy client agent is off.
+  - `CANVAS_QUEUE_DIRECT_FALLBACK=false` ensures canvas jobs only run via the queue/worker. Set to `true` only if Supabase is offline and you explicitly want synchronous execution (actions may duplicate).
   - `CANVAS_AGENT_MAX_FOLLOWUPS=3` max bounded depth for add_detail follow-up loops.
 
 # Agents: Runtime, Roles & Contracts
@@ -97,6 +109,7 @@ If it doesn't move the canvas, it doesn't belong in the voice agent. We separate
   - Emits data-channel messages only after local validation; all deduping happens here so the ToolDispatcher can stay dumb.
 - **Canvas Agent (Unified, Node)**
   Server-centric "brain" that handles all TLDraw canvas operations. Builds prompts, calls models (streaming), sanitizes actions, and broadcasts TLDraw-native action envelopes to clients. Browser acts as "eyes and hands" only (viewport/selection/screenshot + action execution). See `docs/canvas-agent.md` for full architecture.
+  - **Parity rule:** Treat the TLDraw SDK agent starter kit as the source of truth. Do **not** post-process or "fix" the model’s TLDraw actions on the server; instead, update prompts, tool catalog, or few-shot examples so the model emits valid TLDraw verbs on its own. Any new validation should live in the shared contract so it mirrors the upstream kit.
 - **Conductor (Agents SDK, Node)**
   A tiny router that delegates to **steward** subagents via handoffs. No business logic. Runs on the OpenAI Agents SDK (which wraps the Responses API) so stewards can opt into Responses features without rewriting the router.
 - **Stewards (Agents SDK, Node)**

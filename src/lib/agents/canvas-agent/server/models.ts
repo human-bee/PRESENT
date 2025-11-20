@@ -2,9 +2,26 @@ import { createAnthropic } from '@ai-sdk/anthropic';
 import { createOpenAI } from '@ai-sdk/openai';
 import { generateObject, streamObject } from 'ai';
 import { z } from 'zod';
-import { AgentActionSchema } from '../shared/types';
 import type { StructuredStream } from './streaming';
 import type { ModelTuning } from './model/presets';
+
+const agentActionListSchema = z
+  .object({
+    actions: z
+      .array(
+        z.object({
+          id: z.string().optional(),
+          name: z.string(),
+          params: z.unknown().optional(),
+        }),
+      )
+      .min(1),
+  })
+  .passthrough() as unknown as z.ZodTypeAny;
+
+const unsafeStreamObject = streamObject as unknown as (args: any) => any;
+
+const unsafeGenerateObject = generateObject as unknown as (args: any) => Promise<{ object: any }>;
 
 export type StreamChunk = { type: 'json'; data: unknown } | { type: 'text'; data: string };
 
@@ -46,16 +63,28 @@ class AiSdkProvider implements StreamingProvider {
 
   async streamStructured(prompt: string, options?: { system?: string; tuning?: ModelTuning }): Promise<StructuredStream> {
     const model = this.resolveModel();
-    const schema = z.object({ actions: z.array(AgentActionSchema.extend({ id: z.string().optional() })) });
-    return streamObject({
+    // Anthropic does not allow both temperature and top_p. Prefer temperature.
+    const common = {
       model,
       system: options?.system || 'You are a helpful assistant.',
       prompt,
-      schema,
+      schema: agentActionListSchema,
       temperature: options?.tuning?.temperature ?? 0,
-      topP: options?.tuning?.topP,
       maxOutputTokens: options?.tuning?.maxOutputTokens,
-    });
+      providerOptions: this.providerOptionsForCall(),
+    } as any;
+    if (this.provider !== 'anthropic' && options?.tuning?.topP !== undefined) {
+      common.topP = options.tuning.topP;
+    }
+    const streamed = unsafeStreamObject(common) as {
+      partialObjectStream: AsyncIterable<any>;
+      object: Promise<any>;
+    };
+
+    return {
+      partialObjectStream: streamed.partialObjectStream,
+      fullStream: streamed.object.then((object) => ({ object })),
+    } satisfies StructuredStream;
   }
 
   private resolveModel() {
@@ -68,37 +97,71 @@ class AiSdkProvider implements StreamingProvider {
 
   private async generateOnce(prompt: string, options?: { system?: string; tuning?: ModelTuning }) {
     const model = this.resolveModel();
-    const schema = z.object({ actions: z.array(AgentActionSchema.extend({ id: z.string().optional() })) });
-    const { object } = await generateObject({
+    const common = {
       model,
       system: options?.system || 'You are a helpful assistant.',
       prompt,
-      schema,
+      schema: agentActionListSchema,
       temperature: options?.tuning?.temperature ?? 0,
-      topP: options?.tuning?.topP,
       maxOutputTokens: options?.tuning?.maxOutputTokens,
-    });
+      providerOptions: this.providerOptionsForCall(),
+    } as any;
+    if (this.provider !== 'anthropic' && options?.tuning?.topP !== undefined) {
+      common.topP = options.tuning.topP;
+    }
+    const { object } = await unsafeGenerateObject(common);
     return object;
+  }
+
+  private providerOptionsForCall() {
+    if (this.provider !== 'anthropic') return undefined;
+    if (process.env.CANVAS_AGENT_DISABLE_PROMPT_CACHE === '1') return undefined;
+    const ttl = process.env.ANTHROPIC_CACHE_TTL === '5m' ? '5m' : process.env.ANTHROPIC_CACHE_TTL === '1h' ? '1h' : undefined;
+    return {
+      anthropic: {
+        cacheControl: ttl ? { type: 'ephemeral', ttl } : { type: 'ephemeral' },
+      },
+    };
   }
 }
 
 class FakeProvider implements StreamingProvider {
   name = 'debug/fake';
   async *stream(_prompt: string, _options?: { system?: string; tuning?: ModelTuning }): AsyncIterable<StreamChunk> {
-    // Emit a trivial action stream for smoke testing
-    const action = {
-      id: `a-${Date.now()}`,
-      name: 'think',
-      params: { text: 'planning canvas change (debug/fake provider)' },
+    const now = Date.now();
+    const rect = {
+      id: `rect-${now.toString(36)}`,
+      name: 'create_shape',
+      params: {
+        id: `rect-${now.toString(36)}`,
+        type: 'rectangle',
+        x: 0,
+        y: 0,
+        props: {
+          w: 280,
+          h: 180,
+          dash: 'dotted',
+          size: 'm',
+          color: 'red',
+          fill: 'none',
+        },
+      },
     };
-    yield { type: 'json', data: { actions: [action] } } as StreamChunk;
+    yield { type: 'json', data: { actions: [rect] } } as StreamChunk;
   }
 
   async streamStructured(_prompt: string, _options?: { system?: string; tuning?: ModelTuning }): Promise<StructuredStream> {
+    const now = Date.now();
     const action = {
-      id: `a-${Date.now()}`,
-      name: 'think',
-      params: { text: 'planning canvas change (debug/fake provider)' },
+      id: `rect-${now.toString(36)}`,
+      name: 'create_shape',
+      params: {
+        id: `rect-${now.toString(36)}`,
+        type: 'rectangle',
+        x: 0,
+        y: 0,
+        props: { w: 280, h: 180, dash: 'dotted', size: 'm', color: 'red', fill: 'none' },
+      },
     };
     async function* partial() {
       yield { actions: [action] };

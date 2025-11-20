@@ -30,9 +30,7 @@ describe('handleStructuredStreaming', () => {
     expect(calls).toEqual([
       { type: 'delta', payload: [{ id: 1 }] },
       { type: 'delta', payload: [{ id: 2 }] },
-      { type: 'delta', payload: [{ id: 3 }] },
-      { type: 'final', payload: [{ id: 1 }, { id: 2 }, { id: 3 }] },
+      { type: 'final', payload: [{ id: 3 }] },
     ]);
   });
 });
-
