@@ -43,9 +43,7 @@ tunnels:
   livekit-http:
     addr: http://127.0.0.1:$LIVEKIT_HTTP_PORT
     proto: http
-  livekit-tcp:
-    addr: 127.0.0.1:$LIVEKIT_TCP_PORT
-    proto: tcp
+
 EOF2
 
 stop_existing_ngrok() {
@@ -70,7 +68,7 @@ stop_existing_ngrok
 echo "[stack:share] launching ngrok tunnels (config: $NGROK_CONFIG)"
 (
   cd "$ROOT_DIR" || exit 1
-  nohup ngrok start --all --config "$NGROK_CONFIG" >"$NGROK_LOG" 2>&1 &
+  nohup ngrok start --all --config "$HOME/Library/Application Support/ngrok/ngrok.yml" --config "$NGROK_CONFIG" >"$NGROK_LOG" 2>&1 &
   echo $! >"$NGROK_PID_FILE"
 )
 
