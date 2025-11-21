@@ -1,0 +1,7 @@
+[build]
+builder = "NIXPACKS"
+buildCommand = "npm install"
+
+[deploy]
+startCommand = "bash scripts/start-service.sh"
+restartPolicyType = "ON_FAILURE"
