@@ -1,9 +1,9 @@
-#!/bin/bash
+#!/bin/sh
 
-if [ "$SERVICE_TYPE" == "sync" ]; then
+if [ "$SERVICE_TYPE" = "sync" ]; then
   echo "Starting Sync Server..."
   npm run sync:dev
-elif [ "$SERVICE_TYPE" == "agent" ]; then
+elif [ "$SERVICE_TYPE" = "agent" ]; then
   echo "Starting Agent..."
   npm run agent:conductor
 else
