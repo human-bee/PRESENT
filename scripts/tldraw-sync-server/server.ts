@@ -8,7 +8,7 @@ import { nanoid } from 'nanoid';
 
 console.log('[tldraw-sync] booting development sync server');
 
-const PORT = Number(process.env.TLDRAW_SYNC_PORT ?? 3100);
+const PORT = Number(process.env.PORT || process.env.TLDRAW_SYNC_PORT || 3100);
 
 /**
  * Minimal tldraw sync server based on the official simple-server-example.
