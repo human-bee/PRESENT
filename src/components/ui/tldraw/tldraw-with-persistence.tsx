@@ -154,7 +154,7 @@ function CustomMainMenu({ readOnly = false }: { readOnly?: boolean } & any) {
         if (process.env.NODE_ENV !== 'production') {
           try {
             console.debug('[CanvasPersistence] Auto-saving after agent run', detail);
-          } catch {}
+          } catch { }
         }
         saveCanvas();
       }, 1500);
@@ -183,7 +183,7 @@ function CustomMainMenu({ readOnly = false }: { readOnly?: boolean } & any) {
 
   const handleNewCanvas = async () => {
     // Create a brand new canvas via API, then route directly to /canvas?id=...
-    try { localStorage.removeItem('present:lastCanvasId'); } catch {}
+    try { localStorage.removeItem('present:lastCanvasId'); } catch { }
     try {
       const payload = {
         name: `Canvas ${new Date().toLocaleString()}`,
@@ -201,20 +201,20 @@ function CustomMainMenu({ readOnly = false }: { readOnly?: boolean } & any) {
         if (canvas?.id) {
           const url = `/canvas?id=${encodeURIComponent(canvas.id)}`;
           router.push(url);
-          try { localStorage.setItem('present:lastCanvasId', canvas.id); } catch {}
-          try { window.dispatchEvent(new Event('present:canvas-id-changed')); } catch {}
+          try { localStorage.setItem('present:lastCanvasId', canvas.id); } catch { }
+          try { window.dispatchEvent(new Event('present:canvas-id-changed')); } catch { }
           // Clear local UI quickly while the new session hydrates
           try {
             if (editor) {
               const all = editor.getCurrentPageShapes();
               if (all.length) editor.deleteShapes(all.map((s) => s.id));
-              try { editor.selectNone(); } catch {}
+              try { editor.selectNone(); } catch { }
             }
             if (componentStore && typeof componentStore.clear === 'function') {
               componentStore.clear();
-              try { window.dispatchEvent(new Event('present:component-store-updated')); } catch {}
+              try { window.dispatchEvent(new Event('present:component-store-updated')); } catch { }
             }
-          } catch {}
+          } catch { }
           return;
         }
       }
@@ -375,16 +375,6 @@ function CustomToolbarWithTranscript({
   onHelpClick?: () => void;
   onComponentToolboxToggle?: () => void;
 }) {
-  const { user } = useAuth();
-
-  if (!user) {
-    return (
-      <DefaultToolbar>
-        <DefaultToolbarContent />
-      </DefaultToolbar>
-    );
-  }
-
   const isMac = typeof navigator !== 'undefined' && navigator.platform.startsWith('Mac');
   const shortcutText = isMac ? '⌘K' : 'Ctrl+K';
 
@@ -453,7 +443,7 @@ function CustomToolbarWithTranscript({
           onClick={() => {
             try {
               window.dispatchEvent(new CustomEvent('tldraw:create_mermaid_stream', { detail: {} }));
-            } catch {}
+            } catch { }
           }}
           title="Create Mermaid (stream)"
           style={{ color: 'rgb(29, 29, 29)' }}
