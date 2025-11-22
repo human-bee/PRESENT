@@ -69,16 +69,23 @@ async function buildServer() {
   return app;
 }
 
+console.log('[tldraw-sync] calling buildServer()...');
 buildServer()
   .then((app) => {
+    console.log('[tldraw-sync] buildServer() completed, calling app.listen()...');
+    console.log(`[tldraw-sync] PORT=${PORT}, host=0.0.0.0`);
     app.listen({ port: PORT, host: '0.0.0.0' }, (err) => {
+      console.log('[tldraw-sync] listen callback invoked');
       if (err) {
         app.log.error(err);
+        console.error('[tldraw-sync] listen error:', err);
         process.exit(1);
       }
 
       app.log.info(`tldraw sync server listening on http://127.0.0.1:${PORT}`);
+      console.log(`[tldraw-sync] tldraw sync server listening on http://127.0.0.1:${PORT}`);
     });
+    console.log('[tldraw-sync] app.listen() called, waiting for callback...');
   })
   .catch((error) => {
     console.error('[tldraw-sync] failed to start server', error);
