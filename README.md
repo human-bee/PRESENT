@@ -119,6 +119,14 @@ npm run stack:stop
 
 The script reads the PID files in `logs/` and terminates each dev process, removing stale entries along the way.
 
+Need to collaborate from multiple devices? Run the share helper:
+
+```bash
+npm run stack:share
+```
+
+This restarts the entire stack and spins up `ngrok` tunnels for the Next.js app (`:3000`), TLDraw sync server (`:3100`), and LiveKit control ports (`:7880`/`:7882`). Install `ngrok` locally (and set your authtoken) beforehand; the script prints the public URLs plus the dashboard address so you can distribute the links quickly.
+
 #### Production Mode
 
 **Terminal 1 - Voice Agent:**

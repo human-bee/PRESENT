@@ -94,6 +94,18 @@ export const MessageThreadCollapsible = React.forwardRef<
   MessageThreadCollapsibleProps
 >(({ className, contextKey, onTranscriptChange, onClose, isOpen, ...restProps }, ref) => {
   // Conversations tab removed; Transcript is the only view
+  const [agentEvents, setAgentEvents] = React.useState<
+    Array<{
+      ts: number;
+      sessionId?: string;
+      seq?: number;
+      actionCount?: number;
+      verbCounts?: Record<string, number>;
+      status?: string;
+      raw?: any;
+      firstAction?: { name?: string; preview?: string };
+    }>
+  >([]);
   const [canvasComponents, setCanvasComponents] = React.useState<CanvasComponentEntry[]>([]);
   const [transcriptions, setTranscriptions] = React.useState<
     Array<{
@@ -183,6 +195,13 @@ export const MessageThreadCollapsible = React.forwardRef<
     slashCommand && SUPPORTED_SLASH_COMMANDS.has(slashCommand.command),
   );
   const slashHasBody = Boolean(slashCommand?.body && slashCommand.body.trim().length > 0);
+  const showAgentEvents = React.useMemo(() => {
+    if (typeof window === 'undefined') return false;
+    return (
+      process.env.NEXT_PUBLIC_CANVAS_PARITY_DEV === 'true' &&
+      new URLSearchParams(window.location.search).has('debugAgent')
+    );
+  }, []);
   const mentionMatchesCanvasAgent = React.useMemo(() => {
     if (isRecognizedSlashCommand) return false;
     if (!typedMessage) return false;
@@ -477,6 +496,71 @@ export const MessageThreadCollapsible = React.forwardRef<
     return () => window.removeEventListener('custom:transcription-local', handler as EventListener);
   }, [ingestTranscription]);
 
+  // Dev-only inspector for agent tool events (parity debugging)
+  React.useEffect(() => {
+    if (!showAgentEvents) return;
+    const handleActions = (event: Event) => {
+      const detail = (event as CustomEvent).detail as any;
+      if (!detail) return;
+      const first =
+        Array.isArray(detail.actions) && detail.actions.length > 0 ? detail.actions[0] : undefined;
+      const summarizeAction = (action: any): { name?: string; preview?: string } | undefined => {
+        if (!action) return undefined;
+        const name = action.name || action._type || 'unknown';
+        const params = action.params || action;
+        const parts: string[] = [];
+        if (params.id) parts.push(`id:${params.id}`);
+        if (Array.isArray(params.ids)) parts.push(`ids:${params.ids.join(',')}`);
+        if (params.text) parts.push(`text:${String(params.text).slice(0, 80)}`);
+        if (params.axis) parts.push(`axis:${params.axis}`);
+        if (params.direction) parts.push(`dir:${params.direction}`);
+        return { name, preview: parts.join(' · ') };
+      };
+      const names =
+        Array.isArray(detail.actions) && detail.actions.length > 0
+          ? detail.actions.map((a: any) => a?.name || a?._type || 'unknown')
+          : [];
+      const verbCounts = names.reduce<Record<string, number>>((acc, name) => {
+        acc[name] = (acc[name] || 0) + 1;
+        return acc;
+      }, {});
+      setAgentEvents((prev) => {
+        const next = [
+          {
+            ts: Date.now(),
+            sessionId: detail.sessionId,
+            seq: detail.seq,
+            actionCount: Array.isArray(detail.actions) ? detail.actions.length : undefined,
+            verbCounts,
+            firstAction: summarizeAction(first),
+            raw: detail,
+          },
+          ...prev,
+        ].slice(0, 50);
+        return next;
+      });
+    };
+    const handleStatus = (event: Event) => {
+      const detail = (event as CustomEvent).detail as any;
+      if (!detail) return;
+      setAgentEvents((prev) => [
+        {
+          ts: Date.now(),
+          sessionId: detail.sessionId,
+          status: detail.status,
+          raw: detail,
+        },
+        ...prev,
+      ].slice(0, 50));
+    };
+    window.addEventListener('present:agent_actions', handleActions as EventListener);
+    window.addEventListener('present:agent_status', handleStatus as EventListener);
+    return () => {
+      window.removeEventListener('present:agent_actions', handleActions as EventListener);
+      window.removeEventListener('present:agent_status', handleStatus as EventListener);
+    };
+  }, [showAgentEvents]);
+
   // Keep transcript tab mirrored to Supabase session
   React.useEffect(() => {
     if (!Array.isArray(sessionTranscript)) return;
@@ -741,6 +825,53 @@ export const MessageThreadCollapsible = React.forwardRef<
                   }
                   return (
                     <>
+                      {showAgentEvents && agentEvents.length > 0 && (
+                        <div className="mb-3 rounded border bg-amber-50 border-amber-200 px-3 py-2 text-xs text-amber-900">
+                          <div className="font-semibold mb-1">Agent Console (dev · debugAgent=1)</div>
+                          <div className="space-y-1 max-h-60 overflow-auto">
+                            {agentEvents.map((e, idx) => (
+                              <details
+                                key={`${e.ts}-${idx}`}
+                                className="border-b border-amber-100 pb-1 last:border-b-0"
+                              >
+                                <summary className="flex items-center justify-between cursor-pointer">
+                                  <span className="font-mono">
+                                    {new Date(e.ts).toLocaleTimeString('en-US', { hour12: false })}
+                                  </span>
+                                  <span className="flex items-center gap-2">
+                                    {e.status && <span>{e.status}</span>}
+                                    {typeof e.seq === 'number' && <span>seq {e.seq}</span>}
+                                    {e.actionCount !== undefined && <span>{e.actionCount} actions</span>}
+                                  </span>
+                                </summary>
+                                {e.firstAction && (
+                                  <div className="text-[11px] mt-0.5">
+                                    {e.firstAction.name} · {e.firstAction.preview || 'preview n/a'}
+                                  </div>
+                                )}
+                                {e.verbCounts && (
+                                  <div className="text-[11px] mt-0.5">
+                                    {Object.entries(e.verbCounts)
+                                      .map(([k, v]) => `${k}:${v}`)
+                                      .join(', ')}
+                                  </div>
+                                )}
+                                {e.raw && (
+                                  <pre className="mt-1 whitespace-pre-wrap break-words bg-white/70 rounded p-2 text-[11px] text-amber-900 border border-amber-100">
+                                    {JSON.stringify(e.raw, null, 2)}
+                                  </pre>
+                                )}
+                              </details>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {showAgentEvents && agentEvents.length === 0 && (
+                        <div className="mb-3 rounded border bg-amber-50 border-amber-200 px-3 py-2 text-xs text-amber-900">
+                          <div className="font-semibold">Agent Console (dev · debugAgent=1)</div>
+                          <div className="text-[11px] mt-1">Waiting for agent actions/status…</div>
+                        </div>
+                      )}
                       {canvasComponents.map((entry) => (
                         <div
                           key={entry.messageId}
@@ -796,13 +927,11 @@ export const MessageThreadCollapsible = React.forwardRef<
               {(() => {
                 const isRoomConnected = room?.state === 'connected';
                 const trimmedMessage = typedMessage.trim();
-                const inputDisabled =
-                  isSending || (!isRecognizedSlashCommand && !mentionMatchesCanvasAgent && !isRoomConnected);
+                const inputDisabled = isSending;
                 const sendDisabled =
                   isSending ||
                   !trimmedMessage ||
-                  (!isRecognizedSlashCommand && !mentionMatchesCanvasAgent && !isRoomConnected) ||
-                  (isRecognizedSlashCommand && slashCommandBodyMissing);
+                  (isRecognizedSlashCommand ? slashCommandBodyMissing : !isRoomConnected && !mentionMatchesCanvasAgent);
                 if (process.env.NODE_ENV !== 'production' && process.env.NEXT_PUBLIC_TOOL_DISPATCHER_LOGS === 'true') {
                   console.debug('[Transcript] sendDisabled check', {
                     sendDisabled,

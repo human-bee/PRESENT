@@ -33,17 +33,27 @@ suppressViolationWarnings();
 if (typeof window !== 'undefined') {
   try {
     initializeMCPBridge();
-  } catch {}
+  } catch { }
 }
 
 export function CanvasPageClient() {
   // Authentication check
   const { user, loading } = useAuth();
   const router = useRouter();
-  const bypassAuth = process.env.NEXT_PUBLIC_CANVAS_DEV_BYPASS === 'true';
+  const bypassAuth = process.env.NEXT_PUBLIC_CANVAS_DEV_BYPASS === 'true' || process.env.NEXT_PUBLIC_CANVAS_DEV_BYPASS === '"true"';
   // Track resolved canvas id and room name; do not render until resolved
   const [, setCanvasId] = useState<string | null>(null);
   const [roomName, setRoomName] = useState<string>('');
+
+  useEffect(() => {
+    console.log('[CanvasPageClient] Auth state changed:', {
+      loading,
+      userId: user?.id,
+      bypassAuth,
+      roomName,
+      isWindowDefined: typeof window !== 'undefined'
+    });
+  }, [loading, user, bypassAuth, roomName]);
 
   const isUuid = (value: string | null | undefined) =>
     !!value && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
@@ -68,8 +78,11 @@ export function CanvasPageClient() {
     if (typeof window === 'undefined') return;
     // Resolve canvas id from URL, localStorage fallback, or create a new canvas row
     const resolveCanvasId = async () => {
+      console.log('[CanvasPageClient] resolveCanvasId started');
       const url = new URL(window.location.href);
       const roomOverride = url.searchParams.get('room');
+      console.log('[CanvasPageClient] URL params:', { roomOverride, id: url.searchParams.get('id') });
+
       if (roomOverride && roomOverride.trim().length > 0) {
         const sanitized = roomOverride.trim();
         const roomMatch = sanitized.match(/^canvas-([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i);
@@ -84,14 +97,14 @@ export function CanvasPageClient() {
           }
           try {
             localStorage.setItem('present:lastCanvasId', derivedCanvasId);
-          } catch {}
+          } catch { }
         } else {
           setCanvasId(sanitized);
           setRoomName(sanitized);
         }
         try {
           window.dispatchEvent(new Event('present:canvas-id-changed'));
-        } catch {}
+        } catch { }
         return;
       }
       const isSyntheticDevId = (value: string | null) => !!value && value.startsWith('dev-');
@@ -104,10 +117,10 @@ export function CanvasPageClient() {
         setRoomName('');
         try {
           localStorage.removeItem('present:lastCanvasId');
-        } catch {}
+        } catch { }
         try {
           window.dispatchEvent(new Event('present:canvas-id-changed'));
-        } catch {}
+        } catch { }
         idParam = null;
       }
 
@@ -116,10 +129,10 @@ export function CanvasPageClient() {
         setRoomName(`canvas-${idParam}`);
         try {
           localStorage.setItem('present:lastCanvasId', idParam);
-        } catch {}
+        } catch { }
         try {
           window.dispatchEvent(new Event('present:canvas-id-changed'));
-        } catch {}
+        } catch { }
         return;
       }
 
@@ -127,11 +140,11 @@ export function CanvasPageClient() {
       let lastId: string | null = null;
       try {
         lastId = localStorage.getItem('present:lastCanvasId');
-      } catch {}
+      } catch { }
       if (isSyntheticDevId(lastId) && user) {
         try {
           localStorage.removeItem('present:lastCanvasId');
-        } catch {}
+        } catch { }
         lastId = null;
       }
 
@@ -142,7 +155,7 @@ export function CanvasPageClient() {
         setRoomName(`canvas-${lastId}`);
         try {
           window.dispatchEvent(new Event('present:canvas-id-changed'));
-        } catch {}
+        } catch { }
         return;
       }
 
@@ -168,14 +181,14 @@ export function CanvasPageClient() {
             setRoomName(`canvas-${generatedId}`);
             try {
               localStorage.setItem(devKey, generatedId);
-            } catch {}
+            } catch { }
             try {
               w.__present = w.__present || {};
               w.__present.creatingCanvas = false;
-            } catch {}
+            } catch { }
             try {
               window.dispatchEvent(new Event('present:canvas-id-changed'));
-            } catch {}
+            } catch { }
           } catch (err) {
             console.warn('⚠️ [Canvas] Failed to synthesize dev canvas id:', err);
           }
@@ -191,10 +204,11 @@ export function CanvasPageClient() {
           return;
         }
         (window as any).__present.creatingCanvas = true;
-      } catch {}
+      } catch { }
       const now = new Date().toISOString();
       // Lazy import to avoid SSR issues
       const { supabase } = await import('@/lib/supabase');
+      console.log('[CanvasPageClient] Supabase imported, attempting to create canvas...');
 
       // Simple retry loop to avoid transient failures
       const MAX_TRIES = 2;
@@ -203,6 +217,7 @@ export function CanvasPageClient() {
       let lastErr: any = null;
       while (attempt < MAX_TRIES && !createdId) {
         attempt++;
+        console.log(`[CanvasPageClient] Creation attempt ${attempt}`);
         const { data, error } = await supabase
           .from('canvases')
           .insert({
@@ -216,9 +231,12 @@ export function CanvasPageClient() {
           })
           .select('id')
           .single();
+
         if (error) {
+          console.error('[CanvasPageClient] Creation error:', error);
           lastErr = error;
         } else if (data?.id) {
+          console.log('[CanvasPageClient] Created canvas:', data.id);
           createdId = data.id;
         }
       }
@@ -230,7 +248,7 @@ export function CanvasPageClient() {
         );
         try {
           (window as any).__present.creatingCanvas = false;
-        } catch {}
+        } catch { }
         return; // Keep loading; user can refresh or try again
       }
       // Immediately set the canvas name to the id for clarity/stability
@@ -250,13 +268,13 @@ export function CanvasPageClient() {
       setRoomName(`canvas-${createdId}`);
       try {
         localStorage.setItem('present:lastCanvasId', createdId);
-      } catch {}
+      } catch { }
       try {
         (window as any).__present.creatingCanvas = false;
-      } catch {}
+      } catch { }
       try {
         window.dispatchEvent(new Event('present:canvas-id-changed'));
-      } catch {}
+      } catch { }
     };
 
     resolveCanvasId();
@@ -267,11 +285,12 @@ export function CanvasPageClient() {
         if (current) {
           setCanvasId(current);
           setRoomName(`canvas-${current}`);
+          console.log('setRoomName called with:', `canvas-${current}`);
           try {
             localStorage.setItem('present:lastCanvasId', current);
-          } catch {}
+          } catch { }
         }
-      } catch {}
+      } catch { }
     };
     window.addEventListener('present:canvas-id-changed', handleCanvasIdChanged);
     return () => window.removeEventListener('present:canvas-id-changed', handleCanvasIdChanged);
@@ -379,7 +398,7 @@ export function CanvasPageClient() {
 
       const bridge = new LiveKitStateBridge(room);
       bridge.start();
-    } catch {}
+    } catch { }
   }, [room]);
 
   // Show loading state while checking authentication
@@ -393,8 +412,11 @@ export function CanvasPageClient() {
 
   // If not authenticated, don't render the canvas
   if (!user && !bypassAuth) {
+    console.log('[CanvasPageClient] Not authenticated and bypassAuth is false. Returning null.');
     return null;
   }
+
+  console.log('[CanvasPageClient] Rendering main UI', { user: user?.id, roomName });
 
   return (
     <div className="ios-vh w-screen relative overflow-hidden safe-area-padded">

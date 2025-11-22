@@ -20,7 +20,11 @@ import {
 } from '@/components/ui/livekit/livekit-screenshare-tile';
 
 import LiveCaptions, { liveCaptionsSchema } from '@/components/LiveCaptions';
-import LinearKanbanBoard, { linearKanbanSchema } from '@/components/ui/productivity/linear-kanban-board';
+// import LinearKanbanBoard, { linearKanbanSchema } from '@/components/ui/productivity/linear-kanban-board';
+
+// ...
+
+
 import { OnboardingGuide, onboardingGuideSchema } from '@/components/ui/onboarding/onboarding-guide';
 import { ComponentToolbox } from '@/components/ui/shared/component-toolbox';
 
@@ -122,13 +126,13 @@ export const components: any = [
     component: LiveCaptions,
     propsSchema: extendedSchema(liveCaptionsSchema),
   },
-  {
-    name: 'LinearKanbanBoard',
-    description:
-      'A comprehensive Linear project management kanban board with drag-and-drop functionality and MCP integration. Features multiple team support, customizable status columns (Backlog, Todo, In Progress, Delegate to Agent, Blocked, Review Required, Done), issue priority visualization with color coding, assignee management, project categorization, and pending update queue system. Supports optimistic UI updates with drag-and-drop issue movement between columns, clipboard export of pending changes, and hybrid sync workflow for reliable Linear API integration. Perfect for agile project management, sprint planning, issue tracking, and team collaboration workflows. Can be populated with real Linear data via MCP or used with demo data.',
-    component: LinearKanbanBoard,
-    propsSchema: extendedSchema(linearKanbanSchema),
-  },
+  // {
+  //   name: 'LinearKanbanBoard',
+  //   description:
+  //     'A comprehensive Linear project management kanban board with drag-and-drop functionality and MCP integration. Features multiple team support, customizable status columns (Backlog, Todo, In Progress, Delegate to Agent, Blocked, Review Required, Done), issue priority visualization with color coding, assignee management, project categorization, and pending update queue system. Supports optimistic UI updates with drag-and-drop issue movement between columns, clipboard export of pending changes, and hybrid sync workflow for reliable Linear API integration. Perfect for agile project management, sprint planning, issue tracking, and team collaboration workflows. Can be populated with real Linear data via MCP or used with demo data.',
+  //   component: LinearKanbanBoard,
+  //   propsSchema: extendedSchema(linearKanbanSchema),
+  // },
   {
     name: 'OnboardingGuide',
     description:

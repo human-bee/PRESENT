@@ -71,6 +71,15 @@ export function useTLDrawSync(
 
   const store: RemoteTLStoreWithStatus = useSyncDemo(syncOptions);
 
+  // Always log sync host and options for debugging
+  console.log('[useTLDrawSync] Sync configuration:', {
+    roomName,
+    host: safeHost,
+    envHost,
+    storeStatus: store.status,
+    storeError: store.error?.message
+  });
+
   // Log sync host once per session in dev
   try {
     const g: any = globalThis as any;
@@ -78,7 +87,7 @@ export function useTLDrawSync(
       createLogger('Tldraw').info('Using sync host:', safeHost);
       g.__LOGGED_TLDRAW_SYNC_HOST__ = true;
     }
-  } catch {}
+  } catch { }
 
   return store;
 }

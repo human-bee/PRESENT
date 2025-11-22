@@ -411,9 +411,11 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
       >
         {/* Subtle brand grid overlay (8px base, orange every 32px) */}
         <BrandGridOverlay editor={editor} />
+        {console.log('[CanvasSpace] Rendering TldrawWithCollaboration', { roomName: livekitCtx?.roomName })}
         <TldrawWithCollaboration
           key={livekitCtx?.roomName || 'no-room'}
           onMount={(ed) => {
+            console.log('[CanvasSpace] TldrawWithCollaboration mounted');
             setEditor(ed)
             branding.onMount(ed)
           }}

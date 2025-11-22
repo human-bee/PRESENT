@@ -25,6 +25,14 @@ export function useCollaborationSession({
   const resetInProgressRef = useRef(false);
 
   const collaborationStatus: CollaborationStatus = useMemo(() => {
+    const connectionStatus = store.status === 'synced-remote' ? store.connectionStatus : undefined;
+    console.log('[useCollaborationSession] Store state:', {
+      active,
+      status: store.status,
+      connectionStatus,
+      error: store.error?.message
+    });
+
     if (!active) {
       return 'idle';
     }
@@ -33,6 +41,7 @@ export function useCollaborationSession({
       case 'loading':
         return 'connecting';
       case 'error':
+        console.error('[useCollaborationSession] Store error:', store.error);
         return 'error';
       case 'synced-remote':
         return store.connectionStatus === 'online' ? 'ready' : 'syncing';
@@ -78,7 +87,7 @@ export function useCollaborationSession({
           window.localStorage.removeItem('tldraw');
           window.localStorage.removeItem('tldraw-state');
           window.sessionStorage.removeItem('tldraw');
-        } catch {}
+        } catch { }
         window.location.reload();
       }
     })();
