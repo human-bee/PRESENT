@@ -43,6 +43,7 @@ export function TldrawWithCollaboration({
   onComponentToolboxToggle,
   readOnly = false,
 }: TldrawWithCollaborationProps) {
+  console.log('[TldrawWithCollaboration] Component rendering');
   const containerRef = useRef<HTMLDivElement>(null);
   const livekitCtx = useContext(CanvasLiveKitContext);
   const roomName = livekitCtx?.roomName ?? 'custom-canvas-room';
@@ -50,6 +51,7 @@ export function TldrawWithCollaboration({
   const [editorInstance, setEditorInstance] = useState<Editor | null>(null);
 
   const collaboration = useCollaborationSession({ roomName, room, shapeUtils });
+  console.log('[TldrawWithCollaboration] Collaboration status:', collaboration.status);
   const computedReadOnly = readOnly || collaboration.isReadOnly;
 
   const overrides = useMemo(() => createCollaborationOverrides(), []);
@@ -77,6 +79,7 @@ export function TldrawWithCollaboration({
   );
 
   const handleEditorReady = useCallback((editor: Editor) => {
+    console.log('[TldrawWithCollaboration] Editor ready callback triggered');
     setEditorInstance(editor);
   }, []);
 
@@ -96,6 +99,7 @@ export function TldrawWithCollaboration({
   }, [onTranscriptToggle]);
 
   const showOverlay = collaboration.status !== 'ready';
+  console.log('[TldrawWithCollaboration] Show overlay?', showOverlay);
 
   return (
     <div ref={containerRef} className={className} style={{ position: 'absolute', inset: 0 }}>
@@ -139,6 +143,7 @@ function CollaborationEditorEffects({
   onMount,
 }: CollaborationEditorEffectsProps) {
   const { editor, ready } = useEditorReady();
+  console.log('[CollaborationEditorEffects] Rendered. Ready?', ready, 'Editor exists?', !!editor);
 
   useTldrawEditorBridge(editor, { onMount });
   usePinnedShapes(editor, ready);
@@ -146,6 +151,7 @@ function CollaborationEditorEffects({
 
   useEffect(() => {
     if (!ready || !editor) return;
+    console.log('[CollaborationEditorEffects] Editor ready and mounted');
     if (process.env.NODE_ENV !== 'production' && typeof window !== 'undefined') {
       (window as any).__tldrawEditor = editor;
     }

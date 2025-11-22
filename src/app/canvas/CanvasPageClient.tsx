@@ -45,6 +45,16 @@ export function CanvasPageClient() {
   const [, setCanvasId] = useState<string | null>(null);
   const [roomName, setRoomName] = useState<string>('');
 
+  useEffect(() => {
+    console.log('[CanvasPageClient] Auth state changed:', {
+      loading,
+      userId: user?.id,
+      bypassAuth,
+      roomName,
+      isWindowDefined: typeof window !== 'undefined'
+    });
+  }, [loading, user, bypassAuth, roomName]);
+
   const isUuid = (value: string | null | undefined) =>
     !!value && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 
@@ -68,8 +78,11 @@ export function CanvasPageClient() {
     if (typeof window === 'undefined') return;
     // Resolve canvas id from URL, localStorage fallback, or create a new canvas row
     const resolveCanvasId = async () => {
+      console.log('[CanvasPageClient] resolveCanvasId started');
       const url = new URL(window.location.href);
       const roomOverride = url.searchParams.get('room');
+      console.log('[CanvasPageClient] URL params:', { roomOverride, id: url.searchParams.get('id') });
+
       if (roomOverride && roomOverride.trim().length > 0) {
         const sanitized = roomOverride.trim();
         const roomMatch = sanitized.match(/^canvas-([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i);
@@ -195,6 +208,7 @@ export function CanvasPageClient() {
       const now = new Date().toISOString();
       // Lazy import to avoid SSR issues
       const { supabase } = await import('@/lib/supabase');
+      console.log('[CanvasPageClient] Supabase imported, attempting to create canvas...');
 
       // Simple retry loop to avoid transient failures
       const MAX_TRIES = 2;
@@ -203,6 +217,7 @@ export function CanvasPageClient() {
       let lastErr: any = null;
       while (attempt < MAX_TRIES && !createdId) {
         attempt++;
+        console.log(`[CanvasPageClient] Creation attempt ${attempt}`);
         const { data, error } = await supabase
           .from('canvases')
           .insert({
@@ -216,9 +231,12 @@ export function CanvasPageClient() {
           })
           .select('id')
           .single();
+
         if (error) {
+          console.error('[CanvasPageClient] Creation error:', error);
           lastErr = error;
         } else if (data?.id) {
+          console.log('[CanvasPageClient] Created canvas:', data.id);
           createdId = data.id;
         }
       }
@@ -394,8 +412,11 @@ export function CanvasPageClient() {
 
   // If not authenticated, don't render the canvas
   if (!user && !bypassAuth) {
+    console.log('[CanvasPageClient] Not authenticated and bypassAuth is false. Returning null.');
     return null;
   }
+
+  console.log('[CanvasPageClient] Rendering main UI', { user: user?.id, roomName });
 
   return (
     <div className="ios-vh w-screen relative overflow-hidden safe-area-padded">
