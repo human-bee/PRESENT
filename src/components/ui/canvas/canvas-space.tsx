@@ -393,7 +393,6 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
   // Export functionality is now handled by TldrawWithPersistence component
 
   const handleMount = React.useCallback((ed: Editor) => {
-    console.log('[CanvasSpace] TldrawWithCollaboration mounted');
     setEditor(ed);
     branding.onMount(ed);
   }, [branding]);

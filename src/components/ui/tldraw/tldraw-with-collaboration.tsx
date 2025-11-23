@@ -43,7 +43,6 @@ export function TldrawWithCollaboration({
   onComponentToolboxToggle,
   readOnly = false,
 }: TldrawWithCollaborationProps) {
-  console.log('[TldrawWithCollaboration] Component rendering');
   const containerRef = useRef<HTMLDivElement>(null);
   const livekitCtx = useContext(CanvasLiveKitContext);
   const roomName = livekitCtx?.roomName ?? 'custom-canvas-room';
