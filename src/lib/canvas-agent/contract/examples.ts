@@ -101,6 +101,22 @@ export function creativeFewShots(): FewShotExample[] {
         { name: 'todo', params: { text: 'Add spray-paint texture behind hero once copy is approved.' } },
       ],
     },
+    // Custom component manipulation examples
+    {
+      user: 'Move the timer to the right side of the canvas.',
+      actions: [
+        { name: 'think', params: { text: 'User wants to move the RetroTimer component. Checking shapes for type: "custom" with componentType: "RetroTimer".' } },
+        { name: 'move', params: { ids: ['shape:timer-1'], dx: 400, dy: 0 } },
+      ],
+    },
+    {
+      user: 'Arrange the kanban board and the two timers in a row with 48px gaps.',
+      actions: [
+        { name: 'think', params: { text: 'Custom components (kanban, timers) can be laid out like native shapes using stack/align.' } },
+        { name: 'align', params: { ids: ['shape:kanban-1', 'shape:timer-1', 'shape:timer-2'], axis: 'y', mode: 'center' } },
+        { name: 'stack', params: { ids: ['shape:kanban-1', 'shape:timer-1', 'shape:timer-2'], direction: 'row', gap: 48 } },
+      ],
+    },
   ];
 }
 
