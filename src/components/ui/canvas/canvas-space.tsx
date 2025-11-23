@@ -392,6 +392,12 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
 
   // Export functionality is now handled by TldrawWithPersistence component
 
+  const handleMount = React.useCallback((ed: Editor) => {
+    console.log('[CanvasSpace] TldrawWithCollaboration mounted');
+    setEditor(ed);
+    branding.onMount(ed);
+  }, [branding]);
+
   return (
     <div
       className={cn(
@@ -411,14 +417,10 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
       >
         {/* Subtle brand grid overlay (8px base, orange every 32px) */}
         <BrandGridOverlay editor={editor} />
-        {console.log('[CanvasSpace] Rendering TldrawWithCollaboration', { roomName: livekitCtx?.roomName })}
+
         <TldrawWithCollaboration
           key={livekitCtx?.roomName || 'no-room'}
-          onMount={(ed) => {
-            console.log('[CanvasSpace] TldrawWithCollaboration mounted');
-            setEditor(ed)
-            branding.onMount(ed)
-          }}
+          onMount={handleMount}
           shapeUtils={customShapeUtils as any}
           componentStore={componentStore.current}
           className="absolute inset-0"

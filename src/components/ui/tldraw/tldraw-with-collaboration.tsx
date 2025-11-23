@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode, RefObject } from 'react';
 import { Tldraw, TLComponents, Editor, TldrawUiToastsProvider } from '@tldraw/tldraw';
 import { useRoomContext } from '@livekit/components-react';
@@ -51,7 +51,6 @@ export function TldrawWithCollaboration({
   const [editorInstance, setEditorInstance] = useState<Editor | null>(null);
 
   const collaboration = useCollaborationSession({ roomName, room, shapeUtils });
-  console.log('[TldrawWithCollaboration] Collaboration status:', collaboration.status);
   const computedReadOnly = readOnly || collaboration.isReadOnly;
 
   const overrides = useMemo(() => createCollaborationOverrides(), []);
@@ -79,7 +78,6 @@ export function TldrawWithCollaboration({
   );
 
   const handleEditorReady = useCallback((editor: Editor) => {
-    console.log('[TldrawWithCollaboration] Editor ready callback triggered');
     setEditorInstance(editor);
   }, []);
 
@@ -99,7 +97,6 @@ export function TldrawWithCollaboration({
   }, [onTranscriptToggle]);
 
   const showOverlay = collaboration.status !== 'ready';
-  console.log('[TldrawWithCollaboration] Show overlay?', showOverlay);
 
   return (
     <div ref={containerRef} className={className} style={{ position: 'absolute', inset: 0 }}>
@@ -131,7 +128,7 @@ export function TldrawWithCollaboration({
 
 interface CollaborationEditorEffectsProps {
   room: Room | undefined;
-  containerRef: RefObject<HTMLDivElement>;
+  containerRef: RefObject<HTMLDivElement | null>;
   onEditorReady?: (editor: Editor) => void;
   onMount?: (editor: Editor) => void;
 }
@@ -143,7 +140,6 @@ function CollaborationEditorEffects({
   onMount,
 }: CollaborationEditorEffectsProps) {
   const { editor, ready } = useEditorReady();
-  console.log('[CollaborationEditorEffects] Rendered. Ready?', ready, 'Editor exists?', !!editor);
 
   useTldrawEditorBridge(editor, { onMount });
   usePinnedShapes(editor, ready);
@@ -151,7 +147,6 @@ function CollaborationEditorEffects({
 
   useEffect(() => {
     if (!ready || !editor) return;
-    console.log('[CollaborationEditorEffects] Editor ready and mounted');
     if (process.env.NODE_ENV !== 'production' && typeof window !== 'undefined') {
       (window as any).__tldrawEditor = editor;
     }
@@ -173,4 +168,4 @@ function CollaborationEditorEffects({
   return <CanvasAgentController editor={editor} room={room} />;
 }
 
-export default TldrawWithCollaboration;
+export default React.memo(TldrawWithCollaboration);
