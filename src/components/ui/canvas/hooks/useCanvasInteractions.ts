@@ -27,6 +27,12 @@ export function useCanvasInteractions({
   componentStore,
   logger,
 }: CanvasInteractionsOptions): CanvasInteractionsApi {
+  // Use a ref for editor to keep callbacks stable even when editor instance changes
+  const editorRef = React.useRef(editor);
+  React.useEffect(() => {
+    editorRef.current = editor;
+  }, [editor]);
+
   const handleDragOver = useCallback((event: React.DragEvent<HTMLDivElement>) => {
     event.preventDefault();
     event.dataTransfer.dropEffect = 'copy';
@@ -42,7 +48,8 @@ export function useCanvasInteractions({
         return;
       }
 
-      if (!editor) {
+      const currentEditor = editorRef.current;
+      if (!currentEditor) {
         logger.warn('Editor not available, cannot drop component.');
         return;
       }
@@ -67,8 +74,8 @@ export function useCanvasInteractions({
         /* ignore */
       }
 
-      const position = editor.screenToPage({ x: event.clientX, y: event.clientY });
-      editor.createShape({
+      const position = currentEditor.screenToPage({ x: event.clientX, y: event.clientY });
+      currentEditor.createShape({
         id: shapeId,
         type: 'custom',
         x: position.x,
@@ -83,32 +90,33 @@ export function useCanvasInteractions({
 
       logger.info('✅ Component dropped successfully');
     },
-    [componentStore, editor, logger],
+    [componentStore, logger],
   );
 
   const toggleComponentToolbox = useCallback(() => {
-    if (!editor) {
+    const currentEditor = editorRef.current;
+    if (!currentEditor) {
       logger.warn('Editor not available, cannot toggle toolbox');
       return;
     }
 
-    const existingToolbox = editor
+    const existingToolbox = currentEditor
       .getCurrentPageShapes()
       .find((shape) => shape.type === 'toolbox');
 
     if (existingToolbox) {
-      editor.deleteShapes([existingToolbox.id]);
+      currentEditor.deleteShapes([existingToolbox.id]);
       logger.info('🗑️ Removed existing component toolbox');
       return;
     }
 
-    const viewport = editor.getViewportPageBounds();
+    const viewport = currentEditor.getViewportPageBounds();
     const TOOLBOX_W = 56;
     const TOOLBOX_H = 560;
     const x = viewport ? viewport.minX + 24 : 24;
     const y = viewport ? viewport.midY - TOOLBOX_H / 2 : 24;
 
-    editor.createShape({
+    currentEditor.createShape({
       id: createShapeId(`toolbox-${nanoid()}`),
       type: 'toolbox',
       x,
@@ -121,16 +129,17 @@ export function useCanvasInteractions({
     });
 
     logger.info('✅ Created component toolbox shape');
-  }, [editor, logger]);
+  }, [logger]);
 
   const showOnboarding = useCallback(() => {
-    if (!editor) {
+    const currentEditor = editorRef.current;
+    if (!currentEditor) {
       logger.warn('Editor not available, cannot show onboarding');
       return;
     }
 
-    createOnboardingGuide({ editor, componentStore, logger });
-  }, [componentStore, editor, logger]);
+    createOnboardingGuide({ editor: currentEditor, componentStore, logger });
+  }, [componentStore, logger]);
 
   return {
     onDragOver: handleDragOver,

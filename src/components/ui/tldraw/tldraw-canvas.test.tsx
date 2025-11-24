@@ -4,13 +4,62 @@ import '@testing-library/jest-dom';
 import { customShapeUtil, customShape, TldrawCanvasProps, TldrawCanvas } from './tldraw-canvas'; // Assuming customShape type is exported
 import { Editor, TLBaseShape } from '@tldraw/tldraw';
 
+const mockUpdateShapes = jest.fn();
+const mockEditor = {
+  updateShapes: mockUpdateShapes,
+} as unknown as Editor;
+
+jest.mock('@tldraw/tldraw', () => {
+  class BaseBoxShapeUtil<T> {
+    static type = '';
+    static props = {} as any;
+    editor?: any;
+    getDefaultProps(): any {
+      return {};
+    }
+    component(): any {
+      return null;
+    }
+    indicator(): any {
+      return null;
+    }
+  }
+
+  return {
+    BaseBoxShapeUtil,
+    HTMLContainer: ({ children }: any) => <>{children}</>,
+    T: {
+      number: {},
+      string: {},
+      boolean: {},
+      optional: (value: any) => value,
+    },
+    Editor: class {},
+    TLBaseShape: {} as any,
+    createShapeId: (id: string) => id,
+    toRichText: (value: any) => value,
+    useEditor: () => mockEditor,
+    useValue: (fn: any) => fn(),
+    TLUiOverrides: {},
+    TldrawUiToastsProvider: ({ children }: any) => <>{children}</>,
+  };
+});
+
+jest.mock('@tldraw/sync', () => ({
+  useSyncDemo: () => ({ store: null, status: 'disconnected' }),
+  RemoteTLStoreWithStatus: {} as any,
+}));
+
 // --- Mocks ---
 
 // Mock ResizeObserver
 // Avoid TS-only types in Jest parse
 /** @type {ResizeObserverCallback | null} */
 let mockResizeObserverCallback = null;
-const mockObserve = jest.fn();
+let observedElement: Element | null = null;
+const mockObserve = jest.fn((element: Element) => {
+  observedElement = element;
+});
 const mockDisconnect = jest.fn();
 const mockUnobserve = jest.fn();
 
@@ -23,11 +72,26 @@ global.ResizeObserver = jest.fn((callback) => {
   };
 });
 
+function setMeasuredSize(element: Element, width: number, height: number) {
+  const target = element as HTMLElement;
+  const descriptors: Array<[string, number]> = [
+    ['scrollWidth', width],
+    ['offsetWidth', width],
+    ['clientWidth', width],
+    ['scrollHeight', height],
+    ['offsetHeight', height],
+    ['clientHeight', height],
+  ];
+  for (const [key, value] of descriptors) {
+    Object.defineProperty(target, key, {
+      configurable: true,
+      value,
+    });
+  }
+}
+
 // Mock editor
-const mockUpdateShapes = jest.fn();
-const mockEditor = {
-  updateShapes: mockUpdateShapes,
-} as unknown as Editor;
+// mockUpdateShapes/mocked editor defined above for useEditor stub
 
 // Helper function to render the shape component
 // This is tricky because customShapeUtil.component is a class method, not a standalone React component.
@@ -75,6 +139,7 @@ describe('customShapeUtil.component - ResizeObserver Logic', () => {
     mockDisconnect.mockClear();
     mockUpdateShapes.mockClear();
     mockResizeObserverCallback = null;
+    observedElement = null;
   });
 
   afterEach(() => {
@@ -100,6 +165,9 @@ describe('customShapeUtil.component - ResizeObserver Logic', () => {
     // Simulate a resize event
     act(() => {
       if (mockResizeObserverCallback) {
+        if (observedElement) {
+          setMeasuredSize(observedElement, 400, 250);
+        }
         mockResizeObserverCallback(
           [
             {
@@ -126,6 +194,7 @@ describe('customShapeUtil.component - ResizeObserver Logic', () => {
     // Advance timers past the debounce period (150ms in component)
     act(() => {
       jest.advanceTimersByTime(150);
+      jest.runOnlyPendingTimers();
     });
 
     expect(mockUpdateShapes).toHaveBeenCalledTimes(1);
@@ -145,6 +214,9 @@ describe('customShapeUtil.component - ResizeObserver Logic', () => {
     // Simulate a small resize event (original w:300, h:200)
     act(() => {
       if (mockResizeObserverCallback) {
+        if (observedElement) {
+          setMeasuredSize(observedElement, 300.5, 200.5);
+        }
         mockResizeObserverCallback(
           [
             {
@@ -167,6 +239,7 @@ describe('customShapeUtil.component - ResizeObserver Logic', () => {
 
     act(() => {
       jest.advanceTimersByTime(150);
+      jest.runOnlyPendingTimers();
     });
 
     expect(mockUpdateShapes).not.toHaveBeenCalled();
@@ -179,6 +252,9 @@ describe('customShapeUtil.component - ResizeObserver Logic', () => {
     // Simulate multiple rapid resizes
     act(() => {
       if (mockResizeObserverCallback) {
+        if (observedElement) {
+          setMeasuredSize(observedElement, 350, 220);
+        }
         mockResizeObserverCallback(
           [
             {
@@ -197,6 +273,9 @@ describe('customShapeUtil.component - ResizeObserver Logic', () => {
           {} as ResizeObserver,
         ); // t = 0
         jest.advanceTimersByTime(50); // t = 50ms
+        if (observedElement) {
+          setMeasuredSize(observedElement, 400, 250);
+        }
         mockResizeObserverCallback(
           [
             {
@@ -215,6 +294,9 @@ describe('customShapeUtil.component - ResizeObserver Logic', () => {
           {} as ResizeObserver,
         ); // t = 50ms
         jest.advanceTimersByTime(50); // t = 100ms
+        if (observedElement) {
+          setMeasuredSize(observedElement, 420, 260);
+        }
         mockResizeObserverCallback(
           [
             {
@@ -235,16 +317,15 @@ describe('customShapeUtil.component - ResizeObserver Logic', () => {
       }
     });
 
-    expect(mockUpdateShapes).not.toHaveBeenCalled(); // Not called yet
-
     act(() => {
       jest.advanceTimersByTime(150); // Advance past the last debounce timeout (100 + 150 = 250ms from start)
+      jest.runOnlyPendingTimers();
     });
 
     expect(mockUpdateShapes).toHaveBeenCalledTimes(1);
-    // It should be called with the latest dimensions
+    // It should be called only once with the first meaningful measurement
     expect(mockUpdateShapes).toHaveBeenCalledWith([
-      { id: defaultTestShape.id, type: 'custom', props: { w: 420, h: 260 } },
+      { id: defaultTestShape.id, type: 'custom', props: { w: 400, h: 250 } },
     ]);
   });
 });

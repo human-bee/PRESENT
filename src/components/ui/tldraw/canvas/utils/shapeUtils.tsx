@@ -43,6 +43,8 @@ export class MermaidStreamShapeUtil extends BaseBoxShapeUtil<MermaidStreamShape>
   }
 
   component(shape: MermaidStreamShape) {
+    const w = Math.max(0, shape.props.w);
+    const h = Math.max(0, shape.props.h);
     return (
       <TldrawHTMLContainer
         id={shape.id}
@@ -53,8 +55,8 @@ export class MermaidStreamShapeUtil extends BaseBoxShapeUtil<MermaidStreamShape>
           overflow: 'hidden',
           pointerEvents: 'all',
           position: 'relative',
-          width: `${shape.props.w}px`,
-          height: `${shape.props.h}px`,
+          width: `${w}px`,
+          height: `${h}px`,
         }}
       >
         <MermaidStreamShapeComponent shape={shape} />
@@ -63,7 +65,7 @@ export class MermaidStreamShapeUtil extends BaseBoxShapeUtil<MermaidStreamShape>
   }
 
   indicator(shape: MermaidStreamShape) {
-    return <rect width={shape.props.w} height={shape.props.h} fill="transparent" />;
+    return <rect width={Math.max(0, shape.props.w)} height={Math.max(0, shape.props.h)} fill="transparent" />;
   }
 
   canEdit = () => false;
@@ -101,6 +103,8 @@ export class CustomShapeUtil extends BaseBoxShapeUtil<CustomShape> {
   }
 
   component(shape: CustomShape) {
+    const w = Math.max(0, shape.props.w);
+    const h = Math.max(0, shape.props.h);
     return (
       <TldrawHTMLContainer
         id={shape.id}
@@ -111,8 +115,8 @@ export class CustomShapeUtil extends BaseBoxShapeUtil<CustomShape> {
           overflow: 'visible',
           pointerEvents: 'all',
           position: 'relative',
-          width: `${shape.props.w}px`,
-          height: `${shape.props.h}px`,
+          width: `${w}px`,
+          height: `${h}px`,
           zIndex: shape.props.pinned ? 1000 : 100,
         }}
       >
@@ -122,7 +126,7 @@ export class CustomShapeUtil extends BaseBoxShapeUtil<CustomShape> {
   }
 
   indicator(shape: CustomShape) {
-    return <rect width={shape.props.w} height={shape.props.h} fill="transparent" />;
+    return <rect width={Math.max(0, shape.props.w)} height={Math.max(0, shape.props.h)} fill="transparent" />;
   }
 
   canEdit = () => false;
@@ -187,8 +191,8 @@ export class CustomShapeUtil extends BaseBoxShapeUtil<CustomShape> {
       <rect
         x={0}
         y={0}
-        width={shape.props.w}
-        height={shape.props.h}
+        width={Math.max(0, shape.props.w)}
+        height={Math.max(0, shape.props.h)}
         rx={8}
         ry={8}
         fill="white"
@@ -222,8 +226,8 @@ export class CustomShapeUtil extends BaseBoxShapeUtil<CustomShape> {
         <foreignObject
           x={0}
           y={0}
-          width={shape.props.w}
-          height={shape.props.h}
+          width={Math.max(0, shape.props.w)}
+          height={Math.max(0, shape.props.h)}
           className="tl-export-embed-styles"
         >
           <div

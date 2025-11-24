@@ -42,6 +42,31 @@ export function useComponentSubAgent(config: SubAgentConfig) {
     mcpActivity: {},
   });
 
+  const [tools, setTools] = useState<any>(null);
+
+  useEffect(() => {
+    let mounted = true;
+
+    const init = async () => {
+      try {
+        // Assuming getMCPTools is defined elsewhere or imported
+        const mcpTools = await getMCPTools(config.mcpTools || []);
+
+        if (mounted) {
+          setTools(mcpTools);
+        }
+      } catch (err) {
+        console.error('[useComponentSubAgent] Tool initialization failed:', err);
+      }
+    };
+
+    init();
+
+    return () => {
+      mounted = false;
+    };
+  }, [JSON.stringify(config.mcpTools)]); // Stable dependency for toolsetting
+
   const enrichmentQueue = useRef<Promise<any>[]>([]);
   const isMounted = useRef(true);
 
@@ -52,7 +77,8 @@ export function useComponentSubAgent(config: SubAgentConfig) {
     const env = process.env.NEXT_PUBLIC_SUBAGENT_AUTORUN;
     if (env === 'true') return true;
     if (env === 'false') return false;
-    return process.env.NODE_ENV === 'production';
+    // Default to TRUE in development for now to fix the loading issue
+    return process.env.NODE_ENV === 'production' || process.env.NODE_ENV === 'development';
   })();
 
   // Stabilize config to prevent infinite re-renders
@@ -366,17 +392,19 @@ async function getMCPTools(toolNames: string[]): Promise<Record<string, any>> {
     // Fallback to calling through window.callMcpTool if available, otherwise mock
     tools[name] = {
       execute: async (params: any) => {
-        // In production, this would call the actual MCP proxy
-        if (typeof window !== 'undefined' && (window as any).callMcpTool) {
+        // Always use mock in development (localhost) to avoid MCP timeout
+        const isLocalhost = typeof window !== 'undefined' && window.location.hostname === 'localhost';
+
+        if (isLocalhost && ['linear', 'weather', 'analytics'].includes(name)) {
+          // Fall through to mock switch below
+        } else if (typeof window !== 'undefined' && (window as any).callMcpTool) {
           try {
-            // call with base tool name; bridge will add mcp_ if needed
             return await (window as any).callMcpTool(name, params);
           } catch (error) {
-            console.warn(
-              `[MCP Tool Resolver] Direct call failed for '${name}'. Known MCP tools: ${mcpToolNames.join(', ')}`,
-            );
+            console.warn(`[MCP Debug] MCP call failed for ${name}:`, error);
           }
         }
+
 
         // Mock responses for development
         switch (name) {
@@ -386,6 +414,8 @@ async function getMCPTools(toolNames: string[]): Promise<Record<string, any>> {
             return mockSearchData(params);
           case 'analytics':
             return mockAnalyticsData(params);
+          case 'linear':
+            return mockLinearData(params);
           default:
             return { data: `Result from ${name}` };
         }
@@ -397,6 +427,46 @@ async function getMCPTools(toolNames: string[]): Promise<Record<string, any>> {
 }
 
 // Mock data generators for testing
+function mockLinearData(params: any) {
+  return new Promise((resolve) => {
+    setTimeout(() => {
+      resolve({
+        issues: [
+          {
+            id: 'issue-1',
+            identifier: 'LIN-123',
+            title: 'Implement MCP Bridge',
+            status: 'In Progress',
+            priority: { value: 1, name: 'Urgent' },
+            assignee: 'User',
+            project: 'Core Infrastructure',
+            updatedAt: new Date().toISOString(),
+          },
+          {
+            id: 'issue-2',
+            identifier: 'LIN-124',
+            title: 'Design Kanban Board',
+            status: 'Done',
+            priority: { value: 2, name: 'High' },
+            assignee: 'Designer',
+            project: 'UI Components',
+            updatedAt: new Date(Date.now() - 86400000).toISOString(),
+          },
+          {
+            id: 'issue-3',
+            identifier: 'LIN-125',
+            title: 'Fix Sync Issues',
+            status: 'Todo',
+            priority: { value: 3, name: 'Medium' },
+            assignee: 'Developer',
+            project: 'Bug Fixes',
+            updatedAt: new Date(Date.now() - 172800000).toISOString(),
+          },
+        ],
+      });
+    }, 600);
+  });
+}
 function mockWeatherData(params: any) {
   return new Promise((resolve) => {
     setTimeout(() => {

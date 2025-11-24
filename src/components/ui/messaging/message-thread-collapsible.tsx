@@ -45,6 +45,8 @@ export interface MessageThreadCollapsibleProps extends React.HTMLAttributes<HTML
   ) => void;
   /** Optional close handler for mobile to minimize the panel */
   onClose?: () => void;
+  /** Controls open/closed state for styling; not forwarded to the DOM */
+  isOpen?: boolean;
 }
 
 const SUPPORTED_SLASH_COMMANDS = new Set(['canvas']);
@@ -90,8 +92,20 @@ const parseSlashCommand = (input: string): ParsedSlashCommand | null => {
 export const MessageThreadCollapsible = React.forwardRef<
   HTMLDivElement,
   MessageThreadCollapsibleProps
->(({ className, contextKey, onTranscriptChange, onClose, ...props }, ref) => {
+>(({ className, contextKey, onTranscriptChange, onClose, isOpen, ...restProps }, ref) => {
   // Conversations tab removed; Transcript is the only view
+  const [agentEvents, setAgentEvents] = React.useState<
+    Array<{
+      ts: number;
+      sessionId?: string;
+      seq?: number;
+      actionCount?: number;
+      verbCounts?: Record<string, number>;
+      status?: string;
+      raw?: any;
+      firstAction?: { name?: string; preview?: string };
+    }>
+  >([]);
   const [canvasComponents, setCanvasComponents] = React.useState<CanvasComponentEntry[]>([]);
   const [transcriptions, setTranscriptions] = React.useState<
     Array<{
@@ -110,7 +124,7 @@ export const MessageThreadCollapsible = React.forwardRef<
 
   // LiveKit room context and bus for transcript functionality
   const room = useRoomContext();
-  const bus = createLiveKitBus(room);
+  const bus = React.useMemo(() => createLiveKitBus(room), [room]);
   const roomContextKey = useContextKey();
   const effectiveContextKey = contextKey || roomContextKey;
   const livekitCtx = React.useContext(CanvasLiveKitContext);
@@ -180,11 +194,34 @@ export const MessageThreadCollapsible = React.forwardRef<
   const isRecognizedSlashCommand = Boolean(
     slashCommand && SUPPORTED_SLASH_COMMANDS.has(slashCommand.command),
   );
-  const slashCommandBodyMissing = Boolean(isRecognizedSlashCommand && !slashCommand?.body);
+  const slashHasBody = Boolean(slashCommand?.body && slashCommand.body.trim().length > 0);
+  const showAgentEvents = React.useMemo(() => {
+    if (typeof window === 'undefined') return false;
+    return (
+      process.env.NEXT_PUBLIC_CANVAS_PARITY_DEV === 'true' &&
+      new URLSearchParams(window.location.search).has('debugAgent')
+    );
+  }, []);
+  const mentionMatchesCanvasAgent = React.useMemo(() => {
+    if (isRecognizedSlashCommand) return false;
+    if (!typedMessage) return false;
+    return /@canvas-agent/gi.test(typedMessage);
+  }, [isRecognizedSlashCommand, typedMessage]);
+  const slashCommandBodyMissing = Boolean(isRecognizedSlashCommand && !slashHasBody);
 
   React.useEffect(() => {
     refreshCanvasComponents();
   }, [refreshCanvasComponents]);
+
+  React.useEffect(() => {
+    if (process.env.NODE_ENV !== 'production') {
+      try {
+        (window as any).__presentTypedMessage = typedMessage;
+      } catch {
+        // ignore
+      }
+    }
+  }, [typedMessage]);
 
   React.useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -279,7 +316,10 @@ export const MessageThreadCollapsible = React.forwardRef<
       const tokenUrl = new URL(tokenEndpoint, base);
       tokenUrl.searchParams.set('roomName', livekitCtx.roomName);
       tokenUrl.searchParams.set('identity', identity!);
-      tokenUrl.searchParams.set('name', user?.user_metadata?.full_name || 'Canvas User');
+      
+      // Update name parameter to prioritize stored display name
+      const storedDisplayName = window.localStorage.getItem('present:display_name');
+      tokenUrl.searchParams.set('name', storedDisplayName || user?.user_metadata?.full_name || 'Canvas User');
 
       let data: any | null = null;
       try {
@@ -303,8 +343,8 @@ export const MessageThreadCollapsible = React.forwardRef<
       try {
         console.log('[LiveKit] Connected, enabling camera and microphone');
         await room.localParticipant.setCameraEnabled(true);
-      } catch {}
-      try { await room.localParticipant.setMicrophoneEnabled(true); } catch {}
+      } catch { }
+      try { await room.localParticipant.setMicrophoneEnabled(true); } catch { }
     } finally {
       setConnBusy(false);
     }
@@ -312,7 +352,7 @@ export const MessageThreadCollapsible = React.forwardRef<
 
   const disconnectRoom = React.useCallback(async () => {
     if (!room) return;
-    try { await room.disconnect(); } catch {}
+    try { await room.disconnect(); } catch { }
   }, [room]);
 
   const sendCanvasAgentPrompt = React.useCallback(
@@ -339,7 +379,7 @@ export const MessageThreadCollapsible = React.forwardRef<
             timestamp: Date.now(),
           };
         }
-      } catch {}
+      } catch { }
       const res = await fetch('/api/steward/runCanvas', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -383,7 +423,7 @@ export const MessageThreadCollapsible = React.forwardRef<
     }) => {
       if (!transcriptionData.text) return;
       if (transcriptionData.speaker === 'voice-agent') {
-        try { setAgentPresent(true); } catch {}
+        try { setAgentPresent(true); } catch { }
       }
       const transcription = {
         id: `${Date.now()}-${Math.random()}`,
@@ -418,7 +458,7 @@ export const MessageThreadCollapsible = React.forwardRef<
             },
           }),
         );
-      } catch {}
+      } catch { }
     },
     [setAgentPresent, setTranscriptions],
   );
@@ -458,6 +498,71 @@ export const MessageThreadCollapsible = React.forwardRef<
     window.addEventListener('custom:transcription-local', handler as EventListener);
     return () => window.removeEventListener('custom:transcription-local', handler as EventListener);
   }, [ingestTranscription]);
+
+  // Dev-only inspector for agent tool events (parity debugging)
+  React.useEffect(() => {
+    if (!showAgentEvents) return;
+    const handleActions = (event: Event) => {
+      const detail = (event as CustomEvent).detail as any;
+      if (!detail) return;
+      const first =
+        Array.isArray(detail.actions) && detail.actions.length > 0 ? detail.actions[0] : undefined;
+      const summarizeAction = (action: any): { name?: string; preview?: string } | undefined => {
+        if (!action) return undefined;
+        const name = action.name || action._type || 'unknown';
+        const params = action.params || action;
+        const parts: string[] = [];
+        if (params.id) parts.push(`id:${params.id}`);
+        if (Array.isArray(params.ids)) parts.push(`ids:${params.ids.join(',')}`);
+        if (params.text) parts.push(`text:${String(params.text).slice(0, 80)}`);
+        if (params.axis) parts.push(`axis:${params.axis}`);
+        if (params.direction) parts.push(`dir:${params.direction}`);
+        return { name, preview: parts.join(' · ') };
+      };
+      const names =
+        Array.isArray(detail.actions) && detail.actions.length > 0
+          ? detail.actions.map((a: any) => a?.name || a?._type || 'unknown')
+          : [];
+      const verbCounts = names.reduce<Record<string, number>>((acc, name) => {
+        acc[name] = (acc[name] || 0) + 1;
+        return acc;
+      }, {});
+      setAgentEvents((prev) => {
+        const next = [
+          {
+            ts: Date.now(),
+            sessionId: detail.sessionId,
+            seq: detail.seq,
+            actionCount: Array.isArray(detail.actions) ? detail.actions.length : undefined,
+            verbCounts,
+            firstAction: summarizeAction(first),
+            raw: detail,
+          },
+          ...prev,
+        ].slice(0, 50);
+        return next;
+      });
+    };
+    const handleStatus = (event: Event) => {
+      const detail = (event as CustomEvent).detail as any;
+      if (!detail) return;
+      setAgentEvents((prev) => [
+        {
+          ts: Date.now(),
+          sessionId: detail.sessionId,
+          status: detail.status,
+          raw: detail,
+        },
+        ...prev,
+      ].slice(0, 50));
+    };
+    window.addEventListener('present:agent_actions', handleActions as EventListener);
+    window.addEventListener('present:agent_status', handleStatus as EventListener);
+    return () => {
+      window.removeEventListener('present:agent_actions', handleActions as EventListener);
+      window.removeEventListener('present:agent_status', handleStatus as EventListener);
+    };
+  }, [showAgentEvents]);
 
   // Keep transcript tab mirrored to Supabase session
   React.useEffect(() => {
@@ -680,11 +785,12 @@ export const MessageThreadCollapsible = React.forwardRef<
   return (
     <div
       ref={ref}
+      data-state={typeof isOpen === 'boolean' ? (isOpen ? 'open' : 'closed') : undefined}
       className={cn(
         'bg-background border-l border-gray-200 shadow-lg h-full overflow-hidden flex flex-col',
         className,
       )}
-      {...props}
+      {...restProps}
     >
       <div className="h-full flex flex-col overscroll-contain">
         {/* Header with title and close button */}
@@ -704,275 +810,329 @@ export const MessageThreadCollapsible = React.forwardRef<
 
         {/* Transcript Content */}
         <>
-            {/* Transcript Content */}
-            <ScrollableMessageContainer className="flex-1 p-4" ref={transcriptContainerRef}>
-              <div className="space-y-2">
-                {(() => {
-                  const noActivity = canvasComponents.length === 0 && transcriptions.length === 0;
-                  if (noActivity) {
-                    return (
-                      <div className="text-center text-muted-foreground py-8">
-                        <FileText className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                        <p>No activity yet</p>
-                        <p className="text-sm mt-1">
-                          Voice conversations and components will appear here
-                        </p>
-                      </div>
-                    );
-                  }
-                  return (
-                    <>
-                      {canvasComponents.map((entry) => (
-                        <div
-                          key={entry.messageId}
-                          className="mb-4 p-3 rounded-lg border bg-purple-50 dark:bg-purple-900/20 border-purple-200 dark:border-purple-800"
-                        >
-                          <div className="text-xs text-purple-600 dark:text-purple-400 mb-2">
-                            Component: {entry.messageId} · {entry.componentType}
-                          </div>
-                          <div className="bg-white dark:bg-gray-800 rounded border overflow-hidden">
-                            {renderComponentPreview(entry)}
-                            {typeof entry.updatedAt === 'number' && Number.isFinite(entry.updatedAt) && (
-                              <div className="px-3 pb-3 text-[10px] text-muted-foreground">
-                                Updated {formatTime(entry.updatedAt)}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      ))}
-                      {transcriptions.map((transcription) => (
-                        <div
-                          key={transcription.id}
-                          className={cn(
-                            'p-3 rounded-lg border transition-opacity',
-                            transcription.source === 'agent'
-                              ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800'
-                              : transcription.source === 'system'
-                                ? 'bg-purple-50 dark:bg-purple-900/20 border-purple-200 dark:border-purple-800'
-                                : 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800',
-                            !transcription.isFinal && 'opacity-60 italic',
-                          )}
-                        >
-                          <div className="flex items-center justify-between text-xs mb-1">
-                            <span className="font-medium">
-                              {transcription.speaker}
-                              {transcription.type === 'system_call' && ' → custom System'}
-                            </span>
-                            <div className="flex items-center gap-2 text-muted-foreground">
-                              {!transcription.isFinal && <span>(interim)</span>}
-                              <span>{formatTime(transcription.timestamp)}</span>
-                            </div>
-                          </div>
-                          <div className="text-sm">{transcription.text}</div>
-                        </div>
-                      ))}
-                    </>
-                  );
-                })()}
-              </div>
-            </ScrollableMessageContainer>
-
-            {/* Manual text input for sending messages to the LiveKit agent */}
-            <div className="p-4 border-t border-gray-200">
+          {/* Transcript Content */}
+          <ScrollableMessageContainer className="flex-1 p-4" ref={transcriptContainerRef}>
+            <div className="space-y-2">
               {(() => {
-                const isRoomConnected = room?.state === 'connected';
-                const trimmedMessage = typedMessage.trim();
-                const inputDisabled = isSending || (!isRecognizedSlashCommand && !isRoomConnected);
-                const sendDisabled =
-                  isSending ||
-                  !trimmedMessage ||
-                  (!isRecognizedSlashCommand && !isRoomConnected) ||
-                  (isRecognizedSlashCommand && slashCommandBodyMissing);
-                return (
-              <form
-                data-debug-source="messaging-message-form"
-                onSubmit={async (event) => {
-                  event.preventDefault();
-                  const trimmed = typedMessage.trim();
-                  if (!trimmed || isSending) return;
-                  const parsedCommand = parseSlashCommand(trimmed);
-                  const slashActive = Boolean(
-                    parsedCommand && SUPPORTED_SLASH_COMMANDS.has(parsedCommand.command),
+                const noActivity = canvasComponents.length === 0 && transcriptions.length === 0;
+                if (noActivity) {
+                  return (
+                    <div className="text-center text-muted-foreground py-8">
+                      <FileText className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                      <p>No activity yet</p>
+                      <p className="text-sm mt-1">
+                        Voice conversations and components will appear here
+                      </p>
+                    </div>
                   );
-                  if (slashActive && !parsedCommand?.body) {
-                    try {
-                      console.warn('[Transcript] Slash command requires a message body', parsedCommand);
-                    } catch {}
-                    return;
-                  }
-                  setIsSending(true);
-
-                  const speaker =
-                    room?.localParticipant?.identity ||
-                    user?.user_metadata?.full_name ||
-                    user?.user_metadata?.name ||
-                    user?.email ||
-                    'Canvas-User';
-
-                  const textForDispatch = slashActive && parsedCommand ? parsedCommand.body : trimmed;
-
-                  const payload = {
-                    type: 'live_transcription',
-                    text: textForDispatch,
-                    speaker,
-                    timestamp: Date.now(),
-                    is_final: true,
-                    manual: true,
-                  } as const;
-
-                  let completed = false;
-
-                  try {
-                    if (slashActive && parsedCommand) {
-                      await runSlashCommand(parsedCommand.command, parsedCommand.body);
-                    } else {
-                      if (room?.state === 'connected') {
-                        bus.send('transcription', payload);
-                      } else {
-                        console.warn('[Transcript] Room not connected; skipping send');
-                      }
-                    }
-
-                    try {
-                      window.dispatchEvent(
-                        new CustomEvent('livekit:transcription-replay', {
-                          detail: {
-                            speaker,
-                            text: textForDispatch,
-                            timestamp: Date.now(),
-                          },
-                        }),
-                      );
-                    } catch {}
-
-                    try {
-                      window.dispatchEvent(
-                        new CustomEvent('custom:transcription-local', {
-                          detail: payload,
-                        }),
-                      );
-                    } catch {}
-
-                    completed = true;
-                  } catch (error) {
-                    console.error('[Transcript] Failed to send agent prompt', error);
-                  } finally {
-                    if (completed) {
-                      setTypedMessage('');
-                      setTimeout(() => {
-                        if (transcriptContainerRef.current) {
-                          transcriptContainerRef.current.scrollTop =
-                            transcriptContainerRef.current.scrollHeight;
-                        }
-                      }, 10);
-                    }
-                    setIsSending(false);
-                  }
-                }}
-                className="flex items-center gap-2"
-              >
-                <input
-                  type="text"
-                  value={typedMessage}
-                  onChange={(e) => setTypedMessage(e.target.value)}
-                  placeholder={
-                    isRecognizedSlashCommand
-                      ? 'Dispatching directly to the Canvas steward…'
-                      : room?.state === 'connected'
-                        ? 'Type a message for the agent…'
-                        : 'Connecting to LiveKit…'
-                  }
-                  className="flex-1 px-3 py-2 rounded border border-gray-300 bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-                  aria-label="Type a message for the agent"
-                  disabled={inputDisabled}
-                />
-                <button
-                  type="submit"
-                  disabled={sendDisabled}
-                  className={cn(
-                    'px-3 py-2 rounded bg-primary text-primary-foreground disabled:opacity-50',
-                  )}
-                >
-                  {isSending ? 'Sending…' : 'Send'}
-                </button>
-              </form>
+                }
+                return (
+                  <>
+                    {showAgentEvents && agentEvents.length > 0 && (
+                      <div className="mb-3 rounded border bg-amber-50 border-amber-200 px-3 py-2 text-xs text-amber-900">
+                        <div className="font-semibold mb-1">Agent Console (dev · debugAgent=1)</div>
+                        <div className="space-y-1 max-h-60 overflow-auto">
+                          {agentEvents.map((e, idx) => (
+                            <details
+                              key={`${e.ts}-${idx}`}
+                              className="border-b border-amber-100 pb-1 last:border-b-0"
+                            >
+                              <summary className="flex items-center justify-between cursor-pointer">
+                                <span className="font-mono">
+                                  {new Date(e.ts).toLocaleTimeString('en-US', { hour12: false })}
+                                </span>
+                                <span className="flex items-center gap-2">
+                                  {e.status && <span>{e.status}</span>}
+                                  {typeof e.seq === 'number' && <span>seq {e.seq}</span>}
+                                  {e.actionCount !== undefined && <span>{e.actionCount} actions</span>}
+                                </span>
+                              </summary>
+                              {e.firstAction && (
+                                <div className="text-[11px] mt-0.5">
+                                  {e.firstAction.name} · {e.firstAction.preview || 'preview n/a'}
+                                </div>
+                              )}
+                              {e.verbCounts && (
+                                <div className="text-[11px] mt-0.5">
+                                  {Object.entries(e.verbCounts)
+                                    .map(([k, v]) => `${k}:${v}`)
+                                    .join(', ')}
+                                </div>
+                              )}
+                              {e.raw && (
+                                <pre className="mt-1 whitespace-pre-wrap break-words bg-white/70 rounded p-2 text-[11px] text-amber-900 border border-amber-100">
+                                  {JSON.stringify(e.raw, null, 2)}
+                                </pre>
+                              )}
+                            </details>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {showAgentEvents && agentEvents.length === 0 && (
+                      <div className="mb-3 rounded border bg-amber-50 border-amber-200 px-3 py-2 text-xs text-amber-900">
+                        <div className="font-semibold">Agent Console (dev · debugAgent=1)</div>
+                        <div className="text-[11px] mt-1">Waiting for agent actions/status…</div>
+                      </div>
+                    )}
+                    {canvasComponents.map((entry) => (
+                      <div
+                        key={entry.messageId}
+                        className="mb-4 p-3 rounded-lg border bg-purple-50 dark:bg-purple-900/20 border-purple-200 dark:border-purple-800"
+                      >
+                        <div className="text-xs text-purple-600 dark:text-purple-400 mb-2">
+                          Component: {entry.messageId} · {entry.componentType}
+                        </div>
+                        <div className="bg-white dark:bg-gray-800 rounded border overflow-hidden">
+                          {renderComponentPreview(entry)}
+                          {typeof entry.updatedAt === 'number' && Number.isFinite(entry.updatedAt) && (
+                            <div className="px-3 pb-3 text-[10px] text-muted-foreground">
+                              Updated {formatTime(entry.updatedAt)}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                    {transcriptions.map((transcription) => (
+                      <div
+                        key={transcription.id}
+                        className={cn(
+                          'p-3 rounded-lg border transition-opacity',
+                          transcription.source === 'agent'
+                            ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800'
+                            : transcription.source === 'system'
+                              ? 'bg-purple-50 dark:bg-purple-900/20 border-purple-200 dark:border-purple-800'
+                              : 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800',
+                          !transcription.isFinal && 'opacity-60 italic',
+                        )}
+                      >
+                        <div className="flex items-center justify-between text-xs mb-1">
+                          <span className="font-medium">
+                            {transcription.speaker}
+                            {transcription.type === 'system_call' && ' → custom System'}
+                          </span>
+                          <div className="flex items-center gap-2 text-muted-foreground">
+                            {!transcription.isFinal && <span>(interim)</span>}
+                            <span>{formatTime(transcription.timestamp)}</span>
+                          </div>
+                        </div>
+                        <div className="text-sm">{transcription.text}</div>
+                      </div>
+                    ))}
+                  </>
                 );
               })()}
-              <div className="text-[11px] text-muted-foreground mt-1 flex items-center gap-2 flex-wrap">
-                <span>
-                  {isRecognizedSlashCommand
-                    ? 'Slash command active — prompt dispatches directly to the Canvas steward.'
+            </div>
+          </ScrollableMessageContainer>
+
+          {/* Manual text input for sending messages to the LiveKit agent */}
+          <div className="p-4 border-t border-gray-200">
+            {(() => {
+              const isRoomConnected = room?.state === 'connected';
+              const trimmedMessage = typedMessage.trim();
+              const inputDisabled = isSending;
+              const sendDisabled =
+                isSending ||
+                !trimmedMessage ||
+                (isRecognizedSlashCommand ? slashCommandBodyMissing : !isRoomConnected && !mentionMatchesCanvasAgent);
+              return (
+                <form
+                  data-debug-source="messaging-message-form"
+                  onSubmit={async (event) => {
+                    event.preventDefault();
+                    const trimmed = typedMessage.trim();
+                    if (!trimmed || isSending) return;
+                    const parsedCommand = parseSlashCommand(trimmed);
+                    const slashActive = Boolean(
+                      parsedCommand && SUPPORTED_SLASH_COMMANDS.has(parsedCommand.command),
+                    );
+                    const mentionActive = Boolean(!slashActive && mentionMatchesCanvasAgent);
+                    if (slashActive && !parsedCommand?.body) {
+                      try {
+                        console.warn('[Transcript] Slash command requires a message body', parsedCommand);
+                      } catch { }
+                      return;
+                    }
+                    setIsSending(true);
+
+                    const speaker =
+                      room?.localParticipant?.identity ||
+                      user?.user_metadata?.full_name ||
+                      user?.user_metadata?.name ||
+                      user?.email ||
+                      'Canvas-User';
+
+                    const mentionBody = mentionActive
+                      ? trimmed.replace(/@canvas-agent/gi, '').trim() || trimmed
+                      : trimmed;
+                    const textForDispatch = slashActive && parsedCommand ? parsedCommand.body : mentionBody;
+
+                    const payload = {
+                      type: 'live_transcription',
+                      text: textForDispatch,
+                      speaker,
+                      timestamp: Date.now(),
+                      is_final: true,
+                      manual: true,
+                    } as const;
+
+                    let completed = false;
+
+                    try {
+                      if (slashActive && parsedCommand) {
+                        await runSlashCommand(parsedCommand.command, parsedCommand.body);
+                      } else if (mentionActive) {
+                        await sendCanvasAgentPrompt(textForDispatch);
+                      } else {
+                        if (room?.state === 'connected') {
+                          bus.send('transcription', payload);
+                        } else {
+                          console.warn('[Transcript] Room not connected; skipping send');
+                        }
+                      }
+
+                      try {
+                        window.dispatchEvent(
+                          new CustomEvent('livekit:transcription-replay', {
+                            detail: {
+                              speaker,
+                              text: textForDispatch,
+                              timestamp: Date.now(),
+                            },
+                          }),
+                        );
+                      } catch { }
+
+                      try {
+                        window.dispatchEvent(
+                          new CustomEvent('custom:transcription-local', {
+                            detail: payload,
+                          }),
+                        );
+                      } catch { }
+
+                      completed = true;
+                    } catch (error) {
+                      console.error('[Transcript] Failed to send agent prompt', error);
+                    } finally {
+                      if (completed) {
+                        setTypedMessage('');
+                        setTimeout(() => {
+                          if (transcriptContainerRef.current) {
+                            transcriptContainerRef.current.scrollTop =
+                              transcriptContainerRef.current.scrollHeight;
+                          }
+                        }, 10);
+                      }
+                      setIsSending(false);
+                    }
+                  }}
+                  className="flex items-center gap-2"
+                >
+                  <input
+                    type="text"
+                    value={typedMessage}
+                    onChange={(e) => setTypedMessage(e.target.value)}
+                    placeholder={
+                      isRecognizedSlashCommand
+                        ? 'Dispatching directly to the Canvas steward…'
+                        : room?.state === 'connected'
+                          ? 'Type a message for the agent…'
+                          : 'Connecting to LiveKit…'
+                    }
+                    className="flex-1 px-3 py-2 rounded border border-gray-300 bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                    aria-label="Type a message for the agent"
+                    disabled={inputDisabled}
+                  />
+                  <button
+                    type="submit"
+                    disabled={sendDisabled}
+                    className={cn(
+                      'px-3 py-2 rounded bg-primary text-primary-foreground disabled:opacity-50',
+                    )}
+                  >
+                    {isSending ? 'Sending…' : 'Send'}
+                  </button>
+                </form>
+              );
+            })()}
+            <div className="text-[11px] text-muted-foreground mt-1 flex items-center gap-2 flex-wrap">
+              <span>
+                {isRecognizedSlashCommand
+                  ? 'Slash command active — prompt dispatches directly to the Canvas steward.'
+                  : mentionMatchesCanvasAgent
+                    ? '“@canvas-agent” detected — prompt dispatches directly to the Canvas steward.'
                     : agentPresent
                       ? 'Sends as “you” over LiveKit to the voice agent.'
                       : 'Agent not joined'}
-                </span>
-                {!agentPresent && !isRecognizedSlashCommand && (
-                  <button
-                    className="underline disabled:opacity-50"
-                    disabled={agentJoining || room?.state !== 'connected'}
-                    onClick={async () => {
-                      if (!livekitCtx?.roomName || room?.state !== 'connected') return;
-                      setAgentJoining(true);
-                      try {
-                        await fetch('/api/agent/dispatch', {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ roomName: livekitCtx.roomName }),
-                        });
-                      } finally {
-                        // We'll flip to enabled when presence updates via room events
-                        setTimeout(() => setAgentJoining(false), 1500);
-                      }
-                    }}
-                  >
-                    {agentJoining ? 'Requesting agent…' : 'Request agent'}
-                  </button>
-                )}
-                {!isRecognizedSlashCommand && (
-                  <span className="opacity-80">Use `/canvas …` to message the Canvas steward directly.</span>
-                )}
-              </div>
+              </span>
+              {!agentPresent && !isRecognizedSlashCommand && (
+                <button
+                  className="underline disabled:opacity-50"
+                  disabled={agentJoining || room?.state !== 'connected'}
+                  onClick={async () => {
+                    if (!livekitCtx?.roomName || room?.state !== 'connected') return;
+                    setAgentJoining(true);
+                    try {
+                      await fetch('/api/agent/dispatch', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ roomName: livekitCtx.roomName }),
+                      });
+                    } finally {
+                      // We'll flip to enabled when presence updates via room events
+                      setTimeout(() => setAgentJoining(false), 1500);
+                    }
+                  }}
+                >
+                  {agentJoining ? 'Requesting agent…' : 'Request agent'}
+                </button>
+              )}
+              {!isRecognizedSlashCommand && (
+                <span className="opacity-80">Use `/canvas …` to message the Canvas steward directly.</span>
+              )}
             </div>
+          </div>
 
-            {/* Transcript Footer: connection + tools */}
-            <div className="p-3 border-t border-gray-200">
-              <div className="flex items-center justify-between text-[11px] text-muted-foreground gap-2">
-                <div className="flex items-center gap-2 overflow-hidden">
-                  <span className={cn('inline-block h-2 w-2 rounded-full', room?.state === 'connected' ? 'bg-green-500' : room?.state === 'connecting' ? 'bg-yellow-500' : 'bg-gray-400')} />
-                  <span className="truncate">{room?.state === 'connected' ? 'Connected' : room?.state === 'connecting' ? 'Connecting…' : 'Disconnected'}</span>
-                  {livekitCtx?.roomName && (
-                    <span className="font-mono truncate max-w-[140px]">{livekitCtx.roomName}</span>
-                  )}
-                </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={room?.state === 'connected' ? disconnectRoom : connectRoom}
-                    disabled={connBusy}
-                    className="px-2 py-1 rounded border text-foreground hover:bg-muted disabled:opacity-50"
-                  >
-                    {room?.state === 'connected' ? 'Disconnect' : 'Connect'}
+          {/* Transcript Footer: connection + tools */}
+          <div className="p-3 border-t border-gray-200">
+            <div className="flex items-center justify-between text-[11px] text-muted-foreground gap-2">
+              <div className="flex items-center gap-2 overflow-hidden">
+                <span className={cn('inline-block h-2 w-2 rounded-full', room?.state === 'connected' ? 'bg-green-500' : room?.state === 'connecting' ? 'bg-yellow-500' : 'bg-gray-400')} />
+                <span className="truncate">{room?.state === 'connected' ? 'Connected' : room?.state === 'connecting' ? 'Connecting…' : 'Disconnected'}</span>
+                {livekitCtx?.roomName && (
+                  <span className="font-mono truncate max-w-[140px]">{livekitCtx.roomName}</span>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={room?.state === 'connected' ? disconnectRoom : connectRoom}
+                  disabled={connBusy}
+                  className="px-2 py-1 rounded border text-foreground hover:bg-muted disabled:opacity-50"
+                >
+                  {room?.state === 'connected' ? 'Disconnect' : 'Connect'}
+                </button>
+                <button
+                  onClick={() => {
+                    try {
+                      const id = new URL(window.location.href).searchParams.get('id');
+                      const link = `${window.location.origin}/canvas${id ? `?id=${encodeURIComponent(id)}` : ''}`;
+                      navigator.clipboard.writeText(link);
+                    } catch { }
+                  }}
+                  className="px-2 py-1 rounded border hover:bg-muted"
+                >
+                  Copy Link
+                </button>
+                {transcriptions.length > 0 && (
+                  <button onClick={clearTranscriptions} className="px-2 py-1 rounded hover:bg-muted">
+                    Clear
                   </button>
-                  <button
-                    onClick={() => {
-                      try {
-                        const id = new URL(window.location.href).searchParams.get('id');
-                        const link = `${window.location.origin}/canvas${id ? `?id=${encodeURIComponent(id)}` : ''}`;
-                        navigator.clipboard.writeText(link);
-                      } catch {}
-                    }}
-                    className="px-2 py-1 rounded border hover:bg-muted"
-                  >
-                    Copy Link
-                  </button>
-                  {transcriptions.length > 0 && (
-                    <button onClick={clearTranscriptions} className="px-2 py-1 rounded hover:bg-muted">
-                      Clear
-                    </button>
-                  )}
-                </div>
+                )}
               </div>
             </div>
-          </>
+          </div>
+        </>
       </div>
     </div>
   );

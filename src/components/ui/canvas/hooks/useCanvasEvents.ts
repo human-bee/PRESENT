@@ -27,6 +27,8 @@ export function useCanvasEvents({
   bus,
   logger,
 }: CanvasEventsParams) {
+  const lastPayloadSignatureRef = React.useRef(new Map<string, string>());
+
   useEffect(() => {
     const handleShowComponent = (
       event: CustomEvent<{
@@ -36,6 +38,40 @@ export function useCanvasEvents({
     ) => {
       try {
         let node: React.ReactNode = event.detail.component as React.ReactNode;
+        if (process.env.NODE_ENV !== 'production') {
+          try {
+            logger.debug('🎬 custom:showComponent received', {
+              messageId: event.detail.messageId,
+              hasEditor: Boolean(editor),
+              inferredType:
+                (React.isValidElement(node) && (node.type as any)?.name) ||
+                (typeof (event.detail.component as any)?.type === 'string'
+                  ? (event.detail.component as any).type
+                  : undefined),
+            });
+          } catch {
+            /* noop */
+          }
+        }
+        const messageId = event.detail.messageId;
+        if (!messageId) return;
+
+        if (!React.isValidElement(node) && node && typeof node === 'object') {
+          let signature: string | null = null;
+          try {
+            signature = JSON.stringify(node);
+          } catch {
+            signature = null;
+          }
+          if (signature) {
+            const previous = lastPayloadSignatureRef.current.get(messageId);
+            if (previous === signature) {
+              logger.debug('⏭️  Skipping duplicate showComponent payload', { messageId });
+              return;
+            }
+            lastPayloadSignatureRef.current.set(messageId, signature);
+          }
+        }
         let inferredName: string | undefined = 'Rendered Component';
         if (!editor) {
           if (!React.isValidElement(node)) {

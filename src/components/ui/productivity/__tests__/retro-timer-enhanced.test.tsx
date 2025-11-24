@@ -1,37 +1,44 @@
-import React from 'react';
-import { render, cleanup, screen, act } from '@testing-library/react';
-import '@testing-library/jest-dom';
+import { retroTimerTestUtils } from '../retro-timer-enhanced';
 
-import { RetroTimerEnhanced } from '../retro-timer-enhanced';
-import { ComponentRegistry } from '@/lib/component-registry';
+const { buildNextSnapshot } = retroTimerTestUtils;
 
-afterEach(() => {
-  cleanup();
-  ComponentRegistry.clear();
-});
+function createSnapshot(overrides: Partial<ReturnType<typeof buildNextSnapshot>> = {}) {
+  return {
+    configuredDuration: 300,
+    timeLeft: 300,
+    isRunning: false,
+    isFinished: false,
+    updatedAt: 0,
+    ...overrides,
+  };
+}
 
-describe('RetroTimerEnhanced AI updates', () => {
-  it('accepts numeric strings in patch and updates countdown', async () => {
-    render(<RetroTimerEnhanced componentId="test-timer" />);
+describe('RetroTimerEnhanced update sanitization', () => {
+  it('coerces string minute patches into duration seconds', () => {
+    const prev = createSnapshot();
+    const patch = { initialMinutes: '7', updatedAt: 123 } as Record<string, unknown>;
+    const next = buildNextSnapshot(prev, patch, prev.configuredDuration, Date.now());
 
-    const messageId = 'timer-test-timer-5min';
-
-    await act(async () => {
-      await ComponentRegistry.update(messageId, { initialMinutes: '7' } as Record<string, unknown>);
-    });
-
-    expect(await screen.findByText('07:00')).toBeInTheDocument();
+    expect(next.configuredDuration).toBe(420);
+    expect(next.timeLeft).toBe(420);
+    expect(next.isRunning).toBe(false);
+    expect(next.isFinished).toBe(false);
   });
 
-  it('auto-starts when patch boolean is provided as string', async () => {
-    render(<RetroTimerEnhanced componentId="autostart-timer" />);
+  it('respects isRunning toggles when runtime patch sets it', () => {
+    const prev = createSnapshot({ timeLeft: 0, isFinished: true });
+    const patch = {
+      isRunning: true,
+      isFinished: false,
+      configuredDuration: 420,
+      timeLeft: 420,
+      updatedAt: 456,
+    } as Record<string, unknown>;
 
-    const messageId = 'timer-autostart-timer-5min';
+    const next = buildNextSnapshot(prev, patch, 300, Date.now());
 
-    await act(async () => {
-      await ComponentRegistry.update(messageId, { autoStart: 'true' } as Record<string, unknown>);
-    });
-
-    expect(await screen.findByRole('button', { name: /pause timer/i })).toBeInTheDocument();
+    expect(next.isRunning).toBe(true);
+    expect(next.isFinished).toBe(false);
+    expect(next.timeLeft).toBe(420);
   });
 });

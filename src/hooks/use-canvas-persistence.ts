@@ -9,6 +9,15 @@ import { useAuth } from './use-auth';
 
 export function useCanvasPersistence(editor: Editor | null, enabled: boolean = true) {
   const { user } = useAuth();
+  const isParity =
+    typeof window !== 'undefined' && new URL(window.location.href).searchParams.get('parity') === '1';
+  // Dev-only escape hatch so we can persist parity/local canvases without auth friction.
+  // Never allow this in production, and only honor it for parity-tagged canvases.
+  const allowParityWrite =
+    process.env.NODE_ENV !== 'production' &&
+    isParity &&
+    process.env.NEXT_PUBLIC_CANVAS_PARITY_DEV === 'true';
+  const allowUnauthedWrite = allowParityWrite;
   const router = useRouter();
   const { thread } = usecustomThread();
   const [canvasId, setCanvasId] = useState<string | null>(null);
@@ -22,7 +31,11 @@ export function useCanvasPersistence(editor: Editor | null, enabled: boolean = t
   // Load canvas from URL param or create new
   useEffect(() => {
     const loadCanvas = async () => {
-      if (!user?.id || !editor) return;
+      if (!editor) return;
+      if (!user?.id && !allowUnauthedWrite) return;
+      if (allowUnauthedWrite) {
+        setCanWrite(true);
+      }
 
       // Check URL params for canvas ID
       const urlParams = new URLSearchParams(window.location.search);
@@ -44,12 +57,12 @@ export function useCanvasPersistence(editor: Editor | null, enabled: boolean = t
             .from('canvases')
             .select('*')
             .eq('id', canvasIdParam)
-            .single();
+            .maybeSingle();
 
           if (error) throw error;
 
           if (canvas) {
-            logger.info('🎨 Loading canvas:', canvas.id, canvas.name);
+            logger.debug('🎨 Loading canvas:', canvas.id, canvas.name);
             logger.debug(
               'Canvas document has shapes:',
               Object.keys(canvas.document?.store?.['shape:custom'] || {}),
@@ -64,20 +77,26 @@ export function useCanvasPersistence(editor: Editor | null, enabled: boolean = t
             } catch { }
 
             // Determine write permission: owner or editor membership
-            if (canvas.user_id === user.id) {
+            if (allowUnauthedWrite) {
               setCanWrite(true);
-            } else {
-              try {
-                const { data: membership, error: memErr } = await supabase
-                  .from('canvas_members')
-                  .select('role')
-                  .eq('canvas_id', canvas.id)
-                  .eq('user_id', user.id)
-                  .maybeSingle();
-                setCanWrite(!memErr && membership?.role === 'editor');
-              } catch {
-                setCanWrite(false);
+            } else if (user) {
+              if (canvas.user_id === user.id) {
+                setCanWrite(true);
+              } else {
+                try {
+                  const { data: membership, error: memErr } = await supabase
+                    .from('canvas_members')
+                    .select('role')
+                    .eq('canvas_id', canvas.id)
+                    .eq('user_id', user.id)
+                    .maybeSingle();
+                  setCanWrite(!memErr && membership?.role === 'editor');
+                } catch {
+                  setCanWrite(false);
+                }
               }
+            } else {
+              setCanWrite(false);
             }
 
             // Load the document into the editor
@@ -92,32 +111,34 @@ export function useCanvasPersistence(editor: Editor | null, enabled: boolean = t
               );
             }
 
-            logger.info('🎨 Canvas loaded successfully - shapes should appear');
+            logger.debug('🎨 Canvas loaded successfully - shapes should appear');
 
             // CRITICAL: Rehydrate component store after canvas loads
             // The canvas document contains shapes, but componentStore is empty on reload
             setTimeout(() => {
-              logger.info('🔄 Starting component rehydration...');
+              logger.debug('🔄 Starting component rehydration...');
               window.dispatchEvent(
                 new CustomEvent('custom:rehydrateComponents', {
                   detail: { canvasId: canvas.id, conversationKey: canvas.conversation_key },
                 }),
               );
             }, 100); // Small delay to ensure editor is fully loaded
+          } else {
+            setCanWrite(allowParityWrite);
           }
         } catch (error) {
           console.warn(
             '[CanvasPersistence] Canvas load failed or not accessible; continuing in view/collab mode',
             error,
           );
-          // No redirect; keep current id for TLDraw sync. Mark as read-only for persistence.
-          setCanWrite(false);
+          // In parity dev mode, keep write access even if fetch fails (RLS/anon)
+          setCanWrite(Boolean(allowUnauthedWrite));
         }
       }
     };
 
     loadCanvas();
-  }, [user, editor, router]);
+  }, [user, editor, router, allowUnauthedWrite]);
 
   // React to canvas id changes broadcast from the page to keep name in sync immediately
   useEffect(() => {
@@ -136,13 +157,29 @@ export function useCanvasPersistence(editor: Editor | null, enabled: boolean = t
 
   // Auto-save functionality
   const saveCanvas = useCallback(async () => {
+    let lastError: unknown = null;
     if (!enabled) return;
-    if (!editor || !user?.id || isSaving) return;
-    if (!canWrite) return; // respect read-only when not the owner
+    if (!editor || isSaving) return;
+    // In dev/parity flows we allow writes even when the viewer isn't the owner.
+    if (!canWrite && !allowUnauthedWrite) return; // respect read-only when not the owner
 
     setIsSaving(true);
     try {
       const snapshot = editor.getSnapshot();
+      if (process.env.NODE_ENV !== 'production' && process.env.NEXT_PUBLIC_TOOL_DISPATCHER_LOGS === 'true') {
+        try {
+          console.debug('[CanvasPersistence] saveCanvas snapshot', {
+            shapeCount: Array.isArray(snapshot?.store?.shape) ? snapshot.store.shape.length : Object.keys(snapshot?.store?.['shape:'] || {}).length,
+            storeKeys: Object.keys(snapshot?.store || {}).slice(0, 5),
+            canvasId,
+            canWrite,
+          });
+        } catch {}
+      }
+      try {
+        const w = window as any;
+        w.__presentCanvasSaveCalls = (w.__presentCanvasSaveCalls ?? 0) + 1;
+      } catch {}
       const conversationKey = thread?.id || null;
       // Prefer a name derived from canvas id until user customizes
       const urlParams = new URLSearchParams(window.location.search);
@@ -167,21 +204,33 @@ export function useCanvasPersistence(editor: Editor | null, enabled: boolean = t
       }
 
       if (canvasId) {
-        // Update existing canvas
-        const { error } = await supabase
-          .from('canvases')
-          .update({
-            name: canvasName || defaultName,
-            document: snapshot,
-            conversation_key: conversationKey,
-            last_modified: now,
-            updated_at: now,
-            // Store thumbnail preview if available
-            thumbnail,
-          })
-          .eq('id', canvasId);
-
-        if (error) throw error;
+        // Save via Supabase client (anon or service, depending on environment)
+          const { error } = await supabase
+            .from('canvases')
+            .update({
+              name: canvasName || defaultName,
+              document: snapshot,
+              conversation_key: conversationKey,
+              last_modified: now,
+              updated_at: now,
+              // Store thumbnail preview if available
+              thumbnail,
+            })
+            .eq('id', canvasId);
+          if (error) throw error;
+        if (process.env.NODE_ENV !== 'production' && process.env.NEXT_PUBLIC_TOOL_DISPATCHER_LOGS === 'true') {
+          try {
+            console.debug('[CanvasPersistence] saved canvas', {
+              id: canvasId,
+              shapes: Object.keys(snapshot?.store || {}).length,
+              svg: Boolean(thumbnail),
+            });
+          } catch {}
+        }
+        try {
+          const w = window as any;
+          w.__presentCanvasSaveLastOk = Date.now();
+        } catch {}
         setLastSaved(new Date());
 
         // Notify session sync to update the session's canvas_state
@@ -193,7 +242,11 @@ export function useCanvasPersistence(editor: Editor | null, enabled: boolean = t
           // no-op
         }
       } else {
-        // Create new canvas
+        // Create new canvas (only when a real user is present)
+        if (!user?.id) {
+          setCanWrite(false);
+          return;
+        }
         const { data: newCanvas, error } = await supabase
           .from('canvases')
           .insert({
@@ -233,12 +286,41 @@ export function useCanvasPersistence(editor: Editor | null, enabled: boolean = t
         window.history.replaceState({}, '', newUrl.toString());
       }
     } catch (error) {
+      lastError = error;
       console.error('Error saving canvas:', error);
       toast.error('Failed to save canvas');
     } finally {
       setIsSaving(false);
+      try {
+        const w = window as any;
+        if (lastError) {
+          w.__presentCanvasSaveErrors = (w.__presentCanvasSaveErrors ?? 0) + 1;
+          w.__presentCanvasSaveLastError = String(lastError);
+        }
+      } catch {}
     }
-  }, [editor, user, canvasId, canvasName, thread, isSaving, enabled, canWrite]);
+  }, [editor, user, canvasId, canvasName, thread, isSaving, enabled, canWrite, allowUnauthedWrite]);
+
+  // Save shortly after agent actions arrive (as a backstop when editor listeners don’t fire)
+  useEffect(() => {
+    if (!enabled) return;
+    const timerRef: { current: NodeJS.Timeout | null } = { current: null };
+    const handler = () => {
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+      }
+      timerRef.current = setTimeout(() => {
+        saveCanvas();
+      }, 1500);
+    };
+    window.addEventListener('present:agent_actions', handler);
+    return () => {
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+      }
+      window.removeEventListener('present:agent_actions', handler);
+    };
+  }, [enabled, saveCanvas]);
 
   // Set up auto-save on editor changes
   useEffect(() => {
@@ -271,7 +353,7 @@ export function useCanvasPersistence(editor: Editor | null, enabled: boolean = t
   // Manual save function
   const manualSave = useCallback(async () => {
     if (!enabled) return;
-    if (!canWrite) {
+    if (!canWrite && !allowUnauthedWrite) {
       toast.error("You don't have permission to save this canvas");
       return;
     }
@@ -280,7 +362,24 @@ export function useCanvasPersistence(editor: Editor | null, enabled: boolean = t
     }
     await saveCanvas();
     toast.success('Canvas saved!');
-  }, [saveCanvas, enabled, canWrite]);
+  }, [saveCanvas, enabled, canWrite, allowUnauthedWrite]);
+
+  // Debug hook: expose manual save in dev for instrumentation
+  useEffect(() => {
+    if (process.env.NODE_ENV === 'production') return;
+    try {
+      (window as any).__presentCanvasCanWrite = canWrite || allowUnauthedWrite;
+    } catch {}
+    try {
+      (window as any).__presentManualCanvasSave = saveCanvas;
+    } catch {}
+    return () => {
+      try {
+        delete (window as any).__presentManualCanvasSave;
+        delete (window as any).__presentCanvasCanWrite;
+      } catch {}
+    };
+  }, [saveCanvas, canWrite, allowUnauthedWrite]);
 
   // Update canvas name
   const updateCanvasName = useCallback(

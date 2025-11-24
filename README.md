@@ -55,12 +55,13 @@ npm install
   VOICE_AGENT_TRANSCRIPTION_MODE=realtime | manual
   ```
 
-- Optional canvas steward controls:
+  # Optional canvas steward controls (the legacy browser TLDraw agent is archived and disabled by default):
 
   ```
   CANVAS_STEWARD_MODEL=claude-haiku-4-5        # override the default model (falls back if provider unavailable)
-  CANVAS_STEWARD_SERVER_EXECUTION=false        # set true to run the server-side steward alongside the browser agent
-  NEXT_PUBLIC_CANVAS_AGENT_CLIENT_ENABLED=true # set false to disable the browser TLDraw agent (use server execution only)
+  NEXT_PUBLIC_CANVAS_AGENT_CLIENT_ENABLED=false # legacy DOM TLDraw agent (leave false unless debugging an edge case; enabling also skips the server steward so the browser is the sole executor)
+  NEXT_PUBLIC_CANVAS_AGENT_THEME_ENABLED=true   # keep TLDraw branding even when the client agent is disabled
+  CANVAS_QUEUE_DIRECT_FALLBACK=false            # set true to execute the steward immediately when queue inserts fail (may duplicate actions)
   CANVAS_STEWARD_DEBUG=false                   # set true to dump prompts/actions to the server logs
   ```
 
@@ -117,6 +118,14 @@ npm run stack:stop
 ```
 
 The script reads the PID files in `logs/` and terminates each dev process, removing stale entries along the way.
+
+Need to collaborate from multiple devices? Run the share helper:
+
+```bash
+npm run stack:share
+```
+
+This restarts the entire stack and spins up `ngrok` tunnels for the Next.js app (`:3000`), TLDraw sync server (`:3100`), and LiveKit control ports (`:7880`/`:7882`). Install `ngrok` locally (and set your authtoken) beforehand; the script prints the public URLs plus the dashboard address so you can distribute the links quickly.
 
 #### Production Mode
 
@@ -200,6 +209,49 @@ const components: customComponent[] = [
 ```
 
 You can find more information about the options [here](https://custom.co/docs/concepts/registering-components)
+
+### Canvas branding (TLDraw defaults and tiny UI tweaks)
+
+Set TLDraw’s default look-and-feel and a few tasteful UI tweaks via a focused hook.
+
+- Hook: `src/components/ui/canvas/hooks/useTldrawBranding.ts`
+- Used at: `src/components/ui/canvas/canvas-space.tsx:~280` (passed to `onMount`)
+- Server-side macros + steward capabilities live in [docs/canvas-agent.md](docs/canvas-agent.md#tool-catalog--brand-macros); review that section if you need to extend the agent’s “hands” (apply presets, retries, screenshot tuning, etc.).
+
+What it sets by default
+
+- “Next shape” defaults on editor mount: `font: 'mono'`, `size: 'm'`, `dash: 'dotted'`, `color: 'red'` (mapped to the brutalist deep-orange swatch).
+- Optional: remap built-in color names (e.g., change what “violet” points to), and nudge selection highlight via CSS variables (currently orange by default).
+
+Change the defaults
+
+Edit the `useTldrawBranding` call in `src/components/ui/canvas/canvas-space.tsx` and pass your preferences:
+
+```ts
+// src/components/ui/canvas/canvas-space.tsx
+const branding = useTldrawBranding({
+  defaultFont: 'serif',     // 'draw' | 'mono' | 'sans' | 'serif'
+  defaultSize: 'm',         // 's' | 'm' | 'l' | 'xl'
+  defaultDash: 'solid',     // 'solid' | 'dashed' | 'dotted'
+  defaultColor: 'violet',   // see TLColor union in the hook
+  palette: {
+    violet: '#6a5acd',      // optional: remap built-in named colors
+    blue: '#2563eb',
+  },
+  paletteEnabled: true,     // tie this to the @canvas-agent toggle if needed
+  selectionCssVars: {
+    '--tl-color-selection': '#7b66dc33',
+    '--tl-color-selection-stroke': '#7b66dc',
+  },
+})
+```
+
+Scope & notes
+
+- Uses TLDraw v4 Editor APIs (`editor.setStyleForNextShapes`) and v4 theme palette (`DefaultColorThemePalette`).
+- Palette remaps apply once per page load and affect all canvases on the page (intended).
+- Branding respects the `@canvas-agent` toggle via `NEXT_PUBLIC_CANVAS_AGENT_THEME_ENABLED` (falls back to `NEXT_PUBLIC_CANVAS_AGENT_CLIENT_ENABLED` for legacy behaviour). Set either env to `false` to revert instantly to TLDraw stock colors and selection styles.
+- For deeper menu/control edits, compose TLDraw `components` and `overrides`. We already apply collaboration overrides at `src/components/ui/tldraw/utils/collaborationOverrides.ts`.
 
 ## 🎙️ Voice + Steward Architecture
 

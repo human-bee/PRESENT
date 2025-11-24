@@ -53,11 +53,15 @@ export function useCanvasComponentStore(
       const existingShapeId = messageIdToShapeIdMap.get(messageId);
 
       if (existingShapeId) {
+        const existingShape = editor.getShape<CustomShape>(existingShapeId);
+        const prevProps = existingShape?.props;
+
         editor.updateShapes<CustomShape>([
           {
             id: existingShapeId,
             type: 'custom',
             props: {
+              ...(prevProps ?? {}),
               customComponent: messageId,
               name: componentName || `Component ${messageId}`,
             },

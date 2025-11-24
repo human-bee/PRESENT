@@ -21,6 +21,8 @@ import {
   useCanvasEvents,
   useCanvasInteractions,
 } from './hooks';
+import { useTldrawBranding } from './hooks';
+import { BrandGridOverlay } from './BrandGridOverlay';
 
 // Dynamic imports for heavy tldraw components - only load when needed
 
@@ -45,6 +47,8 @@ if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
   const originalWarn = console.warn;
   const originalLog = console.log;
   let mcpLoadingCount = 0;
+  const dispatcherLogsEnabled =
+    typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_TOOL_DISPATCHER_LOGS === 'true';
 
   console.warn = (...args) => {
     const message = args.join(' ');
@@ -67,6 +71,13 @@ if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
       if (mcpLoadingCount > 3) {
         return; // Skip after showing 3 times
       }
+    }
+    if (
+      message.includes('[Transcript] render state') ||
+      message.includes('[RetroTimerEnhanced] Using provided custom message ID') ||
+      (!dispatcherLogsEnabled && message.includes('[ComponentRegistry] '))
+    ) {
+      return;
     }
     originalLog.apply(console, args);
   };
@@ -99,8 +110,136 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
   const previousThreadId = useRef<string | null>(null);
   const livekitCtx = React.useContext(CanvasLiveKitContext);
   const room = useRoomContext();
-  const bus = createLiveKitBus(room);
+  const bus = React.useMemo(() => createLiveKitBus(room), [room]);
+  const snapshotTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const emitComponentSnapshot = React.useCallback(
+    (reason: string, opts?: { force?: boolean }) => {
+      if (!room || room.state !== 'connected') return;
+      const currentRoom = livekitCtx?.roomName || room.name;
+      if (!currentRoom) return;
+      const entries = ComponentRegistry.list();
+      const focusTypes = new Set([
+        'DebateScorecard',
+        'ResearchPanel',
+        'RetroTimerEnhanced',
+        'RetroTimer',
+        'LivekitParticipantTile',
+      ]);
+      const selected = entries.filter((entry) => focusTypes.has(entry.componentType));
+      if (selected.length === 0) return;
+      const componentsPayload = selected.map((entry) => {
+        let clonedProps: Record<string, unknown> = {};
+        try {
+          clonedProps = JSON.parse(JSON.stringify(entry.props ?? {}));
+        } catch {
+          clonedProps = { ...(entry.props ?? {}) };
+        }
+        const intentId =
+          typeof (clonedProps as Record<string, unknown>).intentId === 'string'
+            ? ((clonedProps as Record<string, string>).intentId as string)
+            : null;
+        return {
+          componentId: entry.messageId,
+          componentType: entry.componentType,
+          intentId,
+          lastUpdated: entry.lastUpdated ?? entry.timestamp ?? Date.now(),
+          props: clonedProps,
+        };
+      });
+      const sendSnapshot = () => {
+        bus.send('component_snapshot', {
+          type: 'component_snapshot',
+          room: currentRoom,
+          components: componentsPayload,
+          reason,
+          timestamp: Date.now(),
+        });
+      };
+
+      if (opts?.force) {
+        if (snapshotTimerRef.current) {
+          clearTimeout(snapshotTimerRef.current);
+          snapshotTimerRef.current = null;
+        }
+        sendSnapshot();
+        return;
+      }
+
+      if (snapshotTimerRef.current) {
+        clearTimeout(snapshotTimerRef.current);
+      }
+      snapshotTimerRef.current = setTimeout(() => {
+        snapshotTimerRef.current = null;
+        sendSnapshot();
+      }, 150);
+    },
+    [bus, livekitCtx?.roomName, room],
+  );
+
+  useEffect(() => {
+    const handler = () => emitComponentSnapshot('component_store_update');
+    window.addEventListener('present:component-store-updated', handler);
+    emitComponentSnapshot('initial_mount', { force: true });
+    return () => {
+      window.removeEventListener('present:component-store-updated', handler);
+      if (snapshotTimerRef.current) {
+        clearTimeout(snapshotTimerRef.current);
+        snapshotTimerRef.current = null;
+      }
+    };
+  }, [emitComponentSnapshot]);
+
+  useEffect(() => {
+    const off = bus.on('component_snapshot_request', (msg: any) => {
+      const targetRoom = typeof msg?.room === 'string' ? msg.room : null;
+      const currentRoom = livekitCtx?.roomName || room?.name;
+      if (targetRoom && currentRoom && targetRoom !== currentRoom) {
+        return;
+      }
+      emitComponentSnapshot('request', { force: true });
+    });
+    return off;
+  }, [bus, emitComponentSnapshot, livekitCtx?.roomName, room?.name]);
   const logger = createLogger('CanvasSpace');
+  // A balanced "brutalist orange"-anchored palette while keeping a full color wheel.
+  // Based on well-known, high-contrast material hues (orange/deep-orange anchor).
+  // Toggle off via paletteEnabled: false to keep TLDraw defaults.
+  const BRAND_ORANGE_WHEEL = {
+    // neutrals
+    black: '#000000',
+    grey: '#9E9E9E',
+    // purple/violet
+    'light-violet': '#EDE7F6', // deep purple 50
+    violet: '#673AB7', // deep purple 500
+    // blues
+    'light-blue': '#E3F2FD', // blue 50
+    blue: '#2196F3', // blue 500
+    // greens
+    'light-green': '#E8F5E9', // green 50
+    green: '#4CAF50', // green 500
+    // orange anchor mapped onto TL's yellow slots
+    'light-yellow': '#FFF3E0', // orange 50
+    yellow: '#FF9800', // orange 500 (anchor)
+    // warm accent mapped onto TL's red slots (deep orange)
+    'light-red': '#FFCCBC', // deep orange 100
+    red: '#FF5722', // deep orange 500
+  } as const;
+
+  const branding = useTldrawBranding({
+    defaultFont: 'mono',
+    defaultSize: 'm',
+    defaultDash: 'dotted',
+    defaultColor: 'red',
+    palette: BRAND_ORANGE_WHEEL as any,
+    paletteEnabled: true,
+    selectionCssVars: {
+      // Orange selection + hover highlights
+      '--tl-color-selection-fill': '#ff6a0033',
+      '--tl-color-selection-stroke': '#ff6a00',
+      '--tl-color-focus': '#ff6a00',
+      '--tl-color-selected': '#ff6a00',
+    },
+  });
 
   const {
     componentStore,
@@ -150,9 +289,16 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
     return [customShapeUtil, ToolboxShapeUtil, MermaidStreamShapeUtil] as any[];
   }, []);
 
+  const hasReconciledRegistry = useRef(false);
+
   // On first editor ready, reconcile with ComponentRegistry in case events were missed
   useEffect(() => {
-    if (!editor) return;
+    if (!editor) {
+      hasReconciledRegistry.current = false;
+      return;
+    }
+    if (hasReconciledRegistry.current) return;
+    hasReconciledRegistry.current = true;
     const existing = ComponentRegistry.list();
     if (!existing || existing.length === 0) return;
     logger.info(`🧭 Reconciling ${existing.length} components from registry`);
@@ -246,6 +392,11 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
 
   // Export functionality is now handled by TldrawWithPersistence component
 
+  const handleMount = React.useCallback((ed: Editor) => {
+    setEditor(ed);
+    branding.onMount(ed);
+  }, [branding]);
+
   return (
     <div
       className={cn(
@@ -263,9 +414,12 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
         onDragOver={onDragOver}
         onDrop={onDrop}
       >
+        {/* Subtle brand grid overlay (8px base, orange every 32px) */}
+        <BrandGridOverlay editor={editor} />
+
         <TldrawWithCollaboration
           key={livekitCtx?.roomName || 'no-room'}
-          onMount={setEditor}
+          onMount={handleMount}
           shapeUtils={customShapeUtils as any}
           componentStore={componentStore.current}
           className="absolute inset-0"

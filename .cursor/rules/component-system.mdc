@@ -1,0 +1,30 @@
+---
+alwaysApply: false
+---
+# Component System (Contracts)
+
+## Core Concepts
+- `ComponentRegistry` keeps `{ id, type, props, diffHistory, updateCallback }`.
+- Tools: `ui_update`, `list_components` exposed to agents.
+- Hook: `useComponentRegistration(id, type, props, contextKey, onAIUpdate)`.
+- `<PropertyDiffViewer>` renders shallow prop diffs.
+
+## Lifecycle
+1) Component registers on mount.
+2) `ui_update(id, patch)` merges props and records shallow diffs.
+3) Registry invokes component `updateCallback` (optional); component sets state.
+
+## Diff Tracking
+- Shallow prop diffs `{ key, previous, next, ts }`.
+- Use `<PropertyDiffViewer>` in admin/debug UIs.
+
+## Canvas Events (optional)
+- Large surfaces still use LiveKit bus for physical position/size via `CanvasSyncAdapter`.
+- Prop updates continue to flow through `ui_update`.
+
+## Migration Tips
+- Prefer `useComponentRegistration` + `ui_update` over bespoke bus messages.
+- Remove `bus.send('ui_update', …)` patterns.
+
+See `docs/COMPONENT_SYSTEM.md` for details.
+

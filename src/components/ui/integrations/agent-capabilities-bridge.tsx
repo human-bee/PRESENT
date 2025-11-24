@@ -14,9 +14,10 @@ import { systemRegistry } from '@/lib/system-registry';
 export function AgentCapabilitiesBridge() {
   const room = useRoomContext();
 
+  const bus = React.useMemo(() => (room ? createLiveKitBus(room) : null), [room]);
+
   React.useEffect(() => {
-    if (!room) return;
-    const bus = createLiveKitBus(room);
+    if (!room || !bus) return;
 
     const off = bus.on('capability_query', async () => {
       try {
@@ -56,8 +57,7 @@ export function AgentCapabilitiesBridge() {
     return () => {
       off();
     };
-  }, [room]);
+  }, [room, bus]);
 
   return null;
 }
-

@@ -25,7 +25,7 @@ export interface ToolDispatcherProps {
 export function ToolDispatcher({
   children,
   contextKey,
-  enableLogging = true,
+  enableLogging = false,
   stewardEnabled,
 }: ToolDispatcherProps) {
   const room = useRoomContext();
@@ -78,6 +78,16 @@ export function ToolDispatcher({
       try {
         if (!message || message.type !== 'agent:action') return;
         const envelope = message.envelope;
+        if (enableLogging && typeof window !== 'undefined') {
+          try {
+            console.debug('[ToolDispatcher] agent:action received', {
+              room: room?.name,
+              sessionId: envelope?.sessionId,
+              seq: envelope?.seq,
+              actionCount: Array.isArray(envelope?.actions) ? envelope.actions.length : 0,
+            });
+          } catch {}
+        }
         window.dispatchEvent(new CustomEvent('present:agent_actions', { detail: envelope }));
         void (async () => {
           const token = await ensureToken(envelope.sessionId);
@@ -103,6 +113,17 @@ export function ToolDispatcher({
       } catch {}
     });
 
+    return () => { off?.(); };
+  }, [events.bus, room]);
+
+  useEffect(() => {
+    if (!room) return;
+    const off = events.bus.on('agent:status', (message: any) => {
+      try {
+        if (!message || message.type !== 'agent:status') return;
+        window.dispatchEvent(new CustomEvent('present:agent_status', { detail: message }));
+      } catch {}
+    });
     return () => { off?.(); };
   }, [events.bus, room]);
 

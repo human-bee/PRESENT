@@ -9,7 +9,7 @@ echo "[LiveKit] starting dev server..."
 
 if command -v livekit-server >/dev/null 2>&1; then
   echo "[LiveKit] using binary: $(command -v livekit-server)"
-  exec livekit-server --dev
+  exec livekit-server --dev --bind 0.0.0.0
 fi
 
 echo "[LiveKit] ERROR: 'livekit-server' not found in PATH."

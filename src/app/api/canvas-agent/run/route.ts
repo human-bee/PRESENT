@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { runCanvasAgent } from '@/lib/agents/canvas-agent/server/runner';
 
+export const runtime = 'nodejs';
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
@@ -15,7 +17,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: error instanceof Error ? error.message : String(error) }, { status: 500 });
   }
 }
-
 
 
 

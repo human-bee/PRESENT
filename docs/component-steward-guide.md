@@ -6,7 +6,7 @@
 
 ## 1. Architecture Crash Course
 
-- **Voice Agent (Realtime):** normalizes user intent, reserves component IDs (`reserve_component`), issues updates, and keeps latency low via lossy `update_component`.
+- **Voice Agent (Realtime):** normalizes user intent, reserves component IDs (`reserve_component`), and emits low-latency deltas via `update_component` payloads that include `_ops` (domain-specific operations) plus optional shallow patches.
 - **Conductor:** hands off long-running tasks to stewards and streams status back to the browser.
 - **Canvas Agent (Server):** now ingesting `shape.props.state` (bounded by `CANVAS_AGENT_SHAPE_STATE_LIMIT`, default 4 KB) so the model has the latest runtime state before planning actions.
 - **Browser (ToolDispatcher + TLDraw bridge):** applies patches, exposes metrics, and keeps the `ComponentRegistry` as a local source of truth.
@@ -19,7 +19,7 @@ Keep the voice agent lean; heavy analysis or multi-step planning should run via 
 
 1. **Registration:** call `useComponentRegistration(messageId, type, props, contextKey, handleAIUpdate)` during mount. The hook wires your component into the registry and exposes the latest props to other surfaces.
 2. **Runtime state:** use the injected `state` (from TLDraw shape) as the source of truth. When you mutate local state, mirror the change by calling the injected `updateState` helper so other clients stay in sync.
-3. **Patches:** `handleAIUpdate` should be idempotent and tolerant of partial payloads. Coerce `duration`, `timeLeft`, etc. – the dispatcher now does most normalization, but components should still guard against missing fields.
+3. **Deltas first:** `handleAIUpdate` receives already-reduced state. The dispatcher applies any `_ops` before handing props to your component, so treat the data as authoritative and focus on rendering. If your component still consumes `_ops` directly (rare), keep handlers idempotent. When you do need to promote the update into local React state, read the canonical payload back via `ComponentRegistry.get(messageId)` and only replace your state when the incoming `version`/`lastUpdated` is newer—see the debate scorecard widget for a reference implementation.
 4. **Deterministic IDs:** accept either a provided `__custom_message_id` or derive a fallback, but avoid random IDs – the voice agent uses the ID to resolve future updates.
 5. **Perf ceiling:** keep renders under ~10 ms; expensive recomputations should live inside `useMemo`/`useCallback` or be deferred until interaction.
 
@@ -29,8 +29,11 @@ Keep the voice agent lean; heavy analysis or multi-step planning should run via 
 
 - **Reserve before create:** call `reserve_component` with `type`, `intentId`, `messageId`, and optional `slot` whenever you plan to emit a component. The browser ledger eliminates race conditions between multiple agents.
 - **Resolve smartly:** when updating an existing component from steward context, prefer `resolve_component` (intent/slot/type) instead of guessing the last created ID.
+- **Emit deltas:** send `_ops` arrays that describe the logical change (e.g., `UPSERT_CLAIMS`, `UPDATE_METRICS`) alongside any derived props. The dispatcher reduces the ops into the canonical state before re-rendering clients.
 - **Validation:** sanitize input (minutes, URLs, etc.) before calling downstream tools. Emit user-facing errors via `agent:chat` rather than failing silently.
 - **Streaming etiquette:** long tasks should stream interim status (`analysis_started`, `analysis_complete`) so the browser can surface progress.
+- **Offline runs:** set `MOCK_WEB_SEARCH=true` when running smoketests without outbound network access. The steward will return deterministic evidence hits so latency stays predictable.
+- **CRDT-friendly ops:** `_ops` are now deduped and logged (see `src/lib/component-crdt.ts`). Make sure every steward emits stable, idempotent operations—late subscribers will replay the last 200 ops to catch up.
 
 ---
 
@@ -67,6 +70,33 @@ Keep the voice agent lean; heavy analysis or multi-step planning should run via 
 - [ ] Document any new steward/component pairing in this guide when shipping.
 - [ ] If the flow depends on MCP, verify servers in `/mcp-config` and confirm `mcp_*` tools appear in the Capability Inspector.
 
+## 8. Delta Ops Reference
+
+All new stewards and widgets should express changes as **operations** instead of dumping entire component states. The ToolDispatcher automatically applies `_ops` before merging any residual patch payload.
+
+- `_ops` is an array of domain-specific instructions. Example for the debate scorecard steward:
+
+  ```json
+  {
+    "componentId": "debate-scorecard-1762",
+    "patch": {
+      "_ops": [
+        { "type": "UPSERT_CLAIMS", "claims": [{ "id": "AFF-4", "quote": "Cold brew rocks" }] },
+        { "type": "UPDATE_METRICS", "metrics": { "roundScore": 0.62 } }
+      ]
+    }
+  }
+  ```
+- Operations are additive and order dependent. The reducer guarantees commutativity with the existing state while ignoring stale versions.
+- Include a monotonic `version` (or at least `lastUpdated`) when posting to `/api/steward/commit` so the reducer can drop late packets safely.
+- If you still need to ship a full snapshot (e.g., first commit), emit both `_ops` and the derived props – the registry runs the ops first, then merges the remaining fields.
+
+Update this reference whenever a new steward defines additional ops so other teams can reuse them.
+
+### Release Notes
+
+- **2025-11-04:** Upgraded the OpenAI Agents JS SDK stack (`@openai/agents*`) to **v0.2.1**. This unlocks richer tool outputs (attachments / provider data) and aligns our harness with the current release window. Keep the `openai` client on `^6.x` and stay on **Zod v3** until the SDK officially supports Zod 4. No steward code changes required, but browser/voice-agent logs now surface non-text tool payloads—ignore them unless your component explicitly handles attachments.
+
 ---
 
 ## 8. MCP Tooling & Agent SDK Integration
@@ -99,4 +129,37 @@ Keep the voice agent lean; heavy analysis or multi-step planning should run via 
    - Check `window.__custom_mcp_tools` in the console to see the current MCP tool catalog.
    - If a steward call fails, inspect `logs/agent-conductor.log` for the tool payload and the MCP server’s response.
 
-*Last updated: 2025-11-01*
+*Last updated: 2025-11-04*
+
+---
+
+## 9. Example: Debate Scorecard Steward
+
+- **Schema** – `src/lib/agents/debate-scorecard-schema.ts` holds the shared Zod models for claims, players, achievements, and timeline events.
+- **Steward** – `src/lib/agents/debate-judge.ts` now exposes `debateScorecardSteward` with `get_current_scorecard`, `get_context`, and `commit_scorecard` tools.
+- **UI Component** – `src/components/ui/productivity/debate-scorecard.tsx` renders the scoreboard (scores, momentum, achievements, live timeline) and registers via `useComponentRegistration`.
+- **Voice Agent** – `src/lib/agents/realtime/voice-agent.ts` reserves/creates the scorecard component and dispatches `scorecard.run` jobs to the conductor when debate intents are detected.
+- **Conductor Routing** – `src/lib/agents/conductor/index.ts` handles `scorecard.*` tasks and forwards them to `runDebateScorecardSteward`.
+
+### Lessons from the scorecard rollout
+
+- **Let the steward finish the job.** Once the voice agent calls `dispatch_to_conductor({ task: 'scorecard.run', ... })`, bail out of the `update_component` branch. Returning `{ status: 'REDIRECTED' }` keeps the voice agent from spamming literal `update_component` calls while the steward is mid-run.
+- **Broadcast every commit.** The steward must POST its final state through `/api/steward/commit`; include `_ops` summarising what changed so late subscribers can replay intent deterministically. Local `ComponentRegistry` updates alone are not enough.
+- **Design for expansion, not aspect ratios.** The scorecard originally lived inside a fixed 16×9 frame, which clipped long ledgers/timelines. A flexible two-column shell (sidebar + scrollable main pane) handled large steward patches without layout hacks.
+- **Mirror LiveKit updates into the TLDraw store.** After `ComponentRegistry.update`, emit a `custom:showComponent` + `tldraw:merge_component_state` so the TLDraw shape, transcript preview, and registry stay aligned. The registry will have already applied `_ops`, so TLDraw sees the fully reduced state.
+- **Stress-test with synthetic patches.** Before relying on the steward pipeline, fire a manual `custom:showComponent` event containing a heavy payload (multiple claims, fact checks, timeline items). It’s a quick way to surface layout issues or schema mismatches.
+
+Use this as a reference when cloning the steward pattern for other multi-surface widgets.
+
+#### Evidence search & citations (new in November 2025)
+
+- `search_evidence` (`src/lib/agents/debate-judge.ts`) is the canonical tool for live web lookups. It wraps `performWebSearch` (`src/lib/agents/tools/web-search.ts`) which hits OpenAI Responses with the built-in `web_search` capability and normalises hits into `{ id, title, url, snippet, publishedAt?, source? }`.
+- We inject the tool into the steward manifest (`tools: [get_current_scorecard, get_context, search_evidence, commit_scorecard]`) and require the steward to call it before switching a claim from `CHECKING` → `VERIFIED`/`REFUTED`.
+- Returned hits should be copied into both `claim.factChecks[].evidenceRefs` and the global `sources[]` array so the UI can display a bibliography. Each entry already includes stable `source-${sha1(url)}` IDs—reuse them to avoid dupes.
+- When merging optimistic concurrency conflicts we reconcile `sources` and `factChecks` by ID (see `mergeById` helpers). Any new steward should follow this pattern so citations survive retries.
+- The helper will throw if the Responses API rejects the payload. Keep prompts JSON-only (no markdown) and avoid unsupported model options such as `reasoning.effort` unless the target model documents them.
+- Smoke-testing checklist for any new evidence-driven steward:
+  1. Trigger the steward on a fresh `/canvas` board.
+  2. Confirm `🔍 [Steward] search_evidence` logs appear with non-zero `hits`.
+  3. Reload the board; `sources[]` should persist and the Sources tab should show the recorded URLs/snippets.
+  4. Verify pending-verification IDs clear when a claim is marked `VERIFIED`.

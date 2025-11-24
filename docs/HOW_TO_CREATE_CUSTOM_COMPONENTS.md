@@ -123,8 +123,8 @@ export default function MyWidget({
 ## 3. Updating via AI
 
 1. `list_components` → grab `messageId`, intent, slot metadata.
-2. `update_component({ componentId, patch })` → dispatcher normalizes strings (`"7m"`, `"started"`) before applying state.
-3. Component’s `handleAIUpdate` fires, then `updateState` mirrors the change across clients.
+2. `update_component({ componentId, patch })` → include `_ops` when possible so reducers can apply the semantic change before merging any residual props. The dispatcher still normalizes convenience fields (`"7m"`, `"started"`).
+3. Component’s `handleAIUpdate` fires with the reduced props; call `updateState` if you need to mirror local mutations across clients.
 
 > Tip: use `reserve_component` when the agent wants to guarantee an ID before render – see the integration guide for details.
 

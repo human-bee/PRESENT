@@ -9,7 +9,7 @@
 
 import * as React from 'react';
 import { z } from 'zod';
-import { AlertCircle, User } from 'lucide-react';
+import { AlertCircle, User, Loader2 } from 'lucide-react';
 import { useCanvasLiveKit } from '../livekit-room-connector';
 import { useParticipants, useLocalParticipant, useRoomContext } from '@livekit/components-react';
 import { LivekitParticipantTileState, SingleParticipantTile } from './livekit-single-participant-tile';
@@ -48,6 +48,11 @@ export const livekitParticipantTileSchema = z.object({
     .optional()
     .describe('Prefer which video source when both are present (default: auto)'),
   isAgent: z.boolean().optional().describe('Whether this participant is an AI agent (shows bot icon)'),
+  // Relaxed schema to avoid Zod version compatibility issues with function().args()
+  onIdentityChange: z
+    .any() 
+    .optional()
+    .describe('Callback when the participant identity changes'),
 });
 
 export type LivekitParticipantTileProps = z.infer<typeof livekitParticipantTileSchema>;
@@ -65,13 +70,13 @@ export const LivekitParticipantTile = React.memo(function LivekitParticipantTile
   mirrorLocal = true,
   fit = 'cover',
   trackPreference = 'camera',
+  onIdentityChange,
 }: LivekitParticipantTileProps) {
   const [state] = React.useState<LivekitParticipantTileState>({
     isMinimized: false,
     audioLevel: 0,
     lastSpokeAt: null,
   });
-  const [selectedParticipantId, setSelectedParticipantId] = React.useState<string | null>(null);
 
   const canvasLiveKit = useCanvasLiveKit();
   const room = useRoomContext();
@@ -110,39 +115,36 @@ export const LivekitParticipantTile = React.memo(function LivekitParticipantTile
     );
   }
 
-  const activeParticipantId =
-    selectedParticipantId || participantIdentity || localParticipant?.identity || null;
-  const participant = activeParticipantId
-    ? (localParticipant?.identity === activeParticipantId ? localParticipant : null) ||
-      participants.find((p) => p.identity === activeParticipantId) ||
+  // Robust Participant Selection Logic
+  // 1. Explicit identity via prop
+  // 2. "Waiting" state if explicit identity is missing
+  // 3. Auto-select first REMOTE participant if no identity is set
+  // 4. Fallback to LOCAL participant if no remote and no identity
+
+  let targetIdentity = participantIdentity;
+  let autoSelected = false;
+
+  // Auto-selection logic: If no identity is assigned, pick the first remote participant
+  if (!targetIdentity) {
+    const firstRemote = participants.find(p => !p.isLocal);
+    if (firstRemote) {
+      targetIdentity = firstRemote.identity;
+      autoSelected = true;
+    } else if (localParticipant) {
+      targetIdentity = localParticipant.identity;
+      autoSelected = true;
+    }
+  }
+
+  const participant = targetIdentity
+    ? (localParticipant?.identity === targetIdentity ? localParticipant : null) ||
+      participants.find((p) => p.identity === targetIdentity) ||
       null
     : null;
 
-  if (activeParticipantId && !participant) {
-    return (
-      <div
-        className="bg-yellow-50 border-2 border-yellow-300 rounded-lg p-4 flex flex-col items-center justify-center gap-2"
-        style={{ width, height: Math.max(height / 2, 140), borderRadius }}
-      >
-        <User className="w-8 h-8 text-yellow-600" />
-        <div className="text-center">
-          <p className="font-medium text-yellow-800 mb-1">Participant Not Found</p>
-          <p className="text-xs text-yellow-700 mb-2">
-            Looking for: &quot;{activeParticipantId}&quot;
-          </p>
-          <p className="text-xs text-yellow-600 mb-2">Available participants:</p>
-          <div className="text-xs text-yellow-600">
-            {participants.length === 0 && localParticipant && (
-              <div>• {localParticipant.identity} (you)</div>
-            )}
-            {participants.map((p) => (
-              <div key={p.sid}>• {p.identity}</div>
-            ))}
-          </div>
-        </div>
-      </div>
-    );
-  }
+  // If we auto-selected someone, we should technically "commit" this selection to the canvas state
+  // so everyone sees the same person. But strictly controlled components shouldn't side-effect update props.
+  // For now, we'll just render them visually. Ideally, the user clicks "Pin" to save this state.
 
   if (participant) {
     return (
@@ -160,21 +162,51 @@ export const LivekitParticipantTile = React.memo(function LivekitParticipantTile
         mirrorLocal={mirrorLocal}
         fit={fit}
         trackPreference={trackPreference}
-        onSelectParticipant={(id) => setSelectedParticipantId(id)}
+        onSelectParticipant={onIdentityChange}
         state={state}
       />
     );
   }
 
+  // WAITING STATE: Identity is set, but participant not found in room
+  if (participantIdentity && !participant) {
+    return (
+        <div
+          className="bg-gray-50 border-2 border-gray-300 border-dashed rounded-lg p-4 flex flex-col items-center justify-center gap-2"
+          style={{ width, height: Math.max(height / 2, 140), borderRadius }}
+        >
+          <Loader2 className="w-8 h-8 text-gray-400 animate-spin" />
+          <div className="text-center">
+            <p className="font-medium text-gray-600 mb-1">Waiting for...</p>
+            <p className="text-xs text-gray-500 font-mono bg-gray-100 px-2 py-1 rounded">
+              {participantIdentity}
+            </p>
+            <p className="text-[10px] text-gray-400 mt-2">Participant is not in the room yet</p>
+          </div>
+        </div>
+    );
+  }
+
+  // EMPTY STATE: No identity set, and no participants found to auto-select
   return (
     <div
       className="bg-yellow-50 border-2 border-yellow-300 rounded-lg p-4 flex flex-col items-center justify-center gap-2"
       style={{ width, height: Math.max(height / 2, 140), borderRadius }}
     >
-      <AlertCircle className="w-8 h-8 text-yellow-600" />
+      <User className="w-8 h-8 text-yellow-600" />
       <div className="text-center">
-        <p className="font-medium text-yellow-800 mb-1">No participant</p>
-        <p className="text-xs text-yellow-700">Use tile settings to select a participant.</p>
+        <p className="font-medium text-yellow-800 mb-1">No Participants</p>
+        <p className="text-xs text-yellow-700 mb-2">
+          Waiting for someone to join...
+        </p>
+        {localParticipant && (
+           <button 
+             className="text-xs text-blue-600 underline mt-1"
+             onClick={() => onIdentityChange?.(localParticipant.identity)}
+           >
+             Show Me ({localParticipant.identity})
+           </button>
+        )}
       </div>
     </div>
   );
