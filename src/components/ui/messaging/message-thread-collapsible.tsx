@@ -316,7 +316,10 @@ export const MessageThreadCollapsible = React.forwardRef<
       const tokenUrl = new URL(tokenEndpoint, base);
       tokenUrl.searchParams.set('roomName', livekitCtx.roomName);
       tokenUrl.searchParams.set('identity', identity!);
-      tokenUrl.searchParams.set('name', user?.user_metadata?.full_name || 'Canvas User');
+      
+      // Update name parameter to prioritize stored display name
+      const storedDisplayName = window.localStorage.getItem('present:display_name');
+      tokenUrl.searchParams.set('name', storedDisplayName || user?.user_metadata?.full_name || 'Canvas User');
 
       let data: any | null = null;
       try {
