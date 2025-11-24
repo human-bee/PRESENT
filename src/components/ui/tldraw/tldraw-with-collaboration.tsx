@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode, RefObject } from 'react';
 import { Tldraw, TLComponents, Editor, TldrawUiToastsProvider } from '@tldraw/tldraw';
 import { useRoomContext } from '@livekit/components-react';
@@ -127,7 +127,7 @@ export function TldrawWithCollaboration({
 
 interface CollaborationEditorEffectsProps {
   room: Room | undefined;
-  containerRef: RefObject<HTMLDivElement>;
+  containerRef: RefObject<HTMLDivElement | null>;
   onEditorReady?: (editor: Editor) => void;
   onMount?: (editor: Editor) => void;
 }
@@ -167,4 +167,4 @@ function CollaborationEditorEffects({
   return <CanvasAgentController editor={editor} room={room} />;
 }
 
-export default TldrawWithCollaboration;
+export default React.memo(TldrawWithCollaboration);

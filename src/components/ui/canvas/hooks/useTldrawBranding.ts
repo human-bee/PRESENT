@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef, useCallback } from 'react'
 import * as TL from 'tldraw'
 import type { Editor } from 'tldraw'
 import type { PresetName } from '../../tldraw/brand-presets'
@@ -167,7 +167,7 @@ export function useTldrawBranding(user?: Partial<TldrawBrandingOptions>) {
     }
   }, [opts.selectionCssVars])
 
-  function onMount(editor: Editor) {
+  const onMount = useCallback((editor: Editor) => {
     try {
       editor.setStyleForNextShapes((TL as any).DefaultFontStyle, opts.defaultFont)
       editor.setStyleForNextShapes((TL as any).DefaultSizeStyle, opts.defaultSize)
@@ -176,7 +176,7 @@ export function useTldrawBranding(user?: Partial<TldrawBrandingOptions>) {
     } catch {
       // Ignore: if editor changes API, we don't want to crash the app
     }
-  }
+  }, [opts.defaultFont, opts.defaultSize, opts.defaultDash, opts.defaultColor])
 
   function applyPreset(editor: Editor | null | undefined, name: PresetName, preferSelected = true) {
     if (!editor) return
@@ -186,7 +186,7 @@ export function useTldrawBranding(user?: Partial<TldrawBrandingOptions>) {
       try {
         if (target === 'selected') editor.setStyleForSelectedShapes(key, value)
         else editor.setStyleForNextShapes(key, value)
-      } catch {}
+      } catch { }
     }
     const hasSelection = (() => {
       try {

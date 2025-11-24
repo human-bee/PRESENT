@@ -4,10 +4,11 @@ import cors from '@fastify/cors';
 import type { RawData } from 'ws';
 import { makeOrLoadRoom, resetRoom } from './rooms';
 import { loadAsset, storeAsset } from './storage';
+import { nanoid } from 'nanoid';
 
 console.log('[tldraw-sync] booting development sync server');
 
-const PORT = Number(process.env.TLDRAW_SYNC_PORT ?? 3100);
+const PORT = Number(process.env.PORT || process.env.TLDRAW_SYNC_PORT || 3100);
 
 /**
  * Minimal tldraw sync server based on the official simple-server-example.
@@ -25,7 +26,7 @@ async function buildServer() {
 
   app.get('/connect/:roomId', { websocket: true }, async (socket, request) => {
     const { roomId } = request.params as { roomId: string };
-    const sessionId = (request.query as Record<string, unknown>)?.sessionId as string | undefined;
+    const sessionId = (request.query as Record<string, unknown>)?.sessionId as string | undefined ?? nanoid();
 
     // Collect messages that arrive before the room is ready.
     const caughtMessages: RawData[] = [];
@@ -68,16 +69,23 @@ async function buildServer() {
   return app;
 }
 
+console.log('[tldraw-sync] calling buildServer()...');
 buildServer()
   .then((app) => {
-    app.listen({ port: PORT, host: '127.0.0.1' }, (err) => {
+    console.log('[tldraw-sync] buildServer() completed, calling app.listen()...');
+    console.log(`[tldraw-sync] PORT=${PORT}, host=0.0.0.0`);
+    app.listen({ port: PORT, host: '0.0.0.0' }, (err) => {
+      console.log('[tldraw-sync] listen callback invoked');
       if (err) {
         app.log.error(err);
+        console.error('[tldraw-sync] listen error:', err);
         process.exit(1);
       }
 
       app.log.info(`tldraw sync server listening on http://127.0.0.1:${PORT}`);
+      console.log(`[tldraw-sync] tldraw sync server listening on http://127.0.0.1:${PORT}`);
     });
+    console.log('[tldraw-sync] app.listen() called, waiting for callback...');
   })
   .catch((error) => {
     console.error('[tldraw-sync] failed to start server', error);

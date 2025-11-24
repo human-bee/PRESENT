@@ -17,7 +17,6 @@ export type CanvasSession = {
 
 function isValidUuid(value: string | null | undefined): value is string {
   if (!value) return false;
-  // Simple UUID v4-ish check (accepts any UUID variant)
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 }
 
@@ -51,6 +50,14 @@ function mapParticipants(
   return list;
 }
 
+async function getAuthHeaders() {
+  const { data } = await supabase.auth.getSession();
+  const token = data.session?.access_token;
+  return token
+    ? { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
+    : { 'Content-Type': 'application/json' };
+}
+
 export function useSessionSync(roomName: string) {
   const room = useRoomContext();
   const bus = useMemo(() => createLiveKitBus(room), [room]);
@@ -62,22 +69,41 @@ export function useSessionSync(roomName: string) {
   const cancelledRef = useRef<boolean>(false);
 
   const ensureSession = useMemo(() => {
-    const buildQuery = (canvasId: string | null) => {
-      let base = supabase.from('canvas_sessions' as any).select('*').eq('room_name', roomName);
-      return canvasId === null ? (base as any).is('canvas_id', null) : base.eq('canvas_id', canvasId);
+    const fetchSession = async (canvasId: string | null) => {
+      const headers = await getAuthHeaders();
+      const params = new URLSearchParams({ roomName });
+      if (canvasId !== null) params.set('canvasId', canvasId);
+      else params.set('canvasId', 'null');
+
+      const res = await fetch(`/api/session?${params.toString()}`, { headers });
+      if (res.status === 404) return null;
+      if (!res.ok) {
+        console.error('[useSessionSync] Failed to fetch session', await res.text());
+        return null;
+      }
+      const json = await res.json();
+      return json.session;
+    };
+
+    const createSession = async (payload: any) => {
+      const headers = await getAuthHeaders();
+      const res = await fetch('/api/session', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(payload),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        return { error: json, code: json.code };
+      }
+      return { data: json.session };
     };
 
     return async function ensureSession() {
       const initialCanvasId = getCanvasIdFromUrl();
       canvasIdRef.current = initialCanvasId;
 
-      let query = buildQuery(initialCanvasId);
-
-      const { data: existing, error: selectErr } = await query.limit(1).maybeSingle();
-
-      if (selectErr) {
-        console.error('[useSessionSync] Failed to select session', selectErr);
-      }
+      const existing = await fetchSession(initialCanvasId);
 
       if (!cancelledRef.current && existing?.id) {
         setSessionId(existing.id);
@@ -97,19 +123,14 @@ export function useSessionSync(roomName: string) {
         events: [],
       };
 
-      // Use upsert to avoid conflict on unique (room_name, canvas_id)
-      const attemptInsert = async (payload: typeof insertPayload) => {
-        return await supabase.from('canvas_sessions' as any).insert(payload as any).select('*').single();
-      };
-
-      const { data: created, error: insertErr } = await attemptInsert(insertPayload);
+      const { data: created, error: insertErr, code } = await createSession(insertPayload);
 
       if (insertErr) {
-        const code = (insertErr as { code?: string })?.code;
-        const messageString = typeof insertErr.message === 'string' ? insertErr.message.toLowerCase() : '';
+        const messageString = typeof insertErr.error === 'string' ? insertErr.error.toLowerCase() : '';
         const isDuplicate = code === '23505' || messageString.includes('duplicate key');
+        
         if (isDuplicate) {
-          const { data: existingAfterConflict } = await query.limit(1).maybeSingle();
+          const existingAfterConflict = await fetchSession(initialCanvasId);
           if (existingAfterConflict?.id) {
             if (!cancelledRef.current) {
               setSessionId(existingAfterConflict.id);
@@ -124,8 +145,7 @@ export function useSessionSync(roomName: string) {
         const isMissingCanvas = code === '23503' || messageString.includes('not present in table "canvases"');
         if (isMissingCanvas) {
           const fallbackPayload = { ...insertPayload, canvas_id: null };
-          query = buildQuery(null);
-          const { data: fallback, error: fallbackErr } = await attemptInsert(fallbackPayload);
+          const { data: fallback, error: fallbackErr } = await createSession(fallbackPayload);
           if (!fallbackErr && fallback?.id && !cancelledRef.current) {
             setSessionId(fallback.id);
             transcriptRef.current = [];
@@ -174,11 +194,13 @@ export function useSessionSync(roomName: string) {
 
     const updateParticipants = async () => {
       const participants = mapParticipants(room);
-      const { error } = await supabase
-        .from('canvas_sessions')
-        .update({ participants, updated_at: new Date().toISOString() })
-        .eq('id', sessionId);
-      if (error) console.error('[useSessionSync] Failed to update participants', error);
+      const headers = await getAuthHeaders();
+      const res = await fetch(`/api/session/${sessionId}`, {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify({ participants, updated_at: new Date().toISOString() }),
+      });
+      if (!res.ok) console.error('[useSessionSync] Failed to update participants', await res.text());
     };
 
     const onConnected = () => updateParticipants();
@@ -216,21 +238,23 @@ export function useSessionSync(roomName: string) {
 
       // Append locally and push update
       transcriptRef.current = [...transcriptRef.current, entry];
-      const { error } = await supabase
-        .from('canvas_sessions')
-        .update({
+      
+      const headers = await getAuthHeaders();
+      const res = await fetch(`/api/session/${sessionId}`, {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify({
           transcript: transcriptRef.current,
           updated_at: new Date().toISOString(),
-        })
-        .eq('id', sessionId);
-      if (error) console.error('[useSessionSync] Failed to append transcript', error);
+        }),
+      });
+      if (!res.ok) console.error('[useSessionSync] Failed to append transcript', await res.text());
     });
 
     return off;
   }, [bus, sessionId]);
 
-  // On reload, replay the last N transcript lines after the room connects so any
-  // listeners (e.g. captions widgets) can rehydrate their local view.
+  // On reload, replay the last N transcript lines after the room connects
   useEffect(() => {
     if (!sessionId || !room) return;
 
@@ -252,7 +276,6 @@ export function useSessionSync(roomName: string) {
             is_final: true,
             replay: true,
           });
-          // Also notify local UI (LiveCaptions doesn't receive local data channel loopback)
           try {
             window.dispatchEvent(
               new CustomEvent('livekit:transcription-replay', {
@@ -270,7 +293,6 @@ export function useSessionSync(roomName: string) {
       }
     };
 
-    // Try immediately if already connected; otherwise on connect
     if (room.state === 'connected') replay();
     room.on(RoomEvent.Connected, replay);
     return () => {
@@ -278,7 +300,7 @@ export function useSessionSync(roomName: string) {
     };
   }, [bus, sessionId, room]);
 
-  // Handle manual local transcripts that never loop back over the LiveKit data channel
+  // Handle manual local transcripts
   useEffect(() => {
     if (!sessionId) return;
 
@@ -292,14 +314,17 @@ export function useSessionSync(roomName: string) {
         timestamp: typeof detail.timestamp === 'number' ? detail.timestamp : Date.now(),
       };
       transcriptRef.current = [...transcriptRef.current, entry];
-      const { error } = await supabase
-        .from('canvas_sessions')
-        .update({
+      
+      const headers = await getAuthHeaders();
+      const res = await fetch(`/api/session/${sessionId}`, {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify({
           transcript: transcriptRef.current,
           updated_at: new Date().toISOString(),
-        })
-        .eq('id', sessionId);
-      if (error) console.error('[useSessionSync] Failed to append local transcript', error);
+        }),
+      });
+      if (!res.ok) console.error('[useSessionSync] Failed to append local transcript', await res.text());
     };
 
     window.addEventListener('custom:transcription-local', handler as EventListener);
@@ -325,30 +350,34 @@ export function useSessionSync(roomName: string) {
       const MAX_EVENTS = 500;
       const next = [...eventsRef.current, entry];
       eventsRef.current = next.length > MAX_EVENTS ? next.slice(-MAX_EVENTS) : next;
-      const { error } = await supabase
-        .from('canvas_sessions')
-        .update({
+      
+      const headers = await getAuthHeaders();
+      const res = await fetch(`/api/session/${sessionId}`, {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify({
           events: eventsRef.current,
           updated_at: new Date().toISOString(),
-        })
-        .eq('id', sessionId);
-      if (error) console.error('[useSessionSync] Failed to append tldraw event', error);
+        }),
+      });
+      if (!res.ok) console.error('[useSessionSync] Failed to append tldraw event', await res.text());
     });
 
     const handler = async (e: Event) => {
       const { snapshot, canvasId } = (e as CustomEvent).detail || {};
       if (!snapshot) return;
-      // If canvasIdRef is set and a different canvas id comes through, ignore
       if (canvasIdRef.current && canvasId && canvasIdRef.current !== canvasId) return;
 
-      const { error } = await supabase
-        .from('canvas_sessions')
-        .update({
+      const headers = await getAuthHeaders();
+      const res = await fetch(`/api/session/${sessionId}`, {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify({
           canvas_state: snapshot,
           updated_at: new Date().toISOString(),
-        })
-        .eq('id', sessionId);
-      if (error) console.error('[useSessionSync] Failed to update canvas_state', error);
+        }),
+      });
+      if (!res.ok) console.error('[useSessionSync] Failed to update canvas_state', await res.text());
     };
 
     window.addEventListener('custom:sessionCanvasSaved', handler as EventListener);

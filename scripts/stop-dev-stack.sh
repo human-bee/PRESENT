@@ -143,8 +143,57 @@ stop_process() {
   echo "[$label] stopped."
 }
 
+kill_by_cwd() {
+  local script_name="$1"
+  local label="$2"
+  
+  # Find PIDs matching the npm run command
+  local pids
+  pids=$(pgrep -f "npm run $script_name" || echo "")
+  
+  for pid in $pids; do
+    # Check if the process CWD matches our ROOT_DIR
+    # lsof output format: command pid user fd type device size/off node name
+    # We grep for 'cwd' and the ROOT_DIR
+    if lsof -p "$pid" 2>/dev/null | grep "cwd" | grep -q "$ROOT_DIR"; then
+      echo "[$label] killing process $pid (cwd match)"
+      kill "$pid" 2>/dev/null || true
+      sleep 0.2
+      if ps -p "$pid" >/dev/null 2>&1; then
+        kill -9 "$pid" 2>/dev/null || true
+      fi
+    fi
+  done
+}
+
+kill_port() {
+  local port="$1"
+  local label="$2"
+  
+  if ! command -v lsof >/dev/null 2>&1; then
+    return
+  fi
+
+  # Kill TCP listeners
+  local pids
+  pids=$(lsof -tiTCP:"$port" -sTCP:LISTEN 2>/dev/null || echo "")
+  pids=${pids//$'\n'/ }
+  
+  for pid in $pids; do
+    if [[ -n "$pid" ]]; then
+      echo "[$label] killing process $pid on port $port"
+      kill "$pid" 2>/dev/null || true
+      sleep 0.2
+      if ps -p "$pid" >/dev/null 2>&1; then
+        kill -9 "$pid" 2>/dev/null || true
+      fi
+    fi
+  done
+}
+
 if should_stop "sync:dev"; then
   stop_process "Sync server" "sync:dev"
+  kill_port 3100 "PortGuard:Sync"
 fi
 if should_stop "agent:conductor"; then
   stop_process "Conductor" "agent:conductor"
@@ -154,33 +203,14 @@ if should_stop "agent:realtime"; then
 fi
 if should_stop "dev"; then
   stop_process "Next dev" "dev"
+  kill_by_cwd "dev" "ProcessGuard:Web"
+  kill_port 3000 "PortGuard:Web"
 fi
 if should_stop "lk:server:dev"; then
   stop_process "LiveKit server" "lk:server:dev"
-fi
-
-# Ensure LiveKit ports are freed if we stopped the server (or the default stop-all case).
-if should_stop "lk:server:dev" && command -v lsof >/dev/null 2>&1; then
-  for port in 7880 7881 7882; do
-    pids=$(lsof -tiTCP:"$port" -sTCP:LISTEN 2>/dev/null || true)
-    for pid in $pids; do
-      echo "[PortGuard] killing TCP listener $pid on :$port"
-      kill "$pid" 2>/dev/null || true
-      sleep 0.2
-      if ps -p "$pid" >/dev/null 2>&1; then
-        kill -9 "$pid" 2>/dev/null || true
-      fi
-    done
-    pids=$(lsof -tiUDP:"$port" 2>/dev/null || true)
-    for pid in $pids; do
-      echo "[PortGuard] killing UDP listener $pid on :$port"
-      kill "$pid" 2>/dev/null || true
-      sleep 0.2
-      if ps -p "$pid" >/dev/null 2>&1; then
-        kill -9 "$pid" 2>/dev/null || true
-      fi
-    done
-  done
+  kill_port 7880 "PortGuard:LiveKit"
+  kill_port 7881 "PortGuard:LiveKit"
+  kill_port 7882 "PortGuard:LiveKit"
 fi
 
 echo "All dev services stopped (or no pid files found)."

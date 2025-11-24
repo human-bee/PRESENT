@@ -78,7 +78,7 @@ export function useTLDrawSync(
       createLogger('Tldraw').info('Using sync host:', safeHost);
       g.__LOGGED_TLDRAW_SYNC_HOST__ = true;
     }
-  } catch {}
+  } catch { }
 
   return store;
 }

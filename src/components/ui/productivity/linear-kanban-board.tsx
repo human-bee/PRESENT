@@ -13,7 +13,7 @@ import { useComponentSubAgent, SubAgentPresets } from '@/lib/component-subagent'
  * --------------------------------------------------------------------------*/
 
 export const linearKanbanSchema = z.object({
-  title: z.string().default('Linear Kanban Board').describe('Board title'),
+  title: z.string().default('Linear Kanban Board (v2)').describe('Board title'),
   teams: z
     .array(
       z.object({
@@ -62,7 +62,7 @@ export type LinearKanbanProps = z.infer<typeof linearKanbanSchema> & {
 
 type KanbanState = {
   selectedTeam: string;
-  issues: LinearKanbanProps['issues'] extends Array<infer I> ? I[] : never;
+  issues: NonNullable<LinearKanbanProps['issues']>;
   draggedIssue: string | null; // issue id
   pendingUpdates: Array<{
     id: number;
@@ -161,11 +161,20 @@ export default function LinearKanbanBoard({
     () => ({
       ...SubAgentPresets.kanban,
       dataEnricher: (context: any, tools: any) => {
+        console.log('[LinearKanban] dataEnricher called', { context, toolsAvailable: Object.keys(tools || {}) });
+
         // If we already have initial issues, skip MCP calls
         if (initialIssues && initialIssues.length > 0) {
+          console.log('[LinearKanban] Skipping MCP call, using initial issues');
           return [];
         }
 
+        if (!tools.linear) {
+          console.warn('[LinearKanban] Linear tool not available in tools object');
+          return [];
+        }
+
+        console.log('[LinearKanban] Executing linear.list_issues');
         // Otherwise, fetch data via MCP
         return [
           tools.linear?.execute({
@@ -195,6 +204,16 @@ export default function LinearKanbanBoard({
     pendingUpdates: [],
     updateMessage: '',
   });
+
+  // Sync enriched data to local state when it arrives
+  useEffect(() => {
+    if (linearData.issues && linearData.issues.length > 0) {
+      setState((prev) => ({
+        ...prev,
+        issues: linearData.issues,
+      }));
+    }
+  }, [linearData.issues]);
 
   /* 3. AI patch handler */
   const handleAIUpdate = useCallback(
@@ -494,10 +513,10 @@ export default function LinearKanbanBoard({
                           {issue.priority && (
                             <span
                               className={`text-xs font-semibold px-2 py-1 rounded ${issue.priority.value === 1
-                                  ? 'bg-red-200 text-red-800'
-                                  : issue.priority.value === 2
-                                    ? 'bg-orange-200 text-orange-800'
-                                    : 'bg-gray-200 text-gray-800'
+                                ? 'bg-red-200 text-red-800'
+                                : issue.priority.value === 2
+                                  ? 'bg-orange-200 text-orange-800'
+                                  : 'bg-gray-200 text-gray-800'
                                 }`}
                             >
                               {issue.priority.name}

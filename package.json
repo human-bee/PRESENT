@@ -31,6 +31,7 @@
     "stack:start": "bash scripts/start-dev-stack.sh",
     "stack:stop": "bash scripts/stop-dev-stack.sh",
     "stack:restart": "bash scripts/restart-dev-stack.sh",
+    "stack:share": "bash scripts/share-dev-stack.sh",
     "teacher:build": "esbuild scripts/teacher-worker.ts --bundle --platform=node --target=node22 --outfile=.parity-dist/teacher-worker/teacher-worker.js --tsconfig=tsconfig.teacher-worker.json",
     "teacher:worker": "npm run teacher:build && node .parity-dist/teacher-worker/teacher-worker.js"
   },

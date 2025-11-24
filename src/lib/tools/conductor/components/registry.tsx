@@ -21,6 +21,10 @@ import {
 
 import LiveCaptions, { liveCaptionsSchema } from '@/components/LiveCaptions';
 import LinearKanbanBoard, { linearKanbanSchema } from '@/components/ui/productivity/linear-kanban-board';
+
+// ...
+
+
 import { OnboardingGuide, onboardingGuideSchema } from '@/components/ui/onboarding/onboarding-guide';
 import { ComponentToolbox } from '@/components/ui/shared/component-toolbox';
 
@@ -34,6 +38,28 @@ const extendedSchema = <T extends z.AnyZodObject>(schema: T) => {
     x: z.number().optional().describe('X position'),
     y: z.number().optional().describe('Y position'),
   });
+}
+
+// Wrapper for LivekitParticipantTile to map onIdentityChange to updateState
+function LivekitParticipantTileWrapper(props: any) {
+  // In CustomShapeComponent, props.state contains the component state.
+  // We fallback to top-level props if state is missing (for backward compat or direct usage).
+  const participantIdentity = props.state?.participantIdentity ?? props.participantIdentity;
+
+  const handleIdentityChange = (id: string) => {
+    // updateState is injected by CustomShapeComponent
+    if (props.updateState) {
+      props.updateState({ participantIdentity: id });
+    }
+  };
+
+  return (
+    <LivekitParticipantTile
+      {...props}
+      participantIdentity={participantIdentity}
+      onIdentityChange={handleIdentityChange}
+    />
+  );
 }
 
 export const components: any = [
@@ -97,7 +123,7 @@ export const components: any = [
     name: 'LivekitParticipantTile',
     description:
       'Individual participant video/audio tile with real-time LiveKit integration. REQUIRES LivekitRoomConnector to be connected first. Shows participant video feed, audio controls, connection quality, speaking indicators, and individual toolbar controls. Automatically detects local vs remote participants and AI agents (with bot icons). Features minimize/expand functionality, audio level visualization, and drag-and-drop capability on the canvas.',
-    component: LivekitParticipantTile,
+    component: LivekitParticipantTileWrapper,
     propsSchema: extendedSchema(livekitParticipantTileSchema),
   },
   {

@@ -16,7 +16,7 @@ import {
   useValue,
 } from '@tldraw/tldraw';
 import { ReactNode, createContext, useState, useCallback, useEffect } from 'react';
-import { User } from 'lucide-react';
+import { User, Edit2 } from 'lucide-react';
 import { useCanvasPersistence } from '@/hooks/use-canvas-persistence';
 import { useAuth } from '@/hooks/use-auth';
 import { toast } from 'react-hot-toast';
@@ -40,133 +40,42 @@ interface TldrawWithPersistenceProps {
 // Create a context for transcript panel state
 export const TranscriptPanelContext = createContext<{
   isOpen: boolean;
-  toggle: () => void;
+  setIsOpen: (isOpen: boolean) => void;
 }>({
   isOpen: false,
-  toggle: () => { },
+  setIsOpen: () => {},
 });
 
-const CustomContextMenuContent = () => {
-  const editor = useEditor();
-  const onlySelectedShape = useValue(
-    'only-selected-shape',
-    () => editor.getOnlySelectedShape(),
-    [editor],
-  );
-
-  const canPin = onlySelectedShape?.type === 'custom';
-  const isPinned = canPin ? ((onlySelectedShape as customShape).props.pinned ?? false) : false;
-
-  const handleTogglePin = React.useCallback(() => {
-    const selected = editor.getOnlySelectedShape();
-    if (!selected || selected.type !== 'custom') return;
-    const shape = selected as customShape;
-    const currentlyPinned = shape.props.pinned ?? false;
-
-    if (!currentlyPinned) {
-      const viewport = editor.getViewportScreenBounds();
-      const bounds = editor.getShapePageBounds(shape.id);
-      if (!viewport || !bounds) return;
-
-      const screenPoint = editor.pageToScreen({
-        x: bounds.x + bounds.w / 2,
-        y: bounds.y + bounds.h / 2,
-      });
-
-      editor.updateShapes([
-        {
-          id: shape.id,
-          type: 'custom',
-          props: {
-            pinned: true,
-            pinnedX: Math.max(0, Math.min(1, screenPoint.x / viewport.width)),
-            pinnedY: Math.max(0, Math.min(1, screenPoint.y / viewport.height)),
-          },
-        },
-      ]);
-    } else {
-      editor.updateShapes([
-        {
-          id: shape.id,
-          type: 'custom',
-          props: {
-            pinned: false,
-          },
-        },
-      ]);
-    }
-  }, [editor]);
-
-  return (
-    <>
-      <DefaultContextMenuContent />
-      {canPin && (
-        <TldrawUiMenuGroup id="custom-pin">
-          <TldrawUiMenuItem
-            id="pin-to-viewport"
-            icon="external-link"
-            label={isPinned ? 'Unpin from Window' : 'Pin to Window'}
-            onSelect={() => {
-              handleTogglePin();
-            }}
-          />
-        </TldrawUiMenuGroup>
-      )}
-    </>
-  );
-};
-
-const CustomContextMenu = (props: TLUiContextMenuProps) => (
-  <DefaultContextMenu {...props}>
-    <CustomContextMenuContent />
-  </DefaultContextMenu>
-);
-
 function CustomMainMenu({ readOnly = false }: { readOnly?: boolean } & any) {
+  const { saveCanvas, lastSaved, isSaving, canvasName, renameCanvas } = useCanvasPersistence(null);
   const { user, signOut } = useAuth();
   const router = useRouter();
-  const editor = useEditor();
-  const componentStore = React.useContext(ComponentStoreContext);
-  const { canvasName, isSaving, lastSaved, saveCanvas, updateCanvasName } = useCanvasPersistence(
-    editor,
-    !readOnly,
-  );
+  const [displayName, setDisplayName] = useState('');
+  const [isEditingName, setIsEditingName] = useState(false);
 
-  // Helper to disable or no-op in read-only mode
-  const disabled = readOnly;
-  const autosaveTimerRef = React.useRef<NodeJS.Timeout | null>(null);
-  const lastAutosaveSessionRef = React.useRef<string | null>(null);
+  // Initialize display name from local storage or auth
+  useEffect(() => {
+    const storedName = window.localStorage.getItem('present:display_name');
+    const authName = user?.user_metadata?.full_name || user?.email;
+    setDisplayName(storedName || authName || 'User');
+  }, [user]);
 
-  React.useEffect(() => {
-    if (disabled) return;
-    const handleStatus = (event: Event) => {
-      const detail = (event as CustomEvent).detail as
-        | { sessionId?: string; state?: string; type?: string }
-        | undefined;
-      if (!detail || detail.type !== 'agent:status') return;
-      if (detail.state !== 'done') return;
-      if (lastAutosaveSessionRef.current === detail.sessionId) return;
-      lastAutosaveSessionRef.current = detail.sessionId ?? null;
-      if (autosaveTimerRef.current) {
-        clearTimeout(autosaveTimerRef.current);
-      }
-      autosaveTimerRef.current = setTimeout(() => {
-        if (process.env.NODE_ENV !== 'production') {
-          try {
-            console.debug('[CanvasPersistence] Auto-saving after agent run', detail);
-          } catch {}
-        }
-        saveCanvas();
-      }, 1500);
-    };
-    window.addEventListener('present:agent_status', handleStatus as EventListener);
-    return () => {
-      if (autosaveTimerRef.current) {
-        clearTimeout(autosaveTimerRef.current);
-      }
-      window.removeEventListener('present:agent_status', handleStatus as EventListener);
-    };
-  }, [disabled, saveCanvas]);
+  const handleSaveName = () => {
+    setIsEditingName(false);
+    if (displayName.trim()) {
+      window.localStorage.setItem('present:display_name', displayName.trim());
+      // Force a reload to pick up the new name for LiveKit connection
+      // In a more complex app we'd update the context, but this ensures a clean state
+      window.location.reload(); 
+    }
+  };
+
+  const handleRenameCanvas = () => {
+    const newName = prompt('Enter a new name for your canvas:', canvasName);
+    if (newName) {
+      renameCanvas(newName);
+    }
+  };
 
   const handleSignOut = async () => {
     try {
@@ -174,91 +83,36 @@ function CustomMainMenu({ readOnly = false }: { readOnly?: boolean } & any) {
       router.push('/auth/signin');
     } catch (error) {
       console.error('Error signing out:', error);
+      toast.error('Failed to sign out');
     }
+  };
+
+  const handleNewCanvas = () => {
+    window.open('/canvas?fresh=1', '_blank');
   };
 
   const handleOpenCanvases = () => {
     router.push('/canvases');
   };
 
-  const handleNewCanvas = async () => {
-    // Create a brand new canvas via API, then route directly to /canvas?id=...
-    try { localStorage.removeItem('present:lastCanvasId'); } catch {}
-    try {
-      const payload = {
-        name: `Canvas ${new Date().toLocaleString()}`,
-        description: null,
-        document: {},
-        conversationKey: null,
-      } as any;
-      const res = await fetch('/api/canvas', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      if (res.ok) {
-        const { canvas } = await res.json();
-        if (canvas?.id) {
-          const url = `/canvas?id=${encodeURIComponent(canvas.id)}`;
-          router.push(url);
-          try { localStorage.setItem('present:lastCanvasId', canvas.id); } catch {}
-          try { window.dispatchEvent(new Event('present:canvas-id-changed')); } catch {}
-          // Clear local UI quickly while the new session hydrates
-          try {
-            if (editor) {
-              const all = editor.getCurrentPageShapes();
-              if (all.length) editor.deleteShapes(all.map((s) => s.id));
-              try { editor.selectNone(); } catch {}
-            }
-            if (componentStore && typeof componentStore.clear === 'function') {
-              componentStore.clear();
-              try { window.dispatchEvent(new Event('present:component-store-updated')); } catch {}
-            }
-          } catch {}
-          return;
-        }
-      }
-    } catch (e) {
-      console.warn('[NewCanvas] Fallback to resolver flow', e);
-    }
-    // Fallback: force full page reload to trigger canvas creation
-    window.location.href = '/canvas';
-  };
-
   const handleMcpConfig = () => {
-    // Navigate to MCP config page
     router.push('/mcp-config');
   };
 
-  const handleExport = async () => {
-    if (!editor) return;
-    if (disabled) return;
-
-    try {
-      const result = await editor.getSvgString(Array.from(editor.getCurrentPageShapeIds()));
-      if (result?.svg) {
-        const blob = new Blob([result.svg], { type: 'image/svg+xml' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `${canvasName}.svg`;
-        a.click();
-        URL.revokeObjectURL(url);
-        toast.success('Canvas exported!');
-      }
-    } catch (error) {
-      console.error('Export failed:', error);
-      toast.error('Export failed');
-    }
+  const handleExport = () => {
+    // The export functionality is handled by the default menu item,
+    // we just wrapping it to ensure it's exposed
+    const event = new KeyboardEvent('keydown', {
+      key: 'e',
+      code: 'KeyE',
+      metaKey: true,
+      shiftKey: true,
+      bubbles: true,
+    });
+    document.dispatchEvent(event);
   };
 
-  const handleRenameCanvas = () => {
-    if (disabled) return;
-    const newName = window.prompt('Enter canvas name:', canvasName || 'Untitled Canvas');
-    if (newName !== null && newName.trim()) {
-      updateCanvasName(newName.trim());
-    }
-  };
+  const disabled = readOnly;
 
   const handleSaveCanvas = () => {
     if (disabled) return;
@@ -338,7 +192,7 @@ function CustomMainMenu({ readOnly = false }: { readOnly?: boolean } & any) {
         {/* Separator */}
         <div style={{ height: 1, backgroundColor: 'var(--color-divider)', margin: '4px 0' }} />
 
-        {/* User info - non-clickable */}
+        {/* User info - Click to edit */}
         <div
           style={{
             padding: '0 12px',
@@ -351,7 +205,32 @@ function CustomMainMenu({ readOnly = false }: { readOnly?: boolean } & any) {
           }}
         >
           <User size={14} />
-          <span>{user?.user_metadata?.full_name || user?.email || 'User'}</span>
+          {isEditingName ? (
+            <input
+              autoFocus
+              value={displayName}
+              onChange={(e) => setDisplayName(e.target.value)}
+              onBlur={handleSaveName}
+              onKeyDown={(e) => e.key === 'Enter' && handleSaveName()}
+              style={{
+                border: '1px solid var(--color-primary)',
+                borderRadius: '4px',
+                padding: '2px 4px',
+                fontSize: '12px',
+                width: '100%',
+                outline: 'none',
+              }}
+            />
+          ) : (
+            <div 
+              className="flex items-center gap-2 cursor-pointer hover:text-blue-600 w-full"
+              onClick={() => setIsEditingName(true)}
+              title="Click to change display name"
+            >
+              <span className="font-medium truncate max-w-[120px]">{displayName}</span>
+              <Edit2 size={10} className="opacity-50" />
+            </div>
+          )}
         </div>
 
         <TldrawUiMenuItem
@@ -375,181 +254,32 @@ function CustomToolbarWithTranscript({
   onHelpClick?: () => void;
   onComponentToolboxToggle?: () => void;
 }) {
-  const { user } = useAuth();
-
-  if (!user) {
-    return (
-      <DefaultToolbar>
-        <DefaultToolbarContent />
-      </DefaultToolbar>
-    );
-  }
-
-  const isMac = typeof navigator !== 'undefined' && navigator.platform.startsWith('Mac');
-  const shortcutText = isMac ? '⌘K' : 'Ctrl+K';
+  const { isOpen } = React.useContext(TranscriptPanelContext);
 
   return (
     <DefaultToolbar>
       <DefaultToolbarContent />
-      <div className="tlui-toolbar__tools">
-        {/* Component Toolbox button */}
-        {onComponentToolboxToggle && (
-          <button
-            className="tlui-button tlui-button__tool"
-            onClick={onComponentToolboxToggle}
-            title="Component Toolbox - Browse and add components"
-            style={{
-              color: 'rgb(29, 29, 29)',
-            }}
-          >
-            <div
-              className="tlui-icon tlui-button__icon"
-              style={{
-                mask: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='13.5' cy='6.5' r='.5'%3E%3C/circle%3E%3Ccircle cx='17.5' cy='10.5' r='.5'%3E%3C/circle%3E%3Ccircle cx='8.5' cy='7.5' r='.5'%3E%3C/circle%3E%3Ccircle cx='6.5' cy='12.5' r='.5'%3E%3C/circle%3E%3Cpath d='M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z'%3E%3C/path%3E%3C/svg%3E") center 100% / 100% no-repeat`,
-              }}
-            />
-          </button>
-        )}
-
-        {/* Transcript button */}
-        {onTranscriptToggle && (
-          <button
-            className="tlui-button tlui-button__tool"
-            onClick={onTranscriptToggle}
-            title={`Transcript (${shortcutText})`}
-            style={{
-              color: 'rgb(29, 29, 29)',
-            }}
-          >
-            <div
-              className="tlui-icon tlui-button__icon"
-              style={{
-                mask: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z'%3E%3C/path%3E%3Cpath d='M19 10v2a7 7 0 0 1-14 0v-2'%3E%3C/path%3E%3Cline x1='12' y1='19' x2='12' y2='22'%3E%3C/line%3E%3C/svg%3E") center 100% / 100% no-repeat`,
-              }}
-            />
-          </button>
-        )}
-
-        {/* Help button */}
-        {onHelpClick && (
-          <button
-            className="tlui-button tlui-button__tool"
-            onClick={onHelpClick}
-            title="Show help and onboarding"
-            style={{
-              color: 'rgb(29, 29, 29)',
-            }}
-          >
-            <div
-              className="tlui-icon tlui-button__icon"
-              style={{
-                mask: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='10'%3E%3C/circle%3E%3Cpath d='M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3'%3E%3C/path%3E%3Cpath d='M12 17h.01'%3E%3C/path%3E%3C/svg%3E") center 100% / 100% no-repeat`,
-              }}
-            />
-          </button>
-        )}
-        <button
-          className="tlui-button tlui-button__tool"
-          onClick={() => {
-            try {
-              window.dispatchEvent(new CustomEvent('tldraw:create_mermaid_stream', { detail: {} }));
-            } catch {}
-          }}
-          title="Create Mermaid (stream)"
-          style={{ color: 'rgb(29, 29, 29)' }}
-        >
-          <div
-            className="tlui-icon tlui-button__icon"
-            style={{
-              mask: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 3h18v18H3z'%3E%3C/path%3E%3Cpath d='M7 8h10M7 12h10M7 16h10'%3E%3C/path%3E%3C/svg%3E") center 100% / 100% no-repeat`,
-            }}
-          />
-        </button>
-      </div>
+      <TldrawUiMenuItem
+        id="component-toolbox"
+        label="Component Toolbox"
+        icon="plus"
+        onSelect={onComponentToolboxToggle}
+      />
+      <TldrawUiMenuItem
+        id="transcript-toggle"
+        label={isOpen ? 'Hide Transcript' : 'Show Transcript'}
+        icon="blob"
+        onSelect={onTranscriptToggle}
+        isSelected={isOpen}
+      />
+      <TldrawUiMenuItem
+        id="help-toggle"
+        label="Help"
+        icon="question-mark"
+        onSelect={onHelpClick}
+      />
     </DefaultToolbar>
   );
 }
 
-// Custom components with persistence toolbar only (simplify for now)
-const createPersistenceComponents = (
-  onTranscriptToggle?: () => void,
-  onHelpClick?: () => void,
-  onComponentToolboxToggle?: () => void,
-): TLComponents => ({
-  Toolbar: (props) => (
-    <CustomToolbarWithTranscript
-      {...props}
-      onTranscriptToggle={onTranscriptToggle}
-      onHelpClick={onHelpClick}
-      onComponentToolboxToggle={onComponentToolboxToggle}
-    />
-  ),
-  MainMenu: CustomMainMenu,
-  ContextMenu: CustomContextMenu,
-});
-
-export function TldrawWithPersistence({
-  onMount,
-  shapeUtils,
-  componentStore,
-  className,
-  onTranscriptToggle,
-  onHelpClick,
-  onComponentToolboxToggle,
-}: TldrawWithPersistenceProps) {
-  const [editor, setEditor] = useState<Editor | null>(null);
-
-  const handleMount = useCallback(
-    (mountedEditor: Editor) => {
-      setEditor(mountedEditor);
-      onMount?.(mountedEditor);
-    },
-    [onMount],
-  );
-
-  // Render a lightweight placeholder until the TLDraw editor instance is ready.
-  const isEditorReady = Boolean(editor);
-
-  // Handle keyboard shortcut for transcript
-  useEffect(() => {
-    if (!onTranscriptToggle) return;
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if ((event.metaKey || event.ctrlKey) && event.key === 'k') {
-        event.preventDefault();
-        onTranscriptToggle();
-      }
-    };
-
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [onTranscriptToggle]);
-
-  return (
-    <div className={className} style={{ position: 'absolute', inset: 0 }}>
-      {/* Always render Tldraw so that onMount fires and the editor becomes ready */}
-      <ComponentStoreContext.Provider value={componentStore || null}>
-        <Tldraw
-          onMount={handleMount}
-          shapeUtils={shapeUtils || []}
-          components={createPersistenceComponents(
-            onTranscriptToggle,
-            onHelpClick,
-            onComponentToolboxToggle,
-          )}
-          forceMobile={true}
-        />
-        <TldrawSnapshotBroadcaster editor={editor} />
-      </ComponentStoreContext.Provider>
-
-      {/* Overlay a simple loading state until the editor instance is available */}
-      {!isEditorReady && (
-        <div className="absolute inset-0 flex items-center justify-center bg-gray-50 z-10 pointer-events-none select-none">
-          <div className="text-gray-500">Loading canvas...</div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-export { CustomMainMenu, CustomToolbarWithTranscript, createPersistenceComponents };
+export { CustomMainMenu, CustomToolbarWithTranscript };
