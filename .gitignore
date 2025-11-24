@@ -74,5 +74,5 @@ tasks/
 # Temporary working copies of external templates
 .tmp/
 
-# Parity run artifacts (local-only)
+# Build artifacts and tool installations (Parity run artifacts)
 docs/parity/
