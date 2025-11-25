@@ -40,7 +40,7 @@ const TldrawWithCollaboration = dynamic(
 );
 
 // Import types statically (they don't add to bundle size)
-import { customShapeUtil, ToolboxShapeUtil, MermaidStreamShapeUtil } from '@/components/ui/tldraw/tldraw-canvas';
+import { customShapeUtil, ToolboxShapeUtil, MermaidStreamShapeUtil, InfographicShapeUtil } from '@/components/ui/tldraw/tldraw-canvas';
 
 // Suppress development noise and repetitive warnings
 if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
@@ -286,7 +286,7 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
 
   // Provide shape utils synchronously at first render so the store registers them on mount
   const customShapeUtils = React.useMemo(() => {
-    return [customShapeUtil, ToolboxShapeUtil, MermaidStreamShapeUtil] as any[];
+    return [customShapeUtil, ToolboxShapeUtil, MermaidStreamShapeUtil, InfographicShapeUtil] as any[];
   }, []);
 
   const hasReconciledRegistry = useRef(false);

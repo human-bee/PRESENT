@@ -139,6 +139,25 @@ const getLabelColor = (label: string) => labelColors[label] || 'bg-gray-100 text
  * Component Implementation
  * --------------------------------------------------------------------------*/
 
+/* --------------------------------------------------------------------------
+ * Mock Data for Interactive Features
+ * --------------------------------------------------------------------------*/
+const mockUsers = [
+  { id: 'u1', name: 'Alice', avatar: '👩‍💻' },
+  { id: 'u2', name: 'Bob', avatar: '👨‍💻' },
+  { id: 'u3', name: 'Charlie', avatar: '🦸‍♂️' },
+  { id: 'u4', name: 'Dave', avatar: '🧙‍♂️' },
+];
+
+/* --------------------------------------------------------------------------
+ * Component Implementation
+ * --------------------------------------------------------------------------*/
+
+const DEBUG_DND = process.env.NODE_ENV !== 'production';
+const dndLog = (...args: any[]) => {
+  if (DEBUG_DND) console.log(...args);
+};
+
 export default function LinearKanbanBoard({
   title = 'Linear Kanban Board',
   teams = defaultTeams,
@@ -197,13 +216,25 @@ export default function LinearKanbanBoard({
   const enrichedIssues = linearData.issues || initialIssues || [];
 
   /* 3. Local component state */
-  const [state, setState] = useState<KanbanState>({
+  const [state, setState] = useState<KanbanState & {
+    selectedIssue: string | null; // ID of the issue open in modal
+    comments: Record<string, Array<{ id: string, user: string, text: string, time: string }>>; // Mock comments
+    activeDropColumn: string | null; // ID of the column being dragged over
+    dropIndicator: { targetId: string; position: 'before' | 'after' } | null; // Visual indicator for reordering
+  }>({
     selectedTeam: teams[0]?.id ?? '',
     issues: enrichedIssues,
     draggedIssue: null,
     pendingUpdates: [],
     updateMessage: '',
+    selectedIssue: null,
+    comments: {},
+    activeDropColumn: null,
+    dropIndicator: null,
   });
+
+  // Ref to track drop indicator synchronously to avoid state update delays in onDrop
+  const dropIndicatorRef = React.useRef<{ targetId: string; position: 'before' | 'after' } | null>(null);
 
   // Sync enriched data to local state when it arrives
   useEffect(() => {
@@ -219,7 +250,7 @@ export default function LinearKanbanBoard({
   const handleAIUpdate = useCallback(
     (patch: Partial<KanbanState>) => {
       if (!state) return;
-      setState({ ...state, ...patch });
+      setState((prev) => ({ ...prev, ...patch }));
     },
     [state, setState],
   );
@@ -274,39 +305,248 @@ export default function LinearKanbanBoard({
     state.issues.filter((i) => canon(i.status) === canon(columnId));
 
   /* Event handlers (local only, no Linear API yet) */
+  // Native DnD inside tldraw can get blocked by parent listeners; use capture-phase, stop bubbling,
+  // and ensure dataTransfer has something set.
   const handleDragStart = (e: React.DragEvent<HTMLDivElement>, issueId: string) => {
-    setState({ ...state, draggedIssue: issueId });
+    dndLog('[Kanban] Drag Start:', issueId);
+    e.stopPropagation();
     e.dataTransfer.effectAllowed = 'move';
+    // Set a payload so the browser treats this as a valid drag
+    e.dataTransfer.setData('application/x-kanban-issue', issueId);
+    dropIndicatorRef.current = null;
+    setState({ ...state, draggedIssue: issueId, activeDropColumn: null, dropIndicator: null });
   };
 
-  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+  const boardRef = useMemo(() => ({ current: null as HTMLDivElement | null }), []);
+
+  const handleBoardDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    if (boardRef.current && e.target !== boardRef.current) {
+      return; // Let columns/cards handle it
+    }
+    // Only intercept when dragging a Kanban issue; otherwise let canvas/global handlers run
+    if (!state.draggedIssue) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = 'move';
+    if (state.activeDropColumn || state.dropIndicator) {
+      dndLog('[Kanban] Board Drag Over (Clearing State)');
+      dropIndicatorRef.current = null;
+      setState(prev => ({ ...prev, activeDropColumn: null, dropIndicator: null }));
+    }
+  };
+
+  const handleBoardDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    if (boardRef.current && e.target !== boardRef.current) {
+      return; // Column/card will handle
+    }
+    if (!state.draggedIssue) return; // let non-kanban drops bubble to tldraw
+
+    e.preventDefault();
+    e.stopPropagation();
+    dndLog('[Kanban] Board Drop (Cancelled)');
+    dropIndicatorRef.current = null;
+    setState(prev => ({ ...prev, draggedIssue: null, activeDropColumn: null, dropIndicator: null }));
+  };
+
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>, columnId: string) => {
+    if (!state.draggedIssue) return; // not our payload, let it bubble
+
+    e.preventDefault();
+    e.stopPropagation(); // Stop bubbling to Board
+    e.dataTransfer.dropEffect = 'move';
+
+    // Highlight column
+    if (state.activeDropColumn !== columnId) {
+      dndLog('[Kanban] Column Drag Over:', columnId);
+      setState(prev => ({ ...prev, activeDropColumn: columnId }));
+    }
+
+    // Nearest Neighbor Logic for Drop Indicator
+    // This handles dragging over cards AND gaps between cards
+    const cards = Array.from(e.currentTarget.querySelectorAll('[data-issue-id]'));
+
+    if (cards.length === 0) {
+      // Empty column, clear indicator (will show append)
+      if (state.dropIndicator) {
+        dropIndicatorRef.current = null;
+        setState(prev => ({ ...prev, dropIndicator: null }));
+      }
+      return;
+    }
+
+    // Find the card immediately *after* the cursor (closest one where mouse is above center)
+    const elementAfter = cards.reduce((closest, child) => {
+      const box = child.getBoundingClientRect();
+      const offset = e.clientY - box.top - box.height / 2;
+      // offset < 0 means mouse is above the center of this child
+      // We want the closest one that is still "below" the mouse (offset is negative but closest to 0)
+      if (offset < 0 && offset > closest.offset) {
+        return { offset: offset, element: child };
+      } else {
+        return closest;
+      }
+    }, { offset: Number.NEGATIVE_INFINITY, element: null as Element | null });
+
+    if (elementAfter.element) {
+      // We are "before" this element
+      const targetId = elementAfter.element.getAttribute('data-issue-id');
+      if (targetId && targetId !== state.draggedIssue) {
+        if (state.dropIndicator?.targetId !== targetId || state.dropIndicator?.position !== 'before') {
+          const newIndicator = { targetId, position: 'before' as const };
+          dropIndicatorRef.current = newIndicator;
+          setState(prev => ({ ...prev, dropIndicator: newIndicator }));
+        }
+      }
+    } else {
+      // We are after the last element (or all elements)
+      const lastCard = cards[cards.length - 1];
+      const targetId = lastCard.getAttribute('data-issue-id');
+      // Only show "after" if we are not dragging the last card itself
+      if (targetId && targetId !== state.draggedIssue) {
+        if (state.dropIndicator?.targetId !== targetId || state.dropIndicator?.position !== 'after') {
+          const newIndicator = { targetId, position: 'after' as const };
+          dropIndicatorRef.current = newIndicator;
+          setState(prev => ({ ...prev, dropIndicator: newIndicator }));
+        }
+      }
+    }
+  };
+
+  const handleDragOverCard = (e: React.DragEvent<HTMLDivElement>, issueId: string) => {
+    if (!state.draggedIssue) return; // not our payload
+
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
+    // Ignore if hovering over itself
+    if (issueId === state.draggedIssue) return;
+
+    // Allow bubbling to column so it stays highlighted!
+    // e.stopPropagation(); 
+
+    const rect = e.currentTarget.getBoundingClientRect();
+    const midY = rect.top + rect.height / 2;
+    const position = e.clientY < midY ? 'before' : 'after';
+
+    if (state.dropIndicator?.targetId !== issueId || state.dropIndicator?.position !== position) {
+      dndLog('[Kanban] Card Drag Over:', { targetId: issueId, position });
+      setState(prev => ({ ...prev, dropIndicator: { targetId: issueId, position } }));
+    }
   };
 
-  const handleDrop = (e: React.DragEvent<HTMLDivElement>, newStatus: string) => {
-    e.preventDefault();
-
-    const dragged = state.issues.find((i) => i.id === state.draggedIssue);
-    if (!dragged || dragged.status === newStatus) {
-      setState({ ...state, draggedIssue: null });
+  const queueStatusChange = (issueId: string, newStatus: string) => {
+    const dragged = state.issues.find((i) => i.id === issueId);
+    if (!dragged) {
+      console.warn('[Kanban] Status change failed: Issue not found', issueId);
       return;
     }
 
     const statusObj = statuses.find((s) => s.name === newStatus);
     if (!statusObj) {
+      console.error('[Kanban] Status not found:', newStatus);
       setState({
         ...state,
         updateMessage: `❌ Error: Status "${newStatus}" not found`,
-        draggedIssue: null,
       });
       return;
     }
 
-    // Optimistic UI update
-    const updatedIssues = state.issues.map((i) =>
-      i.id === dragged.id ? { ...i, status: newStatus } : i,
-    );
+    // Remove from current list and append to end of target column for modal changes
+    const updatedIssues = state.issues.filter((i) => i.id !== issueId);
+    updatedIssues.push({ ...dragged, status: newStatus });
+
+    const updateRequest = {
+      id: Date.now(),
+      issueId: dragged.id,
+      issueIdentifier: dragged.identifier,
+      fromStatus: dragged.status,
+      toStatus: newStatus,
+      statusId: statusObj.id,
+      timestamp: new Date().toISOString(),
+    };
+
+    setState((prev) => ({
+      ...prev,
+      issues: updatedIssues,
+      pendingUpdates: [...prev.pendingUpdates, updateRequest],
+      updateMessage: `📝 Queued update: ${dragged.identifier} → ${newStatus} (${prev.pendingUpdates.length + 1} pending)`,
+    }));
+  };
+
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>, newStatus: string) => {
+    dndLog('[Kanban] Drop on Column/Card:', { newStatus, draggedIssue: state.draggedIssue });
+    if (!state.draggedIssue) return; // allow non-kanban drops to propagate
+
+    e.preventDefault();
+    e.stopPropagation();
+
+    const dragged = state.issues.find((i) => i.id === state.draggedIssue);
+    if (!dragged) {
+      console.warn('[Kanban] Drop failed: No dragged issue found');
+      dropIndicatorRef.current = null;
+      setState({ ...state, draggedIssue: null, activeDropColumn: null, dropIndicator: null });
+      return;
+    }
+
+    // Calculate new index
+    let updatedIssues = [...state.issues];
+    const currentIndex = updatedIssues.findIndex(i => i.id === dragged.id);
+
+    // We need to calculate the insertion index BEFORE removing the item,
+    // but we must account for the shift that removal will cause.
+    let newIndex = updatedIssues.length; // Default to end of list
+
+    // Use the REF for the most up-to-date indicator
+    const currentIndicator = dropIndicatorRef.current;
+
+    if (currentIndicator) {
+      const targetIndex = updatedIssues.findIndex(i => i.id === currentIndicator.targetId);
+      if (targetIndex !== -1) {
+        // Initial position based on drop indicator
+        newIndex = currentIndicator.position === 'before' ? targetIndex : targetIndex + 1;
+
+        // If we are moving the item down the list (current < target),
+        // removing the item at current will shift everything above it down by 1.
+        // So we need to decrement the destination index.
+        if (currentIndex < newIndex) {
+          newIndex -= 1;
+        }
+      }
+    } else {
+      // Append to end of specific column
+      const columnIssues = updatedIssues.filter(i => canon(i.status) === canon(newStatus));
+      if (columnIssues.length > 0) {
+        const lastIssue = columnIssues[columnIssues.length - 1];
+        const lastIndex = updatedIssues.findIndex(i => i.id === lastIssue.id);
+        newIndex = lastIndex + 1;
+
+        // Same adjustment if we are moving down
+        if (currentIndex < newIndex) {
+          newIndex -= 1;
+        }
+      }
+    }
+
+    updatedIssues.splice(currentIndex, 1); // Remove from old position
+
+    // Update status
+    const updatedIssue = { ...dragged, status: newStatus };
+
+    // Insert at new position
+    updatedIssues.splice(newIndex, 0, updatedIssue);
+
+    const statusObj = statuses.find((s) => s.name === newStatus);
+    if (!statusObj) {
+      console.error('[Kanban] Status not found:', newStatus);
+      setState({
+        ...state,
+        updateMessage: `❌ Error: Status "${newStatus}" not found`,
+        draggedIssue: null,
+        activeDropColumn: null,
+        dropIndicator: null
+      });
+      return;
+    }
 
     const updateRequest = {
       id: Date.now(),
@@ -322,6 +562,8 @@ export default function LinearKanbanBoard({
       ...state,
       issues: updatedIssues,
       draggedIssue: null,
+      activeDropColumn: null,
+      dropIndicator: null,
       pendingUpdates: [...state.pendingUpdates, updateRequest],
       updateMessage: `📝 Queued update: ${dragged.identifier} → ${newStatus} (${state.pendingUpdates.length + 1} pending)`,
     });
@@ -330,6 +572,12 @@ export default function LinearKanbanBoard({
     setTimeout(() => {
       setState((s) => (s ? { ...s, updateMessage: '' } : s));
     }, 3000);
+  };
+
+  const handleDragEnd = (e: React.DragEvent<HTMLDivElement>) => {
+    dndLog('[Kanban] Drag End');
+    e.stopPropagation();
+    setState(prev => ({ ...prev, draggedIssue: null, activeDropColumn: null, dropIndicator: null }));
   };
 
   const clearPendingUpdates = () => setState({ ...state, pendingUpdates: [] });
@@ -341,6 +589,40 @@ export default function LinearKanbanBoard({
     navigator.clipboard.writeText(text);
     setState({ ...state, updateMessage: '📋 Copied pending updates to clipboard' });
     setTimeout(() => setState((s) => (s ? { ...s, updateMessage: '' } : s)), 2000);
+  };
+
+  /* Interactive Features Handlers */
+  const handleIssueClick = (e: React.MouseEvent, issueId: string) => {
+    e.stopPropagation(); // Prevent Tldraw selection
+    setState({ ...state, selectedIssue: issueId });
+  };
+
+  const handleCloseModal = (e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    setState({ ...state, selectedIssue: null });
+  };
+
+  const handleAssigneeChange = (issueId: string, newAssignee: string) => {
+    const updatedIssues = state.issues.map(i =>
+      i.id === issueId ? { ...i, assignee: newAssignee } : i
+    );
+    setState({ ...state, issues: updatedIssues });
+  };
+
+  const handleAddComment = (issueId: string, text: string) => {
+    const newComment = {
+      id: Date.now().toString(),
+      user: 'You',
+      text,
+      time: 'Just now'
+    };
+    setState(prev => ({
+      ...prev,
+      comments: {
+        ...prev.comments,
+        [issueId]: [...(prev.comments[issueId] || []), newComment]
+      }
+    }));
   };
 
   /* Custom Kanban Skeleton */
@@ -368,6 +650,8 @@ export default function LinearKanbanBoard({
       </div>
     </div>
   );
+
+  const selectedIssueData = state.selectedIssue ? state.issues.find(i => i.id === state.selectedIssue) : null;
 
   /* UI */
   return (
@@ -400,7 +684,11 @@ export default function LinearKanbanBoard({
               : 0,
       }}
     >
-      <div className={cn('p-6 bg-gray-50 h-full overflow-auto', className)}>
+      <div
+        className={cn('p-6 bg-gray-50 h-full overflow-auto relative', className)}
+        onDragOver={handleBoardDragOver}
+        onDrop={handleBoardDrop}
+      >
         {/* Header */}
         <div className="mb-6">
           <h1 className="text-3xl font-bold text-gray-900 mb-4">{title}</h1>
@@ -410,7 +698,7 @@ export default function LinearKanbanBoard({
             <select
               value={state.selectedTeam}
               onChange={(e) => setState({ ...state, selectedTeam: e.target.value })}
-              className="border border-gray-300 rounded px-3 py-1 text-sm bg-white"
+              className="border border-gray-300 rounded px-3 py-1 text-sm bg-white nodrag"
             >
               {teams.map((team) => (
                 <option key={team.id} value={team.id}>
@@ -421,7 +709,7 @@ export default function LinearKanbanBoard({
             {state.pendingUpdates.length > 0 && (
               <button
                 onClick={clearPendingUpdates}
-                className="bg-red-600 text-white px-3 py-1 rounded text-sm hover:bg-red-700 transition-colors"
+                className="bg-red-600 text-white px-3 py-1 rounded text-sm hover:bg-red-700 transition-colors nodrag"
               >
                 Clear Queue ({state.pendingUpdates.length})
               </button>
@@ -442,7 +730,7 @@ export default function LinearKanbanBoard({
                 </h3>
                 <button
                   onClick={copyPendingUpdates}
-                  className="text-xs bg-orange-600 text-white px-2 py-1 rounded hover:bg-orange-700"
+                  className="text-xs bg-orange-600 text-white px-2 py-1 rounded hover:bg-orange-700 nodrag"
                 >
                   Copy Details
                 </button>
@@ -472,7 +760,13 @@ export default function LinearKanbanBoard({
         </div>
 
         {/* Board */}
-        <div className="flex gap-4 overflow-x-auto pb-4" style={{ minHeight: '400px' }}>
+        <div
+          ref={boardRef as any}
+          className="flex gap-4 overflow-x-auto pb-4"
+          style={{ minHeight: '400px' }}
+          onDragOverCapture={handleBoardDragOver}
+          onDropCapture={handleBoardDrop}
+        >
           {columns.map((column) => {
             const columnIssues = getIssuesForColumn(column.id);
             const columnWidth = Math.max(
@@ -484,8 +778,14 @@ export default function LinearKanbanBoard({
             );
             return (
               <div key={column.key} className="flex-shrink-0" style={{ width: columnWidth + 'px' }}>
-                <div className="bg-white rounded-lg shadow-sm border border-gray-200 h-fit">
-                  <div className="p-4 border-b border-gray-200 bg-gray-50 rounded-t-lg">
+                <div
+                  className={`bg-white rounded-lg shadow-sm border h-fit transition-colors nodrag ${state.activeDropColumn === column.id ? 'bg-blue-50 border-blue-300 ring-2 ring-blue-100' : 'border-gray-200'
+                    }`}
+                  onDragEnterCapture={(e) => handleDragOver(e as any, column.id)}
+                  onDragOverCapture={(e) => handleDragOver(e as any, column.id)}
+                  onDropCapture={(e) => handleDrop(e as any, column.id)}
+                >
+                  <div className="p-4 border-b border-gray-200 bg-gray-50/50 rounded-t-lg">
                     <h2 className="font-semibold text-gray-900 text-sm flex items-center justify-between">
                       <span>{column.title}</span>
                       <span className="bg-gray-200 text-gray-700 px-2 py-1 rounded-full text-xs font-medium">
@@ -493,19 +793,33 @@ export default function LinearKanbanBoard({
                       </span>
                     </h2>
                   </div>
-                  <div
-                    className="p-4 min-h-[200px] space-y-3"
-                    onDragOver={handleDragOver}
-                    onDrop={(e) => handleDrop(e, column.id)}
-                  >
+                  <div className="p-4 min-h-[200px] space-y-3">
                     {columnIssues.map((issue) => (
                       <div
                         key={issue.id}
                         draggable
-                        onDragStart={(e) => handleDragStart(e, issue.id)}
-                        className={`p-3 bg-white border-2 rounded-lg shadow-sm hover:shadow-md transition-all cursor-move transform hover:scale-[1.02] ${state.draggedIssue === issue.id ? 'opacity-50 rotate-2 scale-105' : ''
-                          } ${getPriorityColor(issue.priority)}`}
+                        data-tldrag-ok
+                        data-issue-id={issue.id}
+                        onDragStartCapture={(e) => handleDragStart(e, issue.id)}
+                        onDragOverCapture={(e) => handleDragOverCard(e, issue.id)}
+                        onDropCapture={(e) => handleDrop(e, column.id)}
+                        onDragEndCapture={handleDragEnd}
+                        onClick={(e) => handleIssueClick(e, issue.id)}
+                        className={`
+                          relative p-3 bg-white border-2 rounded-lg shadow-sm hover:shadow-md transition-all cursor-move nodrag
+                          ${state.draggedIssue === issue.id ? 'opacity-50 rotate-2 scale-105' : ''} 
+                          ${getPriorityColor(issue.priority)}
+                        `}
                       >
+                        {/* Drop Indicator - Before */}
+                        {state.dropIndicator?.targetId === issue.id && state.dropIndicator.position === 'before' && (
+                          <div className="absolute -top-2 left-0 right-0 h-1.5 bg-blue-600 rounded-full pointer-events-none z-50 shadow-sm ring-2 ring-white" />
+                        )}
+
+                        {/* Drop Indicator - After */}
+                        {state.dropIndicator?.targetId === issue.id && state.dropIndicator.position === 'after' && (
+                          <div className="absolute -bottom-2 left-0 right-0 h-1.5 bg-blue-600 rounded-full pointer-events-none z-50 shadow-sm ring-2 ring-white" />
+                        )}
                         <div className="flex items-start justify-between mb-2">
                           <span className="text-xs font-mono text-gray-500 bg-gray-100 px-2 py-1 rounded">
                             {issue.identifier}
@@ -561,7 +875,12 @@ export default function LinearKanbanBoard({
                         </div>
                       </div>
                     ))}
-                    {columnIssues.length === 0 && (
+                    {/* Empty Column / Append Indicator */}
+                    {state.activeDropColumn === column.id && !state.dropIndicator && (
+                      <div className="h-1.5 bg-blue-600 rounded-full mx-1 shadow-sm ring-2 ring-white animate-pulse" />
+                    )}
+
+                    {columnIssues.length === 0 && !state.activeDropColumn && (
                       <div className="text-gray-400 text-center py-8 text-sm">
                         No issues in {column.title}
                       </div>
@@ -575,9 +894,186 @@ export default function LinearKanbanBoard({
 
         {/* Drag Overlay */}
         {state.draggedIssue && (
-          <div className="fixed bottom-4 right-4 bg-blue-600 text-white px-4 py-2 rounded-lg shadow-lg flex items-center">
+          <div className="fixed bottom-4 right-4 bg-blue-600 text-white px-4 py-2 rounded-lg shadow-lg flex items-center z-50">
             <span className="mr-2">🚀</span>
             Dragging: {state.issues.find((i) => i.id === state.draggedIssue)?.identifier}
+          </div>
+        )}
+
+        {/* Issue Detail Modal */}
+        {selectedIssueData && (
+          <div
+            className="absolute inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+            onClick={handleCloseModal}
+            onPointerDown={(e) => e.stopPropagation()} // Stop Tldraw interaction
+          >
+            <div
+              className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90%] overflow-hidden flex flex-col"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Modal Header */}
+              <div className="p-6 border-b border-gray-200 flex justify-between items-start bg-gray-50">
+                <div>
+                  <div className="flex items-center gap-3 mb-2">
+                    <span className="text-sm font-mono text-gray-500 bg-white border border-gray-200 px-2 py-1 rounded">
+                      {selectedIssueData.identifier}
+                    </span>
+                    <span className={`text-xs font-semibold px-2 py-1 rounded ${selectedIssueData.priority?.value === 1 ? 'bg-red-100 text-red-700' :
+                      selectedIssueData.priority?.value === 2 ? 'bg-orange-100 text-orange-700' :
+                        'bg-gray-100 text-gray-700'
+                      }`}>
+                      {selectedIssueData.priority?.name || 'No Priority'}
+                    </span>
+                  </div>
+                  <h2 className="text-xl font-bold text-gray-900">{selectedIssueData.title}</h2>
+                </div>
+                <button
+                  onClick={handleCloseModal}
+                  className="text-gray-400 hover:text-gray-600 p-1 rounded-full hover:bg-gray-200"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
+              </div>
+
+              {/* Modal Content */}
+              <div className="flex-1 overflow-y-auto p-6">
+                <div className="grid grid-cols-3 gap-8">
+                  {/* Main Content */}
+                  <div className="col-span-2 space-y-6">
+                    <div>
+                      <h3 className="text-sm font-semibold text-gray-900 mb-2">Description</h3>
+                      <div className="text-gray-600 text-sm leading-relaxed">
+                        <p>
+                          This is a placeholder description for the issue. In a real integration,
+                          this would be fetched from the Linear API. It supports <strong>markdown</strong>
+                          and other rich text features.
+                        </p>
+                        <ul className="list-disc ml-4 mt-2 space-y-1">
+                          <li>Check acceptance criteria</li>
+                          <li>Verify with design</li>
+                          <li>Update documentation</li>
+                        </ul>
+                      </div>
+                    </div>
+
+                    <div>
+                      <h3 className="text-sm font-semibold text-gray-900 mb-3">Activity & Comments</h3>
+                      <div className="space-y-4">
+                        {/* Existing Comments */}
+                        {(state.comments[selectedIssueData.id] || []).map((comment) => (
+                          <div key={comment.id} className="flex gap-3">
+                            <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-xs font-bold text-blue-600">
+                              {comment.user[0]}
+                            </div>
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-1">
+                                <span className="text-sm font-medium text-gray-900">{comment.user}</span>
+                                <span className="text-xs text-gray-500">{comment.time}</span>
+                              </div>
+                              <p className="text-sm text-gray-600">{comment.text}</p>
+                            </div>
+                          </div>
+                        ))}
+
+                        {/* Add Comment Input */}
+                        <div className="flex gap-3 mt-4">
+                          <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-xs font-bold text-gray-500">
+                            Y
+                          </div>
+                          <div className="flex-1">
+                            <input
+                              type="text"
+                              placeholder="Leave a comment..."
+                              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter' && e.currentTarget.value.trim()) {
+                                  handleAddComment(selectedIssueData.id, e.currentTarget.value);
+                                  e.currentTarget.value = '';
+                                }
+                              }}
+                            />
+                            <p className="text-xs text-gray-400 mt-1">Press Enter to post</p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Sidebar */}
+                  <div className="space-y-6">
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
+                        Status
+                      </label>
+                      <select
+                        value={selectedIssueData.status}
+                        onChange={(e) => queueStatusChange(selectedIssueData.id, e.target.value)}
+                        className="w-full text-sm border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                      >
+                        {statuses.map(s => (
+                          <option key={s.id} value={s.name}>{s.name}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
+                        Assignee
+                      </label>
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2 p-2 border rounded-md bg-white">
+                          {selectedIssueData.assignee ? (
+                            <>
+                              <span className="w-6 h-6 rounded-full bg-gray-100 flex items-center justify-center text-xs">
+                                👤
+                              </span>
+                              <span className="text-sm text-gray-900">{selectedIssueData.assignee}</span>
+                            </>
+                          ) : (
+                            <span className="text-sm text-gray-400 italic">Unassigned</span>
+                          )}
+                        </div>
+                        <select
+                          className="w-full text-sm border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                          onChange={(e) => handleAssigneeChange(selectedIssueData.id, e.target.value)}
+                          value={selectedIssueData.assignee || ''}
+                        >
+                          <option value="">Change Assignee...</option>
+                          {mockUsers.map(u => (
+                            <option key={u.id} value={u.name}>{u.avatar} {u.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
+                        Labels
+                      </label>
+                      <div className="flex flex-wrap gap-2">
+                        {selectedIssueData.labels?.map((label, i) => (
+                          <span key={i} className={`px-2 py-1 rounded text-xs font-medium ${getLabelColor(label)}`}>
+                            {label}
+                          </span>
+                        ))}
+                        <button className="px-2 py-1 rounded text-xs font-medium bg-gray-100 text-gray-500 hover:bg-gray-200 border border-gray-200 border-dashed">
+                          + Add
+                        </button>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
+                        Project
+                      </label>
+                      <div className="text-sm text-blue-600 hover:underline cursor-pointer flex items-center gap-1">
+                        📁 {selectedIssueData.project || 'No Project'}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         )}
 

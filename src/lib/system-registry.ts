@@ -106,6 +106,18 @@ export const STATIC_CAPABILITIES: SystemCapability[] = [
     available: true, // Enable by default since we have fallback handling
     source: 'static',
   },
+  {
+    id: 'create_infographic',
+    type: 'tool',
+    name: 'Create Infographic',
+    description: 'Generate an infographic based on the conversation or a specific topic',
+    agentToolName: 'create_infographic',
+    intents: ['infographic_generation'],
+    keywords: ['infographic', 'chart', 'diagram', 'visualize', 'summary image'],
+    examples: ['Create an infographic about this', 'Visualize the steps', 'Make a chart of the data'],
+    available: true,
+    source: 'static',
+  },
 ];
 
 // Registry class to manage all capabilities

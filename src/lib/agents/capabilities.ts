@@ -24,19 +24,19 @@ export const defaultCustomComponents: Array<{
   description: string;
   examples?: string[];
 }> = [
-  { name: 'YoutubeEmbed', description: 'Embed a YouTube video by ID', examples: ['show video', 'embed youtube'] },
-  { name: 'WeatherForecast', description: 'Display weather forecast data', examples: ['show weather', "what's the weather"] },
-  { name: 'RetroTimer', description: 'Retro countdown timer', examples: ['set a timer', 'start countdown'] },
-  { name: 'RetroTimerEnhanced', description: 'Enhanced timer with AI updates', examples: ['advanced timer', 'smart countdown'] },
-  { name: 'DocumentEditor', description: 'Collaborative editor with AI updates', examples: ['edit document', 'create doc'] },
-  { name: 'ResearchPanel', description: 'Research results panel', examples: ['show research', 'display findings'] },
-  { name: 'ActionItemTracker', description: 'Action item manager', examples: ['track action items', 'create todo list'] },
-  { name: 'LivekitRoomConnector', description: 'Connect to LiveKit room', examples: ['connect to room'] },
-  { name: 'LivekitParticipantTile', description: 'Participant video/audio tile', examples: ['show participant video'] },
-  { name: 'AIImageGenerator', description: 'Real-time AI image generator', examples: ['generate an image'] },
-  { name: 'LiveCaptions', description: 'Live captions component', examples: ['show live captions'] },
-  { name: 'DebateScorecard', description: 'Real-time debate scorecard', examples: ['show debate scorecard'] },
-];
+    { name: 'YoutubeEmbed', description: 'Embed a YouTube video by ID', examples: ['show video', 'embed youtube'] },
+    { name: 'WeatherForecast', description: 'Display weather forecast data', examples: ['show weather', "what's the weather"] },
+    { name: 'RetroTimer', description: 'Retro countdown timer', examples: ['set a timer', 'start countdown'] },
+    { name: 'RetroTimerEnhanced', description: 'Enhanced timer with AI updates', examples: ['advanced timer', 'smart countdown'] },
+    { name: 'DocumentEditor', description: 'Collaborative editor with AI updates', examples: ['edit document', 'create doc'] },
+    { name: 'ResearchPanel', description: 'Research results panel', examples: ['show research', 'display findings'] },
+    { name: 'ActionItemTracker', description: 'Action item manager', examples: ['track action items', 'create todo list'] },
+    { name: 'LivekitRoomConnector', description: 'Connect to LiveKit room', examples: ['connect to room'] },
+    { name: 'LivekitParticipantTile', description: 'Participant video/audio tile', examples: ['show participant video'] },
+    { name: 'AIImageGenerator', description: 'Real-time AI image generator', examples: ['generate an image'] },
+    { name: 'LiveCaptions', description: 'Live captions component', examples: ['show live captions'] },
+    { name: 'DebateScorecard', description: 'Real-time debate scorecard', examples: ['show debate scorecard'] },
+  ];
 
 export const defaultCapabilities: SystemCapabilities = {
   tools: [
@@ -46,6 +46,7 @@ export const defaultCapabilities: SystemCapabilities = {
     { name: 'update_component', description: 'Update existing UI components', examples: ['update timer to 10 minutes'] },
     { name: 'list_components', description: 'List all components and their IDs' },
     { name: 'web_search', description: 'Search the web' },
+    { name: 'create_infographic', description: 'Generate an infographic' },
     { name: 'respond_with_voice', description: 'Send a text response (voice disabled)' },
     // Canvas tools
     { name: 'canvas_focus', description: 'Focus/zoom camera' },
@@ -76,6 +77,7 @@ export const defaultCapabilities: SystemCapabilities = {
       research: ['research', 'findings', 'results', 'analysis'],
       action_items: ['todo', 'task', 'action item', 'checklist'],
       image_generation: ['image', 'picture', 'illustration', 'generate image'],
+      infographic: ['infographic', 'chart', 'diagram', 'visualize'],
       captions: ['captions', 'subtitles', 'transcription', 'live text'],
       canvas_control: ['zoom', 'focus', 'pan', 'center', 'pin', 'unpin', 'note', 'arrange'],
     },
@@ -117,7 +119,7 @@ export async function queryCapabilities(room: RoomLike): Promise<SystemCapabilit
         reliable: true,
         topic: 'capability_query',
       });
-    } catch {}
+    } catch { }
 
     // Fallback after 5s
     setTimeout(() => {

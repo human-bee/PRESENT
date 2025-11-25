@@ -42,12 +42,18 @@ const toolboxShapeProps = {
   name: T.string,
 };
 
+const infographicShapeProps = {
+  w: T.number,
+  h: T.number,
+};
+
 const appSchema = createTLSchema({
   shapes: {
     ...defaultShapeSchemas,
     custom: { props: customShapeProps },
     mermaid_stream: { props: mermaidStreamShapeProps },
     toolbox: { props: toolboxShapeProps },
+    infographic: { props: infographicShapeProps },
   },
   bindings: defaultBindingSchemas,
 });
@@ -111,12 +117,12 @@ export async function resetRoom(roomId: string) {
   if (state) {
     try {
       state.room.close();
-    } catch {}
+    } catch { }
     rooms.delete(roomId);
   }
   try {
     await unlink(join(ROOM_DIR, roomId));
-  } catch {}
+  } catch { }
 }
 
 setInterval(() => {

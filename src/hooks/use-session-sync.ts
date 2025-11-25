@@ -67,6 +67,8 @@ export function useSessionSync(roomName: string) {
   const eventsRef = useRef<any[]>([]);
   const hasReplayedTranscriptRef = useRef<boolean>(false);
   const cancelledRef = useRef<boolean>(false);
+  const lastCanvasPatchRef = useRef<number>(0);
+  const throttleMs = 2500; // avoid hammering session API with large snapshots
 
   const ensureSession = useMemo(() => {
     const fetchSession = async (canvasId: string | null) => {
@@ -336,7 +338,6 @@ export function useSessionSync(roomName: string) {
   // Listen for canvas save events to update session canvas_state
   useEffect(() => {
     if (!sessionId) return;
-
     // Listen for TLDraw snapshots on the LiveKit bus and record as events
     const offTldraw = bus.on('tldraw', async (msg: any) => {
       if (!msg || typeof msg !== 'object') return;
@@ -367,6 +368,13 @@ export function useSessionSync(roomName: string) {
       const { snapshot, canvasId } = (e as CustomEvent).detail || {};
       if (!snapshot) return;
       if (canvasIdRef.current && canvasId && canvasIdRef.current !== canvasId) return;
+
+       // Throttle large canvas_state writes to reduce backend timeouts
+      const now = Date.now();
+      if (now - lastCanvasPatchRef.current < throttleMs) {
+        return;
+      }
+      lastCanvasPatchRef.current = now;
 
       const headers = await getAuthHeaders();
       const res = await fetch(`/api/session/${sessionId}`, {
