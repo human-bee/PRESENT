@@ -36,6 +36,8 @@ export const defaultCustomComponents: Array<{
     { name: 'AIImageGenerator', description: 'Real-time AI image generator', examples: ['generate an image'] },
     { name: 'LiveCaptions', description: 'Live captions component', examples: ['show live captions'] },
     { name: 'DebateScorecard', description: 'Real-time debate scorecard', examples: ['show debate scorecard'] },
+    { name: 'LinearKanbanBoard', description: 'Kanban board with Linear integration', examples: ['create kanban board', 'show tasks'] },
+    { name: 'InfographicWidget', description: 'AI-powered infographic generator', examples: ['create infographic', 'visualize conversation'] },
   ];
 
 export const defaultCapabilities: SystemCapabilities = {

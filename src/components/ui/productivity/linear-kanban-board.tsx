@@ -1,7 +1,7 @@
 'use client';
 
 import { z } from 'zod';
-import { useCallback, useEffect, useId, useState, useMemo } from 'react';
+import { useCallback, useEffect, useId, useState, useMemo, useRef } from 'react';
 import { useComponentRegistration } from '@/lib/component-registry';
 import { cn } from '@/lib/utils';
 import { LoadingState } from '@/lib/with-progressive-loading';
@@ -233,8 +233,17 @@ export default function LinearKanbanBoard({
     dropIndicator: null,
   });
 
+  const [showPendingDropdown, setShowPendingDropdown] = useState(false);
+
   // Ref to track drop indicator synchronously to avoid state update delays in onDrop
-  const dropIndicatorRef = React.useRef<{ targetId: string; position: 'before' | 'after' } | null>(null);
+  const dropIndicatorRef = useRef<{ targetId: string; position: 'before' | 'after' } | null>(null);
+  const setDropIndicator = useCallback(
+    (indicator: { targetId: string; position: 'before' | 'after' } | null) => {
+      dropIndicatorRef.current = indicator;
+      setState((prev) => ({ ...prev, dropIndicator: indicator }));
+    },
+    [],
+  );
 
   // Sync enriched data to local state when it arrives
   useEffect(() => {
@@ -248,11 +257,108 @@ export default function LinearKanbanBoard({
 
   /* 3. AI patch handler */
   const handleAIUpdate = useCallback(
-    (patch: Partial<KanbanState>) => {
-      if (!state) return;
-      setState((prev) => ({ ...prev, ...patch }));
+    (patch: any) => {
+      console.log('[LinearKanbanBoard] Received AI update:', patch);
+
+      // Handle direct prop updates
+      if (patch.issues) {
+        // Merge logic could go here, but for now we rely on the sub-agent
+      }
+
+      // Handle specific actions
+      if (patch.action === 'move_issue') {
+        const { issueId, status, columnId } = patch;
+        const issue = state.issues.find(
+          (i) =>
+            i.id === issueId ||
+            i.identifier === issueId ||
+            i.title.toLowerCase().includes(issueId.toLowerCase()),
+        );
+
+        if (issue) {
+          // Find the target column based on columnId or status name
+          const targetColumn = (statuses?.length ? statuses : fallbackColumns).find(
+            (c: any) => (c.id === columnId) || (c.name?.toLowerCase() === status?.toLowerCase()) || (c.title?.toLowerCase() === status?.toLowerCase()),
+          );
+
+          if (targetColumn) {
+            const newStatusName = (targetColumn as any).name || (targetColumn as any).title || targetColumn.id;
+
+            // Update the issue's status in the local state
+            setState(prev => {
+              const updatedIssues = prev.issues.map(i =>
+                i.id === issue.id ? { ...i, status: newStatusName } : i
+              );
+              return { ...prev, issues: updatedIssues };
+            });
+
+            // Queue for sync (using the existing pendingUpdates in state)
+            setState(prev => {
+              const existing = prev.pendingUpdates.find((u) => u.issueId === issue.id);
+              const newPendingUpdate = {
+                id: Date.now(), // Unique ID for the update
+                issueId: issue.id,
+                issueIdentifier: issue.identifier,
+                fromStatus: issue.status,
+                toStatus: newStatusName,
+                statusId: targetColumn.id, // Assuming targetColumn.id is the statusId
+                timestamp: new Date().toISOString(),
+              };
+
+              if (existing) {
+                return {
+                  ...prev,
+                  pendingUpdates: prev.pendingUpdates.map((u) =>
+                    u.issueId === issue.id ? { ...u, toStatus: newStatusName, statusId: targetColumn.id } : u,
+                  ),
+                };
+              }
+              return {
+                ...prev,
+                pendingUpdates: [...prev.pendingUpdates, newPendingUpdate],
+              };
+            });
+          }
+        }
+      }
+
+      if (patch.action === 'assign_issue') {
+        const { issueId, assignee } = patch;
+        const issue = state.issues.find(
+          (i) =>
+            i.id === issueId ||
+            i.identifier === issueId ||
+            i.title.toLowerCase().includes(issueId.toLowerCase()),
+        );
+
+        if (issue) {
+          // Find the assignee object from mockUsers
+          const assigneeUser = mockUsers.find(u => u.name.toLowerCase() === assignee.toLowerCase());
+
+          if (assigneeUser) {
+            // Update the issue's assignee in the local state
+            setState(prev => {
+              const updatedIssues = prev.issues.map(i =>
+                i.id === issue.id ? { ...i, assignee: assigneeUser.name } : i
+              );
+              return { ...prev, issues: updatedIssues };
+            });
+
+            // Queue for sync (using the existing pendingUpdates in state)
+            setState(prev => {
+              // For assignee changes, we might need a different structure or just update the issue directly
+              // For simplicity, we'll just update the issue in state and not add to pendingUpdates for now,
+              // as the pendingUpdates type is specifically for status changes.
+              // If assignee changes need to be tracked, the KanbanState.pendingUpdates type would need to be extended.
+              return prev; // No change to pendingUpdates for assignee for now
+            });
+          } else {
+            console.warn(`[LinearKanbanBoard] Assignee "${assignee}" not found in mock users.`);
+          }
+        }
+      }
     },
-    [state, setState],
+    [state, statuses], // Depend on state and statuses to access issues and column definitions
   );
 
   /* 4. Component registration for update_component */
@@ -331,7 +437,7 @@ export default function LinearKanbanBoard({
     e.dataTransfer.dropEffect = 'move';
     if (state.activeDropColumn || state.dropIndicator) {
       dndLog('[Kanban] Board Drag Over (Clearing State)');
-      dropIndicatorRef.current = null;
+      setDropIndicator(null);
       setState(prev => ({ ...prev, activeDropColumn: null, dropIndicator: null }));
     }
   };
@@ -345,7 +451,7 @@ export default function LinearKanbanBoard({
     e.preventDefault();
     e.stopPropagation();
     dndLog('[Kanban] Board Drop (Cancelled)');
-    dropIndicatorRef.current = null;
+    setDropIndicator(null);
     setState(prev => ({ ...prev, draggedIssue: null, activeDropColumn: null, dropIndicator: null }));
   };
 
@@ -369,8 +475,7 @@ export default function LinearKanbanBoard({
     if (cards.length === 0) {
       // Empty column, clear indicator (will show append)
       if (state.dropIndicator) {
-        dropIndicatorRef.current = null;
-        setState(prev => ({ ...prev, dropIndicator: null }));
+        setDropIndicator(null);
       }
       return;
     }
@@ -394,8 +499,7 @@ export default function LinearKanbanBoard({
       if (targetId && targetId !== state.draggedIssue) {
         if (state.dropIndicator?.targetId !== targetId || state.dropIndicator?.position !== 'before') {
           const newIndicator = { targetId, position: 'before' as const };
-          dropIndicatorRef.current = newIndicator;
-          setState(prev => ({ ...prev, dropIndicator: newIndicator }));
+          setDropIndicator(newIndicator);
         }
       }
     } else {
@@ -406,8 +510,7 @@ export default function LinearKanbanBoard({
       if (targetId && targetId !== state.draggedIssue) {
         if (state.dropIndicator?.targetId !== targetId || state.dropIndicator?.position !== 'after') {
           const newIndicator = { targetId, position: 'after' as const };
-          dropIndicatorRef.current = newIndicator;
-          setState(prev => ({ ...prev, dropIndicator: newIndicator }));
+          setDropIndicator(newIndicator);
         }
       }
     }
@@ -430,7 +533,7 @@ export default function LinearKanbanBoard({
 
     if (state.dropIndicator?.targetId !== issueId || state.dropIndicator?.position !== position) {
       dndLog('[Kanban] Card Drag Over:', { targetId: issueId, position });
-      setState(prev => ({ ...prev, dropIndicator: { targetId: issueId, position } }));
+      setDropIndicator({ targetId: issueId, position });
     }
   };
 
@@ -483,7 +586,7 @@ export default function LinearKanbanBoard({
     const dragged = state.issues.find((i) => i.id === state.draggedIssue);
     if (!dragged) {
       console.warn('[Kanban] Drop failed: No dragged issue found');
-      dropIndicatorRef.current = null;
+      setDropIndicator(null);
       setState({ ...state, draggedIssue: null, activeDropColumn: null, dropIndicator: null });
       return;
     }
@@ -558,6 +661,11 @@ export default function LinearKanbanBoard({
       timestamp: new Date().toISOString(),
     };
 
+    if (updateMessageTimeoutRef.current) {
+      clearTimeout(updateMessageTimeoutRef.current);
+      updateMessageTimeoutRef.current = null;
+    }
+
     setState({
       ...state,
       issues: updatedIssues,
@@ -569,8 +677,9 @@ export default function LinearKanbanBoard({
     });
 
     // Clear message after delay
-    setTimeout(() => {
+    updateMessageTimeoutRef.current = setTimeout(() => {
       setState((s) => (s ? { ...s, updateMessage: '' } : s));
+      updateMessageTimeoutRef.current = null;
     }, 3000);
   };
 
@@ -580,6 +689,8 @@ export default function LinearKanbanBoard({
     setState(prev => ({ ...prev, draggedIssue: null, activeDropColumn: null, dropIndicator: null }));
   };
 
+  const updateMessageTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const clearPendingUpdates = () => setState({ ...state, pendingUpdates: [] });
 
   const copyPendingUpdates = () => {
@@ -587,8 +698,32 @@ export default function LinearKanbanBoard({
       .map((u) => `${u.issueIdentifier}: ${u.fromStatus} → ${u.toStatus} (stateId: ${u.statusId})`)
       .join('\n');
     navigator.clipboard.writeText(text);
+    if (updateMessageTimeoutRef.current) {
+      clearTimeout(updateMessageTimeoutRef.current);
+      updateMessageTimeoutRef.current = null;
+    }
     setState({ ...state, updateMessage: '📋 Copied pending updates to clipboard' });
-    setTimeout(() => setState((s) => (s ? { ...s, updateMessage: '' } : s)), 2000);
+    updateMessageTimeoutRef.current = setTimeout(
+      () => setState((s) => (s ? { ...s, updateMessage: '' } : s)),
+      2000,
+    );
+  };
+
+  const handleSendToLinear = () => {
+    // In the hybrid model, we simulate sending by copying to clipboard and showing instructions
+    const text = state.pendingUpdates
+      .map((u) => `${u.issueIdentifier}: ${u.fromStatus} → ${u.toStatus} (stateId: ${u.statusId})`)
+      .join('\n');
+    navigator.clipboard.writeText(text);
+    if (updateMessageTimeoutRef.current) {
+      clearTimeout(updateMessageTimeoutRef.current);
+      updateMessageTimeoutRef.current = null;
+    }
+    setState(prev => ({
+      ...prev,
+      updateMessage: '🚀 Ready to sync! Ask Claude to "process these updates".'
+    }));
+    // Leave the instruction visible; do not auto-clear here.
   };
 
   /* Interactive Features Handlers */
@@ -693,7 +828,7 @@ export default function LinearKanbanBoard({
         <div className="mb-6">
           <h1 className="text-3xl font-bold text-gray-900 mb-4">{title}</h1>
 
-          <div className="flex items-center gap-4 mb-4">
+          <div className="flex items-center gap-4 mb-4 relative z-50">
             <label className="text-sm font-medium text-gray-700">Team:</label>
             <select
               value={state.selectedTeam}
@@ -706,57 +841,91 @@ export default function LinearKanbanBoard({
                 </option>
               ))}
             </select>
-            {state.pendingUpdates.length > 0 && (
+
+            {/* Pending Changes Dropdown Trigger */}
+            <div className="relative">
               <button
-                onClick={clearPendingUpdates}
-                className="bg-red-600 text-white px-3 py-1 rounded text-sm hover:bg-red-700 transition-colors nodrag"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowPendingDropdown(!showPendingDropdown);
+                }}
+                className={`flex items-center gap-2 px-3 py-1 rounded text-sm transition-colors nodrag border ${state.pendingUpdates.length > 0
+                  ? 'bg-orange-100 text-orange-800 border-orange-300 hover:bg-orange-200'
+                  : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
+                  }`}
               >
-                Clear Queue ({state.pendingUpdates.length})
+                <span>Pending Changes</span>
+                {state.pendingUpdates.length > 0 && (
+                  <span className="bg-orange-500 text-white text-xs font-bold px-1.5 rounded-full">
+                    {state.pendingUpdates.length}
+                  </span>
+                )}
               </button>
-            )}
+
+              {/* Dropdown Menu */}
+              {showPendingDropdown && (
+                <div
+                  className="absolute top-full left-0 mt-2 w-80 bg-white rounded-lg shadow-xl border border-gray-200 overflow-hidden z-[100] nodrag"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="p-3 border-b border-gray-100 bg-gray-50 flex justify-between items-center">
+                    <h3 className="font-semibold text-gray-900 text-sm">Update Queue</h3>
+                    <div className="flex gap-2">
+                      {state.pendingUpdates.length > 0 && (
+                        <>
+                          <button
+                            onClick={handleSendToLinear}
+                            className="px-2 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 font-medium transition-colors"
+                          >
+                            Send to Linear
+                          </button>
+                          <button
+                            onClick={clearPendingUpdates}
+                            className="text-xs text-red-600 hover:text-red-800 underline ml-2"
+                          >
+                            Clear
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="max-h-64 overflow-y-scroll p-2 space-y-2">
+                    {state.updateMessage && (
+                      <div className="text-xs bg-blue-50 text-blue-700 p-2 rounded border border-blue-100 mb-2">
+                        {state.updateMessage}
+                      </div>
+                    )}
+
+                    {state.pendingUpdates.length === 0 ? (
+                      <div className="text-center py-4 text-gray-400 text-sm">
+                        No pending updates
+                      </div>
+                    ) : (
+                      state.pendingUpdates.map((update) => (
+                        <div
+                          key={update.id}
+                          className="text-xs bg-orange-50 text-orange-800 p-2 rounded border border-orange-100"
+                        >
+                          <div className="font-medium">{update.issueIdentifier}</div>
+                          <div className="opacity-75">
+                            {update.fromStatus} → {update.toStatus}
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+
+                  {state.pendingUpdates.length > 0 && (
+                    <div className="p-2 bg-orange-50 border-t border-orange-100 text-xs text-orange-700 text-center">
+                      Ask Claude to "process updates" to sync.
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
 
-          {state.updateMessage && (
-            <div className="mt-3 bg-blue-100 border border-blue-300 text-blue-800 px-4 py-2 rounded">
-              {state.updateMessage}
-            </div>
-          )}
-
-          {state.pendingUpdates.length > 0 && (
-            <div className="mt-4 bg-orange-50 border border-orange-200 rounded-lg p-4">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="font-semibold text-orange-800">
-                  🚀 Pending Linear Updates ({state.pendingUpdates.length})
-                </h3>
-                <button
-                  onClick={copyPendingUpdates}
-                  className="text-xs bg-orange-600 text-white px-2 py-1 rounded hover:bg-orange-700 nodrag"
-                >
-                  Copy Details
-                </button>
-              </div>
-              <div className="space-y-2 mb-3">
-                {state.pendingUpdates.slice(-3).map((update) => (
-                  <div
-                    key={update.id}
-                    className="text-sm text-orange-700 bg-orange-100 px-3 py-2 rounded"
-                  >
-                    <strong>{update.issueIdentifier}:</strong> {update.fromStatus} →{' '}
-                    {update.toStatus}
-                  </div>
-                ))}
-                {state.pendingUpdates.length > 3 && (
-                  <div className="text-xs text-orange-600">
-                    ... and {state.pendingUpdates.length - 3} more updates
-                  </div>
-                )}
-              </div>
-              <div className="text-sm text-orange-700">
-                💡 <strong>To sync with Linear:</strong> Ask Claude to "process my pending Kanban
-                updates"
-              </div>
-            </div>
-          )}
         </div>
 
         {/* Board */}
@@ -880,7 +1049,7 @@ export default function LinearKanbanBoard({
                       <div className="h-1.5 bg-blue-600 rounded-full mx-1 shadow-sm ring-2 ring-white animate-pulse" />
                     )}
 
-                    {columnIssues.length === 0 && !state.activeDropColumn && (
+                    {columnIssues.length === 0 && state.activeDropColumn !== column.id && (
                       <div className="text-gray-400 text-center py-8 text-sm">
                         No issues in {column.title}
                       </div>

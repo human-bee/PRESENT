@@ -30,6 +30,7 @@ import { ComponentToolbox } from '@/components/ui/shared/component-toolbox';
 
 // Add debate scorecard @debate-scorecard.tsx
 import DebateScorecard, { debateScoreCardSchema } from '@/components/ui/productivity/debate-scorecard';
+import { InfographicWidget } from '@/components/InfographicWidget';
 
 import { componentToolboxSchema } from "@/lib/custom";
 
@@ -39,6 +40,10 @@ const extendedSchema = <T extends z.AnyZodObject>(schema: T) => {
     y: z.number().optional().describe('Y position'),
   });
 }
+
+const infographicWidgetSchema = z.object({
+  useGrounding: z.boolean().optional().describe('Whether to enable Google Search grounding'),
+});
 
 // Wrapper for LivekitParticipantTile to map onIdentityChange to updateState
 function LivekitParticipantTileWrapper(props: any) {
@@ -176,12 +181,20 @@ export const components: any = [
     component: DebateScorecard,
     propsSchema: extendedSchema(debateScoreCardSchema),
   },
+  {
+    name: 'InfographicWidget',
+    description:
+      'Generates infographics from recent conversation context (Gemini image model) and allows dragging results onto the canvas.',
+    component: InfographicWidget,
+    propsSchema: extendedSchema(infographicWidgetSchema),
+  },
   // Add more components here
 ];
 
 export const allComponents = {
   YoutubeEmbed: extendedSchema(youtubeEmbedSchema),
   DebateScorecard: extendedSchema(debateScoreCardSchema), // Added debate scorecard @debate-scorecard.tsx
+  InfographicWidget: extendedSchema(infographicWidgetSchema),
 }
 
 export const availableComponents = getAvailableComponents(allComponents);

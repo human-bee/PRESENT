@@ -6,10 +6,14 @@ import { Card, CardHeader } from '@/components/ui/shared/card';
 import { X, Loader2, ImageIcon } from 'lucide-react';
 import { useEditor } from '@tldraw/tldraw';
 import { useInfographicDrop, DRAG_MIME_TYPE } from '@/hooks/use-infographic-drop';
+import { useComponentRegistration } from '@/lib/component-registry';
 
 interface InfographicWidgetProps {
     room: Room | null;
     isShape?: boolean;
+    __custom_message_id?: string;
+    messageId?: string;
+    contextKey?: string;
 }
 
 // Helper to stop pointer events from bubbling to TLDraw
@@ -18,7 +22,7 @@ interface InfographicWidgetProps {
 // };
 
 
-export function InfographicWidget({ room, isShape = false }: InfographicWidgetProps) {
+export function InfographicWidget({ room, isShape = false, __custom_message_id, messageId: propMessageId, contextKey }: InfographicWidgetProps) {
     const widgetIdRef = React.useRef<string>(crypto.randomUUID());
     const [isOpen, setIsOpen] = useState(false);
     const [isGenerating, setIsGenerating] = useState(false);
@@ -118,7 +122,47 @@ export function InfographicWidget({ room, isShape = false }: InfographicWidgetPr
         }
     }, [isShape]);
 
-    // Listen for agent actions (scoped to this widget)
+    // ---------------------------------------------------------------------------
+    // AI Integration: Enable update_component support
+    // ---------------------------------------------------------------------------
+    const instanceId = React.useId();
+    // Prefer injected messageId for registry/update_component targeting
+    const messageId = propMessageId || __custom_message_id || (room as any)?.messageId || widgetIdRef.current;
+    const registryContext = contextKey || (isShape ? 'canvas' : 'default');
+
+    const handleAIUpdate = useCallback((patch: any) => {
+        console.log('[InfographicWidget] Received AI update:', patch);
+
+        // Update local state based on patch
+        if (typeof patch.useGrounding === 'boolean') {
+            setUseGrounding(patch.useGrounding);
+        }
+
+        // Trigger generation if instruction/prompt is provided
+        if (patch.instruction || patch.prompt) {
+            console.log('[InfographicWidget] Triggering generation from AI update');
+            handleGenerate();
+        }
+    }, [handleGenerate]);
+
+    const activeImage = history[currentIndex];
+
+    // Register component for AI updates
+    useComponentRegistration(
+        messageId,
+        'InfographicWidget',
+        {
+            messageId,
+            currentImage: activeImage ? {
+                url: activeImage.url,
+                width: 600, // Default width
+                height: 400 // Default height
+            } : null
+        },
+        registryContext,
+        handleAIUpdate
+    );
+
     useEffect(() => {
         const handleAgentAction = (e: CustomEvent) => {
             const envelope: any = e.detail;
@@ -135,7 +179,7 @@ export function InfographicWidget({ room, isShape = false }: InfographicWidgetPr
                     action.params?.shape_id;
 
                 const matches = targetId
-                    ? targetId === widgetIdRef.current
+                    ? targetId === messageId // Use messageId for matching
                     : !envelope.__infographicHandled;
 
                 if (!matches) continue;
@@ -151,15 +195,13 @@ export function InfographicWidget({ room, isShape = false }: InfographicWidgetPr
         return () => {
             window.removeEventListener('present:agent_actions', handleAgentAction as EventListener);
         };
-    }, [handleGenerate, isShape]);
-
-    const currentImage = history[currentIndex];
+    }, [handleGenerate, messageId]); // Added messageId to dependencies
 
     const handleDownload = () => {
-        if (!currentImage) return;
+        if (!activeImage) return;
         const link = document.createElement('a');
-        link.href = currentImage.url;
-        link.download = `infographic-${currentImage.timestamp}.png`;
+        link.href = activeImage.url;
+        link.download = `infographic-${activeImage.timestamp}.png`;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
@@ -169,13 +211,13 @@ export function InfographicWidget({ room, isShape = false }: InfographicWidgetPr
 
     // Use the custom hook to handle drag-and-drop logic
     // This encapsulates the global listener and shape creation
-    useInfographicDrop({ editor, currentImage, widgetId: widgetIdRef.current });
+    useInfographicDrop({ editor, currentImage: activeImage, widgetId: messageId });
 
     const handleDragStart = (e: React.DragEvent<HTMLImageElement>) => {
-        if (!currentImage) return;
+        if (!activeImage) return;
         console.log('[InfographicWidget] Drag started', {
-            url: currentImage.url.substring(0, 50) + '...',
-            timestamp: currentImage.timestamp
+            url: activeImage.url.substring(0, 50) + '...',
+            timestamp: activeImage.timestamp
         });
 
         try {
@@ -186,7 +228,7 @@ export function InfographicWidget({ room, isShape = false }: InfographicWidgetPr
             // Set a custom payload to identify our drag event
             e.dataTransfer.effectAllowed = 'copy';
             e.dataTransfer.setData(DRAG_MIME_TYPE.IGNORE, 'true');
-            e.dataTransfer.setData(DRAG_MIME_TYPE.WIDGET, widgetIdRef.current);
+            e.dataTransfer.setData(DRAG_MIME_TYPE.WIDGET, messageId);
 
             // Pass dimensions so we can reconstruct the shape correctly
             e.dataTransfer.setData(DRAG_MIME_TYPE.WIDTH, width.toString());
@@ -247,7 +289,7 @@ export function InfographicWidget({ room, isShape = false }: InfographicWidgetPr
                 </div>
 
                 {/* Action Buttons */}
-                {currentImage && (
+                {activeImage && (
                     <div className="flex gap-2">
                         <Button
                             size="sm"
@@ -285,11 +327,11 @@ export function InfographicWidget({ room, isShape = false }: InfographicWidgetPr
                                 <p className="text-xs text-white/50">Analyzing conversation context</p>
                             </div>
                         </div>
-                    ) : currentImage ? (
+                    ) : activeImage ? (
                         <div className="relative group w-full h-full flex flex-col">
                             <div className="flex-1 relative flex items-center justify-center bg-black/20 overflow-hidden">
                                 <img
-                                    src={currentImage.url}
+                                    src={activeImage.url}
                                     alt="Generated Infographic"
                                     className="max-w-full max-h-full object-contain cursor-grab active:cursor-grabbing"
                                     draggable="true"

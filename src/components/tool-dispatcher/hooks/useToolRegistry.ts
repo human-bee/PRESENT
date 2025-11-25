@@ -157,57 +157,57 @@ export function useToolRegistry(deps: ToolRegistryDeps): ToolRegistryApi {
       const dispatch = lastDispatch;
       for (const [messageId, entry] of pendingUpdates.entries()) {
         pendingUpdates.delete(messageId);
-      const componentInfo = ComponentRegistry.get(messageId);
-      const patchRecord = entry.patch;
-      const patchVersion =
-        typeof patchRecord.version === 'number' ? patchRecord.version : undefined;
-      const patchTimestamp =
-        typeof patchRecord.lastUpdated === 'number'
-          ? patchRecord.lastUpdated
-          : typeof patchRecord.updatedAt === 'number'
-            ? patchRecord.updatedAt
-            : undefined;
-      dispatch('tldraw:merge_component_state', {
-        messageId,
-        patch: patchRecord,
-        meta: { source: 'update_component' },
-      });
-      void ComponentRegistry.update(messageId, patchRecord, {
-        version: patchVersion ?? null,
-        timestamp: patchTimestamp ?? Date.now(),
-        source: 'tool:update_component',
-      })
-        .then((result) => {
-          const refreshedInfo = ComponentRegistry.get(messageId);
-          if (!result?.ignored && refreshedInfo?.props && refreshedInfo.componentType) {
-            try {
-              window.dispatchEvent(
-                new CustomEvent('custom:showComponent', {
-                  detail: {
-                    messageId,
-                    component: {
-                      type: refreshedInfo.componentType,
-                      props: refreshedInfo.props,
-                    },
-                    contextKey,
-                  },
-                }),
-              );
-            } catch {
-              /* noop */
-            }
-          }
-          metrics?.markPaintForMessage?.(messageId, {
-            tool: 'update_component',
-            componentType: refreshedInfo?.componentType ?? componentInfo?.componentType,
-          });
-        })
-        .catch(() => {
-          metrics?.markPaintForMessage?.(messageId, {
-            tool: 'update_component',
-            componentType: componentInfo?.componentType,
-          });
+        const componentInfo = ComponentRegistry.get(messageId);
+        const patchRecord = entry.patch;
+        const patchVersion =
+          typeof patchRecord.version === 'number' ? patchRecord.version : undefined;
+        const patchTimestamp =
+          typeof patchRecord.lastUpdated === 'number'
+            ? patchRecord.lastUpdated
+            : typeof patchRecord.updatedAt === 'number'
+              ? patchRecord.updatedAt
+              : undefined;
+        dispatch('tldraw:merge_component_state', {
+          messageId,
+          patch: patchRecord,
+          meta: { source: 'update_component' },
         });
+        void ComponentRegistry.update(messageId, patchRecord, {
+          version: patchVersion ?? null,
+          timestamp: patchTimestamp ?? Date.now(),
+          source: 'tool:update_component',
+        })
+          .then((result) => {
+            const refreshedInfo = ComponentRegistry.get(messageId);
+            if (!result?.ignored && refreshedInfo?.props && refreshedInfo.componentType) {
+              try {
+                window.dispatchEvent(
+                  new CustomEvent('custom:showComponent', {
+                    detail: {
+                      messageId,
+                      component: {
+                        type: refreshedInfo.componentType,
+                        props: refreshedInfo.props,
+                      },
+                      contextKey,
+                    },
+                  }),
+                );
+              } catch {
+                /* noop */
+              }
+            }
+            metrics?.markPaintForMessage?.(messageId, {
+              tool: 'update_component',
+              componentType: refreshedInfo?.componentType ?? componentInfo?.componentType,
+            });
+          })
+          .catch(() => {
+            metrics?.markPaintForMessage?.(messageId, {
+              tool: 'update_component',
+              componentType: componentInfo?.componentType,
+            });
+          });
       }
     };
 
@@ -584,6 +584,81 @@ export function useToolRegistry(deps: ToolRegistryDeps): ToolRegistryApi {
       );
       emitEditorAction({ type: 'canvas_command', command: 'tldraw:listShapes', callId: call.id });
       return { status: 'ACK', message: 'Listing shapes' };
+    });
+
+    map.set('create_infographic', async ({ params, call, emitEditorAction }) => {
+      // 1. Check if we already have an infographic widget
+      const components = ComponentRegistry.list(contextKey);
+      let widget = components.find((c) => c.componentType === 'InfographicWidget');
+      let messageId = widget?.messageId;
+
+      // 2. If not, create one
+      if (!widget) {
+        messageId = `ui-infographic-${Date.now().toString(36)}`;
+        window.dispatchEvent(
+          new CustomEvent('custom:showComponent', {
+            detail: {
+              messageId,
+              component: {
+                type: 'InfographicWidget',
+                props: { messageId },
+              },
+              contextKey,
+            },
+          }),
+        );
+        emitEditorAction({ type: 'create_component', componentType: 'InfographicWidget', messageId });
+
+        // Wait briefly for component to mount/register
+        await new Promise((resolve) => setTimeout(resolve, 500));
+      }
+
+      // 3. Dispatch action to trigger generation
+      // The InfographicWidget listens for 'present:agent_actions' with 'create_infographic'
+      const actionEnvelope = {
+        actions: [
+          {
+            name: 'create_infographic',
+            params: {
+              widgetId: messageId,
+              ...params,
+            },
+          },
+        ],
+      };
+
+      window.dispatchEvent(new CustomEvent('present:agent_actions', { detail: actionEnvelope }));
+
+      metrics?.associateCallWithMessage?.(call.id, messageId!, { tool: 'create_infographic', componentType: 'InfographicWidget' });
+
+      return { status: 'SUCCESS', message: 'Infographic generation triggered', componentId: messageId };
+    });
+
+    map.set('promote_widget_to_shape', async ({ params, call }) => {
+      const components = ComponentRegistry.list(contextKey);
+      const widget = components.find((c) => c.componentType === 'InfographicWidget');
+
+      if (!widget) {
+        return { status: 'ERROR', message: 'No infographic widget found' };
+      }
+
+      const currentImage = (widget.props as any).currentImage;
+      if (!currentImage || !currentImage.url) {
+        return { status: 'ERROR', message: 'Infographic widget has no image to promote' };
+      }
+
+      window.dispatchEvent(
+        new CustomEvent('tldraw:create_asset_shape', {
+          detail: {
+            url: currentImage.url,
+            width: currentImage.width || 600,
+            height: currentImage.height || 400,
+            type: 'image'
+          },
+        }),
+      );
+
+      return { status: 'SUCCESS', message: 'Infographic promoted to canvas shape' };
     });
 
     return map;
