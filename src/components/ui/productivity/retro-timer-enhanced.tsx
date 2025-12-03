@@ -326,10 +326,78 @@ export function RetroTimerEnhanced({
     [initialMinutes, initialSeconds, title, autoStart, showPresets, componentId],
   );
 
+  const parseInstruction = useCallback((instruction: string): Record<string, unknown> => {
+    const lower = instruction.toLowerCase().trim();
+    const result: Record<string, unknown> = {};
+
+    if (/\b(pause|stop|halt|freeze)\b/.test(lower)) {
+      result.isRunning = false;
+      return result;
+    }
+
+    if (/\b(start|resume|play|begin|go|run)\b/.test(lower)) {
+      result.isRunning = true;
+      result.isFinished = false;
+      return result;
+    }
+
+    if (/\b(reset|restart|clear)\b/.test(lower)) {
+      result.isRunning = false;
+      result.isFinished = false;
+      result.timeLeft = timerState.configuredDuration;
+      return result;
+    }
+
+    const addMatch = lower.match(/add\s+(\d+)\s*(min|minute|minutes|sec|second|seconds|m|s)?/);
+    if (addMatch) {
+      const amount = parseInt(addMatch[1], 10);
+      const unit = addMatch[2] || 'min';
+      const isSeconds = /^(sec|second|seconds|s)$/.test(unit);
+      const addSeconds = isSeconds ? amount : amount * 60;
+      result.timeLeft = Math.max(0, timerState.timeLeft + addSeconds);
+      result.configuredDuration = Math.max(timerState.configuredDuration, result.timeLeft as number);
+      return result;
+    }
+
+    const setMatch = lower.match(/(?:set|change)(?:\s+(?:timer|it))?\s*(?:to)?\s*(\d+)\s*(min|minute|minutes|sec|second|seconds|m|s)?/);
+    if (setMatch) {
+      const amount = parseInt(setMatch[1], 10);
+      const unit = setMatch[2] || 'min';
+      const isSeconds = /^(sec|second|seconds|s)$/.test(unit);
+      const totalSeconds = isSeconds ? amount : amount * 60;
+      result.configuredDuration = totalSeconds;
+      result.timeLeft = totalSeconds;
+      result.isFinished = false;
+      return result;
+    }
+
+    const timeMatch = lower.match(/(\d+)\s*(min|minute|minutes|sec|second|seconds|m|s)/);
+    if (timeMatch) {
+      const amount = parseInt(timeMatch[1], 10);
+      const unit = timeMatch[2];
+      const isSeconds = /^(sec|second|seconds|s)$/.test(unit);
+      const totalSeconds = isSeconds ? amount : amount * 60;
+      result.configuredDuration = totalSeconds;
+      result.timeLeft = totalSeconds;
+      result.isFinished = false;
+      return result;
+    }
+
+    return result;
+  }, [timerState.configuredDuration, timerState.timeLeft]);
+
   const handleAIUpdate = useCallback(
     (patch: Record<string, unknown>) => {
       if (RETRO_TIMER_DEBUG) {
         if (DEBUG) console.debug('[RetroTimerEnhanced] AI update received', patch);
+      }
+
+      if ('instruction' in patch && typeof patch.instruction === 'string') {
+        const instructionPatch = parseInstruction(patch.instruction);
+        if (Object.keys(instructionPatch).length > 0) {
+          pushRuntimePatch(instructionPatch);
+          return;
+        }
       }
 
       const rawMinutes = 'initialMinutes' in patch ? coerceNumber((patch as any).initialMinutes) : null;
@@ -374,7 +442,7 @@ export function RetroTimerEnhanced({
       const mergedPatch = { ...patch, ...runtimePatch };
       pushRuntimePatch(mergedPatch);
     },
-    [pushRuntimePatch, timerState.configuredDuration, timerState.timeLeft, coerceNumber, coerceBoolean],
+    [pushRuntimePatch, timerState.configuredDuration, timerState.timeLeft, coerceNumber, coerceBoolean, parseInstruction],
   );
 
   useComponentRegistration(

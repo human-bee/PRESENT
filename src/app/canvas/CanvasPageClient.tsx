@@ -19,6 +19,7 @@ import { Room, ConnectionState, RoomEvent, VideoPresets, RoomOptions } from 'liv
 import { RoomContext } from '@livekit/components-react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/use-auth';
+import { RoomScopedProviders } from '@/components/RoomScopedProviders';
 import { ToolDispatcher } from '@/components/tool-dispatcher';
 import { SystemRegistrySync } from '@/components/ui/diagnostics/system-registry-sync';
 import { initializeMCPBridge } from '@/lib/mcp-bridge';
@@ -81,7 +82,18 @@ export function CanvasPageClient() {
       console.log('[CanvasPageClient] resolveCanvasId started');
       const url = new URL(window.location.href);
       const roomOverride = url.searchParams.get('room');
+      const isFresh = url.searchParams.get('fresh') === '1';
       console.log('[CanvasPageClient] URL params:', { roomOverride, id: url.searchParams.get('id') });
+
+      if (isFresh) {
+        try {
+          localStorage.removeItem('present:lastCanvasId');
+        } catch { }
+        url.searchParams.delete('id');
+        url.searchParams.delete('room');
+        url.searchParams.delete('fresh');
+        window.history.replaceState({}, '', url.toString());
+      }
 
       if (roomOverride && roomOverride.trim().length > 0) {
         const sanitized = roomOverride.trim();
@@ -425,7 +437,37 @@ export function CanvasPageClient() {
           <SystemRegistrySync />
 
           <RoomContext.Provider value={room}>
-            <LiveKitDebugConsole enabled={enableDebugConsole} />
+            <RoomScopedProviders>
+              <LiveKitDebugConsole enabled={enableDebugConsole} />
+              <ToolDispatcher contextKey={contextKey} enableLogging={enableDispatcherLogs}>
+                <AgentCapabilitiesBridge />
+                <CanvasLiveKitContext.Provider value={roomState}>
+                  <CanvasSpace
+                    className="absolute inset-0 w-full h-full ios-vh"
+                    onTranscriptToggle={toggleTranscript}
+                  />
+
+                  <CanvasParityAutopilot />
+
+                  <SessionSync roomName={roomName} />
+
+                  <MessageThreadCollapsible
+                    contextKey={contextKey}
+                    className={[
+                      'fixed right-0 top-0 z-50 transform transition-transform duration-300 w-full max-w-sm sm:max-w-md md:max-w-lg ios-vh safe-area-padded bg-background',
+                      isTranscriptOpen ? 'translate-x-0' : 'translate-x-full pointer-events-none opacity-0',
+                    ].join(' ')}
+                    isOpen={isTranscriptOpen}
+                    onClose={toggleTranscript}
+                  />
+                </CanvasLiveKitContext.Provider>
+              </ToolDispatcher>
+            </RoomScopedProviders>
+          </RoomContext.Provider>
+        </EnhancedMcpProvider>
+      ) : (
+        <RoomContext.Provider value={room}>
+          <RoomScopedProviders>
             <ToolDispatcher contextKey={contextKey} enableLogging={enableDispatcherLogs}>
               <AgentCapabilitiesBridge />
               <CanvasLiveKitContext.Provider value={roomState}>
@@ -449,33 +491,7 @@ export function CanvasPageClient() {
                 />
               </CanvasLiveKitContext.Provider>
             </ToolDispatcher>
-          </RoomContext.Provider>
-        </EnhancedMcpProvider>
-      ) : (
-        <RoomContext.Provider value={room}>
-          <ToolDispatcher contextKey={contextKey} enableLogging={enableDispatcherLogs}>
-            <AgentCapabilitiesBridge />
-            <CanvasLiveKitContext.Provider value={roomState}>
-              <CanvasSpace
-                className="absolute inset-0 w-full h-full ios-vh"
-                onTranscriptToggle={toggleTranscript}
-              />
-
-              <CanvasParityAutopilot />
-
-              <SessionSync roomName={roomName} />
-
-              <MessageThreadCollapsible
-                contextKey={contextKey}
-                className={[
-                  'fixed right-0 top-0 z-50 transform transition-transform duration-300 w-full max-w-sm sm:max-w-md md:max-w-lg ios-vh safe-area-padded bg-background',
-                  isTranscriptOpen ? 'translate-x-0' : 'translate-x-full pointer-events-none opacity-0',
-                ].join(' ')}
-                isOpen={isTranscriptOpen}
-                onClose={toggleTranscript}
-              />
-            </CanvasLiveKitContext.Provider>
-          </ToolDispatcher>
+          </RoomScopedProviders>
         </RoomContext.Provider>
       )}
     </div>

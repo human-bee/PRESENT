@@ -88,7 +88,7 @@ function CustomMainMenu({ readOnly = false }: { readOnly?: boolean } & any) {
   };
 
   const handleNewCanvas = () => {
-    window.open('/canvas?fresh=1', '_blank');
+    router.push('/canvas?fresh=1');
   };
 
   const handleOpenCanvases = () => {

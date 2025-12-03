@@ -257,19 +257,20 @@ export function useSessionSync(roomName: string) {
   }, [bus, sessionId]);
 
   // On reload, replay the last N transcript lines after the room connects
+  // Uses batched processing to avoid blocking the main thread
   useEffect(() => {
     if (!sessionId || !room) return;
 
-    const replay = () => {
-      if (hasReplayedTranscriptRef.current) return;
-      if (!Array.isArray(transcriptRef.current) || transcriptRef.current.length === 0) return;
-      if (room.state !== 'connected') return;
+    const BATCH_SIZE = 10;
+    const BATCH_DELAY_MS = 16; // ~1 frame
 
-      hasReplayedTranscriptRef.current = true;
-      const MAX_REPLAY = 100;
-      const recent = transcriptRef.current.slice(-MAX_REPLAY);
-      for (const line of recent) {
+    const replayBatch = (lines: typeof transcriptRef.current, startIndex: number) => {
+      const endIndex = Math.min(startIndex + BATCH_SIZE, lines.length);
+      
+      for (let i = startIndex; i < endIndex; i++) {
+        const line = lines[i];
         try {
+          // Send to LiveKit for other participants (batched)
           bus.send('transcription', {
             type: 'live_transcription',
             speaker: line.participantId ?? 'unknown',
@@ -278,6 +279,7 @@ export function useSessionSync(roomName: string) {
             is_final: true,
             replay: true,
           });
+          // Dispatch for local hydration (TranscriptProvider handles this)
           try {
             window.dispatchEvent(
               new CustomEvent('livekit:transcription-replay', {
@@ -293,6 +295,24 @@ export function useSessionSync(roomName: string) {
           // ignore
         }
       }
+      
+      // Schedule next batch if there are more lines
+      if (endIndex < lines.length) {
+        setTimeout(() => replayBatch(lines, endIndex), BATCH_DELAY_MS);
+      }
+    };
+
+    const replay = () => {
+      if (hasReplayedTranscriptRef.current) return;
+      if (!Array.isArray(transcriptRef.current) || transcriptRef.current.length === 0) return;
+      if (room.state !== 'connected') return;
+
+      hasReplayedTranscriptRef.current = true;
+      const MAX_REPLAY = 100;
+      const recent = transcriptRef.current.slice(-MAX_REPLAY);
+      
+      // Start batched replay
+      replayBatch(recent, 0);
     };
 
     if (room.state === 'connected') replay();

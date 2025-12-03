@@ -1,13 +1,14 @@
 'use client';
 
 import * as React from 'react';
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/shared/avatar';
 import { Mic, Clock, User, Copy, Download, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useRoomContext, useDataChannel, useParticipants } from '@livekit/components-react';
+import { useRoomContext, useParticipants } from '@livekit/components-react';
 import { useRealtimeSessionTranscript } from '@/hooks/use-realtime-session-transcript';
+import { useAllTranscripts, useTranscriptStore, type Transcript as StoreTranscript } from '@/lib/stores/transcript-store';
 import { z } from 'zod';
 
 // Component Schema
@@ -53,7 +54,7 @@ export type LiveCaptionsProps = z.infer<typeof liveCaptionsSchema> & {
   className?: string;
 };
 
-interface Transcript {
+interface DisplayTranscript {
   id: string;
   text: string;
   speaker: string;
@@ -62,24 +63,8 @@ interface Transcript {
   position?: { x: number; y: number };
 }
 
-interface LiveCaptionsState {
-  transcripts: Transcript[];
-  isConnected: boolean;
-  participantCount: number;
-  canvasSize: { width: number; height: number };
-  settings: {
-    showSpeakerAvatars: boolean;
-    showTimestamps: boolean;
-    enableDragAndDrop: boolean;
-    maxTranscripts: number;
-    autoPosition: boolean;
-    exportFormat: 'txt' | 'json' | 'srt';
-    canvasTheme: 'grid' | 'dots' | 'clean';
-  };
-}
-
 interface SpeechBubbleProps {
-  transcript: Transcript;
+  transcript: DisplayTranscript;
   position: { x: number; y: number };
   showAvatar: boolean;
   showTimestamp: boolean;
@@ -268,38 +253,32 @@ const LiveCaptions: React.FC<LiveCaptionsProps> = ({
   const participants = useParticipants();
   const { transcript: sessionTranscript } = useRealtimeSessionTranscript(room?.name);
 
-  const getCanvasIdFromUrl = React.useCallback(() => {
-    if (typeof window === 'undefined') return null as string | null;
-    const params = new URLSearchParams(window.location.search);
-    return params.get('id');
-  }, []);
+  // Use the centralized transcript store
+  const storeTranscripts = useAllTranscripts();
+  const { batchAddTranscripts, clearTranscripts: storeClear } = useTranscriptStore();
 
-  // Define initial state
-  const initialState: LiveCaptionsState = {
-    transcripts: [],
-    isConnected: false,
-    participantCount: 0,
-    canvasSize: { width: 800, height: 600 },
-    settings: {
-      showSpeakerAvatars,
-      showTimestamps,
-      enableDragAndDrop,
-      maxTranscripts,
-      autoPosition,
-      exportFormat,
-      canvasTheme,
-    },
-  };
+  // Local state for positions (keyed by transcript id)
+  const [positions, setPositions] = useState<Map<string, { x: number; y: number }>>(new Map());
+  const [isConnected, setIsConnected] = useState(false);
+  const [participantCount, setParticipantCount] = useState(0);
+  const [canvasSize, setCanvasSize] = useState({ width: 800, height: 600 });
 
-  // Local state management
-  const [state, setState] = useState<LiveCaptionsState>(initialState);
+  const settings = useMemo(() => ({
+    showSpeakerAvatars,
+    showTimestamps,
+    enableDragAndDrop,
+    maxTranscripts,
+    autoPosition,
+    exportFormat,
+    canvasTheme,
+  }), [showSpeakerAvatars, showTimestamps, enableDragAndDrop, maxTranscripts, autoPosition, exportFormat, canvasTheme]);
 
-  // Auto-position calculation (memoized to prevent infinite loops)
+  // Auto-position calculation
   const calculatePosition = useCallback((index: number) => {
     if (!canvasRef.current) return { x: 50, y: 50 };
 
-    const canvasWidth = canvasRef.current.clientWidth - 350; // Account for speech bubble width
-    const canvasHeight = canvasRef.current.clientHeight - 120; // Account for speech bubble height
+    const canvasWidth = canvasRef.current.clientWidth - 350;
+    const canvasHeight = canvasRef.current.clientHeight - 120;
 
     const columns = Math.max(1, Math.floor(canvasWidth / 300));
     const rows = Math.max(1, Math.floor(canvasHeight / 140));
@@ -313,29 +292,36 @@ const LiveCaptions: React.FC<LiveCaptionsProps> = ({
     };
   }, []);
 
-  // Handle speech bubble position updates
-  const handlePositionChange = useCallback(
-    (id: string, newPosition: { x: number; y: number }) => {
-      setState((prev) => ({
-        ...prev,
-        transcripts: prev.transcripts.map((transcript) =>
-          transcript.id === id ? { ...transcript, position: newPosition } : transcript,
-        ),
-      }));
-    },
-    [setState],
-  );
+  // Convert store transcripts to display format with positions
+  const displayTranscripts = useMemo((): DisplayTranscript[] => {
+    const limited = storeTranscripts.slice(-maxTranscripts);
+    return limited.map((t, index): DisplayTranscript => ({
+      id: t.id,
+      text: t.text,
+      speaker: t.speaker,
+      timestamp: new Date(t.timestamp),
+      isFinal: t.isFinal,
+      position: positions.get(t.id) || (autoPosition ? calculatePosition(index) : undefined),
+    }));
+  }, [storeTranscripts, maxTranscripts, positions, autoPosition, calculatePosition]);
+
+  // Handle position changes
+  const handlePositionChange = useCallback((id: string, newPosition: { x: number; y: number }) => {
+    setPositions((prev) => {
+      const next = new Map(prev);
+      next.set(id, newPosition);
+      return next;
+    });
+  }, []);
 
   // Export transcripts
   const exportTranscripts = useCallback(() => {
-    if (!state) return;
-
-    const finalTranscripts = state.transcripts.filter((t) => t.isFinal);
+    const finalTranscripts = displayTranscripts.filter((t) => t.isFinal);
 
     let content = '';
     let filename = '';
 
-    switch (state.settings.exportFormat) {
+    switch (exportFormat) {
       case 'json':
         content = JSON.stringify(finalTranscripts, null, 2);
         filename = `live-captions-${Date.now()}.json`;
@@ -344,7 +330,7 @@ const LiveCaptions: React.FC<LiveCaptionsProps> = ({
         content = finalTranscripts
           .map((t, i) => {
             const start = new Date(t.timestamp);
-            const end = new Date(start.getTime() + 5000); // 5 second duration
+            const end = new Date(start.getTime() + 5000);
             const formatSRTTime = (date: Date) => {
               const hours = date.getHours().toString().padStart(2, '0');
               const minutes = date.getMinutes().toString().padStart(2, '0');
@@ -358,7 +344,7 @@ const LiveCaptions: React.FC<LiveCaptionsProps> = ({
           .join('\n');
         filename = `live-captions-${Date.now()}.srt`;
         break;
-      default: // txt
+      default:
         content = finalTranscripts
           .map((t) => `[${t.timestamp.toLocaleTimeString()}] ${t.speaker}: ${t.text}`)
           .join('\n');
@@ -372,184 +358,44 @@ const LiveCaptions: React.FC<LiveCaptionsProps> = ({
     a.download = filename;
     a.click();
     URL.revokeObjectURL(url);
-  }, [state]);
+  }, [displayTranscripts, exportFormat]);
 
-  // Clear all transcripts
+  // Clear transcripts (both local positions and store)
   const clearTranscripts = useCallback(() => {
-    setState((prev) => ({
-      ...prev,
-      transcripts: [],
-    }));
-  }, [setState]);
+    setPositions(new Map());
+    storeClear();
+  }, [storeClear]);
 
   // Copy transcript text
   const handleCopy = useCallback((text: string) => {
     navigator.clipboard.writeText(text);
   }, []);
 
-  // LiveKit data channel for transcription
-  useDataChannel('transcription', (message) => {
-    try {
-      const data = JSON.parse(new TextDecoder().decode(message.payload));
-
-      if (data.type === 'live_transcription') {
-        const transcriptId = `${data.speaker}-${data.timestamp}`;
-
-        setState((prevState) => {
-          if (!prevState) return prevState;
-
-          const prevTranscripts = prevState.transcripts;
-          // Strong de-dupe by id first (covers session-hydrate/replay collisions)
-          const idIndex = prevTranscripts.findIndex((t) => t.id === transcriptId);
-
-          // Check if this is an update to an existing interim transcript (legacy path)
-          // Guard: prevent duplicates when receiving the same final line via multiple paths
-          if (data.is_final && prevTranscripts.some((t) => t.id === transcriptId && t.isFinal)) {
-            return prevState;
-          }
-          // Check if this is an update to an existing interim transcript
-          const existingIndex = prevTranscripts.findIndex(
-            (t) =>
-              t.speaker === data.speaker &&
-              !t.isFinal &&
-              Math.abs(new Date(t.timestamp).getTime() - new Date(data.timestamp).getTime()) < 5000,
-          );
-
-          const newTranscript: Transcript = {
-            id: transcriptId,
-            text: data.text,
-            speaker: data.speaker,
-            timestamp: new Date(data.timestamp),
-            isFinal: data.is_final,
-            position: prevState.settings.autoPosition
-              ? calculatePosition(prevTranscripts.length)
-              : undefined,
-          };
-
-          let updatedTranscripts = prevTranscripts;
-          if (idIndex >= 0) {
-            // Update by exact id match
-            updatedTranscripts = [...prevTranscripts];
-            updatedTranscripts[idIndex] = {
-              ...updatedTranscripts[idIndex],
-              text: data.text,
-              isFinal: data.is_final,
-            };
-          } else if (existingIndex >= 0) {
-            // Update existing interim transcript by proximity
-            updatedTranscripts = [...prevTranscripts];
-            updatedTranscripts[existingIndex] = {
-              ...updatedTranscripts[existingIndex],
-              text: data.text,
-              isFinal: data.is_final,
-            };
-          } else {
-            // Add new transcript
-            updatedTranscripts = [...prevTranscripts, newTranscript];
-          }
-
-          // Limit the number of transcripts
-          if (updatedTranscripts.length > prevState.settings.maxTranscripts) {
-            updatedTranscripts = updatedTranscripts.slice(-prevState.settings.maxTranscripts);
-          }
-
-          return {
-            ...prevState,
-            transcripts: updatedTranscripts,
-          };
-        });
-      }
-    } catch (error) {
-      console.error('Error parsing transcription data:', error);
-    }
-  });
-
   // Hydrate from session API on mount/reload
   useEffect(() => {
-    if (!Array.isArray(sessionTranscript)) return;
-    const nextList: Transcript[] = sessionTranscript.map((t, idx) => ({
+    if (!Array.isArray(sessionTranscript) || sessionTranscript.length === 0) return;
+    
+    const storeFormat: StoreTranscript[] = sessionTranscript.map((t, idx) => ({
       id: `${t.participantId}-${Number(t.timestamp) || idx}`,
       text: t.text,
       speaker: t.participantId,
-      timestamp: new Date(t.timestamp),
+      timestamp: typeof t.timestamp === 'number' ? t.timestamp : Date.now(),
       isFinal: true,
+      source: t.participantId === 'voice-agent' ? 'agent' as const : 'user' as const,
+      type: 'speech' as const,
     }));
-    setState((prev) => {
-      if (!prev) return prev;
-      const prevList = prev.transcripts;
-      // Merge by id to avoid duplicates when live data already added entries
-      const byId = new Map<string, Transcript>(prevList.map((t) => [t.id, t]));
-      for (const t of nextList) {
-        if (byId.has(t.id)) {
-          const existing = byId.get(t.id)!;
-          byId.set(t.id, { ...existing, text: t.text, isFinal: true, timestamp: t.timestamp });
-        } else {
-          byId.set(t.id, t);
-        }
-      }
-      const merged = Array.from(byId.values());
-      return { ...prev, transcripts: merged };
-    });
-  }, [sessionTranscript, setState]);
-
-  // Replay support: listen for local transcript replay events dispatched on window
-  useEffect(() => {
-    const handler = (evt: Event) => {
-      try {
-        const { speaker, text, timestamp } = (evt as CustomEvent).detail || {};
-        if (!text) return;
-        const transcriptId = `${speaker || 'unknown'}-${timestamp}`;
-        setState((prevState) => {
-          if (!prevState) return prevState;
-          const prevTranscripts = prevState.transcripts;
-          const idIndex = prevTranscripts.findIndex((t) => t.id === transcriptId);
-          if (idIndex >= 0) {
-            const updated = [...prevTranscripts];
-            updated[idIndex] = {
-              ...updated[idIndex],
-              text,
-              isFinal: true,
-              timestamp: new Date(timestamp || Date.now()),
-            };
-            return { ...prevState, transcripts: updated };
-          }
-          const newTranscript: Transcript = {
-            id: transcriptId,
-            text,
-            speaker: speaker || 'unknown',
-            timestamp: new Date(timestamp || Date.now()),
-            isFinal: true,
-          };
-          return { ...prevState, transcripts: [...prevTranscripts, newTranscript] };
-        });
-      } catch {}
-    };
-    window.addEventListener('livekit:transcription-replay', handler as EventListener);
-    return () =>
-      window.removeEventListener('livekit:transcription-replay', handler as EventListener);
-  }, [setState]);
+    
+    batchAddTranscripts(storeFormat);
+  }, [sessionTranscript, batchAddTranscripts]);
 
   // Monitor room connection and participants
   useEffect(() => {
     const newConnected = room?.state === 'connected';
     const newParticipantCount = participants.length;
 
-    setState((prev) => {
-      // Ensure prev is not null and only update if values actually changed
-      if (
-        prev &&
-        (prev.isConnected !== newConnected || prev.participantCount !== newParticipantCount)
-      ) {
-        return {
-          ...prev,
-          isConnected: newConnected,
-          participantCount: newParticipantCount,
-        };
-      }
-      // If prev is null, or no changes, return prev or initial state if prev is null
-      return prev || initialState;
-    });
-  }, [room?.state, participants.length, initialState, setState]);
+    if (isConnected !== newConnected) setIsConnected(newConnected);
+    if (participantCount !== newParticipantCount) setParticipantCount(newParticipantCount);
+  }, [room?.state, participants.length, isConnected, participantCount]);
 
   // Update canvas size when ref changes
   useEffect(() => {
@@ -558,17 +404,9 @@ const LiveCaptions: React.FC<LiveCaptionsProps> = ({
         const newWidth = canvasRef.current?.clientWidth || 800;
         const newHeight = canvasRef.current?.clientHeight || 600;
 
-        setState((prev) => {
-          if (!prev) return prev;
-          // Only update if dimensions actually changed
-          if (prev.canvasSize.width !== newWidth || prev.canvasSize.height !== newHeight) {
-            return {
-              ...prev,
-              canvasSize: { width: newWidth, height: newHeight },
-            };
-          }
-          return prev;
-        });
+        if (canvasSize.width !== newWidth || canvasSize.height !== newHeight) {
+          setCanvasSize({ width: newWidth, height: newHeight });
+        }
       };
 
       updateCanvasSize();
@@ -577,13 +415,11 @@ const LiveCaptions: React.FC<LiveCaptionsProps> = ({
 
       return () => resizeObserver.disconnect();
     }
-  }, [setState]);
+  }, [canvasSize.width, canvasSize.height]);
 
   // Canvas background styles
   const getCanvasBackground = () => {
-    if (!state) return {};
-
-    switch (state.settings.canvasTheme) {
+    switch (canvasTheme) {
       case 'grid':
         return {
           backgroundImage:
@@ -600,14 +436,7 @@ const LiveCaptions: React.FC<LiveCaptionsProps> = ({
     }
   };
 
-  // EARLY RETURN MOVED TO AFTER ALL HOOKS
-  if (!state) {
-    return (
-      <div className="w-full h-full flex items-center justify-center">
-        <div className="text-muted-foreground">Loading...</div>
-      </div>
-    );
-  }
+  const finalCount = displayTranscripts.filter((t) => t.isFinal).length;
 
   return (
     <div
@@ -624,12 +453,12 @@ const LiveCaptions: React.FC<LiveCaptionsProps> = ({
             <div
               className={cn(
                 'w-2 h-2 rounded-full',
-                state.isConnected ? 'bg-green-500 animate-pulse' : 'bg-red-500',
+                isConnected ? 'bg-green-500 animate-pulse' : 'bg-red-500',
               )}
             />
             <span className="text-sm text-muted-foreground">
-              {state.isConnected
-                ? `Connected (${state.participantCount} participants)`
+              {isConnected
+                ? `Connected (${participantCount} participants)`
                 : 'Disconnected'}
             </span>
           </div>
@@ -637,10 +466,10 @@ const LiveCaptions: React.FC<LiveCaptionsProps> = ({
 
         <div className="flex items-center gap-2">
           <span className="text-sm text-muted-foreground">
-            {state.transcripts.filter((t) => t.isFinal).length} captions
+            {finalCount} captions
           </span>
 
-          {state.transcripts.length > 0 && (
+          {displayTranscripts.length > 0 && (
             <>
               <button
                 onClick={exportTranscripts}
@@ -674,7 +503,7 @@ const LiveCaptions: React.FC<LiveCaptionsProps> = ({
         }}
       >
         <AnimatePresence mode="popLayout">
-          {state.transcripts.map((transcript, index) => {
+          {displayTranscripts.map((transcript, index) => {
             const position = transcript.position || calculatePosition(index);
 
             return (
@@ -682,9 +511,9 @@ const LiveCaptions: React.FC<LiveCaptionsProps> = ({
                 key={transcript.id}
                 transcript={transcript}
                 position={position}
-                showAvatar={state.settings.showSpeakerAvatars}
-                showTimestamp={state.settings.showTimestamps}
-                enableDrag={state.settings.enableDragAndDrop}
+                showAvatar={settings.showSpeakerAvatars}
+                showTimestamp={settings.showTimestamps}
+                enableDrag={settings.enableDragAndDrop}
                 onPositionChange={handlePositionChange}
                 onCopy={handleCopy}
               />
@@ -693,13 +522,13 @@ const LiveCaptions: React.FC<LiveCaptionsProps> = ({
         </AnimatePresence>
 
         {/* Empty state */}
-        {state.transcripts.length === 0 && (
+        {displayTranscripts.length === 0 && (
           <div className="absolute inset-0 flex items-center justify-center">
             <div className="text-center text-muted-foreground">
               <Mic className="h-12 w-12 mx-auto mb-3 opacity-50" />
               <p className="text-lg font-medium mb-1">Waiting for speech...</p>
               <p className="text-sm">
-                {state.isConnected
+                {isConnected
                   ? 'Start speaking to see live captions appear'
                   : 'Connect to a LiveKit room to begin'}
               </p>

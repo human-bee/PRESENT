@@ -8,7 +8,7 @@ import {
     getDefaultColorTheme,
     T,
     type RecordProps,
-} from 'tldraw'
+} from '@tldraw/tldraw'
 import { InfographicWidget } from '@/components/InfographicWidget'
 import { useRoomContext } from '@livekit/components-react'
 

@@ -2,6 +2,7 @@
 
 import { useMemo } from 'react';
 import { ComponentRegistry } from '@/lib/component-registry';
+import type { PromotableItem } from '@/lib/promotion-types';
 import type { ToolCall, ToolParameters, ToolRunResult } from '../utils/toolTypes';
 import { getMermaidLastNode, normalizeMermaidText } from '../utils';
 
@@ -634,31 +635,54 @@ export function useToolRegistry(deps: ToolRegistryDeps): ToolRegistryApi {
       return { status: 'SUCCESS', message: 'Infographic generation triggered', componentId: messageId };
     });
 
-    map.set('promote_widget_to_shape', async ({ params, call }) => {
-      const components = ComponentRegistry.list(contextKey);
-      const widget = components.find((c) => c.componentType === 'InfographicWidget');
-
-      if (!widget) {
-        return { status: 'ERROR', message: 'No infographic widget found' };
+    map.set('promote_component_content', async ({ params, dispatchTL, call }) => {
+      const explicitId =
+        typeof params?.componentId === 'string'
+          ? params.componentId.trim()
+          : typeof params?.messageId === 'string'
+            ? params.messageId.trim()
+            : '';
+      const resolvedId = explicitId || resolveLedgerMessageId(params || {});
+      const componentId = resolvedId || '';
+      if (!componentId) {
+        return { status: 'ERROR', message: 'promote_component_content requires a componentId' };
       }
 
-      const currentImage = (widget.props as any).currentImage;
-      if (!currentImage || !currentImage.url) {
-        return { status: 'ERROR', message: 'Infographic widget has no image to promote' };
+      const component = ComponentRegistry.get(componentId);
+      if (!component) {
+        return { status: 'ERROR', message: `Component ${componentId} not found` };
       }
 
-      window.dispatchEvent(
-        new CustomEvent('tldraw:create_asset_shape', {
-          detail: {
-            url: currentImage.url,
-            width: currentImage.width || 600,
-            height: currentImage.height || 400,
-            type: 'image'
-          },
-        }),
-      );
+      const promotable = (component.props as any)?.promotable;
+      const items = Array.isArray(promotable?.items)
+        ? (promotable.items as PromotableItem[])
+        : [];
+      if (!items.length) {
+        return { status: 'ERROR', message: 'Component has no promotable content' };
+      }
 
-      return { status: 'SUCCESS', message: 'Infographic promoted to canvas shape' };
+      const itemId = typeof params?.itemId === 'string' ? params.itemId.trim() : '';
+      const target = itemId ? items.find((item) => item.id === itemId) : items[0];
+      if (!target) {
+        return {
+          status: 'ERROR',
+          message: `Promotable item ${itemId} not found on component ${componentId}`,
+        };
+      }
+
+      dispatchTL('tldraw:promote_content', target);
+
+      metrics?.associateCallWithMessage?.(call.id, componentId, {
+        tool: 'promote_component_content',
+        componentType: component.componentType,
+      });
+
+      return {
+        status: 'SUCCESS',
+        message: `Promoted ${target.label || target.id} to canvas`,
+        itemId: target.id,
+        componentId,
+      };
     });
 
     return map;

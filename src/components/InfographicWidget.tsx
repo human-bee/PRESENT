@@ -6,7 +6,7 @@ import { Card, CardHeader } from '@/components/ui/shared/card';
 import { X, Loader2, ImageIcon } from 'lucide-react';
 import { useEditor } from '@tldraw/tldraw';
 import { useInfographicDrop, DRAG_MIME_TYPE } from '@/hooks/use-infographic-drop';
-import { useComponentRegistration } from '@/lib/component-registry';
+import { usePromotable } from '@/hooks/use-promotable';
 
 interface InfographicWidgetProps {
     room: Room | null;
@@ -148,19 +148,37 @@ export function InfographicWidget({ room, isShape = false, __custom_message_id, 
     const activeImage = history[currentIndex];
 
     // Register component for AI updates
-    useComponentRegistration(
-        messageId,
-        'InfographicWidget',
+    const promotableItems = React.useMemo(
+        () => activeImage ? [{
+            id: activeImage.id || 'active-image',
+            type: 'image' as const,
+            data: {
+                url: activeImage.url,
+                width: 600,
+                height: 400,
+                title: 'Infographic'
+            },
+            label: 'Generated Infographic'
+        }] : [],
+        [activeImage]
+    );
+
+    usePromotable(
+        promotableItems,
         {
             messageId,
-            currentImage: activeImage ? {
-                url: activeImage.url,
-                width: 600, // Default width
-                height: 400 // Default height
-            } : null
-        },
-        registryContext,
-        handleAIUpdate
+            componentType: 'InfographicWidget',
+            contextKey: registryContext,
+            props: {
+                messageId,
+                currentImage: activeImage ? {
+                    url: activeImage.url,
+                    width: 600,
+                    height: 400
+                } : null
+            },
+            updateCallback: handleAIUpdate
+        }
     );
 
     useEffect(() => {
