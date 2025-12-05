@@ -372,8 +372,6 @@ export function useComponentSubAgent(config: SubAgentConfig) {
 declare global {
   interface Window {
     __linearMcpClient?: LinearMcpClient;
-    __linearMcpClientKey?: string;
-    __linearMcpClientPromise?: Promise<LinearMcpClient>;
   }
 }
 
@@ -384,62 +382,9 @@ function getLinearClientInstance(): LinearMcpClient | null {
   return null;
 }
 
-function getLinearClientKey(): string | null {
-  if (typeof window !== 'undefined') {
-    return window.__linearMcpClientKey || null;
-  }
-  return null;
-}
-
-function setLinearClientInstance(client: LinearMcpClient, apiKey: string): void {
+function setLinearClientInstance(client: LinearMcpClient): void {
   if (typeof window !== 'undefined') {
     window.__linearMcpClient = client;
-    window.__linearMcpClientKey = apiKey;
-  }
-}
-
-// Get or create Linear client with mutex to prevent race conditions
-async function getOrCreateLinearClient(apiKey: string): Promise<LinearMcpClient> {
-  // Check if we already have a valid client for this key
-  const existingClient = getLinearClientInstance();
-  const existingKey = getLinearClientKey();
-  
-  if (existingClient && existingKey === apiKey) {
-    console.log('[Linear] Reusing existing MCP client');
-    return existingClient;
-  }
-  
-  // Check if there's already a creation in progress
-  if (typeof window !== 'undefined' && window.__linearMcpClientPromise) {
-    console.log('[Linear] Waiting for existing client creation');
-    const client = await window.__linearMcpClientPromise;
-    // Verify the key matches after waiting
-    if (getLinearClientKey() === apiKey) {
-      return client;
-    }
-    // Key changed, need to create new client
-  }
-  
-  // Create new client with lock
-  console.log('[Linear] Creating new MCP client');
-  const creationPromise = (async () => {
-    const client = new LinearMcpClient(apiKey);
-    setLinearClientInstance(client, apiKey);
-    return client;
-  })();
-  
-  if (typeof window !== 'undefined') {
-    window.__linearMcpClientPromise = creationPromise;
-  }
-  
-  try {
-    const client = await creationPromise;
-    return client;
-  } finally {
-    // Clear the promise after creation completes
-    if (typeof window !== 'undefined') {
-      window.__linearMcpClientPromise = undefined;
-    }
   }
 }
 
@@ -471,8 +416,18 @@ async function getMCPTools(toolNames: string[], context?: any): Promise<Record<s
       tools[name] = {
         execute: async (params: any) => {
           try {
-            // Get or create client with mutex to prevent race conditions
-            const client = await getOrCreateLinearClient(context.linearApiKey);
+            // Initialize client if needed or if key changed
+            let client = getLinearClientInstance();
+            const existingKey = client ? (client as any).apiKey : null;
+            const needsNewClient = !client || existingKey !== context.linearApiKey;
+            
+            if (needsNewClient) {
+              console.log('[Linear] Creating new MCP client (existing:', !!client, 'keyMatch:', existingKey === context.linearApiKey, ')');
+              client = new LinearMcpClient(context.linearApiKey);
+              setLinearClientInstance(client);
+            } else {
+              console.log('[Linear] Reusing existing MCP client');
+            }
 
             // Use the client's smart execution to handle tool mapping
             const action = params?.tool || params?.action || 'list_issues';

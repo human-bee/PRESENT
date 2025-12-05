@@ -15,6 +15,7 @@ import { runCanvasSteward } from '../subagents/canvas-steward';
 import { AgentTaskQueue } from '@/lib/agents/shared/queue';
 import { resolveIntent, getObject, getString } from './intent-resolver';
 import { runDebateScorecardSteward, seedScorecardState } from '@/lib/agents/debate-judge';
+import { runDebateScorecardStewardFast } from '@/lib/agents/subagents/debate-steward-fast';
 import { getDebateScorecard, commitDebateScorecard } from '@/lib/agents/shared/supabase-context';
 import type { DebateScorecardState, Claim } from '@/lib/agents/debate-scorecard-schema';
 import { runSearchSteward } from '@/lib/agents/subagents/search-steward';
@@ -319,28 +320,43 @@ async function executeTask(taskName: string, params: JsonObject) {
 
   if (taskName.startsWith('scorecard.')) {
     const parsed = ScorecardTaskArgs.parse(params);
+    const useFast = taskName !== 'scorecard.fact_check';
+    
     if (taskName === 'scorecard.fact_check') {
       await primeFactCheckStatus(parsed);
     }
+    
     console.log('[Conductor] dispatching scorecard task', {
       taskName,
       room: parsed.room,
       componentId: parsed.componentId,
       intent: parsed.intent ?? taskName,
+      useFast,
     });
-    const output = await runDebateScorecardSteward({
-      room: parsed.room,
-      componentId: parsed.componentId,
-      windowMs: parsed.windowMs,
-      intent: parsed.intent ?? taskName,
-      summary: parsed.summary,
-      prompt: parsed.prompt,
-    });
+    
+    const output = useFast
+      ? await runDebateScorecardStewardFast({
+          room: parsed.room,
+          componentId: parsed.componentId,
+          intent: parsed.intent ?? taskName,
+          summary: parsed.summary,
+          prompt: parsed.prompt,
+        })
+      : await runDebateScorecardSteward({
+          room: parsed.room,
+          componentId: parsed.componentId,
+          windowMs: parsed.windowMs,
+          intent: parsed.intent ?? taskName,
+          summary: parsed.summary,
+          prompt: parsed.prompt,
+        });
+    
     console.log('[Conductor] scorecard steward completed', {
       taskName,
       room: parsed.room,
       componentId: parsed.componentId,
       ok: true,
+      useFast,
     });
     return { status: 'completed', output };
   }

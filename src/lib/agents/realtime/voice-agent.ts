@@ -1763,11 +1763,11 @@ Your only output is function calls. Never use plain text unless absolutely neces
         },
       }),
       update_component: llm.tool({
-        description: 'Update an existing component with a patch.',
+        description: 'Update an existing component. REQUIRED: patch object with properties to update (e.g., { isRunning: false } for timer, { instruction: "..." } for complex widgets).',
         parameters: z.object({
           componentId: z.string().nullish(),
           type: z.string().nullish(),
-          patch: z.union([z.string(), z.record(z.string(), z.any())]).nullish(),
+          patch: z.union([z.string(), z.record(z.string(), z.any())]).describe('REQUIRED: Object with properties to update. For timers: { isRunning, configuredDuration, timeLeft, reset, addSeconds }. For complex widgets: { instruction: "user request" }'),
           intentId: z.string().nullish(),
           slot: z.string().nullish(),
         }),

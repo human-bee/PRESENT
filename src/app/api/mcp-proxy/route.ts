@@ -48,24 +48,7 @@ async function forward(request: NextRequest, targetUrl: string): Promise<Respons
 
     console.log('[MCP Proxy] Forwarding to:', url.toString());
     const upstream = await fetch(url.toString(), init);
-    
-    // Log rate limit headers from Linear
-    const rateLimit = upstream.headers.get('x-ratelimit-limit');
-    const rateRemaining = upstream.headers.get('x-ratelimit-remaining');
-    const rateReset = upstream.headers.get('x-ratelimit-reset');
-    const retryAfter = upstream.headers.get('retry-after');
-    
-    if (rateLimit || rateRemaining || retryAfter) {
-      console.log('[MCP Proxy] Rate limit info:', {
-        status: upstream.status,
-        limit: rateLimit,
-        remaining: rateRemaining,
-        reset: rateReset,
-        retryAfter,
-      });
-    } else {
-      console.log('[MCP Proxy] Upstream status:', upstream.status);
-    }
+    console.log('[MCP Proxy] Upstream status:', upstream.status);
 
     // Stream the body directly so we support Server-Sent Events (text/event-stream)
     return new Response(upstream.body, {

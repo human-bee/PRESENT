@@ -175,3 +175,5 @@ export const IssueCard = React.memo(function IssueCard({
     </div>
   );
 }, areIssueCardPropsEqual);
+
+

@@ -355,43 +355,7 @@ export function ResearchPanel(props: ResearchPanelHostProps) {
   }
   const messageId = (__custom_message_id?.trim() || fallbackMessageIdRef.current)!;
 
-  const parseInstruction = useCallback((instruction: string): Partial<ResearchPanelProps> => {
-    const lower = instruction.toLowerCase().trim();
-    const result: Partial<ResearchPanelProps> = {};
-
-    if (/\b(go\s*live|start\s*live|enable\s*live|live\s*mode\s*on)\b/.test(lower)) {
-      result.isLive = true;
-      return result;
-    }
-    if (/\b(stop\s*live|disable\s*live|live\s*mode\s*off|pause\s*live)\b/.test(lower)) {
-      result.isLive = false;
-      return result;
-    }
-
-    const topicMatch = lower.match(/(?:research|search|find|look\s*up|explore)(?:\s+(?:about|for|on))?\s+(.+)/);
-    if (topicMatch && topicMatch[1]) {
-      result.currentTopic = topicMatch[1].trim();
-      return result;
-    }
-
-    const maxMatch = lower.match(/(?:show|limit|display)\s*(?:to)?\s*(\d+)\s*(?:results?)?/);
-    if (maxMatch) {
-      result.maxResults = Math.min(20, Math.max(1, parseInt(maxMatch[1], 10)));
-      return result;
-    }
-
-    return result;
-  }, []);
-
   const handleRegistryUpdate = useCallback((patch: Record<string, unknown>) => {
-    if ('instruction' in patch && typeof patch.instruction === 'string') {
-      const instructionPatch = parseInstruction(patch.instruction);
-      if (Object.keys(instructionPatch).length > 0) {
-        setPanelProps((prev) => ({ ...prev, ...instructionPatch }));
-        return;
-      }
-    }
-
     const merged = (patch as { __mergedProps?: ResearchPanelProps }).__mergedProps;
     const source = merged ?? patch;
     const parsed = researchPanelPartialSchema.safeParse(source);
@@ -410,7 +374,7 @@ export function ResearchPanel(props: ResearchPanelHostProps) {
           ? data.showCredibilityFilter
           : prev.showCredibilityFilter,
     }));
-  }, [parseInstruction]);
+  }, []);
 
   const registryPayload = useMemo(
     () => ({ title, results, currentTopic, isLive, maxResults, showCredibilityFilter }),

@@ -326,28 +326,33 @@ export function RetroTimerEnhanced({
     [initialMinutes, initialSeconds, title, autoStart, showPresets, componentId],
   );
 
+  // Parse natural language instruction into property patches
   const parseInstruction = useCallback((instruction: string): Record<string, unknown> => {
     const lower = instruction.toLowerCase().trim();
     const result: Record<string, unknown> = {};
-
+    
+    // Pause/stop commands
     if (/\b(pause|stop|halt|freeze)\b/.test(lower)) {
       result.isRunning = false;
       return result;
     }
-
+    
+    // Start/resume/play commands
     if (/\b(start|resume|play|begin|go|run)\b/.test(lower)) {
       result.isRunning = true;
       result.isFinished = false;
       return result;
     }
-
+    
+    // Reset commands
     if (/\b(reset|restart|clear)\b/.test(lower)) {
       result.isRunning = false;
       result.isFinished = false;
       result.timeLeft = timerState.configuredDuration;
       return result;
     }
-
+    
+    // Add time commands: "add 5 minutes", "add 30 seconds"
     const addMatch = lower.match(/add\s+(\d+)\s*(min|minute|minutes|sec|second|seconds|m|s)?/);
     if (addMatch) {
       const amount = parseInt(addMatch[1], 10);
@@ -355,10 +360,11 @@ export function RetroTimerEnhanced({
       const isSeconds = /^(sec|second|seconds|s)$/.test(unit);
       const addSeconds = isSeconds ? amount : amount * 60;
       result.timeLeft = Math.max(0, timerState.timeLeft + addSeconds);
-      result.configuredDuration = Math.max(timerState.configuredDuration, result.timeLeft as number);
+      result.configuredDuration = Math.max(timerState.configuredDuration, (result.timeLeft as number));
       return result;
     }
-
+    
+    // Set time commands: "set to 5 minutes", "set timer to 10 minutes"
     const setMatch = lower.match(/(?:set|change)(?:\s+(?:timer|it))?\s*(?:to)?\s*(\d+)\s*(min|minute|minutes|sec|second|seconds|m|s)?/);
     if (setMatch) {
       const amount = parseInt(setMatch[1], 10);
@@ -370,7 +376,8 @@ export function RetroTimerEnhanced({
       result.isFinished = false;
       return result;
     }
-
+    
+    // Direct time mention: "5 minutes", "10 min timer"
     const timeMatch = lower.match(/(\d+)\s*(min|minute|minutes|sec|second|seconds|m|s)/);
     if (timeMatch) {
       const amount = parseInt(timeMatch[1], 10);
@@ -382,7 +389,7 @@ export function RetroTimerEnhanced({
       result.isFinished = false;
       return result;
     }
-
+    
     return result;
   }, [timerState.configuredDuration, timerState.timeLeft]);
 
@@ -392,9 +399,61 @@ export function RetroTimerEnhanced({
         if (DEBUG) console.debug('[RetroTimerEnhanced] AI update received', patch);
       }
 
+      // Handle direct property patches from voice agent (fast path, no regex)
+      if ('isRunning' in patch || 'timeLeft' in patch || 'configuredDuration' in patch || 'reset' in patch || 'addSeconds' in patch) {
+        const directPatch: Record<string, unknown> = {};
+        
+        if ('isRunning' in patch) {
+          directPatch.isRunning = coerceBoolean((patch as any).isRunning);
+          if (directPatch.isRunning) {
+            directPatch.isFinished = false;
+          }
+        }
+        
+        if ('configuredDuration' in patch) {
+          const duration = coerceNumber((patch as any).configuredDuration);
+          if (duration !== null && duration > 0) {
+            directPatch.configuredDuration = duration;
+            if (!('timeLeft' in patch)) {
+              directPatch.timeLeft = duration;
+            }
+            directPatch.isFinished = false;
+          }
+        }
+        
+        if ('timeLeft' in patch) {
+          const timeLeft = coerceNumber((patch as any).timeLeft);
+          if (timeLeft !== null && timeLeft >= 0) {
+            directPatch.timeLeft = timeLeft;
+            directPatch.isFinished = false;
+          }
+        }
+        
+        if ('reset' in patch && coerceBoolean((patch as any).reset)) {
+          directPatch.timeLeft = timerState.configuredDuration;
+          directPatch.isRunning = false;
+          directPatch.isFinished = false;
+        }
+        
+        if ('addSeconds' in patch) {
+          const add = coerceNumber((patch as any).addSeconds);
+          if (add !== null) {
+            directPatch.timeLeft = Math.max(0, timerState.timeLeft + add);
+            directPatch.configuredDuration = Math.max(timerState.configuredDuration, directPatch.timeLeft as number);
+          }
+        }
+        
+        if (Object.keys(directPatch).length > 0) {
+          pushRuntimePatch(directPatch);
+          return;
+        }
+      }
+
+      // Handle instruction-based updates (instruction delegation pattern - fallback)
       if ('instruction' in patch && typeof patch.instruction === 'string') {
         const instructionPatch = parseInstruction(patch.instruction);
         if (Object.keys(instructionPatch).length > 0) {
+          console.log('[RetroTimerEnhanced] Parsed instruction:', patch.instruction, '->', instructionPatch);
           pushRuntimePatch(instructionPatch);
           return;
         }
@@ -442,7 +501,7 @@ export function RetroTimerEnhanced({
       const mergedPatch = { ...patch, ...runtimePatch };
       pushRuntimePatch(mergedPatch);
     },
-    [pushRuntimePatch, timerState.configuredDuration, timerState.timeLeft, coerceNumber, coerceBoolean, parseInstruction],
+    [pushRuntimePatch, timerState.configuredDuration, timerState.timeLeft, coerceNumber, coerceBoolean],
   );
 
   useComponentRegistration(
