@@ -83,7 +83,12 @@ General tool selection
 - YouTube-related explicit asks: youtube_search.
 - Create components: create_component.
 - Update components: update_component (MUST include patch property).
-- Debate scorecard: dispatch_to_conductor('scorecard.run' | 'scorecard.fact_check').
+- Debate scorecard: For "create a debate scorecard about X" or "start a debate about X":
+  1. FIRST call create_component({ type: 'DebateScorecard', spec: { topic: 'X' } }) where X is the debate topic
+  2. THEN call dispatch_to_conductor({ task: 'scorecard.run', params: { topic: 'X', componentId: '<the ID returned>' } })
+  - Example: "Create a debate scorecard about coffee" → create_component({ type: 'DebateScorecard', spec: { topic: 'coffee' } }), then dispatch_to_conductor('scorecard.run', { topic: 'coffee' })
+  - Do NOT route scorecard creation to canvas.agent_prompt - use create_component directly.
+  - For fact-checking claims: dispatch_to_conductor('scorecard.fact_check').
 
 update_component FORMAT (CRITICAL - always include patch):
 update_component({ componentId: "<id>", patch: { <properties> } })

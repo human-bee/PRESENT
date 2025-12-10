@@ -97,7 +97,17 @@ export class LinearMcpClient {
             }).then(async (response) => {
                 if (!response.ok) {
                     this.connectionPromise = null;
-                    throw new Error(`SSE connection failed: ${response.status}`);
+                    let errorBody = '';
+                    try {
+                        errorBody = await response.text();
+                    } catch {}
+                    console.error('[LinearMcpClient] SSE connection failed', {
+                        status: response.status,
+                        statusText: response.statusText,
+                        body: errorBody,
+                        hint: response.status === 401 ? 'API key may be invalid or expired' : undefined,
+                    });
+                    throw new Error(`SSE connection failed: ${response.status} - ${errorBody || response.statusText}`);
                 }
                 if (!response.body) {
                     this.connectionPromise = null;
@@ -364,10 +374,22 @@ export class LinearMcpClient {
             this.sessionId = null;
             this.isConnected = false;
             this.toolsCache = null;
+            let errorBody = '';
+            try {
+                errorBody = await response.text();
+            } catch {}
+            console.error('[LinearMcpClient] MCP request failed', {
+                method,
+                status: response.status,
+                statusText: response.statusText,
+                body: errorBody,
+                hint: response.status === 401 ? 'API key may be invalid or expired' : 
+                      response.status === 429 ? 'Rate limited - too many requests' : undefined,
+            });
             if (attempt === 0) {
                 return this.sendJsonRpc<T>(method, params, 1);
             }
-            throw new Error(`MCP request failed: ${response.status} ${response.statusText}`);
+            throw new Error(`MCP request failed: ${response.status} - ${errorBody || response.statusText}`);
         }
 
         if (isNotification) {

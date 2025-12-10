@@ -5,7 +5,7 @@ import { cookies } from 'next/headers';
 // GET /api/canvas/[id] - Get a specific canvas
 export async function GET(request: Request, { params }: { params: { id: string } }) {
   try {
-    const cookieStore = cookies();
+    const cookieStore = await cookies();
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -53,7 +53,7 @@ export async function GET(request: Request, { params }: { params: { id: string }
 // PUT /api/canvas/[id] - Update a canvas
 export async function PUT(request: Request, { params }: { params: { id: string } }) {
   try {
-    const cookieStore = cookies();
+    const cookieStore = await cookies();
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -126,7 +126,7 @@ export async function PUT(request: Request, { params }: { params: { id: string }
 // DELETE /api/canvas/[id] - Delete a canvas
 export async function DELETE(request: Request, { params }: { params: { id: string } }) {
   try {
-    const cookieStore = cookies();
+    const cookieStore = await cookies();
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,

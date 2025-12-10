@@ -12,11 +12,14 @@ const DEBATE_STEWARD_FAST_INSTRUCTIONS = `
 You are a fast debate scorecard assistant. Given the current state and an instruction, update the state.
 
 Operations you handle:
+- Set topic/title: Update the "topic" field (e.g., "Single Origin Coffee", "Climate Policy")
 - Add claim: Create new claim with id, side (AFF/NEG), speech, quote, speaker, status: "UNTESTED"
 - Update claim status: Change status to UNTESTED, CHECKING, VERIFIED, or REFUTED
 - Update scores: Modify players[].score (integers)
 - Add timeline event: Append to timeline array with id, timestamp, text, type
 - Update player stats: momentum (0-1), streakCount, bsMeter (0-1)
+
+IMPORTANT: If the instruction mentions a debate topic (e.g., "debate about X", "topic is Y"), update the "topic" field.
 
 Claim structure:
 {
@@ -73,23 +76,25 @@ export async function runDebateScorecardStewardFast(params: {
   intent?: string;
   summary?: string;
   prompt?: string;
+  topic?: string;
 }) {
-  const { room, componentId, intent, summary, prompt } = params;
+  const { room, componentId, intent, summary, prompt, topic } = params;
   const start = Date.now();
 
-  console.log('[DebateStewardFast] start', { room, componentId, intent });
+  console.log('[DebateStewardFast] start', { room, componentId, intent, topic });
 
   const record = await getDebateScorecard(room, componentId);
   const currentState = record.state;
   const currentVersion = record.version;
 
   const instruction = prompt || summary || intent || 'Update the scorecard';
+  const topicInstruction = topic ? `\n\nIMPORTANT: Set the debate topic to: "${topic}"` : '';
 
   const messages = [
     { role: 'system' as const, content: DEBATE_STEWARD_FAST_INSTRUCTIONS },
     {
       role: 'user' as const,
-      content: `Current scorecard state (version ${currentVersion}):\n${JSON.stringify(currentState, null, 2)}\n\nInstruction: "${instruction}"\n\nApply the instruction and call commit_update with the complete updated state.\nSet version to ${currentVersion + 1} and lastUpdated to ${Date.now()}.`,
+      content: `Current scorecard state (version ${currentVersion}):\n${JSON.stringify(currentState, null, 2)}\n\nInstruction: "${instruction}"${topicInstruction}\n\nApply the instruction and call commit_update with the complete updated state.\nSet version to ${currentVersion + 1} and lastUpdated to ${Date.now()}.`,
     },
   ];
 
@@ -186,3 +191,8 @@ function resolveBroadcastUrl(): string | null {
   }
   return null;
 }
+
+
+
+
+

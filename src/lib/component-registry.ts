@@ -517,6 +517,13 @@ class ComponentStore {
 
   private runCallbacks(messageId: string, patch: Record<string, unknown>) {
     const callbacks = this.callbackMap.get(messageId);
+    console.log('[ComponentRegistry] runCallbacks', {
+      messageId,
+      callbackCount: callbacks?.size ?? 0,
+      patchKeys: Object.keys(patch),
+      hasVersion: '__version' in patch,
+      hasMergedProps: '__mergedProps' in patch,
+    });
     if (!callbacks || callbacks.size === 0) {
       return { success: true, invoked: false as const };
     }

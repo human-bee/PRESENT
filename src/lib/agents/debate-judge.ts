@@ -632,6 +632,13 @@ export const commit_scorecard = tool({
         if (broadcastUrl) {
           void (async () => {
             try {
+              console.log('[DebateSteward] Broadcasting update', {
+                room,
+                componentId,
+                version: record.version,
+                broadcastUrl,
+                patchKeys: Object.keys(record.state || {}),
+              });
               await fetch(broadcastUrl, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -695,6 +702,7 @@ Workflow each turn:
 2. Call get_context(windowMs=60000) to read the recent transcript for new claims, challenges, or moderator guidance.
 3. Before declaring a claim VERIFIED or REFUTED, call search_evidence (maxResults 2-3) to gather live supporting sources. Record the returned hits in sources[] (use their id/title/url), add concise factChecks[], and set each factCheck.evidenceRefs to the IDs of supporting sources.
 4. Update the scorecard state atomically:
+   - **IMPORTANT**: If the input includes a "topic" field, ALWAYS update the scorecard's topic to that value.
    - Add or edit claims with side, speech, quote, status, strength, evidenceCount, upvotes.
    - When fact-checking, set claim.status ("CHECKING" → "VERIFIED"/"REFUTED"), update confidence, factChecks, and evidence references.
    - Maintain players[].score, streakCount, momentum, bsMeter, learningScore. Unlock achievements (debateAchievementEnum) when thresholds are met.
@@ -705,6 +713,7 @@ Workflow each turn:
 6. Your final natural language reply must be short (<= 1 sentence) and summarize the visible change (e.g., "Verified AFF-2; score now 32–28").
 
 Additional guidance:
+- If the input contains a "topic" field, set the scorecard's topic to that value and commit immediately.
 - If intent === 'scorecard.fact_check', prioritize moving any pending or newly mentioned claims into CHECKING, run search_evidence immediately, then advance statuses with concise factChecks and evidence links before responding.
 - Never invent component IDs; use componentId from inputs or the fetched state.
 - Prefer precise JSON edits: keep arrays sorted by creation time, preserve existing IDs, and avoid removing historical data unless instructed.
@@ -728,6 +737,7 @@ export async function runDebateScorecardSteward(params: {
   intent?: string;
   summary?: string;
   prompt?: string;
+  topic?: string;
 }) {
   const payload = {
     ...params,
@@ -739,6 +749,7 @@ export async function runDebateScorecardSteward(params: {
     componentId: params.componentId,
     windowMs: payload.windowMs,
     intent: params.intent,
+    topic: params.topic,
   });
   const result = await run(debateScorecardSteward, JSON.stringify(payload));
   logWithTs('🏁 [DebateSteward] run.complete', {

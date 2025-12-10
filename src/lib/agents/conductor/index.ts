@@ -60,6 +60,7 @@ const ScorecardTaskArgs = z
     intent: z.string().optional(),
     summary: z.string().optional(),
     prompt: z.string().optional(),
+    topic: z.string().optional(),
     claimId: z.string().optional(),
     claimIds: z.array(z.string().min(1)).optional(),
     claimHint: z.string().optional(),
@@ -341,6 +342,7 @@ async function executeTask(taskName: string, params: JsonObject) {
           intent: parsed.intent ?? taskName,
           summary: parsed.summary,
           prompt: parsed.prompt,
+          topic: parsed.topic,
         })
       : await runDebateScorecardSteward({
           room: parsed.room,
@@ -349,6 +351,7 @@ async function executeTask(taskName: string, params: JsonObject) {
           intent: parsed.intent ?? taskName,
           summary: parsed.summary,
           prompt: parsed.prompt,
+          topic: parsed.topic,
         });
     
     console.log('[Conductor] scorecard steward completed', {

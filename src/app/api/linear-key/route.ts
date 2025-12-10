@@ -12,7 +12,7 @@ type LinearKeyRow = {
   updated_at?: string;
 };
 
-function getServiceSupabase() {
+async function getServiceSupabase() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
@@ -24,7 +24,7 @@ function getServiceSupabase() {
     return createClient(url, serviceKey, { auth: { autoRefreshToken: false, persistSession: false } });
   }
 
-  const cookieStore = cookies();
+  const cookieStore = await cookies();
   const safeGet = typeof (cookieStore) === "object" && typeof (cookieStore as any).get === "function"
     ? (name: string) => (cookieStore as any).get(name)?.value
     : (_name: string) => undefined;
@@ -48,7 +48,7 @@ function getServiceSupabase() {
 
 
 async function getUserId() {
-  const supabase = getServiceSupabase();
+  const supabase = await getServiceSupabase();
 
    // In tests, allow an injected user id so we don't rely on cookies/auth
   if (process.env.NODE_ENV === 'test' && process.env.TEST_USER_ID) {
@@ -67,7 +67,7 @@ export async function GET(_req: NextRequest) {
     const userId = await getUserId();
     if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const supabase = getServiceSupabase();
+    const supabase = await getServiceSupabase();
     const { data, error } = await supabase
       .from<LinearKeyRow>('user_secrets')
       .select('secret')
@@ -99,7 +99,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'apiKey is required' }, { status: 400 });
     }
 
-    const supabase = getServiceSupabase();
+    const supabase = await getServiceSupabase();
     const { error } = await supabase
       .from<LinearKeyRow>('user_secrets')
       .upsert(
@@ -129,7 +129,7 @@ export async function DELETE(_req: NextRequest) {
     const userId = await getUserId();
     if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const supabase = getServiceSupabase();
+    const supabase = await getServiceSupabase();
     const { error } = await supabase
       .from<LinearKeyRow>('user_secrets')
       .delete()

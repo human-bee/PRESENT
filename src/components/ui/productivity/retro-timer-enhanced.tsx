@@ -326,73 +326,6 @@ export function RetroTimerEnhanced({
     [initialMinutes, initialSeconds, title, autoStart, showPresets, componentId],
   );
 
-  // Parse natural language instruction into property patches
-  const parseInstruction = useCallback((instruction: string): Record<string, unknown> => {
-    const lower = instruction.toLowerCase().trim();
-    const result: Record<string, unknown> = {};
-    
-    // Pause/stop commands
-    if (/\b(pause|stop|halt|freeze)\b/.test(lower)) {
-      result.isRunning = false;
-      return result;
-    }
-    
-    // Start/resume/play commands
-    if (/\b(start|resume|play|begin|go|run)\b/.test(lower)) {
-      result.isRunning = true;
-      result.isFinished = false;
-      return result;
-    }
-    
-    // Reset commands
-    if (/\b(reset|restart|clear)\b/.test(lower)) {
-      result.isRunning = false;
-      result.isFinished = false;
-      result.timeLeft = timerState.configuredDuration;
-      return result;
-    }
-    
-    // Add time commands: "add 5 minutes", "add 30 seconds"
-    const addMatch = lower.match(/add\s+(\d+)\s*(min|minute|minutes|sec|second|seconds|m|s)?/);
-    if (addMatch) {
-      const amount = parseInt(addMatch[1], 10);
-      const unit = addMatch[2] || 'min';
-      const isSeconds = /^(sec|second|seconds|s)$/.test(unit);
-      const addSeconds = isSeconds ? amount : amount * 60;
-      result.timeLeft = Math.max(0, timerState.timeLeft + addSeconds);
-      result.configuredDuration = Math.max(timerState.configuredDuration, (result.timeLeft as number));
-      return result;
-    }
-    
-    // Set time commands: "set to 5 minutes", "set timer to 10 minutes"
-    const setMatch = lower.match(/(?:set|change)(?:\s+(?:timer|it))?\s*(?:to)?\s*(\d+)\s*(min|minute|minutes|sec|second|seconds|m|s)?/);
-    if (setMatch) {
-      const amount = parseInt(setMatch[1], 10);
-      const unit = setMatch[2] || 'min';
-      const isSeconds = /^(sec|second|seconds|s)$/.test(unit);
-      const totalSeconds = isSeconds ? amount : amount * 60;
-      result.configuredDuration = totalSeconds;
-      result.timeLeft = totalSeconds;
-      result.isFinished = false;
-      return result;
-    }
-    
-    // Direct time mention: "5 minutes", "10 min timer"
-    const timeMatch = lower.match(/(\d+)\s*(min|minute|minutes|sec|second|seconds|m|s)/);
-    if (timeMatch) {
-      const amount = parseInt(timeMatch[1], 10);
-      const unit = timeMatch[2];
-      const isSeconds = /^(sec|second|seconds|s)$/.test(unit);
-      const totalSeconds = isSeconds ? amount : amount * 60;
-      result.configuredDuration = totalSeconds;
-      result.timeLeft = totalSeconds;
-      result.isFinished = false;
-      return result;
-    }
-    
-    return result;
-  }, [timerState.configuredDuration, timerState.timeLeft]);
-
   const handleAIUpdate = useCallback(
     (patch: Record<string, unknown>) => {
       if (RETRO_TIMER_DEBUG) {
@@ -445,16 +378,6 @@ export function RetroTimerEnhanced({
         
         if (Object.keys(directPatch).length > 0) {
           pushRuntimePatch(directPatch);
-          return;
-        }
-      }
-
-      // Handle instruction-based updates (instruction delegation pattern - fallback)
-      if ('instruction' in patch && typeof patch.instruction === 'string') {
-        const instructionPatch = parseInstruction(patch.instruction);
-        if (Object.keys(instructionPatch).length > 0) {
-          console.log('[RetroTimerEnhanced] Parsed instruction:', patch.instruction, '->', instructionPatch);
-          pushRuntimePatch(instructionPatch);
           return;
         }
       }

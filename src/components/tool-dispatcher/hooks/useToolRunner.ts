@@ -596,6 +596,12 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
                   : typeof params?.intent === 'string'
                     ? params.intent
                     : task,
+              topic:
+                typeof dispatchParams.topic === 'string'
+                  ? (dispatchParams.topic as string)
+                  : typeof params?.topic === 'string'
+                    ? params.topic
+                    : undefined,
             };
 
             try {

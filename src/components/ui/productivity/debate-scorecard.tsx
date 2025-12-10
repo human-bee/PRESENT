@@ -956,9 +956,30 @@ export function DebateScorecard(props: DebateScorecardProps) {
     (patch: Record<string, unknown>) => {
       const mergedProps = (patch as any)?.__mergedProps;
       const source = mergedProps ?? ComponentRegistry.get(messageId)?.props;
-      if (!source) return;
+      console.log('[DebateScorecard] handleRegistryUpdate called', {
+        messageId,
+        hasMergedProps: Boolean(mergedProps),
+        hasSource: Boolean(source),
+        patchKeys: Object.keys(patch),
+        sourceVersion: (source as any)?.version,
+        sourceTopic: (source as any)?.topic,
+      });
+      if (!source) {
+        console.log('[DebateScorecard] handleRegistryUpdate bailing - no source');
+        return;
+      }
       const candidate = debateScorecardSchema.parse(source);
-      setScorecard((prev) => (shouldPromoteScorecard(prev, candidate) ? candidate : prev));
+      setScorecard((prev) => {
+        const willUpdate = shouldPromoteScorecard(prev, candidate);
+        console.log('[DebateScorecard] shouldPromoteScorecard', {
+          willUpdate,
+          prevVersion: prev.version,
+          candidateVersion: candidate.version,
+          prevTopic: prev.topic,
+          candidateTopic: candidate.topic,
+        });
+        return willUpdate ? candidate : prev;
+      });
     },
     [messageId],
   );

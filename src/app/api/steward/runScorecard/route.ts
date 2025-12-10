@@ -3,7 +3,7 @@ import { runDebateScorecardSteward } from '@/lib/agents/debate-judge';
 
 export async function POST(req: NextRequest) {
   try {
-    const { room, componentId, windowMs, summary, prompt, intent } = await req.json();
+    const { room, componentId, windowMs, summary, prompt, intent, topic } = await req.json();
 
     if (typeof room !== 'string' || !room.trim()) {
       return NextResponse.json({ error: 'Missing or invalid room' }, { status: 400 });
@@ -27,14 +27,16 @@ export async function POST(req: NextRequest) {
       typeof prompt === 'string' && prompt.trim().length > 0 ? prompt.trim() : undefined;
     const normalizedIntent =
       typeof intent === 'string' && intent.trim().length > 0 ? intent.trim() : undefined;
+    const normalizedTopic =
+      typeof topic === 'string' && topic.trim().length > 0 ? topic.trim() : undefined;
 
-    // TEMP instrumentation while debugging steward dispatch pipeline.
     console.debug('[runScorecard][debug] POST received', {
       room: trimmedRoom,
       componentId: trimmedComponentId,
       windowMs: resolvedWindow,
       summary: normalizedSummary,
       intent: normalizedIntent,
+      topic: normalizedTopic,
     });
 
     after(async () => {
@@ -45,6 +47,7 @@ export async function POST(req: NextRequest) {
           windowMs: resolvedWindow,
           summary: normalizedSummary,
           intent: normalizedIntent,
+          topic: normalizedTopic,
         });
         await runDebateScorecardSteward({
           room: trimmedRoom,
@@ -53,6 +56,7 @@ export async function POST(req: NextRequest) {
           summary: normalizedSummary,
           prompt: normalizedPrompt,
           intent: normalizedIntent,
+          topic: normalizedTopic,
         });
         console.log('[Steward][runScorecard] completed', {
           room: trimmedRoom,
@@ -60,6 +64,7 @@ export async function POST(req: NextRequest) {
           windowMs: resolvedWindow,
           summary: normalizedSummary,
           intent: normalizedIntent,
+          topic: normalizedTopic,
         });
       } catch (error) {
         console.error('[Steward][runScorecard] error', {
@@ -68,6 +73,7 @@ export async function POST(req: NextRequest) {
           windowMs: resolvedWindow,
           summary: normalizedSummary,
           intent: normalizedIntent,
+          topic: normalizedTopic,
           error,
         });
       }
