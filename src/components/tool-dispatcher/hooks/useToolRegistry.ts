@@ -162,6 +162,12 @@ export function useToolRegistry(deps: ToolRegistryDeps): ToolRegistryApi {
         const patchRecord = entry.patch;
         const patchVersion =
           typeof patchRecord.version === 'number' ? patchRecord.version : undefined;
+        const effectiveVersion =
+          patchVersion !== undefined
+            ? patchVersion
+            : typeof componentInfo?.version === 'number' && Number.isFinite(componentInfo.version)
+              ? componentInfo.version + 1
+              : 1;
         const patchTimestamp =
           typeof patchRecord.lastUpdated === 'number'
             ? patchRecord.lastUpdated
@@ -174,7 +180,7 @@ export function useToolRegistry(deps: ToolRegistryDeps): ToolRegistryApi {
           meta: { source: 'update_component' },
         });
         void ComponentRegistry.update(messageId, patchRecord, {
-          version: patchVersion ?? null,
+          version: effectiveVersion,
           timestamp: patchTimestamp ?? Date.now(),
           source: 'tool:update_component',
         })

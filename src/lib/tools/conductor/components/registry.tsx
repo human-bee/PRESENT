@@ -32,6 +32,9 @@ import { ComponentToolbox } from '@/components/ui/shared/component-toolbox';
 import DebateScorecard, { debateScoreCardSchema } from '@/components/ui/productivity/debate-scorecard';
 import { InfographicWidget } from '@/components/InfographicWidget';
 
+// Context feeder widget for document/text context injection
+import { ContextFeeder, contextFeederSchema } from '@/components/ui/documents/context-feeder';
+
 import { componentToolboxSchema } from "@/lib/custom";
 
 const extendedSchema = <T extends z.AnyZodObject>(schema: T) => {
@@ -187,6 +190,13 @@ export const components: any = [
       'Generates infographics from recent conversation context (Gemini image model) and allows dragging results onto the canvas.',
     component: InfographicWidget,
     propsSchema: extendedSchema(infographicWidgetSchema),
+  },
+  {
+    name: 'ContextFeeder',
+    description:
+      'Upload markdown files or paste text to add context that gets injected into all AI steward prompts. Perfect for providing reference materials, documentation, or background information to guide agent responses.',
+    component: ContextFeeder,
+    propsSchema: extendedSchema(contextFeederSchema),
   },
   // Add more components here
 ];

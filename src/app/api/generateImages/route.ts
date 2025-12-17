@@ -27,9 +27,11 @@ export async function POST(req: Request) {
     let geminiError = null;
 
     if (requestModel === 'gemini-3-pro-image-preview') {
+      console.log('[generateImages] Using Gemini 3 Pro (nanobanana) model...');
       try {
         // Prefer GEMINI_API_KEY (Google AI Studio) if available, otherwise fallback to Vertex AI
         const geminiApiKey = process.env.GEMINI_API_KEY;
+        console.log('[generateImages] GEMINI_API_KEY available:', !!geminiApiKey);
 
         if (geminiApiKey) {
           // Google AI Studio API Logic
@@ -43,9 +45,7 @@ export async function POST(req: Request) {
               },
             ],
             generationConfig: {
-              responseModalities: ['IMAGE'],
-              responseMimeType: 'image/png',
-              imageConfig: { aspectRatio: '3:4' },
+              responseModalities: ['TEXT', 'IMAGE'],
             },
           };
 
@@ -122,9 +122,7 @@ export async function POST(req: Request) {
             },
           ],
           generationConfig: {
-            responseModalities: ['IMAGE'],
-            responseMimeType: 'image/png',
-            imageConfig: { aspectRatio: '3:4' },
+            responseModalities: ['TEXT', 'IMAGE'],
           },
         };
 

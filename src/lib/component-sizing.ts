@@ -33,6 +33,16 @@ export const componentSizeInfo: Record<string, ComponentSizeInfo> = {
     resizeMode: 'aspect-locked',
     sizingPolicy: 'fit_until_user_resize',
   },
+  // Alias: component registry uses "YoutubeEmbed" (lowercase 't')
+  YoutubeEmbed: {
+    naturalWidth: 640,
+    naturalHeight: 360,
+    minWidth: 320,
+    minHeight: 180,
+    aspectRatio: 16 / 9,
+    resizeMode: 'aspect-locked',
+    sizingPolicy: 'fit_until_user_resize',
+  },
   RetroTimer: {
     naturalWidth: 280,
     naturalHeight: 320, // Taller for full timer display
@@ -76,10 +86,10 @@ export const componentSizeInfo: Record<string, ComponentSizeInfo> = {
     sizingPolicy: 'scale_only',
   },
   DocumentEditor: {
-    naturalWidth: 600,
-    naturalHeight: 500,
-    minWidth: 400,
-    minHeight: 300,
+    naturalWidth: 700,
+    naturalHeight: 1100,
+    minWidth: 500,
+    minHeight: 700,
     resizeMode: 'free',
     sizingPolicy: 'fit_until_user_resize',
   },
@@ -130,6 +140,14 @@ export const componentSizeInfo: Record<string, ComponentSizeInfo> = {
     minHeight: 300,
     resizeMode: 'free',
     sizingPolicy: 'scale_only',
+  },
+  ContextFeeder: {
+    naturalWidth: 420,
+    naturalHeight: 520,
+    minWidth: 320,
+    minHeight: 360,
+    resizeMode: 'free',
+    sizingPolicy: 'fit_until_user_resize',
   },
   DebateScorecard: {
     naturalWidth: 960,

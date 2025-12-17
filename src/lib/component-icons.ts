@@ -17,6 +17,7 @@ import {
   Kanban,
   HelpCircle,
   Trophy,
+  FileUp,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -91,6 +92,11 @@ export const componentIcons: Record<string, ComponentIconMapping> = {
     icon: Kanban,
     category: 'Productivity',
     description: 'Project management board',
+  },
+  ContextFeeder: {
+    icon: FileUp,
+    category: 'Productivity',
+    description: 'Upload documents to add context',
   },
 
   // Collaboration

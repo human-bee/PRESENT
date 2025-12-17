@@ -2,6 +2,8 @@ import { getCerebrasClient, getModelForSteward } from '../fast-steward-config';
 import {
   getDebateScorecard,
   commitDebateScorecard,
+  getContextDocuments,
+  formatContextDocuments,
 } from '@/lib/agents/shared/supabase-context';
 import type { DebateScorecardState } from '@/lib/agents/debate-scorecard-schema';
 
@@ -9,7 +11,7 @@ const CEREBRAS_MODEL = getModelForSteward('DEBATE_STEWARD_FAST_MODEL');
 const client = getCerebrasClient();
 
 const DEBATE_STEWARD_FAST_INSTRUCTIONS = `
-You are a fast debate scorecard assistant. Given the current state and an instruction, update the state.
+You are a fast debate scorecard assistant. Given the current state, context documents, and an instruction, update the state.
 
 Operations you handle:
 - Set topic/title: Update the "topic" field (e.g., "Single Origin Coffee", "Climate Policy")
@@ -18,8 +20,10 @@ Operations you handle:
 - Update scores: Modify players[].score (integers)
 - Add timeline event: Append to timeline array with id, timestamp, text, type
 - Update player stats: momentum (0-1), streakCount, bsMeter (0-1)
+- Parse claims from context: If context documents are provided and instruction says to extract/parse claims, create claims from that content
 
 IMPORTANT: If the instruction mentions a debate topic (e.g., "debate about X", "topic is Y"), update the "topic" field.
+IMPORTANT: If context documents are provided and user asks to "sort into claims" or "extract claims", parse the text and create claim entries.
 
 Claim structure:
 {
@@ -87,6 +91,10 @@ export async function runDebateScorecardStewardFast(params: {
   const currentState = record.state;
   const currentVersion = record.version;
 
+  // Fetch context documents from ContextFeeder
+  const contextDocs = await getContextDocuments(room);
+  const contextSection = formatContextDocuments(contextDocs);
+
   const instruction = prompt || summary || intent || 'Update the scorecard';
   const topicInstruction = topic ? `\n\nIMPORTANT: Set the debate topic to: "${topic}"` : '';
 
@@ -94,7 +102,7 @@ export async function runDebateScorecardStewardFast(params: {
     { role: 'system' as const, content: DEBATE_STEWARD_FAST_INSTRUCTIONS },
     {
       role: 'user' as const,
-      content: `Current scorecard state (version ${currentVersion}):\n${JSON.stringify(currentState, null, 2)}\n\nInstruction: "${instruction}"${topicInstruction}\n\nApply the instruction and call commit_update with the complete updated state.\nSet version to ${currentVersion + 1} and lastUpdated to ${Date.now()}.`,
+      content: `Current scorecard state (version ${currentVersion}):\n${JSON.stringify(currentState, null, 2)}\n\n${contextSection ? `Context Documents:\n${contextSection}\n\n` : ''}Instruction: "${instruction}"${topicInstruction}\n\nApply the instruction and call commit_update with the complete updated state.\nSet version to ${currentVersion + 1} and lastUpdated to ${Date.now()}.`,
     },
   ];
 

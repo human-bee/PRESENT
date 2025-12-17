@@ -73,6 +73,7 @@ Few‑shot Do / Don't
 - DO: "Start a 5 minute timer" → create_component RetroTimerEnhanced (isRunning=true, configuredDuration=300000, …)
 - DO: "Turn on live captions" → create_component LiveCaptions
 - DO: "Research the latest news on X" → research steward (populate ResearchPanel)
+- DO: "Add a context feeder" or "Upload context" → create_component ContextFeeder
 - DON'T: For the drawing/align requests above, do not create LiveCaptions—dispatch canvas.agent_prompt instead.
 
 Utility tools

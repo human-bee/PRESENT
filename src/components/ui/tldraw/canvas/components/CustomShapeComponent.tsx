@@ -117,7 +117,13 @@ export function CustomShapeComponent({ shape }: { shape: CustomShape }) {
       policy === 'always_fit' || (policy === 'fit_until_user_resize' && !userHasResized);
 
     if (shouldAutoFit) {
-      const { w: nw, h: nh } = naturalSize;
+      const { w: rawW, h: rawH } = naturalSize;
+      // Guard: some components (especially percentage-based layouts) can transiently report
+      // 0x0 during first layout; never auto-fit to a collapsed size.
+      if (!Number.isFinite(rawW) || !Number.isFinite(rawH) || rawW < 32 || rawH < 32) {
+        return;
+      }
+      const { w: nw, h: nh } = { w: rawW, h: rawH };
       const changed = Math.abs(shape.props.w - nw) > 1 || Math.abs(shape.props.h - nh) > 1;
       const allowMultiple = policy === 'always_fit';
       if (changed && (allowMultiple || !autoFittedRef.current)) {
@@ -184,7 +190,11 @@ export function CustomShapeComponent({ shape }: { shape: CustomShape }) {
           transformOrigin: 'top left',
         }}
       >
-        <div ref={contentInnerRef} style={{ width: 'auto', height: 'auto', display: 'inline-block' }}>
+        {/* Ensure percentage-based layouts (w-full, aspect-ratio padding) have a stable containing box. */}
+        <div
+          ref={contentInnerRef}
+          style={{ width: `${baseW}px`, height: `${baseH}px`, display: 'block' }}
+        >
           <ComponentErrorBoundary
             fallback={<div style={{ padding: 10, color: 'var(--color-text-muted)' }}>Component error</div>}
           >

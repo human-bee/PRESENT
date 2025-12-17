@@ -1,4 +1,5 @@
 import { getCerebrasClient, getModelForSteward } from '../fast-steward-config';
+import { getContextDocuments, formatContextDocuments } from '@/lib/agents/shared/supabase-context';
 
 const CEREBRAS_MODEL = getModelForSteward('LINEAR_STEWARD_FAST_MODEL');
 const client = getCerebrasClient();
@@ -9,23 +10,25 @@ Your goal is to map a user's natural language instruction to a Linear MCP tool c
 
 Context provided:
 - Current issues (id, identifier, title, status, assignee, labels)
+- Context documents (uploaded text/markdown from ContextFeeder)
 
 Rules:
-1. Analyze the instruction and the current issues.
+1. Analyze the instruction, context documents, and current issues.
 2. If the user refers to an issue by title or identifier (fuzzy match), find its ID.
 3. Call the commit_action function with the appropriate action.
 4. For any action not in the list, use kind: "noOp".
+5. If context documents are provided and user asks to "create todos" or "turn into issues", parse the text and create multiple issues.
 
 Available Linear MCP Tools:
-- update_issue: Update issue. Args: { issueId, stateId?, priority?, assigneeId? }
-- create_issue: Create new issue. Args: { title, description?, teamId? }
+- update_issue: Update issue. Args: { id, state?, priority?, assignee?, labels?, ... } (id required)
+- create_issue: Create new issue. Args: { title, team, description?, priority?, state?, assignee?, labels?, ... } (title+team required; if team is unclear, omit it and the client will inject the current team)
 - create_comment: Add comment. Args: { issueId, body }
-- add_issue_label: Add label. Args: { issueId, labelId }
 
 Special client-side actions:
 - syncPending: User wants to sync/send/push pending local changes to Linear (no MCP tool needed)
+- createMultipleIssues: Create multiple issues from parsed content. Include issuesData array.
 
-Kind values: moveIssue, updateIssue, createIssue, addComment, addLabel, syncPending, noOp
+Kind values: moveIssue, updateIssue, createIssue, createMultipleIssues, addComment, addLabel, syncPending, noOp
 `;
 
 const tools = [
@@ -39,13 +42,26 @@ const tools = [
         properties: {
           kind: {
             type: 'string',
-            enum: ['moveIssue', 'updateIssue', 'createIssue', 'addComment', 'addLabel', 'syncPending', 'noOp'],
+            enum: ['moveIssue', 'updateIssue', 'createIssue', 'createMultipleIssues', 'addComment', 'addLabel', 'syncPending', 'noOp'],
           },
           issueId: { type: 'string', description: 'The issue ID to act on' },
           toStatus: { type: 'string', description: 'Target status for move' },
           reason: { type: 'string', description: 'Reason if noOp' },
           mcpToolName: { type: 'string', description: 'MCP tool to call' },
-          mcpToolArgs: { type: 'string', description: 'MCP tool args as JSON string' },
+          mcpToolArgs: { type: 'object', description: 'MCP tool args object', additionalProperties: true },
+          issuesData: {
+            type: 'array',
+            description: 'Issues to create for createMultipleIssues',
+            items: {
+              type: 'object',
+              properties: {
+                title: { type: 'string' },
+                description: { type: 'string' },
+              },
+              required: ['title'],
+              additionalProperties: false,
+            },
+          },
         },
         required: ['kind'],
       },
@@ -59,10 +75,22 @@ type LinearAction = {
   toStatus?: string;
   reason?: string;
   mcpTool: { name: string; args: Record<string, unknown> } | null;
+  issuesData?: Array<{ title: string; description?: string }>;
 };
 
-export async function runLinearStewardFast(params: { instruction: string; context: any }): Promise<LinearAction> {
-  const { instruction, context } = params;
+export async function runLinearStewardFast(params: {
+  instruction: string;
+  context: any;
+  room?: string; // Room ID to fetch context documents
+}): Promise<LinearAction> {
+  const { instruction, context, room } = params;
+
+  // Fetch context documents if room is provided
+  let contextSection = '';
+  if (room) {
+    const contextDocs = await getContextDocuments(room);
+    contextSection = formatContextDocuments(contextDocs);
+  }
 
   const issuesList = (context.issues || [])
     .map((i: any) => `- [${i.id}] ${i.identifier || 'N/A'}: ${i.title} (Status: ${i.status || 'unknown'})`)
@@ -72,7 +100,7 @@ export async function runLinearStewardFast(params: { instruction: string; contex
     { role: 'system' as const, content: LINEAR_STEWARD_INSTRUCTIONS },
     {
       role: 'user' as const,
-      content: `Context Issues:\n${issuesList || '(no issues)'}\n\nInstruction: "${instruction}"\n\nDetermine the best action and call commit_action.`,
+      content: `Context Issues:\n${issuesList || '(no issues)'}\n\n${contextSection ? `Context Documents:\n${contextSection}\n\n` : ''}Instruction: "${instruction}"\n\nDetermine the best action and call commit_action.`,
     },
   ];
 
@@ -93,13 +121,28 @@ export async function runLinearStewardFast(params: { instruction: string; contex
         let mcpTool: { name: string; args: Record<string, unknown> } | null = null;
 
         if (args.mcpToolName) {
-          try {
-            mcpTool = {
-              name: args.mcpToolName,
-              args: args.mcpToolArgs ? JSON.parse(args.mcpToolArgs) : {},
-            };
-          } catch {
+          const rawArgs = args.mcpToolArgs;
+          if (rawArgs && typeof rawArgs === 'object' && !Array.isArray(rawArgs)) {
+            mcpTool = { name: args.mcpToolName, args: rawArgs as Record<string, unknown> };
+          } else if (typeof rawArgs === 'string') {
+            try {
+              mcpTool = { name: args.mcpToolName, args: JSON.parse(rawArgs) };
+            } catch {
+              mcpTool = { name: args.mcpToolName, args: {} };
+            }
+          } else {
             mcpTool = { name: args.mcpToolName, args: {} };
+          }
+        }
+
+        let issuesData: Array<{ title: string; description?: string }> | undefined;
+        if (Array.isArray(args.issuesData)) {
+          issuesData = args.issuesData;
+        } else if (typeof args.issuesData === 'string') {
+          try {
+            issuesData = JSON.parse(args.issuesData);
+          } catch {
+            // Ignore parse errors
           }
         }
 
@@ -109,6 +152,7 @@ export async function runLinearStewardFast(params: { instruction: string; contex
           toStatus: args.toStatus,
           reason: args.reason,
           mcpTool,
+          issuesData,
         };
       }
     }

@@ -7,6 +7,7 @@ import { X, Loader2, ImageIcon } from 'lucide-react';
 import { useEditor } from '@tldraw/tldraw';
 import { useInfographicDrop, DRAG_MIME_TYPE } from '@/hooks/use-infographic-drop';
 import { usePromotable } from '@/hooks/use-promotable';
+import { useCanvasContext } from '@/lib/hooks/use-canvas-context';
 
 interface InfographicWidgetProps {
     room: Room | null;
@@ -36,6 +37,9 @@ export function InfographicWidget({ room, isShape = false, __custom_message_id, 
 
     const bus = React.useMemo(() => createLiveKitBus(room), [room]);
 
+    // Get unified canvas context (transcripts, documents, etc.)
+    const { documents: contextDocuments, getPromptContext } = useCanvasContext();
+
     // Listen for transcripts
     useEffect(() => {
         const off = bus.on('transcription', (data: any) => {
@@ -57,22 +61,25 @@ export function InfographicWidget({ room, isShape = false, __custom_message_id, 
         if (!isShape) setIsOpen(true); // Ensure widget is open only if not a shape
 
         try {
-            // Get recent transcripts
+            // Get combined context using unified hook
+            const context = getPromptContext({ transcriptLines: 20, maxDocumentLength: 5000 });
+
+            // Also check local transcripts state (separate from unified context for real-time updates)
             const recentLines = transcripts.slice(-20).map((t: any) => {
                 const name = t.participantName || t.participantId || 'Speaker';
                 return `${name}: ${t.text}`;
             }).join('\n');
 
-            if (!recentLines) {
-                throw new Error('No conversation context available yet. Start talking!');
+            // Allow generation if we have EITHER transcripts OR context documents
+            if (!recentLines && contextDocuments.length === 0) {
+                throw new Error('No conversation context available yet. Start talking or add context documents!');
             }
 
             const prompt = `
-            Based on the following conversation, create a visually appealing infographic that summarizes the key points.
+            Based on the following conversation and context, create a visually appealing infographic that summarizes the key points.
             Focus on clarity, professional design, and accurate information.
             
-            Conversation Context:
-            ${recentLines}
+            ${context || '(No context available)'}
         `;
 
             const response = await fetch('/api/generateImages', {
@@ -112,7 +119,7 @@ export function InfographicWidget({ room, isShape = false, __custom_message_id, 
         } finally {
             setIsGenerating(false);
         }
-    }, [isGenerating, transcripts, useGrounding, isShape]);
+    }, [isGenerating, transcripts, useGrounding, isShape, contextDocuments]);
 
     useEffect(() => {
         if (!isShape) {

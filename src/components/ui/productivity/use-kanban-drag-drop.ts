@@ -174,7 +174,7 @@ export function useKanbanDragDrop(options: UseKanbanDragDropOptions): UseKanbanD
   }, [setDropIndicator]);
 
   const queueStatusChange = useCallback((issueId: string, newStatus: string) => {
-    const dragged = issues.find((i) => i.id === issueId);
+    const dragged = issues.find((i) => i.id === issueId || i.identifier === issueId);
     if (!dragged) {
       console.warn('[Kanban] Status change failed: Issue not found', issueId);
       return;
@@ -194,7 +194,7 @@ export function useKanbanDragDrop(options: UseKanbanDragDropOptions): UseKanbanD
     const statusId = typeof statusObj === 'string' ? statusObj : statusObj.id || newStatus;
     const statusName = typeof statusObj === 'string' ? statusObj : statusObj.name || statusObj.id || newStatus;
 
-    const updatedIssues = issues.filter((i) => i.id !== issueId);
+    const updatedIssues = issues.filter((i) => i.id !== dragged.id);
     updatedIssues.push({ ...dragged, status: statusName, statusId });
 
     const updateRequest: PendingUpdate = {
@@ -327,7 +327,6 @@ export function useKanbanDragDrop(options: UseKanbanDragDropOptions): UseKanbanD
     queueStatusChange,
   };
 }
-
 
 
 

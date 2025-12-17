@@ -112,6 +112,27 @@ const logRealtimeError = (context: string, error: unknown) => {
   console.error('[VoiceAgent] realtime error', payload);
 };
 
+// Prevent dev worker from crashing on transient websocket/library errors.
+// In production we generally prefer crashing fast, but the local demo stack benefits from resilience.
+const GLOBAL_VOICE_AGENT_GUARD_KEY = '__present_voice_agent_global_error_guard__';
+const globalAny = globalThis as unknown as Record<string, unknown>;
+if (!globalAny[GLOBAL_VOICE_AGENT_GUARD_KEY]) {
+  globalAny[GLOBAL_VOICE_AGENT_GUARD_KEY] = true;
+  const swallowFatal =
+    process.env.VOICE_AGENT_SWALLOW_FATAL_ERRORS !== 'false' &&
+    process.env.NODE_ENV !== 'production';
+
+  process.on('uncaughtException', (err) => {
+    logRealtimeError('uncaughtException', err);
+    if (!swallowFatal) process.exit(1);
+  });
+
+  process.on('unhandledRejection', (reason) => {
+    logRealtimeError('unhandledRejection', reason);
+    if (!swallowFatal) process.exit(1);
+  });
+}
+
 export default defineAgent({
   entry: async (job: JobContext) => {
     try {
@@ -576,7 +597,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
     // We suppress duplicates aggressively within the same user turn, and apply
     // a longer global TTL to catch late replays from the model/stack.
     let currentTurnId = 0;
-    let activeResponse = false;
+    let isGeneratingReply = false;
     let lastScorecardProvisionedAt = 0;
     const recentCreateFingerprintsByRoom = new Map<
       string,
@@ -777,6 +798,12 @@ Your only output is function calls. Never use plain text unless absolutely neces
           coerceComponentPatch((nextParams as any).patch),
           fallbackSeconds,
         );
+        // For instruction-driven widgets, let the client assign timestamps to avoid
+        // clock skew causing ComponentRegistry to ignore the update.
+        if (typeof (normalizedPatch as any).instruction === 'string') {
+          delete (normalizedPatch as any).updatedAt;
+          delete (normalizedPatch as any).lastUpdated;
+        }
 
         nextParams.patch = normalizedPatch as JsonObject;
         if (componentId) {
@@ -801,14 +828,21 @@ Your only output is function calls. Never use plain text unless absolutely neces
     const CANVAS_DISPATCH_SUPPRESS_MS = 3000;
 
     const sendToolCall = async (tool: string, params: JsonObject, options: { reliable?: boolean } = {}) => {
+      ensureToolCallListeners();
+      const normalizedParams = normalizeOutgoingParams(tool, params);
+      const shouldForceReliableUpdate =
+        tool === 'update_component' &&
+        normalizedParams &&
+        typeof (normalizedParams as any).patch === 'object' &&
+        (normalizedParams as any).patch !== null &&
+        typeof ((normalizedParams as any).patch as any).instruction === 'string' &&
+        (((normalizedParams as any).patch as any).instruction as string).trim().length > 0;
       const reliable =
         options.reliable !== undefined
           ? options.reliable
-          : tool === 'update_component' && enableLossyUpdates
+          : tool === 'update_component' && enableLossyUpdates && !shouldForceReliableUpdate
             ? false
             : true;
-      ensureToolCallListeners();
-      const normalizedParams = normalizeOutgoingParams(tool, params);
 
       if (tool === 'dispatch_to_conductor') {
         const task = typeof (normalizedParams as any)?.task === 'string' ? String((normalizedParams as any).task).trim() : '';
@@ -1407,7 +1441,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
             if (slot) {
               updateParams.slot = slot;
             }
-            await sendToolCall('update_component', updateParams, { reliable: false });
+            await sendToolCall('update_component', updateParams);
             existingComponent.props = {
               ...existingComponent.props,
               ...mergedProps,
@@ -1855,7 +1889,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
             return { status: 'REDIRECTED', componentId: resolvedId };
           }
 
-          await sendToolCall('update_component', payload, { reliable: false });
+          await sendToolCall('update_component', payload);
 
           const existingAfter = getComponentEntry(resolvedId);
           if (existingAfter) {
@@ -1995,32 +2029,31 @@ Your only output is function calls. Never use plain text unless absolutely neces
       llm: new openaiRealtime.RealtimeModel({}),
     });
 
-    let pendingReply: { userInput?: string } | null = null;
+    const pendingReplies: Array<{ userInput?: string }> = [];
     let lastUserPrompt: string | null = null;
     const generateReplySafely = async (options?: { userInput?: string }) => {
-      if (activeResponse) {
-        // Defer this request until the current response settles
-        pendingReply = options ?? {};
-        console.log('[VoiceAgent] Queueing generateReply; active response in progress');
+      pendingReplies.push(options ?? {});
+      if (isGeneratingReply) {
+        console.log('[VoiceAgent] Queueing generateReply; active reply in progress', {
+          queued: pendingReplies.length,
+        });
         return;
       }
-      activeResponse = true;
+
+      isGeneratingReply = true;
       try {
-        await session.generateReply(options as any);
-      } finally {
-        activeResponse = false;
-        if (pendingReply) {
-          const next = pendingReply;
-          pendingReply = null;
-          activeResponse = true;
-          try {
-            await session.generateReply(next as any);
-          } catch (err) {
-            logRealtimeError('queued generateReply failed', err);
-          } finally {
-            activeResponse = false;
+        while (pendingReplies.length > 0) {
+          const next = pendingReplies.shift();
+          if (!next) continue;
+          const speech = session.generateReply(next as any) as any;
+          if (speech && typeof speech.waitForPlayout === 'function') {
+            await speech.waitForPlayout();
           }
         }
+      } catch (err) {
+        logRealtimeError('generateReply queue failed', err);
+      } finally {
+        isGeneratingReply = false;
       }
     };
 
@@ -2289,6 +2322,148 @@ Your only output is function calls. Never use plain text unless absolutely neces
       return '';
     };
 
+    const normalizeCommandText = (value: string) => value.replace(/\s+/g, ' ').trim();
+    const extractCanvasAgentPrompt = (raw: string): string | null => {
+      const text = normalizeCommandText(raw);
+      if (!text) return null;
+
+      const slashMatch = text.match(/^\/canvas\s+(.*)$/i);
+      if (slashMatch?.[1]?.trim()) return slashMatch[1].trim();
+
+      const prefixMatch = text.match(/^(?:canvas|canvas agent|canvas-agent)[:,]?\s*(.*)$/i);
+      if (prefixMatch?.[1]?.trim()) return prefixMatch[1].trim();
+
+      const askMatch = text.match(/^(?:ask|tell)\s+the\s+canvas\s+agent(?:\s+to)?[:,]?\s*(.*)$/i);
+      if (askMatch?.[1]?.trim()) return askMatch[1].trim();
+
+      return null;
+    };
+
+    const extractKanbanInstruction = (raw: string): string | null => {
+      const text = normalizeCommandText(raw);
+      if (!text) return null;
+
+      const onKanbanMatch = text.match(/^on the kanban board[:,]?\s*(.*)$/i);
+      if (onKanbanMatch) {
+        const remainder = (onKanbanMatch[1] ?? '').trim();
+        if (!remainder) return null;
+        const queueMatch = remainder.match(/^queue\s*:\s*(.*)$/i);
+        const instruction = (queueMatch ? queueMatch[1] : remainder).trim();
+        return instruction || null;
+      }
+
+      if (
+        /^sync to linear[.!]?$/i.test(text) ||
+        /^sync( pending updates)?( to linear)?[.!]?$/i.test(text)
+      ) {
+        return 'sync to linear';
+      }
+
+      const usingContextMatch = text.match(/^using the context document[:,]?\s*(.*)$/i);
+      if (usingContextMatch) {
+        const remainder = (usingContextMatch[1] ?? '').trim();
+        if (!remainder) return null;
+        const hasIssueId = /[A-Z]{2,}-\d+/.test(remainder);
+        const hasLinearVerb = /\b(move|rename|assign|comment|label|priority|status|triage|create)\b/i.test(remainder);
+        if (hasIssueId && hasLinearVerb) {
+          // Keep the prefix so the steward knows to incorporate the context doc.
+          return text;
+        }
+      }
+
+      const hasIssueId = /[A-Z]{2,}-\d+/.test(text);
+      const hasLinearVerb = /\b(move|rename|assign|comment|label|priority|status|triage)\b/i.test(text);
+      if (hasIssueId && hasLinearVerb) {
+        return text;
+      }
+
+      return null;
+    };
+
+    const publishAgentTranscript = async (text: string) => {
+      const trimmed = (text || '').trim();
+      if (!trimmed) return;
+      const payload = {
+        type: 'live_transcription',
+        text: trimmed,
+        speaker: 'voice-agent',
+        timestamp: Date.now(),
+        is_final: true,
+      };
+      try {
+        await job.room.localParticipant?.publishData(new TextEncoder().encode(JSON.stringify(payload)), {
+          reliable: true,
+          topic: 'transcription',
+        });
+      } catch { }
+      try {
+        appendTranscriptCache(job.room.name || 'unknown', {
+          participantId: 'voice-agent',
+          text: trimmed,
+          timestamp: Date.now(),
+        });
+      } catch { }
+    };
+
+    const maybeFastRouteCanvasAgent = async (rawText: string, source: 'voice' | 'manual') => {
+      const message = extractCanvasAgentPrompt(rawText);
+      if (!message) return false;
+      const roomName = job.room.name || '';
+      if (!roomName) return false;
+
+      console.log('[VoiceAgent] canvas fast-path routing canvas.agent_prompt', {
+        source,
+        room: roomName,
+        message,
+      });
+
+      await sendToolCall('dispatch_to_conductor', {
+        task: 'canvas.agent_prompt',
+        params: {
+          room: roomName,
+          message,
+          requestId: randomUUID(),
+        },
+      });
+      await publishAgentTranscript(`Sent to canvas agent: ${message}`);
+      return true;
+    };
+
+    const shouldSkipGenerateReplyForDebate = (raw: string) => {
+      const text = normalizeCommandText(raw);
+      if (!text) return false;
+      if (isStartDebate(text)) return true;
+      if (/^(aff|affirmative|neg|negative|judge|voter)\s*[:\-]/i.test(text)) return true;
+      if (/^fact\s*check\b/i.test(text)) return true;
+      if (/^scorecard\b/i.test(text)) return true;
+      return false;
+    };
+
+    const maybeFastRouteKanban = async (rawText: string, source: 'voice' | 'manual') => {
+      const instruction = extractKanbanInstruction(rawText);
+      if (!instruction) return false;
+      const componentId = resolveComponentId({ type: 'LinearKanbanBoard', allowLast: true });
+      if (!componentId) {
+        console.warn('[VoiceAgent] kanban fast-path skipped; no LinearKanbanBoard found', { source, instruction });
+        return false;
+      }
+      console.log('[VoiceAgent] kanban fast-path routing update_component', {
+        source,
+        componentId,
+        instruction,
+      });
+      await sendToolCall(
+        'update_component',
+        {
+          componentId,
+          patch: { instruction },
+        },
+        { reliable: true },
+      );
+      await publishAgentTranscript(`Queued on kanban: ${instruction}`);
+      return true;
+    };
+
     session.on((voice as any).AgentSessionEventTypes.FunctionToolsExecuted, async (event: any) => {
       const calls = event.functionCalls ?? [];
       console.log('[VoiceAgent] FunctionToolsExecuted', {
@@ -2494,7 +2669,6 @@ Your only output is function calls. Never use plain text unless absolutely neces
             text: event.transcript,
             timestamp: Date.now(),
           });
-          void maybeHandleDebate(event.transcript);
         } catch { }
 
         // New user turn begins on a final transcript
@@ -2502,6 +2676,22 @@ Your only output is function calls. Never use plain text unless absolutely neces
 
         const trimmed = event.transcript?.trim();
         if (trimmed) {
+          lastUserPrompt = trimmed;
+          if (shouldSkipGenerateReplyForDebate(trimmed)) {
+            void maybeHandleDebate(trimmed);
+            if (isStartDebate(trimmed)) {
+              await publishAgentTranscript('Debate scorecard queued.');
+            }
+            return;
+          }
+          const canvasHandled = await maybeFastRouteCanvasAgent(trimmed, 'voice');
+          if (canvasHandled) {
+            return;
+          }
+          const handled = await maybeFastRouteKanban(trimmed, 'voice');
+          if (handled) {
+            return;
+          }
           try {
             await generateReplySafely();
           } catch (error) {
@@ -2581,6 +2771,28 @@ Your only output is function calls. Never use plain text unless absolutely neces
         try {
           if (isManual) {
             bumpTurn();
+          }
+          try {
+            appendTranscriptCache(job.room.name || 'unknown', {
+              participantId: speaker || 'user',
+              text,
+              timestamp: Date.now(),
+            });
+          } catch { }
+          if (shouldSkipGenerateReplyForDebate(text)) {
+            void maybeHandleDebate(text);
+            if (isStartDebate(text)) {
+              await publishAgentTranscript('Debate scorecard queued.');
+            }
+            return;
+          }
+          const canvasHandled = await maybeFastRouteCanvasAgent(text, 'manual');
+          if (canvasHandled) {
+            return;
+          }
+          const handled = await maybeFastRouteKanban(text, 'manual');
+          if (handled) {
+            return;
           }
           await generateReplySafely({ userInput: text });
         } catch (err) {

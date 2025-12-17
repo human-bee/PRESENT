@@ -1,5 +1,5 @@
 import { getCerebrasClient, getModelForSteward, isFastStewardReady } from '../fast-steward-config';
-import { getFlowchartDoc, getTranscriptWindow, commitFlowchartDoc } from '../shared/supabase-context';
+import { getFlowchartDoc, getTranscriptWindow, commitFlowchartDoc, getContextDocuments, formatContextDocuments } from '../shared/supabase-context';
 
 const CEREBRAS_MODEL = getModelForSteward('FLOWCHART_STEWARD_FAST_MODEL');
 const client = getCerebrasClient();
@@ -9,7 +9,7 @@ export const flowchartStewardFastReady = isFastStewardReady();
 const logFastMetric = <T extends Record<string, unknown>>(label: string, payload: T) => {
   try {
     console.log(`[StewardFAST][Metrics] ${label}`, { ts: new Date().toISOString(), ...payload });
-  } catch {}
+  } catch { }
 };
 
 const FLOWCHART_STEWARD_FAST_INSTRUCTIONS = `
@@ -82,9 +82,10 @@ export async function runFlowchartStewardFast(params: {
   const { room, docId, windowMs = 60000 } = params;
   const overallStart = Date.now();
 
-  const [docRecord, transcriptWindow] = await Promise.all([
+  const [docRecord, transcriptWindow, contextDocs] = await Promise.all([
     getFlowchartDoc(room, docId),
     getTranscriptWindow(room, windowMs),
+    getContextDocuments(room),
   ]);
 
   const transcript = Array.isArray(transcriptWindow?.transcript) ? transcriptWindow.transcript : [];
@@ -92,13 +93,13 @@ export async function runFlowchartStewardFast(params: {
     transcript.length === 0
       ? '(no recent transcript turns)'
       : transcript
-          .slice()
-          .sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0))
-          .map((line) => {
-            const ts = line.timestamp ? new Date(line.timestamp).toISOString() : 'unknown-ts';
-            return `- [${ts}] ${line.participantId ?? 'anon'}: ${line.text ?? ''}`;
-          })
-          .join('\n');
+        .slice()
+        .sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0))
+        .map((line) => {
+          const ts = line.timestamp ? new Date(line.timestamp).toISOString() : 'unknown-ts';
+          return `- [${ts}] ${line.participantId ?? 'anon'}: ${line.text ?? ''}`;
+        })
+        .join('\n');
 
   const flowchartDocSection =
     docRecord?.doc && docRecord.doc.trim().length > 0 ? docRecord.doc : '(empty mermaid doc)';
@@ -109,7 +110,7 @@ export async function runFlowchartStewardFast(params: {
     { role: 'system' as const, content: FLOWCHART_STEWARD_FAST_INSTRUCTIONS },
     {
       role: 'user' as const,
-      content: `Room: ${room}\nDoc Id: ${docId}\nCurrent version: ${currentVersion}\n\n--- Current flowchart doc ---\n${flowchartDocSection}\n\n--- Transcript window ---\n${formattedTranscript}\n\nTask: Update the flowchart holistically and call commit_flowchart with the full updated doc.`,
+      content: `Room: ${room}\nDoc Id: ${docId}\nCurrent version: ${currentVersion}\n\n--- Current flowchart doc ---\n${flowchartDocSection}\n${contextDocs.length > 0 ? `\n\n--- Context Documents ---\n${formatContextDocuments(contextDocs)}` : ''}\n\n--- Transcript window ---\n${formattedTranscript}\n\nTask: Update the flowchart holistically and call commit_flowchart with the full updated doc.`,
     },
   ];
 

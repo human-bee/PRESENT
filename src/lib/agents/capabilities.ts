@@ -38,6 +38,7 @@ export const defaultCustomComponents: Array<{
     { name: 'DebateScorecard', description: 'Real-time debate scorecard', examples: ['show debate scorecard'] },
     { name: 'LinearKanbanBoard', description: 'Kanban board with Linear integration', examples: ['create kanban board', 'show tasks'] },
     { name: 'InfographicWidget', description: 'AI-powered infographic generator', examples: ['create infographic', 'visualize conversation'] },
+    { name: 'ContextFeeder', description: 'Upload/paste docs to inject context into stewards', examples: ['add a context feeder', 'upload context'] },
   ];
 
 export const defaultCapabilities: SystemCapabilities = {

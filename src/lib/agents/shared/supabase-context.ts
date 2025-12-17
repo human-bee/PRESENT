@@ -12,7 +12,7 @@ import {
 // Ensure .env.local is loaded when running stewards/conductor in Node
 try {
   config({ path: join(process.cwd(), '.env.local') });
-} catch {}
+} catch { }
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL as string;
 const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY as string;
@@ -35,7 +35,7 @@ if (!serviceRoleKey && process.env.NODE_ENV === 'development' && !shouldBypassSu
     console.warn(
       '⚠️ [StewardSupabase] Using anon key for Supabase access. Provide SUPABASE_SERVICE_ROLE_KEY for full access.',
     );
-  } catch {}
+  } catch { }
 }
 
 const supabase = createClient(url, supabaseKey, {
@@ -48,7 +48,7 @@ const logBypass = (scope: string) => {
   bypassLogged = true;
   try {
     console.info(`ℹ️ [StewardSupabase] Dev bypass active (${scope}); using in-memory store only.`);
-  } catch {}
+  } catch { }
 };
 
 type FlowchartDocRecord = {
@@ -256,7 +256,7 @@ const ensureLivekitRoom = async (room: string) => {
 
   try {
     console.error('[LiveKit] Room not found before timeout', context);
-  } catch {}
+  } catch { }
   throw new Error(`LiveKit room not found before timeout: ${normalized}`);
 };
 
@@ -386,7 +386,7 @@ const warnFallback = (scope: string, error: unknown) => {
   const message = error instanceof Error ? error.message : String(error);
   try {
     console.warn(`⚠️ [StewardSupabase] ${scope} fell back to in-memory store`, { message });
-  } catch {}
+  } catch { }
 };
 
 const parseStateValue = (value: unknown): unknown => {
@@ -741,7 +741,7 @@ export async function getCanvasShapeSummary(room: string) {
             room,
           });
         }
-      } catch {}
+      } catch { }
     }
     const shapes: CanvasShapeSummary[] = [];
 
@@ -1045,4 +1045,67 @@ export async function getTranscriptWindow(room: string, windowMs: number) {
     }
     return { transcript: [] };
   }
+}
+
+// =============================================================================
+// Context Documents (user-uploaded markdown/text for steward context)
+// =============================================================================
+
+export type ContextDocument = {
+  id: string;
+  title: string;
+  content: string;
+  type: 'markdown' | 'text';
+  timestamp: number;
+  source: 'file' | 'paste';
+};
+
+/**
+ * Retrieves user-uploaded context documents for a room/session.
+ * These documents are injected into steward prompts alongside the transcript.
+ */
+export async function getContextDocuments(room: string): Promise<ContextDocument[]> {
+  if (shouldBypassSupabase) {
+    logBypass('getContextDocuments');
+    return [];
+  }
+
+  try {
+    // Try to find session by room name
+    const { data, error } = await supabase
+      .from('sessions')
+      .select('context_documents')
+      .eq('room_name', room)
+      .order('updated_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (error && error.code !== 'PGRST116') {
+      throw error;
+    }
+
+    if (!data?.context_documents) {
+      return [];
+    }
+
+    const docs = Array.isArray(data.context_documents) ? data.context_documents : [];
+    return docs as ContextDocument[];
+  } catch (err) {
+    warnFallback('getContextDocuments', err);
+    return [];
+  }
+}
+
+/**
+ * Formats context documents into a string for inclusion in steward prompts.
+ */
+export function formatContextDocuments(docs: ContextDocument[]): string {
+  if (docs.length === 0) return '';
+
+  return docs
+    .map((doc) => {
+      const typeLabel = doc.type === 'markdown' ? 'Markdown' : 'Text';
+      return `[${typeLabel}: ${doc.title}]\n${doc.content}`;
+    })
+    .join('\n\n---\n\n');
 }

@@ -113,20 +113,20 @@ export function useLinearData(options: UseLinearDataOptions): UseLinearDataRetur
         const selectedTeam = teamsData.find((t) => t.id === context.selectedTeamId) || teamsData[0];
         const selectedTeamIdResolved = selectedTeam?.id;
 
-        // 2) Workflow states
+        // 2) Issue statuses
         let statuses: LinearStatus[] = (selectedTeamIdResolved && linearCache.statusesByTeam[selectedTeamIdResolved]) || [];
 
         if (linearTool && selectedTeamIdResolved && (!statuses.length || !linearCache.stateUuidMapping?.size)) {
           try {
-            log('fetchingIssues', 'Calling MCP:list_workflow_states', { teamId: selectedTeamIdResolved });
+            log('fetchingIssues', 'Calling MCP:list_issue_statuses', { teamId: selectedTeamIdResolved });
             const statesResp = await linearTool.execute({
-              tool: 'list_workflow_states',
-              params: { teamId: selectedTeamIdResolved },
+              tool: 'list_issue_statuses',
+              params: { team: selectedTeamIdResolved },
             });
             
-            const rawStates = Array.isArray(statesResp) 
-              ? statesResp 
-              : statesResp?.states || statesResp?.workflowStates || statesResp?.nodes || [];
+            const rawStates = Array.isArray(statesResp)
+              ? statesResp
+              : statesResp?.issueStatuses || statesResp?.nodes || [];
             
             if (Array.isArray(rawStates) && rawStates.length > 0) {
               const newMapping = new Map<string, string>();
@@ -153,7 +153,7 @@ export function useLinearData(options: UseLinearDataOptions): UseLinearDataRetur
               }
             }
           } catch (e: any) {
-            console.warn('[LinearKanban] list_workflow_states failed:', e?.message);
+            console.warn('[LinearKanban] list_issue_statuses failed:', e?.message);
           }
           
           // Fallback to GraphQL
@@ -180,14 +180,22 @@ export function useLinearData(options: UseLinearDataOptions): UseLinearDataRetur
         }
 
         // 3) Issues
-        log('fetchingIssues', 'Calling MCP:list_issues');
-        const issueQueryTeam = selectedTeam?.key || selectedTeamIdResolved;
+        // Prefer structured params (team/limit/orderBy) over the query string.
+        // Linear's hosted MCP server can return partial sets when using `query`,
+        // and very large limits may trigger "Too many subrequests." server errors.
+        log('fetchingIssues', 'Calling MCP:list_issues', {
+          teamId: selectedTeamIdResolved,
+          teamKey: selectedTeam?.key,
+          limit: 100,
+          orderBy: 'updatedAt',
+        });
 
         const issuesResp = await linearTool.execute({
           tool: 'list_issues',
           params: {
-            query: issueQueryTeam ? `team: ${issueQueryTeam}` : 'is:issue',
-            includeCompleted: !!context.showCompleted,
+            ...(selectedTeamIdResolved ? { team: selectedTeamIdResolved } : {}),
+            limit: 100,
+            orderBy: 'updatedAt',
           },
         });
 
@@ -347,10 +355,6 @@ export function useLinearData(options: UseLinearDataOptions): UseLinearDataRetur
     triggerAction: subAgent.trigger,
   };
 }
-
-
-
-
 
 
 

@@ -162,13 +162,13 @@ export class LinearMcpClient {
                             }
                         }
                     }
-                    // Stream ended
-                    this.isConnected = false;
-                    this.sessionId = null;
-                    this.connectionPromise = null;
-                    this.toolsCache = null;
-                    console.warn('[LinearMcpClient] SSE stream closed');
                 }
+                // Stream ended
+                this.isConnected = false;
+                this.sessionId = null;
+                this.connectionPromise = null;
+                this.toolsCache = null;
+                console.warn('[LinearMcpClient] SSE stream closed');
             }).catch(error => {
                 console.error('[LinearMcpClient] SSE Error:', error);
                 this.isConnected = false;
