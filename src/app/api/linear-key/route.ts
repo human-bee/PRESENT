@@ -64,8 +64,16 @@ async function getUserId() {
 
 export async function GET(_req: NextRequest) {
   try {
+    const devEnvKey =
+      process.env.NODE_ENV !== 'production' && process.env.NODE_ENV !== 'test'
+        ? process.env.LINEAR_API_KEY?.trim() || null
+        : null;
+
     const userId = await getUserId();
-    if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    if (!userId) {
+      if (devEnvKey) return NextResponse.json({ apiKey: devEnvKey });
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
 
     const supabase = await getServiceSupabase();
     const { data, error } = await supabase
@@ -80,7 +88,10 @@ export async function GET(_req: NextRequest) {
       return NextResponse.json({ error: 'Failed to load key' }, { status: 500 });
     }
 
-    if (!data?.secret) return NextResponse.json({ apiKey: null });
+    if (!data?.secret) {
+      if (devEnvKey) return NextResponse.json({ apiKey: devEnvKey });
+      return NextResponse.json({ apiKey: null });
+    }
 
     return NextResponse.json({ apiKey: data.secret });
   } catch (err: any) {

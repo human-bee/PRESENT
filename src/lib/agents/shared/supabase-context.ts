@@ -6,6 +6,7 @@ import type { JsonObject } from '@/lib/utils/json-schema';
 import {
   createDefaultScorecardState,
   debateScorecardStateSchema,
+  recomputePlayerScoresFromClaims,
   type DebateScorecardState,
 } from '@/lib/agents/debate-scorecard-schema';
 
@@ -643,8 +644,9 @@ export async function commitDebateScorecard(
     lastUpdated: Date.now(),
   });
 
-  const nextVersion = parsed.version;
-  const sanitizedState = JSON.parse(JSON.stringify(parsed)) as DebateScorecardState;
+  const normalized = recomputePlayerScoresFromClaims(parsed);
+  const nextVersion = normalized.version;
+  const sanitizedState = JSON.parse(JSON.stringify(normalized)) as DebateScorecardState;
 
   if (shouldBypassSupabase) {
     logBypass('commitDebateScorecard');

@@ -228,17 +228,20 @@ function normalizeCreate(shape: {
     if ('text' in nextProps) delete (nextProps as any).text;
     return { id, type: 'text', x, y, props: nextProps };
   }
-  if (rawType === 'arrow') {
-    if ('text' in props) delete (props as any).text;
-    if ('label' in props) delete (props as any).label;
-    if ('content' in props) delete (props as any).content;
-    // fromId/toId are binding hints in the upstream starter kit, but they are NOT valid TLArrowShape props.
-    // If the Canvas Agent emits them, drop to avoid TLDraw schema validation errors.
-    if ('fromId' in props) delete (props as any).fromId;
-    if ('toId' in props) delete (props as any).toId;
+	  if (rawType === 'arrow') {
+	    if ('text' in props) delete (props as any).text;
+	    if ('label' in props) delete (props as any).label;
+	    if ('content' in props) delete (props as any).content;
+	    // fromId/toId are binding hints in the upstream starter kit, but they are NOT valid TLArrowShape props.
+	    // If the Canvas Agent emits them, drop to avoid TLDraw schema validation errors.
+	    if ('fromId' in props) delete (props as any).fromId;
+	    if ('toId' in props) delete (props as any).toId;
+	    // Legacy TLDraw arrow binding fields (v2/v3) that crash TLDraw v4 validation if present.
+	    if ('startBinding' in props) delete (props as any).startBinding;
+	    if ('endBinding' in props) delete (props as any).endBinding;
 
-    const coerceFinite = (value: unknown): number | undefined =>
-      typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+	    const coerceFinite = (value: unknown): number | undefined =>
+	      typeof value === 'number' && Number.isFinite(value) ? value : undefined;
     const pickNumber = (...values: unknown[]): number | undefined => {
       for (const value of values) {
         const coerced = coerceFinite(value);

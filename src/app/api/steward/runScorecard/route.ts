@@ -1,9 +1,18 @@
-import { NextRequest, NextResponse, after } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
+import { AgentTaskQueue } from '@/lib/agents/shared/queue';
 import { runDebateScorecardSteward } from '@/lib/agents/debate-judge';
+import { runDebateScorecardStewardFast } from '@/lib/agents/subagents/debate-steward-fast';
+
+export const runtime = 'nodejs';
+
+const queue = new AgentTaskQueue();
+const QUEUE_DIRECT_FALLBACK_ENABLED = process.env.SCORECARD_QUEUE_DIRECT_FALLBACK === 'true';
 
 export async function POST(req: NextRequest) {
   try {
-    const { room, componentId, windowMs, summary, prompt, intent, topic } = await req.json();
+    const body = await req.json();
+    const { room, componentId, windowMs, summary, prompt, intent, topic, task, requestId, ...rest } =
+      body && typeof body === 'object' ? body : {};
 
     if (typeof room !== 'string' || !room.trim()) {
       return NextResponse.json({ error: 'Missing or invalid room' }, { status: 400 });
@@ -29,57 +38,79 @@ export async function POST(req: NextRequest) {
       typeof intent === 'string' && intent.trim().length > 0 ? intent.trim() : undefined;
     const normalizedTopic =
       typeof topic === 'string' && topic.trim().length > 0 ? topic.trim() : undefined;
+    const normalizedTaskCandidate =
+      typeof task === 'string' && task.trim().length > 0
+        ? task.trim()
+        : normalizedIntent && normalizedIntent.startsWith('scorecard.')
+          ? normalizedIntent
+          : 'scorecard.run';
+    const normalizedTask = normalizedTaskCandidate.startsWith('scorecard.') ? normalizedTaskCandidate : 'scorecard.run';
 
     console.debug('[runScorecard][debug] POST received', {
       room: trimmedRoom,
       componentId: trimmedComponentId,
+      task: normalizedTask,
       windowMs: resolvedWindow,
       summary: normalizedSummary,
       intent: normalizedIntent,
       topic: normalizedTopic,
     });
 
-    after(async () => {
-      try {
-        console.log('[Steward][runScorecard] scheduled', {
-          room: trimmedRoom,
-          componentId: trimmedComponentId,
-          windowMs: resolvedWindow,
-          summary: normalizedSummary,
-          intent: normalizedIntent,
-          topic: normalizedTopic,
-        });
-        await runDebateScorecardSteward({
-          room: trimmedRoom,
-          componentId: trimmedComponentId,
-          windowMs: resolvedWindow,
-          summary: normalizedSummary,
-          prompt: normalizedPrompt,
-          intent: normalizedIntent,
-          topic: normalizedTopic,
-        });
-        console.log('[Steward][runScorecard] completed', {
-          room: trimmedRoom,
-          componentId: trimmedComponentId,
-          windowMs: resolvedWindow,
-          summary: normalizedSummary,
-          intent: normalizedIntent,
-          topic: normalizedTopic,
-        });
-      } catch (error) {
-        console.error('[Steward][runScorecard] error', {
-          room: trimmedRoom,
-          componentId: trimmedComponentId,
-          windowMs: resolvedWindow,
-          summary: normalizedSummary,
-          intent: normalizedIntent,
-          topic: normalizedTopic,
-          error,
-        });
-      }
-    });
+    const normalizedParams = {
+      ...(rest && typeof rest === 'object' ? rest : {}),
+      room: trimmedRoom,
+      componentId: trimmedComponentId,
+      windowMs: resolvedWindow,
+      summary: normalizedSummary,
+      prompt: normalizedPrompt,
+      intent: normalizedIntent,
+      topic: normalizedTopic,
+    } as const;
 
-    return NextResponse.json({ status: 'scheduled' }, { status: 202 });
+    try {
+      const enqueueResult = await queue.enqueueTask({
+        room: trimmedRoom,
+        task: normalizedTask,
+        params: normalizedParams as any,
+        requestId: typeof requestId === 'string' && requestId.trim() ? requestId.trim() : undefined,
+        resourceKeys: [`room:${trimmedRoom}`, `scorecard:${trimmedComponentId}`],
+      });
+      return NextResponse.json({ status: 'queued', task: enqueueResult }, { status: 202 });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.warn('[Steward][runScorecard] queue enqueue failed', { message });
+      if (!QUEUE_DIRECT_FALLBACK_ENABLED) {
+        return NextResponse.json({ error: 'Queue unavailable' }, { status: 503 });
+      }
+
+      const useFast = normalizedTask !== 'scorecard.fact_check';
+      try {
+        if (useFast) {
+          await runDebateScorecardStewardFast({
+            room: trimmedRoom,
+            componentId: trimmedComponentId,
+            intent: normalizedIntent ?? normalizedTask,
+            summary: normalizedSummary,
+            prompt: normalizedPrompt,
+            topic: normalizedTopic,
+          });
+        } else {
+          await runDebateScorecardSteward({
+            room: trimmedRoom,
+            componentId: trimmedComponentId,
+            windowMs: resolvedWindow,
+            intent: normalizedIntent ?? normalizedTask,
+            summary: normalizedSummary,
+            prompt: normalizedPrompt,
+            topic: normalizedTopic,
+          });
+        }
+        return NextResponse.json({ status: 'executed_fallback' }, { status: 202 });
+      } catch (fallbackError) {
+        console.error('[Steward][runScorecard] fallback execution failed', fallbackError);
+        return NextResponse.json({ error: 'Dispatch failed' }, { status: 502 });
+      }
+    }
   } catch (error) {
     console.error('Invalid request to steward/runScorecard', error);
     return NextResponse.json({ error: 'Bad Request' }, { status: 400 });

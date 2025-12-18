@@ -1,12 +1,11 @@
 "use client";
 
-import React, { useContext } from 'react';
+import React from 'react';
 import { nanoid } from 'nanoid';
 import { createShapeId, useEditor } from '@tldraw/tldraw';
 import { ComponentToolbox } from '@/components/ui/shared/component-toolbox';
-import { ComponentStoreContext } from '../hooks/useCanvasStore';
-import { components as registeredComponents } from '@/lib/custom';
 import { getAvailableComponents } from '@/lib/component-icons';
+import { findTiledPlacement } from '@/components/ui/tldraw/utils/findTiledPlacement';
 
 interface ToolboxShapeProps {
   id: string;
@@ -19,7 +18,6 @@ interface ToolboxShapeProps {
 
 export function ToolboxShapeComponent({ shape }: { shape: ToolboxShapeProps }) {
   const editor = useEditor();
-  const componentStore = useContext(ComponentStoreContext);
   const { w, h } = shape.props;
   const BASE_W = 56;
   const PAD = 8; // matches p-2
@@ -75,18 +73,18 @@ export function ToolboxShapeComponent({ shape }: { shape: ToolboxShapeProps }) {
   const handleComponentCreate = (componentType: string) => {
     console.log('🔧 Creating component from toolbox:', componentType);
 
-    if (!editor || !componentStore) {
+    if (!editor) {
       console.error('Editor or component store not available', {
         editor: !!editor,
-        componentStore: !!componentStore,
       });
       return;
     }
 
     if (componentType === 'infographic') {
       const viewport = editor.getViewportPageBounds();
-      const x = viewport ? viewport.midX - 200 : 0;
-      const y = viewport ? viewport.midY - 300 : 0;
+      const placement = findTiledPlacement(editor, { w: 400, h: 600 }, { viewport });
+      const x = viewport ? placement.x : 0;
+      const y = viewport ? placement.y : 0;
 
       editor.createShape({
         id: createShapeId(),
@@ -101,37 +99,23 @@ export function ToolboxShapeComponent({ shape }: { shape: ToolboxShapeProps }) {
       return;
     }
 
-    const Component = registeredComponents.find((c: any) => c.name === componentType)?.component;
-    if (!Component) {
-      console.error('Component not found:', componentType);
-      return;
-    }
-
-    const shapeId = createShapeId(nanoid());
-    const componentInstance = React.createElement(Component, { __custom_message_id: shapeId });
-    componentStore.set(shapeId, componentInstance);
-    if (typeof window !== 'undefined') {
-      try {
-        window.dispatchEvent(new Event('present:component-store-updated'));
-      } catch { }
-    }
-
-    const viewport = editor.getViewportPageBounds();
-    const x = viewport ? viewport.midX - 150 : 0;
-    const y = viewport ? viewport.midY - 100 : 0;
-
-    (editor as any).createShape?.({
-      id: shapeId,
-      type: 'custom',
-      x,
-      y,
-      props: {
-        w: 300,
-        h: 200,
-        customComponent: shapeId,
-        name: componentType,
-      },
-    });
+    const messageId = `ui-${Date.now().toString(36)}-${nanoid(8)}`;
+    window.dispatchEvent(
+      new CustomEvent('custom:showComponent', {
+        detail: {
+          messageId,
+          component: {
+            type: componentType,
+            props: {
+              __custom_message_id: messageId,
+              messageId,
+              contextKey: 'canvas',
+            },
+          },
+          contextKey: 'canvas',
+        },
+      }),
+    );
 
     console.log('✅ Component created successfully:', componentType);
   };

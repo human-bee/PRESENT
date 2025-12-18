@@ -116,8 +116,11 @@ export async function performWebSearch(args: WebSearchArgs): Promise<WebSearchRe
     process.env.DEBATE_STEWARD_SEARCH_MODEL ||
     'gpt-5-mini';
 
-  const systemPrompt = `You are a meticulous research librarian. Use web_search to gather live evidence for debate fact-checking. 
-Return STRICT JSON with shape:
+  const systemPrompt = `You are a JSON API for web evidence used in debate fact-checking.
+
+You MUST call web_search to gather live evidence.
+
+Return STRICT JSON only (no markdown, no backticks, no commentary) with shape:
 {
   "summary": string,
   "hits": [
@@ -125,26 +128,35 @@ Return STRICT JSON with shape:
       "title": string,
       "url": string,
       "snippet": string,
-      "publishedAt"?: string,
-      "source"?: string
+      "publishedAt": string | null,
+      "source": string | null
     }
   ]
 }
-Do not include markdown or commentary. Snippets must cite concrete facts supporting or refuting the query. Prefer authoritative sources.`;
+
+Rules:
+- hits.length must equal Max results.
+- summary must be <= 280 characters.
+- snippet must be <= 180 characters and state concrete, checkable facts relevant to the query.
+- url must be a direct https:// URL (not a generic homepage when avoidable).
+- Prefer authoritative sources.`;
 
   const userPrompt = `Query: ${parsed.query}
 Max results: ${parsed.maxResults}
-Instructions: Cite recent facts (<= 18 months old when possible). Provide direct URLs, not generic homepages.`;
+Instructions:
+- Include both supporting and refuting evidence when available.
+- Prefer recent sources (<= 18 months) when possible.
+- Return exactly ${parsed.maxResults} hits.`;
 
   const response = await client.responses.create({
     model,
-    reasoning: { effort: 'medium' },
+    reasoning: { effort: 'low' },
     input: [
       { role: 'system', content: systemPrompt },
       { role: 'user', content: userPrompt },
     ],
     tools: [{ type: 'web_search' }],
-    max_output_tokens: 600,
+    max_output_tokens: 1200,
   });
 
   const structured = (() => {

@@ -17,7 +17,12 @@ import { resolveIntent, getObject, getString } from './intent-resolver';
 import { runDebateScorecardSteward, seedScorecardState } from '@/lib/agents/debate-judge';
 import { runDebateScorecardStewardFast } from '@/lib/agents/subagents/debate-steward-fast';
 import { getDebateScorecard, commitDebateScorecard } from '@/lib/agents/shared/supabase-context';
-import type { DebateScorecardState, Claim } from '@/lib/agents/debate-scorecard-schema';
+import {
+  createDefaultPlayers,
+  debateScorecardStateSchema,
+  type DebateScorecardState,
+  type Claim,
+} from '@/lib/agents/debate-scorecard-schema';
 import { runSearchSteward } from '@/lib/agents/subagents/search-steward';
 
 dotenvConfig({ path: join(process.cwd(), '.env.local') });
@@ -61,6 +66,16 @@ const ScorecardTaskArgs = z
     summary: z.string().optional(),
     prompt: z.string().optional(),
     topic: z.string().optional(),
+    players: z
+      .array(
+        z.object({
+          side: z.enum(['AFF', 'NEG']),
+          label: z.string().min(1),
+          avatarUrl: z.string().optional(),
+        }),
+      )
+      .optional(),
+    seedState: jsonObjectSchema.optional(),
     claimId: z.string().optional(),
     claimIds: z.array(z.string().min(1)).optional(),
     claimHint: z.string().optional(),
@@ -79,6 +94,38 @@ const SearchTaskArgs = z
     componentId: z.string().optional(),
   })
   .passthrough();
+
+const SCORECARD_AUTO_FACT_CHECK_ENABLED = (process.env.SCORECARD_AUTO_FACT_CHECK ?? 'true') === 'true';
+const SCORECARD_AUTO_FACT_CHECK_MIN_INTERVAL_MS = Number(
+  process.env.SCORECARD_AUTO_FACT_CHECK_MIN_INTERVAL_MS ?? 10_000,
+);
+const SCORECARD_AUTO_FACT_CHECK_MAX_CLAIMS = Number(process.env.SCORECARD_AUTO_FACT_CHECK_MAX_CLAIMS ?? 2);
+
+const scorecardAutoFactCheckLedger = new Map<string, number>();
+const scorecardExecutionLocks = new Map<string, Promise<void>>();
+
+async function withScorecardLock<T>(key: string, fn: () => Promise<T>): Promise<T> {
+  const previous = scorecardExecutionLocks.get(key) ?? Promise.resolve();
+  let release: (() => void) | null = null;
+  const next = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const current = previous.then(() => next);
+  scorecardExecutionLocks.set(key, current);
+
+  await previous;
+  try {
+    return await fn();
+  } finally {
+    try {
+      release?.();
+    } finally {
+      if (scorecardExecutionLocks.get(key) === current) {
+        scorecardExecutionLocks.delete(key);
+      }
+    }
+  }
+}
 
 async function handleCanvasAgentPrompt(rawParams: JsonObject) {
   const parsed: CanvasAgentPromptInput = CanvasAgentPromptSchema.parse(rawParams);
@@ -181,7 +228,7 @@ async function primeFactCheckStatus(params: ScorecardTaskInput) {
       tool: 'update_component',
       params: {
         componentId,
-        patch: workingState as JsonObject,
+        patch: { ...committed.state, version: committed.version } as unknown as JsonObject,
       },
     });
     console.log('[Conductor] primed fact check status', {
@@ -284,6 +331,199 @@ function scoreClaimMatch(claim: Claim, hint: string, hintTokens: string[]): numb
   return score;
 }
 
+async function maybeEnqueueAutoFactChecks(params: ScorecardTaskInput, taskName: string) {
+  if (!SCORECARD_AUTO_FACT_CHECK_ENABLED) return;
+  if (taskName === 'scorecard.fact_check') return;
+  if (taskName === 'scorecard.seed') return;
+
+  const throttleKey = `${params.room}:${params.componentId}`;
+  const now = Date.now();
+  const lastAt = scorecardAutoFactCheckLedger.get(throttleKey) ?? 0;
+  if (now - lastAt < SCORECARD_AUTO_FACT_CHECK_MIN_INTERVAL_MS) return;
+
+  const record = await getDebateScorecard(params.room, params.componentId);
+  const state = record?.state;
+  if (!state || state.factCheckEnabled !== true) return;
+
+  const pending = new Set(state.status?.pendingVerifications ?? []);
+  const candidates = state.claims
+    .filter((claim) => claim.status === 'UNTESTED' && !pending.has(claim.id) && (claim.factChecks?.length ?? 0) === 0)
+    .sort((a, b) => {
+      const aTime = a.updatedAt ?? a.createdAt ?? 0;
+      const bTime = b.updatedAt ?? b.createdAt ?? 0;
+      return bTime - aTime;
+    })
+    .slice(0, Math.max(0, Math.min(3, SCORECARD_AUTO_FACT_CHECK_MAX_CLAIMS)));
+
+  if (candidates.length === 0) return;
+
+  scorecardAutoFactCheckLedger.set(throttleKey, now);
+
+  const hint = params.summary || params.prompt || params.intent || undefined;
+  try {
+    await primeFactCheckStatus({
+      ...params,
+      claimIds: candidates.map((c) => c.id),
+      claimHint: typeof hint === 'string' && hint.trim() ? hint.trim().slice(0, 240) : undefined,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn('[Conductor] auto fact-check prime failed', {
+      room: params.room,
+      componentId: params.componentId,
+      error: message,
+    });
+  }
+  await queue.enqueueTask({
+    room: params.room,
+    task: 'scorecard.fact_check',
+    params: {
+      room: params.room,
+      componentId: params.componentId,
+      claimIds: candidates.map((c) => c.id),
+      claimHint: typeof hint === 'string' && hint.trim() ? hint.trim().slice(0, 240) : undefined,
+    } as unknown as JsonObject,
+    dedupeKey: `scorecard.fact_check:auto:${params.componentId}:${candidates.map((c) => c.id).join(',')}`,
+    resourceKeys: [`room:${params.room}`, `scorecard:${params.componentId}`],
+    priority: 1,
+  });
+
+  console.log('[Conductor] auto-enqueued scorecard.fact_check', {
+    room: params.room,
+    componentId: params.componentId,
+    claims: candidates.map((c) => c.id),
+  });
+}
+
+function isDefaultScorecardTopic(topic: string | undefined | null) {
+  const normalized = (topic || '').trim().toLowerCase();
+  return normalized.length === 0 || normalized === 'untitled debate' || normalized === 'live debate';
+}
+
+function isDefaultPlayerLabel(label: string | undefined | null, side: 'AFF' | 'NEG') {
+  const normalized = (label || '').trim().toLowerCase();
+  if (!normalized) return true;
+  if (side === 'AFF') return normalized === 'affirmative' || normalized === 'aff' || normalized === 'pro';
+  return normalized === 'negative' || normalized === 'neg' || normalized === 'con';
+}
+
+async function upsertScorecardMeta(parsed: ScorecardTaskInput) {
+  const { room, componentId } = parsed;
+  const record = await getDebateScorecard(room, componentId);
+  const base = record?.state ? JSON.parse(JSON.stringify(record.state)) : null;
+  let workingState: DebateScorecardState =
+    base && typeof base === 'object'
+      ? (base as DebateScorecardState)
+      : debateScorecardStateSchema.parse({ componentId });
+
+  const desiredTopic =
+    typeof parsed.topic === 'string' && parsed.topic.trim().length > 0 ? parsed.topic.trim() : undefined;
+
+  let changed = false;
+
+  if (parsed.seedState && typeof parsed.seedState === 'object') {
+    try {
+      const seedCandidate = debateScorecardStateSchema.parse({
+        ...(parsed.seedState as JsonObject),
+        componentId,
+      });
+      const safeToSeed =
+        record.version === 0 &&
+        (workingState.claims?.length ?? 0) === 0 &&
+        (workingState.timeline?.length ?? 0) <= 2;
+      if (safeToSeed) {
+        workingState = seedCandidate;
+        changed = true;
+      }
+    } catch (error) {
+      console.warn('[Conductor] scorecard.seed ignored invalid seedState', {
+        room,
+        componentId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  if (!Array.isArray(workingState.players) || workingState.players.length < 2) {
+    workingState.players = createDefaultPlayers();
+    changed = true;
+  }
+
+  if (desiredTopic && (isDefaultScorecardTopic(workingState.topic) || workingState.topic !== desiredTopic)) {
+    workingState.topic = desiredTopic;
+    changed = true;
+  }
+
+  if (Array.isArray(parsed.players) && parsed.players.length > 0) {
+    for (const update of parsed.players) {
+      const side = update.side;
+      const desiredLabel = update.label.trim();
+      if (!desiredLabel) continue;
+      const idx = workingState.players.findIndex((p) => p.side === side);
+      if (idx === -1) continue;
+      const current = workingState.players[idx];
+      const shouldReplace = isDefaultPlayerLabel(current.label, side) || current.label !== desiredLabel;
+      if (shouldReplace) {
+        workingState.players[idx] = {
+          ...current,
+          label: desiredLabel,
+          avatarUrl: update.avatarUrl ?? current.avatarUrl,
+          lastUpdated: Date.now(),
+        };
+        changed = true;
+      }
+    }
+  }
+
+  if (!changed) {
+    console.log('[Conductor] scorecard meta already up to date', { room, componentId });
+    seedScorecardState(room, componentId, record);
+    return { status: 'no_change', version: record.version };
+  }
+
+  const timestamp = Date.now();
+  const lastActionText = [
+    desiredTopic ? `Topic: ${desiredTopic}` : null,
+    Array.isArray(parsed.players) && parsed.players.length
+      ? `Players: ${workingState.players.map((p) => p.label).join(' vs ')}`
+      : null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+
+  workingState.status = {
+    ...workingState.status,
+    lastAction: lastActionText || workingState.status?.lastAction,
+  };
+  workingState.timeline = [
+    ...(workingState.timeline ?? []),
+    {
+      id: `evt-${timestamp}`,
+      timestamp,
+      text: lastActionText || 'Scorecard metadata updated.',
+      type: 'moderation',
+    },
+  ];
+
+  const committed = await commitDebateScorecard(room, componentId, {
+    state: workingState,
+    prevVersion: record.version,
+  });
+
+  seedScorecardState(room, componentId, committed);
+  await broadcastToolCall({
+    room,
+    tool: 'update_component',
+    params: {
+      componentId,
+      patch: committed.state as JsonObject,
+    },
+  });
+
+  console.log('[Conductor] scorecard meta committed', { room, componentId, version: committed.version });
+  return { status: 'ok', version: committed.version };
+}
+
 async function executeTask(taskName: string, params: JsonObject) {
   if (!taskName || taskName === 'auto') {
     const resolution = resolveIntent(params);
@@ -322,46 +562,79 @@ async function executeTask(taskName: string, params: JsonObject) {
   if (taskName.startsWith('scorecard.')) {
     const parsed = ScorecardTaskArgs.parse(params);
     const useFast = taskName !== 'scorecard.fact_check';
-    
-    if (taskName === 'scorecard.fact_check') {
-      await primeFactCheckStatus(parsed);
-    }
-    
-    console.log('[Conductor] dispatching scorecard task', {
-      taskName,
-      room: parsed.room,
-      componentId: parsed.componentId,
-      intent: parsed.intent ?? taskName,
-      useFast,
+
+    return withScorecardLock(`${parsed.room}:${parsed.componentId}`, async () => {
+      if (taskName === 'scorecard.seed') {
+        return { status: 'completed', output: await upsertScorecardMeta(parsed) };
+      }
+      if (taskName === 'scorecard.fact_check') {
+        await primeFactCheckStatus(parsed);
+      }
+      if (
+        taskName !== 'scorecard.seed' &&
+        (typeof parsed.topic === 'string' || (Array.isArray(parsed.players) && parsed.players.length > 0))
+      ) {
+        try {
+          await upsertScorecardMeta(parsed);
+        } catch (error) {
+          console.warn('[Conductor] scorecard meta upsert failed before steward dispatch', {
+            room: parsed.room,
+            componentId: parsed.componentId,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
+
+      console.log('[Conductor] dispatching scorecard task', {
+        taskName,
+        room: parsed.room,
+        componentId: parsed.componentId,
+        intent: parsed.intent ?? taskName,
+        useFast,
+      });
+
+      const output = useFast
+        ? await runDebateScorecardStewardFast({
+            room: parsed.room,
+            componentId: parsed.componentId,
+            intent: parsed.intent ?? taskName,
+            summary: parsed.summary,
+            prompt: parsed.prompt,
+            topic: parsed.topic,
+          })
+        : await runDebateScorecardSteward({
+            room: parsed.room,
+            componentId: parsed.componentId,
+            windowMs: parsed.windowMs,
+            intent: parsed.intent ?? taskName,
+            summary: parsed.summary,
+            prompt: parsed.prompt,
+            topic: parsed.topic,
+          });
+
+      console.log('[Conductor] scorecard steward completed', {
+        taskName,
+        room: parsed.room,
+        componentId: parsed.componentId,
+        ok: true,
+        useFast,
+      });
+
+      if (useFast) {
+        try {
+          await maybeEnqueueAutoFactChecks(parsed, taskName);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          console.warn('[Conductor] auto fact-check enqueue failed', {
+            room: parsed.room,
+            componentId: parsed.componentId,
+            error: message,
+          });
+        }
+      }
+
+      return { status: 'completed', output };
     });
-    
-    const output = useFast
-      ? await runDebateScorecardStewardFast({
-          room: parsed.room,
-          componentId: parsed.componentId,
-          intent: parsed.intent ?? taskName,
-          summary: parsed.summary,
-          prompt: parsed.prompt,
-          topic: parsed.topic,
-        })
-      : await runDebateScorecardSteward({
-          room: parsed.room,
-          componentId: parsed.componentId,
-          windowMs: parsed.windowMs,
-          intent: parsed.intent ?? taskName,
-          summary: parsed.summary,
-          prompt: parsed.prompt,
-          topic: parsed.topic,
-        });
-    
-    console.log('[Conductor] scorecard steward completed', {
-      taskName,
-      room: parsed.room,
-      componentId: parsed.componentId,
-      ok: true,
-      useFast,
-    });
-    return { status: 'completed', output };
   }
 
   if (taskName.startsWith('search.')) {

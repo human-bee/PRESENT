@@ -483,7 +483,7 @@ export async function runCanvasAgent(args: RunArgs) {
     ): Promise<{ parts: Record<string, unknown>; prompt: string; buildMs: number }> => {
       const startedAt = Date.now();
       const parts = await buildPromptParts(roomId, {
-        windowMs: 60000,
+        windowMs: cfg.transcriptWindowMs,
         viewport: latestScreenshot?.viewport ?? args.initialViewport,
         selection: latestScreenshot?.selection ?? [],
         sessionId,
@@ -1374,7 +1374,7 @@ const normalizeRawAction = (raw: unknown, shapeTypeById: Map<string, string>) =>
 
       await sendStatus(roomId, sessionId, 'scheduled');
       const followParts = await buildPromptParts(roomId, {
-        windowMs: 60000,
+        windowMs: cfg.transcriptWindowMs,
         viewport: followScreenshot?.viewport ?? args.initialViewport,
         selection: followTargetIds.length > 0 ? followTargetIds : followScreenshot?.selection ?? [],
         sessionId,

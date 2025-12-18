@@ -231,6 +231,7 @@ describe('tldraw action handlers', () => {
     const [{ x, y, props }] = updateCall[1];
     expect(x).toBe(120);
     expect(y).toBe(80);
-    expect(props.text).toBe('updated');
+    expect(props.text).toBeUndefined();
+    expect(props.richText).toBeDefined();
   });
 });

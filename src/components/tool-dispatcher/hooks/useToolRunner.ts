@@ -570,6 +570,8 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
             }
 
             const body = {
+              ...(dispatchParams || {}),
+              task,
               room: targetRoom,
               componentId,
               windowMs:
@@ -712,6 +714,32 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
         const tool = message.payload?.tool;
         const params = message.payload?.params || {};
         const callId = message.id || `${Date.now()}`;
+        if (metricsEnabled && typeof window !== 'undefined') {
+          try {
+            window.dispatchEvent(
+              new CustomEvent('present:tool_call_received', {
+                detail: {
+                  callId,
+                  tool: tool || 'unknown',
+                  source:
+                    typeof message.payload?.context?.source === 'string'
+                      ? message.payload.context.source
+                      : typeof message.source === 'string'
+                        ? message.source
+                        : null,
+                  roomId: typeof message.roomId === 'string' ? message.roomId : null,
+                  sentAt:
+                    typeof message.payload?.context?.timestamp === 'number'
+                      ? message.payload.context.timestamp
+                      : typeof message.timestamp === 'number'
+                        ? message.timestamp
+                        : null,
+                  receivedAt: Date.now(),
+                },
+              }),
+            );
+          } catch {}
+        }
         if (metricsEnabled) {
           const existing = metricsByCallRef.current.get(callId);
           const next: ToolMetricEntry = existing ?? {

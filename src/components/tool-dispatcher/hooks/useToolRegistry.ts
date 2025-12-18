@@ -680,6 +680,12 @@ export function useToolRegistry(deps: ToolRegistryDeps): ToolRegistryApi {
       };
 
       window.dispatchEvent(new CustomEvent('present:agent_actions', { detail: actionEnvelope }));
+      // Re-emit shortly after to catch widgets that attach their listeners a tick after mount.
+      window.setTimeout(() => {
+        try {
+          window.dispatchEvent(new CustomEvent('present:agent_actions', { detail: actionEnvelope }));
+        } catch {}
+      }, 900);
 
       metrics?.associateCallWithMessage?.(call.id, messageId!, { tool: 'create_infographic', componentType: 'InfographicWidget' });
 

@@ -59,6 +59,11 @@ import {
 export type DebateScorecardProps = DebateScorecardState;
 export const debateScoreCardSchema = debateScorecardSchema;
 
+type DebateScorecardInjectedProps = DebateScorecardProps & {
+  state?: Record<string, unknown>;
+  updateState?: (patch: Record<string, unknown> | ((prev: any) => any)) => void;
+};
+
 const verdictConfig: Record<
   Verdict,
   { label: string; className: string; icon: React.ComponentType<{ className?: string }> }
@@ -936,21 +941,94 @@ function Timeline({
 }
 
 export function DebateScorecard(props: DebateScorecardProps) {
-  const parsed = useMemo(() => debateScorecardSchema.parse(props), [props]);
-  const parsedRef = useRef(parsed);
-  useEffect(() => {
-    parsedRef.current = parsed;
-  }, [parsed]);
+  const injectedProps = props as DebateScorecardInjectedProps;
+  const injectedState = injectedProps.state;
+  const updateState = injectedProps.updateState;
 
-  const [scorecard, setScorecard] = useState(parsed);
+  const parsedFromProps = useMemo(() => debateScorecardSchema.parse(props), [props]);
+  const parsedFromPropsRef = useRef(parsedFromProps);
+  useEffect(() => {
+    parsedFromPropsRef.current = parsedFromProps;
+  }, [parsedFromProps]);
+
+  const parsedFromShapeState = useMemo(() => {
+    if (!injectedState || typeof injectedState !== 'object') return null;
+    const injectedKeys = Object.keys(injectedState);
+    if (injectedKeys.length === 0) return null;
+    const meaningfulKeys = new Set([
+      'topic',
+      'players',
+      'claims',
+      'sources',
+      'timeline',
+      'metrics',
+      'filters',
+      'map',
+      'rfd',
+      'status',
+      'version',
+      'lastUpdated',
+    ]);
+    if (!injectedKeys.some((key) => meaningfulKeys.has(key))) return null;
+    try {
+      const componentIdFromProps =
+        typeof (props as any)?.componentId === 'string' && (props as any).componentId.trim().length > 0
+          ? (props as any).componentId.trim()
+          : undefined;
+      const candidate = debateScorecardSchema.parse({
+        ...(injectedState as Record<string, unknown>),
+        ...(componentIdFromProps ? { componentId: componentIdFromProps } : {}),
+      });
+      return candidate;
+    } catch {
+      return null;
+    }
+  }, [injectedState, props]);
+
+  const initialScorecard = useMemo(() => {
+    return parsedFromProps;
+  }, [parsedFromProps]);
+
+  const [scorecard, setScorecard] = useState(initialScorecard);
+  const hydratedShapeStateRef = useRef(false);
+
+  useEffect(() => {
+    setScorecard((prev) => {
+      let next = prev;
+      if (shouldPromoteScorecard(next, parsedFromProps)) {
+        next = parsedFromProps;
+      }
+      if (parsedFromShapeState && shouldPromoteScorecard(next, parsedFromShapeState)) {
+        next = parsedFromShapeState;
+      }
+      return next;
+    });
+  }, [parsedFromProps, parsedFromShapeState]);
+
+  useEffect(() => {
+    if (hydratedShapeStateRef.current) return;
+    if (!updateState) return;
+    if (parsedFromShapeState) {
+      hydratedShapeStateRef.current = true;
+      return;
+    }
+    if (!injectedState || typeof injectedState !== 'object' || Object.keys(injectedState).length === 0) {
+      hydratedShapeStateRef.current = true;
+      try {
+        updateState(parsedFromProps);
+      } catch {
+        /* noop */
+      }
+    }
+  }, [injectedState, parsedFromProps, parsedFromShapeState, updateState]);
 
   const explicitMessageId =
     typeof (props as any).__custom_message_id === 'string' ? (props as any).__custom_message_id.trim() : '';
 
   const messageId = useMemo(() => {
-    const stateId = scorecard.componentId?.trim() || parsed.componentId?.trim();
+    const stateId = scorecard.componentId?.trim() || parsedFromProps.componentId?.trim();
     return explicitMessageId || stateId || 'debate-scorecard';
-  }, [explicitMessageId, parsed.componentId, scorecard.componentId]);
+  }, [explicitMessageId, parsedFromProps.componentId, scorecard.componentId]);
 
   const handleRegistryUpdate = useCallback(
     (patch: Record<string, unknown>) => {
@@ -987,9 +1065,9 @@ export function DebateScorecard(props: DebateScorecardProps) {
   useComponentRegistration(messageId, 'DebateScorecard', scorecard, 'canvas', handleRegistryUpdate);
 
   useEffect(() => {
-    const incoming = parsedRef.current;
+    const incoming = parsedFromPropsRef.current;
     setScorecard((prev) => (shouldPromoteScorecard(prev, incoming) ? incoming : prev));
-  }, [parsed.componentId, parsed.version, parsed.lastUpdated]);
+  }, [parsedFromProps.componentId, parsedFromProps.version, parsedFromProps.lastUpdated]);
 
   const [localFilters, setLocalFilters] = useState(scorecard.filters);
   const [factCheckToggle, setFactCheckToggle] = useState(scorecard.factCheckEnabled);
@@ -1105,7 +1183,7 @@ export function DebateScorecard(props: DebateScorecardProps) {
 
   return (
     <div className="w-[960px] max-w-full">
-      <div className="rounded-3xl border border-white/5 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.08),transparent_55%)] shadow-lg text-white font-sans p-6 md:p-8 flex flex-col gap-6">
+      <div className="rounded-3xl border border-white/10 bg-slate-950/95 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.08),transparent_55%)] shadow-xl text-white font-sans p-6 md:p-8 flex flex-col gap-6 backdrop-blur-sm">
         <header className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
           <div className="space-y-1">
             <p className="text-xs uppercase tracking-[0.25em] text-white/40">Debate Analysis</p>

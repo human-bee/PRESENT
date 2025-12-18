@@ -5,7 +5,7 @@ import {
   getContextDocuments,
   formatContextDocuments,
 } from '@/lib/agents/shared/supabase-context';
-import type { DebateScorecardState } from '@/lib/agents/debate-scorecard-schema';
+import { debateScorecardStateSchema, type DebateScorecardState } from '@/lib/agents/debate-scorecard-schema';
 
 const CEREBRAS_MODEL = getModelForSteward('DEBATE_STEWARD_FAST_MODEL');
 const client = getCerebrasClient();
@@ -21,6 +21,29 @@ Operations you handle:
 - Add timeline event: Append to timeline array with id, timestamp, text, type
 - Update player stats: momentum (0-1), streakCount, bsMeter (0-1)
 - Parse claims from context: If context documents are provided and instruction says to extract/parse claims, create claims from that content
+
+Real-time scoring (IMPORTANT):
+- When you add a new claim from a debate turn, ALWAYS assign claim.scoreDelta as an integer 1–3.
+  - Use 1 for a standard argument, 2 for a strong/impactful point, 3 for a decisive/key voter point.
+  - Only use 0 if the line is not a substantive claim (meta, filler, duplicate).
+- Also set claim.summary (<= 120 chars) to a concise restatement of the claim.
+- If scoreDelta > 0, increment the matching player's players[].score by scoreDelta (do not decrement scores).
+- Add a "score_change" timeline event whenever you change any player's score.
+
+Parsing debate turns (IMPORTANT):
+- If the instruction looks like a debate line (e.g. starts with "Affirmative:", "Negative:", "Affirmative rebuttal:", "Negative rebuttal:", "Judge:"), treat it as a new debate event.
+- Add a claim for AFF/NEG lines; for "Judge:" lines add a timeline moderation/argument event and update RFD summary if appropriate.
+- Choose a best-effort speech label (AFF → 1AC/2AC/1AR/2AR; NEG → 1NC/2NC/1NR/2NR). If unsure, use 1AC for AFF and 1NC for NEG.
+
+Map + judge memory (IMPORTANT):
+- Keep scorecard.map nodes/edges lightly populated:
+  - Ensure one MAIN node exists for the debate topic.
+  - When you add a claim, add a map node that references claimId and connects to MAIN (REASON for AFF, OBJECTION/REBUTTAL for NEG depending on speech).
+- Map schema constraints (MUST FOLLOW):
+  - map.nodes[].type MUST be exactly one of: "MAIN" | "REASON" | "OBJECTION" | "REBUTTAL" (all-caps).
+  - map.edges[] items MUST be objects with: { "from": "<nodeId>", "to": "<nodeId>" }.
+- Keep scorecard.rfd.summary updated:
+  - If a Judge line appears, write a short (<= 300 chars) "reason for decision" summary and set metrics.judgeLean (AFF/NEG/NEUTRAL).
 
 IMPORTANT: If the instruction mentions a debate topic (e.g., "debate about X", "topic is Y"), update the "topic" field.
 IMPORTANT: If context documents are provided and user asks to "sort into claims" or "extract claims", parse the text and create claim entries.
@@ -43,36 +66,84 @@ Claim structure:
 }
 
 Rules:
-1. Output the COMPLETE updated state via commit_update
-2. Preserve all existing data - only modify what the instruction specifies
-3. Always increment version by 1
-4. Set lastUpdated to current timestamp
-5. Update status.lastAction with a brief description
+1. Output STRICT JSON only (no markdown, no commentary).
+2. Preserve all existing data - only modify what the instruction specifies.
+3. Do NOT invent component IDs; keep the existing componentId.
+4. Version/lastUpdated are handled server-side; you may omit or keep them, but ensure state is otherwise complete.
+
+Output format (JSON only):
+{
+  "summary": string,
+  "state": <DebateScorecardState>
+}
 `;
 
-const tools = [
-  {
-    type: 'function' as const,
-    function: {
-      name: 'commit_update',
-      description: 'Commit the updated scorecard state',
-      parameters: {
-        type: 'object',
-        properties: {
-          stateJson: {
-            type: 'string',
-            description: 'The complete updated DebateScorecardState as a JSON string',
-          },
-          summary: {
-            type: 'string',
-            description: 'Brief description of what changed (1 sentence)',
-          },
-        },
-        required: ['stateJson', 'summary'],
-      },
-    },
-  },
-];
+function extractJsonCandidate(raw: string): unknown | null {
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    /* fallthrough */
+  }
+  const first = trimmed.indexOf('{');
+  const last = trimmed.lastIndexOf('}');
+  if (first === -1 || last === -1 || last <= first) return null;
+  try {
+    return JSON.parse(trimmed.slice(first, last + 1));
+  } catch {
+    return null;
+  }
+}
+
+function sanitizeStateCandidate(candidate: any): any {
+  if (!candidate || typeof candidate !== 'object') return candidate;
+  const next: any = { ...candidate };
+
+  if (next.map && typeof next.map === 'object') {
+    const allowedTypes = new Set(['MAIN', 'REASON', 'OBJECTION', 'REBUTTAL']);
+    const rawNodes = Array.isArray(next.map.nodes) ? next.map.nodes : [];
+    const nodes = rawNodes
+      .map((node: any) => {
+        const id = typeof node?.id === 'string' ? node.id : undefined;
+        const label = typeof node?.label === 'string' ? node.label : typeof node?.text === 'string' ? node.text : undefined;
+        const rawType = typeof node?.type === 'string' ? node.type : '';
+        const type = rawType ? rawType.toUpperCase() : '';
+        if (!id || !label || !type || !allowedTypes.has(type)) return null;
+        const claimId = typeof node?.claimId === 'string' ? node.claimId : undefined;
+        return claimId ? { id, type, label, claimId } : { id, type, label };
+      })
+      .filter(Boolean);
+
+    const rawEdges = Array.isArray(next.map.edges) ? next.map.edges : [];
+    const edges = rawEdges
+      .map((edge: any) => {
+        const from =
+          typeof edge?.from === 'string'
+            ? edge.from
+            : typeof edge?.source === 'string'
+              ? edge.source
+              : typeof edge?.fromId === 'string'
+                ? edge.fromId
+                : undefined;
+        const to =
+          typeof edge?.to === 'string'
+            ? edge.to
+            : typeof edge?.target === 'string'
+              ? edge.target
+              : typeof edge?.toId === 'string'
+                ? edge.toId
+                : undefined;
+        if (!from || !to) return null;
+        return { from, to };
+      })
+      .filter(Boolean);
+
+    next.map = { nodes, edges };
+  }
+
+  return next;
+}
 
 export async function runDebateScorecardStewardFast(params: {
   room: string;
@@ -102,7 +173,7 @@ export async function runDebateScorecardStewardFast(params: {
     { role: 'system' as const, content: DEBATE_STEWARD_FAST_INSTRUCTIONS },
     {
       role: 'user' as const,
-      content: `Current scorecard state (version ${currentVersion}):\n${JSON.stringify(currentState, null, 2)}\n\n${contextSection ? `Context Documents:\n${contextSection}\n\n` : ''}Instruction: "${instruction}"${topicInstruction}\n\nApply the instruction and call commit_update with the complete updated state.\nSet version to ${currentVersion + 1} and lastUpdated to ${Date.now()}.`,
+      content: `Current scorecard state (version ${currentVersion}):\n${JSON.stringify(currentState, null, 2)}\n\n${contextSection ? `Context Documents:\n${contextSection}\n\n` : ''}Instruction: "${instruction}"${topicInstruction}\n\nReturn STRICT JSON only with:\n{\n  "summary": string,\n  "state": <complete DebateScorecardState>\n}\n\nNotes:\n- Keep componentId as "${componentId}".\n- Version/lastUpdated will be handled server-side.`,
     },
   ];
 
@@ -110,62 +181,108 @@ export async function runDebateScorecardStewardFast(params: {
     const response = await client.chat.completions.create({
       model: CEREBRAS_MODEL,
       messages,
-      tools,
-      tool_choice: 'auto',
     });
 
     const choice = response.choices[0]?.message;
 
-    if (choice?.tool_calls?.[0]) {
-      const toolCall = choice.tool_calls[0];
-      if (toolCall.function.name === 'commit_update') {
-        const args = JSON.parse(toolCall.function.arguments);
-
-        let updatedState: DebateScorecardState;
-        try {
-          updatedState = JSON.parse(args.stateJson);
-        } catch {
-          console.error('[DebateStewardFast] Failed to parse stateJson');
-          return { status: 'error', summary: 'Failed to parse state JSON' };
-        }
-
-        const committed = await commitDebateScorecard(room, componentId, {
-          state: updatedState,
-          prevVersion: currentVersion,
-        });
-
-        console.log('[DebateStewardFast] complete', {
-          room,
-          componentId,
-          newVersion: committed.version,
-          durationMs: Date.now() - start,
-        });
-
-        const broadcastUrl = resolveBroadcastUrl();
-        if (broadcastUrl) {
-          void fetch(broadcastUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              room,
-              componentId,
-              patch: { scorecard: { state: updatedState, version: committed.version } },
-            }),
-          }).catch((err) => {
-            console.warn('[DebateStewardFast] broadcast failed', err);
-          });
-        }
-
-        return {
-          status: 'ok',
-          summary: args.summary,
-          version: committed.version,
-        };
-      }
+    const rawContent = typeof (choice as any)?.content === 'string' ? String((choice as any).content) : '';
+    const parsedResponse = extractJsonCandidate(rawContent);
+    if (!parsedResponse || typeof parsedResponse !== 'object') {
+      console.warn('[DebateStewardFast] No JSON update captured');
+      return { status: 'no_change', summary: 'No update needed' };
     }
 
-    console.warn('[DebateStewardFast] No update captured');
-    return { status: 'no_change', summary: 'No update needed' };
+    const summaryText =
+      typeof (parsedResponse as any).summary === 'string' && (parsedResponse as any).summary.trim()
+        ? String((parsedResponse as any).summary).trim().slice(0, 240)
+        : 'Updated debate scorecard';
+
+    const stateCandidate =
+      (parsedResponse as any).state ??
+      (typeof (parsedResponse as any).stateJson === 'string' ? extractJsonCandidate(String((parsedResponse as any).stateJson)) : null) ??
+      parsedResponse;
+
+    const attemptParse = (value: unknown) => {
+      const parsed = debateScorecardStateSchema.safeParse(value);
+      return parsed.success ? parsed.data : null;
+    };
+
+    let updatedState: DebateScorecardState | null = attemptParse(stateCandidate);
+    if (!updatedState) {
+      updatedState = attemptParse(sanitizeStateCandidate(stateCandidate));
+    }
+    if (!updatedState && stateCandidate && typeof stateCandidate === 'object') {
+      const stripped = { ...(stateCandidate as Record<string, unknown>) };
+      delete (stripped as any).map;
+      updatedState = attemptParse(stripped);
+    }
+    if (!updatedState) {
+      console.error('[DebateStewardFast] Failed to parse updated state JSON');
+      return { status: 'error', summary: 'Failed to parse updated scorecard state' };
+    }
+
+    const ensurePositiveScoreDeltas = (
+      current: DebateScorecardState,
+      next: DebateScorecardState,
+    ): DebateScorecardState => {
+      const currentIds = new Set((current.claims ?? []).map((c) => c.id));
+      let changed = false;
+
+      const patchedClaims = (next.claims ?? []).map((claim) => {
+        if (!claim || currentIds.has(claim.id)) return claim;
+        const rawDelta = (claim as any).scoreDelta;
+        const delta = typeof rawDelta === 'number' && Number.isFinite(rawDelta) ? rawDelta : 0;
+        if (delta > 0) return claim;
+        changed = true;
+        return {
+          ...claim,
+          scoreDelta: 1,
+          summary:
+            typeof claim.summary === 'string' && claim.summary.trim()
+              ? claim.summary
+              : claim.quote?.trim().slice(0, 120) || 'New debate claim',
+        };
+      });
+
+      return changed ? { ...next, claims: patchedClaims } : next;
+    };
+
+    updatedState = ensurePositiveScoreDeltas(currentState, updatedState);
+
+    const committed = await commitDebateScorecard(room, componentId, {
+      state: updatedState,
+      prevVersion: currentVersion,
+    });
+
+    console.log('[DebateStewardFast] complete', {
+      room,
+      componentId,
+      newVersion: committed.version,
+      durationMs: Date.now() - start,
+    });
+
+    const broadcastUrl = resolveBroadcastUrl();
+    if (broadcastUrl) {
+      void fetch(broadcastUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          room,
+          componentId,
+          patch: { ...committed.state, version: committed.version },
+          summary: summaryText,
+        }),
+      }).catch((err) => {
+        console.warn('[DebateStewardFast] broadcast failed', err);
+      });
+    }
+
+    return {
+      status: 'ok',
+      summary: summaryText,
+      version: committed.version,
+    };
+
   } catch (error) {
     console.error('[DebateStewardFast] error', { room, componentId, error });
     return {
@@ -199,8 +316,3 @@ function resolveBroadcastUrl(): string | null {
   }
   return null;
 }
-
-
-
-
-
