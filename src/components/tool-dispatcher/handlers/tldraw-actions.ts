@@ -199,7 +199,17 @@ function flushBatch(editor: Editor, batch: BatchCollector) {
   }
 }
 
-function normalizeCreate(shape: { id?: string; type?: string; x?: number; y?: number; props?: Record<string, unknown> }) {
+function normalizeCreate(shape: {
+  id?: string;
+  type?: string;
+  x?: number;
+  y?: number;
+  x1?: number;
+  y1?: number;
+  x2?: number;
+  y2?: number;
+  props?: Record<string, unknown>;
+}) {
   const id = withPrefix(shape.id || `ag_${Date.now().toString(36)}`);
   const rawType = String(shape.type || '').toLowerCase();
   const props: Record<string, unknown> = { ...(shape.props || {}) };
@@ -208,6 +218,9 @@ function normalizeCreate(shape: { id?: string; type?: string; x?: number; y?: nu
 
   const geoKinds = new Set(['rectangle', 'ellipse', 'triangle', 'diamond', 'rhombus', 'hexagon', 'star']);
   if (geoKinds.has(rawType)) {
+    if ('text' in props) delete (props as any).text;
+    if ('label' in props) delete (props as any).label;
+    if ('content' in props) delete (props as any).content;
     return { id, type: 'geo', x, y, props: { ...props, geo: rawType } };
   }
   if (rawType === 'note' || rawType === 'text') {
@@ -216,7 +229,93 @@ function normalizeCreate(shape: { id?: string; type?: string; x?: number; y?: nu
     return { id, type: 'text', x, y, props: nextProps };
   }
   if (rawType === 'arrow') {
-    return { id, type: 'arrow', x, y, props };
+    if ('text' in props) delete (props as any).text;
+    if ('label' in props) delete (props as any).label;
+    if ('content' in props) delete (props as any).content;
+    // fromId/toId are binding hints in the upstream starter kit, but they are NOT valid TLArrowShape props.
+    // If the Canvas Agent emits them, drop to avoid TLDraw schema validation errors.
+    if ('fromId' in props) delete (props as any).fromId;
+    if ('toId' in props) delete (props as any).toId;
+
+    const coerceFinite = (value: unknown): number | undefined =>
+      typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+    const pickNumber = (...values: unknown[]): number | undefined => {
+      for (const value of values) {
+        const coerced = coerceFinite(value);
+        if (coerced !== undefined) return coerced;
+      }
+      return undefined;
+    };
+
+    const x1 = pickNumber(shape.x1, (props as any).x1);
+    const y1 = pickNumber(shape.y1, (props as any).y1);
+    const x2 = pickNumber(shape.x2, (props as any).x2);
+    const y2 = pickNumber(shape.y2, (props as any).y2);
+    delete (props as any).x1;
+    delete (props as any).y1;
+    delete (props as any).x2;
+    delete (props as any).y2;
+
+    const startRaw = (props as any).start;
+    const endRaw = (props as any).end;
+    const startX = pickNumber(startRaw?.x);
+    const startY = pickNumber(startRaw?.y);
+    const endX = pickNumber(endRaw?.x);
+    const endY = pickNumber(endRaw?.y);
+
+    const ensureArrowEndpoints = () => {
+      if (
+        startX !== undefined &&
+        startY !== undefined &&
+        endX !== undefined &&
+        endY !== undefined
+      ) {
+        return;
+      }
+
+      if (x1 === undefined || y1 === undefined || x2 === undefined || y2 === undefined) {
+        (props as any).start = { x: 0, y: 0 };
+        (props as any).end = { x: 100, y: 0 };
+        return;
+      }
+
+      const minX = Math.min(x1, x2);
+      const minY = Math.min(y1, y2);
+      const baseX = x !== undefined ? x : minX;
+      const baseY = y !== undefined ? y : minY;
+
+      if (shape.x === undefined) {
+        (shape as any).x = minX;
+      }
+      if (shape.y === undefined) {
+        (shape as any).y = minY;
+      }
+
+      (props as any).start = { x: x1 - baseX, y: y1 - baseY };
+      (props as any).end = { x: x2 - baseX, y: y2 - baseY };
+    };
+
+    ensureArrowEndpoints();
+
+    const normalizedX = typeof (shape as any).x === 'number' ? (shape as any).x : x;
+    const normalizedY = typeof (shape as any).y === 'number' ? (shape as any).y : y;
+
+    const finalStart = (props as any).start;
+    const finalEnd = (props as any).end;
+    if (!finalStart || typeof finalStart !== 'object') {
+      (props as any).start = { x: 0, y: 0 };
+    } else {
+      if (!Number.isFinite((finalStart as any).x)) (finalStart as any).x = 0;
+      if (!Number.isFinite((finalStart as any).y)) (finalStart as any).y = 0;
+    }
+    if (!finalEnd || typeof finalEnd !== 'object') {
+      (props as any).end = { x: 100, y: 0 };
+    } else {
+      if (!Number.isFinite((finalEnd as any).x)) (finalEnd as any).x = 100;
+      if (!Number.isFinite((finalEnd as any).y)) (finalEnd as any).y = 0;
+    }
+
+    return { id, type: 'arrow', x: normalizedX, y: normalizedY, props };
   }
   if (rawType === 'draw' || rawType === 'pen') {
     return { id, type: 'draw', x, y, props };
@@ -247,17 +346,18 @@ export function applyAction(ctx: ApplyContext, action: AgentAction, batch?: Batc
 
   switch (action.name) {
     case 'create_shape': {
-      const { id, type, x, y, props } = action.params as any;
-      const normalized = normalizeCreate({ id, type, x, y, props });
+      const { id, type, x, y, props, x1, y1, x2, y2 } = action.params as any;
+      const normalized = normalizeCreate({ id, type, x, y, x1, y1, x2, y2, props });
       localBatch.creates.push(normalized);
       mutated = true;
 
       const rawType = String(type || '').toLowerCase();
       const textContent = String((props?.text ?? props?.label ?? props?.content ?? '') || '');
-      if ((rawType === 'note' || rawType === 'text') && textContent) {
+      const geoKinds = new Set(['rectangle', 'ellipse', 'triangle', 'diamond', 'rhombus', 'hexagon', 'star']);
+      if ((rawType === 'note' || rawType === 'text' || rawType === 'arrow' || geoKinds.has(rawType)) && textContent) {
         localBatch.updates.push({
           id: normalized.id,
-          type: 'text',
+          type: normalized.type,
           props: { richText: toRichText(textContent) },
         });
       }
@@ -268,10 +368,30 @@ export function applyAction(ctx: ApplyContext, action: AgentAction, batch?: Batc
       const sid = withPrefix(id);
       const shape = editor.getShape?.(sid as any) as any;
       if (!shape) break;
+      const nextProps: Record<string, unknown> = { ...(props || {}) };
+      const textContent = String((nextProps as any).text ?? (nextProps as any).label ?? (nextProps as any).content ?? '');
+      if (textContent && ['text', 'geo', 'arrow', 'note'].includes(String(shape.type))) {
+        nextProps.richText = toRichText(textContent);
+        delete (nextProps as any).text;
+        delete (nextProps as any).label;
+        delete (nextProps as any).content;
+      }
+      if (String(shape.type) === 'arrow') {
+        // fromId/toId are not valid TLArrowShape props (bindings are separate records).
+        delete (nextProps as any).fromId;
+        delete (nextProps as any).toId;
+      }
+      if (String(shape.type) === 'text' && 'align' in nextProps && !('textAlign' in nextProps)) {
+        const alignValue = String((nextProps as any).align || '').trim().toLowerCase();
+        if (alignValue === 'start' || alignValue === 'left') (nextProps as any).textAlign = 'start';
+        if (alignValue === 'middle' || alignValue === 'center') (nextProps as any).textAlign = 'middle';
+        if (alignValue === 'end' || alignValue === 'right') (nextProps as any).textAlign = 'end';
+        delete (nextProps as any).align;
+      }
       const update: Record<string, unknown> = {
         id: sid,
         type: shape.type ?? 'geo',
-        props: props || {},
+        props: nextProps,
       };
       if (typeof x === 'number' && Number.isFinite(x)) {
         update.x = x;

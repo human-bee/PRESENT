@@ -19,6 +19,16 @@ const drawSegmentSchema = z
   })
   .passthrough();
 
+const normalizeTextAlign = (value: unknown): 'start' | 'middle' | 'end' | undefined => {
+  if (typeof value !== 'string') return undefined;
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) return undefined;
+  if (normalized === 'start' || normalized === 'left') return 'start';
+  if (normalized === 'middle' || normalized === 'center') return 'middle';
+  if (normalized === 'end' || normalized === 'right') return 'end';
+  return undefined;
+};
+
 const canonicalAlignSchema = z
   .object({
     ids: z.array(z.string()).min(2),
@@ -84,6 +94,17 @@ const legacyActionSchemas = {
       props: z.record(z.string(), z.unknown()).optional(),
     })
     .passthrough()
+    .transform((value) => {
+      if (value.type?.toLowerCase() !== 'text') return value;
+      if (!value.props || typeof value.props !== 'object') return value;
+      const props = { ...(value.props as Record<string, unknown>) };
+      if ('align' in props && !('textAlign' in props)) {
+        const mapped = normalizeTextAlign(props.align);
+        if (mapped) props.textAlign = mapped;
+      }
+      delete (props as any).align;
+      return { ...value, props };
+    })
     .superRefine((value, ctx) => {
       if (value.type?.toLowerCase() !== 'draw') return;
       const segments = (value.props as any)?.segments;

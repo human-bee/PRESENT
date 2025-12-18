@@ -152,25 +152,31 @@ start_process() {
   local logfile="$3"
   local health_port="${4-}"
 
-  if pgrep -f "npm run $script" >/dev/null 2>&1; then
-    echo "[$label] already running."
-    return
+  local pidfile="$LOG_DIR/$script.pid"
+  if [[ -f "$pidfile" ]]; then
+    local existing_pid
+    existing_pid="$(cat "$pidfile" 2>/dev/null || echo "")"
+    if [[ -n "$existing_pid" ]] && ps -p "$existing_pid" >/dev/null 2>&1; then
+      echo "[$label] already running (pid=$existing_pid)."
+      return
+    fi
+    rm -f "$pidfile"
   fi
 
   echo "[$label] starting..."
   (
     cd "$ROOT_DIR" || exit 1
     nohup npm run "$script" >"$LOG_DIR/$logfile" 2>&1 &
-    echo $! >"$LOG_DIR/$script.pid"
+    echo $! >"$pidfile"
   )
 
   local pid
-  pid="$(cat "$LOG_DIR/$script.pid")"
+  pid="$(cat "$pidfile")"
   sleep 1
 
   if ! ps -p "$pid" >/dev/null 2>&1; then
     echo "[$label] failed to stay up, see $LOG_DIR/$logfile"
-    rm -f "$LOG_DIR/$script.pid"
+    rm -f "$pidfile"
     tail -n 20 "$LOG_DIR/$logfile" 2>/dev/null || true
     return 1
   fi

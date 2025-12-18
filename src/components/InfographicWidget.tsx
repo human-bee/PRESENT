@@ -70,8 +70,12 @@ export function InfographicWidget({ room, isShape = false, __custom_message_id, 
                 return `${name}: ${t.text}`;
             }).join('\n');
 
-            // Allow generation if we have EITHER transcripts OR context documents
-            if (!recentLines && contextDocuments.length === 0) {
+            const hasUnifiedContext = Boolean(context && context.trim().length > 0);
+            const hasLocalTranscript = Boolean(recentLines && recentLines.trim().length > 0);
+            const hasContextDocs = contextDocuments.length > 0;
+
+            // Allow generation if we have ANY available context source.
+            if (!hasUnifiedContext && !hasLocalTranscript && !hasContextDocs) {
                 throw new Error('No conversation context available yet. Start talking or add context documents!');
             }
 

@@ -159,6 +159,15 @@ export const MessageThreadCollapsible = React.forwardRef<
     !trimmedTypedMessage ||
     (isRecognizedSlashCommand && slashCommandBodyMissing);
 
+  type LiveTranscriptionPayload = {
+    type: 'live_transcription';
+    text: string;
+    speaker: string;
+    timestamp: number;
+    is_final: boolean;
+    manual: boolean;
+  };
+
   // Helper: detect if an agent participant is present in the room
   const isAgentPresent = React.useCallback(() => {
     try {
@@ -662,7 +671,7 @@ export const MessageThreadCollapsible = React.forwardRef<
                     timestamp: Date.now(),
                     is_final: true,
                     manual: true,
-                  } as const;
+                  } satisfies LiveTranscriptionPayload;
 
                   let completed = false;
 

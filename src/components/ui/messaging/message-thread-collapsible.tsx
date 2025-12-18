@@ -313,6 +313,15 @@ export const MessageThreadCollapsible = React.forwardRef<
     };
   }, [room, isAgentPresent]);
 
+  type LiveTranscriptionPayload = {
+    type: 'live_transcription';
+    text: string;
+    speaker: string;
+    timestamp: number;
+    is_final: boolean;
+    manual: boolean;
+  };
+
   // Minimal connect/disconnect helpers (replaces canvas LivekitRoomConnector UI)
   const wsUrl =
     process.env.NEXT_PUBLIC_LIVEKIT_URL || process.env.NEXT_PUBLIC_LK_SERVER_URL || '';
@@ -922,7 +931,7 @@ export const MessageThreadCollapsible = React.forwardRef<
                       timestamp: Date.now(),
                       is_final: true,
                       manual: true,
-                    } as const;
+                    } satisfies LiveTranscriptionPayload;
 
                     let completed = false;
 
@@ -932,11 +941,7 @@ export const MessageThreadCollapsible = React.forwardRef<
                       } else if (mentionActive) {
                         await sendCanvasAgentPrompt(textForDispatch);
                       } else {
-                        if (room?.state === 'connected') {
-                          bus.send('transcription', payload);
-                        } else {
-                          console.warn('[Transcript] Room not connected; skipping send');
-                        }
+                        bus.send('transcription', payload);
                       }
 
                       try {

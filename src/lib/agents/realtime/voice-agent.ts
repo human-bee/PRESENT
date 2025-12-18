@@ -13,7 +13,6 @@ import { appendTranscriptCache, getTranscriptWindow, listCanvasComponents } from
 import { buildVoiceAgentInstructions } from '@/lib/agents/instructions';
 import { queryCapabilities, defaultCapabilities } from '@/lib/agents/capabilities';
 import { deriveComponentIntent } from '@/lib/agents/shared/deterministic-ids';
-import { isExplicitFactCheckRequest, isStartDebate } from '@/lib/agents/debate-judge';
 import { jsonObjectSchema, type JsonObject } from '@/lib/utils/json-schema';
 import { ConnectionState, RoomEvent, RemoteTrackPublication, Track } from 'livekit-client';
 import { createDefaultScorecardState } from '@/lib/agents/debate-scorecard-schema';
@@ -144,6 +143,96 @@ export default defineAgent({
     console.log('[VoiceAgent] Connected to room:', job.room.name);
     const liveKitBus = createLiveKitBus(job.room);
 
+    type PendingTranscriptionMessage = {
+      text: string;
+      speaker?: string;
+      isManual: boolean;
+      receivedAt: number;
+    };
+
+    // Data messages (topic: "transcription") can arrive immediately after the agent joins the room.
+    // Attach the listener up-front and buffer until the realtime session is running so we don't drop early turns.
+    const pendingTranscriptions: PendingTranscriptionMessage[] = [];
+    const TRANSCRIPTION_BUFFER_MAX = 64;
+    const TRANSCRIPTION_BUFFER_TTL_MS = 30_000;
+    let transcriptionProcessingEnabled = false;
+    let drainingTranscriptions = false;
+    let handleBufferedTranscription:
+      | ((message: PendingTranscriptionMessage) => Promise<void>)
+      | null = null;
+
+    const prunePendingTranscriptions = () => {
+      const now = Date.now();
+      while (pendingTranscriptions.length > 0) {
+        const first = pendingTranscriptions[0];
+        if (now - first.receivedAt <= TRANSCRIPTION_BUFFER_TTL_MS) break;
+        pendingTranscriptions.shift();
+      }
+      if (pendingTranscriptions.length > TRANSCRIPTION_BUFFER_MAX) {
+        pendingTranscriptions.splice(0, pendingTranscriptions.length - TRANSCRIPTION_BUFFER_MAX);
+      }
+    };
+
+    const enqueuePendingTranscription = (message: PendingTranscriptionMessage) => {
+      pendingTranscriptions.push(message);
+      prunePendingTranscriptions();
+    };
+
+    const drainPendingTranscriptions = async () => {
+      if (!transcriptionProcessingEnabled || !handleBufferedTranscription) return;
+      if (drainingTranscriptions) return;
+      drainingTranscriptions = true;
+      try {
+        prunePendingTranscriptions();
+        while (pendingTranscriptions.length > 0) {
+          const next = pendingTranscriptions.shift();
+          if (!next) continue;
+          try {
+            await handleBufferedTranscription(next);
+          } catch (error) {
+            logRealtimeError('failed to handle buffered transcription', error);
+          }
+        }
+      } finally {
+        drainingTranscriptions = false;
+      }
+    };
+
+    job.room.on(RoomEvent.DataReceived, (payload, participant, _, topic) => {
+      if (topic !== 'transcription') return;
+      let message: any;
+      try {
+        message = JSON.parse(new TextDecoder().decode(payload));
+      } catch (error) {
+        logRealtimeError('failed to parse data payload', error);
+        return;
+      }
+
+      const text = typeof message?.text === 'string' ? message.text.trim() : '';
+      const isManual = Boolean(message?.manual);
+      const isReplay = Boolean(message?.replay);
+      const speaker = typeof message?.speaker === 'string' ? message.speaker : participant?.identity;
+
+      if (!text || isReplay) return;
+      if (!isManual && speaker === 'voice-agent') return;
+
+      const entry: PendingTranscriptionMessage = {
+        text,
+        speaker: typeof speaker === 'string' ? speaker : undefined,
+        isManual,
+        receivedAt: Date.now(),
+      };
+
+      if (!transcriptionProcessingEnabled || !handleBufferedTranscription) {
+        enqueuePendingTranscription(entry);
+        return;
+      }
+
+      void handleBufferedTranscription(entry)
+        .then(() => { })
+        .catch((error) => logRealtimeError('failed to handle transcription', error));
+    });
+
     const coerceBooleanFromEnv = (value?: string | null) => {
       if (!value) return undefined;
       const normalized = value.trim().toLowerCase();
@@ -270,9 +359,6 @@ Your only output is function calls. Never use plain text unless absolutely neces
     const slotLedger = new Map<string, string>();
     const messageToIntent = new Map<string, string>();
     const LEDGER_TTL_MS = 5 * 60 * 1000;
-    const recentDebatePrompts = new Map<string, number>();
-    const DEBATE_PROMPT_DEBOUNCE_MS = 2000;
-    const DEBATE_PROMPT_HISTORY_MS = 60_000;
     let lastResearchPanelId: string | null = null;
     let activeScorecard: { componentId: string; intentId: string; topic: string } | null = null;
     const getLastComponentMap = () => {
@@ -574,23 +660,6 @@ Your only output is function calls. Never use plain text unless absolutely neces
     });
 
     requestComponentSnapshot();
-
-    const shouldSkipDebatePrompt = (prompt: string) => {
-      const normalized = prompt.replace(/\s+/g, ' ').trim().toLowerCase();
-      if (!normalized) return true;
-      const now = Date.now();
-      for (const [key, timestamp] of recentDebatePrompts.entries()) {
-        if (now - timestamp > DEBATE_PROMPT_HISTORY_MS) {
-          recentDebatePrompts.delete(key);
-        }
-      }
-      const last = recentDebatePrompts.get(normalized);
-      if (last && now - last < DEBATE_PROMPT_DEBOUNCE_MS) {
-        return true;
-      }
-      recentDebatePrompts.set(normalized, now);
-      return false;
-    };
 
     const SCORECARD_SUPPRESS_WINDOW_MS = 10_000;
     // Duplicate suppression across turns: track last create by component type.
@@ -1328,16 +1397,107 @@ Your only output is function calls. Never use plain text unless absolutely neces
           const normalizedSpec = normalizeSpecInput(args.spec);
           const initialProps = normalizeSpecInput(args.props);
 
-          const mergedProps: JsonObject = {
+          let mergedProps: JsonObject = {
             ...normalizedSpec,
             ...initialProps,
           };
+
+          // Component creation uses props (not TLDraw state). Normalize common runtime-style
+          // timer fields into the RetroTimerEnhanced creation schema so the first render
+          // matches user intent (e.g. "start a 5 minute timer" should auto-start).
+          if (componentType === 'RetroTimerEnhanced' || componentType === 'RetroTimer') {
+            const next: Record<string, unknown> = { ...mergedProps };
+            const coerceNumber = (value: unknown): number | undefined => {
+              if (typeof value === 'number' && Number.isFinite(value)) return value;
+              if (typeof value === 'string') {
+                const trimmed = value.trim();
+                if (!trimmed) return undefined;
+                const parsed = Number(trimmed);
+                if (Number.isFinite(parsed)) return parsed;
+              }
+              return undefined;
+            };
+            const coerceBoolean = (value: unknown): boolean | undefined => {
+              if (typeof value === 'boolean') return value;
+              if (typeof value === 'number') {
+                if (value === 1) return true;
+                if (value === 0) return false;
+              }
+              if (typeof value === 'string') {
+                const normalized = value.trim().toLowerCase();
+                if (!normalized) return undefined;
+                if (['true', 'yes', 'start', 'run', 'running', 'resume', 'play', 'on', '1'].includes(normalized)) {
+                  return true;
+                }
+                if (['false', 'no', 'stop', 'stopped', 'pause', 'paused', 'halt', 'off', '0'].includes(normalized)) {
+                  return false;
+                }
+              }
+              return undefined;
+            };
+
+            if (typeof next.autoStart !== 'boolean') {
+              const inferredAutoStart = coerceBoolean((next as any).isRunning);
+              if (typeof inferredAutoStart === 'boolean') {
+                next.autoStart = inferredAutoStart;
+              }
+            }
+
+            const minutes = coerceNumber((next as any).initialMinutes);
+            const seconds = coerceNumber((next as any).initialSeconds);
+
+            const deriveDurationSeconds = (): number | undefined => {
+              if (minutes !== undefined || seconds !== undefined) {
+                const m = minutes !== undefined ? Math.max(1, Math.round(minutes)) : 5;
+                const s = seconds !== undefined ? Math.max(0, Math.min(59, Math.round(seconds))) : 0;
+                return m * 60 + s;
+              }
+
+              const configuredRaw = coerceNumber((next as any).configuredDuration);
+              if (configuredRaw !== undefined) {
+                // Heuristic: large multiples of 1000 are likely milliseconds.
+                const configuredSeconds =
+                  configuredRaw >= 60_000 && configuredRaw % 1000 === 0 ? configuredRaw / 1000 : configuredRaw;
+                return Math.max(1, Math.round(configuredSeconds));
+              }
+
+              const durationRaw =
+                coerceNumber((next as any).durationSeconds) ?? coerceNumber((next as any).duration);
+              if (durationRaw !== undefined) {
+                return Math.max(1, Math.round(durationRaw));
+              }
+
+              const timeLeftRaw = coerceNumber((next as any).timeLeft);
+              if (timeLeftRaw !== undefined) {
+                return Math.max(1, Math.round(timeLeftRaw));
+              }
+
+              return undefined;
+            };
+
+            const durationSeconds = deriveDurationSeconds();
+            if (durationSeconds !== undefined) {
+              const m = Math.max(1, Math.floor(durationSeconds / 60));
+              const s = Math.max(0, Math.min(59, Math.round(durationSeconds % 60)));
+              next.initialMinutes = m;
+              next.initialSeconds = s;
+            }
+
+            delete (next as any).isRunning;
+            delete (next as any).timeLeft;
+            delete (next as any).configuredDuration;
+            delete (next as any).durationSeconds;
+            delete (next as any).duration;
+
+            mergedProps = next as JsonObject;
+          }
 
           const now = Date.now();
           const explicitMessageId = typeof args.messageId === 'string' ? args.messageId.trim() : '';
           const explicitIntentId = typeof args.intentId === 'string' ? args.intentId.trim() : '';
           const hasExplicitMessageId = explicitMessageId.length > 0;
           const hasExplicitIntentId = explicitIntentId.length > 0;
+          const useExplicitIds = hasExplicitMessageId && hasExplicitIntentId;
           const slot = typeof args.slot === 'string' && args.slot.trim().length > 0 ? args.slot.trim() : undefined;
           const isDebateScorecard = componentType === 'DebateScorecard';
           const isBareScorecardRequest = isDebateScorecard && Object.keys(mergedProps).length === 0;
@@ -1371,8 +1531,21 @@ Your only output is function calls. Never use plain text unless absolutely neces
             slot,
           });
 
-          const intentId = hasExplicitIntentId ? explicitIntentId : preseededScorecardIntent ?? autoIntentId;
-          const messageId = hasExplicitMessageId ? explicitMessageId : preseededScorecardId ?? autoMessageId;
+          let intentId = useExplicitIds ? explicitIntentId : preseededScorecardIntent ?? autoIntentId;
+          let messageId = preseededScorecardId ?? (useExplicitIds ? explicitMessageId : autoMessageId);
+
+          const existingByMessageId = getComponentEntry(messageId);
+          if (existingByMessageId && existingByMessageId.type !== componentType) {
+            const fallbackIntentId = `intent-${randomUUID()}`;
+            const fallbackMessageId = `ui-${randomUUID()}`;
+            console.warn('[VoiceAgent] messageId collision across component types; generating fresh IDs', {
+              messageId,
+              componentType,
+              existingType: existingByMessageId.type,
+            });
+            intentId = fallbackIntentId;
+            messageId = fallbackMessageId;
+          }
 
           args.intentId = intentId;
           args.spec = mergedProps;
@@ -1401,15 +1574,24 @@ Your only output is function calls. Never use plain text unless absolutely neces
           const slotMatches =
             !slot || !recentCreate ? true : recentCreate.slot === slot;
           if (intentMatches && slotMatches && (sameTurnDuplicate || withinGlobalTtl)) {
-            console.log('[VoiceAgent] suppressing duplicate create_component', {
-              componentType,
-              recentMessageId: recentCreate.messageId,
-            });
-            setLastComponentForType(componentType, recentCreate.messageId);
-            setLastCreatedComponentId(recentCreate.messageId);
-            args.intentId = recentCreate.intentId;
-            args.messageId = recentCreate.messageId;
-            return { status: 'duplicate_skipped', messageId: recentCreate.messageId };
+            const recentEntry = getComponentEntry(recentCreate.messageId);
+            if (!recentEntry || recentEntry.type !== componentType) {
+              console.warn('[VoiceAgent] duplicate create fingerprint mismatch; proceeding with create', {
+                componentType,
+                recentMessageId: recentCreate.messageId,
+                recentType: recentEntry?.type,
+              });
+            } else {
+              console.log('[VoiceAgent] suppressing duplicate create_component', {
+                componentType,
+                recentMessageId: recentCreate.messageId,
+              });
+              setLastComponentForType(componentType, recentCreate.messageId);
+              setLastCreatedComponentId(recentCreate.messageId);
+              args.intentId = recentCreate.intentId;
+              args.messageId = recentCreate.messageId;
+              return { status: 'duplicate_skipped', messageId: recentCreate.messageId };
+            }
           }
 
           const existingComponent = getComponentEntry(messageId);
@@ -1501,31 +1683,6 @@ Your only output is function calls. Never use plain text unless absolutely neces
             slot,
           });
 
-          // Reroute misuse: if model asks for LiveCaptions while the last user prompt
-          // clearly describes drawing/styling/layout, dispatch to canvas agent instead.
-          try {
-            const drawingLexicon =
-              /\b(draw|create|place|insert|add|sketch|shape|rectangle|box|note|sticky|arrow|line|circle|ellipse|diamond|star|text|align|group|distribute|stack|mono|serif|sans|dotted|dashed|solid|fill|stroke|font|color|size|viewport)\b/i;
-            if (
-              componentType === 'LiveCaptions' &&
-              typeof lastUserPrompt === 'string' &&
-              drawingLexicon.test(lastUserPrompt)
-            ) {
-              const roomName = job.room.name || '';
-              if (roomName) {
-                await sendToolCall('dispatch_to_conductor', {
-                  task: 'canvas.agent_prompt',
-                  params: {
-                    room: roomName,
-                    message: lastUserPrompt,
-                    requestId: randomUUID(),
-                  } as JsonObject,
-                });
-                return { status: 'rerouted', task: 'canvas.agent_prompt' };
-              }
-            }
-          } catch { }
-
           const payload: JsonObject = {
             type: componentType,
             messageId,
@@ -1544,6 +1701,22 @@ Your only output is function calls. Never use plain text unless absolutely neces
 
           await sendToolCall('create_component', payload);
           return { status: 'queued', messageId };
+        },
+      }),
+      create_infographic: llm.tool({
+        description: 'Create (or reuse) an Infographic widget and trigger generation from current conversation context.',
+        parameters: z
+          .object({
+            useGrounding: z.boolean().nullish(),
+          })
+          .passthrough(),
+        execute: async (args) => {
+          const payload: JsonObject = {};
+          if (typeof (args as any)?.useGrounding === 'boolean') {
+            payload.useGrounding = (args as any).useGrounding;
+          }
+          await sendToolCall('create_infographic', payload);
+          return { status: 'queued' };
         },
       }),
       reserve_component: llm.tool({
@@ -2029,10 +2202,32 @@ Your only output is function calls. Never use plain text unless absolutely neces
       llm: new openaiRealtime.RealtimeModel({}),
     });
 
-    const pendingReplies: Array<{ userInput?: string }> = [];
+    const coercePositiveInt = (value: unknown, fallback: number) => {
+      const parsed = typeof value === 'string' ? Number(value) : typeof value === 'number' ? value : NaN;
+      if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
+      return Math.floor(parsed);
+    };
+    const replyTimeoutMs = coercePositiveInt(process.env.VOICE_AGENT_REPLY_TIMEOUT_MS, 8_000);
+    const interruptTimeoutMs = coercePositiveInt(process.env.VOICE_AGENT_INTERRUPT_TIMEOUT_MS, 1_500);
+    const transcriptionReadyTimeoutMs = coercePositiveInt(process.env.VOICE_AGENT_TRANSCRIPTION_READY_TIMEOUT_MS, 10_000);
+    const waitWithTimeout = async <T>(promise: Promise<T>, timeoutMs: number): Promise<{ ok: boolean; value?: T }> => {
+      let timeoutHandle: NodeJS.Timeout | null = null;
+      const timeoutPromise = new Promise<{ ok: boolean }>((resolve) => {
+        timeoutHandle = setTimeout(() => resolve({ ok: false }), timeoutMs);
+      });
+      const result = await Promise.race([
+        promise.then((value) => ({ ok: true as const, value })),
+        timeoutPromise,
+      ]);
+      if (timeoutHandle) clearTimeout(timeoutHandle);
+      return result.ok ? { ok: true, value: (result as { ok: true; value: T }).value } : { ok: false };
+    };
+
+    type PendingReply = { options: { userInput?: string }; attempts: number };
+    const pendingReplies: PendingReply[] = [];
     let lastUserPrompt: string | null = null;
     const generateReplySafely = async (options?: { userInput?: string }) => {
-      pendingReplies.push(options ?? {});
+      pendingReplies.push({ options: options ?? {}, attempts: 0 });
       if (isGeneratingReply) {
         console.log('[VoiceAgent] Queueing generateReply; active reply in progress', {
           queued: pendingReplies.length,
@@ -2045,9 +2240,31 @@ Your only output is function calls. Never use plain text unless absolutely neces
         while (pendingReplies.length > 0) {
           const next = pendingReplies.shift();
           if (!next) continue;
-          const speech = session.generateReply(next as any) as any;
+          const speech = session.generateReply(next.options as any) as any;
           if (speech && typeof speech.waitForPlayout === 'function') {
-            await speech.waitForPlayout();
+            const completed = await waitWithTimeout(speech.waitForPlayout(), replyTimeoutMs);
+            if (!completed.ok) {
+              console.warn('[VoiceAgent] generateReply timed out; interrupting session', {
+                timeoutMs: replyTimeoutMs,
+                attempts: next.attempts,
+                userInput: next.options.userInput ? next.options.userInput.slice(0, 120) : undefined,
+              });
+              try {
+                speech.interrupt?.(true);
+              } catch { }
+              try {
+                const interruptFuture = session.interrupt();
+                await waitWithTimeout(interruptFuture.await, interruptTimeoutMs);
+              } catch { }
+
+              if (next.attempts < 1) {
+                const retryOptions: { userInput?: string } = { ...next.options };
+                if (retryOptions.userInput) {
+                  delete retryOptions.userInput;
+                }
+                pendingReplies.unshift({ options: retryOptions, attempts: next.attempts + 1 });
+              }
+            }
           }
         }
       } catch (err) {
@@ -2057,9 +2274,24 @@ Your only output is function calls. Never use plain text unless absolutely neces
       }
     };
 
+    handleBufferedTranscription = async ({ text, speaker, isManual }) => {
+      console.log('[VoiceAgent] DataReceived transcription', { text, isManual, speaker, topic: 'transcription' });
+      lastUserPrompt = text;
+      console.log('[VoiceAgent] calling generateReply with userInput:', text);
+      if (isManual) {
+        bumpTurn();
+      }
+      try {
+        appendTranscriptCache(job.room.name || 'unknown', {
+          participantId: speaker || 'user',
+          text,
+          timestamp: Date.now(),
+        });
+      } catch { }
+      await generateReplySafely({ userInput: text });
+    };
+
     let ensureScorecardPromise: Promise<{ componentId: string; intentId: string; topic: string }> | null = null;
-    const debateKeywordRegex =
-      /\b(aff|affirmative|neg|negative|contention|rebuttal|voter|judge|debate|scorecard|flow|argument|claim|evidence|verify|fact|counter)\b/;
 
     const findExistingScorecard = (topic?: string) => {
       const currentRoom = roomKey() || job.room?.name || 'room';
@@ -2190,66 +2422,6 @@ Your only output is function calls. Never use plain text unless absolutely neces
       }
     };
 
-    const maybeHandleDebate = async (text: string) => {
-      const trimmed = (text || '').trim();
-      if (!trimmed) return;
-      const lower = trimmed.toLowerCase();
-      if (shouldSkipDebatePrompt(trimmed)) {
-        return;
-      }
-      const roomName = job.room.name || 'room';
-      try {
-        lastUserPrompt = trimmed;
-        if (isStartDebate(trimmed)) {
-          const topicMatch = trimmed.match(/debate(?: analysis| scorecard)?(?: for| about| on)?\s*(.*)$/i);
-          const topic = topicMatch && topicMatch[1] ? topicMatch[1].trim() : 'Live Debate';
-          const scorecard = await ensureDebateScorecard(topic || 'Live Debate', trimmed);
-          await sendToolCall('dispatch_to_conductor', {
-            task: 'scorecard.run',
-            params: {
-              room: roomName,
-              componentId: scorecard.componentId,
-              summary: `initialize debate scorecard for ${scorecard.topic}`,
-              intent: 'scorecard.init',
-              prompt: trimmed,
-            } as JsonObject,
-          });
-          return;
-        }
-        const wantsFactCheck = isExplicitFactCheckRequest(trimmed);
-        if (wantsFactCheck) {
-          const scorecard = activeScorecard ?? (await ensureDebateScorecard(undefined, trimmed));
-          await sendToolCall('dispatch_to_conductor', {
-            task: 'scorecard.fact_check',
-            params: {
-              room: roomName,
-              componentId: scorecard.componentId,
-              summary: `fact check request: ${trimmed.slice(0, 120)}`,
-              intent: 'scorecard.fact_check',
-              prompt: trimmed,
-            } as JsonObject,
-          });
-          return;
-        }
-
-        if (debateKeywordRegex.test(lower)) {
-          const scorecard = activeScorecard ?? (await ensureDebateScorecard(undefined, trimmed));
-          await sendToolCall('dispatch_to_conductor', {
-            task: 'scorecard.run',
-            params: {
-              room: roomName,
-              componentId: scorecard.componentId,
-              summary: trimmed.slice(0, 180),
-              intent: 'scorecard.update',
-              prompt: trimmed,
-            } as JsonObject,
-          });
-        }
-      } catch (err) {
-        console.warn('[VoiceAgent] Debate judge handling failed', err);
-      }
-    };
-
     const resolveComponentId = (args: Record<string, unknown>) => {
       const rawId = typeof args.componentId === 'string' ? args.componentId.trim() : '';
       if (rawId) return rawId;
@@ -2320,148 +2492,6 @@ Your only output is function calls. Never use plain text unless absolutely neces
         return acceptedLast;
       }
       return '';
-    };
-
-    const normalizeCommandText = (value: string) => value.replace(/\s+/g, ' ').trim();
-    const extractCanvasAgentPrompt = (raw: string): string | null => {
-      const text = normalizeCommandText(raw);
-      if (!text) return null;
-
-      const slashMatch = text.match(/^\/canvas\s+(.*)$/i);
-      if (slashMatch?.[1]?.trim()) return slashMatch[1].trim();
-
-      const prefixMatch = text.match(/^(?:canvas|canvas agent|canvas-agent)[:,]?\s*(.*)$/i);
-      if (prefixMatch?.[1]?.trim()) return prefixMatch[1].trim();
-
-      const askMatch = text.match(/^(?:ask|tell)\s+the\s+canvas\s+agent(?:\s+to)?[:,]?\s*(.*)$/i);
-      if (askMatch?.[1]?.trim()) return askMatch[1].trim();
-
-      return null;
-    };
-
-    const extractKanbanInstruction = (raw: string): string | null => {
-      const text = normalizeCommandText(raw);
-      if (!text) return null;
-
-      const onKanbanMatch = text.match(/^on the kanban board[:,]?\s*(.*)$/i);
-      if (onKanbanMatch) {
-        const remainder = (onKanbanMatch[1] ?? '').trim();
-        if (!remainder) return null;
-        const queueMatch = remainder.match(/^queue\s*:\s*(.*)$/i);
-        const instruction = (queueMatch ? queueMatch[1] : remainder).trim();
-        return instruction || null;
-      }
-
-      if (
-        /^sync to linear[.!]?$/i.test(text) ||
-        /^sync( pending updates)?( to linear)?[.!]?$/i.test(text)
-      ) {
-        return 'sync to linear';
-      }
-
-      const usingContextMatch = text.match(/^using the context document[:,]?\s*(.*)$/i);
-      if (usingContextMatch) {
-        const remainder = (usingContextMatch[1] ?? '').trim();
-        if (!remainder) return null;
-        const hasIssueId = /[A-Z]{2,}-\d+/.test(remainder);
-        const hasLinearVerb = /\b(move|rename|assign|comment|label|priority|status|triage|create)\b/i.test(remainder);
-        if (hasIssueId && hasLinearVerb) {
-          // Keep the prefix so the steward knows to incorporate the context doc.
-          return text;
-        }
-      }
-
-      const hasIssueId = /[A-Z]{2,}-\d+/.test(text);
-      const hasLinearVerb = /\b(move|rename|assign|comment|label|priority|status|triage)\b/i.test(text);
-      if (hasIssueId && hasLinearVerb) {
-        return text;
-      }
-
-      return null;
-    };
-
-    const publishAgentTranscript = async (text: string) => {
-      const trimmed = (text || '').trim();
-      if (!trimmed) return;
-      const payload = {
-        type: 'live_transcription',
-        text: trimmed,
-        speaker: 'voice-agent',
-        timestamp: Date.now(),
-        is_final: true,
-      };
-      try {
-        await job.room.localParticipant?.publishData(new TextEncoder().encode(JSON.stringify(payload)), {
-          reliable: true,
-          topic: 'transcription',
-        });
-      } catch { }
-      try {
-        appendTranscriptCache(job.room.name || 'unknown', {
-          participantId: 'voice-agent',
-          text: trimmed,
-          timestamp: Date.now(),
-        });
-      } catch { }
-    };
-
-    const maybeFastRouteCanvasAgent = async (rawText: string, source: 'voice' | 'manual') => {
-      const message = extractCanvasAgentPrompt(rawText);
-      if (!message) return false;
-      const roomName = job.room.name || '';
-      if (!roomName) return false;
-
-      console.log('[VoiceAgent] canvas fast-path routing canvas.agent_prompt', {
-        source,
-        room: roomName,
-        message,
-      });
-
-      await sendToolCall('dispatch_to_conductor', {
-        task: 'canvas.agent_prompt',
-        params: {
-          room: roomName,
-          message,
-          requestId: randomUUID(),
-        },
-      });
-      await publishAgentTranscript(`Sent to canvas agent: ${message}`);
-      return true;
-    };
-
-    const shouldSkipGenerateReplyForDebate = (raw: string) => {
-      const text = normalizeCommandText(raw);
-      if (!text) return false;
-      if (isStartDebate(text)) return true;
-      if (/^(aff|affirmative|neg|negative|judge|voter)\s*[:\-]/i.test(text)) return true;
-      if (/^fact\s*check\b/i.test(text)) return true;
-      if (/^scorecard\b/i.test(text)) return true;
-      return false;
-    };
-
-    const maybeFastRouteKanban = async (rawText: string, source: 'voice' | 'manual') => {
-      const instruction = extractKanbanInstruction(rawText);
-      if (!instruction) return false;
-      const componentId = resolveComponentId({ type: 'LinearKanbanBoard', allowLast: true });
-      if (!componentId) {
-        console.warn('[VoiceAgent] kanban fast-path skipped; no LinearKanbanBoard found', { source, instruction });
-        return false;
-      }
-      console.log('[VoiceAgent] kanban fast-path routing update_component', {
-        source,
-        componentId,
-        instruction,
-      });
-      await sendToolCall(
-        'update_component',
-        {
-          componentId,
-          patch: { instruction },
-        },
-        { reliable: true },
-      );
-      await publishAgentTranscript(`Queued on kanban: ${instruction}`);
-      return true;
     };
 
     session.on((voice as any).AgentSessionEventTypes.FunctionToolsExecuted, async (event: any) => {
@@ -2677,21 +2707,6 @@ Your only output is function calls. Never use plain text unless absolutely neces
         const trimmed = event.transcript?.trim();
         if (trimmed) {
           lastUserPrompt = trimmed;
-          if (shouldSkipGenerateReplyForDebate(trimmed)) {
-            void maybeHandleDebate(trimmed);
-            if (isStartDebate(trimmed)) {
-              await publishAgentTranscript('Debate scorecard queued.');
-            }
-            return;
-          }
-          const canvasHandled = await maybeFastRouteCanvasAgent(trimmed, 'voice');
-          if (canvasHandled) {
-            return;
-          }
-          const handled = await maybeFastRouteKanban(trimmed, 'voice');
-          if (handled) {
-            return;
-          }
           try {
             await generateReplySafely();
           } catch (error) {
@@ -2747,68 +2762,36 @@ Your only output is function calls. Never use plain text unless absolutely neces
       }
     });
 
-    job.room.on(RoomEvent.DataReceived, async (payload, participant, _, topic) => {
-      let message: any;
-      try {
-        message = JSON.parse(new TextDecoder().decode(payload));
-      } catch (error) {
-        logRealtimeError('failed to parse data payload', error);
-        return;
-      }
+    const enableTranscriptionProcessing = (reason: string) => {
+      if (transcriptionProcessingEnabled) return;
+      if (!handleBufferedTranscription) return;
+      transcriptionProcessingEnabled = true;
+      console.log('[VoiceAgent] transcription processing enabled', {
+        reason,
+        buffered: pendingTranscriptions.length,
+      });
+      void drainPendingTranscriptions();
+    };
 
-      if (topic !== 'transcription') return;
+    const transcriptionReadyTimer = setTimeout(() => {
+      enableTranscriptionProcessing('timeout');
+    }, transcriptionReadyTimeoutMs);
+    transcriptionReadyTimer.unref?.();
 
-      try {
-        const text = typeof message?.text === 'string' ? message.text.trim() : '';
-        const isManual = Boolean(message?.manual);
-        const isReplay = Boolean(message?.replay);
-        const speaker = typeof message?.speaker === 'string' ? message.speaker : participant?.identity;
-        console.log('[VoiceAgent] DataReceived transcription', { text, isManual, isReplay, speaker, topic });
-        if (!text || isReplay) return;
-        if (!isManual && speaker === 'voice-agent') return;
-        lastUserPrompt = text;
-        console.log('[VoiceAgent] calling generateReply with userInput:', text);
-        try {
-          if (isManual) {
-            bumpTurn();
-          }
-          try {
-            appendTranscriptCache(job.room.name || 'unknown', {
-              participantId: speaker || 'user',
-              text,
-              timestamp: Date.now(),
-            });
-          } catch { }
-          if (shouldSkipGenerateReplyForDebate(text)) {
-            void maybeHandleDebate(text);
-            if (isStartDebate(text)) {
-              await publishAgentTranscript('Debate scorecard queued.');
-            }
-            return;
-          }
-          const canvasHandled = await maybeFastRouteCanvasAgent(text, 'manual');
-          if (canvasHandled) {
-            return;
-          }
-          const handled = await maybeFastRouteKanban(text, 'manual');
-          if (handled) {
-            return;
-          }
-          await generateReplySafely({ userInput: text });
-        } catch (err) {
-          logRealtimeError('generateReply from manual input failed', err);
-        }
-      } catch (error) {
-        logRealtimeError('failed to handle DataReceived payload', error);
+    session.on(voice.AgentSessionEventTypes.AgentStateChanged, (event) => {
+      if (event.newState !== 'initializing') {
+        clearTimeout(transcriptionReadyTimer);
+        enableTranscriptionProcessing(`agent_state_${event.newState}`);
       }
     });
 
-    await session.start({
+    const startPromise = session.start({
       agent,
       room: job.room,
       inputOptions: { audioEnabled: true },
       outputOptions: { audioEnabled: false, transcriptionEnabled },
     });
+    await startPromise;
   },
 });
 
@@ -2816,9 +2799,38 @@ if (import.meta.url.startsWith('file:') && process.argv[1].endsWith('voice-agent
   if (process.argv.length < 3) {
     process.argv.push('dev');
   }
+  const coercePositiveInt = (value: unknown, fallback: number) => {
+    const parsed =
+      typeof value === 'string'
+        ? Number(value)
+        : typeof value === 'number'
+          ? value
+          : Number.NaN;
+    if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
+    return Math.floor(parsed);
+  };
+
+  const production = process.env.NODE_ENV === 'production';
+  const initializeProcessTimeout = coercePositiveInt(
+    process.env.VOICE_AGENT_PROCESS_INIT_TIMEOUT_MS,
+    production ? 30_000 : 120_000,
+  );
+  const numIdleProcesses = production
+    ? undefined
+    : coercePositiveInt(process.env.VOICE_AGENT_IDLE_PROCESSES, 1);
+
+  console.log('[VoiceAgent] worker options', {
+    production,
+    initializeProcessTimeout,
+    numIdleProcesses,
+  });
+
   const workerOptions = new WorkerOptions({
     agent: process.argv[1],
     agentName: 'voice-agent',
+    production,
+    initializeProcessTimeout,
+    ...(typeof numIdleProcesses === 'number' ? { numIdleProcesses } : {}),
     apiKey: process.env.LIVEKIT_API_KEY,
     apiSecret: process.env.LIVEKIT_API_SECRET,
     wsURL: process.env.LIVEKIT_URL,

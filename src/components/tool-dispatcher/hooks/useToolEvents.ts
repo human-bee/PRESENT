@@ -58,77 +58,139 @@ export function useToolEvents(room: Room | undefined, options: UseToolEventsOpti
   };
 
   useEffect(() => {
-    const off = bus.on('update_component', async (message: any) => {
-      try {
-        if (!message || typeof message !== 'object') return;
-        const componentId =
-          typeof message.componentId === 'string' && message.componentId.trim().length
-            ? message.componentId.trim()
-            : undefined;
-        const patch = message.patch && typeof message.patch === 'object' ? message.patch : undefined;
-        if (!componentId || !patch) return;
+    const pendingUpdates = new Map<
+      string,
+      { message: any; enqueuedAt: number; attempts: number }
+    >();
+    const PENDING_UPDATE_MAX_AGE_MS = 20_000;
+    const PENDING_UPDATE_MAX_ATTEMPTS = 80;
+    let flushHandle: number | null = null;
 
-        const patchRecord = patch as Record<string, unknown>;
-        const patchVersion =
-          typeof patchRecord.version === 'number' ? patchRecord.version : undefined;
-        const patchTimestamp =
-          typeof patchRecord.lastUpdated === 'number'
-            ? patchRecord.lastUpdated
-            : typeof patchRecord.updatedAt === 'number'
-              ? patchRecord.updatedAt
-              : undefined;
-        const eventTimestamp = typeof message.timestamp === 'number' ? message.timestamp : Date.now();
+    const scheduleFlush = () => {
+      if (flushHandle !== null) return;
+      flushHandle = window.setTimeout(() => {
+        flushHandle = null;
+        void flushPending();
+      }, 250);
+    };
 
+    const flushPending = async () => {
+      const now = Date.now();
+      for (const [componentId, entry] of pendingUpdates.entries()) {
+        if (
+          now - entry.enqueuedAt > PENDING_UPDATE_MAX_AGE_MS ||
+          entry.attempts > PENDING_UPDATE_MAX_ATTEMPTS
+        ) {
+          pendingUpdates.delete(componentId);
+          continue;
+        }
+
+        const registered = ComponentRegistry.get(componentId);
+        if (!registered) {
+          pendingUpdates.set(componentId, { ...entry, attempts: entry.attempts + 1 });
+          continue;
+        }
+
+        pendingUpdates.delete(componentId);
         try {
-          const updateResult = await ComponentRegistry.update(componentId, patchRecord, {
-            version: patchVersion ?? null,
-            timestamp: patchTimestamp ?? eventTimestamp,
-            source: 'livekit:update_component',
-          });
+          await applyLiveKitUpdate(entry.message, { allowQueue: false });
+        } catch (error) {
+          if (enableLogging) {
+            console.warn('[ToolDispatcher] pending update flush failed', { componentId, error });
+          }
+          pendingUpdates.set(componentId, { ...entry, attempts: entry.attempts + 1 });
+        }
+      }
 
-          if (!updateResult?.ignored) {
-            const refreshed = ComponentRegistry.get(componentId);
-            if (refreshed?.props && refreshed.componentType) {
-              try {
-                window.dispatchEvent(
-                  new CustomEvent('custom:showComponent', {
-                    detail: {
-                      messageId: componentId,
-                      component: {
-                        type: refreshed.componentType,
-                        props: refreshed.props,
-                      },
+      if (pendingUpdates.size > 0) scheduleFlush();
+    };
+
+    const applyLiveKitUpdate = async (message: any, opts: { allowQueue: boolean }) => {
+      if (!message || typeof message !== 'object') return;
+      const componentId =
+        typeof message.componentId === 'string' && message.componentId.trim().length
+          ? message.componentId.trim()
+          : undefined;
+      const patch = message.patch && typeof message.patch === 'object' ? message.patch : undefined;
+      if (!componentId || !patch) return;
+
+      const patchRecord = patch as Record<string, unknown>;
+      const patchVersion = typeof patchRecord.version === 'number' ? patchRecord.version : undefined;
+      const patchTimestamp =
+        typeof patchRecord.lastUpdated === 'number'
+          ? patchRecord.lastUpdated
+          : typeof patchRecord.updatedAt === 'number'
+            ? patchRecord.updatedAt
+            : undefined;
+      const eventTimestamp = typeof message.timestamp === 'number' ? message.timestamp : Date.now();
+
+      const componentInfo = ComponentRegistry.get(componentId);
+      if (!componentInfo && opts.allowQueue) {
+        const existing = pendingUpdates.get(componentId);
+        pendingUpdates.set(componentId, {
+          message,
+          enqueuedAt: existing?.enqueuedAt ?? Date.now(),
+          attempts: existing?.attempts ?? 0,
+        });
+        scheduleFlush();
+        return;
+      }
+
+      try {
+        const updateResult = await ComponentRegistry.update(componentId, patchRecord, {
+          version: patchVersion ?? null,
+          timestamp: patchTimestamp ?? eventTimestamp,
+          source: 'livekit:update_component',
+        });
+
+        if (!updateResult?.ignored) {
+          const refreshed = ComponentRegistry.get(componentId);
+          if (refreshed?.props && refreshed.componentType) {
+            try {
+              window.dispatchEvent(
+                new CustomEvent('custom:showComponent', {
+                  detail: {
+                    messageId: componentId,
+                    component: {
+                      type: refreshed.componentType,
+                      props: refreshed.props,
                     },
-                  }),
-                );
-              } catch (error) {
-                if (enableLogging) {
-                  console.warn('[ToolDispatcher] refresh showComponent dispatch failed', { componentId, error });
-                }
+                  },
+                }),
+              );
+            } catch (error) {
+              if (enableLogging) {
+                console.warn('[ToolDispatcher] refresh showComponent dispatch failed', { componentId, error });
               }
             }
           }
-        } catch (error) {
-          if (enableLogging) {
-            console.warn('[ToolDispatcher] registry update failed', { componentId, error });
-          }
         }
+      } catch (error) {
+        if (enableLogging) {
+          console.warn('[ToolDispatcher] registry update failed', { componentId, error });
+        }
+      }
 
-        try {
-          window.dispatchEvent(
-            new CustomEvent('tldraw:merge_component_state', {
-              detail: {
-                messageId: componentId,
-                patch,
-                meta: { source: 'livekit:update_component', summary: message.summary },
-              },
-            }),
-          );
-        } catch (error) {
-          if (enableLogging) {
-            console.warn('[ToolDispatcher] merge_component_state dispatch failed', { componentId, error });
-          }
+      try {
+        window.dispatchEvent(
+          new CustomEvent('tldraw:merge_component_state', {
+            detail: {
+              messageId: componentId,
+              patch,
+              meta: { source: 'livekit:update_component', summary: message.summary },
+            },
+          }),
+        );
+      } catch (error) {
+        if (enableLogging) {
+          console.warn('[ToolDispatcher] merge_component_state dispatch failed', { componentId, error });
         }
+      }
+    };
+
+    const off = bus.on('update_component', async (message: any) => {
+      try {
+        await applyLiveKitUpdate(message, { allowQueue: true });
       } catch (error) {
         if (enableLogging) {
           console.warn('[ToolDispatcher] update_component handling error', error);
@@ -138,6 +200,11 @@ export function useToolEvents(room: Room | undefined, options: UseToolEventsOpti
 
     return () => {
       off?.();
+      pendingUpdates.clear();
+      if (flushHandle !== null) {
+        window.clearTimeout(flushHandle);
+        flushHandle = null;
+      }
     };
   }, [bus, enableLogging]);
 

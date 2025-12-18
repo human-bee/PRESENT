@@ -45,7 +45,7 @@ export class InfographicShapeUtil extends BaseBoxShapeUtil<InfographicShape> {
     override component(shape: InfographicShape) {
         return (
             <HTMLContainer style={{ pointerEvents: 'all' }}>
-                <InfographicShapeComponent />
+                <InfographicShapeComponent shapeId={shape.id} />
             </HTMLContainer>
         )
     }
@@ -54,7 +54,7 @@ export class InfographicShapeUtil extends BaseBoxShapeUtil<InfographicShape> {
     }
 }
 
-function InfographicShapeComponent() {
+function InfographicShapeComponent({ shapeId }: { shapeId: string }) {
     const room = useRoomContext()
 
     return (
@@ -73,7 +73,7 @@ function InfographicShapeComponent() {
                 }
             }}
         >
-            <InfographicWidget room={room} isShape={true} />
+            <InfographicWidget room={room} isShape={true} messageId={shapeId} contextKey="canvas" />
         </div>
     )
 }

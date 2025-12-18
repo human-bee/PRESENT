@@ -6,6 +6,7 @@ Goal: a repeatable 5‑minute “lap” that shows **voice steering**, a live **
 
 - Stack running: `npm run stack:start`
 - Recommended for demo reliability: run the realtime agent with `VOICE_AGENT_UPDATE_LOSSY=false`
+- Widgets auto-tile: repeated `create_component` calls should no longer overlap on the canvas
 - You’re on `/canvas` in your demo room and connected to LiveKit
 - Conductor is running (needed for scorecard + canvas stewards)
 - LinearKanbanBoard has a valid Linear API key saved locally (one-time)
@@ -67,3 +68,29 @@ Optional “bell/whistle” callouts during the debate:
 - Shorten phrasing (fewer tokens → faster routing).
 - Pre-warm: open `/canvas` once, connect LiveKit, request agent, then start the stopwatch.
 - Keep the debate script consistent so the scorecard + infographic are deterministic.
+
+## Quick Metrics (measured)
+
+Tool-call count varies with how many debate turns you do (each turn usually triggers a scorecard update).
+
+Measure the most recent room session from the realtime agent log:
+
+```bash
+python - <<'PY'
+from pathlib import Path
+lines = Path('logs/agent-realtime.log').read_text(errors='ignore').splitlines()
+start = max(i for i, l in enumerate(lines) if 'Connected to room:' in l)
+segment = lines[start:]
+func_counts = {}
+for l in segment:
+    if 'function: "' in l:
+        func = l.split('function: "', 1)[1].split('"', 1)[0]
+        func_counts[func] = func_counts.get(func, 0) + 1
+total = sum(func_counts.values())
+print('tool_calls_total', total)
+for func, c in sorted(func_counts.items(), key=lambda kv: (-kv[1], kv[0])):
+    print(func, c)
+PY
+```
+
+Example output captured on **Dec 18, 2025** (compressed lap): `tool_calls_total 23` with a breakdown like `dispatch_to_conductor 14`, `create_component 5`, `resolve_component 2`, `create_infographic 1`, `update_component 1`.

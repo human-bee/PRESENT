@@ -16,6 +16,10 @@ For a timed “speedrun” version (15 steps / 5 minutes), see `docs/demo-race-t
      - Supabase (`SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`)
      - StewardFAST (`CEREBRAS_API_KEY`) if you want the snappy Linear steward.
    - Recommended for demo reliability: run the realtime agent with `VOICE_AGENT_UPDATE_LOSSY=false`.
+   - Optional resilience knobs (defaults shown):
+     - `VOICE_AGENT_REPLY_TIMEOUT_MS=8000` (interrupt + retry if a Realtime reply stalls)
+     - `VOICE_AGENT_INTERRUPT_TIMEOUT_MS=1500`
+     - `VOICE_AGENT_TRANSCRIPTION_READY_TIMEOUT_MS=10000` (buffer early `topic: 'transcription'` messages until the agent session is ready)
 
 3. **Warm the browser once**
    - Open `/canvas`, create a **LinearKanbanBoard**, and paste your Linear API key into the widget once so it’s stored locally.

@@ -39,7 +39,10 @@ export function useToolRegistry(deps: ToolRegistryDeps): ToolRegistryApi {
 
   const handlers = useMemo(() => {
     const map = new Map<string, ToolHandler>();
-    const pendingUpdates = new Map<string, { patch: Record<string, unknown> }>();
+    const pendingUpdates = new Map<
+      string,
+      { patch: Record<string, unknown>; enqueuedAt: number; attempts: number }
+    >();
     let frameHandle: number | null = null;
     let lastDispatch: ((eventName: string, detail?: unknown) => ToolRunResult) | null = null;
     type LedgerEntry = {
@@ -155,9 +158,18 @@ export function useToolRegistry(deps: ToolRegistryDeps): ToolRegistryApi {
         pendingUpdates.clear();
         return;
       }
+      const PENDING_UPDATE_MAX_AGE_MS = 15_000;
+      const PENDING_UPDATE_MAX_ATTEMPTS = 60;
       const dispatch = lastDispatch;
       for (const [messageId, entry] of pendingUpdates.entries()) {
-        pendingUpdates.delete(messageId);
+        const now = Date.now();
+        if (
+          now - entry.enqueuedAt > PENDING_UPDATE_MAX_AGE_MS ||
+          entry.attempts > PENDING_UPDATE_MAX_ATTEMPTS
+        ) {
+          pendingUpdates.delete(messageId);
+          continue;
+        }
         const componentInfo = ComponentRegistry.get(messageId);
         const patchRecord = entry.patch;
         const patchVersion =
@@ -179,13 +191,27 @@ export function useToolRegistry(deps: ToolRegistryDeps): ToolRegistryApi {
           patch: patchRecord,
           meta: { source: 'update_component' },
         });
+        if (!componentInfo) {
+          pendingUpdates.set(messageId, { ...entry, attempts: entry.attempts + 1 });
+          continue;
+        }
+
+        pendingUpdates.delete(messageId);
         void ComponentRegistry.update(messageId, patchRecord, {
           version: effectiveVersion,
           timestamp: patchTimestamp ?? Date.now(),
           source: 'tool:update_component',
         })
-          .then((result) => {
+          .then((result: any) => {
             const refreshedInfo = ComponentRegistry.get(messageId);
+            if (result?.success === false) {
+              pendingUpdates.set(messageId, {
+                patch: patchRecord,
+                enqueuedAt: entry.enqueuedAt,
+                attempts: entry.attempts + 1,
+              });
+              return;
+            }
             if (!result?.ignored && refreshedInfo?.props && refreshedInfo.componentType) {
               try {
                 window.dispatchEvent(
@@ -210,11 +236,23 @@ export function useToolRegistry(deps: ToolRegistryDeps): ToolRegistryApi {
             });
           })
           .catch(() => {
+            pendingUpdates.set(messageId, {
+              patch: patchRecord,
+              enqueuedAt: entry.enqueuedAt,
+              attempts: entry.attempts + 1,
+            });
             metrics?.markPaintForMessage?.(messageId, {
               tool: 'update_component',
               componentType: componentInfo?.componentType,
             });
           });
+      }
+
+      if (pendingUpdates.size > 0 && lastDispatch && frameHandle === null) {
+        frameHandle = window.requestAnimationFrame(() => {
+          frameHandle = null;
+          flushPending();
+        });
       }
     };
 
@@ -293,6 +331,9 @@ export function useToolRegistry(deps: ToolRegistryDeps): ToolRegistryApi {
         );
         normalizedProps.type = componentType;
         normalizedProps.messageId = messageId;
+        if (contextKey && typeof normalizedProps.contextKey !== 'string') {
+          normalizedProps.contextKey = contextKey;
+        }
         if (!('__custom_message_id' in normalizedProps)) {
           normalizedProps.__custom_message_id = messageId;
         }
@@ -536,7 +577,11 @@ export function useToolRegistry(deps: ToolRegistryDeps): ToolRegistryApi {
         }
       }
 
-      pendingUpdates.set(messageId, { patch: combined });
+      pendingUpdates.set(messageId, {
+        patch: combined,
+        enqueuedAt: existing?.enqueuedAt ?? Date.now(),
+        attempts: existing?.attempts ?? 0,
+      });
       scheduleFlush(dispatchTL);
       const explicitIntent = typeof params?.intentId === 'string' && params.intentId.trim().length > 0 ? params.intentId.trim() : undefined;
       const ledgerIntentId = explicitIntent || messageLedger.get(messageId);
@@ -608,7 +653,7 @@ export function useToolRegistry(deps: ToolRegistryDeps): ToolRegistryApi {
               messageId,
               component: {
                 type: 'InfographicWidget',
-                props: { messageId },
+                props: { messageId, contextKey },
               },
               contextKey,
             },
