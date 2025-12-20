@@ -1182,9 +1182,9 @@ export function DebateScorecard(props: DebateScorecardProps) {
   );
 
   return (
-    <div className="w-[960px] max-w-full">
-      <div className="rounded-3xl border border-white/10 bg-slate-950/95 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.08),transparent_55%)] shadow-xl text-white font-sans p-6 md:p-8 flex flex-col gap-6 backdrop-blur-sm">
-        <header className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+    <div className="w-[1200px] max-w-full">
+      <div className="rounded-3xl border border-white/10 bg-slate-950/95 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.08),transparent_55%)] shadow-xl text-white font-sans p-4 md:p-6 flex flex-col gap-4 backdrop-blur-sm">
+        <header className="flex flex-row items-start justify-between gap-4">
           <div className="space-y-1">
             <p className="text-xs uppercase tracking-[0.25em] text-white/40">Debate Analysis</p>
             <h2 className="text-2xl md:text-3xl font-semibold text-white">{scorecard.topic}</h2>
@@ -1209,9 +1209,10 @@ export function DebateScorecard(props: DebateScorecardProps) {
           <AchievementToast award={activeAchievement} onDismiss={() => setActiveAchievement(null)} />
         )}
 
-        <div className="flex flex-col gap-6 lg:flex-row">
-          <aside className="w-full space-y-4 lg:w-[320px] xl:w-[360px] flex-shrink-0">
-            <div className="grid gap-4">
+        <div className="flex flex-row gap-4">
+          {/* Left sidebar - player cards in horizontal row for landscape */}
+          <aside className="w-[280px] flex-shrink-0 space-y-3">
+            <div className="grid gap-3">
               {playerSummaries.map((summary, index) => (
                 <PlayerCard
                   key={summary.player.id}
@@ -1219,61 +1220,34 @@ export function DebateScorecard(props: DebateScorecardProps) {
                   opponentScore={playerSummaries[(index + 1) % playerSummaries.length]?.player.score ?? 0}
                 />
               ))}
-              <ScoreSummaryCard
-                lastAction={lastAction}
-                pendingVerifications={scorecard.status?.pendingVerifications}
-                players={scorecard.players}
-            />
-          </div>
-
+            </div>
             <MetricsStrip metrics={scorecard.metrics} show={scorecard.showMetricsStrip} />
-
-            <div className="grid gap-4 text-xs text-white/70">
-              <div className="rounded-xl border border-white/5 bg-white/[0.03] p-4 space-y-2">
-                <p className="text-white font-medium flex items-center gap-2 text-sm">
-                  <ShieldAlert className="w-4 h-4" /> Verdict legend
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  {verdictEnum.options.map((value) => {
-                    const cfg = verdictConfig[value];
-                    return (
-                      <span key={value} className={cn('px-2 py-1 rounded-full text-[11px] font-medium', cfg.className)}>
-                        {cfg.label}
-                      </span>
-                    );
-                  })}
-                </div>
-              </div>
-              <div className="rounded-xl border border-white/5 bg-white/[0.03] p-4 space-y-2">
-                <p className="text-white font-medium flex items-center gap-2 text-sm">
-                  <Info className="w-4 h-4" /> How to use
-                </p>
-                <ol className="list-decimal list-inside space-y-1 text-white/70">
-                  <li>Record arguments verbatim with speaker and speech.</li>
-                  <li>Verify claims, attach sources, and mark status.</li>
-                  <li>Use the map to surface clash and supporting warrants.</li>
-                  <li>Keep the RFD aligned with linked voters.</li>
-                </ol>
-              </div>
-              <div className="rounded-xl border border-white/5 bg-white/[0.03] p-4 space-y-2">
-                <p className="text-white font-medium flex items-center gap-2 text-sm">
-                  <Sparkles className="w-4 h-4" /> Achievements earned
-                </p>
-                {unlockedAchievements.length === 0 ? (
-                  <p className="text-xs text-white/40">No achievements yet. Keep debating!</p>
-                ) : (
-                  <div className="flex flex-wrap gap-2">
-                    {unlockedAchievements.map((award) => (
-                      <AchievementBadge key={award.id} award={award} />
-                    ))}
-                  </div>
+            {/* Compact legend - inline badges */}
+            <div className="flex flex-wrap gap-1.5">
+              {verdictEnum.options.map((value) => {
+                const cfg = verdictConfig[value];
+                return (
+                  <span key={value} className={cn('px-1.5 py-0.5 rounded-full text-[10px] font-medium', cfg.className)}>
+                    {cfg.label}
+                  </span>
+                );
+              })}
+            </div>
+            {/* Achievements - compact */}
+            {unlockedAchievements.length > 0 && (
+              <div className="flex flex-wrap gap-1">
+                {unlockedAchievements.slice(0, 3).map((award) => (
+                  <AchievementBadge key={award.id} award={award} />
+                ))}
+                {unlockedAchievements.length > 3 && (
+                  <span className="text-[10px] text-white/40">+{unlockedAchievements.length - 3} more</span>
                 )}
               </div>
-            </div>
+            )}
           </aside>
 
-          <main className="flex-1 flex flex-col gap-4">
-            <div className="flex flex-wrap gap-2 text-xs">
+          <main className="flex-1 flex flex-col gap-3 min-w-0">
+            <div className="flex flex-wrap gap-1.5 text-xs">
               {[
                 { key: 'ledger', label: 'Ledger', icon: FileText },
                 { key: 'map', label: 'Map', icon: MapIcon },
@@ -1307,7 +1281,7 @@ export function DebateScorecard(props: DebateScorecardProps) {
               })}
             </div>
 
-            <div className="grid gap-3 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex flex-wrap items-center gap-2 text-xs">
                 <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-2">
                   <Filter className="w-4 h-4" />
@@ -1381,7 +1355,7 @@ export function DebateScorecard(props: DebateScorecardProps) {
               </div>
             </div>
 
-            <div className="flex flex-col gap-4">
+            <div className="flex-1 overflow-auto min-h-0 max-h-[400px] rounded-lg">
               {localFilters.activeTab === 'timeline' ? (
                 <Timeline events={scorecard.timeline} players={scorecard.players} />
               ) : (

@@ -51,7 +51,11 @@ export function CustomShapeComponent({ shape }: { shape: CustomShape }) {
   const autoFittedRef = useRef(false);
   const lastMeasuredSizeRef = useRef<{ w: number; h: number } | null>(null);
 
+  const sizeInfo = getComponentSizeInfo(shape.props.name);
+  const sizingPolicy = sizeInfo.sizingPolicy || 'fit_until_user_resize';
+
   useEffect(() => {
+    if (sizingPolicy === 'scale_only') return;
     const el = contentInnerRef.current;
     if (!el) return;
 
@@ -82,7 +86,7 @@ export function CustomShapeComponent({ shape }: { shape: CustomShape }) {
       if (frame !== null) cancelAnimationFrame(frame);
       observer.disconnect();
     };
-  }, []);
+  }, [sizingPolicy]);
 
   useEffect(() => {
     lastMeasuredSizeRef.current = null;
@@ -109,35 +113,40 @@ export function CustomShapeComponent({ shape }: { shape: CustomShape }) {
     if (!editor || !naturalSize) return;
     const unsafeEditor = editor as any;
 
-    const sizeInfo = getComponentSizeInfo(shape.props.name);
-    const policy = sizeInfo.sizingPolicy || 'fit_until_user_resize';
+    const policy = sizingPolicy;
     const userHasResized = Boolean(shape.props.userResized);
 
     const shouldAutoFit =
       policy === 'always_fit' || (policy === 'fit_until_user_resize' && !userHasResized);
 
     if (shouldAutoFit) {
-      const { w: rawW, h: rawH } = naturalSize;
-      // Guard: some components (especially percentage-based layouts) can transiently report
-      // 0x0 during first layout; never auto-fit to a collapsed size.
-      if (!Number.isFinite(rawW) || !Number.isFinite(rawH) || rawW < 32 || rawH < 32) {
+      const { h: rawH } = naturalSize;
+      // Guard: some components can transiently report 0 during first layout
+      const minH = Math.max(32, sizeInfo.minHeight * 0.5);
+      if (!Number.isFinite(rawH) || rawH < minH) {
         return;
       }
-      const { w: nw, h: nh } = { w: rawW, h: rawH };
-      const changed = Math.abs(shape.props.w - nw) > 1 || Math.abs(shape.props.h - nh) > 1;
+      // Width: always use design width from sizeInfo (components have fixed design widths)
+      // Height: use measured height for dynamic content
+      const nw = sizeInfo.naturalWidth;
+      const nh = rawH;
+      const widthChanged = Math.abs(shape.props.w - nw) > 1;
+      const heightChanged = Math.abs(shape.props.h - nh) > 1;
       const allowMultiple = policy === 'always_fit';
-      if (changed && (allowMultiple || !autoFittedRef.current)) {
+      if ((widthChanged || heightChanged) && (allowMultiple || !autoFittedRef.current)) {
         unsafeEditor.updateShapes?.([
           { id: shape.id as any, type: 'custom', props: { w: nw, h: nh } },
         ]);
         if (!allowMultiple) autoFittedRef.current = true;
       }
     }
-  }, [editor, naturalSize, shape.id, shape.props.name, shape.props.userResized, shape.props.w, shape.props.h]);
+  }, [editor, naturalSize, shape.id, shape.props.name, shape.props.userResized, shape.props.w, shape.props.h, sizingPolicy, sizeInfo.naturalWidth, sizeInfo.minHeight]);
 
-  const sizeInfo = getComponentSizeInfo(shape.props.name);
-  const baseW = naturalSize?.w ?? sizeInfo.naturalWidth;
-  const baseH = naturalSize?.h ?? sizeInfo.naturalHeight;
+  // For width: Always use the component's design width to avoid feedback loops
+  // (components like DebateScorecard have fixed widths like w-[1200px])
+  // For height: Use measured height for dynamic content, or natural height for scale_only
+  const baseW = sizeInfo.naturalWidth;
+  const baseH = sizingPolicy === 'scale_only' ? sizeInfo.naturalHeight : (naturalSize?.h ?? sizeInfo.naturalHeight);
 
   const scaleX = shape.props.w / baseW;
   const scaleY = shape.props.h / baseH;

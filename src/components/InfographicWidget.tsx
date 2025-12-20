@@ -36,6 +36,7 @@ export function InfographicWidget({ room, isShape = false, __custom_message_id, 
     const [useGrounding, setUseGrounding] = useState(true);
 
     const bus = React.useMemo(() => createLiveKitBus(room), [room]);
+    const editor = useEditor();
 
     // Get unified canvas context (transcripts, documents, etc.)
     const { documents: contextDocuments, getPromptContext } = useCanvasContext();
@@ -70,21 +71,122 @@ export function InfographicWidget({ room, isShape = false, __custom_message_id, 
                 return `${name}: ${t.text}`;
             }).join('\n');
 
+            const scorecardContext = (() => {
+                try {
+                    if (!editor) return '';
+                    const shapes = (editor as any).getCurrentPageShapes?.() ?? [];
+                    const scorecards = shapes
+                        .filter((shape: any) => shape?.type === 'custom' && shape?.props?.name === 'DebateScorecard')
+                        .map((shape: any) => ({
+                            shape,
+                            state: (shape?.props?.state ?? {}) as any,
+                        }))
+                        .filter((entry: any) => entry.state && typeof entry.state === 'object');
+
+                    if (!scorecards.length) return '';
+
+                    scorecards.sort((a: any, b: any) => Number(b.state?.lastUpdated ?? 0) - Number(a.state?.lastUpdated ?? 0));
+                    const state = scorecards[0].state as any;
+
+                    const topic = typeof state.topic === 'string' ? state.topic : '';
+                    const round = typeof state.round === 'string' ? state.round : '';
+
+                    const players = Array.isArray(state.players) ? state.players : [];
+                    const claims = Array.isArray(state.claims) ? state.claims : [];
+                    const sources = Array.isArray(state.sources) ? state.sources : [];
+                    const factCheckEnabled = state.factCheckEnabled === true;
+                    const metrics = state.metrics ?? {};
+                    const rfd = state.rfd ?? {};
+
+                    const formatPlayer = (side: string) => {
+                        const player = players.find((p: any) => p?.side === side) ?? {};
+                        const label = typeof player.label === 'string' ? player.label : side;
+                        const score = Number.isFinite(player.score) ? player.score : 0;
+                        return `${side}: ${label} (score ${score})`;
+                    };
+
+                    const pickClaims = (side: string) => {
+                        const sideClaims = claims.filter((c: any) => c?.side === side);
+                        sideClaims.sort((a: any, b: any) => Number(b.updatedAt ?? b.createdAt ?? 0) - Number(a.updatedAt ?? a.createdAt ?? 0));
+                        return sideClaims.slice(0, 6).map((c: any) => {
+                            const status = typeof c.status === 'string' ? c.status : '';
+                            const verdict = typeof c.verdict === 'string' ? c.verdict : '';
+                            const speech = typeof c.speech === 'string' ? c.speech : '';
+                            const summary = typeof c.summary === 'string' ? c.summary : '';
+                            const quote = typeof c.quote === 'string' ? c.quote : '';
+                            const text = summary || quote;
+                            const tag = [speech, status, verdict].filter(Boolean).join(' · ');
+                            return `- ${tag ? `[${tag}] ` : ''}${text}`.trim();
+                        });
+                    };
+
+                    const pickSources = () => {
+                        const items = sources.slice(0, 8).map((s: any) => {
+                            const title = typeof s.title === 'string' ? s.title : '';
+                            const url = typeof s.url === 'string' ? s.url : '';
+                            const credibility = typeof s.credibility === 'string' ? s.credibility : '';
+                            const type = typeof s.type === 'string' ? s.type : '';
+                            const meta = [credibility, type].filter(Boolean).join(' / ');
+                            return `- ${title || url}${meta ? ` (${meta})` : ''}${url ? ` — ${url}` : ''}`;
+                        });
+                        return items;
+                    };
+
+                    const judgeLean = typeof metrics.judgeLean === 'string' ? metrics.judgeLean : '';
+                    const roundScore = Number.isFinite(metrics.roundScore) ? metrics.roundScore : null;
+                    const evidenceQuality = Number.isFinite(metrics.evidenceQuality) ? metrics.evidenceQuality : null;
+
+                    const rfdSummary = typeof rfd.summary === 'string' ? rfd.summary : '';
+
+                    const sections: string[] = [];
+                    sections.push('## Debate Scorecard Snapshot (authoritative)');
+                    if (topic) sections.push(`Topic: ${topic}`);
+                    if (round) sections.push(`Round: ${round}`);
+                    sections.push(`Players:\n- ${formatPlayer('AFF')}\n- ${formatPlayer('NEG')}`);
+                    if (judgeLean || roundScore !== null || evidenceQuality !== null) {
+                        sections.push(
+                            `Metrics: judgeLean=${judgeLean || 'N/A'}, roundScore=${roundScore ?? 'N/A'}, evidenceQuality=${evidenceQuality ?? 'N/A'}`,
+                        );
+                    }
+                    sections.push(`Fact-check enabled: ${factCheckEnabled ? 'yes' : 'no'}`);
+
+                    const affClaims = pickClaims('AFF');
+                    const negClaims = pickClaims('NEG');
+                    if (affClaims.length || negClaims.length) {
+                        sections.push(`Top claims (use these as the core content):\nAFF:\n${affClaims.join('\n') || '- (none)'}\n\nNEG:\n${negClaims.join('\n') || '- (none)'}`);
+                    }
+
+                    if (rfdSummary) {
+                        sections.push(`Judge / RFD summary:\n${rfdSummary}`);
+                    }
+
+                    const sourceLines = pickSources();
+                    if (sourceLines.length) {
+                        sections.push(`Sources referenced:\n${sourceLines.join('\n')}`);
+                    }
+
+                    return sections.join('\n\n');
+                } catch {
+                    return '';
+                }
+            })();
+
             const hasUnifiedContext = Boolean(context && context.trim().length > 0);
             const hasLocalTranscript = Boolean(recentLines && recentLines.trim().length > 0);
             const hasContextDocs = contextDocuments.length > 0;
 
             // Allow generation if we have ANY available context source.
-            if (!hasUnifiedContext && !hasLocalTranscript && !hasContextDocs) {
+            if (!hasUnifiedContext && !hasLocalTranscript && !hasContextDocs && !scorecardContext) {
                 throw new Error('No conversation context available yet. Start talking or add context documents!');
             }
 
-            const prompt = `
-            Based on the following conversation and context, create a visually appealing infographic that summarizes the key points.
-            Focus on clarity, professional design, and accurate information.
-            
-            ${context || '(No context available)'}
-        `;
+            const prompt = [
+                `Based on the context below, create a visually appealing infographic that summarizes the debate's key claims, evidence, and outcome.`,
+                `Focus on: topic specificity, clear structure (AFF vs NEG), and faithful representation of the provided claims/sources.`,
+                scorecardContext ? `\n${scorecardContext}\n` : '',
+                recentLines ? `\n## Live Transcript (recent)\n${recentLines}\n` : '',
+                context ? `\n## Additional Context\n${context}\n` : '',
+            ].filter(Boolean).join('\n');
 
             const response = await fetch('/api/generateImages', {
                 method: 'POST',
@@ -123,7 +225,7 @@ export function InfographicWidget({ room, isShape = false, __custom_message_id, 
         } finally {
             setIsGenerating(false);
         }
-    }, [isGenerating, transcripts, useGrounding, isShape, contextDocuments]);
+    }, [contextDocuments, editor, getPromptContext, isGenerating, isShape, transcripts, useGrounding]);
 
     useEffect(() => {
         if (!isShape) {
@@ -235,8 +337,6 @@ export function InfographicWidget({ room, isShape = false, __custom_message_id, 
         link.click();
         document.body.removeChild(link);
     };
-
-    const editor = useEditor();
 
     // Use the custom hook to handle drag-and-drop logic
     // This encapsulates the global listener and shape creation

@@ -68,15 +68,28 @@ async function sendAgentLine(page: any, text: string) {
 
 async function closeTranscriptPanelIfPresent(page: any) {
   const closeButton = page.getByRole('button', { name: 'Close' }).first();
-  const visible = await closeButton.isVisible().catch(() => false);
-  if (!visible) return;
-
   const input = page.locator('form input[type="text"]').first();
 
+  const closeVisible = await closeButton.isVisible().catch(() => false);
+  const inputVisible = await input.isVisible().catch(() => false);
+  if (!closeVisible && !inputVisible) return;
+
+  const modifier = isMac() ? 'Meta' : 'Control';
+
+  // Prefer the global toggle shortcut; it's less brittle than clicking inside overlays.
   try {
-    await closeButton.click({ force: true });
+    await page.keyboard.press(`${modifier}+KeyK`);
+    await page.waitForTimeout(350);
+  } catch {}
+
+  const stillOpen = (await closeButton.isVisible().catch(() => false)) || (await input.isVisible().catch(() => false));
+
+  try {
+    if (stillOpen) {
+      await closeButton.click({ force: true });
+      await page.waitForTimeout(350);
+    }
   } catch {
-    const modifier = isMac() ? 'Meta' : 'Control';
     await page.keyboard.press(`${modifier}+KeyK`);
   }
 
@@ -460,6 +473,24 @@ test.describe('5-minute debate lap (report)', () => {
         }),
       ].join('\n');
 
+      const totalStepMs = stepResults.reduce((acc, step) => acc + step.durationMs, 0);
+      const formatMs = (ms: number) => {
+        if (!Number.isFinite(ms)) return 'n/a';
+        const seconds = ms / 1000;
+        if (seconds < 60) return `${seconds.toFixed(1)}s`;
+        const minutes = Math.floor(seconds / 60);
+        const rem = seconds - minutes * 60;
+        return `${minutes}m ${rem.toFixed(1)}s`;
+      };
+      const slowestSteps = [...stepResults]
+        .sort((a, b) => b.durationMs - a.durationMs)
+        .slice(0, Math.min(6, stepResults.length))
+        .map((step) => {
+          const pct = totalStepMs ? Math.round((step.durationMs / totalStepMs) * 100) : 0;
+          return `- ${escapePipes(step.name)}: ${formatMs(step.durationMs)} (${pct}%)`;
+        })
+        .join('\n');
+
       const formatCounts = (record: Record<string, number>) => {
         const entries = Object.entries(record).sort((a, b) => b[1] - a[1]);
         if (!entries.length) return '- (none)\n';
@@ -472,6 +503,9 @@ test.describe('5-minute debate lap (report)', () => {
         `- Result: ${failure ? 'FAIL' : 'PASS'}\n\n` +
         `## Step Results\n\n` +
         `${resultsTable}\n\n` +
+        `## Speed Report\n\n` +
+        `- Total lap (sum of steps): ${formatMs(totalStepMs)}\n` +
+        `- Slowest steps:\n${slowestSteps || '- (none)'}\n\n` +
         `## Tool Call Counts\n\n` +
         `Total tool calls received: **${toolCalls.length}**\n\n` +
         `### By tool\n\n` +

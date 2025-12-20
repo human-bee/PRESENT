@@ -894,8 +894,15 @@ Your only output is function calls. Never use plain text unless absolutely neces
         reliable: entry.reliable,
         topic: 'tool_call',
       });
+      // Add timeout to prevent hanging on publish
       if (publishResult && typeof (publishResult as PromiseLike<unknown>).then === 'function') {
-        await publishResult;
+        const timeoutMs = 3000;
+        await Promise.race([
+          publishResult,
+          new Promise((_, reject) => setTimeout(() => reject(new Error('publish timeout')), timeoutMs)),
+        ]).catch((err) => {
+          console.warn('[VoiceAgent] publishData timed out or failed, continuing anyway', { tool: entry.event.payload.tool, err });
+        });
       }
       console.log('[VoiceAgent] tool_call publish complete', {
         tool: entry.event.payload.tool,

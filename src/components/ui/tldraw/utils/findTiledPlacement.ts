@@ -17,13 +17,26 @@ const snap = (value: number, step: number) => Math.round(value / step) * step;
 const intersects = (a: Rect, b: Rect) =>
   a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
 
-const getShapeRect = (shape: any): Rect | null => {
-  const w = Number(shape?.props?.w);
-  const h = Number(shape?.props?.h);
-  const x = Number(shape?.x);
-  const y = Number(shape?.y);
-  if (![w, h, x, y].every((n) => Number.isFinite(n))) return null;
-  return { x, y, w, h };
+const getShapeRect = (editor: any, shape: any): Rect | null => {
+  const bounds = editor?.getShapePageBounds?.(shape?.id ?? shape);
+  if (!bounds) return null;
+
+  const xRaw = Number((bounds as any).x ?? (bounds as any).minX);
+  const yRaw = Number((bounds as any).y ?? (bounds as any).minY);
+  const wRaw = Number(
+    (bounds as any).w ??
+      (bounds as any).width ??
+      (Number((bounds as any).maxX) - Number((bounds as any).minX)),
+  );
+  const hRaw = Number(
+    (bounds as any).h ??
+      (bounds as any).height ??
+      (Number((bounds as any).maxY) - Number((bounds as any).minY)),
+  );
+
+  if (![xRaw, yRaw, wRaw, hRaw].every((n) => Number.isFinite(n))) return null;
+  if (wRaw < 1 || hRaw < 1) return null;
+  return { x: xRaw, y: yRaw, w: wRaw, h: hRaw };
 };
 
 export function findTiledPlacement(
@@ -33,8 +46,9 @@ export function findTiledPlacement(
     margin?: number;
     gap?: number;
     step?: number;
-    placeableTypes?: string[];
     viewport?: ViewportBounds | null;
+    reservedRects?: Rect[];
+    ignoreShapeIds?: string[];
   },
 ): { x: number; y: number } {
   if (!editor) return { x: Math.random() * 500, y: Math.random() * 300 };
@@ -46,7 +60,9 @@ export function findTiledPlacement(
   const margin = typeof opts?.margin === 'number' ? opts.margin : 48;
   const gap = typeof opts?.gap === 'number' ? opts.gap : 24;
   const step = typeof opts?.step === 'number' ? opts.step : 24;
-  const placeables = new Set(opts?.placeableTypes ?? ['custom', 'toolbox', 'mermaid_stream', 'infographic']);
+  const ignoreIds = new Set(
+    (opts?.ignoreShapeIds ?? []).map((id) => (typeof id === 'string' ? id : '')).filter(Boolean),
+  );
 
   const viewMinX = viewport.minX + margin;
   const viewMinY = viewport.minY + margin;
@@ -61,8 +77,8 @@ export function findTiledPlacement(
   const extMaxY = viewport.maxY + extendedPadY - size.h;
 
   const occupiedFromEditor = (editor.getCurrentPageShapes?.() ?? [])
-    .filter((shape: any) => shape && placeables.has(shape.type))
-    .map((shape: any) => getShapeRect(shape))
+    .filter((shape: any) => shape && !ignoreIds.has(String(shape.id ?? '')))
+    .map((shape: any) => getShapeRect(editor, shape))
     .filter(Boolean)
     .map((rect: any) => ({
       x: rect.x - gap / 2,
@@ -70,6 +86,17 @@ export function findTiledPlacement(
       w: rect.w + gap,
       h: rect.h + gap,
     })) as Rect[];
+
+  const occupiedFromReserved = (opts?.reservedRects ?? [])
+    .filter((rect) => rect && [rect.x, rect.y, rect.w, rect.h].every((n) => Number.isFinite(n)))
+    .map((rect) => ({
+      x: rect.x - gap / 2,
+      y: rect.y - gap / 2,
+      w: rect.w + gap,
+      h: rect.h + gap,
+    })) as Rect[];
+
+  const occupied = [...occupiedFromEditor, ...occupiedFromReserved];
 
   const rawCenterX = viewport.midX - size.w / 2;
   const rawCenterY = viewport.midY - size.h / 2;
@@ -79,18 +106,18 @@ export function findTiledPlacement(
     y: canClampToView ? snap(clamp(rawCenterY, viewMinY, viewMaxY), step) : snap(rawCenterY, step),
   };
 
-  if (occupiedFromEditor.length === 0) {
+  if (occupied.length === 0) {
     return centered;
   }
 
   const isInBounds = (x: number, y: number) => x >= extMinX && x <= extMaxX && y >= extMinY && y <= extMaxY;
   const isFree = (x: number, y: number) => {
     const rect = { x, y, w: size.w, h: size.h };
-    return !occupiedFromEditor.some((occ) => intersects(rect, occ));
+    return !occupied.some((occ) => intersects(rect, occ));
   };
 
   const startRect = { x: centered.x, y: centered.y, w: size.w, h: size.h };
-  if (!occupiedFromEditor.some((rect) => intersects(startRect, rect))) {
+  if (!occupied.some((rect) => intersects(startRect, rect))) {
     return centered;
   }
 
@@ -114,4 +141,3 @@ export function findTiledPlacement(
 
   return centered;
 }
-

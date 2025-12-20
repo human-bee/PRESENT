@@ -8,6 +8,7 @@ import { calculateInitialSize } from '@/lib/component-sizing';
 import { systemRegistry } from '@/lib/system-registry';
 
 import type { customShape as CustomShape } from '../tldraw-canvas';
+import { findTiledPlacement as findTiledPlacementUtil } from '@/components/ui/tldraw/utils/findTiledPlacement';
 
 export type CanvasLogger = {
   info: (...args: unknown[]) => void;
@@ -46,46 +47,8 @@ export function useCanvasComponentStore(
   const findTiledPlacement = useCallback(
     (size: { w: number; h: number }): { x: number; y: number } => {
       if (!editor) return { x: Math.random() * 500, y: Math.random() * 300 };
-      const viewport = editor.getViewportPageBounds();
+      const viewport = editor.getViewportPageBounds?.();
       if (!viewport) return { x: Math.random() * 500, y: Math.random() * 300 };
-
-      const margin = 48;
-      const gap = 24;
-      const step = 24;
-
-      const viewMinX = viewport.minX + margin;
-      const viewMinY = viewport.minY + margin;
-      const viewMaxX = viewport.maxX - margin - size.w;
-      const viewMaxY = viewport.maxY - margin - size.h;
-      const extendedPadX = viewport.w * 2 + margin;
-      const extendedPadY = viewport.h * 2 + margin;
-      const extMinX = viewport.minX - extendedPadX;
-      const extMinY = viewport.minY - extendedPadY;
-      const extMaxX = viewport.maxX + extendedPadX - size.w;
-      const extMaxY = viewport.maxY + extendedPadY - size.h;
-
-      const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
-      const snap = (value: number) => Math.round(value / step) * step;
-      const intersects = (a: { x: number; y: number; w: number; h: number }, b: { x: number; y: number; w: number; h: number }) =>
-        a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
-
-      const placeables = new Set(['custom', 'toolbox', 'mermaid_stream', 'infographic']);
-      const occupiedFromEditor = (editor.getCurrentPageShapes?.() ?? [])
-        .filter((shape: any) => shape && placeables.has(shape.type))
-        .map((shape: any) => {
-          const w = Number(shape?.props?.w);
-          const h = Number(shape?.props?.h);
-          const x = Number(shape?.x);
-          const y = Number(shape?.y);
-          if (![w, h, x, y].every((n) => Number.isFinite(n))) return null;
-          return {
-            x: x - gap / 2,
-            y: y - gap / 2,
-            w: w + gap,
-            h: h + gap,
-          };
-        })
-        .filter(Boolean) as Array<{ x: number; y: number; w: number; h: number }>;
 
       const now = Date.now();
       const LEDGER_TTL_MS = 60_000;
@@ -94,56 +57,18 @@ export function useCanvasComponentStore(
           placementLedgerRef.current.delete(key);
         }
       }
-      const occupiedFromLedger = Array.from(placementLedgerRef.current.values()).map((entry) => ({
-        x: entry.x - gap / 2,
-        y: entry.y - gap / 2,
-        w: entry.w + gap,
-        h: entry.h + gap,
+
+      const reservedRects = Array.from(placementLedgerRef.current.values()).map((entry) => ({
+        x: entry.x,
+        y: entry.y,
+        w: entry.w,
+        h: entry.h,
       }));
 
-      const occupied = [...occupiedFromEditor, ...occupiedFromLedger];
-
-      const rawCenterX = viewport.midX - size.w / 2;
-      const rawCenterY = viewport.midY - size.h / 2;
-      const canClampToView = viewMaxX >= viewMinX && viewMaxY >= viewMinY;
-      const centered = {
-        x: canClampToView ? snap(clamp(rawCenterX, viewMinX, viewMaxX)) : snap(rawCenterX),
-        y: canClampToView ? snap(clamp(rawCenterY, viewMinY, viewMaxY)) : snap(rawCenterY),
-      };
-      if (occupied.length === 0) {
-        return centered;
-      }
-
-      const startRect = { x: centered.x, y: centered.y, w: size.w, h: size.h };
-      if (!occupied.some((rect) => intersects(startRect, rect))) {
-        return centered;
-      }
-
-      const maxRadius = Math.max(80, Math.ceil(Math.max(viewport.w, viewport.h) / step));
-      const isInBounds = (x: number, y: number) => x >= extMinX && x <= extMaxX && y >= extMinY && y <= extMaxY;
-      const isFree = (x: number, y: number) => {
-        const rect = { x, y, w: size.w, h: size.h };
-        return !occupied.some((occ) => intersects(rect, occ));
-      };
-
-      for (let radius = 1; radius <= maxRadius; radius += 1) {
-        for (let dx = -radius; dx <= radius; dx += 1) {
-          const x = centered.x + dx * step;
-          const yTop = centered.y - radius * step;
-          const yBottom = centered.y + radius * step;
-          if (isInBounds(x, yTop) && isFree(x, yTop)) return { x, y: yTop };
-          if (isInBounds(x, yBottom) && isFree(x, yBottom)) return { x, y: yBottom };
-        }
-        for (let dy = -radius + 1; dy <= radius - 1; dy += 1) {
-          const y = centered.y + dy * step;
-          const xLeft = centered.x - radius * step;
-          const xRight = centered.x + radius * step;
-          if (isInBounds(xLeft, y) && isFree(xLeft, y)) return { x: xLeft, y };
-          if (isInBounds(xRight, y) && isFree(xRight, y)) return { x: xRight, y };
-        }
-      }
-
-      return centered;
+      return findTiledPlacementUtil(editor, size, {
+        viewport: viewport as any,
+        reservedRects,
+      });
     },
     [editor],
   );

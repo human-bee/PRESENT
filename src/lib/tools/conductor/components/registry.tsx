@@ -200,15 +200,3 @@ export const components: any = [
   },
   // Add more components here
 ];
-
-export const allComponents = {
-  YoutubeEmbed: extendedSchema(youtubeEmbedSchema),
-  DebateScorecard: extendedSchema(debateScoreCardSchema), // Added debate scorecard @debate-scorecard.tsx
-  InfographicWidget: extendedSchema(infographicWidgetSchema),
-}
-
-export const availableComponents = getAvailableComponents(allComponents);
-
-function getAvailableComponents<T extends Record<string, z.AnyZodObject>>(components: T): T {
-  return components;
-}
