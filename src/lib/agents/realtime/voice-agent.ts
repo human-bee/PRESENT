@@ -2588,6 +2588,52 @@ Your only output is function calls. Never use plain text unless absolutely neces
           return;
         }
 
+        const looksLikeTimerUpdate =
+          lower.includes('timer') &&
+          (lower.includes('pause') ||
+            lower.includes('stop') ||
+            lower.includes('resume') ||
+            lower.includes('reset') ||
+            lower.includes('set'));
+        if (looksLikeTimerUpdate) {
+          const timerId =
+            getLastComponentForType('RetroTimerEnhanced') || getLastComponentForType('RetroTimer');
+          if (timerId) {
+            const tokens = lower.split(' ').filter(Boolean);
+            let minutes: number | undefined;
+            for (let i = 0; i < tokens.length; i += 1) {
+              const token = tokens[i];
+              if (token === 'minute' || token === 'minutes' || token === 'min' || token === 'mins') {
+                const prev = tokens[i - 1] || '';
+                const parsed = Number(prev);
+                if (Number.isFinite(parsed) && parsed > 0) {
+                  minutes = Math.max(1, Math.round(parsed));
+                }
+                break;
+              }
+            }
+            const shouldPause = lower.includes('pause') || lower.includes('stop');
+            const shouldResume = lower.includes('resume') || lower.includes('start');
+            const shouldReset = lower.includes('reset') || lower.includes('set');
+            const patch: Record<string, unknown> = {};
+            if (typeof minutes === 'number' && Number.isFinite(minutes)) {
+              const durationSeconds = Math.max(1, Math.round(minutes)) * 60;
+              patch.configuredDuration = durationSeconds;
+              patch.timeLeft = durationSeconds;
+            }
+            if (shouldPause) patch.isRunning = false;
+            if (shouldResume && !shouldPause) patch.isRunning = true;
+            if (shouldReset && !('isRunning' in patch)) {
+              patch.isRunning = false;
+            }
+            await (toolContext as any).update_component.execute({
+              componentId: timerId,
+              patch,
+            });
+            return;
+          }
+        }
+
         const looksLikeLinearKanbanCommand =
           (lower.startsWith('create') || lower.startsWith('add') || lower.startsWith('open')) &&
           lower.includes('linear') &&
