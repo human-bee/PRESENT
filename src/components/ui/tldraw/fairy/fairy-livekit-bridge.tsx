@@ -8,6 +8,7 @@ import { useFairyApp } from '@/vendor/tldraw-fairy/fairy/fairy-app/FairyAppProvi
 import { useViewportSelectionPublisher } from '@/components/ui/canvas/hooks/useViewportSelectionPublisher';
 import { useScreenshotRequestHandler } from '@/components/ui/canvas/hooks/useScreenshotRequestHandler';
 import type { FairyAgent } from '@/vendor/tldraw-fairy/fairy/fairy-agent/FairyAgent';
+import { useFairyPromptData } from './fairy-prompt-data';
 
 interface FairyLiveKitBridgeProps {
   room?: Room;
@@ -76,6 +77,7 @@ export function FairyLiveKitBridge({ room }: FairyLiveKitBridgeProps) {
   const { isHost } = useIsAgentHost(room);
   const bus = useMemo(() => (room ? createLiveKitBus(room) : null), [room]);
   const processedIdsRef = useRef<Set<string>>(new Set());
+  const buildPromptData = useFairyPromptData();
 
   useViewportSelectionPublisher(editor, room, true);
   useScreenshotRequestHandler(editor, room);
@@ -115,6 +117,17 @@ export function FairyLiveKitBridge({ room }: FairyLiveKitBridgeProps) {
             }
           : editor.getViewportPageBounds();
 
+      const selectionIds = Array.isArray(payload?.selectionIds)
+        ? payload.selectionIds.filter((id: unknown) => typeof id === 'string')
+        : [];
+      const validSelectionIds = selectionIds.filter((id: string) => {
+        try {
+          return Boolean(editor.getShape(id as any));
+        } catch {
+          return false;
+        }
+      });
+
       const agents = fairyApp.agents.getAgents();
       const agent = pickAgent(agents);
       if (!agent) return;
@@ -126,14 +139,35 @@ export function FairyLiveKitBridge({ room }: FairyLiveKitBridgeProps) {
       agent.position.summon();
 
       const run = async () => {
+        const previousSelection =
+          typeof (editor as any).getSelectedShapeIds === 'function'
+            ? (editor as any).getSelectedShapeIds()
+            : [];
+        const setSelection = (ids: string[]) => {
+          const setter = (editor as any).setSelectedShapes ?? (editor as any).setSelectedShapeIds;
+          if (typeof setter === 'function') {
+            setter.call(editor, ids);
+          }
+        };
+        if (validSelectionIds.length > 0) {
+          setSelection(validSelectionIds);
+        }
         try {
           await agent.prompt({
             message: text,
             bounds: normalizedBounds,
             source: 'user',
+            data: buildPromptData({
+              metadata: payload?.metadata,
+              selectionIds: validSelectionIds,
+            }),
           } as any);
         } catch (error) {
           console.error('[FairyBridge] prompt failed', error);
+        } finally {
+          if (validSelectionIds.length > 0) {
+            setSelection(previousSelection);
+          }
         }
       };
 
@@ -143,7 +177,7 @@ export function FairyLiveKitBridge({ room }: FairyLiveKitBridgeProps) {
     return () => {
       unsubscribe?.();
     };
-  }, [bus, editor, fairyApp, isHost]);
+  }, [bus, buildPromptData, editor, fairyApp, isHost]);
 
   return null;
 }

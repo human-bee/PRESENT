@@ -4,6 +4,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { useValue } from '@tldraw/tldraw';
 import { useFairyApp } from '@/vendor/tldraw-fairy/fairy/fairy-app/FairyAppProvider';
 import type { FairyAgent } from '@/vendor/tldraw-fairy/fairy/fairy-agent/FairyAgent';
+import { useFairyPromptData } from './fairy-prompt-data';
 
 function pickAgent(agents: FairyAgent[]): FairyAgent | null {
   if (!agents.length) return null;
@@ -20,6 +21,7 @@ export function FairyPromptPanel() {
     () => activeAgent?.requests.isGenerating() ?? false,
     [activeAgent],
   );
+  const buildPromptData = useFairyPromptData();
 
   const [message, setMessage] = useState('');
 
@@ -41,7 +43,11 @@ export function FairyPromptPanel() {
     }
     activeAgent.updateEntity((f) => (f ? { ...f, isSelected: true } : f));
     try {
-      await activeAgent.prompt({ message: trimmed, source: 'user' } as any);
+      await activeAgent.prompt({
+        message: trimmed,
+        source: 'user',
+        data: buildPromptData(),
+      } as any);
     } catch (error) {
       console.error('[FairyPanel] prompt failed', error);
     }
