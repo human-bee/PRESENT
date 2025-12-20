@@ -33,8 +33,11 @@ const ROOM_CONCURRENCY = Number(process.env.ROOM_CONCURRENCY ?? 2);
 const queue = new AgentTaskQueue();
 
 const CLIENT_CANVAS_AGENT_ENABLED = process.env.NEXT_PUBLIC_CANVAS_AGENT_CLIENT_ENABLED === 'true';
-const SERVER_CANVAS_EXECUTION_ENABLED =
-  (process.env.CANVAS_STEWARD_SERVER_EXECUTION ?? 'true') === 'true' && !CLIENT_CANVAS_AGENT_ENABLED;
+const FAIRY_CANVAS_AGENT_ENABLED = process.env.NEXT_PUBLIC_FAIRY_ENABLED === 'true';
+const CANVAS_STEWARD_ENABLED = (process.env.CANVAS_STEWARD_SERVER_EXECUTION ?? 'true') === 'true';
+const SERVER_CANVAS_AGENT_ENABLED =
+  CANVAS_STEWARD_ENABLED && !CLIENT_CANVAS_AGENT_ENABLED && !FAIRY_CANVAS_AGENT_ENABLED;
+const SERVER_CANVAS_TASKS_ENABLED = CANVAS_STEWARD_ENABLED && !CLIENT_CANVAS_AGENT_ENABLED;
 
 const CanvasAgentPromptSchema = z
   .object({
@@ -696,17 +699,20 @@ async function executeTask(taskName: string, params: JsonObject) {
     if (promptResult.payload.selectionIds) {
       stewardParams.selectionIds = promptResult.payload.selectionIds;
     }
-    if (SERVER_CANVAS_EXECUTION_ENABLED) {
+    if (SERVER_CANVAS_AGENT_ENABLED) {
       // Execute via Canvas Steward on the server to ensure action even without the legacy client host
       await runCanvasSteward({ task: 'canvas.agent_prompt', params: stewardParams });
     } else {
-      console.log('[Conductor] server canvas steward skipped (client legacy flag enabled)');
+      console.log('[Conductor] server canvas steward skipped for canvas.agent_prompt', {
+        clientLegacyEnabled: CLIENT_CANVAS_AGENT_ENABLED,
+        fairyEnabled: FAIRY_CANVAS_AGENT_ENABLED,
+      });
     }
     return { ...promptResult, status: 'queued' };
   }
 
   if (taskName.startsWith('canvas.')) {
-    if (!SERVER_CANVAS_EXECUTION_ENABLED) {
+    if (!SERVER_CANVAS_TASKS_ENABLED) {
       console.log('[Conductor] server canvas steward disabled, skipping task', { taskName });
       return { status: 'skipped', taskName };
     }
