@@ -21,6 +21,7 @@ import { createCollaborationOverrides } from './utils';
 import { CustomMainMenu, CustomToolbarWithTranscript } from './tldraw-with-persistence';
 import { CollaborationLoadingOverlay } from './components';
 import { CanvasAgentController } from './canvas/canvas-agent-controller';
+import { FairyIntegration } from './fairy/fairy-integration';
 
 interface TldrawWithCollaborationProps {
   onMount?: (editor: Editor) => void;
@@ -48,6 +49,8 @@ export function TldrawWithCollaboration({
   const roomName = livekitCtx?.roomName ?? 'custom-canvas-room';
   const room = useRoomContext();
   const [editorInstance, setEditorInstance] = useState<Editor | null>(null);
+  const isFairyEnabled =
+    typeof process !== 'undefined' && process.env.NEXT_PUBLIC_FAIRY_ENABLED === 'true';
 
   const collaboration = useCollaborationSession({ roomName, room, shapeUtils });
   const computedReadOnly = readOnly || collaboration.isReadOnly;
@@ -98,7 +101,11 @@ export function TldrawWithCollaboration({
   const showOverlay = collaboration.status !== 'ready';
 
   return (
-    <div ref={containerRef} className={className} style={{ position: 'absolute', inset: 0 }}>
+    <div
+      ref={containerRef}
+      className={`${className ?? ''}${isFairyEnabled ? ' tla' : ''}`}
+      style={{ position: 'absolute', inset: 0 }}
+    >
       <TldrawUiToastsProvider>
         <ComponentStoreContext.Provider value={componentStore || null}>
           <Tldraw
@@ -139,6 +146,8 @@ function CollaborationEditorEffects({
   onMount,
 }: CollaborationEditorEffectsProps) {
   const { editor, ready } = useEditorReady();
+  const isFairyEnabled =
+    typeof process !== 'undefined' && process.env.NEXT_PUBLIC_FAIRY_ENABLED === 'true';
 
   useTldrawEditorBridge(editor, { onMount });
   usePinnedShapes(editor, ready);
@@ -162,6 +171,10 @@ function CollaborationEditorEffects({
 
   if (!ready || !editor) {
     return null;
+  }
+
+  if (isFairyEnabled) {
+    return <FairyIntegration room={room} />;
   }
 
   return <CanvasAgentController editor={editor} room={room} />;

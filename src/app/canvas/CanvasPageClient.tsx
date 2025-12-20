@@ -3,7 +3,7 @@
 // Route segment config is server-only in theory, but the client bootstrap depends on browser
 // globals. Keep this component namespaced so the server entry can opt out of prerendering.
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { CanvasSpace } from '@/components/ui/canvas/canvas-space';
 import { CanvasParityAutopilot } from '@/components/ui/canvas/CanvasParityAutopilot';
 import { MessageThreadCollapsible } from '@/components/ui/messaging/message-thread-collapsible';
@@ -314,6 +314,33 @@ export function CanvasPageClient() {
   const toggleTranscript = useCallback(() => {
     setIsTranscriptOpen((prev) => !prev);
   }, []);
+  const transcriptPanelRef = useRef<HTMLDivElement>(null);
+  const [transcriptOffset, setTranscriptOffset] = useState(0);
+
+  useEffect(() => {
+    if (!isTranscriptOpen) {
+      setTranscriptOffset(0);
+      return;
+    }
+
+    const panel = transcriptPanelRef.current;
+    if (!panel) return;
+
+    const updateOffset = () => {
+      const width = panel.getBoundingClientRect().width;
+      setTranscriptOffset(Math.max(0, Math.round(width)));
+    };
+
+    updateOffset();
+    const observer = new ResizeObserver(updateOffset);
+    observer.observe(panel);
+    window.addEventListener('resize', updateOffset);
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', updateOffset);
+    };
+  }, [isTranscriptOpen]);
 
   // Redirect to sign in if not authenticated
   useEffect(() => {
@@ -431,7 +458,12 @@ export function CanvasPageClient() {
   console.log('[CanvasPageClient] Rendering main UI', { user: user?.id, roomName });
 
   return (
-    <div className="ios-vh w-screen relative overflow-hidden safe-area-padded">
+    <div
+      className="ios-vh w-screen relative overflow-hidden safe-area-padded"
+      style={{
+        ['--present-transcript-offset' as any]: `${isTranscriptOpen ? transcriptOffset : 0}px`,
+      }}
+    >
       {enableMcp ? (
         <EnhancedMcpProvider mcpServers={mcpServers}>
           <SystemRegistrySync />
@@ -457,6 +489,7 @@ export function CanvasPageClient() {
                       'fixed right-0 top-0 z-50 transform transition-transform duration-300 w-full max-w-sm sm:max-w-md md:max-w-lg ios-vh safe-area-padded bg-background',
                       isTranscriptOpen ? 'translate-x-0' : 'translate-x-full pointer-events-none opacity-0',
                     ].join(' ')}
+                    ref={transcriptPanelRef}
                     isOpen={isTranscriptOpen}
                     onClose={toggleTranscript}
                   />
@@ -486,6 +519,7 @@ export function CanvasPageClient() {
                     'fixed right-0 top-0 z-50 transform transition-transform duration-300 w-full max-w-sm sm:max-w-md md:max-w-lg ios-vh safe-area-padded bg-background',
                     isTranscriptOpen ? 'translate-x-0' : 'translate-x-full pointer-events-none opacity-0',
                   ].join(' ')}
+                  ref={transcriptPanelRef}
                   isOpen={isTranscriptOpen}
                   onClose={toggleTranscript}
                 />

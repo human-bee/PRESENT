@@ -7,6 +7,42 @@ import { supabase, type Canvas } from '@/lib/supabase';
 import { createLogger } from '@/lib/utils';
 import { useAuth } from './use-auth';
 
+const getCanvasExtras = () => {
+  if (typeof window === 'undefined') return {};
+  const w = window as any;
+  if (!w.__presentCanvasExtras) {
+    w.__presentCanvasExtras = {};
+  }
+  return w.__presentCanvasExtras as Record<string, any>;
+};
+
+const ingestCanvasExtras = (document: Record<string, any> | null | undefined) => {
+  if (!document) return;
+  const extras = getCanvasExtras();
+  if (document.components && typeof document.components === 'object') {
+    extras.components = document.components;
+  }
+  if (typeof document.fairyState === 'string') {
+    extras.fairyState = document.fairyState;
+  }
+  if (Array.isArray(document.fairyChat)) {
+    extras.fairyChat = document.fairyChat;
+  }
+};
+
+const mergeCanvasExtras = (snapshot: Record<string, any>) => {
+  const extras = getCanvasExtras();
+  if (extras.components && typeof extras.components === 'object') {
+    snapshot.components = extras.components;
+  }
+  if (typeof extras.fairyState === 'string') {
+    snapshot.fairyState = extras.fairyState;
+  }
+  if (Array.isArray(extras.fairyChat)) {
+    snapshot.fairyChat = extras.fairyChat;
+  }
+};
+
 export function useCanvasPersistence(editor: Editor | null, enabled: boolean = true) {
   const { user } = useAuth();
   const isParity =
@@ -102,6 +138,7 @@ export function useCanvasPersistence(editor: Editor | null, enabled: boolean = t
             // Load the document into the editor
             try {
               if (canvas.document && typeof canvas.document === 'object') {
+                ingestCanvasExtras(canvas.document as Record<string, any>);
                 editor.loadSnapshot(canvas.document);
               }
             } catch (e) {
@@ -166,11 +203,16 @@ export function useCanvasPersistence(editor: Editor | null, enabled: boolean = t
     setIsSaving(true);
     try {
       const snapshot = editor.getSnapshot();
+      mergeCanvasExtras(snapshot as Record<string, any>);
+      const storeSnapshot =
+        (snapshot as any)?.document?.store ?? (snapshot as any)?.store ?? undefined;
       if (process.env.NODE_ENV !== 'production' && process.env.NEXT_PUBLIC_TOOL_DISPATCHER_LOGS === 'true') {
         try {
           console.debug('[CanvasPersistence] saveCanvas snapshot', {
-            shapeCount: Array.isArray(snapshot?.store?.shape) ? snapshot.store.shape.length : Object.keys(snapshot?.store?.['shape:'] || {}).length,
-            storeKeys: Object.keys(snapshot?.store || {}).slice(0, 5),
+            shapeCount: Array.isArray(storeSnapshot?.shape)
+              ? storeSnapshot.shape.length
+              : Object.keys(storeSnapshot?.['shape:'] || {}).length,
+            storeKeys: Object.keys(storeSnapshot || {}).slice(0, 5),
             canvasId,
             canWrite,
           });
@@ -222,7 +264,7 @@ export function useCanvasPersistence(editor: Editor | null, enabled: boolean = t
           try {
             console.debug('[CanvasPersistence] saved canvas', {
               id: canvasId,
-              shapes: Object.keys(snapshot?.store || {}).length,
+              shapes: Object.keys(storeSnapshot || {}).length,
               svg: Boolean(thumbnail),
             });
           } catch {}
