@@ -3,6 +3,8 @@ import { config } from 'dotenv';
 import { randomUUID } from 'crypto';
 import { join } from 'path';
 import { z } from 'zod';
+import { createAnthropic } from '@ai-sdk/anthropic';
+import { generateObject } from 'ai';
 // Removed temporary Responses API fallback for routing
 
 try {
@@ -46,6 +48,45 @@ const readHeaderValue = (headers: unknown, key: string): string | undefined => {
     }
   }
   return undefined;
+};
+
+const routerDecisionSchema = z.object({
+  route: z.enum(['canvas', 'none']),
+  message: z.string().optional(),
+});
+
+let routerModelCache: ReturnType<ReturnType<typeof createAnthropic>> | null = null;
+const getRouterModel = () => {
+  if (routerModelCache) return routerModelCache;
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) return null;
+  const modelId = (process.env.VOICE_AGENT_ROUTER_MODEL || 'claude-haiku-4-5').trim();
+  const anthropic = createAnthropic({ apiKey });
+  routerModelCache = anthropic(modelId);
+  return routerModelCache;
+};
+
+const routeManualInput = async (text: string) => {
+  const model = getRouterModel();
+  if (!model) return null;
+  const system = [
+    'You are a routing assistant for a real-time UI voice agent.',
+    'Decide whether the user request should be handled by the canvas agent.',
+    'Canvas requests involve drawing, layout, styling, editing, or placing shapes or visuals on the canvas.',
+    'If the request is a canvas task, return route="canvas" and a concise imperative message for the canvas agent.',
+    'Otherwise return route="none".',
+  ].join(' ');
+  const { object } = await (generateObject as unknown as (args: any) => Promise<{ object: any }>)({
+    model,
+    system,
+    prompt: text,
+    schema: routerDecisionSchema,
+    temperature: 0,
+    maxOutputTokens: 120,
+  });
+  const parsed = routerDecisionSchema.safeParse(object);
+  if (!parsed.success) return null;
+  return parsed.data as { route: 'canvas' | 'none'; message?: string };
 };
 
 const extractRateLimitHeaders = (headers: unknown) => {
@@ -2488,7 +2529,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
         while (pendingReplies.length > 0) {
           const next = pendingReplies.shift();
           if (!next) continue;
-          const speech = session.generateReply(next.options as any) as any;
+          const speech = session.generateReply({ ...(next.options as any), toolChoice: 'required' }) as any;
           if (speech && typeof speech.waitForPlayout === 'function') {
             const completed = await waitWithTimeout(speech.waitForPlayout(), replyTimeoutMs);
             if (!completed.ok) {
@@ -2701,6 +2742,25 @@ Your only output is function calls. Never use plain text unless absolutely neces
           return;
         }
       }
+      if (isManual && (process.env.VOICE_AGENT_ROUTER_ENABLED ?? 'true') !== 'false') {
+        try {
+          const routed = await routeManualInput(text);
+          if (routed?.route === 'canvas') {
+            const room = roomKey() || job.room?.name || 'room';
+            await sendToolCall('dispatch_to_conductor', {
+              task: 'canvas.agent_prompt',
+              params: {
+                room,
+                message: routed.message?.trim() || text,
+              },
+            });
+            return;
+          }
+        } catch (error) {
+          console.warn('[VoiceAgent] manual router failed, falling back to realtime agent', error);
+        }
+      }
+
       await generateReplySafely({ userInput: text });
     };
 
