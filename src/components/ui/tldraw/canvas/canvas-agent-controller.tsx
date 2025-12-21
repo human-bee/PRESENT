@@ -56,9 +56,22 @@ function useIsAgentHost(room?: Room) {
 
     const getParticipantId = (participant: Participant | undefined) =>
       participant?.identity || participant?.sid || '';
+    const isAgentParticipant = (participant: Participant | undefined) => {
+      const flagged = Boolean((participant as any)?.isAgent || (participant as any)?.permissions?.agent);
+      if (flagged) return true;
+      const identity = String(participant?.identity || participant?.name || '').toLowerCase();
+      if (!identity) return false;
+      if (identity.startsWith('agent-')) return true;
+      if (identity.includes('voice-agent')) return true;
+      return false;
+    };
+    const getEligibleId = (participant: Participant | undefined) => {
+      if (!participant || isAgentParticipant(participant)) return '';
+      return getParticipantId(participant);
+    };
 
     const recompute = () => {
-      const localId = getParticipantId(room.localParticipant);
+      const localId = getEligibleId(room.localParticipant);
       if (!localId) {
         setHostState({ isHost: false, hostId: null });
         return;
@@ -66,7 +79,7 @@ function useIsAgentHost(room?: Room) {
 
       const ids = [localId];
       room.remoteParticipants.forEach((participant) => {
-        const id = getParticipantId(participant);
+        const id = getEligibleId(participant);
         if (id) ids.push(id);
       });
 
