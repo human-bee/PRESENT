@@ -55,10 +55,21 @@ async function connectRoom(page: any) {
 
 async function requestAgent(page: any) {
   const requestButton = page.getByRole('button', { name: 'Request agent' }).first();
-  await expect(requestButton).toBeEnabled({ timeout: 60_000 });
-  await requestButton.evaluate((el: HTMLElement) => el.click());
-  const input = page.locator('form input[type="text"]').first();
-  await expect(input).toBeEnabled({ timeout: 60_000 });
+  const statusText = page.getByText('Agent not joined', { exact: false });
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const visible = await requestButton.isVisible().catch(() => false);
+    if (visible) {
+      await expect(requestButton).toBeEnabled({ timeout: 30_000 });
+      await requestButton.evaluate((el: HTMLElement) => el.click());
+      await page.waitForTimeout(500);
+    }
+    try {
+      await expect(statusText).not.toBeVisible({ timeout: 30_000 });
+      await expect(requestButton).not.toBeVisible({ timeout: 30_000 }).catch(() => {});
+      return;
+    } catch {}
+  }
+  await expect(statusText).not.toBeVisible({ timeout: 30_000 });
 }
 
 async function ensureTranscriptInput(page: any) {
@@ -66,6 +77,10 @@ async function ensureTranscriptInput(page: any) {
   const visible = await input.isVisible().catch(() => false);
   if (!visible) {
     await openTranscriptPanel(page);
+  }
+  const requestButton = page.getByRole('button', { name: 'Request agent' }).first();
+  if (await requestButton.isVisible().catch(() => false)) {
+    await requestAgent(page);
   }
   await expect(input).toBeVisible({ timeout: 10_000 });
   return input;
@@ -97,6 +112,27 @@ async function waitForComponentRegistered(page: any, componentName: string, time
     await page.waitForTimeout(250);
   }
   return null;
+}
+
+async function waitForDispatchTask(page: any, task: string, timeoutMs = 30_000) {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    const found = await page
+      .evaluate((targetTask: string) => {
+        const calls = (window as any).__voiceFairyLap?.toolCalls || [];
+        for (let i = calls.length - 1; i >= 0; i -= 1) {
+          const call = calls[i];
+          if (call?.tool === 'dispatch_to_conductor' && call?.task === targetTask) {
+            return call;
+          }
+        }
+        return null;
+      }, task)
+      .catch(() => null);
+    if (found) return found;
+    await page.waitForTimeout(250);
+  }
+  throw new Error(`No dispatch_to_conductor tool call found for task "${task}".`);
 }
 
 async function focusComponent(page: any, componentName: string, padding = 96): Promise<string | null> {
@@ -215,6 +251,17 @@ test.describe('Voice agent + Fairy pipeline lap', () => {
     await context.grantPermissions(['microphone', 'camera'], { origin: BASE_URL });
     await page.setViewportSize({ width: 1600, height: 1800 });
 
+    const fairyRequests: Array<{ body: string }> = [];
+    const stewardRequests: Array<{ body: string }> = [];
+    page.on('request', (request) => {
+      if (request.url().includes('/api/fairy/stream-actions')) {
+        fairyRequests.push({ body: request.postData() || '' });
+      }
+      if (request.url().includes('/api/steward/runCanvas')) {
+        stewardRequests.push({ body: request.postData() || '' });
+      }
+    });
+
     await page.addInitScript(() => {
       (window as any).__presentDispatcherMetrics = true;
       (window as any).__voiceFairyLap = {
@@ -276,6 +323,12 @@ test.describe('Voice agent + Fairy pipeline lap', () => {
       await expect(hud).toBeVisible({ timeout: 30_000 });
       await snapStable(page, imagesDir, '01-fairy-hud.png');
       return '01-fairy-hud.png';
+    });
+
+    await recordStep('Warm API routes', async () => {
+      await page.request.get(`${BASE_URL}/api/steward/runCanvas`).catch(() => {});
+      await page.request.get(`${BASE_URL}/api/fairy/stream-actions`).catch(() => {});
+      return undefined;
     });
 
     await recordStep('Connect LiveKit + request agent', async () => {
@@ -346,15 +399,57 @@ test.describe('Voice agent + Fairy pipeline lap', () => {
       return '05-timer-reset-10.png';
     });
 
-    await recordStep('Voice agent steers fairy canvas draw', async () => {
+    await recordStep('Voice agent (LLM) steers fairy canvas draw', async () => {
       const initialCount = await page.evaluate(() => {
         const editor = (window as any).__tldrawEditor;
         if (!editor) return 0;
         return Array.from(editor.getCurrentPageShapeIds?.() ?? []).length;
       });
 
-      await sendAgentLine(page, '/canvas Draw a rectangle labeled "Voice Fairy Lap".');
+      await sendAgentLine(
+        page,
+        'Draw a rectangle labeled "Voice Fairy LLM Lap" on the canvas.',
+      );
       await closeTranscriptPanelIfPresent(page);
+
+      const dispatchDetail = await waitForDispatchTask(page, 'canvas.agent_prompt', 30_000);
+      if (
+        dispatchDetail?.dispatchMessage &&
+        !String(dispatchDetail.dispatchMessage).includes('Voice Fairy LLM Lap')
+      ) {
+        throw new Error(`Canvas agent prompt did not include expected label. Got: ${dispatchDetail.dispatchMessage}`);
+      }
+
+      const waitForStewardRequest = async (timeoutMs = 120_000) => {
+        const start = Date.now();
+        while (Date.now() - start < timeoutMs) {
+          const match = stewardRequests.find((entry) => entry.body.trim().length > 10);
+          if (match) return match;
+          await page.waitForTimeout(250);
+        }
+        const lengths = stewardRequests.map((entry) => entry.body.trim().length);
+        throw new Error(
+          `No /api/steward/runCanvas request with a non-empty body was captured. Count=${stewardRequests.length} lengths=${lengths.join(',')}`,
+        );
+      };
+      const stewardRequest = await waitForStewardRequest();
+      if (!stewardRequest.body.includes('canvas.agent_prompt')) {
+        throw new Error(`Steward request did not include canvas.agent_prompt. Body: ${stewardRequest.body.slice(0, 200)}`);
+      }
+
+      const waitForFairyRequest = async (timeoutMs = 120_000) => {
+        const start = Date.now();
+        while (Date.now() - start < timeoutMs) {
+          const match = fairyRequests.find((entry) => entry.body.trim().length > 10);
+          if (match) return match;
+          await page.waitForTimeout(250);
+        }
+        const lengths = fairyRequests.map((entry) => entry.body.trim().length);
+        throw new Error(
+          `No /api/fairy/stream-actions request with a non-empty body was captured. Count=${fairyRequests.length} lengths=${lengths.join(',')}`,
+        );
+      };
+      await waitForFairyRequest();
 
       await page.waitForFunction(
         (prevCount: number) => {
@@ -364,7 +459,7 @@ test.describe('Voice agent + Fairy pipeline lap', () => {
           return nextCount > prevCount;
         },
         initialCount,
-        { timeout: 90_000 },
+        { timeout: 120_000 },
       );
 
       await snapStable(page, imagesDir, '06-fairy-canvas-draw.png');

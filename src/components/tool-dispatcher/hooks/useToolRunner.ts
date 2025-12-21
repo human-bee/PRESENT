@@ -716,11 +716,18 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
         const callId = message.id || `${Date.now()}`;
         if (metricsEnabled && typeof window !== 'undefined') {
           try {
+            const task = typeof params?.task === 'string' ? params.task : null;
+            const dispatchMessage =
+              typeof params?.params?.message === 'string'
+                ? String(params.params.message).slice(0, 160)
+                : null;
             window.dispatchEvent(
               new CustomEvent('present:tool_call_received', {
                 detail: {
                   callId,
                   tool: tool || 'unknown',
+                  task,
+                  dispatchMessage,
                   source:
                     typeof message.payload?.context?.source === 'string'
                       ? message.payload.context.source

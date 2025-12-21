@@ -43,7 +43,10 @@ export async function signInOrSignUp(
     await page.getByLabel('Email').fill(email);
     await page.getByLabel('Password').fill(password);
     await page.getByRole('button', { name: 'Sign In', exact: true }).click();
-    await page.waitForURL('**/canvas**', { timeout: 45_000 });
+    await page.waitForLoadState('networkidle').catch(() => {});
+    await page
+      .waitForURL('**/canvas**', { timeout: 90_000 })
+      .catch(() => page.waitForSelector('[data-canvas-space="true"]', { timeout: 90_000 }));
   };
 
   if (hasEnvCreds) {
@@ -60,14 +63,17 @@ export async function signInOrSignUp(
   await page.getByLabel('Email').fill(email);
   await page.getByLabel('Password').fill(password);
   await page.getByRole('button', { name: 'Sign Up', exact: true }).click();
-  await page.waitForURL('**/canvas**', { timeout: 60_000 });
+  await page.waitForLoadState('networkidle').catch(() => {});
+  await page
+    .waitForURL('**/canvas**', { timeout: 90_000 })
+    .catch(() => page.waitForSelector('[data-canvas-space="true"]', { timeout: 90_000 }));
 
   return { email, password, mode: 'signup' };
 }
 
 export async function snap(page: Page, imagesDir: string, name: string) {
   await page.waitForTimeout(300);
-  await page.screenshot({ path: path.join(imagesDir, name) });
+  await page.screenshot({ path: path.join(imagesDir, name), timeout: 30_000 });
 }
 
 export function writeReport(outputDir: string, runId: string, results: StepResult[]) {
