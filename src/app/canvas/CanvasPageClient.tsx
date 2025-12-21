@@ -342,6 +342,17 @@ export function CanvasPageClient() {
     };
   }, [isTranscriptOpen]);
 
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const offsetValue = `${isTranscriptOpen ? transcriptOffset : 0}px`;
+    document.documentElement.style.setProperty('--present-transcript-offset', offsetValue);
+    document.body.style.setProperty('--present-transcript-offset', offsetValue);
+    return () => {
+      document.documentElement.style.setProperty('--present-transcript-offset', '0px');
+      document.body.style.setProperty('--present-transcript-offset', '0px');
+    };
+  }, [isTranscriptOpen, transcriptOffset]);
+
   // Redirect to sign in if not authenticated
   useEffect(() => {
     if (loading) return;

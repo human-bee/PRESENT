@@ -227,3 +227,8 @@ body {
     color: hsl(var(--secondary));
   }
 }
+
+/* Present overrides for Fairy HUD placement */
+.tla-fairy-hud {
+  transition: right 300ms ease;
+}
