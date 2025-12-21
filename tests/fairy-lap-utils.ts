@@ -14,6 +14,12 @@ export type StepResult = {
   error?: string;
 };
 
+export type ReportSummary = {
+  metrics?: Array<{ label: string; value: string }>;
+  artifacts?: Array<{ label: string; path: string }>;
+  notes?: string[];
+};
+
 export function formatTimestamp(date: Date): string {
   const pad = (n: number) => String(n).padStart(2, '0');
   return `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}-${pad(date.getHours())}${pad(
@@ -76,7 +82,7 @@ export async function snap(page: Page, imagesDir: string, name: string) {
   await page.screenshot({ path: path.join(imagesDir, name), timeout: 30_000 });
 }
 
-export function writeReport(outputDir: string, runId: string, results: StepResult[]) {
+export function writeReport(outputDir: string, runId: string, results: StepResult[], summary?: ReportSummary) {
   const reportLines = [
     `# Fairy Lap Report (${runId})`,
     '',
@@ -91,6 +97,29 @@ export function writeReport(outputDir: string, runId: string, results: StepResul
     }),
     '',
   ];
+
+  if (summary?.metrics?.length) {
+    reportLines.push('## Summary Metrics', '', '| Metric | Value |', '| --- | --- |');
+    summary.metrics.forEach((metric) => {
+      reportLines.push(`| ${metric.label} | ${metric.value} |`);
+    });
+    reportLines.push('');
+  }
+
+  if (summary?.artifacts?.length) {
+    reportLines.push('## Artifacts', '', '| Artifact | Path |', '| --- | --- |');
+    summary.artifacts.forEach((artifact) => {
+      const link = artifact.path ? `[${artifact.path}](${artifact.path})` : '';
+      reportLines.push(`| ${artifact.label} | ${link} |`);
+    });
+    reportLines.push('');
+  }
+
+  if (summary?.notes?.length) {
+    reportLines.push('## Notes', '');
+    summary.notes.forEach((note) => reportLines.push(`- ${note}`));
+    reportLines.push('');
+  }
 
   fs.writeFileSync(path.join(outputDir, 'report.md'), reportLines.join('\n'));
 }
