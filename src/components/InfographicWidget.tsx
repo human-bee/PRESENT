@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Room } from 'livekit-client';
 import { createLiveKitBus } from '../lib/livekit/livekit-bus';
 import { Button } from '@/components/ui/shared/button';
@@ -8,6 +8,22 @@ import { useEditor } from '@tldraw/tldraw';
 import { useInfographicDrop, DRAG_MIME_TYPE } from '@/hooks/use-infographic-drop';
 import { usePromotable } from '@/hooks/use-promotable';
 import { useCanvasContext } from '@/lib/hooks/use-canvas-context';
+import {
+    DEFAULT_FAIRY_CONTEXT_PROFILE,
+    getFairyContextLimits,
+    normalizeFairyContextProfile,
+} from '@/lib/fairy-context/profiles';
+import { formatFairyContextParts, type FairyContextPart } from '@/lib/fairy-context/format';
+import { waitForMcpReady } from '@/lib/mcp-bridge';
+import { buildMemoryPayload } from '@/lib/mcp/memory';
+
+const DEFAULT_MEMORY_TOOL = process.env.NEXT_PUBLIC_INFOGRAPHIC_MEMORY_MCP_TOOL;
+const DEFAULT_MEMORY_COLLECTION = process.env.NEXT_PUBLIC_INFOGRAPHIC_MEMORY_MCP_COLLECTION;
+const DEFAULT_MEMORY_INDEX = process.env.NEXT_PUBLIC_INFOGRAPHIC_MEMORY_MCP_INDEX;
+const DEFAULT_MEMORY_NAMESPACE = process.env.NEXT_PUBLIC_INFOGRAPHIC_MEMORY_MCP_NAMESPACE;
+const DEFAULT_MEMORY_AUTO_SEND = process.env.NEXT_PUBLIC_INFOGRAPHIC_MEMORY_AUTO_SEND === 'true';
+const MAX_MEMORY_SUMMARY_CHARS = 600;
+const MAX_MEMORY_CONTENT_CHARS = 2000;
 
 interface InfographicWidgetProps {
     room: Room | null;
@@ -24,7 +40,7 @@ interface InfographicWidgetProps {
 
 
 export function InfographicWidget({ room, isShape = false, __custom_message_id, messageId: propMessageId, contextKey }: InfographicWidgetProps) {
-    const widgetIdRef = React.useRef<string>(crypto.randomUUID());
+    const widgetIdRef = useRef<string>(crypto.randomUUID());
     const [isOpen, setIsOpen] = useState(false);
     const [isGenerating, setIsGenerating] = useState(false);
     // History state: stores array of generated images
@@ -34,9 +50,86 @@ export function InfographicWidget({ room, isShape = false, __custom_message_id, 
     const [error, setError] = useState<string | null>(null);
     const [transcripts, setTranscripts] = useState<any[]>([]);
     const [useGrounding, setUseGrounding] = useState(true);
+    const [contextProfile, setContextProfile] = useState(DEFAULT_FAIRY_CONTEXT_PROFILE);
+    const [contextBundleParts, setContextBundleParts] = useState<FairyContextPart[] | null>(null);
+    const [memoryToolName, setMemoryToolName] = useState(DEFAULT_MEMORY_TOOL);
+    const [memoryCollection, setMemoryCollection] = useState(DEFAULT_MEMORY_COLLECTION);
+    const [memoryIndex, setMemoryIndex] = useState(DEFAULT_MEMORY_INDEX);
+    const [memoryNamespace, setMemoryNamespace] = useState(DEFAULT_MEMORY_NAMESPACE);
+    const [memoryAutoSend, setMemoryAutoSend] = useState(DEFAULT_MEMORY_AUTO_SEND);
+    const lastPromptRef = useRef<string>('');
+    const lastMemorySentRef = useRef<string>('');
 
-    const bus = React.useMemo(() => createLiveKitBus(room), [room]);
+    const bus = useMemo(() => createLiveKitBus(room), [room]);
     const editor = useEditor();
+    const messageId = propMessageId || __custom_message_id || (room as any)?.messageId || widgetIdRef.current;
+    const registryContext = contextKey || (isShape ? 'canvas' : 'default');
+
+    const memoryTarget = useMemo(
+        () => ({
+            collection: memoryCollection,
+            index: memoryIndex,
+            namespace: memoryNamespace,
+        }),
+        [memoryCollection, memoryIndex, memoryNamespace],
+    );
+
+    const sendInfographicMemory = useCallback(
+        async (image: { id: string; timestamp: number }, promptText: string) => {
+            const rawToolName = (memoryToolName || '').trim();
+            const toolName = rawToolName.startsWith('mcp_') ? rawToolName.slice(4) : rawToolName;
+            if (!toolName) return;
+
+            const ready = await waitForMcpReady(200);
+            if (!ready) return;
+
+            const key = `${image.id}-${image.timestamp}-${promptText.length}`;
+            if (lastMemorySentRef.current === key) return;
+
+            const title = 'Infographic Summary';
+            const summary = promptText
+                ? promptText.slice(0, MAX_MEMORY_SUMMARY_CHARS)
+                : 'Infographic generated from conversation context.';
+            const content = [
+                `Infographic image id: ${image.id}`,
+                `Widget messageId: ${messageId}`,
+                promptText ? `Prompt:\n${promptText}` : '',
+            ]
+                .filter(Boolean)
+                .join('\n\n');
+            const trimmedContent =
+                content.length > MAX_MEMORY_CONTENT_CHARS
+                    ? `${content.slice(0, MAX_MEMORY_CONTENT_CHARS)}...`
+                    : content;
+
+            const payload = buildMemoryPayload(
+                toolName,
+                {
+                    id: image.id,
+                    title,
+                    content: trimmedContent,
+                    summary,
+                    highlights: [],
+                    decisions: [],
+                    actionItems: [],
+                    tags: ['infographic', 'conversation'],
+                    contextProfile,
+                    contextKey: registryContext,
+                    messageId,
+                    lastUpdated: image.timestamp,
+                },
+                memoryTarget,
+            );
+
+            try {
+                await (window as any).callMcpTool?.(toolName, payload);
+                lastMemorySentRef.current = key;
+            } catch (error) {
+                console.warn('[InfographicWidget] memory send failed', error);
+            }
+        },
+        [contextProfile, memoryTarget, memoryToolName, messageId, registryContext],
+    );
 
     // Get unified canvas context (transcripts, documents, etc.)
     const { documents: contextDocuments, getPromptContext } = useCanvasContext();
@@ -63,10 +156,14 @@ export function InfographicWidget({ room, isShape = false, __custom_message_id, 
 
         try {
             // Get combined context using unified hook
-            const context = getPromptContext({ transcriptLines: 20, maxDocumentLength: 5000 });
+            const limits = getFairyContextLimits(contextProfile);
+            const context = getPromptContext({
+                transcriptLines: limits.TRANSCRIPT_LINES,
+                maxDocumentLength: limits.MAX_DOCUMENT_LENGTH,
+            });
 
             // Also check local transcripts state (separate from unified context for real-time updates)
-            const recentLines = transcripts.slice(-20).map((t: any) => {
+            const recentLines = transcripts.slice(-limits.TRANSCRIPT_LINES).map((t: any) => {
                 const name = t.participantName || t.participantId || 'Speaker';
                 return `${name}: ${t.text}`;
             }).join('\n');
@@ -171,12 +268,15 @@ export function InfographicWidget({ room, isShape = false, __custom_message_id, 
                 }
             })();
 
+            const bundleText = contextBundleParts ? formatFairyContextParts(contextBundleParts, limits.MAX_CONTEXT_CHARS) : '';
+
             const hasUnifiedContext = Boolean(context && context.trim().length > 0);
             const hasLocalTranscript = Boolean(recentLines && recentLines.trim().length > 0);
             const hasContextDocs = contextDocuments.length > 0;
+            const hasBundle = Boolean(bundleText && bundleText.trim().length > 0);
 
             // Allow generation if we have ANY available context source.
-            if (!hasUnifiedContext && !hasLocalTranscript && !hasContextDocs && !scorecardContext) {
+            if (!hasUnifiedContext && !hasLocalTranscript && !hasContextDocs && !scorecardContext && !hasBundle) {
                 throw new Error('No conversation context available yet. Start talking or add context documents!');
             }
 
@@ -186,7 +286,9 @@ export function InfographicWidget({ room, isShape = false, __custom_message_id, 
                 scorecardContext ? `\n${scorecardContext}\n` : '',
                 recentLines ? `\n## Live Transcript (recent)\n${recentLines}\n` : '',
                 context ? `\n## Additional Context\n${context}\n` : '',
+                bundleText ? `\n## Context Bundle\n${bundleText}\n` : '',
             ].filter(Boolean).join('\n');
+            lastPromptRef.current = prompt;
 
             const response = await fetch('/api/generateImages', {
                 method: 'POST',
@@ -216,6 +318,9 @@ export function InfographicWidget({ room, isShape = false, __custom_message_id, 
                     setCurrentIndex(next.length - 1); // Always show latest
                     return next;
                 });
+                if (memoryAutoSend) {
+                    void sendInfographicMemory(newImage, lastPromptRef.current || prompt);
+                }
             } else {
                 throw new Error('No image data received');
             }
@@ -225,7 +330,19 @@ export function InfographicWidget({ room, isShape = false, __custom_message_id, 
         } finally {
             setIsGenerating(false);
         }
-    }, [contextDocuments, editor, getPromptContext, isGenerating, isShape, transcripts, useGrounding]);
+    }, [
+        contextBundleParts,
+        contextDocuments,
+        contextProfile,
+        editor,
+        getPromptContext,
+        isGenerating,
+        isShape,
+        memoryAutoSend,
+        sendInfographicMemory,
+        transcripts,
+        useGrounding,
+    ]);
 
     useEffect(() => {
         if (!isShape) {
@@ -238,17 +355,36 @@ export function InfographicWidget({ room, isShape = false, __custom_message_id, 
     // ---------------------------------------------------------------------------
     // AI Integration: Enable update_component support
     // ---------------------------------------------------------------------------
-    const instanceId = React.useId();
-    // Prefer injected messageId for registry/update_component targeting
-    const messageId = propMessageId || __custom_message_id || (room as any)?.messageId || widgetIdRef.current;
-    const registryContext = contextKey || (isShape ? 'canvas' : 'default');
-
     const handleAIUpdate = useCallback((patch: any) => {
         console.log('[InfographicWidget] Received AI update:', patch);
 
         // Update local state based on patch
         if (typeof patch.useGrounding === 'boolean') {
             setUseGrounding(patch.useGrounding);
+        }
+        if (typeof patch.contextProfile === 'string') {
+            const normalized = normalizeFairyContextProfile(patch.contextProfile);
+            if (normalized) {
+                setContextProfile(normalized);
+            }
+        }
+        if (patch.contextBundle && Array.isArray(patch.contextBundle.parts)) {
+            setContextBundleParts(patch.contextBundle.parts as FairyContextPart[]);
+        }
+        if (typeof patch.memoryToolName === 'string') {
+            setMemoryToolName(patch.memoryToolName);
+        }
+        if (typeof patch.memoryCollection === 'string') {
+            setMemoryCollection(patch.memoryCollection);
+        }
+        if (typeof patch.memoryIndex === 'string') {
+            setMemoryIndex(patch.memoryIndex);
+        }
+        if (typeof patch.memoryNamespace === 'string') {
+            setMemoryNamespace(patch.memoryNamespace);
+        }
+        if (typeof patch.memoryAutoSend === 'boolean') {
+            setMemoryAutoSend(patch.memoryAutoSend);
         }
 
         // Trigger generation if instruction/prompt is provided
@@ -345,7 +481,7 @@ export function InfographicWidget({ room, isShape = false, __custom_message_id, 
     const handleDragStart = (e: React.DragEvent<HTMLImageElement>) => {
         if (!activeImage) return;
         console.log('[InfographicWidget] Drag started', {
-            url: activeImage.url.substring(0, 50) + '...',
+            url: `${activeImage.url.substring(0, 50)}...`,
             timestamp: activeImage.timestamp
         });
 

@@ -12,10 +12,6 @@ export interface RoomLike {
 
 export interface SystemCapabilities {
   tools: Array<{ name: string; description: string; examples?: string[] }>;
-  decisionEngine: {
-    intents: Record<string, string[]>;
-    keywords: Record<string, string[]>;
-  };
   components?: Array<{ name: string; description: string; examples?: string[] }>;
 }
 
@@ -31,6 +27,8 @@ export const defaultCustomComponents: Array<{
     { name: 'RetroTimer', description: 'Retro countdown timer', examples: ['create timer', 'set a timer', 'start countdown'] },
     { name: 'RetroTimerEnhanced', description: 'Enhanced timer with AI updates', examples: ['create a 5 minute timer', 'add timer', 'start a timer'] },
     { name: 'ActionItemTracker', description: 'Action item manager', examples: ['create action items', 'add todo list', 'track tasks', 'create task tracker'] },
+    { name: 'MeetingSummaryWidget', description: 'Meeting summary panel', examples: ['create meeting summary widget', 'show meeting summary', 'add summary panel'] },
+    { name: 'MemoryRecallWidget', description: 'Vector memory recall panel', examples: ['search memory', 'recall memory', 'show memory recall'] },
     { name: 'LinearKanbanBoard', description: 'Kanban board with Linear integration', examples: ['create kanban board', 'show kanban', 'add kanban', 'task board'] },
     
     // Documents & Research
@@ -85,37 +83,6 @@ export const defaultCapabilities: SystemCapabilities = {
     { name: 'canvas_set_theme', description: 'Set theme' },
     { name: 'canvas_select', description: 'Select shapes' },
   ],
-  decisionEngine: {
-    intents: {
-      ui_generation: ['create', 'make', 'generate', 'show', 'display', 'build', 'add'],
-      youtube_search: ['youtube', 'video', 'play', 'watch', 'search youtube'],
-      timer: ['timer', 'countdown', 'alarm', 'stopwatch', 'time'],
-      weather: ['weather', 'forecast', 'temperature', 'climate'],
-      research: ['research', 'findings', 'results', 'analysis'],
-      action_items: ['todo', 'task', 'action item', 'checklist', 'action items'],
-      image_generation: ['image', 'picture', 'illustration', 'generate image'],
-      infographic: ['infographic', 'chart', 'visualize'],
-      captions: ['captions', 'subtitles', 'transcription', 'live text'],
-      canvas_control: ['zoom', 'focus', 'pan', 'center', 'pin', 'unpin', 'note', 'arrange'],
-      participant: ['participant', 'participant tile', 'video tile'],
-      kanban: ['kanban', 'kanban board', 'task board'],
-      document: ['document', 'doc', 'editor'],
-      screen_share: ['screen share', 'screenshare', 'share screen'],
-      context: ['context', 'context feeder', 'upload context'],
-      help: ['help', 'onboarding', 'how do I'],
-    },
-    keywords: {
-      timer_related: ['timer', 'countdown', 'minutes', 'seconds', 'alarm'],
-      youtube_related: ['youtube', 'video', 'play', 'watch', 'embed'],
-      weather_related: ['weather', 'forecast', 'temperature', 'rain', 'sunny'],
-      ui_related: ['create', 'make', 'show', 'display', 'component', 'add', 'tile', 'widget'],
-      research_related: ['research', 'study', 'analysis', 'findings'],
-      task_related: ['todo', 'task', 'action', 'checklist', 'manage', 'kanban', 'board'],
-      canvas_related: ['zoom', 'focus', 'pan', 'center', 'pin', 'unpin', 'note', 'arrange', 'grid'],
-      livekit_related: ['participant', 'tile', 'video', 'room', 'connector', 'screen share'],
-      document_related: ['document', 'doc', 'editor', 'write'],
-    },
-  },
   components: defaultCustomComponents,
 };
 

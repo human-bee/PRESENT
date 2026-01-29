@@ -124,6 +124,22 @@ export const componentSizeInfo: Record<string, ComponentSizeInfo> = {
     resizeMode: 'free',
     sizingPolicy: 'always_fit', // List of items grows dynamically
   },
+  MeetingSummaryWidget: {
+    naturalWidth: 520,
+    naturalHeight: 520,
+    minWidth: 360,
+    minHeight: 360,
+    resizeMode: 'free',
+    sizingPolicy: 'always_fit',
+  },
+  MemoryRecallWidget: {
+    naturalWidth: 520,
+    naturalHeight: 520,
+    minWidth: 360,
+    minHeight: 360,
+    resizeMode: 'free',
+    sizingPolicy: 'always_fit',
+  },
   ResearchPanel: {
     naturalWidth: 600,
     naturalHeight: 700,

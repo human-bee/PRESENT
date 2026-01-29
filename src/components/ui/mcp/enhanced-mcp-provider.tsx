@@ -24,12 +24,10 @@ import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { customMcpProvider } from '@custom-ai/react/mcp';
 import {
   markMcpServerFailed,
-  markMcpServerConnected,
   getMcpServerStatuses,
   resetMcpServerFailures,
   type McpServer,
 } from '@/lib/mcp-utils';
-import { sanitizeToolName, isValidToolName } from '@/lib/custom-tool-validator';
 
 interface EnhancedMcpProviderProps {
   children: React.ReactNode;
@@ -91,20 +89,7 @@ export function EnhancedMcpProvider({
 
       updateConnectionStatus();
     },
-    [updateConnectionStatus],
-  );
-
-  // Handle successful connections
-  const handleMcpSuccess = useCallback(
-    (serverUrl: string) => {
-      if (process.env.NODE_ENV === 'development' && LOGS) {
-        console.log(`[Enhanced MCP] Successfully connected to ${serverUrl}`);
-      }
-
-      markMcpServerConnected(serverUrl);
-      updateConnectionStatus();
-    },
-    [updateConnectionStatus],
+    [updateConnectionStatus, LOGS],
   );
 
   // Reset connections if we haven't tried in a while (manual refresh)
@@ -120,7 +105,7 @@ export function EnhancedMcpProvider({
       resetMcpServerFailures();
       setConnectionAttempts(0);
     }
-  }, [connectionAttempts, lastConnectionTime]);
+  }, [connectionAttempts, lastConnectionTime, LOGS]);
 
   // Track connection attempts
   useEffect(() => {
@@ -146,7 +131,7 @@ export function EnhancedMcpProvider({
         );
       }
     }
-  }, [mcpServers]);
+  }, [mcpServers, LOGS]);
 
   // If no servers are available, render children without MCP
   if (mcpServers.length === 0) {
@@ -186,7 +171,7 @@ class MCPErrorBoundary extends React.Component<
     return { hasError: true, error };
   }
 
-  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+  componentDidCatch(error: Error, _errorInfo: React.ErrorInfo) {
     if (process.env.NODE_ENV === 'development' && LOGS) {
       console.warn('[Enhanced MCP] Error boundary caught MCP error:', error);
     }

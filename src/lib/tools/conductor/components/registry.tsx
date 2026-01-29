@@ -6,6 +6,8 @@ import { RetroTimerEnhanced, retroTimerEnhancedSchema } from '@/components/ui/pr
 import { DocumentEditor, documentEditorSchema } from '@/components/ui/documents/document-editor';
 import { ResearchPanel, researchPanelSchema } from '@/components/ui/research/research-panel';
 import { ActionItemTracker, actionItemTrackerSchema } from '@/components/ui/productivity/action-item-tracker';
+import MeetingSummaryWidget, { meetingSummaryWidgetSchema } from '@/components/ui/productivity/meeting-summary-widget';
+import MemoryRecallWidget, { memoryRecallWidgetSchema } from '@/components/ui/productivity/memory-recall-widget';
 import {
   LivekitParticipantTile,
   livekitParticipantTileSchema,
@@ -119,6 +121,20 @@ export const components: any = [
       'A comprehensive action item management system that tracks tasks, assignments, due dates, and progress. Can be initially created by AI with action items from meetings or conversations, then allows users to dynamically add, edit, complete, and manage items. Features priority levels, status tracking, assignee management, filtering, sorting, and persistent state. Perfect for meeting follow-ups, project management, and task coordination.',
     component: ActionItemTracker,
     propsSchema: extendedSchema(actionItemTrackerSchema),
+  },
+  {
+    name: 'MeetingSummaryWidget',
+    description:
+      'Meeting summary panel that renders CRM-ready summaries, highlights, decisions, and action items. Supports updates from the summary steward and optional MCP handoff to a CRM tool.',
+    component: MeetingSummaryWidget,
+    propsSchema: extendedSchema(meetingSummaryWidgetSchema),
+  },
+  {
+    name: 'MemoryRecallWidget',
+    description:
+      'Vector memory recall panel that queries MCP memory stores (e.g. Qdrant) and lists matching context snippets.',
+    component: MemoryRecallWidget,
+    propsSchema: extendedSchema(memoryRecallWidgetSchema),
   },
   {
     name: 'LivekitRoomConnector',

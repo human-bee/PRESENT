@@ -18,6 +18,7 @@ import {
   HelpCircle,
   Trophy,
   FileUp,
+  Database,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -71,6 +72,16 @@ export const componentIcons: Record<string, ComponentIconMapping> = {
     icon: CheckSquare,
     category: 'Productivity',
     description: 'Track tasks and action items',
+  },
+  MeetingSummaryWidget: {
+    icon: FileText,
+    category: 'Productivity',
+    description: 'CRM-ready meeting summary',
+  },
+  MemoryRecallWidget: {
+    icon: Database,
+    category: 'Productivity',
+    description: 'Vector memory recall',
   },
   ResearchPanel: {
     icon: Search,

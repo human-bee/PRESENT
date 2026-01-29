@@ -13,6 +13,11 @@ import xml from 'highlight.js/lib/languages/xml'; // for html / markdown snippet
 import 'highlight.js/styles/github.css';
 import DOMPurify from 'dompurify';
 
+hljs.registerLanguage('javascript', javascript);
+hljs.registerLanguage('typescript', typescript);
+hljs.registerLanguage('json', json);
+hljs.registerLanguage('xml', xml);
+
 /**
  * Markdown Components for React-Markdown
  *
