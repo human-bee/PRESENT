@@ -42,7 +42,7 @@ async function forward(request: NextRequest, targetUrl: string): Promise<Respons
       body: ['GET', 'HEAD'].includes(request.method) ? undefined : request.body,
       redirect: 'follow',
       cache: 'no-store', // Disable caching for SSE/API proxy
-      // @ts-ignore - duplex is required for streaming bodies in some environments but not in all TS definitions
+      // @ts-expect-error - duplex is required for streaming bodies in some environments but not in all TS definitions
       duplex: 'half',
     };
 

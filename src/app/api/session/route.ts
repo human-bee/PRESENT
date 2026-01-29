@@ -26,7 +26,7 @@ export async function GET(req: NextRequest) {
   try {
     let query = supabase.from('canvas_sessions').select('*').eq('room_name', roomName);
     if (canvasId === null || canvasId === 'null' || canvasId === '') {
-      // @ts-ignore
+      // @ts-expect-error
       query = (query as any).is('canvas_id', null);
     } else if (canvasId) {
       query = query.eq('canvas_id', canvasId);

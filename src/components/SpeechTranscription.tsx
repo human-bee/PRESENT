@@ -1,6 +1,5 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
 import dynamic from 'next/dynamic';
 const LivekitRoom = dynamic(() => import('@livekit/components-react').then((m) => m.LiveKitRoom), {
   ssr: false,

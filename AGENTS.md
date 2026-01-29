@@ -38,7 +38,7 @@
 
 - `npm test`: Run Jest tests.
 - `npm run test:watch`: Run tests in watch mode.
-- `npm run lint`: Run ESLint/Next rules.
+- `npm run lint`: Run Biome lint (src only).
 
 > 💡 **Tip:** To test end-to-end, connect to LiveKit, request the agent, and speak/text requests; watch queue throughput in `logs/agent-conductor.log`.
 
@@ -86,6 +86,7 @@
   - `CANVAS_AGENT_SCREENSHOT_TIMEOUT_MS=3500` screenshot RPC timeout in milliseconds (floored at 2500ms so the steward reliably receives frames before giving up, even when back-to-back screenshot requests queue up).
   - `CANVAS_AGENT_TTFB_SLO_MS=200` target time-to-first-byte for first action envelope.
   - `NEXT_PUBLIC_CANVAS_AGENT_CLIENT_ENABLED=false` (archived) — keep this false. Turning it on disables the server steward and routes execution to the legacy browser agent. Do not enable except for one‑off emergency debugging.
+  - `NEXT_PUBLIC_FAIRY_CLIENT_AGENT_ENABLED=false` keeps the local fairy agent off while still allowing the fairy UI. Enable only if you explicitly want client-side fairy execution.
   - `NEXT_PUBLIC_CANVAS_AGENT_THEME_ENABLED=true` keeps the TLDraw branding enabled even when the legacy client agent is off.
   - `CANVAS_QUEUE_DIRECT_FALLBACK=false` ensures canvas jobs only run via the queue/worker. Set to `true` only if Supabase is offline and you explicitly want synchronous execution (actions may duplicate).
   - `CANVAS_AGENT_MAX_FOLLOWUPS=3` max bounded depth for add_detail follow-up loops.

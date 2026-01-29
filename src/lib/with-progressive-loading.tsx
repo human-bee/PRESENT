@@ -6,7 +6,7 @@
 
 'use client';
 
-import React, { ComponentType, useState, useEffect } from 'react';
+import React, { ComponentType, useState } from 'react';
 import { useProgressiveLoading, LoadingState, ComponentLoadingStates } from './progressive-loading';
 import { LoadingWrapper, Skeleton, SkeletonPatterns } from '@/components/ui/shared/loading-states';
 
@@ -164,7 +164,5 @@ export function useComponentProgressiveLoading<T>(initialData: T | null = null):
 export function ProgressiveLoading<P extends object>(
   options: WithProgressiveLoadingOptions<P> = {},
 ) {
-  return function (Component: ComponentType<P>) {
-    return withProgressiveLoading(Component, options);
-  };
+  return (Component: ComponentType<P>) => withProgressiveLoading(Component, options);
 }

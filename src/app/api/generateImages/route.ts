@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 export async function POST(req: Request) {
   const json = await req.json();
-  const { prompt, userAPIKey, iterativeMode, style, model } = z
+  const { prompt, userAPIKey, iterativeMode, style } = z
     .object({
       prompt: z.string(),
       iterativeMode: z.boolean(),
@@ -56,7 +56,6 @@ export async function POST(req: Request) {
             }];
           }
 
-          let lastError;
           for (let attempt = 0; attempt < 5; attempt++) {
             try {
               response = await fetch(endpoint, {
@@ -71,7 +70,7 @@ export async function POST(req: Request) {
 
               const errorText = await response.text();
               if (response.status === 503) {
-                const waitTime = Math.pow(2, attempt) * 1000; // 1s, 2s, 4s, 8s, 16s
+                const waitTime = 2 ** attempt * 1000; // 1s, 2s, 4s, 8s, 16s
                 console.warn(`Gemini API 503 (Attempt ${attempt + 1}/5): ${errorText}. Retrying in ${waitTime}ms...`);
                 if (attempt < 4) {
                   await new Promise(resolve => setTimeout(resolve, waitTime));
@@ -81,7 +80,6 @@ export async function POST(req: Request) {
 
               throw new Error(`Gemini API Error: ${response.status} - ${errorText}`);
             } catch (e) {
-              lastError = e;
               if (attempt === 4) throw e;
               if (attempt < 4) {
                 await new Promise(resolve => setTimeout(resolve, 1000));
@@ -133,7 +131,6 @@ export async function POST(req: Request) {
           }];
         }
 
-        let lastError;
         for (let attempt = 0; attempt < 5; attempt++) {
           try {
             response = await fetch(generateContentEndpoint, {
@@ -149,7 +146,7 @@ export async function POST(req: Request) {
 
             const errorText = await response.text();
             if (response.status === 503) {
-              const waitTime = Math.pow(2, attempt) * 1000;
+              const waitTime = 2 ** attempt * 1000;
               console.warn(`Vertex AI 503 (Attempt ${attempt + 1}/5): ${errorText}. Retrying in ${waitTime}ms...`);
               if (attempt < 4) {
                 await new Promise(resolve => setTimeout(resolve, waitTime));
@@ -159,7 +156,6 @@ export async function POST(req: Request) {
 
             throw new Error(`Vertex AI Error: ${response.status} - ${errorText}`);
           } catch (e) {
-            lastError = e;
             if (attempt === 4) throw e;
             if (attempt < 4) {
               await new Promise(resolve => setTimeout(resolve, 1000));

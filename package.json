@@ -10,7 +10,7 @@
     "build": "next build --webpack",
     "analyze": "ANALYZE=true next build",
     "start": "next start",
-    "lint": "next lint",
+    "lint": "biome lint src",
     "biome:check": "biome check .",
     "format": "biome format --write .",
     "init": "npx custom init",

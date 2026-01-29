@@ -3,7 +3,7 @@ import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 
 // GET /api/canvas - List user's canvases
-export async function GET(request: Request) {
+export async function GET(_request: Request) {
   try {
     const cookieStore = await cookies();
     const supabase = createServerClient(

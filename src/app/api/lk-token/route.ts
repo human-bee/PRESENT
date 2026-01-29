@@ -1,5 +1,4 @@
 import type { NextRequest } from 'next/server';
-import { NextResponse } from 'next/server';
 import { GET as baseGet } from '../token/route';
 
 export const runtime = 'nodejs';

@@ -33,7 +33,7 @@ Return a structured search strategy.
   videoQualityAnalysis: async () => await getPrompt('videoQualityAnalysis'),
 
   // Transcript navigation
-  transcriptAnalysis: (transcript: string, userIntent: string) => `
+  transcriptAnalysis: (_transcript: string, userIntent: string) => `
 Analyze this video transcript to find moments related to: "${userIntent}"
 
 For each relevant segment:
@@ -132,7 +132,7 @@ These videos are gaining rapid popularity today!
 
 // Helper functions for formatting
 function formatViewCount(count: string): string {
-  const num = parseInt(count);
+  const num = parseInt(count, 10);
   if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`;
   if (num >= 1000) return `${(num / 1000).toFixed(1)}K`;
   return count;
@@ -159,7 +159,7 @@ function formatDuration(isoDuration: string): string {
   const minutes = match[2] ? match[2].padStart(2, '0') : '00';
   const seconds = match[3] ? match[3].padStart(2, '0') : '00';
 
-  return hours + minutes + ':' + seconds;
+  return `${hours}${minutes}:${seconds}`;
 }
 
 function formatTimestamp(seconds: number): string {

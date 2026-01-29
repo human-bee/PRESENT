@@ -2,7 +2,6 @@
  * @jest-environment node
  */
 import * as dotenv from 'dotenv';
-import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { GET, POST, DELETE } from './route';
 
