@@ -1,5 +1,5 @@
 import { getCerebrasClient, getModelForSteward } from '../fast-steward-config';
-import { getContextDocuments, formatContextDocuments } from '@/lib/agents/shared/supabase-context';
+import { getContextDocuments, formatContextDocuments, getTranscriptWindow } from '@/lib/agents/shared/supabase-context';
 
 const CEREBRAS_MODEL = getModelForSteward('LINEAR_STEWARD_FAST_MODEL');
 const client = getCerebrasClient();
@@ -87,20 +87,35 @@ export async function runLinearStewardFast(params: {
 
   // Fetch context documents if room is provided
   let contextSection = '';
+  let transcriptSection = '';
   if (room) {
-    const contextDocs = await getContextDocuments(room);
+    const [contextDocs, transcript] = await Promise.all([
+      getContextDocuments(room),
+      getTranscriptWindow(room, context?.contextProfile === 'archive' ? 720_000 : 240_000),
+    ]);
     contextSection = formatContextDocuments(contextDocs);
+    const transcriptLines = Array.isArray(transcript?.transcript)
+      ? transcript.transcript
+          .filter((entry) => entry && typeof entry.text === 'string')
+          .slice(-60)
+          .map((entry) => `${entry.participantId || 'Speaker'}: ${entry.text}`)
+          .join('\n')
+      : '';
+    if (transcriptLines) {
+      transcriptSection = transcriptLines;
+    }
   }
 
   const issuesList = (context.issues || [])
     .map((i: any) => `- [${i.id}] ${i.identifier || 'N/A'}: ${i.title} (Status: ${i.status || 'unknown'})`)
     .join('\n');
+  const contextBundle = typeof context.contextBundle === 'string' ? context.contextBundle : '';
 
   const messages = [
     { role: 'system' as const, content: LINEAR_STEWARD_INSTRUCTIONS },
     {
       role: 'user' as const,
-      content: `Context Issues:\n${issuesList || '(no issues)'}\n\n${contextSection ? `Context Documents:\n${contextSection}\n\n` : ''}Instruction: "${instruction}"\n\nDetermine the best action and call commit_action.`,
+      content: `Context Issues:\n${issuesList || '(no issues)'}\n\n${contextBundle ? `Context Bundle:\n${contextBundle}\n\n` : ''}${contextSection ? `Context Documents:\n${contextSection}\n\n` : ''}${transcriptSection ? `Transcript:\n${transcriptSection}\n\n` : ''}Instruction: "${instruction}"\n\nDetermine the best action and call commit_action.`,
     },
   ];
 

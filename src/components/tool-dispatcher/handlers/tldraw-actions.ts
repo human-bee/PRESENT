@@ -181,7 +181,9 @@ function flushBatch(editor: Editor, batch: BatchCollector) {
       try {
         (editor as any).createShapes(batch.creates);
       } catch {
-        batch.creates.forEach((shape) => editor.createShape?.(shape));
+        batch.creates.forEach((shape) => {
+          editor.createShape?.(shape);
+        });
       }
     } else {
       batch.creates.forEach((shape) => editor.createShape?.(shape));
@@ -408,7 +410,9 @@ export function applyAction(ctx: ApplyContext, action: AgentAction, batch?: Batc
     }
     case 'delete_shape': {
       const { ids } = action.params as any;
-      withPrefixes(ids as string[]).forEach((sid) => localBatch.deletes.add(sid));
+      withPrefixes(ids as string[]).forEach((sid) => {
+        localBatch.deletes.add(sid);
+      });
       mutated = true;
       break;
     }
@@ -523,9 +527,6 @@ export function applyAction(ctx: ApplyContext, action: AgentAction, batch?: Batc
       }
       break;
     }
-    case 'think':
-    case 'todo':
-    case 'add_detail':
     default:
       break;
   }

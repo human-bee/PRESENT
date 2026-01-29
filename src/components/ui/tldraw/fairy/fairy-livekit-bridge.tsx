@@ -22,6 +22,8 @@ interface AgentHostState {
   hostId: string | null;
 }
 
+const FAIRY_CLIENT_AGENT_ENABLED = process.env.NEXT_PUBLIC_FAIRY_CLIENT_AGENT_ENABLED === 'true';
+
 function useIsAgentHost(room?: Room) {
   const [hostState, setHostState] = useState<AgentHostState>({ isHost: false, hostId: null });
 
@@ -157,7 +159,7 @@ export function FairyLiveKitBridge({ room }: FairyLiveKitBridgeProps) {
 
     const unsubscribe = bus.on('agent_prompt', (message: any) => {
       if (!message || message.type !== 'agent_prompt') return;
-      if (!isHost) return;
+      if (!isHost || !FAIRY_CLIENT_AGENT_ENABLED) return;
 
       const { payload } = message as { payload?: any };
       const text: string | undefined = typeof payload?.message === 'string' ? payload.message.trim() : undefined;

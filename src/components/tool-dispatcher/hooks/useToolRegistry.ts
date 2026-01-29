@@ -302,6 +302,23 @@ export function useToolRegistry(deps: ToolRegistryDeps): ToolRegistryApi {
       return { status: 'SUCCESS', intentId, messageId };
     });
 
+    map.set('dispatch_dom_event', async ({ params }) => {
+      const eventName = String(params?.event ?? params?.name ?? '').trim();
+      if (!eventName) {
+        return { status: 'ERROR', message: 'dispatch_dom_event requires event' };
+      }
+      const detail =
+        params?.detail && typeof params.detail === 'object' && !Array.isArray(params.detail)
+          ? (params.detail as Record<string, unknown>)
+          : undefined;
+      try {
+        window.dispatchEvent(new CustomEvent(eventName, { detail }));
+        return { status: 'SUCCESS', message: `Dispatched ${eventName}` };
+      } catch (error) {
+        return { status: 'ERROR', message: error instanceof Error ? error.message : String(error) };
+      }
+    });
+
     map.set('create_component', async ({ params, emitEditorAction, call }) => {
       const componentType = String(params?.type ?? '').trim();
       const messageId = String(params?.messageId || params?.componentId || '') || `ui-${Date.now().toString(36)}`;
@@ -641,7 +658,7 @@ export function useToolRegistry(deps: ToolRegistryDeps): ToolRegistryApi {
     map.set('create_infographic', async ({ params, call, emitEditorAction }) => {
       // 1. Check if we already have an infographic widget
       const components = ComponentRegistry.list(contextKey);
-      let widget = components.find((c) => c.componentType === 'InfographicWidget');
+      const widget = components.find((c) => c.componentType === 'InfographicWidget');
       let messageId = widget?.messageId;
 
       // 2. If not, create one

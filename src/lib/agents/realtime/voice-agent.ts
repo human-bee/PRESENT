@@ -692,7 +692,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
       }
     };
 
-    const cleanupComponentSnapshotListener = liveKitBus.on('component_snapshot', (message: unknown) => {
+    liveKitBus.on('component_snapshot', (message: unknown) => {
       try {
         applyComponentSnapshotMessage(message);
       } catch (error) {
@@ -1044,7 +1044,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
 
     const sendToolCall = async (tool: string, params: JsonObject, options: { reliable?: boolean } = {}) => {
       ensureToolCallListeners();
-      const normalizedParams = normalizeOutgoingParams(tool, params);
+      let normalizedParams = normalizeOutgoingParams(tool, params);
       const shouldForceReliableUpdate =
         tool === 'update_component' &&
         normalizedParams &&
@@ -1055,13 +1055,15 @@ Your only output is function calls. Never use plain text unless absolutely neces
       const reliable =
         options.reliable !== undefined
           ? options.reliable
-          : tool === 'update_component' && enableLossyUpdates && !shouldForceReliableUpdate
-            ? false
-            : true;
+          : !(tool === 'update_component' && enableLossyUpdates && !shouldForceReliableUpdate);
 
       if (tool === 'dispatch_to_conductor') {
-        const task = typeof (normalizedParams as any)?.task === 'string' ? String((normalizedParams as any).task).trim() : '';
-        if (task === 'canvas.agent_prompt') {
+        const rawTask =
+          typeof (normalizedParams as any)?.task === 'string'
+            ? String((normalizedParams as any).task).trim()
+            : '';
+        const task = rawTask || 'auto';
+        if (task === 'canvas.agent_prompt' || task === 'auto') {
           const canvasParams = ((normalizedParams as any)?.params ?? {}) as Record<string, unknown>;
           const roomName = typeof canvasParams.room === 'string' && canvasParams.room.trim()
             ? canvasParams.room.trim()
@@ -1092,6 +1094,30 @@ Your only output is function calls. Never use plain text unless absolutely neces
                 recentCanvasDispatches.delete(mapKey);
               }
             }
+          }
+
+          if (message) {
+            const selectionIds = Array.isArray(canvasParams.selectionIds)
+              ? canvasParams.selectionIds.filter((id) => typeof id === 'string')
+              : undefined;
+            const bounds =
+              canvasParams.bounds && typeof canvasParams.bounds === 'object'
+                ? (canvasParams.bounds as Record<string, unknown>)
+                : undefined;
+            const intentId =
+              requestId || randomUUID();
+            normalizedParams = {
+              task: 'fairy.intent',
+              params: {
+                id: intentId,
+                room: roomName,
+                message,
+                source: 'voice',
+                selectionIds,
+                bounds,
+                metadata: canvasParams.metadata ?? null,
+              },
+            };
           }
         }
       }
@@ -2748,10 +2774,12 @@ Your only output is function calls. Never use plain text unless absolutely neces
           if (routed?.route === 'canvas') {
             const room = roomKey() || job.room?.name || 'room';
             await sendToolCall('dispatch_to_conductor', {
-              task: 'canvas.agent_prompt',
+              task: 'fairy.intent',
               params: {
+                id: randomUUID(),
                 room,
                 message: routed.message?.trim() || text,
+                source: 'voice',
               },
             });
             return;

@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo } from 'react';
-import { useTranscriptStore, useAllTranscripts, type Transcript } from '@/lib/stores/transcript-store';
+import { useAllTranscripts, type Transcript } from '@/lib/stores/transcript-store';
 import { useContextDocuments, type ContextDocument } from '@/lib/stores/context-store';
 import { useContextKey } from '@/components/RoomScopedProviders';
 import { useComponentList, type ComponentInfo } from '@/lib/component-registry';

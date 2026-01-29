@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import type { Room } from 'livekit-client';
 import type { Editor } from '@tldraw/tldraw';
 import { useToolRegistry } from './useToolRegistry';
@@ -324,7 +324,7 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
     async (tool: string, params: ToolParameters): Promise<ToolRunResult> => {
       const toolName = tool.replace(/^mcp_/, '');
       const registry = (window as any).__custom_mcp_tools || {};
-      let result: any = undefined;
+      let result: any;
 
       const direct = (registry as any)[toolName] || (registry as any)[`mcp_${toolName}`];
       if (direct) {
@@ -479,7 +479,7 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
             return { status: 'ERROR', message };
           }
 
-          if (stewardEnabled && task.startsWith('canvas.')) {
+          if (stewardEnabled && (task.startsWith('canvas.') || task.startsWith('fairy.'))) {
             if (task === 'canvas.agent_prompt') {
               if (!dispatchParams.message && typeof params?.message === 'string') {
                 dispatchParams.message = params.message;
@@ -509,7 +509,7 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
                 requestId: typeof dispatchParams.requestId === 'string' ? dispatchParams.requestId : undefined,
               };
             }
-            log('dispatch_to_conductor forwarding canvas task', { task, params: dispatchParams, room: call.roomId || room?.name });
+            log('dispatch_to_conductor forwarding steward task', { task, params: dispatchParams, room: call.roomId || room?.name });
             try {
               const res = await fetch('/api/steward/runCanvas', {
                 method: 'POST',
@@ -522,7 +522,7 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
                 }),
               });
               if (!res.ok) {
-                const message = `Canvas steward dispatch failed: HTTP ${res.status}`;
+                const message = `Steward dispatch failed: HTTP ${res.status}`;
                 queue.markError(call.id, message);
                 emitError(call, message);
                 if (task === 'canvas.agent_prompt') {
@@ -530,7 +530,7 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
                 }
                 return { status: 'ERROR', message };
               }
-              const result = { status: 'SUCCESS', message: 'Dispatched canvas steward' } as ToolRunResult;
+              const result = { status: 'SUCCESS', message: 'Dispatched steward task' } as ToolRunResult;
               queue.markComplete(call.id, result.message);
               emitDone(call, result);
               if (task === 'canvas.agent_prompt') {
@@ -538,7 +538,7 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
               }
               return result;
             } catch (error) {
-              const message = `Canvas steward dispatch error: ${error instanceof Error ? error.message : String(error)}`;
+              const message = `Steward dispatch error: ${error instanceof Error ? error.message : String(error)}`;
               queue.markError(call.id, message);
               emitError(call, message);
               if (task === 'canvas.agent_prompt') {
@@ -693,7 +693,7 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
         return { status: 'ERROR', message };
       }
     },
-    [contextKey, dispatchTL, emitDone, emitError, emitRequest, emitEditorAction, log, queue, registry, runMcpTool, scheduleStewardRun, stewardEnabled],
+    [contextKey, dispatchTL, emitDone, emitError, emitRequest, emitEditorAction, log, queue, registry, runMcpTool, scheduleStewardRun, stewardEnabled, room?.name],
   );
 
   useEffect(() => {
@@ -987,7 +987,7 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
       offTool();
       offDecision();
     };
-  }, [bus, executeToolCall, log, room, scheduleStewardRun, stewardEnabled]);
+  }, [bus, executeToolCall, log, room, scheduleStewardRun, stewardEnabled, metricsEnabled]);
 
   useEffect(() => {
     if (!stewardEnabled) return;

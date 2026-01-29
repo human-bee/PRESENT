@@ -753,7 +753,7 @@ export async function getCanvasShapeSummary(room: string) {
       if (normalized) shapes.push(normalized);
     };
 
-    const rawShapeCollection = store['shape'] || store.shapes;
+    const rawShapeCollection = store.shape || store.shapes;
     if (Array.isArray(rawShapeCollection)) {
       rawShapeCollection.forEach(pushShape);
     } else if (rawShapeCollection && typeof rawShapeCollection === 'object') {
@@ -911,7 +911,7 @@ export async function listCanvasComponents(room: string): Promise<CanvasComponen
       });
     };
 
-    const rawShapeCollection = store['shape'] || store.shapes;
+    const rawShapeCollection = store.shape || store.shapes;
     if (Array.isArray(rawShapeCollection)) {
       rawShapeCollection.forEach(considerShapeEntry);
     } else if (rawShapeCollection && typeof rawShapeCollection === 'object') {

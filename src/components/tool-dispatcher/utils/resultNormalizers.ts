@@ -39,7 +39,7 @@ export function normalizeMermaidText(text: string): string {
 export function getMermaidLastNode(text: string): string | undefined {
   const normalized = normalizeMermaidText(text);
   if (/^sequenceDiagram\b/.test(normalized)) return undefined;
-  const matches = Array.from(normalized.matchAll(/([^\s;]+)\s*--\>\s*([^\s;]+)/g));
+  const matches = Array.from(normalized.matchAll(/([^\s;]+)\s*-->\s*([^\s;]+)/g));
   if (matches.length === 0) return undefined;
   const last = matches[matches.length - 1];
   return last?.[2]?.replace(/;$/, '') || undefined;

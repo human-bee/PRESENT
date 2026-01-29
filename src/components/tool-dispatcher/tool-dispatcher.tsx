@@ -114,7 +114,7 @@ export function ToolDispatcher({
     });
 
     return () => { off?.(); };
-  }, [events.bus, room]);
+  }, [events.bus, room, enableLogging]);
 
   useEffect(() => {
     if (!room) return;

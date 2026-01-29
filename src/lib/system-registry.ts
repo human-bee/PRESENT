@@ -3,7 +3,6 @@
  *
  * Centralized registry for all system capabilities that need to be synchronized across:
  * - LiveKit Agent Worker (tools it can call)
- * - Decision Engine (intents it should detect)
  * - ToolDispatcher (how to route tool calls)
  * - MCP Servers (dynamically loaded tools)
  * - custom Components (available UI components)
@@ -27,10 +26,6 @@ export interface SystemCapability {
   // For components - the custom component name
   componentName?: string;
 
-  // Decision engine hints
-  intents?: string[];
-  keywords?: string[];
-
   // Examples for the agent
   examples?: string[];
 
@@ -49,8 +44,6 @@ export const STATIC_CAPABILITIES: SystemCapability[] = [
     name: 'Create Component',
     description: 'Create any UI component from custom registry',
     agentToolName: 'create_component',
-    intents: ['ui_generation', 'create_component'],
-    keywords: ['create', 'generate', 'make', 'build', 'show', 'display'],
     examples: ['Create a timer', 'Show me a weather widget', 'Build a chart for this data'],
     available: true,
     source: 'static',
@@ -61,15 +54,6 @@ export const STATIC_CAPABILITIES: SystemCapability[] = [
     name: 'Get Documents',
     description: 'Retrieve list of all available documents from the document store',
     agentToolName: 'get_documents',
-    intents: ['document_retrieval', 'list_documents'],
-    keywords: [
-      'documents',
-      'scripts',
-      'files',
-      'containment breach',
-      'show document',
-      'get document',
-    ],
     examples: [
       'Show me available documents',
       'Get the containment breach script',
@@ -85,18 +69,6 @@ export const STATIC_CAPABILITIES: SystemCapability[] = [
     description: 'Search and embed YouTube videos',
     agentToolName: 'youtube_search',
     mcpToolName: 'searchVideos', // Maps to the actual MCP tool name
-    intents: ['youtube_search', 'video_search'],
-    keywords: [
-      'youtube',
-      'video',
-      'watch',
-      'play',
-      'show video',
-      'latest',
-      'newest',
-      'tiktok',
-      'tutorial',
-    ],
     examples: [
       'Show me the latest React tutorial',
       'Play Pink Pantheress newest video',
@@ -112,8 +84,6 @@ export const STATIC_CAPABILITIES: SystemCapability[] = [
     name: 'Create Infographic',
     description: 'Generate an infographic based on the conversation or a specific topic',
     agentToolName: 'create_infographic',
-    intents: ['infographic_generation'],
-    keywords: ['infographic', 'chart', 'diagram', 'visualize', 'summary image'],
     examples: ['Create an infographic about this', 'Visualize the steps', 'Make a chart of the data'],
     available: true,
     source: 'static',
@@ -178,17 +148,6 @@ export class SystemRegistry {
       .map((cap) => cap.agentToolName!);
   }
 
-  // Get decision engine configuration
-  getDecisionEngineConfig() {
-    const capabilities = this.getAllCapabilities().filter((cap) => cap.available);
-
-    return {
-      intents: capabilities.flatMap((cap) => cap.intents || []),
-      keywords: capabilities.flatMap((cap) => cap.keywords || []),
-      examples: capabilities.flatMap((cap) => cap.examples || []),
-    };
-  }
-
   // Get tool routing info (agent name -> actual tool name mapping)
   getToolRouting(agentToolName: string): { mcpToolName?: string; componentName?: string } | null {
     const capability = Array.from(this.capabilities.values()).find(
@@ -214,7 +173,7 @@ export class SystemRegistry {
     this.listeners.forEach((listener) => listener(capabilities));
   }
 
-  // Export current state for agent/decision engine
+  // Export current state for the agent/tooling
   exportForAgent() {
     const capabilities = this.getAllCapabilities().filter((cap) => cap.available);
 
@@ -226,18 +185,6 @@ export class SystemRegistry {
           description: cap.description,
           examples: cap.examples,
         })),
-      decisionEngine: {
-        intents: Object.fromEntries(
-          capabilities
-            .filter((cap) => cap.intents && cap.intents.length > 0)
-            .map((cap) => [cap.agentToolName || cap.id, cap.intents!]),
-        ),
-        keywords: Object.fromEntries(
-          capabilities
-            .filter((cap) => cap.keywords && cap.keywords.length > 0)
-            .map((cap) => [cap.agentToolName || cap.id, cap.keywords!]),
-        ),
-      },
     };
   }
 
@@ -333,7 +280,6 @@ export class SystemRegistry {
       throw new Error(`Tool '${name}' is not registered in custom registry`);
     }
 
-    const started = Date.now();
     try {
       const result = (await impl.execute?.(call.args)) ?? (await impl(call.args));
       // Emit tool_result state

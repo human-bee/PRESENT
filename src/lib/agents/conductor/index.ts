@@ -24,6 +24,22 @@ import {
   type Claim,
 } from '@/lib/agents/debate-scorecard-schema';
 import { runSearchSteward } from '@/lib/agents/subagents/search-steward';
+import {
+  FairyIntentSchema,
+  normalizeFairyIntent,
+  routeFairyIntent,
+  type FairyIntent,
+  type FairyRouteDecision,
+} from '@/lib/fairy-intent';
+import {
+  DEFAULT_FAIRY_CONTEXT_PROFILE,
+  getFairyContextSpectrum,
+  normalizeFairyContextProfile,
+  resolveProfileFromSpectrum,
+  type FairyContextProfile,
+} from '@/lib/fairy-context/profiles';
+import { formatFairyContextParts } from '@/lib/fairy-context/format';
+import { runSummaryStewardFast } from '@/lib/agents/subagents/summary-steward-fast';
 
 dotenvConfig({ path: join(process.cwd(), '.env.local') });
 
@@ -32,11 +48,21 @@ const TASK_LEASE_TTL_MS = Number(process.env.TASK_LEASE_TTL_MS ?? 15_000);
 const ROOM_CONCURRENCY = Number(process.env.ROOM_CONCURRENCY ?? 2);
 const queue = new AgentTaskQueue();
 
+const FAIRY_INTENT_DEDUPE_MS = Number(process.env.FAIRY_INTENT_DEDUPE_MS ?? 1200);
+const FAIRY_INTENT_DEDUPE_MAX = Number(process.env.FAIRY_INTENT_DEDUPE_MAX ?? 200);
+const fairyIntentDedupe = new Map<string, number>();
+
 const CLIENT_CANVAS_AGENT_ENABLED = process.env.NEXT_PUBLIC_CANVAS_AGENT_CLIENT_ENABLED === 'true';
-const FAIRY_CANVAS_AGENT_ENABLED = process.env.NEXT_PUBLIC_FAIRY_ENABLED === 'true';
+const FAIRY_UI_ENABLED = process.env.NEXT_PUBLIC_FAIRY_ENABLED === 'true';
+const FAIRY_CLIENT_AGENT_ENABLED = process.env.NEXT_PUBLIC_FAIRY_CLIENT_AGENT_ENABLED === 'true';
 const CANVAS_STEWARD_ENABLED = (process.env.CANVAS_STEWARD_SERVER_EXECUTION ?? 'true') === 'true';
+const DEFAULT_SUMMARY_MEMORY_TOOL = process.env.SUMMARY_MEMORY_MCP_TOOL;
+const DEFAULT_SUMMARY_AUTO_SEND = process.env.SUMMARY_MEMORY_AUTO_SEND === 'true';
+const DEFAULT_SUMMARY_MEMORY_COLLECTION = process.env.SUMMARY_MEMORY_MCP_COLLECTION;
+const DEFAULT_SUMMARY_MEMORY_INDEX = process.env.SUMMARY_MEMORY_MCP_INDEX;
+const DEFAULT_SUMMARY_MEMORY_NAMESPACE = process.env.SUMMARY_MEMORY_MCP_NAMESPACE;
 const SERVER_CANVAS_AGENT_ENABLED =
-  CANVAS_STEWARD_ENABLED && !CLIENT_CANVAS_AGENT_ENABLED && !FAIRY_CANVAS_AGENT_ENABLED;
+  CANVAS_STEWARD_ENABLED && !CLIENT_CANVAS_AGENT_ENABLED && !FAIRY_CLIENT_AGENT_ENABLED;
 const SERVER_CANVAS_TASKS_ENABLED = CANVAS_STEWARD_ENABLED && !CLIENT_CANVAS_AGENT_ENABLED;
 
 const CanvasAgentPromptSchema = z
@@ -59,6 +85,15 @@ const CanvasAgentPromptSchema = z
   .passthrough();
 
 type CanvasAgentPromptInput = z.infer<typeof CanvasAgentPromptSchema>;
+
+const FairyIntentTaskSchema = FairyIntentSchema.extend({
+  id: z.string().optional(),
+  timestamp: z.number().optional(),
+  source: FairyIntentSchema.shape.source.optional(),
+  contextProfile: z.string().optional(),
+}).passthrough();
+
+type FairyIntentTaskInput = z.infer<typeof FairyIntentTaskSchema>;
 
 const ScorecardTaskArgs = z
   .object({
@@ -160,6 +195,445 @@ async function handleCanvasAgentPrompt(rawParams: JsonObject) {
   });
 
   return { status: 'queued', requestId, room: parsed.room.trim(), payload };
+}
+
+function buildFairyIntent(rawParams: JsonObject): FairyIntent {
+  const parsed: FairyIntentTaskInput = FairyIntentTaskSchema.parse(rawParams);
+  const id = (parsed.id || randomUUID()).trim();
+  const timestamp =
+    typeof parsed.timestamp === 'number' && Number.isFinite(parsed.timestamp) ? parsed.timestamp : Date.now();
+  const source = parsed.source ?? 'ui';
+  const contextProfile = normalizeFairyContextProfile(parsed.contextProfile);
+  const intent: FairyIntent = normalizeFairyIntent({
+    id,
+    room: parsed.room,
+    message: parsed.message,
+    source,
+    timestamp,
+    selectionIds: parsed.selectionIds,
+    bounds: parsed.bounds,
+    metadata: parsed.metadata ?? null,
+    componentId: parsed.componentId,
+    contextProfile,
+  });
+  return intent;
+}
+
+const buildFairyIntentFingerprint = (intent: FairyIntent) => {
+  const selectionKey = Array.isArray(intent.selectionIds)
+    ? intent.selectionIds.slice().sort().join(',')
+    : '';
+  const boundsKey = intent.bounds
+    ? [
+        Math.round(intent.bounds.x),
+        Math.round(intent.bounds.y),
+        Math.round(intent.bounds.w),
+        Math.round(intent.bounds.h),
+      ].join(':')
+    : '';
+  const messageKey = intent.message.trim().toLowerCase();
+  return [intent.room, intent.source, messageKey, intent.componentId ?? '', selectionKey, boundsKey].join('|');
+};
+
+const shouldDedupeFairyIntent = (intent: FairyIntent) => {
+  if (!FAIRY_INTENT_DEDUPE_MS || FAIRY_INTENT_DEDUPE_MS < 1) return false;
+  const metadata = intent.metadata as Record<string, unknown> | null;
+  if (metadata && metadata.dedupe === false) return false;
+  const now = Date.now();
+  const fingerprint = buildFairyIntentFingerprint(intent);
+  const lastSeen = fairyIntentDedupe.get(fingerprint);
+  fairyIntentDedupe.set(fingerprint, now);
+
+  const cutoff = now - FAIRY_INTENT_DEDUPE_MS;
+  for (const [key, ts] of fairyIntentDedupe) {
+    if (ts < cutoff) {
+      fairyIntentDedupe.delete(key);
+    }
+  }
+  while (fairyIntentDedupe.size > FAIRY_INTENT_DEDUPE_MAX) {
+    const first = fairyIntentDedupe.keys().next().value;
+    if (!first) break;
+    fairyIntentDedupe.delete(first);
+  }
+
+  return typeof lastSeen === 'number' && now - lastSeen <= FAIRY_INTENT_DEDUPE_MS;
+};
+
+const resolveIntentContextProfile = (intent: FairyIntent, decision: FairyRouteDecision): FairyContextProfile => {
+  const metadata = intent.metadata as Record<string, unknown> | null;
+  const metaProfile =
+    normalizeFairyContextProfile(metadata?.contextProfile) ??
+    normalizeFairyContextProfile(metadata?.profile) ??
+    normalizeFairyContextProfile((metadata as any)?.promptSummary?.profile);
+  const spectrumProfile =
+    resolveProfileFromSpectrum(intent.spectrum) ??
+    resolveProfileFromSpectrum(metadata?.spectrum) ??
+    resolveProfileFromSpectrum((metadata as any)?.promptSummary?.spectrum);
+
+  return (
+    intent.contextProfile ??
+    metaProfile ??
+    spectrumProfile ??
+    decision.contextProfile ??
+    (decision.kind === 'view'
+      ? 'glance'
+      : decision.kind === 'summary' || decision.kind === 'bundle'
+        ? 'deep'
+        : DEFAULT_FAIRY_CONTEXT_PROFILE)
+  );
+};
+
+const buildIntentMetadata = (
+  intent: FairyIntent,
+  decision: FairyRouteDecision,
+  contextProfile: FairyContextProfile,
+) => {
+  const base =
+    intent.metadata && typeof intent.metadata === 'object' && !Array.isArray(intent.metadata)
+      ? (intent.metadata as Record<string, unknown>)
+      : {};
+
+  return {
+    ...base,
+    contextProfile,
+    spectrum: getFairyContextSpectrum(contextProfile).value,
+    intent: {
+      id: intent.id,
+      source: intent.source,
+      kind: decision.kind,
+      confidence: decision.confidence,
+      summary: decision.summary,
+    },
+  };
+};
+
+const extractContextBundle = (metadata: Record<string, unknown> | null) => {
+  if (!metadata) return undefined;
+  const promptData = (metadata as any).promptData;
+  const promptSummary = (metadata as any).promptSummary;
+  if (Array.isArray(promptData)) {
+    return {
+      parts: promptData,
+      summary: promptSummary ?? undefined,
+    };
+  }
+  const bundle = (metadata as any).contextBundle;
+  if (bundle && Array.isArray(bundle.parts)) {
+    return bundle;
+  }
+  return undefined;
+};
+
+type SummaryResult = {
+  title?: string;
+  summary: string;
+  highlights?: string[];
+  decisions?: string[];
+  actionItems?: Array<{ task: string; owner?: string; due?: string }>;
+  tags?: string[];
+};
+
+const formatSummaryMarkdown = (result: SummaryResult) => {
+  const lines: string[] = [];
+  const title = result.title?.trim() || 'Meeting Summary';
+  lines.push(`# ${title}`);
+  lines.push('');
+  lines.push('## Summary');
+  lines.push(result.summary.trim());
+
+  if (result.highlights?.length) {
+    lines.push('');
+    lines.push('## Highlights');
+    lines.push(result.highlights.map((item) => `- ${item}`).join('\n'));
+  }
+
+  if (result.decisions?.length) {
+    lines.push('');
+    lines.push('## Decisions');
+    lines.push(result.decisions.map((item) => `- ${item}`).join('\n'));
+  }
+
+  if (result.actionItems?.length) {
+    lines.push('');
+    lines.push('## Action Items');
+    lines.push(
+      result.actionItems
+        .map((item) => {
+          const owner = item.owner ? ` - ${item.owner}` : '';
+          const due = item.due ? ` (due ${item.due})` : '';
+          return `- ${item.task}${owner}${due}`;
+        })
+        .join('\n'),
+    );
+  }
+
+  if (result.tags?.length) {
+    lines.push('');
+    lines.push(`Tags: ${result.tags.join(', ')}`);
+  }
+
+  return { title, content: lines.join('\n') };
+};
+
+const dispatchSummaryDocument = async (
+  intent: FairyIntent,
+  decision: Pick<FairyRouteDecision, 'summary' | 'message'>,
+  contextProfile: FairyContextProfile,
+  contextBundle?: { parts?: unknown[] } | undefined,
+) => {
+  const bundleText =
+    contextBundle && Array.isArray(contextBundle.parts)
+      ? formatFairyContextParts(contextBundle.parts as any, 5000)
+      : '';
+  const instruction = decision.summary?.trim() || decision.message?.trim() || intent.message;
+  const result = await runSummaryStewardFast({
+    room: intent.room,
+    instruction,
+    contextBundle: bundleText,
+    contextProfile,
+  });
+  const formatted = formatSummaryMarkdown(result);
+  const documentId = `${intent.id}-summary`;
+  const metadata = intent.metadata as Record<string, unknown> | null;
+  const crmToolName =
+    typeof metadata?.summaryMcpTool === 'string'
+      ? metadata.summaryMcpTool
+      : typeof metadata?.crmToolName === 'string'
+        ? metadata.crmToolName
+        : DEFAULT_SUMMARY_MEMORY_TOOL;
+  const autoSend =
+    typeof metadata?.summaryAutoSend === 'boolean'
+      ? metadata.summaryAutoSend
+      : typeof metadata?.autoSend === 'boolean'
+        ? metadata.autoSend
+        : DEFAULT_SUMMARY_AUTO_SEND
+          ? true
+          : undefined;
+  const memoryCollection =
+    typeof metadata?.memoryCollection === 'string'
+      ? metadata.memoryCollection
+      : DEFAULT_SUMMARY_MEMORY_COLLECTION;
+  const memoryIndex =
+    typeof metadata?.memoryIndex === 'string' ? metadata.memoryIndex : DEFAULT_SUMMARY_MEMORY_INDEX;
+  const memoryNamespace =
+    typeof metadata?.memoryNamespace === 'string'
+      ? metadata.memoryNamespace
+      : DEFAULT_SUMMARY_MEMORY_NAMESPACE;
+  await broadcastToolCall({
+    room: intent.room,
+    tool: 'dispatch_dom_event',
+    params: {
+      event: 'context:document-added',
+      detail: {
+        id: documentId,
+        title: formatted.title,
+        content: formatted.content,
+        type: 'markdown',
+        source: 'paste',
+        timestamp: Date.now(),
+      },
+    },
+  });
+  const requestedId = intent.componentId?.trim();
+  const summaryComponentId =
+    requestedId && requestedId.toLowerCase().includes('summary')
+      ? requestedId
+      : `MeetingSummaryWidget-${intent.room}`;
+  const summaryPatch = {
+    title: formatted.title,
+    summary: result.summary,
+    highlights: result.highlights,
+    decisions: result.decisions,
+    actionItems: result.actionItems,
+    tags: result.tags,
+    sourceDocumentId: documentId,
+    contextProfile,
+    lastUpdated: Date.now(),
+    ...(crmToolName ? { crmToolName } : {}),
+    ...(typeof autoSend === 'boolean' ? { autoSend } : {}),
+    ...(memoryCollection ? { memoryCollection } : {}),
+    ...(memoryIndex ? { memoryIndex } : {}),
+    ...(memoryNamespace ? { memoryNamespace } : {}),
+  };
+  await broadcastToolCall({
+    room: intent.room,
+    tool: 'create_component',
+    params: {
+      type: 'MeetingSummaryWidget',
+      messageId: summaryComponentId,
+      intentId: intent.id,
+      props: summaryPatch,
+    },
+  });
+  await broadcastToolCall({
+    room: intent.room,
+    tool: 'update_component',
+    params: {
+      componentId: summaryComponentId,
+      patch: summaryPatch,
+    },
+  });
+  return { status: 'queued', intentId: intent.id, documentId, summary: result.summary };
+};
+
+async function dispatchFastLane(intent: FairyIntent, decision: FairyRouteDecision) {
+  if (!decision.fastLaneEvent) return;
+  const detail = decision.fastLaneDetail ? { ...decision.fastLaneDetail } : undefined;
+  const detailWithRoom =
+    detail ?? (intent.room ? { roomName: intent.room } : undefined);
+  if (detailWithRoom && !detailWithRoom.componentId && intent.componentId) {
+    detailWithRoom.componentId = intent.componentId;
+  }
+  if (detailWithRoom && !detailWithRoom.roomName && intent.room) {
+    detailWithRoom.roomName = intent.room;
+  }
+  await broadcastToolCall({
+    room: intent.room,
+    tool: 'dispatch_dom_event',
+    params: {
+      event: decision.fastLaneEvent,
+      detail: detailWithRoom,
+    },
+  });
+}
+
+async function ensureWidgetComponent(intent: FairyIntent, componentType: string) {
+  const componentId = intent.componentId?.trim() || `${componentType}-${intent.id}`;
+  await broadcastToolCall({
+    room: intent.room,
+    tool: 'create_component',
+    params: {
+      type: componentType,
+      messageId: componentId,
+      intentId: intent.id,
+    },
+  });
+  return componentId;
+}
+
+async function handleFairyIntent(rawParams: JsonObject) {
+  const intent = buildFairyIntent(rawParams);
+  if (shouldDedupeFairyIntent(intent)) {
+    return { status: 'deduped', intentId: intent.id, room: intent.room };
+  }
+  const decision = await routeFairyIntent(intent);
+  const contextProfile = resolveIntentContextProfile(intent, decision);
+  const mergedMetadata = buildIntentMetadata(intent, decision, contextProfile);
+  const contextBundle = extractContextBundle(
+    intent.metadata && typeof intent.metadata === 'object' && !Array.isArray(intent.metadata)
+      ? (intent.metadata as Record<string, unknown>)
+      : null,
+  );
+
+  const executeDecision = async (decisionLike: Partial<FairyRouteDecision> & { kind?: string }) => {
+    const actionProfile =
+      normalizeFairyContextProfile(decisionLike.contextProfile) ?? contextProfile;
+    const actionMetadata =
+      actionProfile === contextProfile
+        ? mergedMetadata
+        : { ...mergedMetadata, contextProfile: actionProfile };
+    const message = decisionLike.message?.trim() || intent.message;
+    const summary = typeof decisionLike.summary === 'string' ? decisionLike.summary : decision.summary;
+
+    if (decisionLike.fastLaneEvent) {
+      try {
+        await dispatchFastLane(intent, decisionLike as FairyRouteDecision);
+      } catch (error) {
+        console.warn('[Conductor] fast-lane dispatch failed', {
+          intentId: intent.id,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+
+    if (!decisionLike.kind || decisionLike.kind === 'bundle') {
+      return { status: 'handled', intentId: intent.id, decision };
+    }
+
+    if (decisionLike.kind === 'view' || decisionLike.kind === 'none') {
+      return { status: 'handled', intentId: intent.id, decision };
+    }
+
+    if (decisionLike.kind === 'summary') {
+      return dispatchSummaryDocument(intent, { summary, message }, actionProfile, contextBundle);
+    }
+
+    if (decisionLike.kind === 'canvas') {
+      return executeTask('canvas.agent_prompt', {
+        room: intent.room,
+        message,
+        requestId: intent.id,
+        bounds: intent.bounds,
+        selectionIds: intent.selectionIds,
+        metadata: actionMetadata,
+      });
+    }
+
+    if (decisionLike.kind === 'scorecard') {
+      const componentId = await ensureWidgetComponent(intent, 'DebateScorecard');
+      return executeTask('scorecard.run', {
+        room: intent.room,
+        componentId,
+        prompt: message,
+        summary,
+        intent: 'scorecard.run',
+      });
+    }
+
+    if (decisionLike.kind === 'infographic') {
+      const componentId = await ensureWidgetComponent(intent, 'InfographicWidget');
+      await broadcastToolCall({
+        room: intent.room,
+        tool: 'update_component',
+        params: {
+          componentId,
+          patch: {
+            instruction: message,
+            contextProfile: actionProfile,
+            intentId: intent.id,
+            contextBundle,
+          },
+        },
+      });
+      return { status: 'queued', intentId: intent.id, decision, componentId };
+    }
+
+    if (decisionLike.kind === 'kanban') {
+      const componentId = await ensureWidgetComponent(intent, 'LinearKanbanBoard');
+      await broadcastToolCall({
+        room: intent.room,
+        tool: 'update_component',
+        params: {
+          componentId,
+          patch: {
+            instruction: message,
+            contextProfile: actionProfile,
+            intentId: intent.id,
+            contextBundle,
+          },
+        },
+      });
+      return { status: 'queued', intentId: intent.id, decision, componentId };
+    }
+
+    return { status: 'skipped', intentId: intent.id, decision };
+  };
+
+  const results: Array<Record<string, unknown>> = [];
+  if (decision.kind !== 'bundle') {
+    results.push(await executeDecision(decision));
+  }
+  if (Array.isArray((decision as any).actions)) {
+    for (const action of (decision as any).actions) {
+      results.push(await executeDecision(action));
+    }
+  }
+
+  if (results.length === 1) {
+    return results[0];
+  }
+
+  return { status: 'handled', intentId: intent.id, decision, results };
 }
 
 async function primeFactCheckStatus(params: ScorecardTaskInput) {
@@ -531,20 +1005,13 @@ async function executeTask(taskName: string, params: JsonObject) {
   if (!taskName || taskName === 'auto') {
     const resolution = resolveIntent(params);
     if (resolution) {
-      if (resolution.kind === 'tool_call') {
-        const room = resolveRoom(params);
-        await broadcastToolCall({ room, tool: resolution.tool, params: resolution.params });
-        return { status: 'handled', tool: resolution.tool };
-      }
-      if (resolution.kind === 'task') {
-        const nextParams = resolution.params ? { ...params, ...resolution.params } : params;
-        return executeTask(resolution.task, nextParams);
-      }
+      const nextParams = resolution.params ? { ...params, ...resolution.params } : params;
+      return executeTask(resolution.task, nextParams);
     }
     const fallbackParams = params.message
       ? params
       : { ...params, message: resolveIntentText(params) };
-    return executeTask('canvas.agent_prompt', fallbackParams);
+    return executeTask('fairy.intent', { ...fallbackParams, source: 'system' });
   }
 
   if (taskName === 'conductor.dispatch') {
@@ -683,6 +1150,10 @@ async function executeTask(taskName: string, params: JsonObject) {
     };
   }
 
+  if (taskName === 'fairy.intent') {
+    return handleFairyIntent(params);
+  }
+
   if (taskName === 'canvas.agent_prompt') {
     const promptResult = await handleCanvasAgentPrompt(params);
     const stewardParams: JsonObject = {
@@ -705,7 +1176,8 @@ async function executeTask(taskName: string, params: JsonObject) {
     } else {
       console.log('[Conductor] server canvas steward skipped for canvas.agent_prompt', {
         clientLegacyEnabled: CLIENT_CANVAS_AGENT_ENABLED,
-        fairyEnabled: FAIRY_CANVAS_AGENT_ENABLED,
+        fairyUiEnabled: FAIRY_UI_ENABLED,
+        fairyClientEnabled: FAIRY_CLIENT_AGENT_ENABLED,
       });
     }
     return { ...promptResult, status: 'queued' };
@@ -720,35 +1192,6 @@ async function executeTask(taskName: string, params: JsonObject) {
   }
 
   throw new Error(`No steward for task: ${taskName}`);
-}
-
-function resolveRoom(params: JsonObject): string {
-  const direct = getString(params, 'room');
-  if (direct) return direct;
-  const metadata = getObject(params, 'metadata');
-  const metaRoom = metadata ? getString(metadata, 'room') : undefined;
-  if (metaRoom) return metaRoom;
-  const participants = params.participants;
-  if (typeof participants === 'string') {
-    const trimmed = participants.trim();
-    if (trimmed) return trimmed;
-  }
-  if (Array.isArray(participants)) {
-    for (const entry of participants) {
-      if (typeof entry === 'string') {
-        const trimmed = entry.trim();
-        if (trimmed) return trimmed;
-      }
-      if (entry && typeof entry === 'object' && !Array.isArray(entry)) {
-        const candidate = (entry as JsonObject).room;
-        if (typeof candidate === 'string') {
-          const trimmed = candidate.trim();
-          if (trimmed) return trimmed;
-        }
-      }
-    }
-  }
-  throw new Error('Room is required for conductor execution');
 }
 
 function resolveIntentText(params: JsonObject): string {
@@ -823,7 +1266,7 @@ async function workerLoop() {
               console.log('[Conductor] task completed', { roomKey, taskId: task.id, durationMs });
             } catch (error) {
               const message = error instanceof Error ? error.message : String(error);
-              const retryAt = task.attempt < 3 ? new Date(Date.now() + Math.pow(2, task.attempt) * 1000) : undefined;
+              const retryAt = task.attempt < 3 ? new Date(Date.now() + 2 ** task.attempt * 1000) : undefined;
               console.warn('[Conductor] task failed', { roomKey, taskId: task.id, task: task.task, attempt: task.attempt, retryAt, error: message });
               await queue.failTask(task.id, leaseToken, { error: message, retryAt });
             } finally {
