@@ -8,3 +8,4 @@ export * from './useLkAutoConnect';
 export * from './useLkAgentRequest';
 export * from './useLkRoomHandlers';
 export * from './useLkIdentity';
+export * from './useActiveSpeakerTracker';
