@@ -42,7 +42,6 @@ export function AgentCapabilitiesBridge() {
           type: 'capability_list',
           capabilities: {
             tools: exported.tools || [],
-            decisionEngine: exported.decisionEngine || { intents: {}, keywords: {} },
             components,
           },
           timestamp: Date.now(),
