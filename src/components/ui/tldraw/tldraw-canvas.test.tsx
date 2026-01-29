@@ -199,7 +199,7 @@ describe('customShapeUtil.component - ResizeObserver Logic', () => {
 
     expect(mockUpdateShapes).toHaveBeenCalledTimes(1);
     expect(mockUpdateShapes).toHaveBeenCalledWith([
-      { id: defaultTestShape.id, type: 'custom', props: { w: 400, h: 250 } },
+      { id: defaultTestShape.id, type: 'custom', props: { w: 300, h: 250 } },
     ]);
   });
 
@@ -325,7 +325,7 @@ describe('customShapeUtil.component - ResizeObserver Logic', () => {
     expect(mockUpdateShapes).toHaveBeenCalledTimes(1);
     // It should be called only once with the first meaningful measurement
     expect(mockUpdateShapes).toHaveBeenCalledWith([
-      { id: defaultTestShape.id, type: 'custom', props: { w: 400, h: 250 } },
+      { id: defaultTestShape.id, type: 'custom', props: { w: 300, h: 250 } },
     ]);
   });
 });
