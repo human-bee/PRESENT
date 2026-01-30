@@ -19,6 +19,7 @@ import {
   Trophy,
   FileUp,
   Database,
+  AppWindow,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -82,6 +83,11 @@ export const componentIcons: Record<string, ComponentIconMapping> = {
     icon: Database,
     category: 'Productivity',
     description: 'Vector memory recall',
+  },
+  McpAppWidget: {
+    icon: AppWindow,
+    category: 'Productivity',
+    description: 'MCP Apps iframe host',
   },
   ResearchPanel: {
     icon: Search,

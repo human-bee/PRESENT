@@ -7,6 +7,7 @@ A sophisticated Next.js application that combines custom AI's generative UI capa
 - **Voice-Enabled AI Agent**: Real-time voice interactions powered by LiveKit and OpenAI
 - **Generative UI Components**: Dynamic UI generation through custom AI
 - **MCP Integration**: Connect to various AI tools and services via Model Context Protocol
+- **MCP Apps**: Render tool-provided UI views in sandboxed iframes via `McpAppWidget` (see `docs/mcp-apps.md`)
 - **Multi-Modal Interactions**: Support for both chat and voice interfaces
 - **Canvas Collaboration**: Interactive canvas with AI-generated components
 - **Demo Showcases**: Live captions, presentation deck, and toolbar demonstrations

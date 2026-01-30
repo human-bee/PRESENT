@@ -87,6 +87,8 @@ RESEARCH & CONTEXT:
   → create_component({ type: 'ContextFeeder', spec: {} })
 - MemoryRecallWidget: "search memory", "recall memory", "show memory recall"
   → create_component({ type: 'MemoryRecallWidget', spec: { query: '...' } })
+- McpAppWidget: "open MCP app", "show MCP widget"
+  → create_component({ type: 'McpAppWidget', spec: { toolName: 'tool_name', serverName: 'My MCP Server', autoRun: true } })
 
 LIVEKIT/VIDEO:
 - LivekitParticipantTile: "create participant tile", "add video tile", "show participant"

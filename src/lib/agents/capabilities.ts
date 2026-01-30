@@ -29,6 +29,7 @@ export const defaultCustomComponents: Array<{
     { name: 'ActionItemTracker', description: 'Action item manager', examples: ['create action items', 'add todo list', 'track tasks', 'create task tracker'] },
     { name: 'MeetingSummaryWidget', description: 'Meeting summary panel', examples: ['create meeting summary widget', 'show meeting summary', 'add summary panel'] },
     { name: 'MemoryRecallWidget', description: 'Vector memory recall panel', examples: ['search memory', 'recall memory', 'show memory recall'] },
+    { name: 'McpAppWidget', description: 'MCP App iframe host', examples: ['open MCP app', 'show MCP widget'] },
     { name: 'LinearKanbanBoard', description: 'Kanban board with Linear integration', examples: ['create kanban board', 'show kanban', 'add kanban', 'task board'] },
     
     // Documents & Research

@@ -140,6 +140,14 @@ export const componentSizeInfo: Record<string, ComponentSizeInfo> = {
     resizeMode: 'free',
     sizingPolicy: 'always_fit',
   },
+  McpAppWidget: {
+    naturalWidth: 520,
+    naturalHeight: 520,
+    minWidth: 360,
+    minHeight: 360,
+    resizeMode: 'free',
+    sizingPolicy: 'fit_until_user_resize',
+  },
   ResearchPanel: {
     naturalWidth: 600,
     naturalHeight: 700,

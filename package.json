@@ -48,6 +48,8 @@
     "@livekit/agents-plugin-openai": "1.0.15",
     "@livekit/components-react": "2.9.15",
     "@livekit/components-styles": "^1.1.5",
+    "@modelcontextprotocol/ext-apps": "1.0.1",
+    "@modelcontextprotocol/sdk": "1.25.2",
     "@openai/agents": "0.2.1",
     "@openai/agents-core": "0.2.1",
     "@openai/agents-extensions": "0.2.1",

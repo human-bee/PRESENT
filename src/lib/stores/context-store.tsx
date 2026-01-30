@@ -20,7 +20,7 @@ export interface ContextDocument {
     content: string;
     type: 'markdown' | 'text';
     timestamp: number;
-    source: 'file' | 'paste';
+    source: 'file' | 'paste' | 'mcp';
 }
 
 interface ContextState {

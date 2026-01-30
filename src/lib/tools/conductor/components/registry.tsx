@@ -8,6 +8,7 @@ import { ResearchPanel, researchPanelSchema } from '@/components/ui/research/res
 import { ActionItemTracker, actionItemTrackerSchema } from '@/components/ui/productivity/action-item-tracker';
 import MeetingSummaryWidget, { meetingSummaryWidgetSchema } from '@/components/ui/productivity/meeting-summary-widget';
 import MemoryRecallWidget, { memoryRecallWidgetSchema } from '@/components/ui/productivity/memory-recall-widget';
+import McpAppWidget, { mcpAppWidgetSchema } from '@/components/ui/mcp/mcp-app-widget';
 import {
   LivekitParticipantTile,
   livekitParticipantTileSchema,
@@ -135,6 +136,13 @@ export const components: any = [
       'Vector memory recall panel that queries MCP memory stores (e.g. Qdrant) and lists matching context snippets.',
     component: MemoryRecallWidget,
     propsSchema: extendedSchema(memoryRecallWidgetSchema),
+  },
+  {
+    name: 'McpAppWidget',
+    description:
+      'Render an MCP App (ui:// resource) in a sandboxed iframe and optionally call the backing MCP tool.',
+    component: McpAppWidget,
+    propsSchema: extendedSchema(mcpAppWidgetSchema),
   },
   {
     name: 'LivekitRoomConnector',
