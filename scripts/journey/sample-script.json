@@ -1,0 +1,12 @@
+[
+  { "speaker": "Avery", "text": "Hey team, let's start a five minute timer and kick off the safety eval debate.", "delayMs": 500 },
+  { "speaker": "Jordan", "text": "Should AI labs be required to publish safety evals before release? Please create a debate scorecard.", "delayMs": 1400 },
+  { "speaker": "Avery", "text": "Add our first pro claim: transparency improves accountability and public trust.", "delayMs": 1400 },
+  { "speaker": "Jordan", "text": "Add the first con: mandatory publication could expose vulnerabilities and slow innovation.", "delayMs": 1400 },
+  { "speaker": "Avery", "text": "Update the scorecard with evidence quality and a verified label for the transparency claim.", "delayMs": 1600 },
+  { "speaker": "Jordan", "text": "Generate an infographic summarizing the debate arguments so far.", "delayMs": 1600 },
+  { "speaker": "Avery", "text": "Summarize the meeting with decisions and action items.", "delayMs": 1800 },
+  { "speaker": "Jordan", "text": "Add a follow-up ticket to research mandatory eval policies and assign it to me.", "delayMs": 1800 },
+  { "speaker": "Avery", "text": "Switch the layout to presenter view so the debate scorecard and infographic are spotlighted.", "delayMs": 1400 },
+  { "speaker": "Jordan", "text": "Thanks, that's it for now.", "delayMs": 1200 }
+]

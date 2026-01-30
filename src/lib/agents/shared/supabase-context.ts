@@ -1000,6 +1000,33 @@ export async function broadcastAgentPrompt(event: {
   await client.sendData(normalizedRoom, data, DataPacket_Kind.RELIABLE, { topic: 'agent_prompt' });
 }
 
+export async function broadcastTranscription(event: {
+  room: string;
+  text: string;
+  speaker?: string;
+  manual?: boolean;
+  timestamp?: number;
+}) {
+  const { room, text, speaker, manual = true, timestamp } = event;
+  const trimmedRoom = normalizeRoomName(room);
+  if (!trimmedRoom) {
+    throw new Error('Room is required for transcription broadcast');
+  }
+  const cleanedText = String(text || '').trim();
+  if (!cleanedText) {
+    throw new Error('Transcription requires text');
+  }
+  const payload = {
+    text: cleanedText,
+    speaker: typeof speaker === 'string' && speaker.trim().length > 0 ? speaker.trim() : undefined,
+    manual: Boolean(manual),
+    timestamp: typeof timestamp === 'number' ? timestamp : Date.now(),
+  };
+  const data = new TextEncoder().encode(JSON.stringify(payload));
+  const { client, normalizedRoom } = await ensureLivekitRoom(trimmedRoom);
+  await client.sendData(normalizedRoom, data, DataPacket_Kind.RELIABLE, { topic: 'transcription' });
+}
+
 export async function getTranscriptWindow(room: string, windowMs: number) {
   const cache = transcriptStore.get(room);
   const useCache = cache && Date.now() - cache.cachedAt < 5_000;

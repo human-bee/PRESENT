@@ -7,6 +7,7 @@
 
 import { Room } from 'livekit-client';
 import { systemRegistry } from './system-registry';
+import { logJourneyEvent } from './journey-logger';
 import { createLogger } from './utils';
 // Debug flag (use NEXT_PUBLIC_custom_DEBUG=true to enable verbose logging)
 const DEBUG_OBSERVABILITY = process.env.NEXT_PUBLIC_custom_DEBUG === 'true';
@@ -114,6 +115,22 @@ export class ObservabilityBridge {
     this.events.push(event);
     if (this.events.length > this.maxEvents) this.events.shift();
     this.metrics.recentEvents = this.events.slice(-20);
+    try {
+      logJourneyEvent({
+        eventType: event.type,
+        source: event.source,
+        tool: event.tool,
+        durationMs: event.duration,
+        payload: {
+          id: event.id,
+          context: event.context,
+          result: event.result,
+          error: event.error,
+          intent: event.intent,
+          reasoning: event.reasoning,
+        },
+      });
+    } catch { }
   }
 
   private updateMetrics(event: ToolCallEvent) {

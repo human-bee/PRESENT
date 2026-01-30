@@ -1,6 +1,7 @@
 "use client";
 
 import type { McpAppResource, McpAppToolDescriptor } from './types';
+import { logJourneyEvent } from '@/lib/journey-logger';
 
 type McpResourceContent = {
   text?: string;
@@ -29,7 +30,16 @@ export async function callMcpMethod(
 ): Promise<any> {
   const controller = new AbortController();
   const timer = window.setTimeout(() => controller.abort(), timeoutMs);
+  const startedAt = Date.now();
   try {
+    try {
+      logJourneyEvent({
+        eventType: 'mcp_call',
+        source: 'ui',
+        tool: method,
+        payload: { serverUrl, params },
+      });
+    } catch { }
     const response = await fetch(serverUrl, {
       method: 'POST',
       headers: {
@@ -48,7 +58,27 @@ export async function callMcpMethod(
     if (payload?.error) {
       throw new Error(payload.error?.message || 'mcp_request_failed');
     }
+    try {
+      logJourneyEvent({
+        eventType: 'mcp_result',
+        source: 'ui',
+        tool: method,
+        durationMs: Date.now() - startedAt,
+        payload: { serverUrl, result: payload?.result ?? null },
+      });
+    } catch { }
     return payload?.result ?? null;
+  } catch (error) {
+    try {
+      logJourneyEvent({
+        eventType: 'mcp_error',
+        source: 'ui',
+        tool: method,
+        durationMs: Date.now() - startedAt,
+        payload: { serverUrl, error: error instanceof Error ? error.message : String(error) },
+      });
+    } catch { }
+    throw error;
   } finally {
     window.clearTimeout(timer);
   }

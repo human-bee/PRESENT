@@ -26,6 +26,12 @@ import { initializeMCPBridge } from '@/lib/mcp-bridge';
 import { AgentCapabilitiesBridge } from '@/components/ui/integrations/agent-capabilities-bridge';
 import { LiveKitStateBridge } from '@/lib/livekit/livekit-state-bridge';
 import LiveKitDebugConsole from '@/components/LiveKitDebugConsole';
+import {
+  initJourneyLogger,
+  persistJourneyRunId,
+  resolveJourneyConfig,
+  updateJourneyRoom,
+} from '@/lib/journey-logger';
 
 // Suppress development warnings for cleaner console
 suppressDevelopmentWarnings();
@@ -55,6 +61,25 @@ export function CanvasPageClient() {
       isWindowDefined: typeof window !== 'undefined'
     });
   }, [loading, user, bypassAuth, roomName]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (!roomName) return;
+    try {
+      const config = resolveJourneyConfig();
+      if (!config?.enabled || !config.runId) {
+        updateJourneyRoom(roomName);
+        return;
+      }
+      persistJourneyRunId(config.runId);
+      initJourneyLogger({
+        runId: config.runId,
+        roomName,
+        enabled: config.enabled,
+        endpoint: '/api/journey/log',
+      });
+    } catch { }
+  }, [roomName]);
 
   const isUuid = (value: string | null | undefined) =>
     !!value && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
