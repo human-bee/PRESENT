@@ -28,6 +28,7 @@
     "stack:restart": "bash scripts/restart-dev-stack.sh",
     "stack:share": "bash scripts/share-dev-stack.sh",
     "journey:run": "npx tsx scripts/journey/run-multiuser.ts",
+    "journey:tts": "npx tsx scripts/journey/run-multiuser-tts.ts",
     "journey:report": "npx tsx scripts/journey/generate-report.ts",
     "teacher:build": "esbuild scripts/teacher-worker.ts --bundle --platform=node --target=node22 --outfile=.parity-dist/teacher-worker/teacher-worker.js --tsconfig=tsconfig.teacher-worker.json",
     "teacher:worker": "npm run teacher:build && node .parity-dist/teacher-worker/teacher-worker.js"
@@ -45,6 +46,7 @@
     "@livekit/agents-plugin-openai": "1.0.15",
     "@livekit/components-react": "2.9.15",
     "@livekit/components-styles": "^1.1.5",
+    "@livekit/rtc-node": "^0.13.18",
     "@modelcontextprotocol/ext-apps": "1.0.1",
     "@modelcontextprotocol/sdk": "1.25.2",
     "@openai/agents": "0.2.1",

@@ -23,6 +23,27 @@ Optional:
 
 Default script: `scripts/journey/sample-script.json`.
 
+## 2b) Run a multi-user script with TTS audio
+
+This publishes **real audio** into LiveKit and lets the voice agent ingest it via STT.
+Requires LiveKit credentials and an ElevenLabs API key.
+
+```bash
+export LIVEKIT_URL=ws://localhost:7880
+export LIVEKIT_API_KEY=devkey
+export LIVEKIT_API_SECRET=devsecret
+export ELEVENLABS_API_KEY=...
+export ELEVENLABS_VOICE_ID=EXAVITQu4vr4xnSDxMaL
+
+npm run journey:tts -- --room canvas-journey-demo
+```
+
+Optional:
+
+- `--manual true` or `JOURNEY_TTS_MANUAL=true` to also broadcast manual transcriptions.
+- `JOURNEY_TTS_SAMPLE_RATE=16000` (default)
+- `JOURNEY_TTS_FRAME_MS=20` (default)
+
 ## 3) Capture a report from Supabase
 
 ```bash
@@ -45,4 +66,4 @@ This captures:
 ## Notes
 
 - This is **synthetic STT**: we send transcription data packets rather than audio. It exercises the exact same voice-agent path.
-- For true audio-based STT, wire a TTS audio publisher to LiveKit and enable transcription for that track.
+- For true audio-based STT, use `npm run journey:tts` to publish TTS audio into LiveKit.

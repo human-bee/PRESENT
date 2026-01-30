@@ -107,7 +107,16 @@ const buildHtml = (runId: string, roomName: string | null, events: JourneyEventR
   const toolResults = events.filter((event) => event.event_type === 'tool_result');
   const mcpCalls = events.filter((event) => event.event_type === 'mcp_call');
   const mcpResults = events.filter((event) => event.event_type === 'mcp_result');
+  const ttsEvents = events.filter((event) => event.event_type.startsWith('tts'));
+  const audioEvents = events.filter((event) => event.event_type === 'audio_publish');
+  const utterances = events.filter((event) => event.event_type === 'utterance');
+  const assets = events.filter((event) => event.event_type === 'asset');
   const durations = summarizeDurations(toolResults);
+  const speedGrade = durations.avg <= 800 ? 'FAST' : durations.avg <= 1400 ? 'OK' : 'SLOW';
+  const counts = events.reduce<Record<string, number>>((acc, event) => {
+    acc[event.event_type] = (acc[event.event_type] || 0) + 1;
+    return acc;
+  }, {});
 
   return `<!doctype html>
   <html>
@@ -136,12 +145,39 @@ const buildHtml = (runId: string, roomName: string | null, events: JourneyEventR
         <div class="card"><strong>Tool Calls</strong><div>${toolCalls.length}</div></div>
         <div class="card"><strong>Tool Results</strong><div>${toolResults.length}</div></div>
         <div class="card"><strong>MCP Calls</strong><div>${mcpCalls.length}</div></div>
+        <div class="card"><strong>Utterances</strong><div>${utterances.length}</div></div>
+        <div class="card"><strong>Assets</strong><div>${assets.length}</div></div>
+        <div class="card"><strong>TTS Events</strong><div>${ttsEvents.length}</div></div>
+        <div class="card"><strong>Audio Publishes</strong><div>${audioEvents.length}</div></div>
         <div class="card"><strong>Avg Tool Time</strong><div>${durations.avg} ms</div></div>
         <div class="card"><strong>Max Tool Time</strong><div>${durations.max} ms</div></div>
+        <div class="card"><strong>Speed Grade</strong><div>${speedGrade}</div></div>
       </div>
 
       <h2>Assets</h2>
       ${renderAssets(events)}
+
+      <h2>Event Breakdown</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Event Type</th>
+            <th>Count</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${Object.entries(counts)
+            .map(
+              ([key, value]) => `
+                <tr>
+                  <td>${escapeHtml(key)}</td>
+                  <td>${value}</td>
+                </tr>
+              `,
+            )
+            .join('\n')}
+        </tbody>
+      </table>
 
       <h2>Timeline</h2>
       ${renderTimeline(events)}
