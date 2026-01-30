@@ -2541,6 +2541,49 @@ Your only output is function calls. Never use plain text unless absolutely neces
     type PendingReply = { options: { userInput?: string }; attempts: number };
     const pendingReplies: PendingReply[] = [];
     let lastUserPrompt: string | null = null;
+    let latestAgentState: voice.AgentState = 'initializing';
+    let recoveringActiveResponse = false;
+
+    const isActiveResponseError = (error: unknown) => {
+      if (!error) return false;
+      const rawMessage =
+        typeof (error as { message?: unknown })?.message === 'string'
+          ? (error as { message: string }).message
+          : '';
+      const message = rawMessage.toLowerCase();
+      const code =
+        (error as { code?: string })?.code ||
+        (error as { error?: { code?: string } })?.error?.code ||
+        (error as { detail?: { code?: string } })?.detail?.code;
+      return (
+        code === 'conversation_already_has_active_response' ||
+        message.includes('active response') ||
+        message.includes('already has an active response')
+      );
+    };
+
+    const interruptRealtimeSession = async (reason: string, error?: unknown) => {
+      if (recoveringActiveResponse) return;
+      recoveringActiveResponse = true;
+      console.warn('[VoiceAgent] recovering realtime session', {
+        reason,
+        error: error instanceof Error ? error.message : error,
+      });
+      try {
+        const interruptFuture = session.interrupt();
+        await waitWithTimeout(interruptFuture.await, interruptTimeoutMs);
+      } catch { }
+      recoveringActiveResponse = false;
+      // Allow any queued replies to resume after recovery.
+      if (!isGeneratingReply && pendingReplies.length > 0) {
+        setTimeout(() => {
+          if (!isGeneratingReply && pendingReplies.length > 0) {
+            void generateReplySafely();
+          }
+        }, 250);
+      }
+    };
+
     const generateReplySafely = async (options?: { userInput?: string }) => {
       pendingReplies.push({ options: options ?? {}, attempts: 0 });
       if (isGeneratingReply) {
@@ -2555,35 +2598,50 @@ Your only output is function calls. Never use plain text unless absolutely neces
         while (pendingReplies.length > 0) {
           const next = pendingReplies.shift();
           if (!next) continue;
-          const speech = session.generateReply({ ...(next.options as any), toolChoice: 'required' }) as any;
-          if (speech && typeof speech.waitForPlayout === 'function') {
-            const completed = await waitWithTimeout(speech.waitForPlayout(), replyTimeoutMs);
-            if (!completed.ok) {
-              console.warn('[VoiceAgent] generateReply timed out; interrupting session', {
-                timeoutMs: replyTimeoutMs,
-                attempts: next.attempts,
-                userInput: next.options.userInput ? next.options.userInput.slice(0, 120) : undefined,
-              });
-              try {
-                speech.interrupt?.(true);
-              } catch { }
-              try {
-                const interruptFuture = session.interrupt();
-                await waitWithTimeout(interruptFuture.await, interruptTimeoutMs);
-              } catch { }
+          if (latestAgentState === 'thinking' || latestAgentState === 'speaking') {
+            // Agent is still busy; requeue and wait briefly instead of hammering the realtime session.
+            pendingReplies.unshift(next);
+            await waitWithTimeout(new Promise((resolve) => setTimeout(resolve, 300)), 350);
+            continue;
+          }
+          try {
+            const speech = session.generateReply({ ...(next.options as any), toolChoice: 'required' }) as any;
+            if (speech && typeof speech.waitForPlayout === 'function') {
+              const completed = await waitWithTimeout(speech.waitForPlayout(), replyTimeoutMs);
+              if (!completed.ok) {
+                console.warn('[VoiceAgent] generateReply timed out; interrupting session', {
+                  timeoutMs: replyTimeoutMs,
+                  attempts: next.attempts,
+                  userInput: next.options.userInput ? next.options.userInput.slice(0, 120) : undefined,
+                });
+                try {
+                  speech.interrupt?.(true);
+                } catch { }
+                await interruptRealtimeSession('reply_timeout');
 
-              if (next.attempts < 1) {
-                const retryOptions: { userInput?: string } = { ...next.options };
-                if (retryOptions.userInput) {
-                  delete retryOptions.userInput;
+                if (next.attempts < 1) {
+                  const retryOptions: { userInput?: string } = { ...next.options };
+                  if (retryOptions.userInput) {
+                    delete retryOptions.userInput;
+                  }
+                  pendingReplies.unshift({ options: retryOptions, attempts: next.attempts + 1 });
                 }
-                pendingReplies.unshift({ options: retryOptions, attempts: next.attempts + 1 });
               }
             }
+          } catch (err) {
+            if (isActiveResponseError(err)) {
+              pendingReplies.unshift({ options: next.options, attempts: next.attempts + 1 });
+              await interruptRealtimeSession('active_response_error', err);
+              continue;
+            }
+            throw err;
           }
         }
       } catch (err) {
         logRealtimeError('generateReply queue failed', err);
+        if (isActiveResponseError(err)) {
+          await interruptRealtimeSession('active_response_error', err);
+        }
       } finally {
         isGeneratingReply = false;
       }
@@ -3300,9 +3358,13 @@ Your only output is function calls. Never use plain text unless absolutely neces
     transcriptionReadyTimer.unref?.();
 
     session.on(voice.AgentSessionEventTypes.AgentStateChanged, (event) => {
+      latestAgentState = event.newState;
       if (event.newState !== 'initializing') {
         clearTimeout(transcriptionReadyTimer);
         enableTranscriptionProcessing(`agent_state_${event.newState}`);
+      }
+      if (event.newState === 'idle' && pendingReplies.length > 0 && !isGeneratingReply) {
+        void generateReplySafely();
       }
     });
 

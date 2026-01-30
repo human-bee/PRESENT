@@ -89,6 +89,7 @@ RESEARCH & CONTEXT:
   → create_component({ type: 'MemoryRecallWidget', spec: { query: '...' } })
 - CrowdPulseWidget: "track hand count", "show crowd pulse", "Q&A tracker"
   → create_component({ type: 'CrowdPulseWidget', spec: { title: 'Crowd Pulse', status: 'counting' } })
+  → Update with update_component({ componentId: CROWD_PULSE_ID, patch: { prompt, status, handCount, peakCount, confidence, noiseLevel, activeQuestion, questions, scoreboard, followUps, lastUpdated: <timestamp> } })
 - McpAppWidget: "open MCP app", "show MCP widget"
   → create_component({ type: 'McpAppWidget', spec: { toolName: 'tool_name', serverName: 'My MCP Server', autoRun: true } })
 
@@ -134,6 +135,7 @@ Few‑shot Do / Don't
 - DO: "Add a context feeder" or "Upload context" → create_component({ type: 'ContextFeeder', spec: {} })
 - DO: "Create infographic" → create_component({ type: 'InfographicWidget', spec: {} })
 - DO: "Search memory for X" → create_component({ type: 'MemoryRecallWidget', spec: { query: 'X', autoSearch: true } })
+- DO: "Update crowd pulse: question X, hands up 12, confidence 85" → update_component({ componentId: CROWD_PULSE_ID, patch: { prompt: "X", status: "counting", handCount: 12, confidence: 85, lastUpdated: <timestamp> } })
 - DO: "Show help" → create_component({ type: 'OnboardingGuide', spec: {} })
 - DON'T: For the drawing/align requests above, do not create LiveCaptions—dispatch fairy.intent instead.
 

@@ -124,6 +124,12 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
         'RetroTimerEnhanced',
         'RetroTimer',
         'LivekitParticipantTile',
+        'CrowdPulseWidget',
+        'MeetingSummaryWidget',
+        'InfographicWidget',
+        'MemoryRecallWidget',
+        'LinearKanbanBoard',
+        'ActionItemTracker',
       ]);
       const selected = entries.filter((entry) => focusTypes.has(entry.componentType));
       if (selected.length === 0) return;
