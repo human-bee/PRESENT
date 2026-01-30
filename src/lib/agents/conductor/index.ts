@@ -40,6 +40,7 @@ import {
 } from '@/lib/fairy-context/profiles';
 import { formatFairyContextParts } from '@/lib/fairy-context/format';
 import { runSummaryStewardFast } from '@/lib/agents/subagents/summary-steward-fast';
+import { runCrowdPulseStewardFast } from '@/lib/agents/subagents/crowd-pulse-steward-fast';
 
 dotenvConfig({ path: join(process.cwd(), '.env.local') });
 
@@ -556,6 +557,33 @@ async function handleFairyIntent(rawParams: JsonObject) {
 
     if (decisionLike.kind === 'summary') {
       return dispatchSummaryDocument(intent, { summary, message }, actionProfile, contextBundle);
+    }
+
+    if (decisionLike.kind === 'crowd_pulse') {
+      const componentId = await ensureWidgetComponent(intent, 'CrowdPulseWidget');
+      const bundleText =
+        contextBundle && Array.isArray(contextBundle.parts)
+          ? formatFairyContextParts(contextBundle.parts as any, 3000)
+          : '';
+      const patch = await runCrowdPulseStewardFast({
+        room: intent.room,
+        instruction: message,
+        contextBundle: bundleText,
+        contextProfile: actionProfile,
+      });
+      const updatePatch = {
+        ...patch,
+        lastUpdated: Date.now(),
+      };
+      await broadcastToolCall({
+        room: intent.room,
+        tool: 'update_component',
+        params: {
+          componentId,
+          patch: updatePatch,
+        },
+      });
+      return { status: 'queued', intentId: intent.id, decision, componentId };
     }
 
     if (decisionLike.kind === 'canvas') {

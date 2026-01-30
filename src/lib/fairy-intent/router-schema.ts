@@ -1,8 +1,23 @@
 import { z } from 'zod';
 import { FAIRY_CONTEXT_PROFILES } from '@/lib/fairy-context/profiles';
 
-const ROUTE_KINDS = ['canvas', 'scorecard', 'infographic', 'kanban', 'view', 'summary', 'bundle', 'none'] as const;
-const COMPONENT_TYPES = ['DebateScorecard', 'InfographicWidget', 'LinearKanbanBoard'] as const;
+const ROUTE_KINDS = [
+  'canvas',
+  'scorecard',
+  'infographic',
+  'kanban',
+  'view',
+  'summary',
+  'crowd_pulse',
+  'bundle',
+  'none',
+] as const;
+const COMPONENT_TYPES = [
+  'DebateScorecard',
+  'InfographicWidget',
+  'LinearKanbanBoard',
+  'CrowdPulseWidget',
+] as const;
 
 export const ALLOWED_VIEW_EVENTS = [
   'tldraw:canvas_focus',
