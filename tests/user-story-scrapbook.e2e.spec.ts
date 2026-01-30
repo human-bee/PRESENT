@@ -8,6 +8,7 @@ import {
   snap,
   type StepResult,
 } from './fairy-lap-utils';
+import { writeScrapbookHtml } from './helpers/scrapbook-html';
 
 const BASE_URL = 'http://localhost:3000';
 const DEFAULT_PASSWORD = 'Devtools123!';
@@ -191,6 +192,22 @@ function writeScrapbook(args: {
   ];
 
   fs.writeFileSync(outputPath, lines.join('\n'));
+
+  const htmlOutputPath = outputPath.endsWith('.md')
+    ? `${outputPath.slice(0, -3)}.html`
+    : `${outputPath}.html`;
+
+  writeScrapbookHtml({
+    outputPath: htmlOutputPath,
+    title: `PRESENT User Story Scrapbook (${dateStamp})`,
+    runId,
+    dateStamp,
+    story: 'Conversation -> Action -> Memory -> Visuals -> View Orchestration',
+    heroShots,
+    results,
+    perfRows,
+    notes,
+  });
 }
 
 test.describe('User story scrapbook', () => {

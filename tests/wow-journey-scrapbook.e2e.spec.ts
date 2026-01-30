@@ -8,6 +8,7 @@ import {
   snap,
   type StepResult,
 } from './fairy-lap-utils';
+import { writeScrapbookHtml } from './helpers/scrapbook-html';
 
 const BASE_URL = 'http://localhost:3000';
 const DEFAULT_PASSWORD = 'Devtools123!';
@@ -123,6 +124,12 @@ type PerfRow = {
   budgetMs: number;
 };
 
+type HeroShot = {
+  title: string;
+  screenshot?: string;
+  caption?: string;
+};
+
 function writeScrapbook(args: {
   outputPath: string;
   runId: string;
@@ -130,8 +137,9 @@ function writeScrapbook(args: {
   results: StepResult[];
   perfRows: PerfRow[];
   notes: string[];
+  heroShots?: HeroShot[];
 }) {
-  const { outputPath, runId, dateStamp, results, perfRows, notes } = args;
+  const { outputPath, runId, dateStamp, results, perfRows, notes, heroShots: heroOverride } = args;
   const totalMs = results.reduce((sum, step) => sum + step.durationMs, 0);
   const perfRowsFormatted = perfRows.map((row) => ({
     ...row,
@@ -141,24 +149,26 @@ function writeScrapbook(args: {
   const findShot = (stepName: string) =>
     results.find((step) => step.name === stepName)?.screenshot;
 
-  const heroShots = [
-    {
-      title: 'Debate Scorecard (multi-facet view)',
-      screenshot: findShot('Seed debate scorecard'),
-    },
-    {
-      title: 'Scorecard update (claims + metrics)',
-      screenshot: findShot('Update scorecard signals'),
-    },
-    {
-      title: 'MCP App View (tool + UI)',
-      screenshot: findShot('Render MCP App view'),
-    },
-    {
-      title: 'Presenter View Preset (fast lane)',
-      screenshot: findShot('Apply presenter view preset'),
-    },
-  ].filter((shot) => shot.screenshot);
+  const heroShots =
+    heroOverride ||
+    [
+      {
+        title: 'Debate Scorecard (multi-facet view)',
+        screenshot: findShot('Seed debate scorecard'),
+      },
+      {
+        title: 'Scorecard update (claims + metrics)',
+        screenshot: findShot('Update scorecard signals'),
+      },
+      {
+        title: 'MCP App View (tool + UI)',
+        screenshot: findShot('Render MCP App view'),
+      },
+      {
+        title: 'Presenter View Preset (fast lane)',
+        screenshot: findShot('Apply presenter view preset'),
+      },
+    ].filter((shot) => shot.screenshot);
 
   const lines = [
     `# PRESENT Wow Journey Scrapbook (${dateStamp})`,
@@ -211,6 +221,22 @@ function writeScrapbook(args: {
   ];
 
   fs.writeFileSync(outputPath, lines.join('\n'));
+
+  const htmlOutputPath = outputPath.endsWith('.md')
+    ? `${outputPath.slice(0, -3)}.html`
+    : `${outputPath}.html`;
+
+  writeScrapbookHtml({
+    outputPath: htmlOutputPath,
+    title: `PRESENT Wow Journey Scrapbook (${dateStamp})`,
+    runId,
+    dateStamp,
+    story: 'Debate -> Verification -> Memory -> Visuals -> Live Layout',
+    heroShots,
+    results,
+    perfRows,
+    notes,
+  });
 }
 
 test.describe('Wow journey scrapbook', () => {
@@ -741,6 +767,285 @@ test.describe('Wow journey scrapbook', () => {
       results,
       perfRows,
       notes,
+    });
+
+    await expect(fs.existsSync(outputPath)).toBeTruthy();
+  });
+
+  test('runs a second wow journey (widgets + memory) and writes a scrapbook report', async ({ page }) => {
+    test.setTimeout(8 * 60 * 1000);
+
+    const runId = `${formatTimestamp(new Date())}-alt`;
+    const dateStamp = formatDate(new Date());
+    const imagesDir = path.join('docs', 'scrapbooks', 'assets', dateStamp);
+    const outputPath = path.join('docs', 'scrapbooks', `${dateStamp}-wow-journey-2.md`);
+    ensureDir(imagesDir);
+
+    const results: StepResult[] = [];
+    const perfRows: PerfRow[] = [];
+    const notes: string[] = [];
+
+    const recordStep = async (name: string, fn: () => Promise<{ screenshot?: string; notes?: string }>) => {
+      const start = Date.now();
+      try {
+        const payload = await fn();
+        results.push({
+          name,
+          status: 'PASS',
+          durationMs: Date.now() - start,
+          screenshot: payload.screenshot,
+          notes: payload.notes,
+        });
+      } catch (error: any) {
+        results.push({
+          name,
+          status: 'FAIL',
+          durationMs: Date.now() - start,
+          error: error?.message || String(error),
+        });
+        throw error;
+      }
+    };
+
+    await recordStep('Sign in / sign up', async () => {
+      await waitForBaseUrl(BASE_URL);
+      await signInOrSignUp(page, {
+        email: process.env.PLAYWRIGHT_EMAIL,
+        password: process.env.PLAYWRIGHT_PASSWORD || DEFAULT_PASSWORD,
+      });
+      await page.waitForTimeout(1000);
+      return {};
+    });
+
+    await recordStep('Canvas loaded', async () => {
+      await page.goto(`${BASE_URL}/canvas`, { waitUntil: 'networkidle' });
+      await page.waitForSelector('[data-canvas-space="true"]', { timeout: 60_000 });
+      await waitForNoCompilingToast(page);
+      const screenshot = `${runId}-00-canvas.png`;
+      await snap(page, imagesDir, screenshot);
+      return { screenshot };
+    });
+
+    await ensureToolDispatcherReady(page);
+
+    const timerId = `wow-timer-${Date.now().toString(36)}`;
+    await recordStep('Create focus timer', async () => {
+      const result: any = await invokeToolWithMetrics(page, {
+        id: `create-timer-${Date.now()}`,
+        type: 'tool_call',
+        payload: {
+          tool: 'create_component',
+          params: {
+            type: 'RetroTimerEnhanced',
+            messageId: timerId,
+            spec: { initialMinutes: 5 },
+          },
+        },
+        timestamp: Date.now(),
+        source: 'playwright',
+      });
+
+      perfRows.push({
+        label: 'create_component (RetroTimerEnhanced)',
+        durationMs: result.metrics?.dtPaintMs ?? 0,
+        budgetMs: 1400,
+      });
+
+      await page.getByText('05:00').first().waitFor({ timeout: 30_000 });
+      await waitForNoCompilingToast(page);
+      const screenshot = `${runId}-01-timer.png`;
+      await snap(page, imagesDir, screenshot);
+      return { screenshot, notes: `paint ${result.metrics?.dtPaintMs ?? 0} ms` };
+    });
+
+    await recordStep('Update timer to 10 minutes', async () => {
+      const result: any = await invokeToolWithMetrics(page, {
+        id: `update-timer-${Date.now()}`,
+        type: 'tool_call',
+        payload: {
+          tool: 'update_component',
+          params: {
+            componentId: timerId,
+            patch: { duration: 600 },
+          },
+        },
+        timestamp: Date.now(),
+        source: 'playwright',
+      });
+
+      perfRows.push({
+        label: 'update_component (RetroTimerEnhanced)',
+        durationMs: result.metrics?.dtPaintMs ?? 0,
+        budgetMs: 900,
+      });
+
+      await page.getByText('10:00').first().waitFor({ timeout: 30_000 });
+      await waitForNoCompilingToast(page);
+      const screenshot = `${runId}-02-timer-updated.png`;
+      await snap(page, imagesDir, screenshot);
+      return { screenshot, notes: `paint ${result.metrics?.dtPaintMs ?? 0} ms` };
+    });
+
+    const summaryId = `wow-summary-${Date.now().toString(36)}`;
+    await recordStep('Create meeting summary widget', async () => {
+      const result: any = await invokeToolWithMetrics(page, {
+        id: `create-summary-${Date.now()}`,
+        type: 'tool_call',
+        payload: {
+          tool: 'create_component',
+          params: {
+            type: 'MeetingSummaryWidget',
+            messageId: summaryId,
+            spec: {
+              title: 'Crowd Q&A Summary',
+              summary:
+                'We captured a live Q&A, clustered overlapping questions, and identified top follow-ups for the next session.',
+              highlights: ['12 questions captured', '3 themes clustered', 'Top follow-up prioritized'],
+              decisions: ['Publish summary to memory', 'Create follow-up tasks'],
+              actionItems: [
+                { task: 'Draft a follow-up email to attendees', owner: 'Ops', status: 'todo' },
+                { task: 'Schedule a deeper safety eval session', owner: 'Research', status: 'todo' },
+              ],
+              tags: ['demo', 'crowd', 'follow-up'],
+              contextProfile: 'standard',
+              lastUpdated: Date.now(),
+            },
+          },
+        },
+        timestamp: Date.now(),
+        source: 'playwright',
+      });
+
+      perfRows.push({
+        label: 'create_component (MeetingSummaryWidget)',
+        durationMs: result.metrics?.dtPaintMs ?? 0,
+        budgetMs: 1500,
+      });
+
+      await page.getByText('Crowd Q&A Summary', { exact: true }).waitFor({ timeout: 30_000 });
+      await waitForNoCompilingToast(page);
+      const screenshot = `${runId}-03-summary.png`;
+      await snap(page, imagesDir, screenshot);
+      return { screenshot, notes: `paint ${result.metrics?.dtPaintMs ?? 0} ms` };
+    });
+
+    const kanbanId = `wow-kanban-${Date.now().toString(36)}`;
+    await recordStep('Create Linear Kanban board', async () => {
+      const result: any = await invokeToolWithMetrics(page, {
+        id: `create-kanban-${Date.now()}`,
+        type: 'tool_call',
+        payload: {
+          tool: 'create_component',
+          params: {
+            type: 'LinearKanbanBoard',
+            messageId: kanbanId,
+            spec: {},
+          },
+        },
+        timestamp: Date.now(),
+        source: 'playwright',
+      });
+
+      perfRows.push({
+        label: 'create_component (LinearKanbanBoard)',
+        durationMs: result.metrics?.dtPaintMs ?? 0,
+        budgetMs: 1500,
+      });
+
+      await page.getByText('Linear Kanban Board', { exact: false }).first().waitFor({ timeout: 30_000 });
+      await waitForNoCompilingToast(page);
+      const screenshot = `${runId}-04-kanban.png`;
+      await snap(page, imagesDir, screenshot);
+      return { screenshot, notes: `paint ${result.metrics?.dtPaintMs ?? 0} ms` };
+    });
+
+    const infographicId = `wow-info-${Date.now().toString(36)}`;
+    await recordStep('Create infographic widget', async () => {
+      const result: any = await invokeToolWithMetrics(page, {
+        id: `create-infographic-${Date.now()}`,
+        type: 'tool_call',
+        payload: {
+          tool: 'create_component',
+          params: {
+            type: 'InfographicWidget',
+            messageId: infographicId,
+            spec: { useGrounding: false },
+          },
+        },
+        timestamp: Date.now(),
+        source: 'playwright',
+      });
+
+      perfRows.push({
+        label: 'create_component (InfographicWidget)',
+        durationMs: result.metrics?.dtPaintMs ?? 0,
+        budgetMs: 1500,
+      });
+
+      await page.getByText('Infographic', { exact: false }).first().waitFor({ timeout: 30_000 });
+      await waitForNoCompilingToast(page);
+      const screenshot = `${runId}-05-infographic.png`;
+      await snap(page, imagesDir, screenshot);
+      return { screenshot, notes: `paint ${result.metrics?.dtPaintMs ?? 0} ms` };
+    });
+
+    await recordStep('Apply gallery view preset', async () => {
+      const presetPerf = await page.evaluate(async () => {
+        const editor = (window as any).__tldrawEditor;
+        if (!editor) return { durationMs: 0, moved: false };
+        const shapes = editor.getCurrentPageShapes?.() || [];
+        const beforeCount = shapes.length;
+        const start = performance.now();
+        window.dispatchEvent(
+          new CustomEvent('tldraw:applyViewPreset', {
+            detail: { preset: 'gallery', force: true },
+          }),
+        );
+        const timeout = 2000;
+        while (performance.now() - start < timeout) {
+          const nextShapes = editor.getCurrentPageShapes?.() || [];
+          if (nextShapes.length === beforeCount) {
+            return { durationMs: Math.round(performance.now() - start), moved: true };
+          }
+          await new Promise((resolve) => setTimeout(resolve, 50));
+        }
+        return { durationMs: Math.round(performance.now() - start), moved: false };
+      });
+
+      perfRows.push({
+        label: 'fast-lane view preset (gallery)',
+        durationMs: presetPerf.durationMs,
+        budgetMs: 500,
+      });
+
+      await waitForNoCompilingToast(page);
+      const screenshot = `${runId}-06-gallery.png`;
+      await snap(page, imagesDir, screenshot);
+      return { screenshot, notes: `applied in ${presetPerf.durationMs} ms` };
+    });
+
+    notes.push('Timer updated via update_component to show speed of UI edits.');
+    notes.push('Summary widget demonstrates structured notes + action items.');
+    notes.push('Kanban board showcases task follow-ups for the session.');
+    notes.push('Infographic widget anchors the visual recap.');
+    notes.push('Gallery preset uses fast-lane tldraw:applyViewPreset.');
+
+    const heroShots: HeroShot[] = [
+      { title: 'Focus Timer (live adjustments)', screenshot: results.find((step) => step.name === 'Create focus timer')?.screenshot },
+      { title: 'Meeting Summary (structured outcomes)', screenshot: results.find((step) => step.name === 'Create meeting summary widget')?.screenshot },
+      { title: 'Linear Kanban (follow-up tasks)', screenshot: results.find((step) => step.name === 'Create Linear Kanban board')?.screenshot },
+      { title: 'Infographic (visual recap)', screenshot: results.find((step) => step.name === 'Create infographic widget')?.screenshot },
+      { title: 'Gallery View (fast lane)', screenshot: results.find((step) => step.name === 'Apply gallery view preset')?.screenshot },
+    ].filter((shot) => shot.screenshot);
+
+    writeScrapbook({
+      outputPath,
+      runId,
+      dateStamp,
+      results,
+      perfRows,
+      notes,
+      heroShots,
     });
 
     await expect(fs.existsSync(outputPath)).toBeTruthy();
