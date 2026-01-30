@@ -29,6 +29,7 @@ export const crowdPulseWidgetSchema = z.object({
   followUps: z.array(z.string()).optional(),
   lastUpdated: z.number().optional(),
   demoMode: z.boolean().optional(),
+  sensorEnabled: z.boolean().optional(),
   className: z.string().optional(),
 });
 
@@ -55,5 +56,6 @@ export type CrowdPulseState = {
   followUps: string[];
   lastUpdated?: number;
   demoMode: boolean;
+  sensorEnabled: boolean;
   className?: string;
 };

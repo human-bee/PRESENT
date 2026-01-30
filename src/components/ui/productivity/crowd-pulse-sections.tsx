@@ -44,6 +44,7 @@ type StatsProps = {
   peakCount: number;
   confidence: number;
   noiseLevel: number;
+  sensorLabel?: string;
 };
 
 export function CrowdPulseStats({
@@ -52,12 +53,18 @@ export function CrowdPulseStats({
   peakCount,
   confidence,
   noiseLevel,
+  sensorLabel,
 }: StatsProps) {
   const hasConfidence = Number.isFinite(confidence);
   const hasNoise = Number.isFinite(noiseLevel);
 
   return (
     <>
+      {sensorLabel && (
+        <div className="rounded-xl border border-slate-800/60 bg-slate-900/80 px-3 py-2 text-xs text-slate-200">
+          {sensorLabel}
+        </div>
+      )}
       {demoMode && (
         <div className="rounded-xl border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-xs text-cyan-100">
           Simulated crowd feed (demo mode)
