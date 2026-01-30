@@ -10,6 +10,7 @@ import {
   type ReactNode,
 } from 'react';
 import { useDataChannel } from '@livekit/components-react';
+import { logJourneyEvent } from '@/lib/journey-logger';
 
 // =============================================================================
 // Types
@@ -189,6 +190,21 @@ export function TranscriptProvider({ children }: TranscriptProviderProps) {
         const arr = Array.from(processedIds.current);
         processedIds.current = new Set(arr.slice(-300));
       }
+      try {
+        logJourneyEvent({
+          eventType: 'transcript',
+          source: transcript.source || (transcript.speaker === 'voice-agent' ? 'agent' : 'user'),
+          payload: {
+            id: transcript.id,
+            speaker: transcript.speaker,
+            text: transcript.text,
+            timestamp: transcript.timestamp,
+            isFinal: transcript.isFinal,
+            isReplay: transcript.isReplay ?? false,
+            type: transcript.type || 'speech',
+          },
+        });
+      } catch {}
     }
     dispatch({ type: 'ADD_OR_UPDATE', payload: transcript });
   }, []);
@@ -270,7 +286,6 @@ export function TranscriptProvider({ children }: TranscriptProviderProps) {
     </TranscriptContext.Provider>
   );
 }
-
 
 
 

@@ -87,6 +87,8 @@ RESEARCH & CONTEXT:
   → create_component({ type: 'ContextFeeder', spec: {} })
 - MemoryRecallWidget: "search memory", "recall memory", "show memory recall"
   → create_component({ type: 'MemoryRecallWidget', spec: { query: '...' } })
+- CrowdPulseWidget: "track hand count", "show crowd pulse", "Q&A tracker"
+  → create_component({ type: 'CrowdPulseWidget', spec: { title: 'Crowd Pulse', status: 'counting' } })
 - McpAppWidget: "open MCP app", "show MCP widget"
   → create_component({ type: 'McpAppWidget', spec: { toolName: 'tool_name', serverName: 'My MCP Server', autoRun: true } })
 

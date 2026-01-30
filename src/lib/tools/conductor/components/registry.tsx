@@ -8,6 +8,8 @@ import { ResearchPanel, researchPanelSchema } from '@/components/ui/research/res
 import { ActionItemTracker, actionItemTrackerSchema } from '@/components/ui/productivity/action-item-tracker';
 import MeetingSummaryWidget, { meetingSummaryWidgetSchema } from '@/components/ui/productivity/meeting-summary-widget';
 import MemoryRecallWidget, { memoryRecallWidgetSchema } from '@/components/ui/productivity/memory-recall-widget';
+import CrowdPulseWidget from '@/components/ui/productivity/crowd-pulse-widget';
+import { crowdPulseWidgetSchema } from '@/components/ui/productivity/crowd-pulse-schema';
 import McpAppWidget, { mcpAppWidgetSchema } from '@/components/ui/mcp/mcp-app-widget';
 import {
   LivekitParticipantTile,
@@ -136,6 +138,13 @@ export const components: any = [
       'Vector memory recall panel that queries MCP memory stores (e.g. Qdrant) and lists matching context snippets.',
     component: MemoryRecallWidget,
     propsSchema: extendedSchema(memoryRecallWidgetSchema),
+  },
+  {
+    name: 'CrowdPulseWidget',
+    description:
+      'Crowd pulse control room for stage demos. Tracks hand counts, live questions, scoreboards, and follow-up suggestions.',
+    component: CrowdPulseWidget,
+    propsSchema: extendedSchema(crowdPulseWidgetSchema),
   },
   {
     name: 'McpAppWidget',

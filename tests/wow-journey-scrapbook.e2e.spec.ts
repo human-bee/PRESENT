@@ -9,6 +9,7 @@ import {
   type StepResult,
 } from './fairy-lap-utils';
 import { writeScrapbookHtml } from './helpers/scrapbook-html';
+import { fetchJourneyEvents, logJourneyAsset, logJourneyEvent } from './helpers/journey-log';
 
 const BASE_URL = 'http://localhost:3000';
 const DEFAULT_PASSWORD = 'Devtools123!';
@@ -91,6 +92,48 @@ async function invokeToolWithMetrics(page: any, call: any, timeoutMs = 12_000) {
   );
 }
 
+async function invokeToolWithJourney(
+  page: any,
+  runId: string,
+  call: any,
+  label: string,
+  timeoutMs = 12_000,
+) {
+  const tool = call?.payload?.tool;
+  const params = call?.payload?.params || {};
+  const messageId =
+    typeof params?.messageId === 'string'
+      ? params.messageId
+      : typeof params?.componentId === 'string'
+        ? params.componentId
+        : undefined;
+  const componentType =
+    typeof params?.type === 'string'
+      ? params.type
+      : typeof params?.componentType === 'string'
+        ? params.componentType
+        : undefined;
+
+  await logJourneyEvent(runId, 'canvas', {
+    eventType: 'tool_call',
+    source: 'playwright',
+    tool,
+    payload: { label, messageId, componentType },
+  });
+
+  const result = await invokeToolWithMetrics(page, call, timeoutMs);
+
+  await logJourneyEvent(runId, 'canvas', {
+    eventType: 'tool_result',
+    source: 'playwright',
+    tool,
+    durationMs: result?.metrics?.dtPaintMs ?? null,
+    payload: { label, messageId, componentType },
+  });
+
+  return result;
+}
+
 async function waitForNoCompilingToast(page: any) {
   const compiling = page.getByText('Compiling...', { exact: false });
   if (await compiling.count()) {
@@ -107,6 +150,43 @@ async function waitForCanvasReady(page: any) {
     await expect(loading.first()).not.toBeVisible({ timeout: 60_000 }).catch(() => {});
   }
 }
+
+const wowTranscriptScript = [
+  { speaker: 'Moderator', text: 'Welcome to the live demo. We will run a rapid debate and capture artifacts.' },
+  { speaker: 'Avery', text: 'Opening: We should require AI labs to publish safety evals before release.' },
+  { speaker: 'Jordan', text: 'Counter: That slows innovation and hides important details from the public.' },
+  { speaker: 'Avery', text: 'We can share high-level results without revealing exploit details.' },
+  { speaker: 'Jordan', text: 'But transparency is needed to build trust and accountability.' },
+  { speaker: 'Moderator', text: 'Log these claims and update the debate scorecard.' },
+  { speaker: 'Avery', text: 'Add: Third-party audits reduce catastrophic risk.' },
+  { speaker: 'Jordan', text: 'Add: Mandatory evals may lead to regulatory capture.' },
+  { speaker: 'Moderator', text: 'Pull a memory recall on prior evaluations.' },
+  { speaker: 'Avery', text: 'Summarize the debate for our CRM memory.' },
+  { speaker: 'Jordan', text: 'Generate an infographic that captures the key points.' },
+  { speaker: 'Moderator', text: 'Switch to presenter view and spotlight the speaker.' },
+  { speaker: 'Avery', text: 'We agree on a compromise: publish eval summaries with delayed detail.' },
+  { speaker: 'Jordan', text: 'Action item: Draft a policy memo and schedule a follow-up.' },
+  { speaker: 'Moderator', text: 'Close with a recap and capture all artifacts.' },
+];
+
+const wowTranscriptScriptAlt = [
+  { speaker: 'Host', text: 'Welcome to the crowd pulse demo. We are capturing questions and hand counts.' },
+  { speaker: 'Attendee 1', text: 'How do you ensure the board keeps pace with a fast Q&A?' },
+  { speaker: 'Host', text: 'We will track raised hands and cluster questions in real time.' },
+  { speaker: 'Attendee 2', text: 'Can we group similar questions and prioritize top votes?' },
+  { speaker: 'Host', text: 'Yes, clustering plus a follow-up suggestion engine.' },
+  { speaker: 'Attendee 3', text: 'How does the system decide which view preset to use?' },
+  { speaker: 'Host', text: 'Fast lane chooses a preset when the speaker starts a demo.' },
+  { speaker: 'Attendee 4', text: 'Can we log the session for later recall?' },
+  { speaker: 'Host', text: 'Summaries and infographics are captured into memory.' },
+  { speaker: 'Attendee 5', text: 'Show the current hand count and question leaderboard.' },
+  { speaker: 'Host', text: 'We will update the crowd pulse widget now.' },
+  { speaker: 'Attendee 6', text: 'Please suggest a follow-up question for the top theme.' },
+  { speaker: 'Host', text: 'We will add follow-ups and action items.' },
+  { speaker: 'Attendee 7', text: 'How fast can these widgets update?' },
+  { speaker: 'Host', text: 'We track paint times and keep fast-lane updates under 500ms.' },
+  { speaker: 'Host', text: 'Closing the Q&A with a final recap.' },
+];
 
 async function waitForComponentShape(page: any, messageId: string, timeoutMs = 30_000) {
   await page.waitForFunction(
@@ -148,8 +228,18 @@ function writeScrapbook(args: {
   perfRows: PerfRow[];
   notes: string[];
   heroShots?: HeroShot[];
+  journeyEvents?: Awaited<ReturnType<typeof fetchJourneyEvents>>;
 }) {
-  const { outputPath, runId, dateStamp, results, perfRows, notes, heroShots: heroOverride } = args;
+  const {
+    outputPath,
+    runId,
+    dateStamp,
+    results,
+    perfRows,
+    notes,
+    heroShots: heroOverride,
+    journeyEvents,
+  } = args;
   const totalMs = results.reduce((sum, step) => sum + step.durationMs, 0);
   const perfRowsFormatted = perfRows.map((row) => ({
     ...row,
@@ -246,6 +336,7 @@ function writeScrapbook(args: {
     results,
     perfRows,
     notes,
+    journeyEvents: journeyEvents || [],
   });
 }
 
@@ -303,16 +394,46 @@ test.describe('Wow journey scrapbook', () => {
     });
 
     await recordStep('Canvas loaded', async () => {
-      await page.goto(`${BASE_URL}/canvas`, { waitUntil: 'networkidle' });
+      await page.goto(`${BASE_URL}/canvas?journeyLog=1&journeyRunId=${runId}`, { waitUntil: 'networkidle' });
       await page.waitForSelector('[data-canvas-space="true"]', { timeout: 60_000 });
       await waitForCanvasReady(page);
       await waitForNoCompilingToast(page);
       const screenshot = `${runId}-00-canvas.png`;
       await snap(page, imagesDir, screenshot);
+      await logJourneyAsset(runId, 'canvas', `./assets/${dateStamp}/${screenshot}`, 'Canvas ready');
       return { screenshot };
     });
 
     await ensureToolDispatcherReady(page);
+
+    await recordStep('Simulate transcript (15 turns)', async () => {
+      await page.evaluate((lines) => {
+        const now = Date.now();
+        lines.forEach((line: any, idx: number) => {
+          window.dispatchEvent(
+            new CustomEvent('livekit:transcription-replay', {
+              detail: {
+                speaker: line.speaker,
+                text: line.text,
+                timestamp: now + idx * 1300,
+              },
+            }),
+          );
+        });
+      }, wowTranscriptScript);
+      await page.waitForTimeout(800);
+      return { notes: `${wowTranscriptScript.length} turns` };
+    });
+
+    await recordStep('Open transcript panel', async () => {
+      await page.keyboard.press('Control+K').catch(() => {});
+      await page.waitForTimeout(600);
+      await page.getByText('Transcript', { exact: false }).first().waitFor({ timeout: 10_000 }).catch(() => {});
+      const screenshot = `${runId}-01-transcript.png`;
+      await snap(page, imagesDir, screenshot);
+      await logJourneyAsset(runId, 'canvas', `./assets/${dateStamp}/${screenshot}`, 'Transcript panel');
+      return { screenshot };
+    });
 
     const debateId = `journey-debate-${Date.now().toString(36)}`;
     const now = Date.now();
@@ -446,7 +567,7 @@ test.describe('Wow journey scrapbook', () => {
     };
 
     await recordStep('Seed debate scorecard', async () => {
-      const result: any = await invokeToolWithMetrics(page, {
+      const result: any = await invokeToolWithJourney(page, runId, {
         id: `create-debate-${Date.now()}`,
         type: 'tool_call',
         payload: {
@@ -459,7 +580,7 @@ test.describe('Wow journey scrapbook', () => {
         },
         timestamp: Date.now(),
         source: 'playwright',
-      });
+      }, 'Seed debate scorecard');
 
       perfRows.push({
         label: 'create_component (DebateScorecard)',
@@ -473,11 +594,12 @@ test.describe('Wow journey scrapbook', () => {
       await waitForNoCompilingToast(page);
       const screenshot = `${runId}-01-debate-scorecard.png`;
       await snap(page, imagesDir, screenshot);
+      await logJourneyAsset(runId, 'canvas', `./assets/${dateStamp}/${screenshot}`, 'Debate scorecard');
       return { screenshot, notes: `paint ${result.metrics?.dtPaintMs ?? 0} ms` };
     });
 
     await recordStep('Update scorecard signals', async () => {
-      const result: any = await invokeToolWithMetrics(page, {
+      const result: any = await invokeToolWithJourney(page, runId, {
         id: `update-debate-${Date.now()}`,
         type: 'tool_call',
         payload: {
@@ -503,7 +625,7 @@ test.describe('Wow journey scrapbook', () => {
         },
         timestamp: Date.now(),
         source: 'playwright',
-      });
+      }, 'Update debate scorecard');
 
       perfRows.push({
         label: 'update_component (DebateScorecard)',
@@ -515,12 +637,13 @@ test.describe('Wow journey scrapbook', () => {
       await waitForNoCompilingToast(page);
       const screenshot = `${runId}-02-scorecard-updated.png`;
       await snap(page, imagesDir, screenshot);
+      await logJourneyAsset(runId, 'canvas', `./assets/${dateStamp}/${screenshot}`, 'Scorecard updated');
       return { screenshot, notes: `paint ${result.metrics?.dtPaintMs ?? 0} ms` };
     });
 
     const recallId = `wow-recall-${Date.now().toString(36)}`;
     await recordStep('Create memory recall widget', async () => {
-      const result: any = await invokeToolWithMetrics(page, {
+      const result: any = await invokeToolWithJourney(page, runId, {
         id: `create-recall-${Date.now()}`,
         type: 'tool_call',
         payload: {
@@ -537,7 +660,7 @@ test.describe('Wow journey scrapbook', () => {
         },
         timestamp: Date.now(),
         source: 'playwright',
-      });
+      }, 'Create memory recall widget');
 
       perfRows.push({
         label: 'create_component (MemoryRecallWidget)',
@@ -550,11 +673,12 @@ test.describe('Wow journey scrapbook', () => {
       await waitForNoCompilingToast(page);
       const screenshot = `${runId}-03-memory-created.png`;
       await snap(page, imagesDir, screenshot);
+      await logJourneyAsset(runId, 'canvas', `./assets/${dateStamp}/${screenshot}`, 'Memory recall widget');
       return { screenshot, notes: `paint ${result.metrics?.dtPaintMs ?? 0} ms` };
     });
 
     await recordStep('Populate memory recall results', async () => {
-      const result: any = await invokeToolWithMetrics(page, {
+      const result: any = await invokeToolWithJourney(page, runId, {
         id: `update-recall-${Date.now()}`,
         type: 'tool_call',
         payload: {
@@ -582,7 +706,7 @@ test.describe('Wow journey scrapbook', () => {
         },
         timestamp: Date.now(),
         source: 'playwright',
-      });
+      }, 'Populate memory recall results');
 
       perfRows.push({
         label: 'update_component (MemoryRecallWidget)',
@@ -590,17 +714,32 @@ test.describe('Wow journey scrapbook', () => {
         budgetMs: 900,
       });
 
+      await logJourneyEvent(runId, 'canvas', {
+        eventType: 'mcp_call',
+        source: 'playwright',
+        tool: 'qdrant-find',
+        payload: { query: 'safety evals', simulated: true },
+      });
+      await logJourneyEvent(runId, 'canvas', {
+        eventType: 'mcp_result',
+        source: 'playwright',
+        tool: 'qdrant-find',
+        durationMs: 210,
+        payload: { resultCount: 2, simulated: true },
+      });
+
       await page.getByText('2 hits', { exact: false }).waitFor({ timeout: 30_000 });
       await zoomCanvas(page);
       await waitForNoCompilingToast(page);
       const screenshot = `${runId}-04-memory-results.png`;
       await snap(page, imagesDir, screenshot);
+      await logJourneyAsset(runId, 'canvas', `./assets/${dateStamp}/${screenshot}`, 'Memory recall results');
       return { screenshot, notes: `paint ${result.metrics?.dtPaintMs ?? 0} ms` };
     });
 
     const mcpId = `wow-mcp-${Date.now().toString(36)}`;
     await recordStep('Render MCP App view', async () => {
-      const result: any = await invokeToolWithMetrics(page, {
+      const result: any = await invokeToolWithJourney(page, runId, {
         id: `create-mcp-${Date.now()}`,
         type: 'tool_call',
         payload: {
@@ -617,7 +756,7 @@ test.describe('Wow journey scrapbook', () => {
         },
         timestamp: Date.now(),
         source: 'playwright',
-      });
+      }, 'Render MCP App view');
 
       perfRows.push({
         label: 'create_component (McpAppWidget)',
@@ -632,6 +771,7 @@ test.describe('Wow journey scrapbook', () => {
       await waitForNoCompilingToast(page);
       const screenshot = `${runId}-05-mcp-app.png`;
       await snap(page, imagesDir, screenshot);
+      await logJourneyAsset(runId, 'canvas', `./assets/${dateStamp}/${screenshot}`, 'MCP app view');
       return { screenshot, notes: `paint ${result.metrics?.dtPaintMs ?? 0} ms` };
     });
 
@@ -642,7 +782,7 @@ test.describe('Wow journey scrapbook', () => {
     const screenShareId = `wow-screen-${Date.now().toString(36)}`;
 
     await recordStep('Spawn LiveKit tiles', async () => {
-      await invokeToolWithMetrics(page, {
+      await invokeToolWithJourney(page, runId, {
         id: `create-livekit-${Date.now()}`,
         type: 'tool_call',
         payload: {
@@ -657,10 +797,10 @@ test.describe('Wow journey scrapbook', () => {
         },
         timestamp: Date.now(),
         source: 'playwright',
-      });
+      }, 'Create LiveKit room connector');
 
       for (const tileId of livekitTileIds) {
-        await invokeToolWithMetrics(page, {
+        await invokeToolWithJourney(page, runId, {
           id: `create-tile-${tileId}`,
           type: 'tool_call',
           payload: {
@@ -670,15 +810,16 @@ test.describe('Wow journey scrapbook', () => {
               messageId: tileId,
               spec: {
                 participantIdentity: `demo-${tileId.slice(-4)}`,
+                demoMode: true,
               },
             },
           },
           timestamp: Date.now(),
           source: 'playwright',
-        });
+        }, 'Create LiveKit participant tile');
       }
 
-      await invokeToolWithMetrics(page, {
+      await invokeToolWithJourney(page, runId, {
         id: `create-screen-${Date.now()}`,
         type: 'tool_call',
         payload: {
@@ -690,7 +831,7 @@ test.describe('Wow journey scrapbook', () => {
         },
         timestamp: Date.now(),
         source: 'playwright',
-      });
+      }, 'Create LiveKit screen share tile');
 
       await page.waitForFunction(
         (id: string) => {
@@ -707,6 +848,7 @@ test.describe('Wow journey scrapbook', () => {
       await waitForNoCompilingToast(page);
       const screenshot = `${runId}-06-livekit-tiles.png`;
       await snap(page, imagesDir, screenshot);
+      await logJourneyAsset(runId, 'canvas', `./assets/${dateStamp}/${screenshot}`, 'LiveKit tiles (demo)');
       return { screenshot };
     });
 
@@ -763,6 +905,7 @@ test.describe('Wow journey scrapbook', () => {
       await waitForNoCompilingToast(page);
       const screenshot = `${runId}-07-view-preset.png`;
       await snap(page, imagesDir, screenshot);
+      await logJourneyAsset(runId, 'canvas', `./assets/${dateStamp}/${screenshot}`, 'Presenter preset');
       return { screenshot, notes: `applied in ${presetPerf.durationMs} ms` };
     });
 
@@ -771,6 +914,8 @@ test.describe('Wow journey scrapbook', () => {
     notes.push('MCP App demo uses a static ui resource (public/mcp-apps/demo.html).');
     notes.push('Presenter preset uses fast-lane tldraw:applyViewPreset.');
 
+    const journeyEvents = await fetchJourneyEvents(runId);
+
     writeScrapbook({
       outputPath,
       runId,
@@ -778,6 +923,7 @@ test.describe('Wow journey scrapbook', () => {
       results,
       perfRows,
       notes,
+      journeyEvents,
     });
 
     await expect(fs.existsSync(outputPath)).toBeTruthy();
@@ -829,20 +975,50 @@ test.describe('Wow journey scrapbook', () => {
     });
 
     await recordStep('Canvas loaded', async () => {
-      await page.goto(`${BASE_URL}/canvas`, { waitUntil: 'networkidle' });
+      await page.goto(`${BASE_URL}/canvas?journeyLog=1&journeyRunId=${runId}`, { waitUntil: 'networkidle' });
       await page.waitForSelector('[data-canvas-space="true"]', { timeout: 60_000 });
       await waitForCanvasReady(page);
       await waitForNoCompilingToast(page);
       const screenshot = `${runId}-00-canvas.png`;
       await snap(page, imagesDir, screenshot);
+      await logJourneyAsset(runId, 'canvas', `./assets/${dateStamp}/${screenshot}`, 'Canvas ready');
       return { screenshot };
     });
 
     await ensureToolDispatcherReady(page);
 
+    await recordStep('Simulate transcript (16 turns)', async () => {
+      await page.evaluate((lines) => {
+        const now = Date.now();
+        lines.forEach((line: any, idx: number) => {
+          window.dispatchEvent(
+            new CustomEvent('livekit:transcription-replay', {
+              detail: {
+                speaker: line.speaker,
+                text: line.text,
+                timestamp: now + idx * 1250,
+              },
+            }),
+          );
+        });
+      }, wowTranscriptScriptAlt);
+      await page.waitForTimeout(800);
+      return { notes: `${wowTranscriptScriptAlt.length} turns` };
+    });
+
+    await recordStep('Open transcript panel', async () => {
+      await page.keyboard.press('Control+K').catch(() => {});
+      await page.waitForTimeout(600);
+      await page.getByText('Transcript', { exact: false }).first().waitFor({ timeout: 10_000 }).catch(() => {});
+      const screenshot = `${runId}-00-transcript.png`;
+      await snap(page, imagesDir, screenshot);
+      await logJourneyAsset(runId, 'canvas', `./assets/${dateStamp}/${screenshot}`, 'Transcript panel');
+      return { screenshot };
+    });
+
     const timerId = `wow-timer-${Date.now().toString(36)}`;
     await recordStep('Create focus timer', async () => {
-      const result: any = await invokeToolWithMetrics(page, {
+      const result: any = await invokeToolWithJourney(page, runId, {
         id: `create-timer-${Date.now()}`,
         type: 'tool_call',
         payload: {
@@ -855,7 +1031,7 @@ test.describe('Wow journey scrapbook', () => {
         },
         timestamp: Date.now(),
         source: 'playwright',
-      });
+      }, 'Create focus timer');
 
       perfRows.push({
         label: 'create_component (RetroTimerEnhanced)',
@@ -867,11 +1043,12 @@ test.describe('Wow journey scrapbook', () => {
       await waitForNoCompilingToast(page);
       const screenshot = `${runId}-01-timer.png`;
       await snap(page, imagesDir, screenshot);
+      await logJourneyAsset(runId, 'canvas', `./assets/${dateStamp}/${screenshot}`, 'Focus timer');
       return { screenshot, notes: `paint ${result.metrics?.dtPaintMs ?? 0} ms` };
     });
 
     await recordStep('Update timer to 10 minutes', async () => {
-      const result: any = await invokeToolWithMetrics(page, {
+      const result: any = await invokeToolWithJourney(page, runId, {
         id: `update-timer-${Date.now()}`,
         type: 'tool_call',
         payload: {
@@ -883,7 +1060,7 @@ test.describe('Wow journey scrapbook', () => {
         },
         timestamp: Date.now(),
         source: 'playwright',
-      });
+      }, 'Update timer');
 
       perfRows.push({
         label: 'update_component (RetroTimerEnhanced)',
@@ -895,12 +1072,13 @@ test.describe('Wow journey scrapbook', () => {
       await waitForNoCompilingToast(page);
       const screenshot = `${runId}-02-timer-updated.png`;
       await snap(page, imagesDir, screenshot);
+      await logJourneyAsset(runId, 'canvas', `./assets/${dateStamp}/${screenshot}`, 'Timer updated');
       return { screenshot, notes: `paint ${result.metrics?.dtPaintMs ?? 0} ms` };
     });
 
     const summaryId = `wow-summary-${Date.now().toString(36)}`;
     await recordStep('Create meeting summary widget', async () => {
-      const result: any = await invokeToolWithMetrics(page, {
+      const result: any = await invokeToolWithJourney(page, runId, {
         id: `create-summary-${Date.now()}`,
         type: 'tool_call',
         payload: {
@@ -926,7 +1104,7 @@ test.describe('Wow journey scrapbook', () => {
         },
         timestamp: Date.now(),
         source: 'playwright',
-      });
+      }, 'Create meeting summary widget');
 
       perfRows.push({
         label: 'create_component (MeetingSummaryWidget)',
@@ -934,16 +1112,31 @@ test.describe('Wow journey scrapbook', () => {
         budgetMs: 1500,
       });
 
+      await logJourneyEvent(runId, 'canvas', {
+        eventType: 'mcp_call',
+        source: 'playwright',
+        tool: 'memory_upsert',
+        payload: { summary: 'Crowd Q&A Summary', simulated: true },
+      });
+      await logJourneyEvent(runId, 'canvas', {
+        eventType: 'mcp_result',
+        source: 'playwright',
+        tool: 'memory_upsert',
+        durationMs: 260,
+        payload: { resultCount: 1, simulated: true },
+      });
+
       await page.getByText('Crowd Q&A Summary', { exact: true }).waitFor({ timeout: 30_000 });
       await waitForNoCompilingToast(page);
       const screenshot = `${runId}-03-summary.png`;
       await snap(page, imagesDir, screenshot);
+      await logJourneyAsset(runId, 'canvas', `./assets/${dateStamp}/${screenshot}`, 'Meeting summary');
       return { screenshot, notes: `paint ${result.metrics?.dtPaintMs ?? 0} ms` };
     });
 
     const kanbanId = `wow-kanban-${Date.now().toString(36)}`;
     await recordStep('Create Linear Kanban board', async () => {
-      const result: any = await invokeToolWithMetrics(page, {
+      const result: any = await invokeToolWithJourney(page, runId, {
         id: `create-kanban-${Date.now()}`,
         type: 'tool_call',
         payload: {
@@ -956,7 +1149,7 @@ test.describe('Wow journey scrapbook', () => {
         },
         timestamp: Date.now(),
         source: 'playwright',
-      });
+      }, 'Create Linear Kanban board');
 
       perfRows.push({
         label: 'create_component (LinearKanbanBoard)',
@@ -968,12 +1161,13 @@ test.describe('Wow journey scrapbook', () => {
       await waitForNoCompilingToast(page);
       const screenshot = `${runId}-04-kanban.png`;
       await snap(page, imagesDir, screenshot);
+      await logJourneyAsset(runId, 'canvas', `./assets/${dateStamp}/${screenshot}`, 'Linear Kanban');
       return { screenshot, notes: `paint ${result.metrics?.dtPaintMs ?? 0} ms` };
     });
 
     const infographicId = `wow-info-${Date.now().toString(36)}`;
     await recordStep('Create infographic widget', async () => {
-      const result: any = await invokeToolWithMetrics(page, {
+      const result: any = await invokeToolWithJourney(page, runId, {
         id: `create-infographic-${Date.now()}`,
         type: 'tool_call',
         payload: {
@@ -986,7 +1180,7 @@ test.describe('Wow journey scrapbook', () => {
         },
         timestamp: Date.now(),
         source: 'playwright',
-      });
+      }, 'Create infographic widget');
 
       perfRows.push({
         label: 'create_component (InfographicWidget)',
@@ -998,6 +1192,7 @@ test.describe('Wow journey scrapbook', () => {
       await waitForNoCompilingToast(page);
       const screenshot = `${runId}-05-infographic.png`;
       await snap(page, imagesDir, screenshot);
+      await logJourneyAsset(runId, 'canvas', `./assets/${dateStamp}/${screenshot}`, 'Infographic widget');
       return { screenshot, notes: `paint ${result.metrics?.dtPaintMs ?? 0} ms` };
     });
 
@@ -1033,6 +1228,7 @@ test.describe('Wow journey scrapbook', () => {
       await waitForNoCompilingToast(page);
       const screenshot = `${runId}-06-gallery.png`;
       await snap(page, imagesDir, screenshot);
+      await logJourneyAsset(runId, 'canvas', `./assets/${dateStamp}/${screenshot}`, 'Gallery preset');
       return { screenshot, notes: `applied in ${presetPerf.durationMs} ms` };
     });
 
@@ -1050,6 +1246,8 @@ test.describe('Wow journey scrapbook', () => {
       { title: 'Gallery View (fast lane)', screenshot: results.find((step) => step.name === 'Apply gallery view preset')?.screenshot },
     ].filter((shot) => shot.screenshot);
 
+    const journeyEvents = await fetchJourneyEvents(runId);
+
     writeScrapbook({
       outputPath,
       runId,
@@ -1058,6 +1256,7 @@ test.describe('Wow journey scrapbook', () => {
       perfRows,
       notes,
       heroShots,
+      journeyEvents,
     });
 
     await expect(fs.existsSync(outputPath)).toBeTruthy();

@@ -20,6 +20,7 @@ import {
   FileUp,
   Database,
   AppWindow,
+  Hand,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -83,6 +84,11 @@ export const componentIcons: Record<string, ComponentIconMapping> = {
     icon: Database,
     category: 'Productivity',
     description: 'Vector memory recall',
+  },
+  CrowdPulseWidget: {
+    icon: Hand,
+    category: 'Collaboration',
+    description: 'Crowd pulse + hand count control',
   },
   McpAppWidget: {
     icon: AppWindow,

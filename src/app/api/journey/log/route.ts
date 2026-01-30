@@ -12,6 +12,9 @@ const supabaseKey =
   '';
 
 const JOURNEY_SECRET = process.env.JOURNEY_LOGGING_SECRET;
+const ALLOW_MEMORY_FALLBACK =
+  process.env.JOURNEY_LOGGING_ALLOW_MEMORY_FALLBACK !== 'false' &&
+  process.env.NODE_ENV !== 'production';
 
 type JourneyEvent = {
   eventType: string;
@@ -22,9 +25,44 @@ type JourneyEvent = {
   assetPath?: string;
 };
 
+type JourneyRow = {
+  run_id: string;
+  room_name: string | null;
+  event_type: string;
+  source: string | null;
+  tool: string | null;
+  duration_ms: number | null;
+  payload: Record<string, unknown> | null;
+  created_at: string;
+};
+
+const MEMORY_KEY = '__present_journey_events__';
+const MEMORY_MAX_EVENTS = 5000;
+
+const getMemoryStore = (): Map<string, JourneyRow[]> => {
+  const root = globalThis as any;
+  if (!root[MEMORY_KEY]) {
+    root[MEMORY_KEY] = new Map<string, JourneyRow[]>();
+  }
+  return root[MEMORY_KEY] as Map<string, JourneyRow[]>;
+};
+
 const createSupabase = () => {
   if (!supabaseUrl || !supabaseKey) return null;
   return createClient(supabaseUrl, supabaseKey, { auth: { persistSession: false } });
+};
+
+const shouldFallbackToMemory = (message?: string | null) => {
+  if (!ALLOW_MEMORY_FALLBACK) return false;
+  if (!message) return true;
+  const normalized = message.toLowerCase();
+  return (
+    (normalized.includes('present_journey_events') &&
+      normalized.includes('does not exist')) ||
+    normalized.includes('fetch failed') ||
+    normalized.includes('failed to fetch') ||
+    normalized.includes('econnrefused')
+  );
 };
 
 export async function POST(req: Request) {
@@ -68,11 +106,22 @@ export async function POST(req: Request) {
 
   const supabase = createSupabase();
   if (!supabase) {
-    return NextResponse.json({ ok: true, inserted: 0, skipped: true });
+    const store = getMemoryStore();
+    const existing = store.get(runId) ?? [];
+    const next = [...existing, ...events].slice(-MEMORY_MAX_EVENTS);
+    store.set(runId, next);
+    return NextResponse.json({ ok: true, inserted: events.length, stored: 'memory' });
   }
 
   const { error } = await supabase.from('present_journey_events').insert(events);
   if (error) {
+    if (shouldFallbackToMemory(error.message)) {
+      const store = getMemoryStore();
+      const existing = store.get(runId) ?? [];
+      const next = [...existing, ...events].slice(-MEMORY_MAX_EVENTS);
+      store.set(runId, next);
+      return NextResponse.json({ ok: true, inserted: events.length, stored: 'memory' });
+    }
     return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
   }
 
@@ -88,7 +137,9 @@ export async function GET(req: Request) {
 
   const supabase = createSupabase();
   if (!supabase) {
-    return NextResponse.json({ ok: false, error: 'supabase_missing' }, { status: 500 });
+    const store = getMemoryStore();
+    const events = store.get(runId) ?? [];
+    return NextResponse.json({ ok: true, events });
   }
 
   const limit = Number(url.searchParams.get('limit') || 2000);
@@ -100,6 +151,11 @@ export async function GET(req: Request) {
     .limit(Number.isFinite(limit) ? Math.min(limit, 5000) : 2000);
 
   if (error) {
+    if (shouldFallbackToMemory(error.message)) {
+      const store = getMemoryStore();
+      const events = store.get(runId) ?? [];
+      return NextResponse.json({ ok: true, events });
+    }
     return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
   }
 

@@ -10,6 +10,7 @@ import { TOOL_STEWARD_DELAY_MS, TOOL_STEWARD_WINDOW_MS } from '../utils/constant
 import type { ToolEventsApi } from './useToolEvents';
 import { ComponentRegistry } from '@/lib/component-registry';
 import { applyEnvelope } from '@/components/tool-dispatcher/handlers/tldraw-actions';
+import { logJourneyEvent } from '@/lib/journey-logger';
 
 type ToolMetricEntry = {
   callId: string;
@@ -132,6 +133,23 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
                 window.dispatchEvent(new CustomEvent('present:tool_metrics', { detail: details }));
               } catch {}
             }
+            try {
+              logJourneyEvent({
+                eventType: 'tool_metrics',
+                source: 'dispatcher',
+                tool: entry.tool,
+                durationMs: details.dtPaintMs,
+                payload: {
+                  messageId: trimmedId,
+                  componentType: details.componentType,
+                  dtPaintMs: details.dtPaintMs,
+                  dtNetworkMs: details.dtNetworkMs,
+                  tSend: details.tSend,
+                  tArrive: details.tArrive,
+                  tPaint: details.tPaint,
+                },
+              });
+            } catch {}
             entry.loggedMessages.add(trimmedId);
             if (entry.messageIds.size === entry.loggedMessages.size) {
               metricsByCallRef.current.delete(callId);
@@ -325,6 +343,18 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
       const toolName = tool.replace(/^mcp_/, '');
       const registry = (window as any).__custom_mcp_tools || {};
       let result: any;
+      const startedAt = Date.now();
+      let mcpError: string | undefined;
+
+      try {
+        const paramKeys = params && typeof params === 'object' ? Object.keys(params).slice(0, 8) : [];
+        logJourneyEvent({
+          eventType: 'mcp_call',
+          source: 'dispatcher',
+          tool: toolName,
+          payload: { paramKeys },
+        });
+      } catch {}
 
       const direct = (registry as any)[toolName] || (registry as any)[`mcp_${toolName}`];
       if (direct) {
@@ -332,11 +362,17 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
           result = typeof direct?.execute === 'function' ? await direct.execute(params) : await direct(params);
         } catch (error) {
           console.warn('[ToolDispatcher] direct MCP tool failed', toolName, error);
+          mcpError = error instanceof Error ? error.message : String(error);
         }
       }
 
       if (!result) {
-        result = await (window as any).callMcpTool?.(toolName, params);
+        try {
+          result = await (window as any).callMcpTool?.(toolName, params);
+        } catch (error) {
+          console.warn('[ToolDispatcher] MCP tool call failed', toolName, error);
+          mcpError = error instanceof Error ? error.message : String(error);
+        }
       }
 
       if ((!result || result?.status === 'IGNORED') && toolName === 'exa') {
@@ -354,6 +390,24 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
 
       try {
         console.log('[ToolDispatcher][mcp]', toolName, 'result:', JSON.stringify(result)?.slice(0, 2000));
+      } catch {}
+
+      try {
+        const durationMs = Math.max(0, Date.now() - startedAt);
+        const list = (result?.results || result?.items || result?.documents || []) as any[];
+        const resultCount = Array.isArray(list) ? list.length : undefined;
+        const eventType = mcpError ? 'mcp_error' : 'mcp_result';
+        logJourneyEvent({
+          eventType,
+          source: 'dispatcher',
+          tool: toolName,
+          durationMs,
+          payload: {
+            status: result?.status ?? null,
+            resultCount,
+            error: mcpError,
+          },
+        });
       } catch {}
 
       if (toolName === 'exa') {

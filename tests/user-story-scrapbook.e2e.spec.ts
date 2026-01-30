@@ -9,6 +9,7 @@ import {
   type StepResult,
 } from './fairy-lap-utils';
 import { writeScrapbookHtml } from './helpers/scrapbook-html';
+import { fetchJourneyEvents, logJourneyAsset, logJourneyEvent } from './helpers/journey-log';
 
 const BASE_URL = 'http://localhost:3000';
 const DEFAULT_PASSWORD = 'Devtools123!';
@@ -91,6 +92,48 @@ async function invokeToolWithMetrics(page: any, call: any, timeoutMs = 12_000) {
   );
 }
 
+async function invokeToolWithJourney(
+  page: any,
+  runId: string,
+  call: any,
+  label: string,
+  timeoutMs = 12_000,
+) {
+  const tool = call?.payload?.tool;
+  const params = call?.payload?.params || {};
+  const messageId =
+    typeof params?.messageId === 'string'
+      ? params.messageId
+      : typeof params?.componentId === 'string'
+        ? params.componentId
+        : undefined;
+  const componentType =
+    typeof params?.type === 'string'
+      ? params.type
+      : typeof params?.componentType === 'string'
+        ? params.componentType
+        : undefined;
+
+  await logJourneyEvent(runId, 'canvas', {
+    eventType: 'tool_call',
+    source: 'playwright',
+    tool,
+    payload: { label, messageId, componentType },
+  });
+
+  const result = await invokeToolWithMetrics(page, call, timeoutMs);
+
+  await logJourneyEvent(runId, 'canvas', {
+    eventType: 'tool_result',
+    source: 'playwright',
+    tool,
+    durationMs: result?.metrics?.dtPaintMs ?? null,
+    payload: { label, messageId, componentType },
+  });
+
+  return result;
+}
+
 async function waitForNoCompilingToast(page: any) {
   const compiling = page.getByText('Compiling...', { exact: false });
   if (await compiling.count()) {
@@ -108,6 +151,27 @@ async function waitForCanvasReady(page: any) {
   }
 }
 
+const transcriptScript = [
+  { speaker: 'Alex', text: 'Thanks for joining. Today we need a crisp plan for the MCP Apps rollout.' },
+  { speaker: 'Riley', text: 'Agreed. We want fast UI feedback and real tool-backed widgets.' },
+  { speaker: 'Alex', text: 'Let us capture a summary widget first and keep decisions explicit.' },
+  { speaker: 'Riley', text: 'Also track memory so follow-ups can pull past context.' },
+  { speaker: 'Alex', text: 'We should add a view preset for presenter mode during demos.' },
+  { speaker: 'Riley', text: 'Yes. And a live tool timeline so we can debug latency.' },
+  { speaker: 'Alex', text: 'Let us mock an infographic so we can see visual output.' },
+  { speaker: 'Riley', text: 'We should show a demo MCP app view in the canvas.' },
+  { speaker: 'Alex', text: 'Now list the action items and owners.' },
+  { speaker: 'Riley', text: 'We need a memory recall widget that queries vector storage.' },
+  { speaker: 'Alex', text: 'Make sure the transcript is logged and visible for review.' },
+  { speaker: 'Riley', text: 'We should keep an eye on tool paint time benchmarks.' },
+  { speaker: 'Alex', text: 'Also add a quick presenter preset to prove fast lane routing.' },
+  { speaker: 'Riley', text: 'We will simulate three participants for the video layout.' },
+  { speaker: 'Alex', text: 'Let us push a decision: ship the MCP Apps host runtime.' },
+  { speaker: 'Riley', text: 'And document the security posture for iframe apps.' },
+  { speaker: 'Alex', text: 'Finish with a short recap and a memory sink for later.' },
+  { speaker: 'Riley', text: 'Done. Ready for the demo capture.' },
+];
+
 type PerfRow = {
   label: string;
   durationMs: number;
@@ -121,8 +185,9 @@ function writeScrapbook(args: {
   results: StepResult[];
   perfRows: PerfRow[];
   notes: string[];
+  journeyEvents?: Awaited<ReturnType<typeof fetchJourneyEvents>>;
 }) {
-  const { outputPath, runId, dateStamp, results, perfRows, notes } = args;
+  const { outputPath, runId, dateStamp, results, perfRows, notes, journeyEvents } = args;
   const totalMs = results.reduce((sum, step) => sum + step.durationMs, 0);
   const perfRowsFormatted = perfRows.map((row) => ({
     ...row,
@@ -217,6 +282,7 @@ function writeScrapbook(args: {
     results,
     perfRows,
     notes,
+    journeyEvents: journeyEvents || [],
   });
 }
 
@@ -274,20 +340,50 @@ test.describe('User story scrapbook', () => {
     });
 
     await recordStep('Canvas loaded', async () => {
-      await page.goto(`${BASE_URL}/canvas`, { waitUntil: 'networkidle' });
+      await page.goto(`${BASE_URL}/canvas?journeyLog=1&journeyRunId=${runId}`, { waitUntil: 'networkidle' });
       await page.waitForSelector('[data-canvas-space="true"]', { timeout: 60_000 });
       await waitForCanvasReady(page);
       await waitForNoCompilingToast(page);
       const screenshot = `${runId}-00-canvas.png`;
       await snap(page, imagesDir, screenshot);
+      await logJourneyAsset(runId, 'canvas', `./assets/${dateStamp}/${screenshot}`, 'Canvas ready');
       return { screenshot };
     });
 
     await ensureToolDispatcherReady(page);
 
+    await recordStep('Simulate transcript (18 turns)', async () => {
+      await page.evaluate((lines) => {
+        const now = Date.now();
+        lines.forEach((line: any, idx: number) => {
+          window.dispatchEvent(
+            new CustomEvent('livekit:transcription-replay', {
+              detail: {
+                speaker: line.speaker,
+                text: line.text,
+                timestamp: now + idx * 1200,
+              },
+            }),
+          );
+        });
+      }, transcriptScript);
+      await page.waitForTimeout(800);
+      return { notes: `${transcriptScript.length} turns` };
+    });
+
+    await recordStep('Open transcript panel', async () => {
+      await page.keyboard.press('Control+K').catch(() => {});
+      await page.waitForTimeout(600);
+      await page.getByText('Transcript', { exact: false }).first().waitFor({ timeout: 10_000 }).catch(() => {});
+      const screenshot = `${runId}-01-transcript.png`;
+      await snap(page, imagesDir, screenshot);
+      await logJourneyAsset(runId, 'canvas', `./assets/${dateStamp}/${screenshot}`, 'Transcript panel');
+      return { screenshot };
+    });
+
     const summaryId = `journey-summary-${Date.now().toString(36)}`;
     const summaryCreate = await recordStep('Create meeting summary widget', async () => {
-      const result: any = await invokeToolWithMetrics(page, {
+      const result: any = await invokeToolWithJourney(page, runId, {
         id: `create-summary-${Date.now()}`,
         type: 'tool_call',
         payload: {
@@ -308,7 +404,7 @@ test.describe('User story scrapbook', () => {
         },
         timestamp: Date.now(),
         source: 'playwright',
-      });
+      }, 'Create meeting summary widget');
 
       perfRows.push({
         label: 'create_component (MeetingSummaryWidget)',
@@ -320,11 +416,12 @@ test.describe('User story scrapbook', () => {
       await waitForNoCompilingToast(page);
       const screenshot = `${runId}-01-summary-created.png`;
       await snap(page, imagesDir, screenshot);
+      await logJourneyAsset(runId, 'canvas', `./assets/${dateStamp}/${screenshot}`, 'Summary widget');
       return { screenshot, notes: `paint ${result.metrics?.dtPaintMs ?? 0} ms` };
     });
 
     await recordStep('Update summary with decisions + action items', async () => {
-      const result: any = await invokeToolWithMetrics(page, {
+      const result: any = await invokeToolWithJourney(page, runId, {
         id: `update-summary-${Date.now()}`,
         type: 'tool_call',
         payload: {
@@ -350,7 +447,7 @@ test.describe('User story scrapbook', () => {
         },
         timestamp: Date.now(),
         source: 'playwright',
-      });
+      }, 'Update summary');
 
       perfRows.push({
         label: 'update_component (MeetingSummaryWidget)',
@@ -362,12 +459,13 @@ test.describe('User story scrapbook', () => {
       await waitForNoCompilingToast(page);
       const screenshot = `${runId}-02-summary-updated.png`;
       await snap(page, imagesDir, screenshot);
+      await logJourneyAsset(runId, 'canvas', `./assets/${dateStamp}/${screenshot}`, 'Summary updated');
       return { screenshot, notes: `paint ${result.metrics?.dtPaintMs ?? 0} ms` };
     });
 
     const recallId = `journey-recall-${Date.now().toString(36)}`;
     await recordStep('Create memory recall widget', async () => {
-      const result: any = await invokeToolWithMetrics(page, {
+      const result: any = await invokeToolWithJourney(page, runId, {
         id: `create-recall-${Date.now()}`,
         type: 'tool_call',
         payload: {
@@ -384,7 +482,7 @@ test.describe('User story scrapbook', () => {
         },
         timestamp: Date.now(),
         source: 'playwright',
-      });
+      }, 'Create memory recall widget');
 
       perfRows.push({
         label: 'create_component (MemoryRecallWidget)',
@@ -396,11 +494,12 @@ test.describe('User story scrapbook', () => {
       await waitForNoCompilingToast(page);
       const screenshot = `${runId}-03-memory-created.png`;
       await snap(page, imagesDir, screenshot);
+      await logJourneyAsset(runId, 'canvas', `./assets/${dateStamp}/${screenshot}`, 'Memory recall widget');
       return { screenshot, notes: `paint ${result.metrics?.dtPaintMs ?? 0} ms` };
     });
 
     await recordStep('Populate memory recall results', async () => {
-      const result: any = await invokeToolWithMetrics(page, {
+      const result: any = await invokeToolWithJourney(page, runId, {
         id: `update-recall-${Date.now()}`,
         type: 'tool_call',
         payload: {
@@ -428,7 +527,7 @@ test.describe('User story scrapbook', () => {
         },
         timestamp: Date.now(),
         source: 'playwright',
-      });
+      }, 'Populate memory recall results');
 
       perfRows.push({
         label: 'update_component (MemoryRecallWidget)',
@@ -436,16 +535,31 @@ test.describe('User story scrapbook', () => {
         budgetMs: 900,
       });
 
+      await logJourneyEvent(runId, 'canvas', {
+        eventType: 'mcp_call',
+        source: 'playwright',
+        tool: 'qdrant-find',
+        payload: { query: 'intent pipeline', simulated: true },
+      });
+      await logJourneyEvent(runId, 'canvas', {
+        eventType: 'mcp_result',
+        source: 'playwright',
+        tool: 'qdrant-find',
+        durationMs: 180,
+        payload: { resultCount: 2, simulated: true },
+      });
+
       await page.getByText('2 hits', { exact: false }).waitFor({ timeout: 30_000 });
       await waitForNoCompilingToast(page);
       const screenshot = `${runId}-04-memory-results.png`;
       await snap(page, imagesDir, screenshot);
+      await logJourneyAsset(runId, 'canvas', `./assets/${dateStamp}/${screenshot}`, 'Memory recall results');
       return { screenshot, notes: `paint ${result.metrics?.dtPaintMs ?? 0} ms` };
     });
 
     const infographicId = `journey-info-${Date.now().toString(36)}`;
     await recordStep('Create infographic widget', async () => {
-      const result: any = await invokeToolWithMetrics(page, {
+      const result: any = await invokeToolWithJourney(page, runId, {
         id: `create-infographic-${Date.now()}`,
         type: 'tool_call',
         payload: {
@@ -460,7 +574,7 @@ test.describe('User story scrapbook', () => {
         },
         timestamp: Date.now(),
         source: 'playwright',
-      });
+      }, 'Create infographic widget');
 
       perfRows.push({
         label: 'create_component (InfographicWidget)',
@@ -472,12 +586,13 @@ test.describe('User story scrapbook', () => {
       await waitForNoCompilingToast(page);
       const screenshot = `${runId}-05-infographic.png`;
       await snap(page, imagesDir, screenshot);
+      await logJourneyAsset(runId, 'canvas', `./assets/${dateStamp}/${screenshot}`, 'Infographic widget');
       return { screenshot, notes: `paint ${result.metrics?.dtPaintMs ?? 0} ms` };
     });
 
     const mcpId = `journey-mcp-${Date.now().toString(36)}`;
     await recordStep('Render MCP App view', async () => {
-      const result: any = await invokeToolWithMetrics(page, {
+      const result: any = await invokeToolWithJourney(page, runId, {
         id: `create-mcp-${Date.now()}`,
         type: 'tool_call',
         payload: {
@@ -494,7 +609,7 @@ test.describe('User story scrapbook', () => {
         },
         timestamp: Date.now(),
         source: 'playwright',
-      });
+      }, 'Render MCP App view');
 
       perfRows.push({
         label: 'create_component (McpAppWidget)',
@@ -508,6 +623,7 @@ test.describe('User story scrapbook', () => {
       await waitForNoCompilingToast(page);
       const screenshot = `${runId}-06-mcp-app.png`;
       await snap(page, imagesDir, screenshot);
+      await logJourneyAsset(runId, 'canvas', `./assets/${dateStamp}/${screenshot}`, 'MCP app view');
       return { screenshot, notes: `paint ${result.metrics?.dtPaintMs ?? 0} ms` };
     });
 
@@ -518,7 +634,7 @@ test.describe('User story scrapbook', () => {
     const screenShareId = `journey-screen-${Date.now().toString(36)}`;
 
     await recordStep('Spawn LiveKit tiles', async () => {
-      await invokeToolWithMetrics(page, {
+      await invokeToolWithJourney(page, runId, {
         id: `create-livekit-${Date.now()}`,
         type: 'tool_call',
         payload: {
@@ -533,10 +649,10 @@ test.describe('User story scrapbook', () => {
         },
         timestamp: Date.now(),
         source: 'playwright',
-      });
+      }, 'Create LiveKit room connector');
 
       for (const tileId of livekitTileIds) {
-        await invokeToolWithMetrics(page, {
+        await invokeToolWithJourney(page, runId, {
           id: `create-tile-${tileId}`,
           type: 'tool_call',
           payload: {
@@ -546,15 +662,16 @@ test.describe('User story scrapbook', () => {
               messageId: tileId,
               spec: {
                 participantIdentity: `demo-${tileId.slice(-4)}`,
+                demoMode: true,
               },
             },
           },
           timestamp: Date.now(),
           source: 'playwright',
-        });
+        }, 'Create LiveKit participant tile');
       }
 
-      await invokeToolWithMetrics(page, {
+      await invokeToolWithJourney(page, runId, {
         id: `create-screen-${Date.now()}`,
         type: 'tool_call',
         payload: {
@@ -566,7 +683,7 @@ test.describe('User story scrapbook', () => {
         },
         timestamp: Date.now(),
         source: 'playwright',
-      });
+      }, 'Create LiveKit screen share tile');
 
       await page.waitForFunction(
         (id: string) => {
@@ -581,6 +698,7 @@ test.describe('User story scrapbook', () => {
       await waitForNoCompilingToast(page);
       const screenshot = `${runId}-07-livekit-tiles.png`;
       await snap(page, imagesDir, screenshot);
+      await logJourneyAsset(runId, 'canvas', `./assets/${dateStamp}/${screenshot}`, 'LiveKit tiles (demo)');
       return { screenshot };
     });
 
@@ -637,12 +755,16 @@ test.describe('User story scrapbook', () => {
       await waitForNoCompilingToast(page);
       const screenshot = `${runId}-08-view-preset.png`;
       await snap(page, imagesDir, screenshot);
+      await logJourneyAsset(runId, 'canvas', `./assets/${dateStamp}/${screenshot}`, 'Presenter preset');
       return { screenshot, notes: `applied in ${presetPerf.durationMs} ms` };
     });
 
     notes.push('View preset is applied via tldraw:applyViewPreset (fast lane).');
     notes.push('Memory recall results are injected as a simulated MCP response for deterministic capture.');
     notes.push('MCP App demo uses a static ui resource (public/mcp-apps/demo.html).');
+    notes.push('Transcript events are simulated via livekit:transcription-replay for deterministic logging.');
+
+    const journeyEvents = await fetchJourneyEvents(runId);
 
     writeScrapbook({
       outputPath,
@@ -651,6 +773,7 @@ test.describe('User story scrapbook', () => {
       results,
       perfRows,
       notes,
+      journeyEvents,
     });
 
     await expect(fs.existsSync(outputPath)).toBeTruthy();

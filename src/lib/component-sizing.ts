@@ -140,6 +140,14 @@ export const componentSizeInfo: Record<string, ComponentSizeInfo> = {
     resizeMode: 'free',
     sizingPolicy: 'always_fit',
   },
+  CrowdPulseWidget: {
+    naturalWidth: 560,
+    naturalHeight: 620,
+    minWidth: 420,
+    minHeight: 420,
+    resizeMode: 'free',
+    sizingPolicy: 'always_fit',
+  },
   McpAppWidget: {
     naturalWidth: 520,
     naturalHeight: 520,
