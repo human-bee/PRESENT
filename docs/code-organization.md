@@ -112,7 +112,6 @@ Each hook lives under `src/components/ui/canvas/hooks/` and exposes typed APIs f
 | `useCanvasEventHandlers.ts` | 640+ | 66 | Now only wires handler maps from `utils/` and mermaid bridge. |
 | `tldraw-canvas.tsx` (Wave 2) | 1,064 | 189 | Orchestrator composes extracted hooks, HUD/toolbar/rulers, delegates side-effects to hooks. |
 | `tool-dispatcher.tsx` (Wave 2) | 1,015 | 43 | Thin orchestrator wiring typed registry/queue/runner hooks; UI is fully presentational. |
-| `decision-engine.ts` (Wave 2 core) | 770 | 0 (core files) | Pure pipeline relocated to `core/{normalize,rules,scoring,plan}.ts`; legacy class wraps the facade. |
 
 Our guardrail remains **≤300 LOC** per orchestrator and ≤160 LOC per hook. When a file approaches those limits, extract helpers immediately.
 
@@ -185,25 +184,10 @@ ToolDispatcher (orchestrator)
      └─ constants               (topics/timeouts)
 ```
 
-#### Decision Engine
-
-```
-decide() facade
- ├─ core/
- │   ├─ normalize.ts            (input canonicalisation)
- │   ├─ rules.ts                (intent + heuristics)
- │   ├─ scoring.ts              (confidence blending)
- │   └─ plan.ts                 (PlanOutput selection)
- ├─ adapters/                   (reserved for LiveKit/TLDraw IO)
- └─ legacy class (decision-engine.ts)
-     └─ delegates to facade for all heuristics; retains meeting buffers & OpenAI call
-```
-
 Tests now live alongside the pure modules:
 
 - `src/components/ui/tldraw/canvas/utils/{canvasMath,exporters}.test.ts`
 - `src/components/tool-dispatcher/utils/{queueReducer,resultNormalizers}.test.ts`
-- `src/lib/decision-engine/__tests__/{rules,scoring,plan,facade}.test.ts`
 
 ### Remaining Modularization Targets
 

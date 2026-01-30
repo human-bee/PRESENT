@@ -272,15 +272,14 @@ The production pipeline now runs as two lightweight Node processes plus the clie
    - Executes the two UI tools, updates TLDraw or React components, and returns `tool_result`/`tool_error` events.
    - All other logic (diagram merging, lookups, narration) lives in stewards.
 
-Legacy docs for the original `livekit-agent-worker.ts` / three-agent setup now live in `docs/THREE_AGENT_ARCHITECTURE.md` under the archived section.
+Legacy docs for the original three-agent setup now live in `docs/THREE_AGENT_ARCHITECTURE.md` under the archived section.
 
 ### Project Structure
 
 ```
 src/
 ├── lib/
-│   ├── livekit-agent-worker.ts  # Voice Agent (Agent #1)
-│   ├── decision-engine.ts       # Decision Engine (Agent #2)
+│   ├── agents/                  # Voice agent + conductor + stewards
 │   ├── system-registry.ts       # Single source of truth
 │   └── shared-state.ts          # State synchronization types
 ├── components/

@@ -18,8 +18,8 @@
    - Mirror `tsconfig.test.json` options inside the SWC config: `module.type = 'commonjs'`, `esModuleInterop`, `emitDecoratorMetadata`, `experimentalDecorators`, `jsx.runtime = 'automatic'`.
    - Audit custom transformers (none today) to confirm we are not silently relying on them.
 3. **Pilot Scope**
-   - Use Jest's `transform` overrides to apply SWC only to a safe subset (e.g., `src/components/**`) while the decision-engine / agents continue using ts-jest.
-   - Run `npm test --runInBand` and `npm test -- src/lib/decision-engine/__tests__/facade.test.ts` to confirm no regressions.
+   - Use Jest's `transform` overrides to apply SWC only to a safe subset (e.g., `src/components/**`) while agent/steward suites continue using ts-jest.
+   - Run `npm test --runInBand` plus a steward-heavy suite to confirm no regressions.
 4. **Full Cutover**
    - Remove the per-path override, switch the root transform to `@swc/jest`, and drop the `ts-jest` preset.
    - Update docs (`AGENTS.md`, this spec) so new contributors know the canonical setup.
