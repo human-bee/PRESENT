@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import React from 'react';
 
 import { components } from '@/lib/custom';
+import { logJourneyEvent } from '@/lib/journey-logger';
 
 import type { CanvasLogger } from './useCanvasComponentStore';
 import type { Editor } from 'tldraw';
@@ -151,6 +152,12 @@ export function useCanvasEvents({
             source: 'ui',
             context: { name: inferredName },
           });
+          logJourneyEvent({
+            eventType: 'asset',
+            source: 'ui',
+            tool: inferredName,
+            payload: { messageId: event.detail.messageId, name: inferredName },
+          });
         } catch {
           /* noop */
         }
@@ -176,6 +183,12 @@ export function useCanvasEvents({
           timestamp: Date.now(),
           source: 'ui',
           context: { name },
+        });
+        logJourneyEvent({
+          eventType: 'asset',
+          source: 'ui',
+          tool: name,
+          payload: { messageId, name },
         });
       } catch {
         /* noop */
