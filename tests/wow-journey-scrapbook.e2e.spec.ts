@@ -98,6 +98,16 @@ async function waitForNoCompilingToast(page: any) {
   }
 }
 
+async function waitForCanvasReady(page: any) {
+  await page.waitForFunction(() => Boolean((window as any).__tldrawEditor), null, {
+    timeout: 60_000,
+  });
+  const loading = page.getByText('Loading Canvas', { exact: false });
+  if (await loading.count()) {
+    await expect(loading.first()).not.toBeVisible({ timeout: 60_000 }).catch(() => {});
+  }
+}
+
 async function waitForComponentShape(page: any, messageId: string, timeoutMs = 30_000) {
   await page.waitForFunction(
     (id: string) => {
@@ -295,6 +305,7 @@ test.describe('Wow journey scrapbook', () => {
     await recordStep('Canvas loaded', async () => {
       await page.goto(`${BASE_URL}/canvas`, { waitUntil: 'networkidle' });
       await page.waitForSelector('[data-canvas-space="true"]', { timeout: 60_000 });
+      await waitForCanvasReady(page);
       await waitForNoCompilingToast(page);
       const screenshot = `${runId}-00-canvas.png`;
       await snap(page, imagesDir, screenshot);
@@ -820,6 +831,7 @@ test.describe('Wow journey scrapbook', () => {
     await recordStep('Canvas loaded', async () => {
       await page.goto(`${BASE_URL}/canvas`, { waitUntil: 'networkidle' });
       await page.waitForSelector('[data-canvas-space="true"]', { timeout: 60_000 });
+      await waitForCanvasReady(page);
       await waitForNoCompilingToast(page);
       const screenshot = `${runId}-00-canvas.png`;
       await snap(page, imagesDir, screenshot);

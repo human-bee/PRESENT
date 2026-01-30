@@ -1,0 +1,343 @@
+<!doctype html>
+  <html>
+    <head>
+      <meta charset="utf-8" />
+      <title>PRESENT User Story Scrapbook (2026-01-30)</title>
+      <style>
+        :root {
+          color-scheme: light;
+          --bg: #0b1020;
+          --surface: #0f172a;
+          --card: #111827;
+          --accent: #38bdf8;
+          --accent-2: #a78bfa;
+          --text: #e2e8f0;
+          --muted: #94a3b8;
+          --pass: #22c55e;
+          --warn: #f59e0b;
+          --fail: #ef4444;
+        }
+        body {
+          margin: 0;
+          font-family: 'Inter', system-ui, -apple-system, sans-serif;
+          background: radial-gradient(circle at top, #1e293b 0%, var(--bg) 60%);
+          color: var(--text);
+          padding: 32px;
+        }
+        header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: 24px;
+        }
+        h1 { margin: 0; font-size: 28px; }
+        h2 { margin: 32px 0 12px; font-size: 20px; }
+        .meta-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+          gap: 16px;
+        }
+        .card {
+          background: var(--surface);
+          border: 1px solid rgba(148, 163, 184, 0.2);
+          border-radius: 16px;
+          padding: 16px;
+        }
+        .card h3 { margin: 0 0 8px; font-size: 14px; color: var(--muted); }
+        .card p { margin: 0; font-size: 18px; font-weight: 600; }
+        .hero-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+          gap: 18px;
+        }
+        .hero-card {
+          background: var(--card);
+          border-radius: 18px;
+          overflow: hidden;
+          border: 1px solid rgba(56, 189, 248, 0.3);
+          box-shadow: 0 12px 30px rgba(15, 23, 42, 0.6);
+        }
+        .hero-card img {
+          width: 100%;
+          height: auto;
+          display: block;
+        }
+        .hero-meta { padding: 12px 14px; }
+        .hero-meta h3 { margin: 0 0 6px; font-size: 16px; }
+        .hero-meta p { margin: 0; font-size: 13px; color: var(--muted); }
+        table {
+          width: 100%;
+          border-collapse: collapse;
+          font-size: 13px;
+          background: var(--card);
+          border-radius: 12px;
+          overflow: hidden;
+        }
+        th, td {
+          padding: 10px 12px;
+          border-bottom: 1px solid rgba(148, 163, 184, 0.15);
+        }
+        th { text-align: left; background: rgba(15, 23, 42, 0.7); }
+        .pill {
+          padding: 4px 10px;
+          border-radius: 999px;
+          font-size: 11px;
+          font-weight: 700;
+          text-transform: uppercase;
+        }
+        .pill-pass { background: rgba(34, 197, 94, 0.2); color: var(--pass); }
+        .pill-warn { background: rgba(245, 158, 11, 0.2); color: var(--warn); }
+        .pill-fail { background: rgba(239, 68, 68, 0.2); color: var(--fail); }
+        a { color: var(--accent); }
+        ul { padding-left: 18px; color: var(--muted); }
+        .story { font-size: 15px; color: var(--muted); margin-top: 4px; }
+      </style>
+    </head>
+    <body>
+      <header>
+        <div>
+          <h1>PRESENT User Story Scrapbook (2026-01-30)</h1>
+          <div class="story">Conversation -&gt; Action -&gt; Memory -&gt; Visuals -&gt; View Orchestration</div>
+        </div>
+        <div class="card">
+          <h3>Run ID</h3>
+          <p>20260130-005221</p>
+        </div>
+      </header>
+
+      <section class="meta-grid">
+        <div class="card">
+          <h3>Total runtime</h3>
+          <p>11361 ms</p>
+        </div>
+        <div class="card">
+          <h3>Steps captured</h3>
+          <p>10</p>
+        </div>
+        <div class="card">
+          <h3>Benchmarks</h3>
+          <p>7</p>
+        </div>
+      </section>
+
+      <h2>Hero Moments</h2>
+      <section class="hero-grid">
+        
+        <article class="hero-card">
+          <img src="./assets/2026-01-30/20260130-005221-02-summary-updated.png" alt="Conversation Summary (context spectrum)" />
+          <div class="hero-meta">
+            <h3>Conversation Summary (context spectrum)</h3>
+            
+          </div>
+        </article>
+      
+
+        <article class="hero-card">
+          <img src="./assets/2026-01-30/20260130-005221-04-memory-results.png" alt="Memory Recall (vector loop)" />
+          <div class="hero-meta">
+            <h3>Memory Recall (vector loop)</h3>
+            
+          </div>
+        </article>
+      
+
+        <article class="hero-card">
+          <img src="./assets/2026-01-30/20260130-005221-06-mcp-app.png" alt="MCP App View (tool + UI)" />
+          <div class="hero-meta">
+            <h3>MCP App View (tool + UI)</h3>
+            
+          </div>
+        </article>
+      
+
+        <article class="hero-card">
+          <img src="./assets/2026-01-30/20260130-005221-08-view-preset.png" alt="Presenter View Preset (fast lane)" />
+          <div class="hero-meta">
+            <h3>Presenter View Preset (fast lane)</h3>
+            
+          </div>
+        </article>
+      
+      </section>
+
+      <h2>Journey Evidence</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Step</th>
+            <th>Status</th>
+            <th>Duration (ms)</th>
+            <th>Screenshot</th>
+            <th>Notes</th>
+          </tr>
+        </thead>
+        <tbody>
+          
+        <tr>
+          <td>Sign in / sign up</td>
+          <td><span class="pill pill-pass">PASS</span></td>
+          <td>4406</td>
+          <td></td>
+          <td></td>
+        </tr>
+      
+
+        <tr>
+          <td>Canvas loaded</td>
+          <td><span class="pill pill-pass">PASS</span></td>
+          <td>3444</td>
+          <td><a href="./assets/2026-01-30/20260130-005221-00-canvas.png">view</a></td>
+          <td></td>
+        </tr>
+      
+
+        <tr>
+          <td>Create meeting summary widget</td>
+          <td><span class="pill pill-pass">PASS</span></td>
+          <td>473</td>
+          <td><a href="./assets/2026-01-30/20260130-005221-01-summary-created.png">view</a></td>
+          <td>paint 0 ms</td>
+        </tr>
+      
+
+        <tr>
+          <td>Update summary with decisions + action items</td>
+          <td><span class="pill pill-pass">PASS</span></td>
+          <td>442</td>
+          <td><a href="./assets/2026-01-30/20260130-005221-02-summary-updated.png">view</a></td>
+          <td>paint 15 ms</td>
+        </tr>
+      
+
+        <tr>
+          <td>Create memory recall widget</td>
+          <td><span class="pill pill-pass">PASS</span></td>
+          <td>448</td>
+          <td><a href="./assets/2026-01-30/20260130-005221-03-memory-created.png">view</a></td>
+          <td>paint 0 ms</td>
+        </tr>
+      
+
+        <tr>
+          <td>Populate memory recall results</td>
+          <td><span class="pill pill-pass">PASS</span></td>
+          <td>346</td>
+          <td><a href="./assets/2026-01-30/20260130-005221-04-memory-results.png">view</a></td>
+          <td>paint 4 ms</td>
+        </tr>
+      
+
+        <tr>
+          <td>Create infographic widget</td>
+          <td><span class="pill pill-pass">PASS</span></td>
+          <td>451</td>
+          <td><a href="./assets/2026-01-30/20260130-005221-05-infographic.png">view</a></td>
+          <td>paint 0 ms</td>
+        </tr>
+      
+
+        <tr>
+          <td>Render MCP App view</td>
+          <td><span class="pill pill-pass">PASS</span></td>
+          <td>483</td>
+          <td><a href="./assets/2026-01-30/20260130-005221-06-mcp-app.png">view</a></td>
+          <td>paint 0 ms</td>
+        </tr>
+      
+
+        <tr>
+          <td>Spawn LiveKit tiles</td>
+          <td><span class="pill pill-pass">PASS</span></td>
+          <td>523</td>
+          <td><a href="./assets/2026-01-30/20260130-005221-07-livekit-tiles.png">view</a></td>
+          <td></td>
+        </tr>
+      
+
+        <tr>
+          <td>Apply presenter view preset (fast lane)</td>
+          <td><span class="pill pill-pass">PASS</span></td>
+          <td>345</td>
+          <td><a href="./assets/2026-01-30/20260130-005221-08-view-preset.png">view</a></td>
+          <td>applied in 3 ms</td>
+        </tr>
+      
+        </tbody>
+      </table>
+
+      <h2>Speed Benchmarks</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Operation</th>
+            <th>Duration (ms)</th>
+            <th>Budget (ms)</th>
+            <th>Result</th>
+          </tr>
+        </thead>
+        <tbody>
+          
+        <tr>
+          <td>create_component (MeetingSummaryWidget)</td>
+          <td>0</td>
+          <td>1200</td>
+          <td><span class="pill pill-pass">PASS</span></td>
+        </tr>
+      
+
+        <tr>
+          <td>update_component (MeetingSummaryWidget)</td>
+          <td>15</td>
+          <td>900</td>
+          <td><span class="pill pill-pass">PASS</span></td>
+        </tr>
+      
+
+        <tr>
+          <td>create_component (MemoryRecallWidget)</td>
+          <td>0</td>
+          <td>1200</td>
+          <td><span class="pill pill-pass">PASS</span></td>
+        </tr>
+      
+
+        <tr>
+          <td>update_component (MemoryRecallWidget)</td>
+          <td>4</td>
+          <td>900</td>
+          <td><span class="pill pill-pass">PASS</span></td>
+        </tr>
+      
+
+        <tr>
+          <td>create_component (InfographicWidget)</td>
+          <td>0</td>
+          <td>1400</td>
+          <td><span class="pill pill-pass">PASS</span></td>
+        </tr>
+      
+
+        <tr>
+          <td>create_component (McpAppWidget)</td>
+          <td>0</td>
+          <td>1400</td>
+          <td><span class="pill pill-pass">PASS</span></td>
+        </tr>
+      
+
+        <tr>
+          <td>fast-lane view preset (presenter)</td>
+          <td>3</td>
+          <td>500</td>
+          <td><span class="pill pill-pass">PASS</span></td>
+        </tr>
+      
+        </tbody>
+      </table>
+
+      <h2>Notes</h2>
+      <ul><li>View preset is applied via tldraw:applyViewPreset (fast lane).</li>
+<li>Memory recall results are injected as a simulated MCP response for deterministic capture.</li>
+<li>MCP App demo uses a static ui resource (public/mcp-apps/demo.html).</li></ul>
+    </body>
+  </html>
