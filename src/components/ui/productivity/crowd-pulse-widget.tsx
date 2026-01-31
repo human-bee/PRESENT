@@ -50,6 +50,7 @@ export default function CrowdPulseWidget(props: CrowdPulseWidgetProps) {
     lastUpdated: initial.lastUpdated,
     demoMode: initial.demoMode ?? false,
     sensorEnabled: initial.sensorEnabled ?? true,
+    showPreview: initial.showPreview ?? true,
     className,
   }));
 
@@ -84,6 +85,7 @@ export default function CrowdPulseWidget(props: CrowdPulseWidgetProps) {
       if (typeof patch.lastUpdated === 'number') next.lastUpdated = patch.lastUpdated;
       if (typeof patch.demoMode === 'boolean') next.demoMode = patch.demoMode;
       if (typeof patch.sensorEnabled === 'boolean') next.sensorEnabled = patch.sensorEnabled;
+      if (typeof patch.showPreview === 'boolean') next.showPreview = patch.showPreview;
       return next;
     });
   }, []);
@@ -104,6 +106,7 @@ export default function CrowdPulseWidget(props: CrowdPulseWidgetProps) {
       lastUpdated: state.lastUpdated,
       demoMode: state.demoMode,
       sensorEnabled: state.sensorEnabled,
+      showPreview: state.showPreview,
       className,
     }),
     [className, state],
@@ -301,6 +304,22 @@ export default function CrowdPulseWidget(props: CrowdPulseWidgetProps) {
       />
 
       <div className="grid gap-4 p-4">
+        {state.showPreview && (
+          <div className="relative overflow-hidden rounded-xl border border-slate-800/50 bg-slate-900/70">
+            <video
+              ref={videoRef}
+              className="h-44 w-full bg-black object-cover"
+              playsInline
+              muted
+              autoPlay
+            />
+            {sensorLabel && (
+              <div className="absolute bottom-2 left-2 rounded-full bg-slate-950/80 px-2 py-1 text-[10px] text-slate-200">
+                {sensorLabel}
+              </div>
+            )}
+          </div>
+        )}
         <CrowdPulseStats
           demoMode={state.demoMode}
           handCount={state.handCount}
