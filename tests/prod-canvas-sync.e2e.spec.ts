@@ -11,7 +11,7 @@ function stamp() {
 async function waitForCanvasReady(page: any) {
   await page.waitForSelector('[data-canvas-space="true"]', { timeout: 90_000 });
   await page.waitForFunction(() => {
-    const editor = (window as any).__TLDRAW__?.editor;
+    const editor = (window as any).__present?.tldrawEditor || (window as any).__PRESENT__?.tldraw;
     return !!editor;
   }, null, { timeout: 90_000 });
 }
@@ -53,7 +53,7 @@ test.describe('prod canvas sync smoke', () => {
 
     // Create a shape on A and verify it appears on B via sync.
     const shapeId = await pageA.evaluate(() => {
-      const editor = (window as any).__TLDRAW__?.editor;
+      const editor = (window as any).__present?.tldrawEditor;
       const id = editor.createShape({
         type: 'geo',
         x: 160,
@@ -65,7 +65,7 @@ test.describe('prod canvas sync smoke', () => {
 
     await pageB.waitForFunction(
       (id: string) => {
-        const editor = (window as any).__TLDRAW__?.editor;
+        const editor = (window as any).__present?.tldrawEditor;
         if (!editor) return false;
         return !!editor.store.get(id);
       },
@@ -85,4 +85,3 @@ test.describe('prod canvas sync smoke', () => {
     await ctxB.close();
   });
 });
-
