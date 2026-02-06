@@ -1,4 +1,4 @@
-FROM node:20-alpine
+FROM node:22-alpine
 
 WORKDIR /app
 
@@ -12,6 +12,5 @@ COPY . .
 # Build (if necessary, though agents are tsx)
 # RUN npm run build 
 
-# Default command runs the Conductor
-# You can override this in Railway to run other agents (e.g. "npm run agent:voice")
-CMD ["npm", "run", "agent:conductor"]
+# Railway uses SERVICE_TYPE to select the entrypoint in scripts/start-service.sh
+CMD ["sh", "scripts/start-service.sh"]
