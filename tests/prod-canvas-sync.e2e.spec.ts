@@ -70,7 +70,9 @@ test.describe('prod canvas sync smoke', () => {
     // Create a shape on A and verify it appears on B via sync.
     const shapeId = await pageA.evaluate(() => {
       const editor = (window as any).__present?.tldrawEditor;
-      const id = editor.createShape({
+      const id = `shape:${crypto.randomUUID()}`;
+      editor.createShape({
+        id,
         type: 'geo',
         x: 160,
         y: 160,
