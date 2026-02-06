@@ -2,6 +2,7 @@ name = "present-tldraw-sync"
 main = "src/index.ts"
 compatibility_date = "2025-02-01"
 workers_dev = true
+preview_urls = false
 
 [observability]
 enabled = true
@@ -19,3 +20,7 @@ new_sqlite_classes = ["TldrawRoomDurableObject"]
 binding = "TLDRAW_UPLOADS"
 bucket_name = "present-tldraw-uploads"
 preview_bucket_name = "present-tldraw-uploads-preview"
+
+[[routes]]
+pattern = "sync.present.best"
+custom_domain = true
