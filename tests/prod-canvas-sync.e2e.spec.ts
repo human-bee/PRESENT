@@ -51,6 +51,26 @@ test.describe('prod canvas sync smoke', () => {
     await pageA.waitForFunction(() => (window as any).__present?.livekitConnected === true, null, { timeout: 90_000 });
     await pageB.waitForFunction(() => (window as any).__present?.livekitConnected === true, null, { timeout: 90_000 });
 
+    // Optional: verify the LiveKit voice agent actually joins (requires Railway worker online).
+    if (process.env.PLAYWRIGHT_EXPECT_AGENT === '1') {
+      await pageA.waitForFunction(
+        () => {
+          const n = (window as any).__present?.livekitParticipantCount;
+          return typeof n === 'number' && n >= 3;
+        },
+        null,
+        { timeout: 120_000 },
+      );
+      await pageB.waitForFunction(
+        () => {
+          const n = (window as any).__present?.livekitParticipantCount;
+          return typeof n === 'number' && n >= 3;
+        },
+        null,
+        { timeout: 120_000 },
+      );
+    }
+
     // Wait for TLDraw sync to actually be online before creating shapes.
     await pageA.waitForFunction(
       () =>
