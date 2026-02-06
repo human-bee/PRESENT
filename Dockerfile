@@ -2,6 +2,10 @@ FROM node:22-bookworm-slim
 
 WORKDIR /app
 
+# Ensure TLS trust store exists for LiveKit Cloud HTTPS calls.
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates \
+  && rm -rf /var/lib/apt/lists/*
+
 # Install dependencies
 COPY package.json package-lock.json ./
 # `npm ci` is strict about lockfile peer resolution and can fail depending on npm version.
