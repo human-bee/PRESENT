@@ -13,10 +13,9 @@ bindings = [
 
 [[migrations]]
 tag = "v1"
-new_classes = ["TldrawRoomDurableObject"]
+new_sqlite_classes = ["TldrawRoomDurableObject"]
 
 [[r2_buckets]]
 binding = "TLDRAW_UPLOADS"
 bucket_name = "present-tldraw-uploads"
 preview_bucket_name = "present-tldraw-uploads-preview"
-
