@@ -55,16 +55,14 @@ test.describe('prod canvas sync smoke', () => {
     if (process.env.PLAYWRIGHT_EXPECT_AGENT === '1') {
       await pageA.waitForFunction(
         () => {
-          const n = (window as any).__present?.livekitParticipantCount;
-          return typeof n === 'number' && n >= 3;
+          return (window as any).__present?.livekitHasAgent === true;
         },
         null,
         { timeout: 120_000 },
       );
       await pageB.waitForFunction(
         () => {
-          const n = (window as any).__present?.livekitParticipantCount;
-          return typeof n === 'number' && n >= 3;
+          return (window as any).__present?.livekitHasAgent === true;
         },
         null,
         { timeout: 120_000 },

@@ -499,6 +499,7 @@ export function CanvasPageClient() {
   React.useEffect(() => {
     // Update room state when room state changes
     const updateRoomState = () => {
+      const remoteIdentities = Array.from(room.remoteParticipants.values()).map((p) => p.identity);
       const next = {
         isConnected: room.state === ConnectionState.Connected,
         roomName,
@@ -511,6 +512,11 @@ export function CanvasPageClient() {
         w.__present.livekitRoomName = next.roomName;
         w.__present.livekitConnected = next.isConnected;
         w.__present.livekitParticipantCount = next.participantCount;
+        w.__present.livekitRemoteParticipantIdentities = remoteIdentities;
+        w.__present.livekitHasAgent = remoteIdentities.some((id: string) => {
+          const s = String(id || '').toLowerCase();
+          return s.startsWith('agent_') || s.includes('agent') || s.includes('bot') || s.includes('ai');
+        });
       } catch {}
     };
 
