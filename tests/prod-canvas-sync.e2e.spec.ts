@@ -58,7 +58,7 @@ test.describe('prod canvas sync smoke', () => {
         type: 'geo',
         x: 160,
         y: 160,
-        props: { geo: 'rectangle', w: 260, h: 120, color: 'red', text: 'prod sync smoke' },
+        props: { geo: 'rectangle', w: 260, h: 120, color: 'red' },
       });
       return id;
     });
