@@ -24,3 +24,4 @@ preview_bucket_name = "present-tldraw-uploads-preview"
 [[routes]]
 pattern = "sync.present.best"
 custom_domain = true
+zone_name = "present.best"
