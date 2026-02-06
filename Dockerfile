@@ -4,7 +4,9 @@ WORKDIR /app
 
 # Install dependencies
 COPY package.json package-lock.json ./
-RUN npm ci
+# `npm ci` is strict about lockfile peer resolution and can fail depending on npm version.
+# For Railway we prefer a tolerant install that matches Vercel's build behavior.
+RUN npm install --omit=dev
 
 # Copy source code
 COPY . .
