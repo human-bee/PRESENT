@@ -5,6 +5,7 @@ import { mintAgentToken } from '@/lib/agents/canvas-agent/server/auth/agentToken
 import { z } from 'zod';
 import { createClient } from '@supabase/supabase-js';
 import { getRequestUserId } from '@/lib/supabase/server/request-user';
+import { getBooleanFlag } from '@/lib/feature-flags';
 
 const QuerySchema = z.object({
   sessionId: z.string().min(1),
@@ -14,6 +15,7 @@ const QuerySchema = z.object({
 const ROOM_ID_REGEX = /^canvas-([a-zA-Z0-9_-]+)$/;
 const DEV_BYPASS_ENABLED =
   process.env.NEXT_PUBLIC_CANVAS_DEV_BYPASS === 'true' || process.env.CANVAS_DEV_BYPASS === 'true';
+const DEMO_MODE_ENABLED = getBooleanFlag(process.env.NEXT_PUBLIC_CANVAS_DEMO_MODE, false);
 
 export async function GET(req: NextRequest) {
   const url = new URL(req.url);
@@ -65,8 +67,13 @@ export async function GET(req: NextRequest) {
     sessionUserId = session?.user?.id ?? null;
   }
 
-  if (!sessionUserId && !DEV_BYPASS_ENABLED) {
+  if (!sessionUserId && !DEV_BYPASS_ENABLED && !DEMO_MODE_ENABLED) {
     return NextResponse.json({ ok: false, error: 'unauthorized' }, { status: 401 });
+  }
+  // In demo mode, the browser may make early token requests before anonymous auth finishes.
+  // Allow token minting without a session user to avoid transient 401s.
+  if (!sessionUserId && DEMO_MODE_ENABLED) {
+    sessionUserId = null;
   }
 
   const admin = createClient(supabaseUrl, supabaseServiceKey, {
@@ -88,7 +95,14 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ ok: false, error: 'not_found' }, { status: 404 });
   }
 
-  if (!DEV_BYPASS_ENABLED && canvas && !canvas.is_public && sessionUserId && canvas.user_id !== sessionUserId) {
+  if (
+    !DEV_BYPASS_ENABLED &&
+    !DEMO_MODE_ENABLED &&
+    canvas &&
+    !canvas.is_public &&
+    sessionUserId &&
+    canvas.user_id !== sessionUserId
+  ) {
     const { data: member, error: memberErr } = await admin
       .from('canvas_members')
       .select('canvas_id')
