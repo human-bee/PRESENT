@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { fetchWithSupabaseAuth } from '@/lib/supabase/auth-headers';
 
 const LINEAR_KEY_STORAGE_KEY = 'present.linear.apiKey';
 
@@ -55,7 +56,7 @@ export function useLinearApiKey(options: UseLinearApiKeyOptions = {}): UseLinear
     const load = async () => {
       setKeySyncStatus('loading');
       try {
-        const res = await fetch('/api/linear-key', { credentials: 'include' });
+        const res = await fetchWithSupabaseAuth('/api/linear-key');
         if (!res.ok) {
           if (res.status === 401) {
             setKeySyncStatus('idle');
@@ -112,10 +113,9 @@ export function useLinearApiKey(options: UseLinearApiKeyOptions = {}): UseLinear
     
     if (cleaned) {
       setKeySyncStatus('loading');
-      fetch('/api/linear-key', {
+      fetchWithSupabaseAuth('/api/linear-key', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
         body: JSON.stringify({ apiKey: cleaned }),
       })
         .then((res) => {
@@ -147,7 +147,7 @@ export function useLinearApiKey(options: UseLinearApiKeyOptions = {}): UseLinear
     setShowKeyPanel(true);
     setKeySyncStatus('loading');
     
-    fetch('/api/linear-key', { method: 'DELETE', credentials: 'include' })
+    fetchWithSupabaseAuth('/api/linear-key', { method: 'DELETE' })
       .then(() => setKeySyncStatus('idle'))
       .catch((err) => {
         console.error('[LinearKanban] Failed to clear key in Supabase', err);
@@ -173,7 +173,6 @@ export function useLinearApiKey(options: UseLinearApiKeyOptions = {}): UseLinear
     setShowKeyPanel,
   };
 }
-
 
 
 

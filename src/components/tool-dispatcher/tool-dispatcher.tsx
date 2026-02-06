@@ -4,6 +4,7 @@ import { createContext, useContext, type ReactNode, useMemo, useEffect, useRef }
 import { useRoomContext } from '@livekit/components-react';
 import type { DispatcherContext } from './utils';
 import { useToolEvents, useToolRunner } from './hooks';
+import { fetchWithSupabaseAuth } from '@/lib/supabase/auth-headers';
 
 const ToolDispatcherContext = createContext<DispatcherContext | null>(null);
 
@@ -59,7 +60,7 @@ export function ToolDispatcher({
       if (!roomName) return undefined;
       try {
         const url = `/api/canvas-agent/token?sessionId=${encodeURIComponent(sessionId)}&roomId=${encodeURIComponent(roomName)}`;
-        const res = await fetch(url);
+        const res = await fetchWithSupabaseAuth(url);
         if (!res.ok) return undefined;
         const json = await res.json();
         const token = typeof json?.token === 'string' ? json.token : undefined;
@@ -95,7 +96,7 @@ export function ToolDispatcher({
           try {
             const clientId = room?.localParticipant?.identity || 'unknown';
             const roomId = room?.name || '';
-            await fetch('/api/canvas-agent/ack', {
+            await fetchWithSupabaseAuth('/api/canvas-agent/ack', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({

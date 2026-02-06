@@ -13,6 +13,8 @@ export function CanvasParityAutopilot() {
   const livekitState = useCanvasLiveKit();
   const parityRequested = searchParams?.get('parity') === '1';
   const roomOverride = searchParams?.get('room')?.trim() ?? '';
+  const envAutoConnect = process.env.NEXT_PUBLIC_LIVEKIT_AUTO_CONNECT === 'true';
+  const demoMode = process.env.NEXT_PUBLIC_CANVAS_DEMO_MODE === 'true';
 
   const resolvedRoomName = useMemo(() => {
     if (roomOverride) {
@@ -24,11 +26,22 @@ export function CanvasParityAutopilot() {
     return '';
   }, [roomOverride, livekitState?.roomName]);
 
-  const autopilotEnabled = parityRequested && resolvedRoomName.length > 0;
+  const autopilotEnabled = (parityRequested || envAutoConnect || demoMode) && resolvedRoomName.length > 0;
+
+  const resolvedUserName = useMemo(() => {
+    if (typeof window === 'undefined') return 'Canvas User';
+    try {
+      const stored = window.localStorage.getItem('present:display_name')?.trim() || '';
+      return stored || 'Canvas User';
+    } catch {
+      return 'Canvas User';
+    }
+  }, []);
 
   const { state, connect, disconnect } = useLivekitConnection({
     roomName: resolvedRoomName || 'canvas-room',
-    userName: 'Canvas Parity Autopilot',
+    userName: resolvedUserName,
+    audioOnly: demoMode,
     autoConnect: false,
   });
 

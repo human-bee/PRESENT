@@ -1,6 +1,7 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { createClient } from '@supabase/supabase-js';
+import { getRequestUserId } from '@/lib/supabase/server/request-user';
 
 type Body = { canvasId?: string; room?: string };
 
@@ -12,7 +13,7 @@ const parseCanvasId = (body: Body): string | null => {
   return null;
 };
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
     const { NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY } = process.env;
     if (!NEXT_PUBLIC_SUPABASE_URL || !NEXT_PUBLIC_SUPABASE_ANON_KEY || !SUPABASE_SERVICE_ROLE_KEY) {
@@ -25,28 +26,34 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'canvasId required' }, { status: 400 });
     }
 
-    // Get the current user from cookies (anon key + auth cookies)
-    const cookieStore = await cookies();
-    const cookieHeader = typeof cookieStore.toString === 'function' ? cookieStore.toString() : '';
-    const supabase = createClient(NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY, {
-      auth: {
-        detectSessionInUrl: false,
-        persistSession: false,
-        autoRefreshToken: false,
-      },
-      global: {
-        headers: {
-          ...(cookieHeader ? { Cookie: cookieHeader } : {}),
+    let userId: string | null = null;
+    const bearer = await getRequestUserId(request);
+    if (bearer.ok) {
+      userId = bearer.userId;
+    } else {
+      // Fallback: cookie-based auth (legacy).
+      const cookieStore = await cookies();
+      const cookieHeader = typeof cookieStore.toString === 'function' ? cookieStore.toString() : '';
+      const supabase = createClient(NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY, {
+        auth: {
+          detectSessionInUrl: false,
+          persistSession: false,
+          autoRefreshToken: false,
         },
-      },
-    });
+        global: {
+          headers: {
+            ...(cookieHeader ? { Cookie: cookieHeader } : {}),
+          },
+        },
+      });
 
-    const {
-      data: { user },
-      error: userErr,
-    } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      userId = user?.id ?? null;
+    }
 
-    if (userErr || !user?.id) {
+    if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -57,7 +64,7 @@ export async function POST(request: Request) {
 
     const { error: upsertErr } = await admin
       .from('canvas_members')
-      .upsert({ canvas_id: canvasId, user_id: user.id, role: 'editor' }, { onConflict: 'canvas_id,user_id' });
+      .upsert({ canvas_id: canvasId, user_id: userId, role: 'editor' }, { onConflict: 'canvas_id,user_id' });
 
     if (upsertErr) {
       return NextResponse.json({ error: upsertErr.message }, { status: 500 });

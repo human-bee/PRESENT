@@ -31,7 +31,9 @@ import {
   persistJourneyRunId,
   resolveJourneyConfig,
   updateJourneyRoom,
+  logJourneyEvent,
 } from '@/lib/journey-logger';
+import { fetchWithSupabaseAuth } from '@/lib/supabase/auth-headers';
 
 // Suppress development warnings for cleaner console
 suppressDevelopmentWarnings();
@@ -48,19 +50,61 @@ export function CanvasPageClient() {
   const { user, loading } = useAuth();
   const router = useRouter();
   const bypassAuth = process.env.NEXT_PUBLIC_CANVAS_DEV_BYPASS === 'true' || process.env.NEXT_PUBLIC_CANVAS_DEV_BYPASS === '"true"';
+  const demoMode = process.env.NEXT_PUBLIC_CANVAS_DEMO_MODE === 'true';
   // Track resolved canvas id and room name; do not render until resolved
   const [, setCanvasId] = useState<string | null>(null);
   const [roomName, setRoomName] = useState<string>('');
+  const [demoNameDraft, setDemoNameDraft] = useState('');
+  const [demoAuthAttempted, setDemoAuthAttempted] = useState(false);
+  const [demoError, setDemoError] = useState<string | null>(null);
 
   useEffect(() => {
     console.log('[CanvasPageClient] Auth state changed:', {
       loading,
       userId: user?.id,
       bypassAuth,
+      demoMode,
       roomName,
       isWindowDefined: typeof window !== 'undefined'
     });
-  }, [loading, user, bypassAuth, roomName]);
+  }, [loading, user, bypassAuth, demoMode, roomName]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (!demoMode || bypassAuth) return;
+    if (loading || user) return;
+    if (demoAuthAttempted) return;
+
+    let storedName = '';
+    try {
+      storedName = window.localStorage.getItem('present:display_name')?.trim() || '';
+    } catch { }
+
+    if (!storedName) {
+      return;
+    }
+
+    setDemoAuthAttempted(true);
+    setDemoError(null);
+    void (async () => {
+      try {
+        const { supabase } = await import('@/lib/supabase');
+        const authAny = supabase.auth as any;
+        if (typeof authAny?.signInAnonymously !== 'function') {
+          throw new Error('Supabase anonymous auth not supported in this build');
+        }
+        const res = await authAny.signInAnonymously({ options: { data: { full_name: storedName } } });
+        const error = res?.error;
+        if (error) {
+          setDemoError(error.message || 'Failed to start demo session');
+          setDemoAuthAttempted(false);
+        }
+      } catch (err: any) {
+        setDemoError(err?.message || 'Failed to start demo session');
+        setDemoAuthAttempted(false);
+      }
+    })();
+  }, [demoMode, bypassAuth, loading, user, demoAuthAttempted]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -81,6 +125,32 @@ export function CanvasPageClient() {
     } catch { }
   }, [roomName]);
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const url = new URL(window.location.href);
+      const shareParam = url.searchParams.get('share');
+      if (!shareParam || shareParam === '0' || shareParam === 'false') return;
+
+      const roomParam = url.searchParams.get('room');
+      const roomMatch = roomParam?.match(/^canvas-([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i);
+      const idFromRoom = roomMatch?.[1] || null;
+      const id = url.searchParams.get('id') || idFromRoom;
+      const key = `present:share-opened:${id || 'unknown'}`;
+      if (window.sessionStorage.getItem(key)) return;
+      window.sessionStorage.setItem(key, '1');
+
+      logJourneyEvent({
+        eventType: 'share_link_opened',
+        source: 'ui',
+        payload: { canvasId: id || null },
+      });
+
+      url.searchParams.delete('share');
+      window.history.replaceState({}, '', url.toString());
+    } catch { }
+  }, []);
+
   const isUuid = (value: string | null | undefined) =>
     !!value && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 
@@ -89,7 +159,7 @@ export function CanvasPageClient() {
     if (!canvasId || !room || !room.startsWith('canvas-')) return;
     if (window.sessionStorage.getItem(`present:parity-joined:${room}`)) return;
     try {
-      await fetch('/api/canvas/parity-join', {
+      await fetchWithSupabaseAuth('/api/canvas/parity-join', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ canvasId, room }),
@@ -381,10 +451,10 @@ export function CanvasPageClient() {
   // Redirect to sign in if not authenticated
   useEffect(() => {
     if (loading) return;
-    if (!user && !bypassAuth) {
+    if (!user && !bypassAuth && !demoMode) {
       router.push('/auth/signin');
     }
-  }, [user, loading, router, bypassAuth]);
+  }, [user, loading, router, bypassAuth, demoMode]);
 
   // Load MCP server configurations
   const mcpServers = loadMcpServers();
@@ -428,11 +498,19 @@ export function CanvasPageClient() {
   React.useEffect(() => {
     // Update room state when room state changes
     const updateRoomState = () => {
-      setRoomState({
+      const next = {
         isConnected: room.state === ConnectionState.Connected,
         roomName,
         participantCount: room.numParticipants,
-      });
+      };
+      setRoomState(next);
+      try {
+        const w = window as any;
+        w.__present = w.__present || {};
+        w.__present.livekitRoomName = next.roomName;
+        w.__present.livekitConnected = next.isConnected;
+        w.__present.livekitParticipantCount = next.participantCount;
+      } catch {}
     };
 
     // Listen to room events
@@ -477,10 +555,82 @@ export function CanvasPageClient() {
   }, [room]);
 
   // Show loading state while checking authentication
-  if (loading || !roomName) {
+  if (loading || (!roomName && !(demoMode && !user && !bypassAuth))) {
     return (
       <div className="h-screen w-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/20">
         <div className="text-gray-500">Loading...</div>
+      </div>
+    );
+  }
+
+  if (!user && !bypassAuth && demoMode) {
+    const submit = async () => {
+      const name = demoNameDraft.trim();
+      if (!name) return;
+      try {
+        window.localStorage.setItem('present:display_name', name);
+      } catch { }
+      setDemoAuthAttempted(true);
+      setDemoError(null);
+      try {
+        const { supabase } = await import('@/lib/supabase');
+        const authAny = supabase.auth as any;
+        if (typeof authAny?.signInAnonymously !== 'function') {
+          throw new Error('Supabase anonymous auth not supported in this build');
+        }
+        const res = await authAny.signInAnonymously({ options: { data: { full_name: name } } });
+        const error = res?.error;
+        if (error) {
+          setDemoError(error.message || 'Failed to start demo session');
+          setDemoAuthAttempted(false);
+        }
+      } catch (err: any) {
+        setDemoError(err?.message || 'Failed to start demo session');
+        setDemoAuthAttempted(false);
+      }
+    };
+
+    return (
+      <div className="h-screen w-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/20 p-6">
+        <div className="w-full max-w-md rounded-2xl bg-white shadow-xl border border-slate-200 p-6">
+          <div className="text-slate-900 text-lg font-semibold">Join the demo</div>
+          <div className="text-slate-600 text-sm mt-1">
+            Pick a display name. You will join the room automatically.
+          </div>
+          <div className="mt-4">
+            <label className="text-xs text-slate-600">Display name</label>
+            <input
+              value={demoNameDraft}
+              onChange={(e) => setDemoNameDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') void submit();
+              }}
+              autoFocus
+              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-400"
+              placeholder="Alex"
+            />
+          </div>
+          {demoError ? (
+            <div className="mt-3 text-sm text-red-600">{demoError}</div>
+          ) : null}
+          <div className="mt-5 flex items-center gap-3">
+            <button
+              onClick={() => void submit()}
+              disabled={!demoNameDraft.trim() || demoAuthAttempted}
+              className={[
+                'rounded-lg px-4 py-2 text-sm font-medium',
+                demoNameDraft.trim() && !demoAuthAttempted
+                  ? 'bg-slate-900 text-white hover:bg-slate-800'
+                  : 'bg-slate-200 text-slate-500 cursor-not-allowed',
+              ].join(' ')}
+            >
+              {demoAuthAttempted ? 'Connecting...' : 'Join'}
+            </button>
+            <div className="text-xs text-slate-500">
+              Powered by Supabase anonymous auth
+            </div>
+          </div>
+        </div>
       </div>
     );
   }

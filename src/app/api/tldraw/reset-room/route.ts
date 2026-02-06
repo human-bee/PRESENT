@@ -15,8 +15,10 @@ export async function POST(req: NextRequest) {
     const endpoint = new URL(DEFAULT_SYNC_RESET_ENDPOINT);
     endpoint.pathname = `/admin/reset-room/${encodeURIComponent(room.trim())}`;
 
+    const adminToken = process.env.TLDRAW_SYNC_ADMIN_TOKEN?.trim() || '';
     await fetch(endpoint.toString(), {
       method: 'POST',
+      headers: adminToken ? { Authorization: `Bearer ${adminToken}` } : undefined,
     });
 
     return NextResponse.json({ status: 'reset' });

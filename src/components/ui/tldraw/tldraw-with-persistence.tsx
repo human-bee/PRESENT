@@ -26,6 +26,7 @@ import type { Editor } from '@tldraw/tldraw';
 import { useRouter } from 'next/navigation';
 import * as React from 'react';
 import TldrawSnapshotBroadcaster from '@/components/TldrawSnapshotBroadcaster';
+import { logJourneyEvent } from '@/lib/journey-logger';
 
 interface TldrawWithPersistenceProps {
   onMount?: (editor: Editor) => void;
@@ -256,6 +257,51 @@ function CustomToolbarWithTranscript({
 }) {
   const { isOpen } = React.useContext(TranscriptPanelContext);
 
+  const handleShare = useCallback(async () => {
+    if (typeof window === 'undefined') return;
+
+    const id =
+      new URL(window.location.href).searchParams.get('id') ||
+      window.localStorage.getItem('present:lastCanvasId');
+    const shareUrl = new URL('/canvas', window.location.origin);
+    if (id) shareUrl.searchParams.set('id', id);
+    shareUrl.searchParams.set('share', '1');
+    const shareLink = shareUrl.toString();
+
+    logJourneyEvent({
+      eventType: 'share_clicked',
+      source: 'ui',
+      payload: {
+        method: typeof navigator.share === 'function' ? 'share_sheet' : 'clipboard',
+        shareUrl: shareLink,
+        canvasId: id || null,
+      },
+    });
+
+    if (typeof navigator.share === 'function') {
+      try {
+        await navigator.share({
+          title: 'Present Canvas',
+          text: 'Join my canvas',
+          url: shareLink,
+        });
+        toast.success('Share sheet opened');
+        return;
+      } catch (error: any) {
+        if (error?.name === 'AbortError') {
+          return;
+        }
+      }
+    }
+
+    try {
+      await navigator.clipboard.writeText(shareLink);
+      toast.success('Link copied');
+    } catch {
+      toast.error('Failed to copy link');
+    }
+  }, []);
+
   return (
     <DefaultToolbar>
       <DefaultToolbarContent />
@@ -264,6 +310,12 @@ function CustomToolbarWithTranscript({
         label="Component Toolbox"
         icon="plus"
         onSelect={onComponentToolboxToggle}
+      />
+      <TldrawUiMenuItem
+        id="share-canvas"
+        label="Share"
+        icon="external-link"
+        onSelect={handleShare}
       />
       <TldrawUiMenuItem
         id="transcript-toggle"

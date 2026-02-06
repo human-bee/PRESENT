@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef } from 'react';
 import type { Editor } from '@tldraw/tldraw';
 import type { Room } from 'livekit-client';
 import { createLiveKitBus } from '@/lib/livekit/livekit-bus';
+import { fetchWithSupabaseAuth } from '@/lib/supabase/auth-headers';
 
 export function useViewportSelectionPublisher(editor: Editor | undefined, room: Room | undefined, active: boolean) {
   const bus = useMemo(() => (room ? createLiveKitBus(room) : null), [room]);
@@ -29,7 +30,7 @@ export function useViewportSelectionPublisher(editor: Editor | undefined, room: 
       viewportSessionRef.current = sessionId;
       try {
         const params = new URLSearchParams({ sessionId, roomId: room.name });
-        const res = await fetch(`/api/canvas-agent/token?${params.toString()}`);
+        const res = await fetchWithSupabaseAuth(`/api/canvas-agent/token?${params.toString()}`);
         if (!res.ok) return;
         const json = await res.json().catch(() => null);
         const token = typeof json?.token === 'string' ? json.token : undefined;
@@ -128,7 +129,7 @@ export function useViewportSelectionPublisher(editor: Editor | undefined, room: 
               ts: now,
               token,
             };
-            fetch('/api/canvas-agent/viewport', {
+            fetchWithSupabaseAuth('/api/canvas-agent/viewport', {
               method: 'POST',
               headers: { 'content-type': 'application/json' },
               body: JSON.stringify(payload),
