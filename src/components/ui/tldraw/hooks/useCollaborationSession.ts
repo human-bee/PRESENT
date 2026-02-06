@@ -33,6 +33,18 @@ export function useCollaborationSession({
       error: store.error?.message
     });
 
+    // Expose for Playwright/debugging.
+    if (typeof window !== 'undefined') {
+      const w = window as any;
+      w.__present = w.__present || {};
+      w.__present.tldrawSync = {
+        roomName,
+        status: store.status,
+        connectionStatus,
+        error: store.error?.message ?? null,
+      };
+    }
+
     if (!active) {
       return 'idle';
     }

@@ -51,6 +51,22 @@ test.describe('prod canvas sync smoke', () => {
     await pageA.waitForFunction(() => (window as any).__present?.livekitConnected === true, null, { timeout: 90_000 });
     await pageB.waitForFunction(() => (window as any).__present?.livekitConnected === true, null, { timeout: 90_000 });
 
+    // Wait for TLDraw sync to actually be online before creating shapes.
+    await pageA.waitForFunction(
+      () =>
+        (window as any).__present?.tldrawSync?.status === 'synced-remote' &&
+        (window as any).__present?.tldrawSync?.connectionStatus === 'online',
+      null,
+      { timeout: 90_000 },
+    );
+    await pageB.waitForFunction(
+      () =>
+        (window as any).__present?.tldrawSync?.status === 'synced-remote' &&
+        (window as any).__present?.tldrawSync?.connectionStatus === 'online',
+      null,
+      { timeout: 90_000 },
+    );
+
     // Create a shape on A and verify it appears on B via sync.
     const shapeId = await pageA.evaluate(() => {
       const editor = (window as any).__present?.tldrawEditor;

@@ -148,6 +148,7 @@ function CanvasViewport({ componentId, shapeUtils, editor, restProps, onEditorRe
   return (
     <div ref={containerRef} style={{ position: 'fixed', inset: 0 }}>
       <Tldraw
+        licenseKey={process.env.NEXT_PUBLIC_TLDRAW_LICENSE_KEY}
         shapeUtils={shapeUtils}
         persistenceKey={componentId}
         onMount={(instance) => {

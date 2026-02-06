@@ -109,6 +109,7 @@ export function TldrawWithCollaboration({
       <TldrawUiToastsProvider>
         <ComponentStoreContext.Provider value={componentStore || null}>
           <Tldraw
+            licenseKey={process.env.NEXT_PUBLIC_TLDRAW_LICENSE_KEY}
             store={collaboration.store}
             shapeUtils={shapeUtils}
             components={components}
