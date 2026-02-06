@@ -34,6 +34,7 @@ import {
   logJourneyEvent,
 } from '@/lib/journey-logger';
 import { fetchWithSupabaseAuth } from '@/lib/supabase/auth-headers';
+import { getBooleanFlag } from '@/lib/feature-flags';
 
 // Suppress development warnings for cleaner console
 suppressDevelopmentWarnings();
@@ -49,8 +50,8 @@ export function CanvasPageClient() {
   // Authentication check
   const { user, loading } = useAuth();
   const router = useRouter();
-  const bypassAuth = process.env.NEXT_PUBLIC_CANVAS_DEV_BYPASS === 'true' || process.env.NEXT_PUBLIC_CANVAS_DEV_BYPASS === '"true"';
-  const demoMode = process.env.NEXT_PUBLIC_CANVAS_DEMO_MODE === 'true';
+  const bypassAuth = getBooleanFlag(process.env.NEXT_PUBLIC_CANVAS_DEV_BYPASS, false);
+  const demoMode = getBooleanFlag(process.env.NEXT_PUBLIC_CANVAS_DEMO_MODE, false);
   // Track resolved canvas id and room name; do not render until resolved
   const [, setCanvasId] = useState<string | null>(null);
   const [roomName, setRoomName] = useState<string>('');

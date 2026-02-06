@@ -5,6 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import { useLivekitConnection } from '@/components/ui/livekit/hooks';
 import { useCanvasLiveKit } from '@/components/ui/livekit/livekit-room-connector';
 import { createLogger } from '@/lib/utils';
+import { getBooleanFlag } from '@/lib/feature-flags';
 
 const logger = createLogger('CanvasParityAutopilot');
 
@@ -13,8 +14,8 @@ export function CanvasParityAutopilot() {
   const livekitState = useCanvasLiveKit();
   const parityRequested = searchParams?.get('parity') === '1';
   const roomOverride = searchParams?.get('room')?.trim() ?? '';
-  const envAutoConnect = process.env.NEXT_PUBLIC_LIVEKIT_AUTO_CONNECT === 'true';
-  const demoMode = process.env.NEXT_PUBLIC_CANVAS_DEMO_MODE === 'true';
+  const envAutoConnect = getBooleanFlag(process.env.NEXT_PUBLIC_LIVEKIT_AUTO_CONNECT, false);
+  const demoMode = getBooleanFlag(process.env.NEXT_PUBLIC_CANVAS_DEMO_MODE, false);
 
   const resolvedRoomName = useMemo(() => {
     if (roomOverride) {
