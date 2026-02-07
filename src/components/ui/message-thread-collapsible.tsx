@@ -16,6 +16,7 @@ import { useRealtimeSessionTranscript } from '@/hooks/use-realtime-session-trans
 import { supabase } from '@/lib/supabase';
 import { CanvasLiveKitContext } from './livekit/livekit-room-connector';
 import { useAuth } from '@/hooks/use-auth';
+import { useAllTranscripts, useTranscriptStore, type Transcript as StoreTranscript } from '@/lib/stores/transcript-store';
 
 /**
  * Props for the MessageThreadCollapsible component
@@ -88,8 +89,26 @@ export const MessageThreadCollapsible = React.forwardRef<
   const [componentStore, setComponentStore] = React.useState(
     new Map<string, { component: React.ReactNode; contextKey: string }>(),
   );
-  const [transcriptions, setTranscriptions] = React.useState<
+  // System call entries (component creation events) - kept local
+  const [systemCalls, setSystemCalls] = React.useState<
     Array<{
+      id: string;
+      speaker: string;
+      text: string;
+      timestamp: number;
+      isFinal: boolean;
+      source: 'system';
+      type: 'system_call';
+    }>
+  >([]);
+  
+  // Get transcripts from centralized store
+  const storeTranscripts = useAllTranscripts();
+  const { batchAddTranscripts, clearTranscripts: storeClearTranscripts } = useTranscriptStore();
+  
+  // Merge store transcripts with local system calls for display
+  const transcriptions = React.useMemo(() => {
+    const speechTranscripts = storeTranscripts.map((t): {
       id: string;
       speaker: string;
       text: string;
@@ -97,8 +116,19 @@ export const MessageThreadCollapsible = React.forwardRef<
       isFinal: boolean;
       source: 'agent' | 'user' | 'system';
       type?: 'speech' | 'system_call';
-    }>
-  >([]);
+    } => ({
+      id: t.id,
+      speaker: t.speaker,
+      text: t.text,
+      timestamp: t.timestamp,
+      isFinal: t.isFinal,
+      source: t.source || (t.speaker === 'voice-agent' ? 'agent' : 'user'),
+      type: 'speech',
+    }));
+    const merged = [...speechTranscripts, ...systemCalls];
+    merged.sort((a, b) => a.timestamp - b.timestamp);
+    return merged;
+  }, [storeTranscripts, systemCalls]);
 
   // Ref for auto-scroll
   const transcriptContainerRef = React.useRef<HTMLDivElement>(null);
@@ -128,6 +158,15 @@ export const MessageThreadCollapsible = React.forwardRef<
     isSending ||
     !trimmedTypedMessage ||
     (isRecognizedSlashCommand && slashCommandBodyMissing);
+
+  type LiveTranscriptionPayload = {
+    type: 'live_transcription';
+    text: string;
+    speaker: string;
+    timestamp: number;
+    is_final: boolean;
+    manual: boolean;
+  };
 
   // Helper: detect if an agent participant is present in the room
   const isAgentPresent = React.useCallback(() => {
@@ -297,118 +336,35 @@ export const MessageThreadCollapsible = React.forwardRef<
     [sendCanvasAgentPrompt],
   );
 
-  const ingestTranscription = React.useCallback(
-    (transcriptionData: {
-      speaker?: string;
-      text?: string;
-      timestamp?: number;
-      is_final?: boolean;
-    }) => {
-      if (!transcriptionData.text) return;
-      if (transcriptionData.speaker === 'voice-agent') {
-        try { setAgentPresent(true); } catch {}
-      }
-      const transcription = {
-        id: `${Date.now()}-${Math.random()}`,
-        speaker: transcriptionData.speaker || 'Unknown',
-        text: transcriptionData.text,
-        timestamp: transcriptionData.timestamp || Date.now(),
-        isFinal: transcriptionData.is_final || false,
-        source: (transcriptionData.speaker === 'voice-agent' ? 'agent' : 'user') as 'agent' | 'user',
-        type: 'speech' as const,
-      };
-
-      setTranscriptions((prev) => {
-        if (transcription.isFinal) {
-          const filtered = prev.filter(
-            (t) => !(t.speaker === transcription.speaker && !t.isFinal && t.type === 'speech'),
-          );
-          return [...filtered, transcription];
-        }
-        const filtered = prev.filter(
-          (t) => !(t.speaker === transcription.speaker && !t.isFinal && t.type === 'speech'),
-        );
-        return [...filtered, transcription];
-      });
-
-      try {
-        window.dispatchEvent(
-          new CustomEvent('livekit:transcription-replay', {
-            detail: {
-              speaker: transcription.speaker,
-              text: transcription.text,
-              timestamp: transcription.timestamp,
-            },
-          }),
-        );
-      } catch {}
-    },
-    [setAgentPresent, setTranscriptions],
-  );
-
-  // Listen for transcription data via bus
+  // Track agent presence from store transcripts
   React.useEffect(() => {
-    const off = bus.on('transcription', (data: unknown) => {
-      const transcriptionData = data as {
-        type?: string;
-        speaker?: string;
-        text?: string;
-        timestamp?: number;
-        is_final?: boolean;
-      };
-      if (transcriptionData.type === 'live_transcription') {
-        ingestTranscription(transcriptionData);
-      }
-    });
-    return off;
-  }, [bus, ingestTranscription]);
+    const hasAgent = storeTranscripts.some(t => t.speaker === 'voice-agent');
+    if (hasAgent) {
+      try { setAgentPresent(true); } catch { }
+    }
+  }, [storeTranscripts, setAgentPresent]);
 
-  // Local manual messages do not echo back over LiveKit; mirror them here
-  React.useEffect(() => {
-    const handler = (event: Event) => {
-      const payload = (event as CustomEvent).detail;
-      if (!payload || typeof payload.text !== 'string') return;
-      const transcriptionData = {
-        type: 'live_transcription',
-        speaker: payload.participantId || payload.speaker || 'Canvas-User',
-        text: payload.text,
-        timestamp: typeof payload.timestamp === 'number' ? payload.timestamp : Date.now(),
-        is_final: true,
-        manual: true,
-      } as const;
-      ingestTranscription(transcriptionData);
-    };
-    window.addEventListener('custom:transcription-local', handler as EventListener);
-    return () => window.removeEventListener('custom:transcription-local', handler as EventListener);
-  }, [ingestTranscription]);
+  // NOTE: Transcription data channel listening is now handled by TranscriptProvider
+  // Local manual messages are also handled by the store via the replay event
 
-  // Keep transcript tab mirrored to Supabase session
+  // Hydrate transcript store from Supabase session
   React.useEffect(() => {
-    if (!Array.isArray(sessionTranscript)) return;
-    const nextList = sessionTranscript.map((t) => ({
+    if (!Array.isArray(sessionTranscript) || sessionTranscript.length === 0) return;
+    const storeFormat: StoreTranscript[] = sessionTranscript.map((t) => ({
       id: `${t.participantId}-${Number(t.timestamp)}`,
       speaker: t.participantId || 'Unknown',
       text: t.text,
       timestamp: Number(t.timestamp),
       isFinal: true,
-      source: t.participantId === 'voice-agent' ? 'agent' : 'user',
+      source: (t.participantId === 'voice-agent' ? 'agent' : 'user') as 'agent' | 'user',
       type: 'speech' as const,
     }));
-    setTranscriptions((prev) => {
-      if (
-        prev.length === nextList.length &&
-        prev.length > 0 &&
-        prev[prev.length - 1]?.id === nextList[nextList.length - 1]?.id
-      ) {
-        return prev;
-      }
-      return nextList;
-    });
-  }, [sessionTranscript]);
+    batchAddTranscripts(storeFormat);
+  }, [sessionTranscript, batchAddTranscripts]);
 
   // When canvas id changes, clear local transcript immediately to avoid showing stale lines
   React.useEffect(() => {
-    const clearOnCanvasChange = () => setTranscriptions([]);
+    const clearOnCanvasChange = () => clearTranscriptions();
     if (typeof window !== 'undefined') {
       window.addEventListener('present:canvas-id-changed', clearOnCanvasChange);
     }
@@ -479,7 +435,7 @@ export const MessageThreadCollapsible = React.forwardRef<
         type: 'system_call' as const,
       };
 
-      setTranscriptions((prev) => [...prev, systemCall]);
+      setSystemCalls((prev) => [...prev, systemCall]);
     },
     [effectiveContextKey],
   );
@@ -499,10 +455,11 @@ export const MessageThreadCollapsible = React.forwardRef<
     }
   }, [transcriptions]);
 
-  // Clear transcriptions
+  // Clear transcriptions (both store and local system calls)
   const clearTranscriptions = React.useCallback(() => {
-    setTranscriptions([]);
-  }, []);
+    storeClearTranscripts();
+    setSystemCalls([]);
+  }, [storeClearTranscripts]);
 
   const handleThreadChange = React.useCallback((newThreadId?: string) => {
     // Keep canvases and transcript in sync with selected thread
@@ -714,7 +671,7 @@ export const MessageThreadCollapsible = React.forwardRef<
                     timestamp: Date.now(),
                     is_final: true,
                     manual: true,
-                  } as const;
+                  } satisfies LiveTranscriptionPayload;
 
                   let completed = false;
 

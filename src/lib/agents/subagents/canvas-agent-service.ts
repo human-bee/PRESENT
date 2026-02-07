@@ -15,7 +15,10 @@ const canvasActionSchema = z.object({
 	tool: z
 		.string()
 		.min(1)
-		.regex(/^canvas_[\w.-]+$/i, 'Canvas tools must start with canvas_'),
+		.refine(
+			(value) => value.trim().toLowerCase().startsWith('canvas_'),
+			'Canvas tools must start with canvas_',
+		),
   params: z.record(z.string(), jsonValueSchema).default({}),
 	rationale: z.string().optional(),
 });
@@ -52,7 +55,7 @@ const debugJson = (label: string, value: unknown, max = 2000) => {
 	try {
 		const json = JSON.stringify(value, null, 2);
 		debugLog(label, json.length > max ? `${json.slice(0, max)}… (truncated ${json.length - max} chars)` : json);
-	} catch (error) {
+	} catch (_error) {
 		debugLog(label, value);
 	}
 };

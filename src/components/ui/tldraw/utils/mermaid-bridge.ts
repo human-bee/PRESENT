@@ -5,6 +5,7 @@ import { normalizeMermaidText, getMermaidLastNode } from '@/components/tool-disp
 import type { MutableRefObject } from 'react';
 import { registerSingletonWindowListener, registerWindowListener } from './window-listeners';
 import type { LiveKitBus } from './types';
+import { findTiledPlacement } from './findTiledPlacement';
 
 const STEWARD_FLOWCHART = true;
 
@@ -159,8 +160,9 @@ export function attachMermaidBridge({ editor, bus, lastTimestampsRef }: MermaidB
 
       try {
         const viewport = editor.getViewportPageBounds();
-        const x = viewport ? viewport.midX - 200 : 0;
-        const y = viewport ? viewport.midY - 150 : 0;
+        const placement = findTiledPlacement(editor, { w: 400, h: 300 }, { viewport });
+        const x = viewport ? placement.x : 0;
+        const y = viewport ? placement.y : 0;
         const id = createShapeId(`mermaid-${nanoid()}`);
         editor.createShape({
           id,

@@ -17,6 +17,10 @@ import {
   Kanban,
   HelpCircle,
   Trophy,
+  FileUp,
+  Database,
+  AppWindow,
+  Hand,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -71,6 +75,26 @@ export const componentIcons: Record<string, ComponentIconMapping> = {
     category: 'Productivity',
     description: 'Track tasks and action items',
   },
+  MeetingSummaryWidget: {
+    icon: FileText,
+    category: 'Productivity',
+    description: 'CRM-ready meeting summary',
+  },
+  MemoryRecallWidget: {
+    icon: Database,
+    category: 'Productivity',
+    description: 'Vector memory recall',
+  },
+  CrowdPulseWidget: {
+    icon: Hand,
+    category: 'Collaboration',
+    description: 'Crowd pulse + hand count control',
+  },
+  McpAppWidget: {
+    icon: AppWindow,
+    category: 'Productivity',
+    description: 'MCP Apps iframe host',
+  },
   ResearchPanel: {
     icon: Search,
     category: 'Productivity',
@@ -91,6 +115,11 @@ export const componentIcons: Record<string, ComponentIconMapping> = {
     icon: Kanban,
     category: 'Productivity',
     description: 'Project management board',
+  },
+  ContextFeeder: {
+    icon: FileUp,
+    category: 'Productivity',
+    description: 'Upload documents to add context',
   },
 
   // Collaboration

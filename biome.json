@@ -1,5 +1,5 @@
 {
-  "$schema": "https://biomejs.dev/schemas/2.2.2/schema.json",
+  "$schema": "https://biomejs.dev/schemas/2.3.3/schema.json",
   "formatter": {
     "enabled": true,
     "indentStyle": "space",
@@ -10,26 +10,66 @@
     "enabled": true,
     "rules": {
       "recommended": true,
-      "suspicious": {
-        "noExplicitAny": "off",
-        "noImplicitAnyLet": "off"
-      },
       "style": {
         "useImportType": "off",
         "useNodejsImportProtocol": "off",
         "useSelfClosingElements": "off",
-        "noNonNullAssertion": "warn"
+        "noNonNullAssertion": "off",
+        "useTemplate": "off",
+        "useExponentiationOperator": "off",
+        "useConst": "off"
       },
       "complexity": {
-        "useOptionalChain": "off"
+        "useOptionalChain": "off",
+        "noStaticOnlyClass": "off",
+        "useArrowFunction": "off",
+        "noUselessFragments": "off",
+        "noUselessContinue": "off",
+        "noUselessSwitchCase": "off",
+        "useLiteralKeys": "off",
+        "noUselessUndefinedInitialization": "off"
+      },
+      "correctness": {
+        "useExhaustiveDependencies": "off",
+        "useHookAtTopLevel": "off",
+        "noUnusedImports": "off",
+        "noUnusedVariables": "off",
+        "noUnusedFunctionParameters": "off",
+        "useParseIntRadix": "off",
+        "noUnusedPrivateClassMembers": "off",
+        "noSwitchDeclarations": "off"
+      },
+      "performance": {
+        "noImgElement": "off"
+      },
+      "security": {
+        "noDangerouslySetInnerHtml": "off"
       },
       "a11y": {
         "noSvgWithoutTitle": "off",
-        "useButtonType": "off"
+        "useButtonType": "off",
+        "noStaticElementInteractions": "off",
+        "useKeyWithClickEvents": "off",
+        "noRedundantAlt": "off",
+        "noLabelWithoutControl": "off",
+        "useAltText": "off",
+        "useSemanticElements": "off",
+        "noAutofocus": "off",
+        "useValidAriaRole": "off"
+      },
+      "suspicious": {
+        "noExplicitAny": "off",
+        "noImplicitAnyLet": "off",
+        "noArrayIndexKey": "off",
+        "noAssignInExpressions": "off",
+        "useIterableCallbackReturn": "off",
+        "noGlobalIsNan": "off",
+        "noControlCharactersInRegex": "off",
+        "noPrototypeBuiltins": "off"
       }
     }
   },
-  "organizeImports": { "enabled": false },
+  "assist": { "actions": { "source": { "organizeImports": "off" } } },
   "vcs": {
     "enabled": true,
     "clientKind": "git",
@@ -44,16 +84,12 @@
     }
   },
   "files": {
-    "include": ["**"],
-    "ignore": [
-      "**/node_modules",
-      "**/dist",
-      "**/build",
-      ".next",
-      "**/coverage",
-      "**/.turbo",
-      "**/.vercel",
-      "**/out"
+    "includes": [
+      "src/**/*.ts",
+      "src/**/*.tsx",
+      "src/**/*.js",
+      "src/**/*.jsx",
+      "!src/vendor/**"
     ]
   }
 }

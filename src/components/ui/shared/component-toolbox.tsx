@@ -191,7 +191,7 @@ export const ComponentToolbox: React.FC<ComponentToolboxProps> = ({ onComponentC
       try {
         window.dispatchEvent(new CustomEvent('tldraw:create_mermaid_stream', { detail: {} }));
         return;
-      } catch {}
+      } catch { }
     }
     onComponentCreate(componentType);
   };
@@ -212,6 +212,29 @@ export const ComponentToolbox: React.FC<ComponentToolboxProps> = ({ onComponentC
             />
           );
         })}
+
+        {/* Infographic Widget Trigger */}
+        <TooltipProvider delayDuration={150}>
+          <Tooltip content="Infographic Generator" side="left" className="duration-300">
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => {
+                onComponentCreate?.('infographic');
+              }}
+              onPointerDown={stopPointerPropagation}
+              className={cn(
+                'group h-9 w-9 select-none p-0 rounded-md border border-border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 transition-colors mt-2',
+                isDark ? 'bg-zinc-900 text-white' : 'bg-white text-black',
+                isDark ? 'dark:!hover:bg-indigo-400/25' : '!hover:bg-indigo-100',
+                isDark ? 'dark:hover:border-indigo-400/60' : 'hover:border-indigo-300',
+                isDark ? '!hover:text-white' : '!hover:text-black',
+              )}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 text-current"><rect width="18" height="18" x="3" y="3" rx="2" ry="2" /><circle cx="9" cy="9" r="2" /><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" /></svg>
+            </Button>
+          </Tooltip>
+        </TooltipProvider>
       </div>
     </div>
   );

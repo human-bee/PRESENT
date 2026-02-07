@@ -1,143 +1,37 @@
 'use client';
 
-import { z } from 'zod';
-import { useCallback, useEffect, useId, useState, useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useComponentRegistration } from '@/lib/component-registry';
 import { cn } from '@/lib/utils';
-import { LoadingState } from '@/lib/with-progressive-loading';
-import { LoadingWrapper, SkeletonPatterns, Skeleton } from '@/components/ui/shared/loading-states';
-import { useComponentSubAgent, SubAgentPresets } from '@/lib/component-subagent';
+import { LoadingWrapper } from '@/components/ui/shared/loading-states';
+import { useComponentSubAgent } from '@/lib/component-subagent';
+import { useCanvasContext } from '@/lib/hooks/use-canvas-context';
+import { LinearMcpClient } from '@/lib/linear-mcp-client';
 
-/* --------------------------------------------------------------------------
- * Schema
- * --------------------------------------------------------------------------*/
+import {
+  linearKanbanSchema,
+  type LinearKanbanProps,
+  type LinearStatus,
+  type LoadEvent,
+  type LoadStatus,
+  type ExtendedKanbanState,
+  type KanbanColumn,
+  humanizeLoadStep,
+  useLinearApiKey,
+  useLinearSync,
+  useLinearDataEnricher,
+} from '@/lib/linear';
 
-export const linearKanbanSchema = z.object({
-  title: z.string().default('Linear Kanban Board (v2)').describe('Board title'),
-  teams: z
-    .array(
-      z.object({
-        id: z.string(),
-        name: z.string(),
-      }),
-    )
-    .optional()
-    .describe('Linear teams available to switch between'),
-  statuses: z
-    .array(
-      z.object({
-        id: z.string(),
-        type: z.string(),
-        name: z.string(),
-      }),
-    )
-    .optional()
-    .describe('Status definitions for the workflow'),
-  issues: z
-    .array(
-      z.object({
-        id: z.string(),
-        identifier: z.string(),
-        title: z.string(),
-        status: z.string(),
-        updatedAt: z.string(),
-        priority: z.object({ value: z.number(), name: z.string() }).optional(),
-        labels: z.array(z.string()).optional(),
-        project: z.string().optional(),
-        assignee: z.string().optional(),
-      }),
-    )
-    .optional()
-    .describe('Initial issues to render on the board'),
-});
+import { useKanbanDragDrop } from './use-kanban-drag-drop';
+import { KanbanColumnComponent } from './linear-kanban-column';
+import { IssueDetailModal, type Comment } from './linear-kanban-modal';
+import { KanbanSkeleton } from './linear-kanban-skeleton';
 
-export type LinearKanbanProps = z.infer<typeof linearKanbanSchema> & {
-  __custom_message_id?: string;
-  className?: string;
-};
+export { linearKanbanSchema };
+export type { LinearKanbanProps };
 
-/* --------------------------------------------------------------------------
- * Component State (managed by custom)
- * --------------------------------------------------------------------------*/
-
-type KanbanState = {
-  selectedTeam: string;
-  issues: NonNullable<LinearKanbanProps['issues']>;
-  draggedIssue: string | null; // issue id
-  pendingUpdates: Array<{
-    id: number;
-    issueId: string;
-    issueIdentifier: string;
-    fromStatus: string;
-    toStatus: string;
-    statusId: string;
-    timestamp: string;
-  }>;
-  updateMessage: string;
-};
-
-/* --------------------------------------------------------------------------
- * Default Example Data (used if none provided)
- * --------------------------------------------------------------------------*/
-
-const defaultTeams = [
-  { id: '671e5484-202d-44f5-afdf-4bc02e8db8f3', name: 'Personal/Biz Ops.' },
-  { id: '70fa4084-3cc0-40ad-a5b4-bf092959bfd2', name: 'Prototypes' },
-  { id: '3f3b9363-ba24-428c-85f7-46dc1e365104', name: 'Content Marketing' },
-];
-
-const defaultStatuses = [
-  { id: '1f3e5996-0edc-49bc-b76f-6f92e66e2a64', type: 'backlog', name: 'Backlog' },
-  { id: '4ef935e6-73a5-48ac-a19f-69ebcabaee28', type: 'unstarted', name: 'Todo' },
-  { id: '0faff75f-ce2d-49ff-b67b-ef15f036f8d1', type: 'started', name: 'In Progress' },
-  { id: '760c96e6-a68f-453c-a6ce-7b8ab7ac050d', type: 'started', name: 'Delegate to Agent' },
-  { id: '7be8e2c9-3504-4cb1-8e75-ae1c6981a2f2', type: 'started', name: 'Blocked' },
-  { id: '42346112-11d6-4c24-b3bd-064bc6db0028', type: 'started', name: 'Review Required' },
-  { id: 'e48d006e-4510-4a16-9204-403d0807154e', type: 'completed', name: 'Done' },
-];
-
-/* Fallback columns if no statuses provided */
-const fallbackColumns = [
-  'Backlog',
-  'Todo',
-  'In Progress',
-  'Delegate to Agent',
-  'Blocked',
-  'Review Required',
-  'Done',
-].map((c, index) => ({ id: c, title: c, key: `fallback-${index}-${c}` }));
-
-/* --------------------------------------------------------------------------
- * Helper functions
- * --------------------------------------------------------------------------*/
-
-const getPriorityColor = (priority?: { value: number; name: string }) => {
-  if (!priority) return 'bg-gray-100 border-gray-300';
-  switch (priority.value) {
-    case 1:
-      return 'bg-red-100 border-red-300 border-l-4 border-l-red-500'; // Urgent
-    case 2:
-      return 'bg-orange-100 border-orange-300 border-l-4 border-l-orange-500'; // High
-    case 3:
-      return 'bg-yellow-100 border-yellow-300 border-l-4 border-l-yellow-500'; // Medium
-    case 4:
-      return 'bg-green-100 border-green-300 border-l-4 border-l-green-500'; // Low
-    default:
-      return 'bg-gray-100 border-gray-300';
-  }
-};
-
-const labelColors: Record<string, string> = {
-  Work: 'bg-blue-100 text-blue-800',
-  Personal: 'bg-purple-100 text-purple-800',
-  Social: 'bg-green-100 text-green-800',
-};
-
-const getLabelColor = (label: string) => labelColors[label] || 'bg-gray-100 text-gray-800';
-
-/* --------------------------------------------------------------------------
- * Component Implementation
- * --------------------------------------------------------------------------*/
+const defaultTeams: { id: string; name: string }[] = [];
+const defaultStatuses: { id: string; type: string; name: string }[] = [];
 
 export default function LinearKanbanBoard({
   title = 'Linear Kanban Board',
@@ -147,447 +41,322 @@ export default function LinearKanbanBoard({
   __custom_message_id,
   className,
 }: LinearKanbanProps) {
-  /* 1. Stable unique id for custom state */
-  const instanceId = useId();
+  const fallbackMessageIdRef = useRef<string>();
+  if (!fallbackMessageIdRef.current) {
+    fallbackMessageIdRef.current = `linear-kanban-${crypto.randomUUID()}`;
+  }
+  const messageId = (__custom_message_id?.trim() || fallbackMessageIdRef.current)!;
+  const { sessionId } = useCanvasContext(); // Get room/session for context documents
 
-  // Derive a STABLE messageId that remains identical for this component tree
-  const messageId = __custom_message_id || instanceId;
-
-  /* Progressive Loading with Sub-Agent */
-  const [subAgentError, setSubAgentError] = useState<Error | null>(null);
-
-  // Memoize sub-agent config to prevent re-creation
-  const subAgentConfig = useMemo(
-    () => ({
-      ...SubAgentPresets.kanban,
-      dataEnricher: (context: any, tools: any) => {
-        console.log('[LinearKanban] dataEnricher called', { context, toolsAvailable: Object.keys(tools || {}) });
-
-        // If we already have initial issues, skip MCP calls
-        if (initialIssues && initialIssues.length > 0) {
-          console.log('[LinearKanban] Skipping MCP call, using initial issues');
-          return [];
-        }
-
-        if (!tools.linear) {
-          console.warn('[LinearKanban] Linear tool not available in tools object');
-          return [];
-        }
-
-        console.log('[LinearKanban] Executing linear.list_issues');
-        // Otherwise, fetch data via MCP
-        return [
-          tools.linear?.execute({
-            action: 'list_issues',
-            teamName: context.requestedTeam,
-            includeCompleted: context.showCompleted,
-          }),
-        ];
-      },
-    }),
-    [initialIssues],
-  );
-
-  const subAgent = useComponentSubAgent(subAgentConfig);
-
-  const loadingState = subAgent.loadingState;
-
-  /* 2. Use enriched data from sub-agent if available */
-  const linearData = subAgent.enrichedData.linear || {};
-  const enrichedIssues = linearData.issues || initialIssues || [];
-
-  /* 3. Local component state */
-  const [state, setState] = useState<KanbanState>({
+  const [state, setState] = useState<ExtendedKanbanState>({
     selectedTeam: teams[0]?.id ?? '',
-    issues: enrichedIssues,
+    selectedProject: undefined,
+    issues: initialIssues || [],
     draggedIssue: null,
     pendingUpdates: [],
     updateMessage: '',
+    selectedIssue: null,
+    comments: {},
+    activeDropColumn: null,
+    dropIndicator: null,
+    linearApiKey: '',
+    availableTeams: [],
+    availableStatuses: [],
+    availableProjects: [],
   });
 
-  // Sync enriched data to local state when it arrives
-  useEffect(() => {
-    if (linearData.issues && linearData.issues.length > 0) {
-      setState((prev) => ({
-        ...prev,
-        issues: linearData.issues,
-      }));
-    }
-  }, [linearData.issues]);
+  const [loadStatus, setLoadStatus] = useState<LoadStatus>({ step: 'idle', message: 'Waiting to connect…', lastUpdated: Date.now() });
+  const [events, setEvents] = useState<LoadEvent[]>([]);
 
-  /* 3. AI patch handler */
-  const handleAIUpdate = useCallback(
-    (patch: Partial<KanbanState>) => {
-      if (!state) return;
-      setState({ ...state, ...patch });
-    },
-    [state, setState],
-  );
-
-  /* 4. Component registration for update_component */
-  useComponentRegistration(
-    messageId,
-    'LinearKanbanBoard',
-    { title, teamId: state?.selectedTeam },
-    'default',
-    handleAIUpdate,
-  );
-
-  // Only dispatch showComponent if we are the ORIGINAL instance (i.e., not already rendered by CanvasSpace)
-  useEffect(() => {
-    // Avoid dispatching if __custom_message_id was provided (already under CanvasSpace)
-    if (__custom_message_id) return;
-
-    window.dispatchEvent(
-      new CustomEvent('custom:showComponent', {
-        detail: {
-          messageId,
-          component: (
-            <LinearKanbanBoard
-              __custom_message_id={messageId}
-              title={title}
-              teams={teams}
-              statuses={statuses}
-              issues={state?.issues}
-            />
-          ),
-        },
-      }),
-    );
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  const pushEvent = useCallback((update: Omit<LoadEvent, 'ts'>) => {
+    const evt: LoadEvent = { ...update, ts: Date.now() };
+    setEvents((prev) => [evt, ...prev].slice(0, 20));
+    setLoadStatus({ step: update.phase, message: update.message, lastUpdated: Date.now() });
   }, []);
 
-  /* -------------------------------------------- */
-  if (!state) return null; // state not initialised yet
-
-  /* Derived helpers */
-  // Build columns dynamically from statuses if provided; otherwise use fallback
-  const columns = (statuses?.length ? statuses : fallbackColumns).map((s: any, index: number) => {
-    if (typeof s === 'string') return { id: s, title: s, key: `col-${index}-${s}` };
-    return { id: s.name || s.id, title: s.name || s.id, key: `col-${index}-${s.id || s.name}` };
+  const apiKeyHook = useLinearApiKey({
+    onSave: () => pushEvent({ phase: 'starting', message: 'Saved API key. Reloading Linear…' }),
+    onClear: () => pushEvent({ phase: 'idle', message: 'API key cleared' }),
   });
 
-  // Normalise status comparison to handle slight variations (spaces, case)
+  useEffect(() => {
+    setState(prev => ({ ...prev, linearApiKey: apiKeyHook.apiKey }));
+  }, [apiKeyHook.apiKey]);
+
+  const linearSync = useLinearSync({
+    apiKey: state.linearApiKey,
+    teamId: state.selectedTeam,
+    pendingUpdates: state.pendingUpdates,
+    onStart: (count) => setState(prev => ({ ...prev, updateMessage: `Syncing ${count} updates to Linear...` })),
+    onSuccess: (count) => setState(prev => ({ ...prev, pendingUpdates: [], updateMessage: `✓ Synced ${count} update${count !== 1 ? 's' : ''} to Linear` })),
+    onPartialSuccess: (success, fail) => setState(prev => ({ ...prev, pendingUpdates: prev.pendingUpdates.slice(success), updateMessage: `Synced ${success}, failed ${fail}. Check console.` })),
+  });
+
+  const subAgentConfig = useLinearDataEnricher({ apiKey: state.linearApiKey, teamId: state.selectedTeam, pushEvent });
+  const subAgent = useComponentSubAgent(subAgentConfig);
+
+  useEffect(() => {
+    const linearResult = subAgent.enrichedData.linear as any;
+    if (!linearResult?.linearBoard) return;
+    const board = linearResult.linearBoard;
+    setState(prev => ({
+      ...prev,
+      issues: board.issues?.length ? board.issues : prev.issues,
+      availableTeams: board.teams || prev.availableTeams,
+      availableStatuses: board.statuses || prev.availableStatuses,
+      selectedTeam: board.selectedTeamId || prev.selectedTeam,
+    }));
+    if (linearResult.loadStatus) setLoadStatus(linearResult.loadStatus);
+  }, [subAgent.enrichedData.linear]);
+
+  const effectiveStatuses = useMemo(() => {
+    if (state.availableStatuses?.length > 0) return state.availableStatuses;
+    if (statuses?.length > 0) return statuses;
+    const seen = new Map<string, LinearStatus>();
+    state.issues.forEach((issue: any) => {
+      const name = issue.status || issue.state?.name || 'Unknown';
+      const id = (issue.statusId && issue.statusId.includes('-')) ? issue.statusId : issue.state?.id || name;
+      if (!seen.has(id)) seen.set(id, { id, name, type: 'unknown' });
+    });
+    return Array.from(seen.values());
+  }, [statuses, state.issues, state.availableStatuses]);
+
+  const columns: KanbanColumn[] = effectiveStatuses.map((s: any, i: number) => {
+    if (typeof s === 'string') return { id: s, title: s, key: `col-${i}-${s}` };
+    return { id: s.id || s.name, title: s.name || s.id, key: `col-${i}-${s.id || s.name}` };
+  });
+
   const canon = (str: string) => str.toLowerCase().replace(/\s+/g, '');
-
   const getIssuesForColumn = (columnId: string) =>
-    state.issues.filter((i) => canon(i.status) === canon(columnId));
-
-  /* Event handlers (local only, no Linear API yet) */
-  const handleDragStart = (e: React.DragEvent<HTMLDivElement>, issueId: string) => {
-    setState({ ...state, draggedIssue: issueId });
-    e.dataTransfer.effectAllowed = 'move';
-  };
-
-  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-  };
-
-  const handleDrop = (e: React.DragEvent<HTMLDivElement>, newStatus: string) => {
-    e.preventDefault();
-
-    const dragged = state.issues.find((i) => i.id === state.draggedIssue);
-    if (!dragged || dragged.status === newStatus) {
-      setState({ ...state, draggedIssue: null });
-      return;
-    }
-
-    const statusObj = statuses.find((s) => s.name === newStatus);
-    if (!statusObj) {
-      setState({
-        ...state,
-        updateMessage: `❌ Error: Status "${newStatus}" not found`,
-        draggedIssue: null,
-      });
-      return;
-    }
-
-    // Optimistic UI update
-    const updatedIssues = state.issues.map((i) =>
-      i.id === dragged.id ? { ...i, status: newStatus } : i,
-    );
-
-    const updateRequest = {
-      id: Date.now(),
-      issueId: dragged.id,
-      issueIdentifier: dragged.identifier,
-      fromStatus: dragged.status,
-      toStatus: newStatus,
-      statusId: statusObj.id,
-      timestamp: new Date().toISOString(),
-    };
-
-    setState({
-      ...state,
-      issues: updatedIssues,
-      draggedIssue: null,
-      pendingUpdates: [...state.pendingUpdates, updateRequest],
-      updateMessage: `📝 Queued update: ${dragged.identifier} → ${newStatus} (${state.pendingUpdates.length + 1} pending)`,
+    state.issues.filter((i) => {
+      const candidates = [i.statusId, i.status, (i as any).state?.id, (i as any).state?.name].filter(Boolean).map((v) => canon(String(v)));
+      return candidates.includes(canon(columnId));
     });
 
-    // Clear message after delay
-    setTimeout(() => {
-      setState((s) => (s ? { ...s, updateMessage: '' } : s));
-    }, 3000);
-  };
+  const handleStateChange = useCallback((updates: Partial<ExtendedKanbanState>) => {
+    setState(prev => {
+      const newState = { ...prev, ...updates };
+      if (updates.pendingUpdates && prev.pendingUpdates) newState.pendingUpdates = [...prev.pendingUpdates, ...updates.pendingUpdates];
+      return newState;
+    });
+  }, []);
 
-  const clearPendingUpdates = () => setState({ ...state, pendingUpdates: [] });
+  const dnd = useKanbanDragDrop({ issues: state.issues, effectiveStatuses, draggedIssue: state.draggedIssue, dropIndicator: state.dropIndicator, activeDropColumn: state.activeDropColumn, onStateChange: handleStateChange });
 
-  const copyPendingUpdates = () => {
-    const text = state.pendingUpdates
-      .map((u) => `${u.issueIdentifier}: ${u.fromStatus} → ${u.toStatus} (stateId: ${u.statusId})`)
-      .join('\n');
-    navigator.clipboard.writeText(text);
-    setState({ ...state, updateMessage: '📋 Copied pending updates to clipboard' });
-    setTimeout(() => setState((s) => (s ? { ...s, updateMessage: '' } : s)), 2000);
-  };
+  const mcpClientRef = useRef<LinearMcpClient | null>(null);
+  const mcpClientKeyRef = useRef<string>('');
+  const getMcpClient = useCallback(() => {
+    const key = state.linearApiKey?.trim() || '';
+    if (!key) return null;
+    if (!mcpClientRef.current || mcpClientKeyRef.current !== key) {
+      mcpClientRef.current = new LinearMcpClient(key);
+      mcpClientKeyRef.current = key;
+    }
+    return mcpClientRef.current;
+  }, [state.linearApiKey]);
 
-  /* Custom Kanban Skeleton */
-  const kanbanSkeleton = (
-    <div className="p-6 bg-gray-50">
-      <div className="mb-6">
-        <Skeleton className="h-10 w-64 mb-4" />
-        <Skeleton className="h-8 w-32" />
-      </div>
-      <div className="flex gap-6 overflow-x-auto pb-4">
-        {[1, 2, 3, 4].map((i) => (
-          <div key={i} className="flex-shrink-0 w-80">
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200">
-              <div className="p-4 border-b border-gray-200 bg-gray-50 rounded-t-lg">
-                <Skeleton className="h-5 w-24" />
-              </div>
-              <div className="p-4 space-y-3">
-                <Skeleton className="h-24" />
-                <Skeleton className="h-24" />
-                <Skeleton className="h-24" />
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
+  const executeLinearMcpTool = useCallback(async (toolName: string, args: Record<string, unknown>) => {
+    const client = getMcpClient();
+    if (!client) {
+      throw new Error('Linear API key missing');
+    }
+    const normalizedTool = String(toolName || '').trim().replace(/^mcp_/, '');
+    return await client.executeAction(normalizedTool, args);
+  }, [getMcpClient]);
 
-  /* UI */
+  const processInstruction = useCallback(async (instruction: string) => {
+    try {
+      handleStateChange({ updateMessage: '🔄 Processing...' });
+
+      const response = await fetch('/api/ai/linear-steward', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          instruction,
+          context: { issues: state.issues, hasPendingUpdates: state.pendingUpdates.length > 0 },
+          room: sessionId, // Pass room for context document access
+        }),
+      });
+
+      if (!response.ok) {
+        handleStateChange({ updateMessage: '❌ Failed to process instruction' });
+        return;
+      }
+
+      const data = await response.json();
+      if (data?.status === 'error') {
+        handleStateChange({ updateMessage: `❌ ${data.error || 'Error processing instruction'}` });
+        return;
+      }
+      const action = (data?.action || data) as any;
+
+      if (!action || action.kind === 'noOp') {
+        handleStateChange({ updateMessage: action?.reason || 'No action taken' });
+        return;
+      }
+
+      if (action.kind === 'syncPending') {
+        if (state.pendingUpdates.length > 0) {
+          linearSync.sync();
+        } else {
+          handleStateChange({ updateMessage: 'No pending updates to sync' });
+        }
+        return;
+      }
+
+      if (action.kind === 'moveIssue' && action.issueId && action.toStatus) {
+        dnd.queueStatusChange(action.issueId, action.toStatus);
+        handleStateChange({ updateMessage: `📝 Queued move: ${action.toStatus}` });
+        return;
+      }
+
+      if (!state.linearApiKey) {
+        handleStateChange({ updateMessage: '⚠️ Add a Linear API key first' });
+        return;
+      }
+
+      const selectedTeamId = state.selectedTeam || state.availableTeams?.[0]?.id || undefined;
+
+      if (action.kind === 'createMultipleIssues' && Array.isArray(action.issuesData) && action.issuesData.length > 0) {
+        handleStateChange({ updateMessage: `🚀 Creating ${action.issuesData.length} issue${action.issuesData.length === 1 ? '' : 's'} in Linear...` });
+        let createdCount = 0;
+        for (const issue of action.issuesData) {
+          const title = typeof issue?.title === 'string' ? issue.title.trim() : '';
+          const description = typeof issue?.description === 'string' ? issue.description : undefined;
+          if (!title) continue;
+          await executeLinearMcpTool('create_issue', {
+            title,
+            description,
+            ...(selectedTeamId ? { team: selectedTeamId } : {}),
+          });
+          createdCount += 1;
+        }
+        handleStateChange({ updateMessage: `✓ Created ${createdCount} issue${createdCount === 1 ? '' : 's'}` });
+        setTimeout(() => subAgent.forceReload(), 750);
+        return;
+      }
+
+      const mcpToolName = typeof action.mcpTool?.name === 'string'
+        ? action.mcpTool.name.trim().replace(/^mcp_/, '')
+        : '';
+      const mcpArgs: Record<string, unknown> = action.mcpTool?.args && typeof action.mcpTool.args === 'object'
+        ? action.mcpTool.args
+        : {};
+
+      if (mcpToolName) {
+        const hydratedArgs = { ...mcpArgs };
+        if (mcpToolName === 'create_issue') {
+          if (hydratedArgs.teamId !== undefined && hydratedArgs.team === undefined) {
+            hydratedArgs.team = hydratedArgs.teamId;
+            delete hydratedArgs.teamId;
+          }
+          if (selectedTeamId && hydratedArgs.team === undefined) {
+            hydratedArgs.team = selectedTeamId;
+          }
+        }
+        if (mcpToolName === 'update_issue') {
+          if (hydratedArgs.issueId !== undefined && hydratedArgs.id === undefined) {
+            hydratedArgs.id = hydratedArgs.issueId;
+            delete hydratedArgs.issueId;
+          }
+          if (hydratedArgs.stateId !== undefined && hydratedArgs.state === undefined) {
+            hydratedArgs.state = hydratedArgs.stateId;
+            delete hydratedArgs.stateId;
+          }
+        }
+        await executeLinearMcpTool(mcpToolName, hydratedArgs);
+        handleStateChange({ updateMessage: `✓ ${mcpToolName} completed` });
+        setTimeout(() => subAgent.forceReload(), 750);
+        return;
+      }
+
+      handleStateChange({ updateMessage: `✓ ${action.kind} completed` });
+    } catch (error) {
+      console.error('[LinearKanban] processInstruction error:', error);
+      handleStateChange({ updateMessage: '❌ Error processing instruction' });
+    }
+  }, [state.issues, state.pendingUpdates.length, state.linearApiKey, state.selectedTeam, state.availableTeams, dnd, linearSync, handleStateChange, subAgent, sessionId, executeLinearMcpTool]);
+
+  const handleRegistryUpdate = useCallback((patch: Record<string, unknown>) => {
+    if ('instruction' in patch && typeof patch.instruction === 'string') {
+      processInstruction(patch.instruction);
+    }
+  }, [processInstruction]);
+
+  useComponentRegistration(messageId, 'LinearKanbanBoard', { title, teams, statuses, issues: initialIssues }, 'canvas', handleRegistryUpdate);
+
+  const handleIssueClick = useCallback((e: React.MouseEvent, issueId: string) => { e.stopPropagation(); setState(prev => ({ ...prev, selectedIssue: issueId })); }, []);
+  const handleCloseModal = useCallback((e?: React.MouseEvent) => { e?.stopPropagation(); setState(prev => ({ ...prev, selectedIssue: null })); }, []);
+  const handleAssigneeChange = useCallback((issueId: string, newAssignee: string) => { setState(prev => ({ ...prev, issues: prev.issues.map(i => i.id === issueId ? { ...i, assignee: newAssignee } : i) })); }, []);
+  const handleAddComment = useCallback((issueId: string, text: string) => {
+    const newComment: Comment = { id: Date.now().toString(), user: 'You', text, time: 'Just now' };
+    setState(prev => ({ ...prev, comments: { ...prev.comments, [issueId]: [...(prev.comments[issueId] || []), newComment] } }));
+  }, []);
+
+  const selectedIssueData = state.selectedIssue ? state.issues.find((i) => i.id === state.selectedIssue) : null;
+  const columnWidth = Math.max(200, Math.min(320, (typeof window !== 'undefined' ? window.innerWidth : 1200) / columns.length - 32));
+
   return (
-    <LoadingWrapper
-      state={loadingState}
-      skeleton={kanbanSkeleton}
-      showLoadingIndicator={true}
-      loadingProgress={{
-        state: loadingState,
-        progress:
-          loadingState === LoadingState.SKELETON
-            ? 33
-            : loadingState === LoadingState.PARTIAL
-              ? 66
-              : 100,
-        message: subAgentError
-          ? 'Using offline data...'
-          : loadingState === LoadingState.SKELETON
-            ? 'Connecting to Linear...'
-            : loadingState === LoadingState.PARTIAL
-              ? subAgent.mcpActivity?.linear
-                ? 'Fetching issues...'
-                : 'Processing data...'
-              : 'Ready!',
-        eta:
-          loadingState === LoadingState.SKELETON
-            ? 400
-            : loadingState === LoadingState.PARTIAL
-              ? 200
-              : 0,
-      }}
-    >
-      <div className={cn('p-6 bg-gray-50 h-full overflow-auto', className)}>
-        {/* Header */}
-        <div className="mb-6">
-          <h1 className="text-3xl font-bold text-gray-900 mb-4">{title}</h1>
-
-          <div className="flex items-center gap-4 mb-4">
-            <label className="text-sm font-medium text-gray-700">Team:</label>
-            <select
-              value={state.selectedTeam}
-              onChange={(e) => setState({ ...state, selectedTeam: e.target.value })}
-              className="border border-gray-300 rounded px-3 py-1 text-sm bg-white"
-            >
-              {teams.map((team) => (
-                <option key={team.id} value={team.id}>
-                  {team.name}
-                </option>
-              ))}
-            </select>
-            {state.pendingUpdates.length > 0 && (
-              <button
-                onClick={clearPendingUpdates}
-                className="bg-red-600 text-white px-3 py-1 rounded text-sm hover:bg-red-700 transition-colors"
-              >
-                Clear Queue ({state.pendingUpdates.length})
-              </button>
-            )}
+    <LoadingWrapper state={subAgent.loadingState} skeleton={<KanbanSkeleton />}>
+      <div className={cn('p-6 bg-gray-50 min-h-[500px] rounded-lg', className)}>
+        <div className="flex justify-between items-start mb-6">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">{title}</h1>
+            <p className="text-sm text-gray-500">{state.issues.length} issues across {columns.length} columns</p>
           </div>
-
-          {state.updateMessage && (
-            <div className="mt-3 bg-blue-100 border border-blue-300 text-blue-800 px-4 py-2 rounded">
-              {state.updateMessage}
-            </div>
-          )}
-
-          {state.pendingUpdates.length > 0 && (
-            <div className="mt-4 bg-orange-50 border border-orange-200 rounded-lg p-4">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="font-semibold text-orange-800">
-                  🚀 Pending Linear Updates ({state.pendingUpdates.length})
-                </h3>
-                <button
-                  onClick={copyPendingUpdates}
-                  className="text-xs bg-orange-600 text-white px-2 py-1 rounded hover:bg-orange-700"
-                >
-                  Copy Details
-                </button>
-              </div>
-              <div className="space-y-2 mb-3">
-                {state.pendingUpdates.slice(-3).map((update) => (
-                  <div
-                    key={update.id}
-                    className="text-sm text-orange-700 bg-orange-100 px-3 py-2 rounded"
-                  >
-                    <strong>{update.issueIdentifier}:</strong> {update.fromStatus} →{' '}
-                    {update.toStatus}
-                  </div>
-                ))}
-                {state.pendingUpdates.length > 3 && (
-                  <div className="text-xs text-orange-600">
-                    ... and {state.pendingUpdates.length - 3} more updates
-                  </div>
-                )}
-              </div>
-              <div className="text-sm text-orange-700">
-                💡 <strong>To sync with Linear:</strong> Ask Claude to "process my pending Kanban
-                updates"
-              </div>
-            </div>
-          )}
+          <span className={`px-2 py-1 text-xs rounded ${loadStatus.step === 'ready' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}>
+            {humanizeLoadStep(loadStatus.step)}
+          </span>
         </div>
 
-        {/* Board */}
-        <div className="flex gap-4 overflow-x-auto pb-4" style={{ minHeight: '400px' }}>
-          {columns.map((column) => {
-            const columnIssues = getIssuesForColumn(column.id);
-            const columnWidth = Math.max(
-              200,
-              Math.min(
-                320,
-                (typeof window !== 'undefined' ? window.innerWidth : 1200) / columns.length - 32,
-              ),
-            );
-            return (
-              <div key={column.key} className="flex-shrink-0" style={{ width: columnWidth + 'px' }}>
-                <div className="bg-white rounded-lg shadow-sm border border-gray-200 h-fit">
-                  <div className="p-4 border-b border-gray-200 bg-gray-50 rounded-t-lg">
-                    <h2 className="font-semibold text-gray-900 text-sm flex items-center justify-between">
-                      <span>{column.title}</span>
-                      <span className="bg-gray-200 text-gray-700 px-2 py-1 rounded-full text-xs font-medium">
-                        {columnIssues.length}
-                      </span>
-                    </h2>
-                  </div>
-                  <div
-                    className="p-4 min-h-[200px] space-y-3"
-                    onDragOver={handleDragOver}
-                    onDrop={(e) => handleDrop(e, column.id)}
-                  >
-                    {columnIssues.map((issue) => (
-                      <div
-                        key={issue.id}
-                        draggable
-                        onDragStart={(e) => handleDragStart(e, issue.id)}
-                        className={`p-3 bg-white border-2 rounded-lg shadow-sm hover:shadow-md transition-all cursor-move transform hover:scale-[1.02] ${state.draggedIssue === issue.id ? 'opacity-50 rotate-2 scale-105' : ''
-                          } ${getPriorityColor(issue.priority)}`}
-                      >
-                        <div className="flex items-start justify-between mb-2">
-                          <span className="text-xs font-mono text-gray-500 bg-gray-100 px-2 py-1 rounded">
-                            {issue.identifier}
-                          </span>
-                          {issue.priority && (
-                            <span
-                              className={`text-xs font-semibold px-2 py-1 rounded ${issue.priority.value === 1
-                                ? 'bg-red-200 text-red-800'
-                                : issue.priority.value === 2
-                                  ? 'bg-orange-200 text-orange-800'
-                                  : 'bg-gray-200 text-gray-800'
-                                }`}
-                            >
-                              {issue.priority.name}
-                            </span>
-                          )}
-                        </div>
-                        <h3 className="font-medium text-gray-900 text-sm mb-3 leading-tight">
-                          {issue.title}
-                        </h3>
-                        {issue.labels && issue.labels.length > 0 && (
-                          <div className="flex flex-wrap gap-1 mb-2">
-                            {issue.labels.map((label, labelIndex) => (
-                              <span
-                                key={`${issue.id}-label-${labelIndex}-${label}`}
-                                className={`px-2 py-1 rounded text-xs font-medium ${getLabelColor(label)}`}
-                              >
-                                {label}
-                              </span>
-                            ))}
-                          </div>
-                        )}
-                        {issue.project && (
-                          <div className="text-xs text-gray-600 mt-2 truncate flex items-center">
-                            <span className="mr-1">📁</span>
-                            {issue.project}
-                          </div>
-                        )}
-                        {issue.assignee && (
-                          <div className="text-xs text-gray-600 mt-1 flex items-center">
-                            <span className="mr-1">👤</span>
-                            {issue.assignee}
-                          </div>
-                        )}
-                        <div className="text-xs text-gray-500 mt-2 border-t border-gray-100 pt-2">
-                          Updated:{' '}
-                          {new Date(issue.updatedAt).toLocaleDateString('en-US', {
-                            month: 'short',
-                            day: 'numeric',
-                            hour: '2-digit',
-                            minute: '2-digit',
-                          })}
-                        </div>
-                      </div>
-                    ))}
-                    {columnIssues.length === 0 && (
-                      <div className="text-gray-400 text-center py-8 text-sm">
-                        No issues in {column.title}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Drag Overlay */}
-        {state.draggedIssue && (
-          <div className="fixed bottom-4 right-4 bg-blue-600 text-white px-4 py-2 rounded-lg shadow-lg flex items-center">
-            <span className="mr-2">🚀</span>
-            Dragging: {state.issues.find((i) => i.id === state.draggedIssue)?.identifier}
+        {!apiKeyHook.hasApiKey ? (
+          <div className="mb-6 p-4 bg-white rounded-lg border border-gray-200">
+            <label className="block text-sm font-medium text-gray-700 mb-2">Linear API Key</label>
+            <div className="flex gap-2">
+              <input type={apiKeyHook.showApiKey ? 'text' : 'password'} value={apiKeyHook.keyDraft} onChange={(e) => apiKeyHook.setKeyDraft(e.target.value)} placeholder="lin_api_..." className="flex-1 px-3 py-2 border rounded-md text-sm" />
+              <button onClick={() => apiKeyHook.setShowApiKey(!apiKeyHook.showApiKey)} className="px-3 py-2 border rounded-md text-sm text-gray-600 hover:bg-gray-50">{apiKeyHook.showApiKey ? 'Hide' : 'Show'}</button>
+              <button onClick={apiKeyHook.saveApiKey} className="px-4 py-2 bg-blue-600 text-white rounded-md text-sm hover:bg-blue-700">Save</button>
+            </div>
+            <p className="text-xs text-gray-500 mt-2">Get your API key from <a href="https://linear.app/settings/api" target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">Linear Settings → API</a></p>
+          </div>
+        ) : (
+          <div className="mb-4 flex items-center gap-2 text-sm">
+            <span className="text-green-600">✓ API Key configured</span>
+            <button onClick={apiKeyHook.clearApiKey} className="text-gray-500 hover:text-red-600 underline text-xs">Change key</button>
           </div>
         )}
 
-        <div className="mt-8 text-center text-sm text-gray-500">
-          <p>
-            🚀 <strong>Hybrid Linear Integration:</strong> Drag to queue updates, then ask Claude to
-            sync with Linear
-          </p>
-          <p className="mt-1">This approach provides smooth UI with reliable backend sync</p>
+        {state.updateMessage && <div className="mb-4 bg-blue-100 border border-blue-300 text-blue-800 px-4 py-2 rounded text-sm">{state.updateMessage}</div>}
+
+        {state.pendingUpdates.length > 0 && (
+          <div className="mb-6 bg-orange-50 border border-orange-200 rounded-lg p-4">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-semibold text-orange-800">🚀 Pending Linear Updates ({state.pendingUpdates.length})</h3>
+              <div className="flex gap-2">
+                <button onClick={linearSync.sync} disabled={linearSync.isSyncing || !apiKeyHook.hasApiKey} className="text-xs bg-green-600 text-white px-3 py-1 rounded hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed">{linearSync.isSyncing ? 'Syncing...' : 'Send to Linear'}</button>
+                <button onClick={() => setState(prev => ({ ...prev, pendingUpdates: [], updateMessage: 'Cleared pending updates' }))} disabled={linearSync.isSyncing} className="text-xs bg-red-600 text-white px-2 py-1 rounded hover:bg-red-700 disabled:opacity-50">Clear</button>
+              </div>
+            </div>
+            <div className="space-y-2">
+              {state.pendingUpdates.slice(-3).map((update) => <div key={update.id} className="text-sm text-orange-700 bg-orange-100 px-3 py-2 rounded"><strong>{update.issueIdentifier}:</strong> {update.fromStatus} → {update.toStatus}</div>)}
+              {state.pendingUpdates.length > 3 && <div className="text-xs text-orange-600">... and {state.pendingUpdates.length - 3} more updates</div>}
+            </div>
+          </div>
+        )}
+
+        {loadStatus.isRateLimited && <div className="mb-4 p-3 bg-amber-50 border border-amber-300 rounded-lg text-amber-800 text-sm">⏱️ Rate limited by Linear. Wait ~1 hour before refreshing.</div>}
+
+        <div ref={dnd.boardRef as any} className="flex gap-4 overflow-x-auto pb-4" style={{ minHeight: '400px' }} onDragOverCapture={dnd.handleBoardDragOver} onDropCapture={dnd.handleBoardDrop}>
+          {columns.map((column) => (
+            <KanbanColumnComponent key={column.key} column={column} issues={getIssuesForColumn(column.id)} draggedIssue={state.draggedIssue} dropIndicator={state.dropIndicator} isActiveDropColumn={state.activeDropColumn === column.id} columnWidth={columnWidth} onDragOver={dnd.handleDragOver} onDrop={dnd.handleDrop} onDragStart={dnd.handleDragStart} onDragOverCard={dnd.handleDragOverCard} onDragEnd={dnd.handleDragEnd} onIssueClick={handleIssueClick} />
+          ))}
         </div>
+
+        {state.draggedIssue && <div className="fixed bottom-4 right-4 bg-blue-600 text-white px-4 py-2 rounded-lg shadow-lg z-50">🚀 Dragging: {state.issues.find((i) => i.id === state.draggedIssue)?.identifier}</div>}
+
+        {selectedIssueData && <IssueDetailModal issue={selectedIssueData} comments={state.comments[selectedIssueData.id] || []} statuses={effectiveStatuses} onClose={handleCloseModal} onStatusChange={dnd.queueStatusChange} onAssigneeChange={handleAssigneeChange} onAddComment={handleAddComment} />}
+
+        <div className="mt-8 text-center text-sm text-gray-500">🚀 <strong>Linear Integration:</strong> Drag to queue updates.</div>
       </div>
     </LoadingWrapper>
   );

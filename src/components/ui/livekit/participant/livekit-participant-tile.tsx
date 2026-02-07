@@ -43,6 +43,10 @@ export const livekitParticipantTileSchema = z.object({
     .optional()
     .describe('Mirror local self-view horizontally (default: true)'),
   fit: z.enum(['cover', 'contain']).optional().describe('Video object-fit policy (default: cover)'),
+  demoMode: z
+    .boolean()
+    .optional()
+    .describe('Show a simulated video feed when LiveKit is not connected (default: false)'),
   trackPreference: z
     .enum(['auto', 'camera', 'screen'])
     .optional()
@@ -70,6 +74,7 @@ export const LivekitParticipantTile = React.memo(function LivekitParticipantTile
   mirrorLocal = true,
   fit = 'cover',
   trackPreference = 'camera',
+  demoMode = false,
   onIdentityChange,
 }: LivekitParticipantTileProps) {
   const [state] = React.useState<LivekitParticipantTileState>({
@@ -90,6 +95,28 @@ export const LivekitParticipantTile = React.memo(function LivekitParticipantTile
       );
     }
   }, [participantIdentity, canvasLiveKit]);
+
+  if ((!canvasLiveKit || !canvasLiveKit.isConnected || !room) && demoMode) {
+    return (
+      <div
+        className="relative overflow-hidden rounded-lg border border-slate-800 bg-slate-950 text-white"
+        style={{ width, height, borderRadius }}
+      >
+        <div className="absolute inset-0 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900" />
+        <div className="absolute inset-0 opacity-40 bg-[radial-gradient(circle_at_20%_20%,rgba(56,189,248,0.35),transparent_45%),radial-gradient(circle_at_80%_30%,rgba(129,140,248,0.35),transparent_50%),radial-gradient(circle_at_50%_80%,rgba(16,185,129,0.2),transparent_55%)]" />
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 p-4">
+          <div className="h-12 w-12 rounded-full border border-cyan-400/60 bg-cyan-500/10 shadow-[0_0_18px_rgba(34,211,238,0.55)]" />
+          <div className="text-sm font-semibold tracking-wide">Demo Video Feed</div>
+          <div className="text-xs text-slate-300">
+            {participantIdentity ? `Speaker: ${participantIdentity}` : 'Awaiting LiveKit room'}
+          </div>
+        </div>
+        <div className="absolute bottom-3 left-3 rounded-full bg-cyan-400/20 px-2 py-1 text-[10px] uppercase tracking-[0.2em] text-cyan-200">
+          Simulated
+        </div>
+      </div>
+    );
+  }
 
   if (!canvasLiveKit || !canvasLiveKit.isConnected || !room) {
     return (
@@ -126,11 +153,38 @@ export const LivekitParticipantTile = React.memo(function LivekitParticipantTile
 
   // Auto-selection logic: If no identity is assigned, pick the first remote participant
   if (!targetIdentity) {
-    const firstRemote = participants.find(p => !p.isLocal);
-    if (firstRemote) {
-      targetIdentity = firstRemote.identity;
+    const isAgentParticipant = (p: any) => {
+      try {
+        const kind = String(p?.kind ?? '').toLowerCase();
+        if (kind === 'agent') return true;
+        const identity = String(p?.identity || '').toLowerCase();
+        const metadata = String(p?.metadata || '').toLowerCase();
+        return (
+          identity.startsWith('agent-') ||
+          identity.includes('voice-agent') ||
+          identity === 'voiceagent' ||
+          metadata.includes('voice-agent') ||
+          metadata.includes('voiceagent')
+        );
+      } catch {
+        return false;
+      }
+    };
+
+    // Prefer local self-view by default.
+    if (localParticipant) {
+      targetIdentity = localParticipant.identity;
       autoSelected = true;
-    } else if (localParticipant) {
+    } else {
+      // Otherwise, prefer a non-agent remote participant.
+      const firstHumanRemote = participants.find((p: any) => !p.isLocal && !isAgentParticipant(p));
+      const firstRemote = firstHumanRemote ?? participants.find((p) => !p.isLocal);
+      if (firstRemote) {
+        targetIdentity = firstRemote.identity;
+        autoSelected = true;
+      }
+    }
+    if (!targetIdentity && localParticipant) {
       targetIdentity = localParticipant.identity;
       autoSelected = true;
     }

@@ -97,7 +97,7 @@ const PROMPT_LINES = [
   '\t- When nesting shapes (cards inside frames, etc.), size the container or children so they don’t overlap unintentionally.',
   '\t- For labeled flowchart/geo blocks, keep sides ≳200px unless the user requests a tighter fit.',
   '- When drawing arrows between shapes:',
-  '\t- Set fromId / toId whenever possible so bindings stay intact.',
+  '\t- Do NOT include fromId/toId in arrow props (bindings are separate records and are not part of this action contract).',
   '\t- Use the bend rules below to control curvature.',
   '\t- Before adding an arrow, check whether one already connects the same shapes; avoid duplicates.',
   '\t- Keep arrows long enough for any labels you plan to add.',

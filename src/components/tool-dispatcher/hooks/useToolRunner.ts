@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import type { Room } from 'livekit-client';
 import type { Editor } from '@tldraw/tldraw';
 import { useToolRegistry } from './useToolRegistry';
@@ -10,6 +10,7 @@ import { TOOL_STEWARD_DELAY_MS, TOOL_STEWARD_WINDOW_MS } from '../utils/constant
 import type { ToolEventsApi } from './useToolEvents';
 import { ComponentRegistry } from '@/lib/component-registry';
 import { applyEnvelope } from '@/components/tool-dispatcher/handlers/tldraw-actions';
+import { logJourneyEvent } from '@/lib/journey-logger';
 
 type ToolMetricEntry = {
   callId: string;
@@ -132,6 +133,23 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
                 window.dispatchEvent(new CustomEvent('present:tool_metrics', { detail: details }));
               } catch {}
             }
+            try {
+              logJourneyEvent({
+                eventType: 'tool_metrics',
+                source: 'dispatcher',
+                tool: entry.tool,
+                durationMs: details.dtPaintMs,
+                payload: {
+                  messageId: trimmedId,
+                  componentType: details.componentType,
+                  dtPaintMs: details.dtPaintMs,
+                  dtNetworkMs: details.dtNetworkMs,
+                  tSend: details.tSend,
+                  tArrive: details.tArrive,
+                  tPaint: details.tPaint,
+                },
+              });
+            } catch {}
             entry.loggedMessages.add(trimmedId);
             if (entry.messageIds.size === entry.loggedMessages.size) {
               metricsByCallRef.current.delete(callId);
@@ -324,7 +342,19 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
     async (tool: string, params: ToolParameters): Promise<ToolRunResult> => {
       const toolName = tool.replace(/^mcp_/, '');
       const registry = (window as any).__custom_mcp_tools || {};
-      let result: any = undefined;
+      let result: any;
+      const startedAt = Date.now();
+      let mcpError: string | undefined;
+
+      try {
+        const paramKeys = params && typeof params === 'object' ? Object.keys(params).slice(0, 8) : [];
+        logJourneyEvent({
+          eventType: 'mcp_call',
+          source: 'dispatcher',
+          tool: toolName,
+          payload: { paramKeys },
+        });
+      } catch {}
 
       const direct = (registry as any)[toolName] || (registry as any)[`mcp_${toolName}`];
       if (direct) {
@@ -332,11 +362,17 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
           result = typeof direct?.execute === 'function' ? await direct.execute(params) : await direct(params);
         } catch (error) {
           console.warn('[ToolDispatcher] direct MCP tool failed', toolName, error);
+          mcpError = error instanceof Error ? error.message : String(error);
         }
       }
 
       if (!result) {
-        result = await (window as any).callMcpTool?.(toolName, params);
+        try {
+          result = await (window as any).callMcpTool?.(toolName, params);
+        } catch (error) {
+          console.warn('[ToolDispatcher] MCP tool call failed', toolName, error);
+          mcpError = error instanceof Error ? error.message : String(error);
+        }
       }
 
       if ((!result || result?.status === 'IGNORED') && toolName === 'exa') {
@@ -354,6 +390,24 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
 
       try {
         console.log('[ToolDispatcher][mcp]', toolName, 'result:', JSON.stringify(result)?.slice(0, 2000));
+      } catch {}
+
+      try {
+        const durationMs = Math.max(0, Date.now() - startedAt);
+        const list = (result?.results || result?.items || result?.documents || []) as any[];
+        const resultCount = Array.isArray(list) ? list.length : undefined;
+        const eventType = mcpError ? 'mcp_error' : 'mcp_result';
+        logJourneyEvent({
+          eventType,
+          source: 'dispatcher',
+          tool: toolName,
+          durationMs,
+          payload: {
+            status: result?.status ?? null,
+            resultCount,
+            error: mcpError,
+          },
+        });
       } catch {}
 
       if (toolName === 'exa') {
@@ -479,7 +533,7 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
             return { status: 'ERROR', message };
           }
 
-          if (stewardEnabled && task.startsWith('canvas.')) {
+          if (stewardEnabled && (task.startsWith('canvas.') || task.startsWith('fairy.'))) {
             if (task === 'canvas.agent_prompt') {
               if (!dispatchParams.message && typeof params?.message === 'string') {
                 dispatchParams.message = params.message;
@@ -509,7 +563,7 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
                 requestId: typeof dispatchParams.requestId === 'string' ? dispatchParams.requestId : undefined,
               };
             }
-            log('dispatch_to_conductor forwarding canvas task', { task, params: dispatchParams, room: call.roomId || room?.name });
+            log('dispatch_to_conductor forwarding steward task', { task, params: dispatchParams, room: call.roomId || room?.name });
             try {
               const res = await fetch('/api/steward/runCanvas', {
                 method: 'POST',
@@ -522,7 +576,7 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
                 }),
               });
               if (!res.ok) {
-                const message = `Canvas steward dispatch failed: HTTP ${res.status}`;
+                const message = `Steward dispatch failed: HTTP ${res.status}`;
                 queue.markError(call.id, message);
                 emitError(call, message);
                 if (task === 'canvas.agent_prompt') {
@@ -530,7 +584,7 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
                 }
                 return { status: 'ERROR', message };
               }
-              const result = { status: 'SUCCESS', message: 'Dispatched canvas steward' } as ToolRunResult;
+              const result = { status: 'SUCCESS', message: 'Dispatched steward task' } as ToolRunResult;
               queue.markComplete(call.id, result.message);
               emitDone(call, result);
               if (task === 'canvas.agent_prompt') {
@@ -538,7 +592,7 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
               }
               return result;
             } catch (error) {
-              const message = `Canvas steward dispatch error: ${error instanceof Error ? error.message : String(error)}`;
+              const message = `Steward dispatch error: ${error instanceof Error ? error.message : String(error)}`;
               queue.markError(call.id, message);
               emitError(call, message);
               if (task === 'canvas.agent_prompt') {
@@ -570,6 +624,8 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
             }
 
             const body = {
+              ...(dispatchParams || {}),
+              task,
               room: targetRoom,
               componentId,
               windowMs:
@@ -596,6 +652,12 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
                   : typeof params?.intent === 'string'
                     ? params.intent
                     : task,
+              topic:
+                typeof dispatchParams.topic === 'string'
+                  ? (dispatchParams.topic as string)
+                  : typeof params?.topic === 'string'
+                    ? params.topic
+                    : undefined,
             };
 
             try {
@@ -685,7 +747,7 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
         return { status: 'ERROR', message };
       }
     },
-    [contextKey, dispatchTL, emitDone, emitError, emitRequest, emitEditorAction, log, queue, registry, runMcpTool, scheduleStewardRun, stewardEnabled],
+    [contextKey, dispatchTL, emitDone, emitError, emitRequest, emitEditorAction, log, queue, registry, runMcpTool, scheduleStewardRun, stewardEnabled, room?.name],
   );
 
   useEffect(() => {
@@ -706,6 +768,39 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
         const tool = message.payload?.tool;
         const params = message.payload?.params || {};
         const callId = message.id || `${Date.now()}`;
+        if (metricsEnabled && typeof window !== 'undefined') {
+          try {
+            const task = typeof params?.task === 'string' ? params.task : null;
+            const dispatchMessage =
+              typeof params?.params?.message === 'string'
+                ? String(params.params.message).slice(0, 160)
+                : null;
+            window.dispatchEvent(
+              new CustomEvent('present:tool_call_received', {
+                detail: {
+                  callId,
+                  tool: tool || 'unknown',
+                  task,
+                  dispatchMessage,
+                  source:
+                    typeof message.payload?.context?.source === 'string'
+                      ? message.payload.context.source
+                      : typeof message.source === 'string'
+                        ? message.source
+                        : null,
+                  roomId: typeof message.roomId === 'string' ? message.roomId : null,
+                  sentAt:
+                    typeof message.payload?.context?.timestamp === 'number'
+                      ? message.payload.context.timestamp
+                      : typeof message.timestamp === 'number'
+                        ? message.timestamp
+                        : null,
+                  receivedAt: Date.now(),
+                },
+              }),
+            );
+          } catch {}
+        }
         if (metricsEnabled) {
           const existing = metricsByCallRef.current.get(callId);
           const next: ToolMetricEntry = existing ?? {
@@ -946,7 +1041,7 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
       offTool();
       offDecision();
     };
-  }, [bus, executeToolCall, log, room, scheduleStewardRun, stewardEnabled]);
+  }, [bus, executeToolCall, log, room, scheduleStewardRun, stewardEnabled, metricsEnabled]);
 
   useEffect(() => {
     if (!stewardEnabled) return;

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Editor } from 'tldraw';
 import { useRoomContext } from '@livekit/components-react';
 import { createLiveKitBus } from '@/lib/livekit/livekit-bus';

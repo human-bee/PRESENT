@@ -1,0 +1,1582 @@
+<!doctype html>
+  <html>
+    <head>
+      <meta charset="utf-8" />
+      <title>PRESENT Wow Journey Scrapbook (2026-01-30)</title>
+      <link rel="preconnect" href="https://fonts.googleapis.com">
+      <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+      <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+      <style>
+        :root {
+          color-scheme: light;
+          --bg: #05070f;
+          --surface: rgba(12, 18, 35, 0.9);
+          --card: rgba(15, 23, 42, 0.92);
+          --accent: #38bdf8;
+          --accent-2: #a78bfa;
+          --text: #e2e8f0;
+          --muted: #94a3b8;
+          --pass: #22c55e;
+          --warn: #f59e0b;
+          --fail: #ef4444;
+        }
+        * { box-sizing: border-box; }
+        body {
+          margin: 0;
+          font-family: 'Space Grotesk', system-ui, sans-serif;
+          background:
+            radial-gradient(1200px 600px at 15% -10%, rgba(56, 189, 248, 0.35), transparent 60%),
+            radial-gradient(800px 500px at 85% 0%, rgba(167, 139, 250, 0.3), transparent 60%),
+            var(--bg);
+          color: var(--text);
+          padding: 40px 32px 80px;
+        }
+        header {
+          display: grid;
+          grid-template-columns: 1fr 280px;
+          gap: 24px;
+          align-items: start;
+        }
+        h1 { margin: 0; font-size: 32px; letter-spacing: -0.02em; }
+        h2 { margin: 36px 0 16px; font-size: 20px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+        h3 { margin: 0 0 6px; font-size: 16px; }
+        .story { font-size: 15px; color: var(--muted); margin-top: 8px; max-width: 720px; }
+        .mono { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--muted); }
+        .card {
+          background: var(--surface);
+          border: 1px solid rgba(148, 163, 184, 0.15);
+          border-radius: 16px;
+          padding: 16px 18px;
+          box-shadow: 0 16px 40px rgba(2, 6, 23, 0.55);
+        }
+        .run-card { display: flex; flex-direction: column; gap: 8px; }
+        .stat-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+          gap: 14px;
+          margin-top: 24px;
+        }
+        .stat {
+          background: var(--card);
+          border: 1px solid rgba(148, 163, 184, 0.2);
+          border-radius: 14px;
+          padding: 12px 14px;
+        }
+        .stat span { display: block; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+        .stat strong { font-size: 18px; margin-top: 6px; display: block; }
+        .pill {
+          padding: 4px 10px;
+          border-radius: 999px;
+          font-size: 11px;
+          font-weight: 700;
+          text-transform: uppercase;
+        }
+        .pill-pass { background: rgba(34, 197, 94, 0.2); color: var(--pass); }
+        .pill-warn { background: rgba(245, 158, 11, 0.2); color: var(--warn); }
+        .pill-fail { background: rgba(239, 68, 68, 0.2); color: var(--fail); }
+        .hero-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+          gap: 18px;
+        }
+        .hero-card {
+          background: var(--card);
+          border-radius: 18px;
+          overflow: hidden;
+          border: 1px solid rgba(56, 189, 248, 0.35);
+          box-shadow: 0 18px 40px rgba(15, 23, 42, 0.6);
+        }
+        .hero-card img { width: 100%; display: block; }
+        .hero-meta { padding: 12px 14px; }
+        .hero-meta p { margin: 0; font-size: 12px; color: var(--muted); }
+        .perf-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+          gap: 14px;
+          margin-bottom: 18px;
+        }
+        .perf-card {
+          background: var(--card);
+          border-radius: 14px;
+          border: 1px solid rgba(148, 163, 184, 0.2);
+          padding: 12px 14px;
+        }
+        .perf-title { font-size: 13px; font-weight: 600; }
+        .perf-meta { font-size: 12px; color: var(--muted); margin-top: 6px; }
+        .perf-bar {
+          margin-top: 10px;
+          height: 8px;
+          background: rgba(148, 163, 184, 0.2);
+          border-radius: 999px;
+          overflow: hidden;
+        }
+        .perf-bar span { display: block; height: 100%; border-radius: 999px; }
+        .bar-pass { background: linear-gradient(90deg, rgba(34, 197, 94, 0.4), rgba(34, 197, 94, 0.9)); }
+        .bar-warn { background: linear-gradient(90deg, rgba(245, 158, 11, 0.4), rgba(245, 158, 11, 0.9)); }
+        table {
+          width: 100%;
+          border-collapse: collapse;
+          font-size: 13px;
+          background: var(--card);
+          border-radius: 12px;
+          overflow: hidden;
+        }
+        th, td { padding: 10px 12px; border-bottom: 1px solid rgba(148, 163, 184, 0.12); }
+        th { text-align: left; background: rgba(15, 23, 42, 0.65); }
+        a { color: var(--accent); }
+        .section-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+          gap: 20px;
+        }
+        .transcript-list {
+          display: grid;
+          gap: 8px;
+        }
+        .transcript-row {
+          display: grid;
+          grid-template-columns: 84px 120px 1fr;
+          gap: 10px;
+          padding: 10px 12px;
+          background: rgba(15, 23, 42, 0.6);
+          border-radius: 10px;
+          border: 1px solid rgba(148, 163, 184, 0.12);
+        }
+        .transcript-time { font-size: 11px; color: var(--muted); }
+        .transcript-speaker { font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--accent); }
+        .transcript-text { font-size: 14px; }
+        .asset-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+          gap: 16px;
+        }
+        figure { margin: 0; background: var(--card); border-radius: 14px; padding: 10px; box-shadow: 0 10px 24px rgba(15, 23, 42, 0.5); }
+        figure img { width: 100%; border-radius: 12px; display: block; }
+        figcaption { font-size: 12px; color: var(--muted); margin-top: 6px; }
+        .chip-grid { display: flex; flex-wrap: wrap; gap: 10px; }
+        .chip { display: flex; align-items: center; gap: 8px; border-radius: 999px; background: rgba(56, 189, 248, 0.12); color: var(--text); padding: 6px 12px; font-size: 12px; }
+        .chip strong { color: var(--accent); font-size: 12px; }
+        ul { padding-left: 18px; color: var(--muted); }
+        .empty { color: var(--muted); }
+        .pulse-list { display: grid; gap: 8px; }
+        .pulse-row {
+          display: grid;
+          grid-template-columns: 90px 130px 160px 1fr;
+          gap: 12px;
+          padding: 10px 12px;
+          border-radius: 10px;
+          background: rgba(15, 23, 42, 0.55);
+          border: 1px solid rgba(148, 163, 184, 0.14);
+          font-size: 12px;
+        }
+        .pulse-time { color: var(--muted); font-family: 'JetBrains Mono', monospace; }
+        .pulse-type { text-transform: uppercase; letter-spacing: 0.08em; color: var(--accent-2); font-size: 11px; }
+        .pulse-tool { color: var(--accent); font-weight: 600; }
+      </style>
+    </head>
+    <body>
+      <header>
+        <div>
+          <h1>PRESENT Wow Journey Scrapbook (2026-01-30)</h1>
+          <div class="story">Debate -&gt; Verification -&gt; Memory -&gt; Visuals -&gt; Live Layout</div>
+          <div class="mono">Run ID: 20260130-034048</div>
+        </div>
+        <div class="card run-card">
+          <div class="mono">Total runtime</div>
+          <div style="font-size: 22px; font-weight: 700;">19327 ms</div>
+          <div class="mono">Latency grade</div>
+          <div style="font-size: 18px; font-weight: 600;">FAST</div>
+        </div>
+      </header>
+
+      <section class="stat-grid">
+        <div class="stat"><span>Transcript turns</span><strong>15</strong></div>
+        <div class="stat"><span>Tool calls</span><strong>10</strong></div>
+        <div class="stat"><span>Tool results</span><strong>10</strong></div>
+        <div class="stat"><span>Tool errors</span><strong>0</strong></div>
+        <div class="stat"><span>MCP calls</span><strong>1</strong></div>
+        <div class="stat"><span>MCP results</span><strong>1</strong></div>
+        <div class="stat"><span>MCP errors</span><strong>0</strong></div>
+        <div class="stat"><span>Assets captured</span><strong>19</strong></div>
+        <div class="stat"><span>Avg paint</span><strong>4 ms</strong></div>
+        <div class="stat"><span>Avg network</span><strong>0 ms</strong></div>
+        <div class="stat"><span>Tool throughput</span><strong>31/min</strong></div>
+        <div class="stat"><span>P50 paint</span><strong>0 ms</strong></div>
+        <div class="stat"><span>P90 paint</span><strong>22 ms</strong></div>
+        <div class="stat"><span>P95 paint</span><strong>22 ms</strong></div>
+      </section>
+
+      <h2>Hero moments</h2>
+      <section class="hero-grid">
+        
+        <article class="hero-card">
+          <img src="./assets/2026-01-30/20260130-034048-01-debate-scorecard.png" alt="Debate Scorecard (multi-facet view)" />
+          <div class="hero-meta">
+            <h3>Debate Scorecard (multi-facet view)</h3>
+            
+          </div>
+        </article>
+      
+
+        <article class="hero-card">
+          <img src="./assets/2026-01-30/20260130-034048-02-scorecard-updated.png" alt="Scorecard update (claims + metrics)" />
+          <div class="hero-meta">
+            <h3>Scorecard update (claims + metrics)</h3>
+            
+          </div>
+        </article>
+      
+
+        <article class="hero-card">
+          <img src="./assets/2026-01-30/20260130-034048-05-mcp-app.png" alt="MCP App View (tool + UI)" />
+          <div class="hero-meta">
+            <h3>MCP App View (tool + UI)</h3>
+            
+          </div>
+        </article>
+      
+
+        <article class="hero-card">
+          <img src="./assets/2026-01-30/20260130-034048-07-view-preset.png" alt="Presenter View Preset (fast lane)" />
+          <div class="hero-meta">
+            <h3>Presenter View Preset (fast lane)</h3>
+            
+          </div>
+        </article>
+      
+      </section>
+
+      <h2>Conversation timeline</h2>
+      <div class="card">
+        
+        <div class="transcript-list">
+          
+                <div class="transcript-row">
+                  <div class="transcript-time">3:40:57 AM</div>
+                  <div class="transcript-speaker">Moderator</div>
+                  <div class="transcript-text">Welcome to the live demo. We will run a rapid debate and capture artifacts.</div>
+                </div>
+              
+
+                <div class="transcript-row">
+                  <div class="transcript-time">3:40:57 AM</div>
+                  <div class="transcript-speaker">Avery</div>
+                  <div class="transcript-text">Opening: We should require AI labs to publish safety evals before release.</div>
+                </div>
+              
+
+                <div class="transcript-row">
+                  <div class="transcript-time">3:40:57 AM</div>
+                  <div class="transcript-speaker">Jordan</div>
+                  <div class="transcript-text">Counter: That slows innovation and hides important details from the public.</div>
+                </div>
+              
+
+                <div class="transcript-row">
+                  <div class="transcript-time">3:40:57 AM</div>
+                  <div class="transcript-speaker">Avery</div>
+                  <div class="transcript-text">We can share high-level results without revealing exploit details.</div>
+                </div>
+              
+
+                <div class="transcript-row">
+                  <div class="transcript-time">3:40:57 AM</div>
+                  <div class="transcript-speaker">Jordan</div>
+                  <div class="transcript-text">But transparency is needed to build trust and accountability.</div>
+                </div>
+              
+
+                <div class="transcript-row">
+                  <div class="transcript-time">3:40:57 AM</div>
+                  <div class="transcript-speaker">Moderator</div>
+                  <div class="transcript-text">Log these claims and update the debate scorecard.</div>
+                </div>
+              
+
+                <div class="transcript-row">
+                  <div class="transcript-time">3:40:57 AM</div>
+                  <div class="transcript-speaker">Avery</div>
+                  <div class="transcript-text">Add: Third-party audits reduce catastrophic risk.</div>
+                </div>
+              
+
+                <div class="transcript-row">
+                  <div class="transcript-time">3:40:57 AM</div>
+                  <div class="transcript-speaker">Jordan</div>
+                  <div class="transcript-text">Add: Mandatory evals may lead to regulatory capture.</div>
+                </div>
+              
+
+                <div class="transcript-row">
+                  <div class="transcript-time">3:40:57 AM</div>
+                  <div class="transcript-speaker">Moderator</div>
+                  <div class="transcript-text">Pull a memory recall on prior evaluations.</div>
+                </div>
+              
+
+                <div class="transcript-row">
+                  <div class="transcript-time">3:40:57 AM</div>
+                  <div class="transcript-speaker">Avery</div>
+                  <div class="transcript-text">Summarize the debate for our CRM memory.</div>
+                </div>
+              
+
+                <div class="transcript-row">
+                  <div class="transcript-time">3:40:57 AM</div>
+                  <div class="transcript-speaker">Jordan</div>
+                  <div class="transcript-text">Generate an infographic that captures the key points.</div>
+                </div>
+              
+
+                <div class="transcript-row">
+                  <div class="transcript-time">3:40:57 AM</div>
+                  <div class="transcript-speaker">Moderator</div>
+                  <div class="transcript-text">Switch to presenter view and spotlight the speaker.</div>
+                </div>
+              
+
+                <div class="transcript-row">
+                  <div class="transcript-time">3:40:57 AM</div>
+                  <div class="transcript-speaker">Avery</div>
+                  <div class="transcript-text">We agree on a compromise: publish eval summaries with delayed detail.</div>
+                </div>
+              
+
+                <div class="transcript-row">
+                  <div class="transcript-time">3:40:57 AM</div>
+                  <div class="transcript-speaker">Jordan</div>
+                  <div class="transcript-text">Action item: Draft a policy memo and schedule a follow-up.</div>
+                </div>
+              
+
+                <div class="transcript-row">
+                  <div class="transcript-time">3:40:57 AM</div>
+                  <div class="transcript-speaker">Moderator</div>
+                  <div class="transcript-text">Close with a recap and capture all artifacts.</div>
+                </div>
+              
+        </div>
+      
+      </div>
+
+      <h2>Widget coverage</h2>
+      <div class="card">
+        
+        <div class="chip-grid">
+          
+                <div class="chip">
+                  <span>Canvas ready</span>
+                  <strong>1</strong>
+                </div>
+              
+
+                <div class="chip">
+                  <span>Transcript panel</span>
+                  <strong>1</strong>
+                </div>
+              
+
+                <div class="chip">
+                  <span>DebateScorecard</span>
+                  <strong>2</strong>
+                </div>
+              
+
+                <div class="chip">
+                  <span>Debate scorecard</span>
+                  <strong>1</strong>
+                </div>
+              
+
+                <div class="chip">
+                  <span>Scorecard updated</span>
+                  <strong>1</strong>
+                </div>
+              
+
+                <div class="chip">
+                  <span>MemoryRecallWidget</span>
+                  <strong>2</strong>
+                </div>
+              
+
+                <div class="chip">
+                  <span>Memory recall widget</span>
+                  <strong>1</strong>
+                </div>
+              
+
+                <div class="chip">
+                  <span>Memory recall results</span>
+                  <strong>1</strong>
+                </div>
+              
+
+                <div class="chip">
+                  <span>McpAppWidget</span>
+                  <strong>1</strong>
+                </div>
+              
+
+                <div class="chip">
+                  <span>MCP app view</span>
+                  <strong>1</strong>
+                </div>
+              
+
+                <div class="chip">
+                  <span>LivekitRoomConnector</span>
+                  <strong>1</strong>
+                </div>
+              
+
+                <div class="chip">
+                  <span>LivekitParticipantTile</span>
+                  <strong>3</strong>
+                </div>
+              
+
+                <div class="chip">
+                  <span>LivekitScreenShareTile</span>
+                  <strong>1</strong>
+                </div>
+              
+
+                <div class="chip">
+                  <span>LiveKit tiles (demo)</span>
+                  <strong>1</strong>
+                </div>
+              
+
+                <div class="chip">
+                  <span>Presenter preset</span>
+                  <strong>1</strong>
+                </div>
+              
+        </div>
+      
+      </div>
+
+      <h2>Journey evidence</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Step</th>
+            <th>Status</th>
+            <th>Duration (ms)</th>
+            <th>Screenshot</th>
+            <th>Notes</th>
+          </tr>
+        </thead>
+        <tbody>
+          
+        <tr>
+          <td>Sign in / sign up</td>
+          <td><span class="pill pill-pass">PASS</span></td>
+          <td>4458</td>
+          <td></td>
+          <td></td>
+        </tr>
+      
+
+        <tr>
+          <td>Canvas loaded</td>
+          <td><span class="pill pill-pass">PASS</span></td>
+          <td>4403</td>
+          <td><a href="./assets/2026-01-30/20260130-034048-00-canvas.png">view</a></td>
+          <td></td>
+        </tr>
+      
+
+        <tr>
+          <td>Simulate transcript (15 turns)</td>
+          <td><span class="pill pill-pass">PASS</span></td>
+          <td>803</td>
+          <td></td>
+          <td>15 turns</td>
+        </tr>
+      
+
+        <tr>
+          <td>Open transcript panel</td>
+          <td><span class="pill pill-pass">PASS</span></td>
+          <td>1025</td>
+          <td><a href="./assets/2026-01-30/20260130-034048-01-transcript.png">view</a></td>
+          <td></td>
+        </tr>
+      
+
+        <tr>
+          <td>Seed debate scorecard</td>
+          <td><span class="pill pill-pass">PASS</span></td>
+          <td>1215</td>
+          <td><a href="./assets/2026-01-30/20260130-034048-01-debate-scorecard.png">view</a></td>
+          <td>paint 0 ms</td>
+        </tr>
+      
+
+        <tr>
+          <td>Update scorecard signals</td>
+          <td><span class="pill pill-pass">PASS</span></td>
+          <td>1080</td>
+          <td><a href="./assets/2026-01-30/20260130-034048-02-scorecard-updated.png">view</a></td>
+          <td>paint 22 ms</td>
+        </tr>
+      
+
+        <tr>
+          <td>Create memory recall widget</td>
+          <td><span class="pill pill-pass">PASS</span></td>
+          <td>1294</td>
+          <td><a href="./assets/2026-01-30/20260130-034048-03-memory-created.png">view</a></td>
+          <td>paint 0 ms</td>
+        </tr>
+      
+
+        <tr>
+          <td>Populate memory recall results</td>
+          <td><span class="pill pill-pass">PASS</span></td>
+          <td>1185</td>
+          <td><a href="./assets/2026-01-30/20260130-034048-04-memory-results.png">view</a></td>
+          <td>paint 20 ms</td>
+        </tr>
+      
+
+        <tr>
+          <td>Render MCP App view</td>
+          <td><span class="pill pill-pass">PASS</span></td>
+          <td>1376</td>
+          <td><a href="./assets/2026-01-30/20260130-034048-05-mcp-app.png">view</a></td>
+          <td>paint 0 ms</td>
+        </tr>
+      
+
+        <tr>
+          <td>Spawn LiveKit tiles</td>
+          <td><span class="pill pill-pass">PASS</span></td>
+          <td>1976</td>
+          <td><a href="./assets/2026-01-30/20260130-034048-06-livekit-tiles.png">view</a></td>
+          <td></td>
+        </tr>
+      
+
+        <tr>
+          <td>Apply presenter view preset</td>
+          <td><span class="pill pill-pass">PASS</span></td>
+          <td>512</td>
+          <td><a href="./assets/2026-01-30/20260130-034048-07-view-preset.png">view</a></td>
+          <td>applied in 3 ms</td>
+        </tr>
+      
+        </tbody>
+      </table>
+
+      <h2>Speed benchmarks</h2>
+      
+        <div class="perf-grid">
+          
+                <div class="perf-card">
+                  <div class="perf-title">create_component (DebateScorecard)</div>
+                  <div class="perf-meta">0 ms / 1400 ms</div>
+                  <div class="perf-bar">
+                    <span class="bar-pass" style="width:6%"></span>
+                  </div>
+                </div>
+              
+
+                <div class="perf-card">
+                  <div class="perf-title">update_component (DebateScorecard)</div>
+                  <div class="perf-meta">22 ms / 900 ms</div>
+                  <div class="perf-bar">
+                    <span class="bar-pass" style="width:6%"></span>
+                  </div>
+                </div>
+              
+
+                <div class="perf-card">
+                  <div class="perf-title">create_component (MemoryRecallWidget)</div>
+                  <div class="perf-meta">0 ms / 1200 ms</div>
+                  <div class="perf-bar">
+                    <span class="bar-pass" style="width:6%"></span>
+                  </div>
+                </div>
+              
+
+                <div class="perf-card">
+                  <div class="perf-title">update_component (MemoryRecallWidget)</div>
+                  <div class="perf-meta">20 ms / 900 ms</div>
+                  <div class="perf-bar">
+                    <span class="bar-pass" style="width:6%"></span>
+                  </div>
+                </div>
+              
+
+                <div class="perf-card">
+                  <div class="perf-title">create_component (McpAppWidget)</div>
+                  <div class="perf-meta">0 ms / 1400 ms</div>
+                  <div class="perf-bar">
+                    <span class="bar-pass" style="width:6%"></span>
+                  </div>
+                </div>
+              
+
+                <div class="perf-card">
+                  <div class="perf-title">fast-lane view preset (presenter)</div>
+                  <div class="perf-meta">3 ms / 500 ms</div>
+                  <div class="perf-bar">
+                    <span class="bar-pass" style="width:6%"></span>
+                  </div>
+                </div>
+              
+        </div>
+      
+      <table>
+        <thead>
+          <tr>
+            <th>Operation</th>
+            <th>Duration (ms)</th>
+            <th>Budget (ms)</th>
+            <th>Result</th>
+          </tr>
+        </thead>
+        <tbody>
+          
+        <tr>
+          <td>create_component (DebateScorecard)</td>
+          <td>0</td>
+          <td>1400</td>
+          <td><span class="pill pill-pass">PASS</span></td>
+        </tr>
+      
+
+        <tr>
+          <td>update_component (DebateScorecard)</td>
+          <td>22</td>
+          <td>900</td>
+          <td><span class="pill pill-pass">PASS</span></td>
+        </tr>
+      
+
+        <tr>
+          <td>create_component (MemoryRecallWidget)</td>
+          <td>0</td>
+          <td>1200</td>
+          <td><span class="pill pill-pass">PASS</span></td>
+        </tr>
+      
+
+        <tr>
+          <td>update_component (MemoryRecallWidget)</td>
+          <td>20</td>
+          <td>900</td>
+          <td><span class="pill pill-pass">PASS</span></td>
+        </tr>
+      
+
+        <tr>
+          <td>create_component (McpAppWidget)</td>
+          <td>0</td>
+          <td>1400</td>
+          <td><span class="pill pill-pass">PASS</span></td>
+        </tr>
+      
+
+        <tr>
+          <td>fast-lane view preset (presenter)</td>
+          <td>3</td>
+          <td>500</td>
+          <td><span class="pill pill-pass">PASS</span></td>
+        </tr>
+      
+        </tbody>
+      </table>
+
+      <h2>System pulse</h2>
+      <div class="card">
+        
+        <div class="pulse-list">
+          
+                <div class="pulse-row">
+                  <span class="pulse-time">3:40:57 AM</span>
+                  <span class="pulse-type">transcript</span>
+                  <span class="pulse-tool"></span>
+                  <span class="pulse-note"></span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">3:40:57 AM</span>
+                  <span class="pulse-type">transcript</span>
+                  <span class="pulse-tool"></span>
+                  <span class="pulse-note"></span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">3:40:57 AM</span>
+                  <span class="pulse-type">transcript</span>
+                  <span class="pulse-tool"></span>
+                  <span class="pulse-note"></span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">3:40:57 AM</span>
+                  <span class="pulse-type">transcript</span>
+                  <span class="pulse-tool"></span>
+                  <span class="pulse-note"></span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">3:40:57 AM</span>
+                  <span class="pulse-type">transcript</span>
+                  <span class="pulse-tool"></span>
+                  <span class="pulse-note"></span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">3:40:57 AM</span>
+                  <span class="pulse-type">transcript</span>
+                  <span class="pulse-tool"></span>
+                  <span class="pulse-note"></span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">3:40:57 AM</span>
+                  <span class="pulse-type">transcript</span>
+                  <span class="pulse-tool"></span>
+                  <span class="pulse-note"></span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">3:40:57 AM</span>
+                  <span class="pulse-type">transcript</span>
+                  <span class="pulse-tool"></span>
+                  <span class="pulse-note"></span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">3:40:57 AM</span>
+                  <span class="pulse-type">transcript</span>
+                  <span class="pulse-tool"></span>
+                  <span class="pulse-note"></span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">3:40:57 AM</span>
+                  <span class="pulse-type">transcript</span>
+                  <span class="pulse-tool"></span>
+                  <span class="pulse-note"></span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">3:40:57 AM</span>
+                  <span class="pulse-type">transcript</span>
+                  <span class="pulse-tool"></span>
+                  <span class="pulse-note"></span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">3:40:57 AM</span>
+                  <span class="pulse-type">transcript</span>
+                  <span class="pulse-tool"></span>
+                  <span class="pulse-note"></span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">3:40:57 AM</span>
+                  <span class="pulse-type">transcript</span>
+                  <span class="pulse-tool"></span>
+                  <span class="pulse-note"></span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">3:40:57 AM</span>
+                  <span class="pulse-type">transcript</span>
+                  <span class="pulse-tool"></span>
+                  <span class="pulse-note"></span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">3:40:57 AM</span>
+                  <span class="pulse-type">transcript</span>
+                  <span class="pulse-tool"></span>
+                  <span class="pulse-note"></span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">3:40:59 AM</span>
+                  <span class="pulse-type">tool_call</span>
+                  <span class="pulse-tool">create_component</span>
+                  <span class="pulse-note">Seed debate scorecard</span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">3:40:59 AM</span>
+                  <span class="pulse-type">tool_result</span>
+                  <span class="pulse-tool">create_component</span>
+                  <span class="pulse-note">Seed debate scorecard</span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">3:40:59 AM</span>
+                  <span class="pulse-type">tool_metrics</span>
+                  <span class="pulse-tool">create_component</span>
+                  <span class="pulse-note"></span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">3:41:00 AM</span>
+                  <span class="pulse-type">tool_call</span>
+                  <span class="pulse-tool">update_component</span>
+                  <span class="pulse-note">Update debate scorecard</span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">3:41:00 AM</span>
+                  <span class="pulse-type">tool_result</span>
+                  <span class="pulse-tool">update_component</span>
+                  <span class="pulse-note">Update debate scorecard</span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">3:41:00 AM</span>
+                  <span class="pulse-type">tool_metrics</span>
+                  <span class="pulse-tool">update_component</span>
+                  <span class="pulse-note"></span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">3:41:01 AM</span>
+                  <span class="pulse-type">tool_call</span>
+                  <span class="pulse-tool">create_component</span>
+                  <span class="pulse-note">Create memory recall widget</span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">3:41:01 AM</span>
+                  <span class="pulse-type">tool_result</span>
+                  <span class="pulse-tool">create_component</span>
+                  <span class="pulse-note">Create memory recall widget</span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">3:41:01 AM</span>
+                  <span class="pulse-type">tool_metrics</span>
+                  <span class="pulse-tool">create_component</span>
+                  <span class="pulse-note"></span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">3:41:02 AM</span>
+                  <span class="pulse-type">tool_call</span>
+                  <span class="pulse-tool">update_component</span>
+                  <span class="pulse-note">Populate memory recall results</span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">3:41:02 AM</span>
+                  <span class="pulse-type">tool_result</span>
+                  <span class="pulse-tool">update_component</span>
+                  <span class="pulse-note">Populate memory recall results</span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">3:41:03 AM</span>
+                  <span class="pulse-type">mcp_call</span>
+                  <span class="pulse-tool">qdrant-find</span>
+                  <span class="pulse-note"></span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">3:41:03 AM</span>
+                  <span class="pulse-type">mcp_result</span>
+                  <span class="pulse-tool">qdrant-find</span>
+                  <span class="pulse-note"></span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">3:41:03 AM</span>
+                  <span class="pulse-type">tool_metrics</span>
+                  <span class="pulse-tool">update_component</span>
+                  <span class="pulse-note"></span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">3:41:04 AM</span>
+                  <span class="pulse-type">tool_call</span>
+                  <span class="pulse-tool">create_component</span>
+                  <span class="pulse-note">Render MCP App view</span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">3:41:04 AM</span>
+                  <span class="pulse-type">tool_result</span>
+                  <span class="pulse-tool">create_component</span>
+                  <span class="pulse-note">Render MCP App view</span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">3:41:04 AM</span>
+                  <span class="pulse-type">tool_metrics</span>
+                  <span class="pulse-tool">create_component</span>
+                  <span class="pulse-note"></span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">3:41:05 AM</span>
+                  <span class="pulse-type">tool_call</span>
+                  <span class="pulse-tool">create_component</span>
+                  <span class="pulse-note">Create LiveKit room connector</span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">3:41:05 AM</span>
+                  <span class="pulse-type">tool_result</span>
+                  <span class="pulse-tool">create_component</span>
+                  <span class="pulse-note">Create LiveKit room connector</span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">3:41:05 AM</span>
+                  <span class="pulse-type">tool_call</span>
+                  <span class="pulse-tool">create_component</span>
+                  <span class="pulse-note">Create LiveKit participant tile</span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">3:41:05 AM</span>
+                  <span class="pulse-type">tool_result</span>
+                  <span class="pulse-tool">create_component</span>
+                  <span class="pulse-note">Create LiveKit participant tile</span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">3:41:05 AM</span>
+                  <span class="pulse-type">tool_metrics</span>
+                  <span class="pulse-tool">create_component</span>
+                  <span class="pulse-note"></span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">3:41:05 AM</span>
+                  <span class="pulse-type">tool_metrics</span>
+                  <span class="pulse-tool">create_component</span>
+                  <span class="pulse-note"></span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">3:41:05 AM</span>
+                  <span class="pulse-type">tool_call</span>
+                  <span class="pulse-tool">create_component</span>
+                  <span class="pulse-note">Create LiveKit participant tile</span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">3:41:05 AM</span>
+                  <span class="pulse-type">tool_result</span>
+                  <span class="pulse-tool">create_component</span>
+                  <span class="pulse-note">Create LiveKit participant tile</span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">3:41:06 AM</span>
+                  <span class="pulse-type">tool_call</span>
+                  <span class="pulse-tool">create_component</span>
+                  <span class="pulse-note">Create LiveKit participant tile</span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">3:41:06 AM</span>
+                  <span class="pulse-type">tool_result</span>
+                  <span class="pulse-tool">create_component</span>
+                  <span class="pulse-note">Create LiveKit participant tile</span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">3:41:06 AM</span>
+                  <span class="pulse-type">tool_metrics</span>
+                  <span class="pulse-tool">create_component</span>
+                  <span class="pulse-note"></span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">3:41:06 AM</span>
+                  <span class="pulse-type">tool_metrics</span>
+                  <span class="pulse-tool">create_component</span>
+                  <span class="pulse-note"></span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">3:41:06 AM</span>
+                  <span class="pulse-type">tool_call</span>
+                  <span class="pulse-tool">create_component</span>
+                  <span class="pulse-note">Create LiveKit screen share tile</span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">3:41:06 AM</span>
+                  <span class="pulse-type">tool_result</span>
+                  <span class="pulse-tool">create_component</span>
+                  <span class="pulse-note">Create LiveKit screen share tile</span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">3:41:06 AM</span>
+                  <span class="pulse-type">tool_metrics</span>
+                  <span class="pulse-tool">create_component</span>
+                  <span class="pulse-note"></span>
+                </div>
+              
+        </div>
+      
+      </div>
+
+      <h2>Tool call timeline</h2>
+      
+        <table>
+          <thead>
+            <tr>
+              <th>Time</th>
+              <th>Type</th>
+              <th>Tool</th>
+              <th>Duration</th>
+              <th>Notes</th>
+            </tr>
+          </thead>
+          <tbody>
+            
+                  <tr>
+                    <td>3:40:59 AM</td>
+                    <td>tool_call</td>
+                    <td>create_component</td>
+                    <td></td>
+                    <td>DebateScorecard</td>
+                  </tr>
+                
+
+                  <tr>
+                    <td>3:40:59 AM</td>
+                    <td>tool_result</td>
+                    <td>create_component</td>
+                    <td>0</td>
+                    <td>DebateScorecard</td>
+                  </tr>
+                
+
+                  <tr>
+                    <td>3:40:59 AM</td>
+                    <td>tool_metrics</td>
+                    <td>create_component</td>
+                    <td>0</td>
+                    <td>DebateScorecard</td>
+                  </tr>
+                
+
+                  <tr>
+                    <td>3:41:00 AM</td>
+                    <td>tool_call</td>
+                    <td>update_component</td>
+                    <td></td>
+                    <td></td>
+                  </tr>
+                
+
+                  <tr>
+                    <td>3:41:00 AM</td>
+                    <td>tool_result</td>
+                    <td>update_component</td>
+                    <td>22</td>
+                    <td></td>
+                  </tr>
+                
+
+                  <tr>
+                    <td>3:41:00 AM</td>
+                    <td>tool_metrics</td>
+                    <td>update_component</td>
+                    <td>22</td>
+                    <td>DebateScorecard</td>
+                  </tr>
+                
+
+                  <tr>
+                    <td>3:41:01 AM</td>
+                    <td>tool_call</td>
+                    <td>create_component</td>
+                    <td></td>
+                    <td>MemoryRecallWidget</td>
+                  </tr>
+                
+
+                  <tr>
+                    <td>3:41:01 AM</td>
+                    <td>tool_result</td>
+                    <td>create_component</td>
+                    <td>0</td>
+                    <td>MemoryRecallWidget</td>
+                  </tr>
+                
+
+                  <tr>
+                    <td>3:41:01 AM</td>
+                    <td>tool_metrics</td>
+                    <td>create_component</td>
+                    <td>0</td>
+                    <td>MemoryRecallWidget</td>
+                  </tr>
+                
+
+                  <tr>
+                    <td>3:41:02 AM</td>
+                    <td>tool_call</td>
+                    <td>update_component</td>
+                    <td></td>
+                    <td></td>
+                  </tr>
+                
+
+                  <tr>
+                    <td>3:41:02 AM</td>
+                    <td>tool_result</td>
+                    <td>update_component</td>
+                    <td>20</td>
+                    <td></td>
+                  </tr>
+                
+
+                  <tr>
+                    <td>3:41:03 AM</td>
+                    <td>tool_metrics</td>
+                    <td>update_component</td>
+                    <td>20</td>
+                    <td>MemoryRecallWidget</td>
+                  </tr>
+                
+
+                  <tr>
+                    <td>3:41:04 AM</td>
+                    <td>tool_call</td>
+                    <td>create_component</td>
+                    <td></td>
+                    <td>McpAppWidget</td>
+                  </tr>
+                
+
+                  <tr>
+                    <td>3:41:04 AM</td>
+                    <td>tool_result</td>
+                    <td>create_component</td>
+                    <td>0</td>
+                    <td>McpAppWidget</td>
+                  </tr>
+                
+
+                  <tr>
+                    <td>3:41:04 AM</td>
+                    <td>tool_metrics</td>
+                    <td>create_component</td>
+                    <td>0</td>
+                    <td>McpAppWidget</td>
+                  </tr>
+                
+
+                  <tr>
+                    <td>3:41:05 AM</td>
+                    <td>tool_call</td>
+                    <td>create_component</td>
+                    <td></td>
+                    <td>LivekitRoomConnector</td>
+                  </tr>
+                
+
+                  <tr>
+                    <td>3:41:05 AM</td>
+                    <td>tool_result</td>
+                    <td>create_component</td>
+                    <td>0</td>
+                    <td>LivekitRoomConnector</td>
+                  </tr>
+                
+
+                  <tr>
+                    <td>3:41:05 AM</td>
+                    <td>tool_call</td>
+                    <td>create_component</td>
+                    <td></td>
+                    <td>LivekitParticipantTile</td>
+                  </tr>
+                
+
+                  <tr>
+                    <td>3:41:05 AM</td>
+                    <td>tool_result</td>
+                    <td>create_component</td>
+                    <td>0</td>
+                    <td>LivekitParticipantTile</td>
+                  </tr>
+                
+
+                  <tr>
+                    <td>3:41:05 AM</td>
+                    <td>tool_metrics</td>
+                    <td>create_component</td>
+                    <td>0</td>
+                    <td>LivekitRoomConnector</td>
+                  </tr>
+                
+
+                  <tr>
+                    <td>3:41:05 AM</td>
+                    <td>tool_metrics</td>
+                    <td>create_component</td>
+                    <td>0</td>
+                    <td>LivekitParticipantTile</td>
+                  </tr>
+                
+
+                  <tr>
+                    <td>3:41:05 AM</td>
+                    <td>tool_call</td>
+                    <td>create_component</td>
+                    <td></td>
+                    <td>LivekitParticipantTile</td>
+                  </tr>
+                
+
+                  <tr>
+                    <td>3:41:05 AM</td>
+                    <td>tool_result</td>
+                    <td>create_component</td>
+                    <td>0</td>
+                    <td>LivekitParticipantTile</td>
+                  </tr>
+                
+
+                  <tr>
+                    <td>3:41:06 AM</td>
+                    <td>tool_call</td>
+                    <td>create_component</td>
+                    <td></td>
+                    <td>LivekitParticipantTile</td>
+                  </tr>
+                
+
+                  <tr>
+                    <td>3:41:06 AM</td>
+                    <td>tool_result</td>
+                    <td>create_component</td>
+                    <td>0</td>
+                    <td>LivekitParticipantTile</td>
+                  </tr>
+                
+
+                  <tr>
+                    <td>3:41:06 AM</td>
+                    <td>tool_metrics</td>
+                    <td>create_component</td>
+                    <td>0</td>
+                    <td>LivekitParticipantTile</td>
+                  </tr>
+                
+
+                  <tr>
+                    <td>3:41:06 AM</td>
+                    <td>tool_metrics</td>
+                    <td>create_component</td>
+                    <td>0</td>
+                    <td>LivekitParticipantTile</td>
+                  </tr>
+                
+
+                  <tr>
+                    <td>3:41:06 AM</td>
+                    <td>tool_call</td>
+                    <td>create_component</td>
+                    <td></td>
+                    <td>LivekitScreenShareTile</td>
+                  </tr>
+                
+
+                  <tr>
+                    <td>3:41:06 AM</td>
+                    <td>tool_result</td>
+                    <td>create_component</td>
+                    <td>0</td>
+                    <td>LivekitScreenShareTile</td>
+                  </tr>
+                
+
+                  <tr>
+                    <td>3:41:06 AM</td>
+                    <td>tool_metrics</td>
+                    <td>create_component</td>
+                    <td>0</td>
+                    <td>LivekitScreenShareTile</td>
+                  </tr>
+                
+          </tbody>
+        </table>
+      
+
+      <h2>MCP timeline</h2>
+      
+        <table>
+          <thead>
+            <tr>
+              <th>Time</th>
+              <th>Type</th>
+              <th>Tool</th>
+              <th>Duration</th>
+              <th>Notes</th>
+            </tr>
+          </thead>
+          <tbody>
+            
+                  <tr>
+                    <td>3:41:03 AM</td>
+                    <td>mcp_call</td>
+                    <td>qdrant-find</td>
+                    <td></td>
+                    <td></td>
+                  </tr>
+                
+
+                  <tr>
+                    <td>3:41:03 AM</td>
+                    <td>mcp_result</td>
+                    <td>qdrant-find</td>
+                    <td>210</td>
+                    <td></td>
+                  </tr>
+                
+          </tbody>
+        </table>
+      
+
+      <h2>Assets</h2>
+      
+        <div class="asset-grid">
+          
+                <figure>
+                  <img src="./assets/2026-01-30/20260130-034048-00-canvas.png" alt="Canvas ready" />
+                  <figcaption>Canvas ready</figcaption>
+                </figure>
+              
+
+                <figure>
+                  <img src="./assets/2026-01-30/20260130-034048-01-transcript.png" alt="Transcript panel" />
+                  <figcaption>Transcript panel</figcaption>
+                </figure>
+              
+
+                <figure>
+                  
+                  <figcaption>DebateScorecard</figcaption>
+                </figure>
+              
+
+                <figure>
+                  <img src="./assets/2026-01-30/20260130-034048-01-debate-scorecard.png" alt="Debate scorecard" />
+                  <figcaption>Debate scorecard</figcaption>
+                </figure>
+              
+
+                <figure>
+                  
+                  <figcaption>DebateScorecard</figcaption>
+                </figure>
+              
+
+                <figure>
+                  <img src="./assets/2026-01-30/20260130-034048-02-scorecard-updated.png" alt="Scorecard updated" />
+                  <figcaption>Scorecard updated</figcaption>
+                </figure>
+              
+
+                <figure>
+                  
+                  <figcaption>MemoryRecallWidget</figcaption>
+                </figure>
+              
+
+                <figure>
+                  <img src="./assets/2026-01-30/20260130-034048-03-memory-created.png" alt="Memory recall widget" />
+                  <figcaption>Memory recall widget</figcaption>
+                </figure>
+              
+
+                <figure>
+                  
+                  <figcaption>MemoryRecallWidget</figcaption>
+                </figure>
+              
+
+                <figure>
+                  <img src="./assets/2026-01-30/20260130-034048-04-memory-results.png" alt="Memory recall results" />
+                  <figcaption>Memory recall results</figcaption>
+                </figure>
+              
+
+                <figure>
+                  
+                  <figcaption>McpAppWidget</figcaption>
+                </figure>
+              
+
+                <figure>
+                  <img src="./assets/2026-01-30/20260130-034048-05-mcp-app.png" alt="MCP app view" />
+                  <figcaption>MCP app view</figcaption>
+                </figure>
+              
+
+                <figure>
+                  
+                  <figcaption>LivekitRoomConnector</figcaption>
+                </figure>
+              
+
+                <figure>
+                  
+                  <figcaption>LivekitParticipantTile</figcaption>
+                </figure>
+              
+
+                <figure>
+                  
+                  <figcaption>LivekitParticipantTile</figcaption>
+                </figure>
+              
+
+                <figure>
+                  
+                  <figcaption>LivekitParticipantTile</figcaption>
+                </figure>
+              
+
+                <figure>
+                  
+                  <figcaption>LivekitScreenShareTile</figcaption>
+                </figure>
+              
+
+                <figure>
+                  <img src="./assets/2026-01-30/20260130-034048-06-livekit-tiles.png" alt="LiveKit tiles (demo)" />
+                  <figcaption>LiveKit tiles (demo)</figcaption>
+                </figure>
+              
+
+                <figure>
+                  <img src="./assets/2026-01-30/20260130-034048-07-view-preset.png" alt="Presenter preset" />
+                  <figcaption>Presenter preset</figcaption>
+                </figure>
+              
+        </div>
+      
+
+      <h2>Event breakdown</h2>
+      <div class="card">
+        
+        <div class="chip-grid">
+          
+                <div class="chip">
+                  <span>asset</span>
+                  <strong>19</strong>
+                </div>
+              
+
+                <div class="chip">
+                  <span>transcript</span>
+                  <strong>15</strong>
+                </div>
+              
+
+                <div class="chip">
+                  <span>tool call</span>
+                  <strong>10</strong>
+                </div>
+              
+
+                <div class="chip">
+                  <span>tool result</span>
+                  <strong>10</strong>
+                </div>
+              
+
+                <div class="chip">
+                  <span>tool metrics</span>
+                  <strong>10</strong>
+                </div>
+              
+
+                <div class="chip">
+                  <span>run start</span>
+                  <strong>1</strong>
+                </div>
+              
+
+                <div class="chip">
+                  <span>mcp call</span>
+                  <strong>1</strong>
+                </div>
+              
+
+                <div class="chip">
+                  <span>mcp result</span>
+                  <strong>1</strong>
+                </div>
+              
+        </div>
+      
+      </div>
+
+      <h2>Notes</h2>
+      <ul><li>Debate scorecard seeded via create_component with structured state.</li>
+<li>Memory recall results are injected for deterministic visuals.</li>
+<li>MCP App demo uses a static ui resource (public/mcp-apps/demo.html).</li>
+<li>Presenter preset uses fast-lane tldraw:applyViewPreset.</li></ul>
+    </body>
+  </html>

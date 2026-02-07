@@ -8,6 +8,7 @@
 import { usecustomClient } from '@custom-ai/react';
 import { useCallback } from 'react';
 import { createLogger } from '@/lib/utils';
+import { logJourneyEvent } from '@/lib/journey-logger';
 
 // Global MCP tool registry populated by the Tool Dispatcher
 declare global {
@@ -38,9 +39,41 @@ export function initializeMCPBridge() {
 
   // Create the bridge function that components will use
   window.callMcpTool = async (toolName: string, params: any) => {
+    const startedAt = Date.now();
+    try {
+      logJourneyEvent({
+        eventType: 'mcp_call',
+        source: 'component',
+        tool: toolName,
+        payload: { params },
+      });
+    } catch { }
     // Option 1: Use Tool Dispatcher if available
     if (window.__custom_tool_dispatcher?.executeMCPTool) {
-      return window.__custom_tool_dispatcher.executeMCPTool(toolName, params);
+      try {
+        const result = await window.__custom_tool_dispatcher.executeMCPTool(toolName, params);
+        try {
+          logJourneyEvent({
+            eventType: 'mcp_result',
+            source: 'component',
+            tool: toolName,
+            durationMs: Date.now() - startedAt,
+            payload: { result },
+          });
+        } catch { }
+        return result;
+      } catch (error) {
+        try {
+          logJourneyEvent({
+            eventType: 'mcp_error',
+            source: 'component',
+            tool: toolName,
+            durationMs: Date.now() - startedAt,
+            payload: { error: error instanceof Error ? error.message : String(error) },
+          });
+        } catch { }
+        throw error;
+      }
     }
 
     // Option 2: Send via custom message (existing pattern)
@@ -66,8 +99,29 @@ export function initializeMCPBridge() {
         // Match if the responded tool (or resolved key) matches requested (ignoring mcp_ prefix)
         if (responded === requested || (!!resolvedKey && resolvedKey === requested)) {
           window.removeEventListener('custom:mcpToolResponse', responseHandler);
-          if (error) reject(error);
-          else resolve(result);
+          if (error) {
+            try {
+              logJourneyEvent({
+                eventType: 'mcp_error',
+                source: 'component',
+                tool: toolName,
+                durationMs: Date.now() - startedAt,
+                payload: { error },
+              });
+            } catch { }
+            reject(error);
+          } else {
+            try {
+              logJourneyEvent({
+                eventType: 'mcp_result',
+                source: 'component',
+                tool: toolName,
+                durationMs: Date.now() - startedAt,
+                payload: { result },
+              });
+            } catch { }
+            resolve(result);
+          }
         }
       };
 

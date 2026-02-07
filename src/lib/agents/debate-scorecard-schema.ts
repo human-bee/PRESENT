@@ -158,13 +158,31 @@ export type DebateFilters = z.infer<typeof debateFiltersSchema>;
 export const debateScorecardStateSchema = z.object({
   componentId: z.string().default('debate-scorecard'),
   version: z.number().default(0),
-  topic: z.string().default('Untitled debate'),
+  topic: z.string().default('Live Debate'),
   round: z.string().default('Round'),
   showMetricsStrip: z.boolean().default(true),
   factCheckEnabled: z.boolean().default(true),
   filters: debateFiltersSchema.default({ speaker: 'ALL', verdicts: [], statuses: [], searchQuery: '', activeTab: 'ledger' }),
   metrics: roundMetricsSchema.default({ roundScore: 0.5, evidenceQuality: 0.5, judgeLean: 'NEUTRAL', excitement: 0.4 }),
-  players: z.array(debatePlayerSchema).default([]),
+  players: z.preprocess((value) => {
+    if (!Array.isArray(value)) return value;
+    if (value.length >= 2) return value;
+
+    const defaults = createDefaultPlayers();
+    const incoming = value as unknown[];
+    const byId = new Map<string, Record<string, unknown>>();
+    for (const entry of incoming) {
+      if (!entry || typeof entry !== 'object') continue;
+      const id = typeof (entry as any).id === 'string' ? String((entry as any).id) : '';
+      if (!id) continue;
+      byId.set(id, entry as Record<string, unknown>);
+    }
+
+    return defaults.map((player) => {
+      const override = byId.get(player.id);
+      return override ? { ...player, ...override } : player;
+    });
+  }, z.array(debatePlayerSchema).default(() => createDefaultPlayers())),
   claims: z.array(claimSchema).default([]),
   map: z
     .object({ nodes: z.array(mapNodeSchema).default([]), edges: z.array(mapEdgeSchema).default([]) })
@@ -236,7 +254,7 @@ export function createDefaultPlayers(): DebatePlayer[] {
 
 export function createDefaultScorecardState(topic?: string): DebateScorecardState {
   const base = debateScorecardStateSchema.parse({
-    topic: topic && topic.trim().length ? topic : 'Untitled debate',
+    topic: topic && topic.trim().length ? topic : 'Live Debate',
     players: createDefaultPlayers(),
     timeline: [
       {
@@ -249,4 +267,35 @@ export function createDefaultScorecardState(topic?: string): DebateScorecardStat
   });
   base.status.lastAction = `Debate initialized${base.topic ? ` for ${base.topic}` : ''}.`;
   return base;
+}
+
+export function recomputePlayerScoresFromClaims(state: DebateScorecardState): DebateScorecardState {
+  const claims = Array.isArray(state.claims) ? state.claims : [];
+  const players = Array.isArray(state.players) ? state.players : [];
+  if (claims.length === 0 || players.length === 0) return state;
+
+  let hasAnyDelta = false;
+  const totals: Record<DebateSide, number> = { AFF: 0, NEG: 0 };
+
+  for (const claim of claims) {
+    const raw = (claim as any)?.scoreDelta;
+    const delta = typeof raw === 'number' && Number.isFinite(raw) ? raw : 0;
+    if (delta !== 0) hasAnyDelta = true;
+    const side = (claim as any)?.side;
+    if (side !== 'AFF' && side !== 'NEG') continue;
+    totals[side] += delta;
+  }
+
+  if (!hasAnyDelta) return state;
+
+  let changed = false;
+  const nextPlayers = players.map((player) => {
+    const side = player.side;
+    const desired = totals[side] ?? player.score;
+    if (player.score === desired) return player;
+    changed = true;
+    return { ...player, score: desired };
+  });
+
+  return changed ? { ...state, players: nextPlayers } : state;
 }

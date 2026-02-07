@@ -1,10 +1,16 @@
-FROM node:20-alpine
+FROM node:22-bookworm-slim
 
 WORKDIR /app
 
+# Ensure TLS trust store exists for LiveKit Cloud HTTPS calls.
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates \
+  && rm -rf /var/lib/apt/lists/*
+
 # Install dependencies
 COPY package.json package-lock.json ./
-RUN npm ci
+# `npm ci` is strict about lockfile peer resolution and can fail depending on npm version.
+# For Railway we prefer a tolerant install that matches Vercel's build behavior.
+RUN npm install --omit=dev
 
 # Copy source code
 COPY . .
@@ -12,6 +18,5 @@ COPY . .
 # Build (if necessary, though agents are tsx)
 # RUN npm run build 
 
-# Default command runs the Conductor
-# You can override this in Railway to run other agents (e.g. "npm run agent:voice")
-CMD ["npm", "run", "agent:conductor"]
+# Railway uses SERVICE_TYPE to select the entrypoint in scripts/start-service.sh
+CMD ["sh", "scripts/start-service.sh"]

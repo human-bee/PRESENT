@@ -6,6 +6,11 @@ import { RetroTimerEnhanced, retroTimerEnhancedSchema } from '@/components/ui/pr
 import { DocumentEditor, documentEditorSchema } from '@/components/ui/documents/document-editor';
 import { ResearchPanel, researchPanelSchema } from '@/components/ui/research/research-panel';
 import { ActionItemTracker, actionItemTrackerSchema } from '@/components/ui/productivity/action-item-tracker';
+import MeetingSummaryWidget, { meetingSummaryWidgetSchema } from '@/components/ui/productivity/meeting-summary-widget';
+import MemoryRecallWidget, { memoryRecallWidgetSchema } from '@/components/ui/productivity/memory-recall-widget';
+import CrowdPulseWidget from '@/components/ui/productivity/crowd-pulse-widget';
+import { crowdPulseWidgetSchema } from '@/components/ui/productivity/crowd-pulse-schema';
+import McpAppWidget, { mcpAppWidgetSchema } from '@/components/ui/mcp/mcp-app-widget';
 import {
   LivekitParticipantTile,
   livekitParticipantTileSchema,
@@ -30,6 +35,10 @@ import { ComponentToolbox } from '@/components/ui/shared/component-toolbox';
 
 // Add debate scorecard @debate-scorecard.tsx
 import DebateScorecard, { debateScoreCardSchema } from '@/components/ui/productivity/debate-scorecard';
+import { InfographicWidget } from '@/components/InfographicWidget';
+
+// Context feeder widget for document/text context injection
+import { ContextFeeder, contextFeederSchema } from '@/components/ui/documents/context-feeder';
 
 import { componentToolboxSchema } from "@/lib/custom";
 
@@ -39,6 +48,10 @@ const extendedSchema = <T extends z.AnyZodObject>(schema: T) => {
     y: z.number().optional().describe('Y position'),
   });
 }
+
+const infographicWidgetSchema = z.object({
+  useGrounding: z.boolean().optional().describe('Whether to enable Google Search grounding'),
+});
 
 // Wrapper for LivekitParticipantTile to map onIdentityChange to updateState
 function LivekitParticipantTileWrapper(props: any) {
@@ -113,6 +126,34 @@ export const components: any = [
     propsSchema: extendedSchema(actionItemTrackerSchema),
   },
   {
+    name: 'MeetingSummaryWidget',
+    description:
+      'Meeting summary panel that renders CRM-ready summaries, highlights, decisions, and action items. Supports updates from the summary steward and optional MCP handoff to a CRM tool.',
+    component: MeetingSummaryWidget,
+    propsSchema: extendedSchema(meetingSummaryWidgetSchema),
+  },
+  {
+    name: 'MemoryRecallWidget',
+    description:
+      'Vector memory recall panel that queries MCP memory stores (e.g. Qdrant) and lists matching context snippets.',
+    component: MemoryRecallWidget,
+    propsSchema: extendedSchema(memoryRecallWidgetSchema),
+  },
+  {
+    name: 'CrowdPulseWidget',
+    description:
+      'Crowd pulse control room for stage demos. Tracks hand counts, live questions, scoreboards, and follow-up suggestions.',
+    component: CrowdPulseWidget,
+    propsSchema: extendedSchema(crowdPulseWidgetSchema),
+  },
+  {
+    name: 'McpAppWidget',
+    description:
+      'Render an MCP App (ui:// resource) in a sandboxed iframe and optionally call the backing MCP tool.',
+    component: McpAppWidget,
+    propsSchema: extendedSchema(mcpAppWidgetSchema),
+  },
+  {
     name: 'LivekitRoomConnector',
     description:
       'Establishes a LiveKit room connection on the canvas. This is the FIRST component you need to create before using any other LiveKit components. It provides the necessary context for participant tiles and toolbars to function. Features room name configuration, connection status display, participant count, and invite link sharing. Once connected, you can spawn LivekitParticipantTile and LivekitToolbar components.',
@@ -176,16 +217,19 @@ export const components: any = [
     component: DebateScorecard,
     propsSchema: extendedSchema(debateScoreCardSchema),
   },
+  {
+    name: 'InfographicWidget',
+    description:
+      'Generates infographics from recent conversation context (Gemini image model) and allows dragging results onto the canvas.',
+    component: InfographicWidget,
+    propsSchema: extendedSchema(infographicWidgetSchema),
+  },
+  {
+    name: 'ContextFeeder',
+    description:
+      'Upload markdown files or paste text to add context that gets injected into all AI steward prompts. Perfect for providing reference materials, documentation, or background information to guide agent responses.',
+    component: ContextFeeder,
+    propsSchema: extendedSchema(contextFeederSchema),
+  },
   // Add more components here
 ];
-
-export const allComponents = {
-  YoutubeEmbed: extendedSchema(youtubeEmbedSchema),
-  DebateScorecard: extendedSchema(debateScoreCardSchema), // Added debate scorecard @debate-scorecard.tsx
-}
-
-export const availableComponents = getAvailableComponents(allComponents);
-
-function getAvailableComponents<T extends Record<string, z.AnyZodObject>>(components: T): T {
-  return components;
-}

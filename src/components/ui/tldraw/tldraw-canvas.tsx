@@ -27,6 +27,12 @@ export {
   Rulers,
 } from './canvas/components';
 
+import { InfographicShapeUtil } from './shapes/InfographicShapeUtil';
+
+const customShapeUtils = [
+  InfographicShapeUtil,
+]
+
 export {
   CustomShapeUtil as customShapeUtil,
   MermaidStreamShapeUtil,
@@ -34,6 +40,8 @@ export {
   type CustomShape as customShape,
   type MermaidStreamShape,
 } from './canvas/utils/shapeUtils';
+
+export { InfographicShapeUtil };
 
 export type { customShapeProps, MermaidStreamShapeProps } from './canvas/utils/types';
 

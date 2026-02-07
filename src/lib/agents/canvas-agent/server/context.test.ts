@@ -4,6 +4,8 @@ import { getCanvasShapeSummary, getTranscriptWindow } from '@/lib/agents/shared/
 jest.mock('@/lib/agents/shared/supabase-context', () => ({
   getCanvasShapeSummary: jest.fn(),
   getTranscriptWindow: jest.fn(),
+  readPromptCache: jest.fn(() => null),
+  writePromptCache: jest.fn(),
 }));
 
 const mockedCanvas = getCanvasShapeSummary as jest.MockedFunction<typeof getCanvasShapeSummary>;

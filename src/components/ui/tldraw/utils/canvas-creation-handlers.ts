@@ -10,6 +10,13 @@ interface CreateHandlersDeps {
 
 export function createCanvasCreationHandlers({ editor, bus }: CreateHandlersDeps): CanvasEventMap {
   const logger = createLogger('CanvasCreationHandlers');
+  const getViewport = () => {
+    try {
+      return editor.getViewportPageBounds();
+    } catch {
+      return null;
+    }
+  };
 
   const handleCreateNote: EventListener = (event) => {
     const detail = (event as CustomEvent).detail || {};
@@ -218,11 +225,75 @@ export function createCanvasCreationHandlers({ editor, bus }: CreateHandlersDeps
     }
   };
 
+  const handleCreateShape: EventListener = (event) => {
+    const detail = (event as CustomEvent).detail || {};
+    const type = typeof detail.type === 'string' ? detail.type : undefined;
+
+    // Toggle-able toolbox shortcut used by CanvasToolbar + agent actions
+    if (type === 'toolbox') {
+      try {
+        const existingToolbox = editor.getCurrentPageShapes().find((shape) => shape.type === 'toolbox');
+        if (existingToolbox) {
+          editor.deleteShapes([existingToolbox.id]);
+          logger.info('🗑️ Removed existing component toolbox via event');
+          return;
+        }
+
+        const viewport = getViewport();
+        const w = typeof detail?.props?.w === 'number' ? detail.props.w : 56;
+        const h = typeof detail?.props?.h === 'number' ? detail.props.h : 560;
+        const x = typeof detail.x === 'number' ? detail.x : viewport ? viewport.minX + 24 : 24;
+        const y = typeof detail.y === 'number' ? detail.y : viewport ? viewport.midY - h / 2 : 24;
+
+        editor.createShape({
+          id: createShapeId(detail.id ?? `toolbox-${nanoid()}`),
+          type: 'toolbox' as any,
+          x,
+          y,
+          props: {
+            w,
+            h,
+            name: typeof detail?.props?.name === 'string' ? detail.props.name : 'Component Toolbox',
+          },
+        } as any);
+
+        logger.info('✅ Created component toolbox via event');
+      } catch (error) {
+        logger.warn('create_shape toolbox error', error);
+      }
+      return;
+    }
+
+    if (!type) {
+      logger.warn('create_shape event missing type');
+      return;
+    }
+
+    try {
+      const viewport = getViewport();
+      const w = typeof detail?.props?.w === 'number' ? detail.props.w : 300;
+      const h = typeof detail?.props?.h === 'number' ? detail.props.h : 200;
+      const x = typeof detail.x === 'number' ? detail.x : viewport ? viewport.midX - w / 2 : 0;
+      const y = typeof detail.y === 'number' ? detail.y : viewport ? viewport.midY - h / 2 : 0;
+
+      editor.createShape({
+        id: createShapeId(detail.id ?? `${type}-${nanoid()}`),
+        type: type as any,
+        x,
+        y,
+        props: detail.props ?? { w, h },
+      } as any);
+    } catch (error) {
+      logger.warn('create_shape error', error);
+    }
+  };
+
   return {
     'tldraw:create_note': handleCreateNote,
     'tldraw:createRectangle': handleCreateRectangle,
     'tldraw:createEllipse': handleCreateEllipse,
     'tldraw:createArrow': handleCreateArrow,
     'tldraw:drawSmiley': handleDrawSmiley,
+    'tldraw:create_shape': handleCreateShape,
   };
 }

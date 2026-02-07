@@ -39,6 +39,18 @@
       ],
       "@tldraw/tldraw": [
         "./src/lib/tldraw-shim"
+      ],
+      "@tldraw/fairy-shared": [
+        "./src/vendor/tldraw-fairy/fairy-shared"
+      ],
+      "@tldraw/fairy-shared/*": [
+        "./src/vendor/tldraw-fairy/fairy-shared/*"
+      ],
+      "@tldraw/dotcom-shared": [
+        "./src/vendor/tldraw-fairy/dotcom-shared"
+      ],
+      "@tldraw/dotcom-shared/*": [
+        "./src/vendor/tldraw-fairy/dotcom-shared/*"
       ]
     }
   },

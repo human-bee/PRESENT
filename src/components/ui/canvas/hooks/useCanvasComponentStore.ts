@@ -8,6 +8,7 @@ import { calculateInitialSize } from '@/lib/component-sizing';
 import { systemRegistry } from '@/lib/system-registry';
 
 import type { customShape as CustomShape } from '../tldraw-canvas';
+import { findTiledPlacement as findTiledPlacementUtil } from '@/components/ui/tldraw/utils/findTiledPlacement';
 
 export type CanvasLogger = {
   info: (...args: unknown[]) => void;
@@ -35,10 +36,42 @@ export function useCanvasComponentStore(
 ) {
   const componentStore = useRef(new Map<string, React.ReactNode>());
   const pendingComponentsRef = useRef<PendingCanvasComponent[]>([]);
+  const placementLedgerRef = useRef(
+    new Map<string, { x: number; y: number; w: number; h: number; ts: number }>(),
+  );
   const [messageIdToShapeIdMap, setMessageIdToShapeIdMap] = useState<Map<string, TLShapeId>>(
     () => new Map(),
   );
   const [addedMessageIds, setAddedMessageIds] = useState<Set<string>>(() => new Set());
+
+  const findTiledPlacement = useCallback(
+    (size: { w: number; h: number }): { x: number; y: number } => {
+      if (!editor) return { x: Math.random() * 500, y: Math.random() * 300 };
+      const viewport = editor.getViewportPageBounds?.();
+      if (!viewport) return { x: Math.random() * 500, y: Math.random() * 300 };
+
+      const now = Date.now();
+      const LEDGER_TTL_MS = 60_000;
+      for (const [key, entry] of placementLedgerRef.current.entries()) {
+        if (now - entry.ts > LEDGER_TTL_MS) {
+          placementLedgerRef.current.delete(key);
+        }
+      }
+
+      const reservedRects = Array.from(placementLedgerRef.current.values()).map((entry) => ({
+        x: entry.x,
+        y: entry.y,
+        w: entry.w,
+        h: entry.h,
+      }));
+
+      return findTiledPlacementUtil(editor, size, {
+        viewport: viewport as any,
+        reservedRects,
+      });
+    },
+    [editor],
+  );
 
   const addComponentToCanvas = useCallback(
     (messageId: string, component: React.ReactNode, componentName?: string) => {
@@ -99,9 +132,17 @@ export function useCanvasComponentStore(
 
       const viewport = editor.getViewportPageBounds();
       const initialSize = calculateInitialSize(componentName || 'Default');
-      const x = viewport ? viewport.midX - initialSize.w / 2 : Math.random() * 500;
-      const y = viewport ? viewport.midY - initialSize.h / 2 : Math.random() * 300;
+      const placement = findTiledPlacement(initialSize);
+      const x = viewport ? placement.x : Math.random() * 500;
+      const y = viewport ? placement.y : Math.random() * 300;
       const newShapeId = createShapeId(`shape-${nanoid()}`);
+      placementLedgerRef.current.set(messageId, {
+        x,
+        y,
+        w: initialSize.w,
+        h: initialSize.h,
+        ts: Date.now(),
+      });
 
       editor.createShapes<CustomShape>([
         {
@@ -158,7 +199,7 @@ export function useCanvasComponentStore(
         /* noop */
       }
     },
-    [editor, logger, messageIdToShapeIdMap],
+    [editor, findTiledPlacement, logger, messageIdToShapeIdMap],
   );
 
   const queuePendingComponent = useCallback((item: PendingCanvasComponent) => {

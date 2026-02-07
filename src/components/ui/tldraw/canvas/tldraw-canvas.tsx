@@ -12,6 +12,7 @@ import type { Editor, TLShapeUtilConstructor } from '@tldraw/tldraw';
 import { Tldraw } from '@tldraw/tldraw';
 import { useRoomContext } from '@livekit/components-react';
 import { CanvasSyncAdapter } from '@/components/CanvasSyncAdapter';
+import { InfographicShapeUtil } from '../shapes/InfographicShapeUtil';
 import {
   CanvasStoreProvider,
   useCanvasStore,
@@ -67,6 +68,7 @@ export function TldrawCanvas({
       CustomShapeUtil,
       MermaidStreamShapeUtil,
       ToolboxShapeUtil,
+      InfographicShapeUtil,
     ] as readonly AnyShapeUtilConstructor[];
     if (!externalShapeUtils?.length) {
       return defaults;
@@ -146,10 +148,15 @@ function CanvasViewport({ componentId, shapeUtils, editor, restProps, onEditorRe
   return (
     <div ref={containerRef} style={{ position: 'fixed', inset: 0 }}>
       <Tldraw
+        licenseKey={process.env.NEXT_PUBLIC_TLDRAW_LICENSE_KEY}
         shapeUtils={shapeUtils}
         persistenceKey={componentId}
         onMount={(instance) => {
           onEditorReady(instance);
+          if (typeof window !== 'undefined') {
+            console.log('Exposing Tldraw editor to window');
+            (window as any).editor = instance;
+          }
           onMount?.(instance);
         }}
         {...restProps}

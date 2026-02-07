@@ -1,12 +1,10 @@
 'use client';
 
-import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useContext, useEffect, useMemo, useRef } from 'react';
 import type { ReactNode, RefObject } from 'react';
 import { Tldraw, TLComponents, Editor, TldrawUiToastsProvider } from '@tldraw/tldraw';
 import { useRoomContext } from '@livekit/components-react';
 import type { Room } from 'livekit-client';
-import TldrawSnapshotBroadcaster from '@/components/TldrawSnapshotBroadcaster';
-import TldrawSnapshotReceiver from '@/components/TldrawSnapshotReceiver';
 import { CanvasLiveKitContext } from '../livekit/livekit-room-connector';
 import { ComponentStoreContext } from './tldraw-canvas';
 import type { customShapeUtil } from './tldraw-canvas';
@@ -21,6 +19,7 @@ import { createCollaborationOverrides } from './utils';
 import { CustomMainMenu, CustomToolbarWithTranscript } from './tldraw-with-persistence';
 import { CollaborationLoadingOverlay } from './components';
 import { CanvasAgentController } from './canvas/canvas-agent-controller';
+import { FairyIntegration } from './fairy/fairy-integration';
 
 interface TldrawWithCollaborationProps {
   onMount?: (editor: Editor) => void;
@@ -47,7 +46,8 @@ export function TldrawWithCollaboration({
   const livekitCtx = useContext(CanvasLiveKitContext);
   const roomName = livekitCtx?.roomName ?? 'custom-canvas-room';
   const room = useRoomContext();
-  const [editorInstance, setEditorInstance] = useState<Editor | null>(null);
+  const isFairyEnabled =
+    typeof process !== 'undefined' && process.env.NEXT_PUBLIC_FAIRY_ENABLED === 'true';
 
   const collaboration = useCollaborationSession({ roomName, room, shapeUtils });
   const computedReadOnly = readOnly || collaboration.isReadOnly;
@@ -76,10 +76,6 @@ export function TldrawWithCollaboration({
     [onTranscriptToggle, onHelpClick, onComponentToolboxToggle, MainMenuWithPermissions],
   );
 
-  const handleEditorReady = useCallback((editor: Editor) => {
-    setEditorInstance(editor);
-  }, []);
-
   // Handle keyboard shortcut for transcript (Cmd+K or Ctrl+K)
   useEffect(() => {
     if (!onTranscriptToggle) return;
@@ -98,10 +94,15 @@ export function TldrawWithCollaboration({
   const showOverlay = collaboration.status !== 'ready';
 
   return (
-    <div ref={containerRef} className={className} style={{ position: 'absolute', inset: 0 }}>
+    <div
+      ref={containerRef}
+      className={`${className ?? ''}${isFairyEnabled ? ' tla' : ''}`}
+      style={{ position: 'absolute', inset: 0 }}
+    >
       <TldrawUiToastsProvider>
         <ComponentStoreContext.Provider value={componentStore || null}>
           <Tldraw
+            licenseKey={process.env.NEXT_PUBLIC_TLDRAW_LICENSE_KEY}
             store={collaboration.store}
             shapeUtils={shapeUtils}
             components={components}
@@ -111,12 +112,9 @@ export function TldrawWithCollaboration({
             <CollaborationEditorEffects
               room={room}
               containerRef={containerRef}
-              onEditorReady={handleEditorReady}
               onMount={onMount}
             />
           </Tldraw>
-          <TldrawSnapshotBroadcaster editor={editorInstance} />
-          <TldrawSnapshotReceiver editor={editorInstance} />
         </ComponentStoreContext.Provider>
       </TldrawUiToastsProvider>
 
@@ -128,17 +126,17 @@ export function TldrawWithCollaboration({
 interface CollaborationEditorEffectsProps {
   room: Room | undefined;
   containerRef: RefObject<HTMLDivElement | null>;
-  onEditorReady?: (editor: Editor) => void;
   onMount?: (editor: Editor) => void;
 }
 
 function CollaborationEditorEffects({
   room,
   containerRef,
-  onEditorReady,
   onMount,
 }: CollaborationEditorEffectsProps) {
   const { editor, ready } = useEditorReady();
+  const isFairyEnabled =
+    typeof process !== 'undefined' && process.env.NEXT_PUBLIC_FAIRY_ENABLED === 'true';
 
   useTldrawEditorBridge(editor, { onMount });
   usePinnedShapes(editor, ready);
@@ -149,8 +147,7 @@ function CollaborationEditorEffects({
     if (process.env.NODE_ENV !== 'production' && typeof window !== 'undefined') {
       (window as any).__tldrawEditor = editor;
     }
-    onEditorReady?.(editor);
-  }, [editor, ready, onEditorReady]);
+  }, [editor, ready]);
 
   useEffect(() => {
     return () => {
@@ -162,6 +159,10 @@ function CollaborationEditorEffects({
 
   if (!ready || !editor) {
     return null;
+  }
+
+  if (isFairyEnabled) {
+    return <FairyIntegration room={room} />;
   }
 
   return <CanvasAgentController editor={editor} room={room} />;

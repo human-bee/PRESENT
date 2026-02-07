@@ -214,8 +214,9 @@ const McpConfigPage = () => {
               <ul className="border rounded-md divide-y">
                 {mcpServers.map((server, index) => {
                   const serverInfo = getServerInfo(server);
+                  const rowKey = serverInfo.url || serverInfo.name || String(index);
                   return (
-                    <li key={index} className="flex items-center justify-between p-3">
+                    <li key={rowKey} className="flex items-center justify-between p-3">
                       <div className="flex-1">
                         <div className="flex items-center">
                           <span className="text-green-600 mr-2">●</span>

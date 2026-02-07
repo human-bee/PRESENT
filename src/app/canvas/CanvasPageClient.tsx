@@ -3,7 +3,7 @@
 // Route segment config is server-only in theory, but the client bootstrap depends on browser
 // globals. Keep this component namespaced so the server entry can opt out of prerendering.
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { CanvasSpace } from '@/components/ui/canvas/canvas-space';
 import { CanvasParityAutopilot } from '@/components/ui/canvas/CanvasParityAutopilot';
 import { MessageThreadCollapsible } from '@/components/ui/messaging/message-thread-collapsible';
@@ -19,12 +19,22 @@ import { Room, ConnectionState, RoomEvent, VideoPresets, RoomOptions } from 'liv
 import { RoomContext } from '@livekit/components-react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/use-auth';
+import { RoomScopedProviders } from '@/components/RoomScopedProviders';
 import { ToolDispatcher } from '@/components/tool-dispatcher';
 import { SystemRegistrySync } from '@/components/ui/diagnostics/system-registry-sync';
 import { initializeMCPBridge } from '@/lib/mcp-bridge';
 import { AgentCapabilitiesBridge } from '@/components/ui/integrations/agent-capabilities-bridge';
 import { LiveKitStateBridge } from '@/lib/livekit/livekit-state-bridge';
 import LiveKitDebugConsole from '@/components/LiveKitDebugConsole';
+import {
+  initJourneyLogger,
+  persistJourneyRunId,
+  resolveJourneyConfig,
+  updateJourneyRoom,
+  logJourneyEvent,
+} from '@/lib/journey-logger';
+import { fetchWithSupabaseAuth } from '@/lib/supabase/auth-headers';
+import { getBooleanFlag } from '@/lib/feature-flags';
 
 // Suppress development warnings for cleaner console
 suppressDevelopmentWarnings();
@@ -40,20 +50,107 @@ export function CanvasPageClient() {
   // Authentication check
   const { user, loading } = useAuth();
   const router = useRouter();
-  const bypassAuth = process.env.NEXT_PUBLIC_CANVAS_DEV_BYPASS === 'true' || process.env.NEXT_PUBLIC_CANVAS_DEV_BYPASS === '"true"';
+  const bypassAuth = getBooleanFlag(process.env.NEXT_PUBLIC_CANVAS_DEV_BYPASS, false);
+  const demoMode = getBooleanFlag(process.env.NEXT_PUBLIC_CANVAS_DEMO_MODE, false);
   // Track resolved canvas id and room name; do not render until resolved
   const [, setCanvasId] = useState<string | null>(null);
   const [roomName, setRoomName] = useState<string>('');
+  const [demoNameDraft, setDemoNameDraft] = useState('');
+  const [demoAuthAttempted, setDemoAuthAttempted] = useState(false);
+  const [demoError, setDemoError] = useState<string | null>(null);
 
   useEffect(() => {
     console.log('[CanvasPageClient] Auth state changed:', {
       loading,
       userId: user?.id,
       bypassAuth,
+      demoMode,
       roomName,
       isWindowDefined: typeof window !== 'undefined'
     });
-  }, [loading, user, bypassAuth, roomName]);
+  }, [loading, user, bypassAuth, demoMode, roomName]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (!demoMode || bypassAuth) return;
+    if (loading || user) return;
+    if (demoAuthAttempted) return;
+
+    let storedName = '';
+    try {
+      storedName = window.localStorage.getItem('present:display_name')?.trim() || '';
+    } catch { }
+
+    if (!storedName) {
+      return;
+    }
+
+    setDemoAuthAttempted(true);
+    setDemoError(null);
+    void (async () => {
+      try {
+        const { supabase } = await import('@/lib/supabase');
+        const authAny = supabase.auth as any;
+        if (typeof authAny?.signInAnonymously !== 'function') {
+          throw new Error('Supabase anonymous auth not supported in this build');
+        }
+        const res = await authAny.signInAnonymously({ options: { data: { full_name: storedName } } });
+        const error = res?.error;
+        if (error) {
+          setDemoError(error.message || 'Failed to start demo session');
+          setDemoAuthAttempted(false);
+        }
+      } catch (err: any) {
+        setDemoError(err?.message || 'Failed to start demo session');
+        setDemoAuthAttempted(false);
+      }
+    })();
+  }, [demoMode, bypassAuth, loading, user, demoAuthAttempted]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (!roomName) return;
+    try {
+      const config = resolveJourneyConfig();
+      if (!config?.enabled || !config.runId) {
+        updateJourneyRoom(roomName);
+        return;
+      }
+      persistJourneyRunId(config.runId);
+      initJourneyLogger({
+        runId: config.runId,
+        roomName,
+        enabled: config.enabled,
+        endpoint: '/api/journey/log',
+      });
+    } catch { }
+  }, [roomName]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const url = new URL(window.location.href);
+      const shareParam = url.searchParams.get('share');
+      if (!shareParam || shareParam === '0' || shareParam === 'false') return;
+
+      const roomParam = url.searchParams.get('room');
+      const roomMatch = roomParam?.match(/^canvas-([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i);
+      const idFromRoom = roomMatch?.[1] || null;
+      const id = url.searchParams.get('id') || idFromRoom;
+      const key = `present:share-opened:${id || 'unknown'}`;
+      if (window.sessionStorage.getItem(key)) return;
+      window.sessionStorage.setItem(key, '1');
+
+      logJourneyEvent({
+        eventType: 'share_link_opened',
+        source: 'ui',
+        payload: { canvasId: id || null },
+      });
+
+      url.searchParams.delete('share');
+      window.history.replaceState({}, '', url.toString());
+    } catch { }
+  }, []);
 
   const isUuid = (value: string | null | undefined) =>
     !!value && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
@@ -63,7 +160,7 @@ export function CanvasPageClient() {
     if (!canvasId || !room || !room.startsWith('canvas-')) return;
     if (window.sessionStorage.getItem(`present:parity-joined:${room}`)) return;
     try {
-      await fetch('/api/canvas/parity-join', {
+      await fetchWithSupabaseAuth('/api/canvas/parity-join', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ canvasId, room }),
@@ -81,7 +178,18 @@ export function CanvasPageClient() {
       console.log('[CanvasPageClient] resolveCanvasId started');
       const url = new URL(window.location.href);
       const roomOverride = url.searchParams.get('room');
+      const isFresh = url.searchParams.get('fresh') === '1';
       console.log('[CanvasPageClient] URL params:', { roomOverride, id: url.searchParams.get('id') });
+
+      if (isFresh) {
+        try {
+          localStorage.removeItem('present:lastCanvasId');
+        } catch { }
+        url.searchParams.delete('id');
+        url.searchParams.delete('room');
+        url.searchParams.delete('fresh');
+        window.history.replaceState({}, '', url.toString());
+      }
 
       if (roomOverride && roomOverride.trim().length > 0) {
         const sanitized = roomOverride.trim();
@@ -302,14 +410,52 @@ export function CanvasPageClient() {
   const toggleTranscript = useCallback(() => {
     setIsTranscriptOpen((prev) => !prev);
   }, []);
+  const transcriptPanelRef = useRef<HTMLDivElement>(null);
+  const [transcriptOffset, setTranscriptOffset] = useState(0);
+
+  useEffect(() => {
+    if (!isTranscriptOpen) {
+      setTranscriptOffset(0);
+      return;
+    }
+
+    const panel = transcriptPanelRef.current;
+    if (!panel) return;
+
+    const updateOffset = () => {
+      const width = panel.getBoundingClientRect().width;
+      setTranscriptOffset(Math.max(0, Math.round(width)));
+    };
+
+    updateOffset();
+    const observer = new ResizeObserver(updateOffset);
+    observer.observe(panel);
+    window.addEventListener('resize', updateOffset);
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', updateOffset);
+    };
+  }, [isTranscriptOpen]);
+
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const offsetValue = `${isTranscriptOpen ? transcriptOffset : 0}px`;
+    document.documentElement.style.setProperty('--present-transcript-offset', offsetValue);
+    document.body.style.setProperty('--present-transcript-offset', offsetValue);
+    return () => {
+      document.documentElement.style.setProperty('--present-transcript-offset', '0px');
+      document.body.style.setProperty('--present-transcript-offset', '0px');
+    };
+  }, [isTranscriptOpen, transcriptOffset]);
 
   // Redirect to sign in if not authenticated
   useEffect(() => {
     if (loading) return;
-    if (!user && !bypassAuth) {
+    if (!user && !bypassAuth && !demoMode) {
       router.push('/auth/signin');
     }
-  }, [user, loading, router, bypassAuth]);
+  }, [user, loading, router, bypassAuth, demoMode]);
 
   // Load MCP server configurations
   const mcpServers = loadMcpServers();
@@ -353,11 +499,25 @@ export function CanvasPageClient() {
   React.useEffect(() => {
     // Update room state when room state changes
     const updateRoomState = () => {
-      setRoomState({
+      const remoteIdentities = Array.from(room.remoteParticipants.values()).map((p) => p.identity);
+      const next = {
         isConnected: room.state === ConnectionState.Connected,
         roomName,
         participantCount: room.numParticipants,
-      });
+      };
+      setRoomState(next);
+      try {
+        const w = window as any;
+        w.__present = w.__present || {};
+        w.__present.livekitRoomName = next.roomName;
+        w.__present.livekitConnected = next.isConnected;
+        w.__present.livekitParticipantCount = next.participantCount;
+        w.__present.livekitRemoteParticipantIdentities = remoteIdentities;
+        w.__present.livekitHasAgent = remoteIdentities.some((id: string) => {
+          const s = String(id || '').toLowerCase();
+          return s.startsWith('agent_') || s.includes('agent') || s.includes('bot') || s.includes('ai');
+        });
+      } catch {}
     };
 
     // Listen to room events
@@ -402,10 +562,82 @@ export function CanvasPageClient() {
   }, [room]);
 
   // Show loading state while checking authentication
-  if (loading || !roomName) {
+  if (loading || (!roomName && !(demoMode && !user && !bypassAuth))) {
     return (
       <div className="h-screen w-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/20">
         <div className="text-gray-500">Loading...</div>
+      </div>
+    );
+  }
+
+  if (!user && !bypassAuth && demoMode) {
+    const submit = async () => {
+      const name = demoNameDraft.trim();
+      if (!name) return;
+      try {
+        window.localStorage.setItem('present:display_name', name);
+      } catch { }
+      setDemoAuthAttempted(true);
+      setDemoError(null);
+      try {
+        const { supabase } = await import('@/lib/supabase');
+        const authAny = supabase.auth as any;
+        if (typeof authAny?.signInAnonymously !== 'function') {
+          throw new Error('Supabase anonymous auth not supported in this build');
+        }
+        const res = await authAny.signInAnonymously({ options: { data: { full_name: name } } });
+        const error = res?.error;
+        if (error) {
+          setDemoError(error.message || 'Failed to start demo session');
+          setDemoAuthAttempted(false);
+        }
+      } catch (err: any) {
+        setDemoError(err?.message || 'Failed to start demo session');
+        setDemoAuthAttempted(false);
+      }
+    };
+
+    return (
+      <div className="h-screen w-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/20 p-6">
+        <div className="w-full max-w-md rounded-2xl bg-white shadow-xl border border-slate-200 p-6">
+          <div className="text-slate-900 text-lg font-semibold">Join the demo</div>
+          <div className="text-slate-600 text-sm mt-1">
+            Pick a display name. You will join the room automatically.
+          </div>
+          <div className="mt-4">
+            <label className="text-xs text-slate-600">Display name</label>
+            <input
+              value={demoNameDraft}
+              onChange={(e) => setDemoNameDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') void submit();
+              }}
+              autoFocus
+              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-400"
+              placeholder="Alex"
+            />
+          </div>
+          {demoError ? (
+            <div className="mt-3 text-sm text-red-600">{demoError}</div>
+          ) : null}
+          <div className="mt-5 flex items-center gap-3">
+            <button
+              onClick={() => void submit()}
+              disabled={!demoNameDraft.trim() || demoAuthAttempted}
+              className={[
+                'rounded-lg px-4 py-2 text-sm font-medium',
+                demoNameDraft.trim() && !demoAuthAttempted
+                  ? 'bg-slate-900 text-white hover:bg-slate-800'
+                  : 'bg-slate-200 text-slate-500 cursor-not-allowed',
+              ].join(' ')}
+            >
+              {demoAuthAttempted ? 'Connecting...' : 'Join'}
+            </button>
+            <div className="text-xs text-slate-500">
+              Powered by Supabase anonymous auth
+            </div>
+          </div>
+        </div>
       </div>
     );
   }
@@ -419,13 +651,49 @@ export function CanvasPageClient() {
   console.log('[CanvasPageClient] Rendering main UI', { user: user?.id, roomName });
 
   return (
-    <div className="ios-vh w-screen relative overflow-hidden safe-area-padded">
+    <div
+      className="ios-vh w-screen relative overflow-hidden safe-area-padded"
+      style={{
+        ['--present-transcript-offset' as any]: `${isTranscriptOpen ? transcriptOffset : 0}px`,
+      }}
+    >
       {enableMcp ? (
         <EnhancedMcpProvider mcpServers={mcpServers}>
           <SystemRegistrySync />
 
           <RoomContext.Provider value={room}>
-            <LiveKitDebugConsole enabled={enableDebugConsole} />
+            <RoomScopedProviders>
+              <LiveKitDebugConsole enabled={enableDebugConsole} />
+              <ToolDispatcher contextKey={contextKey} enableLogging={enableDispatcherLogs}>
+                <AgentCapabilitiesBridge />
+                <CanvasLiveKitContext.Provider value={roomState}>
+                  <CanvasSpace
+                    className="absolute inset-0 w-full h-full ios-vh"
+                    onTranscriptToggle={toggleTranscript}
+                  />
+
+                  <CanvasParityAutopilot />
+
+                  <SessionSync roomName={roomName} />
+
+                  <MessageThreadCollapsible
+                    contextKey={contextKey}
+                    className={[
+                      'fixed right-0 top-0 z-50 transform transition-transform duration-300 w-full max-w-sm sm:max-w-md md:max-w-lg ios-vh safe-area-padded bg-background',
+                      isTranscriptOpen ? 'translate-x-0' : 'translate-x-full pointer-events-none opacity-0',
+                    ].join(' ')}
+                    ref={transcriptPanelRef}
+                    isOpen={isTranscriptOpen}
+                    onClose={toggleTranscript}
+                  />
+                </CanvasLiveKitContext.Provider>
+              </ToolDispatcher>
+            </RoomScopedProviders>
+          </RoomContext.Provider>
+        </EnhancedMcpProvider>
+      ) : (
+        <RoomContext.Provider value={room}>
+          <RoomScopedProviders>
             <ToolDispatcher contextKey={contextKey} enableLogging={enableDispatcherLogs}>
               <AgentCapabilitiesBridge />
               <CanvasLiveKitContext.Provider value={roomState}>
@@ -444,38 +712,13 @@ export function CanvasPageClient() {
                     'fixed right-0 top-0 z-50 transform transition-transform duration-300 w-full max-w-sm sm:max-w-md md:max-w-lg ios-vh safe-area-padded bg-background',
                     isTranscriptOpen ? 'translate-x-0' : 'translate-x-full pointer-events-none opacity-0',
                   ].join(' ')}
+                  ref={transcriptPanelRef}
                   isOpen={isTranscriptOpen}
                   onClose={toggleTranscript}
                 />
               </CanvasLiveKitContext.Provider>
             </ToolDispatcher>
-          </RoomContext.Provider>
-        </EnhancedMcpProvider>
-      ) : (
-        <RoomContext.Provider value={room}>
-          <ToolDispatcher contextKey={contextKey} enableLogging={enableDispatcherLogs}>
-            <AgentCapabilitiesBridge />
-            <CanvasLiveKitContext.Provider value={roomState}>
-              <CanvasSpace
-                className="absolute inset-0 w-full h-full ios-vh"
-                onTranscriptToggle={toggleTranscript}
-              />
-
-              <CanvasParityAutopilot />
-
-              <SessionSync roomName={roomName} />
-
-              <MessageThreadCollapsible
-                contextKey={contextKey}
-                className={[
-                  'fixed right-0 top-0 z-50 transform transition-transform duration-300 w-full max-w-sm sm:max-w-md md:max-w-lg ios-vh safe-area-padded bg-background',
-                  isTranscriptOpen ? 'translate-x-0' : 'translate-x-full pointer-events-none opacity-0',
-                ].join(' ')}
-                isOpen={isTranscriptOpen}
-                onClose={toggleTranscript}
-              />
-            </CanvasLiveKitContext.Provider>
-          </ToolDispatcher>
+          </RoomScopedProviders>
         </RoomContext.Provider>
       )}
     </div>

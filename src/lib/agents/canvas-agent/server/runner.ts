@@ -30,6 +30,7 @@ import {
   getTeacherServiceForEndpoint,
   type TeacherService,
 } from '@/lib/canvas-agent/teacher-runtime/service-client';
+import { normalizeFairyContextProfile, type FairyContextProfile } from '@/lib/fairy-context/profiles';
 
 let teacherRuntimeWarningLogged = false;
 
@@ -51,6 +52,7 @@ type RunArgs = {
   model?: string;
   initialViewport?: { x: number; y: number; w: number; h: number };
   hooks?: CanvasAgentHooks;
+  contextProfile?: FairyContextProfile | string;
 };
 
 let screenshotInboxPromise: Promise<typeof import('@/server/inboxes/screenshot')> | null = null;
@@ -101,6 +103,17 @@ const BRAND_COLOR_ALIASES: Record<string, string> = {
   'accent-violet': 'violet',
   'accent violet': 'violet',
   citrus: 'yellow',
+};
+
+const resolveTranscriptWindowMs = (
+  profile: FairyContextProfile | undefined,
+  defaultMs: number,
+) => {
+  if (!profile) return defaultMs;
+  if (profile === 'glance') return Math.min(defaultMs, 30_000);
+  if (profile === 'deep') return Math.max(defaultMs, 180_000);
+  if (profile === 'archive') return Math.max(defaultMs, 420_000);
+  return defaultMs;
 };
 
 const sanitizeProps = (rawProps: Record<string, unknown>, shapeType: string) =>
@@ -206,7 +219,7 @@ const expandMacroAction = (rawAction: Record<string, any>): Record<string, any>[
   ];
 };
 
-const coerceNumber = (value: unknown): number | undefined => {
+const _coerceNumber = (value: unknown): number | undefined => {
   if (typeof value === 'number' && Number.isFinite(value)) return value;
   if (typeof value === 'string') {
     const parsed = Number.parseFloat(value);
@@ -348,7 +361,7 @@ export async function runCanvasAgent(args: RunArgs) {
     partial: boolean;
     sample?: AgentAction;
   } | null = null;
-  let pendingViewportBounds: { x?: number; y?: number; w?: number; h?: number } | null = null;
+  const _pendingViewportBounds: { x?: number; y?: number; w?: number; h?: number } | null = null;
 
   const captureScreenshot = async (
     label: 'primary' | 'followup',
@@ -478,12 +491,15 @@ export async function runCanvasAgent(args: RunArgs) {
       offset.setOrigin({ x: x + w / 2, y: y + h / 2 });
     }
 
+    const normalizedProfile = normalizeFairyContextProfile(args.contextProfile);
+    const transcriptWindowMs = resolveTranscriptWindowMs(normalizedProfile, cfg.transcriptWindowMs);
+
     const buildPromptPayload = async (
       label: 'initial' | 'downscale' | 'fallback' | 'noscreenshot',
     ): Promise<{ parts: Record<string, unknown>; prompt: string; buildMs: number }> => {
       const startedAt = Date.now();
       const parts = await buildPromptParts(roomId, {
-        windowMs: 60000,
+        windowMs: transcriptWindowMs,
         viewport: latestScreenshot?.viewport ?? args.initialViewport,
         selection: latestScreenshot?.selection ?? [],
         sessionId,
@@ -866,7 +882,7 @@ const normalizeRawAction = (raw: unknown, shapeTypeById: Map<string, string>) =>
       ]);
 
       for (const item of queue) {
-        let normalized = normalizeRawAction(item, shapeTypeById);
+        const normalized = normalizeRawAction(item, shapeTypeById);
         if (!normalized) continue;
         if (normalized.name === 'create_shape') {
           const shapeId = String((normalized as any).params?.id ?? '').trim();
@@ -1374,7 +1390,7 @@ const normalizeRawAction = (raw: unknown, shapeTypeById: Map<string, string>) =>
 
       await sendStatus(roomId, sessionId, 'scheduled');
       const followParts = await buildPromptParts(roomId, {
-        windowMs: 60000,
+        windowMs: transcriptWindowMs,
         viewport: followScreenshot?.viewport ?? args.initialViewport,
         selection: followTargetIds.length > 0 ? followTargetIds : followScreenshot?.selection ?? [],
         sessionId,

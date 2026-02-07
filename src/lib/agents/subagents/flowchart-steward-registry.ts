@@ -1,7 +1,5 @@
-import type { Agent } from '@openai/agents';
 import { flowchartSteward, runFlowchartSteward } from './flowchart-steward';
 import {
-  flowchartStewardFast,
   flowchartStewardFastReady,
   runFlowchartStewardFast,
 } from './flowchart-steward-fast';
@@ -23,16 +21,15 @@ const prefersFast = FAST_VARIANT_FLAGS.has(rawVariant);
 if (prefersFast && !flowchartStewardFastReady) {
   try {
     console.warn(
-      '⚠️ [StewardRegistry] FLOWCHART_STEWARD_VARIANT requests FAST but GROQ_API_KEY is missing. Falling back to standard steward.',
+      '⚠️ [StewardRegistry] FLOWCHART_STEWARD_VARIANT requests FAST but CEREBRAS_API_KEY is missing. Falling back to standard steward.',
     );
   } catch {}
 }
 
 export const isFlowchartStewardFastActive = prefersFast && flowchartStewardFastReady;
 
-export const activeFlowchartSteward: Agent = isFlowchartStewardFastActive
-  ? flowchartStewardFast
-  : flowchartSteward;
+// For backwards compat - returns the slow Agent instance (fast variant doesn't use Agent)
+export const activeFlowchartSteward = flowchartSteward;
 
 export type FlowchartStewardMode = 'auto' | 'fast' | 'slow';
 

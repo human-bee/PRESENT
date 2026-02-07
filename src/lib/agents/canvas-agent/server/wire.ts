@@ -10,18 +10,12 @@ import {
 } from '@/lib/canvas-agent/contract/types';
 import { mintAgentToken } from './auth/agentTokens';
 
-type AckRecord = {
-  seq: number;
-  clientId: string;
-  ts: number;
-};
-
 try {
   dotenvConfig({ path: join(process.cwd(), '.env.local') });
 } catch {}
 
 let cachedClient: RoomServiceClient | null = null;
-let cachedRestUrl: string | null = null;
+let _cachedRestUrl: string | null = null;
 
 function resolveRest(): string {
   const raw = process.env.LIVEKIT_REST_URL || process.env.LIVEKIT_URL || process.env.NEXT_PUBLIC_LK_SERVER_URL || process.env.LIVEKIT_HOST;
@@ -39,7 +33,7 @@ function getClient(): RoomServiceClient {
   const apiKey = process.env.LIVEKIT_API_KEY;
   const apiSecret = process.env.LIVEKIT_API_SECRET;
   if (!apiKey || !apiSecret) throw new Error('LiveKit API credentials missing');
-  cachedRestUrl = rest;
+  _cachedRestUrl = rest;
   cachedClient = new RoomServiceClient(rest, apiKey, apiSecret);
   return cachedClient;
 }

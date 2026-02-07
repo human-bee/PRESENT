@@ -11,6 +11,7 @@
 
 'use client';
 
+import * as React from 'react';
 import { cn } from '@/lib/utils';
 import { useEffect, useState, useCallback } from 'react';
 import { z } from 'zod';
@@ -28,7 +29,8 @@ import {
   Mic,
   MicOff,
 } from 'lucide-react';
-import { useRoomContext, useDataChannel } from '@livekit/components-react';
+import { useRoomContext } from '@livekit/components-react';
+import { useAllTranscripts } from '@/lib/stores/transcript-store';
 
 // Schema for image styles
 const imageStyleSchema = z.object({
@@ -361,59 +363,67 @@ export function AIImageGenerator({
     }
   }, [room, state, setState]);
 
-  // Listen for transcription data from LiveKit data channel
-  useDataChannel('transcription', (message) => {
-    try {
-      const data = JSON.parse(new TextDecoder().decode(message.payload));
-
-      if (data.type === 'live_transcription' && state?.speechToTextEnabled) {
-        const transcriptionEntry = {
-          text: data.text,
-          speaker: data.speaker || 'Unknown',
-          timestamp: data.timestamp,
-          isFinal: data.is_final,
-        };
-
-        setState((prevState) => {
-          if (!prevState) return prevState;
-
-          // Update live transcription
-          const newState = {
-            ...prevState,
-            liveTranscription: data.text,
-            lastTranscriptionTime: data.timestamp,
-            transcriptionHistory: [
-              ...prevState.transcriptionHistory.slice(-10), // Keep last 10 transcriptions
-              transcriptionEntry,
-            ],
-          };
-
-          // If this is a final transcript and speech-to-text is enabled, update the prompt
-          if (data.is_final && data.text.trim()) {
-            const transcribedText = data.text.trim();
-
-            if (speechPromptMode === 'replace') {
-              // Replace the entire prompt with the transcription
-              setLocalPrompt(transcribedText);
-              console.log(`Replaced image prompt from speech: "${transcribedText}"`);
-            } else {
-              // Append to existing prompt (default behavior)
-              const currentPrompt = localPrompt.trim();
-              const newPrompt = currentPrompt
-                ? `${currentPrompt} ${transcribedText}`
-                : transcribedText;
-              setLocalPrompt(newPrompt);
-              console.log(`Appended to image prompt from speech: "${transcribedText}"`);
-            }
-          }
-
-          return newState;
-        });
+  // Get transcripts from centralized store
+  const storeTranscripts = useAllTranscripts();
+  
+  // Track processed transcript IDs to avoid re-processing
+  const processedTranscriptIdsRef = React.useRef(new Set<string>());
+  
+  // Sync store transcripts to local state and handle prompt updates
+  useEffect(() => {
+    if (!state?.speechToTextEnabled) return;
+    
+    // Get the latest transcript
+    const latestTranscripts = storeTranscripts.slice(-10);
+    
+    // Update transcription history for display
+    const transcriptionHistory = latestTranscripts.map(t => ({
+      text: t.text,
+      speaker: t.speaker,
+      timestamp: t.timestamp,
+      isFinal: t.isFinal,
+    }));
+    
+    // Find the latest transcript for live display
+    const latest = storeTranscripts[storeTranscripts.length - 1];
+    
+    // Update state with new transcription data
+    setState((prevState) => {
+      if (!prevState) return prevState;
+      return {
+        ...prevState,
+        liveTranscription: latest?.text || '',
+        lastTranscriptionTime: latest?.timestamp || 0,
+        transcriptionHistory,
+      };
+    });
+    
+    // Handle prompt updates for new final transcripts
+    for (const t of storeTranscripts) {
+      if (t.isFinal && t.text.trim() && !processedTranscriptIdsRef.current.has(t.id)) {
+        processedTranscriptIdsRef.current.add(t.id);
+        
+        const transcribedText = t.text.trim();
+        
+        if (speechPromptMode === 'replace') {
+          setLocalPrompt(transcribedText);
+          console.log(`Replaced image prompt from speech: "${transcribedText}"`);
+        } else {
+          setLocalPrompt((prev) => {
+            const currentPrompt = prev.trim();
+            return currentPrompt ? `${currentPrompt} ${transcribedText}` : transcribedText;
+          });
+          console.log(`Appended to image prompt from speech: "${transcribedText}"`);
+        }
       }
-    } catch (error) {
-      console.error('Error processing transcription data:', error);
     }
-  });
+    
+    // Keep the set from growing unbounded
+    if (processedTranscriptIdsRef.current.size > 100) {
+      const arr = Array.from(processedTranscriptIdsRef.current);
+      processedTranscriptIdsRef.current = new Set(arr.slice(-50));
+    }
+  }, [storeTranscripts, state?.speechToTextEnabled, speechPromptMode, setState]);
 
   // Show component on canvas when mounted
   useEffect(() => {

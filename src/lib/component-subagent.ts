@@ -11,11 +11,13 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { usecustomThread } from '@custom-ai/react';
 import { LoadingState } from './progressive-loading';
+import { LinearMcpClient } from './linear-mcp-client';
 
 // Sub-agent configuration
 export interface SubAgentConfig {
   componentName: string;
   mcpTools: string[]; // Which MCP tools this component can use
+  initialContext?: any; // Static context (e.g. API keys)
   contextExtractor: (thread: any) => any; // Extract relevant context from thread
   dataEnricher: (context: any, mcpTools: any) => Promise<any>[]; // Define enrichment pipeline
 }
@@ -36,7 +38,7 @@ export function useComponentSubAgent(config: SubAgentConfig) {
   const { thread } = usecustomThread();
   const [state, setState] = useState<SubAgentState>({
     loadingState: LoadingState.SKELETON,
-    context: null,
+    context: config.initialContext || null,
     enrichedData: {},
     errors: {},
     mcpActivity: {},
@@ -49,8 +51,8 @@ export function useComponentSubAgent(config: SubAgentConfig) {
 
     const init = async () => {
       try {
-        // Assuming getMCPTools is defined elsewhere or imported
-        const mcpTools = await getMCPTools(config.mcpTools || []);
+        // Pass initialContext to getMCPTools so it has access to API keys immediately
+        const mcpTools = await getMCPTools(config.mcpTools || [], config.initialContext);
 
         if (mounted) {
           setTools(mcpTools);
@@ -65,7 +67,7 @@ export function useComponentSubAgent(config: SubAgentConfig) {
     return () => {
       mounted = false;
     };
-  }, [JSON.stringify(config.mcpTools)]); // Stable dependency for toolsetting
+  }, [JSON.stringify(config.mcpTools), JSON.stringify(config.initialContext)]); // Stable dependency for toolsetting
 
   const enrichmentQueue = useRef<Promise<any>[]>([]);
   const isMounted = useRef(true);
@@ -83,38 +85,42 @@ export function useComponentSubAgent(config: SubAgentConfig) {
 
   // Stabilize config to prevent infinite re-renders
   const stableConfig = useRef(config);
-  const configKey = `${config.componentName}-${JSON.stringify(config.mcpTools)}`;
+  const configKey = `${config.componentName}-${JSON.stringify(config.mcpTools)}-${JSON.stringify(config.initialContext)}`;
   useEffect(() => {
     stableConfig.current = config;
   }, [configKey]); // Stable dependency
 
   // Extract context from thread
   const extractContext = useCallback(() => {
-    if (!thread || !stableConfig.current.contextExtractor) return null;
+    // Start with initial context
+    let context = { ...stableConfig.current.initialContext };
 
-    try {
-      const context = stableConfig.current.contextExtractor(thread);
-      if (isMounted.current) {
-        setState((prev) => ({
-          ...prev,
-          context,
-          loadingState: LoadingState.PARTIAL,
-        }));
+    if (thread && stableConfig.current.contextExtractor) {
+      try {
+        const extracted = stableConfig.current.contextExtractor(thread);
+        context = { ...context, ...extracted };
+      } catch (error) {
+        console.error(
+          `[SubAgent ${stableConfig.current.componentName}] Context extraction failed:`,
+          error,
+        );
+        if (isMounted.current) {
+          setState((prev) => ({
+            ...prev,
+            errors: { ...prev.errors, contextExtraction: error as Error },
+          }));
+        }
       }
-      return context;
-    } catch (error) {
-      console.error(
-        `[SubAgent ${stableConfig.current.componentName}] Context extraction failed:`,
-        error,
-      );
-      if (isMounted.current) {
-        setState((prev) => ({
-          ...prev,
-          errors: { ...prev.errors, contextExtraction: error as Error },
-        }));
-      }
-      return null;
     }
+
+    if (isMounted.current) {
+      setState((prev) => ({
+        ...prev,
+        context,
+        loadingState: LoadingState.PARTIAL,
+      }));
+    }
+    return context;
   }, [thread]);
 
   // Execute MCP enrichment pipeline
@@ -125,7 +131,7 @@ export function useComponentSubAgent(config: SubAgentConfig) {
 
     try {
       // Get available MCP tools
-      const mcpTools = await getMCPTools(stableConfig.current.mcpTools);
+      const mcpTools = await getMCPTools(stableConfig.current.mcpTools, context);
 
       // Create enrichment promises
       const enrichmentPromises = stableConfig.current.dataEnricher(context, mcpTools);
@@ -287,7 +293,7 @@ export function useComponentSubAgent(config: SubAgentConfig) {
       setState((prev) => ({
         ...prev,
         loadingState: LoadingState.SKELETON,
-        context: null,
+        context: config.initialContext || null,
         enrichedData: {},
         errors: {},
         mcpActivity: {},
@@ -338,7 +344,7 @@ export function useComponentSubAgent(config: SubAgentConfig) {
       hasRunRef.current = false; // Reset run flag
       setState({
         loadingState: LoadingState.SKELETON,
-        context: null,
+        context: config.initialContext || null,
         enrichedData: {},
         errors: {},
         mcpActivity: {},
@@ -349,14 +355,51 @@ export function useComponentSubAgent(config: SubAgentConfig) {
         if (context) enrichData(context);
       }, 0);
     },
+    trigger: async (actionPayload: any) => {
+      console.log(`[SubAgent ${componentIdRef.current}] Triggered with payload:`, actionPayload);
+      const context = extractContext();
+      // Merge action payload into context
+      const triggerContext = { ...context, ...actionPayload };
+      if (triggerContext) {
+        await enrichData(triggerContext);
+      }
+    }
   };
+}
+
+// Cache for the Linear client to avoid reconnecting on every tool call
+// Use window in browser to survive hot module reloading in development
+declare global {
+  interface Window {
+    __linearMcpClient?: LinearMcpClient;
+  }
+}
+
+function getLinearClientInstance(): LinearMcpClient | null {
+  if (typeof window !== 'undefined') {
+    return window.__linearMcpClient || null;
+  }
+  return null;
+}
+
+function setLinearClientInstance(client: LinearMcpClient): void {
+  if (typeof window !== 'undefined') {
+    window.__linearMcpClient = client;
+  }
 }
 
 /**
  * Get MCP tools by name - integrates with actual MCP system
  */
-async function getMCPTools(toolNames: string[]): Promise<Record<string, any>> {
+async function getMCPTools(toolNames: string[], context?: any): Promise<Record<string, any>> {
   const tools: Record<string, any> = {};
+  console.log('[getMCPTools] called with:', {
+    toolNames,
+    context,
+    hasKey: !!context?.linearApiKey,
+    keyType: typeof context?.linearApiKey,
+    keyLen: context?.linearApiKey?.length
+  });
 
   // Try to get actual MCP tools from window if available
   const mcpTools = (window as any).__custom_mcp_tools || {};
@@ -368,6 +411,40 @@ async function getMCPTools(toolNames: string[]): Promise<Record<string, any>> {
       .replace(/[^a-z0-9]/g, '');
 
   for (const name of toolNames) {
+    // Special handling for Linear if API key is present
+    if (name === 'linear' && context?.linearApiKey) {
+      tools[name] = {
+        execute: async (params: any) => {
+          try {
+            // Initialize client if needed or if key changed
+            let client = getLinearClientInstance();
+            const existingKey = client ? (client as any).apiKey : null;
+            const needsNewClient = !client || existingKey !== context.linearApiKey;
+            
+            if (needsNewClient) {
+              console.log('[Linear] Creating new MCP client (existing:', !!client, 'keyMatch:', existingKey === context.linearApiKey, ')');
+              client = new LinearMcpClient(context.linearApiKey);
+              setLinearClientInstance(client);
+            } else {
+              console.log('[Linear] Reusing existing MCP client');
+            }
+
+            // Use the client's smart execution to handle tool mapping
+            const action = params?.tool || params?.action || 'list_issues';
+            const actionParams = params?.params || params;
+
+            console.log('[Linear] executeAction:', { action, actionParams, rawParams: params });
+            return await client.executeAction(action, actionParams);
+
+          } catch (error) {
+            console.error('[MCP] Linear API call failed:', error);
+            return { error: error instanceof Error ? error.message : 'Unknown error' };
+          }
+        }
+      };
+      continue;
+    }
+
     // Use actual MCP tool if available
     if (mcpTools[name]) {
       tools[name] = mcpTools[name];
@@ -395,7 +472,7 @@ async function getMCPTools(toolNames: string[]): Promise<Record<string, any>> {
         // Always use mock in development (localhost) to avoid MCP timeout
         const isLocalhost = typeof window !== 'undefined' && window.location.hostname === 'localhost';
 
-        if (isLocalhost && ['linear', 'weather', 'analytics'].includes(name)) {
+        if (isLocalhost && ['weather', 'analytics'].includes(name)) {
           // Fall through to mock switch below
         } else if (typeof window !== 'undefined' && (window as any).callMcpTool) {
           try {
@@ -415,7 +492,7 @@ async function getMCPTools(toolNames: string[]): Promise<Record<string, any>> {
           case 'analytics':
             return mockAnalyticsData(params);
           case 'linear':
-            return mockLinearData(params);
+            return { error: 'Linear MCP tool unavailable. Provide LINEAR_API_KEY or ensure MCP tools are injected.' };
           default:
             return { data: `Result from ${name}` };
         }
@@ -427,46 +504,6 @@ async function getMCPTools(toolNames: string[]): Promise<Record<string, any>> {
 }
 
 // Mock data generators for testing
-function mockLinearData(params: any) {
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      resolve({
-        issues: [
-          {
-            id: 'issue-1',
-            identifier: 'LIN-123',
-            title: 'Implement MCP Bridge',
-            status: 'In Progress',
-            priority: { value: 1, name: 'Urgent' },
-            assignee: 'User',
-            project: 'Core Infrastructure',
-            updatedAt: new Date().toISOString(),
-          },
-          {
-            id: 'issue-2',
-            identifier: 'LIN-124',
-            title: 'Design Kanban Board',
-            status: 'Done',
-            priority: { value: 2, name: 'High' },
-            assignee: 'Designer',
-            project: 'UI Components',
-            updatedAt: new Date(Date.now() - 86400000).toISOString(),
-          },
-          {
-            id: 'issue-3',
-            identifier: 'LIN-125',
-            title: 'Fix Sync Issues',
-            status: 'Todo',
-            priority: { value: 3, name: 'Medium' },
-            assignee: 'Developer',
-            project: 'Bug Fixes',
-            updatedAt: new Date(Date.now() - 172800000).toISOString(),
-          },
-        ],
-      });
-    }, 600);
-  });
-}
 function mockWeatherData(params: any) {
   return new Promise((resolve) => {
     setTimeout(() => {

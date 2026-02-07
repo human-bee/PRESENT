@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>PRESENT User Story Scrapbook (2026-01-29)</title>
+    <style>
+      :root {
+        color-scheme: light;
+        font-family: "Inter", system-ui, -apple-system, sans-serif;
+        background: #f8fafc;
+      }
+      body {
+        margin: 0;
+        padding: 32px;
+        background: linear-gradient(180deg, #f8fafc 0%, #eef2ff 100%);
+        color: #0f172a;
+      }
+      .wrap {
+        max-width: 1100px;
+        margin: 0 auto;
+      }
+      header {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        margin-bottom: 24px;
+      }
+      h1 {
+        font-size: 28px;
+        margin: 0;
+      }
+      .meta {
+        font-size: 13px;
+        color: #475569;
+      }
+      .section {
+        margin: 28px 0;
+        padding: 20px;
+        background: #ffffff;
+        border-radius: 18px;
+        box-shadow: 0 12px 32px rgba(15, 23, 42, 0.08);
+      }
+      .story {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+      }
+      .badge {
+        display: inline-flex;
+        padding: 6px 10px;
+        border-radius: 999px;
+        background: #e0e7ff;
+        color: #3730a3;
+        font-size: 12px;
+        font-weight: 600;
+        width: fit-content;
+      }
+      ul {
+        margin: 0;
+        padding-left: 18px;
+        color: #334155;
+      }
+      .hero-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+        gap: 18px;
+      }
+      .card {
+        padding: 16px;
+        border-radius: 16px;
+        background: #0f172a;
+        color: #e2e8f0;
+      }
+      .card.hero {
+        background: #0b1020;
+      }
+      .card-title {
+        font-size: 14px;
+        font-weight: 600;
+        margin-bottom: 10px;
+      }
+      img {
+        width: 100%;
+        border-radius: 12px;
+        border: 1px solid rgba(148, 163, 184, 0.3);
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13px;
+      }
+      th, td {
+        padding: 10px 12px;
+        border-bottom: 1px solid #e2e8f0;
+        text-align: left;
+      }
+      th {
+        background: #f1f5f9;
+        color: #334155;
+      }
+      .notes li {
+        margin-bottom: 6px;
+      }
+      @media (max-width: 900px) {
+        body { padding: 18px; }
+        .story { grid-template-columns: 1fr; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header>
+        <span class="badge">PRESENT Scrapbook</span>
+        <h1>PRESENT User Story Scrapbook (2026-01-29)</h1>
+        <div class="meta">Run ID: 20260129-211028</div>
+      </header>
+
+      <section class="section story">
+        <div>
+          <h2>Story Arc</h2>
+          <p><strong>Conversation -&gt; Action -&gt; Memory -&gt; Visuals -&gt; View Orchestration</strong></p>
+        </div>
+        <div>
+          <h2>New Paradigms</h2>
+          <ul><li>Fast-lane view presets (instant layout changes)</li><li>Context-spectrum widgets (summary + memory recall)</li><li>MCP App view rendering in-canvas</li><li>Tool-driven UI updates with measured paint latency</li></ul>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>Hero Moments</h2>
+        <div class="hero-grid">
+          
+        <div class="card hero">
+          <div class="card-title">Conversation Summary (context spectrum)</div>
+          <img src="./assets/2026-01-29/20260129-211028-02-summary-updated.png" alt="Conversation Summary (context spectrum)" />
+        </div>
+        
+        <div class="card hero">
+          <div class="card-title">Memory Recall (vector loop)</div>
+          <img src="./assets/2026-01-29/20260129-211028-04-memory-results.png" alt="Memory Recall (vector loop)" />
+        </div>
+        
+        <div class="card hero">
+          <div class="card-title">MCP App View (tool + UI)</div>
+          <img src="./assets/2026-01-29/20260129-211028-06-mcp-app.png" alt="MCP App View (tool + UI)" />
+        </div>
+        
+        <div class="card hero">
+          <div class="card-title">Presenter View Preset (fast lane)</div>
+          <img src="./assets/2026-01-29/20260129-211028-08-view-preset.png" alt="Presenter View Preset (fast lane)" />
+        </div>
+        
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>Journey Evidence</h2>
+        <table><thead><tr><th>Step</th><th>Status</th><th>Duration (ms)</th><th>Screenshot</th><th>Notes</th></tr></thead><tbody><tr><td>Sign in / sign up</td><td>PASS</td><td>4638</td><td></td><td></td></tr><tr><td>Canvas loaded</td><td>PASS</td><td>3771</td><td>[20260129-211028-00-canvas.png](./assets/2026-01-29/20260129-211028-00-canvas.png)</td><td></td></tr><tr><td>Create meeting summary widget</td><td>PASS</td><td>504</td><td>[20260129-211028-01-summary-created.png](./assets/2026-01-29/20260129-211028-01-summary-created.png)</td><td>paint 0 ms</td></tr><tr><td>Update summary with decisions + action items</td><td>PASS</td><td>463</td><td>[20260129-211028-02-summary-updated.png](./assets/2026-01-29/20260129-211028-02-summary-updated.png)</td><td>paint 30 ms</td></tr><tr><td>Create memory recall widget</td><td>PASS</td><td>475</td><td>[20260129-211028-03-memory-created.png](./assets/2026-01-29/20260129-211028-03-memory-created.png)</td><td>paint 0 ms</td></tr><tr><td>Populate memory recall results</td><td>PASS</td><td>408</td><td>[20260129-211028-04-memory-results.png](./assets/2026-01-29/20260129-211028-04-memory-results.png)</td><td>paint 15 ms</td></tr><tr><td>Create infographic widget</td><td>PASS</td><td>401</td><td>[20260129-211028-05-infographic.png](./assets/2026-01-29/20260129-211028-05-infographic.png)</td><td>paint 0 ms</td></tr><tr><td>Render MCP App view</td><td>PASS</td><td>439</td><td>[20260129-211028-06-mcp-app.png](./assets/2026-01-29/20260129-211028-06-mcp-app.png)</td><td>paint 0 ms</td></tr><tr><td>Spawn LiveKit tiles</td><td>PASS</td><td>695</td><td>[20260129-211028-07-livekit-tiles.png](./assets/2026-01-29/20260129-211028-07-livekit-tiles.png)</td><td></td></tr><tr><td>Apply presenter view preset (fast lane)</td><td>PASS</td><td>393</td><td>[20260129-211028-08-view-preset.png](./assets/2026-01-29/20260129-211028-08-view-preset.png)</td><td>applied in 3 ms</td></tr></tbody></table>
+      </section>
+
+      <section class="section">
+        <h2>Speed Benchmarks</h2>
+        <table><thead><tr><th>Operation</th><th>Duration (ms)</th><th>Budget (ms)</th><th>Result</th></tr></thead><tbody><tr><td>create_component (MeetingSummaryWidget)</td><td>0</td><td>1200</td><td>PASS</td></tr><tr><td>update_component (MeetingSummaryWidget)</td><td>30</td><td>900</td><td>PASS</td></tr><tr><td>create_component (MemoryRecallWidget)</td><td>0</td><td>1200</td><td>PASS</td></tr><tr><td>update_component (MemoryRecallWidget)</td><td>15</td><td>900</td><td>PASS</td></tr><tr><td>create_component (InfographicWidget)</td><td>0</td><td>1400</td><td>PASS</td></tr><tr><td>create_component (McpAppWidget)</td><td>0</td><td>1400</td><td>PASS</td></tr><tr><td>fast-lane view preset (presenter)</td><td>3</td><td>500</td><td>PASS</td></tr></tbody></table>
+      </section>
+
+      <section class="section notes">
+        <h2>Notes</h2>
+        <ul><li>View preset is applied via tldraw:applyViewPreset (fast lane).</li><li>Memory recall results are injected as a simulated MCP response for deterministic capture.</li><li>MCP App demo uses a static ui resource (public/mcp-apps/demo.html).</li></ul>
+      </section>
+    </div>
+  </body>
+</html>

@@ -5,6 +5,9 @@ const MIN_SCREENSHOT_TIMEOUT_MS = 2500;
 const DEFAULT_SCREENSHOT_EDGE = 1024;
 const MIN_SCREENSHOT_EDGE = 64;
 const DEFAULT_PROMPT_MAX_CHARS = 200000;
+const DEFAULT_TRANSCRIPT_WINDOW_MS = 5 * 60 * 1000;
+const MIN_TRANSCRIPT_WINDOW_MS = 15 * 1000;
+const MAX_TRANSCRIPT_WINDOW_MS = 30 * 60 * 1000;
 
 const coerceScreenshotTimeout = (value?: string): number => {
   const parsed = value ? Number.parseInt(value, 10) : DEFAULT_SCREENSHOT_TIMEOUT_MS;
@@ -48,6 +51,13 @@ const sanitizeEdgeList = (input: unknown, base: number, minEdge: number): number
   return unique.length ? unique : undefined;
 };
 
+const coerceTranscriptWindowMs = (value?: string): number => {
+  if (!value) return DEFAULT_TRANSCRIPT_WINDOW_MS;
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed)) return DEFAULT_TRANSCRIPT_WINDOW_MS;
+  return Math.max(MIN_TRANSCRIPT_WINDOW_MS, Math.min(MAX_TRANSCRIPT_WINDOW_MS, parsed));
+};
+
 export type ScreenshotConfig = {
   timeoutMs: number;
   retries: number;
@@ -77,6 +87,7 @@ export type CanvasAgentConfig = {
   mode: CanvasAgentMode;
   /** Placeholder for upcoming HTTP-based teacher worker endpoint */
   teacherEndpoint?: string;
+  transcriptWindowMs: number;
   screenshot: ScreenshotConfig;
   prompt: PromptConfig;
   followups: FollowupConfig;
@@ -129,6 +140,7 @@ export function loadCanvasAgentConfig(env: NodeJS.ProcessEnv = process.env): Can
     ttfbSloMs: Number(env.CANVAS_AGENT_TTFB_SLO_MS ?? 200),
     mode: parseAgentMode(env.CANVAS_AGENT_MODE),
     teacherEndpoint: teacherEndpoint.length ? teacherEndpoint : undefined,
+    transcriptWindowMs: coerceTranscriptWindowMs(env.CANVAS_AGENT_TRANSCRIPT_WINDOW_MS),
     screenshot: {
       timeoutMs: coerceScreenshotTimeout(env.CANVAS_AGENT_SCREENSHOT_TIMEOUT_MS),
       retries: Math.max(0, Number.parseInt(env.CANVAS_AGENT_SCREENSHOT_RETRIES ?? '1', 10) || 0),

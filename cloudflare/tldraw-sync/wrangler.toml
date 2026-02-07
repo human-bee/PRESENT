@@ -1,0 +1,27 @@
+name = "present-tldraw-sync"
+main = "src/index.ts"
+compatibility_date = "2025-02-01"
+workers_dev = true
+preview_urls = false
+
+[observability]
+enabled = true
+
+[durable_objects]
+bindings = [
+  { name = "TLDRAW_ROOM", class_name = "TldrawRoomDurableObject" },
+]
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["TldrawRoomDurableObject"]
+
+[[r2_buckets]]
+binding = "TLDRAW_UPLOADS"
+bucket_name = "present-tldraw-uploads"
+preview_bucket_name = "present-tldraw-uploads-preview"
+
+[[routes]]
+pattern = "sync.present.best"
+custom_domain = true
+zone_name = "present.best"

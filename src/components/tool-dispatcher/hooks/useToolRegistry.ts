@@ -2,6 +2,7 @@
 
 import { useMemo } from 'react';
 import { ComponentRegistry } from '@/lib/component-registry';
+import type { PromotableItem } from '@/lib/promotion-types';
 import type { ToolCall, ToolParameters, ToolRunResult } from '../utils/toolTypes';
 import { getMermaidLastNode, normalizeMermaidText } from '../utils';
 
@@ -38,7 +39,10 @@ export function useToolRegistry(deps: ToolRegistryDeps): ToolRegistryApi {
 
   const handlers = useMemo(() => {
     const map = new Map<string, ToolHandler>();
-    const pendingUpdates = new Map<string, { patch: Record<string, unknown> }>();
+    const pendingUpdates = new Map<
+      string,
+      { patch: Record<string, unknown>; enqueuedAt: number; attempts: number }
+    >();
     let frameHandle: number | null = null;
     let lastDispatch: ((eventName: string, detail?: unknown) => ToolRunResult) | null = null;
     type LedgerEntry = {
@@ -154,59 +158,100 @@ export function useToolRegistry(deps: ToolRegistryDeps): ToolRegistryApi {
         pendingUpdates.clear();
         return;
       }
+      const PENDING_UPDATE_MAX_AGE_MS = 15_000;
+      const PENDING_UPDATE_MAX_ATTEMPTS = 60;
       const dispatch = lastDispatch;
       for (const [messageId, entry] of pendingUpdates.entries()) {
+        const now = Date.now();
+        if (
+          now - entry.enqueuedAt > PENDING_UPDATE_MAX_AGE_MS ||
+          entry.attempts > PENDING_UPDATE_MAX_ATTEMPTS
+        ) {
+          pendingUpdates.delete(messageId);
+          continue;
+        }
+        const componentInfo = ComponentRegistry.get(messageId);
+        const patchRecord = entry.patch;
+        const patchVersion =
+          typeof patchRecord.version === 'number' ? patchRecord.version : undefined;
+        const effectiveVersion =
+          patchVersion !== undefined
+            ? patchVersion
+            : typeof componentInfo?.version === 'number' && Number.isFinite(componentInfo.version)
+              ? componentInfo.version + 1
+              : 1;
+        const patchTimestamp =
+          typeof patchRecord.lastUpdated === 'number'
+            ? patchRecord.lastUpdated
+            : typeof patchRecord.updatedAt === 'number'
+              ? patchRecord.updatedAt
+              : undefined;
+        dispatch('tldraw:merge_component_state', {
+          messageId,
+          patch: patchRecord,
+          meta: { source: 'update_component' },
+        });
+        if (!componentInfo) {
+          pendingUpdates.set(messageId, { ...entry, attempts: entry.attempts + 1 });
+          continue;
+        }
+
         pendingUpdates.delete(messageId);
-      const componentInfo = ComponentRegistry.get(messageId);
-      const patchRecord = entry.patch;
-      const patchVersion =
-        typeof patchRecord.version === 'number' ? patchRecord.version : undefined;
-      const patchTimestamp =
-        typeof patchRecord.lastUpdated === 'number'
-          ? patchRecord.lastUpdated
-          : typeof patchRecord.updatedAt === 'number'
-            ? patchRecord.updatedAt
-            : undefined;
-      dispatch('tldraw:merge_component_state', {
-        messageId,
-        patch: patchRecord,
-        meta: { source: 'update_component' },
-      });
-      void ComponentRegistry.update(messageId, patchRecord, {
-        version: patchVersion ?? null,
-        timestamp: patchTimestamp ?? Date.now(),
-        source: 'tool:update_component',
-      })
-        .then((result) => {
-          const refreshedInfo = ComponentRegistry.get(messageId);
-          if (!result?.ignored && refreshedInfo?.props && refreshedInfo.componentType) {
-            try {
-              window.dispatchEvent(
-                new CustomEvent('custom:showComponent', {
-                  detail: {
-                    messageId,
-                    component: {
-                      type: refreshedInfo.componentType,
-                      props: refreshedInfo.props,
-                    },
-                    contextKey,
-                  },
-                }),
-              );
-            } catch {
-              /* noop */
-            }
-          }
-          metrics?.markPaintForMessage?.(messageId, {
-            tool: 'update_component',
-            componentType: refreshedInfo?.componentType ?? componentInfo?.componentType,
-          });
+        void ComponentRegistry.update(messageId, patchRecord, {
+          version: effectiveVersion,
+          timestamp: patchTimestamp ?? Date.now(),
+          source: 'tool:update_component',
         })
-        .catch(() => {
-          metrics?.markPaintForMessage?.(messageId, {
-            tool: 'update_component',
-            componentType: componentInfo?.componentType,
+          .then((result: any) => {
+            const refreshedInfo = ComponentRegistry.get(messageId);
+            if (result?.success === false) {
+              pendingUpdates.set(messageId, {
+                patch: patchRecord,
+                enqueuedAt: entry.enqueuedAt,
+                attempts: entry.attempts + 1,
+              });
+              return;
+            }
+            if (!result?.ignored && refreshedInfo?.props && refreshedInfo.componentType) {
+              try {
+                window.dispatchEvent(
+                  new CustomEvent('custom:showComponent', {
+                    detail: {
+                      messageId,
+                      component: {
+                        type: refreshedInfo.componentType,
+                        props: refreshedInfo.props,
+                      },
+                      contextKey,
+                    },
+                  }),
+                );
+              } catch {
+                /* noop */
+              }
+            }
+            metrics?.markPaintForMessage?.(messageId, {
+              tool: 'update_component',
+              componentType: refreshedInfo?.componentType ?? componentInfo?.componentType,
+            });
+          })
+          .catch(() => {
+            pendingUpdates.set(messageId, {
+              patch: patchRecord,
+              enqueuedAt: entry.enqueuedAt,
+              attempts: entry.attempts + 1,
+            });
+            metrics?.markPaintForMessage?.(messageId, {
+              tool: 'update_component',
+              componentType: componentInfo?.componentType,
+            });
           });
+      }
+
+      if (pendingUpdates.size > 0 && lastDispatch && frameHandle === null) {
+        frameHandle = window.requestAnimationFrame(() => {
+          frameHandle = null;
+          flushPending();
         });
       }
     };
@@ -257,6 +302,23 @@ export function useToolRegistry(deps: ToolRegistryDeps): ToolRegistryApi {
       return { status: 'SUCCESS', intentId, messageId };
     });
 
+    map.set('dispatch_dom_event', async ({ params }) => {
+      const eventName = String(params?.event ?? params?.name ?? '').trim();
+      if (!eventName) {
+        return { status: 'ERROR', message: 'dispatch_dom_event requires event' };
+      }
+      const detail =
+        params?.detail && typeof params.detail === 'object' && !Array.isArray(params.detail)
+          ? (params.detail as Record<string, unknown>)
+          : undefined;
+      try {
+        window.dispatchEvent(new CustomEvent(eventName, { detail }));
+        return { status: 'SUCCESS', message: `Dispatched ${eventName}` };
+      } catch (error) {
+        return { status: 'ERROR', message: error instanceof Error ? error.message : String(error) };
+      }
+    });
+
     map.set('create_component', async ({ params, emitEditorAction, call }) => {
       const componentType = String(params?.type ?? '').trim();
       const messageId = String(params?.messageId || params?.componentId || '') || `ui-${Date.now().toString(36)}`;
@@ -286,6 +348,9 @@ export function useToolRegistry(deps: ToolRegistryDeps): ToolRegistryApi {
         );
         normalizedProps.type = componentType;
         normalizedProps.messageId = messageId;
+        if (contextKey && typeof normalizedProps.contextKey !== 'string') {
+          normalizedProps.contextKey = contextKey;
+        }
         if (!('__custom_message_id' in normalizedProps)) {
           normalizedProps.__custom_message_id = messageId;
         }
@@ -529,7 +594,11 @@ export function useToolRegistry(deps: ToolRegistryDeps): ToolRegistryApi {
         }
       }
 
-      pendingUpdates.set(messageId, { patch: combined });
+      pendingUpdates.set(messageId, {
+        patch: combined,
+        enqueuedAt: existing?.enqueuedAt ?? Date.now(),
+        attempts: existing?.attempts ?? 0,
+      });
       scheduleFlush(dispatchTL);
       const explicitIntent = typeof params?.intentId === 'string' && params.intentId.trim().length > 0 ? params.intentId.trim() : undefined;
       const ledgerIntentId = explicitIntent || messageLedger.get(messageId);
@@ -584,6 +653,110 @@ export function useToolRegistry(deps: ToolRegistryDeps): ToolRegistryApi {
       );
       emitEditorAction({ type: 'canvas_command', command: 'tldraw:listShapes', callId: call.id });
       return { status: 'ACK', message: 'Listing shapes' };
+    });
+
+    map.set('create_infographic', async ({ params, call, emitEditorAction }) => {
+      // 1. Check if we already have an infographic widget
+      const components = ComponentRegistry.list(contextKey);
+      const widget = components.find((c) => c.componentType === 'InfographicWidget');
+      let messageId = widget?.messageId;
+
+      // 2. If not, create one
+      if (!widget) {
+        messageId = `ui-infographic-${Date.now().toString(36)}`;
+        window.dispatchEvent(
+          new CustomEvent('custom:showComponent', {
+            detail: {
+              messageId,
+              component: {
+                type: 'InfographicWidget',
+                props: { messageId, contextKey },
+              },
+              contextKey,
+            },
+          }),
+        );
+        emitEditorAction({ type: 'create_component', componentType: 'InfographicWidget', messageId });
+
+        // Wait briefly for component to mount/register
+        await new Promise((resolve) => setTimeout(resolve, 500));
+      }
+
+      // 3. Dispatch action to trigger generation
+      // The InfographicWidget listens for 'present:agent_actions' with 'create_infographic'
+      const actionEnvelope = {
+        actions: [
+          {
+            name: 'create_infographic',
+            params: {
+              widgetId: messageId,
+              ...params,
+            },
+          },
+        ],
+      };
+
+      window.dispatchEvent(new CustomEvent('present:agent_actions', { detail: actionEnvelope }));
+      // Re-emit shortly after to catch widgets that attach their listeners a tick after mount.
+      window.setTimeout(() => {
+        try {
+          window.dispatchEvent(new CustomEvent('present:agent_actions', { detail: actionEnvelope }));
+        } catch {}
+      }, 900);
+
+      metrics?.associateCallWithMessage?.(call.id, messageId!, { tool: 'create_infographic', componentType: 'InfographicWidget' });
+
+      return { status: 'SUCCESS', message: 'Infographic generation triggered', componentId: messageId };
+    });
+
+    map.set('promote_component_content', async ({ params, dispatchTL, call }) => {
+      const explicitId =
+        typeof params?.componentId === 'string'
+          ? params.componentId.trim()
+          : typeof params?.messageId === 'string'
+            ? params.messageId.trim()
+            : '';
+      const resolvedId = explicitId || resolveLedgerMessageId(params || {});
+      const componentId = resolvedId || '';
+      if (!componentId) {
+        return { status: 'ERROR', message: 'promote_component_content requires a componentId' };
+      }
+
+      const component = ComponentRegistry.get(componentId);
+      if (!component) {
+        return { status: 'ERROR', message: `Component ${componentId} not found` };
+      }
+
+      const promotable = (component.props as any)?.promotable;
+      const items = Array.isArray(promotable?.items)
+        ? (promotable.items as PromotableItem[])
+        : [];
+      if (!items.length) {
+        return { status: 'ERROR', message: 'Component has no promotable content' };
+      }
+
+      const itemId = typeof params?.itemId === 'string' ? params.itemId.trim() : '';
+      const target = itemId ? items.find((item) => item.id === itemId) : items[0];
+      if (!target) {
+        return {
+          status: 'ERROR',
+          message: `Promotable item ${itemId} not found on component ${componentId}`,
+        };
+      }
+
+      dispatchTL('tldraw:promote_content', target);
+
+      metrics?.associateCallWithMessage?.(call.id, componentId, {
+        tool: 'promote_component_content',
+        componentType: component.componentType,
+      });
+
+      return {
+        status: 'SUCCESS',
+        message: `Promoted ${target.label || target.id} to canvas`,
+        itemId: target.id,
+        componentId,
+      };
     });
 
     return map;

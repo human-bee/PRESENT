@@ -1,7 +1,5 @@
 'use client';
 
-import { components } from './custom'; // Import all registered components
-
 // Define interface for component size information
 export interface ComponentSizeInfo {
   naturalWidth: number;
@@ -33,21 +31,31 @@ export const componentSizeInfo: Record<string, ComponentSizeInfo> = {
     resizeMode: 'aspect-locked',
     sizingPolicy: 'fit_until_user_resize',
   },
+  // Alias: component registry uses "YoutubeEmbed" (lowercase 't')
+  YoutubeEmbed: {
+    naturalWidth: 640,
+    naturalHeight: 360,
+    minWidth: 320,
+    minHeight: 180,
+    aspectRatio: 16 / 9,
+    resizeMode: 'aspect-locked',
+    sizingPolicy: 'fit_until_user_resize',
+  },
   RetroTimer: {
     naturalWidth: 280,
-    naturalHeight: 320, // Taller for full timer display
+    naturalHeight: 380, // Taller for full timer display with presets
     minWidth: 200,
     minHeight: 240,
     resizeMode: 'free',
-    sizingPolicy: 'scale_only',
+    sizingPolicy: 'fit_until_user_resize',
   },
   RetroTimerEnhanced: {
     naturalWidth: 280,
-    naturalHeight: 320,
+    naturalHeight: 380, // Includes preset buttons and status text
     minWidth: 200,
     minHeight: 240,
     resizeMode: 'free',
-    sizingPolicy: 'scale_only',
+    sizingPolicy: 'fit_until_user_resize', // Auto-fit to actual content
   },
   ParticipantTile: {
     naturalWidth: 320,
@@ -75,13 +83,30 @@ export const componentSizeInfo: Record<string, ComponentSizeInfo> = {
     resizeMode: 'free',
     sizingPolicy: 'scale_only',
   },
-  DocumentEditor: {
-    naturalWidth: 600,
-    naturalHeight: 500,
-    minWidth: 400,
-    minHeight: 300,
-    resizeMode: 'free',
+  LivekitScreenShareTile: {
+    naturalWidth: 640,
+    naturalHeight: 360,
+    minWidth: 320,
+    minHeight: 180,
+    aspectRatio: 16 / 9,
+    resizeMode: 'aspect-locked',
     sizingPolicy: 'fit_until_user_resize',
+  },
+  LiveCaptions: {
+    naturalWidth: 500,
+    naturalHeight: 400,
+    minWidth: 300,
+    minHeight: 250,
+    resizeMode: 'free',
+    sizingPolicy: 'always_fit', // Captions list grows dynamically
+  },
+  DocumentEditor: {
+    naturalWidth: 700,
+    naturalHeight: 1100,
+    minWidth: 500,
+    minHeight: 700,
+    resizeMode: 'free',
+    sizingPolicy: 'always_fit', // Document content varies significantly
   },
   LinearKanbanBoard: {
     naturalWidth: 1200, // Wider to show all columns
@@ -89,13 +114,45 @@ export const componentSizeInfo: Record<string, ComponentSizeInfo> = {
     minWidth: 800,
     minHeight: 400,
     resizeMode: 'free',
-    sizingPolicy: 'always_fit', // dynamic content grows/shrinks with board
+    sizingPolicy: 'always_fit', // Dynamic tasks/columns
   },
   ActionItemTracker: {
     naturalWidth: 500,
     naturalHeight: 600,
     minWidth: 350,
     minHeight: 400,
+    resizeMode: 'free',
+    sizingPolicy: 'always_fit', // List of items grows dynamically
+  },
+  MeetingSummaryWidget: {
+    naturalWidth: 520,
+    naturalHeight: 520,
+    minWidth: 360,
+    minHeight: 360,
+    resizeMode: 'free',
+    sizingPolicy: 'always_fit',
+  },
+  MemoryRecallWidget: {
+    naturalWidth: 520,
+    naturalHeight: 520,
+    minWidth: 360,
+    minHeight: 360,
+    resizeMode: 'free',
+    sizingPolicy: 'always_fit',
+  },
+  CrowdPulseWidget: {
+    naturalWidth: 560,
+    naturalHeight: 620,
+    minWidth: 420,
+    minHeight: 420,
+    resizeMode: 'free',
+    sizingPolicy: 'always_fit',
+  },
+  McpAppWidget: {
+    naturalWidth: 520,
+    naturalHeight: 520,
+    minWidth: 360,
+    minHeight: 360,
     resizeMode: 'free',
     sizingPolicy: 'fit_until_user_resize',
   },
@@ -105,7 +162,7 @@ export const componentSizeInfo: Record<string, ComponentSizeInfo> = {
     minWidth: 400,
     minHeight: 500,
     resizeMode: 'free',
-    sizingPolicy: 'fit_until_user_resize',
+    sizingPolicy: 'always_fit', // Search results vary
   },
   AIImageGenerator: {
     naturalWidth: 800,
@@ -131,14 +188,30 @@ export const componentSizeInfo: Record<string, ComponentSizeInfo> = {
     resizeMode: 'free',
     sizingPolicy: 'scale_only',
   },
+  ContextFeeder: {
+    naturalWidth: 420,
+    naturalHeight: 520,
+    minWidth: 320,
+    minHeight: 360,
+    resizeMode: 'free',
+    sizingPolicy: 'always_fit', // Context items vary dynamically
+  },
   DebateScorecard: {
-    naturalWidth: 960,
-    naturalHeight: 540,
-    minWidth: 720,
-    minHeight: 405,
+    naturalWidth: 1200,
+    naturalHeight: 675, // 16:9 landscape layout
+    minWidth: 800,
+    minHeight: 450,
     aspectRatio: 16 / 9,
-    resizeMode: 'aspect-locked',
-    sizingPolicy: 'fit_until_user_resize',
+    resizeMode: 'free', // Allow free resize but prefer landscape
+    sizingPolicy: 'always_fit', // Always adapt to dynamic content
+  },
+  InfographicWidget: {
+    naturalWidth: 400,
+    naturalHeight: 500,
+    minWidth: 300,
+    minHeight: 350,
+    resizeMode: 'free',
+    sizingPolicy: 'always_fit', // Generated images vary in size
   },
   // Default fallback for unregistered components
   Default: {

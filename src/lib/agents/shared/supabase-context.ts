@@ -6,13 +6,14 @@ import type { JsonObject } from '@/lib/utils/json-schema';
 import {
   createDefaultScorecardState,
   debateScorecardStateSchema,
+  recomputePlayerScoresFromClaims,
   type DebateScorecardState,
 } from '@/lib/agents/debate-scorecard-schema';
 
 // Ensure .env.local is loaded when running stewards/conductor in Node
 try {
   config({ path: join(process.cwd(), '.env.local') });
-} catch {}
+} catch { }
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL as string;
 const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY as string;
@@ -35,7 +36,7 @@ if (!serviceRoleKey && process.env.NODE_ENV === 'development' && !shouldBypassSu
     console.warn(
       '⚠️ [StewardSupabase] Using anon key for Supabase access. Provide SUPABASE_SERVICE_ROLE_KEY for full access.',
     );
-  } catch {}
+  } catch { }
 }
 
 const supabase = createClient(url, supabaseKey, {
@@ -48,7 +49,7 @@ const logBypass = (scope: string) => {
   bypassLogged = true;
   try {
     console.info(`ℹ️ [StewardSupabase] Dev bypass active (${scope}); using in-memory store only.`);
-  } catch {}
+  } catch { }
 };
 
 type FlowchartDocRecord = {
@@ -256,7 +257,7 @@ const ensureLivekitRoom = async (room: string) => {
 
   try {
     console.error('[LiveKit] Room not found before timeout', context);
-  } catch {}
+  } catch { }
   throw new Error(`LiveKit room not found before timeout: ${normalized}`);
 };
 
@@ -386,7 +387,7 @@ const warnFallback = (scope: string, error: unknown) => {
   const message = error instanceof Error ? error.message : String(error);
   try {
     console.warn(`⚠️ [StewardSupabase] ${scope} fell back to in-memory store`, { message });
-  } catch {}
+  } catch { }
 };
 
 const parseStateValue = (value: unknown): unknown => {
@@ -643,8 +644,9 @@ export async function commitDebateScorecard(
     lastUpdated: Date.now(),
   });
 
-  const nextVersion = parsed.version;
-  const sanitizedState = JSON.parse(JSON.stringify(parsed)) as DebateScorecardState;
+  const normalized = recomputePlayerScoresFromClaims(parsed);
+  const nextVersion = normalized.version;
+  const sanitizedState = JSON.parse(JSON.stringify(normalized)) as DebateScorecardState;
 
   if (shouldBypassSupabase) {
     logBypass('commitDebateScorecard');
@@ -741,7 +743,7 @@ export async function getCanvasShapeSummary(room: string) {
             room,
           });
         }
-      } catch {}
+      } catch { }
     }
     const shapes: CanvasShapeSummary[] = [];
 
@@ -751,7 +753,7 @@ export async function getCanvasShapeSummary(room: string) {
       if (normalized) shapes.push(normalized);
     };
 
-    const rawShapeCollection = store['shape'] || store.shapes;
+    const rawShapeCollection = store.shape || store.shapes;
     if (Array.isArray(rawShapeCollection)) {
       rawShapeCollection.forEach(pushShape);
     } else if (rawShapeCollection && typeof rawShapeCollection === 'object') {
@@ -909,7 +911,7 @@ export async function listCanvasComponents(room: string): Promise<CanvasComponen
       });
     };
 
-    const rawShapeCollection = store['shape'] || store.shapes;
+    const rawShapeCollection = store.shape || store.shapes;
     if (Array.isArray(rawShapeCollection)) {
       rawShapeCollection.forEach(considerShapeEntry);
     } else if (rawShapeCollection && typeof rawShapeCollection === 'object') {
@@ -998,6 +1000,33 @@ export async function broadcastAgentPrompt(event: {
   await client.sendData(normalizedRoom, data, DataPacket_Kind.RELIABLE, { topic: 'agent_prompt' });
 }
 
+export async function broadcastTranscription(event: {
+  room: string;
+  text: string;
+  speaker?: string;
+  manual?: boolean;
+  timestamp?: number;
+}) {
+  const { room, text, speaker, manual = true, timestamp } = event;
+  const trimmedRoom = normalizeRoomName(room);
+  if (!trimmedRoom) {
+    throw new Error('Room is required for transcription broadcast');
+  }
+  const cleanedText = String(text || '').trim();
+  if (!cleanedText) {
+    throw new Error('Transcription requires text');
+  }
+  const payload = {
+    text: cleanedText,
+    speaker: typeof speaker === 'string' && speaker.trim().length > 0 ? speaker.trim() : undefined,
+    manual: Boolean(manual),
+    timestamp: typeof timestamp === 'number' ? timestamp : Date.now(),
+  };
+  const data = new TextEncoder().encode(JSON.stringify(payload));
+  const { client, normalizedRoom } = await ensureLivekitRoom(trimmedRoom);
+  await client.sendData(normalizedRoom, data, DataPacket_Kind.RELIABLE, { topic: 'transcription' });
+}
+
 export async function getTranscriptWindow(room: string, windowMs: number) {
   const cache = transcriptStore.get(room);
   const useCache = cache && Date.now() - cache.cachedAt < 5_000;
@@ -1045,4 +1074,67 @@ export async function getTranscriptWindow(room: string, windowMs: number) {
     }
     return { transcript: [] };
   }
+}
+
+// =============================================================================
+// Context Documents (user-uploaded markdown/text for steward context)
+// =============================================================================
+
+export type ContextDocument = {
+  id: string;
+  title: string;
+  content: string;
+  type: 'markdown' | 'text';
+  timestamp: number;
+  source: 'file' | 'paste';
+};
+
+/**
+ * Retrieves user-uploaded context documents for a room/session.
+ * These documents are injected into steward prompts alongside the transcript.
+ */
+export async function getContextDocuments(room: string): Promise<ContextDocument[]> {
+  if (shouldBypassSupabase) {
+    logBypass('getContextDocuments');
+    return [];
+  }
+
+  try {
+    // Try to find session by room name
+    const { data, error } = await supabase
+      .from('sessions')
+      .select('context_documents')
+      .eq('room_name', room)
+      .order('updated_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (error && error.code !== 'PGRST116') {
+      throw error;
+    }
+
+    if (!data?.context_documents) {
+      return [];
+    }
+
+    const docs = Array.isArray(data.context_documents) ? data.context_documents : [];
+    return docs as ContextDocument[];
+  } catch (err) {
+    warnFallback('getContextDocuments', err);
+    return [];
+  }
+}
+
+/**
+ * Formats context documents into a string for inclusion in steward prompts.
+ */
+export function formatContextDocuments(docs: ContextDocument[]): string {
+  if (docs.length === 0) return '';
+
+  return docs
+    .map((doc) => {
+      const typeLabel = doc.type === 'markdown' ? 'Markdown' : 'Text';
+      return `[${typeLabel}: ${doc.title}]\n${doc.content}`;
+    })
+    .join('\n\n---\n\n');
 }

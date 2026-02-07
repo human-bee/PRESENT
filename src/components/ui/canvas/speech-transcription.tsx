@@ -1,14 +1,14 @@
 'use client';
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   useRoomContext,
   useRemoteParticipants,
   useLocalParticipant,
 } from '@livekit/components-react';
-import { RemoteParticipant } from 'livekit-client';
 import { Mic, MicOff, Loader2, AudioLines } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useAllTranscripts, useTranscriptStore } from '@/lib/stores/transcript-store';
 
 interface Transcription {
   id: string;
@@ -36,7 +36,10 @@ export function SpeechTranscription({
   const remoteParticipants = useRemoteParticipants();
   const localParticipant = useLocalParticipant();
 
-  const [transcriptions, setTranscriptions] = useState<Transcription[]>([]);
+  // Get transcripts from centralized store
+  const storeTranscripts = useAllTranscripts();
+  const { clearTranscripts: storeClearTranscripts } = useTranscriptStore();
+
   const [isListening, setIsListening] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<
     'disconnected' | 'connecting' | 'connected'
@@ -44,6 +47,19 @@ export function SpeechTranscription({
   const [agentStatus, setAgentStatus] = useState<'waiting' | 'active' | 'error'>('waiting');
 
   const transcriptionContainerRef = useRef<HTMLDivElement>(null);
+  const lastNotifiedIdRef = useRef<string | null>(null);
+
+  // Convert store transcripts to local format
+  const transcriptions = useMemo((): Transcription[] => {
+    return storeTranscripts.slice(-maxTranscriptions).map((t) => ({
+      id: t.id,
+      speaker: t.speaker,
+      text: t.text,
+      timestamp: t.timestamp,
+      isFinal: t.isFinal,
+      source: (t.source === 'agent' || t.speaker === 'voice-agent' ? 'agent' : 'user') as 'agent' | 'user',
+    }));
+  }, [storeTranscripts, maxTranscriptions]);
 
   // Check for agent presence with detailed logging
   const agentParticipant = remoteParticipants.find(
@@ -77,42 +93,23 @@ export function SpeechTranscription({
     });
   }, [remoteParticipants, agentParticipant]);
 
+  // Update connection status
   useEffect(() => {
     if (room) {
       setConnectionStatus('connected');
-
-      // Listen for data messages from the agent
-      const handleDataReceived = (payload: Uint8Array, participant?: RemoteParticipant) => {
-        try {
-          const data = new TextDecoder().decode(payload);
-          const parsed = JSON.parse(data);
-
-          // Handle transcription data from agent
-          if (parsed.type === 'live_transcription') {
-            const transcription: Transcription = {
-              id: `${Date.now()}-${Math.random()}`,
-              speaker: parsed.speaker || participant?.identity || 'Unknown',
-              text: parsed.text,
-              timestamp: parsed.timestamp || Date.now(),
-              isFinal: parsed.is_final || false,
-              source: participant?.identity === 'voice-agent' ? 'agent' : 'user',
-            };
-
-            addTranscription(transcription);
-            onTranscription?.(transcription);
-          }
-        } catch (error) {
-          console.warn('Failed to parse transcription data:', error);
-        }
-      };
-
-      room.on('dataReceived', handleDataReceived);
-
-      return () => {
-        room.off('dataReceived', handleDataReceived);
-      };
     }
-  }, [room, onTranscription, addTranscription]);
+  }, [room]);
+
+  // Notify onTranscription callback for new transcripts
+  useEffect(() => {
+    if (!onTranscription || transcriptions.length === 0) return;
+    
+    const latest = transcriptions[transcriptions.length - 1];
+    if (latest && latest.id !== lastNotifiedIdRef.current) {
+      lastNotifiedIdRef.current = latest.id;
+      onTranscription(latest);
+    }
+  }, [transcriptions, onTranscription]);
 
   // Monitor agent status
   useEffect(() => {
@@ -122,32 +119,6 @@ export function SpeechTranscription({
       setAgentStatus('waiting');
     }
   }, [agentParticipant]);
-
-  const addTranscription = useCallback(
-    (transcription: Transcription) => {
-      setTranscriptions((prev) => {
-        const updated = [...prev];
-
-        // Remove old interim results from same speaker
-        if (!transcription.isFinal) {
-          const filteredPrev = updated.filter(
-            (t) => !(t.speaker === transcription.speaker && !t.isFinal),
-          );
-          filteredPrev.push(transcription);
-          return filteredPrev.slice(-maxTranscriptions);
-        }
-
-        // For final results, replace any interim result from same speaker
-        const filteredPrev = updated.filter(
-          (t) => !(t.speaker === transcription.speaker && !t.isFinal),
-        );
-        filteredPrev.push(transcription);
-
-        return filteredPrev.slice(-maxTranscriptions);
-      });
-    },
-    [maxTranscriptions],
-  );
 
   // Auto-scroll to bottom when new transcriptions arrive
   useEffect(() => {
@@ -168,9 +139,9 @@ export function SpeechTranscription({
     console.log('🎤 Stopped listening for agent transcriptions');
   }, []);
 
-  const clearTranscriptions = () => {
-    setTranscriptions([]);
-  };
+  const clearTranscriptions = useCallback(() => {
+    storeClearTranscripts();
+  }, [storeClearTranscripts]);
 
   const formatTime = (timestamp: number) => {
     return new Date(timestamp).toLocaleTimeString('en-US', {

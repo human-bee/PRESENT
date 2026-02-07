@@ -3,7 +3,7 @@ import type { RefObject } from 'react';
 import type { Editor } from '@tldraw/tldraw';
 import type { Room } from 'livekit-client';
 import { createLiveKitBus } from '@/lib/livekit/livekit-bus';
-import { attachMermaidBridge, registerWindowListener } from '../utils';
+import { attachMermaidBridge, attachPromotionBridge, registerWindowListener } from '../utils';
 import { createCanvasCreationHandlers } from '../utils/canvas-creation-handlers';
 import { createCanvasSelectionHandlers } from '../utils/canvas-selection-handlers';
 import { createCanvasPinHandlers } from '../utils/canvas-pin-handlers';
@@ -39,6 +39,11 @@ export function useCanvasEventHandlers(
     });
     if (mermaidCleanup) {
       cleanups.push(mermaidCleanup);
+    }
+
+    const promotionCleanup = attachPromotionBridge({ editor });
+    if (promotionCleanup) {
+      cleanups.push(promotionCleanup);
     }
 
     const handlerMaps = [

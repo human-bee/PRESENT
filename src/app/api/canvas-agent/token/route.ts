@@ -3,6 +3,9 @@ import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import { mintAgentToken } from '@/lib/agents/canvas-agent/server/auth/agentTokens';
 import { z } from 'zod';
+import { createClient } from '@supabase/supabase-js';
+import { getRequestUserId } from '@/lib/supabase/server/request-user';
+import { getBooleanFlag } from '@/lib/feature-flags';
 
 const QuerySchema = z.object({
   sessionId: z.string().min(1),
@@ -12,6 +15,7 @@ const QuerySchema = z.object({
 const ROOM_ID_REGEX = /^canvas-([a-zA-Z0-9_-]+)$/;
 const DEV_BYPASS_ENABLED =
   process.env.NEXT_PUBLIC_CANVAS_DEV_BYPASS === 'true' || process.env.CANVAS_DEV_BYPASS === 'true';
+const DEMO_MODE_ENABLED = getBooleanFlag(process.env.NEXT_PUBLIC_CANVAS_DEMO_MODE, false);
 
 export async function GET(req: NextRequest) {
   const url = new URL(req.url);
@@ -29,11 +33,22 @@ export async function GET(req: NextRequest) {
   }
   const canvasId = match[1];
 
-  const cookieStore = await cookies();
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseAnon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!supabaseUrl || !supabaseAnon || !supabaseServiceKey) {
+    return NextResponse.json({ ok: false, error: 'misconfigured' }, { status: 500 });
+  }
+
+  // Prefer bearer auth (browser sessions are stored in localStorage, not SSR cookies).
+  let sessionUserId: string | null = null;
+  const bearerUser = await getRequestUserId(req);
+  if (bearerUser.ok) {
+    sessionUserId = bearerUser.userId;
+  } else {
+    // Fallback: cookie-based auth (local dev / legacy flows).
+    const cookieStore = await cookies();
+    const supabase = createServerClient(supabaseUrl, supabaseAnon, {
       cookies: {
         get(name: string) {
           return cookieStore.get(name)?.value;
@@ -45,21 +60,29 @@ export async function GET(req: NextRequest) {
           cookieStore.set({ name, value: '', ...options });
         },
       },
-    },
-  );
-
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
-
-  const sessionUserId = session?.user?.id;
-  if (!sessionUserId && !DEV_BYPASS_ENABLED) {
-    return NextResponse.json({ ok: false, error: 'unauthorized' }, { status: 401 });
+    });
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    sessionUserId = session?.user?.id ?? null;
   }
 
-  const { data: canvas, error: canvasErr } = await supabase
+  if (!sessionUserId && !DEV_BYPASS_ENABLED && !DEMO_MODE_ENABLED) {
+    return NextResponse.json({ ok: false, error: 'unauthorized' }, { status: 401 });
+  }
+  // In demo mode, the browser may make early token requests before anonymous auth finishes.
+  // Allow token minting without a session user to avoid transient 401s.
+  if (!sessionUserId && DEMO_MODE_ENABLED) {
+    sessionUserId = null;
+  }
+
+  const admin = createClient(supabaseUrl, supabaseServiceKey, {
+    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+  });
+
+  const { data: canvas, error: canvasErr } = await admin
     .from('canvases')
-    .select('id, user_id')
+    .select('id, user_id, is_public')
     .eq('id', canvasId)
     .maybeSingle();
 
@@ -72,8 +95,15 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ ok: false, error: 'not_found' }, { status: 404 });
   }
 
-  if (!DEV_BYPASS_ENABLED && canvas && canvas.user_id !== sessionUserId) {
-    const { data: member, error: memberErr } = await supabase
+  if (
+    !DEV_BYPASS_ENABLED &&
+    !DEMO_MODE_ENABLED &&
+    canvas &&
+    !canvas.is_public &&
+    sessionUserId &&
+    canvas.user_id !== sessionUserId
+  ) {
+    const { data: member, error: memberErr } = await admin
       .from('canvas_members')
       .select('canvas_id')
       .eq('canvas_id', canvasId)

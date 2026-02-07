@@ -332,6 +332,56 @@ export function RetroTimerEnhanced({
         if (DEBUG) console.debug('[RetroTimerEnhanced] AI update received', patch);
       }
 
+      // Handle direct property patches from voice agent (fast path, no regex)
+      if ('isRunning' in patch || 'timeLeft' in patch || 'configuredDuration' in patch || 'reset' in patch || 'addSeconds' in patch) {
+        const directPatch: Record<string, unknown> = {};
+        
+        if ('isRunning' in patch) {
+          directPatch.isRunning = coerceBoolean((patch as any).isRunning);
+          if (directPatch.isRunning) {
+            directPatch.isFinished = false;
+          }
+        }
+        
+        if ('configuredDuration' in patch) {
+          const duration = coerceNumber((patch as any).configuredDuration);
+          if (duration !== null && duration > 0) {
+            directPatch.configuredDuration = duration;
+            if (!('timeLeft' in patch)) {
+              directPatch.timeLeft = duration;
+            }
+            directPatch.isFinished = false;
+          }
+        }
+        
+        if ('timeLeft' in patch) {
+          const timeLeft = coerceNumber((patch as any).timeLeft);
+          if (timeLeft !== null && timeLeft >= 0) {
+            directPatch.timeLeft = timeLeft;
+            directPatch.isFinished = false;
+          }
+        }
+        
+        if ('reset' in patch && coerceBoolean((patch as any).reset)) {
+          directPatch.timeLeft = timerState.configuredDuration;
+          directPatch.isRunning = false;
+          directPatch.isFinished = false;
+        }
+        
+        if ('addSeconds' in patch) {
+          const add = coerceNumber((patch as any).addSeconds);
+          if (add !== null) {
+            directPatch.timeLeft = Math.max(0, timerState.timeLeft + add);
+            directPatch.configuredDuration = Math.max(timerState.configuredDuration, directPatch.timeLeft as number);
+          }
+        }
+        
+        if (Object.keys(directPatch).length > 0) {
+          pushRuntimePatch(directPatch);
+          return;
+        }
+      }
+
       const rawMinutes = 'initialMinutes' in patch ? coerceNumber((patch as any).initialMinutes) : null;
       const rawSeconds = 'initialSeconds' in patch ? coerceNumber((patch as any).initialSeconds) : null;
       const normalizedMinutes =

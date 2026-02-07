@@ -12,6 +12,8 @@
 
 # testing
 /coverage
+/playwright-report
+/test-results
 
 # next.js
 /.next/
@@ -73,6 +75,8 @@ tasks/
 
 # Temporary working copies of external templates
 .tmp/
+tmp/
+.qdrant-data/
 
 # Build artifacts and tool installations (Parity run artifacts)
 docs/parity/

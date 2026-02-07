@@ -1,10 +1,10 @@
 import { z } from 'zod';
 import { randomUUID } from 'crypto';
-import { getTranscriptWindow } from '@/lib/agents/shared/supabase-context';
 import { jsonObjectSchema, jsonValueSchema, type JsonObject, type JsonValue } from '@/lib/utils/json-schema';
 import { runCanvasAgent } from '@/lib/agents/canvas-agent/server/runner';
 import { sendActionsEnvelope } from '@/lib/agents/canvas-agent/server/wire';
 import type { AgentAction } from '@/lib/canvas-agent/contract/types';
+import { normalizeFairyContextProfile } from '@/lib/fairy-context/profiles';
 
 const logWithTs = <T extends Record<string, unknown>>(label: string, payload: T) => {
   try {
@@ -20,12 +20,12 @@ const debugLog = (...args: unknown[]) => {
     } catch {}
   }
 };
-const debugJson = (label: string, value: unknown, max = 2000) => {
+const _debugJson = (label: string, value: unknown, max = 2000) => {
   if (!CANVAS_STEWARD_DEBUG) return;
   try {
     const json = JSON.stringify(value, null, 2);
     debugLog(label, json.length > max ? `${json.slice(0, max)}… (truncated ${json.length - max} chars)` : json);
-  } catch (error) {
+  } catch (_error) {
     debugLog(label, value);
   }
 };
@@ -47,6 +47,11 @@ export async function runCanvasSteward(args: RunCanvasStewardArgs) {
   const payload = jsonObjectSchema.parse(entriesToObject(normalizedEntries));
   const room = extractRoom(payload);
   const model = typeof payload.model === 'string' ? payload.model : undefined;
+  const contextProfile = normalizeFairyContextProfile(
+    typeof payload.contextProfile === 'string'
+      ? payload.contextProfile
+      : (payload.metadata as any)?.contextProfile,
+  );
 
   const taskLabel = task.startsWith('canvas.') ? task.slice('canvas.'.length) : task;
   const start = Date.now();
@@ -77,6 +82,7 @@ export async function runCanvasSteward(args: RunCanvasStewardArgs) {
       userMessage: message,
       model,
       initialViewport: payload.bounds as any,
+      contextProfile,
     });
 
     logWithTs('✅ [CanvasSteward] run.complete', {

@@ -41,9 +41,14 @@ async function forward(request: NextRequest, targetUrl: string): Promise<Respons
       // For non-GET methods pass the body through
       body: ['GET', 'HEAD'].includes(request.method) ? undefined : request.body,
       redirect: 'follow',
+      cache: 'no-store', // Disable caching for SSE/API proxy
+      // @ts-expect-error - duplex is required for streaming bodies in some environments but not in all TS definitions
+      duplex: 'half',
     };
 
+    console.log('[MCP Proxy] Forwarding to:', url.toString());
     const upstream = await fetch(url.toString(), init);
+    console.log('[MCP Proxy] Upstream status:', upstream.status);
 
     // Stream the body directly so we support Server-Sent Events (text/event-stream)
     return new Response(upstream.body, {

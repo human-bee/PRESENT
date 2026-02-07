@@ -1,17 +1,119 @@
-import { Agent, run } from '@openai/agents';
+import { getCerebrasClient, getModelForSteward } from '../fast-steward-config';
 
-export const youtubeSteward = new Agent({
-  name: 'YouTubeSteward',
-  model: 'gpt-5-mini',
-  instructions:
-    'Search and select helpful official videos using hosted tools, then yield a create_component call for YouTubeEmbed via the caller.',
-  tools: [],
-});
+const CEREBRAS_MODEL = getModelForSteward('YOUTUBE_STEWARD_FAST_MODEL');
+const client = getCerebrasClient();
 
-export async function runYouTubeSteward(params: { query: string }) {
-  const prompt = `Find an official YouTube video for: ${params.query}`;
-  const result = await run(youtubeSteward, prompt);
-  return result.finalOutput;
+const YOUTUBE_STEWARD_INSTRUCTIONS = `
+You are a fast YouTube assistant that maps user requests to YouTube MCP tool calls.
+
+Available YouTube MCP Tools:
+- searchVideos: Search for videos. Args: { query, maxResults?, order? }
+- getVideoDetails: Get video metadata. Args: { videoId }
+- getChannelVideos: List videos from channel. Args: { channelId, maxResults? }
+- getTrending: Get trending videos. Args: { categoryId?, regionCode? }
+
+Category IDs: music=10, gaming=20, education=27, science=28, howto=26, entertainment=24, news=25
+
+Rules:
+1. Parse the user's intent and map to the appropriate tool
+2. For "latest" or "newest" requests, use order: "date"
+3. For "popular" or "best" requests, use order: "viewCount"
+4. Always call commit_action with the result
+
+Kind values: search, getVideo, getChannel, getTrending, embed, noOp
+`;
+
+const tools = [
+  {
+    type: 'function' as const,
+    function: {
+      name: 'commit_action',
+      description: 'Commit the YouTube action',
+      parameters: {
+        type: 'object',
+        properties: {
+          kind: {
+            type: 'string',
+            enum: ['search', 'getVideo', 'getChannel', 'getTrending', 'embed', 'noOp'],
+          },
+          videoId: { type: 'string' },
+          channelId: { type: 'string' },
+          reason: { type: 'string' },
+          mcpToolName: { type: 'string', description: 'MCP tool to call' },
+          mcpToolArgs: { type: 'string', description: 'MCP tool args as JSON string' },
+        },
+        required: ['kind'],
+      },
+    },
+  },
+];
+
+type YouTubeAction = {
+  kind: string;
+  videoId?: string;
+  channelId?: string;
+  reason?: string;
+  mcpTool: { name: string; args: Record<string, unknown> } | null;
+};
+
+export async function runYouTubeSteward(params: { instruction: string; context?: any }): Promise<YouTubeAction> {
+  const { instruction, context } = params;
+
+  const contextInfo = context?.currentVideo
+    ? `Current video: ${context.currentVideo.title} (${context.currentVideo.videoId})`
+    : '';
+
+  const messages = [
+    { role: 'system' as const, content: YOUTUBE_STEWARD_INSTRUCTIONS },
+    {
+      role: 'user' as const,
+      content: `${contextInfo}\n\nInstruction: "${instruction}"\n\nDetermine the best YouTube action and call commit_action.`,
+    },
+  ];
+
+  try {
+    const response = await client.chat.completions.create({
+      model: CEREBRAS_MODEL,
+      messages,
+      tools,
+      tool_choice: 'auto',
+    });
+
+    const choice = response.choices[0]?.message;
+
+    if (choice?.tool_calls?.[0]) {
+      const toolCall = choice.tool_calls[0];
+      if (toolCall.function.name === 'commit_action') {
+        const args = JSON.parse(toolCall.function.arguments);
+        let mcpTool: { name: string; args: Record<string, unknown> } | null = null;
+
+        if (args.mcpToolName) {
+          try {
+            mcpTool = {
+              name: args.mcpToolName,
+              args: args.mcpToolArgs ? JSON.parse(args.mcpToolArgs) : {},
+            };
+          } catch {
+            mcpTool = { name: args.mcpToolName, args: {} };
+          }
+        }
+
+        return {
+          kind: args.kind,
+          videoId: args.videoId,
+          channelId: args.channelId,
+          reason: args.reason,
+          mcpTool,
+        };
+      }
+    }
+
+    return {
+      kind: 'search',
+      mcpTool: { name: 'searchVideos', args: { query: instruction, maxResults: 5 } },
+    };
+  } catch (error) {
+    console.error('[YouTubeSteward] Error:', error);
+    return { kind: 'noOp', reason: 'Error processing instruction', mcpTool: null };
+  }
 }
-
-

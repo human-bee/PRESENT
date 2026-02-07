@@ -1,0 +1,1289 @@
+<!doctype html>
+  <html>
+    <head>
+      <meta charset="utf-8" />
+      <title>PRESENT Wow Journey Scrapbook (2026-01-30)</title>
+      <link rel="preconnect" href="https://fonts.googleapis.com">
+      <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+      <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+      <style>
+        :root {
+          color-scheme: light;
+          --bg: #05070f;
+          --surface: rgba(12, 18, 35, 0.9);
+          --card: rgba(15, 23, 42, 0.92);
+          --accent: #38bdf8;
+          --accent-2: #a78bfa;
+          --text: #e2e8f0;
+          --muted: #94a3b8;
+          --pass: #22c55e;
+          --warn: #f59e0b;
+          --fail: #ef4444;
+        }
+        * { box-sizing: border-box; }
+        body {
+          margin: 0;
+          font-family: 'Space Grotesk', system-ui, sans-serif;
+          background:
+            radial-gradient(1200px 600px at 15% -10%, rgba(56, 189, 248, 0.35), transparent 60%),
+            radial-gradient(800px 500px at 85% 0%, rgba(167, 139, 250, 0.3), transparent 60%),
+            var(--bg);
+          color: var(--text);
+          padding: 40px 32px 80px;
+        }
+        header {
+          display: grid;
+          grid-template-columns: 1fr 280px;
+          gap: 24px;
+          align-items: start;
+        }
+        h1 { margin: 0; font-size: 32px; letter-spacing: -0.02em; }
+        h2 { margin: 36px 0 16px; font-size: 20px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+        h3 { margin: 0 0 6px; font-size: 16px; }
+        .story { font-size: 15px; color: var(--muted); margin-top: 8px; max-width: 720px; }
+        .mono { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--muted); }
+        .card {
+          background: var(--surface);
+          border: 1px solid rgba(148, 163, 184, 0.15);
+          border-radius: 16px;
+          padding: 16px 18px;
+          box-shadow: 0 16px 40px rgba(2, 6, 23, 0.55);
+        }
+        .run-card { display: flex; flex-direction: column; gap: 8px; }
+        .stat-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+          gap: 14px;
+          margin-top: 24px;
+        }
+        .stat {
+          background: var(--card);
+          border: 1px solid rgba(148, 163, 184, 0.2);
+          border-radius: 14px;
+          padding: 12px 14px;
+        }
+        .stat span { display: block; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+        .stat strong { font-size: 18px; margin-top: 6px; display: block; }
+        .pill {
+          padding: 4px 10px;
+          border-radius: 999px;
+          font-size: 11px;
+          font-weight: 700;
+          text-transform: uppercase;
+        }
+        .pill-pass { background: rgba(34, 197, 94, 0.2); color: var(--pass); }
+        .pill-warn { background: rgba(245, 158, 11, 0.2); color: var(--warn); }
+        .pill-fail { background: rgba(239, 68, 68, 0.2); color: var(--fail); }
+        .hero-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+          gap: 18px;
+        }
+        .hero-card {
+          background: var(--card);
+          border-radius: 18px;
+          overflow: hidden;
+          border: 1px solid rgba(56, 189, 248, 0.35);
+          box-shadow: 0 18px 40px rgba(15, 23, 42, 0.6);
+        }
+        .hero-card img { width: 100%; display: block; }
+        .hero-meta { padding: 12px 14px; }
+        .hero-meta p { margin: 0; font-size: 12px; color: var(--muted); }
+        .perf-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+          gap: 14px;
+          margin-bottom: 18px;
+        }
+        .perf-card {
+          background: var(--card);
+          border-radius: 14px;
+          border: 1px solid rgba(148, 163, 184, 0.2);
+          padding: 12px 14px;
+        }
+        .perf-title { font-size: 13px; font-weight: 600; }
+        .perf-meta { font-size: 12px; color: var(--muted); margin-top: 6px; }
+        .perf-bar {
+          margin-top: 10px;
+          height: 8px;
+          background: rgba(148, 163, 184, 0.2);
+          border-radius: 999px;
+          overflow: hidden;
+        }
+        .perf-bar span { display: block; height: 100%; border-radius: 999px; }
+        .bar-pass { background: linear-gradient(90deg, rgba(34, 197, 94, 0.4), rgba(34, 197, 94, 0.9)); }
+        .bar-warn { background: linear-gradient(90deg, rgba(245, 158, 11, 0.4), rgba(245, 158, 11, 0.9)); }
+        table {
+          width: 100%;
+          border-collapse: collapse;
+          font-size: 13px;
+          background: var(--card);
+          border-radius: 12px;
+          overflow: hidden;
+        }
+        th, td { padding: 10px 12px; border-bottom: 1px solid rgba(148, 163, 184, 0.12); }
+        th { text-align: left; background: rgba(15, 23, 42, 0.65); }
+        a { color: var(--accent); }
+        .section-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+          gap: 20px;
+        }
+        .transcript-list {
+          display: grid;
+          gap: 8px;
+        }
+        .transcript-row {
+          display: grid;
+          grid-template-columns: 84px 120px 1fr;
+          gap: 10px;
+          padding: 10px 12px;
+          background: rgba(15, 23, 42, 0.6);
+          border-radius: 10px;
+          border: 1px solid rgba(148, 163, 184, 0.12);
+        }
+        .transcript-time { font-size: 11px; color: var(--muted); }
+        .transcript-speaker { font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--accent); }
+        .transcript-text { font-size: 14px; }
+        .asset-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+          gap: 16px;
+        }
+        figure { margin: 0; background: var(--card); border-radius: 14px; padding: 10px; box-shadow: 0 10px 24px rgba(15, 23, 42, 0.5); }
+        figure img { width: 100%; border-radius: 12px; display: block; }
+        figcaption { font-size: 12px; color: var(--muted); margin-top: 6px; }
+        .chip-grid { display: flex; flex-wrap: wrap; gap: 10px; }
+        .chip { display: flex; align-items: center; gap: 8px; border-radius: 999px; background: rgba(56, 189, 248, 0.12); color: var(--text); padding: 6px 12px; font-size: 12px; }
+        .chip strong { color: var(--accent); font-size: 12px; }
+        ul { padding-left: 18px; color: var(--muted); }
+        .empty { color: var(--muted); }
+        .pulse-list { display: grid; gap: 8px; }
+        .pulse-row {
+          display: grid;
+          grid-template-columns: 90px 130px 160px 1fr;
+          gap: 12px;
+          padding: 10px 12px;
+          border-radius: 10px;
+          background: rgba(15, 23, 42, 0.55);
+          border: 1px solid rgba(148, 163, 184, 0.14);
+          font-size: 12px;
+        }
+        .pulse-time { color: var(--muted); font-family: 'JetBrains Mono', monospace; }
+        .pulse-type { text-transform: uppercase; letter-spacing: 0.08em; color: var(--accent-2); font-size: 11px; }
+        .pulse-tool { color: var(--accent); font-weight: 600; }
+      </style>
+    </head>
+    <body>
+      <header>
+        <div>
+          <h1>PRESENT Wow Journey Scrapbook (2026-01-30)</h1>
+          <div class="story">Debate -&gt; Verification -&gt; Memory -&gt; Visuals -&gt; Live Layout</div>
+          <div class="mono">Run ID: 20260130-034108-alt</div>
+        </div>
+        <div class="card run-card">
+          <div class="mono">Total runtime</div>
+          <div style="font-size: 22px; font-weight: 700;">15396 ms</div>
+          <div class="mono">Latency grade</div>
+          <div style="font-size: 18px; font-weight: 600;">FAST</div>
+        </div>
+      </header>
+
+      <section class="stat-grid">
+        <div class="stat"><span>Transcript turns</span><strong>16</strong></div>
+        <div class="stat"><span>Tool calls</span><strong>5</strong></div>
+        <div class="stat"><span>Tool results</span><strong>5</strong></div>
+        <div class="stat"><span>Tool errors</span><strong>0</strong></div>
+        <div class="stat"><span>MCP calls</span><strong>1</strong></div>
+        <div class="stat"><span>MCP results</span><strong>1</strong></div>
+        <div class="stat"><span>MCP errors</span><strong>0</strong></div>
+        <div class="stat"><span>Assets captured</span><strong>13</strong></div>
+        <div class="stat"><span>Avg paint</span><strong>1 ms</strong></div>
+        <div class="stat"><span>Avg network</span><strong>0 ms</strong></div>
+        <div class="stat"><span>Tool throughput</span><strong>19/min</strong></div>
+        <div class="stat"><span>P50 paint</span><strong>0 ms</strong></div>
+        <div class="stat"><span>P90 paint</span><strong>5 ms</strong></div>
+        <div class="stat"><span>P95 paint</span><strong>5 ms</strong></div>
+      </section>
+
+      <h2>Hero moments</h2>
+      <section class="hero-grid">
+        
+        <article class="hero-card">
+          <img src="./assets/2026-01-30/20260130-034108-alt-01-timer.png" alt="Focus Timer (live adjustments)" />
+          <div class="hero-meta">
+            <h3>Focus Timer (live adjustments)</h3>
+            
+          </div>
+        </article>
+      
+
+        <article class="hero-card">
+          <img src="./assets/2026-01-30/20260130-034108-alt-03-summary.png" alt="Meeting Summary (structured outcomes)" />
+          <div class="hero-meta">
+            <h3>Meeting Summary (structured outcomes)</h3>
+            
+          </div>
+        </article>
+      
+
+        <article class="hero-card">
+          <img src="./assets/2026-01-30/20260130-034108-alt-04-kanban.png" alt="Linear Kanban (follow-up tasks)" />
+          <div class="hero-meta">
+            <h3>Linear Kanban (follow-up tasks)</h3>
+            
+          </div>
+        </article>
+      
+
+        <article class="hero-card">
+          <img src="./assets/2026-01-30/20260130-034108-alt-05-infographic.png" alt="Infographic (visual recap)" />
+          <div class="hero-meta">
+            <h3>Infographic (visual recap)</h3>
+            
+          </div>
+        </article>
+      
+
+        <article class="hero-card">
+          <img src="./assets/2026-01-30/20260130-034108-alt-06-gallery.png" alt="Gallery View (fast lane)" />
+          <div class="hero-meta">
+            <h3>Gallery View (fast lane)</h3>
+            
+          </div>
+        </article>
+      
+      </section>
+
+      <h2>Conversation timeline</h2>
+      <div class="card">
+        
+        <div class="transcript-list">
+          
+                <div class="transcript-row">
+                  <div class="transcript-time">3:41:16 AM</div>
+                  <div class="transcript-speaker">Host</div>
+                  <div class="transcript-text">Welcome to the crowd pulse demo. We are capturing questions and hand counts.</div>
+                </div>
+              
+
+                <div class="transcript-row">
+                  <div class="transcript-time">3:41:16 AM</div>
+                  <div class="transcript-speaker">Attendee 1</div>
+                  <div class="transcript-text">How do you ensure the board keeps pace with a fast Q&amp;A?</div>
+                </div>
+              
+
+                <div class="transcript-row">
+                  <div class="transcript-time">3:41:16 AM</div>
+                  <div class="transcript-speaker">Host</div>
+                  <div class="transcript-text">We will track raised hands and cluster questions in real time.</div>
+                </div>
+              
+
+                <div class="transcript-row">
+                  <div class="transcript-time">3:41:16 AM</div>
+                  <div class="transcript-speaker">Attendee 2</div>
+                  <div class="transcript-text">Can we group similar questions and prioritize top votes?</div>
+                </div>
+              
+
+                <div class="transcript-row">
+                  <div class="transcript-time">3:41:16 AM</div>
+                  <div class="transcript-speaker">Host</div>
+                  <div class="transcript-text">Yes, clustering plus a follow-up suggestion engine.</div>
+                </div>
+              
+
+                <div class="transcript-row">
+                  <div class="transcript-time">3:41:16 AM</div>
+                  <div class="transcript-speaker">Attendee 3</div>
+                  <div class="transcript-text">How does the system decide which view preset to use?</div>
+                </div>
+              
+
+                <div class="transcript-row">
+                  <div class="transcript-time">3:41:16 AM</div>
+                  <div class="transcript-speaker">Host</div>
+                  <div class="transcript-text">Fast lane chooses a preset when the speaker starts a demo.</div>
+                </div>
+              
+
+                <div class="transcript-row">
+                  <div class="transcript-time">3:41:16 AM</div>
+                  <div class="transcript-speaker">Attendee 4</div>
+                  <div class="transcript-text">Can we log the session for later recall?</div>
+                </div>
+              
+
+                <div class="transcript-row">
+                  <div class="transcript-time">3:41:16 AM</div>
+                  <div class="transcript-speaker">Host</div>
+                  <div class="transcript-text">Summaries and infographics are captured into memory.</div>
+                </div>
+              
+
+                <div class="transcript-row">
+                  <div class="transcript-time">3:41:16 AM</div>
+                  <div class="transcript-speaker">Attendee 5</div>
+                  <div class="transcript-text">Show the current hand count and question leaderboard.</div>
+                </div>
+              
+
+                <div class="transcript-row">
+                  <div class="transcript-time">3:41:16 AM</div>
+                  <div class="transcript-speaker">Host</div>
+                  <div class="transcript-text">We will update the crowd pulse widget now.</div>
+                </div>
+              
+
+                <div class="transcript-row">
+                  <div class="transcript-time">3:41:16 AM</div>
+                  <div class="transcript-speaker">Attendee 6</div>
+                  <div class="transcript-text">Please suggest a follow-up question for the top theme.</div>
+                </div>
+              
+
+                <div class="transcript-row">
+                  <div class="transcript-time">3:41:16 AM</div>
+                  <div class="transcript-speaker">Host</div>
+                  <div class="transcript-text">We will add follow-ups and action items.</div>
+                </div>
+              
+
+                <div class="transcript-row">
+                  <div class="transcript-time">3:41:16 AM</div>
+                  <div class="transcript-speaker">Attendee 7</div>
+                  <div class="transcript-text">How fast can these widgets update?</div>
+                </div>
+              
+
+                <div class="transcript-row">
+                  <div class="transcript-time">3:41:16 AM</div>
+                  <div class="transcript-speaker">Host</div>
+                  <div class="transcript-text">We track paint times and keep fast-lane updates under 500ms.</div>
+                </div>
+              
+
+                <div class="transcript-row">
+                  <div class="transcript-time">3:41:16 AM</div>
+                  <div class="transcript-speaker">Host</div>
+                  <div class="transcript-text">Closing the Q&amp;A with a final recap.</div>
+                </div>
+              
+        </div>
+      
+      </div>
+
+      <h2>Widget coverage</h2>
+      <div class="card">
+        
+        <div class="chip-grid">
+          
+                <div class="chip">
+                  <span>Canvas ready</span>
+                  <strong>1</strong>
+                </div>
+              
+
+                <div class="chip">
+                  <span>Transcript panel</span>
+                  <strong>1</strong>
+                </div>
+              
+
+                <div class="chip">
+                  <span>RetroTimerEnhanced</span>
+                  <strong>2</strong>
+                </div>
+              
+
+                <div class="chip">
+                  <span>Focus timer</span>
+                  <strong>1</strong>
+                </div>
+              
+
+                <div class="chip">
+                  <span>Timer updated</span>
+                  <strong>1</strong>
+                </div>
+              
+
+                <div class="chip">
+                  <span>MeetingSummaryWidget</span>
+                  <strong>1</strong>
+                </div>
+              
+
+                <div class="chip">
+                  <span>Meeting summary</span>
+                  <strong>1</strong>
+                </div>
+              
+
+                <div class="chip">
+                  <span>LinearKanbanBoard</span>
+                  <strong>1</strong>
+                </div>
+              
+
+                <div class="chip">
+                  <span>Linear Kanban</span>
+                  <strong>1</strong>
+                </div>
+              
+
+                <div class="chip">
+                  <span>InfographicWidget</span>
+                  <strong>1</strong>
+                </div>
+              
+
+                <div class="chip">
+                  <span>Infographic widget</span>
+                  <strong>1</strong>
+                </div>
+              
+
+                <div class="chip">
+                  <span>Gallery preset</span>
+                  <strong>1</strong>
+                </div>
+              
+        </div>
+      
+      </div>
+
+      <h2>Journey evidence</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Step</th>
+            <th>Status</th>
+            <th>Duration (ms)</th>
+            <th>Screenshot</th>
+            <th>Notes</th>
+          </tr>
+        </thead>
+        <tbody>
+          
+        <tr>
+          <td>Sign in / sign up</td>
+          <td><span class="pill pill-pass">PASS</span></td>
+          <td>4315</td>
+          <td></td>
+          <td></td>
+        </tr>
+      
+
+        <tr>
+          <td>Canvas loaded</td>
+          <td><span class="pill pill-pass">PASS</span></td>
+          <td>3626</td>
+          <td><a href="./assets/2026-01-30/20260130-034108-alt-00-canvas.png">view</a></td>
+          <td></td>
+        </tr>
+      
+
+        <tr>
+          <td>Simulate transcript (16 turns)</td>
+          <td><span class="pill pill-pass">PASS</span></td>
+          <td>805</td>
+          <td></td>
+          <td>16 turns</td>
+        </tr>
+      
+
+        <tr>
+          <td>Open transcript panel</td>
+          <td><span class="pill pill-pass">PASS</span></td>
+          <td>1070</td>
+          <td><a href="./assets/2026-01-30/20260130-034108-alt-00-transcript.png">view</a></td>
+          <td></td>
+        </tr>
+      
+
+        <tr>
+          <td>Create focus timer</td>
+          <td><span class="pill pill-pass">PASS</span></td>
+          <td>735</td>
+          <td><a href="./assets/2026-01-30/20260130-034108-alt-01-timer.png">view</a></td>
+          <td>paint 0 ms</td>
+        </tr>
+      
+
+        <tr>
+          <td>Update timer to 10 minutes</td>
+          <td><span class="pill pill-pass">PASS</span></td>
+          <td>708</td>
+          <td><a href="./assets/2026-01-30/20260130-034108-alt-02-timer-updated.png">view</a></td>
+          <td>paint 5 ms</td>
+        </tr>
+      
+
+        <tr>
+          <td>Create meeting summary widget</td>
+          <td><span class="pill pill-pass">PASS</span></td>
+          <td>848</td>
+          <td><a href="./assets/2026-01-30/20260130-034108-alt-03-summary.png">view</a></td>
+          <td>paint 0 ms</td>
+        </tr>
+      
+
+        <tr>
+          <td>Create Linear Kanban board</td>
+          <td><span class="pill pill-pass">PASS</span></td>
+          <td>2121</td>
+          <td><a href="./assets/2026-01-30/20260130-034108-alt-04-kanban.png">view</a></td>
+          <td>paint 0 ms</td>
+        </tr>
+      
+
+        <tr>
+          <td>Create infographic widget</td>
+          <td><span class="pill pill-pass">PASS</span></td>
+          <td>730</td>
+          <td><a href="./assets/2026-01-30/20260130-034108-alt-05-infographic.png">view</a></td>
+          <td>paint 0 ms</td>
+        </tr>
+      
+
+        <tr>
+          <td>Apply gallery view preset</td>
+          <td><span class="pill pill-pass">PASS</span></td>
+          <td>438</td>
+          <td><a href="./assets/2026-01-30/20260130-034108-alt-06-gallery.png">view</a></td>
+          <td>applied in 0 ms</td>
+        </tr>
+      
+        </tbody>
+      </table>
+
+      <h2>Speed benchmarks</h2>
+      
+        <div class="perf-grid">
+          
+                <div class="perf-card">
+                  <div class="perf-title">create_component (RetroTimerEnhanced)</div>
+                  <div class="perf-meta">0 ms / 1400 ms</div>
+                  <div class="perf-bar">
+                    <span class="bar-pass" style="width:6%"></span>
+                  </div>
+                </div>
+              
+
+                <div class="perf-card">
+                  <div class="perf-title">update_component (RetroTimerEnhanced)</div>
+                  <div class="perf-meta">5 ms / 900 ms</div>
+                  <div class="perf-bar">
+                    <span class="bar-pass" style="width:6%"></span>
+                  </div>
+                </div>
+              
+
+                <div class="perf-card">
+                  <div class="perf-title">create_component (MeetingSummaryWidget)</div>
+                  <div class="perf-meta">0 ms / 1500 ms</div>
+                  <div class="perf-bar">
+                    <span class="bar-pass" style="width:6%"></span>
+                  </div>
+                </div>
+              
+
+                <div class="perf-card">
+                  <div class="perf-title">create_component (LinearKanbanBoard)</div>
+                  <div class="perf-meta">0 ms / 1500 ms</div>
+                  <div class="perf-bar">
+                    <span class="bar-pass" style="width:6%"></span>
+                  </div>
+                </div>
+              
+
+                <div class="perf-card">
+                  <div class="perf-title">create_component (InfographicWidget)</div>
+                  <div class="perf-meta">0 ms / 1500 ms</div>
+                  <div class="perf-bar">
+                    <span class="bar-pass" style="width:6%"></span>
+                  </div>
+                </div>
+              
+
+                <div class="perf-card">
+                  <div class="perf-title">fast-lane view preset (gallery)</div>
+                  <div class="perf-meta">0 ms / 500 ms</div>
+                  <div class="perf-bar">
+                    <span class="bar-pass" style="width:6%"></span>
+                  </div>
+                </div>
+              
+        </div>
+      
+      <table>
+        <thead>
+          <tr>
+            <th>Operation</th>
+            <th>Duration (ms)</th>
+            <th>Budget (ms)</th>
+            <th>Result</th>
+          </tr>
+        </thead>
+        <tbody>
+          
+        <tr>
+          <td>create_component (RetroTimerEnhanced)</td>
+          <td>0</td>
+          <td>1400</td>
+          <td><span class="pill pill-pass">PASS</span></td>
+        </tr>
+      
+
+        <tr>
+          <td>update_component (RetroTimerEnhanced)</td>
+          <td>5</td>
+          <td>900</td>
+          <td><span class="pill pill-pass">PASS</span></td>
+        </tr>
+      
+
+        <tr>
+          <td>create_component (MeetingSummaryWidget)</td>
+          <td>0</td>
+          <td>1500</td>
+          <td><span class="pill pill-pass">PASS</span></td>
+        </tr>
+      
+
+        <tr>
+          <td>create_component (LinearKanbanBoard)</td>
+          <td>0</td>
+          <td>1500</td>
+          <td><span class="pill pill-pass">PASS</span></td>
+        </tr>
+      
+
+        <tr>
+          <td>create_component (InfographicWidget)</td>
+          <td>0</td>
+          <td>1500</td>
+          <td><span class="pill pill-pass">PASS</span></td>
+        </tr>
+      
+
+        <tr>
+          <td>fast-lane view preset (gallery)</td>
+          <td>0</td>
+          <td>500</td>
+          <td><span class="pill pill-pass">PASS</span></td>
+        </tr>
+      
+        </tbody>
+      </table>
+
+      <h2>System pulse</h2>
+      <div class="card">
+        
+        <div class="pulse-list">
+          
+                <div class="pulse-row">
+                  <span class="pulse-time">3:41:16 AM</span>
+                  <span class="pulse-type">transcript</span>
+                  <span class="pulse-tool"></span>
+                  <span class="pulse-note"></span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">3:41:16 AM</span>
+                  <span class="pulse-type">transcript</span>
+                  <span class="pulse-tool"></span>
+                  <span class="pulse-note"></span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">3:41:16 AM</span>
+                  <span class="pulse-type">transcript</span>
+                  <span class="pulse-tool"></span>
+                  <span class="pulse-note"></span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">3:41:16 AM</span>
+                  <span class="pulse-type">transcript</span>
+                  <span class="pulse-tool"></span>
+                  <span class="pulse-note"></span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">3:41:16 AM</span>
+                  <span class="pulse-type">transcript</span>
+                  <span class="pulse-tool"></span>
+                  <span class="pulse-note"></span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">3:41:16 AM</span>
+                  <span class="pulse-type">transcript</span>
+                  <span class="pulse-tool"></span>
+                  <span class="pulse-note"></span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">3:41:16 AM</span>
+                  <span class="pulse-type">transcript</span>
+                  <span class="pulse-tool"></span>
+                  <span class="pulse-note"></span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">3:41:16 AM</span>
+                  <span class="pulse-type">transcript</span>
+                  <span class="pulse-tool"></span>
+                  <span class="pulse-note"></span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">3:41:16 AM</span>
+                  <span class="pulse-type">transcript</span>
+                  <span class="pulse-tool"></span>
+                  <span class="pulse-note"></span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">3:41:16 AM</span>
+                  <span class="pulse-type">transcript</span>
+                  <span class="pulse-tool"></span>
+                  <span class="pulse-note"></span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">3:41:16 AM</span>
+                  <span class="pulse-type">transcript</span>
+                  <span class="pulse-tool"></span>
+                  <span class="pulse-note"></span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">3:41:16 AM</span>
+                  <span class="pulse-type">transcript</span>
+                  <span class="pulse-tool"></span>
+                  <span class="pulse-note"></span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">3:41:16 AM</span>
+                  <span class="pulse-type">transcript</span>
+                  <span class="pulse-tool"></span>
+                  <span class="pulse-note"></span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">3:41:16 AM</span>
+                  <span class="pulse-type">transcript</span>
+                  <span class="pulse-tool"></span>
+                  <span class="pulse-note"></span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">3:41:16 AM</span>
+                  <span class="pulse-type">transcript</span>
+                  <span class="pulse-tool"></span>
+                  <span class="pulse-note"></span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">3:41:16 AM</span>
+                  <span class="pulse-type">transcript</span>
+                  <span class="pulse-tool"></span>
+                  <span class="pulse-note"></span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">3:41:17 AM</span>
+                  <span class="pulse-type">tool_call</span>
+                  <span class="pulse-tool">create_component</span>
+                  <span class="pulse-note">Create focus timer</span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">3:41:18 AM</span>
+                  <span class="pulse-type">tool_result</span>
+                  <span class="pulse-tool">create_component</span>
+                  <span class="pulse-note">Create focus timer</span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">3:41:18 AM</span>
+                  <span class="pulse-type">tool_metrics</span>
+                  <span class="pulse-tool">create_component</span>
+                  <span class="pulse-note"></span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">3:41:18 AM</span>
+                  <span class="pulse-type">tool_call</span>
+                  <span class="pulse-tool">update_component</span>
+                  <span class="pulse-note">Update timer</span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">3:41:18 AM</span>
+                  <span class="pulse-type">tool_result</span>
+                  <span class="pulse-tool">update_component</span>
+                  <span class="pulse-note">Update timer</span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">3:41:19 AM</span>
+                  <span class="pulse-type">tool_metrics</span>
+                  <span class="pulse-tool">update_component</span>
+                  <span class="pulse-note"></span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">3:41:19 AM</span>
+                  <span class="pulse-type">tool_call</span>
+                  <span class="pulse-tool">create_component</span>
+                  <span class="pulse-note">Create meeting summary widget</span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">3:41:19 AM</span>
+                  <span class="pulse-type">tool_result</span>
+                  <span class="pulse-tool">create_component</span>
+                  <span class="pulse-note">Create meeting summary widget</span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">3:41:19 AM</span>
+                  <span class="pulse-type">mcp_call</span>
+                  <span class="pulse-tool">memory_upsert</span>
+                  <span class="pulse-note">Crowd Q&amp;A Summary</span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">3:41:19 AM</span>
+                  <span class="pulse-type">mcp_result</span>
+                  <span class="pulse-tool">memory_upsert</span>
+                  <span class="pulse-note"></span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">3:41:19 AM</span>
+                  <span class="pulse-type">tool_metrics</span>
+                  <span class="pulse-tool">create_component</span>
+                  <span class="pulse-note"></span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">3:41:20 AM</span>
+                  <span class="pulse-type">tool_call</span>
+                  <span class="pulse-tool">create_component</span>
+                  <span class="pulse-note">Create Linear Kanban board</span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">3:41:21 AM</span>
+                  <span class="pulse-type">tool_metrics</span>
+                  <span class="pulse-tool">create_component</span>
+                  <span class="pulse-note"></span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">3:41:21 AM</span>
+                  <span class="pulse-type">tool_result</span>
+                  <span class="pulse-tool">create_component</span>
+                  <span class="pulse-note">Create Linear Kanban board</span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">3:41:22 AM</span>
+                  <span class="pulse-type">tool_call</span>
+                  <span class="pulse-tool">create_component</span>
+                  <span class="pulse-note">Create infographic widget</span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">3:41:22 AM</span>
+                  <span class="pulse-type">tool_result</span>
+                  <span class="pulse-tool">create_component</span>
+                  <span class="pulse-note">Create infographic widget</span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">3:41:22 AM</span>
+                  <span class="pulse-type">tool_metrics</span>
+                  <span class="pulse-tool">create_component</span>
+                  <span class="pulse-note"></span>
+                </div>
+              
+        </div>
+      
+      </div>
+
+      <h2>Tool call timeline</h2>
+      
+        <table>
+          <thead>
+            <tr>
+              <th>Time</th>
+              <th>Type</th>
+              <th>Tool</th>
+              <th>Duration</th>
+              <th>Notes</th>
+            </tr>
+          </thead>
+          <tbody>
+            
+                  <tr>
+                    <td>3:41:17 AM</td>
+                    <td>tool_call</td>
+                    <td>create_component</td>
+                    <td></td>
+                    <td>RetroTimerEnhanced</td>
+                  </tr>
+                
+
+                  <tr>
+                    <td>3:41:18 AM</td>
+                    <td>tool_result</td>
+                    <td>create_component</td>
+                    <td>0</td>
+                    <td>RetroTimerEnhanced</td>
+                  </tr>
+                
+
+                  <tr>
+                    <td>3:41:18 AM</td>
+                    <td>tool_metrics</td>
+                    <td>create_component</td>
+                    <td>0</td>
+                    <td>RetroTimerEnhanced</td>
+                  </tr>
+                
+
+                  <tr>
+                    <td>3:41:18 AM</td>
+                    <td>tool_call</td>
+                    <td>update_component</td>
+                    <td></td>
+                    <td></td>
+                  </tr>
+                
+
+                  <tr>
+                    <td>3:41:18 AM</td>
+                    <td>tool_result</td>
+                    <td>update_component</td>
+                    <td>5</td>
+                    <td></td>
+                  </tr>
+                
+
+                  <tr>
+                    <td>3:41:19 AM</td>
+                    <td>tool_metrics</td>
+                    <td>update_component</td>
+                    <td>5</td>
+                    <td>RetroTimerEnhanced</td>
+                  </tr>
+                
+
+                  <tr>
+                    <td>3:41:19 AM</td>
+                    <td>tool_call</td>
+                    <td>create_component</td>
+                    <td></td>
+                    <td>MeetingSummaryWidget</td>
+                  </tr>
+                
+
+                  <tr>
+                    <td>3:41:19 AM</td>
+                    <td>tool_result</td>
+                    <td>create_component</td>
+                    <td>0</td>
+                    <td>MeetingSummaryWidget</td>
+                  </tr>
+                
+
+                  <tr>
+                    <td>3:41:19 AM</td>
+                    <td>tool_metrics</td>
+                    <td>create_component</td>
+                    <td>0</td>
+                    <td>MeetingSummaryWidget</td>
+                  </tr>
+                
+
+                  <tr>
+                    <td>3:41:20 AM</td>
+                    <td>tool_call</td>
+                    <td>create_component</td>
+                    <td></td>
+                    <td>LinearKanbanBoard</td>
+                  </tr>
+                
+
+                  <tr>
+                    <td>3:41:21 AM</td>
+                    <td>tool_metrics</td>
+                    <td>create_component</td>
+                    <td>0</td>
+                    <td>LinearKanbanBoard</td>
+                  </tr>
+                
+
+                  <tr>
+                    <td>3:41:21 AM</td>
+                    <td>tool_result</td>
+                    <td>create_component</td>
+                    <td>0</td>
+                    <td>LinearKanbanBoard</td>
+                  </tr>
+                
+
+                  <tr>
+                    <td>3:41:22 AM</td>
+                    <td>tool_call</td>
+                    <td>create_component</td>
+                    <td></td>
+                    <td>InfographicWidget</td>
+                  </tr>
+                
+
+                  <tr>
+                    <td>3:41:22 AM</td>
+                    <td>tool_result</td>
+                    <td>create_component</td>
+                    <td>0</td>
+                    <td>InfographicWidget</td>
+                  </tr>
+                
+
+                  <tr>
+                    <td>3:41:22 AM</td>
+                    <td>tool_metrics</td>
+                    <td>create_component</td>
+                    <td>0</td>
+                    <td>InfographicWidget</td>
+                  </tr>
+                
+          </tbody>
+        </table>
+      
+
+      <h2>MCP timeline</h2>
+      
+        <table>
+          <thead>
+            <tr>
+              <th>Time</th>
+              <th>Type</th>
+              <th>Tool</th>
+              <th>Duration</th>
+              <th>Notes</th>
+            </tr>
+          </thead>
+          <tbody>
+            
+                  <tr>
+                    <td>3:41:19 AM</td>
+                    <td>mcp_call</td>
+                    <td>memory_upsert</td>
+                    <td></td>
+                    <td></td>
+                  </tr>
+                
+
+                  <tr>
+                    <td>3:41:19 AM</td>
+                    <td>mcp_result</td>
+                    <td>memory_upsert</td>
+                    <td>260</td>
+                    <td></td>
+                  </tr>
+                
+          </tbody>
+        </table>
+      
+
+      <h2>Assets</h2>
+      
+        <div class="asset-grid">
+          
+                <figure>
+                  <img src="./assets/2026-01-30/20260130-034108-alt-00-canvas.png" alt="Canvas ready" />
+                  <figcaption>Canvas ready</figcaption>
+                </figure>
+              
+
+                <figure>
+                  <img src="./assets/2026-01-30/20260130-034108-alt-00-transcript.png" alt="Transcript panel" />
+                  <figcaption>Transcript panel</figcaption>
+                </figure>
+              
+
+                <figure>
+                  
+                  <figcaption>RetroTimerEnhanced</figcaption>
+                </figure>
+              
+
+                <figure>
+                  <img src="./assets/2026-01-30/20260130-034108-alt-01-timer.png" alt="Focus timer" />
+                  <figcaption>Focus timer</figcaption>
+                </figure>
+              
+
+                <figure>
+                  
+                  <figcaption>RetroTimerEnhanced</figcaption>
+                </figure>
+              
+
+                <figure>
+                  <img src="./assets/2026-01-30/20260130-034108-alt-02-timer-updated.png" alt="Timer updated" />
+                  <figcaption>Timer updated</figcaption>
+                </figure>
+              
+
+                <figure>
+                  
+                  <figcaption>MeetingSummaryWidget</figcaption>
+                </figure>
+              
+
+                <figure>
+                  <img src="./assets/2026-01-30/20260130-034108-alt-03-summary.png" alt="Meeting summary" />
+                  <figcaption>Meeting summary</figcaption>
+                </figure>
+              
+
+                <figure>
+                  
+                  <figcaption>LinearKanbanBoard</figcaption>
+                </figure>
+              
+
+                <figure>
+                  <img src="./assets/2026-01-30/20260130-034108-alt-04-kanban.png" alt="Linear Kanban" />
+                  <figcaption>Linear Kanban</figcaption>
+                </figure>
+              
+
+                <figure>
+                  
+                  <figcaption>InfographicWidget</figcaption>
+                </figure>
+              
+
+                <figure>
+                  <img src="./assets/2026-01-30/20260130-034108-alt-05-infographic.png" alt="Infographic widget" />
+                  <figcaption>Infographic widget</figcaption>
+                </figure>
+              
+
+                <figure>
+                  <img src="./assets/2026-01-30/20260130-034108-alt-06-gallery.png" alt="Gallery preset" />
+                  <figcaption>Gallery preset</figcaption>
+                </figure>
+              
+        </div>
+      
+
+      <h2>Event breakdown</h2>
+      <div class="card">
+        
+        <div class="chip-grid">
+          
+                <div class="chip">
+                  <span>transcript</span>
+                  <strong>16</strong>
+                </div>
+              
+
+                <div class="chip">
+                  <span>asset</span>
+                  <strong>13</strong>
+                </div>
+              
+
+                <div class="chip">
+                  <span>tool call</span>
+                  <strong>5</strong>
+                </div>
+              
+
+                <div class="chip">
+                  <span>tool result</span>
+                  <strong>5</strong>
+                </div>
+              
+
+                <div class="chip">
+                  <span>tool metrics</span>
+                  <strong>5</strong>
+                </div>
+              
+
+                <div class="chip">
+                  <span>run start</span>
+                  <strong>1</strong>
+                </div>
+              
+
+                <div class="chip">
+                  <span>mcp call</span>
+                  <strong>1</strong>
+                </div>
+              
+
+                <div class="chip">
+                  <span>mcp result</span>
+                  <strong>1</strong>
+                </div>
+              
+        </div>
+      
+      </div>
+
+      <h2>Notes</h2>
+      <ul><li>Timer updated via update_component to show speed of UI edits.</li>
+<li>Summary widget demonstrates structured notes + action items.</li>
+<li>Kanban board showcases task follow-ups for the session.</li>
+<li>Infographic widget anchors the visual recap.</li>
+<li>Gallery preset uses fast-lane tldraw:applyViewPreset.</li></ul>
+    </body>
+  </html>

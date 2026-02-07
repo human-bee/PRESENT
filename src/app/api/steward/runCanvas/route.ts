@@ -8,6 +8,12 @@ export const runtime = 'nodejs';
 
 const queue = new AgentTaskQueue();
 const QUEUE_DIRECT_FALLBACK_ENABLED = process.env.CANVAS_QUEUE_DIRECT_FALLBACK === 'true';
+const CLIENT_CANVAS_AGENT_ENABLED = process.env.NEXT_PUBLIC_CANVAS_AGENT_CLIENT_ENABLED === 'true';
+const FAIRY_CLIENT_AGENT_ENABLED = process.env.NEXT_PUBLIC_FAIRY_CLIENT_AGENT_ENABLED === 'true';
+const CANVAS_STEWARD_ENABLED = (process.env.CANVAS_STEWARD_SERVER_EXECUTION ?? 'true') === 'true';
+const SERVER_CANVAS_AGENT_ENABLED =
+  CANVAS_STEWARD_ENABLED && !CLIENT_CANVAS_AGENT_ENABLED && !FAIRY_CLIENT_AGENT_ENABLED;
+const SERVER_CANVAS_TASKS_ENABLED = CANVAS_STEWARD_ENABLED && !CLIENT_CANVAS_AGENT_ENABLED;
 
 export async function POST(req: NextRequest) {
   try {
@@ -76,11 +82,6 @@ export async function POST(req: NextRequest) {
       const msg = error instanceof Error ? error.message : String(error);
       console.warn('[Steward][runCanvas] queue enqueue failed, falling back to direct run', msg);
 
-      if (!QUEUE_DIRECT_FALLBACK_ENABLED) {
-        return NextResponse.json({ error: 'Queue unavailable' }, { status: 503 });
-      }
-
-      // 1) If it's an agent prompt, still broadcast the prompt for the client bridge
       if (normalizedTask === 'canvas.agent_prompt') {
         try {
           const rid = (requestId && String(requestId).trim()) || randomUUID();
@@ -99,7 +100,20 @@ export async function POST(req: NextRequest) {
         }
       }
 
+      if (!QUEUE_DIRECT_FALLBACK_ENABLED) {
+        if (normalizedTask === 'canvas.agent_prompt' && !SERVER_CANVAS_AGENT_ENABLED) {
+          return NextResponse.json({ status: 'broadcast_only' }, { status: 202 });
+        }
+        return NextResponse.json({ error: 'Queue unavailable' }, { status: 503 });
+      }
+
       // 2) Execute the canvas steward right away so the canvas updates even during queue outages
+      const canExecuteFallback =
+        normalizedTask === 'canvas.agent_prompt' ? SERVER_CANVAS_AGENT_ENABLED : SERVER_CANVAS_TASKS_ENABLED;
+      if (!canExecuteFallback) {
+        return NextResponse.json({ status: 'broadcast_only' }, { status: 202 });
+      }
+
       try {
         await runCanvasSteward({ task: normalizedTask, params: normalizedParams });
         return NextResponse.json({ status: 'executed_fallback' }, { status: 202 });

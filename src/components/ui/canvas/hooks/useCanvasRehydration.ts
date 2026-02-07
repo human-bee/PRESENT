@@ -24,13 +24,17 @@ export function useCanvasRehydration({
   setAddedMessageIds,
   logger,
 }: RehydrationParams) {
+  const LOG_REHYDRATE = process.env.NEXT_PUBLIC_LOG_CANVAS_REHYDRATE === 'true';
+  const debug = (...args: any[]) => {
+    if (LOG_REHYDRATE) logger.debug(...args);
+  };
   const lastSignatureRef = useRef<string>('');
   const lastRunAtRef = useRef<number>(0);
   const hasHydratedOnceRef = useRef(false);
   useEffect(() => {
     const handleRehydration = (event?: Event) => {
       if (!editor) {
-        logger.debug('Editor not ready for rehydration, skipping...');
+        debug('Editor not ready for rehydration, skipping...');
         return;
       }
 
@@ -68,16 +72,16 @@ export function useCanvasRehydration({
         signature === lastSignatureRef.current &&
         now - lastRunAtRef.current < 2_000;
       if (shouldSkipRehydration) {
-        logger.debug('♻️ Skipping rehydration (no component deltas detected)');
+        debug('♻️ Skipping rehydration (no component deltas detected)');
         return;
       }
       lastSignatureRef.current = signature;
       lastRunAtRef.current = now;
       hasHydratedOnceRef.current = true;
 
-      logger.debug('🔄 Starting component rehydration...');
+      debug('🔄 Starting component rehydration...');
 
-      logger.debug(`Found ${customShapes.length} custom shapes to rehydrate`);
+      debug(`Found ${customShapes.length} custom shapes to rehydrate`);
 
       customShapes.forEach((shape) => {
         const messageId = shape.props.customComponent;
@@ -85,7 +89,7 @@ export function useCanvasRehydration({
         const registryEntry = ComponentRegistry.get(messageId);
         let componentName = registryEntry?.componentType || shape.props.name;
 
-        logger.debug(`Rehydrating ${componentName} (${messageId})`);
+        debug(`Rehydrating ${componentName} (${messageId})`);
 
         if (componentName === 'LivekitRoomConnector') {
           logger.debug('⏭️  Skipping rehydration of LivekitRoomConnector (moved to Transcript sidebar)');
@@ -165,7 +169,7 @@ export function useCanvasRehydration({
           setMessageIdToShapeIdMap((prev) => new Map(prev).set(messageId, shape.id));
           setAddedMessageIds((prev) => new Set(prev).add(messageId));
 
-          logger.debug(`✅ Rehydrated ${componentName} successfully`);
+          debug(`✅ Rehydrated ${componentName} successfully`);
         } else {
           logger.warn(`❌ Component definition not found for: ${componentName}`);
 
@@ -213,11 +217,11 @@ export function useCanvasRehydration({
           setMessageIdToShapeIdMap((prev) => new Map(prev).set(messageId, shape.id));
           setAddedMessageIds((prev) => new Set(prev).add(messageId));
 
-          logger.debug(`⚠️ Created fallback for ${componentName}`);
+          debug(`⚠️ Created fallback for ${componentName}`);
         }
       });
 
-      logger.debug(
+      debug(
         `🎯 Rehydration complete! ComponentStore now has ${componentStore.current.size} components`,
       );
     };

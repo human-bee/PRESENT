@@ -52,27 +52,27 @@ npm run agent:clean          # Clean/minimal agent implementation
 
 ## Project Architecture
 
-### Three-Agent System
+### Agent System
 
-This project implements a sophisticated **3-agent architecture** for AI-driven collaborative applications:
+This project uses a **realtime voice agent + conductor + stewards** architecture:
 
-1. **🎙️ Voice Agent** (`src/lib/livekit-agent-worker.ts`)
-   - Node.js worker process using LiveKit Agents framework
-   - Captures voice input and provides real-time transcription via OpenAI Realtime API
-   - Orchestrates conversation flow and publishes tool calls
-   - Queries system capabilities and manages room connections
+1. **🎙️ Voice Agent** (`src/lib/agents/realtime/voice-agent.ts`)
+   - Node.js worker process using LiveKit Agents Realtime API
+   - Captures voice input and provides real-time transcription
+   - Enqueues work via `dispatch_to_conductor` or issues UI tool calls
 
-2. **🧠 Decision Engine** (`src/lib/decision-engine.ts`)
-   - Embedded within Voice Agent process
-   - Analyzes transcriptions with 30-second context windows
-   - Detects actionable requests vs casual conversation using GPT-4
-   - Handles collaborative meeting scenarios and "do it" references
+2. **🧭 Conductor** (`src/lib/agents/conductor/`)
+   - Queue-driven router that delegates to domain stewards
+   - No business logic; routes tasks and aggregates context
 
-3. **🔧 Tool Dispatcher** (`src/components/tool-dispatcher.tsx`)
-   - React component running in browser
-   - Routes tool calls to appropriate handlers (custom UI, MCP tools, built-in functions)
-   - Manages execution state with circuit breaker patterns
-   - Publishes results back to Voice Agent via LiveKit data channels
+3. **🧠 Stewards** (`src/lib/agents/subagents/`)
+   - Domain owners (canvas, flowchart, infographic, etc.)
+   - Read state from Supabase and emit structured UI patches
+
+4. **🔧 Tool Dispatcher** (`src/components/tool-dispatcher.tsx`)
+   - React component running in the browser
+   - Executes `create_component` / `update_component` and TLDraw actions
+   - Publishes results back via LiveKit data channels
 
 ### Key System Components
 
@@ -84,9 +84,9 @@ This project implements a sophisticated **3-agent architecture** for AI-driven c
 
 ### Data Flow Pattern
 
-1. User speaks → Voice Agent transcribes → Decision Engine analyzes
-2. Actionable request → Tool call published → Tool Dispatcher routes via SystemRegistry
-3. Execute (custom UI/MCP tool/built-in) → Result published → Voice Agent responds
+1. User speaks → Voice Agent transcribes → dispatches task/tool
+2. Conductor routes → Steward executes → Tool Dispatcher renders
+3. Results publish back over LiveKit → Voice Agent responds
 
 ## Environment Configuration
 
