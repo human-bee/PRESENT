@@ -1,4 +1,5 @@
 import { YoutubeEmbed, youtubeEmbedSchema } from "@/components/ui/youtube/youtube-embed";
+import { YoutubeSearchEnhanced, youtubeSearchEnhancedSchema } from '@/components/ui/youtube/youtube-search-enhanced';
 import { z } from "zod";
 import { WeatherForecast, weatherForecastSchema } from '@/components/ui/integrations/weather-forecast';
 import { RetroTimerRegistry, retroTimerSchema } from '@/components/ui/productivity/retro-timer-registry';
@@ -51,6 +52,7 @@ const extendedSchema = <T extends z.AnyZodObject>(schema: T) => {
 
 const infographicWidgetSchema = z.object({
   useGrounding: z.boolean().optional().describe('Whether to enable Google Search grounding'),
+  isShape: z.boolean().optional().default(true).describe('Render inside the canvas shape'),
 });
 
 // Wrapper for LivekitParticipantTile to map onIdentityChange to updateState
@@ -82,6 +84,13 @@ export const components: any = [
       'Use this to embed a YouTube video. Requires a video ID and optional start time in seconds.',
     component: YoutubeEmbed,
     propsSchema: extendedSchema(youtubeEmbedSchema),
+  },
+  {
+    name: 'YoutubeSearchEnhanced',
+    description:
+      'Search YouTube videos (YouTube Data API) with trending, filters, and optional transcripts.',
+    component: YoutubeSearchEnhanced,
+    propsSchema: extendedSchema(youtubeSearchEnhancedSchema),
   },
   {
     name: 'WeatherForecast',

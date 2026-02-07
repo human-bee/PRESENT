@@ -1,7 +1,8 @@
+'use client';
+
 import { z } from 'zod';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import dynamic from 'next/dynamic';
-import { debounce } from 'lodash';
 
 // Dynamic import for YouTube embed - only load when actually playing a video
 const YoutubeEmbed = dynamic(
@@ -105,6 +106,8 @@ export function YoutubeSearchEnhanced({
     view: 'search',
   });
 
+  const searchTimeoutRef = useRef<number | null>(null);
+
   const fetchJson = useCallback(async (url: string) => {
     const res = await fetch(url, { method: 'GET' });
     const json = await res.json().catch(() => null);
@@ -115,10 +118,12 @@ export function YoutubeSearchEnhanced({
     return json as any;
   }, []);
 
-  // Debounced search function
-  const performSearch = useCallback(
-    debounce(async (query: string, filters: SearchFilters) => {
-      if (!query.trim() && state?.view !== 'trending') return;
+  const performSearchImmediate = useCallback(
+    async (query: string, filters: SearchFilters) => {
+      if (!query.trim()) {
+        setState((prev) => (prev ? { ...prev, searchResults: [], loading: false } : prev));
+        return;
+      }
 
       setState((prev) => (prev ? { ...prev, loading: true, error: null } : prev));
 
@@ -140,26 +145,49 @@ export function YoutubeSearchEnhanced({
         setState((prev) =>
           prev
             ? {
-              ...prev,
-              searchResults: filtered,
-              loading: false,
-            }
+                ...prev,
+                searchResults: filtered,
+                loading: false,
+              }
             : prev,
         );
-      } catch (error) {
+      } catch {
         setState((prev) =>
           prev
             ? {
-              ...prev,
-              error: 'Failed to search videos',
-              loading: false,
-            }
+                ...prev,
+                error: 'Failed to search videos',
+                loading: false,
+              }
             : prev,
         );
       }
-    }, 500),
-    [state?.view, maxResults, fetchJson, setState],
+    },
+    [fetchJson, maxResults],
   );
+
+  // Debounced search without lodash (keeps this component self-contained).
+  const performSearch = useCallback(
+    (query: string, filters: SearchFilters) => {
+      if (typeof window === 'undefined') return;
+      if (searchTimeoutRef.current != null) {
+        window.clearTimeout(searchTimeoutRef.current);
+      }
+      searchTimeoutRef.current = window.setTimeout(() => {
+        void performSearchImmediate(query, filters);
+      }, 500);
+    },
+    [performSearchImmediate],
+  );
+
+  useEffect(() => {
+    return () => {
+      if (typeof window === 'undefined') return;
+      if (searchTimeoutRef.current != null) {
+        window.clearTimeout(searchTimeoutRef.current);
+      }
+    };
+  }, []);
 
   // Load trending videos
   const loadTrendingVideos = useCallback(async () => {

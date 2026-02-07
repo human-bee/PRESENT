@@ -1,0 +1,23 @@
+{
+  "name": "present-showcase-video",
+  "private": true,
+  "version": "0.0.0",
+  "scripts": {
+    "start": "remotion studio",
+    "render": "remotion render PresentShowcase ../../docs/scrapbooks/assets/showcase/render.mp4 --props=showcase.props.json"
+  },
+  "dependencies": {
+    "@remotion/google-fonts": "4.0.419",
+    "@remotion/transitions": "4.0.419",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "remotion": "4.0.419"
+  },
+  "devDependencies": {
+    "@remotion/cli": "4.0.419",
+    "@types/node": "22.13.4",
+    "@types/react": "18.3.24",
+    "@types/react-dom": "18.3.7",
+    "typescript": "5.9.3"
+  }
+}
