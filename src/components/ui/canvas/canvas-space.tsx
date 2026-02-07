@@ -207,43 +207,18 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
     return off;
   }, [bus, emitComponentSnapshot, livekitCtx?.roomName, room?.name]);
   const logger = createLogger('CanvasSpace');
-  // A balanced "brutalist orange"-anchored palette while keeping a full color wheel.
-  // Based on well-known, high-contrast material hues (orange/deep-orange anchor).
-  // Toggle off via paletteEnabled: false to keep TLDraw defaults.
-  const BRAND_ORANGE_WHEEL = {
-    // neutrals
-    black: '#000000',
-    grey: '#9E9E9E',
-    // purple/violet
-    'light-violet': '#EDE7F6', // deep purple 50
-    violet: '#673AB7', // deep purple 500
-    // blues
-    'light-blue': '#E3F2FD', // blue 50
-    blue: '#2196F3', // blue 500
-    // greens
-    'light-green': '#E8F5E9', // green 50
-    green: '#4CAF50', // green 500
-    // orange anchor mapped onto TL's yellow slots
-    'light-yellow': '#FFF3E0', // orange 50
-    yellow: '#FF9800', // orange 500 (anchor)
-    // warm accent mapped onto TL's red slots (deep orange)
-    'light-red': '#FFCCBC', // deep orange 100
-    red: '#FF5722', // deep orange 500
-  } as const;
-
   const branding = useTldrawBranding({
-    defaultFont: 'mono',
+    defaultFont: 'sans',
     defaultSize: 'm',
-    defaultDash: 'dotted',
-    defaultColor: 'red',
-    palette: BRAND_ORANGE_WHEEL as any,
-    paletteEnabled: true,
+    defaultDash: 'solid',
+    defaultColor: 'black',
+    paletteEnabled: false,
     selectionCssVars: {
-      // Orange selection + hover highlights
-      '--tl-color-selection-fill': '#ff6a0033',
-      '--tl-color-selection-stroke': '#ff6a00',
-      '--tl-color-focus': '#ff6a00',
-      '--tl-color-selected': '#ff6a00',
+      // Copper highlight selection.
+      '--tl-color-selection-fill': 'var(--present-accent-ring)',
+      '--tl-color-selection-stroke': 'var(--present-accent)',
+      '--tl-color-focus': 'var(--present-accent)',
+      '--tl-color-selected': 'var(--present-accent)',
     },
   });
 
@@ -406,13 +381,26 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
   return (
     <div
       className={cn(
-        'h-screen flex-1 flex flex-col bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/20 overflow-hidden relative',
+        'h-screen flex-1 flex flex-col bg-surface overflow-hidden relative',
         className,
       )}
       data-canvas-space="true"
     >
       {/* Toast notifications */}
-      <Toaster position="bottom-left" />
+      <Toaster
+        position="bottom-left"
+        toastOptions={{
+          style: {
+            background: 'var(--present-surface-elevated)',
+            color: 'var(--present-text)',
+            border: '1px solid var(--present-border)',
+          },
+          iconTheme: {
+            primary: 'var(--present-accent)',
+            secondary: 'var(--present-surface)',
+          },
+        }}
+      />
 
       {/* Use tldraw with collaboration for sync support */}
       <div
@@ -446,8 +434,8 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
           <div className="space-y-6 max-w-md">
             <div className="text-8xl mb-6 animate-pulse">🎨</div>
             <div className="space-y-3">
-              <p className="text-gray-700 font-semibold text-xl">Loading Canvas...</p>
-              <p className="text-gray-500 text-base leading-relaxed">
+              <p className="text-primary font-semibold text-xl">Loading canvas…</p>
+              <p className="text-secondary text-base leading-relaxed">
                 The canvas is initializing. Please wait a moment.
               </p>
             </div>

@@ -1,0 +1,58 @@
+/*
+ * Present UI (2026)
+ *
+ * Single entrypoint for:
+ * - Tailwind v4 layers
+ * - OpenAI Apps SDK UI tokens + components
+ * - Present-specific theme overrides (copper highlight)
+ *
+ * Keep this file dependency-light: global tokens + overrides only.
+ */
+
+@import "tailwindcss";
+@import "@openai/apps-sdk-ui/css";
+
+/* Required for Tailwind to detect class usage inside Apps SDK UI components. */
+@source "../../node_modules/@openai/apps-sdk-ui";
+
+@layer theme {
+  :root,
+  :where([data-theme]) {
+    /* Accent strategy: neutral primary surfaces + copper highlight for rings/selection. */
+    --present-accent: hsl(24 55% 48%);
+    --present-accent-ring: hsl(24 55% 48% / 0.25);
+
+    /* Apps SDK UI focus rings (default blue) -> copper. */
+    --color-ring: var(--present-accent);
+
+    /* Small semantic bridge used by app + TLDraw integration. */
+    --present-surface: var(--color-surface);
+    --present-surface-secondary: var(--color-surface-secondary);
+    --present-surface-elevated: var(--color-surface-elevated);
+    --present-border: var(--color-border);
+    --present-border-subtle: var(--color-border-subtle);
+    --present-text: var(--color-text);
+    --present-text-secondary: var(--color-text-secondary);
+    --present-text-tertiary: var(--color-text-tertiary);
+  }
+
+  :where([data-theme="dark"]) {
+    --present-accent: hsl(24 70% 60%);
+    --present-accent-ring: hsl(24 70% 60% / 0.30);
+    --color-ring: var(--present-accent);
+  }
+}
+
+@layer base {
+  html,
+  body {
+    height: 100%;
+  }
+
+  body {
+    background: var(--present-surface);
+    color: var(--present-text);
+    font-family: var(--font-sans);
+  }
+}
+

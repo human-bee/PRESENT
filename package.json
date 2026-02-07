@@ -31,7 +31,10 @@
     "journey:tts": "npx tsx scripts/journey/run-multiuser-tts.ts",
     "journey:report": "npx tsx scripts/journey/generate-report.ts",
     "teacher:build": "esbuild scripts/teacher-worker.ts --bundle --platform=node --target=node22 --outfile=.parity-dist/teacher-worker/teacher-worker.js --tsconfig=tsconfig.teacher-worker.json",
-    "teacher:worker": "npm run teacher:build && node .parity-dist/teacher-worker/teacher-worker.js"
+    "teacher:worker": "npm run teacher:build && node .parity-dist/teacher-worker/teacher-worker.js",
+    "showcase:capture": "npx tsx scripts/showcase/capture-ui.ts",
+    "remotion:preview": "remotion studio remotion/index.ts",
+    "remotion:render": "remotion render remotion/index.ts Showcase docs/showcase/2026-ui/showcase.mp4 --overwrite"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "2.0.41",
@@ -55,6 +58,7 @@
     "@openai/agents-extensions": "0.2.1",
     "@openai/agents-openai": "0.2.1",
     "@openai/agents-realtime": "0.2.1",
+    "@openai/apps-sdk-ui": "^0.2.1",
     "@supabase/ssr": "0.7.0",
     "@supabase/supabase-js": "2.78.0",
     "@tanstack/react-query": "5.90.6",
@@ -98,6 +102,9 @@
     "@fastify/websocket": "^11.2.0",
     "@jest/globals": "^29.7.0",
     "@playwright/test": "1.56.1",
+    "@remotion/cli": "^4.0.419",
+    "@remotion/google-fonts": "^4.0.419",
+    "@remotion/transitions": "^4.0.419",
     "@resvg/resvg-js": "^2.6.2",
     "@tailwindcss/postcss": "4.1.16",
     "@testing-library/jest-dom": "6.9.1",
@@ -120,6 +127,7 @@
     "node-fetch": "^3.3.2",
     "pngjs": "^7.0.0",
     "postcss": "^8.5.3",
+    "remotion": "^4.0.419",
     "sharp": "0.34.4",
     "tailwindcss": "4.1.16",
     "ts-jest": "29.4.5",

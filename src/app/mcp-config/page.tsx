@@ -108,13 +108,13 @@ const McpConfigPage = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 p-8">
-      <div className="max-w-2xl mx-auto bg-white rounded-lg shadow-md p-6">
+    <div className="min-h-screen bg-surface p-8">
+      <div className="max-w-2xl mx-auto bg-surface-elevated border border-default rounded-2xl shadow-lg p-6">
         <div className="flex items-center justify-between mb-6">
-          <h1 className="text-2xl font-bold">MCP Server Configuration</h1>
+          <h1 className="heading-lg">MCP server configuration</h1>
           <Link
             href="/canvas"
-            className="px-4 py-2 rounded-md bg-black text-white hover:bg-black/80"
+            className="px-4 py-2 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--present-accent-ring)]"
           >
             Back to Canvas
           </Link>
@@ -122,12 +122,12 @@ const McpConfigPage = () => {
 
         <div className="mb-8">
           <h2 className="text-lg font-semibold mb-4">Model Context Protocol Servers</h2>
-          <p className="text-gray-600 mb-4">
+          <p className="text-secondary mb-4 text-sm">
             Configure external MCP-compliant servers to extend the capabilities of your custom
             application. The servers listed here will be available as tool providers in your chat.
           </p>
           {winToolNames.length === 0 && (
-            <div className="mb-4 p-3 rounded-md bg-yellow-50 text-yellow-800 border border-yellow-200">
+            <div className="mb-4 p-3 rounded-lg bg-caution-surface text-caution border border-caution-outline text-sm">
               No MCP tools are currently registered in the window bridge. Add a server below, then
               use "Verify & Map" to confirm tools are available and mapped.
             </div>
@@ -140,7 +140,7 @@ const McpConfigPage = () => {
 
           <form onSubmit={addServer} className="mb-6">
             <div className="flex flex-col space-y-2">
-              <label htmlFor="server-url" className="font-medium text-gray-700">
+              <label htmlFor="server-url" className="font-medium text-secondary text-sm">
                 Server URL
               </label>
               <input
@@ -149,13 +149,13 @@ const McpConfigPage = () => {
                 value={serverUrl}
                 onChange={(e) => setServerUrl(e.target.value)}
                 placeholder="https://your-mcp-server-url.com"
-                className="px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="px-3 py-2 border border-default rounded-lg bg-surface outline-none focus-visible:ring-2 focus-visible:ring-[var(--present-accent-ring)]"
                 required
               />
             </div>
 
             <div className="flex flex-col space-y-2 mt-3">
-              <label htmlFor="server-name" className="font-medium text-gray-700">
+              <label htmlFor="server-name" className="font-medium text-secondary text-sm">
                 Server Name (optional)
               </label>
               <input
@@ -164,19 +164,19 @@ const McpConfigPage = () => {
                 value={serverName}
                 onChange={(e) => setServerName(e.target.value)}
                 placeholder="Custom server name"
-                className="px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="px-3 py-2 border border-default rounded-lg bg-surface outline-none focus-visible:ring-2 focus-visible:ring-[var(--present-accent-ring)]"
               />
             </div>
 
             <div className="flex flex-col space-y-2 mt-3">
-              <label htmlFor="transport-type" className="font-medium text-gray-700">
+              <label htmlFor="transport-type" className="font-medium text-secondary text-sm">
                 Transport Type
               </label>
               <select
                 id="transport-type"
                 value={transportType}
                 onChange={(e) => setTransportType(e.target.value as MCPTransport)}
-                className="px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="px-3 py-2 border border-default rounded-lg bg-surface outline-none focus-visible:ring-2 focus-visible:ring-[var(--present-accent-ring)]"
               >
                 <option value={MCPTransport.SSE}>SSE</option>
                 <option value={MCPTransport.HTTP}>HTTP (default)</option>
@@ -185,14 +185,14 @@ const McpConfigPage = () => {
 
             <button
               type="submit"
-              className="mt-4 px-4 py-2 rounded-md w-full bg-black text-white hover:bg-black/80"
+              className="mt-4 px-4 py-2 rounded-lg w-full bg-primary text-primary-foreground hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--present-accent-ring)]"
             >
               Add Server
             </button>
           </form>
 
           {savedSuccess && (
-            <div className="mb-4 p-2 bg-green-100 text-green-800 rounded-md">
+            <div className="mb-4 p-2 bg-success-surface text-success rounded-lg text-sm border border-success-surface">
               ✓ Servers saved to browser storage
             </div>
           )}
@@ -204,7 +204,7 @@ const McpConfigPage = () => {
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => setVerifyOpen((v) => !v)}
-                    className="px-2 py-1 text-xs rounded bg-gray-100 hover:bg-gray-200"
+                    className="px-2 py-1 text-xs rounded-lg bg-surface-secondary hover:bg-surface-tertiary border border-default"
                   >
                     {verifyOpen ? 'Hide Verification' : 'Verify & Map'}
                   </button>
@@ -219,11 +219,11 @@ const McpConfigPage = () => {
                     <li key={rowKey} className="flex items-center justify-between p-3">
                       <div className="flex-1">
                         <div className="flex items-center">
-                          <span className="text-green-600 mr-2">●</span>
+                          <span className="text-success mr-2">●</span>
                           <span>{serverInfo.url}</span>
                         </div>
                         {(serverInfo.name || typeof server !== 'string') && (
-                          <div className="text-sm text-gray-600 ml-5 mt-1">
+                          <div className="text-sm text-secondary ml-5 mt-1">
                             {serverInfo.name && <div>Name: {serverInfo.name}</div>}
                             <div>Transport: {serverInfo.transport}</div>
                           </div>
@@ -231,7 +231,7 @@ const McpConfigPage = () => {
                       </div>
                       <button
                         onClick={() => removeServer(index)}
-                        className="px-2 py-1 bg-red-100 text-red-600 rounded hover:bg-red-200 ml-2"
+                        className="px-2 py-1 rounded-lg bg-danger-soft text-danger hover:bg-danger-soft-hover border border-danger-surface ml-2"
                       >
                         Remove
                       </button>
@@ -240,43 +240,43 @@ const McpConfigPage = () => {
                 })}
               </ul>
               {verifyOpen && (
-                <div className="mt-4 border rounded-md p-3 bg-gray-50">
+                <div className="mt-4 border border-default rounded-lg p-3 bg-surface-secondary">
                   <h4 className="font-medium mb-2">Verification</h4>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
                     <div>
-                      <div className="text-gray-600 mb-1">Window MCP Tools</div>
+                      <div className="text-secondary mb-1">Window MCP Tools</div>
                       <ul className="list-disc ml-5">
-                        {winToolNames.length === 0 && <li className="text-gray-400">none</li>}
+                        {winToolNames.length === 0 && <li className="text-tertiary">none</li>}
                         {winToolNames.map((n) => (
                           <li key={n}>{n}</li>
                         ))}
                       </ul>
                     </div>
                     <div>
-                      <div className="text-gray-600 mb-1">Registry Tools</div>
+                      <div className="text-secondary mb-1">Registry Tools</div>
                       <ul className="list-disc ml-5">
-                        {regToolNames.length === 0 && <li className="text-gray-400">none</li>}
+                        {regToolNames.length === 0 && <li className="text-tertiary">none</li>}
                         {regToolNames.map((n) => (
                           <li key={n}>{n}</li>
                         ))}
                       </ul>
                     </div>
                     <div>
-                      <div className="text-gray-600 mb-1">System Mappings</div>
+                      <div className="text-secondary mb-1">System Mappings</div>
                       <ul className="list-disc ml-5">
-                        {mappings.length === 0 && <li className="text-gray-400">none</li>}
+                        {mappings.length === 0 && <li className="text-tertiary">none</li>}
                         {mappings.map((m) => (
                           <li key={m.agentTool}>
                             <span className="font-mono">{m.agentTool}</span>
-                            <span className="text-gray-500"> → </span>
+                            <span className="text-tertiary"> → </span>
                             <span className="font-mono">{m.mcpTool}</span>
                             <span
-                              className={`ml-2 text-xs ${m.inRegistry ? 'text-green-600' : 'text-red-600'}`}
+                              className={`ml-2 text-xs ${m.inRegistry ? 'text-success' : 'text-danger'}`}
                             >
                               {m.inRegistry ? 'in registry' : 'missing'}
                             </span>
                             <span
-                              className={`ml-2 text-xs ${m.inWindow ? 'text-green-600' : 'text-red-600'}`}
+                              className={`ml-2 text-xs ${m.inWindow ? 'text-success' : 'text-danger'}`}
                             >
                               {m.inWindow ? 'in window' : 'not registered'}
                             </span>
@@ -285,7 +285,7 @@ const McpConfigPage = () => {
                       </ul>
                     </div>
                   </div>
-                  <div className="mt-2 text-xs text-gray-500">
+                  <div className="mt-2 text-xs text-tertiary">
                     If a mapping is missing, ensure your MCP server exposes tool names that match
                     the registry or add aliases in the System Registry.
                   </div>
@@ -293,15 +293,15 @@ const McpConfigPage = () => {
               )}
             </div>
           ) : (
-            <div className="text-center p-4 border border-dashed rounded-md text-gray-500">
+            <div className="text-center p-4 border border-dashed border-default rounded-lg text-secondary text-sm">
               No MCP servers configured yet
             </div>
           )}
         </div>
 
-        <div className="bg-gray-50 p-4 rounded-md">
+        <div className="bg-surface-secondary p-4 rounded-lg border border-default">
           <h3 className="font-semibold mb-2">What is MCP?</h3>
-          <p className="text-gray-600 text-sm">
+          <p className="text-secondary text-sm">
             The Model Context Protocol (MCP) is a standard that allows applications to communicate
             with external tools and services. By configuring MCP servers, you can extend your custom
             application with additional capabilities provided by these servers.

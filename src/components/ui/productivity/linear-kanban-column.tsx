@@ -36,17 +36,19 @@ export function KanbanColumnComponent({
   return (
     <div className="flex-shrink-0" style={{ width: columnWidth + 'px' }}>
       <div
-        className={`bg-white rounded-lg shadow-sm border h-fit transition-colors nodrag ${
-          isActiveDropColumn ? 'bg-blue-50 border-blue-300 ring-2 ring-blue-100' : 'border-gray-200'
+        className={`bg-surface-elevated rounded-2xl shadow-sm border h-fit transition-colors nodrag overflow-hidden ${
+          isActiveDropColumn
+            ? 'bg-info-surface border-default ring-2 ring-[var(--present-accent-ring)]'
+            : 'border-default'
         }`}
         onDragEnterCapture={(e) => onDragOver(e as any, column.id)}
         onDragOverCapture={(e) => onDragOver(e as any, column.id)}
         onDropCapture={(e) => onDrop(e as any, column.id)}
       >
-        <div className="p-4 border-b border-gray-200 bg-gray-50/50 rounded-t-lg">
-          <h2 className="font-semibold text-gray-900 text-sm flex items-center justify-between">
+        <div className="p-4 border-b border-default bg-surface-secondary">
+          <h2 className="font-semibold text-primary text-sm flex items-center justify-between">
             <span>{column.title}</span>
-            <span className="bg-gray-200 text-gray-700 px-2 py-1 rounded-full text-xs font-medium">
+            <span className="bg-surface-secondary text-secondary px-2 py-1 rounded-full text-xs font-medium border border-default">
               {issues.length}
             </span>
           </h2>
@@ -76,11 +78,11 @@ export function KanbanColumnComponent({
 
           {/* Empty Column / Append Indicator */}
           {isActiveDropColumn && !dropIndicator && (
-            <div className="h-1.5 bg-blue-600 rounded-full mx-1 shadow-sm ring-2 ring-white animate-pulse" />
+            <div className="h-1.5 bg-[var(--present-accent)] rounded-full mx-1 shadow-sm ring-2 ring-[var(--present-accent-ring)] animate-pulse" />
           )}
 
           {issues.length === 0 && !isActiveDropColumn && (
-            <div className="text-gray-400 text-center py-8 text-sm">
+            <div className="text-tertiary text-center py-8 text-sm">
               No issues in {column.title}
             </div>
           )}
@@ -89,7 +91,6 @@ export function KanbanColumnComponent({
     </div>
   );
 }
-
 
 
 

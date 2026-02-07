@@ -26,6 +26,7 @@ import type { Editor } from '@tldraw/tldraw';
 import { useRouter } from 'next/navigation';
 import * as React from 'react';
 import { logJourneyEvent } from '@/lib/journey-logger';
+import { usePresentTheme } from '@/components/ui/system/theme-provider';
 
 interface TldrawWithPersistenceProps {
   onMount?: (editor: Editor) => void;
@@ -50,6 +51,7 @@ function CustomMainMenu({ readOnly = false }: { readOnly?: boolean } & any) {
   const { saveCanvas, lastSaved, isSaving, canvasName, renameCanvas } = useCanvasPersistence(null);
   const { user, signOut } = useAuth();
   const router = useRouter();
+  const theme = usePresentTheme();
   const [displayName, setDisplayName] = useState('');
   const [isEditingName, setIsEditingName] = useState(false);
 
@@ -126,16 +128,10 @@ function CustomMainMenu({ readOnly = false }: { readOnly?: boolean } & any) {
       {/* Canvas persistence group */}
       <TldrawUiMenuGroup id="canvas-persistence">
         {/* Canvas info - shows name and last saved */}
-        <div
-          style={{
-            padding: '4px 12px',
-            fontSize: '12px',
-            color: 'var(--color-text-1)',
-          }}
-        >
-          <div style={{ fontWeight: 500 }}>{canvasName || 'Untitled Canvas'}</div>
+        <div className="px-3 py-1.5 text-xs text-primary">
+          <div className="font-medium">{canvasName || 'Untitled Canvas'}</div>
           {lastSaved && (
-            <div style={{ fontSize: '11px', color: 'var(--color-text-3)', marginTop: '2px' }}>
+            <div className="mt-0.5 text-[11px] text-tertiary">
               Saved {lastSaved.toLocaleTimeString()}
             </div>
           )}
@@ -190,20 +186,34 @@ function CustomMainMenu({ readOnly = false }: { readOnly?: boolean } & any) {
         />
 
         {/* Separator */}
-        <div style={{ height: 1, backgroundColor: 'var(--color-divider)', margin: '4px 0' }} />
+        <div className="my-1 h-px bg-[var(--color-divider)]" />
+
+        <TldrawUiMenuItem
+          id="theme-system"
+          label="Theme: System"
+          icon="external-link"
+          isSelected={theme.mode === 'system'}
+          onSelect={() => theme.setMode('system')}
+        />
+        <TldrawUiMenuItem
+          id="theme-light"
+          label="Theme: Light"
+          icon="external-link"
+          isSelected={theme.mode === 'light'}
+          onSelect={() => theme.setMode('light')}
+        />
+        <TldrawUiMenuItem
+          id="theme-dark"
+          label="Theme: Dark"
+          icon="external-link"
+          isSelected={theme.mode === 'dark'}
+          onSelect={() => theme.setMode('dark')}
+        />
+
+        <div className="my-1 h-px bg-[var(--color-divider)]" />
 
         {/* User info - Click to edit */}
-        <div
-          style={{
-            padding: '0 12px',
-            height: '32px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-            color: 'var(--color-text-1)',
-            fontSize: '12px',
-          }}
-        >
+        <div className="flex h-8 items-center gap-2 px-3 text-xs text-primary">
           <User size={14} />
           {isEditingName ? (
             <input
@@ -212,18 +222,11 @@ function CustomMainMenu({ readOnly = false }: { readOnly?: boolean } & any) {
               onChange={(e) => setDisplayName(e.target.value)}
               onBlur={handleSaveName}
               onKeyDown={(e) => e.key === 'Enter' && handleSaveName()}
-              style={{
-                border: '1px solid var(--color-primary)',
-                borderRadius: '4px',
-                padding: '2px 4px',
-                fontSize: '12px',
-                width: '100%',
-                outline: 'none',
-              }}
+              className="w-full rounded-md border border-default bg-surface px-2 py-1 text-xs outline-none focus-visible:ring-2 focus-visible:ring-[var(--present-accent-ring)]"
             />
           ) : (
             <div 
-              className="flex items-center gap-2 cursor-pointer hover:text-blue-600 w-full"
+              className="flex w-full cursor-pointer items-center gap-2 hover:text-[var(--present-accent)]"
               onClick={() => setIsEditingName(true)}
               title="Click to change display name"
             >

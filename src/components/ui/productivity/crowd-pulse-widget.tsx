@@ -6,7 +6,6 @@ import { useComponentRegistration } from '@/lib/component-registry';
 import {
   CrowdPulseActiveQuestion,
   CrowdPulseFollowUps,
-  CrowdPulseHeader,
   CrowdPulseQuestions,
   CrowdPulseScoreboard,
   CrowdPulseStats,
@@ -19,6 +18,7 @@ import {
   computeCrowdMetrics,
   type HandLandmark,
 } from './crowd-pulse-hand-utils';
+import { WidgetFrame } from './widget-frame';
 
 export default function CrowdPulseWidget(props: CrowdPulseWidgetProps) {
   const {
@@ -290,22 +290,29 @@ export default function CrowdPulseWidget(props: CrowdPulseWidgetProps) {
               : sensorDetail || undefined;
 
   return (
-    <div
-      className={cn(
-        'w-full rounded-2xl border border-slate-800/60 bg-slate-950/95 text-white shadow-2xl',
-        className,
-      )}
+    <WidgetFrame
+      title={state.title}
+      subtitle={state.prompt}
+      meta={state.lastUpdated ? `Updated ${updatedLabel}` : undefined}
+      actions={
+        <span
+          className={cn(
+            'rounded-full px-2 py-1 text-xs font-semibold border',
+            state.status === 'locked'
+              ? 'bg-success-surface text-success border-success-surface'
+              : state.status === 'counting'
+                ? 'bg-info-surface text-info border-info-surface'
+                : 'bg-surface-secondary text-secondary border-default',
+          )}
+        >
+          {state.status.toUpperCase()}
+        </span>
+      }
+      className={className}
+      bodyClassName="grid gap-4"
     >
-      <CrowdPulseHeader
-        title={state.title}
-        prompt={state.prompt}
-        status={state.status}
-        updatedLabel={updatedLabel}
-      />
-
-      <div className="grid gap-4 p-4">
         {state.showPreview && (
-          <div className="relative overflow-hidden rounded-xl border border-slate-800/50 bg-slate-900/70">
+          <div className="relative overflow-hidden rounded-xl border border-default bg-surface-secondary">
             <video
               ref={videoRef}
               className="h-44 w-full bg-black object-cover"
@@ -314,7 +321,7 @@ export default function CrowdPulseWidget(props: CrowdPulseWidgetProps) {
               autoPlay
             />
             {sensorLabel && (
-              <div className="absolute bottom-2 left-2 rounded-full bg-slate-950/80 px-2 py-1 text-[10px] text-slate-200">
+              <div className="absolute bottom-2 left-2 rounded-full bg-surface/90 border border-default px-2 py-1 text-[10px] text-secondary">
                 {sensorLabel}
               </div>
             )}
@@ -337,7 +344,6 @@ export default function CrowdPulseWidget(props: CrowdPulseWidgetProps) {
         </div>
 
         <CrowdPulseFollowUps followUps={state.followUps} />
-      </div>
-    </div>
+    </WidgetFrame>
   );
 }

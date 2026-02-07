@@ -9,7 +9,7 @@ type MemoryRecallResultsProps = {
 export function MemoryRecallResults({ hits }: MemoryRecallResultsProps) {
   if (hits.length === 0) {
     return (
-      <div className="text-xs text-slate-400">
+      <div className="text-xs text-tertiary">
         Enter a query to recall summaries, infographics, and context snapshots.
       </div>
     );
@@ -25,9 +25,9 @@ export function MemoryRecallResults({ hits }: MemoryRecallResultsProps) {
         return (
           <div
             key={`${hit.id || 'hit'}-${index}`}
-            className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700"
+            className="rounded-lg border border-default bg-surface-secondary px-3 py-2 text-xs text-primary"
           >
-            {metaTitle && <div className="mb-1 text-[11px] font-semibold text-slate-900">{metaTitle}</div>}
+            {metaTitle && <div className="mb-1 text-[11px] font-semibold text-primary">{metaTitle}</div>}
             <div className="whitespace-pre-wrap text-[12px] leading-5">
               {displayText || 'No text found'}
             </div>
@@ -36,7 +36,7 @@ export function MemoryRecallResults({ hits }: MemoryRecallResultsProps) {
                 {tags.slice(0, 6).map((tag) => (
                   <span
                     key={tag}
-                    className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] text-blue-700"
+                    className="rounded-full bg-info-surface px-2 py-0.5 text-[10px] text-info border border-info-surface"
                   >
                     {tag}
                   </span>

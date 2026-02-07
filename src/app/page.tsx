@@ -31,8 +31,8 @@ export default function Home() {
   }, [router]);
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/20">
-      <div className="text-gray-600">Redirecting…</div>
+    <div className="min-h-screen flex items-center justify-center bg-surface">
+      <div className="text-secondary text-sm">Redirecting…</div>
     </div>
   );
 }

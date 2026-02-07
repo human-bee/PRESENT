@@ -17,6 +17,7 @@ import { Plus, Calendar, Trash2, ExternalLink, MessageSquare } from 'lucide-reac
 import { toast } from 'react-hot-toast';
 import { useAuth } from '@/hooks/use-auth';
 import { supabase, type Canvas } from '@/lib/supabase';
+import { Button } from '@/components/ui/shared/button';
 
 type UserCanvas = Canvas & { owner_id: string; membership_role: 'owner' | 'editor' | 'viewer' };
 
@@ -90,70 +91,70 @@ export default function CanvasesPage() {
 
   if (loading || !user) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/20">
-        <div className="text-gray-500">Loading...</div>
+      <div className="min-h-screen flex items-center justify-center bg-surface">
+        <div className="text-secondary text-sm">Loading…</div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/20">
+    <div className="min-h-screen bg-surface">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Header */}
         <div className="flex justify-between items-center mb-8">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">My Canvases</h1>
-            <p className="mt-2 text-gray-600">
+            <h1 className="heading-lg">My canvases</h1>
+            <p className="mt-2 text-secondary text-sm">
               Welcome back, {user.user_metadata?.full_name || user.email}
             </p>
           </div>
 
-          <button
+          <Button
             onClick={() => {
               try {
                 localStorage.removeItem('present:lastCanvasId');
               } catch {}
               router.push('/canvas');
             }}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            className="flex items-center gap-2"
           >
             <Plus className="w-5 h-5" />
             New Canvas
-          </button>
+          </Button>
         </div>
 
         {/* Canvas Grid */}
         {isLoading ? (
           <div className="flex items-center justify-center h-64">
-            <div className="text-gray-500">Loading canvases...</div>
+            <div className="text-secondary text-sm">Loading canvases…</div>
           </div>
         ) : canvases.length === 0 ? (
           <div className="text-center py-12">
             <div className="text-6xl mb-4">🎨</div>
-            <h3 className="text-xl font-semibold text-gray-700 mb-2">No canvases yet</h3>
-            <p className="text-gray-500 mb-6">Create your first canvas to get started</p>
-            <button
+            <h3 className="heading-md mb-2">No canvases yet</h3>
+            <p className="text-secondary mb-6 text-sm">Create your first canvas to get started</p>
+            <Button
               onClick={() => {
                 try {
                   localStorage.removeItem('present:lastCanvasId');
                 } catch {}
                 router.push('/canvas');
               }}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              className="inline-flex items-center gap-2"
             >
               <Plus className="w-5 h-5" />
               Create Canvas
-            </button>
+            </Button>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {canvases.map((canvas) => (
               <div
                 key={canvas.id}
-                className="bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow overflow-hidden"
+                className="bg-surface-elevated border border-default rounded-2xl shadow-sm hover:shadow-md transition-shadow overflow-hidden"
               >
                 {/* Canvas Thumbnail or Placeholder */}
-                <div className="h-48 bg-gradient-to-br from-blue-100 to-indigo-100 relative">
+                <div className="h-48 bg-surface-secondary relative">
                   {canvas.thumbnail ? (
                     <img
                       src={canvas.thumbnail}
@@ -169,28 +170,28 @@ export default function CanvasesPage() {
                   {/* Conversation Indicator */}
                   {canvas.conversation_key && (
                     <div
-                      className="absolute top-2 right-2 bg-white/90 rounded-full p-1.5"
+                      className="absolute top-2 right-2 bg-surface/90 rounded-full p-1.5 border border-default"
                       title="Has linked conversation"
                     >
-                      <MessageSquare className="w-4 h-4 text-blue-600" />
+                      <MessageSquare className="w-4 h-4 text-secondary" />
                     </div>
                   )}
                 </div>
 
                 {/* Canvas Info */}
                 <div className="p-4">
-                  <h3 className="font-semibold text-lg text-gray-900 mb-1">{canvas.name}</h3>
-                  <div className="text-xs text-gray-500 mb-2">
+                  <h3 className="font-semibold text-lg text-primary mb-1">{canvas.name}</h3>
+                  <div className="text-xs text-tertiary mb-2">
                     {canvas.membership_role === 'owner'
                       ? 'Owned by you'
                       : `Shared · ${canvas.membership_role}`}
                   </div>
                   {canvas.description && (
-                    <p className="text-sm text-gray-600 mb-3 line-clamp-2">{canvas.description}</p>
+                    <p className="text-sm text-secondary mb-3 line-clamp-2">{canvas.description}</p>
                   )}
 
                   {/* Last Modified */}
-                  <div className="flex items-center gap-1 text-xs text-gray-500 mb-3">
+                  <div className="flex items-center gap-1 text-xs text-tertiary mb-3">
                     <Calendar className="w-3 h-3" />
                     <span>
                       Last modified: {new Date(canvas.last_modified).toLocaleDateString()}
@@ -201,7 +202,7 @@ export default function CanvasesPage() {
                   <div className="flex justify-between items-center">
                     <Link
                       href={`/canvas?id=${canvas.id}`}
-                      className="flex items-center gap-1 text-sm font-medium text-blue-600 hover:text-blue-700"
+                      className="flex items-center gap-1 text-sm font-medium hover:text-[var(--present-accent)]"
                     >
                       Open
                       <ExternalLink className="w-3 h-3" />
@@ -210,7 +211,7 @@ export default function CanvasesPage() {
                     {canvas.membership_role === 'owner' && (
                       <button
                         onClick={() => handleDelete(canvas.id)}
-                        className="text-sm text-red-600 hover:text-red-700"
+                        className="text-sm text-danger hover:opacity-80"
                         title="Delete canvas"
                       >
                         <Trash2 className="w-4 h-4" />

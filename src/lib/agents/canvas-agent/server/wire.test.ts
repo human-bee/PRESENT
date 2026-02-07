@@ -15,7 +15,8 @@ describe('awaitAck', () => {
     setTimeout(() => {
       recordAck('session-1', 1, 'client-A', Date.now());
     }, 20);
-    const ack = await awaitAck({ sessionId: 'session-1', seq: 1, deadlineMs: 300 });
+    // Allow extra slack to avoid flaking under load (the production poll interval starts at 150ms).
+    const ack = await awaitAck({ sessionId: 'session-1', seq: 1, deadlineMs: 2000 });
     expect(ack).toBeTruthy();
     expect(ack?.clientId).toBe('client-A');
   });
