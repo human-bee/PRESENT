@@ -2,8 +2,6 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { AgentTaskQueue } from '@/lib/agents/shared/queue';
 
-const queue = new AgentTaskQueue();
-
 const requestSchema = z.object({
   room: z.string().min(1),
   task: z.string().min(1),
@@ -19,6 +17,8 @@ export async function POST(request: Request) {
     const body = await request.json();
     const payload = requestSchema.parse(body);
 
+    // Lazily instantiate so `next build` doesn't require Supabase env vars.
+    const queue = new AgentTaskQueue();
     const task = await queue.enqueueTask(payload);
 
     return NextResponse.json({ status: 'queued', task });

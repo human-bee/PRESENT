@@ -454,6 +454,12 @@ export function WeatherForecast(props: WeatherForecastProps) {
 
   const loadingState = subAgent.loadingState;
 
+  const [fallbackForecast, setFallbackForecast] = useState<{
+    location: string;
+    periods: ForecastPeriod[];
+  } | null>(null);
+  const fallbackRequestedRef = useRef<string | null>(null);
+
   // Local state management
   const [state, setState] = useState<WeatherForecastState>({
     activeView: props.viewType || 'current',
@@ -479,9 +485,59 @@ export function WeatherForecast(props: WeatherForecastProps) {
     props.location,
   );
 
+  const requestedLocation = (props.location || normalized.location || subAgent.context?.location || '').trim();
+
+  // Prod fallback: Open-Meteo (no API key). Keeps the widget useful even when MCP isn't available.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (props.periods && props.periods.length > 0) return;
+    if (!requestedLocation) return;
+    if (Array.isArray(normalized.periods) && normalized.periods.length > 0) return;
+
+    if (fallbackRequestedRef.current === requestedLocation) return;
+    fallbackRequestedRef.current = requestedLocation;
+
+    let cancelled = false;
+    void (async () => {
+      try {
+        const url = new URL('/api/weather', window.location.origin);
+        url.searchParams.set('location', requestedLocation);
+        url.searchParams.set('days', '7');
+        const res = await fetch(url.toString(), { method: 'GET' });
+        const json = await res.json().catch(() => null);
+        if (!res.ok) {
+          throw new Error(typeof json?.error === 'string' ? json.error : `HTTP ${res.status}`);
+        }
+        if (cancelled) return;
+        if (json?.periods && Array.isArray(json.periods)) {
+          setFallbackForecast({
+            location: typeof json.location === 'string' ? json.location : requestedLocation,
+            periods: json.periods as ForecastPeriod[],
+          });
+        }
+      } catch (error) {
+        if (cancelled) return;
+        console.warn('[WeatherForecast] /api/weather fallback failed', error);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [props.periods, requestedLocation, normalized.periods]);
+
   // Merge props data with MCP-fetched data (props take priority)
-  const location = props.location || normalized.location || subAgent.context?.location;
-  const periods = props.periods || normalized.periods || [];
+  const location =
+    props.location ||
+    normalized.location ||
+    fallbackForecast?.location ||
+    subAgent.context?.location;
+  const periods =
+    (props.periods && props.periods.length > 0
+      ? props.periods
+      : normalized.periods && normalized.periods.length > 0
+        ? normalized.periods
+        : fallbackForecast?.periods) || [];
   const currentPeriod = periods[state?.selectedPeriod || 0] || periods[0];
 
   // Determine loading state - if we have data from props, skip loading

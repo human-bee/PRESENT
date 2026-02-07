@@ -11,6 +11,7 @@ try {
   config({ path: join(process.cwd(), '.env.local') });
 } catch { }
 import { realtime as openaiRealtime } from '@livekit/agents-plugin-openai';
+import { MultiParticipantTranscriptionManager } from './multi-participant-transcription';
 import { appendTranscriptCache, getTranscriptWindow, listCanvasComponents } from '@/lib/agents/shared/supabase-context';
 import { buildVoiceAgentInstructions } from '@/lib/agents/instructions';
 import { queryCapabilities, defaultCapabilities } from '@/lib/agents/capabilities';
@@ -187,7 +188,12 @@ export default defineAgent({
     type PendingTranscriptionMessage = {
       text: string;
       speaker?: string;
+      participantId?: string;
+      participantName?: string;
       isManual: boolean;
+      isFinal: boolean;
+      timestamp?: number;
+      serverGenerated?: boolean;
       receivedAt: number;
     };
 
@@ -239,28 +245,50 @@ export default defineAgent({
       }
     };
 
-    job.room.on(RoomEvent.DataReceived, (payload, participant, _, topic) => {
-      if (topic !== 'transcription') return;
-      let message: any;
-      try {
-        message = JSON.parse(new TextDecoder().decode(payload));
-      } catch (error) {
-        logRealtimeError('failed to parse data payload', error);
-        return;
-      }
-
+    const ingestTranscription = (message: {
+      text: string;
+      speaker?: string;
+      participantId?: string;
+      participantName?: string;
+      isManual?: boolean;
+      isFinal?: boolean;
+      timestamp?: number;
+      serverGenerated?: boolean;
+    }) => {
       const text = typeof message?.text === 'string' ? message.text.trim() : '';
-      const isManual = Boolean(message?.manual);
-      const isReplay = Boolean(message?.replay);
-      const speaker = typeof message?.speaker === 'string' ? message.speaker : participant?.identity;
+      if (!text) return;
 
-      if (!text || isReplay) return;
-      if (!isManual && speaker === 'voice-agent') return;
+      const isManual = Boolean(message?.isManual);
+      const isFinal = message?.isFinal ?? true;
+      if (!isFinal) return;
+
+      const participantIdRaw =
+        typeof message?.participantId === 'string' ? message.participantId.trim() : '';
+      const participantNameRaw =
+        typeof message?.participantName === 'string' ? message.participantName.trim() : '';
+      const speakerRaw = typeof message?.speaker === 'string' ? message.speaker.trim() : '';
+
+      const speaker = participantNameRaw || speakerRaw || participantIdRaw || undefined;
+      const participantId = participantIdRaw || undefined;
+      const participantName =
+        participantNameRaw ||
+        (speakerRaw && speakerRaw !== participantIdRaw ? speakerRaw : undefined) ||
+        undefined;
+
+      if (!isManual) {
+        const lower = String(speaker || '').toLowerCase();
+        if (lower.includes('voice-agent') || lower.startsWith('agent-')) return;
+      }
 
       const entry: PendingTranscriptionMessage = {
         text,
-        speaker: typeof speaker === 'string' ? speaker : undefined,
+        speaker,
+        participantId,
+        participantName,
         isManual,
+        isFinal,
+        timestamp: typeof message?.timestamp === 'number' ? message.timestamp : undefined,
+        serverGenerated: Boolean(message?.serverGenerated),
         receivedAt: Date.now(),
       };
 
@@ -272,6 +300,43 @@ export default defineAgent({
       void handleBufferedTranscription(entry)
         .then(() => { })
         .catch((error) => logRealtimeError('failed to handle transcription', error));
+    };
+
+    job.room.on(RoomEvent.DataReceived, (payload, participant, _, topic) => {
+      if (topic !== 'transcription') return;
+      let message: any;
+      try {
+        message = JSON.parse(new TextDecoder().decode(payload));
+      } catch (error) {
+        logRealtimeError('failed to parse data payload', error);
+        return;
+      }
+
+      const text = typeof message?.text === 'string' ? message.text.trim() : '';
+      const isReplay = Boolean(message?.replay);
+      const isManual = Boolean(message?.manual);
+      const isFinal =
+        typeof message?.is_final === 'boolean'
+          ? message.is_final
+          : typeof message?.isFinal === 'boolean'
+            ? message.isFinal
+            : typeof message?.final === 'boolean'
+              ? message.final
+              : true;
+      const participantId = typeof message?.participantId === 'string' ? message.participantId : participant?.identity;
+      const speaker = typeof message?.speaker === 'string' ? message.speaker : participant?.name || participant?.identity;
+
+      if (!text || isReplay) return;
+      ingestTranscription({
+        text,
+        speaker: typeof speaker === 'string' ? speaker : undefined,
+        participantId: typeof participantId === 'string' ? participantId : undefined,
+        participantName: typeof speaker === 'string' ? speaker : undefined,
+        isManual,
+        isFinal,
+        timestamp: typeof message?.timestamp === 'number' ? message.timestamp : undefined,
+        serverGenerated: Boolean(message?.server_generated),
+      });
     });
 
     const coerceBooleanFromEnv = (value?: string | null) => {
@@ -285,16 +350,22 @@ export default defineAgent({
 
     const envInputTranscriptionModel = process.env.VOICE_AGENT_INPUT_TRANSCRIPTION_MODEL?.trim();
     const fallbackInputTranscriptionModel = process.env.AGENT_STT_MODEL?.trim();
+    const envSttModel = process.env.VOICE_AGENT_STT_MODEL?.trim();
     const envTranscriptionLanguage = process.env.VOICE_AGENT_TRANSCRIPTION_LANGUAGE?.trim();
     const fallbackTranscriptionLanguage = process.env.AGENT_STT_LANGUAGE?.trim();
     const resolvedInputTranscriptionModel = envInputTranscriptionModel || fallbackInputTranscriptionModel || undefined;
+    const resolvedSttModel = envSttModel || resolvedInputTranscriptionModel || 'gpt-4o-mini-transcribe';
     const envTurnDetection = process.env.VOICE_AGENT_TURN_DETECTION?.trim().toLowerCase();
     const transcriptionEnabledFlag = coerceBooleanFromEnv(process.env.VOICE_AGENT_TRANSCRIPTION_ENABLED);
-    const transcriptionEnabled = transcriptionEnabledFlag ?? Boolean(resolvedInputTranscriptionModel);
+    const multiParticipantTranscriptionEnabled =
+      coerceBooleanFromEnv(process.env.VOICE_AGENT_MULTI_PARTICIPANT_TRANSCRIPTION) ??
+      process.env.NODE_ENV === 'production';
+    const transcriptionEnabled =
+      transcriptionEnabledFlag ?? (!multiParticipantTranscriptionEnabled && Boolean(resolvedInputTranscriptionModel));
     const resolvedTranscriptionLanguage = envTranscriptionLanguage || fallbackTranscriptionLanguage || undefined;
     const inputAudioTranscription = transcriptionEnabled
       ? {
-        model: resolvedInputTranscriptionModel || 'gpt-4o-mini-transcribe',
+        model: resolvedSttModel,
         ...(resolvedTranscriptionLanguage ? { language: resolvedTranscriptionLanguage } : {}),
       }
       : null;
@@ -312,6 +383,8 @@ export default defineAgent({
     })();
 
     console.log('[VoiceAgent] transcription config', {
+      multiParticipantTranscriptionEnabled,
+      resolvedSttModel,
       transcriptionEnabled,
       inputAudioTranscription,
       turnDetectionOption,
@@ -358,6 +431,57 @@ export default defineAgent({
     job.room.remoteParticipants.forEach((participant) => subscribeToParticipant(participant));
     job.room.on(RoomEvent.ParticipantConnected, (participant) => subscribeToParticipant(participant as any));
     job.room.on(RoomEvent.TrackPublished, (_publication, participant) => subscribeToParticipant(participant as any));
+
+    const transcriptionMaxParticipants = (() => {
+      const raw =
+        process.env.VOICE_AGENT_TRANSCRIPTION_MAX_PARTICIPANTS ??
+        process.env.VOICE_AGENT_TRANSCRIBER_MAX_PARTICIPANTS ??
+        '';
+      const parsed = raw ? Number(raw) : Number.NaN;
+      if (!Number.isFinite(parsed) || parsed <= 0) return 8;
+      return Math.max(1, Math.min(16, Math.floor(parsed)));
+    })();
+
+    let multiParticipantTranscriber: MultiParticipantTranscriptionManager | null = null;
+    if (multiParticipantTranscriptionEnabled) {
+      multiParticipantTranscriber = new MultiParticipantTranscriptionManager({
+        room: job.room,
+        maxParticipants: transcriptionMaxParticipants,
+        model: resolvedSttModel,
+        language: resolvedTranscriptionLanguage,
+        onTranscript: (payload) => {
+          try {
+            // Fan out to all browsers for transcript UI.
+            job.room.localParticipant?.publishData(
+              new TextEncoder().encode(JSON.stringify(payload)),
+              {
+                reliable: payload.is_final,
+                topic: 'transcription',
+              },
+            );
+          } catch { }
+
+          // Feed the orchestrator directly (the voice agent does not receive its own data packets).
+          ingestTranscription({
+            text: payload.text,
+            speaker: payload.speaker,
+            participantId: payload.participantId,
+            participantName: payload.speaker,
+            isManual: false,
+            isFinal: payload.is_final,
+            timestamp: payload.timestamp,
+            serverGenerated: true,
+          });
+        },
+      });
+
+      multiParticipantTranscriber.start();
+      console.log('[VoiceAgent] multi-participant transcription enabled', {
+        maxParticipants: transcriptionMaxParticipants,
+        model: resolvedSttModel,
+        language: resolvedTranscriptionLanguage,
+      });
+    }
 
     let instructions = `You are a UI automation agent. You NEVER speak—you only act by calling tools.
 
@@ -2647,18 +2771,41 @@ Your only output is function calls. Never use plain text unless absolutely neces
       }
     };
 
-    handleBufferedTranscription = async ({ text, speaker, isManual }) => {
-      console.log('[VoiceAgent] DataReceived transcription', { text, isManual, speaker, topic: 'transcription' });
+    handleBufferedTranscription = async ({
+      text,
+      speaker,
+      participantId,
+      participantName,
+      isManual,
+      timestamp,
+    }) => {
+      console.log('[VoiceAgent] DataReceived transcription', {
+        text,
+        isManual,
+        speaker,
+        participantId,
+        participantName,
+        topic: 'transcription',
+      });
       lastUserPrompt = text;
-      console.log('[VoiceAgent] calling generateReply with userInput:', text);
-      if (isManual) {
-        bumpTurn();
-      }
+
+      // New user turn begins on a final transcript (manual or server STT).
+      bumpTurn();
+
+      const speakerLabel =
+        participantName?.trim() ||
+        speaker?.trim() ||
+        participantId?.trim() ||
+        'user';
+      const attributedInput =
+        speakerLabel && speakerLabel !== 'user' ? `${speakerLabel}: ${text}` : text;
+      console.log('[VoiceAgent] calling generateReply with userInput:', attributedInput.slice(0, 160));
       try {
         appendTranscriptCache(job.room.name || 'unknown', {
-          participantId: speaker || 'user',
+          participantId: participantId || speakerLabel,
+          participantName: participantName || (speakerLabel !== participantId ? speakerLabel : undefined),
           text,
-          timestamp: Date.now(),
+          timestamp: typeof timestamp === 'number' ? timestamp : Date.now(),
         });
       } catch { }
 
@@ -2847,7 +2994,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
         }
       }
 
-      await generateReplySafely({ userInput: text });
+      await generateReplySafely({ userInput: attributedInput });
     };
 
     let ensureScorecardPromise: Promise<{ componentId: string; intentId: string; topic: string }> | null = null;
@@ -3265,35 +3412,49 @@ Your only output is function calls. Never use plain text unless absolutely neces
       }
     });
 
-    session.on(voice.AgentSessionEventTypes.UserInputTranscribed, async (event) => {
-      const payload = { type: 'live_transcription', text: event.transcript, speaker: 'user', timestamp: Date.now(), is_final: event.isFinal };
-      await job.room.localParticipant?.publishData(new TextEncoder().encode(JSON.stringify(payload)), {
-        reliable: event.isFinal,
-        topic: 'transcription',
-      });
-      if (event.isFinal) {
-        try {
-          appendTranscriptCache(job.room.name || 'unknown', {
-            participantId: 'user',
-            text: event.transcript,
-            timestamp: Date.now(),
-          });
-        } catch { }
-
-        // New user turn begins on a final transcript
-        bumpTurn();
-
-        const trimmed = event.transcript?.trim();
-        if (trimmed) {
-          lastUserPrompt = trimmed;
+    if (!multiParticipantTranscriptionEnabled && transcriptionEnabled) {
+      session.on(voice.AgentSessionEventTypes.UserInputTranscribed, async (event) => {
+        const payload = {
+          type: 'live_transcription',
+          event_id: randomUUID(),
+          text: event.transcript,
+          speaker: 'user',
+          participantId: 'user',
+          timestamp: Date.now(),
+          is_final: event.isFinal,
+          manual: false,
+          server_generated: true,
+        };
+        await job.room.localParticipant?.publishData(new TextEncoder().encode(JSON.stringify(payload)), {
+          reliable: event.isFinal,
+          topic: 'transcription',
+        });
+        if (event.isFinal) {
           try {
-            await generateReplySafely();
-          } catch (error) {
-            logRealtimeError('generateReply after transcript failed', error);
+            appendTranscriptCache(job.room.name || 'unknown', {
+              participantId: 'user',
+              participantName: 'user',
+              text: event.transcript,
+              timestamp: Date.now(),
+              manual: false,
+            });
+          } catch { }
+
+          // New user turn begins on a final transcript
+          bumpTurn();
+
+          const trimmed = event.transcript?.trim();
+          if (trimmed) {
+            lastUserPrompt = trimmed;
+            try {
+              await generateReplySafely();
+            } catch (error) {
+              logRealtimeError('generateReply after transcript failed', error);
+            }
           }
         }
-      }
-    });
+      });
+    }
 
     session.on(voice.AgentSessionEventTypes.ConversationItemAdded, async (event) => {
       console.log('[VoiceAgent] ConversationItem FULL', {
@@ -3312,7 +3473,17 @@ Your only output is function calls. Never use plain text unless absolutely neces
       const text = event.item.textContent ?? '';
       if (!text.trim()) return;
 
-      const payload = { type: 'live_transcription', text, speaker: 'voice-agent', timestamp: Date.now(), is_final: true };
+      const payload = {
+        type: 'live_transcription',
+        event_id: randomUUID(),
+        text,
+        speaker: 'voice-agent',
+        participantId: 'voice-agent',
+        timestamp: Date.now(),
+        is_final: true,
+        manual: false,
+        server_generated: true,
+      };
       await job.room.localParticipant?.publishData(new TextEncoder().encode(JSON.stringify(payload)), {
         reliable: true,
         topic: 'transcription',
@@ -3320,8 +3491,10 @@ Your only output is function calls. Never use plain text unless absolutely neces
       try {
         appendTranscriptCache(job.room.name || 'unknown', {
           participantId: 'voice-agent',
+          participantName: 'voice-agent',
           text,
           timestamp: Date.now(),
+          manual: false,
         });
       } catch { }
     });
@@ -3338,6 +3511,9 @@ Your only output is function calls. Never use plain text unless absolutely neces
       console.log('[VoiceAgent] session closed', payload);
       if (event.error) {
         logRealtimeError('session close error', event.error as unknown);
+      }
+      if (multiParticipantTranscriber) {
+        void multiParticipantTranscriber.stop().catch(() => {});
       }
     });
 
@@ -3371,8 +3547,11 @@ Your only output is function calls. Never use plain text unless absolutely neces
     const startPromise = session.start({
       agent,
       room: job.room,
-      inputOptions: { audioEnabled: true },
-      outputOptions: { audioEnabled: false, transcriptionEnabled },
+      inputOptions: { audioEnabled: !multiParticipantTranscriptionEnabled },
+      outputOptions: {
+        audioEnabled: false,
+        transcriptionEnabled: !multiParticipantTranscriptionEnabled && transcriptionEnabled,
+      },
     });
     await startPromise;
   },

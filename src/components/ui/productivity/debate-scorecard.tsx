@@ -35,6 +35,7 @@ import {
 } from 'lucide-react';
 import { ComponentRegistry, useComponentRegistration } from '@/lib/component-registry';
 import { cn } from '@/lib/utils';
+import { useCanvasContext } from '@/lib/hooks/use-canvas-context';
 import {
   debateScorecardStateSchema as debateScorecardSchema,
   verdictEnum,
@@ -626,29 +627,164 @@ function LedgerTable({
   claims,
   factCheckEnabled,
   playerColorBySide,
+  onPatchClaims,
+  onRequestFactCheck,
 }: {
   claims: Claim[];
   factCheckEnabled: boolean;
   playerColorBySide: Map<'AFF' | 'NEG', string>;
+  onPatchClaims: (claimPatches: Array<Record<string, unknown>>) => void;
+  onRequestFactCheck: (
+    task: 'scorecard.fact_check' | 'scorecard.verify' | 'scorecard.refute',
+    claimId: string,
+  ) => void;
 }) {
-  if (!claims.length) {
-    return (
-      <div className="flex flex-col items-center justify-center py-16 text-white/60 gap-2 border border-dashed border-white/10 rounded-xl">
-        <ClipboardList className="w-10 h-10" />
-        <p className="font-medium">No claims captured yet.</p>
-        <p className="text-xs text-white/40">
-          Record arguments with the voice agent or by typing in the transcript.
-        </p>
-      </div>
-    );
-  }
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [draftQuote, setDraftQuote] = useState('');
+  const [draftSummary, setDraftSummary] = useState('');
+  const [draftStatus, setDraftStatus] = useState<ClaimStatus>('UNTESTED');
 
-  const sorted = [...claims].sort(
-    (a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0),
-  );
+  const [addOpen, setAddOpen] = useState(false);
+  const [newSide, setNewSide] = useState<'AFF' | 'NEG'>('AFF');
+  const [newSpeech, setNewSpeech] = useState<'1AC' | '1NC' | '2AC' | '2NC' | '1AR' | '1NR' | '2AR' | '2NR'>('1AC');
+  const [newQuote, setNewQuote] = useState('');
+
+  const sorted = useMemo(() => {
+    return [...claims].sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0));
+  }, [claims]);
+
+  const beginEdit = (claim: Claim) => {
+    setEditingId(claim.id);
+    setDraftQuote(claim.quote || '');
+    setDraftSummary(claim.summary || '');
+    setDraftStatus(claim.status);
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+  };
+
+  const saveEdit = (claimId: string) => {
+    onPatchClaims([
+      {
+        op: 'upsert',
+        id: claimId,
+        quote: draftQuote.trim(),
+        summary: draftSummary.trim(),
+        status: draftStatus,
+      },
+    ]);
+    setEditingId(null);
+  };
+
+  const deleteClaim = (claimId: string) => {
+    onPatchClaims([{ op: 'delete', id: claimId }]);
+    if (editingId === claimId) setEditingId(null);
+  };
+
+  const addClaim = () => {
+    const quote = newQuote.trim();
+    if (!quote) return;
+    const id = `MAN-${crypto.randomUUID().slice(0, 8)}`;
+    onPatchClaims([
+      {
+        op: 'upsert',
+        id,
+        side: newSide,
+        speech: newSpeech,
+        quote,
+        status: 'UNTESTED',
+      },
+    ]);
+    setAddOpen(false);
+    setNewQuote('');
+  };
 
   return (
     <div className="overflow-hidden rounded-xl border border-white/5 bg-white/[0.02]">
+      <div className="flex items-center justify-between gap-2 px-4 py-3 border-b border-white/5 bg-white/[0.02]">
+        <div className="text-xs uppercase tracking-wide text-white/40">
+          Claims <span className="text-white/30">({claims.length})</span>
+        </div>
+        <button
+          type="button"
+          onClick={() => setAddOpen((prev) => !prev)}
+          className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs text-white/70 hover:bg-white/[0.08]"
+        >
+          + Add claim
+        </button>
+      </div>
+
+      {addOpen && (
+        <div className="px-4 py-3 border-b border-white/5 bg-white/[0.02] space-y-2">
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <select
+              value={newSide}
+              onChange={(e) => {
+                const next = e.target.value as 'AFF' | 'NEG';
+                setNewSide(next);
+                setNewSpeech(next === 'NEG' ? '1NC' : '1AC');
+              }}
+              className="rounded-full border border-white/10 bg-white/[0.05] px-3 py-2 text-xs text-white/80 focus:outline-none"
+            >
+              <option value="AFF" className="text-black">
+                AFF
+              </option>
+              <option value="NEG" className="text-black">
+                NEG
+              </option>
+            </select>
+            <select
+              value={newSpeech}
+              onChange={(e) => setNewSpeech(e.target.value as any)}
+              className="rounded-full border border-white/10 bg-white/[0.05] px-3 py-2 text-xs text-white/80 focus:outline-none"
+            >
+              {(['1AC', '1NC', '2AC', '2NC', '1AR', '1NR', '2AR', '2NR'] as const).map((value) => (
+                <option key={value} value={value} className="text-black">
+                  {value}
+                </option>
+              ))}
+            </select>
+          </div>
+          <textarea
+            value={newQuote}
+            onChange={(e) => setNewQuote(e.target.value)}
+            placeholder="New claim text…"
+            className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-xs text-white/80 focus:outline-none focus:border-white/30"
+            rows={2}
+          />
+          <div className="flex items-center justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setAddOpen(false);
+                setNewQuote('');
+              }}
+              className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs text-white/70 hover:bg-white/[0.08]"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={addClaim}
+              className="rounded-full border border-emerald-500/30 bg-emerald-500/15 px-3 py-1.5 text-xs font-semibold text-emerald-200 hover:bg-emerald-500/20"
+            >
+              Add
+            </button>
+          </div>
+        </div>
+      )}
+
+      {!claims.length && (
+        <div className="flex flex-col items-center justify-center py-16 text-white/60 gap-2 border-t border-white/5">
+          <ClipboardList className="w-10 h-10" />
+          <p className="font-medium">No claims captured yet.</p>
+          <p className="text-xs text-white/40">
+            Record arguments with the voice agent, or add a claim manually.
+          </p>
+        </div>
+      )}
+
       <table className="min-w-full text-sm text-white/80">
         <thead className="bg-white/[0.04] text-xs uppercase tracking-wide text-white/60">
           <tr>
@@ -657,11 +793,13 @@ function LedgerTable({
             <th className="px-4 py-3 text-left">Support</th>
             <th className="px-4 py-3 text-left">Impact</th>
             <th className="px-4 py-3 text-left">Updated</th>
+            <th className="px-4 py-3 text-left">Actions</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-white/5">
           {sorted.map((claim) => {
             const color = playerColorBySide.get(claim.side) ?? 'var(--foreground)';
+            const isEditing = editingId === claim.id;
             return (
               <tr key={claim.id} className="hover:bg-white/[0.03]">
                 <td className="px-4 py-3 align-top">
@@ -677,7 +815,24 @@ function LedgerTable({
                         {speechLabels[claim.speech] || claim.speech}
                       </span>
                     </div>
-                    <p className="text-white/90">{claim.quote}</p>
+                    {isEditing ? (
+                      <textarea
+                        value={draftQuote}
+                        onChange={(e) => setDraftQuote(e.target.value)}
+                        className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-xs text-white/85 focus:outline-none focus:border-white/30"
+                        rows={3}
+                      />
+                    ) : (
+                      <p className="text-white/90">{claim.quote}</p>
+                    )}
+                    {isEditing && (
+                      <input
+                        value={draftSummary}
+                        onChange={(e) => setDraftSummary(e.target.value)}
+                        placeholder="Optional summary…"
+                        className="w-full rounded-full border border-white/10 bg-white/[0.04] px-3 py-2 text-xs text-white/75 focus:outline-none focus:border-white/30"
+                      />
+                    )}
                     {claim.evidenceInline && (
                       <p className="text-xs text-white/40 italic">Evidence: {claim.evidenceInline}</p>
                     )}
@@ -694,7 +849,21 @@ function LedgerTable({
                   </div>
                 </td>
                 <td className="px-4 py-3 align-top space-y-2">
-                  {statusBadge(claim.status)}
+                  {isEditing ? (
+                    <select
+                      value={draftStatus}
+                      onChange={(e) => setDraftStatus(e.target.value as any)}
+                      className="rounded-full border border-white/10 bg-white/[0.05] px-3 py-2 text-xs text-white/80 focus:outline-none"
+                    >
+                      {(claimStatusEnum.options as ClaimStatus[]).map((value) => (
+                        <option key={value} value={value} className="text-black">
+                          {value}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    statusBadge(claim.status)
+                  )}
                   {verdictBadge(claim.verdict as Verdict)}
                 </td>
                 <td className="px-4 py-3 align-top space-y-3">
@@ -706,6 +875,61 @@ function LedgerTable({
                 </td>
                 <td className="px-4 py-3 align-top text-xs text-white/50">
                   {claim.updatedAt ? formatDate(claim.updatedAt) : '—'}
+                </td>
+                <td className="px-4 py-3 align-top">
+                  <div className="flex flex-wrap items-center gap-2">
+                    {isEditing ? (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => saveEdit(claim.id)}
+                          className="rounded-full border border-emerald-500/30 bg-emerald-500/15 px-3 py-1 text-[11px] font-semibold text-emerald-200 hover:bg-emerald-500/20"
+                        >
+                          Save
+                        </button>
+                        <button
+                          type="button"
+                          onClick={cancelEdit}
+                          className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-[11px] text-white/70 hover:bg-white/[0.08]"
+                        >
+                          Cancel
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => beginEdit(claim)}
+                          className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-[11px] text-white/70 hover:bg-white/[0.08]"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => onRequestFactCheck('scorecard.verify', claim.id)}
+                          className="rounded-full border border-sky-400/25 bg-sky-500/10 px-3 py-1 text-[11px] text-sky-200 hover:bg-sky-500/15"
+                        >
+                          Verify
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => onRequestFactCheck('scorecard.refute', claim.id)}
+                          className="rounded-full border border-rose-500/25 bg-rose-500/10 px-3 py-1 text-[11px] text-rose-200 hover:bg-rose-500/15"
+                        >
+                          Refute
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (confirm(`Delete ${claim.id}?`)) deleteClaim(claim.id);
+                          }}
+                          className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-[11px] text-white/70 hover:bg-white/[0.08]"
+                        >
+                          Delete
+                        </button>
+                      </>
+                    )}
+                  </div>
                 </td>
               </tr>
             );
@@ -944,6 +1168,7 @@ export function DebateScorecard(props: DebateScorecardProps) {
   const injectedProps = props as DebateScorecardInjectedProps;
   const injectedState = injectedProps.state;
   const updateState = injectedProps.updateState;
+  const { roomName } = useCanvasContext();
 
   const parsedFromProps = useMemo(() => debateScorecardSchema.parse(props), [props]);
   const parsedFromPropsRef = useRef(parsedFromProps);
@@ -1029,6 +1254,100 @@ export function DebateScorecard(props: DebateScorecardProps) {
     const stateId = scorecard.componentId?.trim() || parsedFromProps.componentId?.trim();
     return explicitMessageId || stateId || 'debate-scorecard';
   }, [explicitMessageId, parsedFromProps.componentId, scorecard.componentId]);
+
+  const dispatchScorecardTask = useCallback(
+    async (task: string, body: Record<string, unknown>) => {
+      if (!roomName) return;
+      try {
+        const res = await fetch('/api/steward/runScorecard', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            room: roomName,
+            componentId: messageId,
+            task,
+            ...body,
+          }),
+        });
+        if (!res.ok) {
+          const text = await res.text().catch(() => '');
+          console.warn('[DebateScorecard] task dispatch failed', { task, status: res.status, text: text.slice(0, 120) });
+        }
+      } catch (error) {
+        console.warn('[DebateScorecard] task dispatch error', { task, error });
+      }
+    },
+    [messageId, roomName],
+  );
+
+  const patchClaims = useCallback(
+    (claimPatches: Array<Record<string, unknown>>) => {
+      // Optimistic local update (best-effort) so edits feel instant.
+      setScorecard((prev) => {
+        const next = { ...prev, claims: [...(prev.claims ?? [])] };
+        for (const patch of claimPatches) {
+          const op = typeof patch.op === 'string' ? patch.op : 'upsert';
+          const id = typeof patch.id === 'string' ? patch.id : '';
+          if (!id) continue;
+          const idx = next.claims.findIndex((c) => c.id === id);
+          if (op === 'delete') {
+            if (idx !== -1) next.claims.splice(idx, 1);
+            continue;
+          }
+          if (idx === -1) {
+            const side = patch.side === 'NEG' ? 'NEG' : 'AFF';
+            const allowedSpeeches = new Set(['1AC', '1NC', '2AC', '2NC', '1AR', '1NR', '2AR', '2NR']);
+            const speech =
+              typeof patch.speech === 'string' && allowedSpeeches.has(patch.speech)
+                ? (patch.speech as any)
+                : side === 'NEG'
+                  ? '1NC'
+                  : '1AC';
+            const playerLabel = prev.players.find((p) => p.side === side)?.label ?? 'Speaker';
+            next.claims.push({
+              id,
+              side,
+              speech,
+              quote: typeof patch.quote === 'string' ? patch.quote : '',
+              speaker: typeof patch.speaker === 'string' ? patch.speaker : playerLabel,
+              summary: typeof patch.summary === 'string' ? patch.summary : undefined,
+              evidenceInline: typeof patch.evidenceInline === 'string' ? patch.evidenceInline : undefined,
+              status: typeof patch.status === 'string' ? (patch.status as any) : 'UNTESTED',
+              strength: { logos: 0.5, pathos: 0.5, ethos: 0.5 },
+              confidence: 0.5,
+              evidenceCount: 0,
+              upvotes: 0,
+              scoreDelta: 0,
+              factChecks: [],
+              createdAt: Date.now(),
+              updatedAt: Date.now(),
+            });
+            continue;
+          }
+          next.claims[idx] = {
+            ...next.claims[idx],
+            ...(typeof patch.quote === 'string' ? { quote: patch.quote } : null),
+            ...(typeof patch.summary === 'string' ? { summary: patch.summary } : null),
+            ...(typeof patch.speaker === 'string' ? { speaker: patch.speaker } : null),
+            ...(typeof patch.evidenceInline === 'string' ? { evidenceInline: patch.evidenceInline } : null),
+            ...(typeof patch.status === 'string' ? { status: patch.status as any } : null),
+          };
+        }
+        return next;
+      });
+
+      void dispatchScorecardTask('scorecard.patch', { claimPatches });
+    },
+    [dispatchScorecardTask],
+  );
+
+  const requestFactCheck = useCallback(
+    (task: 'scorecard.fact_check' | 'scorecard.verify' | 'scorecard.refute', claimId: string) => {
+      if (!claimId) return;
+      void dispatchScorecardTask(task, { claimId });
+    },
+    [dispatchScorecardTask],
+  );
 
   const handleRegistryUpdate = useCallback(
     (patch: Record<string, unknown>) => {
@@ -1365,6 +1684,8 @@ export function DebateScorecard(props: DebateScorecardProps) {
                       claims={filteredClaims}
                       factCheckEnabled={factCheckToggle}
                       playerColorBySide={playerColorBySide as Map<'AFF' | 'NEG', string>}
+                      onPatchClaims={patchClaims}
+                      onRequestFactCheck={requestFactCheck}
                     />
                   )}
                   {localFilters.activeTab === 'map' && (

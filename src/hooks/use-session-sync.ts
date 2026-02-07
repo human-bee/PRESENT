@@ -63,44 +63,98 @@ export function useSessionSync(roomName: string) {
   const bus = useMemo(() => createLiveKitBus(room), [room]);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const canvasIdRef = useRef<string | null>(null);
-  const transcriptRef = useRef<any[]>([]);
-  const hasReplayedTranscriptRef = useRef<boolean>(false);
   const cancelledRef = useRef<boolean>(false);
-  const transcriptFlushTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const transcriptFlushInFlightRef = useRef(false);
-  const MAX_TRANSCRIPT_LINES = 200;
-  const TRANSCRIPT_FLUSH_DEBOUNCE_MS = 1000;
+  const isWriterRef = useRef<boolean>(false);
+  const [isWriter, setIsWriter] = useState<boolean>(false);
 
-  const appendTranscript = (entry: any) => {
-    const next = [...transcriptRef.current, entry];
-    transcriptRef.current =
-      next.length > MAX_TRANSCRIPT_LINES ? next.slice(-MAX_TRANSCRIPT_LINES) : next;
+  type TranscriptEntry = {
+    eventId: string;
+    participantId: string;
+    participantName?: string | null;
+    text: string;
+    timestamp: number;
+    manual: boolean;
   };
+
+  const pendingTranscriptRef = useRef<TranscriptEntry[]>([]);
+  const seenEventIdsRef = useRef<Set<string>>(new Set());
+  const flushTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const flushInFlightRef = useRef(false);
+  const retryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const TRANSCRIPT_FLUSH_DEBOUNCE_MS = 900;
+
+  const enqueueTranscript = (entry: TranscriptEntry) => {
+    if (!entry.text || !entry.eventId) return;
+    const seen = seenEventIdsRef.current;
+    if (seen.has(entry.eventId)) return;
+    seen.add(entry.eventId);
+    if (seen.size > 2000) {
+      // Simple guard against unbounded memory growth.
+      const first = seen.values().next().value;
+      if (first) seen.delete(first);
+    }
+    pendingTranscriptRef.current.push(entry);
+  };
+
+  const flushTranscriptBatch = useMemo(() => {
+    return async (sid: string) => {
+      if (!isWriterRef.current) return;
+      if (flushInFlightRef.current) return;
+      if (pendingTranscriptRef.current.length === 0) return;
+
+      flushInFlightRef.current = true;
+      try {
+        if (retryTimeoutRef.current) {
+          clearTimeout(retryTimeoutRef.current);
+          retryTimeoutRef.current = null;
+        }
+        while (pendingTranscriptRef.current.length > 0) {
+          const batch = pendingTranscriptRef.current.slice(0, 25);
+          const headers = await getAuthHeaders();
+          const res = await fetch('/api/session-transcripts', {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({
+              sessionId: sid,
+              entries: batch.map((line) => ({
+                eventId: line.eventId,
+                participantId: line.participantId,
+                participantName: line.participantName ?? null,
+                text: line.text,
+                timestamp: line.timestamp,
+                manual: line.manual,
+              })),
+            }),
+          });
+          if (!res.ok) {
+            console.error('[useSessionSync] Failed to persist transcript batch', await res.text());
+            break;
+          }
+          pendingTranscriptRef.current = pendingTranscriptRef.current.slice(batch.length);
+        }
+      } finally {
+        flushInFlightRef.current = false;
+        // If we still have entries pending (e.g. auth not ready / transient network), retry shortly.
+        if (pendingTranscriptRef.current.length > 0 && isWriterRef.current && !retryTimeoutRef.current) {
+          retryTimeoutRef.current = setTimeout(() => {
+            retryTimeoutRef.current = null;
+            void flushTranscriptBatch(sid);
+          }, 1500);
+        }
+      }
+    };
+  }, []);
 
   const scheduleTranscriptFlush = useMemo(() => {
     return (sid: string) => {
-      if (transcriptFlushTimeoutRef.current) return;
-      transcriptFlushTimeoutRef.current = setTimeout(async () => {
-        transcriptFlushTimeoutRef.current = null;
-        if (transcriptFlushInFlightRef.current) return;
-        transcriptFlushInFlightRef.current = true;
-        try {
-          const headers = await getAuthHeaders();
-          const res = await fetch(`/api/session/${sid}`, {
-            method: 'PATCH',
-            headers,
-            body: JSON.stringify({
-              transcript: transcriptRef.current,
-              updated_at: new Date().toISOString(),
-            }),
-          });
-          if (!res.ok) console.error('[useSessionSync] Failed to append transcript', await res.text());
-        } finally {
-          transcriptFlushInFlightRef.current = false;
-        }
+      if (!isWriterRef.current) return;
+      if (flushTimeoutRef.current) return;
+      flushTimeoutRef.current = setTimeout(async () => {
+        flushTimeoutRef.current = null;
+        await flushTranscriptBatch(sid);
       }, TRANSCRIPT_FLUSH_DEBOUNCE_MS);
     };
-  }, []);
+  }, [flushTranscriptBatch]);
 
   const ensureSession = useMemo(() => {
     const fetchSession = async (canvasId: string | null) => {
@@ -141,9 +195,6 @@ export function useSessionSync(roomName: string) {
 
       if (!cancelledRef.current && existing?.id) {
         setSessionId(existing.id);
-        transcriptRef.current = Array.isArray(existing.transcript)
-          ? existing.transcript.slice(-MAX_TRANSCRIPT_LINES)
-          : [];
         return;
       }
 
@@ -163,14 +214,11 @@ export function useSessionSync(roomName: string) {
         const messageString = typeof insertErr.error === 'string' ? insertErr.error.toLowerCase() : '';
         const isDuplicate = code === '23505' || messageString.includes('duplicate key');
         
-        if (isDuplicate) {
+      if (isDuplicate) {
           const existingAfterConflict = await fetchSession(initialCanvasId);
           if (existingAfterConflict?.id) {
             if (!cancelledRef.current) {
               setSessionId(existingAfterConflict.id);
-              transcriptRef.current = Array.isArray(existingAfterConflict.transcript)
-                ? existingAfterConflict.transcript.slice(-MAX_TRANSCRIPT_LINES)
-                : [];
             }
             return;
           }
@@ -180,9 +228,8 @@ export function useSessionSync(roomName: string) {
         if (isMissingCanvas) {
           const fallbackPayload = { ...insertPayload, canvas_id: null };
           const { data: fallback, error: fallbackErr } = await createSession(fallbackPayload);
-          if (!fallbackErr && fallback?.id && !cancelledRef.current) {
+      if (!fallbackErr && fallback?.id && !cancelledRef.current) {
             setSessionId(fallback.id);
-            transcriptRef.current = [];
             return;
           }
           if (fallbackErr) {
@@ -196,7 +243,6 @@ export function useSessionSync(roomName: string) {
 
       if (!cancelledRef.current && created) {
         setSessionId(created.id);
-        transcriptRef.current = [];
       }
     };
   }, [roomName, room]);
@@ -213,7 +259,6 @@ export function useSessionSync(roomName: string) {
   // If canvas id in URL changes (e.g., due to thread switch), re-run ensureSession
   useEffect(() => {
     const rerun = () => {
-      hasReplayedTranscriptRef.current = false;
       ensureSession();
     };
     if (typeof window !== 'undefined') {
@@ -221,6 +266,64 @@ export function useSessionSync(roomName: string) {
       return () => window.removeEventListener('present:canvas-id-changed', rerun);
     }
   }, [ensureSession]);
+
+  // Determine a single "writer" per room to avoid duplicated transcript inserts.
+  useEffect(() => {
+    if (!room) {
+      setIsWriter(false);
+      isWriterRef.current = false;
+      return;
+    }
+
+    const isAgentParticipant = (p: any) => {
+      try {
+        const kind = String(p?.kind ?? '').toLowerCase();
+        if (kind === 'agent') return true;
+        const identity = String(p?.identity || '').toLowerCase();
+        const metadata = String(p?.metadata || '').toLowerCase();
+        return (
+          identity.startsWith('agent-') ||
+          identity.includes('voice-agent') ||
+          metadata.includes('voice-agent') ||
+          metadata.includes('agent')
+        );
+      } catch {
+        return false;
+      }
+    };
+
+    const recompute = () => {
+      const localId = room.localParticipant?.identity || '';
+      if (!localId || isAgentParticipant(room.localParticipant)) {
+        setIsWriter(false);
+        isWriterRef.current = false;
+        return;
+      }
+
+      const ids = [localId];
+      room.remoteParticipants.forEach((p) => {
+        if (isAgentParticipant(p)) return;
+        if (p?.identity) ids.push(p.identity);
+      });
+      ids.sort();
+      const nextIsWriter = ids[0] === localId;
+      setIsWriter(nextIsWriter);
+      isWriterRef.current = nextIsWriter;
+    };
+
+    recompute();
+    const handleChange = () => recompute();
+    room.on(RoomEvent.ParticipantConnected, handleChange);
+    room.on(RoomEvent.ParticipantDisconnected, handleChange);
+    room.on(RoomEvent.Connected, handleChange);
+    room.on(RoomEvent.Disconnected, handleChange);
+    return () => {
+      room.off(RoomEvent.ParticipantConnected, handleChange);
+      room.off(RoomEvent.ParticipantDisconnected, handleChange);
+      room.off(RoomEvent.Connected, handleChange);
+      room.off(RoomEvent.Disconnected, handleChange);
+    };
+  }, [room]);
 
   // Update participants on join/leave
   useEffect(() => {
@@ -258,93 +361,53 @@ export function useSessionSync(roomName: string) {
     };
   }, [room, sessionId]);
 
-  // Stream transcription messages to Supabase
+  // Persist transcripts via append-only table (one writer per room).
   useEffect(() => {
     if (!sessionId) return;
 
     const off = bus.on('transcription', async (msg: any) => {
       if (!msg || typeof msg.text !== 'string') return;
-      const entry = {
-        participantId: msg.participantId ?? msg.speaker ?? 'unknown',
+      if (msg.replay) return;
+      const isFinal =
+        typeof msg.is_final === 'boolean'
+          ? msg.is_final
+          : typeof msg.isFinal === 'boolean'
+            ? msg.isFinal
+            : typeof msg.final === 'boolean'
+              ? msg.final
+              : true;
+      // Only persist final transcripts to avoid ballooning the transcript table with interim updates.
+      if (!isFinal) return;
+      if (!isWriterRef.current) return;
+      const eventId =
+        typeof msg.event_id === 'string'
+          ? msg.event_id
+          : typeof msg.eventId === 'string'
+            ? msg.eventId
+            : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+      const entry: TranscriptEntry = {
+        eventId,
+        participantId: String(msg.participantId ?? msg.speaker ?? 'unknown'),
+        participantName:
+          typeof msg.participantName === 'string'
+            ? msg.participantName
+            : typeof msg.speaker === 'string'
+              ? msg.speaker
+              : null,
         text: msg.text,
         timestamp: typeof msg.timestamp === 'number' ? msg.timestamp : Date.now(),
+        manual: Boolean(msg.manual),
       };
 
-      // Append locally and batch updates to avoid hammering Supabase / Vercel payload limits.
-      appendTranscript(entry);
+      enqueueTranscript(entry);
       scheduleTranscriptFlush(sessionId);
     });
 
     return off;
   }, [bus, sessionId, scheduleTranscriptFlush]);
 
-  // On reload, replay the last N transcript lines after the room connects
-  // Uses batched processing to avoid blocking the main thread
-  useEffect(() => {
-    if (!sessionId || !room) return;
-
-    const BATCH_SIZE = 10;
-    const BATCH_DELAY_MS = 16; // ~1 frame
-
-    const replayBatch = (lines: typeof transcriptRef.current, startIndex: number) => {
-      const endIndex = Math.min(startIndex + BATCH_SIZE, lines.length);
-      
-      for (let i = startIndex; i < endIndex; i++) {
-        const line = lines[i];
-        try {
-          // Send to LiveKit for other participants (batched)
-          bus.send('transcription', {
-            type: 'live_transcription',
-            speaker: line.participantId ?? 'unknown',
-            text: line.text ?? '',
-            timestamp: typeof line.timestamp === 'number' ? line.timestamp : Date.now(),
-            is_final: true,
-            replay: true,
-          });
-          // Dispatch for local hydration (TranscriptProvider handles this)
-          try {
-            window.dispatchEvent(
-              new CustomEvent('livekit:transcription-replay', {
-                detail: {
-                  speaker: line.participantId ?? 'unknown',
-                  text: line.text ?? '',
-                  timestamp: typeof line.timestamp === 'number' ? line.timestamp : Date.now(),
-                },
-              }),
-            );
-          } catch { }
-        } catch {
-          // ignore
-        }
-      }
-      
-      // Schedule next batch if there are more lines
-      if (endIndex < lines.length) {
-        setTimeout(() => replayBatch(lines, endIndex), BATCH_DELAY_MS);
-      }
-    };
-
-    const replay = () => {
-      if (hasReplayedTranscriptRef.current) return;
-      if (!Array.isArray(transcriptRef.current) || transcriptRef.current.length === 0) return;
-      if (room.state !== 'connected') return;
-
-      hasReplayedTranscriptRef.current = true;
-      const MAX_REPLAY = 100;
-      const recent = transcriptRef.current.slice(-MAX_REPLAY);
-      
-      // Start batched replay
-      replayBatch(recent, 0);
-    };
-
-    if (room.state === 'connected') replay();
-    room.on(RoomEvent.Connected, replay);
-    return () => {
-      room.off(RoomEvent.Connected, replay);
-    };
-  }, [bus, sessionId, room]);
-
-  // Handle manual local transcripts
+  // Handle manual local transcripts (sender may not receive their own data packets).
   useEffect(() => {
     if (!sessionId) return;
 
@@ -352,12 +415,27 @@ export function useSessionSync(roomName: string) {
       const detail = (event as CustomEvent<any>).detail;
       if (!detail || typeof detail.text !== 'string') return;
       if (detail.replay) return;
-      const entry = {
-        participantId: detail.participantId ?? detail.speaker ?? 'unknown',
+      if (!isWriterRef.current) return;
+      const eventId =
+        typeof detail.event_id === 'string'
+          ? detail.event_id
+          : typeof detail.eventId === 'string'
+            ? detail.eventId
+            : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+      enqueueTranscript({
+        eventId,
+        participantId: String(detail.participantId ?? detail.speaker ?? 'unknown'),
+        participantName:
+          typeof detail.participantName === 'string'
+            ? detail.participantName
+            : typeof detail.speaker === 'string'
+              ? detail.speaker
+              : null,
         text: String(detail.text),
         timestamp: typeof detail.timestamp === 'number' ? detail.timestamp : Date.now(),
-      };
-      appendTranscript(entry);
+        manual: Boolean(detail.manual),
+      });
       scheduleTranscriptFlush(sessionId);
     };
 

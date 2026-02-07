@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { AgentTaskQueue } from '@/lib/agents/shared/queue';
+import { isFastStewardReady } from '@/lib/agents/fast-steward-config';
 import { runDebateScorecardSteward } from '@/lib/agents/debate-judge';
 import { runDebateScorecardStewardFast } from '@/lib/agents/subagents/debate-steward-fast';
 
 export const runtime = 'nodejs';
 
-const queue = new AgentTaskQueue();
 const QUEUE_DIRECT_FALLBACK_ENABLED = process.env.SCORECARD_QUEUE_DIRECT_FALLBACK === 'true';
 
 export async function POST(req: NextRequest) {
@@ -68,6 +68,8 @@ export async function POST(req: NextRequest) {
     } as const;
 
     try {
+      // Lazily instantiate so `next build` doesn't require Supabase env vars.
+      const queue = new AgentTaskQueue();
       const enqueueResult = await queue.enqueueTask({
         room: trimmedRoom,
         task: normalizedTask,
@@ -83,7 +85,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: 'Queue unavailable' }, { status: 503 });
       }
 
-      const useFast = normalizedTask !== 'scorecard.fact_check';
+      const useFast = isFastStewardReady() && normalizedTask !== 'scorecard.fact_check';
       try {
         if (useFast) {
           await runDebateScorecardStewardFast({

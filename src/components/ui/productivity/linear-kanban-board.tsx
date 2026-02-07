@@ -294,7 +294,29 @@ export default function LinearKanbanBoard({
   }, []);
 
   const selectedIssueData = state.selectedIssue ? state.issues.find((i) => i.id === state.selectedIssue) : null;
-  const columnWidth = Math.max(200, Math.min(320, (typeof window !== 'undefined' ? window.innerWidth : 1200) / columns.length - 32));
+  const [boardWidth, setBoardWidth] = useState<number>(1200);
+
+  useEffect(() => {
+    const el = dnd.boardRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (!entry) return;
+      const next = Math.max(320, Math.round(entry.contentRect.width));
+      setBoardWidth(next);
+    });
+    ro.observe(el);
+    // Initial read
+    setBoardWidth(Math.max(320, el.offsetWidth || 1200));
+    return () => ro.disconnect();
+  }, [dnd.boardRef]);
+
+  const columnWidth = useMemo(() => {
+    const cols = Math.max(1, columns.length);
+    const gap = 16; // tailwind gap-4
+    const available = Math.max(320, boardWidth - gap * (cols - 1));
+    return Math.max(200, Math.min(320, Math.floor(available / cols)));
+  }, [boardWidth, columns.length]);
 
   return (
     <LoadingWrapper state={subAgent.loadingState} skeleton={<KanbanSkeleton />}>

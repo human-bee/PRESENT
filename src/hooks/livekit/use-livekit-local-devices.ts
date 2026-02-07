@@ -266,14 +266,18 @@ export function useLivekitLocalDevices({ room, isLocal }: UseLivekitLocalDevices
   }, [audioDevices, videoDevices, isLocal, room]);
 
   const microphoneSelectValue = React.useMemo(() => {
-    if (!activeMicrophoneId) return '';
+    if (!activeMicrophoneId) {
+      return audioDevices.some((device) => device.deviceId === 'default') ? 'default' : '';
+    }
     return audioDevices.some((device) => device.deviceId === activeMicrophoneId)
       ? activeMicrophoneId
       : '';
   }, [audioDevices, activeMicrophoneId]);
 
   const cameraSelectValue = React.useMemo(() => {
-    if (!activeCameraId) return '';
+    if (!activeCameraId) {
+      return videoDevices.some((device) => device.deviceId === 'default') ? 'default' : '';
+    }
     return videoDevices.some((device) => device.deviceId === activeCameraId)
       ? activeCameraId
       : '';

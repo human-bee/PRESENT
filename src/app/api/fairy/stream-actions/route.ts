@@ -1,6 +1,8 @@
 import { AgentService } from '@/lib/fairy-worker/agent-service';
 import type { FairyWorkerEnv, FairyUserStub } from '@/lib/fairy-worker/environment';
 import type { AgentPrompt } from '@/lib/fairy-worker/types';
+import { NextRequest } from 'next/server';
+import { getRequestUserId } from '@/lib/supabase/server/request-user';
 
 export const runtime = 'nodejs';
 
@@ -10,7 +12,12 @@ function createUserStub(): FairyUserStub {
   };
 }
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
+  const bearer = await getRequestUserId(request);
+  if (!bearer.ok) {
+    return new Response(JSON.stringify({ error: 'unauthorized' }), { status: 401 });
+  }
+
   const prompt = (await request.json()) as AgentPrompt;
 
   const env: FairyWorkerEnv = {
@@ -18,13 +25,13 @@ export async function POST(request: Request) {
     ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
     GOOGLE_API_KEY: process.env.GOOGLE_API_KEY,
     FAIRY_MODEL: process.env.FAIRY_MODEL,
-    IS_LOCAL: 'true',
+    IS_LOCAL: process.env.NODE_ENV === 'production' ? 'false' : 'true',
   };
 
   const service = new AgentService(env);
   const encoder = new TextEncoder();
   const userStub = createUserStub();
-  const userId = 'present-user';
+  const userId = bearer.userId;
 
   const abortController = new AbortController();
   const signal = abortController.signal;

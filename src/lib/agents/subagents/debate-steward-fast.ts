@@ -1,4 +1,4 @@
-import { getCerebrasClient, getModelForSteward } from '../fast-steward-config';
+import { getCerebrasClient, getModelForSteward, isFastStewardReady } from '../fast-steward-config';
 import {
   getDebateScorecard,
   commitDebateScorecard,
@@ -8,7 +8,6 @@ import {
 import { debateScorecardStateSchema, type DebateScorecardState } from '@/lib/agents/debate-scorecard-schema';
 
 const CEREBRAS_MODEL = getModelForSteward('DEBATE_STEWARD_FAST_MODEL');
-const client = getCerebrasClient();
 
 const DEBATE_STEWARD_FAST_INSTRUCTIONS = `
 You are a fast debate scorecard assistant. Given the current state, context documents, and an instruction, update the state.
@@ -156,6 +155,10 @@ export async function runDebateScorecardStewardFast(params: {
   const { room, componentId, intent, summary, prompt, topic } = params;
   const start = Date.now();
 
+  if (!isFastStewardReady()) {
+    throw new Error('DebateStewardFast requires CEREBRAS_API_KEY');
+  }
+
   console.log('[DebateStewardFast] start', { room, componentId, intent, topic });
 
   const record = await getDebateScorecard(room, componentId);
@@ -178,6 +181,7 @@ export async function runDebateScorecardStewardFast(params: {
   ];
 
   try {
+    const client = getCerebrasClient();
     const response = await client.chat.completions.create({
       model: CEREBRAS_MODEL,
       messages,

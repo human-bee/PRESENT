@@ -96,7 +96,8 @@ export async function requestScreenshot(room: string, request: Omit<ScreenshotRe
   await client.sendData(normalizedRoom, data, DataPacket_Kind.RELIABLE, { topic: 'agent:screenshot_request' });
 }
 
-const ACK_BACKOFF_MS = [150, 300, 600, 1000];
+// Keep ack polling snappy; this path is latency-sensitive and tests run in a noisy event loop.
+const ACK_BACKOFF_MS = [25, 50, 100, 200, 300, 500, 1000];
 let ackModulePromise: Promise<any> | null = null;
 
 async function loadAckModule() {

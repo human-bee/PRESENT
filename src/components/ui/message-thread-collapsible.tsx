@@ -351,8 +351,8 @@ export const MessageThreadCollapsible = React.forwardRef<
   React.useEffect(() => {
     if (!Array.isArray(sessionTranscript) || sessionTranscript.length === 0) return;
     const storeFormat: StoreTranscript[] = sessionTranscript.map((t) => ({
-      id: `${t.participantId}-${Number(t.timestamp)}`,
-      speaker: t.participantId || 'Unknown',
+      id: (t as any).eventId || `${t.participantId}-${Number(t.timestamp)}`,
+      speaker: (t as any).participantName || t.participantId || 'Unknown',
       text: t.text,
       timestamp: Number(t.timestamp),
       isFinal: true,
@@ -656,18 +656,27 @@ export const MessageThreadCollapsible = React.forwardRef<
                   setIsSending(true);
 
                   const speaker =
-                    room?.localParticipant?.identity ||
                     user?.user_metadata?.full_name ||
                     user?.user_metadata?.name ||
                     user?.email ||
+                    room?.localParticipant?.identity ||
                     'Canvas-User';
+                  const participantId =
+                    room?.localParticipant?.identity || user?.id || speaker || 'unknown';
+                  const eventId =
+                    typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+                      ? crypto.randomUUID()
+                      : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
                   const textForDispatch = slashActive && parsedCommand ? parsedCommand.body : trimmed;
 
                   const payload = {
                     type: 'live_transcription',
+                    event_id: eventId,
                     text: textForDispatch,
                     speaker,
+                    participantId,
+                    participantName: speaker,
                     timestamp: Date.now(),
                     is_final: true,
                     manual: true,

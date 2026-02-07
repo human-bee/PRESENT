@@ -37,16 +37,26 @@ export function LivekitParticipantSpawner() {
     // Spawn tiles for new participants
     for (const identity of currentParticipants) {
       if (!spawnedParticipants.current.has(identity)) {
-        spawnedParticipants.current.add(identity);
-
         // Determine if this is the local participant
         const isLocal = localParticipant?.identity === identity;
 
         // Check if this might be an agent (simple heuristic)
+        const lower = identity.toLowerCase();
         const isAgent =
-          identity.toLowerCase().includes('agent') ||
-          identity.toLowerCase().includes('bot') ||
-          identity.toLowerCase().includes('ai');
+          lower.startsWith('agent-') ||
+          lower.includes('voice-agent') ||
+          lower.includes('voiceagent') ||
+          lower.includes('bot') ||
+          lower.includes('ai');
+
+        // Do not auto-spawn tiles for agent identities by default.
+        // (They can still be selected manually in a participant tile's dropdown.)
+        if (!isLocal && isAgent) {
+          spawnedParticipants.current.add(identity);
+          continue;
+        }
+
+        spawnedParticipants.current.add(identity);
 
         // Send message to spawn participant tile
         const participantType = isLocal ? 'your' : isAgent ? 'AI agent' : 'participant';

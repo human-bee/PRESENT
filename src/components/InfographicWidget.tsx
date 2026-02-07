@@ -43,6 +43,8 @@ export function InfographicWidget({ room, isShape = false, __custom_message_id, 
     const widgetIdRef = useRef<string>(crypto.randomUUID());
     const [isOpen, setIsOpen] = useState(false);
     const [isGenerating, setIsGenerating] = useState(false);
+    const [providerUsed, setProviderUsed] = useState<string | null>(null);
+    const [fallbackReason, setFallbackReason] = useState<string | null>(null);
     // History state: stores array of generated images
     const [history, setHistory] = useState<Array<{ id: string, url: string, timestamp: number }>>([]);
     const [currentIndex, setCurrentIndex] = useState(-1);
@@ -307,6 +309,8 @@ export function InfographicWidget({ room, isShape = false, __custom_message_id, 
             }
 
             const data = await response.json();
+            setProviderUsed(typeof data?.providerUsed === 'string' ? data.providerUsed : null);
+            setFallbackReason(typeof data?.fallbackReason === 'string' ? data.fallbackReason : null);
             if (data.b64_json) {
                 const newImage = {
                     id: crypto.randomUUID(),
@@ -540,6 +544,20 @@ export function InfographicWidget({ room, isShape = false, __custom_message_id, 
             </div>
 
             <div className="p-4 space-y-4 flex-1 flex flex-col">
+                {(providerUsed || fallbackReason) && (
+                    <div className="text-[11px] text-white/50">
+                        {providerUsed && (
+                            <span>
+                                Provider: <span className="text-white/70 font-semibold">{providerUsed}</span>
+                            </span>
+                        )}
+                        {fallbackReason && (
+                            <span className="ml-2">
+                                Fallback: <span className="text-white/60">{fallbackReason}</span>
+                            </span>
+                        )}
+                    </div>
+                )}
                 <div className="flex items-center space-x-2 p-3 rounded-xl border border-white/5 bg-white/[0.03]">
                     <input
                         type="checkbox"

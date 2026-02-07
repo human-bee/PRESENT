@@ -2,7 +2,6 @@ import { getCerebrasClient, getModelForSteward, isFastStewardReady } from '../fa
 import { getFlowchartDoc, getTranscriptWindow, commitFlowchartDoc, getContextDocuments, formatContextDocuments } from '../shared/supabase-context';
 
 const CEREBRAS_MODEL = getModelForSteward('FLOWCHART_STEWARD_FAST_MODEL');
-const client = getCerebrasClient();
 
 export const flowchartStewardFastReady = isFastStewardReady();
 
@@ -82,6 +81,13 @@ export async function runFlowchartStewardFast(params: {
   const { room, docId, windowMs = 60000 } = params;
   const overallStart = Date.now();
 
+  if (!isFastStewardReady()) {
+    return {
+      status: 'error',
+      error: 'FAST Flowchart steward unavailable (missing CEREBRAS_API_KEY)',
+    };
+  }
+
   const [docRecord, transcriptWindow, contextDocs] = await Promise.all([
     getFlowchartDoc(room, docId),
     getTranscriptWindow(room, windowMs),
@@ -124,6 +130,7 @@ export async function runFlowchartStewardFast(params: {
   });
 
   try {
+    const client = getCerebrasClient();
     const response = await client.chat.completions.create({
       model: CEREBRAS_MODEL,
       messages,
@@ -180,6 +187,13 @@ export async function runFlowchartInstruction(params: {
 }): Promise<FlowchartResult> {
   const { instruction, room, docId, currentDoc, currentVersion = 0 } = params;
 
+  if (!isFastStewardReady()) {
+    return {
+      status: 'error',
+      error: 'FAST Flowchart steward unavailable (missing CEREBRAS_API_KEY)',
+    };
+  }
+
   const docSection =
     currentDoc && currentDoc.trim().length > 0
       ? currentDoc
@@ -201,6 +215,7 @@ export async function runFlowchartInstruction(params: {
   });
 
   try {
+    const client = getCerebrasClient();
     const response = await client.chat.completions.create({
       model: CEREBRAS_MODEL,
       messages,

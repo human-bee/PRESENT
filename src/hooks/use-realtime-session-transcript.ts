@@ -2,9 +2,12 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 
 export type TranscriptLine = {
+  eventId?: string;
   participantId: string;
+  participantName?: string | null;
   text: string;
   timestamp: number;
+  manual?: boolean;
 };
 
 function isValidUuid(value: string | null | undefined): value is string {
@@ -22,20 +25,56 @@ function getCanvasIdFromUrl(): string | null {
 export function useRealtimeSessionTranscript(roomName: string | undefined) {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [transcript, setTranscript] = useState<TranscriptLine[]>([]);
-  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
-  const currentChannelKeyRef = useRef<string | null>(null);
 
   // Locate session row id and hydrate
   useEffect(() => {
     if (!roomName) return;
     let cancelled = false;
 
+    async function getAuthHeaders() {
+      const { data } = await supabase.auth.getSession();
+      const token = data.session?.access_token;
+      return token ? { Authorization: `Bearer ${token}` } : {};
+    }
+
+    async function fetchTranscriptLines(targetSessionId: string) {
+      try {
+        const headers = await getAuthHeaders();
+        const params = new URLSearchParams({
+          sessionId: targetSessionId,
+          limit: '200',
+        });
+        const res = await fetch(`/api/session-transcripts?${params.toString()}`, { headers });
+        if (!res.ok) return;
+        const json = await res.json().catch(() => null);
+        const rows = Array.isArray(json?.transcript) ? json.transcript : [];
+        const lines: TranscriptLine[] = rows
+          .map((t: any) => ({
+            eventId: typeof t.eventId === 'string' ? t.eventId : undefined,
+            participantId: String(t.participantId ?? 'unknown'),
+            participantName:
+              typeof t.participantName === 'string' && t.participantName.trim().length > 0
+                ? t.participantName.trim()
+                : null,
+            text: String(t.text ?? ''),
+            timestamp: typeof t.timestamp === 'number' ? t.timestamp : Date.now(),
+            manual: typeof t.manual === 'boolean' ? t.manual : undefined,
+          }))
+          .filter((line) => line.text.trim().length > 0);
+        if (!cancelled) {
+          setTranscript(lines);
+        }
+      } catch {
+        // ignore fetch failures; live data-channel updates will still show new lines
+      }
+    }
+
     async function init() {
       const canvasId = getCanvasIdFromUrl();
 
       let query = supabase
         .from('canvas_sessions' as any)
-        .select('id, transcript')
+        .select('id')
         .eq('room_name', roomName);
       query =
         canvasId === null ? (query as any).is('canvas_id', null) : query.eq('canvas_id', canvasId);
@@ -45,52 +84,7 @@ export function useRealtimeSessionTranscript(roomName: string | undefined) {
       if (cancelled) return;
       if (data?.id) {
         setSessionId(data.id);
-        if (Array.isArray(data.transcript)) {
-          // Validate shape defensively
-          const lines: TranscriptLine[] = data.transcript.map((t: any) => ({
-            participantId: String(t.participantId ?? 'unknown'),
-            text: String(t.text ?? ''),
-            timestamp: typeof t.timestamp === 'number' ? t.timestamp : Date.now(),
-          }));
-          setTranscript(lines);
-        }
-
-        // Subscribe to realtime updates for this row
-        const key = `canvas_sessions_${data.id}`;
-        if (channelRef.current && currentChannelKeyRef.current !== key) {
-          try {
-            channelRef.current.unsubscribe();
-          } catch {}
-          channelRef.current = null;
-          currentChannelKeyRef.current = null;
-        }
-        if (!channelRef.current) {
-          const ch = supabase
-            .channel(key)
-            .on(
-              'postgres_changes',
-              {
-                event: 'UPDATE',
-                schema: 'public',
-                table: 'canvas_sessions',
-                filter: `id=eq.${data.id}`,
-              },
-              (payload) => {
-                const next = (payload.new as any)?.transcript;
-                if (Array.isArray(next)) {
-                  const lines: TranscriptLine[] = next.map((t: any) => ({
-                    participantId: String(t.participantId ?? 'unknown'),
-                    text: String(t.text ?? ''),
-                    timestamp: typeof t.timestamp === 'number' ? t.timestamp : Date.now(),
-                  }));
-                  setTranscript(lines);
-                }
-              },
-            )
-            .subscribe();
-          channelRef.current = ch;
-          currentChannelKeyRef.current = key;
-        }
+        await fetchTranscriptLines(String(data.id));
       }
     }
 
@@ -102,12 +96,6 @@ export function useRealtimeSessionTranscript(roomName: string | undefined) {
     }
     return () => {
       cancelled = true;
-      if (channelRef.current) {
-        try {
-          channelRef.current.unsubscribe();
-        } catch {}
-        channelRef.current = null;
-      }
       if (typeof window !== 'undefined') {
         window.removeEventListener('present:canvas-id-changed', onCanvasIdChanged);
       }
