@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import OpenAI from 'openai';
 import { z } from 'zod';
-import { consumeBudget, isCostCircuitBreakerEnabled } from '@/lib/server/traffic-guards';
+import { BYOK_REQUIRED } from '@/lib/agents/shared/byok-flags';
 
 export const webSearchArgsSchema = z.object({
   query: z.string().min(4, 'query must be at least 4 characters').max(400),
@@ -43,21 +43,31 @@ export type WebSearchResponse = {
   };
 };
 
-let cachedClient: OpenAI | null = null;
-const evidenceCache = new Map<string, { response: WebSearchResponse; expiresAt: number }>();
-const FACT_CHECK_CACHE_TTL_MS = Math.max(
-  1_000,
-  Number(process.env.FACT_CHECK_CACHE_TTL_SEC ?? 900) * 1000,
-);
+const clientByKey = new Map<string, OpenAI>();
 
-function getClient(): OpenAI {
-  if (cachedClient) return cachedClient;
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey || !apiKey.trim()) {
+function getClient(apiKey?: string): OpenAI {
+  const explicit = typeof apiKey === 'string' ? apiKey.trim() : '';
+  if (BYOK_REQUIRED) {
+    if (!explicit) {
+      throw new Error('BYOK_MISSING_KEY:openai');
+    }
+    const cached = clientByKey.get(explicit);
+    if (cached) return cached;
+    const client = new OpenAI({ apiKey: explicit });
+    clientByKey.set(explicit, client);
+    return client;
+  }
+
+  const fallback = explicit || (process.env.OPENAI_API_KEY ?? '').trim();
+  if (!fallback) {
     throw new Error('OPENAI_API_KEY missing for web search');
   }
-  cachedClient = new OpenAI({ apiKey });
-  return cachedClient;
+
+  const cached = clientByKey.get(fallback);
+  if (cached) return cached;
+  const client = new OpenAI({ apiKey: fallback });
+  clientByKey.set(fallback, client);
+  return client;
 }
 
 function hashId(value: string): string {
@@ -142,7 +152,10 @@ const tryParseJsonCandidate = (candidate: string): any | null => {
   return null;
 };
 
-export async function performWebSearch(args: WebSearchArgs): Promise<WebSearchResponse> {
+export async function performWebSearch(
+  args: WebSearchArgs,
+  options?: { apiKey?: string },
+): Promise<WebSearchResponse> {
   const parsed = webSearchArgsSchema.parse(args);
   if (process.env.MOCK_WEB_SEARCH === 'true') {
     const hashed = hashId(parsed.query);
@@ -161,7 +174,7 @@ export async function performWebSearch(args: WebSearchArgs): Promise<WebSearchRe
       model: 'mock-web-search',
     };
   }
-  const client = getClient();
+  const client = getClient(options?.apiKey);
   const model =
     process.env.CANVAS_STEWARD_SEARCH_MODEL ||
     process.env.DEBATE_STEWARD_SEARCH_MODEL ||

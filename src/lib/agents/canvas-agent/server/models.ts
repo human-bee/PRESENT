@@ -4,6 +4,7 @@ import { generateObject, streamObject } from 'ai';
 import { z } from 'zod';
 import type { StructuredStream } from './streaming';
 import type { ModelTuning } from './model/presets';
+import { BYOK_REQUIRED } from '@/lib/agents/shared/byok-flags';
 
 const agentActionListSchema = z
   .object({
@@ -25,6 +26,8 @@ const unsafeGenerateObject = generateObject as unknown as (args: any) => Promise
 
 export type StreamChunk = { type: 'json'; data: unknown } | { type: 'text'; data: string };
 
+export type CanvasAgentApiKeys = Partial<Record<'openai' | 'anthropic', string>>;
+
 export interface StreamingProvider {
   name: string;
   stream(prompt: string, options?: { system?: string; tuning?: ModelTuning }): AsyncIterable<StreamChunk>;
@@ -35,11 +38,13 @@ class AiSdkProvider implements StreamingProvider {
   name: string;
   private modelId: string;
   private provider: 'openai' | 'anthropic';
+  private apiKeys: CanvasAgentApiKeys;
 
-  constructor(provider: 'openai' | 'anthropic', modelId: string) {
+  constructor(provider: 'openai' | 'anthropic', modelId: string, apiKeys?: CanvasAgentApiKeys) {
     this.name = `${provider}:${modelId}`;
     this.provider = provider;
     this.modelId = modelId;
+    this.apiKeys = apiKeys ?? {};
   }
 
   async *stream(prompt: string, options?: { system?: string; tuning?: ModelTuning }): AsyncIterable<StreamChunk> {
@@ -88,10 +93,30 @@ class AiSdkProvider implements StreamingProvider {
   }
 
   private resolveModel() {
-    const openai = process.env.OPENAI_API_KEY ? createOpenAI({ apiKey: process.env.OPENAI_API_KEY }) : null;
-    const anthropic = process.env.ANTHROPIC_API_KEY ? createAnthropic({ apiKey: process.env.ANTHROPIC_API_KEY }) : null;
-    const modelFn = this.provider === 'openai' ? openai : anthropic;
-    if (!modelFn) throw new Error(`Provider not configured: ${this.provider}`);
+    const bundleKey =
+      this.provider === 'openai'
+        ? (this.apiKeys.openai ?? '').trim()
+        : (this.apiKeys.anthropic ?? '').trim();
+
+    if (BYOK_REQUIRED) {
+      if (!bundleKey) throw new Error(`BYOK_MISSING_KEY:${this.provider}`);
+      const modelFn =
+        this.provider === 'openai'
+          ? createOpenAI({ apiKey: bundleKey })
+          : createAnthropic({ apiKey: bundleKey });
+      return modelFn(this.modelId);
+    }
+
+    const envKey =
+      this.provider === 'openai' ? (process.env.OPENAI_API_KEY ?? '').trim() : (process.env.ANTHROPIC_API_KEY ?? '').trim();
+    const apiKey = bundleKey || envKey;
+    if (!apiKey) throw new Error(`Provider not configured: ${this.provider}`);
+
+    const modelFn =
+      this.provider === 'openai'
+        ? createOpenAI({ apiKey })
+        : createAnthropic({ apiKey });
+
     return modelFn(this.modelId);
   }
 
@@ -173,71 +198,121 @@ class FakeProvider implements StreamingProvider {
   }
 }
 
-const registry = new Map<string, StreamingProvider>();
+const DEFAULT_OPENAI_MODEL = 'gpt-5-mini';
+const DEFAULT_ANTHROPIC_MODEL = 'claude-sonnet-4-5';
 
-const registerProvider = (key: string, provider: 'anthropic' | 'openai', modelId: string) => {
-  if (!registry.has(key)) {
-    registry.set(key, new AiSdkProvider(provider, modelId));
-  }
-};
+const fakeProvider = new FakeProvider();
 
-// Initialize commonly used providers using Vercel AI SDK
-const bootstrapProviders = () => {
-  if (process.env.ANTHROPIC_API_KEY) {
-    registerProvider('anthropic:claude-sonnet-4-5', 'anthropic', 'claude-sonnet-4-5');
-    registerProvider('anthropic:claude-haiku-4-5', 'anthropic', 'claude-haiku-4-5');
-    registry.set('anthropic', registry.get('anthropic:claude-sonnet-4-5')!);
-  }
-  if (process.env.OPENAI_API_KEY) {
-    registerProvider('openai:gpt-5', 'openai', 'gpt-5');
-    registerProvider('openai:gpt-5-mini', 'openai', 'gpt-5-mini');
-    registry.set('openai', registry.get('openai:gpt-5')!);
-  }
-  registry.set('debug/fake', new FakeProvider());
-};
+function hasProviderKey(provider: 'openai' | 'anthropic', apiKeys: CanvasAgentApiKeys): boolean {
+  const bundleKey =
+    provider === 'openai' ? (apiKeys.openai ?? '').trim() : (apiKeys.anthropic ?? '').trim();
+  if (bundleKey) return true;
+  if (BYOK_REQUIRED) return false;
+  const envKey =
+    provider === 'openai' ? (process.env.OPENAI_API_KEY ?? '').trim() : (process.env.ANTHROPIC_API_KEY ?? '').trim();
+  return Boolean(envKey);
+}
 
-const ensureDynamicProvider = (name: string): StreamingProvider | null => {
-  const trimmed = name.trim();
+function extractProviderAlias(name: string): 'openai' | 'anthropic' | null {
+  const trimmed = (name || '').trim();
   if (!trimmed) return null;
-  if (registry.has(trimmed)) return registry.get(trimmed)!;
+  if (trimmed.startsWith('openai:') || trimmed === 'openai') return 'openai';
+  if (trimmed.startsWith('anthropic:') || trimmed === 'anthropic') return 'anthropic';
+  if (trimmed.startsWith('gpt')) return 'openai';
+  if (trimmed.startsWith('claude')) return 'anthropic';
+  return null;
+}
 
-  const create = (provider: 'anthropic' | 'openai', modelId: string, key?: string) => {
-    const hasAuth = provider === 'anthropic' ? !!process.env.ANTHROPIC_API_KEY : !!process.env.OPENAI_API_KEY;
-    if (!hasAuth) return null;
-    const registryKey = key ?? `${provider}:${modelId}`;
-    registerProvider(registryKey, provider, modelId);
-    return registry.get(registryKey) ?? null;
-  };
+function preferredModelIdForProvider(
+  provider: 'openai' | 'anthropic',
+  candidates: string[],
+): string | null {
+  for (const candidate of candidates) {
+    const trimmed = (candidate || '').trim();
+    if (!trimmed) continue;
+    if (trimmed.includes(':')) {
+      const [alias, ...rest] = trimmed.split(':');
+      const modelId = rest.join(':');
+      if (!modelId) continue;
+      if (alias === provider) return modelId;
+      continue;
+    }
+    if (provider === 'openai' && trimmed.startsWith('gpt')) return trimmed;
+    if (provider === 'anthropic' && trimmed.startsWith('claude')) return trimmed;
+  }
+  return null;
+}
+
+function resolvePreferredProvider(name: string, apiKeys: CanvasAgentApiKeys): StreamingProvider | null {
+  const trimmed = (name || '').trim();
+  if (!trimmed) return null;
+
+  if (trimmed === 'debug/fake') {
+    return BYOK_REQUIRED ? null : fakeProvider;
+  }
 
   if (trimmed.includes(':')) {
     const [providerAlias, ...rest] = trimmed.split(':');
     const modelId = rest.join(':');
     if (!modelId) return null;
-    if (providerAlias === 'anthropic') return create('anthropic', modelId, trimmed);
-    if (providerAlias === 'openai') return create('openai', modelId, trimmed);
+    if (providerAlias === 'openai' && hasProviderKey('openai', apiKeys)) {
+      return new AiSdkProvider('openai', modelId, apiKeys);
+    }
+    if (providerAlias === 'anthropic' && hasProviderKey('anthropic', apiKeys)) {
+      return new AiSdkProvider('anthropic', modelId, apiKeys);
+    }
     return null;
   }
 
-  if (trimmed.startsWith('claude')) return create('anthropic', trimmed, `anthropic:${trimmed}`);
-  if (trimmed.startsWith('gpt')) return create('openai', trimmed, `openai:${trimmed}`);
+  if (trimmed === 'openai') {
+    return hasProviderKey('openai', apiKeys) ? new AiSdkProvider('openai', DEFAULT_OPENAI_MODEL, apiKeys) : null;
+  }
+  if (trimmed === 'anthropic') {
+    return hasProviderKey('anthropic', apiKeys) ? new AiSdkProvider('anthropic', DEFAULT_ANTHROPIC_MODEL, apiKeys) : null;
+  }
+
+  if (trimmed.startsWith('gpt')) {
+    return hasProviderKey('openai', apiKeys) ? new AiSdkProvider('openai', trimmed, apiKeys) : null;
+  }
+  if (trimmed.startsWith('claude')) {
+    return hasProviderKey('anthropic', apiKeys) ? new AiSdkProvider('anthropic', trimmed, apiKeys) : null;
+  }
 
   return null;
-};
+}
 
-bootstrapProviders();
+export function selectModel(args?: { preferred?: string; apiKeys?: CanvasAgentApiKeys }): StreamingProvider {
+  const apiKeys = args?.apiKeys ?? {};
+  const envModel = (process.env.CANVAS_STEWARD_MODEL ?? '').trim();
+  const primary =
+    (args?.preferred ?? '').trim() ||
+    envModel ||
+    (BYOK_REQUIRED ? `openai:${DEFAULT_OPENAI_MODEL}` : 'debug/fake');
 
-export function selectModel(preferred?: string): StreamingProvider {
-  const envPreferred = preferred?.trim() || process.env.CANVAS_STEWARD_MODEL || 'debug/fake';
-  const resolved = ensureDynamicProvider(envPreferred);
+  const resolved = resolvePreferredProvider(primary, apiKeys);
   if (resolved) return resolved;
 
-  if (process.env.CANVAS_STEWARD_MODEL) {
-    const secondary = ensureDynamicProvider(process.env.CANVAS_STEWARD_MODEL);
+  if (envModel && envModel !== primary) {
+    const secondary = resolvePreferredProvider(envModel, apiKeys);
     if (secondary) return secondary;
   }
 
-  if (registry.get('anthropic')) return registry.get('anthropic')!;
-  if (registry.get('openai')) return registry.get('openai')!;
+  if (BYOK_REQUIRED) {
+    if ((apiKeys.openai ?? '').trim()) {
+      const modelId = preferredModelIdForProvider('openai', [primary, envModel]) ?? DEFAULT_OPENAI_MODEL;
+      return new AiSdkProvider('openai', modelId, apiKeys);
+    }
+    if ((apiKeys.anthropic ?? '').trim()) {
+      const modelId = preferredModelIdForProvider('anthropic', [primary, envModel]) ?? DEFAULT_ANTHROPIC_MODEL;
+      return new AiSdkProvider('anthropic', modelId, apiKeys);
+    }
 
-  return registry.get('debug/fake')!;
+    const preferredProvider = extractProviderAlias(primary) ?? 'openai';
+    throw new Error(`BYOK_MISSING_KEY:${preferredProvider}`);
+  }
+
+  if (hasProviderKey('anthropic', apiKeys)) return new AiSdkProvider('anthropic', DEFAULT_ANTHROPIC_MODEL, apiKeys);
+  if (hasProviderKey('openai', apiKeys)) return new AiSdkProvider('openai', DEFAULT_OPENAI_MODEL, apiKeys);
+
+  return fakeProvider;
 }

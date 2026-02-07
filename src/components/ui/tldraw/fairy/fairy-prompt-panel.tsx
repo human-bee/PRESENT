@@ -11,6 +11,7 @@ import {
   getFairyContextSpectrum,
 } from '@/lib/fairy-context/profiles';
 import { useCanvasContext } from '@/lib/hooks/use-canvas-context';
+import { fetchWithSupabaseAuth } from '@/lib/supabase/auth-headers';
 
 function pickAgent(agents: FairyAgent[]): FairyAgent | null {
   if (!agents.length) return null;
@@ -103,7 +104,7 @@ export function FairyPromptPanel() {
           },
         },
       };
-      const response = await fetch('/api/steward/runCanvas', {
+      const response = await fetchWithSupabaseAuth('/api/steward/runCanvas', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),

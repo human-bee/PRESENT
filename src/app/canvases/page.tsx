@@ -17,7 +17,8 @@ import { Plus, Calendar, Trash2, ExternalLink, MessageSquare } from 'lucide-reac
 import { toast } from 'react-hot-toast';
 import { useAuth } from '@/hooks/use-auth';
 import { supabase, type Canvas } from '@/lib/supabase';
-import { Button } from '@/components/ui/shared/button';
+import { fetchWithSupabaseAuth } from '@/lib/supabase/auth-headers';
+import { getBooleanFlag } from '@/lib/feature-flags';
 
 type UserCanvas = Canvas & { owner_id: string; membership_role: 'owner' | 'editor' | 'viewer' };
 
@@ -26,6 +27,11 @@ export default function CanvasesPage() {
   const router = useRouter();
   const [canvases, setCanvases] = useState<UserCanvas[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [openaiConfigured, setOpenaiConfigured] = useState<boolean | null>(null);
+
+  const demoMode = getBooleanFlag(process.env.NEXT_PUBLIC_CANVAS_DEMO_MODE, false);
+  const bypassAuth = getBooleanFlag(process.env.NEXT_PUBLIC_CANVAS_DEV_BYPASS, false);
+  const byokEnabled = !demoMode && !bypassAuth;
 
   // Redirect to sign in if not authenticated
   useEffect(() => {
@@ -69,6 +75,32 @@ export default function CanvasesPage() {
     fetchCanvases();
   }, [user]);
 
+  useEffect(() => {
+    if (!user) return;
+    if (!byokEnabled) return;
+
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetchWithSupabaseAuth('/api/model-keys');
+        if (!res.ok) {
+          // In demo/bypass this endpoint returns 404; ignore.
+          return;
+        }
+        const json = await res.json();
+        const keys = Array.isArray(json?.keys) ? json.keys : [];
+        const openai = keys.find((k: any) => k?.provider === 'openai');
+        if (!cancelled) setOpenaiConfigured(Boolean(openai?.configured));
+      } catch {
+        // ignore
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user, byokEnabled]);
+
   const handleDelete = async (canvasId: string) => {
     if (!confirm('Are you sure you want to delete this canvas?')) return;
 
@@ -100,6 +132,22 @@ export default function CanvasesPage() {
   return (
     <div className="min-h-screen bg-surface">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {byokEnabled && openaiConfigured === false && (
+          <div className="mb-6 rounded-lg border border-yellow-200 bg-yellow-50 px-4 py-3 text-yellow-900">
+            <div className="flex items-center justify-between gap-3">
+              <div className="text-sm">
+                <span className="font-semibold">OpenAI key missing.</span> Add your model keys to enable voice and stewards.
+              </div>
+              <Link
+                href="/settings/keys"
+                className="shrink-0 rounded bg-yellow-900 px-3 py-1.5 text-sm text-yellow-50 hover:bg-yellow-950"
+              >
+                Manage keys
+              </Link>
+            </div>
+          </div>
+        )}
+
         {/* Header */}
         <div className="flex justify-between items-center mb-8">
           <div>
@@ -109,18 +157,29 @@ export default function CanvasesPage() {
             </p>
           </div>
 
-          <Button
-            onClick={() => {
-              try {
-                localStorage.removeItem('present:lastCanvasId');
-              } catch {}
-              router.push('/canvas');
-            }}
-            className="flex items-center gap-2"
-          >
-            <Plus className="w-5 h-5" />
-            New Canvas
-          </Button>
+          <div className="flex items-center gap-3">
+            {byokEnabled && (
+              <Link
+                href="/settings/keys"
+                className="px-4 py-2 rounded-lg border border-slate-300 bg-white text-slate-800 hover:bg-slate-50 transition-colors"
+              >
+                Model Keys
+              </Link>
+            )}
+
+            <button
+              onClick={() => {
+                try {
+                  localStorage.removeItem('present:lastCanvasId');
+                } catch {}
+                router.push('/canvas');
+              }}
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              <Plus className="w-5 h-5" />
+              New Canvas
+            </button>
+          </div>
         </div>
 
         {/* Canvas Grid */}

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { BYOK_ENABLED } from '@/lib/agents/shared/byok-flags';
 import { AgentTaskQueue } from '@/lib/agents/shared/queue';
 import { runCanvasSteward } from '@/lib/agents/subagents/canvas-steward';
 import {
@@ -6,16 +7,16 @@ import {
   type CanvasAgentPromptPayload,
 } from '@/lib/agents/shared/supabase-context';
 import { randomUUID } from 'crypto';
-import { createLogger } from '@/lib/logging';
-import {
-  parseJsonObject,
-  stewardRunCanvasRequestSchema,
-} from '@/lib/agents/shared/schemas';
-import type { JsonObject } from '@/lib/utils/json-schema';
-import { getBooleanFlag, isFairyClientAgentEnabled } from '@/lib/feature-flags';
+import { assertCanvasMember, parseCanvasIdFromRoom } from '@/lib/agents/shared/canvas-billing';
+import { resolveRequestUserId } from '@/lib/supabase/server/resolve-request-user';
 
 export const runtime = 'nodejs';
 
+let queue: AgentTaskQueue | null = null;
+function getQueue() {
+  if (!queue) queue = new AgentTaskQueue();
+  return queue;
+}
 const QUEUE_DIRECT_FALLBACK_ENABLED = process.env.CANVAS_QUEUE_DIRECT_FALLBACK === 'true';
 const CLIENT_CANVAS_AGENT_ENABLED = getBooleanFlag(process.env.NEXT_PUBLIC_CANVAS_AGENT_CLIENT_ENABLED, false);
 const FAIRY_CLIENT_AGENT_ENABLED = isFairyClientAgentEnabled(process.env.NEXT_PUBLIC_FAIRY_CLIENT_AGENT_ENABLED);
@@ -71,6 +72,27 @@ export async function POST(req: NextRequest) {
     const normalizedParams = parseJsonObject(params) || {};
     const trimmedRoom = room.trim();
 
+    if (BYOK_ENABLED) {
+      const requesterUserId = await resolveRequestUserId(req);
+      if (!requesterUserId) {
+        return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+      }
+      const canvasId = parseCanvasIdFromRoom(trimmedRoom);
+      if (!canvasId) {
+        return NextResponse.json({ error: 'invalid_room' }, { status: 400 });
+      }
+      try {
+        const { ownerUserId } = await assertCanvasMember({ canvasId, requesterUserId });
+        normalizedParams.billingUserId = ownerUserId;
+      } catch (error) {
+        const code = (error as Error & { code?: string }).code;
+        if (code === 'forbidden') {
+          return NextResponse.json({ error: 'forbidden' }, { status: 403 });
+        }
+        throw error;
+      }
+    }
+
     if (!normalizedParams.room) {
       normalizedParams.room = trimmedRoom;
     } else if (typeof normalizedParams.room === 'string') {
@@ -98,12 +120,7 @@ export async function POST(req: NextRequest) {
 
     try {
       // Lazily instantiate so `next build` doesn't require Supabase env vars.
-      const queue = new AgentTaskQueue();
-      const normalizedResourceKeys =
-        normalizedTask === 'canvas.agent_prompt' || normalizedTask === 'fairy.intent'
-          ? [`room:${trimmedRoom}`, 'canvas:intent']
-          : [`room:${trimmedRoom}`];
-      const enqueueResult = await queue.enqueueTask({
+      const enqueueResult = await getQueue().enqueueTask({
         room: trimmedRoom,
         task: normalizedTask,
         params: normalizedParams,

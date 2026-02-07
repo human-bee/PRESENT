@@ -1,6 +1,7 @@
 import { getCerebrasClient, getModelForSteward, isFastStewardReady } from '../fast-steward-config';
 import { getContextDocuments, formatContextDocuments, getTranscriptWindow } from '@/lib/agents/shared/supabase-context';
-import { extractFirstToolCall, parseToolArgumentsResult } from './fast-steward-response';
+import { BYOK_REQUIRED } from '@/lib/agents/shared/byok-flags';
+import { getDecryptedUserModelKey } from '@/lib/agents/shared/user-model-keys';
 
 const CEREBRAS_MODEL = getModelForSteward('LINEAR_STEWARD_FAST_MODEL');
 
@@ -82,8 +83,17 @@ export async function runLinearStewardFast(params: {
   instruction: string;
   context: any;
   room?: string; // Room ID to fetch context documents
+  billingUserId?: string;
 }): Promise<LinearAction> {
-  const { instruction, context, room } = params;
+  const { instruction, context, room, billingUserId } = params;
+
+  const cerebrasKey = BYOK_REQUIRED && billingUserId
+    ? await getDecryptedUserModelKey({ userId: billingUserId, provider: 'cerebras' })
+    : null;
+
+  if (BYOK_REQUIRED && !cerebrasKey) {
+    throw new Error('BYOK_MISSING_KEY:cerebras');
+  }
 
   if (!isFastStewardReady()) {
     return {
@@ -128,7 +138,7 @@ export async function runLinearStewardFast(params: {
   ];
 
   try {
-    const client = getCerebrasClient();
+    const client = getCerebrasClient(cerebrasKey ?? undefined);
     const response = await client.chat.completions.create({
       model: CEREBRAS_MODEL,
       messages,

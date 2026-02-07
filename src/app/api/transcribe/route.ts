@@ -1,12 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createHash } from 'crypto';
-import { getRequestUserId } from '@/lib/supabase/server/request-user';
-import {
-  consumeBudget,
-  consumeWindowedLimit,
-  isCostCircuitBreakerEnabled,
-} from '@/lib/server/traffic-guards';
-
+import { BYOK_ENABLED } from '@/lib/agents/shared/byok-flags';
+import { resolveRequestUserId } from '@/lib/supabase/server/resolve-request-user';
+import { getDecryptedUserModelKey } from '@/lib/agents/shared/user-model-keys';
 export const runtime = 'nodejs';
 
 const maxBodyBytes = Math.max(64_000, Number(process.env.TRANSCRIBE_MAX_BODY_BYTES ?? 3_000_000));
@@ -83,32 +78,24 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Missing audio data' }, { status: 400 });
     }
 
-    const estimatedAudioBytes = Math.ceil((audio.length * 3) / 4);
-    if (estimatedAudioBytes > maxAudioBytes) {
-      return NextResponse.json({ error: 'Audio payload too large' }, { status: 413 });
-    }
-
-    if (isCostCircuitBreakerEnabled()) {
-      const budget = consumeBudget(
-        `transcribe-audio:${userId}`,
-        estimatedAudioBytes,
-        transcribeBudgetPerMinute,
-        60_000,
-      );
-      if (!budget.ok) {
+    let openaiApiKey: string | null = null;
+    if (BYOK_ENABLED) {
+      const userId = await resolveRequestUserId(req);
+      if (!userId) {
+        return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+      }
+      openaiApiKey = await getDecryptedUserModelKey({ userId, provider: 'openai' });
+      if (!openaiApiKey) {
+        return NextResponse.json({ error: 'BYOK_MISSING_KEY:openai' }, { status: 400 });
+      }
+    } else {
+      openaiApiKey = process.env.OPENAI_API_KEY || null;
+      if (!openaiApiKey) {
         return NextResponse.json(
-          { error: 'Transcription budget exceeded', retryAfterSec: budget.retryAfterSec },
-          { status: 429, headers: { 'Retry-After': String(budget.retryAfterSec) } },
+          { error: 'Server misconfigured: missing OPENAI_API_KEY' },
+          { status: 500 },
         );
       }
-    }
-
-    const openaiApiKey = process.env.OPENAI_API_KEY;
-    if (!openaiApiKey) {
-      return NextResponse.json(
-        { error: 'Server misconfigured: missing OPENAI_API_KEY' },
-        { status: 500 },
-      );
     }
 
     const audioBuffer = Buffer.from(audio, 'base64');

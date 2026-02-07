@@ -31,6 +31,7 @@ import {
 } from 'lucide-react';
 import { useRoomContext } from '@livekit/components-react';
 import { useAllTranscripts } from '@/lib/stores/transcript-store';
+import { fetchWithSupabaseAuth } from '@/lib/supabase/auth-headers';
 
 // Schema for image styles
 const imageStyleSchema = z.object({
@@ -262,7 +263,7 @@ export function AIImageGenerator({
     placeholderData: (previousData) => previousData,
     queryKey: [fullPrompt, localStyle, iterativeMode],
     queryFn: async (): Promise<ImageResponse> => {
-      const response = await fetch('/api/generateImages', {
+      const response = await fetchWithSupabaseAuth('/api/generateImages', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -270,7 +271,6 @@ export function AIImageGenerator({
         body: JSON.stringify({
           prompt: debouncedPrompt,
           style: selectedStyleData?.prompt,
-          userAPIKey,
           iterativeMode,
         }),
       });

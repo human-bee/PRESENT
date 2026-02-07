@@ -8,7 +8,8 @@ import {
   getTranscriptWindow,
   formatContextDocuments,
 } from '@/lib/agents/shared/supabase-context';
-import { extractFirstToolCall, parseToolArgumentsResult } from './fast-steward-response';
+import { BYOK_REQUIRED } from '@/lib/agents/shared/byok-flags';
+import { getDecryptedUserModelKey } from '@/lib/agents/shared/user-model-keys';
 
 const CEREBRAS_MODEL = getModelForSteward('CROWD_PULSE_STEWARD_FAST_MODEL');
 
@@ -107,8 +108,9 @@ export async function runCrowdPulseStewardFast(params: {
   instruction?: string;
   contextBundle?: string;
   contextProfile?: string;
+  billingUserId?: string;
 }): Promise<CrowdPulsePatch> {
-  const { room, instruction, contextBundle, contextProfile } = params;
+  const { room, instruction, contextBundle, contextProfile, billingUserId } = params;
   const [transcript, contextDocs] = await Promise.all([
     getTranscriptWindow(room, resolveWindowMs(contextProfile)),
     getContextDocuments(room),
@@ -138,12 +140,20 @@ export async function runCrowdPulseStewardFast(params: {
     },
   ];
 
-  if (!isFastStewardReady()) {
+  const cerebrasKey = BYOK_REQUIRED && billingUserId
+    ? await getDecryptedUserModelKey({ userId: billingUserId, provider: 'cerebras' })
+    : null;
+
+  if (BYOK_REQUIRED && !cerebrasKey) {
+    return instruction ? { prompt: instruction.slice(0, 180) } : {};
+  }
+
+  if (!BYOK_REQUIRED && !isFastStewardReady()) {
     return instruction ? { prompt: instruction.slice(0, 180) } : {};
   }
 
   try {
-    const client = getCerebrasClient();
+    const client = getCerebrasClient(cerebrasKey ?? undefined);
     const response = await client.chat.completions.create({
       model: CEREBRAS_MODEL,
       messages,

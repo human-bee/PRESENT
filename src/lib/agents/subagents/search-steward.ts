@@ -1,6 +1,9 @@
 import { z } from 'zod';
 import { performWebSearch, type WebSearchHit } from '@/lib/agents/tools/web-search';
 import type { JsonObject } from '@/lib/utils/json-schema';
+import { BYOK_REQUIRED } from '@/lib/agents/shared/byok-flags';
+import { resolveBillingUserIdForRoom } from '@/lib/agents/shared/canvas-billing';
+import { getDecryptedUserModelKey } from '@/lib/agents/shared/user-model-keys';
 
 const GeneralSearchArgs = z
   .object({
@@ -76,11 +79,24 @@ async function runGeneralSearch(rawParams: JsonObject): Promise<SearchStewardRes
   const parsed = GeneralSearchArgs.parse(rawParams);
   const { query } = parsed;
   try {
-    const searchResponse = await performWebSearch({
+    const billingUserIdRaw =
+      typeof (rawParams as any)?.billingUserId === 'string' ? String((rawParams as any).billingUserId).trim() : '';
+    const billingUserId =
+      BYOK_REQUIRED && !billingUserIdRaw ? await resolveBillingUserIdForRoom(parsed.room) : billingUserIdRaw;
+
+    const openaiKey =
+      BYOK_REQUIRED && billingUserId
+        ? await getDecryptedUserModelKey({ userId: billingUserId, provider: 'openai' })
+        : null;
+
+    const searchResponse = await performWebSearch(
+      {
       query,
       maxResults: parsed.maxResults ?? 3,
       includeAnswer: parsed.includeAnswer ?? true,
-    });
+      },
+      openaiKey ? { apiKey: openaiKey } : undefined,
+    );
 
     const panel: ResearchPanelPayload = {
       title: `Research findings for “${query}”`,

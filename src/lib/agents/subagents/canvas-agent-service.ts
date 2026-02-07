@@ -9,12 +9,8 @@ import { generateObject, type LanguageModel } from 'ai';
 import type { ProviderOptions } from '@ai-sdk/provider-utils';
 import { z } from 'zod';
 import { jsonValueSchema, type JsonObject, type JsonValue } from '@/lib/utils/json-schema';
-import {
-	getCanvasModelDefinition,
-	resolveCanvasModelName,
-	type CanvasModelDefinition,
-	type CanvasModelName,
-} from './canvas-models';
+import { getCanvasModelDefinition, type CanvasModelDefinition, type CanvasModelName } from './canvas-models';
+import { BYOK_REQUIRED } from '@/lib/agents/shared/byok-flags';
 
 const canvasActionSchema = z.object({
 	tool: z
@@ -84,14 +80,14 @@ export class CanvasAgentService {
 	private providers: ProviderMap;
 
 	constructor(env?: Partial<Record<'OPENAI_API_KEY' | 'ANTHROPIC_API_KEY' | 'GOOGLE_API_KEY', string>>) {
-		const openaiKey = env?.OPENAI_API_KEY ?? process.env.OPENAI_API_KEY;
-		const anthropicKey = env?.ANTHROPIC_API_KEY ?? process.env.ANTHROPIC_API_KEY;
-		const googleKey = env?.GOOGLE_API_KEY ?? process.env.GOOGLE_API_KEY;
+		const openaiKey = BYOK_REQUIRED ? env?.OPENAI_API_KEY : (env?.OPENAI_API_KEY ?? process.env.OPENAI_API_KEY);
+		const anthropicKey = BYOK_REQUIRED ? env?.ANTHROPIC_API_KEY : (env?.ANTHROPIC_API_KEY ?? process.env.ANTHROPIC_API_KEY);
+		const googleKey = BYOK_REQUIRED ? env?.GOOGLE_API_KEY : (env?.GOOGLE_API_KEY ?? process.env.GOOGLE_API_KEY);
 
 		this.providers = {
-			openai: openaiKey ? createOpenAI({ apiKey: openaiKey }) : null,
-			anthropic: anthropicKey ? createAnthropic({ apiKey: anthropicKey }) : null,
-			google: googleKey ? createGoogleGenerativeAI({ apiKey: googleKey }) : null,
+			openai: openaiKey && openaiKey.trim() ? createOpenAI({ apiKey: openaiKey.trim() }) : null,
+			anthropic: anthropicKey && anthropicKey.trim() ? createAnthropic({ apiKey: anthropicKey.trim() }) : null,
+			google: googleKey && googleKey.trim() ? createGoogleGenerativeAI({ apiKey: googleKey.trim() }) : null,
 		};
 	}
 

@@ -3,6 +3,8 @@ import {
   flowchartStewardFastReady,
   runFlowchartStewardFast,
 } from './flowchart-steward-fast';
+import { BYOK_REQUIRED } from '@/lib/agents/shared/byok-flags';
+import { getDecryptedUserModelKey } from '@/lib/agents/shared/user-model-keys';
 
 const FAST_VARIANT_FLAGS = new Set(['fast', 'groq', 'stewardfast', 'true', '1', 'cerebras']);
 
@@ -38,19 +40,33 @@ export async function runActiveFlowchartSteward(params: {
   docId: string;
   windowMs?: number;
   mode?: FlowchartStewardMode;
+  billingUserId?: string;
 }) {
-  const { mode = 'auto', ...rest } = params;
+  const { mode = 'auto', billingUserId, ...rest } = params;
   if (mode === 'slow') {
-    return runFlowchartSteward(rest);
+    return runFlowchartSteward({ ...rest, billingUserId });
   }
   if (mode === 'fast') {
-    if (flowchartStewardFastReady) {
-      return runFlowchartStewardFast(rest);
+    if (BYOK_REQUIRED && billingUserId) {
+      const cerebrasKey = await getDecryptedUserModelKey({ userId: billingUserId, provider: 'cerebras' });
+      if (!cerebrasKey) {
+        return runFlowchartSteward({ ...rest, billingUserId });
+      }
     }
-    return runFlowchartSteward(rest);
+    if (flowchartStewardFastReady) {
+      return runFlowchartStewardFast({ ...rest, billingUserId });
+    }
+    return runFlowchartSteward({ ...rest, billingUserId });
+  }
+  if (BYOK_REQUIRED && billingUserId) {
+    const cerebrasKey = await getDecryptedUserModelKey({ userId: billingUserId, provider: 'cerebras' });
+    if (cerebrasKey) {
+      return runFlowchartStewardFast({ ...rest, billingUserId });
+    }
+    return runFlowchartSteward({ ...rest, billingUserId });
   }
   if (isFlowchartStewardFastActive) {
-    return runFlowchartStewardFast(rest);
+    return runFlowchartStewardFast({ ...rest, billingUserId });
   }
-  return runFlowchartSteward(rest);
+  return runFlowchartSteward({ ...rest, billingUserId });
 }

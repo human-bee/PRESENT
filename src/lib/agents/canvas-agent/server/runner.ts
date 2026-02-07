@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto';
-import { selectModel } from './models';
+import { selectModel, type CanvasAgentApiKeys } from './models';
 import { buildPromptParts } from './context';
 import { sanitizeActions } from './sanitize';
 import { requestScreenshot, sendActionsEnvelope, sendChat, sendStatus, awaitAck } from './wire';
@@ -31,6 +31,8 @@ import {
   type TeacherService,
 } from '@/lib/canvas-agent/teacher-runtime/service-client';
 import { normalizeFairyContextProfile, type FairyContextProfile } from '@/lib/fairy-context/profiles';
+import { BYOK_REQUIRED } from '@/lib/agents/shared/byok-flags';
+import { getDecryptedUserModelKey } from '@/lib/agents/shared/user-model-keys';
 
 let teacherRuntimeWarningLogged = false;
 
@@ -53,6 +55,7 @@ type RunArgs = {
   initialViewport?: { x: number; y: number; w: number; h: number };
   hooks?: CanvasAgentHooks;
   contextProfile?: FairyContextProfile | string;
+  billingUserId?: string;
 };
 
 let screenshotInboxPromise: Promise<typeof import('@/server/inboxes/screenshot')> | null = null;
@@ -315,6 +318,23 @@ export async function runCanvasAgent(args: RunArgs) {
     ? rawUserMessage.trim()
     : 'Improve the layout. Clarify hierarchy and polish typography.';
   const sessionId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const billingUserId = typeof args.billingUserId === 'string' ? args.billingUserId.trim() : '';
+  if (BYOK_REQUIRED && !billingUserId) {
+    throw new Error('BYOK_MISSING_BILLING_USER');
+  }
+
+  const apiKeys: CanvasAgentApiKeys | undefined = BYOK_REQUIRED
+    ? await (async () => {
+        const [openaiKey, anthropicKey] = await Promise.all([
+          getDecryptedUserModelKey({ userId: billingUserId, provider: 'openai' }),
+          getDecryptedUserModelKey({ userId: billingUserId, provider: 'anthropic' }),
+        ]);
+        return {
+          ...(openaiKey ? { openai: openaiKey } : {}),
+          ...(anthropicKey ? { anthropic: anthropicKey } : {}),
+        };
+      })()
+    : undefined;
   const cfg = loadCanvasAgentConfig();
   if (cfg.mode === 'tldraw-teacher') {
     console.info('[CanvasAgent] running in tldraw-teacher mode (vendored TLDraw agent active)', {
@@ -646,7 +666,7 @@ export async function runCanvasAgent(args: RunArgs) {
 
     await sendStatus(roomId, sessionId, 'calling_model');
     const requestedModel = model || cfg.modelName;
-    const provider = selectModel(requestedModel);
+    const provider = selectModel({ preferred: requestedModel, apiKeys });
     const tuning = getModelTuning(cfg.preset);
     if (cfg.debug) {
       try {
@@ -1427,7 +1447,7 @@ const normalizeRawAction = (
         followPayload.followup = followInput;
       }
       const followPrompt = JSON.stringify(followPayload);
-      const followProvider = selectModel(model || cfg.modelName);
+      const followProvider = selectModel({ preferred: model || cfg.modelName, apiKeys });
       let followSeq = 0;
       const followEnqueueDetail = makeDetailEnqueuer(followMessage, followBaseDepth);
       const followStreamingEnabled = typeof followProvider.streamStructured === 'function' && process.env.CANVAS_AGENT_STREAMING !== 'false';

@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse, after } from 'next/server';
+import { BYOK_ENABLED } from '@/lib/agents/shared/byok-flags';
 import {
   type FlowchartStewardMode,
   runActiveFlowchartSteward,
 } from '@/lib/agents/subagents/flowchart-steward-registry';
+import { assertCanvasMember, parseCanvasIdFromRoom } from '@/lib/agents/shared/canvas-billing';
+import { resolveRequestUserId } from '@/lib/supabase/server/resolve-request-user';
 
 export async function POST(req: NextRequest) {
   try {
@@ -16,6 +19,28 @@ export async function POST(req: NextRequest) {
     const trimmedDocId = docId.trim();
     if (!trimmedRoom || !trimmedDocId) {
       return NextResponse.json({ error: 'Missing or invalid room/docId' }, { status: 400 });
+    }
+
+    let billingUserId: string | null = null;
+    if (BYOK_ENABLED) {
+      const requesterUserId = await resolveRequestUserId(req);
+      if (!requesterUserId) {
+        return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+      }
+      const canvasId = parseCanvasIdFromRoom(trimmedRoom);
+      if (!canvasId) {
+        return NextResponse.json({ error: 'invalid_room' }, { status: 400 });
+      }
+      try {
+        const membership = await assertCanvasMember({ canvasId, requesterUserId });
+        billingUserId = membership.ownerUserId;
+      } catch (error) {
+        const code = (error as Error & { code?: string }).code;
+        if (code === 'forbidden') {
+          return NextResponse.json({ error: 'forbidden' }, { status: 403 });
+        }
+        throw error;
+      }
     }
 
     const resolvedWindow = windowMs === undefined ? undefined : Number(windowMs);
@@ -49,6 +74,7 @@ export async function POST(req: NextRequest) {
           docId: trimmedDocId,
           windowMs: resolvedWindow,
           mode: normalizedMode,
+          ...(billingUserId ? { billingUserId } : {}),
         });
         console.log('[Steward][run] completed', {
           room: trimmedRoom,

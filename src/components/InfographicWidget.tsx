@@ -16,6 +16,7 @@ import {
 import { formatFairyContextParts, type FairyContextPart } from '@/lib/fairy-context/format';
 import { waitForMcpReady } from '@/lib/mcp-bridge';
 import { buildMemoryPayload } from '@/lib/mcp/memory';
+import { fetchWithSupabaseAuth } from '@/lib/supabase/auth-headers';
 
 const DEFAULT_MEMORY_TOOL = process.env.NEXT_PUBLIC_INFOGRAPHIC_MEMORY_MCP_TOOL;
 const DEFAULT_MEMORY_COLLECTION = process.env.NEXT_PUBLIC_INFOGRAPHIC_MEMORY_MCP_COLLECTION;
@@ -292,7 +293,7 @@ export function InfographicWidget({ room, isShape = false, __custom_message_id, 
             ].filter(Boolean).join('\n');
             lastPromptRef.current = prompt;
 
-            const response = await fetch('/api/generateImages', {
+            const response = await fetchWithSupabaseAuth('/api/generateImages', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({

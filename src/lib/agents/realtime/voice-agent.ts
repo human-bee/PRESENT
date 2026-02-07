@@ -3,6 +3,9 @@ import { config } from 'dotenv';
 import { randomUUID } from 'crypto';
 import { join } from 'path';
 import { z } from 'zod';
+import { createAnthropic } from '@ai-sdk/anthropic';
+import { createOpenAI } from '@ai-sdk/openai';
+import { generateObject } from 'ai';
 // Removed temporary Responses API fallback for routing
 
 try {
@@ -17,28 +20,9 @@ import { deriveComponentIntent } from '@/lib/agents/shared/deterministic-ids';
 import type { JsonObject } from '@/lib/utils/json-schema';
 import { ConnectionState, RoomEvent, RemoteTrackPublication, Track } from 'livekit-client';
 import { createLiveKitBus } from '@/lib/livekit/livekit-bus';
-import { createManualInputRouter } from './voice-agent/manual-routing';
-import { VoiceComponentLedger } from './voice-agent/component-ledger';
-import { ScorecardService } from './voice-agent/scorecard-service';
-import { TranscriptionBuffer, type PendingTranscriptionMessage } from './voice-agent/transcription-buffer';
-import {
-  executeCreateComponent,
-  type ComponentRegistryEntry,
-} from './voice-agent/create-component';
-import { createToolParametersSchema } from './voice-agent/tool-context';
-import {
-  buildToolEvent,
-  CANVAS_DISPATCH_SUPPRESS_MS,
-  coerceComponentPatch,
-  flushPendingToolCallQueue,
-  normalizeComponentPatch,
-  normalizeSpecInput,
-  shouldSuppressCanvasDispatch,
-  shouldForceReliableUpdate,
-  type PendingToolCallEntry,
-  type ToolEvent,
-} from './voice-agent/tool-publishing';
-import { inferScorecardTopicFromText, resolveDebatePlayerSeedFromLabels } from './voice-agent/scorecard';
+import { BYOK_REQUIRED } from '@/lib/agents/shared/byok-flags';
+import { resolveBillingUserIdForRoom } from '@/lib/agents/shared/canvas-billing';
+import { getDecryptedUserModelKey } from '@/lib/agents/shared/user-model-keys';
 
 const RATE_LIMIT_HEADER_KEYS = [
   'retry-after',
@@ -70,7 +54,10 @@ const readHeaderValue = (headers: unknown, key: string): string | undefined => {
   return undefined;
 };
 
-const routeManualInput = createManualInputRouter();
+const routerDecisionSchema = z.object({
+  route: z.enum(['canvas', 'none']),
+  message: z.string().optional(),
+});
 
 const extractRateLimitHeaders = (headers: unknown) => {
   const info: Record<string, string> = {};
@@ -165,8 +152,206 @@ export default defineAgent({
       throw error;
     }
     console.log('[VoiceAgent] Connected to room:', job.room.name);
-    const liveKitBus = createLiveKitBus(job.room as any);
-    const allowSensitiveLogging = process.env.NODE_ENV !== 'production';
+
+    const roomName = job.room.name || 'unknown';
+    let billingUserId: string | null = null;
+    let ownerOpenAIKey: string | null = null;
+    let ownerAnthropicKey: string | null = null;
+
+    const publishKeysRequiredBanner = async (args: { missingProviders: string[]; message?: string }) => {
+      try {
+        const participant = job.room.localParticipant;
+        if (!participant) return;
+
+        const missingProviders = Array.isArray(args.missingProviders)
+          ? args.missingProviders.filter((p) => typeof p === 'string' && p.trim().length > 0)
+          : [];
+        const message = typeof args.message === 'string' && args.message.trim().length > 0
+          ? args.message.trim()
+          : 'AI features are disabled until the canvas owner adds model keys.';
+
+        const { intentId, messageId } = deriveComponentIntent({
+          roomName,
+          turnId: 0,
+          componentType: 'KeysRequiredBanner',
+          spec: { missingProviders, message },
+          slot: 'system.byok',
+        });
+
+        const toolCall = {
+          id: randomUUID(),
+          roomId: roomName,
+          type: 'tool_call' as const,
+          payload: {
+            tool: 'create_component',
+            params: {
+              type: 'KeysRequiredBanner',
+              messageId,
+              intentId,
+              slot: 'system.byok',
+              spec: {
+                title: 'Model keys required',
+                message,
+                href: '/settings/keys',
+                missingProviders,
+              },
+            },
+            context: { source: 'voice', timestamp: Date.now() },
+          },
+          timestamp: Date.now(),
+          source: 'voice' as const,
+        };
+
+        const payloadBytes = new TextEncoder().encode(JSON.stringify(toolCall));
+        const publish = participant.publishData(payloadBytes, { reliable: true, topic: 'tool_call' });
+        if (publish && typeof (publish as PromiseLike<unknown>).then === 'function') {
+          await Promise.race([
+            publish as PromiseLike<unknown>,
+            new Promise((resolve) => setTimeout(resolve, 2500)),
+          ]);
+        }
+      } catch (error) {
+        logRealtimeError('failed to publish BYOK keys-required banner', error);
+      }
+    };
+
+    if (BYOK_REQUIRED) {
+      try {
+        billingUserId = await resolveBillingUserIdForRoom(roomName);
+      } catch (error) {
+        logRealtimeError('failed to resolve billing user id for room', error);
+      }
+
+      if (billingUserId) {
+        try {
+          ownerOpenAIKey = await getDecryptedUserModelKey({ userId: billingUserId, provider: 'openai' });
+        } catch (error) {
+          logRealtimeError('failed to load owner OpenAI key for room', error);
+        }
+
+        try {
+          ownerAnthropicKey = await getDecryptedUserModelKey({ userId: billingUserId, provider: 'anthropic' });
+        } catch (error) {
+          logRealtimeError('failed to load owner Anthropic key for room', error);
+        }
+      }
+
+      const missing: string[] = [];
+      if (!billingUserId) {
+        missing.push('openai');
+      } else if (!ownerOpenAIKey) {
+        missing.push('openai');
+      }
+
+      if (missing.length > 0) {
+        await publishKeysRequiredBanner({
+          missingProviders: missing,
+          message: billingUserId
+            ? 'This canvas requires the owner to configure an OpenAI key before AI features can run.'
+            : 'This canvas requires model keys but the canvas owner could not be resolved. Ensure the canvas exists and try again.',
+        });
+        try {
+          (job.room as any).disconnect?.();
+        } catch {}
+        return;
+      }
+    }
+
+    const routerConfig = (() => {
+      if (BYOK_REQUIRED) {
+        if (ownerAnthropicKey) {
+          return {
+            provider: 'anthropic' as const,
+            apiKey: ownerAnthropicKey,
+            modelId: (process.env.VOICE_AGENT_ROUTER_MODEL || 'claude-haiku-4-5').trim(),
+          };
+        }
+        return {
+          provider: 'openai' as const,
+          apiKey: ownerOpenAIKey!,
+          modelId: 'gpt-5-mini',
+        };
+      }
+
+      const envAnthropic = (process.env.ANTHROPIC_API_KEY ?? '').trim();
+      if (envAnthropic) {
+        return {
+          provider: 'anthropic' as const,
+          apiKey: envAnthropic,
+          modelId: (process.env.VOICE_AGENT_ROUTER_MODEL || 'claude-haiku-4-5').trim(),
+        };
+      }
+      const envOpenAI = (process.env.OPENAI_API_KEY ?? '').trim();
+      if (envOpenAI) {
+        return {
+          provider: 'openai' as const,
+          apiKey: envOpenAI,
+          modelId: 'gpt-5-mini',
+        };
+      }
+      return null;
+    })();
+
+    let routerModelCache: any | null = null;
+    const getRouterModel = () => {
+      if (routerModelCache) return routerModelCache;
+      if (!routerConfig) return null;
+
+      if (routerConfig.provider === 'anthropic') {
+        routerModelCache = createAnthropic({ apiKey: routerConfig.apiKey })(routerConfig.modelId);
+      } else {
+        routerModelCache = createOpenAI({ apiKey: routerConfig.apiKey })(routerConfig.modelId);
+      }
+      return routerModelCache;
+    };
+
+    const routeManualInput = async (text: string) => {
+      const model = getRouterModel();
+      if (!model) return null;
+      const system = [
+        'You are a routing assistant for a real-time UI voice agent.',
+        'Decide whether the user request should be handled by the canvas agent.',
+        'Canvas requests involve drawing, layout, styling, editing, or placing shapes or visuals on the canvas.',
+        'If the request is a canvas task, return route="canvas" and a concise imperative message for the canvas agent.',
+        'Otherwise return route="none".',
+      ].join(' ');
+
+      let object: unknown;
+      try {
+        const res = await (generateObject as unknown as (args: any) => Promise<{ object: any }>)(
+          {
+            model,
+            system,
+            prompt: text,
+            schema: routerDecisionSchema,
+            temperature: 0,
+            maxOutputTokens: 120,
+          },
+        );
+        object = res.object;
+      } catch (error) {
+        logRealtimeError('manual router generateObject failed', error);
+        return null;
+      }
+
+      const parsed = routerDecisionSchema.safeParse(object);
+      if (!parsed.success) return null;
+      return parsed.data as { route: 'canvas' | 'none'; message?: string };
+    };
+
+    const liveKitBus = createLiveKitBus(job.room);
+
+    type PendingTranscriptionMessage = {
+      text: string;
+      speaker?: string;
+      participantId?: string;
+      participantName?: string;
+      isManual: boolean;
+      isFinal: boolean;
+      timestamp?: number;
+      serverGenerated?: boolean;
+      receivedAt: number;
+    };
 
     // Data messages (topic: "transcription") can arrive immediately after the agent joins the room.
     // Attach the listener up-front and buffer until the realtime session is running so we don't drop early turns.
@@ -1884,7 +2069,9 @@ Your only output is function calls. Never use plain text unless absolutely neces
     });
 
     const session = new voice.AgentSession({
-      llm: new openaiRealtime.RealtimeModel({}),
+      llm: new openaiRealtime.RealtimeModel({
+        ...(BYOK_REQUIRED ? { apiKey: ownerOpenAIKey ?? undefined } : {}),
+      }),
     });
 
     const coercePositiveInt = (value: unknown, fallback: number) => {
