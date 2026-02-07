@@ -8,8 +8,6 @@ import type { FairyModeDefinition, FairyProject, FairyProjectRole } from '@tldra
 import { toProjectId } from '@tldraw/fairy-shared';
 import { createLiveKitBus } from '@/lib/livekit/livekit-bus';
 import { useFairyApp } from '@/vendor/tldraw-fairy/fairy/fairy-app/FairyAppProvider';
-import { useViewportSelectionPublisher } from '@/components/ui/canvas/hooks/useViewportSelectionPublisher';
-import { useScreenshotRequestHandler } from '@/components/ui/canvas/hooks/useScreenshotRequestHandler';
 import type { FairyAgent } from '@/vendor/tldraw-fairy/fairy/fairy-agent/FairyAgent';
 import { useFairyPromptData } from './fairy-prompt-data';
 
@@ -151,8 +149,8 @@ export function FairyLiveKitBridge({ room }: FairyLiveKitBridgeProps) {
   const processedIdsRef = useRef<Set<string>>(new Set());
   const buildPromptData = useFairyPromptData();
 
-  useViewportSelectionPublisher(editor, room, true);
-  useScreenshotRequestHandler(editor, room);
+  // NOTE: Viewport + screenshot bridging is handled by the unified CanvasAgentController.
+  // Keep the fairy bridge focused on fairy-specific prompt handling to avoid duplicate handlers.
 
   useEffect(() => {
     if (!bus) return;
