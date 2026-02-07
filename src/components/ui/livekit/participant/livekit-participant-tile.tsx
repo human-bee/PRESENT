@@ -153,11 +153,38 @@ export const LivekitParticipantTile = React.memo(function LivekitParticipantTile
 
   // Auto-selection logic: If no identity is assigned, pick the first remote participant
   if (!targetIdentity) {
-    const firstRemote = participants.find(p => !p.isLocal);
-    if (firstRemote) {
-      targetIdentity = firstRemote.identity;
+    const isAgentParticipant = (p: any) => {
+      try {
+        const kind = String(p?.kind ?? '').toLowerCase();
+        if (kind === 'agent') return true;
+        const identity = String(p?.identity || '').toLowerCase();
+        const metadata = String(p?.metadata || '').toLowerCase();
+        return (
+          identity.startsWith('agent-') ||
+          identity.includes('voice-agent') ||
+          identity === 'voiceagent' ||
+          metadata.includes('voice-agent') ||
+          metadata.includes('voiceagent')
+        );
+      } catch {
+        return false;
+      }
+    };
+
+    // Prefer local self-view by default.
+    if (localParticipant) {
+      targetIdentity = localParticipant.identity;
       autoSelected = true;
-    } else if (localParticipant) {
+    } else {
+      // Otherwise, prefer a non-agent remote participant.
+      const firstHumanRemote = participants.find((p: any) => !p.isLocal && !isAgentParticipant(p));
+      const firstRemote = firstHumanRemote ?? participants.find((p) => !p.isLocal);
+      if (firstRemote) {
+        targetIdentity = firstRemote.identity;
+        autoSelected = true;
+      }
+    }
+    if (!targetIdentity && localParticipant) {
       targetIdentity = localParticipant.identity;
       autoSelected = true;
     }
