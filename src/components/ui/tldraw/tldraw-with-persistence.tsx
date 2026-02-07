@@ -25,7 +25,6 @@ import type { customShape } from './tldraw-canvas';
 import type { Editor } from '@tldraw/tldraw';
 import { useRouter } from 'next/navigation';
 import * as React from 'react';
-import TldrawSnapshotBroadcaster from '@/components/TldrawSnapshotBroadcaster';
 import { logJourneyEvent } from '@/lib/journey-logger';
 
 interface TldrawWithPersistenceProps {

@@ -3,6 +3,7 @@ import { cookies } from 'next/headers';
 import { createServerClient } from '@supabase/ssr';
 import { createClient } from '@supabase/supabase-js';
 import { getRequestUserId } from '@/lib/supabase/server/request-user';
+import { getBooleanFlag } from '@/lib/feature-flags';
 
 export const runtime = 'nodejs';
 
@@ -12,6 +13,8 @@ type LinearKeyRow = {
   secret: string;
   updated_at?: string;
 };
+
+const DEMO_MODE_ENABLED = getBooleanFlag(process.env.NEXT_PUBLIC_CANVAS_DEMO_MODE, false);
 
 async function getServiceSupabase() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -95,6 +98,8 @@ export async function GET(req: NextRequest) {
     const userId = (await getUserId()) || (await resolveUserId(req));
     if (!userId) {
       if (devEnvKey) return NextResponse.json({ apiKey: devEnvKey });
+      // In demo mode, treat missing auth as "no key configured" (avoid noisy 401s in the console).
+      if (DEMO_MODE_ENABLED) return NextResponse.json({ apiKey: null });
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 

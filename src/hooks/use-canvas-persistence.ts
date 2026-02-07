@@ -275,14 +275,7 @@ export function useCanvasPersistence(editor: Editor | null, enabled: boolean = t
         } catch {}
         setLastSaved(new Date());
 
-        // Notify session sync to update the session's canvas_state
-        try {
-          window.dispatchEvent(
-            new CustomEvent('custom:sessionCanvasSaved', { detail: { snapshot, canvasId } }),
-          );
-        } catch (e) {
-          // no-op
-        }
+        // Session sync no longer persists full TLDraw snapshots to avoid large payload/timeouts.
       } else {
         // Create new canvas (only when a real user is present)
         if (!user?.id) {
@@ -311,16 +304,7 @@ export function useCanvasPersistence(editor: Editor | null, enabled: boolean = t
           localStorage.setItem('present:lastCanvasId', newCanvas.id);
         } catch { }
 
-        // Notify session sync to update the session's canvas_state
-        try {
-          window.dispatchEvent(
-            new CustomEvent('custom:sessionCanvasSaved', {
-              detail: { snapshot, canvasId: newCanvas.id },
-            }),
-          );
-        } catch (e) {
-          // no-op
-        }
+        // Session sync no longer persists full TLDraw snapshots to avoid large payload/timeouts.
 
         // Update URL with canvas ID
         const newUrl = new URL(window.location.href);

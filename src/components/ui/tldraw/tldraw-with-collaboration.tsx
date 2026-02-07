@@ -1,12 +1,10 @@
 'use client';
 
-import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useContext, useEffect, useMemo, useRef } from 'react';
 import type { ReactNode, RefObject } from 'react';
 import { Tldraw, TLComponents, Editor, TldrawUiToastsProvider } from '@tldraw/tldraw';
 import { useRoomContext } from '@livekit/components-react';
 import type { Room } from 'livekit-client';
-import TldrawSnapshotBroadcaster from '@/components/TldrawSnapshotBroadcaster';
-import TldrawSnapshotReceiver from '@/components/TldrawSnapshotReceiver';
 import { CanvasLiveKitContext } from '../livekit/livekit-room-connector';
 import { ComponentStoreContext } from './tldraw-canvas';
 import type { customShapeUtil } from './tldraw-canvas';
@@ -48,7 +46,6 @@ export function TldrawWithCollaboration({
   const livekitCtx = useContext(CanvasLiveKitContext);
   const roomName = livekitCtx?.roomName ?? 'custom-canvas-room';
   const room = useRoomContext();
-  const [editorInstance, setEditorInstance] = useState<Editor | null>(null);
   const isFairyEnabled =
     typeof process !== 'undefined' && process.env.NEXT_PUBLIC_FAIRY_ENABLED === 'true';
 
@@ -78,10 +75,6 @@ export function TldrawWithCollaboration({
     }),
     [onTranscriptToggle, onHelpClick, onComponentToolboxToggle, MainMenuWithPermissions],
   );
-
-  const handleEditorReady = useCallback((editor: Editor) => {
-    setEditorInstance(editor);
-  }, []);
 
   // Handle keyboard shortcut for transcript (Cmd+K or Ctrl+K)
   useEffect(() => {
@@ -119,12 +112,9 @@ export function TldrawWithCollaboration({
             <CollaborationEditorEffects
               room={room}
               containerRef={containerRef}
-              onEditorReady={handleEditorReady}
               onMount={onMount}
             />
           </Tldraw>
-          <TldrawSnapshotBroadcaster editor={editorInstance} />
-          <TldrawSnapshotReceiver editor={editorInstance} />
         </ComponentStoreContext.Provider>
       </TldrawUiToastsProvider>
 
@@ -136,14 +126,12 @@ export function TldrawWithCollaboration({
 interface CollaborationEditorEffectsProps {
   room: Room | undefined;
   containerRef: RefObject<HTMLDivElement | null>;
-  onEditorReady?: (editor: Editor) => void;
   onMount?: (editor: Editor) => void;
 }
 
 function CollaborationEditorEffects({
   room,
   containerRef,
-  onEditorReady,
   onMount,
 }: CollaborationEditorEffectsProps) {
   const { editor, ready } = useEditorReady();
@@ -159,8 +147,7 @@ function CollaborationEditorEffects({
     if (process.env.NODE_ENV !== 'production' && typeof window !== 'undefined') {
       (window as any).__tldrawEditor = editor;
     }
-    onEditorReady?.(editor);
-  }, [editor, ready, onEditorReady]);
+  }, [editor, ready]);
 
   useEffect(() => {
     return () => {

@@ -64,11 +64,43 @@ export function useSessionSync(roomName: string) {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const canvasIdRef = useRef<string | null>(null);
   const transcriptRef = useRef<any[]>([]);
-  const eventsRef = useRef<any[]>([]);
   const hasReplayedTranscriptRef = useRef<boolean>(false);
   const cancelledRef = useRef<boolean>(false);
-  const lastCanvasPatchRef = useRef<number>(0);
-  const throttleMs = 2500; // avoid hammering session API with large snapshots
+  const transcriptFlushTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const transcriptFlushInFlightRef = useRef(false);
+  const MAX_TRANSCRIPT_LINES = 200;
+  const TRANSCRIPT_FLUSH_DEBOUNCE_MS = 1000;
+
+  const appendTranscript = (entry: any) => {
+    const next = [...transcriptRef.current, entry];
+    transcriptRef.current =
+      next.length > MAX_TRANSCRIPT_LINES ? next.slice(-MAX_TRANSCRIPT_LINES) : next;
+  };
+
+  const scheduleTranscriptFlush = useMemo(() => {
+    return (sid: string) => {
+      if (transcriptFlushTimeoutRef.current) return;
+      transcriptFlushTimeoutRef.current = setTimeout(async () => {
+        transcriptFlushTimeoutRef.current = null;
+        if (transcriptFlushInFlightRef.current) return;
+        transcriptFlushInFlightRef.current = true;
+        try {
+          const headers = await getAuthHeaders();
+          const res = await fetch(`/api/session/${sid}`, {
+            method: 'PATCH',
+            headers,
+            body: JSON.stringify({
+              transcript: transcriptRef.current,
+              updated_at: new Date().toISOString(),
+            }),
+          });
+          if (!res.ok) console.error('[useSessionSync] Failed to append transcript', await res.text());
+        } finally {
+          transcriptFlushInFlightRef.current = false;
+        }
+      }, TRANSCRIPT_FLUSH_DEBOUNCE_MS);
+    };
+  }, []);
 
   const ensureSession = useMemo(() => {
     const fetchSession = async (canvasId: string | null) => {
@@ -109,8 +141,9 @@ export function useSessionSync(roomName: string) {
 
       if (!cancelledRef.current && existing?.id) {
         setSessionId(existing.id);
-        transcriptRef.current = Array.isArray(existing.transcript) ? existing.transcript : [];
-        eventsRef.current = Array.isArray((existing as any).events) ? (existing as any).events : [];
+        transcriptRef.current = Array.isArray(existing.transcript)
+          ? existing.transcript.slice(-MAX_TRANSCRIPT_LINES)
+          : [];
         return;
       }
 
@@ -122,7 +155,6 @@ export function useSessionSync(roomName: string) {
         participants,
         transcript: [],
         canvas_state: null as any,
-        events: [],
       };
 
       const { data: created, error: insertErr, code } = await createSession(insertPayload);
@@ -137,7 +169,7 @@ export function useSessionSync(roomName: string) {
             if (!cancelledRef.current) {
               setSessionId(existingAfterConflict.id);
               transcriptRef.current = Array.isArray(existingAfterConflict.transcript)
-                ? existingAfterConflict.transcript
+                ? existingAfterConflict.transcript.slice(-MAX_TRANSCRIPT_LINES)
                 : [];
             }
             return;
@@ -238,23 +270,13 @@ export function useSessionSync(roomName: string) {
         timestamp: typeof msg.timestamp === 'number' ? msg.timestamp : Date.now(),
       };
 
-      // Append locally and push update
-      transcriptRef.current = [...transcriptRef.current, entry];
-      
-      const headers = await getAuthHeaders();
-      const res = await fetch(`/api/session/${sessionId}`, {
-        method: 'PATCH',
-        headers,
-        body: JSON.stringify({
-          transcript: transcriptRef.current,
-          updated_at: new Date().toISOString(),
-        }),
-      });
-      if (!res.ok) console.error('[useSessionSync] Failed to append transcript', await res.text());
+      // Append locally and batch updates to avoid hammering Supabase / Vercel payload limits.
+      appendTranscript(entry);
+      scheduleTranscriptFlush(sessionId);
     });
 
     return off;
-  }, [bus, sessionId]);
+  }, [bus, sessionId, scheduleTranscriptFlush]);
 
   // On reload, replay the last N transcript lines after the room connects
   // Uses batched processing to avoid blocking the main thread
@@ -335,85 +357,15 @@ export function useSessionSync(roomName: string) {
         text: String(detail.text),
         timestamp: typeof detail.timestamp === 'number' ? detail.timestamp : Date.now(),
       };
-      transcriptRef.current = [...transcriptRef.current, entry];
-      
-      const headers = await getAuthHeaders();
-      const res = await fetch(`/api/session/${sessionId}`, {
-        method: 'PATCH',
-        headers,
-        body: JSON.stringify({
-          transcript: transcriptRef.current,
-          updated_at: new Date().toISOString(),
-        }),
-      });
-      if (!res.ok) console.error('[useSessionSync] Failed to append local transcript', await res.text());
+      appendTranscript(entry);
+      scheduleTranscriptFlush(sessionId);
     };
 
     window.addEventListener('custom:transcription-local', handler as EventListener);
     return () => {
       window.removeEventListener('custom:transcription-local', handler as EventListener);
     };
-  }, [sessionId]);
-
-  // Listen for canvas save events to update session canvas_state
-  useEffect(() => {
-    if (!sessionId) return;
-    // Listen for TLDraw snapshots on the LiveKit bus and record as events
-    const offTldraw = bus.on('tldraw', async (msg: any) => {
-      if (!msg || typeof msg !== 'object') return;
-      const entry = {
-        type: typeof msg.type === 'string' ? msg.type : 'tldraw_event',
-        timestamp: typeof msg.timestamp === 'number' ? msg.timestamp : Date.now(),
-        data: msg.data ?? null,
-        source: msg.source ?? 'unknown',
-      };
-      // Cap events to avoid unbounded growth
-      const MAX_EVENTS = 500;
-      const next = [...eventsRef.current, entry];
-      eventsRef.current = next.length > MAX_EVENTS ? next.slice(-MAX_EVENTS) : next;
-      
-      const headers = await getAuthHeaders();
-      const res = await fetch(`/api/session/${sessionId}`, {
-        method: 'PATCH',
-        headers,
-        body: JSON.stringify({
-          events: eventsRef.current,
-          updated_at: new Date().toISOString(),
-        }),
-      });
-      if (!res.ok) console.error('[useSessionSync] Failed to append tldraw event', await res.text());
-    });
-
-    const handler = async (e: Event) => {
-      const { snapshot, canvasId } = (e as CustomEvent).detail || {};
-      if (!snapshot) return;
-      if (canvasIdRef.current && canvasId && canvasIdRef.current !== canvasId) return;
-
-       // Throttle large canvas_state writes to reduce backend timeouts
-      const now = Date.now();
-      if (now - lastCanvasPatchRef.current < throttleMs) {
-        return;
-      }
-      lastCanvasPatchRef.current = now;
-
-      const headers = await getAuthHeaders();
-      const res = await fetch(`/api/session/${sessionId}`, {
-        method: 'PATCH',
-        headers,
-        body: JSON.stringify({
-          canvas_state: snapshot,
-          updated_at: new Date().toISOString(),
-        }),
-      });
-      if (!res.ok) console.error('[useSessionSync] Failed to update canvas_state', await res.text());
-    };
-
-    window.addEventListener('custom:sessionCanvasSaved', handler as EventListener);
-    return () => {
-      window.removeEventListener('custom:sessionCanvasSaved', handler as EventListener);
-      offTldraw?.();
-    };
-  }, [sessionId]);
+  }, [sessionId, scheduleTranscriptFlush]);
 
   return { sessionId };
 }
