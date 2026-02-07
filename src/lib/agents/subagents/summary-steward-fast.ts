@@ -2,7 +2,6 @@ import { getCerebrasClient, getModelForSteward, isFastStewardReady } from '../fa
 import { getTranscriptWindow, getContextDocuments, formatContextDocuments } from '@/lib/agents/shared/supabase-context';
 
 const CEREBRAS_MODEL = getModelForSteward('SUMMARY_STEWARD_FAST_MODEL');
-const client = getCerebrasClient();
 
 const SUMMARY_SYSTEM = `
 You are a fast meeting summarizer for a realtime collaborative workspace.
@@ -104,6 +103,7 @@ export async function runSummaryStewardFast(params: {
   }
 
   try {
+    const client = getCerebrasClient();
     const response = await client.chat.completions.create({
       model: CEREBRAS_MODEL,
       messages,

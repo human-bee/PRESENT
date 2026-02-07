@@ -10,7 +10,6 @@ import {
 } from '@/lib/agents/shared/supabase-context';
 
 const CEREBRAS_MODEL = getModelForSteward('CROWD_PULSE_STEWARD_FAST_MODEL');
-const client = getCerebrasClient();
 
 const CROWD_PULSE_SYSTEM = `
 You are a fast crowd pulse steward for a realtime collaborative workspace.
@@ -143,6 +142,7 @@ export async function runCrowdPulseStewardFast(params: {
   }
 
   try {
+    const client = getCerebrasClient();
     const response = await client.chat.completions.create({
       model: CEREBRAS_MODEL,
       messages,

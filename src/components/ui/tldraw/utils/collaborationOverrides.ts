@@ -2,12 +2,14 @@
 
 import { TLUiOverrides } from '@tldraw/tldraw';
 import type { customShape } from '../tldraw-canvas';
+import { clearLocalPin, getLocalPin, setLocalPin } from './local-pin-store';
 
 /**
  * Creates TLDraw UI overrides for collaboration features
  * Adds pin-to-viewport action
  */
-export function createCollaborationOverrides(): TLUiOverrides {
+export function createCollaborationOverrides(options?: { roomName?: string }): TLUiOverrides {
+  const roomName = (options?.roomName || '').trim() || 'canvas';
   const overrides: any = {
     actions: (editor: any, actions: any) => {
       const pinAction = {
@@ -20,7 +22,7 @@ export function createCollaborationOverrides(): TLUiOverrides {
 
           if (selectedShapes.length === 1 && selectedShapes[0].type === 'custom') {
             const shape = selectedShapes[0] as customShape;
-            const isPinned = shape.props.pinned ?? false;
+            const isPinned = Boolean(getLocalPin(roomName, String(shape.id)));
 
             if (!isPinned) {
               const viewport = editor.getViewportScreenBounds();
@@ -33,26 +35,13 @@ export function createCollaborationOverrides(): TLUiOverrides {
                 const pinnedX = screenPoint.x / viewport.width;
                 const pinnedY = screenPoint.y / viewport.height;
 
-                editor.updateShapes([
-                  {
-                    id: shape.id,
-                    type: 'custom',
-                    props: {
-                      pinned: true,
-                      pinnedX: Math.max(0, Math.min(1, pinnedX)),
-                      pinnedY: Math.max(0, Math.min(1, pinnedY)),
-                    },
-                  },
-                ]);
+                setLocalPin(roomName, String(shape.id), {
+                  pinnedX: Math.max(0, Math.min(1, pinnedX)),
+                  pinnedY: Math.max(0, Math.min(1, pinnedY)),
+                });
               }
             } else {
-              editor.updateShapes([
-                {
-                  id: shape.id,
-                  type: 'custom',
-                  props: { pinned: false },
-                },
-              ]);
+              clearLocalPin(roomName, String(shape.id));
             }
           }
         },

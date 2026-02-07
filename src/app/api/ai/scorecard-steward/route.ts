@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { isFastStewardReady } from '@/lib/agents/fast-steward-config';
 import { runDebateScorecardStewardFast } from '@/lib/agents/subagents/debate-steward-fast';
 import { runDebateScorecardSteward } from '@/lib/agents/debate-judge';
 
@@ -7,8 +8,8 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { task, room, componentId, intent, summary, prompt } = body;
 
-    // Route fact_check to the full SOTA steward, other tasks to fast
-    const useFast = task !== 'scorecard.fact_check';
+    // Route fact_check to the full SOTA steward, other tasks to FAST (Cerebras) when configured.
+    const useFast = isFastStewardReady() && task !== 'scorecard.fact_check';
 
     let result;
     if (useFast) {
@@ -38,7 +39,6 @@ export async function POST(req: NextRequest) {
     );
   }
 }
-
 
 
 

@@ -129,44 +129,52 @@ export function ParticipantTileOptionsPanel({
                 Refresh
               </button>
             </div>
-            <div>
-              <div className="mb-1 text-xs text-white/70">Microphone</div>
-              <select
-                className="w-full rounded bg-white/10 px-2 py-1 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
-                value={microphoneSelectValue}
-                onChange={async (event) => {
-                  await onSelectMicrophone(event.target.value);
-                }}
-              >
-                <option value="" disabled>
-                  {audioDevices.length ? 'Select a microphone' : 'No microphones found'}
-                </option>
-                {audioDevices.map((device) => (
-                  <option key={device.deviceId} value={device.deviceId}>
-                    {device.label || 'Microphone'}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <div className="mb-1 text-xs text-white/70">Camera</div>
-              <select
-                className="w-full rounded bg-white/10 px-2 py-1 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
-                value={cameraSelectValue}
-                onChange={async (event) => {
-                  await onSelectCamera(event.target.value);
-                }}
-              >
-                <option value="" disabled>
-                  {videoDevices.length ? 'Select a camera' : 'No cameras found'}
-                </option>
-                {videoDevices.map((device) => (
-                  <option key={device.deviceId} value={device.deviceId}>
-                    {device.label || 'Camera'}
-                  </option>
-                ))}
-              </select>
-            </div>
+            {isCoarsePointer ? (
+              <div className="rounded bg-white/5 p-2 text-xs text-white/60">
+                Device selection is managed by your browser on mobile.
+              </div>
+            ) : (
+              <>
+                <div>
+                  <div className="mb-1 text-xs text-white/70">Microphone</div>
+                  <select
+                    className="w-full rounded bg-white/10 px-2 py-1 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
+                    value={microphoneSelectValue}
+                    onChange={async (event) => {
+                      await onSelectMicrophone(event.target.value);
+                    }}
+                  >
+                    <option value="" disabled>
+                      {audioDevices.length ? 'Select a microphone' : 'No microphones found'}
+                    </option>
+                    {audioDevices.map((device) => (
+                      <option key={device.deviceId} value={device.deviceId}>
+                        {device.label || 'Microphone'}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <div className="mb-1 text-xs text-white/70">Camera</div>
+                  <select
+                    className="w-full rounded bg-white/10 px-2 py-1 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
+                    value={cameraSelectValue}
+                    onChange={async (event) => {
+                      await onSelectCamera(event.target.value);
+                    }}
+                  >
+                    <option value="" disabled>
+                      {videoDevices.length ? 'Select a camera' : 'No cameras found'}
+                    </option>
+                    {videoDevices.map((device) => (
+                      <option key={device.deviceId} value={device.deviceId}>
+                        {device.label || 'Camera'}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </>
+            )}
             <div>
               <div className="mb-1 text-xs text-white/70">Stream Quality</div>
               <div className="flex gap-2">
@@ -230,4 +238,3 @@ export function ParticipantTileOptionsPanel({
     document.body,
   );
 }
-

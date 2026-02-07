@@ -1,18 +1,20 @@
 import type { Editor } from '@tldraw/tldraw';
 import type { CanvasEventMap } from './types';
 import { getSelectedCustomShapes } from './canvas-selection-shared';
+import { clearLocalPin, setLocalPin } from './local-pin-store';
 
 interface PinHandlersDeps {
   editor: Editor;
+  roomName?: string;
 }
 
-export function createCanvasPinHandlers({ editor }: PinHandlersDeps): CanvasEventMap {
+export function createCanvasPinHandlers({ editor, roomName }: PinHandlersDeps): CanvasEventMap {
+  const resolvedRoom = (roomName || '').trim() || 'canvas';
   const handlePinSelected: EventListener = () => {
     try {
       const selected = getSelectedCustomShapes(editor);
       if (!selected.length) return;
       const viewport = editor.getViewportScreenBounds();
-      const updates: any[] = [];
 
       for (const shape of selected) {
         const bounds = editor.getShapePageBounds(shape.id as any);
@@ -20,15 +22,10 @@ export function createCanvasPinHandlers({ editor }: PinHandlersDeps): CanvasEven
         const screenPoint = editor.pageToScreen({ x: bounds.x + bounds.w / 2, y: bounds.y + bounds.h / 2 });
         const pinnedX = screenPoint.x / viewport.width;
         const pinnedY = screenPoint.y / viewport.height;
-        updates.push({
-          id: shape.id,
-          type: shape.type as any,
-          props: { pinned: true, pinnedX, pinnedY },
+        setLocalPin(resolvedRoom, String(shape.id), {
+          pinnedX,
+          pinnedY,
         });
-      }
-
-      if (updates.length) {
-        editor.updateShapes(updates as any);
       }
     } catch (error) {
       console.warn('[CanvasControl] pin_selected error', error);
@@ -39,8 +36,9 @@ export function createCanvasPinHandlers({ editor }: PinHandlersDeps): CanvasEven
     try {
       const selected = getSelectedCustomShapes(editor);
       if (!selected.length) return;
-      const updates = selected.map((shape) => ({ id: shape.id, type: shape.type as any, props: { pinned: false } }));
-      editor.updateShapes(updates as any);
+      for (const shape of selected) {
+        clearLocalPin(resolvedRoom, String(shape.id));
+      }
     } catch (error) {
       console.warn('[CanvasControl] unpin_selected error', error);
     }

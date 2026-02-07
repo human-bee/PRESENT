@@ -10,6 +10,7 @@ import { createLiveKitBus } from '@/lib/livekit/livekit-bus';
 import { useFairyApp } from '@/vendor/tldraw-fairy/fairy/fairy-app/FairyAppProvider';
 import type { FairyAgent } from '@/vendor/tldraw-fairy/fairy/fairy-agent/FairyAgent';
 import { useFairyPromptData } from './fairy-prompt-data';
+import { getBooleanFlag } from '@/lib/feature-flags';
 
 interface FairyLiveKitBridgeProps {
   room?: Room;
@@ -20,7 +21,7 @@ interface AgentHostState {
   hostId: string | null;
 }
 
-const FAIRY_CLIENT_AGENT_ENABLED = process.env.NEXT_PUBLIC_FAIRY_CLIENT_AGENT_ENABLED === 'true';
+const FAIRY_CLIENT_AGENT_ENABLED = getBooleanFlag(process.env.NEXT_PUBLIC_FAIRY_CLIENT_AGENT_ENABLED, true);
 
 function useIsAgentHost(room?: Room) {
   const [hostState, setHostState] = useState<AgentHostState>({ isHost: false, hostId: null });
@@ -156,226 +157,272 @@ export function FairyLiveKitBridge({ room }: FairyLiveKitBridgeProps) {
     if (!bus) return;
 
     const unsubscribe = bus.on('agent_prompt', (message: any) => {
-      if (!message || message.type !== 'agent_prompt') return;
-      if (!isHost || !FAIRY_CLIENT_AGENT_ENABLED) return;
+      void (async () => {
+        if (!message || message.type !== 'agent_prompt') return;
+        if (!isHost || !FAIRY_CLIENT_AGENT_ENABLED) return;
 
-      const { payload } = message as { payload?: any };
-      const text: string | undefined = typeof payload?.message === 'string' ? payload.message.trim() : undefined;
-      if (!text) return;
+        const { payload } = message as { payload?: any };
+        const text: string | undefined =
+          typeof payload?.message === 'string' ? payload.message.trim() : undefined;
+        if (!text) return;
 
-      const requestId: string =
-        typeof payload?.requestId === 'string' && payload.requestId
-          ? payload.requestId
-          : `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        const requestId: string =
+          typeof payload?.requestId === 'string' && payload.requestId
+            ? payload.requestId
+            : `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
-      const seen = processedIdsRef.current;
-      if (seen.has(requestId)) return;
-      seen.add(requestId);
-      if (seen.size > 100) {
-        const firstKey = seen.values().next().value;
-        if (firstKey) seen.delete(firstKey);
-      }
-
-      const boundsInput = payload?.bounds;
-      const normalizedBounds =
-        boundsInput && typeof boundsInput === 'object'
-          ? {
-              x: Number(boundsInput.x) || 0,
-              y: Number(boundsInput.y) || 0,
-              w: Number(boundsInput.w) || 0,
-              h: Number(boundsInput.h) || 0,
-            }
-          : editor.getViewportPageBounds();
-
-      const selectionIds = Array.isArray(payload?.selectionIds)
-        ? payload.selectionIds.filter((id: unknown) => typeof id === 'string')
-        : [];
-      const validSelectionIds = selectionIds.filter((id: string) => {
-        try {
-          return Boolean(editor.getShape(id as any));
-        } catch {
-          return false;
+        const seen = processedIdsRef.current;
+        if (seen.has(requestId)) return;
+        seen.add(requestId);
+        if (seen.size > 100) {
+          const firstKey = seen.values().next().value;
+          if (firstKey) seen.delete(firstKey);
         }
-      });
 
-      const agents = fairyApp.agents.getAgents();
-      const selectedAgents = getSelectedAgents(agents);
+        const boundsInput = payload?.bounds;
+        const normalizedBounds =
+          boundsInput && typeof boundsInput === 'object'
+            ? {
+                x: Number(boundsInput.x) || 0,
+                y: Number(boundsInput.y) || 0,
+                w: Number(boundsInput.w) || 0,
+                h: Number(boundsInput.h) || 0,
+              }
+            : editor.getViewportPageBounds();
 
-      const runWithSelection = async (runner: () => Promise<void>) => {
-        const previousSelection =
-          typeof (editor as any).getSelectedShapeIds === 'function'
-            ? (editor as any).getSelectedShapeIds()
-            : [];
-        const setSelection = (ids: string[]) => {
-          const setter = (editor as any).setSelectedShapes ?? (editor as any).setSelectedShapeIds;
-          if (typeof setter === 'function') {
-            setter.call(editor, ids);
+        const selectionIds = Array.isArray(payload?.selectionIds)
+          ? payload.selectionIds.filter((id: unknown) => typeof id === 'string')
+          : [];
+        const validSelectionIds = selectionIds.filter((id: string) => {
+          try {
+            return Boolean(editor.getShape(id as any));
+          } catch {
+            return false;
+          }
+        });
+
+        const requestedFairyCount = (() => {
+          const meta = payload?.metadata;
+          const raw =
+            (meta && typeof meta === 'object' ? (meta as any)?.fairy?.count : undefined) ??
+            (meta && typeof meta === 'object' ? (meta as any)?.fairyCount : undefined);
+          const parsed =
+            typeof raw === 'number' ? raw : typeof raw === 'string' ? Number(raw) : Number.NaN;
+          if (!Number.isFinite(parsed)) return null;
+          return Math.max(1, Math.min(8, Math.floor(parsed)));
+        })();
+
+        const ensureFairyCount = async (desired: number) => {
+          const deadline = Date.now() + 2500;
+          let current = fairyApp.agents.getAgents();
+          const safeCreate = () => {
+            try {
+              fairyApp.agents.createNewFairyConfig();
+            } catch {}
+          };
+          while (current.length < desired && Date.now() < deadline) {
+            safeCreate();
+            await new Promise((resolve) => setTimeout(resolve, 80));
+            current = fairyApp.agents.getAgents();
+          }
+          return current;
+        };
+
+        let agents = fairyApp.agents.getAgents();
+        // When the orchestrator requests multiple fairies, auto-select and orchestrate a multi-agent project.
+        if (requestedFairyCount && requestedFairyCount >= 2) {
+          agents = await ensureFairyCount(requestedFairyCount);
+          const targetAgents = agents.slice(0, requestedFairyCount);
+          const targetIds = new Set(targetAgents.map((agent) => agent.id));
+          agents.forEach((agent) => {
+            const shouldSelect = targetIds.has(agent.id);
+            if (shouldSelect && agent.mode.isSleeping()) {
+              try {
+                agent.mode.setMode('idling');
+              } catch {}
+            }
+            agent.updateEntity((f) => (f ? { ...f, isSelected: shouldSelect } : f));
+          });
+        }
+
+        const selectedAgents = getSelectedAgents(agents);
+
+        const runWithSelection = async (runner: () => Promise<void>) => {
+          const previousSelection =
+            typeof (editor as any).getSelectedShapeIds === 'function'
+              ? (editor as any).getSelectedShapeIds()
+              : [];
+          const setSelection = (ids: string[]) => {
+            const setter = (editor as any).setSelectedShapes ?? (editor as any).setSelectedShapeIds;
+            if (typeof setter === 'function') {
+              setter.call(editor, ids);
+            }
+          };
+          if (validSelectionIds.length > 0) {
+            setSelection(validSelectionIds);
+          }
+          try {
+            await runner();
+          } finally {
+            if (validSelectionIds.length > 0) {
+              setSelection(previousSelection);
+            }
           }
         };
-        if (validSelectionIds.length > 0) {
-          setSelection(validSelectionIds);
-        }
-        try {
-          await runner();
-        } finally {
-          if (validSelectionIds.length > 0) {
-            setSelection(previousSelection);
-          }
-        }
-      };
 
-      if (selectedAgents.length > 1) {
-        const sharedProject = getSharedProject(fairyApp, selectedAgents);
-        if (sharedProject) {
-          const orchestratorMember = fairyApp.projects.getProjectOrchestrator(sharedProject);
-          const orchestratorAgent = orchestratorMember
-            ? agents.find((agent) => agent.id === orchestratorMember.id)
-            : null;
-          if (orchestratorAgent) {
-            if (orchestratorAgent.mode.isSleeping()) {
-              orchestratorAgent.mode.setMode('idling');
+        if (selectedAgents.length > 1) {
+          const sharedProject = getSharedProject(fairyApp, selectedAgents);
+          if (sharedProject) {
+            const orchestratorMember = fairyApp.projects.getProjectOrchestrator(sharedProject);
+            const orchestratorAgent = orchestratorMember
+              ? agents.find((agent) => agent.id === orchestratorMember.id)
+              : null;
+            if (orchestratorAgent) {
+              if (orchestratorAgent.mode.isSleeping()) {
+                orchestratorAgent.mode.setMode('idling');
+              }
+              orchestratorAgent.updateEntity((f) => (f ? { ...f, isSelected: true } : f));
+              orchestratorAgent.position.summon();
+
+              const projectMembers = sharedProject.members.length;
+              const isDuo = projectMembers === 2;
+              const augmentationPrompt = buildProjectAugmentationPrompt(text);
+
+              void runWithSelection(async () => {
+                orchestratorAgent.interrupt({
+                  mode: isDuo ? 'duo-orchestrating-active' : 'orchestrating-active',
+                  input: {
+                    agentMessages: [augmentationPrompt],
+                    userMessages: [text],
+                    bounds: normalizedBounds,
+                    source: 'user',
+                    data: buildPromptData({
+                      metadata: payload?.metadata,
+                      selectionIds: validSelectionIds,
+                    }),
+                  },
+                });
+              });
+              return;
             }
-            orchestratorAgent.updateEntity((f) => (f ? { ...f, isSelected: true } : f));
-            orchestratorAgent.position.summon();
+          }
 
-            const projectMembers = sharedProject.members.length;
-            const isDuo = projectMembers === 2;
-            const augmentationPrompt = buildProjectAugmentationPrompt(text);
+          const eligibleAgents = selectedAgents.filter(
+            (agent) => fairyApp.projects.getProjectByAgentId(agent.id) == null,
+          );
+          const leaderAgent = eligibleAgents[0] ?? null;
+          const followerAgents = leaderAgent
+            ? eligibleAgents.filter((agent) => agent.id !== leaderAgent.id)
+            : [];
+
+          if (leaderAgent && followerAgents.length > 0) {
+            if (leaderAgent.mode.isSleeping()) {
+              leaderAgent.mode.setMode('idling');
+            }
+            leaderAgent.updateEntity((f) => (f ? { ...f, isSelected: true } : f));
+            leaderAgent.position.summon();
+
+            const isDuo = followerAgents.length === 1;
+            const agentAttributes: { role: FairyProjectRole; mode: FairyModeDefinition['type'] } = {
+              role: isDuo ? 'duo-orchestrator' : 'orchestrator',
+              mode: isDuo ? 'duo-orchestrating-active' : 'orchestrating-active',
+            };
+
+            const newProjectId = uniqueId(5);
+            const newProject: FairyProject = {
+              id: toProjectId(newProjectId),
+              title: '',
+              description: '',
+              color: '',
+              members: [
+                {
+                  id: leaderAgent.id,
+                  role: agentAttributes.role,
+                },
+                ...followerAgents.map((agent) => ({ id: agent.id, role: 'drone' as const })),
+              ],
+              plan: '',
+              softDeleted: false,
+            };
+
+            fairyApp.projects.hardDeleteSoftDeletedProjects();
+            fairyApp.projects.addProject(newProject);
+
+            const projectMemberIds = new Set(newProject.members.map((member) => member.id));
+            agents.forEach((agent) => {
+              const shouldSelect = projectMemberIds.has(agent.id);
+              agent.updateEntity((f) => (f ? { ...f, isSelected: shouldSelect } : f));
+            });
+
+            leaderAgent.interrupt({
+              mode: agentAttributes.mode,
+              input: null,
+            });
+
+            followerAgents.forEach((agent) => {
+              agent.interrupt({ mode: 'standing-by', input: null });
+            });
+
+            const leaderEntity = leaderAgent.getEntity();
+            if (leaderEntity) {
+              const leaderPosition = leaderEntity.position;
+              const leaderPageId = leaderEntity.currentPageId;
+              followerAgents.forEach((agent, index) => {
+                const offset = (index + 1) * 120;
+                const position = { x: leaderPosition.x + offset, y: leaderPosition.y };
+                agent.position.moveTo(position);
+                agent.updateEntity((f) => ({ ...f, flipX: true, currentPageId: leaderPageId }));
+              });
+            }
+
+            const groupChatPrompt = buildGroupChatPrompt(text, followerAgents, isDuo);
 
             void runWithSelection(async () => {
-              orchestratorAgent.interrupt({
-                mode: isDuo ? 'duo-orchestrating-active' : 'orchestrating-active',
-                input: {
-                  agentMessages: [augmentationPrompt],
-                  userMessages: [text],
-                  bounds: normalizedBounds,
-                  source: 'user',
-                  data: buildPromptData({
-                    metadata: payload?.metadata,
-                    selectionIds: validSelectionIds,
-                  }),
-                },
-              });
+              await leaderAgent.prompt({
+                source: 'user',
+                agentMessages: [groupChatPrompt],
+                userMessages: [text],
+                bounds: normalizedBounds,
+                data: buildPromptData({
+                  metadata: payload?.metadata,
+                  selectionIds: validSelectionIds,
+                }),
+              } as any);
             });
             return;
           }
         }
 
-        const eligibleAgents = selectedAgents.filter(
-          (agent) => fairyApp.projects.getProjectByAgentId(agent.id) == null,
-        );
-        const leaderAgent = eligibleAgents[0] ?? null;
-        const followerAgents = leaderAgent
-          ? eligibleAgents.filter((agent) => agent.id !== leaderAgent.id)
-          : [];
+        const agentPool = selectedAgents.length > 0 ? selectedAgents : agents;
+        const agent = pickAgent(agentPool);
+        if (!agent) return;
 
-        if (leaderAgent && followerAgents.length > 0) {
-          if (leaderAgent.mode.isSleeping()) {
-            leaderAgent.mode.setMode('idling');
-          }
-          leaderAgent.updateEntity((f) => (f ? { ...f, isSelected: true } : f));
-          leaderAgent.position.summon();
+        if (agent.mode.isSleeping()) {
+          agent.mode.setMode('idling');
+        }
+        agent.updateEntity((f) => (f ? { ...f, isSelected: true } : f));
+        agent.position.summon();
 
-          const isDuo = followerAgents.length === 1;
-          const agentAttributes: { role: FairyProjectRole; mode: FairyModeDefinition['type'] } = {
-            role: isDuo ? 'duo-orchestrator' : 'orchestrator',
-            mode: isDuo ? 'duo-orchestrating-active' : 'orchestrating-active',
-          };
-
-          const newProjectId = uniqueId(5);
-          const newProject: FairyProject = {
-            id: toProjectId(newProjectId),
-            title: '',
-            description: '',
-            color: '',
-            members: [
-              {
-                id: leaderAgent.id,
-                role: agentAttributes.role,
-              },
-              ...followerAgents.map((agent) => ({ id: agent.id, role: 'drone' as const })),
-            ],
-            plan: '',
-            softDeleted: false,
-          };
-
-          fairyApp.projects.hardDeleteSoftDeletedProjects();
-          fairyApp.projects.addProject(newProject);
-
-          const projectMemberIds = new Set(newProject.members.map((member) => member.id));
-          agents.forEach((agent) => {
-            const shouldSelect = projectMemberIds.has(agent.id);
-            agent.updateEntity((f) => (f ? { ...f, isSelected: shouldSelect } : f));
-          });
-
-          leaderAgent.interrupt({
-            mode: agentAttributes.mode,
-            input: null,
-          });
-
-          followerAgents.forEach((agent) => {
-            agent.interrupt({ mode: 'standing-by', input: null });
-          });
-
-          const leaderEntity = leaderAgent.getEntity();
-          if (leaderEntity) {
-            const leaderPosition = leaderEntity.position;
-            const leaderPageId = leaderEntity.currentPageId;
-            followerAgents.forEach((agent, index) => {
-              const offset = (index + 1) * 120;
-              const position = { x: leaderPosition.x + offset, y: leaderPosition.y };
-              agent.position.moveTo(position);
-              agent.updateEntity((f) => ({ ...f, flipX: true, currentPageId: leaderPageId }));
+        const run = async () => {
+          try {
+            await runWithSelection(async () => {
+              await agent.prompt({
+                message: text,
+                bounds: normalizedBounds,
+                source: 'user',
+                data: buildPromptData({
+                  metadata: payload?.metadata,
+                  selectionIds: validSelectionIds,
+                }),
+              } as any);
             });
+          } catch (error) {
+            console.error('[FairyBridge] prompt failed', error);
           }
+        };
 
-          const groupChatPrompt = buildGroupChatPrompt(text, followerAgents, isDuo);
-
-          void runWithSelection(async () => {
-            await leaderAgent.prompt({
-              source: 'user',
-              agentMessages: [groupChatPrompt],
-              userMessages: [text],
-              bounds: normalizedBounds,
-              data: buildPromptData({
-                metadata: payload?.metadata,
-                selectionIds: validSelectionIds,
-              }),
-            } as any);
-          });
-          return;
-        }
-      }
-
-      const agentPool = selectedAgents.length > 0 ? selectedAgents : agents;
-      const agent = pickAgent(agentPool);
-      if (!agent) return;
-
-      if (agent.mode.isSleeping()) {
-        agent.mode.setMode('idling');
-      }
-      agent.updateEntity((f) => (f ? { ...f, isSelected: true } : f));
-      agent.position.summon();
-
-      const run = async () => {
-        try {
-          await runWithSelection(async () => {
-            await agent.prompt({
-              message: text,
-              bounds: normalizedBounds,
-              source: 'user',
-              data: buildPromptData({
-                metadata: payload?.metadata,
-                selectionIds: validSelectionIds,
-              }),
-            } as any);
-          });
-        } catch (error) {
-          console.error('[FairyBridge] prompt failed', error);
-        }
-      };
-
-      void run();
+        void run();
+      })();
     });
 
     return () => {

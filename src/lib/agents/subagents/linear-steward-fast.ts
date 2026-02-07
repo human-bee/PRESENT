@@ -1,8 +1,7 @@
-import { getCerebrasClient, getModelForSteward } from '../fast-steward-config';
+import { getCerebrasClient, getModelForSteward, isFastStewardReady } from '../fast-steward-config';
 import { getContextDocuments, formatContextDocuments, getTranscriptWindow } from '@/lib/agents/shared/supabase-context';
 
 const CEREBRAS_MODEL = getModelForSteward('LINEAR_STEWARD_FAST_MODEL');
-const client = getCerebrasClient();
 
 const LINEAR_STEWARD_INSTRUCTIONS = `
 You are a fast, precise assistant for the Linear issue tracking system.
@@ -85,6 +84,14 @@ export async function runLinearStewardFast(params: {
 }): Promise<LinearAction> {
   const { instruction, context, room } = params;
 
+  if (!isFastStewardReady()) {
+    return {
+      kind: 'noOp',
+      reason: 'FAST Linear steward unavailable (missing CEREBRAS_API_KEY)',
+      mcpTool: null,
+    };
+  }
+
   // Fetch context documents if room is provided
   let contextSection = '';
   let transcriptSection = '';
@@ -120,6 +127,7 @@ export async function runLinearStewardFast(params: {
   ];
 
   try {
+    const client = getCerebrasClient();
     const response = await client.chat.completions.create({
       model: CEREBRAS_MODEL,
       messages,

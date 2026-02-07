@@ -228,7 +228,10 @@ export function TranscriptProvider({ children }: TranscriptProviderProps) {
       const data = JSON.parse(new TextDecoder().decode(message.payload));
 
       if (data.type === 'live_transcription') {
-        const transcriptId = `${data.speaker}-${data.timestamp}`;
+        const transcriptId =
+          (typeof data.event_id === 'string' && data.event_id) ||
+          (typeof data.eventId === 'string' && data.eventId) ||
+          `${data.speaker}-${data.timestamp}`;
         const transcript: Transcript = {
           id: transcriptId,
           text: data.text,
@@ -250,13 +253,17 @@ export function TranscriptProvider({ children }: TranscriptProviderProps) {
   useEffect(() => {
     const handler = (evt: Event) => {
       try {
-        const { speaker, text, timestamp } = (evt as CustomEvent).detail || {};
+        const { speaker, participantName, text, timestamp, eventId, event_id } =
+          (evt as CustomEvent).detail || {};
         if (!text) return;
-        const transcriptId = `${speaker || 'unknown'}-${timestamp}`;
+        const transcriptId =
+          (typeof event_id === 'string' && event_id) ||
+          (typeof eventId === 'string' && eventId) ||
+          `${speaker || 'unknown'}-${timestamp}`;
         const transcript: Transcript = {
           id: transcriptId,
           text,
-          speaker: speaker || 'unknown',
+          speaker: participantName || speaker || 'unknown',
           timestamp: typeof timestamp === 'number' ? timestamp : Date.now(),
           isFinal: true,
           source: speaker === 'voice-agent' ? 'agent' : 'user',
@@ -286,7 +293,6 @@ export function TranscriptProvider({ children }: TranscriptProviderProps) {
     </TranscriptContext.Provider>
   );
 }
-
 
 
 

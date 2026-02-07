@@ -25,15 +25,18 @@ export async function POST(req: Request) {
   try {
     const requestModel = (json as any).model;
     let geminiError = null;
+    let providerUsed: string | null = null;
+    let fallbackReason: string | null = null;
 
     if (requestModel === 'gemini-3-pro-image-preview') {
       console.log('[generateImages] Using Gemini 3 Pro (nanobanana) model...');
       try {
         // Prefer GEMINI_API_KEY (Google AI Studio) if available, otherwise fallback to Vertex AI
-        const geminiApiKey = process.env.GEMINI_API_KEY;
+        const geminiApiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
         console.log('[generateImages] GEMINI_API_KEY available:', !!geminiApiKey);
 
         if (geminiApiKey) {
+          providerUsed = 'gemini_ai_studio';
           // Google AI Studio API Logic
           const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-image-preview:generateContent?key=${geminiApiKey}`;
 
@@ -98,9 +101,12 @@ export async function POST(req: Request) {
           return Response.json({
             b64_json: base64Image,
             timings: { inference: 0 },
+            providerUsed,
+            fallbackReason,
           });
         }
 
+        providerUsed = 'vertex_ai';
         // Fallback to Vertex AI Logic if no GEMINI_API_KEY
         const projectId = process.env.GOOGLE_VERTEX_PROJECT_ID;
         const location = process.env.GOOGLE_VERTEX_LOCATION || 'us-central1';
@@ -174,11 +180,14 @@ export async function POST(req: Request) {
         return Response.json({
           b64_json: base64Image,
           timings: { inference: 0 },
+          providerUsed,
+          fallbackReason,
         });
 
       } catch (e: any) {
         console.warn('Gemini/Vertex generation failed, falling back to Together AI:', e);
         geminiError = e;
+        fallbackReason = 'gemini_or_vertex_failed';
         // Fall through to Together AI logic
       }
     }
@@ -192,6 +201,7 @@ export async function POST(req: Request) {
     }
 
     console.log('Using Together AI (Flux) fallback...');
+    providerUsed = 'together_flux';
     response = await fetch('https://api.together.xyz/v1/images/generations', {
       method: 'POST',
       headers: {
@@ -220,6 +230,8 @@ export async function POST(req: Request) {
     return Response.json({
       b64_json: data.data[0].b64_json,
       timings: { inference: 2000 }, // Placeholder timing
+      providerUsed,
+      fallbackReason,
     });
   } catch (e: any) {
     console.error('Image generation error:', e);

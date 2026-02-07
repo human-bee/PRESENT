@@ -9,10 +9,13 @@ import React, {
   useState,
   ErrorInfo,
 } from 'react';
+import { createPortal } from 'react-dom';
 import { useEditor } from '@tldraw/tldraw';
 import { getComponentSizeInfo } from '@/lib/component-sizing';
 import { ComponentStoreContext } from '../hooks/useCanvasStore';
 import type { CustomShape } from '../utils/shapeUtils';
+import { useContextKey } from '@/components/RoomScopedProviders';
+import { clearLocalPin, getLocalPin, type LocalPinData } from '../../utils/local-pin-store';
 
 export class ComponentErrorBoundary extends Component<
   { children: ReactNode; fallback: ReactNode },
@@ -46,6 +49,8 @@ export function CustomShapeComponent({ shape }: { shape: CustomShape }) {
   const componentStore = useContext(ComponentStoreContext);
   const editor = useEditor();
   const [, setRenderTick] = useState(0);
+  const roomName = useContextKey() || 'canvas';
+  const [localPin, setLocalPinState] = useState<LocalPinData | null>(null);
 
   const [naturalSize, setNaturalSize] = useState<{ w: number; h: number } | null>(null);
   const autoFittedRef = useRef(false);
@@ -110,6 +115,25 @@ export function CustomShapeComponent({ shape }: { shape: CustomShape }) {
   }, [shape.props.name]);
 
   useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const read = () => {
+      setLocalPinState(getLocalPin(roomName, String(shape.id)));
+    };
+    read();
+    const handler = (evt: Event) => {
+      const detail = (evt as CustomEvent<any>).detail;
+      if (!detail) return;
+      if (detail.roomName && String(detail.roomName) !== roomName) return;
+      if (detail.shapeId && String(detail.shapeId) !== String(shape.id)) return;
+      read();
+    };
+    window.addEventListener('present:pins-changed', handler as EventListener);
+    return () => {
+      window.removeEventListener('present:pins-changed', handler as EventListener);
+    };
+  }, [roomName, shape.id]);
+
+  useEffect(() => {
     if (!editor || !naturalSize) return;
     const unsafeEditor = editor as any;
 
@@ -157,7 +181,7 @@ export function CustomShapeComponent({ shape }: { shape: CustomShape }) {
   const offsetX = (shape.props.w - scaledWidth) / 2;
   const offsetY = (shape.props.h - scaledHeight) / 2;
 
-  return (
+  const content = (
     <div
       ref={containerRef}
       style={{
@@ -222,6 +246,60 @@ export function CustomShapeComponent({ shape }: { shape: CustomShape }) {
       </div>
     </div>
   );
+
+  if (localPin && typeof document !== 'undefined') {
+    const left = `${localPin.pinnedX * 100}vw`;
+    const top = `${localPin.pinnedY * 100}vh`;
+    const portal = createPortal(
+      <div
+        style={{
+          position: 'fixed',
+          left,
+          top,
+          transform: 'translate(-50%, -50%)',
+          zIndex: 1100,
+          pointerEvents: 'auto',
+        }}
+      >
+        <div className="absolute -top-9 right-0 flex items-center gap-2">
+          <button
+            type="button"
+            className="rounded-md bg-black/70 px-2 py-1 text-[11px] font-semibold text-white shadow-sm"
+            onClick={() => {
+              clearLocalPin(roomName, String(shape.id));
+              setLocalPinState(null);
+            }}
+          >
+            Unpin
+          </button>
+        </div>
+        {content}
+      </div>,
+      document.body,
+    );
+
+    // Keep a lightweight placeholder in the canvas so the shape can still be selected/unpinned.
+    return (
+      <>
+        <div
+          style={{
+            width: `${shape.props.w}px`,
+            height: `${shape.props.h}px`,
+            position: 'relative',
+            overflow: 'hidden',
+            background: 'transparent',
+          }}
+        >
+          <div className="absolute inset-0 flex items-center justify-center text-[10px] font-semibold text-slate-400">
+            Pinned
+          </div>
+        </div>
+        {portal}
+      </>
+    );
+  }
+
+  return content;
 }
 
 interface RenderStoredComponentArgs {

@@ -12,7 +12,6 @@ import {
   useCanvasEventHandlers,
   useCollaborationSession,
   useEditorReady,
-  usePinnedShapes,
   useTldrawEditorBridge,
 } from './hooks';
 import { createCollaborationOverrides } from './utils';
@@ -20,6 +19,7 @@ import { CustomMainMenu, CustomToolbarWithTranscript } from './tldraw-with-persi
 import { CollaborationLoadingOverlay } from './components';
 import { CanvasAgentController } from './canvas/canvas-agent-controller';
 import { FairyIntegration } from './fairy/fairy-integration';
+import { getBooleanFlag } from '@/lib/feature-flags';
 
 interface TldrawWithCollaborationProps {
   onMount?: (editor: Editor) => void;
@@ -46,13 +46,12 @@ export function TldrawWithCollaboration({
   const livekitCtx = useContext(CanvasLiveKitContext);
   const roomName = livekitCtx?.roomName ?? 'custom-canvas-room';
   const room = useRoomContext();
-  const isFairyEnabled =
-    typeof process !== 'undefined' && process.env.NEXT_PUBLIC_FAIRY_ENABLED === 'true';
+  const isFairyEnabled = getBooleanFlag(process.env.NEXT_PUBLIC_FAIRY_ENABLED, true);
 
   const collaboration = useCollaborationSession({ roomName, room, shapeUtils });
   const computedReadOnly = readOnly || collaboration.isReadOnly;
 
-  const overrides = useMemo(() => createCollaborationOverrides(), []);
+  const overrides = useMemo(() => createCollaborationOverrides({ roomName }), [roomName]);
 
   const MainMenuWithPermissions = useCallback(
     (props: Record<string, unknown>) => (
@@ -135,11 +134,9 @@ function CollaborationEditorEffects({
   onMount,
 }: CollaborationEditorEffectsProps) {
   const { editor, ready } = useEditorReady();
-  const isFairyEnabled =
-    typeof process !== 'undefined' && process.env.NEXT_PUBLIC_FAIRY_ENABLED === 'true';
+  const isFairyEnabled = getBooleanFlag(process.env.NEXT_PUBLIC_FAIRY_ENABLED, true);
 
   useTldrawEditorBridge(editor, { onMount });
-  usePinnedShapes(editor, ready);
   useCanvasEventHandlers(editor, room, containerRef, { enabled: ready });
 
   useEffect(() => {

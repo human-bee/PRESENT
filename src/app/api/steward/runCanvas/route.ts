@@ -6,7 +6,6 @@ import { randomUUID } from 'crypto';
 
 export const runtime = 'nodejs';
 
-const queue = new AgentTaskQueue();
 const QUEUE_DIRECT_FALLBACK_ENABLED = process.env.CANVAS_QUEUE_DIRECT_FALLBACK === 'true';
 const CLIENT_CANVAS_AGENT_ENABLED = process.env.NEXT_PUBLIC_CANVAS_AGENT_CLIENT_ENABLED === 'true';
 const FAIRY_CLIENT_AGENT_ENABLED = process.env.NEXT_PUBLIC_FAIRY_CLIENT_AGENT_ENABLED === 'true';
@@ -52,6 +51,8 @@ export async function POST(req: NextRequest) {
     }
 
     try {
+      // Lazily instantiate so `next build` doesn't require Supabase env vars.
+      const queue = new AgentTaskQueue();
       const enqueueResult = await queue.enqueueTask({
         room: trimmedRoom,
         task: normalizedTask,

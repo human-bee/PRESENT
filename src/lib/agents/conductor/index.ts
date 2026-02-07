@@ -19,6 +19,11 @@ import { runDebateScorecardStewardFast } from '@/lib/agents/subagents/debate-ste
 import { getDebateScorecard, commitDebateScorecard } from '@/lib/agents/shared/supabase-context';
 import {
   createDefaultPlayers,
+  debateSideEnum,
+  debateSpeechEnum,
+  claimStatusEnum,
+  verdictEnum,
+  impactEnum,
   debateScorecardStateSchema,
   type DebateScorecardState,
   type Claim,
@@ -41,6 +46,7 @@ import {
 import { formatFairyContextParts } from '@/lib/fairy-context/format';
 import { runSummaryStewardFast } from '@/lib/agents/subagents/summary-steward-fast';
 import { runCrowdPulseStewardFast } from '@/lib/agents/subagents/crowd-pulse-steward-fast';
+import { getBooleanFlag } from '@/lib/feature-flags';
 
 dotenvConfig({ path: join(process.cwd(), '.env.local') });
 
@@ -53,9 +59,10 @@ const FAIRY_INTENT_DEDUPE_MS = Number(process.env.FAIRY_INTENT_DEDUPE_MS ?? 1200
 const FAIRY_INTENT_DEDUPE_MAX = Number(process.env.FAIRY_INTENT_DEDUPE_MAX ?? 200);
 const fairyIntentDedupe = new Map<string, number>();
 
-const CLIENT_CANVAS_AGENT_ENABLED = process.env.NEXT_PUBLIC_CANVAS_AGENT_CLIENT_ENABLED === 'true';
-const FAIRY_UI_ENABLED = process.env.NEXT_PUBLIC_FAIRY_ENABLED === 'true';
-const FAIRY_CLIENT_AGENT_ENABLED = process.env.NEXT_PUBLIC_FAIRY_CLIENT_AGENT_ENABLED === 'true';
+const CLIENT_CANVAS_AGENT_ENABLED = getBooleanFlag(process.env.NEXT_PUBLIC_CANVAS_AGENT_CLIENT_ENABLED, false);
+// Fairy is now the default canvas manipulation layer; allow overriding via env for emergency fallback.
+const FAIRY_UI_ENABLED = getBooleanFlag(process.env.NEXT_PUBLIC_FAIRY_ENABLED, true);
+const FAIRY_CLIENT_AGENT_ENABLED = getBooleanFlag(process.env.NEXT_PUBLIC_FAIRY_CLIENT_AGENT_ENABLED, true);
 const CANVAS_STEWARD_ENABLED = (process.env.CANVAS_STEWARD_SERVER_EXECUTION ?? 'true') === 'true';
 const DEFAULT_SUMMARY_MEMORY_TOOL = process.env.SUMMARY_MEMORY_MCP_TOOL;
 const DEFAULT_SUMMARY_AUTO_SEND = process.env.SUMMARY_MEMORY_AUTO_SEND === 'true';
@@ -122,6 +129,37 @@ const ScorecardTaskArgs = z
   .passthrough();
 
 type ScorecardTaskInput = z.infer<typeof ScorecardTaskArgs>;
+
+const ClaimPatchSchema = z
+  .object({
+    op: z.enum(['upsert', 'delete']).optional().default('upsert'),
+    id: z.string().optional(),
+    side: debateSideEnum.optional(),
+    speech: debateSpeechEnum.optional(),
+    quote: z.string().optional(),
+    summary: z.string().optional(),
+    speaker: z.string().optional(),
+    evidenceInline: z.string().optional(),
+    status: claimStatusEnum.optional(),
+    verdict: verdictEnum.optional(),
+    impact: impactEnum.optional(),
+  })
+  .passthrough();
+
+const ScorecardPatchSchema = z
+  .object({
+    topic: z.string().optional(),
+    claimPatches: z.array(ClaimPatchSchema).optional(),
+  })
+  .passthrough()
+  .refine(
+    (value) =>
+      (typeof value.topic === 'string' && value.topic.trim().length > 0) ||
+      (Array.isArray(value.claimPatches) && value.claimPatches.length > 0),
+    { message: 'patch must include topic or claimPatches' },
+  );
+
+type ScorecardPatchPayload = z.infer<typeof ScorecardPatchSchema>;
 
 const SearchTaskArgs = z
   .object({
@@ -1029,6 +1067,187 @@ async function upsertScorecardMeta(parsed: ScorecardTaskInput) {
   return { status: 'ok', version: committed.version };
 }
 
+function nextClaimId(state: DebateScorecardState, side: 'AFF' | 'NEG'): string {
+  const prefix = `${side}-`;
+  let max = 0;
+  for (const claim of state.claims || []) {
+    const id = String(claim?.id || '');
+    if (!id.startsWith(prefix)) continue;
+    const n = Number(id.slice(prefix.length));
+    if (Number.isFinite(n)) max = Math.max(max, Math.floor(n));
+  }
+  return `${side}-${max + 1}`;
+}
+
+function applyClaimPatch(
+  state: DebateScorecardState,
+  patch: z.infer<typeof ClaimPatchSchema>,
+  now: number,
+): { changed: boolean; id?: string; op: 'upsert' | 'delete' } {
+  const op = (patch.op || 'upsert') as 'upsert' | 'delete';
+  const rawId = typeof patch.id === 'string' ? patch.id.trim() : '';
+
+  if (op === 'delete') {
+    if (!rawId) return { changed: false, op };
+    const idx = state.claims.findIndex((c) => c.id === rawId);
+    if (idx === -1) return { changed: false, id: rawId, op };
+    state.claims.splice(idx, 1);
+    return { changed: true, id: rawId, op };
+  }
+
+  let id = rawId;
+  if (!id) {
+    if (patch.side) {
+      id = nextClaimId(state, patch.side);
+    } else {
+      id = `C-${randomUUID().slice(0, 8)}`;
+    }
+  }
+
+  const idx = state.claims.findIndex((c) => c.id === id);
+  const playerLabel = patch.side
+    ? state.players.find((p) => p.side === patch.side)?.label
+    : undefined;
+
+  if (idx === -1) {
+    const side: 'AFF' | 'NEG' = patch.side ?? 'AFF';
+    const speech =
+      patch.speech ??
+      (side === 'NEG' ? '1NC' : '1AC');
+    const quote = typeof patch.quote === 'string' ? patch.quote : '';
+    state.claims.push({
+      id,
+      side,
+      speech,
+      quote,
+      speaker: typeof patch.speaker === 'string' ? patch.speaker : playerLabel || 'Speaker',
+      summary: typeof patch.summary === 'string' ? patch.summary : undefined,
+      evidenceInline: typeof patch.evidenceInline === 'string' ? patch.evidenceInline : undefined,
+      status: patch.status ?? 'UNTESTED',
+      strength: { logos: 0.5, pathos: 0.5, ethos: 0.5 },
+      confidence: 0.5,
+      evidenceCount: 0,
+      upvotes: 0,
+      scoreDelta: 0,
+      factChecks: [],
+      verdict: patch.verdict ?? undefined,
+      impact: patch.impact ?? undefined,
+      createdAt: now,
+      updatedAt: now,
+    });
+    return { changed: true, id, op };
+  }
+
+  const current = state.claims[idx];
+  const next: Claim = {
+    ...current,
+    ...(patch.side ? { side: patch.side } : null),
+    ...(patch.speech ? { speech: patch.speech } : null),
+    ...(typeof patch.quote === 'string' ? { quote: patch.quote } : null),
+    ...(typeof patch.summary === 'string' ? { summary: patch.summary } : null),
+    ...(typeof patch.speaker === 'string' ? { speaker: patch.speaker } : null),
+    ...(typeof patch.evidenceInline === 'string' ? { evidenceInline: patch.evidenceInline } : null),
+    ...(patch.status ? { status: patch.status } : null),
+    ...(patch.verdict ? { verdict: patch.verdict } : null),
+    ...(patch.impact ? { impact: patch.impact } : null),
+    updatedAt: now,
+  };
+
+  state.claims[idx] = next;
+  return { changed: true, id, op };
+}
+
+async function runScorecardPatchTask(parsed: ScorecardTaskInput, rawParams: JsonObject) {
+  const patchCandidate = (getObject(rawParams, 'patch') as JsonObject | null) ?? rawParams;
+  const fallbackTopic =
+    typeof parsed.topic === 'string' && parsed.topic.trim().length > 0 ? parsed.topic.trim() : undefined;
+
+  const payload = ScorecardPatchSchema.parse({
+    ...patchCandidate,
+    ...(fallbackTopic && !(patchCandidate as any)?.topic ? { topic: fallbackTopic } : null),
+  }) as ScorecardPatchPayload;
+
+  const record = await getDebateScorecard(parsed.room, parsed.componentId);
+  const base = record?.state ? JSON.parse(JSON.stringify(record.state)) : null;
+  let workingState: DebateScorecardState =
+    base && typeof base === 'object'
+      ? (base as DebateScorecardState)
+      : debateScorecardStateSchema.parse({ componentId: parsed.componentId });
+
+  const now = Date.now();
+  const notes: string[] = [];
+  let changed = false;
+
+  if (typeof payload.topic === 'string' && payload.topic.trim().length > 0) {
+    const nextTopic = payload.topic.trim();
+    if (workingState.topic !== nextTopic) {
+      workingState.topic = nextTopic;
+      changed = true;
+      notes.push(`Topic: ${nextTopic}`);
+    }
+  }
+
+  const claimPatches = Array.isArray(payload.claimPatches) ? payload.claimPatches : [];
+  for (const patch of claimPatches) {
+    const result = applyClaimPatch(workingState, patch, now);
+    if (!result.changed) continue;
+    changed = true;
+    if (result.op === 'delete') {
+      notes.push(`Deleted ${result.id}`);
+    } else {
+      notes.push(`Updated ${result.id}`);
+    }
+  }
+
+  if (!changed) {
+    console.log('[Conductor] scorecard.patch no changes detected', {
+      room: parsed.room,
+      componentId: parsed.componentId,
+    });
+    return { status: 'no_change', version: record.version };
+  }
+
+  const lastAction = notes.join(' · ').slice(0, 240) || 'Scorecard updated';
+  workingState.status = {
+    ...workingState.status,
+    lastAction,
+  };
+  workingState.timeline = [
+    ...(workingState.timeline ?? []),
+    {
+      id: `evt-${now}`,
+      timestamp: now,
+      text: lastAction,
+      type: 'moderation',
+    },
+  ];
+  workingState.lastUpdated = now;
+
+  const committed = await commitDebateScorecard(parsed.room, parsed.componentId, {
+    state: debateScorecardStateSchema.parse(workingState),
+    prevVersion: record.version,
+  });
+
+  seedScorecardState(parsed.room, parsed.componentId, committed);
+  await broadcastToolCall({
+    room: parsed.room,
+    tool: 'update_component',
+    params: {
+      componentId: parsed.componentId,
+      patch: committed.state as JsonObject,
+    },
+  });
+
+  console.log('[Conductor] scorecard.patch committed', {
+    room: parsed.room,
+    componentId: parsed.componentId,
+    version: committed.version,
+    lastAction,
+  });
+
+  return { status: 'ok', version: committed.version, lastAction };
+}
+
 async function executeTask(taskName: string, params: JsonObject) {
   if (!taskName || taskName === 'auto') {
     const resolution = resolveIntent(params);
@@ -1059,13 +1278,20 @@ async function executeTask(taskName: string, params: JsonObject) {
 
   if (taskName.startsWith('scorecard.')) {
     const parsed = ScorecardTaskArgs.parse(params);
-    const useFast = taskName !== 'scorecard.fact_check';
+    const isFactCheckTask =
+      taskName === 'scorecard.fact_check' || taskName === 'scorecard.verify' || taskName === 'scorecard.refute';
+    const useFast = !isFactCheckTask && taskName !== 'scorecard.seed';
 
     return withScorecardLock(`${parsed.room}:${parsed.componentId}`, async () => {
+      if (taskName === 'scorecard.patch') {
+        const patchResult = await runScorecardPatchTask(parsed, params);
+        return { status: 'completed', output: patchResult };
+      }
+
       if (taskName === 'scorecard.seed') {
         return { status: 'completed', output: await upsertScorecardMeta(parsed) };
       }
-      if (taskName === 'scorecard.fact_check') {
+      if (isFactCheckTask) {
         await primeFactCheckStatus(parsed);
       }
       if (
@@ -1087,26 +1313,40 @@ async function executeTask(taskName: string, params: JsonObject) {
         taskName,
         room: parsed.room,
         componentId: parsed.componentId,
-        intent: parsed.intent ?? taskName,
+        intent: isFactCheckTask ? 'scorecard.fact_check' : parsed.intent ?? taskName,
         useFast,
       });
+
+      const factCheckDirective =
+        taskName === 'scorecard.verify'
+          ? 'Verify the claim(s) and add evidence links. If unsupported or false, mark REFUTED with concise explanation.'
+          : taskName === 'scorecard.refute'
+            ? 'Try to refute the claim(s) with evidence links. If actually accurate, mark VERIFIED.'
+            : null;
+
+      const stewardPrompt =
+        factCheckDirective && typeof parsed.prompt === 'string' && parsed.prompt.trim().length > 0
+          ? `${factCheckDirective}\n\nUser request: ${parsed.prompt}`
+          : factCheckDirective && typeof parsed.summary === 'string' && parsed.summary.trim().length > 0
+            ? `${factCheckDirective}\n\nUser request: ${parsed.summary}`
+            : factCheckDirective ?? parsed.prompt;
 
       const output = useFast
         ? await runDebateScorecardStewardFast({
             room: parsed.room,
             componentId: parsed.componentId,
-            intent: parsed.intent ?? taskName,
+            intent: isFactCheckTask ? 'scorecard.fact_check' : parsed.intent ?? taskName,
             summary: parsed.summary,
-            prompt: parsed.prompt,
+            prompt: stewardPrompt,
             topic: parsed.topic,
           })
         : await runDebateScorecardSteward({
             room: parsed.room,
             componentId: parsed.componentId,
             windowMs: parsed.windowMs,
-            intent: parsed.intent ?? taskName,
+            intent: isFactCheckTask ? 'scorecard.fact_check' : parsed.intent ?? taskName,
             summary: parsed.summary,
-            prompt: parsed.prompt,
+            prompt: stewardPrompt,
             topic: parsed.topic,
           });
 

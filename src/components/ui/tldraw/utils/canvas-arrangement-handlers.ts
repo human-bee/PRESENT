@@ -1,16 +1,71 @@
 import type { Editor } from '@tldraw/tldraw';
+import type { Room, Participant } from 'livekit-client';
 import type { CanvasEventMap } from './types';
 import { getSelectedCustomShapes } from './canvas-selection-shared';
 import { createLogger } from '@/lib/utils';
 
 interface ArrangementHandlersDeps {
   editor: Editor;
+  room?: Room;
 }
 
-export function createCanvasArrangementHandlers({ editor }: ArrangementHandlersDeps): CanvasEventMap {
+export function createCanvasArrangementHandlers({ editor, room }: ArrangementHandlersDeps): CanvasEventMap {
   const logger = createLogger('CanvasArrangementHandlers');
   const lastArrangeRef = new Map<string, { ts: number; signature: string }>();
   const activePresetRef = { preset: '', detail: null as Record<string, any> | null };
+
+  const isAgentParticipant = (participant: Participant | undefined) => {
+    if (!participant) return false;
+    const flagged = Boolean((participant as any)?.isAgent || (participant as any)?.permissions?.agent);
+    if (flagged) return true;
+    const identity = String(participant.identity || participant.name || '').toLowerCase();
+    if (!identity) return false;
+    if (identity.startsWith('agent-')) return true;
+    if (identity.includes('voice-agent')) return true;
+    return identity.includes('agent');
+  };
+
+  const isLayoutHost = () => {
+    if (!room) return true;
+    const local = room.localParticipant;
+    if (!local || isAgentParticipant(local)) return false;
+    const localId = local.identity || (local as any).sid || '';
+    if (!localId) return false;
+
+    const ids: string[] = [localId];
+    room.remoteParticipants?.forEach((p) => {
+      if (!p || isAgentParticipant(p)) return;
+      const id = p.identity || (p as any).sid || '';
+      if (id) ids.push(id);
+    });
+    ids.sort();
+    return ids[0] === localId;
+  };
+
+  const resolveUnionBounds = (targets: any[]) => {
+    let minX = Number.POSITIVE_INFINITY;
+    let minY = Number.POSITIVE_INFINITY;
+    let maxX = Number.NEGATIVE_INFINITY;
+    let maxY = Number.NEGATIVE_INFINITY;
+    for (const shape of targets) {
+      try {
+        const bounds = editor.getShapePageBounds(shape.id as any);
+        if (!bounds) continue;
+        minX = Math.min(minX, bounds.x);
+        minY = Math.min(minY, bounds.y);
+        maxX = Math.max(maxX, bounds.x + bounds.w);
+        maxY = Math.max(maxY, bounds.y + bounds.h);
+      } catch {
+        // ignore shape bounds failures
+      }
+    }
+    if (!Number.isFinite(minX) || !Number.isFinite(minY) || !Number.isFinite(maxX) || !Number.isFinite(maxY)) {
+      return editor.getViewportPageBounds();
+    }
+    const midX = (minX + maxX) / 2;
+    const midY = (minY + maxY) / 2;
+    return { minX, minY, maxX, maxY, midX, midY };
+  };
 
   const shouldSkip = (key: string, signature: string, detail: Record<string, any>) => {
     if (detail?.force) {
@@ -93,6 +148,7 @@ export function createCanvasArrangementHandlers({ editor }: ArrangementHandlersD
   const handleArrangeGrid: EventListener = (event) => {
     try {
       const detail = (event as CustomEvent).detail || {};
+      if (!isLayoutHost()) return;
       const spacing = typeof detail.spacing === 'number' ? detail.spacing : 24;
       const targets = resolveTargets(detail);
 
@@ -106,11 +162,11 @@ export function createCanvasArrangementHandlers({ editor }: ArrangementHandlersD
       const sizes = targets.map((shape) => ({ w: shape.props?.w ?? 300, h: shape.props?.h ?? 200 }));
       const maxW = Math.max(...sizes.map((s) => s.w));
       const maxH = Math.max(...sizes.map((s) => s.h));
-      const viewport = editor.getViewportPageBounds();
+      const anchor = resolveUnionBounds(targets);
       const totalW = cols * maxW + (cols - 1) * spacing;
       const totalH = rows * maxH + (rows - 1) * spacing;
-      const left = viewport ? viewport.midX - totalW / 2 : 0;
-      const top = viewport ? viewport.midY - totalH / 2 : 0;
+      const left = anchor ? anchor.midX - totalW / 2 : 0;
+      const top = anchor ? anchor.midY - totalH / 2 : 0;
 
       const updates: any[] = [];
       for (let i = 0; i < targets.length; i++) {
@@ -130,6 +186,7 @@ export function createCanvasArrangementHandlers({ editor }: ArrangementHandlersD
   const handleArrangeSidebar: EventListener = (event) => {
     try {
       const detail = (event as CustomEvent).detail || {};
+      if (!isLayoutHost()) return;
       const spacing = typeof detail.spacing === 'number' ? detail.spacing : 16;
       const padding = typeof detail.padding === 'number' ? detail.padding : 24;
       const side = detail.side === 'left' ? 'left' : 'right';
@@ -139,11 +196,11 @@ export function createCanvasArrangementHandlers({ editor }: ArrangementHandlersD
 
       const sizes = targets.map((shape) => ({ w: shape.props?.w ?? 300, h: shape.props?.h ?? 200 }));
       const maxW = Math.max(...sizes.map((s) => s.w));
-      const viewport = editor.getViewportPageBounds();
-      const minX = viewport ? viewport.minX : 0;
-      const maxX = viewport ? viewport.maxX : maxW + padding;
+      const anchor = resolveUnionBounds(targets);
+      const minX = anchor ? anchor.minX : 0;
+      const maxX = anchor ? anchor.maxX : maxW + padding;
       const startX = side === 'left' ? minX + padding : maxX - maxW - padding;
-      let y = viewport ? viewport.minY + padding : padding;
+      let y = anchor ? anchor.minY + padding : padding;
 
       const updates: any[] = [];
       for (let i = 0; i < targets.length; i++) {
@@ -164,6 +221,7 @@ export function createCanvasArrangementHandlers({ editor }: ArrangementHandlersD
   const handleArrangeSpeaker: EventListener = (event) => {
     try {
       const detail = (event as CustomEvent).detail || {};
+      if (!isLayoutHost()) return;
       const spacing = typeof detail.spacing === 'number' ? detail.spacing : 16;
       const padding = typeof detail.padding === 'number' ? detail.padding : 24;
       const side = detail.side === 'left' ? 'left' : 'right';
@@ -203,16 +261,16 @@ export function createCanvasArrangementHandlers({ editor }: ArrangementHandlersD
       ].join('|');
       if (shouldSkip('arrangeSpeaker', signature, detail)) return;
 
-      const viewport = editor.getViewportPageBounds();
-      if (!viewport) return;
+      const anchor = resolveUnionBounds(targets);
+      if (!anchor) return;
 
       const updates: any[] = [];
 
       if (others.length > 0) {
         const sizes = others.map((shape) => ({ w: shape.props?.w ?? 300, h: shape.props?.h ?? 200 }));
         const maxW = Math.max(...sizes.map((s) => s.w));
-        const startX = side === 'left' ? viewport.minX + padding : viewport.maxX - maxW - padding;
-        let y = viewport.minY + padding;
+        const startX = side === 'left' ? anchor.minX + padding : anchor.maxX - maxW - padding;
+        let y = anchor.minY + padding;
         for (const shape of others) {
           const height = shape.props?.h ?? 200;
           updates.push({ id: shape.id, type: shape.type as any, x: startX, y });
@@ -222,14 +280,14 @@ export function createCanvasArrangementHandlers({ editor }: ArrangementHandlersD
 
       const speakerWidth = speaker.props?.w ?? 320;
       const speakerHeight = speaker.props?.h ?? 240;
-      let speakerX = viewport.midX - speakerWidth / 2;
+      let speakerX = anchor.midX - speakerWidth / 2;
       if (others.length > 0) {
         const sidebarWidth = Math.max(...others.map((shape) => shape.props?.w ?? 300));
-        const availableMinX = side === 'left' ? viewport.minX + sidebarWidth + padding * 2 : viewport.minX + padding;
-        const availableMaxX = side === 'left' ? viewport.maxX - padding : viewport.maxX - sidebarWidth - padding * 2;
+        const availableMinX = side === 'left' ? anchor.minX + sidebarWidth + padding * 2 : anchor.minX + padding;
+        const availableMaxX = side === 'left' ? anchor.maxX - padding : anchor.maxX - sidebarWidth - padding * 2;
         speakerX = Math.min(Math.max(speakerX, availableMinX), availableMaxX - speakerWidth);
       }
-      const speakerY = viewport.midY - speakerHeight / 2;
+      const speakerY = anchor.midY - speakerHeight / 2;
       updates.push({ id: speaker.id, type: speaker.type as any, x: speakerX, y: speakerY });
 
       if (updates.length) {

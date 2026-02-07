@@ -1,7 +1,6 @@
-import { getCerebrasClient, getModelForSteward } from '../fast-steward-config';
+import { getCerebrasClient, getModelForSteward, isFastStewardReady } from '../fast-steward-config';
 
 const CEREBRAS_MODEL = getModelForSteward('YOUTUBE_STEWARD_FAST_MODEL');
-const client = getCerebrasClient();
 
 const YOUTUBE_STEWARD_INSTRUCTIONS = `
 You are a fast YouTube assistant that maps user requests to YouTube MCP tool calls.
@@ -59,6 +58,16 @@ type YouTubeAction = {
 export async function runYouTubeSteward(params: { instruction: string; context?: any }): Promise<YouTubeAction> {
   const { instruction, context } = params;
 
+  // The FAST YouTube steward uses Cerebras; if it's not configured we return a best-effort heuristic
+  // so the rest of the system can keep running.
+  if (!isFastStewardReady()) {
+    return {
+      kind: 'search',
+      reason: 'FAST YouTube steward unavailable (missing CEREBRAS_API_KEY)',
+      mcpTool: { name: 'searchVideos', args: { query: instruction, maxResults: 5 } },
+    };
+  }
+
   const contextInfo = context?.currentVideo
     ? `Current video: ${context.currentVideo.title} (${context.currentVideo.videoId})`
     : '';
@@ -72,6 +81,7 @@ export async function runYouTubeSteward(params: { instruction: string; context?:
   ];
 
   try {
+    const client = getCerebrasClient();
     const response = await client.chat.completions.create({
       model: CEREBRAS_MODEL,
       messages,

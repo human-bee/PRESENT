@@ -706,6 +706,44 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
 
         if (tool === 'youtube_search') {
           const query = String(params?.query || '').trim();
+          if (!query) {
+            const result = { status: 'IGNORED', message: 'No YouTube query provided' };
+            queue.markComplete(call.id, result.message);
+            emitDone(call, result);
+            return result;
+          }
+
+          // Prefer first-party API (prod reliable). Fall back to MCP if configured.
+          try {
+            const url = new URL('/api/youtube/search', window.location.origin);
+            url.searchParams.set('q', query);
+            url.searchParams.set('maxResults', '3');
+            const res = await fetch(url.toString(), { method: 'GET' });
+            if (res.ok) {
+              const json = await res.json().catch(() => null);
+              const first = Array.isArray(json?.items) ? json.items[0] : null;
+              const videoId = first?.id ? String(first.id) : null;
+              if (videoId) {
+                const messageId = `ui-youtube-${Date.now()}`;
+                window.dispatchEvent(
+                  new CustomEvent('custom:showComponent', {
+                    detail: {
+                      messageId,
+                      component: { type: 'YoutubeEmbed', props: { videoId } },
+                      contextKey,
+                    },
+                  }),
+                );
+                const result = { status: 'SUCCESS', message: 'Rendered YouTube video', videoId };
+                queue.markComplete(call.id, result.message);
+                emitDone(call, result);
+                return result;
+              }
+            }
+          } catch (error) {
+            console.warn('[ToolDispatcher] youtube_search API failed', error);
+          }
+
           try {
             const mcpResult = await (window as any).callMcpTool?.('searchVideos', { query });
             const first = mcpResult?.videos?.[0] || mcpResult?.items?.[0] || null;

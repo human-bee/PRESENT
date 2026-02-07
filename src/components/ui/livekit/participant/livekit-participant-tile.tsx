@@ -172,16 +172,33 @@ export const LivekitParticipantTile = React.memo(function LivekitParticipantTile
     };
 
     // Prefer local self-view by default.
-    if (localParticipant) {
+    if (localParticipant && !isAgentParticipant(localParticipant)) {
       targetIdentity = localParticipant.identity;
       autoSelected = true;
     } else {
       // Otherwise, prefer a non-agent remote participant.
       const firstHumanRemote = participants.find((p: any) => !p.isLocal && !isAgentParticipant(p));
       const firstRemote = firstHumanRemote ?? participants.find((p) => !p.isLocal);
-      if (firstRemote) {
+      if (firstHumanRemote) {
+        targetIdentity = firstHumanRemote.identity;
+        autoSelected = true;
+      } else if (firstRemote && !isAgentParticipant(firstRemote)) {
         targetIdentity = firstRemote.identity;
         autoSelected = true;
+      } else {
+        // Avoid briefly snapping to an agent tile before the local participant is ready.
+        return (
+          <div
+            className="relative overflow-hidden rounded-lg border border-slate-800 bg-slate-950 text-white"
+            style={{ width, height, borderRadius }}
+          >
+            <div className="absolute inset-0 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900" />
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 p-4">
+              <Loader2 className="h-7 w-7 animate-spin text-white/70" />
+              <div className="text-xs text-white/70">Waiting for participants…</div>
+            </div>
+          </div>
+        );
       }
     }
     if (!targetIdentity && localParticipant) {

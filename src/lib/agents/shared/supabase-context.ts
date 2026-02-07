@@ -1,4 +1,4 @@
-import { createClient } from '@supabase/supabase-js';
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { config } from 'dotenv';
 import { join } from 'path';
 import { RoomServiceClient, DataPacket_Kind } from 'livekit-server-sdk';
@@ -15,15 +15,7 @@ try {
   config({ path: join(process.cwd(), '.env.local') });
 } catch { }
 
-const url = process.env.NEXT_PUBLIC_SUPABASE_URL as string;
-const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY as string;
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY;
-
-if (!url || !anonKey) {
-  throw new Error('Supabase credentials missing: set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY');
-}
-
-const supabaseKey = serviceRoleKey || anonKey;
 
 const hasServiceRoleKey = Boolean(serviceRoleKey);
 const bypassFlag = process.env.STEWARDS_SUPABASE_BYPASS;
@@ -39,9 +31,25 @@ if (!serviceRoleKey && process.env.NODE_ENV === 'development' && !shouldBypassSu
   } catch { }
 }
 
-const supabase = createClient(url, supabaseKey, {
-  auth: { persistSession: false },
-});
+let cachedSupabase: SupabaseClient | null = null;
+
+const getSupabase = () => {
+  if (cachedSupabase) return cachedSupabase;
+
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  if (!url || !anonKey) {
+    throw new Error(
+      'Supabase credentials missing: set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY',
+    );
+  }
+
+  cachedSupabase = createClient(url, serviceRoleKey || anonKey, {
+    auth: { persistSession: false },
+  });
+  return cachedSupabase;
+};
 
 let bypassLogged = false;
 const logBypass = (scope: string) => {
@@ -137,7 +145,13 @@ const promptCacheStore: Map<string, PromptCacheRecord> =
   new Map<string, PromptCacheRecord>();
 
 type TranscriptRecord = {
-  transcript: Array<{ participantId: string; text: string; timestamp: number }>;
+  transcript: Array<{
+    participantId: string;
+    participantName?: string | null;
+    text: string;
+    timestamp: number;
+    manual?: boolean;
+  }>;
   cachedAt: number;
 };
 
@@ -483,7 +497,7 @@ const setTranscriptCache = (room: string, transcript: TranscriptRecord['transcri
 
 export const appendTranscriptCache = (
   room: string,
-  entry: { participantId: string; text: string; timestamp: number },
+  entry: TranscriptRecord['transcript'][number],
 ) => {
   const existing = transcriptStore.get(room);
   if (existing) {
@@ -502,7 +516,7 @@ export async function getFlowchartDoc(room: string, docId: string) {
   }
   try {
     const lookup = deriveCanvasLookup(room);
-    const canvasQuery = supabase.from('canvases').select('document, id');
+    const canvasQuery = getSupabase().from('canvases').select('document, id');
     if (lookup.canvasId && isUuid(lookup.canvasId)) {
       canvasQuery.eq('id', lookup.canvasId);
     } else {
@@ -553,7 +567,7 @@ export async function commitFlowchartDoc(
     logBypass('commitFlowchartDoc');
   } else {
     try {
-      const { data: canvas, error: fetchErr } = await supabase
+      const { data: canvas, error: fetchErr } = await getSupabase()
         .from('canvases')
         .select('id, document')
         .ilike('name', `%${room}%`)
@@ -575,7 +589,7 @@ export async function commitFlowchartDoc(
         updated_at: Date.now(),
       };
 
-      const { error: updateErr } = await supabase
+      const { error: updateErr } = await getSupabase()
         .from('canvases')
         .update({ document })
         .eq('id', canvas.id);
@@ -602,7 +616,7 @@ export async function getDebateScorecard(room: string, componentId: string): Pro
 
   try {
     const lookup = deriveCanvasLookup(room);
-    const canvasQuery = supabase.from('canvases').select('document, id');
+    const canvasQuery = getSupabase().from('canvases').select('document, id');
     if (lookup.canvasId && isUuid(lookup.canvasId)) {
       canvasQuery.eq('id', lookup.canvasId);
     } else {
@@ -653,7 +667,7 @@ export async function commitDebateScorecard(
   } else {
     try {
       const lookup = deriveCanvasLookup(room);
-      const canvasQuery = supabase.from('canvases').select('id, document');
+      const canvasQuery = getSupabase().from('canvases').select('id, document');
       if (lookup.canvasId && isUuid(lookup.canvasId)) {
         canvasQuery.eq('id', lookup.canvasId);
       } else {
@@ -680,7 +694,7 @@ export async function commitDebateScorecard(
         updated_at: Date.now(),
       };
 
-      const { error: updateErr } = await supabase
+      const { error: updateErr } = await getSupabase()
         .from('canvases')
         .update({ document })
         .eq('id', canvas.id);
@@ -715,7 +729,7 @@ export async function getCanvasShapeSummary(room: string) {
 
   try {
     const lookup = deriveCanvasLookup(room);
-    const canvasQuery = supabase.from('canvases').select('document, id');
+    const canvasQuery = getSupabase().from('canvases').select('document, id');
     if (lookup.canvasId && isUuid(lookup.canvasId)) {
       canvasQuery.eq('id', lookup.canvasId);
     } else {
@@ -793,7 +807,7 @@ export async function listCanvasComponents(room: string): Promise<CanvasComponen
 
   try {
     const lookup = deriveCanvasLookup(room);
-    const canvasQuery = supabase.from('canvases').select('document, id');
+    const canvasQuery = getSupabase().from('canvases').select('document, id');
     if (lookup.canvasId && isUuid(lookup.canvasId)) {
       canvasQuery.eq('id', lookup.canvasId);
     } else {
@@ -1048,19 +1062,30 @@ export async function getTranscriptWindow(room: string, windowMs: number) {
   }
 
   try {
-    const { data, error } = await supabase
-      .from('canvas_sessions')
-      .select('transcript')
+    const cutoff = Date.now() - Math.max(1_000, windowMs);
+    const { data, error } = await getSupabase()
+      .from('canvas_session_transcripts')
+      .select('participant_id, participant_name, text, ts, manual')
       .eq('room_name', room)
-      .order('updated_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
+      .gte('ts', cutoff)
+      .order('ts', { ascending: true })
+      .limit(240);
 
-    if (error) {
-      throw new Error(error.message);
-    }
+    if (error) throw new Error(error.message);
 
-    const transcript = Array.isArray(data?.transcript) ? data.transcript : [];
+    const transcript = (data || [])
+      .map((row: any) => ({
+        participantId: String(row?.participant_id ?? 'unknown'),
+        participantName:
+          typeof row?.participant_name === 'string' && row.participant_name.trim().length > 0
+            ? row.participant_name.trim()
+            : undefined,
+        text: String(row?.text ?? ''),
+        timestamp: typeof row?.ts === 'number' ? row.ts : Date.now(),
+        manual: typeof row?.manual === 'boolean' ? row.manual : undefined,
+      }))
+      .filter((line) => typeof line.text === 'string' && line.text.trim().length > 0);
+
     setTranscriptCache(room, transcript);
     const now = Date.now();
     const filtered = transcript.filter((l: any) => now - (l.timestamp || 0) <= windowMs);
@@ -1101,7 +1126,7 @@ export async function getContextDocuments(room: string): Promise<ContextDocument
 
   try {
     // Try to find session by room name
-    const { data, error } = await supabase
+    const { data, error } = await getSupabase()
       .from('sessions')
       .select('context_documents')
       .eq('room_name', room)

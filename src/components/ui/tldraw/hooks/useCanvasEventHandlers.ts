@@ -49,8 +49,8 @@ export function useCanvasEventHandlers(
     const handlerMaps = [
       createCanvasCreationHandlers({ editor, bus }),
       createCanvasSelectionHandlers({ editor }),
-      createCanvasPinHandlers({ editor }),
-      createCanvasArrangementHandlers({ editor }),
+      createCanvasPinHandlers({ editor, roomName: room?.name }),
+      createCanvasArrangementHandlers({ editor, room }),
       createCanvasListShapesHandlers({ editor }),
       createCanvasNotesHandlers({ editor }),
       createUiStateHandlers({ editor, containerRef, bus }),

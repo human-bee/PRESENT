@@ -105,34 +105,15 @@ export function YoutubeSearchEnhanced({
     view: 'search',
   });
 
-  // MCP Tool execution via custom
-  const executeMCPTool = useCallback(
-    async (tool: string, params: any) => {
-      try {
-        // Send to custom as a formatted message that will trigger MCP tool
-        const message = `Execute YouTube MCP tool: ${tool} with parameters: ${JSON.stringify(params, null, 2)}`;
-
-        // Dispatch custom event that custom will handle
-        window.dispatchEvent(
-          new CustomEvent('custom:executeMCPTool', {
-            detail: {
-              tool: `youtube_${tool}`,
-              params,
-              componentId,
-            },
-          }),
-        );
-
-        // For now, we'll simulate the response structure
-        // In production, this would come from the MCP server
-        return { success: true, data: null };
-      } catch (error) {
-        console.error(`Error executing MCP tool ${tool}:`, error);
-        return { success: false, error };
-      }
-    },
-    [componentId],
-  );
+  const fetchJson = useCallback(async (url: string) => {
+    const res = await fetch(url, { method: 'GET' });
+    const json = await res.json().catch(() => null);
+    if (!res.ok) {
+      const message = typeof json?.error === 'string' ? json.error : `HTTP ${res.status}`;
+      throw new Error(message);
+    }
+    return json as any;
+  }, []);
 
   // Debounced search function
   const performSearch = useCallback(
@@ -142,32 +123,29 @@ export function YoutubeSearchEnhanced({
       setState((prev) => (prev ? { ...prev, loading: true, error: null } : prev));
 
       try {
-        // Build search parameters based on filters
-        const searchParams = {
-          query,
-          maxResults,
-          order: filters.sortBy,
-          publishedAfter: getPublishedAfterDate(filters.uploadDate),
-          videoDuration: filters.duration !== 'any' ? filters.duration : undefined,
-        };
+        const url = new URL('/api/youtube/search', window.location.origin);
+        url.searchParams.set('q', query);
+        url.searchParams.set('maxResults', String(maxResults));
+        url.searchParams.set('order', filters.sortBy);
+        const publishedAfter = getPublishedAfterDate(filters.uploadDate);
+        if (publishedAfter) url.searchParams.set('publishedAfter', publishedAfter);
+        if (filters.duration !== 'any') url.searchParams.set('videoDuration', filters.duration);
 
-        // Execute search via MCP
-        const result = await executeMCPTool('searchVideos', searchParams);
+        const json = await fetchJson(url.toString());
+        const items: VideoResult[] = Array.isArray(json?.items) ? json.items : [];
+        const filtered = filters.officialOnly
+          ? items.filter((item) => /official|vevo/i.test(item.channelTitle))
+          : items;
 
-        if (result.success) {
-          // Process results to identify official channels
-          const processedResults = await processSearchResults(result.data || []);
-
-          setState((prev) =>
-            prev
-              ? {
-                ...prev,
-                searchResults: processedResults,
-                loading: false,
-              }
-              : prev,
-          );
-        }
+        setState((prev) =>
+          prev
+            ? {
+              ...prev,
+              searchResults: filtered,
+              loading: false,
+            }
+            : prev,
+        );
       } catch (error) {
         setState((prev) =>
           prev
@@ -180,7 +158,7 @@ export function YoutubeSearchEnhanced({
         );
       }
     }, 500),
-    [state?.view, maxResults, executeMCPTool, setState],
+    [state?.view, maxResults, fetchJson, setState],
   );
 
   // Load trending videos
@@ -188,25 +166,17 @@ export function YoutubeSearchEnhanced({
     if (!showTrending) return;
 
     try {
-      const result = await executeMCPTool('getTrendingVideos', {
-        maxResults: 10,
-        regionCode: 'US', // Can be made configurable
-      });
-
-      if (result.success && result.data) {
-        setState((prev) =>
-          prev
-            ? {
-              ...prev,
-              trendingVideos: result.data,
-            }
-            : prev,
-        );
-      }
+      const url = new URL('/api/youtube/search', window.location.origin);
+      url.searchParams.set('trending', '1');
+      url.searchParams.set('maxResults', '10');
+      url.searchParams.set('regionCode', 'US');
+      const json = await fetchJson(url.toString());
+      const items: VideoResult[] = Array.isArray(json?.items) ? json.items : [];
+      setState((prev) => (prev ? { ...prev, trendingVideos: items } : prev));
     } catch (error) {
       console.error('Failed to load trending videos:', error);
     }
-  }, [showTrending, executeMCPTool, setState]);
+  }, [showTrending, fetchJson, setState]);
 
   // Load transcript for selected video
   const loadTranscript = useCallback(
@@ -214,80 +184,25 @@ export function YoutubeSearchEnhanced({
       if (!showTranscripts) return;
 
       try {
-        const result = await executeMCPTool('getTranscripts', {
-          videoIds: [videoId],
-          lang: 'en', // Can be made configurable
-        });
-
-        if (result.success && result.data?.[0]) {
-          setState((prev) =>
-            prev
-              ? {
-                ...prev,
-                transcript: result.data[0].segments,
-              }
-              : prev,
-          );
-        }
+        const url = new URL('/api/youtube/transcript', window.location.origin);
+        url.searchParams.set('videoId', videoId);
+        url.searchParams.set('lang', 'en');
+        const json = await fetchJson(url.toString());
+        const segments: TranscriptSegment[] | null = json?.transcript?.segments ?? null;
+        setState((prev) =>
+          prev
+            ? {
+              ...prev,
+              transcript: Array.isArray(segments) ? segments : null,
+            }
+            : prev,
+        );
       } catch (error) {
         console.error('Failed to load transcript:', error);
       }
     },
-    [showTranscripts, executeMCPTool, setState],
+    [showTranscripts, fetchJson, setState],
   );
-
-  // Process search results to identify official/verified channels
-  const processSearchResults = async (results: any[]): Promise<VideoResult[]> => {
-    // Get channel details to verify official status
-    const channelIds = [...new Set(results.map((r) => r.snippet.channelId))];
-
-    try {
-      const channelResult = await executeMCPTool('getChannelStatistics', {
-        channelIds,
-      });
-
-      const channelData = channelResult.data || {};
-
-      return results.map((item) => {
-        const channel = channelData[item.snippet.channelId] || {};
-        const isVerified = channel.subscriberCount > 100000; // Simple heuristic
-        const isOfficial =
-          item.snippet.channelTitle.includes('Official') ||
-          item.snippet.channelTitle.includes('VEVO');
-
-        return {
-          id: item.id.videoId,
-          title: item.snippet.title,
-          description: item.snippet.description,
-          channelTitle: item.snippet.channelTitle,
-          channelId: item.snippet.channelId,
-          publishedAt: item.snippet.publishedAt,
-          duration: item.contentDetails?.duration || '',
-          viewCount: item.statistics?.viewCount || '0',
-          likeCount: item.statistics?.likeCount || '0',
-          commentCount: item.statistics?.commentCount || '0',
-          thumbnail: item.snippet.thumbnails.high,
-          isVerified,
-          isOfficial,
-        };
-      });
-    } catch (error) {
-      // Fallback without channel verification
-      return results.map((item) => ({
-        id: item.id.videoId,
-        title: item.snippet.title,
-        description: item.snippet.description,
-        channelTitle: item.snippet.channelTitle,
-        channelId: item.snippet.channelId,
-        publishedAt: item.snippet.publishedAt,
-        duration: item.contentDetails?.duration || '',
-        viewCount: item.statistics?.viewCount || '0',
-        likeCount: item.statistics?.likeCount || '0',
-        commentCount: item.statistics?.commentCount || '0',
-        thumbnail: item.snippet.thumbnails.high,
-      }));
-    }
-  };
 
   // Get published after date based on filter
   const getPublishedAfterDate = (filter: string): string | undefined => {
@@ -383,7 +298,7 @@ export function YoutubeSearchEnhanced({
   if (!state) return null;
 
   return (
-    <div className="w-full max-w-7xl mx-auto p-4">
+    <div className="w-full max-w-7xl mx-auto p-4" data-component-id={componentId}>
       {title && <h2 className="text-2xl font-bold mb-6">{title}</h2>}
 
       {/* Search Interface */}
