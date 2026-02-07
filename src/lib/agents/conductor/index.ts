@@ -1,4 +1,4 @@
-import { Agent, run } from '@openai/agents';
+import { Agent } from '@openai/agents';
 import { randomUUID } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 import { join } from 'node:path';
@@ -10,7 +10,7 @@ import {
   broadcastToolCall,
   type CanvasAgentPromptPayload,
 } from '@/lib/agents/shared/supabase-context';
-import { activeFlowchartSteward } from '../subagents/flowchart-steward-registry';
+import { runActiveFlowchartSteward } from '../subagents/flowchart-steward-registry';
 import { runCanvasSteward } from '../subagents/canvas-steward';
 import { AgentTaskQueue } from '@/lib/agents/shared/queue';
 import { resolveIntent, getObject, getString } from './intent-resolver';
@@ -47,6 +47,10 @@ import { formatFairyContextParts } from '@/lib/fairy-context/format';
 import { runSummaryStewardFast } from '@/lib/agents/subagents/summary-steward-fast';
 import { runCrowdPulseStewardFast } from '@/lib/agents/subagents/crowd-pulse-steward-fast';
 import { getBooleanFlag } from '@/lib/feature-flags';
+import { BYOK_REQUIRED } from '@/lib/agents/shared/byok-flags';
+import { resolveBillingUserIdForRoom } from '@/lib/agents/shared/canvas-billing';
+import { getDecryptedUserModelKey } from '@/lib/agents/shared/user-model-keys';
+import { isFastStewardReady } from '@/lib/agents/fast-steward-config';
 
 dotenvConfig({ path: join(process.cwd(), '.env.local') });
 
@@ -419,6 +423,7 @@ const dispatchSummaryDocument = async (
   decision: Pick<FairyRouteDecision, 'summary' | 'message'>,
   contextProfile: FairyContextProfile,
   contextBundle?: { parts?: unknown[] } | undefined,
+  billingUserId?: string,
 ) => {
   const bundleText =
     contextBundle && Array.isArray(contextBundle.parts)
@@ -430,6 +435,7 @@ const dispatchSummaryDocument = async (
     instruction,
     contextBundle: bundleText,
     contextProfile,
+    ...(billingUserId ? { billingUserId } : {}),
   });
   const formatted = formatSummaryMarkdown(result);
   const documentId = `${intent.id}-summary`;
@@ -551,6 +557,8 @@ async function ensureWidgetComponent(intent: FairyIntent, componentType: string)
 }
 
 async function handleFairyIntent(rawParams: JsonObject) {
+  const billingUserId =
+    typeof (rawParams as any)?.billingUserId === 'string' ? String((rawParams as any).billingUserId).trim() : '';
   const intent = buildFairyIntent(rawParams);
   if (shouldDedupeFairyIntent(intent)) {
     return { status: 'deduped', intentId: intent.id, room: intent.room };
@@ -594,7 +602,7 @@ async function handleFairyIntent(rawParams: JsonObject) {
     }
 
     if (decisionLike.kind === 'summary') {
-      return dispatchSummaryDocument(intent, { summary, message }, actionProfile, contextBundle);
+      return dispatchSummaryDocument(intent, { summary, message }, actionProfile, contextBundle, billingUserId || undefined);
     }
 
     if (decisionLike.kind === 'crowd_pulse') {
@@ -608,6 +616,7 @@ async function handleFairyIntent(rawParams: JsonObject) {
         instruction: message,
         contextBundle: bundleText,
         contextProfile: actionProfile,
+        ...(billingUserId ? { billingUserId } : {}),
       });
       const updatePatch = {
         ...patch,
@@ -632,6 +641,7 @@ async function handleFairyIntent(rawParams: JsonObject) {
         bounds: intent.bounds,
         selectionIds: intent.selectionIds,
         metadata: actionMetadata,
+        ...(billingUserId ? { billingUserId } : {}),
       });
     }
 
@@ -643,6 +653,7 @@ async function handleFairyIntent(rawParams: JsonObject) {
         prompt: message,
         summary,
         intent: 'scorecard.run',
+        ...(billingUserId ? { billingUserId } : {}),
       });
     }
 
@@ -902,6 +913,9 @@ async function maybeEnqueueAutoFactChecks(params: ScorecardTaskInput, taskName: 
 
   scorecardAutoFactCheckLedger.set(throttleKey, now);
 
+  const billingUserId =
+    typeof (params as any)?.billingUserId === 'string' ? String((params as any).billingUserId).trim() : '';
+
   const hint = params.summary || params.prompt || params.intent || undefined;
   try {
     await primeFactCheckStatus({
@@ -925,6 +939,7 @@ async function maybeEnqueueAutoFactChecks(params: ScorecardTaskInput, taskName: 
       componentId: params.componentId,
       claimIds: candidates.map((c) => c.id),
       claimHint: typeof hint === 'string' && hint.trim() ? hint.trim().slice(0, 240) : undefined,
+      ...(billingUserId ? { billingUserId } : {}),
     } as unknown as JsonObject,
     dedupeKey: `scorecard.fact_check:auto:${params.componentId}:${candidates.map((c) => c.id).join(',')}`,
     resourceKeys: [`room:${params.room}`, `scorecard:${params.componentId}`],
@@ -1246,6 +1261,45 @@ async function runScorecardPatchTask(parsed: ScorecardTaskInput, rawParams: Json
   });
 
   return { status: 'ok', version: committed.version, lastAction };
+
+}
+
+type BillingCacheEntry = { userId: string; exp: number };
+const billingUserIdCache = new Map<string, BillingCacheEntry>();
+const BILLING_CACHE_TTL_MS = 60_000;
+
+async function resolveBillingUserId(room: string): Promise<string | null> {
+  const trimmed = (room || '').trim();
+  if (!trimmed) return null;
+  const cached = billingUserIdCache.get(trimmed);
+  const now = Date.now();
+  if (cached && cached.exp > now) return cached.userId;
+
+  const owner = await resolveBillingUserIdForRoom(trimmed);
+  if (owner) {
+    billingUserIdCache.set(trimmed, { userId: owner, exp: now + BILLING_CACHE_TTL_MS });
+  }
+  return owner;
+}
+
+async function ensureBillingUserId(taskName: string, params: JsonObject): Promise<JsonObject> {
+  if (!BYOK_REQUIRED) return params;
+  const existing =
+    typeof (params as any)?.billingUserId === 'string' ? String((params as any).billingUserId).trim() : '';
+  if (existing) {
+    return existing === (params as any).billingUserId ? params : { ...params, billingUserId: existing };
+  }
+
+  const room =
+    typeof (params as any)?.room === 'string' ? String((params as any).room).trim() : '';
+  if (!room) return params;
+
+  const owner = await resolveBillingUserId(room);
+  if (!owner) {
+    console.warn('[Conductor] billingUserId unresolved', { taskName, room });
+    return params;
+  }
+  return { ...params, billingUserId: owner };
 }
 
 async function executeTask(taskName: string, params: JsonObject) {
@@ -1261,26 +1315,68 @@ async function executeTask(taskName: string, params: JsonObject) {
     return executeTask('fairy.intent', { ...fallbackParams, source: 'system' });
   }
 
+  params = await ensureBillingUserId(taskName, params);
+
   if (taskName === 'conductor.dispatch') {
     const nextTask = typeof params?.task === 'string' ? params.task : 'auto';
     const payload = (params?.params as JsonObject) ?? params;
+    const billingUserId =
+      typeof (params as any)?.billingUserId === 'string' ? String((params as any).billingUserId).trim() : '';
+    const nextPayload =
+      billingUserId && payload && typeof (payload as any)?.billingUserId !== 'string'
+        ? ({ ...(payload as JsonObject), billingUserId } as JsonObject)
+        : (payload ?? {});
     console.log('[Conductor] dispatch_to_conductor routed', {
       nextTask,
       hasPayload: payload != null,
     });
-    return executeTask(nextTask, payload ?? {});
+    return executeTask(nextTask, nextPayload);
   }
 
   if (taskName.startsWith('flowchart.')) {
-    const result = await run(activeFlowchartSteward, JSON.stringify({ task: taskName, params }));
-    return result.finalOutput;
+    const room = typeof (params as any)?.room === 'string' ? String((params as any).room).trim() : '';
+    const docId = typeof (params as any)?.docId === 'string' ? String((params as any).docId).trim() : '';
+    if (!room || !docId) {
+      throw new Error('flowchart tasks require room and docId');
+    }
+    const windowMs =
+      typeof (params as any)?.windowMs === 'number' && Number.isFinite((params as any).windowMs)
+        ? Number((params as any).windowMs)
+        : undefined;
+    const modeRaw = typeof (params as any)?.mode === 'string' ? String((params as any).mode).trim() : undefined;
+    const mode = modeRaw === 'fast' || modeRaw === 'slow' || modeRaw === 'auto' ? (modeRaw as any) : undefined;
+    const billingUserId =
+      typeof (params as any)?.billingUserId === 'string' ? String((params as any).billingUserId).trim() : '';
+
+    return await runActiveFlowchartSteward({
+      room,
+      docId,
+      windowMs,
+      ...(mode ? { mode } : {}),
+      ...(billingUserId ? { billingUserId } : {}),
+    });
   }
 
   if (taskName.startsWith('scorecard.')) {
     const parsed = ScorecardTaskArgs.parse(params);
     const isFactCheckTask =
       taskName === 'scorecard.fact_check' || taskName === 'scorecard.verify' || taskName === 'scorecard.refute';
-    const useFast = !isFactCheckTask && taskName !== 'scorecard.seed';
+    const billingUserId =
+      typeof (parsed as any)?.billingUserId === 'string' ? String((parsed as any).billingUserId).trim() : '';
+
+    let useFast = !isFactCheckTask && taskName !== 'scorecard.seed';
+    if (useFast) {
+      if (BYOK_REQUIRED) {
+        if (!billingUserId) {
+          useFast = false;
+        } else {
+          const cerebrasKey = await getDecryptedUserModelKey({ userId: billingUserId, provider: 'cerebras' });
+          useFast = isFastStewardReady(cerebrasKey ?? undefined);
+        }
+      } else {
+        useFast = isFastStewardReady();
+      }
+    }
 
     return withScorecardLock(`${parsed.room}:${parsed.componentId}`, async () => {
       if (taskName === 'scorecard.patch') {
@@ -1339,6 +1435,7 @@ async function executeTask(taskName: string, params: JsonObject) {
             summary: parsed.summary,
             prompt: stewardPrompt,
             topic: parsed.topic,
+            ...(billingUserId ? { billingUserId } : {}),
           })
         : await runDebateScorecardSteward({
             room: parsed.room,
@@ -1348,6 +1445,7 @@ async function executeTask(taskName: string, params: JsonObject) {
             summary: parsed.summary,
             prompt: stewardPrompt,
             topic: parsed.topic,
+            ...(billingUserId ? { billingUserId } : {}),
           });
 
       console.log('[Conductor] scorecard steward completed', {
@@ -1429,6 +1527,11 @@ async function executeTask(taskName: string, params: JsonObject) {
       message: promptResult.payload.message,
       requestId: promptResult.payload.requestId,
     };
+    const billingUserId =
+      typeof (params as any)?.billingUserId === 'string' ? String((params as any).billingUserId).trim() : '';
+    if (billingUserId) {
+      stewardParams.billingUserId = billingUserId;
+    }
     if (promptResult.payload.metadata) {
       stewardParams.metadata = promptResult.payload.metadata;
     }

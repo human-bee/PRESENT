@@ -1,6 +1,10 @@
 import { Agent, tool, run } from '@openai/agents';
+import { aisdk } from '@openai/agents-extensions';
+import { createOpenAI } from '@ai-sdk/openai';
 import { z } from 'zod';
 import { getFlowchartDoc, commitFlowchartDoc, getTranscriptWindow } from '../shared/supabase-context';
+import { BYOK_REQUIRED } from '@/lib/agents/shared/byok-flags';
+import { getDecryptedUserModelKey } from '@/lib/agents/shared/user-model-keys';
 
 const logWithTs = <T extends Record<string, unknown>>(label: string, payload: T) => {
   try {
@@ -203,6 +207,29 @@ export const commit_flowchart = tool({
 export const FLOWCHART_STEWARD_INSTRUCTIONS =
   'You are the single writer for flowcharts. Fetch the current doc and transcript; reason holistically; output the entire doc each turn. Then commit via commit_flowchart. If you lack a rationale, send an empty string (never use null). Keep a concise status sentence.';
 
+async function resolveOpenAIKeyForFlowchart(billingUserId?: string): Promise<string> {
+  if (BYOK_REQUIRED) {
+    const userId = typeof billingUserId === 'string' ? billingUserId.trim() : '';
+    if (!userId) throw new Error('BYOK_MISSING_BILLING_USER');
+    const key = await getDecryptedUserModelKey({ userId, provider: 'openai' });
+    if (!key) throw new Error('BYOK_MISSING_KEY:openai');
+    return key;
+  }
+  const envKey = (process.env.OPENAI_API_KEY ?? '').trim();
+  if (!envKey) throw new Error('OPENAI_API_KEY missing for flowchart steward');
+  return envKey;
+}
+
+function createFlowchartStewardAgent(openaiApiKey: string) {
+  const model = createOpenAI({ apiKey: openaiApiKey })('gpt-5-mini');
+  return new Agent({
+    name: 'FlowchartSteward',
+    model: aisdk(model),
+    instructions: FLOWCHART_STEWARD_INSTRUCTIONS,
+    tools: [get_current_flowchart, get_context, commit_flowchart],
+  });
+}
+
 export const flowchartSteward = new Agent({
   name: 'FlowchartSteward',
   model: 'gpt-5-mini',
@@ -210,7 +237,7 @@ export const flowchartSteward = new Agent({
   tools: [get_current_flowchart, get_context, commit_flowchart],
 });
 
-export async function runFlowchartSteward(params: { room: string; docId: string; windowMs?: number }) {
+export async function runFlowchartSteward(params: { room: string; docId: string; windowMs?: number; billingUserId?: string }) {
   const windowMs = params.windowMs ?? 60000;
   const overallStart = Date.now();
   try {
@@ -221,7 +248,9 @@ export async function runFlowchartSteward(params: { room: string; docId: string;
     });
   } catch {}
   const prompt = `Update the flowchart for room ${params.room} doc ${params.docId} with params: ${JSON.stringify({ ...params, windowMs })}`;
-  const result = await run(flowchartSteward, prompt);
+  const apiKey = await resolveOpenAIKeyForFlowchart(params.billingUserId);
+  const agent = createFlowchartStewardAgent(apiKey);
+  const result = await run(agent, prompt);
   try {
     const preview = typeof result.finalOutput === 'string' ? result.finalOutput.slice(0, 200) : null;
     logWithTs('✅ [Steward] runFlowchartSteward.complete', {

@@ -27,6 +27,7 @@ import {
 
 import LiveCaptions, { liveCaptionsSchema } from '@/components/LiveCaptions';
 import LinearKanbanBoard, { linearKanbanSchema } from '@/components/ui/productivity/linear-kanban-board';
+import { KeysRequiredBanner, keysRequiredBannerSchema } from '@/components/ui/productivity/keys-required-banner';
 
 // ...
 
@@ -204,6 +205,13 @@ export const components: any = [
       'A comprehensive Linear project management kanban board with drag-and-drop functionality and MCP integration. Features multiple team support, customizable status columns (Backlog, Todo, In Progress, Delegate to Agent, Blocked, Review Required, Done), issue priority visualization with color coding, assignee management, project categorization, and pending update queue system. Supports optimistic UI updates with drag-and-drop issue movement between columns, clipboard export of pending changes, and hybrid sync workflow for reliable Linear API integration. Perfect for agile project management, sprint planning, issue tracking, and team collaboration workflows. Can be populated with real Linear data via MCP or used with demo data.',
     component: LinearKanbanBoard,
     propsSchema: extendedSchema(linearKanbanSchema),
+  },
+  {
+    name: 'KeysRequiredBanner',
+    description:
+      'Shows a banner explaining that model keys are required (BYOK) and links to the key settings page.',
+    component: KeysRequiredBanner,
+    propsSchema: extendedSchema(keysRequiredBannerSchema),
   },
   {
     name: 'OnboardingGuide',

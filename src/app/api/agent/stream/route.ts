@@ -3,11 +3,13 @@ import { streamText, type CoreMessage } from 'ai'
 import type { AgentStreamPayload } from '@/lib/tldraw-agent/shared/types/AgentStreamPayload'
 import { getAgentModelDefinition } from '@/lib/tldraw-agent/worker/models'
 import { closeAndParseJson } from '@/lib/tldraw-agent/worker/do/closeAndParseJson'
-import { getCanvasAgentService } from '@/lib/agents/subagents/canvas-agent-service'
+import { CanvasAgentService, getCanvasAgentService } from '@/lib/agents/subagents/canvas-agent-service'
 import { resolveCanvasModelName } from '@/lib/agents/subagents/canvas-models'
+import { BYOK_ENABLED } from '@/lib/agents/shared/byok-flags'
+import { resolveRequestUserId } from '@/lib/supabase/server/resolve-request-user'
+import { getDecryptedUserModelKey } from '@/lib/agents/shared/user-model-keys'
 
 const isDevEnv = process.env.NODE_ENV !== 'production'
-const service = getCanvasAgentService()
 const CANVAS_STEWARD_DEBUG = process.env.CANVAS_STEWARD_DEBUG === 'true'
 const debugLog = (...args: unknown[]) => {
 	if (CANVAS_STEWARD_DEBUG) {
@@ -46,6 +48,25 @@ export async function POST(req: NextRequest) {
 		explicit: requestedDefinition.name,
 		allowOverride: true,
 	})
+
+  let service = getCanvasAgentService()
+  if (BYOK_ENABLED) {
+    const userId = await resolveRequestUserId(req)
+    if (!userId) {
+      return jsonError('unauthorized', 401)
+    }
+    const [openaiKey, anthropicKey, googleKey] = await Promise.all([
+      getDecryptedUserModelKey({ userId, provider: 'openai' }),
+      getDecryptedUserModelKey({ userId, provider: 'anthropic' }),
+      getDecryptedUserModelKey({ userId, provider: 'google' }),
+    ])
+    service = new CanvasAgentService({
+      ...(openaiKey ? { OPENAI_API_KEY: openaiKey } : {}),
+      ...(anthropicKey ? { ANTHROPIC_API_KEY: anthropicKey } : {}),
+      ...(googleKey ? { GOOGLE_API_KEY: googleKey } : {}),
+    })
+  }
+
 	const { model, modelDefinition, providerOptions } = service.getModelForStreaming(desiredModel)
 	debugLog('stream.start', {
 		requestedModel: modelName,

@@ -1,4 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { BYOK_ENABLED } from '@/lib/agents/shared/byok-flags';
+import { resolveRequestUserId } from '@/lib/supabase/server/resolve-request-user';
+import { getDecryptedUserModelKey } from '@/lib/agents/shared/user-model-keys';
 export const runtime = 'nodejs';
 
 /**
@@ -19,12 +22,24 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Missing audio data' }, { status: 400 });
     }
 
-    const openaiApiKey = process.env.OPENAI_API_KEY;
-    if (!openaiApiKey) {
-      return NextResponse.json(
-        { error: 'Server misconfigured: missing OPENAI_API_KEY' },
-        { status: 500 },
-      );
+    let openaiApiKey: string | null = null;
+    if (BYOK_ENABLED) {
+      const userId = await resolveRequestUserId(req);
+      if (!userId) {
+        return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+      }
+      openaiApiKey = await getDecryptedUserModelKey({ userId, provider: 'openai' });
+      if (!openaiApiKey) {
+        return NextResponse.json({ error: 'BYOK_MISSING_KEY:openai' }, { status: 400 });
+      }
+    } else {
+      openaiApiKey = process.env.OPENAI_API_KEY || null;
+      if (!openaiApiKey) {
+        return NextResponse.json(
+          { error: 'Server misconfigured: missing OPENAI_API_KEY' },
+          { status: 500 },
+        );
+      }
     }
 
     // Convert base64 to binary

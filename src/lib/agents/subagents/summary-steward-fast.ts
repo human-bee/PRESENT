@@ -1,5 +1,7 @@
 import { getCerebrasClient, getModelForSteward, isFastStewardReady } from '../fast-steward-config';
 import { getTranscriptWindow, getContextDocuments, formatContextDocuments } from '@/lib/agents/shared/supabase-context';
+import { BYOK_REQUIRED } from '@/lib/agents/shared/byok-flags';
+import { getDecryptedUserModelKey } from '@/lib/agents/shared/user-model-keys';
 
 const CEREBRAS_MODEL = getModelForSteward('SUMMARY_STEWARD_FAST_MODEL');
 
@@ -66,8 +68,9 @@ export async function runSummaryStewardFast(params: {
   instruction?: string;
   contextBundle?: string;
   contextProfile?: string;
+  billingUserId?: string;
 }): Promise<SummaryResult> {
-  const { room, instruction, contextBundle, contextProfile } = params;
+  const { room, instruction, contextBundle, contextProfile, billingUserId } = params;
   const [transcript, contextDocs] = await Promise.all([
     getTranscriptWindow(room, resolveWindowMs(contextProfile)),
     getContextDocuments(room),
@@ -97,13 +100,22 @@ export async function runSummaryStewardFast(params: {
     },
   ];
 
-  if (!isFastStewardReady()) {
+  const cerebrasKey = BYOK_REQUIRED && billingUserId
+    ? await getDecryptedUserModelKey({ userId: billingUserId, provider: 'cerebras' })
+    : null;
+
+  if (BYOK_REQUIRED && !cerebrasKey) {
+    const fallbackSummary = transcriptLines.slice(0, 800) || 'Summary unavailable.';
+    return { summary: fallbackSummary };
+  }
+
+  if (!BYOK_REQUIRED && !isFastStewardReady()) {
     const fallbackSummary = transcriptLines.slice(0, 800) || 'Summary unavailable.';
     return { summary: fallbackSummary };
   }
 
   try {
-    const client = getCerebrasClient();
+    const client = getCerebrasClient(cerebrasKey ?? undefined);
     const response = await client.chat.completions.create({
       model: CEREBRAS_MODEL,
       messages,

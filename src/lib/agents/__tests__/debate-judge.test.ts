@@ -4,6 +4,10 @@ jest.mock('@openai/agents', () => ({
   run: jest.fn(),
 }));
 
+jest.mock('@openai/agents-extensions', () => ({
+  aisdk: () => ({}),
+}));
+
 import { commit_scorecard, isExplicitFactCheckRequest } from '@/lib/agents/debate-judge';
 import { debateScorecardStateSchema } from '@/lib/agents/debate-scorecard-schema';
 

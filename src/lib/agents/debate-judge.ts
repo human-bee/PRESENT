@@ -1,4 +1,6 @@
 import { Agent, run, tool } from '@openai/agents';
+import { aisdk } from '@openai/agents-extensions';
+import { createOpenAI } from '@ai-sdk/openai';
 import { z } from 'zod';
 import {
   getDebateScorecard,
@@ -21,6 +23,8 @@ import {
   type RfdLink,
 } from '@/lib/agents/debate-scorecard-schema';
 import { performWebSearch, webSearchArgsSchema } from '@/lib/agents/tools/web-search';
+import { BYOK_REQUIRED } from '@/lib/agents/shared/byok-flags';
+import { getDecryptedUserModelKey } from '@/lib/agents/shared/user-model-keys';
 
 const logWithTs = (label: string, payload: Record<string, unknown>) => {
   try {
@@ -554,11 +558,14 @@ export const search_evidence = tool({
   parameters: SearchEvidenceArgs,
   async execute({ room, componentId, query, maxResults, includeAnswer }) {
     try {
-      const result = await performWebSearch({
-        query,
-        maxResults,
-        includeAnswer,
-      });
+      const result = await performWebSearch(
+        {
+          query,
+          maxResults,
+          includeAnswer,
+        },
+        undefined,
+      );
       logWithTs('🔍 [DebateSteward] search_evidence', {
         room,
         componentId,
@@ -587,6 +594,52 @@ export const search_evidence = tool({
     }
   },
 });
+
+function createSearchEvidenceTool(openaiApiKey: string) {
+  return tool({
+    name: 'search_evidence',
+    description:
+      'Perform a live web search to collect supporting or refuting evidence. Returns a summary and top sources.',
+    parameters: SearchEvidenceArgs,
+    async execute({ room, componentId, query, maxResults, includeAnswer }) {
+      try {
+        const result = await performWebSearch(
+          {
+            query,
+            maxResults,
+            includeAnswer,
+          },
+          { apiKey: openaiApiKey },
+        );
+        logWithTs('🔍 [DebateSteward] search_evidence', {
+          room,
+          componentId,
+          query,
+          hits: result.hits.length,
+        });
+        return {
+          status: 'ok',
+          summary: result.summary,
+          hits: result.hits,
+          model: result.model,
+          query: result.query,
+        };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        logWithTs('⚠️ [DebateSteward] search_evidence_failed', {
+          room,
+          componentId,
+          query,
+          error: message,
+        });
+        return {
+          status: 'error',
+          error: message,
+        };
+      }
+    },
+  });
+}
 
 export const commit_scorecard = tool({
   name: 'commit_scorecard',
@@ -730,6 +783,30 @@ export const debateScorecardSteward = new Agent({
   tools: [get_current_scorecard, get_context, search_evidence, commit_scorecard],
 });
 
+async function resolveOpenAIKeyForDebate(billingUserId?: string): Promise<string> {
+  if (BYOK_REQUIRED) {
+    const userId = typeof billingUserId === 'string' ? billingUserId.trim() : '';
+    if (!userId) throw new Error('BYOK_MISSING_BILLING_USER');
+    const key = await getDecryptedUserModelKey({ userId, provider: 'openai' });
+    if (!key) throw new Error('BYOK_MISSING_KEY:openai');
+    return key;
+  }
+
+  const envKey = (process.env.OPENAI_API_KEY ?? '').trim();
+  if (!envKey) throw new Error('OPENAI_API_KEY missing for debate steward');
+  return envKey;
+}
+
+function createDebateScorecardStewardAgent(openaiApiKey: string) {
+  const model = createOpenAI({ apiKey: openaiApiKey })('gpt-5-mini');
+  return new Agent({
+    name: 'DebateScorecardSteward',
+    model: aisdk(model),
+    instructions: DEBATE_SCORECARD_INSTRUCTIONS,
+    tools: [get_current_scorecard, get_context, createSearchEvidenceTool(openaiApiKey), commit_scorecard],
+  });
+}
+
 export async function runDebateScorecardSteward(params: {
   room: string;
   componentId: string;
@@ -738,6 +815,7 @@ export async function runDebateScorecardSteward(params: {
   summary?: string;
   prompt?: string;
   topic?: string;
+  billingUserId?: string;
 }) {
   const payload = {
     ...params,
@@ -751,7 +829,9 @@ export async function runDebateScorecardSteward(params: {
     intent: params.intent,
     topic: params.topic,
   });
-  const result = await run(debateScorecardSteward, JSON.stringify(payload));
+  const apiKey = await resolveOpenAIKeyForDebate(params.billingUserId);
+  const agent = createDebateScorecardStewardAgent(apiKey);
+  const result = await run(agent, JSON.stringify(payload));
   logWithTs('🏁 [DebateSteward] run.complete', {
     room: params.room,
     componentId: params.componentId,

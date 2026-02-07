@@ -11,6 +11,7 @@ import type { ToolEventsApi } from './useToolEvents';
 import { ComponentRegistry } from '@/lib/component-registry';
 import { applyEnvelope } from '@/components/tool-dispatcher/handlers/tldraw-actions';
 import { logJourneyEvent } from '@/lib/journey-logger';
+import { fetchWithSupabaseAuth } from '@/lib/supabase/auth-headers';
 
 type ToolMetricEntry = {
   callId: string;
@@ -254,7 +255,7 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
           }
           if (options?.mode) payload.mode = options.mode;
           if (options?.reason) payload.reason = options.reason;
-          const res = await fetch('/api/steward/run', {
+          const res = await fetchWithSupabaseAuth('/api/steward/run', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload),
@@ -565,7 +566,7 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
             }
             log('dispatch_to_conductor forwarding steward task', { task, params: dispatchParams, room: call.roomId || room?.name });
             try {
-              const res = await fetch('/api/steward/runCanvas', {
+              const res = await fetchWithSupabaseAuth('/api/steward/runCanvas', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -661,7 +662,7 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
             };
 
             try {
-              const res = await fetch('/api/steward/runScorecard', {
+              const res = await fetchWithSupabaseAuth('/api/steward/runScorecard', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(body),
@@ -975,7 +976,7 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
             };
             try {
               // TODO: move steward dispatch to a typed conductor task instead of direct fetch.
-              const res = await fetch('/api/steward/runCanvas', {
+              const res = await fetchWithSupabaseAuth('/api/steward/runCanvas', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(body),

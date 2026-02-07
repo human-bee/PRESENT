@@ -1,5 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { runLinearStewardFast } from '@/lib/agents/subagents/linear-steward-fast';
+import { runLinearSteward } from '@/lib/agents/subagents/linear-steward';
+import { BYOK_ENABLED } from '@/lib/agents/shared/byok-flags';
+import { resolveRequestUserId } from '@/lib/supabase/server/resolve-request-user';
+import { assertCanvasMember, parseCanvasIdFromRoom } from '@/lib/agents/shared/canvas-billing';
+import { getDecryptedUserModelKey } from '@/lib/agents/shared/user-model-keys';
 
 export const runtime = 'nodejs'; // Agents SDK might need Node runtime, or Edge if compatible.
 // flowchart-steward-fast uses 'process.env' so Node is safer.
@@ -13,7 +18,61 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ status: 'error', error: 'Missing instruction' }, { status: 400 });
     }
 
-    const action = await runLinearStewardFast({ instruction, context: context || {}, room });
+    let billingUserId: string | null = null;
+    if (BYOK_ENABLED) {
+      const requesterUserId = await resolveRequestUserId(req);
+      if (!requesterUserId) {
+        return NextResponse.json({ status: 'error', error: 'unauthorized' }, { status: 401 });
+      }
+      const roomName = typeof room === 'string' ? room.trim() : '';
+      const canvasId = roomName ? parseCanvasIdFromRoom(roomName) : null;
+      if (canvasId) {
+        try {
+          const membership = await assertCanvasMember({ canvasId, requesterUserId });
+          billingUserId = membership.ownerUserId;
+        } catch (error) {
+          const code = (error as Error & { code?: string }).code;
+          if (code === 'forbidden') {
+            return NextResponse.json({ status: 'error', error: 'forbidden' }, { status: 403 });
+          }
+          throw error;
+        }
+      } else {
+        billingUserId = requesterUserId;
+      }
+    }
+
+    const roomName = typeof room === 'string' ? room.trim() : '';
+    const usesFast = BYOK_ENABLED
+      ? (billingUserId
+          ? Boolean(await getDecryptedUserModelKey({ userId: billingUserId, provider: 'cerebras' }))
+          : false)
+      : Boolean((process.env.CEREBRAS_API_KEY ?? '').trim());
+
+    const action = usesFast
+      ? await runLinearStewardFast({
+          instruction,
+          context: context || {},
+          room: roomName || undefined,
+          ...(billingUserId ? { billingUserId } : {}),
+        })
+      : await (async () => {
+          const openaiKey = BYOK_ENABLED && billingUserId
+            ? await getDecryptedUserModelKey({ userId: billingUserId, provider: 'openai' })
+            : (process.env.OPENAI_API_KEY ?? null);
+          if (BYOK_ENABLED && !openaiKey) {
+            throw new Error('BYOK_MISSING_KEY:openai');
+          }
+          if (!openaiKey) {
+            throw new Error('OPENAI_API_KEY missing');
+          }
+          return await runLinearSteward({
+            instruction,
+            context: context || {},
+            room: roomName || undefined,
+            openaiApiKey: openaiKey,
+          });
+        })();
 
     return NextResponse.json({ status: 'ok', action });
   } catch (error) {

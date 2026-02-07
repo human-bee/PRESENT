@@ -1,4 +1,6 @@
 import { getCerebrasClient, getModelForSteward, isFastStewardReady } from '../fast-steward-config';
+import { BYOK_REQUIRED } from '@/lib/agents/shared/byok-flags';
+import { getDecryptedUserModelKey } from '@/lib/agents/shared/user-model-keys';
 
 const CEREBRAS_MODEL = getModelForSteward('YOUTUBE_STEWARD_FAST_MODEL');
 
@@ -55,12 +57,25 @@ type YouTubeAction = {
   mcpTool: { name: string; args: Record<string, unknown> } | null;
 };
 
-export async function runYouTubeSteward(params: { instruction: string; context?: any }): Promise<YouTubeAction> {
+export async function runYouTubeSteward(params: { instruction: string; context?: any; billingUserId?: string }): Promise<YouTubeAction> {
   const { instruction, context } = params;
+  const billingUserId = typeof params.billingUserId === 'string' ? params.billingUserId : '';
+  const cerebrasKey =
+    BYOK_REQUIRED && billingUserId
+      ? await getDecryptedUserModelKey({ userId: billingUserId, provider: 'cerebras' })
+      : null;
 
   // The FAST YouTube steward uses Cerebras; if it's not configured we return a best-effort heuristic
   // so the rest of the system can keep running.
-  if (!isFastStewardReady()) {
+  if (BYOK_REQUIRED && !cerebrasKey) {
+    return {
+      kind: 'search',
+      reason: 'BYOK Cerebras key missing (falling back to heuristic)',
+      mcpTool: { name: 'searchVideos', args: { query: instruction, maxResults: 5 } },
+    };
+  }
+
+  if (!BYOK_REQUIRED && !isFastStewardReady()) {
     return {
       kind: 'search',
       reason: 'FAST YouTube steward unavailable (missing CEREBRAS_API_KEY)',
@@ -81,7 +96,7 @@ export async function runYouTubeSteward(params: { instruction: string; context?:
   ];
 
   try {
-    const client = getCerebrasClient();
+    const client = getCerebrasClient(cerebrasKey ?? undefined);
     const response = await client.chat.completions.create({
       model: CEREBRAS_MODEL,
       messages,

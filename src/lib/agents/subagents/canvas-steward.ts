@@ -47,6 +47,10 @@ export async function runCanvasSteward(args: RunCanvasStewardArgs) {
   const payload = jsonObjectSchema.parse(entriesToObject(normalizedEntries));
   const room = extractRoom(payload);
   const model = typeof payload.model === 'string' ? payload.model : undefined;
+  const billingUserId =
+    typeof (payload as any)?.billingUserId === 'string' && String((payload as any).billingUserId).trim().length > 0
+      ? String((payload as any).billingUserId).trim()
+      : undefined;
   const contextProfile = normalizeFairyContextProfile(
     typeof payload.contextProfile === 'string'
       ? payload.contextProfile
@@ -83,6 +87,7 @@ export async function runCanvasSteward(args: RunCanvasStewardArgs) {
       model,
       initialViewport: payload.bounds as any,
       contextProfile,
+      ...(billingUserId ? { billingUserId } : {}),
     });
 
     logWithTs('✅ [CanvasSteward] run.complete', {

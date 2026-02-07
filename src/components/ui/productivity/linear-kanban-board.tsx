@@ -7,6 +7,7 @@ import { LoadingWrapper } from '@/components/ui/shared/loading-states';
 import { useComponentSubAgent } from '@/lib/component-subagent';
 import { useCanvasContext } from '@/lib/hooks/use-canvas-context';
 import { LinearMcpClient } from '@/lib/linear-mcp-client';
+import { fetchWithSupabaseAuth } from '@/lib/supabase/auth-headers';
 
 import {
   linearKanbanSchema,
@@ -168,7 +169,7 @@ export default function LinearKanbanBoard({
     try {
       handleStateChange({ updateMessage: '🔄 Processing...' });
 
-      const response = await fetch('/api/ai/linear-steward', {
+      const response = await fetchWithSupabaseAuth('/api/ai/linear-steward', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

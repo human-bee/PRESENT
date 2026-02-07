@@ -1,5 +1,7 @@
 import { getCerebrasClient, getModelForSteward, isFastStewardReady } from '../fast-steward-config';
 import { getFlowchartDoc, getTranscriptWindow, commitFlowchartDoc, getContextDocuments, formatContextDocuments } from '../shared/supabase-context';
+import { BYOK_REQUIRED } from '@/lib/agents/shared/byok-flags';
+import { getDecryptedUserModelKey } from '@/lib/agents/shared/user-model-keys';
 
 const CEREBRAS_MODEL = getModelForSteward('FLOWCHART_STEWARD_FAST_MODEL');
 
@@ -77,15 +79,21 @@ export async function runFlowchartStewardFast(params: {
   room: string;
   docId: string;
   windowMs?: number;
+  billingUserId?: string;
 }): Promise<FlowchartResult> {
-  const { room, docId, windowMs = 60000 } = params;
+  const { room, docId, windowMs = 60000, billingUserId } = params;
   const overallStart = Date.now();
 
-  if (!isFastStewardReady()) {
-    return {
-      status: 'error',
-      error: 'FAST Flowchart steward unavailable (missing CEREBRAS_API_KEY)',
-    };
+  const cerebrasKey = BYOK_REQUIRED && billingUserId
+    ? await getDecryptedUserModelKey({ userId: billingUserId, provider: 'cerebras' })
+    : null;
+
+  if (BYOK_REQUIRED && !cerebrasKey) {
+    return { status: 'error', error: 'BYOK_MISSING_KEY:cerebras' };
+  }
+
+  if (!BYOK_REQUIRED && !isFastStewardReady()) {
+    return { status: 'error', error: 'FAST Flowchart steward unavailable (missing CEREBRAS_API_KEY)' };
   }
 
   const [docRecord, transcriptWindow, contextDocs] = await Promise.all([
@@ -130,7 +138,7 @@ export async function runFlowchartStewardFast(params: {
   });
 
   try {
-    const client = getCerebrasClient();
+    const client = getCerebrasClient(cerebrasKey ?? undefined);
     const response = await client.chat.completions.create({
       model: CEREBRAS_MODEL,
       messages,
@@ -184,10 +192,19 @@ export async function runFlowchartInstruction(params: {
   docId: string;
   currentDoc?: string;
   currentVersion?: number;
+  billingUserId?: string;
 }): Promise<FlowchartResult> {
-  const { instruction, room, docId, currentDoc, currentVersion = 0 } = params;
+  const { instruction, room, docId, currentDoc, currentVersion = 0, billingUserId } = params;
 
-  if (!isFastStewardReady()) {
+  const cerebrasKey = BYOK_REQUIRED && billingUserId
+    ? await getDecryptedUserModelKey({ userId: billingUserId, provider: 'cerebras' })
+    : null;
+
+  if (BYOK_REQUIRED && !cerebrasKey) {
+    return { status: 'error', error: 'BYOK_MISSING_KEY:cerebras' };
+  }
+
+  if (!BYOK_REQUIRED && !isFastStewardReady()) {
     return {
       status: 'error',
       error: 'FAST Flowchart steward unavailable (missing CEREBRAS_API_KEY)',
@@ -215,7 +232,7 @@ export async function runFlowchartInstruction(params: {
   });
 
   try {
-    const client = getCerebrasClient();
+    const client = getCerebrasClient(cerebrasKey ?? undefined);
     const response = await client.chat.completions.create({
       model: CEREBRAS_MODEL,
       messages,

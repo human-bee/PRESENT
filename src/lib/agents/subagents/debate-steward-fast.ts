@@ -6,6 +6,8 @@ import {
   formatContextDocuments,
 } from '@/lib/agents/shared/supabase-context';
 import { debateScorecardStateSchema, type DebateScorecardState } from '@/lib/agents/debate-scorecard-schema';
+import { BYOK_REQUIRED } from '@/lib/agents/shared/byok-flags';
+import { getDecryptedUserModelKey } from '@/lib/agents/shared/user-model-keys';
 
 const CEREBRAS_MODEL = getModelForSteward('DEBATE_STEWARD_FAST_MODEL');
 
@@ -151,8 +153,9 @@ export async function runDebateScorecardStewardFast(params: {
   summary?: string;
   prompt?: string;
   topic?: string;
+  billingUserId?: string;
 }) {
-  const { room, componentId, intent, summary, prompt, topic } = params;
+  const { room, componentId, intent, summary, prompt, topic, billingUserId } = params;
   const start = Date.now();
 
   if (!isFastStewardReady()) {
@@ -160,6 +163,14 @@ export async function runDebateScorecardStewardFast(params: {
   }
 
   console.log('[DebateStewardFast] start', { room, componentId, intent, topic });
+
+  const cerebrasKey = BYOK_REQUIRED && billingUserId
+    ? await getDecryptedUserModelKey({ userId: billingUserId, provider: 'cerebras' })
+    : null;
+
+  if (BYOK_REQUIRED && !cerebrasKey) {
+    throw new Error('BYOK_MISSING_KEY:cerebras');
+  }
 
   const record = await getDebateScorecard(room, componentId);
   const currentState = record.state;
@@ -181,7 +192,7 @@ export async function runDebateScorecardStewardFast(params: {
   ];
 
   try {
-    const client = getCerebrasClient();
+    const client = getCerebrasClient(cerebrasKey ?? undefined);
     const response = await client.chat.completions.create({
       model: CEREBRAS_MODEL,
       messages,
