@@ -60,17 +60,6 @@ export function CanvasPageClient() {
   const [demoError, setDemoError] = useState<string | null>(null);
 
   useEffect(() => {
-    console.log('[CanvasPageClient] Auth state changed:', {
-      loading,
-      userId: user?.id,
-      bypassAuth,
-      demoMode,
-      roomName,
-      isWindowDefined: typeof window !== 'undefined'
-    });
-  }, [loading, user, bypassAuth, demoMode, roomName]);
-
-  useEffect(() => {
     if (typeof window === 'undefined') return;
     if (!demoMode || bypassAuth) return;
     if (loading || user) return;
