@@ -161,11 +161,14 @@ function CollaborationEditorEffects({
     return null;
   }
 
-  if (isFairyEnabled) {
-    return <FairyIntegration room={room} />;
-  }
-
-  return <CanvasAgentController editor={editor} room={room} />;
+  return (
+    <>
+      {/* Always mount the unified server-driven canvas agent bridge. */}
+      <CanvasAgentController editor={editor} room={room} />
+      {/* Fairy UI is optional and should not disable the server steward path. */}
+      {isFairyEnabled && <FairyIntegration room={room} />}
+    </>
+  );
 }
 
 export default React.memo(TldrawWithCollaboration);
