@@ -58,9 +58,9 @@ export function ParticipantToolbar({
           onToggleRemoteAudio();
         }}
         className={cn(
-          'w-11 h-11 rounded-md grid place-items-center transition-colors',
+          'w-11 h-11 rounded-md grid place-items-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--present-accent-ring)]',
           effectiveAudioMuted
-            ? 'bg-red-500/80 text-white hover:bg-red-600/80'
+            ? 'bg-danger-solid text-white hover:opacity-90'
             : 'bg-white/10 text-white hover:bg-white/20',
         )}
       >
@@ -74,8 +74,8 @@ export function ParticipantToolbar({
           await onToggleLocalCamera();
         }}
         className={cn(
-          'w-11 h-11 rounded-md grid place-items-center transition-colors',
-          videoMuted ? 'bg-red-500/80 text-white hover:bg-red-600/80' : 'bg-white/10 text-white hover:bg-white/20',
+          'w-11 h-11 rounded-md grid place-items-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--present-accent-ring)]',
+          videoMuted ? 'bg-danger-solid text-white hover:opacity-90' : 'bg-white/10 text-white hover:bg-white/20',
         )}
       >
         {videoMuted ? <VideoOff className="w-4 h-4" /> : <Video className="w-4 h-4" />}
@@ -87,7 +87,7 @@ export function ParticipantToolbar({
           onClick={async () => {
             await onToggleScreenShare();
           }}
-          className="w-11 h-11 rounded-md grid place-items-center bg-white/10 text-white hover:bg-white/20 transition-colors"
+          className="w-11 h-11 rounded-md grid place-items-center bg-white/10 text-white hover:bg-white/20 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--present-accent-ring)]"
         >
           <ScreenShare className="w-4 h-4" />
         </button>
@@ -97,7 +97,7 @@ export function ParticipantToolbar({
         aria-label="Tile options"
         onClick={openOptions}
         ref={optionsButtonRef}
-        className="w-11 h-11 rounded-md grid place-items-center bg-white/10 text-white hover:bg-white/20 transition-colors"
+        className="w-11 h-11 rounded-md grid place-items-center bg-white/10 text-white hover:bg-white/20 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--present-accent-ring)]"
       >
         <MoreHorizontal className="w-4 h-4" />
       </button>
@@ -132,7 +132,7 @@ export function ParticipantToolbar({
             aria-label="Tile options"
             onClick={openOptions}
             ref={optionsButtonRef}
-            className="w-11 h-11 rounded-full bg-black/55 text-white backdrop-blur-md grid place-items-center shadow-lg"
+            className="w-11 h-11 rounded-full bg-black/55 text-white backdrop-blur-md grid place-items-center shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--present-accent-ring)]"
           >
             <MoreHorizontal className="w-5 h-5" />
           </button>

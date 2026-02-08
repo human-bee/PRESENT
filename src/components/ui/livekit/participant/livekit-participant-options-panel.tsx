@@ -1,6 +1,7 @@
 import * as React from 'react';
 import { createPortal } from 'react-dom';
 import { cn } from '@/lib/utils';
+import { Button } from '@/components/ui/shared/button';
 
 type AnchorRect = {
   top: number;
@@ -82,27 +83,29 @@ export function ParticipantTileOptionsPanel({
       ref={panelRef}
       style={style}
       className={cn(
-        'w-72 max-w-[min(20rem,calc(100vw-1.5rem))] max-h-[70vh] overflow-y-auto rounded-xl border border-white/10 bg-zinc-900/95 p-3 text-white shadow-xl backdrop-blur-md',
+        'w-72 max-w-[min(20rem,calc(100vw-1.5rem))] max-h-[70vh] overflow-y-auto rounded-xl border border-default bg-surface-elevated p-3 text-primary shadow-sm backdrop-blur-md',
       )}
       role="dialog"
       aria-modal="false"
     >
       <div className="mb-3 flex items-center justify-between">
-        <div className="text-sm font-medium">Tile Options</div>
-        <button
+        <div className="text-sm font-medium">Tile options</div>
+        <Button
           aria-label="Close tile options"
           onClick={onClose}
-          className="rounded-full px-2 py-1 text-white/70 transition hover:bg-white/10 hover:text-white"
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8"
         >
           ✕
-        </button>
+        </Button>
       </div>
 
       <div className="space-y-3">
         <div>
-          <div className="mb-1 text-xs text-white/70">Participant</div>
+          <div className="mb-1 text-xs text-secondary">Participant</div>
           <select
-            className="w-full rounded bg-white/10 px-2 py-1 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
+            className="w-full rounded-lg border border-default bg-surface px-2 py-1 text-sm text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--present-accent-ring)]"
             value={participantId}
             onChange={(event) => {
               try {
@@ -121,24 +124,25 @@ export function ParticipantTileOptionsPanel({
         {isLocal && (
           <>
             <div className="flex items-center justify-between">
-              <div className="text-xs text-white/70">Devices</div>
-              <button
-                className="rounded px-2 py-1 text-xs transition hover:bg-white/20 bg-white/10"
+              <div className="text-xs text-secondary">Devices</div>
+              <Button
+                variant="ghost"
+                size="sm"
                 onClick={onRefreshDevices}
               >
                 Refresh
-              </button>
+              </Button>
             </div>
             {isCoarsePointer ? (
-              <div className="rounded bg-white/5 p-2 text-xs text-white/60">
+              <div className="rounded-lg border border-default bg-surface-secondary p-2 text-xs text-secondary">
                 Device selection is managed by your browser on mobile.
               </div>
             ) : (
               <>
                 <div>
-                  <div className="mb-1 text-xs text-white/70">Microphone</div>
+                  <div className="mb-1 text-xs text-secondary">Microphone</div>
                   <select
-                    className="w-full rounded bg-white/10 px-2 py-1 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
+                    className="w-full rounded-lg border border-default bg-surface px-2 py-1 text-sm text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--present-accent-ring)]"
                     value={microphoneSelectValue}
                     onChange={async (event) => {
                       await onSelectMicrophone(event.target.value);
@@ -155,9 +159,9 @@ export function ParticipantTileOptionsPanel({
                   </select>
                 </div>
                 <div>
-                  <div className="mb-1 text-xs text-white/70">Camera</div>
+                  <div className="mb-1 text-xs text-secondary">Camera</div>
                   <select
-                    className="w-full rounded bg-white/10 px-2 py-1 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
+                    className="w-full rounded-lg border border-default bg-surface px-2 py-1 text-sm text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--present-accent-ring)]"
                     value={cameraSelectValue}
                     onChange={async (event) => {
                       await onSelectCamera(event.target.value);
@@ -176,23 +180,19 @@ export function ParticipantTileOptionsPanel({
               </>
             )}
             <div>
-              <div className="mb-1 text-xs text-white/70">Stream Quality</div>
+              <div className="mb-1 text-xs text-secondary">Stream quality</div>
               <div className="flex gap-2">
                 {(['auto', 'low', 'high'] as const).map((quality) => (
-                  <button
+                  <Button
                     key={quality}
-                    className={cn(
-                      'rounded px-2 py-1 text-xs transition-colors',
-                      selectedQuality === quality
-                        ? 'bg-white/20 text-white'
-                        : 'bg-white/10 text-white hover:bg-white/20',
-                    )}
+                    variant={selectedQuality === quality ? 'secondary' : 'ghost'}
+                    size="sm"
                     onClick={() => {
                       onSelectQuality(quality);
                     }}
                   >
                     {quality}
-                  </button>
+                  </Button>
                 ))}
               </div>
             </div>
@@ -201,8 +201,9 @@ export function ParticipantTileOptionsPanel({
       </div>
 
       <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
-        <button
-          className="rounded bg-white/10 px-3 py-1.5 text-sm transition hover:bg-white/20"
+        <Button
+          variant="outline"
+          size="sm"
           onClick={() => {
             window.dispatchEvent(
               new CustomEvent('tldraw:pin', {
@@ -213,9 +214,10 @@ export function ParticipantTileOptionsPanel({
           }}
         >
           Pin
-        </button>
-        <button
-          className="rounded bg-white/10 px-3 py-1.5 text-sm transition hover:bg-white/20"
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
           onClick={() => {
             window.dispatchEvent(
               new CustomEvent('tldraw:pinOnTop', {
@@ -226,13 +228,10 @@ export function ParticipantTileOptionsPanel({
           }}
         >
           Pin on top
-        </button>
-        <button
-          className="rounded bg-white/20 px-3 py-1.5 text-sm transition hover:bg-white/30"
-          onClick={onClose}
-        >
+        </Button>
+        <Button variant="default" size="sm" onClick={onClose}>
           Done
-        </button>
+        </Button>
       </div>
     </div>,
     document.body,

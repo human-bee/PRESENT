@@ -18,6 +18,8 @@ const TARGET_FILES = [
   'src/components/InfographicWidget.tsx',
   'src/components/ui/livekit/components/RoomConnectorUI.tsx',
   'src/components/ui/livekit/participant/livekit-participant-tile.tsx',
+  'src/components/ui/livekit/participant/participant-toolbar.tsx',
+  'src/components/ui/livekit/participant/livekit-participant-options-panel.tsx',
   'src/components/ui/livekit/livekit-toolbar.tsx',
   'src/components/ui/livekit/livekit-screenshare-tile.tsx',
   'src/components/ui/livekit/live-kit.tsx',
