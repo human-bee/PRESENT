@@ -165,20 +165,20 @@ const ParticipantControls: React.FC<ParticipantControlsProps> = ({
       onPointerLeave={() => setShowControls(false)}
     >
       {/* Participant Avatar/Video */}
-      <div className="relative w-12 h-12 rounded-full overflow-hidden bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center">
-        <span className="text-white text-sm font-semibold">
+      <div className="relative w-12 h-12 rounded-full overflow-hidden border border-default bg-surface-secondary flex items-center justify-center">
+        <span className="text-primary text-sm font-semibold">
           {participant.name?.charAt(0)?.toUpperCase() || '?'}
         </span>
 
         {/* Status indicators */}
         <div className="absolute bottom-0 right-0 flex gap-0.5">
           {isMuted && (
-            <div className="w-3 h-3 bg-red-500 rounded-full flex items-center justify-center">
+            <div className="w-3 h-3 bg-danger-solid rounded-full flex items-center justify-center">
               <MicOff className="w-2 h-2 text-white" />
             </div>
           )}
           {connectionQuality === ConnectionQuality.Poor && (
-            <div className="w-3 h-3 bg-amber-500 rounded-full flex items-center justify-center">
+            <div className="w-3 h-3 bg-warning-solid rounded-full flex items-center justify-center">
               <AlertTriangle className="w-2 h-2 text-white" />
             </div>
           )}
@@ -215,7 +215,7 @@ const ParticipantControls: React.FC<ParticipantControlsProps> = ({
           {isModerator && onKick && (
             <button
               onClick={onKick}
-              className="p-1 hover:bg-red-500/50 rounded transition-colors"
+              className="p-1 hover:bg-danger-surface rounded transition-colors"
               title="Remove participant"
             >
               <UserX className="w-3 h-3 text-white" />
@@ -492,13 +492,13 @@ export function LivekitToolbar({
   const getConnectionIcon = (quality: ConnectionQuality) => {
     switch (quality) {
       case ConnectionQuality.Poor:
-        return <SignalLow className="w-4 h-4 text-red-500" />;
+        return <SignalLow className="w-4 h-4 text-danger" />;
       case ConnectionQuality.Good:
-        return <SignalMedium className="w-4 h-4 text-yellow-500" />;
+        return <SignalMedium className="w-4 h-4 text-warning" />;
       case ConnectionQuality.Excellent:
-        return <SignalHigh className="w-4 h-4 text-green-500" />;
+        return <SignalHigh className="w-4 h-4 text-success" />;
       default:
-        return <Wifi className="w-4 h-4 text-gray-500" />;
+        return <Wifi className="w-4 h-4 text-tertiary" />;
     }
   };
 
@@ -507,7 +507,7 @@ export function LivekitToolbar({
     return (
       <div className="flex items-center justify-center p-4 bg-background border border-border rounded-xl">
         <div className="flex items-center gap-2 text-muted-foreground">
-          <AlertTriangle className="w-4 h-4 text-amber-500" />
+          <AlertTriangle className="w-4 h-4 text-warning" />
           <span>
             LiveKit toolbar requires a connected LiveKit room. Please create a LivekitRoomConnector
             component first.
@@ -539,7 +539,7 @@ export function LivekitToolbar({
               'flex items-center justify-center w-9 h-9 rounded-lg transition-all duration-200',
               micEnabled
                 ? 'bg-background hover:bg-accent text-foreground'
-                : 'bg-red-500 hover:bg-red-600 text-white',
+                : 'bg-danger-solid hover:opacity-90 text-white',
             )}
           >
             {micEnabled ? <Mic className="w-4 h-4" /> : <MicOff className="w-4 h-4" />}
@@ -551,7 +551,7 @@ export function LivekitToolbar({
               'flex items-center justify-center w-9 h-9 rounded-lg transition-all duration-200',
               cameraEnabled
                 ? 'bg-background hover:bg-accent text-foreground'
-                : 'bg-red-500 hover:bg-red-600 text-white',
+                : 'bg-danger-solid hover:opacity-90 text-white',
             )}
           >
             {cameraEnabled ? <Video className="w-4 h-4" /> : <VideoOff className="w-4 h-4" />}
@@ -563,7 +563,7 @@ export function LivekitToolbar({
               className={cn(
                 'flex items-center justify-center w-9 h-9 rounded-lg transition-all duration-200',
                 screenShareEnabled
-                  ? 'bg-blue-500 hover:bg-blue-600 text-white'
+                  ? 'bg-surface-secondary text-[var(--present-accent)] ring-2 ring-[var(--present-accent-ring)]'
                   : 'bg-background hover:bg-accent text-foreground',
               )}
             >
@@ -605,7 +605,7 @@ export function LivekitToolbar({
               className={cn(
                 'flex items-center justify-center w-9 h-9 rounded-lg transition-all duration-200',
                 state.handRaisedParticipants.includes(localParticipant?.identity || '')
-                  ? 'bg-yellow-500 hover:bg-yellow-600 text-white animate-pulse'
+                  ? 'bg-warning-solid text-white animate-pulse'
                   : 'bg-background hover:bg-accent text-foreground',
               )}
             >
@@ -620,7 +620,7 @@ export function LivekitToolbar({
               className={cn(
                 'flex items-center justify-center w-9 h-9 rounded-lg transition-all duration-200',
                 state.isRecording
-                  ? 'bg-red-500 hover:bg-red-600 text-white'
+                  ? 'bg-danger-solid hover:opacity-90 text-white'
                   : 'bg-background hover:bg-accent text-foreground',
               )}
             >
@@ -646,7 +646,7 @@ export function LivekitToolbar({
           {/* Leave Call - Always accessible */}
           <button
             onClick={() => room.disconnect()}
-            className="flex items-center justify-center w-9 h-9 rounded-lg bg-red-500 hover:bg-red-600 text-white transition-all duration-200"
+            className="flex items-center justify-center w-9 h-9 rounded-lg bg-danger-solid hover:opacity-90 text-white transition-all duration-200"
           >
             <X className="w-4 h-4" />
           </button>
@@ -666,7 +666,7 @@ export function LivekitToolbar({
               <span
                 className={cn(
                   'text-xs',
-                  state.isRecording ? 'text-red-500' : 'text-muted-foreground',
+                  state.isRecording ? 'text-danger' : 'text-muted-foreground',
                 )}
               >
                 {state.isRecording ? 'LIVE' : 'Off'}
@@ -675,7 +675,7 @@ export function LivekitToolbar({
             {state.isRecording && state.recordingStartTime && (
               <div className="col-span-2 flex items-center justify-between">
                 <span>Duration</span>
-                <span className="text-xs text-red-500">
+                <span className="text-xs text-danger">
                   {Math.floor((Date.now() - state.recordingStartTime.getTime()) / 1000)}s
                 </span>
               </div>

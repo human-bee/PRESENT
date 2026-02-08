@@ -104,9 +104,9 @@ export function LivekitScreenShareTile({
   };
 
   return (
-    <div
+      <div
       className={cn(
-        'relative bg-black border-2 border-gray-300 overflow-hidden transition-all duration-200 touch-manipulation',
+        'relative bg-black border-2 border-default overflow-hidden transition-all duration-200 touch-manipulation',
         state?.isMinimized && '!h-16',
       )}
       style={{ width, height: state?.isMinimized ? 64 : height, borderRadius }}
@@ -124,7 +124,7 @@ export function LivekitScreenShareTile({
           )}
         />
       ) : (
-        <div className="absolute inset-0 bg-gray-900 flex items-center justify-center text-white">
+        <div className="absolute inset-0 bg-surface-elevated flex items-center justify-center text-secondary">
           <div className="flex flex-col items-center gap-2">
             <ScreenShare className="w-10 h-10 opacity-75" />
             <div className="text-sm opacity-80">
