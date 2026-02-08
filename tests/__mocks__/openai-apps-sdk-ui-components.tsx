@@ -15,7 +15,10 @@ export type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
 };
 
 export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ loading, children, ...props }, ref) => (
+  (
+    { loading, children, color, variant, size, uniform, pill, selected, block, ...props },
+    ref,
+  ) => (
     <button ref={ref} {...props}>
       {loading ? 'Loading…' : children}
     </button>
@@ -48,4 +51,3 @@ export const Tooltip: any = Object.assign(TooltipImpl, {
   Trigger: ({ children }: any) => <>{children}</>,
   TriggerDecorator: ({ children }: any) => <>{children}</>,
 });
-

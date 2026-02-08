@@ -8,8 +8,19 @@ const TARGET_FILES = [
   'src/app/not-found.tsx',
   'src/app/canvas/CanvasPageClient.tsx',
   'src/components/ui/canvas/canvas-space.tsx',
+  'src/components/ui/canvas/speech-transcription.tsx',
+  'src/components/ui/canvas/speech-transcription-view.tsx',
   'src/components/ui/messaging/message-thread-collapsible.tsx',
   'src/components/ui/tldraw/tldraw-with-persistence.tsx',
+  'src/components/ui/research/research-panel.tsx',
+  'src/components/ui/research/research-renderers.tsx',
+  'src/components/ui/research/research-ui.tsx',
+  'src/components/InfographicWidget.tsx',
+  'src/components/ui/livekit/components/RoomConnectorUI.tsx',
+  'src/components/ui/livekit/participant/livekit-participant-tile.tsx',
+  'src/components/ui/livekit/livekit-toolbar.tsx',
+  'src/components/ui/livekit/livekit-screenshare-tile.tsx',
+  'src/components/ui/livekit/live-kit.tsx',
   'src/app/auth/signin/page.tsx',
   'src/app/auth/signup/page.tsx',
   'src/app/auth/finish/page.tsx',
@@ -52,4 +63,3 @@ describe('UI style contract (OpenAI parity)', () => {
     }
   });
 });
-
