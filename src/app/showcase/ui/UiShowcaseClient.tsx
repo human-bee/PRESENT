@@ -12,9 +12,99 @@ import CrowdPulseWidget from '@/components/ui/productivity/crowd-pulse-widget';
 import { RetroTimerEnhanced } from '@/components/ui/productivity/retro-timer-enhanced';
 import { LinearKanbanShowcase } from '@/components/ui/showcase/linear-kanban-showcase';
 import { ContextProvider } from '@/lib/stores/context-store';
+import { ResearchPanel } from '@/components/ui/research/research-panel';
+import { RoomConnectorUI } from '@/components/ui/livekit/components/RoomConnectorUI';
+import type { LivekitRoomConnectorState } from '@/components/ui/livekit/hooks/types';
+import { SpeechTranscriptionView } from '@/components/ui/canvas/speech-transcription-view';
 
 export function UiShowcaseClient() {
   const theme = usePresentTheme();
+  const now = Date.now();
+  const sampleResearchResults = [
+    {
+      id: 'r1',
+      title: 'Neutral primaries, copper highlight',
+      content:
+        'Keep primary surfaces neutral and reserve copper for focus rings, selection, and active states.',
+      source: {
+        name: 'Present Design Notes',
+        url: 'https://example.invalid',
+        credibility: 'high' as const,
+        type: 'other' as const,
+      },
+      relevance: 92,
+      timestamp: new Date(now - 60_000).toISOString(),
+      tags: ['tokens', 'a11y'],
+      factCheck: { status: 'verified' as const, confidence: 90 },
+    },
+    {
+      id: 'r2',
+      title: 'TLDraw chrome should inherit app tokens',
+      content:
+        'Bridge TLDraw variables to the same token set so menus/toolbars look like the rest of the product.',
+      source: {
+        name: 'Internal Docs',
+        url: 'https://example.invalid',
+        credibility: 'medium' as const,
+        type: 'wiki' as const,
+      },
+      relevance: 81,
+      timestamp: new Date(now - 5 * 60_000).toISOString(),
+      tags: ['tldraw', 'ui'],
+      factCheck: { status: 'unverified' as const, confidence: 55 },
+    },
+  ];
+
+  const connectorStates: Array<{ label: string; state: LivekitRoomConnectorState }> = [
+    {
+      label: 'Disconnected',
+      state: {
+        connectionState: 'disconnected',
+        isMinimized: false,
+        participantCount: 0,
+        errorMessage: null,
+        token: null,
+        agentStatus: 'not-requested',
+        agentIdentity: null,
+      },
+    },
+    {
+      label: 'Connecting',
+      state: {
+        connectionState: 'connecting',
+        isMinimized: false,
+        participantCount: 0,
+        errorMessage: null,
+        token: 'token',
+        agentStatus: 'dispatching',
+        agentIdentity: null,
+      },
+    },
+    {
+      label: 'Connected',
+      state: {
+        connectionState: 'connected',
+        isMinimized: false,
+        participantCount: 3,
+        errorMessage: null,
+        token: 'token',
+        agentStatus: 'joined',
+        agentIdentity: 'voice-agent',
+      },
+    },
+    {
+      label: 'Error',
+      state: {
+        connectionState: 'error',
+        isMinimized: false,
+        participantCount: 0,
+        errorMessage: 'Failed to connect. Check LiveKit credentials.',
+        token: null,
+        agentStatus: 'failed',
+        agentIdentity: null,
+      },
+    },
+  ];
 
   return (
     <ContextProvider>
@@ -72,7 +162,7 @@ export function UiShowcaseClient() {
           </div>
         </Card>
 
-        <div className="grid gap-6 lg:grid-cols-2">
+	        <div className="grid gap-6 lg:grid-cols-2">
           <MemoryRecallWidget
             title="Memory Recall"
             query="What did we decide about copper accents?"
@@ -126,10 +216,81 @@ export function UiShowcaseClient() {
 
           <RetroTimerEnhanced title="Retro Timer (Enhanced)" initialMinutes={5} showPresets={true} />
 
-          <LinearKanbanShowcase className="lg:col-span-2" />
-        </div>
-        </div>
-      </div>
-    </ContextProvider>
+	          <LinearKanbanShowcase className="lg:col-span-2" />
+	        </div>
+
+          <div className="pt-6">
+            <div className="text-xs uppercase tracking-[0.25em] text-tertiary">Canvas Widgets</div>
+            <h2 className="mt-2 text-xl font-semibold text-primary">Tokenized canvas chrome</h2>
+            <p className="mt-2 text-sm text-secondary">
+              Research panel, LiveKit connector states, and speech transcription view without LiveKit.
+            </p>
+          </div>
+
+          <div className="grid gap-6 lg:grid-cols-2">
+            <ResearchPanel
+              title="Research"
+              results={sampleResearchResults as any}
+              currentTopic="OpenAI parity design"
+              isLive={true}
+              maxResults={10}
+              showCredibilityFilter={true}
+            />
+
+            <div className="space-y-4">
+              <Card className="p-4">
+                <div className="text-sm font-medium text-primary mb-3">LiveKit Room Connector</div>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  {connectorStates.map(({ label, state }) => (
+                    <div key={label} className="space-y-2">
+                      <div className="text-xs text-tertiary">{label}</div>
+                      <RoomConnectorUI
+                        state={state}
+                        roomName="demo-room"
+                        onMinimize={() => {}}
+                        onConnect={() => {}}
+                        onDisconnect={() => {}}
+                        onCopyLink={() => {}}
+                        onRequestAgent={() => {}}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </Card>
+
+              <SpeechTranscriptionView
+                tone="success"
+                statusText="Agent active and listening"
+                roomConnected={true}
+                agentIdentity="voice-agent"
+                isListening={true}
+                canStart={true}
+                transcriptions={[
+                  {
+                    id: 't1',
+                    speaker: 'you',
+                    text: 'Can you summarize the design changes?',
+                    timestamp: now - 15_000,
+                    isFinal: true,
+                    source: 'user',
+                  },
+                  {
+                    id: 't2',
+                    speaker: 'voice-agent',
+                    text: 'Yep. All widgets now share tokenized surfaces and consistent focus rings.',
+                    timestamp: now - 8_000,
+                    isFinal: true,
+                    source: 'agent',
+                  },
+                ]}
+                onClear={() => {}}
+                onStartListening={() => {}}
+                onStopListening={() => {}}
+              />
+            </div>
+          </div>
+	        </div>
+	      </div>
+	    </ContextProvider>
   );
 }
