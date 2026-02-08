@@ -220,14 +220,14 @@ export function CanvasAgentController({ editor, room }: CanvasAgentControllerPro
             requestId,
             room: room?.name,
             message: text,
-          });
+	          });
 
-          if (isClientAgentEnabled) {
-          await agent.prompt(input);
-          }
+	          if (isClientAgentEnabled) {
+	            await agent.prompt(input);
+	          }
 
-          await sendAgentTelemetry('agent_end', {
-            requestId,
+	          await sendAgentTelemetry('agent_end', {
+	            requestId,
             room: room?.name,
             ok: true,
           });
