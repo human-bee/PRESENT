@@ -28,6 +28,12 @@ const isClientAgentEnabled =
 
 const LOGS_ENABLED =
   typeof process !== 'undefined' && process.env.NEXT_PUBLIC_TOOL_DISPATCHER_LOGS === 'true';
+
+// The viewport/selection publisher is only useful when a consumer is listening.
+// Keep it off by default to avoid an always-on rAF loop and data channel traffic.
+const VIEWPORT_PUBLISHER_ENABLED =
+  typeof process !== 'undefined' &&
+  process.env.NEXT_PUBLIC_CANVAS_AGENT_VIEWPORT_PUBLISHER_ENABLED === 'true';
 const debugLog = (...args: Parameters<typeof console.log>) => {
   if (isDevEnv && LOGS_ENABLED) {
     console.log(...args);
@@ -126,7 +132,7 @@ export function CanvasAgentController({ editor, room }: CanvasAgentControllerPro
   const appliedActionIdsRef = useRef<Set<string>>(new Set());
 
   // Mount connectors regardless of client agent enablement
-  useViewportSelectionPublisher(editor, room, true);
+  useViewportSelectionPublisher(editor, room, VIEWPORT_PUBLISHER_ENABLED);
   useScreenshotRequestHandler(editor, room);
 
   useEffect(() => {

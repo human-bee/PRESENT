@@ -327,7 +327,7 @@ function createLiveKitBusInstance(room: Room | null | undefined) {
       // Guard against stale or disconnected rooms. Calling publishData when
       // the underlying PeerConnection is already closed will throw
       // `UnexpectedConnectionState: PC manager is closed` inside livekit-client.
-      // See https://github.com/livekit/components-js/issues/XXX (example) for details.
+      // This tends to happen during fast refresh, tab closes, and reconnect churn.
 
       // 1. Room reference must exist.
       if (!room) return;

@@ -634,7 +634,7 @@ export const commit_scorecard = tool({
         if (broadcastUrl) {
           void (async () => {
             try {
-              console.log('[DebateSteward] Broadcasting update', {
+              logWithTs('[DebateSteward] Broadcasting update', {
                 room,
                 componentId,
                 version: record.version,

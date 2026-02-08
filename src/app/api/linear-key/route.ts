@@ -21,42 +21,19 @@ async function getServiceSupabase() {
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
   if (!url || !serviceKey) {
-    throw new Error("Missing Supabase configuration for secure key storage");
+    throw new Error('Missing Supabase configuration for secure key storage');
   }
 
-  if (process.env.NODE_ENV === "test") {
-    return createClient(url, serviceKey, { auth: { autoRefreshToken: false, persistSession: false } });
-  }
-
-  const cookieStore = await cookies();
-  const safeGet = typeof (cookieStore) === "object" && typeof (cookieStore as any).get === "function"
-    ? (name: string) => (cookieStore as any).get(name)?.value
-    : (_name: string) => undefined;
-
-  const safeSet = typeof (cookieStore) === "object" && typeof (cookieStore as any).set === "function"
-    ? (name: string, value: string, options: any) => (cookieStore as any).set({ name, value, ...options })
-    : (_name: string, _value: string, _options: any) => {};
-
-  const safeRemove = typeof (cookieStore) === "object" && typeof (cookieStore as any).set === "function"
-    ? (name: string, options: any) => (cookieStore as any).set({ name, value: "", ...options })
-    : (_name: string, _options: any) => {};
-
-  return createServerClient(url, serviceKey, {
-    cookies: {
-      get: safeGet,
-      set: safeSet,
-      remove: safeRemove,
-    },
+  // Service role is server-only and should never rely on cookie/session state.
+  return createClient(url, serviceKey, {
+    auth: { autoRefreshToken: false, persistSession: false, detectSessionInUrl: false },
   });
 }
 
-
-async function getUserId() {
-   // In tests, allow an injected user id so we don't rely on cookies/auth
-  if (process.env.NODE_ENV === 'test' && process.env.TEST_USER_ID) {
-    return process.env.TEST_USER_ID;
-  }
-  return null;
+function getTestUserId(): string | null {
+  if (process.env.NODE_ENV !== 'test') return null;
+  const raw = process.env.TEST_USER_ID?.trim();
+  return raw ? raw : null;
 }
 
 async function resolveUserId(req: NextRequest): Promise<string | null> {
@@ -95,7 +72,7 @@ export async function GET(req: NextRequest) {
         ? process.env.LINEAR_API_KEY?.trim() || null
         : null;
 
-    const userId = (await getUserId()) || (await resolveUserId(req));
+    const userId = getTestUserId() || (await resolveUserId(req));
     if (!userId) {
       if (devEnvKey) return NextResponse.json({ apiKey: devEnvKey });
       // In demo mode, treat missing auth as "no key configured" (avoid noisy 401s in the console).
@@ -130,7 +107,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const userId = (await getUserId()) || (await resolveUserId(req));
+    const userId = getTestUserId() || (await resolveUserId(req));
     if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const { apiKey } = await req.json();
@@ -165,7 +142,7 @@ export async function POST(req: NextRequest) {
 
 export async function DELETE(req: NextRequest) {
   try {
-    const userId = (await getUserId()) || (await resolveUserId(req));
+    const userId = getTestUserId() || (await resolveUserId(req));
     if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const supabase = await getServiceSupabase();
