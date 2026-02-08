@@ -23,6 +23,8 @@ import {
 import { performWebSearch, webSearchArgsSchema } from '@/lib/agents/tools/web-search';
 
 const logWithTs = (label: string, payload: Record<string, unknown>) => {
+  // Keep Jest output signal-heavy. You can re-enable for debugging with DEBUG_DEBATE_STEWARD=true.
+  if (process.env.NODE_ENV === 'test' && process.env.DEBUG_DEBATE_STEWARD !== 'true') return;
   try {
     console.log(label, { ts: new Date().toISOString(), ...payload });
   } catch {}
