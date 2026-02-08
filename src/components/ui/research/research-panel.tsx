@@ -4,12 +4,7 @@ import { cn } from '@/lib/utils';
 import { useComponentRegistration } from '@/lib/component-registry';
 import { z } from 'zod';
 import {
-  ExternalLink,
-  CheckCircle,
-  AlertTriangle,
   Info,
-  Bookmark,
-  BookmarkCheck,
   GripVertical,
   Upload,
 } from 'lucide-react';
@@ -31,6 +26,8 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { useDropzone } from 'react-dropzone';
+import { WidgetFrame } from '@/components/ui/productivity/widget-frame';
+import { Button } from '@/components/ui/shared/button';
 
 // Define the research result type
 export const researchResultSchema = z.object({
@@ -89,193 +86,6 @@ type ResearchPanelState = {
   expandedResults: string[];
   sortBy: 'relevance' | 'timestamp' | 'credibility';
 };
-
-// Credibility badge component
-function CredibilityBadge({
-  level,
-  className,
-}: { level: 'high' | 'medium' | 'low'; className?: string }) {
-  const styles = {
-    high: 'bg-green-100 text-green-800 border-green-200',
-    medium: 'bg-yellow-100 text-yellow-800 border-yellow-200',
-    low: 'bg-red-100 text-red-800 border-red-200',
-  };
-
-  const icons = {
-    high: CheckCircle,
-    medium: AlertTriangle,
-    low: AlertTriangle,
-  };
-
-  const Icon = icons[level];
-
-  return (
-    <span
-      className={cn(
-        'inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium border',
-        styles[level],
-        className,
-      )}
-    >
-      <Icon className="w-3 h-3" />
-      {level.charAt(0).toUpperCase() + level.slice(1)}
-    </span>
-  );
-}
-
-// Fact-check badge component
-function FactCheckBadge({
-  factCheck,
-  className,
-}: { factCheck: ResearchResult['factCheck']; className?: string }) {
-  if (!factCheck) return null;
-
-  const styles = {
-    verified: 'bg-green-100 text-green-800 border-green-200',
-    disputed: 'bg-orange-100 text-orange-800 border-orange-200',
-    unverified: 'bg-gray-100 text-gray-800 border-gray-200',
-    false: 'bg-red-100 text-red-800 border-red-200',
-  };
-
-  return (
-    <span
-      className={cn(
-        'inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium border',
-        styles[factCheck.status],
-        className,
-      )}
-    >
-      <Info className="w-3 h-3" />
-      {factCheck.status} ({factCheck.confidence}%)
-    </span>
-  );
-}
-
-// Source type badge component
-function SourceTypeBadge({ type, className }: { type: string; className?: string }) {
-  const colors = {
-    news: 'bg-blue-100 text-blue-800',
-    academic: 'bg-purple-100 text-purple-800',
-    wiki: 'bg-gray-100 text-gray-800',
-    blog: 'bg-orange-100 text-orange-800',
-    social: 'bg-pink-100 text-pink-800',
-    government: 'bg-indigo-100 text-indigo-800',
-    other: 'bg-gray-100 text-gray-800',
-  };
-
-  return (
-    <span
-      className={cn(
-        'inline-flex items-center px-2 py-1 rounded-md text-xs font-medium',
-        colors[type as keyof typeof colors] || colors.other,
-        className,
-      )}
-    >
-      {type}
-    </span>
-  );
-}
-
-// Individual research result card
-function ResearchResultCard({
-  result,
-  isBookmarked,
-  isExpanded,
-  onToggleBookmark,
-  onToggleExpanded,
-}: {
-  result: ResearchResult;
-  isBookmarked: boolean;
-  isExpanded: boolean;
-  onToggleBookmark: () => void;
-  onToggleExpanded: () => void;
-}) {
-  return (
-    <div className="bg-white rounded-lg border border-gray-200 shadow-sm hover:shadow-md transition-all duration-200 p-4">
-      {/* Header */}
-      <div className="flex items-start justify-between gap-3 mb-3">
-        <div className="flex-1 min-w-0">
-          <h3 className="font-semibold text-gray-900 text-sm leading-5 line-clamp-2">
-            {result.title}
-          </h3>
-          <div className="flex items-center gap-2 mt-2">
-            <span className="text-xs text-gray-600">{result.source.name}</span>
-            <CredibilityBadge level={result.source.credibility} />
-            <SourceTypeBadge type={result.source.type} />
-          </div>
-        </div>
-
-        <div className="flex items-center gap-1 flex-shrink-0">
-          <button
-            onClick={onToggleBookmark}
-            className="p-1 rounded hover:bg-gray-100 transition-colors"
-            title={isBookmarked ? 'Remove bookmark' : 'Bookmark'}
-          >
-            {isBookmarked ? (
-              <BookmarkCheck className="w-4 h-4 text-blue-600" />
-            ) : (
-              <Bookmark className="w-4 h-4 text-gray-400" />
-            )}
-          </button>
-
-          {result.source.url && (
-            <a
-              href={result.source.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="p-1 rounded hover:bg-gray-100 transition-colors"
-              title="Open source"
-            >
-              <ExternalLink className="w-4 h-4 text-gray-400" />
-            </a>
-          )}
-        </div>
-      </div>
-
-      {/* Content */}
-      <div className="mb-3">
-        <p className={cn('text-sm text-gray-700 leading-relaxed', !isExpanded && 'line-clamp-3')}>
-          {result.content}
-        </p>
-
-        {result.content.length > 200 && (
-          <button
-            onClick={onToggleExpanded}
-            className="text-xs text-blue-600 hover:text-blue-800 mt-1 font-medium"
-          >
-            {isExpanded ? 'Show less' : 'Read more'}
-          </button>
-        )}
-      </div>
-
-      {/* Footer */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-gray-500">Relevance: {result.relevance}%</span>
-          {result.factCheck && <FactCheckBadge factCheck={result.factCheck} />}
-        </div>
-
-        <span className="text-xs text-gray-400">
-          {new Date(result.timestamp).toLocaleTimeString()}
-        </span>
-      </div>
-
-      {/* Tags */}
-      {result.tags && result.tags.length > 0 && (
-        <div className="flex flex-wrap gap-1 mt-2">
-          {result.tags.map((tag, index) => (
-            <span
-              key={index}
-              className="inline-block px-2 py-0.5 bg-gray-100 text-gray-600 text-xs rounded-full"
-            >
-              {tag}
-            </span>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
 
 // Main ResearchPanel component
 const coerceResults = (value: unknown): ResearchResult[] =>
@@ -571,54 +381,51 @@ export function ResearchPanel(props: ResearchPanelHostProps) {
     setState({ ...state, expandedResults: expanded });
   };
 
-  // Get unique source types for filter
-  const availableSourceTypes = [...new Set(results.map((r) => r.source.type))];
-
   return (
     <div className={cn('w-full max-w-4xl mx-auto', className)} {...(domProps as any)}>
-      {/* Header */}
-      <div className="mb-6">
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h2 className="text-xl font-semibold text-gray-900 flex items-center gap-2">
-              {title}
-              {isLive && (
-                <span className="inline-flex items-center gap-1 px-2 py-1 bg-red-100 text-red-800 text-xs font-medium rounded-full">
-                  <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
-                  Live
-                </span>
-              )}
-            </h2>
-            {currentTopic && (
-              <p className="text-sm text-gray-600 mt-1">
-                Researching: <span className="font-medium">{currentTopic}</span>
-              </p>
-            )}
+      <WidgetFrame
+        title={
+          <div className="flex items-center gap-2">
+            <span>{title}</span>
+            {isLive ? (
+              <span className="inline-flex items-center gap-2 rounded-full border border-danger-outline bg-danger-surface px-2 py-1 text-xs font-medium text-danger">
+                <span className="h-2 w-2 rounded-full bg-current animate-pulse" />
+                Live
+              </span>
+            ) : null}
           </div>
-
-          <div className="flex items-center gap-4 text-sm text-gray-500">
+        }
+        subtitle={
+          currentTopic ? (
             <span>
-              {filteredResults.length} of {combinedResults.length} results
+              Researching: <span className="font-medium text-primary">{currentTopic}</span>
             </span>
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                openFileDialog();
-              }}
-              className="flex items-center gap-1 text-blue-600 hover:text-blue-800"
-            >
-              <Upload className="w-4 h-4" /> Upload
-            </button>
-          </div>
-        </div>
-
-        {/* Filters */}
-        {showCredibilityFilter && (
-          <div className="flex flex-wrap gap-4 p-4 bg-gray-50 rounded-lg">
-            {/* Credibility Filter */}
+          ) : undefined
+        }
+        meta={
+          <span>
+            {filteredResults.length} of {combinedResults.length} results
+          </span>
+        }
+        actions={
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={(e) => {
+              e.stopPropagation();
+              openFileDialog();
+            }}
+            className="hover:bg-surface-secondary"
+          >
+            <Upload className="h-4 w-4" /> Upload
+          </Button>
+        }
+        bodyClassName="space-y-4"
+      >
+        {showCredibilityFilter ? (
+          <div className="flex flex-wrap gap-4 rounded-xl border border-default bg-surface-secondary p-4">
             <div className="flex items-center gap-2">
-              <label className="text-sm font-medium text-gray-700">Credibility:</label>
+              <label className="text-sm font-medium text-secondary">Credibility:</label>
               <select
                 value={state?.selectedCredibility || 'all'}
                 onChange={(e) =>
@@ -628,7 +435,7 @@ export function ResearchPanel(props: ResearchPanelHostProps) {
                     selectedCredibility: e.target.value as typeof state.selectedCredibility,
                   })
                 }
-                className="text-sm border border-gray-300 rounded px-2 py-1 bg-white"
+                className="rounded-lg border border-default bg-surface px-2 py-1 text-sm text-primary outline-none focus-visible:ring-2 focus-visible:ring-[var(--present-accent-ring)]"
               >
                 <option value="all">All</option>
                 <option value="high">High</option>
@@ -637,9 +444,8 @@ export function ResearchPanel(props: ResearchPanelHostProps) {
               </select>
             </div>
 
-            {/* Sort By */}
             <div className="flex items-center gap-2">
-              <label className="text-sm font-medium text-gray-700">Sort by:</label>
+              <label className="text-sm font-medium text-secondary">Sort by:</label>
               <select
                 value={state?.sortBy || 'relevance'}
                 onChange={(e) =>
@@ -649,7 +455,7 @@ export function ResearchPanel(props: ResearchPanelHostProps) {
                     sortBy: e.target.value as typeof state.sortBy,
                   })
                 }
-                className="text-sm border border-gray-300 rounded px-2 py-1 bg-white"
+                className="rounded-lg border border-default bg-surface px-2 py-1 text-sm text-primary outline-none focus-visible:ring-2 focus-visible:ring-[var(--present-accent-ring)]"
               >
                 <option value="relevance">Relevance</option>
                 <option value="timestamp">Time</option>
@@ -657,74 +463,74 @@ export function ResearchPanel(props: ResearchPanelHostProps) {
               </select>
             </div>
           </div>
-        )}
-      </div>
+        ) : null}
 
-      {/* Results */}
-      <div
-        {...getRootProps()}
-        className={cn(
-          'space-y-4 relative',
-          (isDragOver || isDragActive) && 'ring-2 ring-blue-400 ring-offset-2',
-        )}
-        onDragOver={handleDragOver}
-        onDragLeave={handleDragLeave}
-      >
-        <input {...getInputProps()} />
-        {isDragOver && (
-          <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/70 pointer-events-none">
-            <p className="text-lg font-medium text-blue-600">Drop files or links to add</p>
-          </div>
-        )}
-        {filteredResults.length === 0 ? (
-          <div className="text-center py-12">
-            <div className="text-gray-400 mb-2">
-              <Info className="w-12 h-12 mx-auto" />
+        <div
+          {...getRootProps()}
+          className={cn(
+            'relative space-y-4',
+            (isDragOver || isDragActive) &&
+              'ring-2 ring-[var(--present-accent-ring)] ring-offset-2 ring-offset-[var(--present-surface)]',
+          )}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+        >
+          <input {...getInputProps()} />
+          {isDragOver ? (
+            <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center bg-surface/80">
+              <p className="text-lg font-medium text-[var(--present-accent)]">
+                Drop files or links to add
+              </p>
             </div>
-            <h3 className="text-lg font-medium text-gray-900 mb-2">No research results</h3>
-            <p className="text-gray-600">
-              {results.length === 0
-                ? 'Start a conversation to see research results appear here.'
-                : 'Try adjusting your filters to see more results.'}
-            </p>
-          </div>
-        ) : (
-          <DndContext
-            sensors={sensors}
-            collisionDetection={closestCenter}
-            onDragEnd={handleDragEnd}
-          >
-            <SortableContext
-              items={filteredResults.map((r) => r.id)}
-              strategy={verticalListSortingStrategy}
-            >
-              {filteredResults.map((result) => {
-                const Renderer = getRendererForResult(result);
-                return (
-                  <SortableItem key={result.id} id={result.id}>
-                    <Renderer
-                      result={result}
-                      isBookmarked={state?.bookmarkedResults.includes(result.id) || false}
-                      isExpanded={state?.expandedResults.includes(result.id) || false}
-                      onToggleBookmark={() => toggleBookmark(result.id)}
-                      onToggleExpanded={() => toggleExpanded(result.id)}
-                    />
-                  </SortableItem>
-                );
-              })}
-            </SortableContext>
-          </DndContext>
-        )}
-      </div>
+          ) : null}
 
-      {/* Load More */}
-      {results.length > maxResults && (
-        <div className="text-center mt-6">
-          <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
-            Load More Results
-          </button>
+          {filteredResults.length === 0 ? (
+            <div className="py-12 text-center">
+              <div className="mb-2 text-tertiary">
+                <Info className="mx-auto h-12 w-12" />
+              </div>
+              <h3 className="mb-2 text-lg font-medium text-primary">No research results</h3>
+              <p className="text-secondary">
+                {results.length === 0
+                  ? 'Start a conversation to see research results appear here.'
+                  : 'Try adjusting your filters to see more results.'}
+              </p>
+            </div>
+          ) : (
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={handleDragEnd}
+            >
+              <SortableContext
+                items={filteredResults.map((r) => r.id)}
+                strategy={verticalListSortingStrategy}
+              >
+                {filteredResults.map((result) => {
+                  const Renderer = getRendererForResult(result);
+                  return (
+                    <SortableItem key={result.id} id={result.id}>
+                      <Renderer
+                        result={result}
+                        isBookmarked={state?.bookmarkedResults.includes(result.id) || false}
+                        isExpanded={state?.expandedResults.includes(result.id) || false}
+                        onToggleBookmark={() => toggleBookmark(result.id)}
+                        onToggleExpanded={() => toggleExpanded(result.id)}
+                      />
+                    </SortableItem>
+                  );
+                })}
+              </SortableContext>
+            </DndContext>
+          )}
         </div>
-      )}
+
+        {results.length > maxResults ? (
+          <div className="pt-2 text-center">
+            <Button>Load More Results</Button>
+          </div>
+        ) : null}
+      </WidgetFrame>
     </div>
   );
 }
@@ -756,7 +562,7 @@ function SortableItem({ id, children }: { id: string; children: React.ReactNode 
         ref={setActivatorNodeRef as unknown as React.Ref<HTMLButtonElement>}
         {...attributes}
         {...listeners}
-        className="absolute -left-2 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600 cursor-grab"
+        className="absolute -left-2 top-1/2 -translate-y-1/2 cursor-grab rounded p-1 text-tertiary hover:text-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--present-accent-ring)]"
         onClick={(e) => e.stopPropagation()}
         title="Drag to reorder"
       >
