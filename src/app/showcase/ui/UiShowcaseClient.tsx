@@ -10,55 +10,16 @@ import { MeetingSummaryWidget } from '@/components/ui/productivity/meeting-summa
 import ActionItemTracker from '@/components/ui/productivity/action-item-tracker';
 import CrowdPulseWidget from '@/components/ui/productivity/crowd-pulse-widget';
 import { RetroTimerEnhanced } from '@/components/ui/productivity/retro-timer-enhanced';
-import DebateScorecard, { debateScoreCardSchema } from '@/components/ui/productivity/debate-scorecard';
 import { LinearKanbanShowcase } from '@/components/ui/showcase/linear-kanban-showcase';
 import { ContextProvider } from '@/lib/stores/context-store';
-import { TranscriptProvider } from '@/lib/stores/transcript-store';
 
 export function UiShowcaseClient() {
   const theme = usePresentTheme();
 
-  const scorecard = debateScoreCardSchema.parse({
-    topic: 'OpenAI-parity UI refactor',
-    round: 'Showcase fixture',
-    status: { lastAction: 'Unified tokens + widget chrome sweep', pendingVerifications: [] },
-    claims: [
-      {
-        id: 'c1',
-        side: 'AFF',
-        speech: '1AC',
-        quote: 'Every surface should share one tokenized language.',
-        speaker: 'AFF',
-        status: 'VERIFIED',
-        verdict: 'ACCURATE',
-        impact: 'KEY_VOTER',
-        confidence: 0.85,
-        evidenceCount: 3,
-        upvotes: 12,
-        scoreDelta: 3,
-      },
-      {
-        id: 'c2',
-        side: 'NEG',
-        speech: '1NC',
-        quote: 'Gradients everywhere make it feel like 2020.',
-        speaker: 'NEG',
-        status: 'CHECKING',
-        verdict: 'PARTIALLY_TRUE',
-        impact: 'MINOR',
-        confidence: 0.62,
-        evidenceCount: 1,
-        upvotes: 4,
-        scoreDelta: -1,
-      },
-    ],
-  });
-
   return (
     <ContextProvider>
-      <TranscriptProvider>
-        <div className="min-h-screen bg-surface p-6 md:p-10">
-          <div className="mx-auto max-w-6xl space-y-8">
+      <div className="min-h-screen bg-surface p-6 md:p-10">
+        <div className="mx-auto max-w-6xl space-y-8">
         <header className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
           <div>
             <div className="text-xs uppercase tracking-[0.25em] text-tertiary">UI Showcase</div>
@@ -166,14 +127,9 @@ export function UiShowcaseClient() {
           <RetroTimerEnhanced title="Retro Timer (Enhanced)" initialMinutes={5} showPresets={true} />
 
           <LinearKanbanShowcase className="lg:col-span-2" />
-
-          <div className="lg:col-span-2">
-            <DebateScorecard {...scorecard} />
-          </div>
         </div>
-          </div>
         </div>
-      </TranscriptProvider>
+      </div>
     </ContextProvider>
   );
 }
