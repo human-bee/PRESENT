@@ -13,6 +13,7 @@ import { RetroTimerEnhanced } from '@/components/ui/productivity/retro-timer-enh
 import DebateScorecard, { debateScoreCardSchema } from '@/components/ui/productivity/debate-scorecard';
 import { LinearKanbanShowcase } from '@/components/ui/showcase/linear-kanban-showcase';
 import { ContextProvider } from '@/lib/stores/context-store';
+import { TranscriptProvider } from '@/lib/stores/transcript-store';
 
 export function UiShowcaseClient() {
   const theme = usePresentTheme();
@@ -54,8 +55,10 @@ export function UiShowcaseClient() {
   });
 
   return (
-    <div className="min-h-screen bg-surface p-6 md:p-10">
-      <div className="mx-auto max-w-6xl space-y-8">
+    <ContextProvider>
+      <TranscriptProvider>
+        <div className="min-h-screen bg-surface p-6 md:p-10">
+          <div className="mx-auto max-w-6xl space-y-8">
         <header className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
           <div>
             <div className="text-xs uppercase tracking-[0.25em] text-tertiary">UI Showcase</div>
@@ -118,24 +121,22 @@ export function UiShowcaseClient() {
             ]}
           />
 
-          <ContextProvider>
-            <MeetingSummaryWidget
-              title="Meeting Summary"
-              summary="We standardized UI tokens, bridged TLDraw variables, and started the widget chrome migration sweep."
-              highlights={[
-                'Apps SDK UI is the baseline for tokens and primitives.',
-                'Copper highlight is reserved for focus + selection states.',
-              ]}
-              actionItems={[
-                { task: 'Finish productivity widget chrome sweep', owner: 'You' },
-                { task: 'Capture screenshots + render Remotion showcase', owner: 'Bea' },
-              ]}
-              decisions={[
-                'Apps SDK UI tokens are the single source of truth.',
-                'Copper highlight only for focus/selection.',
-              ]}
-            />
-          </ContextProvider>
+          <MeetingSummaryWidget
+            title="Meeting Summary"
+            summary="We standardized UI tokens, bridged TLDraw variables, and started the widget chrome migration sweep."
+            highlights={[
+              'Apps SDK UI is the baseline for tokens and primitives.',
+              'Copper highlight is reserved for focus + selection states.',
+            ]}
+            actionItems={[
+              { task: 'Finish productivity widget chrome sweep', owner: 'You' },
+              { task: 'Capture screenshots + render Remotion showcase', owner: 'Bea' },
+            ]}
+            decisions={[
+              'Apps SDK UI tokens are the single source of truth.',
+              'Copper highlight only for focus/selection.',
+            ]}
+          />
 
           <ActionItemTracker title="Action Item Tracker" />
 
@@ -170,8 +171,9 @@ export function UiShowcaseClient() {
             <DebateScorecard {...scorecard} />
           </div>
         </div>
-      </div>
-    </div>
+          </div>
+        </div>
+      </TranscriptProvider>
+    </ContextProvider>
   );
 }
-
