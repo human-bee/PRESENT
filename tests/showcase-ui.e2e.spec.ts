@@ -194,9 +194,13 @@ test.describe('prod showcase screenshots', () => {
     const ctxB = await browser.newContext();
 
     await ctxA.addInitScript(() => {
+      // Needed for invokeToolWithMetrics(): emit `present:tool_metrics` regardless of env flags.
+      (window as any).__presentDispatcherMetrics = true;
       window.localStorage.setItem('present:display_name', 'Alice');
     });
     await ctxB.addInitScript(() => {
+      // Needed for invokeToolWithMetrics(): emit `present:tool_metrics` regardless of env flags.
+      (window as any).__presentDispatcherMetrics = true;
       window.localStorage.setItem('present:display_name', 'Bob');
     });
 
@@ -453,8 +457,19 @@ test.describe('prod showcase screenshots', () => {
       { speaker: 'Alice', participantId: 'alice', text: 'Weather + YouTube widgets are live in prod.' },
       { speaker: 'Bob', participantId: 'bob', text: 'I see them too. Canvas sync is working across users.' },
     ]);
-    // Wait for text to appear (best-effort).
-    await pageA.getByText('Weather + YouTube widgets are live in prod.', { exact: false }).waitFor({ timeout: 15_000 }).catch(() => {});
+    if (transcriptResult.ok) {
+      await pageA.getByText('Weather + YouTube widgets are live in prod.', { exact: false }).waitFor({ timeout: 15_000 });
+    } else {
+      testInfo.attach('transcript-injection', {
+        body: JSON.stringify(transcriptResult, null, 2),
+        contentType: 'application/json',
+      });
+      // Still take the screenshot; in environments without REST creds, transcript may be produced by real STT instead.
+      await pageA
+        .getByText('Weather + YouTube widgets are live in prod.', { exact: false })
+        .waitFor({ timeout: 15_000 })
+        .catch(() => {});
+    }
     const shotTranscript = path.join(outDir, '02-transcript.png');
     await pageA.screenshot({ path: shotTranscript, fullPage: true });
     testInfo.attach('transcript', { path: shotTranscript, contentType: 'image/png' });

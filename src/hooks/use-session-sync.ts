@@ -213,8 +213,8 @@ export function useSessionSync(roomName: string) {
       if (insertErr) {
         const messageString = typeof insertErr.error === 'string' ? insertErr.error.toLowerCase() : '';
         const isDuplicate = code === '23505' || messageString.includes('duplicate key');
-        
-      if (isDuplicate) {
+
+        if (isDuplicate) {
           const existingAfterConflict = await fetchSession(initialCanvasId);
           if (existingAfterConflict?.id) {
             if (!cancelledRef.current) {
@@ -228,7 +228,7 @@ export function useSessionSync(roomName: string) {
         if (isMissingCanvas) {
           const fallbackPayload = { ...insertPayload, canvas_id: null };
           const { data: fallback, error: fallbackErr } = await createSession(fallbackPayload);
-      if (!fallbackErr && fallback?.id && !cancelledRef.current) {
+          if (!fallbackErr && fallback?.id && !cancelledRef.current) {
             setSessionId(fallback.id);
             return;
           }

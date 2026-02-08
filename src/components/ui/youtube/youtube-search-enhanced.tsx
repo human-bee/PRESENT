@@ -283,28 +283,6 @@ export function YoutubeSearchEnhanced({
     );
   };
 
-  // Format duration for display
-  const formatDuration = (isoDuration: string): string => {
-    if (!isoDuration) return '';
-    // Convert ISO 8601 duration to readable format
-    const match = isoDuration.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
-    if (!match) return '';
-
-    const hours = match[1] ? `${match[1]}:` : '';
-    const minutes = match[2] ? match[2].padStart(2, '0') : '00';
-    const seconds = match[3] ? match[3].padStart(2, '0') : '00';
-
-    return `${hours}${minutes}:${seconds}`;
-  };
-
-  // Format view count
-  const formatViewCount = (count: string): string => {
-    const num = parseInt(count);
-    if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`;
-    if (num >= 1000) return `${(num / 1000).toFixed(1)}K`;
-    return count;
-  };
-
   // Initial load
   useEffect(() => {
     if (autoSearch && initialQuery) {
