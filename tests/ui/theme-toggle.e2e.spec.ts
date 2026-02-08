@@ -3,7 +3,10 @@ import { test, expect } from '@playwright/test';
 test.describe('Theme bootstrap', () => {
   test('persisted theme applies before paint (data-theme + class)', async ({ page }) => {
     await page.addInitScript(() => {
-      window.localStorage.setItem('present:theme', 'dark');
+      // Only seed once; later parts of this test intentionally override to verify persistence.
+      if (!window.localStorage.getItem('present:theme')) {
+        window.localStorage.setItem('present:theme', 'dark');
+      }
     });
     await page.goto('/canvas');
 
@@ -18,4 +21,3 @@ test.describe('Theme bootstrap', () => {
     await expect(page.locator('html')).not.toHaveClass(/dark/);
   });
 });
-

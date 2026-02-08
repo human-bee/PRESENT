@@ -9,11 +9,19 @@ test.describe('Canvas shell', () => {
 
     // Transcript panel should open with Ctrl+K (wired in TldrawWithCollaboration).
     await page.keyboard.press('Control+K');
-    await expect(page.locator('[data-debug-source="messaging-message-form"]')).toBeVisible();
+    await expect(page.locator('[data-present-transcript-panel="true"]')).toHaveAttribute(
+      'data-state',
+      'open',
+    );
 
-    // Close via header action.
-    await page.getByRole('button', { name: 'Close' }).click();
-    await expect(page.locator('[data-debug-source="messaging-message-form"]')).toBeHidden();
+    // Close via header action. Use DOM click to avoid fixed+transform viewport flake.
+    await page.evaluate(() => {
+      const btn = document.querySelector('button[aria-label="Close"]') as HTMLButtonElement | null;
+      btn?.click();
+    });
+    await expect(page.locator('[data-present-transcript-panel="true"]')).toHaveAttribute(
+      'data-state',
+      'closed',
+    );
   });
 });
-

@@ -743,6 +743,7 @@ export const MessageThreadCollapsible = React.forwardRef<
   return (
     <div
       ref={ref}
+      data-present-transcript-panel="true"
       data-state={typeof isOpen === 'boolean' ? (isOpen ? 'open' : 'closed') : undefined}
       className={cn(
         'bg-surface-elevated border-l border-default shadow-lg h-full overflow-hidden flex flex-col',
