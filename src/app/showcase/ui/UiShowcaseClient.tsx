@@ -1,5 +1,6 @@
 'use client';
 
+import * as React from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/shared/button';
 import { Card } from '@/components/ui/shared/card';
@@ -19,7 +20,11 @@ import { SpeechTranscriptionView } from '@/components/ui/canvas/speech-transcrip
 
 export function UiShowcaseClient() {
   const theme = usePresentTheme();
-  const now = Date.now();
+  // Deterministic timestamps avoid SSR/CSR hydration mismatches on this page.
+  const baseTimeMs = Date.parse('2026-02-08T00:00:00.000Z');
+  const [mounted, setMounted] = React.useState(false);
+  React.useEffect(() => setMounted(true), []);
+
   const sampleResearchResults = [
     {
       id: 'r1',
@@ -33,7 +38,7 @@ export function UiShowcaseClient() {
         type: 'other' as const,
       },
       relevance: 92,
-      timestamp: new Date(now - 60_000).toISOString(),
+      timestamp: new Date(baseTimeMs - 60_000).toISOString(),
       tags: ['tokens', 'a11y'],
       factCheck: { status: 'verified' as const, confidence: 90 },
     },
@@ -49,7 +54,7 @@ export function UiShowcaseClient() {
         type: 'wiki' as const,
       },
       relevance: 81,
-      timestamp: new Date(now - 5 * 60_000).toISOString(),
+      timestamp: new Date(baseTimeMs - 5 * 60_000).toISOString(),
       tags: ['tldraw', 'ui'],
       factCheck: { status: 'unverified' as const, confidence: 55 },
     },
@@ -153,9 +158,13 @@ export function UiShowcaseClient() {
         <Card className="p-5">
           <div className="flex flex-wrap items-center gap-3">
             <div className="text-sm text-secondary">Theme mode:</div>
-            <div className="text-sm font-medium text-primary">{theme.mode}</div>
+            <div className="text-sm font-medium text-primary" suppressHydrationWarning>
+              {mounted ? theme.mode : '...'}
+            </div>
             <div className="text-sm text-secondary">Resolved:</div>
-            <div className="text-sm font-medium text-primary">{theme.resolved}</div>
+            <div className="text-sm font-medium text-primary" suppressHydrationWarning>
+              {mounted ? theme.resolved : '...'}
+            </div>
             <div className="ml-auto text-xs text-tertiary">
               Tip: Screenshots are captured for both light/dark.
             </div>
