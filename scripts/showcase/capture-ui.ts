@@ -104,7 +104,7 @@ async function main() {
 
         await captureCanvas(page, theme, viewportName);
 
-        await gotoAndWait(page, '/showcase/ui', 'text=UI Showcase');
+        await gotoAndWait(page, '/showcase/ui', '[data-present-showcase-mounted="true"]');
         await screenshot(page, `ui-${theme}-${viewportName}`);
 
         await gotoAndWait(page, '/mcp-config', 'text=MCP server configuration', { waitUntil: 'load' });

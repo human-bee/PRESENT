@@ -113,7 +113,11 @@ export function UiShowcaseClient() {
 
   return (
     <ContextProvider>
-      <div className="min-h-screen bg-surface p-6 md:p-10">
+      <div
+        className="min-h-screen bg-surface p-6 md:p-10"
+        data-present-showcase-mounted={mounted ? 'true' : 'false'}
+        suppressHydrationWarning
+      >
         <div className="mx-auto max-w-6xl space-y-8">
         <header className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
           <div>
