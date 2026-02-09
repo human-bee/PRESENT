@@ -13,13 +13,16 @@ const statuses: LinearStatus[] = [
   { id: 'done', name: 'Done', type: 'completed' },
 ];
 
+// Keep fixture times stable to avoid SSR/CSR hydration mismatches in /showcase/ui.
+const FIXTURE_NOW = Date.parse('2026-02-08T00:00:00.000Z');
+
 const issues: LinearIssue[] = [
   {
     id: 'ISSUE-1',
     identifier: 'PRE-128',
     title: 'Tokenize widget chrome (headers, borders, focus)',
     status: 'In Progress',
-    updatedAt: new Date(Date.now() - 1000 * 60 * 35).toISOString(),
+    updatedAt: new Date(FIXTURE_NOW - 1000 * 60 * 35).toISOString(),
     priority: { value: 2, name: 'High' },
     labels: ['Work'],
     project: 'Present',
@@ -30,7 +33,7 @@ const issues: LinearIssue[] = [
     identifier: 'PRE-131',
     title: 'Add UI showcase route + screenshot capture script',
     status: 'Review',
-    updatedAt: new Date(Date.now() - 1000 * 60 * 90).toISOString(),
+    updatedAt: new Date(FIXTURE_NOW - 1000 * 60 * 90).toISOString(),
     priority: { value: 3, name: 'Medium' },
     labels: ['Work', 'Social'],
     project: 'Showcase',
@@ -41,7 +44,7 @@ const issues: LinearIssue[] = [
     identifier: 'PRE-140',
     title: 'Remotion video: stitch before/after and highlight copper accents',
     status: 'Triage',
-    updatedAt: new Date(Date.now() - 1000 * 60 * 180).toISOString(),
+    updatedAt: new Date(FIXTURE_NOW - 1000 * 60 * 180).toISOString(),
     priority: { value: 4, name: 'Low' },
     labels: ['Personal'],
     project: 'Marketing',
@@ -51,7 +54,7 @@ const issues: LinearIssue[] = [
     identifier: 'PRE-145',
     title: 'Fix a11y: consistent focus rings across modals and menus',
     status: 'Done',
-    updatedAt: new Date(Date.now() - 1000 * 60 * 12).toISOString(),
+    updatedAt: new Date(FIXTURE_NOW - 1000 * 60 * 12).toISOString(),
     priority: { value: 1, name: 'Urgent' },
     labels: ['Work'],
     project: 'Present',
@@ -123,4 +126,3 @@ export function LinearKanbanShowcase({ className }: { className?: string }) {
     </WidgetFrame>
   );
 }
-

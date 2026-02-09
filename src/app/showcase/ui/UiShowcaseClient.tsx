@@ -17,6 +17,7 @@ import { ResearchPanel } from '@/components/ui/research/research-panel';
 import { RoomConnectorUI } from '@/components/ui/livekit/components/RoomConnectorUI';
 import type { LivekitRoomConnectorState } from '@/components/ui/livekit/hooks/types';
 import { SpeechTranscriptionView } from '@/components/ui/canvas/speech-transcription-view';
+import { ToolDispatcherStub } from '@/components/tool-dispatcher/tool-dispatcher-stub';
 
 export function UiShowcaseClient() {
   const theme = usePresentTheme();
@@ -113,12 +114,13 @@ export function UiShowcaseClient() {
 
   return (
     <ContextProvider>
-      <div
-        className="min-h-screen bg-surface p-6 md:p-10"
-        data-present-showcase-mounted={mounted ? 'true' : 'false'}
-        suppressHydrationWarning
-      >
-        <div className="mx-auto max-w-6xl space-y-8">
+      <ToolDispatcherStub>
+        <div
+          className="min-h-screen bg-surface p-6 md:p-10"
+          data-present-showcase-mounted={mounted ? 'true' : 'false'}
+          suppressHydrationWarning
+        >
+          <div className="mx-auto max-w-6xl space-y-8">
         <header className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
           <div>
             <div className="text-xs uppercase tracking-[0.25em] text-tertiary">UI Showcase</div>
@@ -283,7 +285,7 @@ export function UiShowcaseClient() {
                     id: 't1',
                     speaker: 'you',
                     text: 'Can you summarize the design changes?',
-                    timestamp: now - 15_000,
+                    timestamp: baseTimeMs - 15_000,
                     isFinal: true,
                     source: 'user',
                   },
@@ -291,7 +293,7 @@ export function UiShowcaseClient() {
                     id: 't2',
                     speaker: 'voice-agent',
                     text: 'Yep. All widgets now share tokenized surfaces and consistent focus rings.',
-                    timestamp: now - 8_000,
+                    timestamp: baseTimeMs - 8_000,
                     isFinal: true,
                     source: 'agent',
                   },
@@ -304,6 +306,7 @@ export function UiShowcaseClient() {
           </div>
 	        </div>
 	      </div>
-	    </ContextProvider>
+      </ToolDispatcherStub>
+    </ContextProvider>
   );
 }

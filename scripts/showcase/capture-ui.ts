@@ -40,17 +40,18 @@ async function gotoAndWait(
   page: Page,
   pathname: string,
   waitForSelector: string,
-  opts?: { waitUntil?: 'domcontentloaded' | 'load'; retries?: number },
+  opts?: { waitUntil?: 'domcontentloaded' | 'load'; retries?: number; timeoutMs?: number },
 ) {
   const url = `${BASE_URL}${pathname}`;
   const waitUntil = opts?.waitUntil ?? 'domcontentloaded';
   const retries = opts?.retries ?? 3;
+  const timeoutMs = opts?.timeoutMs ?? 60_000;
 
   let lastErr: unknown;
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
-      await page.goto(url, { waitUntil, timeout: 60_000 });
-      await page.waitForSelector(waitForSelector, { state: 'visible', timeout: 60_000 });
+      await page.goto(url, { waitUntil, timeout: timeoutMs });
+      await page.waitForSelector(waitForSelector, { state: 'visible', timeout: timeoutMs });
       // Small settle to avoid capturing mid-hydration.
       await page.waitForTimeout(150);
       return;
@@ -75,7 +76,7 @@ async function screenshot(page: Page, name: string) {
 }
 
 async function captureCanvas(page: Page, theme: ThemeMode, viewport: ViewportName) {
-  await gotoAndWait(page, '/canvas', '.tl-container');
+  await gotoAndWait(page, '/canvas', '.tl-container', { retries: 4, timeoutMs: 120_000 });
   await screenshot(page, `canvas-${theme}-${viewport}-closed`);
 
   // Transcript open via Ctrl+K (matches existing UX + tests).
