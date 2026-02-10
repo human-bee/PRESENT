@@ -23,4 +23,24 @@ test.describe('Theme bootstrap', () => {
     await expect(page.locator('html')).not.toHaveClass(/dark/);
     await expect(page.locator('.tl-container')).toHaveClass(/tl-theme__light/);
   });
+
+  test('system mode resolves to OS scheme and TLDraw follows', async ({ page }) => {
+    await page.addInitScript(() => {
+      window.localStorage.setItem('present:theme', 'system');
+    });
+
+    await page.emulateMedia({ colorScheme: 'dark' });
+    await page.goto('/canvas');
+
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+    await expect(page.locator('html')).toHaveClass(/dark/);
+    await expect(page.locator('.tl-container')).toHaveClass(/tl-theme__dark/);
+
+    await page.emulateMedia({ colorScheme: 'light' });
+    await page.reload();
+
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+    await expect(page.locator('html')).not.toHaveClass(/dark/);
+    await expect(page.locator('.tl-container')).toHaveClass(/tl-theme__light/);
+  });
 });

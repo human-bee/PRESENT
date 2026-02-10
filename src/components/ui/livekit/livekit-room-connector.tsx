@@ -23,12 +23,19 @@ export const CanvasLiveKitContext = React.createContext<{
 } | null>(null);
 
 export function LivekitRoomConnector({
-  roomName = 'canvas-room',
-  userName = 'Canvas User',
+  roomName: providedRoomName,
+  userName: providedUserName,
   serverUrl,
   audioOnly = false,
   autoConnect = false,
 }: LivekitRoomConnectorProps) {
+  // In canvas, the canonical room name is computed by CanvasPageClient (canvas-<uuid>).
+  // If callers don't pass roomName explicitly, prefer the canvas context to avoid dispatching
+  // the voice agent to the wrong room (and timing out waiting for it to join).
+  const livekitCtx = React.useContext(CanvasLiveKitContext);
+  const roomName = providedRoomName ?? livekitCtx?.roomName ?? 'canvas-room';
+  const userName = providedUserName ?? 'Canvas User';
+
   const {
     state,
     connect,

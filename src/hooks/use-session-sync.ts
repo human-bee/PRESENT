@@ -127,7 +127,13 @@ export function useSessionSync(roomName: string) {
             }),
           });
           if (!res.ok) {
-            console.error('[useSessionSync] Failed to persist transcript batch', await res.text());
+            const bodyText = await res.text().catch(() => '');
+            console.error('[useSessionSync] Failed to persist transcript batch', bodyText);
+            // If unauthenticated, don't keep retrying forever (production was spamming 500s via RLS failures).
+            if (res.status === 401 || res.status === 403) {
+              pendingTranscriptRef.current = [];
+              break;
+            }
             break;
           }
           pendingTranscriptRef.current = pendingTranscriptRef.current.slice(batch.length);
