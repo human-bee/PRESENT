@@ -60,6 +60,7 @@ export const defaultCapabilities: SystemCapabilities = {
     { name: 'youtube_search', description: 'Search YouTube videos', examples: ['search youtube for cats'] },
     { name: 'mcp_tool', description: 'Call an MCP tool by name', examples: ['mcp weather', 'mcp searchVideos'] },
     { name: 'update_component', description: 'Update existing UI components', examples: ['update timer to 10 minutes'] },
+    { name: 'remove_component', description: 'Remove an existing UI component', examples: ['remove that widget', 'delete the crowd pulse widget'] },
     { name: 'list_components', description: 'List all components and their IDs' },
     { name: 'web_search', description: 'Search the web' },
     { name: 'create_infographic', description: 'Generate an infographic' },

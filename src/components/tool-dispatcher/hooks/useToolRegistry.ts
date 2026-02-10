@@ -621,6 +621,56 @@ export function useToolRegistry(deps: ToolRegistryDeps): ToolRegistryApi {
 
       return { status: 'SUCCESS', message: 'Component update queued' };
     });
+
+    map.set('remove_component', async ({ params, call }) => {
+      const explicitId =
+        typeof params?.componentId === 'string'
+          ? params.componentId.trim()
+          : typeof params?.messageId === 'string'
+            ? params.messageId.trim()
+            : '';
+      const resolvedId = explicitId || resolveLedgerMessageId(params || {}) || '';
+      if (!resolvedId) {
+        return { status: 'ERROR', message: 'remove_component requires componentId or resolvable hints' };
+      }
+
+      const componentInfo = ComponentRegistry.get(resolvedId);
+      metrics?.associateCallWithMessage?.(call.id, resolvedId, {
+        tool: 'remove_component',
+        componentType: componentInfo?.componentType,
+      });
+
+      // Best-effort: clean up local intent/message ledgers so follow-on updates don't target removed nodes.
+      try {
+        const intentId = messageLedger.get(resolvedId);
+        if (intentId) {
+          const entry = intentLedger.get(intentId);
+          if (entry?.slot) {
+            const slotIntent = slotLedger.get(entry.slot);
+            if (slotIntent === intentId) {
+              slotLedger.delete(entry.slot);
+            }
+          }
+          intentLedger.delete(intentId);
+          messageLedger.delete(resolvedId);
+        }
+      } catch {
+        /* noop */
+      }
+
+      try {
+        window.dispatchEvent(
+          new CustomEvent('present:remove_component', { detail: { messageId: resolvedId } }),
+        );
+        // For instrumentation/test harnesses: consider removal "painted" once we request it.
+        metrics?.markPaintForMessage?.(resolvedId, { tool: 'remove_component', componentType: componentInfo?.componentType });
+      } catch (error) {
+        return { status: 'ERROR', message: error instanceof Error ? error.message : String(error) };
+      }
+
+      return { status: 'SUCCESS', message: `Remove requested for ${resolvedId}`, componentId: resolvedId };
+    });
+
     map.set('resolve_component', async ({ params }) => {
       const resolved = resolveLedgerMessageId(params || {});
       if (!resolved) {
