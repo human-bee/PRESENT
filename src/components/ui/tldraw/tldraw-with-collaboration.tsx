@@ -20,6 +20,7 @@ import { CollaborationLoadingOverlay } from './components';
 import { CanvasAgentController } from './canvas/canvas-agent-controller';
 import { FairyIntegration } from './fairy/fairy-integration';
 import { getBooleanFlag } from '@/lib/feature-flags';
+import { usePresentTheme } from '@/components/ui/system/theme-provider';
 
 interface TldrawWithCollaborationProps {
   onMount?: (editor: Editor) => void;
@@ -135,9 +136,22 @@ function CollaborationEditorEffects({
 }: CollaborationEditorEffectsProps) {
   const { editor, ready } = useEditorReady();
   const isFairyEnabled = getBooleanFlag(process.env.NEXT_PUBLIC_FAIRY_ENABLED, true);
+  const theme = usePresentTheme();
 
   useTldrawEditorBridge(editor, { onMount });
   useCanvasEventHandlers(editor, room, containerRef, { enabled: ready });
+
+  // Keep TLDraw's internal color scheme aligned with the app theme.
+  // Without this, TLDraw can stay in "light" while the app is "dark" (or vice versa),
+  // leading to illegible text / mismatched chrome.
+  useEffect(() => {
+    if (!ready || !editor) return;
+    try {
+      editor.user.updateUserPreferences({ colorScheme: theme.mode });
+    } catch {
+      // Best-effort: if TLDraw changes preferences API, avoid crashing the canvas.
+    }
+  }, [editor, ready, theme.mode]);
 
   useEffect(() => {
     if (!ready || !editor) return;

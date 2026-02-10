@@ -12,6 +12,8 @@ test.describe('Theme bootstrap', () => {
 
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
     await expect(page.locator('html')).toHaveClass(/dark/);
+    // TLDraw chrome should follow the app theme to avoid mixed light/dark tokens.
+    await expect(page.locator('.tl-container')).toHaveClass(/tl-theme__dark/);
 
     // Flip to light and ensure it persists after reload.
     await page.evaluate(() => window.localStorage.setItem('present:theme', 'light'));
@@ -19,5 +21,6 @@ test.describe('Theme bootstrap', () => {
 
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
     await expect(page.locator('html')).not.toHaveClass(/dark/);
+    await expect(page.locator('.tl-container')).toHaveClass(/tl-theme__light/);
   });
 });
