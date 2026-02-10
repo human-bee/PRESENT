@@ -21,7 +21,8 @@ binding = "TLDRAW_UPLOADS"
 bucket_name = "present-tldraw-uploads"
 preview_bucket_name = "present-tldraw-uploads-preview"
 
-[[routes]]
-pattern = "sync.present.best"
-custom_domain = true
-zone_name = "present.best"
+# NOTE:
+# We intentionally do not configure a custom domain here because present.best DNS is
+# not currently delegated to Cloudflare (it is on Porkbun/Vercel DNS). If you want
+# `sync.present.best`, either move DNS to Cloudflare or enable Cloudflare "Custom
+# Hostnames" (SSL for SaaS) and then add routes back in.
