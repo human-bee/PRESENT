@@ -230,6 +230,7 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
     addComponentToCanvas,
     queuePendingComponent,
     drainPendingComponents,
+    removeComponentFromCanvas,
   } = useCanvasComponentStore(editor, logger);
 
   const { onDragOver, onDrop, toggleComponentToolbox, showOnboarding } = useCanvasInteractions({
@@ -264,6 +265,24 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
     bus,
     logger,
   });
+
+  useEffect(() => {
+    const handler = (event: Event) => {
+      try {
+        const detail = (event as CustomEvent<{ messageId?: string; componentId?: string }>).detail;
+        const messageIdRaw = detail?.messageId ?? detail?.componentId;
+        const messageId = typeof messageIdRaw === 'string' ? messageIdRaw.trim() : '';
+        if (!messageId) return;
+        removeComponentFromCanvas(messageId);
+      } catch (error) {
+        logger.warn('remove_component handler failed', error);
+      }
+    };
+    window.addEventListener('present:remove_component', handler as EventListener);
+    return () => {
+      window.removeEventListener('present:remove_component', handler as EventListener);
+    };
+  }, [removeComponentFromCanvas, logger]);
 
   // Provide shape utils synchronously at first render so the store registers them on mount
   const customShapeUtils = React.useMemo(() => {
