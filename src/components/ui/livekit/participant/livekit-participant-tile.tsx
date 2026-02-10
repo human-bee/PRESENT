@@ -99,19 +99,17 @@ export const LivekitParticipantTile = React.memo(function LivekitParticipantTile
   if ((!canvasLiveKit || !canvasLiveKit.isConnected || !room) && demoMode) {
     return (
       <div
-        className="relative overflow-hidden rounded-lg border border-slate-800 bg-slate-950 text-white"
+        className="relative overflow-hidden border border-default bg-surface-elevated text-primary"
         style={{ width, height, borderRadius }}
       >
-        <div className="absolute inset-0 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900" />
-        <div className="absolute inset-0 opacity-40 bg-[radial-gradient(circle_at_20%_20%,rgba(56,189,248,0.35),transparent_45%),radial-gradient(circle_at_80%_30%,rgba(129,140,248,0.35),transparent_50%),radial-gradient(circle_at_50%_80%,rgba(16,185,129,0.2),transparent_55%)]" />
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 p-4">
-          <div className="h-12 w-12 rounded-full border border-cyan-400/60 bg-cyan-500/10 shadow-[0_0_18px_rgba(34,211,238,0.55)]" />
+          <div className="h-12 w-12 rounded-full border border-default bg-[var(--present-accent-ring)]" />
           <div className="text-sm font-semibold tracking-wide">Demo Video Feed</div>
-          <div className="text-xs text-slate-300">
+          <div className="text-xs text-secondary">
             {participantIdentity ? `Speaker: ${participantIdentity}` : 'Awaiting LiveKit room'}
           </div>
         </div>
-        <div className="absolute bottom-3 left-3 rounded-full bg-cyan-400/20 px-2 py-1 text-[10px] uppercase tracking-[0.2em] text-cyan-200">
+        <div className="absolute bottom-3 left-3 rounded-full border border-default bg-surface-secondary px-2 py-1 text-[10px] uppercase tracking-[0.2em] text-tertiary">
           Simulated
         </div>
       </div>
@@ -121,20 +119,20 @@ export const LivekitParticipantTile = React.memo(function LivekitParticipantTile
   if (!canvasLiveKit || !canvasLiveKit.isConnected || !room) {
     return (
       <div
-        className="bg-blue-50 border-2 border-blue-300 rounded-lg p-4 flex flex-col items-center justify-center gap-3"
+        className="flex flex-col items-center justify-center gap-3 rounded-lg border border-info-surface bg-info-surface p-4 text-info"
         style={{ width, height: Math.max(height / 2, 140), borderRadius }}
       >
-        <AlertCircle className="w-8 h-8 text-blue-600" />
+        <AlertCircle className="w-8 h-8" />
         <div className="text-center">
-          <p className="font-medium text-blue-800 mb-1">
+          <p className="mb-1 font-medium">
             {!canvasLiveKit ? 'Room Connector Required' : 'Room Not Connected'}
           </p>
-          <p className="text-xs text-blue-700 mb-2">
+          <p className="mb-2 text-xs text-secondary">
             {!canvasLiveKit
               ? 'Create a LivekitRoomConnector component first'
               : `Room "${canvasLiveKit.roomName}" is not connected yet`}
           </p>
-          <p className="text-xs text-blue-600">
+          <p className="text-xs text-secondary">
             Participant tiles work only when the room is connected.
           </p>
         </div>
@@ -189,13 +187,12 @@ export const LivekitParticipantTile = React.memo(function LivekitParticipantTile
         // Avoid briefly snapping to an agent tile before the local participant is ready.
         return (
           <div
-            className="relative overflow-hidden rounded-lg border border-slate-800 bg-slate-950 text-white"
+            className="relative overflow-hidden rounded-lg border border-default bg-surface-elevated text-primary"
             style={{ width, height, borderRadius }}
           >
-            <div className="absolute inset-0 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900" />
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 p-4">
-              <Loader2 className="h-7 w-7 animate-spin text-white/70" />
-              <div className="text-xs text-white/70">Waiting for participants…</div>
+              <Loader2 className="h-7 w-7 animate-spin text-tertiary" />
+              <div className="text-xs text-secondary">Waiting for participants…</div>
             </div>
           </div>
         );
@@ -243,16 +240,16 @@ export const LivekitParticipantTile = React.memo(function LivekitParticipantTile
   if (participantIdentity && !participant) {
     return (
         <div
-          className="bg-gray-50 border-2 border-gray-300 border-dashed rounded-lg p-4 flex flex-col items-center justify-center gap-2"
+          className="flex flex-col items-center justify-center gap-2 rounded-lg border border-default border-dashed bg-surface-secondary p-4"
           style={{ width, height: Math.max(height / 2, 140), borderRadius }}
         >
-          <Loader2 className="w-8 h-8 text-gray-400 animate-spin" />
+          <Loader2 className="w-8 h-8 text-tertiary animate-spin" />
           <div className="text-center">
-            <p className="font-medium text-gray-600 mb-1">Waiting for...</p>
-            <p className="text-xs text-gray-500 font-mono bg-gray-100 px-2 py-1 rounded">
+            <p className="mb-1 font-medium text-secondary">Waiting for...</p>
+            <p className="rounded border border-default bg-surface px-2 py-1 font-mono text-xs text-secondary">
               {participantIdentity}
             </p>
-            <p className="text-[10px] text-gray-400 mt-2">Participant is not in the room yet</p>
+            <p className="mt-2 text-[10px] text-tertiary">Participant is not in the room yet</p>
           </div>
         </div>
     );
@@ -261,18 +258,18 @@ export const LivekitParticipantTile = React.memo(function LivekitParticipantTile
   // EMPTY STATE: No identity set, and no participants found to auto-select
   return (
     <div
-      className="bg-yellow-50 border-2 border-yellow-300 rounded-lg p-4 flex flex-col items-center justify-center gap-2"
+      className="flex flex-col items-center justify-center gap-2 rounded-lg border border-warning-surface bg-warning-surface p-4 text-warning"
       style={{ width, height: Math.max(height / 2, 140), borderRadius }}
     >
-      <User className="w-8 h-8 text-yellow-600" />
+      <User className="w-8 h-8" />
       <div className="text-center">
-        <p className="font-medium text-yellow-800 mb-1">No Participants</p>
-        <p className="text-xs text-yellow-700 mb-2">
+        <p className="mb-1 font-medium">No Participants</p>
+        <p className="mb-2 text-xs text-secondary">
           Waiting for someone to join...
         </p>
         {localParticipant && (
            <button 
-             className="text-xs text-blue-600 underline mt-1"
+             className="mt-1 text-xs font-medium text-[var(--present-accent)] underline underline-offset-4 hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--present-accent-ring)] rounded"
              onClick={() => onIdentityChange?.(localParticipant.identity)}
            >
              Show Me ({localParticipant.identity})

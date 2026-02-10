@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { Room } from 'livekit-client';
 import { createLiveKitBus } from '../lib/livekit/livekit-bus';
 import { Button } from '@/components/ui/shared/button';
-import { Card, CardHeader } from '@/components/ui/shared/card';
+import { Card } from '@/components/ui/shared/card';
 import { X, Loader2, ImageIcon } from 'lucide-react';
 import { useEditor } from '@tldraw/tldraw';
 import { useInfographicDrop, DRAG_MIME_TYPE } from '@/hooks/use-infographic-drop';
@@ -523,10 +523,10 @@ export function InfographicWidget({ room, isShape = false, __custom_message_id, 
 
     // Render content function to reuse between modes
     const renderContent = () => (
-        <div className={`flex flex-col h-full overflow-y-auto ${!isShape ? 'bg-zinc-950 text-white' : 'text-white'}`}>
-            <div className="flex items-center justify-between p-4 border-b border-white/10">
-                <div className="flex items-center gap-2 font-medium text-white/90">
-                    <div className="p-1.5 rounded-lg bg-blue-500/20 text-blue-400">
+        <div className="flex h-full flex-col overflow-y-auto bg-surface-elevated text-primary">
+            <div className="flex items-center justify-between border-b border-default p-4">
+                <div className="flex items-center gap-2 font-medium">
+                    <div className="rounded-lg bg-[var(--present-accent-ring)] p-1.5 text-[var(--present-accent)]">
                         <ImageIcon className="h-4 w-4" />
                     </div>
                     Infographic Generator
@@ -535,7 +535,7 @@ export function InfographicWidget({ room, isShape = false, __custom_message_id, 
                     <Button
                         variant="ghost"
                         size="icon"
-                        className="h-6 w-6 text-white/60 hover:text-white hover:bg-white/10 rounded-full"
+                        className="h-7 w-7 rounded-full text-secondary hover:bg-surface-secondary"
                         onClick={() => setIsOpen(false)}
                     >
                         <X className="h-4 w-4" />
@@ -543,98 +543,91 @@ export function InfographicWidget({ room, isShape = false, __custom_message_id, 
                 )}
             </div>
 
-            <div className="p-4 space-y-4 flex-1 flex flex-col">
+            <div className="flex flex-1 flex-col space-y-4 p-4">
                 {(providerUsed || fallbackReason) && (
-                    <div className="text-[11px] text-white/50">
-                        {providerUsed && (
+                    <div className="text-[11px] text-tertiary">
+                        {providerUsed ? (
                             <span>
-                                Provider: <span className="text-white/70 font-semibold">{providerUsed}</span>
+                                Provider: <span className="font-semibold text-secondary">{providerUsed}</span>
                             </span>
-                        )}
-                        {fallbackReason && (
+                        ) : null}
+                        {fallbackReason ? (
                             <span className="ml-2">
-                                Fallback: <span className="text-white/60">{fallbackReason}</span>
+                                Fallback: <span className="text-tertiary">{fallbackReason}</span>
                             </span>
-                        )}
+                        ) : null}
                     </div>
                 )}
-                <div className="flex items-center space-x-2 p-3 rounded-xl border border-white/5 bg-white/[0.03]">
+
+                <div className="flex items-center space-x-2 rounded-xl border border-default bg-surface-secondary p-3">
                     <input
                         type="checkbox"
                         id="grounding"
                         checked={useGrounding}
                         onChange={(e) => setUseGrounding(e.target.checked)}
-                        className="h-4 w-4 rounded border-white/20 bg-white/5 text-blue-500 focus:ring-blue-500/50 focus:ring-offset-0"
+                        className="h-4 w-4 rounded border-default bg-surface accent-[var(--present-accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--present-accent-ring)]"
                     />
-                    <label htmlFor="grounding" className="text-sm text-white/70 cursor-pointer select-none">
+                    <label htmlFor="grounding" className="select-none text-sm text-secondary">
                         Use Google Search Grounding
                     </label>
                 </div>
 
-                {/* Action Buttons */}
-                {activeImage && (
+                {activeImage ? (
                     <div className="flex gap-2">
-                        <Button
-                            size="sm"
-                            onClick={handleDownload}
-                            className="flex-1 bg-white/10 hover:bg-white/20 text-white border border-white/20"
-                        >
+                        <Button size="sm" variant="outline" onClick={handleDownload} className="flex-1">
                             Download
                         </Button>
-                        <Button
-                            size="sm"
-                            className="flex-1 bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-500/20"
-                            onClick={handleGenerate}
-                        >
+                        <Button size="sm" onClick={handleGenerate} className="flex-1">
                             Regenerate
                         </Button>
                     </div>
-                )}
+                ) : null}
 
-                {error && (
-                    <div className="p-3 text-sm text-rose-200 bg-rose-500/10 rounded-xl border border-rose-500/20 flex items-start gap-2">
-                        <div className="mt-0.5"><X className="h-4 w-4" /></div>
+                {error ? (
+                    <div className="flex items-start gap-2 rounded-xl border border-danger-outline bg-danger-surface p-3 text-sm text-danger">
+                        <div className="mt-0.5">
+                            <X className="h-4 w-4" />
+                        </div>
                         {error}
                     </div>
-                )}
+                ) : null}
 
-                <div className="flex-1 min-h-0 flex flex-col items-center justify-center rounded-2xl border border-white/10 bg-white/[0.02] relative overflow-hidden">
+                <div className="relative flex min-h-0 flex-1 flex-col items-center justify-center overflow-hidden rounded-2xl border border-default bg-surface-secondary">
                     {isGenerating ? (
                         <div className="flex flex-col items-center gap-4 p-8 text-center">
                             <div className="relative">
-                                <div className="absolute inset-0 rounded-full blur-md bg-blue-500/30 animate-pulse" />
-                                <Loader2 className="relative h-10 w-10 animate-spin text-blue-400" />
+                                <div className="absolute inset-0 rounded-full bg-[var(--present-accent-ring)] blur-md animate-pulse" />
+                                <Loader2 className="relative h-10 w-10 animate-spin text-[var(--present-accent)]" />
                             </div>
                             <div className="space-y-1">
-                                <p className="text-sm font-medium text-white/90">Generating Infographic...</p>
-                                <p className="text-xs text-white/50">Analyzing conversation context</p>
+                                <p className="text-sm font-medium text-primary">Generating Infographic...</p>
+                                <p className="text-xs text-tertiary">Analyzing conversation context</p>
                             </div>
                         </div>
                     ) : activeImage ? (
-                        <div className="relative group w-full h-full flex flex-col">
-                            <div className="flex-1 relative flex items-center justify-center bg-black/20 overflow-hidden">
+                        <div className="group relative flex h-full w-full flex-col">
+                            <div className="relative flex flex-1 items-center justify-center overflow-hidden bg-surface">
                                 <img
                                     src={activeImage.url}
                                     alt="Generated Infographic"
-                                    className="max-w-full max-h-full object-contain cursor-grab active:cursor-grabbing"
+                                    className="max-h-full max-w-full cursor-grab object-contain active:cursor-grabbing"
                                     draggable="true"
                                     onDragStart={handleDragStart}
                                 />
                             </div>
 
-                            {/* Navigation Bar */}
-                            {history.length > 1 && (
-                                <div className="h-12 border-t border-white/10 bg-white/5 flex items-center justify-between px-4 shrink-0">
+                            {history.length > 1 ? (
+                                <div className="flex h-12 shrink-0 items-center justify-between border-t border-default bg-surface-secondary px-4">
                                     <Button
                                         variant="ghost"
                                         size="sm"
                                         onClick={handlePrev}
                                         disabled={currentIndex === 0}
-                                        className="text-white/70 hover:text-white disabled:opacity-30"
+                                        className="text-secondary hover:bg-surface"
                                     >
                                         Previous
                                     </Button>
-                                    <span className="text-xs text-white/50 font-medium">
+                                    <span className="text-xs font-medium text-tertiary">
                                         {currentIndex + 1} / {history.length}
                                     </span>
                                     <Button
@@ -642,30 +635,25 @@ export function InfographicWidget({ room, isShape = false, __custom_message_id, 
                                         size="sm"
                                         onClick={handleNext}
                                         disabled={currentIndex === history.length - 1}
-                                        className="text-white/70 hover:text-white disabled:opacity-30"
+                                        className="text-secondary hover:bg-surface"
                                     >
                                         Next
                                     </Button>
                                 </div>
-                            )}
+                            ) : null}
                         </div>
                     ) : (
-                        <div className="p-8 text-center space-y-4">
-                            <div className="w-16 h-16 rounded-2xl bg-white/5 flex items-center justify-center mx-auto border border-white/10">
-                                <ImageIcon className="h-8 w-8 text-white/20" />
+                        <div className="space-y-4 p-8 text-center">
+                            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl border border-default bg-surface">
+                                <ImageIcon className="h-8 w-8 text-tertiary" />
                             </div>
                             <div className="space-y-1">
-                                <p className="text-sm font-medium text-white/80">Ready to Generate</p>
-                                <p className="text-xs text-white/40 max-w-[200px] mx-auto">
+                                <p className="text-sm font-medium text-primary">Ready to Generate</p>
+                                <p className="mx-auto max-w-[240px] text-xs text-tertiary">
                                     Create a visual summary of the current conversation using Gemini.
                                 </p>
                             </div>
-                            <Button
-                                onClick={handleGenerate}
-                                className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white shadow-lg shadow-blue-500/25 border border-white/10"
-                            >
-                                Generate Infographic
-                            </Button>
+                            <Button onClick={handleGenerate}>Generate Infographic</Button>
                         </div>
                     )}
                 </div>
@@ -680,7 +668,10 @@ export function InfographicWidget({ room, isShape = false, __custom_message_id, 
     if (!isOpen) {
         return (
             <div className="fixed bottom-4 right-4 z-50">
-                <Button onClick={() => setIsOpen(true)} className="shadow-lg bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-full px-6 py-3 flex items-center gap-2">
+                <Button
+                    onClick={() => setIsOpen(true)}
+                    className="flex items-center gap-2 rounded-full px-6 py-3 shadow-lg"
+                >
                     <ImageIcon className="h-4 w-4" />
                     Infographic
                 </Button>
@@ -690,12 +681,8 @@ export function InfographicWidget({ room, isShape = false, __custom_message_id, 
 
     return (
         <div className="fixed bottom-4 right-4 z-50 w-80 md:w-96 shadow-2xl">
-            <Card className="border-2 border-primary/20 overflow-hidden h-[500px]">
-                <CardHeader className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white p-0">
-                    {/* The header content is now part of renderContent, but we apply the background here */}
-                    {/* We reuse the content but wrap it in the card for the floating widget */}
-                    {renderContent()}
-                </CardHeader>
+            <Card className="h-[500px] overflow-hidden p-0">
+                {renderContent()}
             </Card>
         </div>
     );

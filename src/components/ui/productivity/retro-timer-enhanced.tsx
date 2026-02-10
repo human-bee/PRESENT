@@ -14,6 +14,7 @@ import { cn } from '@/lib/utils';
 import { Play, Pause, RotateCcw, Clock } from 'lucide-react';
 import { LoadingState } from '@/lib/with-progressive-loading';
 import { LoadingWrapper, SkeletonPatterns } from '@/components/ui/shared/loading-states';
+import { Button } from '@/components/ui/shared/button';
 
 const RETRO_TIMER_DEBUG = process.env.NEXT_PUBLIC_CANVAS_DEBUG === 'true';
 
@@ -534,18 +535,17 @@ export function RetroTimerEnhanced({
     >
       <div
         className={cn(
-          'bg-gradient-to-br from-gray-900 to-gray-800 rounded-xl p-6 text-white shadow-2xl',
-          'border border-gray-700 max-w-sm mx-auto',
+          'rounded-2xl p-6 shadow-sm border border-default bg-surface-elevated text-primary max-w-sm mx-auto',
           'touch-manipulation',
-          timerState.isFinished && 'ring-2 ring-red-500 ring-opacity-50',
+          timerState.isFinished && 'ring-2 ring-[var(--present-accent-ring)]',
         )}
       >
         <div className="text-center mb-6">
           <div className="flex items-center justify-center gap-2 mb-2">
-            <Clock className="w-5 h-5 text-blue-400" />
+            <Clock className="w-5 h-5 text-[var(--present-accent)]" />
             <h3 className="text-lg font-semibold">{headerTitle}</h3>
           </div>
-          <div className="text-xs text-gray-400">Enhanced with AI Updates • {componentId}</div>
+          <div className="text-xs text-tertiary">Enhanced with AI Updates • {componentId}</div>
         </div>
 
         <div className="text-center mb-6">
@@ -553,32 +553,26 @@ export function RetroTimerEnhanced({
             className={cn(
               'text-6xl font-mono font-bold tracking-wider',
               timerState.isFinished
-                ? 'text-red-400 animate-pulse'
+                ? 'text-danger animate-pulse'
                 : timerState.isRunning
-                  ? 'text-green-400'
-                  : 'text-blue-400',
+                  ? 'text-success'
+                  : 'text-[var(--present-accent)]',
             )}
           >
             {formatTime(timerState.timeLeft)}
           </div>
           {timerState.isFinished && (
-            <div className="text-red-400 text-sm mt-2 animate-bounce">Time's up! 🎉</div>
+            <div className="text-danger text-sm mt-2 animate-bounce">Time's up! 🎉</div>
           )}
         </div>
 
         <div className="flex justify-center gap-3 mb-4">
-          <button
+          <Button
             onClick={startPause}
             disabled={timerState.isFinished}
-            className={cn(
-              'flex items-center gap-2 px-5 py-3 rounded-lg font-medium transition-all min-h-11',
-              'focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50',
-              timerState.isRunning
-                ? 'bg-yellow-600 hover:bg-yellow-700 text-white'
-                : 'bg-green-600 hover:bg-green-700 text-white',
-              timerState.isFinished && 'opacity-50 cursor-not-allowed',
-            )}
             aria-label={timerState.isRunning ? 'Pause timer' : 'Start timer'}
+            className="min-h-11"
+            variant={timerState.isRunning ? 'secondary' : 'default'}
           >
             {timerState.isRunning ? (
               <>
@@ -591,34 +585,32 @@ export function RetroTimerEnhanced({
                 Start
               </>
             )}
-          </button>
+          </Button>
 
-          <button
-            onClick={reset}
-            className="flex items-center gap-2 px-4 py-3 rounded-lg font-medium bg-gray-600 hover:bg-gray-700 text-white transition-all focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-opacity-50 min-h-11"
-            aria-label="Reset timer"
-          >
+          <Button onClick={reset} variant="outline" className="min-h-11">
             <RotateCcw className="w-4 h-4" />
             Reset
-          </button>
+          </Button>
         </div>
 
         {showPresets && (
           <div className="flex justify-center gap-2">
             {[5, 10, 20].map((minutes) => (
-              <button
+              <Button
                 key={minutes}
                 onClick={() => setPresetTime(minutes)}
-                className="px-4 py-2 text-sm rounded-md bg-gray-700 hover:bg-gray-600 text-gray-300 hover:text-white transition-all min-h-11"
+                variant="ghost"
+                size="sm"
+                className="min-h-11"
                 aria-label={`Set preset timer to ${minutes} minutes`}
               >
                 {minutes}m
-              </button>
+              </Button>
             ))}
           </div>
         )}
 
-        <div className="mt-4 text-center text-xs text-gray-500">
+        <div className="mt-4 text-center text-xs text-tertiary">
           Status: {timerState.isFinished ? 'Finished' : timerState.isRunning ? 'Running' : 'Stopped'}
           {timerState.isRunning && ' • AI can update while running'}
         </div>

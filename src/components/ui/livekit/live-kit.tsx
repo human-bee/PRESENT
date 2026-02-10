@@ -20,6 +20,8 @@ import { usecustomThreadInput } from '@custom-ai/react';
 import { MediaDeviceFailure, RpcError, RpcInvocationData } from 'livekit-client';
 import { ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { generateRandomUserId } from '@/lib/helper';
+import { Button } from '@/components/ui/shared/button';
+import { Card } from '@/components/ui/shared/card';
 
 // Child component that will handle RPC registration
 export function RpcHandler({ contextKey }: { contextKey: string }) {
@@ -162,16 +164,11 @@ interface ConnectButtonProps {
 function ConnectButton({ onConnect }: ConnectButtonProps) {
   return (
     <div className="mx-auto max-w-4xl p-4">
-      <div className="flex flex-col bg-background border border-gray-200 rounded-xl shadow-md p-3 mb-2">
+      <Card className="mb-2 p-3">
         <div className="flex items-center justify-between">
-          <button
-            className="px-4 py-2 bg-black/80 hover:bg-black/70 text-white font-medium rounded-lg transition-colors"
-            onClick={onConnect}
-          >
-            Connect
-          </button>
+          <Button onClick={onConnect}>Connect</Button>
         </div>
-      </div>
+      </Card>
     </div>
   );
 }
@@ -180,7 +177,7 @@ function ConnectButton({ onConnect }: ConnectButtonProps) {
 export function LiveKitUI() {
   return (
     <div className="mx-auto max-w-4xl p-4">
-      <div className="flex flex-col bg-background border border-gray-200 rounded-xl shadow-md p-3 mb-2">
+      <Card className="mb-2 p-3">
         <div className="flex items-center justify-between">
           <div className="text-sm font-medium">Connected</div>
           <ControlBar
@@ -194,7 +191,7 @@ export function LiveKitUI() {
             }}
           />
         </div>
-      </div>
+      </Card>
       <RoomAudioRenderer />
     </div>
   );

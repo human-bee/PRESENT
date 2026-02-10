@@ -1,52 +1,98 @@
 /**
- * Button component for the Next.js application.
+ * Present Button (adapter)
  *
- * This component serves as a button display.
+ * Keep existing import paths stable while migrating to OpenAI Apps SDK UI.
  */
 
 'use client';
 
 import * as React from 'react';
-import { cva, type VariantProps } from 'class-variance-authority';
+import { Button as OaiButton, type ButtonProps as OaiButtonProps } from '@openai/apps-sdk-ui/components/Button';
 import { cn } from '@/lib/utils';
 
-const buttonVariants = cva(
-  'inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50',
-  {
-    variants: {
-      variant: {
-        default: 'bg-primary text-primary-foreground hover:bg-primary/90',
-        destructive: 'bg-destructive text-destructive-foreground hover:bg-destructive/90',
-        outline: 'border border-input bg-background hover:bg-accent hover:text-accent-foreground',
-        secondary: 'bg-secondary text-secondary-foreground hover:bg-secondary/80',
-        ghost: 'hover:bg-accent hover:text-accent-foreground',
-        link: 'text-primary underline-offset-4 hover:underline',
-      },
-      size: {
-        default: 'h-10 px-4 py-2',
-        sm: 'h-9 rounded-md px-3',
-        lg: 'h-11 rounded-md px-8',
-        icon: 'h-10 w-10',
-      },
-    },
-    defaultVariants: {
-      variant: 'default',
-      size: 'default',
-    },
-  },
-);
+export type PresentButtonVariant =
+  | 'default'
+  | 'destructive'
+  | 'outline'
+  | 'secondary'
+  | 'ghost'
+  | 'link';
+
+export type PresentButtonSize = 'default' | 'sm' | 'lg' | 'icon';
 
 export interface ButtonProps
-  extends React.ButtonHTMLAttributes<HTMLButtonElement>,
-    VariantProps<typeof buttonVariants> {}
+  extends Omit<OaiButtonProps, 'variant' | 'color' | 'size' | 'uniform' | 'pill'> {
+  variant?: PresentButtonVariant;
+  size?: PresentButtonSize;
+}
+
+function mapVariant(variant: PresentButtonVariant | undefined): {
+  color: OaiButtonProps['color'];
+  variant: NonNullable<OaiButtonProps['variant']>;
+  className?: string;
+} {
+  switch (variant) {
+    case 'destructive':
+      return { color: 'danger', variant: 'solid' };
+    case 'outline':
+      return { color: 'primary', variant: 'outline' };
+    case 'secondary':
+      return { color: 'secondary', variant: 'solid' };
+    case 'ghost':
+      return { color: 'secondary', variant: 'ghost' };
+    case 'link':
+      return { color: 'primary', variant: 'ghost', className: 'underline underline-offset-4' };
+    case 'default':
+    default:
+      // Intentionally neutral: Apps SDK UI "primary" is gray by default.
+      return { color: 'primary', variant: 'solid' };
+  }
+}
+
+function mapSize(size: PresentButtonSize | undefined): {
+  size: NonNullable<OaiButtonProps['size']>;
+  uniform?: boolean;
+} {
+  switch (size) {
+    case 'sm':
+      return { size: 'sm' };
+    case 'lg':
+      return { size: 'lg' };
+    case 'icon':
+      return { size: 'md', uniform: true };
+    case 'default':
+    default:
+      return { size: 'md' };
+  }
+}
 
 const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className, variant, size, ...props }, ref) => {
+  ({ variant = 'default', size = 'default', className, ...props }, ref) => {
+    const mappedVariant = mapVariant(variant);
+    const mappedSize = mapSize(size);
     return (
-      <button className={cn(buttonVariants({ variant, size, className }))} ref={ref} {...props} />
+      <OaiButton
+        {...props}
+        ref={ref}
+        color={mappedVariant.color}
+        variant={mappedVariant.variant}
+        size={mappedSize.size}
+        uniform={mappedSize.uniform}
+        pill={false}
+        className={cn(mappedVariant.className, className)}
+      />
     );
   },
 );
 Button.displayName = 'Button';
 
-export { Button, buttonVariants };
+/**
+ * Back-compat export.
+ * `buttonVariants` used to be `cva(...)`. It is no longer needed after migrating to Apps SDK UI.
+ */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export const buttonVariants = (_opts?: { variant?: PresentButtonVariant; size?: PresentButtonSize; className?: string }) =>
+  '';
+
+export { Button };
+

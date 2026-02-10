@@ -50,6 +50,8 @@ import {
 import { LoadingState } from '@/lib/with-progressive-loading';
 import { LoadingWrapper, SkeletonPatterns } from '@/components/ui/shared/loading-states';
 import { useComponentSubAgent, SubAgentPresets } from '@/lib/component-subagent';
+import { Button } from '@/components/ui/shared/button';
+import { WidgetFrame } from './widget-frame';
 
 // Define priority levels
 export const priorityLevels = ['low', 'medium', 'high', 'urgent'] as const;
@@ -127,10 +129,10 @@ type ActionItemTrackerState = {
 // Priority badge component
 function PriorityBadge({ priority, className }: { priority: Priority; className?: string }) {
   const styles = {
-    low: 'bg-gray-100 text-gray-700 border-gray-300',
-    medium: 'bg-blue-100 text-blue-700 border-blue-300',
-    high: 'bg-orange-100 text-orange-700 border-orange-300',
-    urgent: 'bg-red-100 text-red-700 border-red-300',
+    low: 'bg-surface-secondary text-secondary border-default',
+    medium: 'bg-info-surface text-info border-info-surface',
+    high: 'bg-warning-surface text-warning border-warning-surface',
+    urgent: 'bg-danger-surface text-danger border-danger-outline',
   };
 
   return (
@@ -150,10 +152,10 @@ function PriorityBadge({ priority, className }: { priority: Priority; className?
 // Status badge component
 function StatusBadge({ status, className }: { status: Status; className?: string }) {
   const styles = {
-    pending: 'bg-gray-100 text-gray-700 border-gray-300',
-    'in-progress': 'bg-blue-100 text-blue-700 border-blue-300',
-    completed: 'bg-green-100 text-green-700 border-green-300',
-    blocked: 'bg-red-100 text-red-700 border-red-300',
+    pending: 'bg-surface-secondary text-secondary border-default',
+    'in-progress': 'bg-info-surface text-info border-info-surface',
+    completed: 'bg-success-surface text-success border-success-surface',
+    blocked: 'bg-danger-surface text-danger border-danger-outline',
   };
 
   return (
@@ -212,16 +214,16 @@ function ActionItemForm({
   };
 
   return (
-    <form onSubmit={handleSubmit} className="bg-gray-50 p-4 rounded-lg border space-y-4">
+    <form onSubmit={handleSubmit} className="bg-surface-secondary p-4 rounded-xl border border-default space-y-4">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* Title */}
         <div className="md:col-span-2">
-          <label className="block text-sm font-medium text-gray-700 mb-1">Title *</label>
+          <label className="block text-sm font-medium text-secondary mb-1">Title *</label>
           <input
             type="text"
             value={formData.title}
             onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full px-3 py-2 border border-default rounded-lg bg-surface outline-none focus-visible:ring-2 focus-visible:ring-[var(--present-accent-ring)]"
             placeholder="What needs to be done?"
             required
           />
@@ -229,11 +231,11 @@ function ActionItemForm({
 
         {/* Description */}
         <div className="md:col-span-2">
-          <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+          <label className="block text-sm font-medium text-secondary mb-1">Description</label>
           <textarea
             value={formData.description}
             onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full px-3 py-2 border border-default rounded-lg bg-surface outline-none focus-visible:ring-2 focus-visible:ring-[var(--present-accent-ring)]"
             rows={3}
             placeholder="Additional details..."
           />
@@ -241,19 +243,19 @@ function ActionItemForm({
 
         {/* Assignee */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Assignee</label>
+          <label className="block text-sm font-medium text-secondary mb-1">Assignee</label>
           <input
             type="text"
             value={formData.assignee}
             onChange={(e) => setFormData({ ...formData, assignee: e.target.value })}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full px-3 py-2 border border-default rounded-lg bg-surface outline-none focus-visible:ring-2 focus-visible:ring-[var(--present-accent-ring)]"
             placeholder="Who's responsible?"
           />
         </div>
 
         {/* Due Date */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Due Date</label>
+          <label className="block text-sm font-medium text-secondary mb-1">Due Date</label>
           <input
             type="date"
             value={formData.dueDate ? formData.dueDate.split('T')[0] : ''}
@@ -263,17 +265,17 @@ function ActionItemForm({
                 dueDate: e.target.value ? new Date(e.target.value).toISOString() : '',
               })
             }
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full px-3 py-2 border border-default rounded-lg bg-surface outline-none focus-visible:ring-2 focus-visible:ring-[var(--present-accent-ring)]"
           />
         </div>
 
         {/* Priority */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Priority</label>
+          <label className="block text-sm font-medium text-secondary mb-1">Priority</label>
           <select
             value={formData.priority}
             onChange={(e) => setFormData({ ...formData, priority: e.target.value as Priority })}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full px-3 py-2 border border-default rounded-lg bg-surface outline-none focus-visible:ring-2 focus-visible:ring-[var(--present-accent-ring)]"
           >
             {priorityLevels.map((priority) => (
               <option key={priority} value={priority}>
@@ -285,11 +287,11 @@ function ActionItemForm({
 
         {/* Status */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+          <label className="block text-sm font-medium text-secondary mb-1">Status</label>
           <select
             value={formData.status}
             onChange={(e) => setFormData({ ...formData, status: e.target.value as Status })}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full px-3 py-2 border border-default rounded-lg bg-surface outline-none focus-visible:ring-2 focus-visible:ring-[var(--present-accent-ring)]"
           >
             {statusTypes.map((status) => (
               <option key={status} value={status}>
@@ -301,7 +303,7 @@ function ActionItemForm({
 
         {/* Estimated Hours */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Estimated Hours</label>
+          <label className="block text-sm font-medium text-secondary mb-1">Estimated Hours</label>
           <input
             type="number"
             min="0"
@@ -313,18 +315,18 @@ function ActionItemForm({
                 estimatedHours: e.target.value ? parseFloat(e.target.value) : undefined,
               })
             }
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full px-3 py-2 border border-default rounded-lg bg-surface outline-none focus-visible:ring-2 focus-visible:ring-[var(--present-accent-ring)]"
             placeholder="Hours"
           />
         </div>
 
         {/* Notes */}
         <div className="md:col-span-2">
-          <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
+          <label className="block text-sm font-medium text-secondary mb-1">Notes</label>
           <textarea
             value={formData.notes}
             onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full px-3 py-2 border border-default rounded-lg bg-surface outline-none focus-visible:ring-2 focus-visible:ring-[var(--present-accent-ring)]"
             rows={2}
             placeholder="Additional notes..."
           />
@@ -333,21 +335,22 @@ function ActionItemForm({
 
       {/* Form Actions */}
       <div className="flex justify-end gap-2">
-        <button
+        <Button
           type="button"
           onClick={onCancel}
-          className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+          variant="outline"
+          size="sm"
         >
           <X className="w-4 h-4 inline mr-1" />
           Cancel
-        </button>
-        <button
+        </Button>
+        <Button
           type="submit"
-          className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+          size="sm"
         >
           <Save className="w-4 h-4 inline mr-1" />
           Save
-        </button>
+        </Button>
       </div>
     </form>
   );
@@ -390,9 +393,9 @@ function ActionItemCard({
   return (
     <div
       className={cn(
-        'bg-white rounded-lg border shadow-sm hover:shadow-md transition-all duration-200 p-4',
-        isCompleted && 'opacity-75 bg-gray-50',
-        isOverdue && 'border-red-200 bg-red-50',
+        'bg-surface-elevated rounded-xl border border-default shadow-sm hover:shadow-md transition-all duration-200 p-4',
+        isCompleted && 'opacity-75 bg-surface-secondary',
+        isOverdue && 'border-danger-outline bg-danger-surface',
       )}
     >
       {/* Header */}
@@ -401,10 +404,10 @@ function ActionItemCard({
           {/* Complete Toggle */}
           <button
             onClick={onToggleComplete}
-            className="mt-0.5 text-gray-400 hover:text-blue-600 transition-colors"
+            className="mt-0.5 text-tertiary hover:text-[var(--present-accent)] transition-colors"
           >
             {isCompleted ? (
-              <CheckCircle2 className="w-5 h-5 text-green-600" />
+              <CheckCircle2 className="w-5 h-5 text-success" />
             ) : (
               <Circle className="w-5 h-5" />
             )}
@@ -414,15 +417,15 @@ function ActionItemCard({
           <div className="flex-1 min-w-0">
             <h3
               className={cn(
-                'font-medium text-gray-900 text-sm leading-5',
-                isCompleted && 'line-through text-gray-500',
+                'font-medium text-primary text-sm leading-5',
+                isCompleted && 'line-through text-tertiary',
               )}
             >
               {item.title}
             </h3>
 
             {item.description && (
-              <p className="text-sm text-gray-600 mt-1 line-clamp-2">{item.description}</p>
+              <p className="text-sm text-secondary mt-1 line-clamp-2">{item.description}</p>
             )}
 
             {/* Meta Info */}
@@ -431,7 +434,7 @@ function ActionItemCard({
               <PriorityBadge priority={item.priority} />
 
               {item.assignee && (
-                <span className="inline-flex items-center gap-1 text-xs text-gray-600">
+                <span className="inline-flex items-center gap-1 text-xs text-secondary">
                   <User className="w-3 h-3" />
                   {item.assignee}
                 </span>
@@ -441,7 +444,7 @@ function ActionItemCard({
                 <span
                   className={cn(
                     'inline-flex items-center gap-1 text-xs',
-                    isOverdue ? 'text-red-600' : 'text-gray-600',
+                    isOverdue ? 'text-danger' : 'text-secondary',
                   )}
                 >
                   <Calendar className="w-3 h-3" />
@@ -450,7 +453,7 @@ function ActionItemCard({
               )}
 
               {item.estimatedHours && (
-                <span className="inline-flex items-center gap-1 text-xs text-gray-600">
+                <span className="inline-flex items-center gap-1 text-xs text-secondary">
                   <Clock className="w-3 h-3" />
                   {item.estimatedHours}h
                 </span>
@@ -463,25 +466,25 @@ function ActionItemCard({
         <div className="flex items-center gap-1 flex-shrink-0">
           <button
             onClick={onEdit}
-            className="p-1 rounded hover:bg-gray-100 transition-colors"
+            className="p-1 rounded hover:bg-surface-secondary transition-colors"
             title="Edit"
           >
-            <Edit3 className="w-4 h-4 text-gray-400" />
+            <Edit3 className="w-4 h-4 text-tertiary" />
           </button>
 
           <button
             onClick={onDelete}
-            className="p-1 rounded hover:bg-gray-100 transition-colors"
+            className="p-1 rounded hover:bg-surface-secondary transition-colors"
             title="Delete"
           >
-            <Trash2 className="w-4 h-4 text-gray-400" />
+            <Trash2 className="w-4 h-4 text-tertiary" />
           </button>
         </div>
       </div>
 
       {/* Notes */}
       {item.notes && (
-        <div className="text-sm text-gray-600 bg-gray-50 p-2 rounded border-l-2 border-gray-300">
+        <div className="text-sm text-secondary bg-surface-secondary p-2 rounded-lg border-l-2 border-default">
           {item.notes}
         </div>
       )}
@@ -708,48 +711,36 @@ export function ActionItemTracker({
               : 0,
       }}
     >
-      <div className={cn('w-full max-w-4xl mx-auto', className)} {...props}>
-        {/* Header */}
-        <div className="mb-6">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h2 className="text-xl font-semibold text-gray-900 flex items-center gap-2">
-                {title}
-                <span className="text-sm font-normal text-gray-500">
-                  ({completedCount}/{totalCount} completed)
-                </span>
-              </h2>
-
-              {meetingContext && (
-                <div className="text-sm text-gray-600 mt-1">
-                  {meetingContext.meetingTitle && (
-                    <span className="font-medium">From: {meetingContext.meetingTitle}</span>
-                  )}
-                  {meetingContext.meetingDate && (
-                    <span className="ml-2">
-                      {new Date(meetingContext.meetingDate).toLocaleDateString()}
-                    </span>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {allowEditing && (
-              <button
-                onClick={() => state && setState({ ...state, showAddForm: !state.showAddForm })}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
-              >
-                <Plus className="w-4 h-4" />
-                Add Item
-              </button>
-            )}
-          </div>
-
-          {/* Filters */}
-          <div className="flex flex-wrap gap-4 p-4 bg-gray-50 rounded-lg">
+      <WidgetFrame
+        title={title}
+        subtitle={
+          meetingContext?.meetingTitle ? `From: ${meetingContext.meetingTitle}` : undefined
+        }
+        meta={
+          meetingContext?.meetingDate
+            ? `${new Date(meetingContext.meetingDate).toLocaleDateString()} · ${completedCount}/${totalCount} completed`
+            : `${completedCount}/${totalCount} completed`
+        }
+        actions={
+          allowEditing ? (
+            <Button
+              onClick={() => state && setState({ ...state, showAddForm: !state.showAddForm })}
+              size="sm"
+              className="flex items-center gap-2"
+            >
+              <Plus className="w-4 h-4" />
+              Add item
+            </Button>
+          ) : null
+        }
+        className={cn('w-full max-w-4xl mx-auto', className)}
+        bodyClassName="space-y-6"
+      >
+        {/* Filters */}
+        <div className="flex flex-wrap gap-4 p-4 bg-surface-secondary border border-default rounded-xl">
             {/* Status Filter */}
             <div className="flex items-center gap-2">
-              <label className="text-sm font-medium text-gray-700">Status:</label>
+              <label className="text-sm font-medium text-secondary">Status:</label>
               <select
                 value={state?.filter.status || 'all'}
                 onChange={(e) =>
@@ -762,7 +753,7 @@ export function ActionItemTracker({
                     },
                   })
                 }
-                className="text-sm border border-gray-300 rounded px-2 py-1 bg-white"
+                className="text-sm border border-default rounded-lg px-2 py-1 bg-surface outline-none focus-visible:ring-2 focus-visible:ring-[var(--present-accent-ring)]"
               >
                 <option value="all">All</option>
                 {statusTypes.map((status) => (
@@ -775,7 +766,7 @@ export function ActionItemTracker({
 
             {/* Priority Filter */}
             <div className="flex items-center gap-2">
-              <label className="text-sm font-medium text-gray-700">Priority:</label>
+              <label className="text-sm font-medium text-secondary">Priority:</label>
               <select
                 value={state?.filter.priority || 'all'}
                 onChange={(e) =>
@@ -788,7 +779,7 @@ export function ActionItemTracker({
                     },
                   })
                 }
-                className="text-sm border border-gray-300 rounded px-2 py-1 bg-white"
+                className="text-sm border border-default rounded-lg px-2 py-1 bg-surface outline-none focus-visible:ring-2 focus-visible:ring-[var(--present-accent-ring)]"
               >
                 <option value="all">All</option>
                 {priorityLevels.map((priority) => (
@@ -802,7 +793,7 @@ export function ActionItemTracker({
             {/* Assignee Filter */}
             {uniqueAssignees.length > 0 && (
               <div className="flex items-center gap-2">
-                <label className="text-sm font-medium text-gray-700">Assignee:</label>
+                <label className="text-sm font-medium text-secondary">Assignee:</label>
                 <select
                   value={state?.filter.assignee || 'all'}
                   onChange={(e) =>
@@ -812,7 +803,7 @@ export function ActionItemTracker({
                       filter: { ...state.filter, assignee: e.target.value },
                     })
                   }
-                  className="text-sm border border-gray-300 rounded px-2 py-1 bg-white"
+                  className="text-sm border border-default rounded-lg px-2 py-1 bg-surface outline-none focus-visible:ring-2 focus-visible:ring-[var(--present-accent-ring)]"
                 >
                   <option value="all">All</option>
                   {uniqueAssignees.map((assignee) => (
@@ -826,7 +817,7 @@ export function ActionItemTracker({
 
             {/* Sort By */}
             <div className="flex items-center gap-2">
-              <label className="text-sm font-medium text-gray-700">Sort by:</label>
+              <label className="text-sm font-medium text-secondary">Sort by:</label>
               <select
                 value={state?.sortBy || 'dueDate'}
                 onChange={(e) =>
@@ -836,7 +827,7 @@ export function ActionItemTracker({
                     sortBy: e.target.value as typeof state.sortBy,
                   })
                 }
-                className="text-sm border border-gray-300 rounded px-2 py-1 bg-white"
+                className="text-sm border border-default rounded-lg px-2 py-1 bg-surface outline-none focus-visible:ring-2 focus-visible:ring-[var(--present-accent-ring)]"
               >
                 <option value="dueDate">Due Date</option>
                 <option value="priority">Priority</option>
@@ -844,29 +835,26 @@ export function ActionItemTracker({
                 <option value="createdAt">Created</option>
               </select>
             </div>
-          </div>
         </div>
 
         {/* Add Form */}
         {state?.showAddForm && allowEditing && (
-          <div className="mb-6">
-            <ActionItemForm
-              defaultAssignee={defaultAssignee}
-              onSave={addActionItem}
-              onCancel={() => state && setState({ ...state, showAddForm: false })}
-            />
-          </div>
+          <ActionItemForm
+            defaultAssignee={defaultAssignee}
+            onSave={addActionItem}
+            onCancel={() => state && setState({ ...state, showAddForm: false })}
+          />
         )}
 
         {/* Items */}
         <div className="space-y-4">
           {filteredItems.length === 0 ? (
             <div className="text-center py-12">
-              <div className="text-gray-400 mb-2">
+              <div className="text-tertiary mb-2">
                 <CheckCircle2 className="w-12 h-12 mx-auto" />
               </div>
-              <h3 className="text-lg font-medium text-gray-900 mb-2">No action items</h3>
-              <p className="text-gray-600">
+              <h3 className="text-lg font-medium text-primary mb-2">No action items</h3>
+              <p className="text-secondary">
                 {totalCount === 0
                   ? 'Add your first action item to get started.'
                   : 'Try adjusting your filters to see more items.'}
@@ -888,7 +876,7 @@ export function ActionItemTracker({
             ))
           )}
         </div>
-      </div>
+      </WidgetFrame>
     </LoadingWrapper>
   );
 }

@@ -60,17 +60,6 @@ export function CanvasPageClient() {
   const [demoError, setDemoError] = useState<string | null>(null);
 
   useEffect(() => {
-    console.log('[CanvasPageClient] Auth state changed:', {
-      loading,
-      userId: user?.id,
-      bypassAuth,
-      demoMode,
-      roomName,
-      isWindowDefined: typeof window !== 'undefined'
-    });
-  }, [loading, user, bypassAuth, demoMode, roomName]);
-
-  useEffect(() => {
     if (typeof window === 'undefined') return;
     if (!demoMode || bypassAuth) return;
     if (loading || user) return;
@@ -564,8 +553,8 @@ export function CanvasPageClient() {
   // Show loading state while checking authentication
   if (loading || (!roomName && !(demoMode && !user && !bypassAuth))) {
     return (
-      <div className="h-screen w-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/20">
-        <div className="text-gray-500">Loading...</div>
+      <div className="h-screen w-screen flex items-center justify-center bg-surface">
+        <div className="text-secondary text-sm">Loading…</div>
       </div>
     );
   }
@@ -598,14 +587,14 @@ export function CanvasPageClient() {
     };
 
     return (
-      <div className="h-screen w-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/20 p-6">
-        <div className="w-full max-w-md rounded-2xl bg-white shadow-xl border border-slate-200 p-6">
-          <div className="text-slate-900 text-lg font-semibold">Join the demo</div>
-          <div className="text-slate-600 text-sm mt-1">
+      <div className="h-screen w-screen flex items-center justify-center bg-surface p-6">
+        <div className="w-full max-w-md rounded-2xl bg-surface-elevated shadow-lg border border-default p-6">
+          <div className="heading-lg">Join the demo</div>
+          <div className="text-secondary text-sm mt-1">
             Pick a display name. You will join the room automatically.
           </div>
           <div className="mt-4">
-            <label className="text-xs text-slate-600">Display name</label>
+            <label className="text-xs text-secondary">Display name</label>
             <input
               value={demoNameDraft}
               onChange={(e) => setDemoNameDraft(e.target.value)}
@@ -613,27 +602,27 @@ export function CanvasPageClient() {
                 if (e.key === 'Enter') void submit();
               }}
               autoFocus
-              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-400"
+              className="mt-1 w-full rounded-lg border border-default bg-surface px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-[var(--present-accent-ring)]"
               placeholder="Alex"
             />
           </div>
           {demoError ? (
-            <div className="mt-3 text-sm text-red-600">{demoError}</div>
+            <div className="mt-3 text-sm text-danger">{demoError}</div>
           ) : null}
           <div className="mt-5 flex items-center gap-3">
             <button
               onClick={() => void submit()}
               disabled={!demoNameDraft.trim() || demoAuthAttempted}
               className={[
-                'rounded-lg px-4 py-2 text-sm font-medium',
+                'rounded-lg px-4 py-2 text-sm font-medium transition-colors',
                 demoNameDraft.trim() && !demoAuthAttempted
-                  ? 'bg-slate-900 text-white hover:bg-slate-800'
-                  : 'bg-slate-200 text-slate-500 cursor-not-allowed',
+                  ? 'bg-primary text-primary-foreground hover:bg-primary/90'
+                  : 'bg-muted text-muted-foreground cursor-not-allowed',
               ].join(' ')}
             >
               {demoAuthAttempted ? 'Connecting...' : 'Join'}
             </button>
-            <div className="text-xs text-slate-500">
+            <div className="text-xs text-tertiary">
               Powered by Supabase anonymous auth
             </div>
           </div>

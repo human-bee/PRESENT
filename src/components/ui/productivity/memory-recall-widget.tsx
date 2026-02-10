@@ -11,6 +11,7 @@ import {
 } from './memory-recall-utils';
 import { MemoryRecallResults } from './memory-recall-results';
 import { useMemoryRecallSearch } from './memory-recall-search';
+import { WidgetFrame } from './widget-frame';
 
 const DEFAULT_MEMORY_RECALL_TOOL = process.env.NEXT_PUBLIC_MEMORY_RECALL_MCP_TOOL;
 const DEFAULT_MEMORY_RECALL_COLLECTION = process.env.NEXT_PUBLIC_MEMORY_RECALL_MCP_COLLECTION;
@@ -133,36 +134,32 @@ export default function MemoryRecallWidget(props: MemoryRecallWidgetProps) {
   };
 
   return (
-    <div className={cn('w-full rounded-xl border border-slate-200 bg-white shadow-sm', className)}>
-      <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
-        <div className="flex flex-col">
-          <span className="text-sm font-semibold text-slate-900">{state.title}</span>
-          <span className="text-xs text-slate-500">Vector recall via MCP</span>
-        </div>
-        <div className="text-xs text-slate-400">
-          {state.lastUpdated ? `Updated ${new Date(state.lastUpdated).toLocaleTimeString()}` : 'Idle'}
-        </div>
-      </div>
-      <div className="p-4 space-y-4">
+    <WidgetFrame
+      title={state.title}
+      subtitle="Vector recall via MCP"
+      meta={state.lastUpdated ? `Updated ${new Date(state.lastUpdated).toLocaleTimeString()}` : 'Idle'}
+      className={className}
+      bodyClassName="space-y-4"
+    >
         <form onSubmit={handleSubmit} className="flex flex-col gap-2">
           <input
             value={state.query}
             onChange={(e) => setState((prev) => ({ ...prev, query: e.target.value }))}
             placeholder="Search vector memory…"
-            className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
+            className="w-full rounded-lg border border-default bg-surface px-3 py-2 text-sm text-primary outline-none focus-visible:ring-2 focus-visible:ring-[var(--present-accent-ring)]"
           />
           <div className="flex items-center gap-2">
-            <Button type="submit" size="sm" className="bg-blue-600 text-white hover:bg-blue-500">
+            <Button type="submit" size="sm">
               Search
             </Button>
-            <span className="text-xs text-slate-500">
+            <span className="text-xs text-secondary">
               {status === 'searching' ? 'Searching…' : state.results.length ? `${state.results.length} hits` : 'No results yet'}
             </span>
           </div>
         </form>
 
         {error && (
-          <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
+          <div className="rounded-lg border border-danger-outline bg-danger-surface px-3 py-2 text-xs text-danger">
             {error}
           </div>
         )}
@@ -170,7 +167,6 @@ export default function MemoryRecallWidget(props: MemoryRecallWidgetProps) {
         <div className="space-y-3">
           <MemoryRecallResults hits={state.results} />
         </div>
-      </div>
-    </div>
+    </WidgetFrame>
   );
 }

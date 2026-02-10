@@ -4,6 +4,8 @@ import { cn } from '@/lib/utils';
 import { useEffect, useRef, useState } from 'react';
 import { z } from 'zod';
 import { CanvasSyncAdapter } from '@/components/CanvasSyncAdapter';
+import { Button } from '@/components/ui/shared/button';
+import { WidgetFrame } from './widget-frame';
 
 // Define the component props schema with Zod
 export const retroTimerSchema = z.object({
@@ -286,26 +288,23 @@ export function RetroTimer({
           setState({ ...state, isRunning: patch.isRunning });
       }}
     >
-      <div className="w-full max-w-md mx-auto">
-        {title && <h2 className="text-xl font-bold text-center mb-4">{title}</h2>}
-
-        <div className="bg-gray-900 border-4 border-gray-700 rounded-lg p-6 shadow-lg">
+      <WidgetFrame title={title ?? 'Retro Timer'} className="w-full max-w-md mx-auto" bodyClassName="space-y-4">
           {/* Timer Display */}
           <div
             className={cn(
-              'bg-black border-2 border-gray-600 rounded-md p-4 mb-6 relative overflow-hidden transition-colors',
-              isBlinking && 'animate-pulse bg-red-900',
+              'bg-surface border-2 border-default rounded-xl p-4 relative overflow-hidden transition-colors',
+              isBlinking && 'animate-pulse bg-danger-surface border-danger-outline',
             )}
           >
             <div
-              className="absolute bottom-0 left-0 bg-green-500/20 h-1"
+              className="absolute bottom-0 left-0 bg-[var(--present-accent-ring)] h-1"
               style={{ width: `${progressPercent}%` }}
             ></div>
 
             <div
               className={cn(
                 'font-mono text-4xl text-center tracking-widest',
-                isBlinking ? 'text-red-400' : 'text-green-500',
+                isBlinking ? 'text-danger' : 'text-primary',
               )}
             >
               {state ? formatTime(state.timeRemaining) : '00:00'}
@@ -314,61 +313,68 @@ export function RetroTimer({
 
           {/* Preset Buttons */}
           {showPresets && (
-            <div className="grid grid-cols-3 gap-2 mb-6">
-              <button
+            <div className="grid grid-cols-3 gap-2">
+              <Button
+                type="button"
                 onClick={() => setTimer(2)}
                 aria-label="Set timer to 2 minutes"
                 className={cn(
-                  'py-2 px-4 rounded-md border-2 border-gray-600 bg-gray-800 text-gray-300 hover:bg-gray-700 transition-colors',
-                  state?.initialTime === 2 * 60 && 'bg-gray-700 border-gray-500',
+                  'w-full',
+                  state?.initialTime === 2 * 60 && 'ring-2 ring-[var(--present-accent-ring)]',
                 )}
+                variant="outline"
+                size="sm"
               >
                 2 min
-              </button>
-              <button
+              </Button>
+              <Button
+                type="button"
                 onClick={() => setTimer(20)}
                 aria-label="Set timer to 20 minutes"
                 className={cn(
-                  'py-2 px-4 rounded-md border-2 border-gray-600 bg-gray-800 text-gray-300 hover:bg-gray-700 transition-colors',
-                  state?.initialTime === 20 * 60 && 'bg-gray-700 border-gray-500',
+                  'w-full',
+                  state?.initialTime === 20 * 60 && 'ring-2 ring-[var(--present-accent-ring)]',
                 )}
+                variant="outline"
+                size="sm"
               >
                 20 min
-              </button>
-              <button
+              </Button>
+              <Button
+                type="button"
                 onClick={setCustomTimer}
                 aria-label="Set custom timer"
-                className="py-2 px-4 rounded-md border-2 border-blue-600 bg-blue-800 text-blue-300 hover:bg-blue-700 transition-colors"
+                variant="outline"
+                size="sm"
+                className="w-full"
               >
                 Custom
-              </button>
+              </Button>
             </div>
           )}
 
           {/* Controls */}
           <div className="grid grid-cols-2 gap-4">
-            <button
+            <Button
+              type="button"
               onClick={toggleTimer}
               aria-label={state?.isRunning ? 'Pause timer' : 'Start timer'}
-              className={cn(
-                'py-3 px-6 rounded-md border-2 text-lg font-medium transition-colors',
-                state?.isRunning
-                  ? 'bg-yellow-600 border-yellow-700 text-white hover:bg-yellow-700'
-                  : 'bg-green-600 border-green-700 text-white hover:bg-green-700',
-              )}
+              variant={state?.isRunning ? 'secondary' : 'default'}
+              className="w-full"
             >
               {state?.isRunning ? 'PAUSE' : 'START'}
-            </button>
-            <button
+            </Button>
+            <Button
+              type="button"
               onClick={resetTimer}
               aria-label="Reset timer"
-              className="py-3 px-6 rounded-md border-2 border-gray-600 bg-gray-700 text-white text-lg font-medium hover:bg-gray-600 transition-colors"
+              variant="outline"
+              className="w-full"
             >
               RESET
-            </button>
+            </Button>
           </div>
-        </div>
-      </div>
+      </WidgetFrame>
     </CanvasSyncAdapter>
   );
 }

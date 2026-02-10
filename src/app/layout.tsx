@@ -14,7 +14,6 @@
  */
 
 import type { Metadata } from 'next';
-import { Geist, Geist_Mono } from 'next/font/google';
 import './globals.css';
 
 // Component registry tests disabled to prevent infinite loops
@@ -22,16 +21,6 @@ import './globals.css';
 // then call testComponentRegistry() in browser console
 import 'tldraw/tldraw.css';
 import Providers from '@/components/providers';
-
-const geistSans = Geist({
-  variable: '--font-geist-sans',
-  subsets: ['latin'],
-});
-
-const geistMono = Geist_Mono({
-  variable: '--font-geist-mono',
-  subsets: ['latin'],
-});
 
 export const metadata: Metadata = {
   title: 'Create Next App',
@@ -46,6 +35,25 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
+        {/* Theme bootstrap: apply light/dark before first paint to avoid flashes. */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function() {
+                try {
+                  var mode = localStorage.getItem('present:theme') || 'system';
+                  var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+                  var dark = mode === 'dark' || (mode === 'system' && prefersDark);
+                  var root = document.documentElement;
+                  if (dark) root.classList.add('dark');
+                  else root.classList.remove('dark');
+                  root.dataset.theme = dark ? 'dark' : 'light';
+                  root.dataset.presentTheme = mode;
+                } catch (e) {}
+              })();
+            `,
+          }}
+        />
         {/* Suppress development warnings and performance violations */}
         {process.env.NODE_ENV === 'development' && (
           <script
@@ -93,7 +101,7 @@ export default function RootLayout({
         <link rel="apple-touch-icon" href="/ios-icons/icon.png" />
       </head>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        className="antialiased"
         suppressHydrationWarning
       >
         <Providers>{children}</Providers>

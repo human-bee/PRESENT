@@ -128,6 +128,7 @@ export function useTldrawBranding(user?: Partial<TldrawBrandingOptions>) {
   const opts = useMemo<TldrawBrandingOptions>(() => ({ ...DEFAULTS, ...(user || {}) }), [user])
   const paletteApplied = useRef(false)
   const cssApplied = useRef(false)
+  const uiCssApplied = useRef(false)
 
   // Apply brand palette remaps once (module-scoped constants are safe to mutate before mount)
   useEffect(() => {
@@ -166,6 +167,46 @@ export function useTldrawBranding(user?: Partial<TldrawBrandingOptions>) {
       style.remove()
     }
   }, [opts.selectionCssVars])
+
+  // Always bridge a minimal set of TLDraw UI variables to the app's shared theme tokens.
+  // This keeps TLDraw native menus/toolbars visually coherent with the rest of the app.
+  useEffect(() => {
+    if (uiCssApplied.current) return
+    if (typeof document === 'undefined') return
+    const style = document.createElement('style')
+    style.setAttribute('data-present-canvas-branding', 'ui-vars')
+    style.textContent = `
+      .tl-container {
+        /* Core panel + text */
+        --color-panel: var(--present-surface-elevated);
+        --color-panel-2: var(--present-surface-secondary);
+        --color-divider: var(--present-border);
+        --color-text-1: var(--present-text);
+        --color-text-2: var(--present-text-secondary);
+        --color-text-3: var(--present-text-tertiary);
+        --color-primary: var(--present-accent);
+
+        /* TLDraw-prefixed variants (some integrations use these) */
+        --tl-color-panel: var(--present-surface-elevated);
+        --tl-color-divider: var(--present-border);
+        --tl-color-text: var(--present-text);
+        --tl-color-text-2: var(--present-text-secondary);
+        --tl-color-text-3: var(--present-text-tertiary);
+
+        /* Radius + shadows */
+        --tl-radius-1: var(--radius-sm);
+        --tl-radius-2: var(--radius-md);
+        --tl-radius-3: var(--radius-lg);
+        --tl-shadow-2: var(--shadow);
+      }
+    `
+    document.head.appendChild(style)
+    uiCssApplied.current = true
+    return () => {
+      uiCssApplied.current = false
+      style.remove()
+    }
+  }, [])
 
   const onMount = useCallback((editor: Editor) => {
     try {

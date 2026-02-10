@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils';
 import { FileText } from 'lucide-react';
 import * as React from 'react';
 import { type VariantProps } from 'class-variance-authority';
+import { Button } from '@/components/ui/shared/button';
 import { useRoomContext } from '@livekit/components-react';
 import { RoomEvent } from 'livekit-client';
 import { createLiveKitBus } from '../../../lib/livekit/livekit-bus';
@@ -742,27 +743,24 @@ export const MessageThreadCollapsible = React.forwardRef<
   return (
     <div
       ref={ref}
+      data-present-transcript-panel="true"
       data-state={typeof isOpen === 'boolean' ? (isOpen ? 'open' : 'closed') : undefined}
       className={cn(
-        'bg-background border-l border-gray-200 shadow-lg h-full overflow-hidden flex flex-col',
+        'bg-surface-elevated border-l border-default shadow-lg h-full overflow-hidden flex flex-col',
         className,
       )}
       {...restProps}
     >
       <div className="h-full flex flex-col overscroll-contain">
         {/* Header with title and close button */}
-        <div className="flex items-center justify-between p-4 border-b border-gray-200 safe-top">
+        <div className="flex items-center justify-between p-4 border-b border-default safe-top">
           <div className="flex items-center gap-2">
-            <span className="font-medium">Transcript</span>
+            <span className="font-medium text-primary">Transcript</span>
             <ThreadDropdown contextKey={effectiveContextKey} onThreadChange={handleThreadChange} />
           </div>
-          <button
-            aria-label="Close"
-            className="px-2 py-1 rounded bg-accent hover:bg-muted text-foreground"
-            onClick={onClose}
-          >
+          <Button aria-label="Close" variant="secondary" size="sm" onClick={onClose}>
             Close
-          </button>
+          </Button>
         </div>
 
         {/* Transcript Content */}
@@ -835,12 +833,12 @@ export const MessageThreadCollapsible = React.forwardRef<
                     {canvasComponents.map((entry) => (
                       <div
                         key={entry.messageId}
-                        className="mb-4 p-3 rounded-lg border bg-purple-50 dark:bg-purple-900/20 border-purple-200 dark:border-purple-800"
+                        className="mb-4 p-3 rounded-lg border bg-discovery-surface border-discovery-surface"
                       >
-                        <div className="text-xs text-purple-600 dark:text-purple-400 mb-2">
+                        <div className="text-xs text-discovery mb-2">
                           Component: {entry.messageId} · {entry.componentType}
                         </div>
-                        <div className="bg-white dark:bg-gray-800 rounded border overflow-hidden">
+                        <div className="bg-surface rounded-lg border border-default overflow-hidden">
                           {renderComponentPreview(entry)}
                           {typeof entry.updatedAt === 'number' && Number.isFinite(entry.updatedAt) && (
                             <div className="px-3 pb-3 text-[10px] text-muted-foreground">
@@ -856,10 +854,10 @@ export const MessageThreadCollapsible = React.forwardRef<
                         className={cn(
                           'p-3 rounded-lg border transition-opacity',
                           transcription.source === 'agent'
-                            ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800'
+                            ? 'bg-info-surface border-info-surface'
                             : transcription.source === 'system'
-                              ? 'bg-purple-50 dark:bg-purple-900/20 border-purple-200 dark:border-purple-800'
-                              : 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800',
+                              ? 'bg-discovery-surface border-discovery-surface'
+                              : 'bg-surface-secondary border-default',
                           !transcription.isFinal && 'opacity-60 italic',
                         )}
                       >
@@ -883,7 +881,7 @@ export const MessageThreadCollapsible = React.forwardRef<
           </ScrollableMessageContainer>
 
           {/* Manual text input for sending messages to the LiveKit agent */}
-          <div className="p-4 border-t border-gray-200">
+          <div className="p-4 border-t border-default">
             {(() => {
               const isRoomConnected = room?.state === 'connected';
               const trimmedMessage = typedMessage.trim();
@@ -1002,19 +1000,18 @@ export const MessageThreadCollapsible = React.forwardRef<
                           ? 'Type a message for the agent…'
                           : 'Connecting to LiveKit…'
                     }
-                    className="flex-1 px-3 py-2 rounded border border-gray-300 bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                    className="flex-1 px-3 py-2 rounded-lg border border-default bg-surface text-primary outline-none focus-visible:ring-2 focus-visible:ring-[var(--present-accent-ring)]"
                     aria-label="Type a message for the agent"
                     disabled={inputDisabled}
                   />
-                  <button
+                  <Button
                     type="submit"
                     disabled={sendDisabled}
-                    className={cn(
-                      'px-3 py-2 rounded bg-primary text-primary-foreground disabled:opacity-50',
-                    )}
+                    size="sm"
+                    loading={isSending}
                   >
-                    {isSending ? 'Sending…' : 'Send'}
-                  </button>
+                    Send
+                  </Button>
                 </form>
               );
             })()}
@@ -1057,24 +1054,34 @@ export const MessageThreadCollapsible = React.forwardRef<
           </div>
 
           {/* Transcript Footer: connection + tools */}
-          <div className="p-3 border-t border-gray-200">
+          <div className="p-3 border-t border-default">
             <div className="flex items-center justify-between text-[11px] text-muted-foreground gap-2">
               <div className="flex items-center gap-2 overflow-hidden">
-                <span className={cn('inline-block h-2 w-2 rounded-full', room?.state === 'connected' ? 'bg-green-500' : room?.state === 'connecting' ? 'bg-yellow-500' : 'bg-gray-400')} />
+                <span
+                  className={cn(
+                    'inline-block h-2 w-2 rounded-full',
+                    room?.state === 'connected'
+                      ? 'bg-success-solid'
+                      : room?.state === 'connecting'
+                        ? 'bg-warning-solid'
+                        : 'bg-border',
+                  )}
+                />
                 <span className="truncate">{room?.state === 'connected' ? 'Connected' : room?.state === 'connecting' ? 'Connecting…' : 'Disconnected'}</span>
                 {livekitCtx?.roomName && (
                   <span className="font-mono truncate max-w-[140px]">{livekitCtx.roomName}</span>
                 )}
               </div>
               <div className="flex items-center gap-2">
-                <button
+                <Button
                   onClick={room?.state === 'connected' ? disconnectRoom : connectRoom}
                   disabled={connBusy}
-                  className="px-2 py-1 rounded border text-foreground hover:bg-muted disabled:opacity-50"
+                  variant="outline"
+                  size="sm"
                 >
                   {room?.state === 'connected' ? 'Disconnect' : 'Connect'}
-                </button>
-                <button
+                </Button>
+                <Button
                   onClick={() => {
                     try {
                       const id = new URL(window.location.href).searchParams.get('id');
@@ -1082,14 +1089,15 @@ export const MessageThreadCollapsible = React.forwardRef<
                       navigator.clipboard.writeText(link);
                     } catch { }
                   }}
-                  className="px-2 py-1 rounded border hover:bg-muted"
+                  variant="outline"
+                  size="sm"
                 >
                   Copy Link
-                </button>
+                </Button>
                 {transcriptions.length > 0 && (
-                  <button onClick={clearTranscriptions} className="px-2 py-1 rounded hover:bg-muted">
+                  <Button onClick={clearTranscriptions} variant="ghost" size="sm">
                     Clear
-                  </button>
+                  </Button>
                 )}
               </div>
             </div>

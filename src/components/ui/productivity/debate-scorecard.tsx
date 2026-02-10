@@ -71,22 +71,22 @@ const verdictConfig: Record<
 > = {
   ACCURATE: {
     label: 'Accurate',
-    className: 'bg-emerald-600/15 text-emerald-400 border border-emerald-500/30',
+    className: 'bg-success-surface text-success border border-success-surface',
     icon: CheckCircle2,
   },
   PARTIALLY_TRUE: {
     label: 'Partially True',
-    className: 'bg-amber-500/15 text-amber-300 border border-amber-400/30',
+    className: 'bg-warning-surface text-warning border border-warning-surface',
     icon: ShieldMinus,
   },
   UNSUPPORTED: {
     label: 'Unsupported',
-    className: 'bg-orange-500/15 text-orange-300 border border-orange-400/30',
+    className: 'bg-warning-surface text-warning border border-warning-surface',
     icon: AlertTriangle,
   },
   FALSE: {
     label: 'False',
-    className: 'bg-red-600/15 text-red-400 border border-red-500/30',
+    className: 'bg-danger-surface text-danger border border-danger-outline',
     icon: ShieldX,
   },
 };
@@ -94,23 +94,23 @@ const verdictConfig: Record<
 const impactConfig: Record<Impact, { label: string; className: string }> = {
   KEY_VOTER: {
     label: 'Key Voter',
-    className: 'bg-blue-500/10 text-blue-300 border border-blue-400/40',
+    className: 'bg-info-surface text-info border border-info-surface',
   },
   MAJOR: {
     label: 'Major',
-    className: 'bg-sky-500/10 text-sky-300 border border-sky-400/40',
+    className: 'bg-info-surface text-info border border-info-surface',
   },
   MINOR: {
     label: 'Minor',
-    className: 'bg-slate-500/10 text-slate-300 border border-slate-400/40',
+    className: 'bg-surface-secondary text-secondary border border-default',
   },
   CREDIBILITY_HIT: {
     label: 'Credibility Hit',
-    className: 'bg-purple-500/10 text-purple-300 border border-purple-400/40',
+    className: 'bg-warning-surface text-warning border border-warning-surface',
   },
   DROPPED: {
     label: 'Dropped',
-    className: 'bg-neutral-500/10 text-neutral-300 border border-neutral-400/40',
+    className: 'bg-surface-secondary text-secondary border border-default',
   },
 };
 
@@ -120,22 +120,22 @@ const claimStatusConfig: Record<
 > = {
   UNTESTED: {
     label: 'Untested',
-    className: 'bg-slate-500/15 text-slate-200 border border-slate-500/40',
+    className: 'bg-surface-secondary text-secondary border border-default',
     icon: ShieldQuestion,
   },
   CHECKING: {
     label: 'Checking',
-    className: 'bg-amber-500/15 text-amber-200 border border-amber-500/40',
+    className: 'bg-warning-surface text-warning border border-warning-surface',
     icon: Loader2,
   },
   VERIFIED: {
     label: 'Verified',
-    className: 'bg-emerald-500/15 text-emerald-200 border border-emerald-500/40',
+    className: 'bg-success-surface text-success border border-success-surface',
     icon: ShieldCheck,
   },
   REFUTED: {
     label: 'Refuted',
-    className: 'bg-rose-600/15 text-rose-200 border border-rose-500/40',
+    className: 'bg-danger-surface text-danger border border-danger-outline',
     icon: ShieldX,
   },
 };
@@ -1502,25 +1502,25 @@ export function DebateScorecard(props: DebateScorecardProps) {
 
   return (
     <div className="w-[1200px] max-w-full">
-      <div className="rounded-3xl border border-white/10 bg-slate-950/95 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.08),transparent_55%)] shadow-xl text-white font-sans p-4 md:p-6 flex flex-col gap-4 backdrop-blur-sm">
+      <div className="rounded-3xl border border-default bg-surface-elevated shadow-sm text-primary font-sans p-4 md:p-6 flex flex-col gap-4 backdrop-blur-sm">
         <header className="flex flex-row items-start justify-between gap-4">
           <div className="space-y-1">
-            <p className="text-xs uppercase tracking-[0.25em] text-white/40">Debate Analysis</p>
-            <h2 className="text-2xl md:text-3xl font-semibold text-white">{scorecard.topic}</h2>
-            <p className="text-sm text-white/50">{scorecard.round}</p>
-            {lastAction && <p className="text-xs text-white/40 mt-2">Latest action: {lastAction}</p>}
+            <p className="text-xs uppercase tracking-[0.25em] text-tertiary">Debate Analysis</p>
+            <h2 className="text-2xl md:text-3xl font-semibold text-primary">{scorecard.topic}</h2>
+            <p className="text-sm text-secondary">{scorecard.round}</p>
+            {lastAction && <p className="text-xs text-tertiary mt-2">Latest action: {lastAction}</p>}
           </div>
-          <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-5 py-3 text-right">
-            <p className="text-xs uppercase tracking-wide text-white/40">Scoreboard</p>
-            <div className="flex items-center justify-end gap-3 text-2xl font-semibold text-white">
+          <div className="rounded-2xl border border-default bg-surface-secondary px-5 py-3 text-right">
+            <p className="text-xs uppercase tracking-wide text-tertiary">Scoreboard</p>
+            <div className="flex items-center justify-end gap-3 text-2xl font-semibold text-primary">
               {scoreline.entries.map((entry, index) => (
                 <React.Fragment key={entry.label}>
                   <span>{entry.score}</span>
-                  {index < scoreline.entries.length - 1 && <span className="text-white/30 text-xl">·</span>}
+                  {index < scoreline.entries.length - 1 && <span className="text-tertiary text-xl">·</span>}
                 </React.Fragment>
               ))}
             </div>
-            <p className="text-xs text-white/40 mt-1">Total points exchanged: {scoreline.total}</p>
+            <p className="text-xs text-tertiary mt-1">Total points exchanged: {scoreline.total}</p>
           </div>
         </header>
 

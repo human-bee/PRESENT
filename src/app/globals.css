@@ -1,17 +1,4 @@
-@import "tailwindcss";
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
-}
+@import "../styles/present-ui.css";
 
 @layer base {
   :root {
@@ -112,83 +99,9 @@ body {
     touch-action: manipulation;
   }
 
-  /* Background Utilities */
-  .bg-background {
-    background-color: hsl(var(--background));
-  }
-  .bg-card {
-    background-color: hsl(var(--card));
-  }
-  .bg-popover {
-    background-color: hsl(var(--popover));
-  }
-  .bg-primary {
-    background-color: hsl(var(--primary));
-  }
-  .bg-secondary {
-    background-color: hsl(var(--secondary));
-  }
-  .bg-backdrop {
-    background-color: hsl(var(--backdrop));
-  }
-  .bg-muted {
-    background-color: hsl(var(--muted));
-  }
-  .bg-accent {
-    background-color: hsl(var(--accent));
-  }
-  .bg-container {
-    background-color: hsl(var(--container));
-  }
-  .bg-destructive {
-    background-color: hsl(var(--destructive));
-  }
-  .bg-input {
-    background-color: hsl(var(--input));
-  }
-  .bg-border {
-    background-color: hsl(var(--border));
-  }
-
-  /* Text Utilities */
-  .text-primary {
-    color: hsl(var(--primary));
-  }
-  .text-primary-foreground {
-    color: hsl(var(--primary-foreground));
-  }
-  .text-secondary {
-    color: hsl(var(--secondary));
-  }
-  .text-secondary-foreground {
-    color: hsl(var(--secondary-foreground));
-  }
-  .text-foreground {
-    color: hsl(var(--foreground));
-  }
-  .text-card-foreground {
-    color: hsl(var(--card-foreground));
-  }
-  .text-popover-foreground {
-    color: hsl(var(--popover-foreground));
-  }
-  .text-muted-foreground {
-    /* disabled color */
-    color: hsl(var(--muted-foreground));
-  }
-  .text-accent-foreground {
-    color: hsl(var(--accent-foreground));
-  }
-  .text-destructive-foreground {
-    color: hsl(var(--destructive-foreground));
-  }
-  .text-backdrop {
-    color: hsl(var(--backdrop));
-  }
-
-  /* Border Utilities */
-  .border-border {
-    border-color: hsl(var(--border));
+  /* Present-only utilities that are not provided by Apps SDK UI. */
+  .border-flat {
+    border: 1px solid hsl(var(--border));
   }
   .border-dimension-50 {
     border-image: var(--border-dimension-50);
@@ -197,34 +110,6 @@ body {
   .border-dimension-100 {
     border-image: var(--border-dimension-100);
     border-image-slice: 1;
-  }
-  .border-flat {
-    border: 1px solid hsl(var(--border));
-  }
-  .border-container {
-    border-color: hsl(var(--container));
-  }
-
-  /* Ring Utilities */
-  .ring-ring {
-    --tw-ring-color: hsl(var(--ring));
-  }
-
-  /* Hover Utilities */
-  .hover\:bg-primary\/90:hover {
-    background-color: hsl(var(--primary) / 0.9);
-  }
-  .hover\:bg-muted\/90:hover {
-    background-color: hsl(var(--muted) / 0.9);
-  }
-  .hover\:bg-backdrop:hover {
-    background-color: hsl(var(--muted-backdrop));
-  }
-  .hover\:bg-container:hover {
-    background-color: hsl(var(--container));
-  }
-  .hover\:text-secondary:hover {
-    color: hsl(var(--secondary));
   }
 }
 

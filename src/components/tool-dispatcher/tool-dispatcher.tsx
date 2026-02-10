@@ -6,7 +6,9 @@ import type { DispatcherContext } from './utils';
 import { useToolEvents, useToolRunner } from './hooks';
 import { fetchWithSupabaseAuth } from '@/lib/supabase/auth-headers';
 
-const ToolDispatcherContext = createContext<DispatcherContext | null>(null);
+// Exported so fixture routes (e.g. /showcase/ui) can provide a no-op dispatcher
+// without pulling in LiveKit room context.
+export const ToolDispatcherContext = createContext<DispatcherContext | null>(null);
 
 export function useToolDispatcher(): DispatcherContext {
   const ctx = useContext(ToolDispatcherContext);

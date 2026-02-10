@@ -22,6 +22,7 @@ import {
   normalizeMeetingSummaryState,
   resolveMeetingSummaryDocument,
 } from './meeting-summary-utils';
+import { WidgetFrame } from './widget-frame';
 
 export { meetingSummaryWidgetSchema } from './meeting-summary-schema';
 
@@ -126,55 +127,51 @@ export function MeetingSummaryWidget(props: MeetingSummaryWidgetProps) {
   const lastUpdatedLabel = formatMeetingSummaryTime(state.lastUpdated ?? resolvedDocument?.timestamp);
 
   return (
-    <div className={cn('rounded-xl border border-gray-200 bg-white p-5 shadow-sm', className)}>
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h2 className="text-lg font-semibold text-gray-900">{resolvedTitle}</h2>
-          {state.contextProfile && (
-            <p className="text-xs uppercase tracking-wide text-gray-400">Profile: {state.contextProfile}</p>
-          )}
-          {lastUpdatedLabel && (
-            <p className="text-xs text-gray-400">Updated {lastUpdatedLabel}</p>
-          )}
-        </div>
-        <div className="flex items-center gap-2">
+    <WidgetFrame
+      title={resolvedTitle}
+      subtitle={state.contextProfile ? `Profile: ${state.contextProfile}` : undefined}
+      meta={lastUpdatedLabel ? `Updated ${lastUpdatedLabel}` : undefined}
+      actions={
+        <>
           <Button variant="outline" size="sm" onClick={handleCopy}>
             <Copy className="mr-1 h-4 w-4" />
             {copyState === 'copied' ? 'Copied' : 'Copy'}
           </Button>
           <Button
-            variant="default"
             size="sm"
             disabled={!state.crmToolName || sendState === 'sending'}
+            loading={sendState === 'sending'}
             onClick={sendToCrm}
           >
             <Send className="mr-1 h-4 w-4" />
-            {sendState === 'sending' ? 'Sending...' : 'Send'}
+            Send
           </Button>
-        </div>
-      </div>
+        </>
+      }
+      className={className}
+      bodyClassName="space-y-4"
+    >
 
       <SummaryTags tags={state.tags} />
 
-      <div className="mt-4 space-y-4">
-        {resolvedContent && (
-          <section>
-            <h3 className="text-sm font-semibold text-gray-700">Summary</h3>
-            <div className="mt-2 text-sm text-gray-700 break-words whitespace-pre-wrap">
-              <ReactMarkdown components={createMarkdownComponents()}>
-                {resolvedContent}
-              </ReactMarkdown>
-            </div>
-          </section>
-        )}
+      {resolvedContent && (
+        <section>
+          <h3 className="text-sm font-semibold text-secondary">Summary</h3>
+          <div className="mt-2 text-sm text-primary break-words whitespace-pre-wrap">
+            <ReactMarkdown components={createMarkdownComponents()}>
+              {resolvedContent}
+            </ReactMarkdown>
+          </div>
+        </section>
+      )}
 
-        <SummaryList title="Highlights" items={state.highlights} />
-        <SummaryList title="Decisions" items={state.decisions} />
-        <ActionItemList items={state.actionItems} />
-        {!resolvedContent && <EmptySummaryState />}
-      </div>
+      <SummaryList title="Highlights" items={state.highlights} />
+      <SummaryList title="Decisions" items={state.decisions} />
+      <ActionItemList items={state.actionItems} />
+      {!resolvedContent && <EmptySummaryState />}
+
       <SendStatus state={sendState} />
-    </div>
+    </WidgetFrame>
   );
 }
 

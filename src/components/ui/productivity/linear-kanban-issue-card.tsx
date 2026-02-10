@@ -4,29 +4,29 @@ import React from 'react';
 import type { LinearIssue } from '@/lib/linear/types';
 
 export function getPriorityColor(priority?: { value: number; name: string }): string {
-  if (!priority) return 'bg-gray-100 border-gray-300';
+  if (!priority) return 'bg-surface border-default border-l-4';
   switch (priority.value) {
     case 1:
-      return 'bg-red-100 border-red-300 border-l-4 border-l-red-500'; // Urgent
+      return 'bg-danger-surface border-danger-outline border-l-4'; // Urgent
     case 2:
-      return 'bg-orange-100 border-orange-300 border-l-4 border-l-orange-500'; // High
+      return 'bg-warning-surface border-warning-surface border-l-4'; // High
     case 3:
-      return 'bg-yellow-100 border-yellow-300 border-l-4 border-l-yellow-500'; // Medium
+      return 'bg-info-surface border-info-surface border-l-4'; // Medium
     case 4:
-      return 'bg-green-100 border-green-300 border-l-4 border-l-green-500'; // Low
+      return 'bg-success-surface border-success-surface border-l-4'; // Low
     default:
-      return 'bg-gray-100 border-gray-300';
+      return 'bg-surface border-default border-l-4';
   }
 }
 
 const labelColors: Record<string, string> = {
-  Work: 'bg-blue-100 text-blue-800',
-  Personal: 'bg-purple-100 text-purple-800',
-  Social: 'bg-green-100 text-green-800',
+  Work: 'bg-info-surface text-info border border-info-surface',
+  Personal: 'bg-surface-secondary text-secondary border border-default',
+  Social: 'bg-success-surface text-success border border-success-surface',
 };
 
 export function getLabelColor(label: string): string {
-  return labelColors[label] || 'bg-gray-100 text-gray-800';
+  return labelColors[label] || 'bg-surface-secondary text-secondary border border-default';
 }
 
 /* --------------------------------------------------------------------------
@@ -100,31 +100,31 @@ export const IssueCard = React.memo(function IssueCard({
       onDragEndCapture={onDragEnd}
       onClick={(e) => onClick(e, issue.id)}
       className={`
-        relative p-3 bg-white border-2 rounded-lg shadow-sm hover:shadow-md transition-all cursor-move nodrag
+        relative p-3 bg-surface border-2 rounded-xl shadow-sm hover:shadow-md transition-all cursor-move nodrag
         ${isDragging ? 'opacity-50 rotate-2 scale-105' : ''} 
         ${getPriorityColor(issue.priority)}
       `}
     >
       {showDropIndicatorBefore && (
-        <div className="absolute -top-2 left-0 right-0 h-1.5 bg-blue-600 rounded-full pointer-events-none z-50 shadow-sm ring-2 ring-white" />
+        <div className="absolute -top-2 left-0 right-0 h-1.5 bg-[var(--present-accent)] rounded-full pointer-events-none z-50 shadow-sm ring-2 ring-[var(--present-accent-ring)]" />
       )}
 
       {showDropIndicatorAfter && (
-        <div className="absolute -bottom-2 left-0 right-0 h-1.5 bg-blue-600 rounded-full pointer-events-none z-50 shadow-sm ring-2 ring-white" />
+        <div className="absolute -bottom-2 left-0 right-0 h-1.5 bg-[var(--present-accent)] rounded-full pointer-events-none z-50 shadow-sm ring-2 ring-[var(--present-accent-ring)]" />
       )}
 
       <div className="flex items-start justify-between mb-2">
-        <span className="text-xs font-mono text-gray-500 bg-gray-100 px-2 py-1 rounded">
+        <span className="text-xs font-mono text-tertiary bg-surface-secondary px-2 py-1 rounded border border-default">
           {issue.identifier}
         </span>
         {issue.priority && (
           <span
             className={`text-xs font-semibold px-2 py-1 rounded ${
               issue.priority.value === 1
-                ? 'bg-red-200 text-red-800'
+                ? 'bg-danger-surface text-danger border border-danger-outline'
                 : issue.priority.value === 2
-                  ? 'bg-orange-200 text-orange-800'
-                  : 'bg-gray-200 text-gray-800'
+                  ? 'bg-warning-surface text-warning border border-warning-surface'
+                  : 'bg-surface-secondary text-secondary border border-default'
             }`}
           >
             {issue.priority.name}
@@ -132,7 +132,7 @@ export const IssueCard = React.memo(function IssueCard({
         )}
       </div>
 
-      <h3 className="font-medium text-gray-900 text-sm mb-3 leading-tight">
+      <h3 className="font-medium text-primary text-sm mb-3 leading-tight">
         {issue.title}
       </h3>
 
@@ -150,20 +150,20 @@ export const IssueCard = React.memo(function IssueCard({
       )}
 
       {issue.project && (
-        <div className="text-xs text-gray-600 mt-2 truncate flex items-center">
+        <div className="text-xs text-secondary mt-2 truncate flex items-center">
           <span className="mr-1">📁</span>
           {issue.project}
         </div>
       )}
 
       {issue.assignee && (
-        <div className="text-xs text-gray-600 mt-1 flex items-center">
+        <div className="text-xs text-secondary mt-1 flex items-center">
           <span className="mr-1">👤</span>
           {issue.assignee}
         </div>
       )}
 
-      <div className="text-xs text-gray-500 mt-2 border-t border-gray-100 pt-2">
+      <div className="text-xs text-tertiary mt-2 border-t border-default pt-2">
         Updated:{' '}
         {new Date(issue.updatedAt).toLocaleDateString('en-US', {
           month: 'short',
@@ -175,8 +175,6 @@ export const IssueCard = React.memo(function IssueCard({
     </div>
   );
 }, areIssueCardPropsEqual);
-
-
 
 
 

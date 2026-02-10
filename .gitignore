@@ -37,6 +37,11 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+.env.local
+
+# UI showcase artifacts (generated locally)
+public/showcase/
+docs/showcase/
 
 # vercel
 .vercel

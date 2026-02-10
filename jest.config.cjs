@@ -17,6 +17,7 @@ module.exports = {
     '^@custom-ai/react$': '<rootDir>/tests/__mocks__/custom-ai-react.ts',
     '^react-markdown$': '<rootDir>/tests/__mocks__/react-markdown.tsx',
     '^nanoid$': '<rootDir>/tests/__mocks__/nanoid-stub.ts',
+    '^@openai/apps-sdk-ui/components/(.*)$': '<rootDir>/tests/__mocks__/openai-apps-sdk-ui-components.tsx',
     '^@/(.*)$': '<rootDir>/src/$1',
     '^.+\\.(css|less|scss)$': '<rootDir>/tests/__mocks__/styleMock.js',
   },

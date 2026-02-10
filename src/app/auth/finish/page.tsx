@@ -62,19 +62,19 @@ function AuthFinishContent() {
   }, [router, searchParams]);
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/20">
-      <div className="bg-white p-8 rounded-lg shadow-lg w-full max-w-md text-center">
+    <div className="min-h-screen flex items-center justify-center bg-surface p-6">
+      <div className="bg-surface-elevated border border-default p-8 rounded-2xl shadow-lg w-full max-w-md text-center">
         {!error ? (
           <>
-            <div className="animate-spin inline-block w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full mb-3" />
-            <div className="text-gray-700">Finishing sign-in…</div>
+            <div className="animate-spin inline-block w-6 h-6 border-2 border-[var(--present-accent)] border-t-transparent rounded-full mb-3" />
+            <div className="text-secondary text-sm">Finishing sign-in…</div>
           </>
         ) : (
           <>
-            <div className="text-red-600 font-medium mb-2">Authentication Error</div>
-            <div className="text-sm text-gray-600 mb-4">{error}</div>
+            <div className="text-danger font-medium mb-2">Authentication Error</div>
+            <div className="text-sm text-secondary mb-4">{error}</div>
             <button
-              className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+              className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--present-accent-ring)]"
               onClick={() => router.replace('/auth/signin')}
             >
               Return to Sign In
@@ -90,10 +90,10 @@ export default function AuthFinish() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/20">
-          <div className="bg-white p-8 rounded-lg shadow-lg w-full max-w-md text-center">
-            <div className="animate-spin inline-block w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full mb-3" />
-            <div className="text-gray-700">Loading…</div>
+        <div className="min-h-screen flex items-center justify-center bg-surface p-6">
+          <div className="bg-surface-elevated border border-default p-8 rounded-2xl shadow-lg w-full max-w-md text-center">
+            <div className="animate-spin inline-block w-6 h-6 border-2 border-[var(--present-accent)] border-t-transparent rounded-full mb-3" />
+            <div className="text-secondary text-sm">Loading…</div>
           </div>
         </div>
       }

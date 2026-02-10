@@ -80,7 +80,7 @@ export function TldrawWithCollaboration({
     if (!onTranscriptToggle) return;
 
     const handleKeyDown = (event: KeyboardEvent) => {
-      if ((event.metaKey || event.ctrlKey) && event.key === 'k') {
+      if ((event.metaKey || event.ctrlKey) && String(event.key).toLowerCase() === 'k') {
         event.preventDefault();
         onTranscriptToggle();
       }
