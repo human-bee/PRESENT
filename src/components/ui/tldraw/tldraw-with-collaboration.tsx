@@ -147,11 +147,13 @@ function CollaborationEditorEffects({
   useEffect(() => {
     if (!ready || !editor) return;
     try {
-      editor.user.updateUserPreferences({ colorScheme: theme.mode });
+      // TLDraw expects a concrete scheme. If our theme is `system`, resolve it first to avoid
+      // mismatched chrome (e.g. app is dark, TLDraw stays light -> illegible text).
+      editor.user.updateUserPreferences({ colorScheme: theme.resolved });
     } catch {
       // Best-effort: if TLDraw changes preferences API, avoid crashing the canvas.
     }
-  }, [editor, ready, theme.mode]);
+  }, [editor, ready, theme.resolved]);
 
   useEffect(() => {
     if (!ready || !editor) return;

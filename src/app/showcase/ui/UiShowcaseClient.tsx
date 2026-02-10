@@ -26,6 +26,14 @@ export function UiShowcaseClient() {
   const [mounted, setMounted] = React.useState(false);
   React.useEffect(() => setMounted(true), []);
 
+  // Avoid hydration mismatches on this dev-only page. Theme mode can differ between SSR ("system")
+  // and CSR (localStorage), so we render a minimal shell until mounted.
+  if (!mounted) {
+    return (
+      <div className="min-h-screen bg-surface p-6 md:p-10" suppressHydrationWarning />
+    );
+  }
+
   const sampleResearchResults = [
     {
       id: 'r1',
@@ -115,11 +123,7 @@ export function UiShowcaseClient() {
   return (
     <ContextProvider>
       <ToolDispatcherStub>
-        <div
-          className="min-h-screen bg-surface p-6 md:p-10"
-          data-present-showcase-mounted={mounted ? 'true' : 'false'}
-          suppressHydrationWarning
-        >
+        <div className="min-h-screen bg-surface p-6 md:p-10" data-present-showcase-mounted="true">
           <div className="mx-auto max-w-6xl space-y-8">
         <header className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
           <div>
@@ -164,13 +168,9 @@ export function UiShowcaseClient() {
         <Card className="p-5">
           <div className="flex flex-wrap items-center gap-3">
             <div className="text-sm text-secondary">Theme mode:</div>
-            <div className="text-sm font-medium text-primary" suppressHydrationWarning>
-              {mounted ? theme.mode : '...'}
-            </div>
+            <div className="text-sm font-medium text-primary">{theme.mode}</div>
             <div className="text-sm text-secondary">Resolved:</div>
-            <div className="text-sm font-medium text-primary" suppressHydrationWarning>
-              {mounted ? theme.resolved : '...'}
-            </div>
+            <div className="text-sm font-medium text-primary">{theme.resolved}</div>
             <div className="ml-auto text-xs text-tertiary">
               Tip: Screenshots are captured for both light/dark.
             </div>
