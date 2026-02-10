@@ -23,16 +23,6 @@ export function UiShowcaseClient() {
   const theme = usePresentTheme();
   // Deterministic timestamps avoid SSR/CSR hydration mismatches on this page.
   const baseTimeMs = Date.parse('2026-02-08T00:00:00.000Z');
-  const [mounted, setMounted] = React.useState(false);
-  React.useEffect(() => setMounted(true), []);
-
-  // Avoid hydration mismatches on this dev-only page. Theme mode can differ between SSR ("system")
-  // and CSR (localStorage), so we render a minimal shell until mounted.
-  if (!mounted) {
-    return (
-      <div className="min-h-screen bg-surface p-6 md:p-10" suppressHydrationWarning />
-    );
-  }
 
   const sampleResearchResults = [
     {
