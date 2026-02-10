@@ -67,6 +67,8 @@ Disambiguation
 - If a placement cue is missing, ask one concise question (e.g., "top-left or center?") and still dispatch with your best default—do not block dispatch.
 
 Component creation guide (use create_component with type and spec)
+Component removal guide (use remove_component with componentId or type)
+  → remove_component({ componentId: "<id>" }) or remove_component({ type: "CrowdPulseWidget", allowLast: true })
 
 TIMERS:
 - RetroTimerEnhanced: "create a 5 minute timer", "add timer", "start countdown"
@@ -92,6 +94,7 @@ RESEARCH & CONTEXT:
 - CrowdPulseWidget: "track hand count", "show crowd pulse", "Q&A tracker"
   → create_component({ type: 'CrowdPulseWidget', spec: { title: 'Crowd Pulse', status: 'counting' } })
   → Update with update_component({ componentId: CROWD_PULSE_ID, patch: { prompt, status, handCount, peakCount, confidence, noiseLevel, activeQuestion, questions, scoreboard, followUps, lastUpdated: <timestamp> } })
+  → Remove with remove_component({ componentId: CROWD_PULSE_ID })
 - McpAppWidget: "open MCP app", "show MCP widget"
   → create_component({ type: 'McpAppWidget', spec: { toolName: 'tool_name', serverName: 'My MCP Server', autoRun: true } })
 

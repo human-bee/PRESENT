@@ -564,6 +564,51 @@ test.describe('Hand count journey scrapbook', () => {
       return { screenshot, notes: `paint ${result.metrics?.dtPaintMs ?? 0} ms` };
     });
 
+    await recordStep('Reload + rehydrate Crowd Pulse widget', async () => {
+      await page.reload();
+      await waitForNoCompilingToast(page);
+      await waitForCanvasReady(page);
+      await ensureToolDispatcherReady(page);
+
+      // The follow-up suggestions should survive reload via TLDraw shape state hydration.
+      const canvas = page.getByTestId('canvas');
+      await canvas.getByText('Suggested Follow-Ups', { exact: false }).waitFor({ timeout: 30_000 });
+      await canvas.getByText('Which eval results should be published within 30 days?', { exact: false }).waitFor({ timeout: 30_000 });
+
+      const screenshot = `${runId}-06-crowd-rehydrated.png`;
+      await snap(page, imagesDir, screenshot);
+      await logJourneyAsset(runId, 'canvas', `./assets/${dateStamp}/${screenshot}`, 'Crowd pulse rehydrated after reload');
+      return { screenshot };
+    });
+
+    await recordStep('Remove Crowd Pulse widget', async () => {
+      const result: any = await invokeToolWithJourney(page, runId, {
+        id: `remove-crowd-${Date.now()}`,
+        type: 'tool_call',
+        payload: {
+          tool: 'remove_component',
+          params: {
+            componentId: crowdId,
+          },
+        },
+        timestamp: Date.now(),
+        source: 'playwright',
+      }, 'Remove Crowd Pulse widget');
+
+      perfRows.push({
+        label: 'remove_component (CrowdPulseWidget)',
+        durationMs: result.metrics?.dtPaintMs ?? 0,
+        budgetMs: 900,
+      });
+
+      await expect(page.getByTestId('canvas').getByText('Stage Q&A Control', { exact: true })).toHaveCount(0, { timeout: 30_000 });
+
+      const screenshot = `${runId}-07-crowd-removed.png`;
+      await snap(page, imagesDir, screenshot);
+      await logJourneyAsset(runId, 'canvas', `./assets/${dateStamp}/${screenshot}`, 'Crowd pulse removed');
+      return { screenshot, notes: `paint ${result.metrics?.dtPaintMs ?? 0} ms` };
+    });
+
     await recordStep('Apply speaker view preset', async () => {
       const presetPerf = await page.evaluate(async () => {
         const start = performance.now();
