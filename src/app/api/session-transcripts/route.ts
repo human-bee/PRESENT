@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { createServerClient } from '@supabase/ssr';
+import { cookies } from 'next/headers';
 import { z } from 'zod';
 import { getBooleanFlag } from '@/lib/feature-flags';
 
@@ -10,12 +12,44 @@ const DEMO_MODE_ENABLED = getBooleanFlag(process.env.NEXT_PUBLIC_CANVAS_DEMO_MOD
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
-function getServerClient(authHeader?: string | null) {
-  const token = authHeader?.startsWith('Bearer ') ? authHeader : undefined;
-  return createClient(url, anon, {
-    global: { headers: token ? { Authorization: token } : {} },
-    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
-  });
+async function getServerClient(req: NextRequest): Promise<{
+  supabase: ReturnType<typeof createClient>;
+  isAuthenticated: boolean;
+}> {
+  const authHeader = req.headers.get('Authorization');
+  const token = authHeader?.startsWith('Bearer ') ? authHeader : null;
+
+  if (token) {
+    return {
+      supabase: createClient(url, anon, {
+        global: { headers: { Authorization: token } },
+        auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+      }),
+      isAuthenticated: true,
+    };
+  }
+
+  // Fallback: cookie-based auth (local dev / legacy flows). If no session exists, fail closed.
+  const cookieStore = await cookies();
+  const supabase = createServerClient(url, anon, {
+    cookies: {
+      get(name: string) {
+        return cookieStore.get(name)?.value;
+      },
+      set(name: string, value: string, options: any) {
+        cookieStore.set({ name, value, ...options });
+      },
+      remove(name: string, options: any) {
+        cookieStore.set({ name, value: '', ...options });
+      },
+    },
+  }) as unknown as ReturnType<typeof createClient>;
+
+  const {
+    data: { session },
+  } = await (supabase as any).auth.getSession();
+
+  return { supabase, isAuthenticated: Boolean(session?.user?.id) };
 }
 
 const QuerySchema = z.object({
@@ -42,8 +76,7 @@ const PostSchema = z
   .strict();
 
 export async function GET(req: NextRequest) {
-  const authHeader = req.headers.get('Authorization');
-  const supabase = getServerClient(authHeader);
+  const { supabase, isAuthenticated } = await getServerClient(req);
 
   const { searchParams } = new URL(req.url);
   const parsed = QuerySchema.safeParse({
@@ -54,8 +87,11 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Bad request' }, { status: 400 });
   }
 
-  if (!authHeader && DEMO_MODE_ENABLED) {
+  if (!isAuthenticated && DEMO_MODE_ENABLED) {
     return NextResponse.json({ transcript: [] });
+  }
+  if (!isAuthenticated) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
   const { sessionId, limit } = parsed.data;
@@ -87,11 +123,13 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const authHeader = req.headers.get('Authorization');
-  const supabase = getServerClient(authHeader);
+  const { supabase, isAuthenticated } = await getServerClient(req);
 
-  if (!authHeader && DEMO_MODE_ENABLED) {
+  if (!isAuthenticated && DEMO_MODE_ENABLED) {
     return NextResponse.json({ ok: true, skipped: true });
+  }
+  if (!isAuthenticated) {
+    return NextResponse.json({ ok: false, error: 'unauthorized' }, { status: 401 });
   }
 
   const body = await req.json().catch(() => null);
@@ -138,4 +176,3 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json({ ok: true });
 }
-
