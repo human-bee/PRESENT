@@ -45,7 +45,8 @@ async function gotoAndWait(
   const url = `${BASE_URL}${pathname}`;
   const waitUntil = opts?.waitUntil ?? 'domcontentloaded';
   const retries = opts?.retries ?? 3;
-  const timeoutMs = opts?.timeoutMs ?? 60_000;
+  // First-hit route compilation in `next dev` can be slow for heavy pages (canvas, showcase).
+  const timeoutMs = opts?.timeoutMs ?? 120_000;
 
   let lastErr: unknown;
   for (let attempt = 1; attempt <= retries; attempt++) {
@@ -76,7 +77,7 @@ async function screenshot(page: Page, name: string) {
 }
 
 async function captureCanvas(page: Page, theme: ThemeMode, viewport: ViewportName) {
-  await gotoAndWait(page, '/canvas', '.tl-container', { retries: 4, timeoutMs: 120_000 });
+  await gotoAndWait(page, '/canvas', '.tl-container', { retries: 4, timeoutMs: 180_000 });
   await screenshot(page, `canvas-${theme}-${viewport}-closed`);
 
   // Transcript open via Ctrl+K (matches existing UX + tests).
@@ -105,7 +106,10 @@ async function main() {
 
         await captureCanvas(page, theme, viewportName);
 
-        await gotoAndWait(page, '/showcase/ui', '[data-present-showcase-mounted="true"]');
+        await gotoAndWait(page, '/showcase/ui', '[data-present-showcase-mounted="true"]', {
+          retries: 4,
+          timeoutMs: 180_000,
+        });
         await screenshot(page, `ui-${theme}-${viewportName}`);
 
         await gotoAndWait(page, '/mcp-config', 'text=MCP server configuration', { waitUntil: 'load' });
