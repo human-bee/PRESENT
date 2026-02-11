@@ -575,6 +575,32 @@ test.describe('Hand count journey scrapbook', () => {
       await canvas.getByText('Suggested Follow-Ups', { exact: false }).waitFor({ timeout: 30_000 });
       await canvas.getByText('Which eval results should be published within 30 days?', { exact: false }).waitFor({ timeout: 30_000 });
 
+      const rehydrateUpdate: any = await invokeToolWithJourney(page, runId, {
+        id: `update-crowd-post-rehydrate-${Date.now()}`,
+        type: 'tool_call',
+        payload: {
+          tool: 'update_component',
+          params: {
+            componentId: crowdId,
+            patch: {
+              activeQuestion: 'Rehydrate check question',
+              handCount: 29,
+              lastUpdated: Date.now(),
+            },
+          },
+        },
+        timestamp: Date.now(),
+        source: 'playwright',
+      }, 'Update Crowd Pulse after rehydrate');
+
+      perfRows.push({
+        label: 'update_component (CrowdPulseWidget post-rehydrate)',
+        durationMs: rehydrateUpdate.metrics?.dtPaintMs ?? 0,
+        budgetMs: 900,
+      });
+      await canvas.getByText('Rehydrate check question', { exact: false }).waitFor({ timeout: 30_000 });
+      await canvas.getByText('29', { exact: true }).waitFor({ timeout: 30_000 });
+
       const screenshot = `${runId}-06-crowd-rehydrated.png`;
       await snap(page, imagesDir, screenshot);
       await logJourneyAsset(runId, 'canvas', `./assets/${dateStamp}/${screenshot}`, 'Crowd pulse rehydrated after reload');
@@ -602,11 +628,95 @@ test.describe('Hand count journey scrapbook', () => {
       });
 
       await expect(page.getByTestId('canvas').getByText('Stage Q&A Control', { exact: true })).toHaveCount(0, { timeout: 30_000 });
+      await page.waitForTimeout(500);
+      await expect(page.getByTestId('canvas').getByText('Stage Q&A Control', { exact: true })).toHaveCount(0);
+
+      const postRemoveCall = {
+        id: `update-crowd-after-remove-${Date.now()}`,
+        type: 'tool_call',
+        payload: {
+          tool: 'update_component',
+          params: {
+            componentId: crowdId,
+            patch: {
+              title: 'Should Not Respawn',
+              handCount: 99,
+              lastUpdated: Date.now(),
+            },
+          },
+        },
+        timestamp: Date.now(),
+        source: 'playwright',
+      };
+      await logJourneyEvent(runId, 'canvas', {
+        eventType: 'tool_call',
+        source: 'playwright',
+        tool: 'update_component',
+        payload: { label: 'Update Crowd Pulse after remove', componentId: crowdId },
+      });
+      await page.evaluate(async (call: any) => {
+        const exec = (window as any).__presentToolDispatcherExecute;
+        if (typeof exec !== 'function') {
+          throw new Error('Tool dispatcher not ready');
+        }
+        await exec(call);
+      }, postRemoveCall);
+      await logJourneyEvent(runId, 'canvas', {
+        eventType: 'tool_result',
+        source: 'playwright',
+        tool: 'update_component',
+        payload: { label: 'Update Crowd Pulse after remove', componentId: crowdId, expected: 'no_paint' },
+      });
+
+      await page.waitForTimeout(700);
+      await expect(page.getByTestId('canvas').getByText('Should Not Respawn', { exact: true })).toHaveCount(0);
+      await expect(page.getByTestId('canvas').getByText('Stage Q&A Control', { exact: true })).toHaveCount(0);
 
       const screenshot = `${runId}-07-crowd-removed.png`;
       await snap(page, imagesDir, screenshot);
       await logJourneyAsset(runId, 'canvas', `./assets/${dateStamp}/${screenshot}`, 'Crowd pulse removed');
       return { screenshot, notes: `paint ${result.metrics?.dtPaintMs ?? 0} ms` };
+    });
+
+    await recordStep('Recreate Crowd Pulse with same componentId', async () => {
+      const recreate: any = await invokeToolWithJourney(page, runId, {
+        id: `recreate-crowd-${Date.now()}`,
+        type: 'tool_call',
+        payload: {
+          tool: 'create_component',
+          params: {
+            type: 'CrowdPulseWidget',
+            messageId: crowdId,
+            spec: {
+              title: 'Stage Q&A Control (Recreated)',
+              prompt: 'Recreated widget check',
+              status: 'counting',
+              handCount: 2,
+              peakCount: 2,
+              confidence: 0.5,
+              noiseLevel: 0.1,
+              demoMode: true,
+            },
+          },
+        },
+        timestamp: Date.now(),
+        source: 'playwright',
+      }, 'Recreate Crowd Pulse widget');
+
+      perfRows.push({
+        label: 'create_component (CrowdPulseWidget recreate same id)',
+        durationMs: recreate.metrics?.dtPaintMs ?? 0,
+        budgetMs: 1300,
+      });
+
+      const canvas = page.getByTestId('canvas');
+      await canvas.getByText('Stage Q&A Control (Recreated)', { exact: true }).waitFor({ timeout: 30_000 });
+      await canvas.getByText('Recreated widget check', { exact: false }).waitFor({ timeout: 30_000 });
+
+      const screenshot = `${runId}-08-crowd-recreated.png`;
+      await snap(page, imagesDir, screenshot);
+      await logJourneyAsset(runId, 'canvas', `./assets/${dateStamp}/${screenshot}`, 'Crowd pulse recreated with same id');
+      return { screenshot, notes: `paint ${recreate.metrics?.dtPaintMs ?? 0} ms` };
     });
 
     await recordStep('Apply speaker view preset', async () => {
@@ -628,7 +738,7 @@ test.describe('Hand count journey scrapbook', () => {
       });
 
       await waitForNoCompilingToast(page);
-      const screenshot = `${runId}-06-speaker-view.png`;
+      const screenshot = `${runId}-09-speaker-view.png`;
       await snap(page, imagesDir, screenshot);
       await logJourneyAsset(runId, 'canvas', `./assets/${dateStamp}/${screenshot}`, 'Speaker preset');
       return { screenshot, notes: `applied in ${presetPerf.durationMs} ms` };
