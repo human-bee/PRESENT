@@ -3,8 +3,6 @@ import { config } from 'dotenv';
 import { randomUUID } from 'crypto';
 import { join } from 'path';
 import { z } from 'zod';
-import { createAnthropic } from '@ai-sdk/anthropic';
-import { generateObject } from 'ai';
 // Removed temporary Responses API fallback for routing
 
 try {
@@ -16,10 +14,23 @@ import { appendTranscriptCache, getTranscriptWindow, listCanvasComponents } from
 import { buildVoiceAgentInstructions } from '@/lib/agents/instructions';
 import { queryCapabilities, defaultCapabilities } from '@/lib/agents/capabilities';
 import { deriveComponentIntent } from '@/lib/agents/shared/deterministic-ids';
-import { jsonObjectSchema, type JsonObject } from '@/lib/utils/json-schema';
+import type { JsonObject } from '@/lib/utils/json-schema';
 import { ConnectionState, RoomEvent, RemoteTrackPublication, Track } from 'livekit-client';
 import { createDefaultScorecardState } from '@/lib/agents/debate-scorecard-schema';
 import { createLiveKitBus } from '@/lib/livekit/livekit-bus';
+import { createManualInputRouter } from './voice-agent/manual-routing';
+import { VoiceComponentLedger } from './voice-agent/component-ledger';
+import { TranscriptionBuffer, type PendingTranscriptionMessage } from './voice-agent/transcription-buffer';
+import { createToolParametersSchema } from './voice-agent/tool-context';
+import {
+  buildToolEvent,
+  coerceComponentPatch,
+  normalizeComponentPatch,
+  normalizeSpecInput,
+  shouldForceReliableUpdate,
+  type ToolEvent,
+} from './voice-agent/tool-publishing';
+import { inferScorecardTopicFromText, resolveDebatePlayerSeedFromLabels } from './voice-agent/scorecard';
 
 const RATE_LIMIT_HEADER_KEYS = [
   'retry-after',
@@ -51,44 +62,7 @@ const readHeaderValue = (headers: unknown, key: string): string | undefined => {
   return undefined;
 };
 
-const routerDecisionSchema = z.object({
-  route: z.enum(['canvas', 'none']),
-  message: z.string().optional(),
-});
-
-let routerModelCache: ReturnType<ReturnType<typeof createAnthropic>> | null = null;
-const getRouterModel = () => {
-  if (routerModelCache) return routerModelCache;
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) return null;
-  const modelId = (process.env.VOICE_AGENT_ROUTER_MODEL || 'claude-haiku-4-5').trim();
-  const anthropic = createAnthropic({ apiKey });
-  routerModelCache = anthropic(modelId);
-  return routerModelCache;
-};
-
-const routeManualInput = async (text: string) => {
-  const model = getRouterModel();
-  if (!model) return null;
-  const system = [
-    'You are a routing assistant for a real-time UI voice agent.',
-    'Decide whether the user request should be handled by the canvas agent.',
-    'Canvas requests involve drawing, layout, styling, editing, or placing shapes or visuals on the canvas.',
-    'If the request is a canvas task, return route="canvas" and a concise imperative message for the canvas agent.',
-    'Otherwise return route="none".',
-  ].join(' ');
-  const { object } = await (generateObject as unknown as (args: any) => Promise<{ object: any }>)({
-    model,
-    system,
-    prompt: text,
-    schema: routerDecisionSchema,
-    temperature: 0,
-    maxOutputTokens: 120,
-  });
-  const parsed = routerDecisionSchema.safeParse(object);
-  if (!parsed.success) return null;
-  return parsed.data as { route: 'canvas' | 'none'; message?: string };
-};
+const routeManualInput = createManualInputRouter();
 
 const extractRateLimitHeaders = (headers: unknown) => {
   const info: Record<string, string> = {};
@@ -185,64 +159,21 @@ export default defineAgent({
     console.log('[VoiceAgent] Connected to room:', job.room.name);
     const liveKitBus = createLiveKitBus(job.room as any);
 
-    type PendingTranscriptionMessage = {
-      text: string;
-      speaker?: string;
-      participantId?: string;
-      participantName?: string;
-      isManual: boolean;
-      isFinal: boolean;
-      timestamp?: number;
-      serverGenerated?: boolean;
-      receivedAt: number;
-    };
-
     // Data messages (topic: "transcription") can arrive immediately after the agent joins the room.
     // Attach the listener up-front and buffer until the realtime session is running so we don't drop early turns.
-    const pendingTranscriptions: PendingTranscriptionMessage[] = [];
-    const TRANSCRIPTION_BUFFER_MAX = 64;
-    const TRANSCRIPTION_BUFFER_TTL_MS = 30_000;
+    const transcriptionBuffer = new TranscriptionBuffer(64, 30_000);
     let transcriptionProcessingEnabled = false;
-    let drainingTranscriptions = false;
     let handleBufferedTranscription:
       | ((message: PendingTranscriptionMessage) => Promise<void>)
       | null = null;
 
-    const prunePendingTranscriptions = () => {
-      const now = Date.now();
-      while (pendingTranscriptions.length > 0) {
-        const first = pendingTranscriptions[0];
-        if (now - first.receivedAt <= TRANSCRIPTION_BUFFER_TTL_MS) break;
-        pendingTranscriptions.shift();
-      }
-      if (pendingTranscriptions.length > TRANSCRIPTION_BUFFER_MAX) {
-        pendingTranscriptions.splice(0, pendingTranscriptions.length - TRANSCRIPTION_BUFFER_MAX);
-      }
-    };
-
-    const enqueuePendingTranscription = (message: PendingTranscriptionMessage) => {
-      pendingTranscriptions.push(message);
-      prunePendingTranscriptions();
-    };
-
     const drainPendingTranscriptions = async () => {
       if (!transcriptionProcessingEnabled || !handleBufferedTranscription) return;
-      if (drainingTranscriptions) return;
-      drainingTranscriptions = true;
-      try {
-        prunePendingTranscriptions();
-        while (pendingTranscriptions.length > 0) {
-          const next = pendingTranscriptions.shift();
-          if (!next) continue;
-          try {
-            await handleBufferedTranscription(next);
-          } catch (error) {
-            logRealtimeError('failed to handle buffered transcription', error);
-          }
-        }
-      } finally {
-        drainingTranscriptions = false;
-      }
+      transcriptionBuffer.setEnabled(true);
+      await transcriptionBuffer.drain(
+        handleBufferedTranscription,
+        (error) => logRealtimeError('failed to handle buffered transcription', error),
+      );
     };
 
     const ingestTranscription = (message: {
@@ -293,7 +224,7 @@ export default defineAgent({
       };
 
       if (!transcriptionProcessingEnabled || !handleBufferedTranscription) {
-        enqueuePendingTranscription(entry);
+        transcriptionBuffer.enqueue(entry);
         return;
       }
 
@@ -509,8 +440,8 @@ Your only output is function calls. Never use plain text unless absolutely neces
       room: string;
     };
     const componentRegistry = new Map<string, ComponentRegistryEntry>();
-    const lastComponentByTypeByRoom = new Map<string, Map<string, string>>();
-    const lastCreatedComponentIdByRoom = new Map<string, string>();
+    const roomKey = () => job.room.name || 'room';
+    const componentLedger = new VoiceComponentLedger(roomKey);
     type IntentLedgerEntry = {
       intentId: string;
       messageId: string;
@@ -526,17 +457,8 @@ Your only output is function calls. Never use plain text unless absolutely neces
     const LEDGER_TTL_MS = 5 * 60 * 1000;
     let lastResearchPanelId: string | null = null;
     let activeScorecard: { componentId: string; intentId: string; topic: string } | null = null;
-    const getLastComponentMap = () => {
-      const key = job.room.name || 'room';
-      let map = lastComponentByTypeByRoom.get(key);
-      if (!map) {
-        map = new Map<string, string>();
-        lastComponentByTypeByRoom.set(key, map);
-      }
-      return map;
-    };
-    const getLastComponentForType = (type: string) => getLastComponentMap().get(type);
-    const setLastComponentForType = (type: string, messageId: string) => getLastComponentMap().set(type, messageId);
+    const getLastComponentForType = (type: string) => componentLedger.getLastComponentForType(type);
+    const setLastComponentForType = (type: string, messageId: string) => componentLedger.setLastComponentForType(type, messageId);
 
     const rememberResearchPanel = (candidate?: string | null) => {
       if (typeof candidate !== 'string') return;
@@ -833,64 +755,6 @@ Your only output is function calls. Never use plain text unless absolutely neces
     let currentTurnId = 0;
     let isGeneratingReply = false;
     let lastScorecardProvisionedAt = 0;
-    const recentCreateFingerprintsByRoom = new Map<
-      string,
-      Map<
-        string,
-        {
-          fingerprint: string;
-          messageId: string;
-          createdAt: number;
-          turnId: number;
-          intentId: string;
-          slot?: string;
-        }
-      >
-    >();
-    const roomKey = () => job.room.name || 'room';
-
-    const stripWrappingQuotes = (value: string) => {
-      let next = value.trim();
-      if (next.length < 2) return next;
-      const first = next[0];
-      const last = next[next.length - 1];
-      if ((first === '"' || first === "'" || first === '`') && first === last) {
-        next = next.slice(1, -1).trim();
-      }
-      return next;
-    };
-
-    const inferScorecardTopicFromText = (text?: string): string | undefined => {
-      if (!text) return undefined;
-      const trimmed = text.trim();
-      if (!trimmed) return undefined;
-      const lower = trimmed.toLowerCase();
-      if (!lower.includes('debate') && !lower.includes('scorecard')) return undefined;
-
-      const markers = ['about:', 'about ', 'topic:', 'topic is', 'topic '];
-      for (const marker of markers) {
-        const idx = lower.indexOf(marker);
-        if (idx === -1) continue;
-        const candidate = stripWrappingQuotes(trimmed.slice(idx + marker.length).trim());
-        if (candidate.length >= 6 && candidate.length <= 180) {
-          return candidate;
-        }
-      }
-
-      const lastColon = trimmed.lastIndexOf(':');
-      if (lastColon !== -1) {
-        const candidate = stripWrappingQuotes(trimmed.slice(lastColon + 1).trim());
-        if (candidate.length >= 6 && candidate.length <= 180) {
-          return candidate;
-        }
-      }
-
-      if (trimmed.endsWith('?') && trimmed.length <= 180) {
-        return trimmed;
-      }
-
-      return undefined;
-    };
 
     const listRemoteParticipantLabels = (): string[] => {
       const labels: string[] = [];
@@ -912,16 +776,6 @@ Your only output is function calls. Never use plain text unless absolutely neces
       });
     };
 
-    const resolveDebatePlayerSeed = () => {
-      const labels = listRemoteParticipantLabels();
-      const affLabel = labels[0] || 'You';
-      const negLabel = labels[1] || (labels[0] ? 'Opponent' : 'Opponent');
-      return [
-        { side: 'AFF' as const, label: affLabel },
-        { side: 'NEG' as const, label: negLabel },
-      ];
-    };
-
     const sendScorecardSeedTask = async (payload: {
       componentId: string;
       intentId?: string;
@@ -931,7 +785,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
       const room = roomKey() || job.room?.name || 'room';
       const componentId = payload.componentId.trim();
       if (!componentId) return;
-      const players = resolveDebatePlayerSeed();
+      const players = resolveDebatePlayerSeedFromLabels(listRemoteParticipantLabels());
 
       await sendToolCall('dispatch_to_conductor', {
         task: 'scorecard.seed',
@@ -950,38 +804,9 @@ Your only output is function calls. Never use plain text unless absolutely neces
       });
     };
 
-    const getLastCreatedComponentId = () => {
-      const key = roomKey();
-      return lastCreatedComponentIdByRoom.get(key) ?? null;
-    };
-    const setLastCreatedComponentId = (messageId: string | null) => {
-      const key = roomKey();
-      if (!messageId) {
-        lastCreatedComponentIdByRoom.delete(key);
-        return;
-      }
-      lastCreatedComponentIdByRoom.set(key, messageId);
-    };
-    const getRecentCreateMap = () => {
-      const key = roomKey();
-      let map = recentCreateFingerprintsByRoom.get(key);
-      if (!map) {
-        map = new Map<
-          string,
-          {
-            fingerprint: string;
-            messageId: string;
-            createdAt: number;
-            turnId: number;
-            intentId: string;
-            slot?: string;
-          }
-        >();
-        recentCreateFingerprintsByRoom.set(key, map);
-      }
-      return map;
-    };
-    const getRecentCreateFingerprint = (type: string) => getRecentCreateMap().get(type);
+    const getLastCreatedComponentId = () => componentLedger.getLastCreatedComponentId();
+    const setLastCreatedComponentId = (messageId: string | null) => componentLedger.setLastCreatedComponentId(messageId);
+    const getRecentCreateFingerprint = (type: string) => componentLedger.getRecentCreateFingerprint(type);
     const setRecentCreateFingerprint = (
       type: string,
       fingerprint: {
@@ -992,9 +817,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
         intentId: string;
         slot?: string;
       },
-    ) => {
-      getRecentCreateMap().set(type, fingerprint);
-    };
+    ) => componentLedger.setRecentCreateFingerprint(type, fingerprint);
     const getComponentEntry = (id: string) => {
       const entry = componentRegistry.get(id);
       if (!entry) return undefined;
@@ -1020,24 +843,6 @@ Your only output is function calls. Never use plain text unless absolutely neces
     };
 
     const enableLossyUpdates = process.env.VOICE_AGENT_UPDATE_LOSSY !== 'false';
-
-    type ToolEvent = {
-      id: string;
-      roomId: string;
-      type: 'tool_call';
-      payload: { tool: string; params: JsonObject; context: { source: 'voice'; timestamp: number } };
-      timestamp: number;
-      source: 'voice';
-    };
-
-    const buildToolEvent = (tool: string, params: JsonObject): ToolEvent => ({
-      id: randomUUID(),
-      roomId: job.room.name || 'unknown',
-      type: 'tool_call' as const,
-      payload: { tool, params, context: { source: 'voice', timestamp: Date.now() } },
-      timestamp: Date.now(),
-      source: 'voice' as const,
-    });
 
     const pendingToolCalls: Array<{ event: ToolEvent; reliable: boolean }> = [];
     let toolCallListenersAttached = false;
@@ -1173,17 +978,11 @@ Your only output is function calls. Never use plain text unless absolutely neces
     const sendToolCall = async (tool: string, params: JsonObject, options: { reliable?: boolean } = {}) => {
       ensureToolCallListeners();
       let normalizedParams = normalizeOutgoingParams(tool, params);
-      const shouldForceReliableUpdate =
-        tool === 'update_component' &&
-        normalizedParams &&
-        typeof (normalizedParams as any).patch === 'object' &&
-        (normalizedParams as any).patch !== null &&
-        typeof ((normalizedParams as any).patch as any).instruction === 'string' &&
-        (((normalizedParams as any).patch as any).instruction as string).trim().length > 0;
+      const forceReliableUpdate = shouldForceReliableUpdate(tool, normalizedParams);
       const reliable =
         options.reliable !== undefined
           ? options.reliable
-          : !(tool === 'update_component' && enableLossyUpdates && !shouldForceReliableUpdate);
+          : !(tool === 'update_component' && enableLossyUpdates && !forceReliableUpdate);
 
       if (tool === 'dispatch_to_conductor') {
         const rawTask =
@@ -1265,7 +1064,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
         }
       }
 
-      const entry = { event: buildToolEvent(tool, normalizedParams), reliable };
+      const entry = { event: buildToolEvent(tool, normalizedParams, job.room.name || 'unknown'), reliable };
       if (!job.room.localParticipant) {
         pendingToolCalls.push(entry);
         console.info('[VoiceAgent] queueing tool_call until room connects', {
@@ -1304,331 +1103,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
       }
     };
 
-    const safeCloneJson = (value: unknown): JsonObject => {
-      if (!value || typeof value !== 'object') return {};
-      try {
-        return JSON.parse(JSON.stringify(value)) as JsonObject;
-      } catch {
-        return {};
-      }
-    };
-
-    const coerceComponentPatch = (raw: unknown): JsonObject => {
-      if (!raw) return {};
-      if (typeof raw === 'string') {
-        try {
-          const parsed = JSON.parse(raw);
-          return parsed && typeof parsed === 'object' ? safeCloneJson(parsed) : { instruction: raw };
-        } catch {
-          return { instruction: raw } as JsonObject;
-        }
-      }
-      if (typeof raw === 'object') {
-        return safeCloneJson(raw);
-      }
-      return {};
-    };
-
-    const normalizeSpecInput = (raw: unknown): JsonObject => {
-      if (!raw) return {};
-      if (typeof raw === 'string') {
-        try {
-          const parsed = JSON.parse(raw);
-          return parsed && typeof parsed === 'object' ? safeCloneJson(parsed) : {};
-        } catch {
-          return {};
-        }
-      }
-      if (raw && typeof raw === 'object') {
-        return safeCloneJson(raw);
-      }
-      return {};
-    };
-
-    const normalizeComponentPatch = (patch: JsonObject, fallbackSeconds: number): JsonObject => {
-      const next: JsonObject = { ...patch };
-      const timestamp = Date.now();
-      next.updatedAt = typeof next.updatedAt === 'number' ? next.updatedAt : timestamp;
-
-      const coerceBoolean = (value: unknown): boolean | undefined => {
-        if (typeof value === 'boolean') return value;
-        if (typeof value === 'number') {
-          if (value === 1) return true;
-          if (value === 0) return false;
-        }
-        if (typeof value === 'string') {
-          const normalized = value.trim().toLowerCase();
-          if (!normalized) return undefined;
-          if (['true', 'yes', 'start', 'run', 'running', 'resume', 'play', 'on', '1'].includes(normalized)) {
-            return true;
-          }
-          if (['false', 'no', 'stop', 'stopped', 'pause', 'paused', 'halt', 'off', '0'].includes(normalized)) {
-            return false;
-          }
-        }
-        return undefined;
-      };
-
-      const coerceDurationValue = (value: unknown, fallbackSeconds: number) => {
-        if (typeof value === 'number' && Number.isFinite(value)) {
-          return Math.max(1, Math.round(value));
-        }
-        if (typeof value === 'string') {
-          const cleaned = value.trim().toLowerCase();
-          if (!cleaned) return fallbackSeconds;
-          const parsed = Number.parseFloat(cleaned);
-          if (!Number.isFinite(parsed)) return fallbackSeconds;
-          const isMinutes =
-            cleaned.includes('min') ||
-            cleaned.endsWith('m') ||
-            cleaned.endsWith('minutes') ||
-            cleaned.endsWith('minute');
-          const seconds = isMinutes ? parsed * 60 : parsed;
-          return Math.max(1, Math.round(seconds));
-        }
-        return fallbackSeconds;
-      };
-
-      const coerceIntValue = (value: unknown, fallback: number) => {
-        if (typeof value === 'number' && Number.isFinite(value)) {
-          return Math.round(value);
-        }
-        if (typeof value === 'string') {
-          const parsed = Number.parseFloat(value);
-          if (Number.isFinite(parsed)) {
-            return Math.round(parsed);
-          }
-        }
-        return fallback;
-      };
-
-      if (next.durationMinutes !== undefined) {
-        const minutesValue = coerceIntValue(
-          (next as any).durationMinutes,
-          Math.max(1, Math.round(((next as any).configuredDuration ?? fallbackSeconds) as number / 60)),
-        );
-        const durationSeconds = Math.max(1, minutesValue) * 60;
-        const seconds = durationSeconds % 60;
-        const minutes = Math.floor(durationSeconds / 60);
-        next.configuredDuration = durationSeconds;
-        if (typeof next.timeLeft !== 'number') {
-          next.timeLeft = durationSeconds;
-        }
-        next.initialMinutes = minutes;
-        next.initialSeconds = seconds;
-        delete (next as any).durationMinutes;
-      }
-
-      if (next.update && typeof (next as any).update === 'object' && !Array.isArray((next as any).update)) {
-        const update = (next as any).update as Record<string, unknown>;
-        const defaultMinutes = Math.max(0, Math.floor(fallbackSeconds / 60));
-        const defaultSeconds = fallbackSeconds % 60;
-        const minutesCandidate =
-          'minutes' in update ? coerceIntValue(update.minutes, defaultMinutes) : null;
-        const secondsCandidate =
-          'seconds' in update ? coerceIntValue(update.seconds, defaultSeconds) : null;
-        if (minutesCandidate !== null || secondsCandidate !== null) {
-          const minutes =
-            minutesCandidate !== null
-              ? Math.max(0, minutesCandidate)
-              : secondsCandidate !== null
-                ? 0
-                : defaultMinutes;
-          const seconds = secondsCandidate !== null ? Math.max(0, Math.min(59, secondsCandidate)) : defaultSeconds;
-          const durationSeconds = Math.max(1, minutes * 60 + seconds);
-          next.configuredDuration = durationSeconds;
-          next.timeLeft = durationSeconds;
-          next.initialMinutes = minutes;
-          next.initialSeconds = seconds;
-          next.isFinished = false;
-          next.isRunning = false;
-        }
-        delete (next as any).update;
-      }
-
-      if (next.duration !== undefined) {
-        const durationSeconds = coerceDurationValue(
-          next.duration,
-          Math.max(1, Math.round((next as any).configuredDuration ?? fallbackSeconds)),
-        );
-        const minutes = Math.floor(durationSeconds / 60);
-        const seconds = durationSeconds % 60;
-        next.configuredDuration = durationSeconds;
-        if (typeof next.timeLeft !== 'number') {
-          next.timeLeft = durationSeconds;
-        }
-        next.initialMinutes = minutes;
-        next.initialSeconds = seconds;
-        delete next.duration;
-      }
-      if (next.durationSeconds !== undefined) {
-        const durationSeconds = coerceDurationValue(
-          (next as any).durationSeconds,
-          Math.max(1, Math.round((next as any).configuredDuration ?? fallbackSeconds)),
-        );
-        const minutes = Math.floor(durationSeconds / 60);
-        const seconds = durationSeconds % 60;
-        next.configuredDuration = durationSeconds;
-        if (typeof next.timeLeft !== 'number') {
-          next.timeLeft = durationSeconds;
-        }
-        next.initialMinutes = minutes;
-        next.initialSeconds = seconds;
-      }
-      if (next.initialMinutes !== undefined || next.initialSeconds !== undefined) {
-        const hasMinutesField = (next as any).initialMinutes !== undefined;
-        const hasSecondsField = (next as any).initialSeconds !== undefined;
-        const defaultMinutes = Math.max(
-          0,
-          Math.floor((((next as any).configuredDuration ?? fallbackSeconds) as number) / 60),
-        );
-        const defaultSeconds = (((next as any).configuredDuration ?? fallbackSeconds) as number) % 60;
-        const minutesCandidate = hasMinutesField
-          ? coerceIntValue((next as any).initialMinutes, defaultMinutes)
-          : null;
-        const secondsCandidate = hasSecondsField
-          ? coerceIntValue((next as any).initialSeconds, defaultSeconds)
-          : null;
-        if (minutesCandidate !== null || secondsCandidate !== null) {
-          const minutes =
-            minutesCandidate !== null
-              ? Math.max(0, minutesCandidate)
-              : secondsCandidate !== null
-                ? 0
-                : defaultMinutes;
-          const seconds =
-            secondsCandidate !== null ? Math.max(0, Math.min(59, secondsCandidate)) : Math.max(0, Math.min(59, defaultSeconds));
-          const totalSeconds = Math.max(1, minutes * 60 + seconds);
-          next.configuredDuration = totalSeconds;
-          if (typeof next.timeLeft !== 'number') {
-            next.timeLeft = totalSeconds;
-          }
-          next.initialMinutes = minutes;
-          next.initialSeconds = seconds;
-        }
-      }
-
-      if (typeof (next as any).state === 'string') {
-        const stateLabel = ((next as any).state as string).trim().toLowerCase();
-        delete (next as any).state;
-        const markRunning = () => {
-          next.isRunning = true;
-          next.isFinished = false;
-          if (typeof next.timeLeft !== 'number' || next.timeLeft <= 0) {
-            const durationSeconds = typeof next.configuredDuration === 'number' ? next.configuredDuration : fallbackSeconds;
-            next.timeLeft = Math.max(1, Math.round(durationSeconds));
-          }
-        };
-        const markStopped = (finished: boolean) => {
-          next.isRunning = false;
-          if (finished) {
-            next.isFinished = true;
-            if (typeof next.timeLeft !== 'number' || next.timeLeft < 0) {
-              next.timeLeft = 0;
-            }
-          }
-        };
-        if (
-          ['run', 'running', 'start', 'started', 'resume', 'resumed', 'play', 'playing', 'active'].includes(
-            stateLabel,
-          )
-        ) {
-          markRunning();
-        } else if (
-          ['paused', 'pause', 'stop', 'stopped', 'halt', 'idle', 'ready', 'standby'].includes(stateLabel)
-        ) {
-          markStopped(false);
-        } else if (
-          ['finished', 'complete', 'completed', 'done', 'expired', "time's up", 'time up', 'timeup'].includes(
-            stateLabel,
-          )
-        ) {
-          markStopped(true);
-        }
-      }
-
-      const runningValue =
-        'running' in next ? coerceBoolean(next.running) : undefined;
-      if (runningValue !== undefined) {
-        next.isRunning = runningValue;
-        if (runningValue) {
-          next.isFinished = false;
-          if (typeof next.timeLeft !== 'number' && typeof next.configuredDuration === 'number') {
-            next.timeLeft = next.configuredDuration;
-          }
-        }
-        delete next.running;
-      }
-
-      const autoStartValue =
-        'autoStart' in next ? coerceBoolean(next.autoStart) : undefined;
-      if (autoStartValue !== undefined) {
-        next.autoStart = autoStartValue;
-        next.isRunning = autoStartValue;
-        if (autoStartValue) {
-          next.isFinished = false;
-          if (typeof next.timeLeft !== 'number' && typeof next.configuredDuration === 'number') {
-            next.timeLeft = next.configuredDuration;
-          }
-        }
-      }
-
-      const statusValue =
-        'status' in next ? coerceBoolean(next.status) : undefined;
-      if (statusValue !== undefined && next.isRunning === undefined) {
-        next.isRunning = statusValue;
-        if (statusValue) {
-          next.isFinished = false;
-          if (typeof next.timeLeft !== 'number' && typeof next.configuredDuration === 'number') {
-            next.timeLeft = next.configuredDuration;
-          }
-        }
-      }
-
-      if (typeof (next as any).action === 'string') {
-        const action = ((next as any).action as string).trim().toLowerCase();
-        delete (next as any).action;
-        if (action === 'start' || action === 'resume' || action === 'run' || action === 'play') {
-          next.isRunning = true;
-          next.isFinished = false;
-          if (typeof next.timeLeft !== 'number' || next.timeLeft <= 0) {
-            const durationSeconds = typeof next.configuredDuration === 'number' ? next.configuredDuration : fallbackSeconds;
-            next.timeLeft = Math.max(1, Math.round(durationSeconds));
-          }
-        } else if (action === 'pause' || action === 'stop' || action === 'halt') {
-          next.isRunning = false;
-        } else if (action === 'reset') {
-          const durationSeconds = typeof next.configuredDuration === 'number' ? next.configuredDuration : fallbackSeconds;
-          next.timeLeft = Math.max(1, Math.round(durationSeconds));
-          next.isRunning = false;
-          next.isFinished = false;
-        }
-      }
-
-      if (typeof (next as any).command === 'string') {
-        const command = ((next as any).command as string).trim().toLowerCase();
-        delete (next as any).command;
-        if (command === 'start' || command === 'resume' || command === 'run' || command === 'play') {
-          next.isRunning = true;
-          next.isFinished = false;
-          if (typeof next.timeLeft !== 'number' || next.timeLeft <= 0) {
-            const durationSeconds = typeof next.configuredDuration === 'number' ? next.configuredDuration : fallbackSeconds;
-            next.timeLeft = Math.max(1, Math.round(durationSeconds));
-          }
-        } else if (command === 'pause' || command === 'stop' || command === 'halt') {
-          next.isRunning = false;
-        } else if (command === 'reset') {
-          const durationSeconds = typeof next.configuredDuration === 'number' ? next.configuredDuration : fallbackSeconds;
-          next.timeLeft = Math.max(1, Math.round(durationSeconds));
-          next.isRunning = false;
-          next.isFinished = false;
-        }
-      }
-
-      return next;
-    };
-
-    const toolParameters = jsonObjectSchema.default({});
+    const toolParameters = createToolParametersSchema();
     const toolContext: llm.ToolContext = {
       create_component: llm.tool({
         description: 'Create a new component on the canvas.',
@@ -1905,7 +1380,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
             seededScorecardTopic = pickTopic(topicFromSpec, topicFromPrompt) ?? topicFromSpec ?? topicFromPrompt ?? 'Live Debate';
 
             const seed = createDefaultScorecardState(seededScorecardTopic);
-            const playersSeed = resolveDebatePlayerSeed();
+            const playersSeed = resolveDebatePlayerSeedFromLabels(listRemoteParticipantLabels());
             try {
               if (Array.isArray((seed as any).players)) {
                 for (const update of playersSeed) {
@@ -3122,7 +2597,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
         const intentId = `debate-scorecard-${Date.now()}`;
         const messageId = intentId;
         const initialState = createDefaultScorecardState(topicLabel);
-        const seedPlayers = resolveDebatePlayerSeed();
+        const seedPlayers = resolveDebatePlayerSeedFromLabels(listRemoteParticipantLabels());
         initialState.players[0].label = seedPlayers[0].label;
         initialState.players[1].label = seedPlayers[1].label;
         initialState.status.lastAction = `Initialized debate${topicLabel ? ` on ${topicLabel}` : ''} with ${seedPlayers[0].label} vs ${seedPlayers[1].label}.`;
@@ -3556,7 +3031,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
       transcriptionProcessingEnabled = true;
       console.log('[VoiceAgent] transcription processing enabled', {
         reason,
-        buffered: pendingTranscriptions.length,
+        buffered: transcriptionBuffer.size(),
       });
       void drainPendingTranscriptions();
     };
