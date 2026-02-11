@@ -17,7 +17,7 @@ import {
 import { EnhancedMcpProvider } from '@/components/ui/mcp/enhanced-mcp-provider';
 import { Room, ConnectionState, RoomEvent, VideoPresets, RoomOptions } from 'livekit-client';
 import { RoomContext } from '@livekit/components-react';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/hooks/use-auth';
 import { RoomScopedProviders } from '@/components/RoomScopedProviders';
 import { ToolDispatcher } from '@/components/tool-dispatcher';
@@ -50,6 +50,8 @@ export function CanvasPageClient() {
   // Authentication check
   const { user, loading } = useAuth();
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const bypassAuth = getBooleanFlag(process.env.NEXT_PUBLIC_CANVAS_DEV_BYPASS, false);
   const demoMode = getBooleanFlag(process.env.NEXT_PUBLIC_CANVAS_DEMO_MODE, false);
   // Track resolved canvas id and room name; do not render until resolved
@@ -115,6 +117,12 @@ export function CanvasPageClient() {
     } catch { }
   }, [roomName]);
 
+  const replaceUrl = useCallback((nextUrl: URL) => {
+    // Keep Next's router state in sync; avoid direct history mutations that won't retrigger hooks.
+    const href = `${nextUrl.pathname}${nextUrl.search}${nextUrl.hash}`;
+    router.replace(href, { scroll: false });
+  }, [router]);
+
   useEffect(() => {
     if (typeof window === 'undefined') return;
     try {
@@ -137,9 +145,9 @@ export function CanvasPageClient() {
       });
 
       url.searchParams.delete('share');
-      window.history.replaceState({}, '', url.toString());
+      replaceUrl(url);
     } catch { }
-  }, []);
+  }, [replaceUrl]);
 
   const isUuid = (value: string | null | undefined) =>
     !!value && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
@@ -174,10 +182,17 @@ export function CanvasPageClient() {
         try {
           localStorage.removeItem('present:lastCanvasId');
         } catch { }
+        // Clear UI state immediately so the old room doesn't keep running while we spin up a new canvas.
+        setCanvasId(null);
+        setRoomName('');
         url.searchParams.delete('id');
         url.searchParams.delete('room');
         url.searchParams.delete('fresh');
-        window.history.replaceState({}, '', url.toString());
+        replaceUrl(url);
+        try {
+          window.dispatchEvent(new Event('present:canvas-id-changed'));
+        } catch { }
+        return;
       }
 
       if (roomOverride && roomOverride.trim().length > 0) {
@@ -190,7 +205,7 @@ export function CanvasPageClient() {
           joinParityCanvas(derivedCanvasId, sanitized);
           if (url.searchParams.get('id') !== derivedCanvasId) {
             url.searchParams.set('id', derivedCanvasId);
-            window.history.replaceState({}, '', url.toString());
+            replaceUrl(url);
           }
           try {
             localStorage.setItem('present:lastCanvasId', derivedCanvasId);
@@ -209,7 +224,7 @@ export function CanvasPageClient() {
       let idParam = url.searchParams.get('id');
       if (isSyntheticDevId(idParam) && user) {
         url.searchParams.delete('id');
-        window.history.replaceState({}, '', url.toString());
+        replaceUrl(url);
         setCanvasId(null);
         setRoomName('');
         try {
@@ -247,7 +262,7 @@ export function CanvasPageClient() {
 
       if (lastId) {
         url.searchParams.set('id', lastId);
-        window.history.replaceState({}, '', url.toString());
+        replaceUrl(url);
         setCanvasId(lastId);
         setRoomName(`canvas-${lastId}`);
         try {
@@ -273,7 +288,7 @@ export function CanvasPageClient() {
             }
 
             url.searchParams.set('id', generatedId);
-            window.history.replaceState({}, '', url.toString());
+            replaceUrl(url);
             setCanvasId(generatedId);
             setRoomName(`canvas-${generatedId}`);
             try {
@@ -360,7 +375,7 @@ export function CanvasPageClient() {
       }
 
       url.searchParams.set('id', createdId);
-      window.history.replaceState({}, '', url.toString());
+      replaceUrl(url);
       setCanvasId(createdId);
       setRoomName(`canvas-${createdId}`);
       try {
@@ -391,7 +406,16 @@ export function CanvasPageClient() {
     };
     window.addEventListener('present:canvas-id-changed', handleCanvasIdChanged);
     return () => window.removeEventListener('present:canvas-id-changed', handleCanvasIdChanged);
-  }, [user, bypassAuth]);
+  }, [
+    user,
+    bypassAuth,
+    joinParityCanvas,
+    replaceUrl,
+    pathname,
+    // Re-run whenever Next navigation updates the querystring (e.g. /canvas?fresh=1).
+    // Avoid depending on the object identity.
+    searchParams?.toString(),
+  ]);
 
   // Transcript panel state
   const [isTranscriptOpen, setIsTranscriptOpen] = useState(false);
