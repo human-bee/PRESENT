@@ -47,6 +47,7 @@ export default function CrowdPulseWidget(props: CrowdPulseWidgetProps) {
     questions: initial.questions ?? [],
     scoreboard: initial.scoreboard ?? [],
     followUps: initial.followUps ?? [],
+    version: typeof initial.version === 'number' ? initial.version : 1,
     lastUpdated: initial.lastUpdated,
     demoMode: initial.demoMode ?? false,
     sensorEnabled: initial.sensorEnabled ?? true,
@@ -83,6 +84,7 @@ export default function CrowdPulseWidget(props: CrowdPulseWidgetProps) {
       if (Array.isArray(patch.scoreboard)) next.scoreboard = patch.scoreboard as CrowdPulseState['scoreboard'];
       if (Array.isArray(patch.followUps)) next.followUps = patch.followUps as string[];
       if (typeof patch.lastUpdated === 'number') next.lastUpdated = patch.lastUpdated;
+      if (typeof patch.version === 'number') next.version = patch.version;
       if (typeof patch.demoMode === 'boolean') next.demoMode = patch.demoMode;
       if (typeof patch.sensorEnabled === 'boolean') next.sensorEnabled = patch.sensorEnabled;
       if (typeof patch.showPreview === 'boolean') next.showPreview = patch.showPreview;
@@ -103,6 +105,7 @@ export default function CrowdPulseWidget(props: CrowdPulseWidgetProps) {
       questions: state.questions,
       scoreboard: state.scoreboard,
       followUps: state.followUps,
+      version: state.version,
       lastUpdated: state.lastUpdated,
       demoMode: state.demoMode,
       sensorEnabled: state.sensorEnabled,
@@ -230,6 +233,7 @@ export default function CrowdPulseWidget(props: CrowdPulseWidgetProps) {
               next.confidence = metrics.confidence;
               next.noiseLevel = metrics.noiseLevel;
               next.lastUpdated = Date.now();
+              next.version = (prev.version ?? 0) + 1;
               if (prev.status === 'idle' && metrics.handCount > 0) {
                 next.status = 'counting';
               }

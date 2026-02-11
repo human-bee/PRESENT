@@ -62,18 +62,23 @@ const shouldAcceptUpdate = (
   incomingVersion: number | null | undefined,
   incomingTimestamp: number | null | undefined,
 ) => {
-  if (incomingVersion == null && incomingTimestamp == null) {
+  if (existingVersion != null) {
+    if (incomingVersion == null) {
+      return false;
+    }
+    if (incomingVersion > existingVersion) return true;
+    if (incomingVersion < existingVersion) return false;
+    if (incomingTimestamp != null && existingTimestamp != null) {
+      return incomingTimestamp >= existingTimestamp;
+    }
     return true;
   }
 
   if (incomingVersion != null) {
-    if (existingVersion == null) return true;
-    if (incomingVersion > existingVersion) return true;
-    if (incomingVersion < existingVersion) return false;
-    // versions equal
-    if (incomingTimestamp != null && existingTimestamp != null) {
-      return incomingTimestamp >= existingTimestamp;
-    }
+    return true;
+  }
+
+  if (incomingVersion == null && incomingTimestamp == null) {
     return true;
   }
 
@@ -208,10 +213,12 @@ class ComponentStore {
 
     let record: ComponentInfo;
     if (existing) {
+      const compareVersion =
+        incomingVersion ?? existing.version ?? null;
       const accept = shouldAcceptUpdate(
         existing.version,
         existing.lastUpdated,
-        incomingVersion,
+        compareVersion,
         incomingTimestamp,
       );
 
@@ -295,10 +302,12 @@ class ComponentStore {
         this.addCallback(messageId, registrationToken, updateCallback);
       }
       const aggregatedCallback = this.getAggregatedCallback(messageId) ?? updateCallback;
+      const compareVersion =
+        incomingVersion ?? component.version ?? null;
       const accept = shouldAcceptUpdate(
         component.version,
         component.lastUpdated,
-        incomingVersion,
+        compareVersion,
         incomingTimestamp,
       );
       const nextProps = accept ? mergeState(component.props, incomingProps) : component.props;
@@ -330,7 +339,7 @@ class ComponentStore {
     }
 
     const incomingVersion =
-      options.version ?? toFiniteNumber(patch.version) ?? component.version ?? null;
+      options.version ?? toFiniteNumber(patch.version) ?? null;
     const incomingTimestamp =
       options.timestamp ??
       toFiniteNumber((patch as any)?.lastUpdated) ??
@@ -365,6 +374,12 @@ class ComponentStore {
     const sanitizedPatch = { ...cloneValue(patch) } as Record<string, unknown>;
     if ('_ops' in sanitizedPatch) {
       delete (sanitizedPatch as Record<string, unknown>)._ops;
+    }
+    if ('allowRepeat' in sanitizedPatch) {
+      delete (sanitizedPatch as Record<string, unknown>).allowRepeat;
+    }
+    if ('__meta' in sanitizedPatch) {
+      delete (sanitizedPatch as Record<string, unknown>).__meta;
     }
 
     const stateAfterOps = dedupedOps.length
@@ -559,6 +574,15 @@ class UpdateCircuitBreaker {
   private readonly COOLDOWN_MS = 3000; // 3 seconds
 
   canUpdate(componentId: string, patch: Record<string, unknown>): boolean {
+    const allowRepeat =
+      patch?.allowRepeat === true ||
+      (patch?.__meta &&
+        typeof patch.__meta === 'object' &&
+        (patch.__meta as Record<string, unknown>).allowRepeat === true);
+    if (allowRepeat) {
+      return true;
+    }
+
     const key = `${componentId}-${JSON.stringify(patch)}`;
     const lastUpdate = this.recentUpdates.get(key);
     const now = Date.now();

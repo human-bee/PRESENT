@@ -3,6 +3,11 @@ import { useRoomContext } from '@livekit/components-react';
 import { Room, RoomEvent, Participant } from 'livekit-client';
 import { supabase } from '@/lib/supabase';
 import { createLiveKitBus } from '@/lib/livekit/livekit-bus';
+import {
+  buildSyncContract,
+  getCanvasIdFromCurrentUrl,
+  validateSessionPair,
+} from '@/lib/realtime/sync-contract';
 
 export type CanvasSession = {
   id: string;
@@ -196,8 +201,42 @@ export function useSessionSync(roomName: string) {
     return async function ensureSession() {
       const initialCanvasId = getCanvasIdFromUrl();
       canvasIdRef.current = initialCanvasId;
+      const reportSessionPair = (session: { room_name?: string | null; canvas_id?: string | null } | null) => {
+        if (typeof window === 'undefined' || !session) return;
+        try {
+          const contract = buildSyncContract({
+            roomName,
+            canvasId: initialCanvasId ?? getCanvasIdFromCurrentUrl(),
+            tldrawRoomId: roomName,
+          });
+          const errors = validateSessionPair(contract, {
+            roomName: session.room_name,
+            canvasId: session.canvas_id,
+          });
+          const diagnostics = {
+            ok: errors.length === 0,
+            sessionId: (session as any)?.id ?? null,
+            roomName: session.room_name ?? null,
+            canvasId: session.canvas_id ?? null,
+            errors,
+            updatedAt: Date.now(),
+          };
+          const w = window as any;
+          w.__present = w.__present || {};
+          w.__present.syncDiagnostics = w.__present.syncDiagnostics || {};
+          w.__present.syncDiagnostics.session = diagnostics;
+          window.dispatchEvent(
+            new CustomEvent('present:sync-diagnostic', {
+              detail: { source: 'session', ...diagnostics },
+            }),
+          );
+        } catch {
+          // noop
+        }
+      };
 
       const existing = await fetchSession(initialCanvasId);
+      reportSessionPair(existing);
 
       if (!cancelledRef.current && existing?.id) {
         setSessionId(existing.id);
@@ -222,6 +261,7 @@ export function useSessionSync(roomName: string) {
 
         if (isDuplicate) {
           const existingAfterConflict = await fetchSession(initialCanvasId);
+          reportSessionPair(existingAfterConflict);
           if (existingAfterConflict?.id) {
             if (!cancelledRef.current) {
               setSessionId(existingAfterConflict.id);
@@ -248,6 +288,7 @@ export function useSessionSync(roomName: string) {
       }
 
       if (!cancelledRef.current && created) {
+        reportSessionPair(created);
         setSessionId(created.id);
       }
     };
@@ -450,6 +491,27 @@ export function useSessionSync(roomName: string) {
       window.removeEventListener('custom:transcription-local', handler as EventListener);
     };
   }, [sessionId, scheduleTranscriptFlush]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const w = window as any;
+      w.__present = w.__present || {};
+      w.__present.sessionSync = {
+        sessionId,
+        roomName,
+        isWriter,
+        updatedAt: Date.now(),
+      };
+      window.dispatchEvent(
+        new CustomEvent('present:session-sync', {
+          detail: w.__present.sessionSync,
+        }),
+      );
+    } catch {
+      // noop
+    }
+  }, [isWriter, roomName, sessionId]);
 
   return { sessionId };
 }

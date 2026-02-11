@@ -186,11 +186,6 @@ export function useToolRegistry(deps: ToolRegistryDeps): ToolRegistryApi {
             : typeof patchRecord.updatedAt === 'number'
               ? patchRecord.updatedAt
               : undefined;
-        dispatch('tldraw:merge_component_state', {
-          messageId,
-          patch: patchRecord,
-          meta: { source: 'update_component' },
-        });
         if (!componentInfo) {
           pendingUpdates.set(messageId, { ...entry, attempts: entry.attempts + 1 });
           continue;
@@ -212,6 +207,13 @@ export function useToolRegistry(deps: ToolRegistryDeps): ToolRegistryApi {
               });
               return;
             }
+            if (!result?.ignored) {
+              dispatch('tldraw:merge_component_state', {
+                messageId,
+                patch: patchRecord,
+                meta: { source: 'update_component' },
+              });
+            }
             if (!result?.ignored && refreshedInfo?.props && refreshedInfo.componentType) {
               try {
                 window.dispatchEvent(
@@ -229,21 +231,17 @@ export function useToolRegistry(deps: ToolRegistryDeps): ToolRegistryApi {
               } catch {
                 /* noop */
               }
+              metrics?.markPaintForMessage?.(messageId, {
+                tool: 'update_component',
+                componentType: refreshedInfo?.componentType ?? componentInfo?.componentType,
+              });
             }
-            metrics?.markPaintForMessage?.(messageId, {
-              tool: 'update_component',
-              componentType: refreshedInfo?.componentType ?? componentInfo?.componentType,
-            });
           })
           .catch(() => {
             pendingUpdates.set(messageId, {
               patch: patchRecord,
               enqueuedAt: entry.enqueuedAt,
               attempts: entry.attempts + 1,
-            });
-            metrics?.markPaintForMessage?.(messageId, {
-              tool: 'update_component',
-              componentType: componentInfo?.componentType,
             });
           });
       }
@@ -592,6 +590,20 @@ export function useToolRegistry(deps: ToolRegistryDeps): ToolRegistryApi {
         if (typeof configured === 'number' && Number.isFinite(configured)) {
           combined.timeLeft = Math.max(0, Math.round(configured));
         }
+      }
+
+      const currentVersion =
+        typeof componentInfo?.version === 'number' && Number.isFinite(componentInfo.version)
+          ? componentInfo.version
+          : 0;
+      const patchVersion =
+        typeof combined.version === 'number' && Number.isFinite(combined.version)
+          ? Math.round(combined.version)
+          : null;
+      const nextVersion = patchVersion != null ? patchVersion : currentVersion + 1;
+      combined.version = nextVersion;
+      if (typeof combined.lastUpdated !== 'number') {
+        combined.lastUpdated = timestamp;
       }
 
       pendingUpdates.set(messageId, {

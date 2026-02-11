@@ -1333,6 +1333,12 @@ export function DebateScorecard(props: DebateScorecardProps) {
             ...(typeof patch.status === 'string' ? { status: patch.status as any } : null),
           };
         }
+        const nextVersion =
+          typeof prev.version === 'number' && Number.isFinite(prev.version)
+            ? prev.version + 1
+            : 1;
+        next.version = nextVersion;
+        next.lastUpdated = Date.now();
         return next;
       });
 

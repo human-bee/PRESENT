@@ -15,6 +15,14 @@ import { useParticipants, useLocalParticipant, useRoomContext } from '@livekit/c
 import { LivekitParticipantTileState, SingleParticipantTile } from './livekit-single-participant-tile';
 
 export const livekitParticipantTileSchema = z.object({
+  slotId: z
+    .string()
+    .optional()
+    .describe('Stable slot identifier for this tile (defaults to component id/message id)'),
+  assignmentStatus: z
+    .enum(['unassigned', 'assigned'])
+    .optional()
+    .describe('Shared assignment status for this participant slot'),
   participantIdentity: z
     .string()
     .optional()
@@ -62,6 +70,8 @@ export const livekitParticipantTileSchema = z.object({
 export type LivekitParticipantTileProps = z.infer<typeof livekitParticipantTileSchema>;
 
 export const LivekitParticipantTile = React.memo(function LivekitParticipantTile({
+  slotId,
+  assignmentStatus,
   participantIdentity,
   showToolbar = true,
   showVideo = true,
@@ -87,6 +97,58 @@ export const LivekitParticipantTile = React.memo(function LivekitParticipantTile
   const room = useRoomContext();
   const participants = useParticipants();
   const { localParticipant } = useLocalParticipant();
+  const resolvedSlotId = slotId?.trim() || 'slot';
+  const resolvedAssignmentStatus =
+    assignmentStatus ??
+    (participantIdentity && participantIdentity.trim().length > 0 ? 'assigned' : 'unassigned');
+
+  const isAgentParticipant = React.useCallback((p: any) => {
+    try {
+      const kind = String(p?.kind ?? '').toLowerCase();
+      if (kind === 'agent') return true;
+      const identity = String(p?.identity || '').toLowerCase();
+      const metadata = String(p?.metadata || '').toLowerCase();
+      return (
+        identity.startsWith('agent-') ||
+        identity.includes('voice-agent') ||
+        identity === 'voiceagent' ||
+        metadata.includes('voice-agent') ||
+        metadata.includes('voiceagent')
+      );
+    } catch {
+      return false;
+    }
+  }, []);
+
+  const participantOptions = React.useMemo(() => {
+    const list: Array<{ identity: string; label: string }> = [];
+    if (localParticipant && !isAgentParticipant(localParticipant)) {
+      list.push({
+        identity: localParticipant.identity,
+        label: `${localParticipant.identity} (You)`,
+      });
+    }
+    participants
+      .filter((p) => !isAgentParticipant(p))
+      .sort((a, b) => String(a.identity).localeCompare(String(b.identity)))
+      .forEach((p) => {
+        if (!list.find((entry) => entry.identity === p.identity)) {
+          list.push({ identity: p.identity, label: p.identity });
+        }
+      });
+    return list;
+  }, [isAgentParticipant, localParticipant, participants]);
+  const [selectedIdentity, setSelectedIdentity] = React.useState<string>('');
+
+  React.useEffect(() => {
+    if (!participantOptions.length) {
+      setSelectedIdentity('');
+      return;
+    }
+    if (!selectedIdentity || !participantOptions.some((entry) => entry.identity === selectedIdentity)) {
+      setSelectedIdentity(participantOptions[0].identity);
+    }
+  }, [participantOptions, selectedIdentity]);
 
   React.useEffect(() => {
     if (!canvasLiveKit) {
@@ -140,79 +202,13 @@ export const LivekitParticipantTile = React.memo(function LivekitParticipantTile
     );
   }
 
-  // Robust Participant Selection Logic
-  // 1. Explicit identity via prop
-  // 2. "Waiting" state if explicit identity is missing
-  // 3. Auto-select first REMOTE participant if no identity is set
-  // 4. Fallback to LOCAL participant if no remote and no identity
-
-  let targetIdentity = participantIdentity;
-  let autoSelected = false;
-
-  // Auto-selection logic: If no identity is assigned, pick the first remote participant
-  if (!targetIdentity) {
-    const isAgentParticipant = (p: any) => {
-      try {
-        const kind = String(p?.kind ?? '').toLowerCase();
-        if (kind === 'agent') return true;
-        const identity = String(p?.identity || '').toLowerCase();
-        const metadata = String(p?.metadata || '').toLowerCase();
-        return (
-          identity.startsWith('agent-') ||
-          identity.includes('voice-agent') ||
-          identity === 'voiceagent' ||
-          metadata.includes('voice-agent') ||
-          metadata.includes('voiceagent')
-        );
-      } catch {
-        return false;
-      }
-    };
-
-    // Prefer local self-view by default.
-    if (localParticipant && !isAgentParticipant(localParticipant)) {
-      targetIdentity = localParticipant.identity;
-      autoSelected = true;
-    } else {
-      // Otherwise, prefer a non-agent remote participant.
-      const firstHumanRemote = participants.find((p: any) => !p.isLocal && !isAgentParticipant(p));
-      const firstRemote = firstHumanRemote ?? participants.find((p) => !p.isLocal);
-      if (firstHumanRemote) {
-        targetIdentity = firstHumanRemote.identity;
-        autoSelected = true;
-      } else if (firstRemote && !isAgentParticipant(firstRemote)) {
-        targetIdentity = firstRemote.identity;
-        autoSelected = true;
-      } else {
-        // Avoid briefly snapping to an agent tile before the local participant is ready.
-        return (
-          <div
-            className="relative overflow-hidden rounded-lg border border-default bg-surface-elevated text-primary"
-            style={{ width, height, borderRadius }}
-          >
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 p-4">
-              <Loader2 className="h-7 w-7 animate-spin text-tertiary" />
-              <div className="text-xs text-secondary">Waiting for participants…</div>
-            </div>
-          </div>
-        );
-      }
-    }
-    if (!targetIdentity && localParticipant) {
-      targetIdentity = localParticipant.identity;
-      autoSelected = true;
-    }
-  }
+  const targetIdentity = participantIdentity?.trim() || undefined;
 
   const participant = targetIdentity
     ? (localParticipant?.identity === targetIdentity ? localParticipant : null) ||
       participants.find((p) => p.identity === targetIdentity) ||
       null
     : null;
-
-  // If we auto-selected someone, we should technically "commit" this selection to the canvas state
-  // so everyone sees the same person. But strictly controlled components shouldn't side-effect update props.
-  // For now, we'll just render them visually. Ideally, the user clicks "Pin" to save this state.
 
   if (participant) {
     return (
@@ -236,8 +232,8 @@ export const LivekitParticipantTile = React.memo(function LivekitParticipantTile
     );
   }
 
-  // WAITING STATE: Identity is set, but participant not found in room
-  if (participantIdentity && !participant) {
+  // WAITING STATE: Identity is assigned in shared state, but participant not in room.
+  if (targetIdentity && !participant) {
     return (
         <div
           className="flex flex-col items-center justify-center gap-2 rounded-lg border border-default border-dashed bg-surface-secondary p-4"
@@ -245,9 +241,12 @@ export const LivekitParticipantTile = React.memo(function LivekitParticipantTile
         >
           <Loader2 className="w-8 h-8 text-tertiary animate-spin" />
           <div className="text-center">
+            <p className="mb-1 rounded border border-default bg-surface px-2 py-1 font-mono text-[10px] uppercase tracking-wide text-tertiary">
+              {resolvedSlotId} • {resolvedAssignmentStatus}
+            </p>
             <p className="mb-1 font-medium text-secondary">Waiting for...</p>
             <p className="rounded border border-default bg-surface px-2 py-1 font-mono text-xs text-secondary">
-              {participantIdentity}
+              {targetIdentity}
             </p>
             <p className="mt-2 text-[10px] text-tertiary">Participant is not in the room yet</p>
           </div>
@@ -255,7 +254,7 @@ export const LivekitParticipantTile = React.memo(function LivekitParticipantTile
     );
   }
 
-  // EMPTY STATE: No identity set, and no participants found to auto-select
+  // UNASSIGNED STATE: Slot exists, but no participant has been assigned in shared state.
   return (
     <div
       className="flex flex-col items-center justify-center gap-2 rounded-lg border border-warning-surface bg-warning-surface p-4 text-warning"
@@ -263,18 +262,41 @@ export const LivekitParticipantTile = React.memo(function LivekitParticipantTile
     >
       <User className="w-8 h-8" />
       <div className="text-center">
-        <p className="mb-1 font-medium">No Participants</p>
-        <p className="mb-2 text-xs text-secondary">
-          Waiting for someone to join...
+        <p className="mb-1 rounded border border-default bg-surface px-2 py-1 font-mono text-[10px] uppercase tracking-wide text-tertiary">
+          {resolvedSlotId} • {resolvedAssignmentStatus}
         </p>
-        {localParticipant && (
-           <button 
-             className="mt-1 text-xs font-medium text-[var(--present-accent)] underline underline-offset-4 hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--present-accent-ring)] rounded"
-             onClick={() => onIdentityChange?.(localParticipant.identity)}
-           >
-             Show Me ({localParticipant.identity})
-           </button>
-        )}
+        <p className="mb-1 font-medium">Unassigned Slot</p>
+        <p className="mb-2 text-xs text-secondary">
+          Assign a participant to sync this tile across everyone in the room.
+        </p>
+        <div className="mt-2 flex flex-col items-center gap-2">
+          <select
+            className="w-full rounded border border-default bg-surface px-2 py-1 text-xs text-primary"
+            value={selectedIdentity}
+            onChange={(event) => setSelectedIdentity(event.target.value)}
+          >
+            {participantOptions.length === 0 ? (
+              <option value="">No participants available</option>
+            ) : (
+              participantOptions.map((option) => (
+                <option key={option.identity} value={option.identity}>
+                  {option.label}
+                </option>
+              ))
+            )}
+          </select>
+          <button
+            className="mt-1 text-xs font-medium text-[var(--present-accent)] underline underline-offset-4 hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--present-accent-ring)] rounded"
+            onClick={() => {
+              if (!selectedIdentity) return;
+              onIdentityChange?.(selectedIdentity);
+            }}
+            disabled={!selectedIdentity}
+            type="button"
+          >
+            Assign Participant
+          </button>
+        </div>
       </div>
     </div>
   );
