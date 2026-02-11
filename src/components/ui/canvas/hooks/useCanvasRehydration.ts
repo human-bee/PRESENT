@@ -17,6 +17,7 @@ interface RehydrationParams {
   ) => void;
   setAddedMessageIds: (updater: (prev: Set<string>) => Set<string>) => void;
   logger: CanvasLogger;
+  isMessageRemoved?: (messageId: string) => boolean;
 }
 
 export function useCanvasRehydration({
@@ -25,6 +26,7 @@ export function useCanvasRehydration({
   setMessageIdToShapeIdMap,
   setAddedMessageIds,
   logger,
+  isMessageRemoved,
 }: RehydrationParams) {
   const LOG_REHYDRATE = process.env.NEXT_PUBLIC_LOG_CANVAS_REHYDRATE === 'true';
   const debug = (...args: any[]) => {
@@ -87,6 +89,15 @@ export function useCanvasRehydration({
 
       customShapes.forEach((shape) => {
         const messageId = shape.props.customComponent;
+        if (isMessageRemoved?.(messageId)) {
+          debug(`⛔ Skipping rehydration for removed component (${messageId})`);
+          try {
+            editor.deleteShapes?.([shape.id as any]);
+          } catch {
+            /* noop */
+          }
+          return;
+        }
 
         const registryEntry = ComponentRegistry.get(messageId);
         let componentName = registryEntry?.componentType || shape.props.name;
@@ -233,5 +244,5 @@ export function useCanvasRehydration({
     return () => {
       window.removeEventListener('custom:rehydrateComponents', handleRehydration as EventListener);
     };
-  }, [editor, componentStore, logger, setAddedMessageIds, setMessageIdToShapeIdMap]);
+  }, [editor, componentStore, logger, setAddedMessageIds, setMessageIdToShapeIdMap, isMessageRemoved]);
 }

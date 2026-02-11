@@ -678,6 +678,22 @@ test.describe('Hand count journey scrapbook', () => {
       return { screenshot, notes: `paint ${result.metrics?.dtPaintMs ?? 0} ms` };
     });
 
+    await recordStep('Reload after remove (no respawn)', async () => {
+      await page.reload();
+      await waitForNoCompilingToast(page);
+      await waitForCanvasReady(page);
+      await ensureToolDispatcherReady(page);
+
+      const canvas = page.getByTestId('canvas');
+      await expect(canvas.getByText('Stage Q&A Control', { exact: true })).toHaveCount(0, { timeout: 30_000 });
+      await expect(canvas.getByText('Should Not Respawn', { exact: true })).toHaveCount(0);
+
+      const screenshot = `${runId}-08-crowd-removed-reload.png`;
+      await snap(page, imagesDir, screenshot);
+      await logJourneyAsset(runId, 'canvas', `./assets/${dateStamp}/${screenshot}`, 'Crowd pulse still removed after reload');
+      return { screenshot };
+    });
+
     await recordStep('Recreate Crowd Pulse with same componentId', async () => {
       const recreate: any = await invokeToolWithJourney(page, runId, {
         id: `recreate-crowd-${Date.now()}`,
@@ -713,7 +729,7 @@ test.describe('Hand count journey scrapbook', () => {
       await canvas.getByText('Stage Q&A Control (Recreated)', { exact: true }).waitFor({ timeout: 30_000 });
       await canvas.getByText('Recreated widget check', { exact: false }).waitFor({ timeout: 30_000 });
 
-      const screenshot = `${runId}-08-crowd-recreated.png`;
+      const screenshot = `${runId}-09-crowd-recreated.png`;
       await snap(page, imagesDir, screenshot);
       await logJourneyAsset(runId, 'canvas', `./assets/${dateStamp}/${screenshot}`, 'Crowd pulse recreated with same id');
       return { screenshot, notes: `paint ${recreate.metrics?.dtPaintMs ?? 0} ms` };
@@ -738,7 +754,7 @@ test.describe('Hand count journey scrapbook', () => {
       });
 
       await waitForNoCompilingToast(page);
-      const screenshot = `${runId}-09-speaker-view.png`;
+      const screenshot = `${runId}-10-speaker-view.png`;
       await snap(page, imagesDir, screenshot);
       await logJourneyAsset(runId, 'canvas', `./assets/${dateStamp}/${screenshot}`, 'Speaker preset');
       return { screenshot, notes: `applied in ${presetPerf.durationMs} ms` };

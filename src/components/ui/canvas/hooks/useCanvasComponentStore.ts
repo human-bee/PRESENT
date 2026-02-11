@@ -211,12 +211,19 @@ export function useCanvasComponentStore(
   }, []);
 
   const drainPendingComponents = useCallback(
-    (onMounted?: (messageId: string, name?: string) => void) => {
+    (
+      onMounted?: (messageId: string, name?: string) => void,
+      shouldMount?: (messageId: string, name?: string) => boolean,
+    ) => {
       if (!editor || pendingComponentsRef.current.length === 0) return;
 
       const queued = [...pendingComponentsRef.current];
       pendingComponentsRef.current = [];
       queued.forEach(({ messageId, node, name }) => {
+        if (shouldMount && !shouldMount(messageId, name)) {
+          logger.debug('⏭️  Skipping queued component mount:', name || 'component', { messageId });
+          return;
+        }
         addComponentToCanvas(messageId, node, name);
         onMounted?.(messageId, name);
         logger.debug('▶️  Rendered queued component:', name || 'component');

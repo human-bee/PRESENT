@@ -218,6 +218,7 @@ export function useToolRegistry(deps: ToolRegistryDeps): ToolRegistryApi {
                   new CustomEvent('custom:showComponent', {
                     detail: {
                       messageId,
+                      lifecycleAction: 'update',
                       component: {
                         type: refreshedInfo.componentType,
                         props: refreshedInfo.props,
@@ -374,6 +375,7 @@ export function useToolRegistry(deps: ToolRegistryDeps): ToolRegistryApi {
           new CustomEvent('custom:showComponent', {
             detail: {
               messageId,
+              lifecycleAction: 'create',
               component: {
                 type: componentType,
                 props: normalizedProps,
@@ -657,6 +659,11 @@ export function useToolRegistry(deps: ToolRegistryDeps): ToolRegistryApi {
       } catch {
         /* noop */
       }
+      try {
+        ComponentRegistry.remove(resolvedId);
+      } catch {
+        /* noop */
+      }
 
       try {
         window.dispatchEvent(
@@ -718,6 +725,7 @@ export function useToolRegistry(deps: ToolRegistryDeps): ToolRegistryApi {
           new CustomEvent('custom:showComponent', {
             detail: {
               messageId,
+              lifecycleAction: 'create',
               component: {
                 type: 'InfographicWidget',
                 props: { messageId, contextKey },
