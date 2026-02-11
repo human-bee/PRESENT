@@ -1,4 +1,6 @@
 import { nanoid } from 'nanoid';
+import { getSupabaseAccessToken } from '@/lib/supabase/auth-headers';
+import { resolveEdgeIngressUrl } from '@/lib/edge-ingress';
 
 const RATE_LIMIT_WINDOW_MS = 60_000; // 1 minute window
 const DEFAULT_MAX_REQUESTS_PER_MINUTE = 20; // stay comfortably under Linear's 1500/hour allotment
@@ -16,6 +18,30 @@ function resolveMaxRequestsPerMinute(): number {
     }
 
     return DEFAULT_MAX_REQUESTS_PER_MINUTE;
+}
+
+function resolveMcpProxyUrl(): string {
+    const resolved = resolveEdgeIngressUrl('/api/mcp-proxy');
+    if (/^https?:\/\//i.test(resolved)) {
+        return resolved;
+    }
+    if (typeof window !== 'undefined') {
+        return resolved;
+    }
+
+    const base =
+        process.env.MCP_PROXY_BASE_URL ||
+        process.env.APP_BASE_URL ||
+        process.env.NEXT_PUBLIC_APP_URL ||
+        process.env.NEXT_PUBLIC_SITE_URL ||
+        'http://localhost:3000';
+
+    try {
+        return new URL(resolved, base).toString();
+    } catch {
+        const normalizedPath = resolved.startsWith('/') ? resolved : `/${resolved}`;
+        return `http://localhost:3000${normalizedPath}`;
+    }
 }
 
 // --- Types ---
@@ -68,12 +94,24 @@ export class LinearMcpClient {
 
     constructor(apiKey: string) {
         this.apiKey = apiKey;
-        // Base URL for the proxy
-        // In Node.js (debug script), we need an absolute URL. In browser, relative is fine.
-        const isNode = typeof window === 'undefined';
-        const baseUrl = isNode ? 'http://localhost:3000' : '';
-        this.postUrl = `${baseUrl}/api/mcp-proxy`;
+        this.postUrl = resolveMcpProxyUrl();
         this.maxRequestsPerMinute = resolveMaxRequestsPerMinute();
+    }
+
+    private async buildProxyHeaders(baseHeaders: Record<string, string>): Promise<Record<string, string>> {
+        const headers: Record<string, string> = {
+            ...baseHeaders,
+            'x-mcp-upstream-authorization': `Bearer ${this.apiKey}`,
+        };
+
+        try {
+            const supabaseToken = await getSupabaseAccessToken(750);
+            if (supabaseToken) {
+                headers.Authorization = `Bearer ${supabaseToken}`;
+            }
+        } catch {}
+
+        return headers;
     }
 
     /**
@@ -88,13 +126,10 @@ export class LinearMcpClient {
             const sseTarget = 'https://mcp.linear.app/sse';
             const url = `${this.postUrl}?target=${encodeURIComponent(sseTarget)}`;
 
-            fetch(url, {
-                headers: {
-                    'Authorization': `Bearer ${this.apiKey}`,
-                    'Accept': 'text/event-stream',
-                    'Cache-Control': 'no-cache',
-                },
-            }).then(async (response) => {
+            this.buildProxyHeaders({
+                'Accept': 'text/event-stream',
+                'Cache-Control': 'no-cache',
+            }).then((headers) => fetch(url, { headers })).then(async (response) => {
                 if (!response.ok) {
                     this.connectionPromise = null;
                     let errorBody = '';
@@ -347,12 +382,12 @@ export class LinearMcpClient {
 
         let response: Response;
         try {
+            const headers = await this.buildProxyHeaders({
+                'Content-Type': 'application/json',
+            });
             response = await fetch(proxyUrl, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${this.apiKey}`,
-                },
+                headers,
                 body: JSON.stringify(payload),
             });
         } catch (err) {

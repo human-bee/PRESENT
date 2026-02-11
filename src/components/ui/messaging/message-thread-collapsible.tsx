@@ -17,6 +17,8 @@ import { supabase } from '@/lib/supabase';
 import { CanvasLiveKitContext } from '../livekit/livekit-room-connector';
 import { useAuth } from '@/hooks/use-auth';
 import { useAllTranscripts, useTranscriptStore, type Transcript as StoreTranscript } from '@/lib/stores/transcript-store';
+import { buildLivekitTokenHeaders } from '@/components/ui/livekit/hooks/utils/lk-token';
+import { resolveEdgeIngressUrl } from '@/lib/edge-ingress';
 
 /**
  * Props for the MessageThreadCollapsible component
@@ -353,7 +355,7 @@ export const MessageThreadCollapsible = React.forwardRef<
       }
       // Prefer configured token endpoint; fall back to /api/token
       const tokenEndpoint =
-        process.env.NEXT_PUBLIC_LK_TOKEN_ENDPOINT || '/api/token';
+        process.env.NEXT_PUBLIC_LK_TOKEN_ENDPOINT || resolveEdgeIngressUrl('/api/token');
       // Build absolute URL to avoid basePath/iframe pitfalls
       const base = typeof window !== 'undefined' ? window.location.origin : '';
       const tokenUrl = new URL(tokenEndpoint, base);
@@ -366,7 +368,12 @@ export const MessageThreadCollapsible = React.forwardRef<
 
       let data: any | null = null;
       try {
-        const res = await fetch(tokenUrl.toString(), { cache: 'no-store' });
+        const headers = await buildLivekitTokenHeaders({
+          roomName: livekitCtx.roomName,
+          identity: identity!,
+          pathname: tokenUrl.pathname,
+        });
+        const res = await fetch(tokenUrl.toString(), { cache: 'no-store', headers });
         if (!res.ok) throw new Error(`Token fetch failed: ${res.status}`);
         data = await res.json();
       } catch (err) {
