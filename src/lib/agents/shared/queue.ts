@@ -33,6 +33,7 @@ export interface EnqueueTaskInput {
   resourceKeys?: string[];
   priority?: number;
   runAt?: Date;
+  coalesceByResource?: boolean;
 }
 
 export interface ClaimOptions {
@@ -73,11 +74,47 @@ export class AgentTaskQueue {
       resourceKeys = [],
       priority = 0,
       runAt,
+      coalesceByResource = false,
     } = input;
 
     const nowIso = new Date().toISOString();
 
     const resourceKeySet = new Set(resourceKeys.length ? resourceKeys : [`room:${room}`]);
+    const normalizedResourceKeys = Array.from(resourceKeySet);
+    const queueDepthLimit = Number(process.env.TASK_QUEUE_MAX_DEPTH_PER_ROOM ?? 0);
+    if (Number.isFinite(queueDepthLimit) && queueDepthLimit > 0) {
+      const { count, error: countError } = await this.supabase
+        .from('agent_tasks')
+        .select('id', { count: 'exact', head: true })
+        .eq('room', room)
+        .in('status', ['queued', 'running']);
+      if (countError) throw countError;
+      if ((count ?? 0) >= queueDepthLimit) {
+        throw new Error(`QUEUE_DEPTH_LIMIT_REACHED:${room}`);
+      }
+    }
+
+    const coalescingTaskNames = ['fairy.intent', 'canvas.agent_prompt', 'canvas.quick_text'];
+    const shouldCoalesce = coalesceByResource || coalescingTaskNames.includes(task);
+    const coalesceTaskFilter = coalesceByResource
+      ? Array.from(new Set([...coalescingTaskNames, task]))
+      : coalescingTaskNames;
+    if (shouldCoalesce) {
+      const { error: coalesceError } = await this.supabase
+        .from('agent_tasks')
+        .update({ status: 'canceled', updated_at: nowIso })
+        .eq('room', room)
+        .eq('status', 'queued')
+        .contains('resource_keys', normalizedResourceKeys)
+        .in('task', coalesceTaskFilter);
+      if (coalesceError) {
+        console.warn('[AgentTaskQueue][debug] enqueueTask coalesce failed', {
+          room,
+          task,
+          error: coalesceError.message,
+        });
+      }
+    }
 
     // TEMP instrumentation to trace steward enqueue issues.
     console.debug('[AgentTaskQueue][debug] enqueueTask', {
@@ -85,7 +122,8 @@ export class AgentTaskQueue {
       task,
       requestId,
       dedupeKey,
-      resourceKeys: Array.from(resourceKeySet),
+      resourceKeys: normalizedResourceKeys,
+      coalesced: shouldCoalesce,
       hasSupabase: Boolean(this.supabase),
     });
 
@@ -97,7 +135,7 @@ export class AgentTaskQueue {
         params,
         request_id: requestId ?? null,
         dedupe_key: dedupeKey ?? null,
-        resource_keys: Array.from(resourceKeySet),
+        resource_keys: normalizedResourceKeys,
         priority,
         run_at: runAt ? runAt.toISOString() : null,
         created_at: nowIso,

@@ -21,6 +21,8 @@ const useRoomContext = require('@livekit/components-react').useRoomContext;
 import { Room } from 'livekit-client';
 import { motion, AnimatePresence } from 'framer-motion';
 import { LiveTranscription } from './LiveTranscription';
+import { buildLivekitTokenHeaders } from '@/components/ui/livekit/hooks/utils/lk-token';
+import { resolveEdgeIngressUrl } from '@/lib/edge-ingress';
 
 interface SpeechTranscriptionProps {
   roomName: string;
@@ -45,14 +47,20 @@ export function SpeechTranscription({ roomName, username }: SpeechTranscriptionP
   // Fetch token for room connection
   const fetchToken = async () => {
     try {
-      const response = await fetch(`/api/token?roomName=${roomName}&username=${username}`);
+      const headers = await buildLivekitTokenHeaders({
+        roomName,
+        identity: username,
+        pathname: '/api/token',
+      });
+      const endpoint = resolveEdgeIngressUrl('/api/token');
+      const response = await fetch(`${endpoint}?roomName=${roomName}&username=${username}`, { headers });
       const data = await response.json();
 
       if (!response.ok) {
         throw new Error(data.error || 'Failed to get token');
       }
 
-      setToken(data.token);
+      setToken(data.accessToken || data.token);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to get token');
       console.error('Token fetch error:', err);

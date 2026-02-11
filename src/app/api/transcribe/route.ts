@@ -1,22 +1,106 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { createHash } from 'crypto';
+import { getRequestUserId } from '@/lib/supabase/server/request-user';
+import {
+  consumeBudget,
+  consumeWindowedLimit,
+  isCostCircuitBreakerEnabled,
+} from '@/lib/server/traffic-guards';
+
 export const runtime = 'nodejs';
+
+const maxBodyBytes = Math.max(64_000, Number(process.env.TRANSCRIBE_MAX_BODY_BYTES ?? 3_000_000));
+const maxAudioBytes = Math.max(8_000, Number(process.env.TRANSCRIBE_MAX_AUDIO_BYTES ?? 1_500_000));
+const userRatePerMinute = Math.max(1, Number(process.env.TRANSCRIBE_RATE_LIMIT_PER_USER_PER_MIN ?? 20));
+const transcribeBudgetPerMinute = Math.max(
+  8_000,
+  Number(process.env.COST_TRANSCRIBE_AUDIO_BYTES_PER_MINUTE_LIMIT ?? 24_000_000),
+);
+const REQUIRE_TRANSCRIBE_AUTH =
+  (process.env.TRANSCRIBE_REQUIRE_AUTH ??
+    (process.env.NODE_ENV === 'production' ? 'true' : 'false')) === 'true';
+
+const getTestUserId = (): string | null => {
+  if (process.env.NODE_ENV !== 'test') return null;
+  const raw = process.env.TEST_USER_ID?.trim();
+  return raw || null;
+};
+
+async function resolveUserId(req: NextRequest): Promise<string | null> {
+  const testUser = getTestUserId();
+  if (testUser) return testUser;
+  const auth = await getRequestUserId(req);
+  if (!auth.ok) return null;
+  return auth.userId;
+}
+
+function deriveAnonymousFingerprint(req: NextRequest): string {
+  const forwarded = req.headers.get('x-forwarded-for') || '';
+  const ip = forwarded.split(',')[0]?.trim() || 'unknown-ip';
+  const ua = req.headers.get('user-agent') || 'unknown-ua';
+  return createHash('sha1').update(`${ip}|${ua}`).digest('hex').slice(0, 16);
+}
 
 /**
  * POST /api/transcribe
  *
- * Transcribes audio using OpenAI's Responses API (or fallback to Whisper)
- *
  * Request body:
- * - audio: string - Base64 encoded audio data (16-bit PCM)
- * - speaker: string - Name/identity of the speaker
- * - sampleRate: number - Audio sample rate (e.g., 48000)
+ * - audio: Base64 encoded audio data (16-bit PCM)
+ * - speaker: optional speaker label
+ * - sampleRate: audio sample rate
  */
 export async function POST(req: NextRequest) {
   try {
-    const { audio, speaker, sampleRate } = await req.json();
+    const userId = REQUIRE_TRANSCRIBE_AUTH
+      ? await resolveUserId(req)
+      : getTestUserId() || `anonymous:${deriveAnonymousFingerprint(req)}`;
+    if (REQUIRE_TRANSCRIBE_AUTH && !userId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const contentLength = Number(req.headers.get('content-length') || '0');
+    if (Number.isFinite(contentLength) && contentLength > maxBodyBytes) {
+      return NextResponse.json({ error: 'Payload too large' }, { status: 413 });
+    }
+
+    const rate = consumeWindowedLimit(`transcribe:user:${userId}`, userRatePerMinute, 60_000);
+    if (!rate.ok) {
+      return NextResponse.json(
+        { error: 'Rate limit exceeded', retryAfterSec: rate.retryAfterSec },
+        { status: 429, headers: { 'Retry-After': String(rate.retryAfterSec) } },
+      );
+    }
+
+    const body = await req.json();
+    const audio = typeof body?.audio === 'string' ? body.audio : '';
+    const speaker = typeof body?.speaker === 'string' ? body.speaker : undefined;
+    const sampleRate =
+      typeof body?.sampleRate === 'number' && Number.isFinite(body.sampleRate)
+        ? Math.max(8_000, Math.min(96_000, Math.floor(body.sampleRate)))
+        : 48_000;
 
     if (!audio) {
       return NextResponse.json({ error: 'Missing audio data' }, { status: 400 });
+    }
+
+    const estimatedAudioBytes = Math.ceil((audio.length * 3) / 4);
+    if (estimatedAudioBytes > maxAudioBytes) {
+      return NextResponse.json({ error: 'Audio payload too large' }, { status: 413 });
+    }
+
+    if (isCostCircuitBreakerEnabled()) {
+      const budget = consumeBudget(
+        `transcribe-audio:${userId}`,
+        estimatedAudioBytes,
+        transcribeBudgetPerMinute,
+        60_000,
+      );
+      if (!budget.ok) {
+        return NextResponse.json(
+          { error: 'Transcription budget exceeded', retryAfterSec: budget.retryAfterSec },
+          { status: 429, headers: { 'Retry-After': String(budget.retryAfterSec) } },
+        );
+      }
     }
 
     const openaiApiKey = process.env.OPENAI_API_KEY;
@@ -27,66 +111,47 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Convert base64 to binary
     const audioBuffer = Buffer.from(audio, 'base64');
-
-    // For now, we'll use Whisper API as it's more straightforward for audio transcription
-    // The Responses API is better suited for text-to-text tasks
-    // In production, you might want to use Groq's Whisper for faster transcription
-
-    try {
-      // Create a temporary WAV file format in memory
-      const wavBuffer = createWavBuffer(audioBuffer, sampleRate);
-
-      // Create form data for Whisper API
-      const formData = new FormData();
-      const audioBlob = new Blob([wavBuffer], { type: 'audio/wav' });
-      formData.append('file', audioBlob, 'audio.wav');
-      formData.append('model', 'whisper-1');
-      formData.append('language', 'en'); // You can make this configurable
-
-      // Call OpenAI Whisper API
-      const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${openaiApiKey}`,
-        },
-        body: formData,
-      });
-
-      if (!response.ok) {
-        const error = await response.text();
-        console.error('Whisper API error:', error);
-        throw new Error(`Transcription failed: ${response.status}`);
-      }
-
-      const data = await response.json();
-
-      return NextResponse.json({
-        success: true,
-        transcription: data.text,
-        speaker,
-        timestamp: Date.now(),
-      });
-    } catch (error) {
-      console.error('Transcription processing error:', error);
-
-      // Fallback: Use the Responses API for a simpler approach
-      // Note: This is a conceptual fallback - Responses API doesn't directly handle audio
-      // In production, you'd use a proper speech-to-text service
-
-      return NextResponse.json({
-        success: false,
-        error: 'Transcription failed',
-        fallback: true,
-        // Return a placeholder for testing
-        transcription: '[Audio transcription placeholder - implement Groq Whisper or similar]',
-        speaker,
-        timestamp: Date.now(),
-      });
+    if (audioBuffer.length > maxAudioBytes) {
+      return NextResponse.json({ error: 'Audio payload too large' }, { status: 413 });
     }
+
+    const wavBuffer = createWavBuffer(audioBuffer, sampleRate);
+    const formData = new FormData();
+    const audioBlob = new Blob([wavBuffer], { type: 'audio/wav' });
+    formData.append('file', audioBlob, 'audio.wav');
+    formData.append('model', 'whisper-1');
+    formData.append('language', 'en');
+
+    const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${openaiApiKey}`,
+      },
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      console.warn('[transcribe] upstream whisper error', {
+        status: response.status,
+        bodyPreview: errText.slice(0, 240),
+      });
+      return NextResponse.json(
+        { error: 'Transcription failed upstream', status: response.status },
+        { status: 502 },
+      );
+    }
+
+    const data = await response.json();
+    return NextResponse.json({
+      success: true,
+      transcription: data.text,
+      speaker,
+      timestamp: Date.now(),
+    });
   } catch (error) {
-    console.error('API error:', error);
+    console.error('[transcribe] API error', error instanceof Error ? error.message : error);
     return NextResponse.json(
       {
         error: 'Internal server error',
@@ -97,25 +162,20 @@ export async function POST(req: NextRequest) {
   }
 }
 
-/**
- * Creates a WAV file buffer from PCM audio data
- */
 function createWavBuffer(pcmData: Buffer, sampleRate: number): Buffer {
-  const numChannels = 1; // Mono
+  const numChannels = 1;
   const bitsPerSample = 16;
   const byteRate = sampleRate * numChannels * (bitsPerSample / 8);
   const blockAlign = numChannels * (bitsPerSample / 8);
   const dataSize = pcmData.length;
-
   const buffer = Buffer.alloc(44 + dataSize);
 
-  // WAV header
   buffer.write('RIFF', 0);
   buffer.writeUInt32LE(36 + dataSize, 4);
   buffer.write('WAVE', 8);
   buffer.write('fmt ', 12);
-  buffer.writeUInt32LE(16, 16); // Subchunk1Size
-  buffer.writeUInt16LE(1, 20); // AudioFormat (PCM)
+  buffer.writeUInt32LE(16, 16);
+  buffer.writeUInt16LE(1, 20);
   buffer.writeUInt16LE(numChannels, 22);
   buffer.writeUInt32LE(sampleRate, 24);
   buffer.writeUInt32LE(byteRate, 28);
@@ -123,8 +183,6 @@ function createWavBuffer(pcmData: Buffer, sampleRate: number): Buffer {
   buffer.writeUInt16LE(bitsPerSample, 34);
   buffer.write('data', 36);
   buffer.writeUInt32LE(dataSize, 40);
-
-  // Copy PCM data
   pcmData.copy(buffer, 44);
 
   return buffer;

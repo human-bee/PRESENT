@@ -10,6 +10,7 @@ const requestSchema = z.object({
   resourceKeys: z.array(z.string()).optional(),
   priority: z.number().int().min(0).default(0),
   runAt: z.coerce.date().optional(),
+  coalesceByResource: z.boolean().optional(),
 });
 
 export async function POST(request: Request) {

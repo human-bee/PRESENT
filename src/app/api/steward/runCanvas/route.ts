@@ -53,12 +53,17 @@ export async function POST(req: NextRequest) {
     try {
       // Lazily instantiate so `next build` doesn't require Supabase env vars.
       const queue = new AgentTaskQueue();
+      const normalizedResourceKeys =
+        normalizedTask === 'canvas.agent_prompt' || normalizedTask === 'fairy.intent'
+          ? [`room:${trimmedRoom}`, 'canvas:intent']
+          : [`room:${trimmedRoom}`];
       const enqueueResult = await queue.enqueueTask({
         room: trimmedRoom,
         task: normalizedTask,
         params: normalizedParams,
         requestId,
-        resourceKeys: [`room:${trimmedRoom}`],
+        resourceKeys: normalizedResourceKeys,
+        coalesceByResource: normalizedTask === 'canvas.agent_prompt' || normalizedTask === 'fairy.intent',
       });
       if (normalizedTask === 'canvas.agent_prompt') {
         try {

@@ -184,6 +184,7 @@ export default defineAgent({
     }
     console.log('[VoiceAgent] Connected to room:', job.room.name);
     const liveKitBus = createLiveKitBus(job.room);
+    const allowSensitiveLogging = process.env.NODE_ENV !== 'production';
 
     type PendingTranscriptionMessage = {
       text: string;
@@ -359,7 +360,7 @@ export default defineAgent({
     const transcriptionEnabledFlag = coerceBooleanFromEnv(process.env.VOICE_AGENT_TRANSCRIPTION_ENABLED);
     const multiParticipantTranscriptionEnabled =
       coerceBooleanFromEnv(process.env.VOICE_AGENT_MULTI_PARTICIPANT_TRANSCRIPTION) ??
-      process.env.NODE_ENV === 'production';
+      false;
     const transcriptionEnabled =
       transcriptionEnabledFlag ?? (!multiParticipantTranscriptionEnabled && Boolean(resolvedInputTranscriptionModel));
     const resolvedTranscriptionLanguage = envTranscriptionLanguage || fallbackTranscriptionLanguage || undefined;
@@ -1165,6 +1166,129 @@ Your only output is function calls. Never use plain text unless absolutely neces
 
     const recentCanvasDispatches = new Map<string, { ts: number; requestId?: string }>();
     const CANVAS_DISPATCH_SUPPRESS_MS = 3000;
+    const TOOL_DEDUPE_WINDOW_MS = Math.max(250, Number(process.env.VOICE_AGENT_TOOL_DEDUPE_WINDOW_MS ?? 1_500));
+    const EVENT_BUDGET_PER_SEC = Math.max(2, Number(process.env.VOICE_AGENT_EVENT_BUDGET_PER_SEC ?? 24));
+    const recentToolCallFingerprints = new Map<string, number>();
+    const roomEventBudget = new Map<string, { windowStart: number; events: number }>();
+
+    type IntentGateDecision = {
+      allow: boolean;
+      confidence: number;
+      reason: string;
+    };
+
+    type ToolCallFingerprint = {
+      key: string;
+      ts: number;
+    };
+
+    type RoomBudgetState = {
+      windowStart: number;
+      events: number;
+    };
+
+    const canvasIntentKeywords = [
+      'draw',
+      'canvas',
+      'shape',
+      'sticky',
+      'diagram',
+      'layout',
+      'align',
+      'resize',
+      'color',
+      'style',
+      'place',
+      'move',
+      'delete',
+      'arrow',
+      'text',
+      'box',
+      'circle',
+      'flowchart',
+    ];
+
+    const evaluateDispatchIntent = (task: string, taskParams: Record<string, unknown>): IntentGateDecision => {
+      if (
+        (process.env.VOICE_AGENT_ALLOW_INTERNAL_BYPASS ?? 'false') === 'true' &&
+        taskParams.__internalBypass === true
+      ) {
+        return { allow: true, confidence: 1, reason: 'forced' };
+      }
+
+      if (task === 'auto') {
+        const message = typeof taskParams.message === 'string' ? taskParams.message.trim() : '';
+        if (!message) {
+          return { allow: false, confidence: 0.1, reason: 'auto dispatch missing message' };
+        }
+      }
+
+      if (task === 'fairy.intent' || task === 'canvas.agent_prompt' || task === 'auto') {
+        const message = typeof taskParams.message === 'string' ? taskParams.message.trim().toLowerCase() : '';
+        if (!message || message.length < 2) {
+          return { allow: false, confidence: 0.12, reason: 'canvas intent too short' };
+        }
+        const keywordHits = canvasIntentKeywords.reduce(
+          (count, keyword) => (message.includes(keyword) ? count + 1 : count),
+          0,
+        );
+        const confidence = Math.min(0.98, 0.2 + keywordHits * 0.16 + Math.min(message.length / 200, 0.2));
+        if (keywordHits === 0 && message.length < 8) {
+          return { allow: false, confidence, reason: 'canvas intent ambiguous' };
+        }
+        return { allow: true, confidence, reason: 'canvas intent accepted' };
+      }
+
+      if (task === 'scorecard.fact_check' || task === 'scorecard.verify' || task === 'scorecard.refute') {
+        const hasClaimId = typeof taskParams.claimId === 'string' && taskParams.claimId.trim().length > 0;
+        const hasClaimIds =
+          Array.isArray(taskParams.claimIds) &&
+          (taskParams.claimIds as unknown[]).some(
+            (claimId) => typeof claimId === 'string' && claimId.trim().length > 0,
+          );
+        const summary = typeof taskParams.summary === 'string' ? taskParams.summary.trim() : '';
+        const prompt = typeof taskParams.prompt === 'string' ? taskParams.prompt.trim() : '';
+        if (!hasClaimId && !hasClaimIds && summary.length < 6 && prompt.length < 6) {
+          return { allow: false, confidence: 0.2, reason: 'fact-check missing anchor' };
+        }
+        return {
+          allow: true,
+          confidence: hasClaimId || hasClaimIds ? 0.92 : 0.68,
+          reason: 'fact-check accepted',
+        };
+      }
+
+      return { allow: true, confidence: 0.8, reason: 'default allow' };
+    };
+
+    const buildFingerprint = (tool: string, normalizedParams: JsonObject): ToolCallFingerprint => {
+      const task = typeof (normalizedParams as any)?.task === 'string' ? (normalizedParams as any).task : '';
+      const taskParams =
+        (normalizedParams as any)?.params && typeof (normalizedParams as any).params === 'object'
+          ? ((normalizedParams as any).params as Record<string, unknown>)
+          : {};
+      const marker = [
+        tool,
+        task,
+        typeof taskParams.room === 'string' ? taskParams.room.trim() : '',
+        typeof taskParams.componentId === 'string' ? taskParams.componentId.trim() : '',
+        typeof taskParams.message === 'string' ? taskParams.message.trim().toLowerCase() : '',
+        typeof taskParams.query === 'string' ? taskParams.query.trim().toLowerCase() : '',
+      ].join('|');
+      return { key: marker, ts: Date.now() };
+    };
+
+    const consumeRoomEventBudget = (roomName: string): { ok: boolean; state: RoomBudgetState } => {
+      const now = Date.now();
+      const existing = roomEventBudget.get(roomName);
+      if (!existing || now - existing.windowStart >= 1_000) {
+        const nextState: RoomBudgetState = { windowStart: now, events: 1 };
+        roomEventBudget.set(roomName, nextState);
+        return { ok: true, state: nextState };
+      }
+      existing.events += 1;
+      return { ok: existing.events <= EVENT_BUDGET_PER_SEC, state: existing };
+    };
 
     const sendToolCall = async (tool: string, params: JsonObject, options: { reliable?: boolean } = {}) => {
       ensureToolCallListeners();
@@ -1187,8 +1311,20 @@ Your only output is function calls. Never use plain text unless absolutely neces
             ? String((normalizedParams as any).task).trim()
             : '';
         const task = rawTask || 'auto';
+        const taskParams =
+          ((normalizedParams as any)?.params ?? {}) as Record<string, unknown>;
+        const intentGate = evaluateDispatchIntent(task, taskParams);
+        if (!intentGate.allow) {
+          console.info('[VoiceAgent] dropped low-confidence dispatch', {
+            task,
+            reason: intentGate.reason,
+            confidence: intentGate.confidence,
+          });
+          return;
+        }
+
         if (task === 'canvas.agent_prompt' || task === 'auto') {
-          const canvasParams = ((normalizedParams as any)?.params ?? {}) as Record<string, unknown>;
+          const canvasParams = taskParams;
           const roomName = typeof canvasParams.room === 'string' && canvasParams.room.trim()
             ? canvasParams.room.trim()
             : job.room?.name || roomKey() || 'room';
@@ -1205,7 +1341,6 @@ Your only output is function calls. Never use plain text unless absolutely neces
           ) {
             console.info('[VoiceAgent] suppressing duplicate canvas.agent_prompt dispatch', {
               room: roomName,
-              message,
               requestId,
             });
             return;
@@ -1242,6 +1377,37 @@ Your only output is function calls. Never use plain text unless absolutely neces
                 metadata: canvasParams.metadata ?? null,
               },
             };
+          }
+        }
+      }
+
+      const roomName = job.room.name || roomKey() || 'room';
+      const budget = consumeRoomEventBudget(roomName);
+      if (!budget.ok) {
+        console.warn('[VoiceAgent] tool_call budget exceeded, dropping event', {
+          room: roomName,
+          budget: EVENT_BUDGET_PER_SEC,
+          events: budget.state.events,
+          tool,
+        });
+        return;
+      }
+
+      const fingerprint = buildFingerprint(tool, normalizedParams);
+      const lastSeen = recentToolCallFingerprints.get(fingerprint.key);
+      if (typeof lastSeen === 'number' && fingerprint.ts - lastSeen < TOOL_DEDUPE_WINDOW_MS) {
+        console.info('[VoiceAgent] duplicate tool_call dropped', {
+          tool,
+          ageMs: fingerprint.ts - lastSeen,
+        });
+        return;
+      }
+      recentToolCallFingerprints.set(fingerprint.key, fingerprint.ts);
+      if (recentToolCallFingerprints.size > 500) {
+        const cutoff = Date.now() - TOOL_DEDUPE_WINDOW_MS;
+        for (const [key, ts] of recentToolCallFingerprints) {
+          if (ts < cutoff) {
+            recentToolCallFingerprints.delete(key);
           }
         }
       }
@@ -2780,11 +2946,11 @@ Your only output is function calls. Never use plain text unless absolutely neces
       timestamp,
     }) => {
       console.log('[VoiceAgent] DataReceived transcription', {
-        text,
+        text: allowSensitiveLogging ? text : `[redacted:${text.length}]`,
         isManual,
-        speaker,
-        participantId,
-        participantName,
+        speaker: allowSensitiveLogging ? speaker : '[redacted]',
+        participantId: allowSensitiveLogging ? participantId : '[redacted]',
+        participantName: allowSensitiveLogging ? participantName : '[redacted]',
         topic: 'transcription',
       });
       lastUserPrompt = text;
@@ -2799,7 +2965,10 @@ Your only output is function calls. Never use plain text unless absolutely neces
         'user';
       const attributedInput =
         speakerLabel && speakerLabel !== 'user' ? `${speakerLabel}: ${text}` : text;
-      console.log('[VoiceAgent] calling generateReply with userInput:', attributedInput.slice(0, 160));
+      console.log(
+        '[VoiceAgent] calling generateReply with userInput:',
+        allowSensitiveLogging ? attributedInput.slice(0, 160) : '[redacted]',
+      );
       try {
         appendTranscriptCache(job.room.name || 'unknown', {
           participantId: participantId || speakerLabel,
@@ -3457,18 +3626,20 @@ Your only output is function calls. Never use plain text unless absolutely neces
     }
 
     session.on(voice.AgentSessionEventTypes.ConversationItemAdded, async (event) => {
-      console.log('[VoiceAgent] ConversationItem FULL', {
-        type: event.item.type,
-        role: event.item.role,
-        hasFunctionCall: !!(event.item as any).functionCall,
-        functionCall: (event.item as any).functionCall,
-        functionCallId: (event.item as any).function_call_id,
-        toolCalls: (event.item as any).tool_calls,
-        content: (event.item as any).content,
-        contentKinds: Array.isArray((event.item as any).content)
-          ? (event.item as any).content.map((c: any) => c.type)
-          : undefined,
-      });
+      if (allowSensitiveLogging) {
+        console.log('[VoiceAgent] ConversationItem FULL', {
+          type: event.item.type,
+          role: event.item.role,
+          hasFunctionCall: !!(event.item as any).functionCall,
+          functionCall: (event.item as any).functionCall,
+          functionCallId: (event.item as any).function_call_id,
+          toolCalls: (event.item as any).tool_calls,
+          content: (event.item as any).content,
+          contentKinds: Array.isArray((event.item as any).content)
+            ? (event.item as any).content.map((c: any) => c.type)
+            : undefined,
+        });
+      }
       if (event.item.role !== 'assistant') return;
       const text = event.item.textContent ?? '';
       if (!text.trim()) return;

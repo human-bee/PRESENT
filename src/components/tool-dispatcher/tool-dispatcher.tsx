@@ -5,6 +5,7 @@ import { useRoomContext } from '@livekit/components-react';
 import type { DispatcherContext } from './utils';
 import { useToolEvents, useToolRunner } from './hooks';
 import { fetchWithSupabaseAuth } from '@/lib/supabase/auth-headers';
+import { resolveEdgeIngressUrl } from '@/lib/edge-ingress';
 
 // Exported so fixture routes (e.g. /showcase/ui) can provide a no-op dispatcher
 // without pulling in LiveKit room context.
@@ -98,7 +99,7 @@ export function ToolDispatcher({
           try {
             const clientId = room?.localParticipant?.identity || 'unknown';
             const roomId = room?.name || '';
-            await fetchWithSupabaseAuth('/api/canvas-agent/ack', {
+            await fetchWithSupabaseAuth(resolveEdgeIngressUrl('/api/canvas-agent/ack'), {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({

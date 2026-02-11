@@ -172,13 +172,22 @@ const SearchTaskArgs = z
   })
   .passthrough();
 
-const SCORECARD_AUTO_FACT_CHECK_ENABLED = (process.env.SCORECARD_AUTO_FACT_CHECK ?? 'true') === 'true';
+const SCORECARD_AUTO_FACT_CHECK_ENABLED = (process.env.SCORECARD_AUTO_FACT_CHECK ?? 'false') === 'true';
 const SCORECARD_AUTO_FACT_CHECK_MIN_INTERVAL_MS = Number(
-  process.env.SCORECARD_AUTO_FACT_CHECK_MIN_INTERVAL_MS ?? 10_000,
+  process.env.SCORECARD_AUTO_FACT_CHECK_MIN_INTERVAL_MS ?? 30_000,
 );
 const SCORECARD_AUTO_FACT_CHECK_MAX_CLAIMS = Number(process.env.SCORECARD_AUTO_FACT_CHECK_MAX_CLAIMS ?? 2);
+const SCORECARD_AUTO_FACT_CHECK_ROOM_MIN_INTERVAL_MS = Number(
+  process.env.SCORECARD_AUTO_FACT_CHECK_ROOM_MIN_INTERVAL_MS ?? 120_000,
+);
+const CONDUCTOR_IDLE_BACKOFF_MAX_MS = Math.max(
+  5_000,
+  Number(process.env.CONDUCTOR_IDLE_BACKOFF_MAX_MS ?? 15_000),
+);
 
 const scorecardAutoFactCheckLedger = new Map<string, number>();
+const scorecardAutoFactCheckRoomLedger = new Map<string, number>();
+const scorecardAutoFactCheckFingerprintLedger = new Map<string, string>();
 const scorecardExecutionLocks = new Map<string, Promise<void>>();
 
 async function withScorecardLock<T>(key: string, fn: () => Promise<T>): Promise<T> {
@@ -880,9 +889,12 @@ async function maybeEnqueueAutoFactChecks(params: ScorecardTaskInput, taskName: 
   if (taskName === 'scorecard.seed') return;
 
   const throttleKey = `${params.room}:${params.componentId}`;
+  const roomThrottleKey = params.room;
   const now = Date.now();
   const lastAt = scorecardAutoFactCheckLedger.get(throttleKey) ?? 0;
   if (now - lastAt < SCORECARD_AUTO_FACT_CHECK_MIN_INTERVAL_MS) return;
+  const roomLastAt = scorecardAutoFactCheckRoomLedger.get(roomThrottleKey) ?? 0;
+  if (now - roomLastAt < SCORECARD_AUTO_FACT_CHECK_ROOM_MIN_INTERVAL_MS) return;
 
   const record = await getDebateScorecard(params.room, params.componentId);
   const state = record?.state;
@@ -900,7 +912,17 @@ async function maybeEnqueueAutoFactChecks(params: ScorecardTaskInput, taskName: 
 
   if (candidates.length === 0) return;
 
+  const candidateFingerprint = candidates
+    .map((claim) => `${claim.id}:${claim.updatedAt ?? claim.createdAt ?? 0}`)
+    .join('|');
+  const priorFingerprint = scorecardAutoFactCheckFingerprintLedger.get(throttleKey);
+  if (priorFingerprint && priorFingerprint === candidateFingerprint) {
+    return;
+  }
+
   scorecardAutoFactCheckLedger.set(throttleKey, now);
+  scorecardAutoFactCheckRoomLedger.set(roomThrottleKey, now);
+  scorecardAutoFactCheckFingerprintLedger.set(throttleKey, candidateFingerprint);
 
   const hint = params.summary || params.prompt || params.intent || undefined;
   try {
@@ -1248,6 +1270,66 @@ async function runScorecardPatchTask(parsed: ScorecardTaskInput, rawParams: Json
   return { status: 'ok', version: committed.version, lastAction };
 }
 
+type IntentGateDecision = {
+  allow: boolean;
+  confidence: number;
+  reason: string;
+  downgradedTask?: string;
+};
+
+function hasGateBypass(params: JsonObject): boolean {
+  if ((process.env.CONDUCTOR_ALLOW_INTERNAL_BYPASS ?? 'false') !== 'true') return false;
+  return (params as any)?.__internalBypass === true;
+}
+
+function evaluateCostlyTaskGate(taskName: string, params: JsonObject): IntentGateDecision {
+  if (hasGateBypass(params)) {
+    return { allow: true, confidence: 1, reason: 'bypass' };
+  }
+
+  if (taskName === 'fairy.intent' || taskName === 'canvas.agent_prompt') {
+    const message = getString(params, 'message')?.trim() || '';
+    const alphaCount = message.replace(/[^a-zA-Z]/g, '').length;
+    if (!message || message.length < 2 || alphaCount < 1) {
+      return { allow: false, confidence: 0.1, reason: 'low-signal canvas intent' };
+    }
+    return { allow: true, confidence: message.length > 12 ? 0.9 : 0.72, reason: 'canvas intent' };
+  }
+
+  if (taskName.startsWith('search.')) {
+    const query = getString(params, 'query')?.trim() || '';
+    const tokenCount = query.split(/\s+/).filter(Boolean).length;
+    if (!query || query.length < 2 || tokenCount < 1) {
+      return { allow: false, confidence: 0.2, reason: 'search query too weak' };
+    }
+    return { allow: true, confidence: query.length >= 12 ? 0.86 : 0.7, reason: 'search query accepted' };
+  }
+
+  if (
+    taskName === 'scorecard.fact_check' ||
+    taskName === 'scorecard.verify' ||
+    taskName === 'scorecard.refute'
+  ) {
+    const claimId = getString(params, 'claimId');
+    const claimIds = Array.isArray((params as any).claimIds) ? (params as any).claimIds : [];
+    const summary = getString(params, 'summary')?.trim() || '';
+    const prompt = getString(params, 'prompt')?.trim() || '';
+    const hasClaimAnchor = Boolean(claimId) || claimIds.some((value: unknown) => typeof value === 'string' && value.trim());
+    const hasIntentText = summary.length >= 6 || prompt.length >= 6;
+    if (!hasClaimAnchor && !hasIntentText) {
+      return {
+        allow: false,
+        confidence: 0.2,
+        reason: 'fact-check missing claim anchor',
+        downgradedTask: 'scorecard.run',
+      };
+    }
+    return { allow: true, confidence: hasClaimAnchor ? 0.92 : 0.68, reason: 'fact-check accepted' };
+  }
+
+  return { allow: true, confidence: 0.75, reason: 'default allow' };
+}
+
 async function executeTask(taskName: string, params: JsonObject) {
   if (!taskName || taskName === 'auto') {
     const resolution = resolveIntent(params);
@@ -1269,6 +1351,38 @@ async function executeTask(taskName: string, params: JsonObject) {
       hasPayload: payload != null,
     });
     return executeTask(nextTask, payload ?? {});
+  }
+
+  if (
+    taskName === 'fairy.intent' ||
+    taskName === 'canvas.agent_prompt' ||
+    taskName.startsWith('search.') ||
+    taskName === 'scorecard.fact_check' ||
+    taskName === 'scorecard.verify' ||
+    taskName === 'scorecard.refute'
+  ) {
+    const gateDecision = evaluateCostlyTaskGate(taskName, params);
+    if (!gateDecision.allow && gateDecision.downgradedTask) {
+      console.log('[Conductor] downgraded low-confidence costly task', {
+        from: taskName,
+        to: gateDecision.downgradedTask,
+        confidence: gateDecision.confidence,
+        reason: gateDecision.reason,
+      });
+      return executeTask(gateDecision.downgradedTask, params);
+    }
+    if (!gateDecision.allow) {
+      console.log('[Conductor] dropped low-confidence costly task', {
+        taskName,
+        confidence: gateDecision.confidence,
+        reason: gateDecision.reason,
+      });
+      return {
+        status: 'skipped',
+        reason: gateDecision.reason,
+        confidence: gateDecision.confidence,
+      };
+    }
   }
 
   if (taskName.startsWith('flowchart.')) {
@@ -1494,6 +1608,8 @@ function createLeaseExtender(taskId: string, leaseToken: string) {
 }
 
 async function workerLoop() {
+  const idleBackoffPlan = [500, 1_000, 2_000, 5_000, CONDUCTOR_IDLE_BACKOFF_MAX_MS];
+  let idleBackoffIndex = 0;
   while (true) {
     const { leaseToken, tasks } = await queue.claimTasks({
       limit: Number(process.env.TASK_DEFAULT_CONCURRENCY ?? 10),
@@ -1501,9 +1617,12 @@ async function workerLoop() {
     });
 
     if (tasks.length === 0) {
-      await delay(500);
+      const backoffMs = idleBackoffPlan[Math.min(idleBackoffIndex, idleBackoffPlan.length - 1)];
+      idleBackoffIndex = Math.min(idleBackoffIndex + 1, idleBackoffPlan.length - 1);
+      await delay(backoffMs);
       continue;
     }
+    idleBackoffIndex = 0;
 
     console.log('[Conductor] claimed tasks', {
       count: tasks.length,
