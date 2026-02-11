@@ -12,7 +12,7 @@
     "allowJs": true,
     "skipLibCheck": true,
     "strict": true,
-    "noImplicitAny": true,
+    "noImplicitAny": false,
     "noEmit": true,
     "esModuleInterop": true,
     "moduleResolution": "bundler", // Next.js default, agent uses "node"

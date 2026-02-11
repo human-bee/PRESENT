@@ -2,7 +2,8 @@
   "extends": "./tsconfig.agent.json",
   "compilerOptions": {
     "noEmit": true,
-    "incremental": false
+    "incremental": false,
+    "noImplicitAny": true
   },
   "include": [],
   "files": [
