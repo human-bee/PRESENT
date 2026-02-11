@@ -10,6 +10,18 @@ export type ToolEvent = {
   source: 'voice';
 };
 
+export type PendingToolCallEntry = {
+  event: ToolEvent;
+  reliable: boolean;
+};
+
+export type CanvasDispatchEntry = {
+  ts: number;
+  requestId?: string;
+};
+
+export const CANVAS_DISPATCH_SUPPRESS_MS = 3000;
+
 export const buildToolEvent = (tool: string, params: JsonObject, roomId: string): ToolEvent => ({
   id: randomUUID(),
   roomId,
@@ -18,6 +30,77 @@ export const buildToolEvent = (tool: string, params: JsonObject, roomId: string)
   timestamp: Date.now(),
   source: 'voice',
 });
+
+export const shouldSuppressCanvasDispatch = ({
+  dispatches,
+  roomName,
+  message,
+  requestId,
+  now = Date.now(),
+  suppressMs = CANVAS_DISPATCH_SUPPRESS_MS,
+  maxEntries = 20,
+}: {
+  dispatches: Map<string, CanvasDispatchEntry>;
+  roomName: string;
+  message: string;
+  requestId?: string;
+  now?: number;
+  suppressMs?: number;
+  maxEntries?: number;
+}): boolean => {
+  const key = `${roomName}::${message}`;
+  const existing = dispatches.get(key);
+  if (
+    existing &&
+    now - existing.ts < suppressMs &&
+    (existing.requestId === undefined || existing.requestId === requestId)
+  ) {
+    return true;
+  }
+
+  dispatches.set(key, { ts: now, requestId });
+  if (dispatches.size > maxEntries) {
+    for (const [mapKey, entry] of dispatches) {
+      if (now - entry.ts > suppressMs) {
+        dispatches.delete(mapKey);
+      }
+    }
+  }
+
+  return false;
+};
+
+export const flushPendingToolCallQueue = async ({
+  queue,
+  isConnected,
+  publish,
+  onPublishError,
+}: {
+  queue: PendingToolCallEntry[];
+  isConnected: boolean;
+  publish: (entry: PendingToolCallEntry) => Promise<boolean>;
+  onPublishError?: (error: unknown, entry: PendingToolCallEntry) => void;
+}): Promise<boolean> => {
+  if (!isConnected) return false;
+
+  while (queue.length > 0) {
+    const next = queue.shift();
+    if (!next) continue;
+    try {
+      const sent = await publish(next);
+      if (!sent) {
+        queue.unshift(next);
+        return false;
+      }
+    } catch (error) {
+      onPublishError?.(error, next);
+      queue.unshift(next);
+      return false;
+    }
+  }
+
+  return true;
+};
 
 export const safeCloneJson = (value: unknown): JsonObject => {
   if (!value || typeof value !== 'object') return {};

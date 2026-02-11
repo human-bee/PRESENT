@@ -3,7 +3,10 @@ import {
   getModelForSteward,
   isFastStewardReady,
 } from '@/lib/agents/fast-steward-config';
-import { extractFirstToolCall, parseToolArguments } from '@/lib/agents/subagents/fast-steward-response';
+import {
+  extractFirstToolCall,
+  parseToolArgumentsResult,
+} from '@/lib/agents/subagents/fast-steward-response';
 import type { FairyIntent } from './intent';
 import { FairyRouteDecisionSchema, type FairyRouteDecision, routerTools } from './router-schema';
 
@@ -107,11 +110,21 @@ export async function routeFairyIntent(intent: FairyIntent): Promise<FairyRouteD
 
     const toolCall = extractFirstToolCall(response);
     if (toolCall?.name === 'route_intent') {
-      const args = parseToolArguments(toolCall.argumentsRaw) ?? {};
+      const parsedArgs = parseToolArgumentsResult(toolCall.argumentsRaw);
+      if (!parsedArgs.ok) {
+        console.warn('[FairyRouter] failed to parse route_intent arguments', {
+          error: parsedArgs.error,
+          raw: parsedArgs.raw,
+        });
+      }
+      const args = parsedArgs.ok ? parsedArgs.args : {};
       const parsed = FairyRouteDecisionSchema.safeParse(args);
       if (parsed.success) {
         return parsed.data;
       }
+      console.warn('[FairyRouter] route_intent payload failed schema validation', {
+        issues: parsed.error.issues.map((issue) => issue.message),
+      });
     }
   } catch (error) {
     console.warn('[FairyRouter] routing failed, falling back to canvas', error);

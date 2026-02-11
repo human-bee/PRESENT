@@ -21,13 +21,21 @@ import { createLiveKitBus } from '@/lib/livekit/livekit-bus';
 import { createManualInputRouter } from './voice-agent/manual-routing';
 import { VoiceComponentLedger } from './voice-agent/component-ledger';
 import { TranscriptionBuffer, type PendingTranscriptionMessage } from './voice-agent/transcription-buffer';
+import {
+  executeCreateComponent,
+  type ComponentRegistryEntry,
+} from './voice-agent/create-component';
 import { createToolParametersSchema } from './voice-agent/tool-context';
 import {
   buildToolEvent,
+  CANVAS_DISPATCH_SUPPRESS_MS,
   coerceComponentPatch,
+  flushPendingToolCallQueue,
   normalizeComponentPatch,
   normalizeSpecInput,
+  shouldSuppressCanvasDispatch,
   shouldForceReliableUpdate,
+  type PendingToolCallEntry,
   type ToolEvent,
 } from './voice-agent/tool-publishing';
 import { inferScorecardTopicFromText, resolveDebatePlayerSeedFromLabels } from './voice-agent/scorecard';
@@ -430,15 +438,6 @@ Examples:
 
 Your only output is function calls. Never use plain text unless absolutely necessary.`;
 
-    type ComponentRegistryEntry = {
-      type: string;
-      createdAt: number;
-      props: JsonObject;
-      state: JsonObject;
-      intentId?: string;
-      slot?: string;
-      room: string;
-    };
     const componentRegistry = new Map<string, ComponentRegistryEntry>();
     const roomKey = () => job.room.name || 'room';
     const componentLedger = new VoiceComponentLedger(roomKey);
@@ -825,6 +824,9 @@ Your only output is function calls. Never use plain text unless absolutely neces
       if (entry.room && entry.room !== key) return undefined;
       return entry;
     };
+    const setComponentEntry = (id: string, entry: ComponentRegistryEntry) => {
+      componentRegistry.set(id, entry);
+    };
     const findLatestScorecardEntryInRoom = () => {
       const key = roomKey();
       let latest: { id: string; entry: ComponentRegistryEntry } | null = null;
@@ -844,7 +846,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
 
     const enableLossyUpdates = process.env.VOICE_AGENT_UPDATE_LOSSY !== 'false';
 
-    const pendingToolCalls: Array<{ event: ToolEvent; reliable: boolean }> = [];
+    const pendingToolCalls: PendingToolCallEntry[] = [];
     let toolCallListenersAttached = false;
     let flushToolCallsHandle: ReturnType<typeof setTimeout> | null = null;
 
@@ -886,36 +888,22 @@ Your only output is function calls. Never use plain text unless absolutely neces
     };
 
     const flushPendingToolCalls = async () => {
-      if ((job.room as any).state !== ConnectionState.Connected) return;
-      while (pendingToolCalls.length > 0) {
-        const next = pendingToolCalls.shift();
-        if (!next) continue;
-        try {
-          const sent = await publishToolCall(next);
-          if (!sent) {
-            pendingToolCalls.unshift(next);
-            if (!flushToolCallsHandle) {
-              flushToolCallsHandle = setTimeout(() => {
-                flushToolCallsHandle = null;
-                void flushPendingToolCalls();
-              }, 250);
-            }
-            break;
-          }
-        } catch (error) {
+      const drained = await flushPendingToolCallQueue({
+        queue: pendingToolCalls,
+        isConnected: (job.room as any).state === ConnectionState.Connected,
+        publish: publishToolCall,
+        onPublishError: (error, next) => {
           console.warn('[VoiceAgent] failed to flush pending tool_call, re-queueing', {
             tool: next.event.payload.tool,
             error,
           });
-          pendingToolCalls.unshift(next);
-          if (!flushToolCallsHandle) {
-            flushToolCallsHandle = setTimeout(() => {
-              flushToolCallsHandle = null;
-              void flushPendingToolCalls();
-            }, 250);
-          }
-          break;
-        }
+        },
+      });
+      if (!drained && pendingToolCalls.length > 0 && !flushToolCallsHandle) {
+        flushToolCallsHandle = setTimeout(() => {
+          flushToolCallsHandle = null;
+          void flushPendingToolCalls();
+        }, 250);
       }
     };
 
@@ -973,7 +961,6 @@ Your only output is function calls. Never use plain text unless absolutely neces
     };
 
     const recentCanvasDispatches = new Map<string, { ts: number; requestId?: string }>();
-    const CANVAS_DISPATCH_SUPPRESS_MS = 3000;
 
     const sendToolCall = async (tool: string, params: JsonObject, options: { reliable?: boolean } = {}) => {
       ensureToolCallListeners();
@@ -997,14 +984,17 @@ Your only output is function calls. Never use plain text unless absolutely neces
             : job.room?.name || roomKey() || 'room';
           const message = typeof canvasParams.message === 'string' ? canvasParams.message.trim() : '';
           const requestId = typeof canvasParams.requestId === 'string' ? canvasParams.requestId.trim() : undefined;
-          const key = `${roomName}::${message}`;
-          const existing = recentCanvasDispatches.get(key);
           const nowTs = Date.now();
           if (
             message &&
-            existing &&
-            nowTs - existing.ts < CANVAS_DISPATCH_SUPPRESS_MS &&
-            (existing.requestId === undefined || existing.requestId === requestId)
+            shouldSuppressCanvasDispatch({
+              dispatches: recentCanvasDispatches,
+              roomName,
+              message,
+              requestId,
+              now: nowTs,
+              suppressMs: CANVAS_DISPATCH_SUPPRESS_MS,
+            })
           ) {
             console.info('[VoiceAgent] suppressing duplicate canvas.agent_prompt dispatch', {
               room: roomName,
@@ -1012,15 +1002,6 @@ Your only output is function calls. Never use plain text unless absolutely neces
               requestId,
             });
             return;
-          }
-          recentCanvasDispatches.set(key, { ts: nowTs, requestId });
-          // prune stale entries occasionally
-          if (recentCanvasDispatches.size > 20) {
-            for (const [mapKey, entry] of recentCanvasDispatches) {
-              if (nowTs - entry.ts > CANVAS_DISPATCH_SUPPRESS_MS) {
-                recentCanvasDispatches.delete(mapKey);
-              }
-            }
           }
 
           if (message) {
@@ -1115,491 +1096,31 @@ Your only output is function calls. Never use plain text unless absolutely neces
           intentId: z.string().nullish(),
           slot: z.string().nullish(),
         }),
-        execute: async (args) => {
-          const componentType = String(args.type || '').trim();
-          if (!componentType) {
-            return { status: 'ERROR', message: 'create_component requires type' };
-          }
-
-          const normalizedType = componentType.toLowerCase();
-          if (normalizedType === 'airesponse') {
-            const roomName = job.room.name || '';
-            if (!roomName) {
-              return { status: 'ERROR', message: 'canvas room unavailable' };
-            }
-
-            const candidateTexts: Array<string | undefined> = [];
-            if (args.props && typeof args.props === 'object') {
-              const propsRecord = args.props as Record<string, unknown>;
-              if (typeof propsRecord.text === 'string') candidateTexts.push(propsRecord.text);
-              if (typeof propsRecord.content === 'string') candidateTexts.push(propsRecord.content);
-              if (typeof propsRecord.label === 'string') candidateTexts.push(propsRecord.label);
-            }
-            if (args.spec && typeof args.spec === 'object') {
-              const specRecord = args.spec as Record<string, unknown>;
-              if (typeof specRecord.text === 'string') candidateTexts.push(specRecord.text);
-              if (typeof specRecord.content === 'string') candidateTexts.push(specRecord.content);
-            }
-            if (typeof args.spec === 'string') candidateTexts.push(args.spec);
-
-            const text = candidateTexts.find((value) => typeof value === 'string' && value.trim().length > 0)?.trim();
-            if (!text) {
-              return { status: 'ERROR', message: 'AIResponse requires text content' };
-            }
-
-            const requestId = typeof args.messageId === 'string' && args.messageId.trim().length > 0
-              ? args.messageId.trim()
-              : randomUUID();
-
-            const quickTextParams: JsonObject = {
-              room: roomName,
-              text,
-              requestId,
-            };
-            if (args.props && typeof args.props === 'object') {
-              const propsRecord = args.props as Record<string, unknown>;
-              if (typeof propsRecord.x === 'number' && Number.isFinite(propsRecord.x)) {
-                quickTextParams.x = propsRecord.x as number;
-              }
-              if (typeof propsRecord.y === 'number' && Number.isFinite(propsRecord.y)) {
-                quickTextParams.y = propsRecord.y as number;
-              }
-            }
-
-            await sendToolCall('dispatch_to_conductor', {
-              task: 'canvas.quick_text',
-              params: quickTextParams,
-            });
-
-            return { status: 'queued', messageId: requestId };
-          }
-
-          if (args.spec === null) {
-            delete (args as any).spec;
-          }
-          if (args.props === null) {
-            delete (args as any).props;
-          }
-          if (args.messageId === null) {
-            delete (args as any).messageId;
-          }
-
-          const normalizedSpec = normalizeSpecInput(args.spec);
-          const initialProps = normalizeSpecInput(args.props);
-
-          let mergedProps: JsonObject = {
-            ...normalizedSpec,
-            ...initialProps,
-          };
-
-          let seededScorecardState: JsonObject | null = null;
-          let seededScorecardTopic: string | undefined;
-
-          // Component creation uses props (not TLDraw state). Normalize common runtime-style
-          // timer fields into the RetroTimerEnhanced creation schema so the first render
-          // matches user intent (e.g. "start a 5 minute timer" should auto-start).
-          if (componentType === 'RetroTimerEnhanced' || componentType === 'RetroTimer') {
-            const next: Record<string, unknown> = { ...mergedProps };
-            const coerceNumber = (value: unknown): number | undefined => {
-              if (typeof value === 'number' && Number.isFinite(value)) return value;
-              if (typeof value === 'string') {
-                const trimmed = value.trim();
-                if (!trimmed) return undefined;
-                const parsed = Number(trimmed);
-                if (Number.isFinite(parsed)) return parsed;
-              }
-              return undefined;
-            };
-            const coerceBoolean = (value: unknown): boolean | undefined => {
-              if (typeof value === 'boolean') return value;
-              if (typeof value === 'number') {
-                if (value === 1) return true;
-                if (value === 0) return false;
-              }
-              if (typeof value === 'string') {
-                const normalized = value.trim().toLowerCase();
-                if (!normalized) return undefined;
-                if (['true', 'yes', 'start', 'run', 'running', 'resume', 'play', 'on', '1'].includes(normalized)) {
-                  return true;
-                }
-                if (['false', 'no', 'stop', 'stopped', 'pause', 'paused', 'halt', 'off', '0'].includes(normalized)) {
-                  return false;
-                }
-              }
-              return undefined;
-            };
-
-            if (typeof next.autoStart !== 'boolean') {
-              const inferredAutoStart = coerceBoolean((next as any).isRunning);
-              if (typeof inferredAutoStart === 'boolean') {
-                next.autoStart = inferredAutoStart;
-              } else {
-                const prompt = (lastUserPrompt || '').toLowerCase();
-                const wantsTimer = prompt.includes('timer');
-                const wantsStart =
-                  wantsTimer && (prompt.includes('start') || prompt.includes('begin') || prompt.includes('run'));
-                const wantsNotStart =
-                  prompt.includes("don't start") ||
-                  prompt.includes('do not start') ||
-                  prompt.includes('paused') ||
-                  prompt.includes('pause');
-                if (wantsStart && !wantsNotStart) {
-                  next.autoStart = true;
-                }
-              }
-            }
-
-            const minutes = coerceNumber((next as any).initialMinutes);
-            const seconds = coerceNumber((next as any).initialSeconds);
-
-            const deriveDurationSeconds = (): number | undefined => {
-              if (minutes !== undefined || seconds !== undefined) {
-                const m = minutes !== undefined ? Math.max(1, Math.round(minutes)) : 5;
-                const s = seconds !== undefined ? Math.max(0, Math.min(59, Math.round(seconds))) : 0;
-                return m * 60 + s;
-              }
-
-              const configuredRaw = coerceNumber((next as any).configuredDuration);
-              if (configuredRaw !== undefined) {
-                // Heuristic: large multiples of 1000 are likely milliseconds.
-                const configuredSeconds =
-                  configuredRaw >= 60_000 && configuredRaw % 1000 === 0 ? configuredRaw / 1000 : configuredRaw;
-                return Math.max(1, Math.round(configuredSeconds));
-              }
-
-              const durationRaw =
-                coerceNumber((next as any).durationSeconds) ?? coerceNumber((next as any).duration);
-              if (durationRaw !== undefined) {
-                return Math.max(1, Math.round(durationRaw));
-              }
-
-              const timeLeftRaw = coerceNumber((next as any).timeLeft);
-              if (timeLeftRaw !== undefined) {
-                return Math.max(1, Math.round(timeLeftRaw));
-              }
-
-              return undefined;
-            };
-
-            const durationSeconds = deriveDurationSeconds();
-            if (durationSeconds !== undefined) {
-              const m = Math.max(1, Math.floor(durationSeconds / 60));
-              const s = Math.max(0, Math.min(59, Math.round(durationSeconds % 60)));
-              next.initialMinutes = m;
-              next.initialSeconds = s;
-            }
-
-            delete (next as any).isRunning;
-            delete (next as any).timeLeft;
-            delete (next as any).configuredDuration;
-            delete (next as any).durationSeconds;
-            delete (next as any).duration;
-
-            mergedProps = next as JsonObject;
-          }
-
-          const now = Date.now();
-          const explicitMessageId = typeof args.messageId === 'string' ? args.messageId.trim() : '';
-          const explicitIntentId = typeof args.intentId === 'string' ? args.intentId.trim() : '';
-          const hasExplicitMessageId = explicitMessageId.length > 0;
-          const hasExplicitIntentId = explicitIntentId.length > 0;
-          const useExplicitIds = hasExplicitMessageId && hasExplicitIntentId;
-          const slot = typeof args.slot === 'string' && args.slot.trim().length > 0 ? args.slot.trim() : undefined;
-          const isDebateScorecard = componentType === 'DebateScorecard';
-          const isBareScorecardRequest = isDebateScorecard && Object.keys(mergedProps).length === 0;
-          let preseededScorecardId: string | undefined;
-          let preseededScorecardIntent: string | undefined;
-          if (
-            isBareScorecardRequest &&
-            !hasExplicitMessageId &&
-            !hasExplicitIntentId &&
-            lastScorecardProvisionedAt > 0 &&
-            now - lastScorecardProvisionedAt < SCORECARD_SUPPRESS_WINDOW_MS
-          ) {
-            const latestScorecard = findLatestScorecardEntryInRoom();
-            preseededScorecardId =
-              activeScorecard?.componentId ||
-              getLastComponentForType('DebateScorecard') ||
-              latestScorecard?.id;
-            if (preseededScorecardId) {
-              const ledger = findLedgerEntryByMessage(preseededScorecardId);
-              preseededScorecardIntent = ledger?.intentId || activeScorecard?.intentId || undefined;
-              console.log('[VoiceAgent] reusing pre-seeded DebateScorecard for create_component call', {
-                componentId: preseededScorecardId,
-              });
-            }
-          }
-
-          if (isDebateScorecard && !preseededScorecardId) {
-            const topicFromSpec =
-              typeof (mergedProps as any).topic === 'string' ? String((mergedProps as any).topic).trim() : undefined;
-            const topicFromPrompt = inferScorecardTopicFromText(lastUserPrompt ?? undefined);
-
-            const pickTopic = (specTopic?: string, promptTopic?: string) => {
-              const spec = specTopic?.trim();
-              const prompt = promptTopic?.trim();
-              if (!spec && !prompt) return undefined;
-              if (!spec) return prompt;
-              if (!prompt) return spec;
-              if (spec === prompt) return spec;
-
-              const normalizeLoose = (value: string) =>
-                (() => {
-                  const trimmed = value.trim();
-                  const parts = trimmed.split(' ').filter(Boolean);
-                  let collapsed = parts.join(' ');
-                  while (collapsed.length > 0) {
-                    const last = collapsed[collapsed.length - 1];
-                    if (last === '?' || last === '!' || last === '.') {
-                      collapsed = collapsed.slice(0, -1);
-                      continue;
-                    }
-                    break;
-                  }
-                  return collapsed;
-                })();
-              const specLoose = normalizeLoose(spec);
-              const promptLoose = normalizeLoose(prompt);
-              if (specLoose === promptLoose) {
-                // Prefer the prompt version because it usually preserves punctuation.
-                return prompt;
-              }
-
-              // If one is a strict prefix of the other, prefer the longer.
-              if (prompt.startsWith(spec) || promptLoose.startsWith(specLoose)) {
-                return prompt.length >= spec.length ? prompt : spec;
-              }
-              if (spec.startsWith(prompt) || specLoose.startsWith(promptLoose)) {
-                return spec.length >= prompt.length ? spec : prompt;
-              }
-
-              // Default to prompt topic when it exists; it's closer to what the user said.
-              return prompt;
-            };
-
-            seededScorecardTopic = pickTopic(topicFromSpec, topicFromPrompt) ?? topicFromSpec ?? topicFromPrompt ?? 'Live Debate';
-
-            const seed = createDefaultScorecardState(seededScorecardTopic);
-            const playersSeed = resolveDebatePlayerSeedFromLabels(listRemoteParticipantLabels());
-            try {
-              if (Array.isArray((seed as any).players)) {
-                for (const update of playersSeed) {
-                  const idx = (seed as any).players.findIndex((p: any) => p?.side === update.side);
-                  if (idx === -1) continue;
-                  (seed as any).players[idx] = { ...(seed as any).players[idx], label: update.label };
-                }
-              }
-            } catch { }
-            seededScorecardState = seed as unknown as JsonObject;
-
-            // Ensure the first render has a complete state object (players, filters, etc),
-            // while still respecting any extra config the model provided.
-            mergedProps = {
-              ...(seed as unknown as JsonObject),
-              ...mergedProps,
-              topic: seededScorecardTopic,
-              players: (seed as any).players as unknown as any,
-            } as JsonObject;
-          }
-          const { intentId: autoIntentId, messageId: autoMessageId } = deriveComponentIntent({
+        execute: async (args) =>
+          executeCreateComponent(args as any, {
             roomName: job.room.name || '',
-            turnId: currentTurnId,
-            componentType,
-            spec: mergedProps,
-            slot,
-          });
-
-          let intentId = useExplicitIds ? explicitIntentId : preseededScorecardIntent ?? autoIntentId;
-          let messageId = preseededScorecardId ?? (useExplicitIds ? explicitMessageId : autoMessageId);
-
-          const existingByMessageId = getComponentEntry(messageId);
-          if (existingByMessageId && existingByMessageId.type !== componentType) {
-            const fallbackIntentId = `intent-${randomUUID()}`;
-            const fallbackMessageId = `ui-${randomUUID()}`;
-            console.warn('[VoiceAgent] messageId collision across component types; generating fresh IDs', {
-              messageId,
-              componentType,
-              existingType: existingByMessageId.type,
-            });
-            intentId = fallbackIntentId;
-            messageId = fallbackMessageId;
-          }
-
-          args.intentId = intentId;
-          args.spec = mergedProps;
-          args.messageId = messageId;
-
-          const fingerprintPayload = Object.keys(mergedProps)
-            .sort()
-            .reduce<Record<string, unknown>>((acc, key) => {
-              acc[key] = mergedProps[key];
-              return acc;
-            }, {});
-          if (slot) {
-            fingerprintPayload.__slot = slot;
-          }
-          fingerprintPayload.__type = componentType;
-          const sortedFingerprint = JSON.stringify(fingerprintPayload);
-          const recentCreate = getRecentCreateFingerprint(componentType);
-          const TTL_MS = 30000; // 30s window to absorb late replays
-          const sameTurnDuplicate =
-            !!recentCreate &&
-            recentCreate.fingerprint === sortedFingerprint &&
-            recentCreate.turnId === currentTurnId;
-          const withinGlobalTtl =
-            !!recentCreate && recentCreate.fingerprint === sortedFingerprint && now - recentCreate.createdAt < TTL_MS;
-          const intentMatches = !!recentCreate && recentCreate.intentId === intentId;
-          const slotMatches =
-            !slot || !recentCreate ? true : recentCreate.slot === slot;
-          if (intentMatches && slotMatches && (sameTurnDuplicate || withinGlobalTtl)) {
-            const recentEntry = getComponentEntry(recentCreate.messageId);
-            if (!recentEntry || recentEntry.type !== componentType) {
-              console.warn('[VoiceAgent] duplicate create fingerprint mismatch; proceeding with create', {
-                componentType,
-                recentMessageId: recentCreate.messageId,
-                recentType: recentEntry?.type,
-              });
-            } else {
-              console.log('[VoiceAgent] suppressing duplicate create_component', {
-                componentType,
-                recentMessageId: recentCreate.messageId,
-              });
-              setLastComponentForType(componentType, recentCreate.messageId);
-              setLastCreatedComponentId(recentCreate.messageId);
-              args.intentId = recentCreate.intentId;
-              args.messageId = recentCreate.messageId;
-              return { status: 'duplicate_skipped', messageId: recentCreate.messageId };
-            }
-          }
-
-          const existingComponent = getComponentEntry(messageId);
-          if (existingComponent) {
-            const fallbackSeconds =
-              typeof existingComponent?.props?.configuredDuration === 'number' &&
-                Number.isFinite(existingComponent.props.configuredDuration)
-                ? (existingComponent.props.configuredDuration as number)
-                : 300;
-            const normalizedPatch = normalizeComponentPatch(mergedProps, fallbackSeconds);
-            if (Object.keys(normalizedPatch).length === 0) {
-              console.debug('[VoiceAgent] duplicate create_component with no changes; skipping', {
-                messageId,
-                componentType,
-              });
-              return { status: 'duplicate_skipped', messageId };
-            }
-            console.log('[VoiceAgent] coalescing duplicate create_component into update_component', {
-              messageId,
-              componentType,
-            });
-            const updateParams: JsonObject = {
-              componentId: messageId,
-              patch: normalizedPatch,
-            };
-            if (intentId) {
-              updateParams.intentId = intentId;
-            }
-            if (slot) {
-              updateParams.slot = slot;
-            }
-            await sendToolCall('update_component', updateParams);
-            existingComponent.props = {
-              ...existingComponent.props,
-              ...mergedProps,
-            };
-            existingComponent.intentId = intentId;
-            if (slot) {
-              existingComponent.slot = slot;
-            }
-            if (intentId) {
-              registerLedgerEntry({
-                intentId,
-                messageId,
-                componentType,
-                slot,
-                state: 'updated',
-              });
-            }
-            setLastComponentForType(componentType, messageId);
-            setLastCreatedComponentId(messageId);
-            setRecentCreateFingerprint(componentType, {
-              fingerprint: sortedFingerprint,
-              messageId,
-              createdAt: now,
-              turnId: currentTurnId,
-              intentId,
-              slot,
-            });
-            return { status: 'queued', messageId, reusedExisting: true };
-          }
-
-          componentRegistry.set(messageId, {
-            type: componentType,
-            createdAt: Date.now(),
-            props: mergedProps as JsonObject,
-            state: {} as JsonObject,
-            intentId,
-            slot,
-            room: job.room.name || 'room',
-          });
-          if (intentId) {
-            registerLedgerEntry({
-              intentId,
-              messageId,
-              componentType,
-              slot,
-              state: 'created',
-            });
-          }
-          setLastComponentForType(componentType, messageId);
-          setLastCreatedComponentId(messageId);
-          setRecentCreateFingerprint(componentType, {
-            fingerprint: sortedFingerprint,
-            messageId,
-            createdAt: now,
-            turnId: currentTurnId,
-            intentId,
-            slot,
-          });
-
-          const payload: JsonObject = {
-            type: componentType,
-            messageId,
-          };
-          payload.spec = mergedProps as JsonObject;
-          if (initialProps && Object.keys(initialProps).length > 0) {
-            payload.props = initialProps as JsonObject;
-          }
-
-          if (intentId) {
-            payload.intentId = intentId;
-          }
-          if (slot) {
-            payload.slot = slot;
-          }
-
-          await sendToolCall('create_component', payload);
-
-          if (componentType === 'DebateScorecard') {
-            const inferredTopic =
-              typeof lastUserPrompt === 'string'
-                ? inferScorecardTopicFromText(lastUserPrompt)
-                : undefined;
-            const topic =
-              seededScorecardTopic ||
-              (typeof (mergedProps as any).topic === 'string'
-                ? String((mergedProps as any).topic).trim()
-                : inferredTopic) ||
-              'Live Debate';
-            activeScorecard = { componentId: messageId, intentId, topic };
-            await sendScorecardSeedTask({
-              componentId: messageId,
-              intentId,
-              topic,
-              seedState: seededScorecardState ?? (createDefaultScorecardState(topic) as unknown as JsonObject),
-            });
-          }
-          return { status: 'queued', messageId };
-        },
+            currentTurnId,
+            scorecardSuppressWindowMs: SCORECARD_SUPPRESS_WINDOW_MS,
+            lastScorecardProvisionedAt,
+            lastUserPrompt: lastUserPrompt ?? undefined,
+            activeScorecard,
+            findLatestScorecardEntryInRoom,
+            getLastComponentForType,
+            setLastComponentForType,
+            setLastCreatedComponentId,
+            getRecentCreateFingerprint,
+            setRecentCreateFingerprint,
+            getComponentEntry,
+            setComponentEntry,
+            findLedgerEntryByMessage,
+            registerLedgerEntry,
+            listRemoteParticipantLabels,
+            sendToolCall,
+            sendScorecardSeedTask,
+            setActiveScorecard: (next) => {
+              activeScorecard = next;
+            },
+          }),
       }),
       create_infographic: llm.tool({
         description: 'Create (or reuse) an Infographic widget and trigger generation from current conversation context.',
