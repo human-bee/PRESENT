@@ -15,9 +15,14 @@ interface CanvasEventsParams {
     componentName?: string,
   ) => void;
   queuePendingComponent: (item: { messageId: string; node: React.ReactNode; name?: string }) => void;
-  drainPendingComponents: (onMounted: (messageId: string, name?: string) => void) => void;
+  drainPendingComponents: (
+    onMounted: (messageId: string, name?: string) => void,
+    shouldMount?: (messageId: string, name?: string) => boolean,
+  ) => void;
   bus: { send: (...args: any[]) => void };
   logger: CanvasLogger;
+  isMessageRemoved?: (messageId: string) => boolean;
+  clearRemovedMessageId?: (messageId: string) => void;
 }
 
 export function useCanvasEvents({
@@ -27,6 +32,8 @@ export function useCanvasEvents({
   drainPendingComponents,
   bus,
   logger,
+  isMessageRemoved,
+  clearRemovedMessageId,
 }: CanvasEventsParams) {
   const lastPayloadSignatureRef = React.useRef(new Map<string, string>());
 
@@ -35,6 +42,7 @@ export function useCanvasEvents({
       event: CustomEvent<{
         messageId: string;
         component: React.ReactNode | { type: string; props?: Record<string, unknown> };
+        lifecycleAction?: string;
       }>,
     ) => {
       try {
@@ -56,6 +64,22 @@ export function useCanvasEvents({
         }
         const messageId = event.detail.messageId;
         if (!messageId) return;
+        const lifecycleAction =
+          typeof event.detail?.lifecycleAction === 'string'
+            ? event.detail.lifecycleAction.trim().toLowerCase()
+            : '';
+        const isCreateAction = lifecycleAction === 'create' || lifecycleAction === 'recreate';
+        if (isMessageRemoved?.(messageId)) {
+          if (isCreateAction) {
+            clearRemovedMessageId?.(messageId);
+          } else {
+            logger.debug('⛔ Skipping showComponent for removed messageId', {
+              messageId,
+              lifecycleAction: lifecycleAction || 'unspecified',
+            });
+            return;
+          }
+        }
 
         if (!React.isValidElement(node) && node && typeof node === 'object') {
           let signature: string | null = null;
@@ -193,6 +217,10 @@ export function useCanvasEvents({
       } catch {
         /* noop */
       }
+    }, (messageId) => {
+      if (!isMessageRemoved?.(messageId)) return true;
+      logger.debug('⛔ Skipping queued mount for removed messageId', { messageId });
+      return false;
     });
-  }, [editor, drainPendingComponents, bus]);
+  }, [editor, drainPendingComponents, bus, isMessageRemoved, logger]);
 }

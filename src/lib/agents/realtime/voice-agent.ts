@@ -998,6 +998,43 @@ Your only output is function calls. Never use plain text unless absolutely neces
       if (entry.room && entry.room !== key) return undefined;
       return entry;
     };
+    const pruneRemovedComponentState = (resolvedId: string, typeHint?: string) => {
+      const existing = getComponentEntry(resolvedId);
+      const normalizedTypeHint =
+        typeof typeHint === 'string' && typeHint.trim().length > 0 ? typeHint.trim() : '';
+      const removedType = existing?.type || normalizedTypeHint;
+
+      componentRegistry.delete(resolvedId);
+
+      if (removedType) {
+        const current = getLastComponentForType(removedType);
+        if (current === resolvedId) {
+          try {
+            getLastComponentMap().delete(removedType);
+          } catch {}
+        }
+      }
+      if (getLastCreatedComponentId() === resolvedId) {
+        setLastCreatedComponentId(null);
+      }
+      if (removedType === 'ResearchPanel' && lastResearchPanelId === resolvedId) {
+        lastResearchPanelId = null;
+      }
+
+      const mappedIntent = messageToIntent.get(resolvedId);
+      if (mappedIntent) {
+        messageToIntent.delete(resolvedId);
+        const entry = intentLedger.get(mappedIntent);
+        if (entry?.slot) {
+          const slotIntent = slotLedger.get(entry.slot);
+          if (slotIntent === mappedIntent) {
+            slotLedger.delete(entry.slot);
+          }
+        }
+        intentLedger.delete(mappedIntent);
+      }
+      return removedType;
+    };
     const findLatestScorecardEntryInRoom = () => {
       const key = roomKey();
       let latest: { id: string; entry: ComponentRegistryEntry } | null = null;
@@ -2564,34 +2601,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
           await sendToolCall('remove_component', payload);
 
           // Local bookkeeping so follow-up tool calls don't keep targeting a removed widget.
-          const removedType = existing?.type || typeHint;
-          componentRegistry.delete(resolvedId);
-          if (removedType) {
-            const current = getLastComponentForType(removedType);
-            if (current === resolvedId) {
-              try {
-                getLastComponentMap().delete(removedType);
-              } catch {}
-            }
-          }
-          if (getLastCreatedComponentId() === resolvedId) {
-            setLastCreatedComponentId(null);
-          }
-          if (removedType === 'ResearchPanel' && lastResearchPanelId === resolvedId) {
-            lastResearchPanelId = null;
-          }
-          const mappedIntent = messageToIntent.get(resolvedId);
-          if (mappedIntent) {
-            messageToIntent.delete(resolvedId);
-            const entry = intentLedger.get(mappedIntent);
-            if (entry?.slot) {
-              const slotIntent = slotLedger.get(entry.slot);
-              if (slotIntent === mappedIntent) {
-                slotLedger.delete(entry.slot);
-              }
-            }
-            intentLedger.delete(mappedIntent);
-          }
+          pruneRemovedComponentState(resolvedId, existing?.type || typeHint);
 
           return { status: 'queued', componentId: resolvedId };
         },
@@ -3445,35 +3455,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
               existingFT?.type ||
               (typeof args.type === 'string' && args.type.trim().length > 0 ? args.type.trim() : '');
 
-            componentRegistry.delete(resolvedId);
-
-            if (componentType) {
-              const current = getLastComponentForType(componentType);
-              if (current === resolvedId) {
-                try {
-                  getLastComponentMap().delete(componentType);
-                } catch {}
-              }
-            }
-            if (getLastCreatedComponentId() === resolvedId) {
-              setLastCreatedComponentId(null);
-            }
-            if (componentType === 'ResearchPanel' && lastResearchPanelId === resolvedId) {
-              lastResearchPanelId = null;
-            }
-
-            const mappedIntent = messageToIntent.get(resolvedId);
-            if (mappedIntent) {
-              messageToIntent.delete(resolvedId);
-              const entry = intentLedger.get(mappedIntent);
-              if (entry?.slot) {
-                const slotIntent = slotLedger.get(entry.slot);
-                if (slotIntent === mappedIntent) {
-                  slotLedger.delete(entry.slot);
-                }
-              }
-              intentLedger.delete(mappedIntent);
-            }
+            pruneRemovedComponentState(resolvedId, componentType);
           }
           if (fnCall.name === 'reserve_component') {
             const componentType = typeof args.type === 'string' ? args.type.trim() : '';
