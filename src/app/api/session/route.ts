@@ -24,13 +24,12 @@ export async function GET(req: NextRequest) {
   const supabase = getServerClient(authHeader);
 
   try {
-    let query = supabase.from('canvas_sessions').select('*').eq('room_name', roomName);
-    if (canvasId === null || canvasId === 'null' || canvasId === '') {
-      // @ts-expect-error
-      query = (query as any).is('canvas_id', null);
-    } else if (canvasId) {
-      query = query.eq('canvas_id', canvasId);
-    }
+	    let query = supabase.from('canvas_sessions').select('*').eq('room_name', roomName);
+	    if (canvasId === null || canvasId === 'null' || canvasId === '') {
+	      query = (query as any).is('canvas_id', null);
+	    } else if (canvasId) {
+	      query = query.eq('canvas_id', canvasId);
+	    }
 
     const { data, error } = await query.limit(1).maybeSingle();
     if (error) {

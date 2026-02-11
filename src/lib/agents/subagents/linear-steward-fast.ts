@@ -1,5 +1,6 @@
 import { getCerebrasClient, getModelForSteward, isFastStewardReady } from '../fast-steward-config';
 import { getContextDocuments, formatContextDocuments, getTranscriptWindow } from '@/lib/agents/shared/supabase-context';
+import { extractFirstToolCall, parseToolArgumentsResult } from './fast-steward-response';
 
 const CEREBRAS_MODEL = getModelForSteward('LINEAR_STEWARD_FAST_MODEL');
 
@@ -135,49 +136,58 @@ export async function runLinearStewardFast(params: {
       tool_choice: 'auto',
     });
 
-    const choice = response.choices[0]?.message;
+    const toolCall = extractFirstToolCall(response);
+    if (toolCall?.name === 'commit_action') {
+      const argsResult = parseToolArgumentsResult(toolCall.argumentsRaw);
+      if (!argsResult.ok) {
+        console.warn('[LinearStewardFast] Invalid tool arguments', { reason: argsResult.error });
+        return { kind: 'noOp', reason: 'Invalid tool arguments', mcpTool: null };
+      }
 
-    if (choice?.tool_calls?.[0]) {
-      const toolCall = choice.tool_calls[0];
-      if (toolCall.function.name === 'commit_action') {
-        const args = JSON.parse(toolCall.function.arguments);
-        let mcpTool: { name: string; args: Record<string, unknown> } | null = null;
+      const args = argsResult.args;
+      let mcpTool: { name: string; args: Record<string, unknown> } | null = null;
 
-        if (args.mcpToolName) {
-          const rawArgs = args.mcpToolArgs;
-          if (rawArgs && typeof rawArgs === 'object' && !Array.isArray(rawArgs)) {
-            mcpTool = { name: args.mcpToolName, args: rawArgs as Record<string, unknown> };
-          } else if (typeof rawArgs === 'string') {
-            try {
-              mcpTool = { name: args.mcpToolName, args: JSON.parse(rawArgs) };
-            } catch {
-              mcpTool = { name: args.mcpToolName, args: {} };
-            }
-          } else {
+      if (typeof args.mcpToolName === 'string' && args.mcpToolName.trim().length > 0) {
+        const rawArgs = args.mcpToolArgs;
+        if (rawArgs && typeof rawArgs === 'object' && !Array.isArray(rawArgs)) {
+          mcpTool = { name: args.mcpToolName, args: rawArgs as Record<string, unknown> };
+        } else if (typeof rawArgs === 'string') {
+          try {
+            const parsed = JSON.parse(rawArgs);
+            mcpTool =
+              parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+                ? { name: args.mcpToolName, args: parsed as Record<string, unknown> }
+                : { name: args.mcpToolName, args: {} };
+          } catch {
             mcpTool = { name: args.mcpToolName, args: {} };
           }
+        } else {
+          mcpTool = { name: args.mcpToolName, args: {} };
         }
-
-        let issuesData: Array<{ title: string; description?: string }> | undefined;
-        if (Array.isArray(args.issuesData)) {
-          issuesData = args.issuesData;
-        } else if (typeof args.issuesData === 'string') {
-          try {
-            issuesData = JSON.parse(args.issuesData);
-          } catch {
-            // Ignore parse errors
-          }
-        }
-
-        return {
-          kind: args.kind,
-          issueId: args.issueId,
-          toStatus: args.toStatus,
-          reason: args.reason,
-          mcpTool,
-          issuesData,
-        };
       }
+
+      let issuesData: Array<{ title: string; description?: string }> | undefined;
+      if (Array.isArray(args.issuesData)) {
+        issuesData = args.issuesData as Array<{ title: string; description?: string }>;
+      } else if (typeof args.issuesData === 'string') {
+        try {
+          const parsed = JSON.parse(args.issuesData);
+          if (Array.isArray(parsed)) {
+            issuesData = parsed as Array<{ title: string; description?: string }>;
+          }
+        } catch {
+          // Ignore parse errors
+        }
+      }
+
+      return {
+        kind: typeof args.kind === 'string' ? args.kind : 'noOp',
+        issueId: typeof args.issueId === 'string' ? args.issueId : undefined,
+        toStatus: typeof args.toStatus === 'string' ? args.toStatus : undefined,
+        reason: typeof args.reason === 'string' ? args.reason : undefined,
+        mcpTool,
+        issuesData,
+      };
     }
 
     return { kind: 'noOp', reason: 'No action determined', mcpTool: null };

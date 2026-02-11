@@ -434,6 +434,9 @@ async function getMCPTools(toolNames: string[], context?: any): Promise<Record<s
             const actionParams = params?.params || params;
 
             console.log('[Linear] executeAction:', { action, actionParams, rawParams: params });
+            if (!client) {
+              return { error: 'Linear MCP client unavailable' };
+            }
             return await client.executeAction(action, actionParams);
 
           } catch (error) {

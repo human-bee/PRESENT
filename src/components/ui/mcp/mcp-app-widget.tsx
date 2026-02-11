@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AppBridge, PostMessageTransport, buildAllowAttribute } from '@modelcontextprotocol/ext-apps/app-bridge';
+import type { McpUiDisplayMode, McpUiHostContext, McpUiTheme } from '@modelcontextprotocol/ext-apps';
 import { cn } from '@/lib/utils';
 import { useComponentRegistration } from '@/lib/component-registry';
 import { waitForMcpReady } from '@/lib/mcp-bridge';
@@ -31,7 +32,15 @@ type McpAppWidgetState = {
 };
 
 const HOST_INFO = { name: 'PRESENT', version: '0.1.0' };
-const DEFAULT_DISPLAY_MODES = ['inline', 'panel', 'modal'];
+const DEFAULT_DISPLAY_MODES: McpUiDisplayMode[] = ['inline', 'pip', 'fullscreen'];
+
+const coerceDisplayMode = (value: unknown): McpUiDisplayMode => {
+  if (value === 'fullscreen' || value === 'pip' || value === 'inline') return value;
+  // Legacy values used by older code paths.
+  if (value === 'modal') return 'fullscreen';
+  if (value === 'panel') return 'pip';
+  return 'inline';
+};
 
 const coerceBoolean = (value: unknown, fallback: boolean) => {
   if (typeof value === 'boolean') return value;
@@ -96,7 +105,7 @@ export function McpAppWidget(props: McpAppWidgetProps) {
     ...rest
   } = props;
 
-  const fallbackIdRef = useRef<string>();
+  const fallbackIdRef = useRef<string | null>(null);
   if (!fallbackIdRef.current) {
     fallbackIdRef.current = `mcp-app-${crypto.randomUUID()}`;
   }
@@ -239,10 +248,15 @@ export function McpAppWidget(props: McpAppWidgetProps) {
     const connectBridge = async () => {
       if (!iframe.contentWindow || disconnected) return;
 
-      const hostContext = {
+      const theme: McpUiTheme = document.documentElement.classList.contains('dark')
+        ? 'dark'
+        : 'light';
+      const displayMode = coerceDisplayMode(state.displayMode);
+
+      const hostContext: McpUiHostContext = {
         toolInfo: toolDescriptor ? { tool: toolDescriptor } : undefined,
-        theme: document.documentElement.classList.contains('dark') ? 'dark' : 'light',
-        displayMode: state.displayMode || 'inline',
+        theme,
+        displayMode,
         availableDisplayModes: DEFAULT_DISPLAY_MODES,
         containerDimensions: containerRef.current
           ? {

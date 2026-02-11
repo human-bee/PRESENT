@@ -91,13 +91,11 @@ export function LivekitScreenShareTile({
   const stopShare = async () => {
     try {
       // Prefer LocalParticipant API if available
-      // @ts-expect-error optional API
       if (
         isLocal &&
         room?.localParticipant &&
         typeof (room.localParticipant as any).setScreenShareEnabled === 'function'
       ) {
-        // @ts-expect-error optional API
         await (room.localParticipant as any).setScreenShareEnabled(false);
       }
     } catch {}

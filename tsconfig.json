@@ -56,12 +56,22 @@
   },
   "include": [
     "next-env.d.ts",
-    "**/*.ts",
-    "**/*.tsx",
+    "src/**/*.ts",
+    "src/**/*.tsx",
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts"
   ],
   "exclude": [
-    "node_modules"
+    "node_modules",
+    "cloudflare",
+    "generated",
+    "remotion",
+    "scripts",
+    "showcase",
+    "src/lib/tldraw-agent",
+    "tests",
+    "src/lib/test-*.ts",
+    "tmp-*",
+    "vendor"
   ]
 }

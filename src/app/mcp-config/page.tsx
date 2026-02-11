@@ -19,13 +19,13 @@ import { useValidatedcustom } from '@/hooks/use-validated-custom';
 import { computeMcpMappings, listRegistryTools, listWindowMcpTools } from '@/lib/mcp-introspection';
 
 // Define MCP transport types
-export enum MCPTransport {
+enum MCPTransport {
   SSE = 'sse',
   HTTP = 'http',
 }
 
 // Define MCP server configuration types
-export type MCPServerConfig =
+type MCPServerConfig =
   | string
   | {
     url: string;

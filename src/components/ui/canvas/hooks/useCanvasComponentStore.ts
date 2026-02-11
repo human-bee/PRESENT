@@ -7,7 +7,7 @@ import { createShapeId } from 'tldraw';
 import { calculateInitialSize } from '@/lib/component-sizing';
 import { systemRegistry } from '@/lib/system-registry';
 
-import type { customShape as CustomShape } from '../tldraw-canvas';
+import type { customShape as CustomShape } from '@/components/ui/tldraw/tldraw-canvas';
 import { findTiledPlacement as findTiledPlacementUtil } from '@/components/ui/tldraw/utils/findTiledPlacement';
 
 export type CanvasLogger = {
@@ -295,11 +295,12 @@ export function useMergeComponentStateBridge(
           (shape) => shape?.type === 'custom' && shape?.props?.customComponent === messageId,
         );
         if (candidate?.id) {
-          shapeId = candidate.id as TLShapeId;
+          const resolvedShapeId = candidate.id as TLShapeId;
+          shapeId = resolvedShapeId;
           setMessageIdToShapeIdMap((prev) => {
-            if (prev.get(messageId) === shapeId) return prev;
+            if (prev.get(messageId) === resolvedShapeId) return prev;
             const next = new Map(prev);
-            next.set(messageId, shapeId);
+            next.set(messageId, resolvedShapeId);
             return next;
           });
         }
@@ -354,11 +355,12 @@ export function useMergeComponentStateBridge(
           (shape) => shape?.type === 'custom' && shape?.props?.customComponent === messageId,
         );
         if (candidate?.id) {
-          shapeId = candidate.id as TLShapeId;
+          const resolvedShapeId = candidate.id as TLShapeId;
+          shapeId = resolvedShapeId;
           setMessageIdToShapeIdMap((prev) => {
-            if (prev.get(messageId) === shapeId) return prev;
+            if (prev.get(messageId) === resolvedShapeId) return prev;
             const next = new Map(prev);
-            next.set(messageId, shapeId);
+            next.set(messageId, resolvedShapeId);
             return next;
           });
         }

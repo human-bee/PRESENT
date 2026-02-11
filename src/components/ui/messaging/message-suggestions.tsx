@@ -312,7 +312,7 @@ const MessageSuggestionsList = React.forwardRef<HTMLDivElement, MessageSuggestio
                 data-suggestion-id={suggestion.id}
                 data-suggestion-index={index}
               >
-                <span className="font-medium">{suggestion.title}</span>
+                <span className="font-medium">{suggestion.text}</span>
               </button>
             </Tooltip>
           ))

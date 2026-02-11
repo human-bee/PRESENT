@@ -5,6 +5,11 @@ export type customThreadMessage = {
   role: 'user' | 'assistant' | 'tool' | string;
   content: any;
   createdAt?: string;
+  // Optional fields used by the PRESENT UI to render tool-call lifecycle states.
+  actionType?: string;
+  toolCallRequest?: { toolName?: string } | null;
+  component?: { statusMessage?: string; completionStatusMessage?: string } | null;
+  renderedComponent?: unknown;
 };
 
 export type customThread = {

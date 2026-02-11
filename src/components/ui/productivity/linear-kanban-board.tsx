@@ -43,7 +43,7 @@ export default function LinearKanbanBoard({
   __custom_message_id,
   className,
 }: LinearKanbanProps) {
-  const fallbackMessageIdRef = useRef<string>();
+  const fallbackMessageIdRef = useRef<string | null>(null);
   if (!fallbackMessageIdRef.current) {
     fallbackMessageIdRef.current = `linear-kanban-${crypto.randomUUID()}`;
   }

@@ -62,8 +62,9 @@ const transpiledPackages = [
 ] as const;
 
 const nextConfig: NextConfig = {
+  // Keep TypeScript checks enabled during build so deploys fail fast on type regressions.
   typescript: {
-    ignoreBuildErrors: true,
+    ignoreBuildErrors: false,
   },
   compiler: {
     removeConsole:

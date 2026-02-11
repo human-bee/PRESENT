@@ -673,8 +673,9 @@ export function ActionItemTracker({
       }) || [];
 
   // Get unique assignees for filter
-  const uniqueAssignees =
-    [...new Set(state?.items.map((item) => item.assignee).filter(Boolean))] || [];
+  const uniqueAssignees = [
+    ...new Set((state?.items ?? []).map((item) => item.assignee).filter(Boolean)),
+  ];
 
   const completedCount = state?.items.filter((item) => item.status === 'completed').length || 0;
   const totalCount = state?.items.length || 0;

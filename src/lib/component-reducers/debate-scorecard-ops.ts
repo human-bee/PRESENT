@@ -60,7 +60,7 @@ const mergeClaims = (state: DebateScorecardState, claims: Claim[]): DebateScorec
     if (!claim?.id) continue;
     const existing = map.get(claim.id);
     const merged = existing ? { ...existing, ...claim } : claim;
-    map.set(claim.id, debateScorecardStateSchema.shape.claims.element.parse(merged));
+    map.set(claim.id, claimSchema.parse(merged));
   }
   return { ...state, claims: Array.from(map.values()) };
 };
@@ -238,4 +238,3 @@ export const applyDebateScorecardOps = (
   }
   return debateScorecardStateSchema.parse({ ...state, lastUpdated: Date.now() });
 };
-

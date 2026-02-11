@@ -983,7 +983,7 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
           const existing = metricsByCallRef.current.get(callId);
           const next: ToolMetricEntry = existing ?? {
             callId,
-            tool: 'unknown',
+            tool: tool || 'unknown',
             messageIds: new Set(),
             metaByMessage: new Map(),
             loggedMessages: new Set(),

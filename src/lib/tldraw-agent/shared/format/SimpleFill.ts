@@ -19,6 +19,7 @@ const SHAPE_TO_SIMPLE_FILLS: Record<TLDefaultFillStyle, SimpleFill> = {
 	semi: 'background',
 	solid: 'tint',
 	pattern: 'pattern',
+	'lined-fill': 'pattern',
 }
 
 export function convertSimpleFillToTldrawFill(fill: SimpleFill): TLDefaultFillStyle {

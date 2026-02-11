@@ -168,22 +168,25 @@ export function UiShowcaseClient() {
         </Card>
 
 	        <div className="grid gap-6 lg:grid-cols-2">
-          <MemoryRecallWidget
-            title="Memory Recall"
-            query="What did we decide about copper accents?"
-            results={[
-              { id: 'r1', text: 'Accent strategy: neutral primaries; copper for focus + selection.' },
-              { id: 'r2', text: 'Canvas review: unify borders, radii, and menu surfaces.' },
-            ]}
-          />
+	          <MemoryRecallWidget
+	            title="Memory Recall"
+	            query="What did we decide about copper accents?"
+	            autoSearch={false}
+	            results={[
+	              { id: 'r1', text: 'Accent strategy: neutral primaries; copper for focus + selection.' },
+	              { id: 'r2', text: 'Canvas review: unify borders, radii, and menu surfaces.' },
+	            ]}
+	          />
 
-          <MeetingSummaryWidget
-            title="Meeting Summary"
-            summary="We standardized UI tokens, bridged TLDraw variables, and started the widget chrome migration sweep."
-            highlights={[
-              'Apps SDK UI is the baseline for tokens and primitives.',
-              'Copper highlight is reserved for focus + selection states.',
-            ]}
+	          <MeetingSummaryWidget
+	            title="Meeting Summary"
+	            summary="We standardized UI tokens, bridged TLDraw variables, and started the widget chrome migration sweep."
+	            tags={[]}
+	            autoSend={false}
+	            highlights={[
+	              'Apps SDK UI is the baseline for tokens and primitives.',
+	              'Copper highlight is reserved for focus + selection states.',
+	            ]}
             actionItems={[
               { task: 'Finish productivity widget chrome sweep', owner: 'You' },
               { task: 'Capture screenshots + render Remotion showcase', owner: 'Bea' },
@@ -194,7 +197,12 @@ export function UiShowcaseClient() {
             ]}
           />
 
-          <ActionItemTracker title="Action Item Tracker" />
+	          <ActionItemTracker
+	            title="Action Item Tracker"
+	            initialItems={[]}
+	            allowEditing={false}
+	            showCompleted={false}
+	          />
 
           <CrowdPulseWidget
             title="Crowd Pulse"
@@ -219,7 +227,14 @@ export function UiShowcaseClient() {
             showPreview={false}
           />
 
-          <RetroTimerEnhanced title="Retro Timer (Enhanced)" initialMinutes={5} showPresets={true} />
+	          <RetroTimerEnhanced
+	            title="Retro Timer (Enhanced)"
+	            componentId="showcase-retro-timer"
+	            initialMinutes={5}
+	            initialSeconds={0}
+	            autoStart={false}
+	            showPresets={true}
+	          />
 
 	          <LinearKanbanShowcase className="lg:col-span-2" />
 	        </div>

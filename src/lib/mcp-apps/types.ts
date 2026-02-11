@@ -1,15 +1,12 @@
+import type { Tool } from '@modelcontextprotocol/sdk/types.js';
+
 export type McpAppResource = {
   html: string;
   mimeType?: string;
   meta?: Record<string, unknown>;
 };
 
-export type McpAppToolDescriptor = {
-  name?: string;
-  description?: string;
-  inputSchema?: unknown;
-  _meta?: Record<string, unknown>;
-};
+export type McpAppToolDescriptor = Tool;
 
 export type McpAppHostContextInput = {
   toolName?: string;
