@@ -10,15 +10,15 @@ if (ACTION_NAMES.length === 0) {
 }
 const ACTION_NAME_TUPLE = ACTION_NAMES as [string, ...string[]];
 
-const ActionUnionSchema = z.union(
-  ACTION_NAME_TUPLE.map((actionName) =>
-    z.object({
-      id: z.union([z.string(), z.number()]).optional(),
-      name: z.literal(actionName),
-      params: actionParamSchemas[actionName],
-    }),
-  ) as [z.ZodTypeAny, ...z.ZodTypeAny[]],
-);
+const actionSchemas = ACTION_NAME_TUPLE.map((actionName) =>
+  z.object({
+    id: z.union([z.string(), z.number()]).optional(),
+    name: z.literal(actionName),
+    params: actionParamSchemas[actionName],
+  }),
+) as unknown as [z.ZodTypeAny, ...z.ZodTypeAny[]];
+
+const ActionUnionSchema = z.union(actionSchemas);
 
 const ActionListSchema = z.object({ actions: z.array(ActionUnionSchema).min(1) });
 
@@ -38,9 +38,9 @@ export function validateCanonicalAction(action: unknown) {
   };
 }
 
-const ACTION_SCHEMA_JSON = zodToJsonSchema(ActionListSchema, {
+const ACTION_SCHEMA_JSON = zodToJsonSchema(ActionListSchema as any, {
   name: 'CanvasAgentActions',
-  refStrategy: 'root',
+  $refStrategy: 'root',
 });
 
 export function getActionSchemaJson() {

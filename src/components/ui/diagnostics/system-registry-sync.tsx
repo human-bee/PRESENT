@@ -101,7 +101,11 @@ export function SystemRegistrySync() {
       logRegistryState();
       const unsubscribe = systemRegistry.subscribe(logRegistryState);
 
-      return unsubscribe;
+      return () => {
+        try {
+          unsubscribe();
+        } catch {}
+      };
     }
   }, []);
 

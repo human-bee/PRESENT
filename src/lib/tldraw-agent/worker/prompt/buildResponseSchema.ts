@@ -13,7 +13,7 @@ export function buildResponseSchema() {
 		actions: z.array(actionSchema),
 	})
 
-	return zodToJsonSchema(schema, {
+	return zodToJsonSchema(schema as any, {
 		name: 'AgentResponse',
 		$refStrategy: 'root',
 	})

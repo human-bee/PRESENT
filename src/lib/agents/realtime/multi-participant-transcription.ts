@@ -271,7 +271,7 @@ export class MultiParticipantTranscriptionManager {
 
     await session.start({
       agent: transcriberAgent,
-      room: this.room,
+      room: this.room as any,
       inputOptions: {
         audioEnabled: true,
         participantIdentity: participantId,

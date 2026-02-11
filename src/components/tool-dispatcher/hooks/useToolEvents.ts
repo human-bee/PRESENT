@@ -143,7 +143,15 @@ export function useToolEvents(room: Room | undefined, options: UseToolEventsOpti
           source: 'livekit:update_component',
         });
 
-        if (!updateResult?.ignored) {
+        const wasIgnored =
+          Boolean(
+            updateResult &&
+              typeof updateResult === 'object' &&
+              'ignored' in updateResult &&
+              (updateResult as any).ignored,
+          );
+
+        if (!wasIgnored) {
           const refreshed = ComponentRegistry.get(componentId);
           if (refreshed?.props && refreshed.componentType) {
             try {

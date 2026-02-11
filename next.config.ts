@@ -68,10 +68,9 @@ const nextConfig: NextConfig = {
   // 1. Remove or set to false: typescript.ignoreBuildErrors
   // 2. Fix all ESLint errors in: action-item-tracker.tsx, research-panel.tsx, tldraw-canvas.tsx
   // 3. Fix TypeScript errors in test files
+  // Keep TypeScript checks enabled during build so deploys fail fast on type regressions.
   typescript: {
-    // ⚠️ DANGER: This ignores TypeScript errors during build
-    // Remove this line once TypeScript errors are fixed!
-    ignoreBuildErrors: true,
+    ignoreBuildErrors: false,
   },
 
   // Skip trailing slash redirect

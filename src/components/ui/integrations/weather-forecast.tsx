@@ -412,7 +412,7 @@ export function WeatherForecast(props: WeatherForecastProps) {
         }
 
         // Otherwise, fetch data via MCP using actual tool names
-        const promises = [];
+        const promises: Array<Promise<unknown>> = [];
 
         // The MCP tools might have different names - let's check what's available
         const weatherTool = tools['mcp_weather-gov-weather'] || tools.weather;

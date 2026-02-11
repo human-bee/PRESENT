@@ -43,7 +43,7 @@ import { ContextFeeder, contextFeederSchema } from '@/components/ui/documents/co
 
 import { componentToolboxSchema } from "@/lib/custom";
 
-const extendedSchema = <T extends z.AnyZodObject>(schema: T) => {
+const extendedSchema = <T extends z.ZodObject<any>>(schema: T) => {
   return schema.extend({
     x: z.number().optional().describe('X position'),
     y: z.number().optional().describe('Y position'),

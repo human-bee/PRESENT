@@ -152,10 +152,8 @@ export function useLivekitLocalDevices({ room, isLocal }: UseLivekitLocalDevices
     const handleMediaDevicesChanged = () => {
       void refreshDevices();
     };
-    // @ts-expect-error runtime event ensured by LiveKit typings
     room.on(RoomEvent.MediaDevicesChanged, handleMediaDevicesChanged);
     return () => {
-      // @ts-expect-error runtime event ensured by LiveKit typings
       room.off(RoomEvent.MediaDevicesChanged, handleMediaDevicesChanged);
     };
   }, [room, refreshDevices, isLocal]);

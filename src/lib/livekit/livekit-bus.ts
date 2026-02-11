@@ -1,5 +1,3 @@
-export type { DataMessage } from '@livekit/components-react';
-
 import { Room, RoomEvent, ParticipantKind } from 'livekit-client';
 import { createLogger } from '@/lib/utils';
 
@@ -111,12 +109,18 @@ const registerSidEntry = (sid: string, entry: ListenerEntry) => {
   }
 };
 
+const getRoomSid = (room: Room | null | undefined): string | null => {
+  const sid = (room as any)?.sid;
+  return typeof sid === 'string' && sid.trim().length > 0 ? sid : null;
+};
+
 function createLiveKitBusInstance(room: Room | null | undefined) {
   const logger = createLogger('LiveKitBus');
-  const shouldLogBusInit = () => process.env.NODE_ENV !== 'production' && room && room.sid;
+  const shouldLogBusInit = () => process.env.NODE_ENV !== 'production' && Boolean(getRoomSid(room));
   if (shouldLogBusInit()) {
     try {
-      const label = `${room!.name ?? 'unknown'}#${room!.sid}`;
+      const sid = getRoomSid(room) ?? 'no-sid';
+      const label = `${room?.name ?? 'unknown'}#${sid}`;
       console.debug('[LiveKitBus][debug] createLiveKitBus', { label, state: room?.state });
       console.debug('[LiveKitBus][debug] instantiated', { label, state: room?.state });
     } catch {}
@@ -280,8 +284,9 @@ function createLiveKitBusInstance(room: Room | null | undefined) {
     const existing = listenerRegistryByRoom.get(room);
     if (existing) {
       listenersAttached = true;
-      if (room.sid) {
-        registerSidEntry(room.sid, existing);
+      const sid = getRoomSid(room);
+      if (sid) {
+        registerSidEntry(sid, existing);
       }
       return;
     }
@@ -298,13 +303,15 @@ function createLiveKitBusInstance(room: Room | null | undefined) {
     listenersAttached = true;
 
     const attachWhenSidReady = () => {
-      if (!room.sid) return;
+      const sid = getRoomSid(room);
+      if (!sid) return;
       room.off(RoomEvent.ConnectionStateChanged, attachWhenSidReady);
-      registerSidEntry(room.sid, entry);
+      registerSidEntry(sid, entry);
     };
 
-    if (room.sid) {
-      registerSidEntry(room.sid, entry);
+    const sid = getRoomSid(room);
+    if (sid) {
+      registerSidEntry(sid, entry);
     } else {
       room.on(RoomEvent.ConnectionStateChanged, attachWhenSidReady);
     }
@@ -315,9 +322,12 @@ function createLiveKitBusInstance(room: Room | null | undefined) {
 
   const handlePublishResult = (result: unknown, topic: string, context?: Record<string, unknown>) => {
     if (result && typeof (result as PromiseLike<unknown>).then === 'function') {
-      (result as PromiseLike<unknown>).catch((err) => {
-        logger.error('Failed to send', { topic, ...context }, err);
-      });
+      (result as PromiseLike<unknown>).then(
+        undefined,
+        (err) => {
+          logger.error('Failed to send', { topic, ...context }, err);
+        },
+      );
     }
   };
 
@@ -473,8 +483,9 @@ export function createLiveKitBus(room: Room | null | undefined) {
     return cachedByRoom;
   }
 
-  if (room.sid) {
-    const cachedEntry = busCacheBySid.get(room.sid);
+  const sid = getRoomSid(room);
+  if (sid) {
+    const cachedEntry = busCacheBySid.get(sid);
     if (cachedEntry) {
       if (cachedEntry.room === room) {
         busCacheByRoom.set(room, cachedEntry.bus);
@@ -483,15 +494,15 @@ export function createLiveKitBus(room: Room | null | undefined) {
 
       const newBus = createLiveKitBusInstance(room);
       busCacheByRoom.set(room, newBus);
-      busCacheBySid.set(room.sid, { bus: newBus, room });
+      busCacheBySid.set(sid, { bus: newBus, room });
       return newBus;
     }
   }
 
   const bus = createLiveKitBusInstance(room);
   busCacheByRoom.set(room, bus);
-  if (room.sid) {
-    busCacheBySid.set(room.sid, { bus, room });
+  if (sid) {
+    busCacheBySid.set(sid, { bus, room });
   }
   return bus;
 }

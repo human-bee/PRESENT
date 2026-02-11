@@ -20,7 +20,7 @@ type ParticipantSummary = {
 type ParticipantTileOptionsPanelProps = {
   isOpen: boolean;
   anchor: AnchorRect | null;
-  panelRef: React.RefObject<HTMLDivElement>;
+  panelRef: React.RefObject<HTMLDivElement | null>;
   panelStyle: React.CSSProperties | null;
   isCoarsePointer: boolean;
   onClose: () => void;

@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server'
-import { streamText, type CoreMessage } from 'ai'
+import { jsonSchema, Output, streamText, type CoreMessage, type JSONSchema7 } from 'ai'
 import type { AgentStreamPayload } from '@/lib/tldraw-agent/shared/types/AgentStreamPayload'
 import { getAgentModelDefinition } from '@/lib/tldraw-agent/worker/models'
 import { closeAndParseJson } from '@/lib/tldraw-agent/worker/do/closeAndParseJson'
@@ -64,30 +64,26 @@ export async function POST(req: NextRequest) {
 					content: '{"actions": [{"_type":',
 				} as CoreMessage)
 
-				const { textStream } = streamText({
-					model,
-					system,
-					messages: conversation,
-					maxOutputTokens: 8_192,
-					temperature: 0,
-					providerOptions,
-					response:
-						modelDefinition.provider === 'openai' && responseSchema
-							? {
-								format: {
-									type: 'json_schema',
-									json_schema: {
-										name: 'AgentResponse',
-										strict: true,
-										schema: responseSchema,
-									},
-								},
-						  }
-						: undefined,
-					onError: (error) => {
-						debugLog('stream.error', error instanceof Error ? error.message : error)
-						throw error
-					},
+					const { textStream } = streamText({
+						model,
+						system,
+						messages: conversation,
+						maxOutputTokens: 8_192,
+						temperature: 0,
+						providerOptions,
+						// Structured outputs are configured via `experimental_output` in AI SDK v5.
+						// Note: we intentionally do not attach a validator here; `jsonSchema(...)`
+						// passes schema through to the provider while keeping runtime validation off.
+						experimental_output:
+							modelDefinition.provider === 'openai' && responseSchema
+								? Output.object({
+									schema: jsonSchema(() => responseSchema as unknown as JSONSchema7),
+								})
+								: undefined,
+						onError: (error) => {
+							debugLog('stream.error', error instanceof Error ? error.message : error)
+							throw error
+						},
 				})
 
 				const providerId = (model as { provider?: string } | undefined)?.provider ?? ''

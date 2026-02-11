@@ -3,6 +3,7 @@ import {
   getModelForSteward,
   isFastStewardReady,
 } from '@/lib/agents/fast-steward-config';
+import { extractFirstToolCall, parseToolArguments } from '@/lib/agents/subagents/fast-steward-response';
 import type { FairyIntent } from './intent';
 import { FairyRouteDecisionSchema, type FairyRouteDecision, routerTools } from './router-schema';
 
@@ -104,9 +105,9 @@ export async function routeFairyIntent(intent: FairyIntent): Promise<FairyRouteD
       tool_choice: 'auto',
     });
 
-    const toolCall = response.choices[0]?.message?.tool_calls?.[0];
-    if (toolCall?.function?.name === 'route_intent') {
-      const args = JSON.parse(toolCall.function.arguments || '{}');
+    const toolCall = extractFirstToolCall(response);
+    if (toolCall?.name === 'route_intent') {
+      const args = parseToolArguments(toolCall.argumentsRaw) ?? {};
       const parsed = FairyRouteDecisionSchema.safeParse(args);
       if (parsed.success) {
         return parsed.data;

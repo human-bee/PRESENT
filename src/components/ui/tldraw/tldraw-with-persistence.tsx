@@ -48,7 +48,7 @@ export const TranscriptPanelContext = createContext<{
 });
 
 function CustomMainMenu({ readOnly = false }: { readOnly?: boolean } & any) {
-  const { saveCanvas, lastSaved, isSaving, canvasName, renameCanvas } = useCanvasPersistence(null);
+  const { saveCanvas, lastSaved, isSaving, canvasName, updateCanvasName } = useCanvasPersistence(null);
   const { user, signOut } = useAuth();
   const router = useRouter();
   const theme = usePresentTheme();
@@ -75,7 +75,7 @@ function CustomMainMenu({ readOnly = false }: { readOnly?: boolean } & any) {
   const handleRenameCanvas = () => {
     const newName = prompt('Enter a new name for your canvas:', canvasName);
     if (newName) {
-      renameCanvas(newName);
+      void updateCanvasName(newName);
     }
   };
 
@@ -311,7 +311,9 @@ function CustomToolbarWithTranscript({
         id="component-toolbox"
         label="Component Toolbox"
         icon="plus"
-        onSelect={onComponentToolboxToggle}
+        onSelect={() => {
+          onComponentToolboxToggle?.();
+        }}
       />
       <TldrawUiMenuItem
         id="share-canvas"
@@ -323,14 +325,18 @@ function CustomToolbarWithTranscript({
         id="transcript-toggle"
         label={isOpen ? 'Hide Transcript' : 'Show Transcript'}
         icon="blob"
-        onSelect={onTranscriptToggle}
+        onSelect={() => {
+          onTranscriptToggle?.();
+        }}
         isSelected={isOpen}
       />
       <TldrawUiMenuItem
         id="help-toggle"
         label="Help"
         icon="question-mark"
-        onSelect={onHelpClick}
+        onSelect={() => {
+          onHelpClick?.();
+        }}
       />
     </DefaultToolbar>
   );

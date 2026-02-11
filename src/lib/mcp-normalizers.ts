@@ -7,10 +7,10 @@ export type NormalizedForecast = {
     temperature: string;
     wind: { speed: string; direction: string };
     condition: string;
-    humidity?: number | null;
-    precipitation?: number | null;
-    uvIndex?: number | null;
-    visibility?: string | null;
+    humidity?: number;
+    precipitation?: number;
+    uvIndex?: number;
+    visibility?: string;
   }>;
   alerts?: Array<{
     type: string;
@@ -24,13 +24,33 @@ function toTitleCase(s: string) {
   return s.replace(/(^|\s)\w/g, (m) => m.toUpperCase());
 }
 
+function normalizePeriod(p: any, idx: number) {
+  return {
+    name: String(p.name ?? p.period ?? `Period ${idx + 1}`),
+    temperature:
+      typeof p.temperature === 'number'
+        ? `${p.temperature}°F`
+        : String(p.temperature ?? p.temp ?? ''),
+    wind: {
+      speed: String(p.windSpeed ?? p.wind?.speed ?? p.wind_speed ?? ''),
+      direction: String(p.windDirection ?? p.wind?.direction ?? p.wind_dir ?? ''),
+    },
+    condition: toTitleCase(String(p.shortForecast ?? p.condition ?? p.summary ?? '')),
+    humidity: typeof p.humidity === 'number' ? p.humidity : undefined,
+    precipitation: typeof p.precipitation === 'number' ? p.precipitation : undefined,
+    uvIndex: typeof p.uvIndex === 'number' ? p.uvIndex : undefined,
+    visibility: p.visibility ? String(p.visibility) : undefined,
+  };
+}
+
 // Try to coerce many possible shapes into our canonical WeatherForecast props
 export function normalizeWeatherForecast(raw: any, location?: string): NormalizedForecast {
   // Case 1: Already in canonical form
   if (raw && Array.isArray(raw.periods)) {
+    const periods = raw.periods.map((p: any, idx: number) => normalizePeriod(p, idx));
     return {
       location: raw.location || location,
-      periods: raw.periods,
+      periods,
       alerts: raw.alerts ?? null,
     } as NormalizedForecast;
   }
@@ -38,22 +58,7 @@ export function normalizeWeatherForecast(raw: any, location?: string): Normalize
   // Case 2: NOAA style { properties: { periods: [...] } } or { periods: [...] } with different keys
   const periodsLike = raw?.properties?.periods || raw?.periods || raw?.forecast || [];
   if (Array.isArray(periodsLike) && periodsLike.length > 0) {
-    const periods = periodsLike.map((p: any, idx: number) => ({
-      name: String(p.name ?? p.period ?? `Period ${idx + 1}`),
-      temperature:
-        typeof p.temperature === 'number'
-          ? `${p.temperature}°F`
-          : String(p.temperature ?? p.temp ?? ''),
-      wind: {
-        speed: String(p.windSpeed ?? p.wind?.speed ?? p.wind_speed ?? ''),
-        direction: String(p.windDirection ?? p.wind?.direction ?? p.wind_dir ?? ''),
-      },
-      condition: toTitleCase(String(p.shortForecast ?? p.condition ?? p.summary ?? '')),
-      humidity: typeof p.humidity === 'number' ? p.humidity : undefined,
-      precipitation: typeof p.precipitation === 'number' ? p.precipitation : undefined,
-      uvIndex: typeof p.uvIndex === 'number' ? p.uvIndex : undefined,
-      visibility: p.visibility ? String(p.visibility) : undefined,
-    }));
+    const periods = periodsLike.map((p: any, idx: number) => normalizePeriod(p, idx));
     return { location: raw.location || raw.city || location, periods, alerts: raw.alerts ?? null };
   }
 

@@ -71,7 +71,7 @@ export function ContextFeeder(props: ContextFeederHostProps) {
     const [isTextExpanded, setIsTextExpanded] = useState(false);
     const [expandedDocId, setExpandedDocId] = useState<string | null>(null);
 
-    const fallbackMessageIdRef = useRef<string>();
+    const fallbackMessageIdRef = useRef<string | null>(null);
     if (!fallbackMessageIdRef.current) {
         fallbackMessageIdRef.current = `context-feeder-${crypto.randomUUID()}`;
     }

@@ -82,7 +82,7 @@ export async function GET(req: NextRequest) {
 
     const supabase = await getServiceSupabase();
     const { data, error } = await supabase
-      .from<LinearKeyRow>('user_secrets')
+      .from('user_secrets')
       .select('secret')
       .eq('user_id', userId)
       .eq('provider', 'linear')
@@ -117,7 +117,7 @@ export async function POST(req: NextRequest) {
 
     const supabase = await getServiceSupabase();
     const { error } = await supabase
-      .from<LinearKeyRow>('user_secrets')
+      .from('user_secrets')
       .upsert(
         {
           user_id: userId,
@@ -147,7 +147,7 @@ export async function DELETE(req: NextRequest) {
 
     const supabase = await getServiceSupabase();
     const { error } = await supabase
-      .from<LinearKeyRow>('user_secrets')
+      .from('user_secrets')
       .delete()
       .eq('user_id', userId)
       .eq('provider', 'linear');

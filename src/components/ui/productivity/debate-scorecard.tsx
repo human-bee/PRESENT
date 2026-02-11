@@ -196,7 +196,11 @@ const speechLabels: Record<string, string> = {
 
 const timelineMeta: Record<
   TimelineEvent['type'],
-  { icon: React.ComponentType<{ className?: string }>; className: string; label: string }
+  {
+    icon: React.ComponentType<{ className?: string; style?: React.CSSProperties }>;
+    className: string;
+    label: string;
+  }
 > = {
   argument: { icon: FileText, className: 'text-sky-300', label: 'Argument' },
   rebuttal: { icon: ArrowRightLeft, className: 'text-purple-300', label: 'Rebuttal' },

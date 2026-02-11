@@ -1,6 +1,7 @@
 import * as React from 'react';
 import { Bot, User, VideoOff } from 'lucide-react';
 import { VideoTrack } from '@livekit/components-react';
+import { isTrackReference } from '@livekit/components-core';
 import { cn } from '@/lib/utils';
 import type { ParticipantTracks } from '@/hooks/livekit/use-participant-tracks';
 
@@ -27,7 +28,7 @@ export function ParticipantVideoLayer({
 }: ParticipantVideoLayerProps) {
   if (!showVideo || isMinimized) return null;
 
-  if (videoTrackRef && !videoPublication?.isMuted) {
+  if (videoTrackRef && isTrackReference(videoTrackRef) && !videoPublication?.isMuted) {
     return (
       <div
         className={cn('absolute inset-0 w-full h-full', isLocal && mirrorLocal && '[transform:scaleX(-1)]')}

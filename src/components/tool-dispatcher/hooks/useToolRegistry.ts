@@ -248,7 +248,7 @@ export function useToolRegistry(deps: ToolRegistryDeps): ToolRegistryApi {
           });
       }
 
-      if (pendingUpdates.size > 0 && lastDispatch && frameHandle === null) {
+      if (pendingUpdates.size > 0 && frameHandle === null) {
         frameHandle = window.requestAnimationFrame(() => {
           frameHandle = null;
           flushPending();

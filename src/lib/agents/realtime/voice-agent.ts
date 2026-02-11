@@ -183,7 +183,7 @@ export default defineAgent({
       throw error;
     }
     console.log('[VoiceAgent] Connected to room:', job.room.name);
-    const liveKitBus = createLiveKitBus(job.room);
+    const liveKitBus = createLiveKitBus(job.room as any);
 
     type PendingTranscriptionMessage = {
       text: string;
@@ -445,7 +445,7 @@ export default defineAgent({
     let multiParticipantTranscriber: MultiParticipantTranscriptionManager | null = null;
     if (multiParticipantTranscriptionEnabled) {
       multiParticipantTranscriber = new MultiParticipantTranscriptionManager({
-        room: job.room,
+        room: job.room as any,
         maxParticipants: transcriptionMaxParticipants,
         model: resolvedSttModel,
         language: resolvedTranscriptionLanguage,
@@ -938,10 +938,14 @@ Your only output is function calls. Never use plain text unless absolutely neces
         params: {
           room,
           componentId,
-          topic: typeof payload.topic === 'string' && payload.topic.trim().length > 0 ? payload.topic.trim() : undefined,
-          intent: typeof payload.intentId === 'string' && payload.intentId.trim().length > 0 ? payload.intentId.trim() : undefined,
           players,
           ...(payload.seedState ? { seedState: payload.seedState } : {}),
+          ...(typeof payload.topic === 'string' && payload.topic.trim().length > 0
+            ? { topic: payload.topic.trim() }
+            : {}),
+          ...(typeof payload.intentId === 'string' && payload.intentId.trim().length > 0
+            ? { intent: payload.intentId.trim() }
+            : {}),
         },
       });
     };
@@ -1077,7 +1081,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
     };
 
     const flushPendingToolCalls = async () => {
-      if (job.room.state !== ConnectionState.Connected) return;
+      if ((job.room as any).state !== ConnectionState.Connected) return;
       while (pendingToolCalls.length > 0) {
         const next = pendingToolCalls.shift();
         if (!next) continue;
@@ -1224,10 +1228,25 @@ Your only output is function calls. Never use plain text unless absolutely neces
             const selectionIds = Array.isArray(canvasParams.selectionIds)
               ? canvasParams.selectionIds.filter((id) => typeof id === 'string')
               : undefined;
+            const boundsCandidate = canvasParams.bounds as any;
             const bounds =
-              canvasParams.bounds && typeof canvasParams.bounds === 'object'
-                ? (canvasParams.bounds as Record<string, unknown>)
+              boundsCandidate &&
+              typeof boundsCandidate === 'object' &&
+              typeof boundsCandidate.x === 'number' &&
+              typeof boundsCandidate.y === 'number' &&
+              typeof boundsCandidate.w === 'number' &&
+              typeof boundsCandidate.h === 'number'
+                ? {
+                    x: boundsCandidate.x,
+                    y: boundsCandidate.y,
+                    w: boundsCandidate.w,
+                    h: boundsCandidate.h,
+                  }
                 : undefined;
+            const metadataSafe =
+              canvasParams.metadata && typeof canvasParams.metadata === 'object'
+                ? (JSON.parse(JSON.stringify(canvasParams.metadata)) as any)
+                : null;
             const intentId =
               requestId || randomUUID();
             normalizedParams = {
@@ -1237,9 +1256,9 @@ Your only output is function calls. Never use plain text unless absolutely neces
                 room: roomName,
                 message,
                 source: 'voice',
-                selectionIds,
-                bounds,
-                metadata: canvasParams.metadata ?? null,
+                metadata: metadataSafe,
+                ...(selectionIds ? { selectionIds } : {}),
+                ...(bounds ? { bounds } : {}),
               },
             };
           }
@@ -2086,9 +2105,16 @@ Your only output is function calls. Never use plain text unless absolutely neces
           await sendToolCall('create_component', payload);
 
           if (componentType === 'DebateScorecard') {
-            const topic = seededScorecardTopic || (typeof (mergedProps as any).topic === 'string'
-              ? String((mergedProps as any).topic).trim()
-              : inferScorecardTopicFromText(lastUserPrompt) ?? undefined) || 'Live Debate';
+            const inferredTopic =
+              typeof lastUserPrompt === 'string'
+                ? inferScorecardTopicFromText(lastUserPrompt)
+                : undefined;
+            const topic =
+              seededScorecardTopic ||
+              (typeof (mergedProps as any).topic === 'string'
+                ? String((mergedProps as any).topic).trim()
+                : inferredTopic) ||
+              'Live Debate';
             activeScorecard = { componentId: messageId, intentId, topic };
             await sendScorecardSeedTask({
               componentId: messageId,
@@ -2440,10 +2466,14 @@ Your only output is function calls. Never use plain text unless absolutely neces
           }
 
           if (isDebateScorecardTarget) {
+            const inferredTopic =
+              typeof lastUserPrompt === 'string'
+                ? inferScorecardTopicFromText(lastUserPrompt)
+                : undefined;
             const patchTopic =
               typeof (patch as any)?.topic === 'string' && (patch as any).topic.trim().length > 0
                 ? String((patch as any).topic).trim()
-                : inferScorecardTopicFromText(lastUserPrompt) ?? undefined;
+                : inferredTopic;
             const patchPlayersRaw = (patch as any)?.players;
             const patchPlayers =
               Array.isArray(patchPlayersRaw) && patchPlayersRaw.length > 0
@@ -2547,7 +2577,10 @@ Your only output is function calls. Never use plain text unless absolutely neces
               typeof enrichedParams.topic !== 'string' ||
               (enrichedParams.topic as string).trim().length === 0)
           ) {
-            const inferred = inferScorecardTopicFromText(lastUserPrompt);
+            const inferred =
+              typeof lastUserPrompt === 'string'
+                ? inferScorecardTopicFromText(lastUserPrompt)
+                : null;
             if (inferred) {
               enrichedParams.topic = inferred;
             }

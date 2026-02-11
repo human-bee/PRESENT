@@ -843,10 +843,10 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
           const existing = metricsByCallRef.current.get(callId);
           const next: ToolMetricEntry = existing ?? {
             callId,
-            tool: tool || existing?.tool || 'unknown',
-            messageIds: existing?.messageIds ?? new Set(),
-            metaByMessage: existing?.metaByMessage ?? new Map(),
-            loggedMessages: existing?.loggedMessages ?? new Set(),
+            tool: tool || 'unknown',
+            messageIds: new Set(),
+            metaByMessage: new Map(),
+            loggedMessages: new Set(),
           };
           next.tool = tool || next.tool;
           const contextTs =

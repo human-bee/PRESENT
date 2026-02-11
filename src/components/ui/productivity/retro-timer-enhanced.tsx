@@ -436,7 +436,7 @@ export function RetroTimerEnhanced({
     handleAIUpdate,
   );
 
-  const loadingState = LoadingState.COMPLETE;
+  const loadingState: LoadingState = LoadingState.COMPLETE;
 
   useEffect(() => {
     if (!timerState.isRunning) return;
@@ -513,24 +513,9 @@ export function RetroTimerEnhanced({
       showLoadingIndicator={true}
       loadingProgress={{
         state: loadingState,
-        progress:
-          loadingState === LoadingState.SKELETON
-            ? 33
-            : loadingState === LoadingState.PARTIAL
-              ? 66
-              : 100,
-        message:
-          loadingState === LoadingState.SKELETON
-            ? 'Loading timer...'
-            : loadingState === LoadingState.PARTIAL
-              ? 'Initializing...'
-              : 'Ready!',
-        eta:
-          loadingState === LoadingState.SKELETON
-            ? 250
-            : loadingState === LoadingState.PARTIAL
-              ? 100
-              : 0,
+        progress: 100,
+        message: 'Ready!',
+        eta: 0,
       }}
     >
       <div

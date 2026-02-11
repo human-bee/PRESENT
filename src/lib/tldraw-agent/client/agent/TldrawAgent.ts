@@ -812,8 +812,8 @@ function requestAgent({ agent, request }: { agent: TldrawAgent; request: AgentRe
 						}
 
 						applied += 1
-						appliedTypes[transformedAction._type] =
-							(appliedTypes[transformedAction._type] ?? 0) + 1
+						const actionType = typeof transformedAction._type === 'string' ? transformedAction._type : 'unknown'
+						appliedTypes[actionType] = (appliedTypes[actionType] ?? 0) + 1
 				try {
 					debugLog('[CanvasAgent] applied action', {
 						type: transformedAction._type,

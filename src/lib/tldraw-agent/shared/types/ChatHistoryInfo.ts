@@ -1,4 +1,4 @@
-import { AgentIconType } from '../../client/components/icons/AgentIcon'
+import type { AgentIconType } from '../../../../../vendor/tldraw-agent-template/client/components/icons/AgentIcon'
 import { BaseAgentAction } from './BaseAgentAction'
 import { Streaming } from './Streaming'
 

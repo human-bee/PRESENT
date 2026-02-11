@@ -5,7 +5,7 @@
  * @returns The parsed object.
  */
 export function closeAndParseJson(string: string) {
-	const stackOfOpenings = []
+	const stackOfOpenings: Array<'{' | '[' | '"'> = []
 
 	// Track openings and closings
 	let i = 0

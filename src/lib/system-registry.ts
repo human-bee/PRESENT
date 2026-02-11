@@ -101,7 +101,7 @@ export class SystemRegistry {
   // browser runtime; server/agent can persist elsewhere. In the future this
   // could be migrated to redis / kv.
   private stateSnapshot: Map<string, unknown> = new Map(); // key = StateEnvelope.id
-  private stateListeners: Set<(envelope: unknown) => void> = new Set();
+  private stateListeners: Set<(envelope: import('./shared-state').StateEnvelope<any>) => void> = new Set();
 
   constructor() {
     // Load static capabilities

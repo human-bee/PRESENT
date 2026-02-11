@@ -1,5 +1,6 @@
 import { getCerebrasClient, getModelForSteward, isFastStewardReady } from '../fast-steward-config';
 import { getTranscriptWindow, getContextDocuments, formatContextDocuments } from '@/lib/agents/shared/supabase-context';
+import { extractFirstToolCall, parseToolArgumentsResult } from './fast-steward-response';
 
 const CEREBRAS_MODEL = getModelForSteward('SUMMARY_STEWARD_FAST_MODEL');
 
@@ -111,9 +112,15 @@ export async function runSummaryStewardFast(params: {
       tool_choice: 'auto',
     });
 
-    const toolCall = response.choices[0]?.message?.tool_calls?.[0];
-    if (toolCall?.function?.name === 'commit_summary') {
-      const args = JSON.parse(toolCall.function.arguments || '{}');
+    const toolCall = extractFirstToolCall(response);
+    if (toolCall?.name === 'commit_summary') {
+      const argsResult = parseToolArgumentsResult(toolCall.argumentsRaw);
+      if (!argsResult.ok) {
+        console.warn('[SummaryStewardFast] Invalid tool arguments', { reason: argsResult.error });
+        return { summary: transcriptLines.slice(0, 800) || 'Summary unavailable.' };
+      }
+
+      const args = argsResult.args;
       const summary = typeof args.summary === 'string' ? args.summary.trim() : '';
       if (summary) {
         return {

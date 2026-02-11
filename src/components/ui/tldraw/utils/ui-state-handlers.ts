@@ -6,7 +6,7 @@ import { toPlainText } from './rich-text';
 
 interface UiStateHandlersDeps {
   editor: Editor;
-  containerRef: RefObject<HTMLDivElement>;
+  containerRef: RefObject<HTMLDivElement | null>;
   bus: LiveKitBus;
 }
 

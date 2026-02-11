@@ -28,7 +28,7 @@ if (TEACHER_ACTIONS.length === 0) {
   throw new Error('Teacher contract must define at least one action. Did you run scripts/gen-agent-contract.ts?');
 }
 
-const teacherActionTuple = TEACHER_ACTIONS as readonly [TeacherActionName, ...TeacherActionName[]];
+const teacherActionTuple = TEACHER_ACTIONS as unknown as readonly [TeacherActionName, ...TeacherActionName[]];
 
 const LegacyActionNameSchema = z.enum(LEGACY_ACTION_NAMES);
 const TeacherActionNameSchema = z.enum(teacherActionTuple);
@@ -84,4 +84,3 @@ export type ScreenshotResponse = {
   selection: string[];
   docVersion: string;
 };
-

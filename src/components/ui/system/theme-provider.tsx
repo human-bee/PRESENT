@@ -62,8 +62,8 @@ export function PresentThemeProvider({ children }: { children: React.ReactNode }
   }, []);
 
   const toggle = React.useCallback(() => {
-    setMode((prev) => (prev === 'dark' ? 'light' : 'dark'));
-  }, [setMode]);
+    setMode(mode === 'dark' ? 'light' : 'dark');
+  }, [mode, setMode]);
 
   // Keep DOM in sync after hydration.
   React.useEffect(() => {
@@ -101,4 +101,3 @@ export function usePresentTheme(): ThemeContextValue {
   }
   return ctx;
 }
-

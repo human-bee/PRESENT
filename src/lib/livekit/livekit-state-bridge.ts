@@ -20,7 +20,7 @@ export class LiveKitStateBridge {
         const decoded = JSON.parse(new TextDecoder().decode(payload)) as StateEnvelope;
         if (!decoded || !decoded.kind) return;
         // Avoid echo loop – ignore messages we originated
-        if (decoded.origin === 'browser' && participant.isLocal) return;
+        if (decoded.origin === 'browser' && participant?.isLocal) return;
         systemRegistry.ingestState(decoded);
       } catch (_) {
         /* ignore non JSON */

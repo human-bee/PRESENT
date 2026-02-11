@@ -183,9 +183,9 @@ const scorecardExecutionLocks = new Map<string, Promise<void>>();
 
 async function withScorecardLock<T>(key: string, fn: () => Promise<T>): Promise<T> {
   const previous = scorecardExecutionLocks.get(key) ?? Promise.resolve();
-  let release: (() => void) | null = null;
+  let release!: () => void;
   const next = new Promise<void>((resolve) => {
-    release = resolve;
+    release = () => resolve();
   });
   const current = previous.then(() => next);
   scorecardExecutionLocks.set(key, current);
@@ -195,7 +195,7 @@ async function withScorecardLock<T>(key: string, fn: () => Promise<T>): Promise<
     return await fn();
   } finally {
     try {
-      release?.();
+      release();
     } finally {
       if (scorecardExecutionLocks.get(key) === current) {
         scorecardExecutionLocks.delete(key);
@@ -481,10 +481,10 @@ const dispatchSummaryDocument = async (
   const summaryPatch = {
     title: formatted.title,
     summary: result.summary,
-    highlights: result.highlights,
-    decisions: result.decisions,
-    actionItems: result.actionItems,
-    tags: result.tags,
+    highlights: result.highlights ?? [],
+    decisions: result.decisions ?? [],
+    actionItems: result.actionItems ?? [],
+    tags: result.tags ?? [],
     sourceDocumentId: documentId,
     contextProfile,
     lastUpdated: Date.now(),
@@ -526,12 +526,15 @@ async function dispatchFastLane(intent: FairyIntent, decision: FairyRouteDecisio
   if (detailWithRoom && !detailWithRoom.roomName && intent.room) {
     detailWithRoom.roomName = intent.room;
   }
+  const detailSafe = detailWithRoom
+    ? (JSON.parse(JSON.stringify(detailWithRoom)) as any)
+    : null;
   await broadcastToolCall({
     room: intent.room,
     tool: 'dispatch_dom_event',
     params: {
       event: decision.fastLaneEvent,
-      detail: detailWithRoom,
+      detail: detailSafe,
     },
   });
 }
@@ -625,25 +628,27 @@ async function handleFairyIntent(rawParams: JsonObject) {
     }
 
     if (decisionLike.kind === 'canvas') {
-      return executeTask('canvas.agent_prompt', {
+      const args: Record<string, unknown> = {
         room: intent.room,
         message,
         requestId: intent.id,
-        bounds: intent.bounds,
-        selectionIds: intent.selectionIds,
-        metadata: actionMetadata,
-      });
+      };
+      if (intent.bounds) args.bounds = intent.bounds;
+      if (intent.selectionIds) args.selectionIds = intent.selectionIds;
+      if (actionMetadata) args.metadata = actionMetadata;
+      return executeTask('canvas.agent_prompt', args as any);
     }
 
     if (decisionLike.kind === 'scorecard') {
       const componentId = await ensureWidgetComponent(intent, 'DebateScorecard');
-      return executeTask('scorecard.run', {
+      const args: Record<string, unknown> = {
         room: intent.room,
         componentId,
         prompt: message,
-        summary,
         intent: 'scorecard.run',
-      });
+      };
+      if (typeof summary === 'string') args.summary = summary;
+      return executeTask('scorecard.run', args as any);
     }
 
     if (decisionLike.kind === 'infographic') {
@@ -685,7 +690,7 @@ async function handleFairyIntent(rawParams: JsonObject) {
     return { status: 'skipped', intentId: intent.id, decision };
   };
 
-  const results: Array<Record<string, unknown>> = [];
+  const results: any[] = [];
   if (decision.kind !== 'bundle') {
     results.push(await executeDecision(decision));
   }
