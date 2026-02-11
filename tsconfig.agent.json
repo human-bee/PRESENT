@@ -5,7 +5,7 @@
     "lib": ["es2020"],
     "moduleResolution": "node",
     "strict": true,
-    "noImplicitAny": false,
+    "noImplicitAny": true,
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
@@ -38,5 +38,4 @@
     "**/__tests__/**"
   ]
 }
-
 

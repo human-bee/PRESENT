@@ -10,6 +10,7 @@ export const TOOL_EVENT_TOPICS = {
   error: 'tool_error',
   editorAction: 'editor_action',
   decision: 'decision',
+  stewardTrigger: 'steward_trigger',
 } as const;
 
 export type ToolEventTopicKey = keyof typeof TOOL_EVENT_TOPICS;

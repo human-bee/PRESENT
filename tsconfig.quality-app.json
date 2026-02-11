@@ -1,0 +1,21 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "incremental": false
+  },
+  "include": [],
+  "files": [
+    "src/app/api/agent/enqueue/route.ts",
+    "src/app/api/agent/dispatch/route.ts",
+    "src/app/api/token/route.ts",
+    "src/lib/livekit/protocol.ts",
+    "src/lib/logging/index.ts",
+    "src/lib/agents/shared/schemas.ts",
+    "src/lib/agents/shared/queue.ts",
+    "src/types/present-globals.d.ts"
+  ],
+  "exclude": [
+    "node_modules"
+  ]
+}

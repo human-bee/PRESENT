@@ -30,10 +30,10 @@
         "noUselessUndefinedInitialization": "off"
       },
       "correctness": {
-        "useExhaustiveDependencies": "off",
-        "useHookAtTopLevel": "off",
-        "noUnusedImports": "off",
-        "noUnusedVariables": "off",
+        "useExhaustiveDependencies": "warn",
+        "useHookAtTopLevel": "warn",
+        "noUnusedImports": "warn",
+        "noUnusedVariables": "warn",
         "noUnusedFunctionParameters": "off",
         "useParseIntRadix": "off",
         "noUnusedPrivateClassMembers": "off",
@@ -58,17 +58,42 @@
         "useValidAriaRole": "off"
       },
       "suspicious": {
-        "noExplicitAny": "off",
+        "noExplicitAny": "warn",
         "noImplicitAnyLet": "off",
         "noArrayIndexKey": "off",
         "noAssignInExpressions": "off",
         "useIterableCallbackReturn": "off",
         "noGlobalIsNan": "off",
         "noControlCharactersInRegex": "off",
-        "noPrototypeBuiltins": "off"
+        "noPrototypeBuiltins": "off",
+        "noConsole": {
+          "level": "warn",
+          "options": {
+            "allow": ["warn", "error"]
+          }
+        }
       }
     }
   },
+  "overrides": [
+    {
+      "includes": [
+        "src/lib/logging/**/*.ts",
+        "src/lib/logging/**/*.tsx",
+        "**/*.test.ts",
+        "**/*.test.tsx",
+        "tests/**/*.ts",
+        "tests/**/*.tsx"
+      ],
+      "linter": {
+        "rules": {
+          "suspicious": {
+            "noConsole": "off"
+          }
+        }
+      }
+    }
+  ],
   "assist": { "actions": { "source": { "organizeImports": "off" } } },
   "vcs": {
     "enabled": true,

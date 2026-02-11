@@ -3,24 +3,40 @@ import { AgentTaskQueue } from '@/lib/agents/shared/queue';
 import { isFastStewardReady } from '@/lib/agents/fast-steward-config';
 import { runDebateScorecardSteward } from '@/lib/agents/debate-judge';
 import { runDebateScorecardStewardFast } from '@/lib/agents/subagents/debate-steward-fast';
+import { createLogger } from '@/lib/logging';
+import { parseJsonObject, stewardRunScorecardRequestSchema } from '@/lib/agents/shared/schemas';
+import type { JsonObject, JsonValue } from '@/lib/utils/json-schema';
 
 export const runtime = 'nodejs';
 
 const QUEUE_DIRECT_FALLBACK_ENABLED = process.env.SCORECARD_QUEUE_DIRECT_FALLBACK === 'true';
+const logger = createLogger('api:steward:runScorecard');
+
+const compactJsonObject = (input: Record<string, unknown>): JsonObject => {
+  const output: JsonObject = {};
+  for (const [key, value] of Object.entries(input)) {
+    if (value === undefined) continue;
+    output[key] = value as JsonValue;
+  }
+  return output;
+};
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { room, componentId, windowMs, summary, prompt, intent, topic, task, requestId, ...rest } =
-      body && typeof body === 'object' ? body : {};
-
-    if (typeof room !== 'string' || !room.trim()) {
-      return NextResponse.json({ error: 'Missing or invalid room' }, { status: 400 });
-    }
-
-    if (typeof componentId !== 'string' || !componentId.trim()) {
-      return NextResponse.json({ error: 'Missing or invalid componentId' }, { status: 400 });
-    }
+    const parsed = stewardRunScorecardRequestSchema.parse(body);
+    const {
+      room,
+      componentId,
+      windowMs,
+      summary,
+      prompt,
+      intent,
+      topic,
+      task,
+      requestId,
+      ...rest
+    } = parsed;
 
     const trimmedRoom = room.trim();
     const trimmedComponentId = componentId.trim();
@@ -46,7 +62,7 @@ export async function POST(req: NextRequest) {
           : 'scorecard.run';
     const normalizedTask = normalizedTaskCandidate.startsWith('scorecard.') ? normalizedTaskCandidate : 'scorecard.run';
 
-    console.debug('[runScorecard][debug] POST received', {
+    logger.debug('POST received', {
       room: trimmedRoom,
       componentId: trimmedComponentId,
       task: normalizedTask,
@@ -56,8 +72,8 @@ export async function POST(req: NextRequest) {
       topic: normalizedTopic,
     });
 
-    const normalizedParams = {
-      ...(rest && typeof rest === 'object' ? rest : {}),
+    const normalizedParams = compactJsonObject({
+      ...(parseJsonObject(rest) || {}),
       room: trimmedRoom,
       componentId: trimmedComponentId,
       windowMs: resolvedWindow,
@@ -65,7 +81,7 @@ export async function POST(req: NextRequest) {
       prompt: normalizedPrompt,
       intent: normalizedIntent,
       topic: normalizedTopic,
-    } as const;
+    });
 
     try {
       // Lazily instantiate so `next build` doesn't require Supabase env vars.
@@ -73,14 +89,14 @@ export async function POST(req: NextRequest) {
       const enqueueResult = await queue.enqueueTask({
         room: trimmedRoom,
         task: normalizedTask,
-        params: normalizedParams as any,
+        params: normalizedParams,
         requestId: typeof requestId === 'string' && requestId.trim() ? requestId.trim() : undefined,
         resourceKeys: [`room:${trimmedRoom}`, `scorecard:${trimmedComponentId}`],
       });
       return NextResponse.json({ status: 'queued', task: enqueueResult }, { status: 202 });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      console.warn('[Steward][runScorecard] queue enqueue failed', { message });
+      logger.warn('queue enqueue failed', { message });
       if (!QUEUE_DIRECT_FALLBACK_ENABLED) {
         return NextResponse.json({ error: 'Queue unavailable' }, { status: 503 });
       }
@@ -109,12 +125,12 @@ export async function POST(req: NextRequest) {
         }
         return NextResponse.json({ status: 'executed_fallback' }, { status: 202 });
       } catch (fallbackError) {
-        console.error('[Steward][runScorecard] fallback execution failed', fallbackError);
+        logger.error('fallback execution failed', { error: fallbackError });
         return NextResponse.json({ error: 'Dispatch failed' }, { status: 502 });
       }
     }
   } catch (error) {
-    console.error('Invalid request to steward/runScorecard', error);
+    logger.error('invalid request', { error: error instanceof Error ? error.message : String(error) });
     return NextResponse.json({ error: 'Bad Request' }, { status: 400 });
   }
 }

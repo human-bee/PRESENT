@@ -5,7 +5,6 @@
  * It includes:
  * - Font configuration using Geist Sans and Geist Mono from Google Fonts
  * - Global CSS imports including Tailwind CSS and tldraw styles
- * - Development-specific console warning suppression for performance violations
  * - HTML structure with proper lang attribute and hydration warning suppression
  * - Provider components wrapper for global state management
  *
@@ -54,45 +53,6 @@ export default function RootLayout({
             `,
           }}
         />
-        {/* Suppress development warnings and performance violations */}
-        {process.env.NODE_ENV === 'development' && (
-          <script
-            dangerouslySetInnerHTML={{
-              __html: `
-                // Suppress development warnings and performance violations
-                if (typeof window !== 'undefined') {
-                  const originalConsoleWarn = console.warn;
-                  const originalConsoleError = console.error;
-                  
-                  console.warn = function(...args) {
-                    const message = args.join(' ');
-                    if (message.includes("'message' handler took") ||
-                        message.includes("'setTimeout' handler took") ||
-                        message.includes("Forced reflow while executing JavaScript") ||
-                        message.includes("Violation") ||
-                        message.includes("You have multiple instances of some tldraw libraries") ||
-                        message.includes("This can lead to bugs and unexpected behavior") ||
-                        message.includes("This usually means that your bundler is misconfigured")) {
-                      return;
-                    }
-                    originalConsoleWarn.apply(console, args);
-                  };
-                  
-                  console.error = function(...args) {
-                    const message = args.join(' ');
-                    if (message.includes("ValidationError") && 
-                        message.includes("Expected a valid url") &&
-                        message.includes("data:image")) {
-                      console.log('Image drop validation error - handled by custom external content handlers');
-                      return;
-                    }
-                    originalConsoleError.apply(console, args);
-                  };
-                }
-              `,
-            }}
-          />
-        )}
         <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="mobile-web-app-capable" content="yes" />

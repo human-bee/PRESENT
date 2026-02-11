@@ -11,6 +11,14 @@ import type { ToolEventsApi } from './useToolEvents';
 import { ComponentRegistry } from '@/lib/component-registry';
 import { applyEnvelope } from '@/components/tool-dispatcher/handlers/tldraw-actions';
 import { logJourneyEvent } from '@/lib/journey-logger';
+import { createLogger } from '@/lib/logging';
+import {
+  parseDecisionMessage,
+  parseStewardTriggerMessage,
+  parseToolCallMessage,
+  type StewardTriggerMessage,
+} from '@/lib/livekit/protocol';
+import { ACTION_VERSION, AgentActionEnvelopeSchema } from '@/lib/canvas-agent/contract/types';
 
 type ToolMetricEntry = {
   callId: string;
@@ -39,8 +47,8 @@ export interface ToolRunnerApi {
 export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
   const { contextKey, events, room, stewardEnabled } = options;
   const queue = useToolQueue();
-  const runtimeMetricsFlag =
-    typeof window !== 'undefined' && (window as any).__presentDispatcherMetrics === true;
+  const logger = useMemo(() => createLogger('ToolDispatcher:runner'), []);
+  const runtimeMetricsFlag = typeof window !== 'undefined' && window.__presentDispatcherMetrics === true;
   const metricsEnabled =
     process.env.NEXT_PUBLIC_TOOL_DISPATCHER_METRICS === 'true' || runtimeMetricsFlag;
   const metricsByCallRef = useRef<Map<string, ToolMetricEntry>>(new Map());
@@ -126,7 +134,7 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
               dtPaintMs: paintMs,
             };
             try {
-              console.log('[ToolDispatcher][metrics]', details);
+              logger.info('metrics', details);
             } catch {}
             if (typeof window !== 'undefined') {
               try {
@@ -159,7 +167,7 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
         messageToCallsRef.current.delete(trimmedId);
       },
     };
-  }, [metricsEnabled]);
+  }, [metricsEnabled, logger]);
   const registry = useToolRegistry({ contextKey, metrics: metricsAdapter });
   const {
     emitRequest,
@@ -264,19 +272,19 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
             try {
               text = await res.text();
             } catch {}
-            console.warn('[ToolDispatcher] steward run failed', { status: res.status, text });
+            logger.warn('steward run failed', { status: res.status, text });
             scheduleCompletion();
             return;
           }
           log('steward_run: dispatched', { status: res.status, mode: options?.mode ?? 'auto' });
           scheduleCompletion(windowMs);
         } catch (error) {
-          console.warn('[ToolDispatcher] steward run error', error);
+          logger.warn('steward run error', { error });
           scheduleCompletion();
         }
       })();
     },
-    [stewardEnabled, log],
+    [stewardEnabled, log, logger],
   );
 
   const scheduleStewardRun = useCallback(
@@ -341,8 +349,8 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
   const runMcpTool = useCallback(
     async (tool: string, params: ToolParameters): Promise<ToolRunResult> => {
       const toolName = tool.replace(/^mcp_/, '');
-      const registry = (window as any).__custom_mcp_tools || {};
-      let result: any;
+      const registry = window.__custom_mcp_tools || {};
+      let result: unknown;
       const startedAt = Date.now();
       let mcpError: string | undefined;
 
@@ -356,27 +364,32 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
         });
       } catch {}
 
-      const direct = (registry as any)[toolName] || (registry as any)[`mcp_${toolName}`];
+      const direct = registry[toolName] || registry[`mcp_${toolName}`];
       if (direct) {
         try {
-          result = typeof direct?.execute === 'function' ? await direct.execute(params) : await direct(params);
+          if (typeof direct === 'function') {
+            result = await direct(params);
+          } else if (typeof direct?.execute === 'function') {
+            result = await direct.execute(params);
+          }
         } catch (error) {
-          console.warn('[ToolDispatcher] direct MCP tool failed', toolName, error);
+          logger.warn('direct MCP tool failed', { toolName, error });
           mcpError = error instanceof Error ? error.message : String(error);
         }
       }
 
       if (!result) {
         try {
-          result = await (window as any).callMcpTool?.(toolName, params);
+          result = await window.callMcpTool?.(toolName, params);
         } catch (error) {
-          console.warn('[ToolDispatcher] MCP tool call failed', toolName, error);
+          logger.warn('MCP tool call failed', { toolName, error });
           mcpError = error instanceof Error ? error.message : String(error);
         }
       }
 
-      if ((!result || result?.status === 'IGNORED') && toolName === 'exa') {
-        const q = String((params as any)?.query || '').trim();
+      const resultRecord = toRecord(result);
+      if ((!resultRecord || resultRecord.status === 'IGNORED') && toolName === 'exa') {
+        const q = String(params.query || '').trim();
         result = {
           status: 'STUB',
           results: [
@@ -389,12 +402,18 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
       }
 
       try {
-        console.log('[ToolDispatcher][mcp]', toolName, 'result:', JSON.stringify(result)?.slice(0, 2000));
+        logger.debug('mcp result', {
+          toolName,
+          preview: JSON.stringify(result)?.slice(0, 2000),
+        });
       } catch {}
 
       try {
         const durationMs = Math.max(0, Date.now() - startedAt);
-        const list = (result?.results || result?.items || result?.documents || []) as any[];
+        const observedResult = toRecord(result);
+        const listRaw =
+          observedResult?.results ?? observedResult?.items ?? observedResult?.documents ?? [];
+        const list = Array.isArray(listRaw) ? listRaw : [];
         const resultCount = Array.isArray(list) ? list.length : undefined;
         const eventType = mcpError ? 'mcp_error' : 'mcp_result';
         logJourneyEvent({
@@ -403,7 +422,7 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
           tool: toolName,
           durationMs,
           payload: {
-            status: result?.status ?? null,
+            status: observedResult?.status ?? null,
             resultCount,
             error: mcpError,
           },
@@ -412,12 +431,19 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
 
       if (toolName === 'exa') {
         try {
-          const queryText = String((params as any)?.query || '').trim();
-          const items = (result?.results || result?.items || result?.documents || []) as any[];
+          const queryText = String(params.query || '').trim();
+          const exaResult = toRecord(result);
+          const itemsRaw = exaResult?.results ?? exaResult?.items ?? exaResult?.documents ?? [];
+          const items = Array.isArray(itemsRaw) ? itemsRaw : [];
           const sourcesText = Array.isArray(items)
             ? items
                 .slice(0, 3)
-                .map((it: any) => it.title || it.url || it.snippet || it.text?.slice?.(0, 80))
+                .map((it) => {
+                  const itemRecord = toRecord(it);
+                  if (!itemRecord) return null;
+                  const textValue = typeof itemRecord.text === 'string' ? itemRecord.text : '';
+                  return itemRecord.title || itemRecord.url || itemRecord.snippet || textValue.slice(0, 80);
+                })
                 .filter(Boolean)
                 .join('; ')
             : '';
@@ -444,17 +470,17 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
                 source: 'tool:exa',
               });
             } catch (error) {
-              console.warn('[ToolDispatcher] exa-to-update_component synthesis failed', error);
+              logger.warn('exa-to-update_component synthesis failed', { error });
             }
           }
         } catch (error) {
-          console.warn('[ToolDispatcher] exa result reflection failed', error);
+          logger.warn('exa result reflection failed', { error });
         }
       }
 
-      return result ?? { status: 'IGNORED' };
+      return toToolRunResult(result);
     },
-    [],
+    [logger],
   );
 
   const activeCanvasDispatchRef = useRef<{
@@ -496,14 +522,24 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
 
         if (tool === 'tldraw_envelope') {
           try {
-            const env = (params as any)?.envelope || { actions: (params as any)?.actions };
-            if (env && (env.actions || (Array.isArray(env) && env.length))) {
-              const envelope = Array.isArray(env)
-                ? { v: 'tldraw-actions/1', sessionId: 'svr', seq: 0, actions: env, ts: Date.now() }
+            const paramsRecord = toRecord(params);
+            const rawEnvelope = paramsRecord?.envelope;
+            const rawActions = paramsRecord?.actions;
+            const env = rawEnvelope || (Array.isArray(rawActions) ? { actions: rawActions } : null);
+            if (env && (toRecord(env)?.actions || (Array.isArray(env) && env.length))) {
+              const envelopeCandidate = Array.isArray(env)
+                ? { v: ACTION_VERSION, sessionId: 'svr', seq: 0, actions: env, ts: Date.now() }
                 : env;
+              const parsedEnvelope = AgentActionEnvelopeSchema.safeParse(envelopeCandidate);
+              if (!parsedEnvelope.success) {
+                const message = `Invalid TLDraw envelope: ${parsedEnvelope.error.issues[0]?.message || 'schema mismatch'}`;
+                queue.markError(call.id, message);
+                emitError(call, message);
+                return { status: 'ERROR', message };
+              }
               const editor = getEditor();
               if (editor) {
-                applyEnvelope({ editor, isHost: true, appliedIds: new Set() }, envelope as any);
+                applyEnvelope({ editor, isHost: true, appliedIds: new Set() }, parsedEnvelope.data);
                 const result = { status: 'SUCCESS', message: 'Applied envelope' } as ToolRunResult;
                 queue.markComplete(call.id, result.message);
                 emitDone(call, result);
@@ -741,13 +777,21 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
               }
             }
           } catch (error) {
-            console.warn('[ToolDispatcher] youtube_search API failed', error);
+            logger.warn('youtube_search API failed', { error });
           }
 
           try {
-            const mcpResult = await (window as any).callMcpTool?.('searchVideos', { query });
-            const first = mcpResult?.videos?.[0] || mcpResult?.items?.[0] || null;
-            const videoId = first?.id || first?.videoId || first?.video_id || null;
+            const mcpResult = await window.callMcpTool?.('searchVideos', { query });
+            const mcpRecord = toRecord(mcpResult);
+            const videos = Array.isArray(mcpRecord?.videos) ? mcpRecord.videos : [];
+            const items = Array.isArray(mcpRecord?.items) ? mcpRecord.items : [];
+            const first = (videos[0] || items[0]) as unknown;
+            const firstRecord = toRecord(first);
+            const videoId =
+              (typeof firstRecord?.id === 'string' && firstRecord.id) ||
+              (typeof firstRecord?.videoId === 'string' && firstRecord.videoId) ||
+              (typeof firstRecord?.video_id === 'string' && firstRecord.video_id) ||
+              null;
             if (videoId) {
               const messageId = `ui-youtube-${Date.now()}`;
               window.dispatchEvent(
@@ -765,7 +809,7 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
               return result;
             }
           } catch (error) {
-            console.warn('[ToolDispatcher] youtube_search MCP failed', error);
+            logger.warn('youtube_search MCP failed', { error });
           }
           const result = { status: 'IGNORED', message: 'No YouTube result' };
           queue.markComplete(call.id, result.message);
@@ -785,33 +829,129 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
         return { status: 'ERROR', message };
       }
     },
-    [contextKey, dispatchTL, emitDone, emitError, emitRequest, emitEditorAction, log, queue, registry, runMcpTool, scheduleStewardRun, stewardEnabled, room?.name],
+    [contextKey, dispatchTL, emitDone, emitError, emitRequest, emitEditorAction, log, logger, queue, registry, runMcpTool, scheduleStewardRun, stewardEnabled, room?.name],
   );
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    const globalAny = window as any;
-    globalAny.__presentToolDispatcherExecute = executeToolCall;
+    window.__presentToolDispatcherExecute = executeToolCall;
     return () => {
-      if (globalAny.__presentToolDispatcherExecute === executeToolCall) {
-        delete globalAny.__presentToolDispatcherExecute;
+      if (window.__presentToolDispatcherExecute === executeToolCall) {
+        delete window.__presentToolDispatcherExecute;
       }
     };
   }, [executeToolCall]);
 
   useEffect(() => {
-    const offTool = bus.on('tool_call', (message: any) => {
+    const runStewardTrigger = async (parsed: StewardTriggerMessage) => {
+      if (!stewardEnabled) return;
+      window.__present_steward_active = true;
+      const roomName =
+        (typeof parsed.payload.room === 'string' && parsed.payload.room.trim()) ||
+        (typeof parsed.roomId === 'string' && parsed.roomId.trim()) ||
+        room?.name ||
+        '';
+      if (!roomName) {
+        log('steward trigger ignored: missing room');
+        return;
+      }
+
+      if (parsed.payload.kind === 'flowchart') {
+        let existingDocId =
+          typeof window.__present_mermaid_last_shape_id === 'string'
+            ? window.__present_mermaid_last_shape_id
+            : '';
+
+        if (!existingDocId) {
+          try {
+            const editor = getEditor();
+            const shapes = editor?.getCurrentPageShapes?.() ?? [];
+            for (let i = shapes.length - 1; i >= 0; i -= 1) {
+              const shape = shapes[i];
+              if (shape?.type === 'mermaid_stream' && typeof shape?.id === 'string') {
+                existingDocId = shape.id;
+                window.__present_mermaid_last_shape_id = shape.id;
+                break;
+              }
+            }
+          } catch (error) {
+            log('steward_run: failed to recover existing mermaid shape', error);
+          }
+        }
+
+        if (!existingDocId) {
+          await executeToolCall({
+            id: parsed.id || `${Date.now()}`,
+            type: 'tool_call',
+            payload: { tool: 'mermaid_create_stream', params: { text: 'graph TD;\nA-->B;' } },
+            timestamp: Date.now(),
+            source: 'dispatcher',
+            roomId: parsed.roomId,
+          });
+        }
+
+        const docId =
+          typeof window.__present_mermaid_last_shape_id === 'string'
+            ? window.__present_mermaid_last_shape_id
+            : '';
+        if (docId) {
+          scheduleStewardRun(roomName, docId);
+        } else {
+          window.setTimeout(() => {
+            const fallbackId = String(window.__present_mermaid_last_shape_id || '');
+            if (fallbackId) {
+              scheduleStewardRun(roomName, fallbackId);
+            }
+          }, 150);
+        }
+        return;
+      }
+
+      if (parsed.payload.kind === 'canvas') {
+        const intentSummary =
+          typeof parsed.payload.summary === 'string' && parsed.payload.summary.trim()
+            ? parsed.payload.summary.trim()
+            : typeof parsed.payload.reason === 'string'
+              ? parsed.payload.reason.trim()
+              : '';
+        const body = {
+          room: roomName,
+          task: 'canvas.draw',
+          params: {
+            room: roomName,
+            summary: intentSummary,
+          },
+          summary: intentSummary,
+        };
+        const res = await fetch('/api/steward/runCanvas', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        if (!res.ok) {
+          log('canvas steward request failed', { status: res.status });
+        }
+      }
+    };
+
+    const offTool = bus.on('tool_call', (message: unknown) => {
       try {
-        if (!message || message.type !== 'tool_call') return;
-        const tool = message.payload?.tool;
-        const params = message.payload?.params || {};
-        const callId = message.id || `${Date.now()}`;
+        const parsed = parseToolCallMessage(message);
+        if (!parsed) {
+          logger.debug('ignored non-tool_call payload', { message });
+          return;
+        }
+        const tool = parsed.payload.tool;
+        const params = parsed.payload.params || {};
+        const callId = parsed.id || `${Date.now()}`;
+        const context = toRecord(parsed.payload.context);
         if (metricsEnabled && typeof window !== 'undefined') {
           try {
-            const task = typeof params?.task === 'string' ? params.task : null;
+            const nestedParams = toRecord(params.params);
+            const task = typeof params.task === 'string' ? params.task : null;
             const dispatchMessage =
-              typeof params?.params?.message === 'string'
-                ? String(params.params.message).slice(0, 160)
+              typeof nestedParams?.message === 'string'
+                ? String(nestedParams.message).slice(0, 160)
                 : null;
             window.dispatchEvent(
               new CustomEvent('present:tool_call_received', {
@@ -821,17 +961,17 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
                   task,
                   dispatchMessage,
                   source:
-                    typeof message.payload?.context?.source === 'string'
-                      ? message.payload.context.source
-                      : typeof message.source === 'string'
-                        ? message.source
+                    typeof context?.source === 'string'
+                      ? context.source
+                      : typeof parsed.source === 'string'
+                        ? parsed.source
                         : null,
-                  roomId: typeof message.roomId === 'string' ? message.roomId : null,
+                  roomId: typeof parsed.roomId === 'string' ? parsed.roomId : null,
                   sentAt:
-                    typeof message.payload?.context?.timestamp === 'number'
-                      ? message.payload.context.timestamp
-                      : typeof message.timestamp === 'number'
-                        ? message.timestamp
+                    typeof context?.timestamp === 'number'
+                      ? context.timestamp
+                      : typeof parsed.timestamp === 'number'
+                        ? parsed.timestamp
                         : null,
                   receivedAt: Date.now(),
                 },
@@ -843,20 +983,17 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
           const existing = metricsByCallRef.current.get(callId);
           const next: ToolMetricEntry = existing ?? {
             callId,
-            tool: tool || existing?.tool || 'unknown',
-            messageIds: existing?.messageIds ?? new Set(),
-            metaByMessage: existing?.metaByMessage ?? new Map(),
-            loggedMessages: existing?.loggedMessages ?? new Set(),
+            tool: 'unknown',
+            messageIds: new Set(),
+            metaByMessage: new Map(),
+            loggedMessages: new Set(),
           };
           next.tool = tool || next.tool;
-          const contextTs =
-            typeof message.payload?.context?.timestamp === 'number'
-              ? message.payload.context.timestamp
-              : undefined;
+          const contextTs = typeof context?.timestamp === 'number' ? context.timestamp : undefined;
           if (contextTs !== undefined) {
             next.sendContextTs = contextTs;
           }
-          const generatedTs = typeof message.timestamp === 'number' ? message.timestamp : undefined;
+          const generatedTs = typeof parsed.timestamp === 'number' ? parsed.timestamp : undefined;
           if (generatedTs !== undefined) {
             next.sendGeneratedAt = generatedTs;
           }
@@ -869,124 +1006,77 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
           id: callId,
           type: 'tool_call',
           payload: { tool, params },
-          timestamp: message.timestamp || Date.now(),
+          timestamp: parsed.timestamp || Date.now(),
           source: 'dispatcher',
-          roomId: message.roomId,
-        } as ToolCall);
+          roomId: parsed.roomId,
+        });
       } catch (error) {
-        console.error('[ToolDispatcher] failed handling tool_call', error);
+        logger.error('failed handling tool_call', { error });
       }
     });
 
-    const offDecision = bus.on('decision', async (message: any) => {
+    const offStewardTrigger = bus.on('steward_trigger', (message: unknown) => {
+      const parsed = parseStewardTriggerMessage(message);
+      if (!parsed) {
+        logger.debug('ignored invalid steward_trigger payload', { message });
+        return;
+      }
+
+      void (async () => {
+        try {
+          await runStewardTrigger(parsed);
+        } catch (error) {
+          logger.error('failed handling steward_trigger', { error });
+        }
+      })();
+    });
+
+    const offDecision = bus.on('decision', async (message: unknown) => {
       try {
-        if (!message || message.type !== 'decision') return;
-        const decision = message.payload?.decision || {};
-        const originalText: string = message.payload?.originalText || '';
+        const parsed = parseDecisionMessage(message);
+        if (!parsed) {
+          logger.debug('ignored non-decision payload', { message });
+          return;
+        }
+        const decision = parsed.payload.decision || {};
+        const originalText = parsed.payload.originalText || '';
         log('received decision from data channel:', decision);
 
         const rawSummary = typeof decision.summary === 'string' ? decision.summary : '';
         const summary: string = String(rawSummary || originalText || '').toLowerCase();
-        const globalAny = window as any;
 
         if (stewardEnabled) {
-          const stewardSummary = rawSummary.trim();
-          // TODO: voice agent should emit explicit decision summaries for each steward instead of legacy fallback values.
-          if (decision.should_send && stewardSummary === 'steward_trigger') {
-            try {
-              globalAny.__present_steward_active = true;
-            } catch {}
-            const roomName = (typeof message.roomId === 'string' && message.roomId) || room?.name || '';
-            let existingDocId =
-              typeof globalAny.__present_mermaid_last_shape_id === 'string'
-                ? globalAny.__present_mermaid_last_shape_id
-                : '';
-
-            // Fallback: if the global tracker is missing (e.g. after reload), recover the latest mermaid shape
-            if (!existingDocId) {
-              try {
-                const editor = globalAny.__present?.tldrawEditor;
-                const shapes = editor?.getCurrentPageShapes?.() ?? [];
-                for (let i = shapes.length - 1; i >= 0; i -= 1) {
-                  const shape = shapes[i];
-                  if (shape?.type === 'mermaid_stream' && typeof shape?.id === 'string') {
-                    existingDocId = shape.id;
-                    globalAny.__present_mermaid_last_shape_id = shape.id;
-                    break;
-                  }
-                }
-              } catch (err) {
-                log('steward_run: failed to recover existing mermaid shape', err);
-              }
-            }
-
-            log('steward trigger decision received', {
-              room: roomName || 'unknown',
-              docId: existingDocId || 'pending',
-            });
-            if (!existingDocId) {
-              log('steward trigger creating mermaid stream shape');
-              await executeToolCall({
-                id: message.id || `${Date.now()}`,
-                type: 'tool_call',
-                payload: { tool: 'mermaid_create_stream', params: { text: 'graph TD;\nA-->B;' } },
-                timestamp: Date.now(),
-                source: 'dispatcher',
-                roomId: message.roomId,
-              } as ToolCall);
-            }
-            const docId =
-              typeof globalAny.__present_mermaid_last_shape_id === 'string'
-                ? globalAny.__present_mermaid_last_shape_id
-                : '';
-            if (roomName) {
-              if (docId) {
-                scheduleStewardRun(roomName, docId);
-              } else {
-                window.setTimeout(() => {
-                  try {
-                    const fallbackId = String((window as any).__present_mermaid_last_shape_id || '');
-                    if (fallbackId) {
-                      scheduleStewardRun(roomName, fallbackId);
-                    }
-                  } catch {}
-                }, 150);
-              }
-            }
+          const explicitTrigger = parseStewardTriggerMessage({
+            type: 'steward_trigger',
+            id: parsed.id,
+            roomId: parsed.roomId,
+            payload: parsed.payload.stewardTrigger,
+          });
+          if (explicitTrigger) {
+            await runStewardTrigger(explicitTrigger);
             return;
           }
-          if (decision.should_send && stewardSummary === 'steward_trigger_canvas') {
-            // TODO: Replace this heuristic-based steward trigger with an LLM-driven routing signal.
-            const roomName = (typeof message.roomId === 'string' && message.roomId) || room?.name || '';
-            if (!roomName) {
-              log('canvas steward trigger ignored: missing room');
+
+          if (decision.should_send) {
+            const legacySummary = rawSummary.trim().toLowerCase();
+            if (legacySummary === 'steward_trigger' || legacySummary === 'steward_trigger_canvas') {
+              const legacyTrigger: StewardTriggerMessage = {
+                type: 'steward_trigger',
+                id: parsed.id,
+                roomId: parsed.roomId,
+                payload: {
+                  kind: legacySummary === 'steward_trigger_canvas' ? 'canvas' : 'flowchart',
+                  room: parsed.roomId || room?.name,
+                  summary: originalText || rawSummary || undefined,
+                  reason: 'legacy_decision_summary_adapter',
+                },
+              };
+              logger.warn('using legacy decision summary steward adapter', {
+                summary: legacySummary,
+              });
+              await runStewardTrigger(legacyTrigger);
               return;
             }
-            const intentSummary = typeof originalText === 'string' && originalText.trim() ? originalText.trim() : summary;
-            log('canvas steward trigger received', { room: roomName, summary: intentSummary });
-            const body = {
-              room: roomName,
-              task: 'canvas.draw',
-              params: {
-                room: roomName,
-                summary: intentSummary,
-              },
-              summary: intentSummary,
-            };
-            try {
-              // TODO: move steward dispatch to a typed conductor task instead of direct fetch.
-              const res = await fetch('/api/steward/runCanvas', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(body),
-              });
-              if (!res.ok) {
-                log('canvas steward request failed', { status: res.status });
-              }
-            } catch (error) {
-              log('canvas steward request error', error);
-            }
-            return;
           }
           return;
         }
@@ -996,7 +1086,7 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
           const minutes = Math.max(1, Math.min(180, minutesParsed));
           log('synthesizing timer component', { minutes });
           await executeToolCall({
-            id: message.id || `${Date.now()}`,
+            id: parsed.id || `${Date.now()}`,
             type: 'tool_call',
             payload: {
               tool: 'create_component',
@@ -1004,54 +1094,54 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
             },
             timestamp: Date.now(),
             source: 'dispatcher',
-            roomId: message.roomId,
-          } as ToolCall);
+            roomId: parsed.roomId,
+          });
           return;
         }
 
         const isWeather = /\bweather\b|\bforecast\b/.test(summary);
         const wantsMermaid = /\bmermaid\b|\bflow\s*chart\b|\bdiagram\b/.test(summary);
-        const lastShapeId = globalAny.__present_mermaid_last_shape_id as string | undefined;
-        const session = (globalAny.__present_mermaid_session || {}) as { last?: string; text?: string };
-        const stewardActive = !!globalAny.__present_steward_active;
+        const lastShapeId = window.__present_mermaid_last_shape_id;
+        const session = window.__present_mermaid_session || {};
+        const stewardActive = !!window.__present_steward_active;
         const isDiagramFollowup = /\bdiagram\b|\bflow\s*chart\b|\bitinerary\b|\bmap out\b|\bprocess\b|\bsteps?\b/i.test(
           originalText || summary,
         );
         if (!stewardActive && lastShapeId && (isDiagramFollowup || wantsMermaid)) {
-          const sanitize = (s: string) =>
-            s
+          const sanitize = (value: string) =>
+            value
               .toLowerCase()
               .replace(/[^a-z0-9\s_-]/g, '')
               .trim()
               .split(/\s+/)
               .slice(0, 5)
               .join('_') || `step_${Date.now().toString(36)}`;
-          const current = session.text && typeof session.text === 'string' ? session.text : 'graph TD;';
-          const last = session.last && typeof session.last === 'string' ? session.last : 'Start';
+          const current = typeof session.text === 'string' ? session.text : 'graph TD;';
+          const last = typeof session.last === 'string' ? session.last : 'Start';
           const next = sanitize(originalText || summary);
           const line = `${last}-->${next}`;
           const merged = current.includes('graph') ? `${current} ${line};` : `graph TD; ${line};`;
-          globalAny.__present_mermaid_session = { last: next, text: merged };
+          window.__present_mermaid_session = { last: next, text: merged };
           await executeToolCall({
-            id: message.id || `${Date.now()}`,
+            id: parsed.id || `${Date.now()}`,
             type: 'tool_call',
             payload: { tool: 'mermaid_update_stream', params: { shapeId: lastShapeId, text: merged } },
             timestamp: Date.now(),
             source: 'dispatcher',
-            roomId: message.roomId,
-          } as ToolCall);
+            roomId: parsed.roomId,
+          });
           return;
         }
         if (!stewardActive && decision.should_send && wantsMermaid && !lastShapeId) {
           log('synthesizing mermaid stream shape');
           await executeToolCall({
-            id: message.id || `${Date.now()}`,
+            id: parsed.id || `${Date.now()}`,
             type: 'tool_call',
             payload: { tool: 'mermaid_create_stream', params: { text: 'graph TD; A-->B' } },
             timestamp: Date.now(),
             source: 'dispatcher',
-            roomId: message.roomId,
-          } as ToolCall);
+            roomId: parsed.roomId,
+          });
           return;
         }
         if (decision.should_send && isWeather) {
@@ -1059,7 +1149,7 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
           const location = locMatch ? locMatch[1].replace(/\s+on the canvas\b/i, '').trim() : undefined;
           log('synthesizing weather component', { location });
           await executeToolCall({
-            id: message.id || `${Date.now()}`,
+            id: parsed.id || `${Date.now()}`,
             type: 'tool_call',
             payload: {
               tool: 'create_component',
@@ -1067,30 +1157,28 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
             },
             timestamp: Date.now(),
             source: 'dispatcher',
-            roomId: message.roomId,
-          } as ToolCall);
+            roomId: parsed.roomId,
+          });
         }
       } catch (error) {
-        console.error('[ToolDispatcher] failed handling decision', error);
+        logger.error('failed handling decision', { error });
       }
     });
 
     return () => {
       offTool();
+      offStewardTrigger();
       offDecision();
     };
-  }, [bus, executeToolCall, log, room, scheduleStewardRun, stewardEnabled, metricsEnabled]);
+  }, [bus, executeToolCall, log, logger, room, scheduleStewardRun, stewardEnabled, metricsEnabled]);
 
   useEffect(() => {
     if (!stewardEnabled) return;
     const fallbackDebounce = new Map<string, number>();
     const resolveRoomNameFromWindow = (): string | undefined => {
       if (typeof window === 'undefined') return undefined;
-      const globalAny = window as any;
       const candidate: unknown =
-        globalAny?.__present?.livekitRoomName ??
-        globalAny?.__present_roomName ??
-        globalAny?.__present_canvas_room;
+        window.__present?.livekitRoomName ?? window.__present_roomName ?? window.__present_canvas_room;
       const name = typeof candidate === 'string' ? candidate.trim() : '';
       return name || undefined;
     };
@@ -1143,12 +1231,12 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
             try {
               stewardCompleteRef.current?.();
             } catch (err) {
-              console.warn('[ToolDispatcher] failed to flush steward pending state after fallback', err);
+              logger.warn('failed to flush steward pending state after fallback', { err });
             }
           }, 1500);
         }
       } catch (error) {
-        console.warn('[ToolDispatcher] failed to process flowchart fallback event', error);
+        logger.warn('failed to process flowchart fallback event', { error });
       }
     };
 
@@ -1163,25 +1251,24 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
         slowReleaseTimerRef.current = null;
       }
     };
-  }, [log, room, stewardEnabled, triggerStewardRun]);
+  }, [log, logger, room, stewardEnabled, triggerStewardRun]);
 
   useEffect(() => {
-    const globalAny = window as any;
-    globalAny.__custom_tool_dispatcher = {
-      executeMCPTool: async (tool: string, params: any) => {
+    window.__custom_tool_dispatcher = {
+      executeMCPTool: async (tool: string, params: Record<string, unknown>) => {
         return executeToolCall({
           id: crypto.randomUUID?.() || String(Date.now()),
           type: 'tool_call',
           payload: { tool, params },
           timestamp: Date.now(),
           source: 'bridge',
-        } as ToolCall);
+        });
       },
     };
 
     return () => {
-      if (globalAny.__custom_tool_dispatcher?.executeMCPTool) {
-        delete globalAny.__custom_tool_dispatcher;
+      if (window.__custom_tool_dispatcher?.executeMCPTool) {
+        delete window.__custom_tool_dispatcher;
       }
     };
   }, [executeToolCall]);
@@ -1191,7 +1278,7 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
 
 function getEditor(): Editor | null {
   if (typeof window === 'undefined') return null;
-  const editor = (window as any).__present?.tldrawEditor as Editor | undefined;
+  const editor = window.__present?.tldrawEditor;
   return editor ?? null;
 }
 
@@ -1199,4 +1286,17 @@ function parseMinutesFromText(text: string): number | undefined {
   const match = text.match(/\b(?:for\s+)?(\d{1,3})\s*(?:minute|minutes|mins|min|m)\b/);
   if (!match) return undefined;
   return Number(match[1]);
+}
+
+function toRecord(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  return value as Record<string, unknown>;
+}
+
+function toToolRunResult(value: unknown): ToolRunResult {
+  const record = toRecord(value);
+  if (record && typeof record.status === 'string') {
+    return record as ToolRunResult;
+  }
+  return { status: 'IGNORED' };
 }

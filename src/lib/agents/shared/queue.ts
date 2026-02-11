@@ -1,6 +1,7 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { randomUUID } from 'crypto';
 import type { JsonObject } from '@/lib/utils/json-schema';
+import { createLogger } from '@/lib/logging';
 
 export type AgentTaskStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'canceled';
 
@@ -56,6 +57,8 @@ function createSupabaseClient(options?: QueueClientOptions): SupabaseClient {
   return createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
 }
 
+const logger = createLogger('agents:queue');
+
 export class AgentTaskQueue {
   private readonly supabase: SupabaseClient;
 
@@ -79,8 +82,7 @@ export class AgentTaskQueue {
 
     const resourceKeySet = new Set(resourceKeys.length ? resourceKeys : [`room:${room}`]);
 
-    // TEMP instrumentation to trace steward enqueue issues.
-    console.debug('[AgentTaskQueue][debug] enqueueTask', {
+    logger.debug('enqueueTask', {
       room,
       task,
       requestId,
@@ -108,14 +110,14 @@ export class AgentTaskQueue {
 
     if (error) {
       if (error.code === '23505') {
-        console.debug('[AgentTaskQueue][debug] enqueueTask dedupe hit', { room, task, requestId });
+        logger.debug('enqueueTask dedupe hit', { room, task, requestId });
         return null; // idempotent duplicate
       }
-      console.error('[AgentTaskQueue][debug] enqueueTask error', { room, task, error });
+      logger.error('enqueueTask failed', { room, task, error });
       throw error;
     }
 
-    console.debug('[AgentTaskQueue][debug] enqueueTask inserted', { id: data?.id, room, task });
+    logger.debug('enqueueTask inserted', { id: data?.id, room, task });
 
     return data;
   }
