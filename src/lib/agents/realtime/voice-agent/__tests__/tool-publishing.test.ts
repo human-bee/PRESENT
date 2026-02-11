@@ -103,4 +103,20 @@ describe('voice-agent tool publishing helpers', () => {
     expect(secondDrain).toBe(true);
     expect(queue).toHaveLength(0);
   });
+
+  it('does not drain queue while disconnected and preserves entries for reconnect', async () => {
+    const queue = [{ event: buildToolEvent('dispatch_to_conductor', {}, 'room-a'), reliable: true }];
+    const publish = jest.fn(async () => true);
+
+    const drained = await flushPendingToolCallQueue({
+      queue,
+      isConnected: false,
+      publish,
+    });
+
+    expect(drained).toBe(false);
+    expect(publish).not.toHaveBeenCalled();
+    expect(queue).toHaveLength(1);
+    expect(queue[0]?.event.payload.tool).toBe('dispatch_to_conductor');
+  });
 });

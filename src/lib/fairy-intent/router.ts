@@ -114,7 +114,8 @@ export async function routeFairyIntent(intent: FairyIntent): Promise<FairyRouteD
       if (!parsedArgs.ok) {
         console.warn('[FairyRouter] failed to parse route_intent arguments', {
           error: parsedArgs.error,
-          raw: parsedArgs.raw,
+          rawLength: parsedArgs.raw.length,
+          rawPreview: parsedArgs.raw.slice(0, 240),
         });
       }
       const args = parsedArgs.ok ? parsedArgs.args : {};
