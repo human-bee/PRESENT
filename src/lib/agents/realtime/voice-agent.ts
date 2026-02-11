@@ -770,9 +770,6 @@ Your only output is function calls. Never use plain text unless absolutely neces
       if (entry.room && entry.room !== key) return undefined;
       return entry;
     };
-    const setComponentEntry = (id: string, entry: ComponentRegistryEntry) => {
-      componentRegistry.set(id, entry);
-    };
     const pruneRemovedComponentState = (resolvedId: string, typeHint?: string) => {
       const existing = getComponentEntry(resolvedId);
       const normalizedTypeHint =
