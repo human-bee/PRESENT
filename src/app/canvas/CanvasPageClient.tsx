@@ -17,7 +17,7 @@ import {
 import { EnhancedMcpProvider } from '@/components/ui/mcp/enhanced-mcp-provider';
 import { Room, ConnectionState, RoomEvent, VideoPresets, RoomOptions } from 'livekit-client';
 import { RoomContext } from '@livekit/components-react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/hooks/use-auth';
 import { RoomScopedProviders } from '@/components/RoomScopedProviders';
 import { ToolDispatcher } from '@/components/tool-dispatcher';
@@ -50,6 +50,7 @@ export function CanvasPageClient() {
   // Authentication check
   const { user, loading } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const bypassAuth = getBooleanFlag(process.env.NEXT_PUBLIC_CANVAS_DEV_BYPASS, false);
   const demoMode = getBooleanFlag(process.env.NEXT_PUBLIC_CANVAS_DEMO_MODE, false);
   // Track resolved canvas id and room name; do not render until resolved
@@ -174,6 +175,9 @@ export function CanvasPageClient() {
         try {
           localStorage.removeItem('present:lastCanvasId');
         } catch { }
+        // Clear UI state immediately so the old room doesn't keep running while we spin up a new canvas.
+        setCanvasId(null);
+        setRoomName('');
         url.searchParams.delete('id');
         url.searchParams.delete('room');
         url.searchParams.delete('fresh');
@@ -391,7 +395,14 @@ export function CanvasPageClient() {
     };
     window.addEventListener('present:canvas-id-changed', handleCanvasIdChanged);
     return () => window.removeEventListener('present:canvas-id-changed', handleCanvasIdChanged);
-  }, [user, bypassAuth]);
+  }, [
+    user,
+    bypassAuth,
+    joinParityCanvas,
+    // Re-run whenever Next navigation updates the querystring (e.g. /canvas?fresh=1).
+    // Avoid depending on the object identity.
+    searchParams?.toString(),
+  ]);
 
   // Transcript panel state
   const [isTranscriptOpen, setIsTranscriptOpen] = useState(false);
