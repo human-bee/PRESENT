@@ -53,6 +53,7 @@ export function CanvasPageClient() {
   const searchParams = useSearchParams();
   const bypassAuth = getBooleanFlag(process.env.NEXT_PUBLIC_CANVAS_DEV_BYPASS, false);
   const demoMode = getBooleanFlag(process.env.NEXT_PUBLIC_CANVAS_DEMO_MODE, false);
+  const searchParamsKey = searchParams?.toString() ?? '';
   // Track resolved canvas id and room name; do not render until resolved
   const [, setCanvasId] = useState<string | null>(null);
   const [roomName, setRoomName] = useState<string>('');
@@ -395,14 +396,7 @@ export function CanvasPageClient() {
     };
     window.addEventListener('present:canvas-id-changed', handleCanvasIdChanged);
     return () => window.removeEventListener('present:canvas-id-changed', handleCanvasIdChanged);
-  }, [
-    user,
-    bypassAuth,
-    joinParityCanvas,
-    // Re-run whenever Next navigation updates the querystring (e.g. /canvas?fresh=1).
-    // Avoid depending on the object identity.
-    searchParams?.toString(),
-  ]);
+  }, [user, bypassAuth, joinParityCanvas, searchParamsKey]);
 
   // Transcript panel state
   const [isTranscriptOpen, setIsTranscriptOpen] = useState(false);
