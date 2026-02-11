@@ -2,9 +2,27 @@ import { NextResponse } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 
+type RouteParams = { [key: string]: string | string[] | undefined };
+
+const getCanvasIdFromParams = (params: RouteParams): string | null => {
+  const raw = params.id;
+  if (typeof raw !== 'string') return null;
+  const trimmed = raw.trim();
+  return trimmed ? trimmed : null;
+};
+
 // GET /api/canvas/[id] - Get a specific canvas
-export async function GET(_request: Request, { params }: { params: { id: string } }) {
+export async function GET(
+  _request: Request,
+  { params }: { params: Promise<RouteParams> },
+) {
   try {
+    const resolvedParams = await params;
+    const canvasId = getCanvasIdFromParams(resolvedParams);
+    if (!canvasId) {
+      return NextResponse.json({ error: 'Invalid canvas id' }, { status: 400 });
+    }
+
     const cookieStore = await cookies();
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -35,7 +53,7 @@ export async function GET(_request: Request, { params }: { params: { id: string 
     const { data: canvas, error } = await supabase
       .from('canvases')
       .select('*')
-      .eq('id', params.id)
+      .eq('id', canvasId)
       .eq('user_id', session.user.id)
       .single();
 
@@ -51,8 +69,17 @@ export async function GET(_request: Request, { params }: { params: { id: string 
 }
 
 // PUT /api/canvas/[id] - Update a canvas
-export async function PUT(request: Request, { params }: { params: { id: string } }) {
+export async function PUT(
+  request: Request,
+  { params }: { params: Promise<RouteParams> },
+) {
   try {
+    const resolvedParams = await params;
+    const canvasId = getCanvasIdFromParams(resolvedParams);
+    if (!canvasId) {
+      return NextResponse.json({ error: 'Invalid canvas id' }, { status: 400 });
+    }
+
     const cookieStore = await cookies();
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -86,7 +113,7 @@ export async function PUT(request: Request, { params }: { params: { id: string }
     const { data: existingCanvas } = await supabase
       .from('canvases')
       .select('id')
-      .eq('id', params.id)
+      .eq('id', canvasId)
       .eq('user_id', session.user.id)
       .single();
 
@@ -94,7 +121,7 @@ export async function PUT(request: Request, { params }: { params: { id: string }
       return NextResponse.json({ error: 'Canvas not found' }, { status: 404 });
     }
 
-    const updateData: any = {
+    const updateData: Record<string, unknown> = {
       last_modified: new Date().toISOString(),
     };
 
@@ -107,7 +134,7 @@ export async function PUT(request: Request, { params }: { params: { id: string }
     const { data: updatedCanvas, error } = await supabase
       .from('canvases')
       .update(updateData)
-      .eq('id', params.id)
+      .eq('id', canvasId)
       .select()
       .single();
 
@@ -124,8 +151,17 @@ export async function PUT(request: Request, { params }: { params: { id: string }
 }
 
 // DELETE /api/canvas/[id] - Delete a canvas
-export async function DELETE(_request: Request, { params }: { params: { id: string } }) {
+export async function DELETE(
+  _request: Request,
+  { params }: { params: Promise<RouteParams> },
+) {
   try {
+    const resolvedParams = await params;
+    const canvasId = getCanvasIdFromParams(resolvedParams);
+    if (!canvasId) {
+      return NextResponse.json({ error: 'Invalid canvas id' }, { status: 400 });
+    }
+
     const cookieStore = await cookies();
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -157,7 +193,7 @@ export async function DELETE(_request: Request, { params }: { params: { id: stri
     const { data: existingCanvas } = await supabase
       .from('canvases')
       .select('id')
-      .eq('id', params.id)
+      .eq('id', canvasId)
       .eq('user_id', session.user.id)
       .single();
 
@@ -165,7 +201,7 @@ export async function DELETE(_request: Request, { params }: { params: { id: stri
       return NextResponse.json({ error: 'Canvas not found' }, { status: 404 });
     }
 
-    const { error } = await supabase.from('canvases').delete().eq('id', params.id);
+    const { error } = await supabase.from('canvases').delete().eq('id', canvasId);
 
     if (error) {
       console.error('Error deleting canvas:', error);

@@ -1,18 +1,20 @@
 import { useEffect, useRef } from 'react';
-import type { Editor } from 'tldraw';
+import type { Editor, TLShapeId } from 'tldraw';
 import React from 'react';
 
 import { components } from '@/lib/custom';
 import { ComponentRegistry } from '@/lib/component-registry';
 
-import type { customShape as CustomShape } from '../tldraw-canvas';
+import type { customShape as CustomShape } from '@/components/ui/tldraw/tldraw-canvas';
 import type { CanvasLogger } from './useCanvasComponentStore';
 import type { MutableRefObject } from 'react';
 
 interface RehydrationParams {
   editor: Editor | null;
   componentStore: MutableRefObject<Map<string, React.ReactNode>>;
-  setMessageIdToShapeIdMap: (updater: (prev: Map<string, string>) => Map<string, string>) => void;
+  setMessageIdToShapeIdMap: (
+    updater: (prev: Map<string, TLShapeId>) => Map<string, TLShapeId>,
+  ) => void;
   setAddedMessageIds: (updater: (prev: Set<string>) => Set<string>) => void;
   logger: CanvasLogger;
 }
@@ -48,7 +50,7 @@ export function useCanvasRehydration({
 
       const shapeSignature = customShapes
         .map((shape) => {
-          const props = shape.props as Record<string, unknown>;
+          const props = shape.props as unknown as Record<string, unknown>;
           const componentId =
             typeof props?.customComponent === 'string' ? (props.customComponent as string) : 'unknown';
           const shapeUpdatedAt = typeof props?.updatedAt === 'number' ? (props.updatedAt as number) : 0;

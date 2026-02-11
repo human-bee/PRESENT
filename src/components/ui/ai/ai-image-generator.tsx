@@ -123,7 +123,11 @@ type AIImageGeneratorState = {
 };
 
 // Image style definitions
-const imageStyles = [
+const imageStyles: Array<{
+  label: string;
+  value: NonNullable<AIImageGeneratorProps['style']>;
+  prompt: string;
+}> = [
   {
     label: 'Pop Art',
     value: 'pop-art',
@@ -220,7 +224,6 @@ export function AIImageGenerator({
 
   const [state, setState] = useState<AIImageGeneratorState>({
     currentImageIndex: 0,
-    id: 'asdf',
     isExpanded: false,
     showStyleSelector: false,
     generationHistory: [],
@@ -467,7 +470,7 @@ export function AIImageGenerator({
   }, [refetch]);
 
   const handleStyleSelect = useCallback(
-    (styleValue: string) => {
+    (styleValue: NonNullable<AIImageGeneratorProps['style']>) => {
       setLocalStyle(styleValue === localStyle ? undefined : styleValue);
       setState((prev) => (prev ? { ...prev, showStyleSelector: false } : prev));
     },

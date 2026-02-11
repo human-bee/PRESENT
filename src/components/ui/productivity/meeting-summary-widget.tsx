@@ -35,7 +35,7 @@ export function MeetingSummaryWidget(props: MeetingSummaryWidgetProps) {
     ...initial
   } = props;
 
-  const fallbackIdRef = useRef<string>();
+  const fallbackIdRef = useRef<string | null>(null);
   if (!fallbackIdRef.current) {
     fallbackIdRef.current = `meeting-summary-${crypto.randomUUID()}`;
   }

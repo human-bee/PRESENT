@@ -155,8 +155,13 @@ const ParticipantControls: React.FC<ParticipantControlsProps> = ({
   isPinned,
 }) => {
   const [showControls, setShowControls] = React.useState(false);
-  const isMuted = useIsMuted(Track.Source.Microphone, participant);
-  const connectionQuality = useConnectionQualityIndicator(participant);
+  // `useIsMuted` typings in @livekit/components-react only expose the trackRef overload.
+  const micTrackRef = React.useMemo(
+    () => ({ participant, source: Track.Source.Microphone }),
+    [participant],
+  );
+  const isMuted = useIsMuted(micTrackRef as any);
+  const { quality: connectionQuality } = useConnectionQualityIndicator({ participant });
 
   return (
     <div
@@ -243,7 +248,14 @@ export function LivekitToolbar({
   compactMode = false,
   showConnectionStatus = true,
   showParticipantList = true,
-  features = {},
+  features = {
+    recording: true,
+    screenShare: true,
+    chat: true,
+    handRaise: true,
+    backgroundBlur: true,
+    aiAssistant: true,
+  },
 }: LivekitToolbarProps) {
   const componentId = `livekit-toolbar-${roomName || 'default'}`;
 
@@ -255,12 +267,12 @@ export function LivekitToolbar({
   const room = useRoomContext();
   const { localParticipant } = useLocalParticipant();
   const participants = useParticipants();
-  const connectionQuality = useConnectionQualityIndicator(localParticipant);
+  const { quality: connectionQuality } = useConnectionQualityIndicator({ participant: localParticipant });
 
   // Media controls with real LiveKit integration - always call hooks
-  const micToggle = useTrackToggle(Track.Source.Microphone);
-  const cameraToggle = useTrackToggle(Track.Source.Camera);
-  const screenShareToggle = useTrackToggle(Track.Source.ScreenShare);
+  const micToggle = useTrackToggle({ source: Track.Source.Microphone });
+  const cameraToggle = useTrackToggle({ source: Track.Source.Camera });
+  const screenShareToggle = useTrackToggle({ source: Track.Source.ScreenShare });
 
   // Local state management
   const [state, setState] = React.useState<LivekitToolbarState>({
@@ -277,7 +289,7 @@ export function LivekitToolbar({
     assistantState: 'idle',
     lastVoiceCommand: null,
     connectionIssues: {},
-    networkQuality: connectionQuality || ConnectionQuality.Unknown,
+    networkQuality: connectionQuality ?? ConnectionQuality.Unknown,
     canvasPosition: { x: 0, y: 0 },
     canvasSize: { width: 800, height: 60 },
     isCanvasFocused: false,
@@ -296,9 +308,12 @@ export function LivekitToolbar({
     if (!state) return;
 
     try {
+      const roomAny = room as any;
       if (!state.isRecording) {
         // Start recording via room API
-        await room?.startRecording?.();
+        if (typeof roomAny?.startRecording === 'function') {
+          await roomAny.startRecording();
+        }
         setState({
           ...state,
           isRecording: true,
@@ -306,7 +321,9 @@ export function LivekitToolbar({
         });
       } else {
         // Stop recording
-        await room?.stopRecording?.();
+        if (typeof roomAny?.stopRecording === 'function') {
+          await roomAny.stopRecording();
+        }
         setState({
           ...state,
           isRecording: false,
@@ -482,7 +499,10 @@ export function LivekitToolbar({
 
     try {
       // Implement kick functionality through room API
-      await room?.removeParticipant?.(participantId);
+      const roomAny = room as any;
+      if (typeof roomAny?.removeParticipant === 'function') {
+        await roomAny.removeParticipant(participantId);
+      }
     } catch (error) {
       console.error('Failed to kick participant:', error);
     }
@@ -534,7 +554,9 @@ export function LivekitToolbar({
         {/* Essential Media Controls */}
         <div className="flex items-center gap-1">
           <button
-            onClick={toggleMic}
+            onClick={() => {
+              void toggleMic();
+            }}
             className={cn(
               'flex items-center justify-center w-9 h-9 rounded-lg transition-all duration-200',
               micEnabled
@@ -546,7 +568,9 @@ export function LivekitToolbar({
           </button>
 
           <button
-            onClick={toggleCamera}
+            onClick={() => {
+              void toggleCamera();
+            }}
             className={cn(
               'flex items-center justify-center w-9 h-9 rounded-lg transition-all duration-200',
               cameraEnabled
@@ -559,7 +583,9 @@ export function LivekitToolbar({
 
           {features.screenShare && (
             <button
-              onClick={toggleScreenShare}
+              onClick={() => {
+                void toggleScreenShare();
+              }}
               className={cn(
                 'flex items-center justify-center w-9 h-9 rounded-lg transition-all duration-200',
                 screenShareEnabled

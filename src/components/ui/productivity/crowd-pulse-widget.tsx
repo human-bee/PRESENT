@@ -29,7 +29,7 @@ export default function CrowdPulseWidget(props: CrowdPulseWidgetProps) {
     ...initial
   } = props;
 
-  const fallbackIdRef = useRef<string>();
+  const fallbackIdRef = useRef<string | null>(null);
   if (!fallbackIdRef.current) {
     fallbackIdRef.current = `crowd-pulse-${crypto.randomUUID()}`;
   }

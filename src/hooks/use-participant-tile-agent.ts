@@ -77,9 +77,9 @@ export function useParticipantTileAgent(ctx: ParticipantTileAgentContext): {
   );
 
   // Local toggles
-  const micToggle = useTrackToggle(Track.Source.Microphone);
-  const cameraToggle = useTrackToggle(Track.Source.Camera);
-  const screenToggle = useTrackToggle(Track.Source.ScreenShare);
+  const micToggle = useTrackToggle({ source: Track.Source.Microphone });
+  const cameraToggle = useTrackToggle({ source: Track.Source.Camera });
+  const screenToggle = useTrackToggle({ source: Track.Source.ScreenShare });
 
   // Debounced speaking state to reduce jitter
   const [speaking, setSpeaking] = React.useState(false);
@@ -145,7 +145,7 @@ export function useParticipantTileAgent(ctx: ParticipantTileAgentContext): {
 
   const events: ParticipantTileAgentEvents = {
     async toggleMic() {
-      if (!ctx.isLocal) return;
+      if (!ctx.isLocal) return audioEnabledGuess;
       try {
         // Prefer direct LiveKit API for reliability
         const currentlyMuted = !audioEnabledGuess;
@@ -160,11 +160,11 @@ export function useParticipantTileAgent(ctx: ParticipantTileAgentContext): {
           return !currentlyMuted;
         }
       } catch {
-        return !audioEnabledGuess;
+        return audioEnabledGuess;
       }
     },
     async toggleCamera() {
-      if (!ctx.isLocal) return;
+      if (!ctx.isLocal) return videoEnabledGuess;
       try {
         const currentlyMuted = !videoEnabledGuess;
         if (
@@ -178,21 +178,19 @@ export function useParticipantTileAgent(ctx: ParticipantTileAgentContext): {
           return !currentlyMuted;
         }
       } catch {
-        return !videoEnabledGuess;
+        return videoEnabledGuess;
       }
     },
     async toggleScreenShare() {
-      if (!ctx.isLocal) return;
+      if (!ctx.isLocal) return state.screenSharing;
       try {
         const isActive = !!screenPub && !screenPub.isMuted;
         // Some SDKs expose direct control on localParticipant
         // Fallback to hook toggle if not available
-        // @ts-expect-error optional API
         if (
           room?.localParticipant &&
           typeof (room.localParticipant as any).setScreenShareEnabled === 'function'
         ) {
-          // @ts-expect-error optional API
           await (room.localParticipant as any).setScreenShareEnabled(!isActive);
           return !isActive;
         } else {
@@ -208,7 +206,6 @@ export function useParticipantTileAgent(ctx: ParticipantTileAgentContext): {
       // We keep state for UI and try to adjust subscription profile if available.
       setPublishQuality(level);
       try {
-        // @ts-expect-error: some SDKs expose setDefaultSubscriptionProfile
         if (room && typeof (room as any).setDefaultSubscriptionProfile === 'function') {
           const profile = level === 'high' ? 'high' : level === 'low' ? 'low' : 'balanced';
           await (room as any).setDefaultSubscriptionProfile(profile);

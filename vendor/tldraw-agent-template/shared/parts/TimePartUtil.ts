@@ -1,7 +1,7 @@
 import { BasePromptPart } from '../types/BasePromptPart'
 import { PromptPartUtil } from './PromptPartUtil'
 
-interface TimePart extends BasePromptPart<'time'> {
+export interface TimePart extends BasePromptPart<'time'> {
 	time: string
 }
 

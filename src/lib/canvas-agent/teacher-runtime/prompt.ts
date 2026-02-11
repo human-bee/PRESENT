@@ -101,7 +101,7 @@ export function buildTeacherPrompt(context: TeacherPromptContext): AgentPrompt {
     } satisfies ContextItemsPart,
     data: {
       type: 'data',
-      data: context.promptBudget ? [context.promptBudget] : [],
+      data: context.promptBudget ? [context.promptBudget as any] : [],
     } satisfies DataPart,
     time: {
       type: 'time',

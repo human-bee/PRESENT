@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Room, RoomEvent, RemoteTrack } from 'livekit-client';
 import { createLiveKitBus } from '../lib/livekit/livekit-bus';
 
@@ -18,7 +18,7 @@ interface LiveTranscriptionProps {
 export function LiveTranscription({ room, onTranscription }: LiveTranscriptionProps) {
   const [isProcessing] = useState(false);
   const [status, setStatus] = useState<string>('Waiting for room connection...');
-  const bus = React.useMemo(() => createLiveKitBus(room), [room]);
+  const bus = useMemo(() => createLiveKitBus(room), [room]);
   const linesRef = useRef<number>(0);
 
   useEffect(() => {

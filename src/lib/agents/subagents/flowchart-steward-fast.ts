@@ -1,5 +1,6 @@
 import { getCerebrasClient, getModelForSteward, isFastStewardReady } from '../fast-steward-config';
 import { getFlowchartDoc, getTranscriptWindow, commitFlowchartDoc, getContextDocuments, formatContextDocuments } from '../shared/supabase-context';
+import { extractFirstToolCall, parseToolArgumentsResult } from './fast-steward-response';
 
 const CEREBRAS_MODEL = getModelForSteward('FLOWCHART_STEWARD_FAST_MODEL');
 
@@ -138,33 +139,44 @@ export async function runFlowchartStewardFast(params: {
       tool_choice: 'auto',
     });
 
-    const choice = response.choices[0]?.message;
-
-    if (choice?.tool_calls?.[0]) {
-      const toolCall = choice.tool_calls[0];
-      if (toolCall.function.name === 'commit_flowchart') {
-        const args = JSON.parse(toolCall.function.arguments);
-
-        const committed = await commitFlowchartDoc(room, docId, {
-          doc: args.doc,
-          format: args.format || 'mermaid',
-          prevVersion: args.prevVersion,
-        });
-
-        logFastMetric('agent.run.complete', {
+    const toolCall = extractFirstToolCall(response);
+    if (toolCall?.name === 'commit_flowchart') {
+      const argsResult = parseToolArgumentsResult(toolCall.argumentsRaw);
+      if (!argsResult.ok) {
+        console.warn('[FlowchartStewardFast] Invalid tool arguments', {
+          reason: argsResult.error,
           room,
           docId,
-          newVersion: committed.version,
-          durationMs: Date.now() - overallStart,
         });
-
-        return {
-          status: 'ok',
-          doc: args.doc,
-          rationale: args.rationale,
-          version: committed.version,
-        };
+        return { status: 'no_change' };
       }
+      const args = argsResult.args;
+      const doc = typeof args.doc === 'string' ? args.doc : '';
+      if (!doc.trim()) {
+        console.warn('[FlowchartStewardFast] Missing doc in commit_flowchart', { room, docId });
+        return { status: 'no_change' };
+      }
+
+      const committed = await commitFlowchartDoc(room, docId, {
+        doc,
+        format: args.format === 'markdown' || args.format === 'streamdown' ? args.format : 'mermaid',
+        prevVersion: typeof args.prevVersion === 'number' ? args.prevVersion : undefined,
+        rationale: typeof args.rationale === 'string' ? args.rationale : undefined,
+      });
+
+      logFastMetric('agent.run.complete', {
+        room,
+        docId,
+        newVersion: committed.version,
+        durationMs: Date.now() - overallStart,
+      });
+
+      return {
+        status: 'ok',
+        doc,
+        rationale: typeof args.rationale === 'string' ? args.rationale : undefined,
+        version: committed.version,
+      };
     }
 
     logFastMetric('agent.run.no_change', { room, docId });
@@ -223,32 +235,43 @@ export async function runFlowchartInstruction(params: {
       tool_choice: 'auto',
     });
 
-    const choice = response.choices[0]?.message;
-
-    if (choice?.tool_calls?.[0]) {
-      const toolCall = choice.tool_calls[0];
-      if (toolCall.function.name === 'commit_flowchart') {
-        const args = JSON.parse(toolCall.function.arguments);
-
-        const committed = await commitFlowchartDoc(room, docId, {
-          doc: args.doc,
-          format: args.format || 'mermaid',
-          prevVersion: args.prevVersion ?? currentVersion,
-        });
-
-        logFastMetric('instruction.run.complete', {
+    const toolCall = extractFirstToolCall(response);
+    if (toolCall?.name === 'commit_flowchart') {
+      const argsResult = parseToolArgumentsResult(toolCall.argumentsRaw);
+      if (!argsResult.ok) {
+        console.warn('[FlowchartInstruction] Invalid tool arguments', {
+          reason: argsResult.error,
           room,
           docId,
-          newVersion: committed.version,
         });
-
-        return {
-          status: 'ok',
-          doc: args.doc,
-          rationale: args.rationale,
-          version: committed.version,
-        };
+        return { status: 'no_change' };
       }
+      const args = argsResult.args;
+      const doc = typeof args.doc === 'string' ? args.doc : '';
+      if (!doc.trim()) {
+        console.warn('[FlowchartInstruction] Missing doc in commit_flowchart', { room, docId });
+        return { status: 'no_change' };
+      }
+
+      const committed = await commitFlowchartDoc(room, docId, {
+        doc,
+        format: args.format === 'markdown' || args.format === 'streamdown' ? args.format : 'mermaid',
+        prevVersion: typeof args.prevVersion === 'number' ? args.prevVersion : currentVersion,
+        rationale: typeof args.rationale === 'string' ? args.rationale : undefined,
+      });
+
+      logFastMetric('instruction.run.complete', {
+        room,
+        docId,
+        newVersion: committed.version,
+      });
+
+      return {
+        status: 'ok',
+        doc,
+        rationale: typeof args.rationale === 'string' ? args.rationale : undefined,
+        version: committed.version,
+      };
     }
 
     return { status: 'no_change' };

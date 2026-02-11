@@ -12,8 +12,8 @@ export function useLocalMediaControls(
   videoMuted: boolean,
 ) {
   const room = useRoomContext();
-  const micToggle = useTrackToggle(Track.Source.Microphone);
-  const cameraToggle = useTrackToggle(Track.Source.Camera);
+  const micToggle = useTrackToggle({ source: Track.Source.Microphone });
+  const cameraToggle = useTrackToggle({ source: Track.Source.Camera });
 
   const toggleLocalMicrophone = React.useCallback(async () => {
     if (!isLocal) return;

@@ -40,7 +40,7 @@ export const researchResultSchema = z.object({
       url: z.string().optional().describe('URL to the original source'),
       credibility: z.enum(['high', 'medium', 'low']).describe('Credibility rating of the source'),
       type: z
-        .enum(['news', 'academic', 'wiki', 'blog', 'social', 'government', 'other'])
+        .enum(['news', 'academic', 'wiki', 'blog', 'social', 'government', 'video', 'other'])
         .describe('Type of source'),
     })
     .describe('Source information and metadata'),
@@ -159,7 +159,7 @@ export function ResearchPanel(props: ResearchPanelHostProps) {
   const maxResults = panelProps.maxResults ?? 10;
   const showCredibilityFilter = panelProps.showCredibilityFilter ?? true;
 
-  const fallbackMessageIdRef = useRef<string>();
+  const fallbackMessageIdRef = useRef<string | null>(null);
   if (!fallbackMessageIdRef.current) {
     fallbackMessageIdRef.current = `research-panel-${crypto.randomUUID()}`;
   }

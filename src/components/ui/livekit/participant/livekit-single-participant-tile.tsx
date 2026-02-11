@@ -3,6 +3,7 @@
 import * as React from 'react';
 import { cn } from '@/lib/utils';
 import { AudioTrack, useRoomContext } from '@livekit/components-react';
+import { isTrackReference } from '@livekit/components-core';
 import { useParticipantTileAgent } from '@/hooks/use-participant-tile-agent';
 import { resolveParticipantDisplayName } from '@/lib/livekit/display-names';
 import { useTileOverlay } from '@/hooks/livekit/use-tile-overlay';
@@ -255,7 +256,11 @@ export function SingleParticipantTile({
           isAgent={isAgent}
         />
 
-        {showAudio && audioTrackRef && !audioPublication?.isMuted && !playbackMuted && (
+        {showAudio &&
+          audioTrackRef &&
+          isTrackReference(audioTrackRef) &&
+          !audioPublication?.isMuted &&
+          !playbackMuted && (
           <AudioTrack trackRef={audioTrackRef} />
         )}
 

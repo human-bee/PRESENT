@@ -134,7 +134,7 @@ export class AgentHelpers {
 	 * Apply the offset of this request to a shape partial.
 	 */
 	applyOffsetToShapePartial(shape: Partial<SimpleShape>): Partial<SimpleShape> {
-		const updates: Partial<SimpleShape> = {}
+		const updates: Record<string, number> = {}
 		let changed = false
 
 		if ('x' in shape && typeof shape.x === 'number') {
@@ -166,7 +166,7 @@ export class AgentHelpers {
 			return shape
 		}
 
-		return { ...shape, ...updates }
+		return { ...(shape as any), ...(updates as any) } as Partial<SimpleShape>
 	}
 
 	/**

@@ -43,7 +43,7 @@ export function useTldrawEditorBridge(editor: Editor | null, options?: TldrawEdi
       (((window as any).__present = {}) as Record<string, unknown>);
 
     const bridge: TldrawBridge = {
-      editorId: editor.getInstanceId?.() ?? 'tldraw-editor',
+      editorId: (editor as any).getInstanceId?.() ?? 'tldraw-editor',
       dispatch: (eventName, detail) => {
         window.dispatchEvent(new CustomEvent(`tldraw:${eventName}`, { detail }));
       },

@@ -8,6 +8,7 @@ import {
   getTranscriptWindow,
   formatContextDocuments,
 } from '@/lib/agents/shared/supabase-context';
+import { extractFirstToolCall, parseToolArgumentsResult } from './fast-steward-response';
 
 const CEREBRAS_MODEL = getModelForSteward('CROWD_PULSE_STEWARD_FAST_MODEL');
 
@@ -150,9 +151,14 @@ export async function runCrowdPulseStewardFast(params: {
       tool_choice: 'auto',
     });
 
-    const toolCall = response.choices[0]?.message?.tool_calls?.[0];
-    if (toolCall?.function?.name === 'commit_crowd_pulse') {
-      const args = JSON.parse(toolCall.function.arguments || '{}');
+    const toolCall = extractFirstToolCall(response);
+    if (toolCall?.name === 'commit_crowd_pulse') {
+      const argsResult = parseToolArgumentsResult(toolCall.argumentsRaw);
+      if (!argsResult.ok) {
+        console.warn('[CrowdPulseStewardFast] Invalid tool arguments', { reason: argsResult.error });
+        return instruction ? { prompt: instruction.slice(0, 180) } : {};
+      }
+      const args = argsResult.args;
       const patch: CrowdPulsePatch = {};
       if (typeof args.title === 'string') patch.title = args.title.trim();
       if (typeof args.prompt === 'string') patch.prompt = args.prompt.trim();

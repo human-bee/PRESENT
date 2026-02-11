@@ -705,8 +705,11 @@ export async function runCanvasAgent(args: RunArgs) {
  * semantic fallback is the `line` → `rectangle` rewrite noted below, which is
  * a temporary crutch until the TLDraw contract exposes sized lines.
  */
-const normalizeRawAction = (raw: unknown, shapeTypeById: Map<string, string>) => {
-  if (!raw || typeof raw !== 'object') return raw;
+const normalizeRawAction = (
+  raw: unknown,
+  shapeTypeById: Map<string, string>,
+): Record<string, any> | null => {
+  if (!raw || typeof raw !== 'object') return null;
   const action = raw as Record<string, any>;
   if (action.name !== 'create_shape' && action.name !== 'update_shape') return action;
 
@@ -1515,7 +1518,13 @@ const normalizeRawAction = (raw: unknown, shapeTypeById: Map<string, string>) =>
           room: roomId,
           tool: 'tldraw_envelope',
           params: {
-            envelope: { v: ACTION_VERSION, sessionId, seq: currentSeq, actions: fallback, ts: Date.now() },
+            envelope: {
+              v: ACTION_VERSION,
+              sessionId,
+              seq: currentSeq,
+              actions: fallback as any,
+              ts: Date.now(),
+            } as any,
             source: envelopeDispatched ? 'livekit' : 'broadcast-only',
           },
         });

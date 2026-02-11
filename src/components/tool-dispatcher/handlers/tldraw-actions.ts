@@ -452,9 +452,9 @@ export function applyAction(ctx: ApplyContext, action: AgentAction, batch?: Batc
           props: { ...(shape.props ?? {}), w, h },
         });
         mutated = true;
-      } else if (typeof editor.fitBoundsToContent === 'function') {
+      } else if (typeof (editor as any).fitBoundsToContent === 'function') {
         try {
-          editor.fitBoundsToContent?.([sid] as any, { w, h });
+          (editor as any).fitBoundsToContent([sid] as any, { w, h });
         } catch {}
       } else {
         localBatch.updates.push({

@@ -300,7 +300,7 @@ export function FairyLiveKitBridge({ room }: FairyLiveKitBridgeProps) {
                       metadata: payload?.metadata,
                       selectionIds: validSelectionIds,
                     }),
-                  },
+                  } as any,
                 });
               });
               return;

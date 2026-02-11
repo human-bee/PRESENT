@@ -1,4 +1,5 @@
 import { getCerebrasClient, getModelForSteward, isFastStewardReady } from '../fast-steward-config';
+import { extractFirstToolCall, parseToolArgumentsResult } from './fast-steward-response';
 
 const CEREBRAS_MODEL = getModelForSteward('YOUTUBE_STEWARD_FAST_MODEL');
 
@@ -89,33 +90,43 @@ export async function runYouTubeSteward(params: { instruction: string; context?:
       tool_choice: 'auto',
     });
 
-    const choice = response.choices[0]?.message;
+    const toolCall = extractFirstToolCall(response);
+    if (toolCall?.name === 'commit_action') {
+      const argsResult = parseToolArgumentsResult(toolCall.argumentsRaw);
+      if (!argsResult.ok) {
+        console.warn('[YouTubeSteward] Invalid tool arguments', { reason: argsResult.error });
+        return { kind: 'noOp', reason: 'Invalid tool arguments', mcpTool: null };
+      }
 
-    if (choice?.tool_calls?.[0]) {
-      const toolCall = choice.tool_calls[0];
-      if (toolCall.function.name === 'commit_action') {
-        const args = JSON.parse(toolCall.function.arguments);
-        let mcpTool: { name: string; args: Record<string, unknown> } | null = null;
+      const args = argsResult.args;
+      let mcpTool: { name: string; args: Record<string, unknown> } | null = null;
 
-        if (args.mcpToolName) {
+      if (typeof args.mcpToolName === 'string' && args.mcpToolName.trim().length > 0) {
+        const rawMcpArgs = args.mcpToolArgs;
+        if (rawMcpArgs && typeof rawMcpArgs === 'object' && !Array.isArray(rawMcpArgs)) {
+          mcpTool = { name: args.mcpToolName, args: rawMcpArgs as Record<string, unknown> };
+        } else if (typeof rawMcpArgs === 'string') {
           try {
-            mcpTool = {
-              name: args.mcpToolName,
-              args: args.mcpToolArgs ? JSON.parse(args.mcpToolArgs) : {},
-            };
+            const parsed = JSON.parse(rawMcpArgs);
+            mcpTool =
+              parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+                ? { name: args.mcpToolName, args: parsed as Record<string, unknown> }
+                : { name: args.mcpToolName, args: {} };
           } catch {
             mcpTool = { name: args.mcpToolName, args: {} };
           }
+        } else {
+          mcpTool = { name: args.mcpToolName, args: {} };
         }
-
-        return {
-          kind: args.kind,
-          videoId: args.videoId,
-          channelId: args.channelId,
-          reason: args.reason,
-          mcpTool,
-        };
       }
+
+      return {
+        kind: typeof args.kind === 'string' ? args.kind : 'noOp',
+        videoId: typeof args.videoId === 'string' ? args.videoId : undefined,
+        channelId: typeof args.channelId === 'string' ? args.channelId : undefined,
+        reason: typeof args.reason === 'string' ? args.reason : undefined,
+        mcpTool,
+      };
     }
 
     return {

@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import type { Editor } from 'tldraw';
+import type { Editor, TLShapeId } from 'tldraw';
 
 import type { CanvasLogger } from './useCanvasComponentStore';
 import type React from 'react';
@@ -8,7 +8,7 @@ interface ThreadResetParams {
   thread: { id?: string } | null | undefined;
   editor: Editor | null;
   componentStore: React.MutableRefObject<Map<string, React.ReactNode>>;
-  setMessageIdToShapeIdMap: (value: Map<string, string>) => void;
+  setMessageIdToShapeIdMap: (value: Map<string, TLShapeId>) => void;
   setAddedMessageIds: (value: Set<string>) => void;
   previousThreadId: React.MutableRefObject<string | null>;
   logger: CanvasLogger;
