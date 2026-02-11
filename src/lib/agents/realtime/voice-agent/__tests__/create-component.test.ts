@@ -89,6 +89,54 @@ describe('executeCreateComponent', () => {
     expect(getLastCreatedId()).not.toBeNull();
   });
 
+  it('uses global ttl for cross-turn duplicate suppression and allows coalesced update after expiry', async () => {
+    const { deps, sentCalls } = createDeps();
+    const nowSpy = jest.spyOn(Date, 'now');
+    nowSpy.mockReturnValue(1_000);
+
+    const first = await executeCreateComponent(
+      {
+        type: 'RetroTimerEnhanced',
+        spec: { initialMinutes: 5, autoStart: true },
+        messageId: 'ui-fixed',
+        intentId: 'intent-fixed',
+      },
+      deps,
+    );
+
+    deps.currentTurnId = 8;
+    nowSpy.mockReturnValue(15_000);
+    const withinTtl = await executeCreateComponent(
+      {
+        type: 'RetroTimerEnhanced',
+        spec: { initialMinutes: 5, autoStart: true },
+        messageId: 'ui-fixed',
+        intentId: 'intent-fixed',
+      },
+      deps,
+    );
+
+    nowSpy.mockReturnValue(35_500);
+    const expiredTtl = await executeCreateComponent(
+      {
+        type: 'RetroTimerEnhanced',
+        spec: { initialMinutes: 5, autoStart: true },
+        messageId: 'ui-fixed',
+        intentId: 'intent-fixed',
+      },
+      deps,
+    );
+
+    nowSpy.mockRestore();
+
+    expect(first.status).toBe('queued');
+    expect(withinTtl.status).toBe('duplicate_skipped');
+    expect(expiredTtl.status).toBe('queued');
+    expect(expiredTtl.reusedExisting).toBe(true);
+    expect(sentCalls.filter((entry) => entry.tool === 'create_component')).toHaveLength(1);
+    expect(sentCalls.filter((entry) => entry.tool === 'update_component')).toHaveLength(1);
+  });
+
   it('routes AIResponse widget creates to canvas.quick_text dispatch', async () => {
     const { deps, sentCalls } = createDeps();
     const result = await executeCreateComponent(
