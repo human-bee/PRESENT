@@ -17,7 +17,7 @@ import {
 import { EnhancedMcpProvider } from '@/components/ui/mcp/enhanced-mcp-provider';
 import { Room, ConnectionState, RoomEvent, VideoPresets, RoomOptions } from 'livekit-client';
 import { RoomContext } from '@livekit/components-react';
-import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/hooks/use-auth';
 import { RoomScopedProviders } from '@/components/RoomScopedProviders';
 import { ToolDispatcher } from '@/components/tool-dispatcher';
@@ -50,7 +50,6 @@ export function CanvasPageClient() {
   // Authentication check
   const { user, loading } = useAuth();
   const router = useRouter();
-  const pathname = usePathname();
   const searchParams = useSearchParams();
   const bypassAuth = getBooleanFlag(process.env.NEXT_PUBLIC_CANVAS_DEV_BYPASS, false);
   const demoMode = getBooleanFlag(process.env.NEXT_PUBLIC_CANVAS_DEMO_MODE, false);
@@ -117,12 +116,6 @@ export function CanvasPageClient() {
     } catch { }
   }, [roomName]);
 
-  const replaceUrl = useCallback((nextUrl: URL) => {
-    // Keep Next's router state in sync; avoid direct history mutations that won't retrigger hooks.
-    const href = `${nextUrl.pathname}${nextUrl.search}${nextUrl.hash}`;
-    router.replace(href, { scroll: false });
-  }, [router]);
-
   useEffect(() => {
     if (typeof window === 'undefined') return;
     try {
@@ -145,9 +138,9 @@ export function CanvasPageClient() {
       });
 
       url.searchParams.delete('share');
-      replaceUrl(url);
+      window.history.replaceState({}, '', url.toString());
     } catch { }
-  }, [replaceUrl]);
+  }, []);
 
   const isUuid = (value: string | null | undefined) =>
     !!value && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
@@ -188,11 +181,7 @@ export function CanvasPageClient() {
         url.searchParams.delete('id');
         url.searchParams.delete('room');
         url.searchParams.delete('fresh');
-        replaceUrl(url);
-        try {
-          window.dispatchEvent(new Event('present:canvas-id-changed'));
-        } catch { }
-        return;
+        window.history.replaceState({}, '', url.toString());
       }
 
       if (roomOverride && roomOverride.trim().length > 0) {
@@ -205,7 +194,7 @@ export function CanvasPageClient() {
           joinParityCanvas(derivedCanvasId, sanitized);
           if (url.searchParams.get('id') !== derivedCanvasId) {
             url.searchParams.set('id', derivedCanvasId);
-            replaceUrl(url);
+            window.history.replaceState({}, '', url.toString());
           }
           try {
             localStorage.setItem('present:lastCanvasId', derivedCanvasId);
@@ -224,7 +213,7 @@ export function CanvasPageClient() {
       let idParam = url.searchParams.get('id');
       if (isSyntheticDevId(idParam) && user) {
         url.searchParams.delete('id');
-        replaceUrl(url);
+        window.history.replaceState({}, '', url.toString());
         setCanvasId(null);
         setRoomName('');
         try {
@@ -262,7 +251,7 @@ export function CanvasPageClient() {
 
       if (lastId) {
         url.searchParams.set('id', lastId);
-        replaceUrl(url);
+        window.history.replaceState({}, '', url.toString());
         setCanvasId(lastId);
         setRoomName(`canvas-${lastId}`);
         try {
@@ -288,7 +277,7 @@ export function CanvasPageClient() {
             }
 
             url.searchParams.set('id', generatedId);
-            replaceUrl(url);
+            window.history.replaceState({}, '', url.toString());
             setCanvasId(generatedId);
             setRoomName(`canvas-${generatedId}`);
             try {
@@ -375,7 +364,7 @@ export function CanvasPageClient() {
       }
 
       url.searchParams.set('id', createdId);
-      replaceUrl(url);
+      window.history.replaceState({}, '', url.toString());
       setCanvasId(createdId);
       setRoomName(`canvas-${createdId}`);
       try {
@@ -410,8 +399,6 @@ export function CanvasPageClient() {
     user,
     bypassAuth,
     joinParityCanvas,
-    replaceUrl,
-    pathname,
     // Re-run whenever Next navigation updates the querystring (e.g. /canvas?fresh=1).
     // Avoid depending on the object identity.
     searchParams?.toString(),
