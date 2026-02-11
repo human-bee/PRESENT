@@ -1,6 +1,10 @@
 import { TextEncoder, TextDecoder } from 'util';
+import { ReadableStream, TransformStream, WritableStream } from 'stream/web';
 (global as any).TextEncoder = TextEncoder;
 (global as any).TextDecoder = TextDecoder as any;
+(global as any).ReadableStream = (global as any).ReadableStream || ReadableStream;
+(global as any).TransformStream = (global as any).TransformStream || TransformStream;
+(global as any).WritableStream = (global as any).WritableStream || WritableStream;
 
 if (typeof window !== 'undefined') {
   if (!window.requestAnimationFrame) {
@@ -15,4 +19,3 @@ if (typeof window !== 'undefined') {
 
 process.env.NEXT_PUBLIC_SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'http://localhost/supabase';
 process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'test-key';
-

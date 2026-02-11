@@ -46,7 +46,7 @@ import {
 import { formatFairyContextParts } from '@/lib/fairy-context/format';
 import { runSummaryStewardFast } from '@/lib/agents/subagents/summary-steward-fast';
 import { runCrowdPulseStewardFast } from '@/lib/agents/subagents/crowd-pulse-steward-fast';
-import { getBooleanFlag } from '@/lib/feature-flags';
+import { getBooleanFlag, isFairyClientAgentEnabled } from '@/lib/feature-flags';
 
 dotenvConfig({ path: join(process.cwd(), '.env.local') });
 
@@ -62,7 +62,7 @@ const fairyIntentDedupe = new Map<string, number>();
 const CLIENT_CANVAS_AGENT_ENABLED = getBooleanFlag(process.env.NEXT_PUBLIC_CANVAS_AGENT_CLIENT_ENABLED, false);
 // Fairy is now the default canvas manipulation layer; allow overriding via env for emergency fallback.
 const FAIRY_UI_ENABLED = getBooleanFlag(process.env.NEXT_PUBLIC_FAIRY_ENABLED, true);
-const FAIRY_CLIENT_AGENT_ENABLED = getBooleanFlag(process.env.NEXT_PUBLIC_FAIRY_CLIENT_AGENT_ENABLED, true);
+const FAIRY_CLIENT_AGENT_ENABLED = isFairyClientAgentEnabled(process.env.NEXT_PUBLIC_FAIRY_CLIENT_AGENT_ENABLED);
 const CANVAS_STEWARD_ENABLED = (process.env.CANVAS_STEWARD_SERVER_EXECUTION ?? 'true') === 'true';
 const DEFAULT_SUMMARY_MEMORY_TOOL = process.env.SUMMARY_MEMORY_MCP_TOOL;
 const DEFAULT_SUMMARY_AUTO_SEND = process.env.SUMMARY_MEMORY_AUTO_SEND === 'true';
