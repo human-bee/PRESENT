@@ -27,6 +27,7 @@ export const crowdPulseWidgetSchema = z.object({
   questions: z.array(crowdQuestionSchema).optional(),
   scoreboard: z.array(crowdScoreSchema).optional(),
   followUps: z.array(z.string()).optional(),
+  version: z.number().optional(),
   lastUpdated: z.number().optional(),
   demoMode: z.boolean().optional(),
   sensorEnabled: z.boolean().optional(),
@@ -55,6 +56,7 @@ export type CrowdPulseState = {
   questions: CrowdQuestion[];
   scoreboard: CrowdScore[];
   followUps: string[];
+  version: number;
   lastUpdated?: number;
   demoMode: boolean;
   sensorEnabled: boolean;

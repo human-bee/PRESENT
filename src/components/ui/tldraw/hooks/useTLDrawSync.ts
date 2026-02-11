@@ -1,7 +1,8 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useSyncDemo, RemoteTLStoreWithStatus } from '@tldraw/sync';
 import type { customShapeUtil } from '../tldraw-canvas';
 import { createLogger } from '@/lib/utils';
+import { buildSyncContract, getCanvasIdFromCurrentUrl } from '@/lib/realtime/sync-contract';
 
 /**
  * Configures TLDraw sync with the demo server
@@ -70,6 +71,38 @@ export function useTLDrawSync(
   );
 
   const store: RemoteTLStoreWithStatus = useSyncDemo(syncOptions);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !roomName) return;
+    try {
+      const contract = buildSyncContract({
+        roomName,
+        canvasId: getCanvasIdFromCurrentUrl(),
+        tldrawRoomId: roomName,
+      });
+      const diagnostics = {
+        ok: contract.errors.length === 0,
+        canvasId: contract.canvasId,
+        roomName: contract.livekitRoomName,
+        tldrawRoomId: contract.tldrawRoomId,
+        syncStatus: store?.status ?? 'unknown',
+        connectionStatus: store?.connectionStatus ?? 'unknown',
+        errors: contract.errors,
+        updatedAt: Date.now(),
+      };
+      const w = window as any;
+      w.__present = w.__present || {};
+      w.__present.syncDiagnostics = w.__present.syncDiagnostics || {};
+      w.__present.syncDiagnostics.tldraw = diagnostics;
+      window.dispatchEvent(
+        new CustomEvent('present:sync-diagnostic', {
+          detail: { source: 'tldraw', ...diagnostics },
+        }),
+      );
+    } catch {
+      // noop
+    }
+  }, [roomName, store?.status, store?.connectionStatus]);
 
   // Log sync host once per session in dev
   try {

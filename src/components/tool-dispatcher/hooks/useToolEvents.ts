@@ -118,17 +118,29 @@ export function useToolEvents(room: Room | undefined, options: UseToolEventsOpti
       const patch = parseJsonObject(parsedMessage.patch);
       if (!componentId || !patch) return;
 
-      const patchRecord = patch;
-      const patchVersion = typeof patchRecord.version === 'number' ? patchRecord.version : undefined;
+      const componentInfo = ComponentRegistry.get(componentId);
+      const patchRecord = patch as Record<string, unknown>;
+      const existingVersion =
+        typeof componentInfo?.version === 'number' && Number.isFinite(componentInfo.version)
+          ? componentInfo.version
+          : 0;
+      const patchVersionRaw = typeof patchRecord.version === 'number' ? patchRecord.version : undefined;
+      const normalizedVersion =
+        patchVersionRaw !== undefined && Number.isFinite(patchVersionRaw)
+          ? Math.round(patchVersionRaw)
+          : existingVersion + 1;
+      patchRecord.version = normalizedVersion;
       const patchTimestamp =
         typeof patchRecord.lastUpdated === 'number'
           ? patchRecord.lastUpdated
           : typeof patchRecord.updatedAt === 'number'
             ? patchRecord.updatedAt
             : undefined;
+      if (typeof patchRecord.lastUpdated !== 'number') {
+        patchRecord.lastUpdated = patchTimestamp ?? Date.now();
+      }
       const eventTimestamp = typeof parsedMessage.timestamp === 'number' ? parsedMessage.timestamp : Date.now();
 
-      const componentInfo = ComponentRegistry.get(componentId);
       if (!componentInfo && opts.allowQueue) {
         const existing = pendingUpdates.get(componentId);
         pendingUpdates.set(componentId, {
@@ -140,9 +152,10 @@ export function useToolEvents(room: Room | undefined, options: UseToolEventsOpti
         return;
       }
 
+      let applied = false;
       try {
         const updateResult = await ComponentRegistry.update(componentId, patchRecord, {
-          version: patchVersion ?? null,
+          version: normalizedVersion,
           timestamp: patchTimestamp ?? eventTimestamp,
           source: 'livekit:update_component',
         });
@@ -154,6 +167,7 @@ export function useToolEvents(room: Room | undefined, options: UseToolEventsOpti
         );
 
         if (!wasIgnored) {
+          applied = true;
           const refreshed = ComponentRegistry.get(componentId);
           if (refreshed?.props && refreshed.componentType) {
             try {
@@ -181,12 +195,13 @@ export function useToolEvents(room: Room | undefined, options: UseToolEventsOpti
         }
       }
 
+      if (!applied) return;
       try {
         window.dispatchEvent(
           new CustomEvent('tldraw:merge_component_state', {
             detail: {
               messageId: componentId,
-              patch,
+              patch: patchRecord,
               meta: { source: 'livekit:update_component', summary: parsedMessage.summary },
             },
           }),
