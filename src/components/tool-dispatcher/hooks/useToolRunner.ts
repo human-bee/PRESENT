@@ -1102,7 +1102,7 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
         const isWeather = /\bweather\b|\bforecast\b/.test(summary);
         const wantsMermaid = /\bmermaid\b|\bflow\s*chart\b|\bdiagram\b/.test(summary);
         const lastShapeId = window.__present_mermaid_last_shape_id;
-        const session = window.__present_mermaid_session || {};
+        const session = window.__present_mermaid_session;
         const stewardActive = !!window.__present_steward_active;
         const isDiagramFollowup = /\bdiagram\b|\bflow\s*chart\b|\bitinerary\b|\bmap out\b|\bprocess\b|\bsteps?\b/i.test(
           originalText || summary,
@@ -1116,8 +1116,8 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
               .split(/\s+/)
               .slice(0, 5)
               .join('_') || `step_${Date.now().toString(36)}`;
-          const current = typeof session.text === 'string' ? session.text : 'graph TD;';
-          const last = typeof session.last === 'string' ? session.last : 'Start';
+          const current = typeof session?.text === 'string' ? session.text : 'graph TD;';
+          const last = typeof session?.last === 'string' ? session.last : 'Start';
           const next = sanitize(originalText || summary);
           const line = `${last}-->${next}`;
           const merged = current.includes('graph') ? `${current} ${line};` : `graph TD; ${line};`;
