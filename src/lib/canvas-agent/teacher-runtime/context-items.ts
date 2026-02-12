@@ -23,7 +23,7 @@ const coerceNumber = (value: unknown): number | undefined => {
   return undefined;
 };
 
-const fallbackNote = (entry: { label?: string; name?: string; text?: string; type?: string }): string => {
+const fallbackNote = (entry: { label?: string | null; name?: string | null; text?: string | null; type?: string | null }): string => {
   const note = entry.label ?? entry.name ?? entry.text ?? entry.type;
   return typeof note === 'string' && note.trim().length > 0 ? note.trim() : 'shape';
 };

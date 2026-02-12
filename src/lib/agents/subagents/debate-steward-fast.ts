@@ -6,6 +6,7 @@ import {
   formatContextDocuments,
 } from '@/lib/agents/shared/supabase-context';
 import { debateScorecardStateSchema, type DebateScorecardState } from '@/lib/agents/debate-scorecard-schema';
+import { extractFirstMessageContent } from './fast-steward-response';
 
 const CEREBRAS_MODEL = getModelForSteward('DEBATE_STEWARD_FAST_MODEL');
 
@@ -187,9 +188,7 @@ export async function runDebateScorecardStewardFast(params: {
       messages,
     });
 
-    const choice = response.choices[0]?.message;
-
-    const rawContent = typeof (choice as any)?.content === 'string' ? String((choice as any).content) : '';
+    const rawContent = extractFirstMessageContent(response);
     const parsedResponse = extractJsonCandidate(rawContent);
     if (!parsedResponse || typeof parsedResponse !== 'object') {
       console.warn('[DebateStewardFast] No JSON update captured');

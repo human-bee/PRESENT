@@ -19,7 +19,7 @@ type AnchoredPanelControls = {
   isOpen: boolean;
   openPanel: () => void;
   closePanel: () => void;
-  panelRef: React.RefObject<HTMLDivElement>;
+  panelRef: React.RefObject<HTMLDivElement | null>;
   setButtonNode: (node: HTMLButtonElement | null) => void;
   anchor: AnchorRect | null;
   panelStyle: React.CSSProperties | null;

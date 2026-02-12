@@ -30,7 +30,7 @@ export default function MemoryRecallWidget(props: MemoryRecallWidgetProps) {
     ...initial
   } = props;
 
-  const fallbackIdRef = useRef<string>();
+  const fallbackIdRef = useRef<string | null>(null);
   if (!fallbackIdRef.current) {
     fallbackIdRef.current = `memory-recall-${crypto.randomUUID()}`;
   }

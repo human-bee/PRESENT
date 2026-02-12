@@ -3,8 +3,6 @@ import { config } from 'dotenv';
 import { randomUUID } from 'crypto';
 import { join } from 'path';
 import { z } from 'zod';
-import { createAnthropic } from '@ai-sdk/anthropic';
-import { generateObject } from 'ai';
 // Removed temporary Responses API fallback for routing
 
 try {
@@ -16,10 +14,31 @@ import { appendTranscriptCache, getTranscriptWindow, listCanvasComponents } from
 import { buildVoiceAgentInstructions } from '@/lib/agents/instructions';
 import { queryCapabilities, defaultCapabilities } from '@/lib/agents/capabilities';
 import { deriveComponentIntent } from '@/lib/agents/shared/deterministic-ids';
-import { jsonObjectSchema, type JsonObject } from '@/lib/utils/json-schema';
+import type { JsonObject } from '@/lib/utils/json-schema';
 import { ConnectionState, RoomEvent, RemoteTrackPublication, Track } from 'livekit-client';
-import { createDefaultScorecardState } from '@/lib/agents/debate-scorecard-schema';
 import { createLiveKitBus } from '@/lib/livekit/livekit-bus';
+import { createManualInputRouter } from './voice-agent/manual-routing';
+import { VoiceComponentLedger } from './voice-agent/component-ledger';
+import { ScorecardService } from './voice-agent/scorecard-service';
+import { TranscriptionBuffer, type PendingTranscriptionMessage } from './voice-agent/transcription-buffer';
+import {
+  executeCreateComponent,
+  type ComponentRegistryEntry,
+} from './voice-agent/create-component';
+import { createToolParametersSchema } from './voice-agent/tool-context';
+import {
+  buildToolEvent,
+  CANVAS_DISPATCH_SUPPRESS_MS,
+  coerceComponentPatch,
+  flushPendingToolCallQueue,
+  normalizeComponentPatch,
+  normalizeSpecInput,
+  shouldSuppressCanvasDispatch,
+  shouldForceReliableUpdate,
+  type PendingToolCallEntry,
+  type ToolEvent,
+} from './voice-agent/tool-publishing';
+import { inferScorecardTopicFromText, resolveDebatePlayerSeedFromLabels } from './voice-agent/scorecard';
 
 const RATE_LIMIT_HEADER_KEYS = [
   'retry-after',
@@ -51,44 +70,7 @@ const readHeaderValue = (headers: unknown, key: string): string | undefined => {
   return undefined;
 };
 
-const routerDecisionSchema = z.object({
-  route: z.enum(['canvas', 'none']),
-  message: z.string().optional(),
-});
-
-let routerModelCache: ReturnType<ReturnType<typeof createAnthropic>> | null = null;
-const getRouterModel = () => {
-  if (routerModelCache) return routerModelCache;
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) return null;
-  const modelId = (process.env.VOICE_AGENT_ROUTER_MODEL || 'claude-haiku-4-5').trim();
-  const anthropic = createAnthropic({ apiKey });
-  routerModelCache = anthropic(modelId);
-  return routerModelCache;
-};
-
-const routeManualInput = async (text: string) => {
-  const model = getRouterModel();
-  if (!model) return null;
-  const system = [
-    'You are a routing assistant for a real-time UI voice agent.',
-    'Decide whether the user request should be handled by the canvas agent.',
-    'Canvas requests involve drawing, layout, styling, editing, or placing shapes or visuals on the canvas.',
-    'If the request is a canvas task, return route="canvas" and a concise imperative message for the canvas agent.',
-    'Otherwise return route="none".',
-  ].join(' ');
-  const { object } = await (generateObject as unknown as (args: any) => Promise<{ object: any }>)({
-    model,
-    system,
-    prompt: text,
-    schema: routerDecisionSchema,
-    temperature: 0,
-    maxOutputTokens: 120,
-  });
-  const parsed = routerDecisionSchema.safeParse(object);
-  if (!parsed.success) return null;
-  return parsed.data as { route: 'canvas' | 'none'; message?: string };
-};
+const routeManualInput = createManualInputRouter();
 
 const extractRateLimitHeaders = (headers: unknown) => {
   const info: Record<string, string> = {};
@@ -183,66 +165,23 @@ export default defineAgent({
       throw error;
     }
     console.log('[VoiceAgent] Connected to room:', job.room.name);
-    const liveKitBus = createLiveKitBus(job.room);
-
-    type PendingTranscriptionMessage = {
-      text: string;
-      speaker?: string;
-      participantId?: string;
-      participantName?: string;
-      isManual: boolean;
-      isFinal: boolean;
-      timestamp?: number;
-      serverGenerated?: boolean;
-      receivedAt: number;
-    };
+    const liveKitBus = createLiveKitBus(job.room as any);
 
     // Data messages (topic: "transcription") can arrive immediately after the agent joins the room.
     // Attach the listener up-front and buffer until the realtime session is running so we don't drop early turns.
-    const pendingTranscriptions: PendingTranscriptionMessage[] = [];
-    const TRANSCRIPTION_BUFFER_MAX = 64;
-    const TRANSCRIPTION_BUFFER_TTL_MS = 30_000;
+    const transcriptionBuffer = new TranscriptionBuffer(64, 30_000);
     let transcriptionProcessingEnabled = false;
-    let drainingTranscriptions = false;
     let handleBufferedTranscription:
       | ((message: PendingTranscriptionMessage) => Promise<void>)
       | null = null;
 
-    const prunePendingTranscriptions = () => {
-      const now = Date.now();
-      while (pendingTranscriptions.length > 0) {
-        const first = pendingTranscriptions[0];
-        if (now - first.receivedAt <= TRANSCRIPTION_BUFFER_TTL_MS) break;
-        pendingTranscriptions.shift();
-      }
-      if (pendingTranscriptions.length > TRANSCRIPTION_BUFFER_MAX) {
-        pendingTranscriptions.splice(0, pendingTranscriptions.length - TRANSCRIPTION_BUFFER_MAX);
-      }
-    };
-
-    const enqueuePendingTranscription = (message: PendingTranscriptionMessage) => {
-      pendingTranscriptions.push(message);
-      prunePendingTranscriptions();
-    };
-
     const drainPendingTranscriptions = async () => {
       if (!transcriptionProcessingEnabled || !handleBufferedTranscription) return;
-      if (drainingTranscriptions) return;
-      drainingTranscriptions = true;
-      try {
-        prunePendingTranscriptions();
-        while (pendingTranscriptions.length > 0) {
-          const next = pendingTranscriptions.shift();
-          if (!next) continue;
-          try {
-            await handleBufferedTranscription(next);
-          } catch (error) {
-            logRealtimeError('failed to handle buffered transcription', error);
-          }
-        }
-      } finally {
-        drainingTranscriptions = false;
-      }
+      transcriptionBuffer.setEnabled(true);
+      await transcriptionBuffer.drain(
+        handleBufferedTranscription,
+        (error) => logRealtimeError('failed to handle buffered transcription', error),
+      );
     };
 
     const ingestTranscription = (message: {
@@ -293,7 +232,7 @@ export default defineAgent({
       };
 
       if (!transcriptionProcessingEnabled || !handleBufferedTranscription) {
-        enqueuePendingTranscription(entry);
+        transcriptionBuffer.enqueue(entry);
         return;
       }
 
@@ -445,7 +384,7 @@ export default defineAgent({
     let multiParticipantTranscriber: MultiParticipantTranscriptionManager | null = null;
     if (multiParticipantTranscriptionEnabled) {
       multiParticipantTranscriber = new MultiParticipantTranscriptionManager({
-        room: job.room,
+        room: job.room as any,
         maxParticipants: transcriptionMaxParticipants,
         model: resolvedSttModel,
         language: resolvedTranscriptionLanguage,
@@ -499,44 +438,13 @@ Examples:
 
 Your only output is function calls. Never use plain text unless absolutely necessary.`;
 
-    type ComponentRegistryEntry = {
-      type: string;
-      createdAt: number;
-      props: JsonObject;
-      state: JsonObject;
-      intentId?: string;
-      slot?: string;
-      room: string;
-    };
     const componentRegistry = new Map<string, ComponentRegistryEntry>();
-    const lastComponentByTypeByRoom = new Map<string, Map<string, string>>();
-    const lastCreatedComponentIdByRoom = new Map<string, string>();
-    type IntentLedgerEntry = {
-      intentId: string;
-      messageId: string;
-      componentType: string;
-      slot?: string;
-      reservedAt: number;
-      updatedAt: number;
-      state: 'reserved' | 'created' | 'updated';
-    };
-    const intentLedger = new Map<string, IntentLedgerEntry>();
-    const slotLedger = new Map<string, string>();
-    const messageToIntent = new Map<string, string>();
-    const LEDGER_TTL_MS = 5 * 60 * 1000;
+    const roomKey = () => job.room.name || 'room';
+    const componentLedger = new VoiceComponentLedger(roomKey);
     let lastResearchPanelId: string | null = null;
     let activeScorecard: { componentId: string; intentId: string; topic: string } | null = null;
-    const getLastComponentMap = () => {
-      const key = job.room.name || 'room';
-      let map = lastComponentByTypeByRoom.get(key);
-      if (!map) {
-        map = new Map<string, string>();
-        lastComponentByTypeByRoom.set(key, map);
-      }
-      return map;
-    };
-    const getLastComponentForType = (type: string) => getLastComponentMap().get(type);
-    const setLastComponentForType = (type: string, messageId: string) => getLastComponentMap().set(type, messageId);
+    const getLastComponentForType = (type: string) => componentLedger.getLastComponentForType(type);
+    const setLastComponentForType = (type: string, messageId: string) => componentLedger.setLastComponentForType(type, messageId);
 
     const rememberResearchPanel = (candidate?: string | null) => {
       if (typeof candidate !== 'string') return;
@@ -613,61 +521,17 @@ Your only output is function calls. Never use plain text unless absolutely neces
       return { componentId: messageId, intentId };
     };
 
-    const cleanupLedger = () => {
-      const now = Date.now();
-      for (const [intentId, entry] of intentLedger.entries()) {
-        if (now - entry.updatedAt > LEDGER_TTL_MS) {
-          intentLedger.delete(intentId);
-          if (entry.slot) {
-            const currentIntent = slotLedger.get(entry.slot);
-            if (currentIntent === intentId) {
-              slotLedger.delete(entry.slot);
-            }
-          }
-          const mappedIntent = messageToIntent.get(entry.messageId);
-          if (mappedIntent === intentId) {
-            messageToIntent.delete(entry.messageId);
-          }
-        }
-      }
-    };
-
     const registerLedgerEntry = (entry: {
       intentId: string;
       messageId: string;
       componentType: string;
       slot?: string;
-      state?: IntentLedgerEntry['state'];
-    }) => {
-      const now = Date.now();
-      const existing = intentLedger.get(entry.intentId);
-      const next: IntentLedgerEntry = {
-        intentId: entry.intentId,
-        messageId: entry.messageId,
-        componentType: entry.componentType,
-        slot: entry.slot ?? existing?.slot,
-        reservedAt: existing?.reservedAt ?? now,
-        updatedAt: now,
-        state: entry.state ?? existing?.state ?? 'reserved',
-      };
-      if (entry.slot) {
-        next.slot = entry.slot;
-      }
-      intentLedger.set(next.intentId, next);
-      messageToIntent.set(next.messageId, next.intentId);
-      if (next.slot) {
-        slotLedger.set(next.slot, next.intentId);
-      }
-      cleanupLedger();
-      return next;
-    };
+      state?: 'reserved' | 'created' | 'updated';
+    }) => componentLedger.registerIntentEntry(entry);
 
     const findLedgerEntryByMessage = (messageId: string) => {
-      const intentId = messageToIntent.get(messageId);
-      if (intentId) {
-        return intentLedger.get(intentId);
-      }
-      return undefined;
+      componentLedger.cleanupExpired();
+      return componentLedger.findIntentByMessage(messageId);
     };
 
     const hydrateComponentsFromCanvas = async () => {
@@ -833,64 +697,6 @@ Your only output is function calls. Never use plain text unless absolutely neces
     let currentTurnId = 0;
     let isGeneratingReply = false;
     let lastScorecardProvisionedAt = 0;
-    const recentCreateFingerprintsByRoom = new Map<
-      string,
-      Map<
-        string,
-        {
-          fingerprint: string;
-          messageId: string;
-          createdAt: number;
-          turnId: number;
-          intentId: string;
-          slot?: string;
-        }
-      >
-    >();
-    const roomKey = () => job.room.name || 'room';
-
-    const stripWrappingQuotes = (value: string) => {
-      let next = value.trim();
-      if (next.length < 2) return next;
-      const first = next[0];
-      const last = next[next.length - 1];
-      if ((first === '"' || first === "'" || first === '`') && first === last) {
-        next = next.slice(1, -1).trim();
-      }
-      return next;
-    };
-
-    const inferScorecardTopicFromText = (text?: string): string | undefined => {
-      if (!text) return undefined;
-      const trimmed = text.trim();
-      if (!trimmed) return undefined;
-      const lower = trimmed.toLowerCase();
-      if (!lower.includes('debate') && !lower.includes('scorecard')) return undefined;
-
-      const markers = ['about:', 'about ', 'topic:', 'topic is', 'topic '];
-      for (const marker of markers) {
-        const idx = lower.indexOf(marker);
-        if (idx === -1) continue;
-        const candidate = stripWrappingQuotes(trimmed.slice(idx + marker.length).trim());
-        if (candidate.length >= 6 && candidate.length <= 180) {
-          return candidate;
-        }
-      }
-
-      const lastColon = trimmed.lastIndexOf(':');
-      if (lastColon !== -1) {
-        const candidate = stripWrappingQuotes(trimmed.slice(lastColon + 1).trim());
-        if (candidate.length >= 6 && candidate.length <= 180) {
-          return candidate;
-        }
-      }
-
-      if (trimmed.endsWith('?') && trimmed.length <= 180) {
-        return trimmed;
-      }
-
-      return undefined;
-    };
 
     const listRemoteParticipantLabels = (): string[] => {
       const labels: string[] = [];
@@ -912,16 +718,6 @@ Your only output is function calls. Never use plain text unless absolutely neces
       });
     };
 
-    const resolveDebatePlayerSeed = () => {
-      const labels = listRemoteParticipantLabels();
-      const affLabel = labels[0] || 'You';
-      const negLabel = labels[1] || (labels[0] ? 'Opponent' : 'Opponent');
-      return [
-        { side: 'AFF' as const, label: affLabel },
-        { side: 'NEG' as const, label: negLabel },
-      ];
-    };
-
     const sendScorecardSeedTask = async (payload: {
       componentId: string;
       intentId?: string;
@@ -931,53 +727,28 @@ Your only output is function calls. Never use plain text unless absolutely neces
       const room = roomKey() || job.room?.name || 'room';
       const componentId = payload.componentId.trim();
       if (!componentId) return;
-      const players = resolveDebatePlayerSeed();
+      const players = resolveDebatePlayerSeedFromLabels(listRemoteParticipantLabels());
 
       await sendToolCall('dispatch_to_conductor', {
         task: 'scorecard.seed',
         params: {
           room,
           componentId,
-          topic: typeof payload.topic === 'string' && payload.topic.trim().length > 0 ? payload.topic.trim() : undefined,
-          intent: typeof payload.intentId === 'string' && payload.intentId.trim().length > 0 ? payload.intentId.trim() : undefined,
           players,
           ...(payload.seedState ? { seedState: payload.seedState } : {}),
+          ...(typeof payload.topic === 'string' && payload.topic.trim().length > 0
+            ? { topic: payload.topic.trim() }
+            : {}),
+          ...(typeof payload.intentId === 'string' && payload.intentId.trim().length > 0
+            ? { intent: payload.intentId.trim() }
+            : {}),
         },
       });
     };
 
-    const getLastCreatedComponentId = () => {
-      const key = roomKey();
-      return lastCreatedComponentIdByRoom.get(key) ?? null;
-    };
-    const setLastCreatedComponentId = (messageId: string | null) => {
-      const key = roomKey();
-      if (!messageId) {
-        lastCreatedComponentIdByRoom.delete(key);
-        return;
-      }
-      lastCreatedComponentIdByRoom.set(key, messageId);
-    };
-    const getRecentCreateMap = () => {
-      const key = roomKey();
-      let map = recentCreateFingerprintsByRoom.get(key);
-      if (!map) {
-        map = new Map<
-          string,
-          {
-            fingerprint: string;
-            messageId: string;
-            createdAt: number;
-            turnId: number;
-            intentId: string;
-            slot?: string;
-          }
-        >();
-        recentCreateFingerprintsByRoom.set(key, map);
-      }
-      return map;
-    };
-    const getRecentCreateFingerprint = (type: string) => getRecentCreateMap().get(type);
+    const getLastCreatedComponentId = () => componentLedger.getLastCreatedComponentId();
+    const setLastCreatedComponentId = (messageId: string | null) => componentLedger.setLastCreatedComponentId(messageId);
+    const getRecentCreateFingerprint = (type: string) => componentLedger.getRecentCreateFingerprint(type);
     const setRecentCreateFingerprint = (
       type: string,
       fingerprint: {
@@ -988,15 +759,16 @@ Your only output is function calls. Never use plain text unless absolutely neces
         intentId: string;
         slot?: string;
       },
-    ) => {
-      getRecentCreateMap().set(type, fingerprint);
-    };
+    ) => componentLedger.setRecentCreateFingerprint(type, fingerprint);
     const getComponentEntry = (id: string) => {
       const entry = componentRegistry.get(id);
       if (!entry) return undefined;
       const key = roomKey();
       if (entry.room && entry.room !== key) return undefined;
       return entry;
+    };
+    const setComponentEntry = (id: string, entry: ComponentRegistryEntry) => {
+      componentRegistry.set(id, entry);
     };
     const findLatestScorecardEntryInRoom = () => {
       const key = roomKey();
@@ -1011,31 +783,23 @@ Your only output is function calls. Never use plain text unless absolutely neces
       return latest;
     };
 
+    const resolveComponentId = (args: Record<string, unknown>) => {
+      componentLedger.cleanupExpired();
+      return componentLedger.resolveComponentId(args, {
+        getComponentEntry,
+        listComponentEntries: () => componentRegistry.entries(),
+        lastResearchPanelId,
+        roomKey: roomKey() || job.room?.name || 'room',
+      });
+    };
+
     const bumpTurn = () => {
       currentTurnId += 1;
     };
 
     const enableLossyUpdates = process.env.VOICE_AGENT_UPDATE_LOSSY !== 'false';
 
-    type ToolEvent = {
-      id: string;
-      roomId: string;
-      type: 'tool_call';
-      payload: { tool: string; params: JsonObject; context: { source: 'voice'; timestamp: number } };
-      timestamp: number;
-      source: 'voice';
-    };
-
-    const buildToolEvent = (tool: string, params: JsonObject): ToolEvent => ({
-      id: randomUUID(),
-      roomId: job.room.name || 'unknown',
-      type: 'tool_call' as const,
-      payload: { tool, params, context: { source: 'voice', timestamp: Date.now() } },
-      timestamp: Date.now(),
-      source: 'voice' as const,
-    });
-
-    const pendingToolCalls: Array<{ event: ToolEvent; reliable: boolean }> = [];
+    const pendingToolCalls: PendingToolCallEntry[] = [];
     let toolCallListenersAttached = false;
     let flushToolCallsHandle: ReturnType<typeof setTimeout> | null = null;
 
@@ -1077,36 +841,22 @@ Your only output is function calls. Never use plain text unless absolutely neces
     };
 
     const flushPendingToolCalls = async () => {
-      if (job.room.state !== ConnectionState.Connected) return;
-      while (pendingToolCalls.length > 0) {
-        const next = pendingToolCalls.shift();
-        if (!next) continue;
-        try {
-          const sent = await publishToolCall(next);
-          if (!sent) {
-            pendingToolCalls.unshift(next);
-            if (!flushToolCallsHandle) {
-              flushToolCallsHandle = setTimeout(() => {
-                flushToolCallsHandle = null;
-                void flushPendingToolCalls();
-              }, 250);
-            }
-            break;
-          }
-        } catch (error) {
+      const drained = await flushPendingToolCallQueue({
+        queue: pendingToolCalls,
+        isConnected: (job.room as any).state === ConnectionState.Connected,
+        publish: publishToolCall,
+        onPublishError: (error, next) => {
           console.warn('[VoiceAgent] failed to flush pending tool_call, re-queueing', {
             tool: next.event.payload.tool,
             error,
           });
-          pendingToolCalls.unshift(next);
-          if (!flushToolCallsHandle) {
-            flushToolCallsHandle = setTimeout(() => {
-              flushToolCallsHandle = null;
-              void flushPendingToolCalls();
-            }, 250);
-          }
-          break;
-        }
+        },
+      });
+      if (!drained && pendingToolCalls.length > 0 && !flushToolCallsHandle) {
+        flushToolCallsHandle = setTimeout(() => {
+          flushToolCallsHandle = null;
+          void flushPendingToolCalls();
+        }, 250);
       }
     };
 
@@ -1164,22 +914,15 @@ Your only output is function calls. Never use plain text unless absolutely neces
     };
 
     const recentCanvasDispatches = new Map<string, { ts: number; requestId?: string }>();
-    const CANVAS_DISPATCH_SUPPRESS_MS = 3000;
 
     const sendToolCall = async (tool: string, params: JsonObject, options: { reliable?: boolean } = {}) => {
       ensureToolCallListeners();
       let normalizedParams = normalizeOutgoingParams(tool, params);
-      const shouldForceReliableUpdate =
-        tool === 'update_component' &&
-        normalizedParams &&
-        typeof (normalizedParams as any).patch === 'object' &&
-        (normalizedParams as any).patch !== null &&
-        typeof ((normalizedParams as any).patch as any).instruction === 'string' &&
-        (((normalizedParams as any).patch as any).instruction as string).trim().length > 0;
+      const forceReliableUpdate = shouldForceReliableUpdate(tool, normalizedParams);
       const reliable =
         options.reliable !== undefined
           ? options.reliable
-          : !(tool === 'update_component' && enableLossyUpdates && !shouldForceReliableUpdate);
+          : !(tool === 'update_component' && enableLossyUpdates && !forceReliableUpdate);
 
       if (tool === 'dispatch_to_conductor') {
         const rawTask =
@@ -1194,14 +937,17 @@ Your only output is function calls. Never use plain text unless absolutely neces
             : job.room?.name || roomKey() || 'room';
           const message = typeof canvasParams.message === 'string' ? canvasParams.message.trim() : '';
           const requestId = typeof canvasParams.requestId === 'string' ? canvasParams.requestId.trim() : undefined;
-          const key = `${roomName}::${message}`;
-          const existing = recentCanvasDispatches.get(key);
           const nowTs = Date.now();
           if (
             message &&
-            existing &&
-            nowTs - existing.ts < CANVAS_DISPATCH_SUPPRESS_MS &&
-            (existing.requestId === undefined || existing.requestId === requestId)
+            shouldSuppressCanvasDispatch({
+              dispatches: recentCanvasDispatches,
+              roomName,
+              message,
+              requestId,
+              now: nowTs,
+              suppressMs: CANVAS_DISPATCH_SUPPRESS_MS,
+            })
           ) {
             console.info('[VoiceAgent] suppressing duplicate canvas.agent_prompt dispatch', {
               room: roomName,
@@ -1210,24 +956,30 @@ Your only output is function calls. Never use plain text unless absolutely neces
             });
             return;
           }
-          recentCanvasDispatches.set(key, { ts: nowTs, requestId });
-          // prune stale entries occasionally
-          if (recentCanvasDispatches.size > 20) {
-            for (const [mapKey, entry] of recentCanvasDispatches) {
-              if (nowTs - entry.ts > CANVAS_DISPATCH_SUPPRESS_MS) {
-                recentCanvasDispatches.delete(mapKey);
-              }
-            }
-          }
 
           if (message) {
             const selectionIds = Array.isArray(canvasParams.selectionIds)
               ? canvasParams.selectionIds.filter((id) => typeof id === 'string')
               : undefined;
+            const boundsCandidate = canvasParams.bounds as any;
             const bounds =
-              canvasParams.bounds && typeof canvasParams.bounds === 'object'
-                ? (canvasParams.bounds as Record<string, unknown>)
+              boundsCandidate &&
+              typeof boundsCandidate === 'object' &&
+              typeof boundsCandidate.x === 'number' &&
+              typeof boundsCandidate.y === 'number' &&
+              typeof boundsCandidate.w === 'number' &&
+              typeof boundsCandidate.h === 'number'
+                ? {
+                    x: boundsCandidate.x,
+                    y: boundsCandidate.y,
+                    w: boundsCandidate.w,
+                    h: boundsCandidate.h,
+                  }
                 : undefined;
+            const metadataSafe =
+              canvasParams.metadata && typeof canvasParams.metadata === 'object'
+                ? (JSON.parse(JSON.stringify(canvasParams.metadata)) as any)
+                : null;
             const intentId =
               requestId || randomUUID();
             normalizedParams = {
@@ -1237,16 +989,16 @@ Your only output is function calls. Never use plain text unless absolutely neces
                 room: roomName,
                 message,
                 source: 'voice',
-                selectionIds,
-                bounds,
-                metadata: canvasParams.metadata ?? null,
+                metadata: metadataSafe,
+                ...(selectionIds ? { selectionIds } : {}),
+                ...(bounds ? { bounds } : {}),
               },
             };
           }
         }
       }
 
-      const entry = { event: buildToolEvent(tool, normalizedParams), reliable };
+      const entry = { event: buildToolEvent(tool, normalizedParams, job.room.name || 'unknown'), reliable };
       if (!job.room.localParticipant) {
         pendingToolCalls.push(entry);
         console.info('[VoiceAgent] queueing tool_call until room connects', {
@@ -1285,331 +1037,26 @@ Your only output is function calls. Never use plain text unless absolutely neces
       }
     };
 
-    const safeCloneJson = (value: unknown): JsonObject => {
-      if (!value || typeof value !== 'object') return {};
-      try {
-        return JSON.parse(JSON.stringify(value)) as JsonObject;
-      } catch {
-        return {};
-      }
-    };
+    const scorecardService = new ScorecardService({
+      getRoomName: () => roomKey() || job.room?.name || 'room',
+      componentRegistry,
+      getActiveScorecard: () => activeScorecard,
+      setActiveScorecard: (scorecard) => {
+        activeScorecard = scorecard;
+      },
+      findLedgerEntryByMessage,
+      registerLedgerEntry,
+      setLastComponentForType,
+      setLastCreatedComponentId,
+      setLastScorecardProvisionedAt: (createdAt) => {
+        lastScorecardProvisionedAt = createdAt;
+      },
+      listRemoteParticipantLabels,
+      sendToolCall,
+      sendScorecardSeedTask,
+    });
 
-    const coerceComponentPatch = (raw: unknown): JsonObject => {
-      if (!raw) return {};
-      if (typeof raw === 'string') {
-        try {
-          const parsed = JSON.parse(raw);
-          return parsed && typeof parsed === 'object' ? safeCloneJson(parsed) : { instruction: raw };
-        } catch {
-          return { instruction: raw } as JsonObject;
-        }
-      }
-      if (typeof raw === 'object') {
-        return safeCloneJson(raw);
-      }
-      return {};
-    };
-
-    const normalizeSpecInput = (raw: unknown): JsonObject => {
-      if (!raw) return {};
-      if (typeof raw === 'string') {
-        try {
-          const parsed = JSON.parse(raw);
-          return parsed && typeof parsed === 'object' ? safeCloneJson(parsed) : {};
-        } catch {
-          return {};
-        }
-      }
-      if (raw && typeof raw === 'object') {
-        return safeCloneJson(raw);
-      }
-      return {};
-    };
-
-    const normalizeComponentPatch = (patch: JsonObject, fallbackSeconds: number): JsonObject => {
-      const next: JsonObject = { ...patch };
-      const timestamp = Date.now();
-      next.updatedAt = typeof next.updatedAt === 'number' ? next.updatedAt : timestamp;
-
-      const coerceBoolean = (value: unknown): boolean | undefined => {
-        if (typeof value === 'boolean') return value;
-        if (typeof value === 'number') {
-          if (value === 1) return true;
-          if (value === 0) return false;
-        }
-        if (typeof value === 'string') {
-          const normalized = value.trim().toLowerCase();
-          if (!normalized) return undefined;
-          if (['true', 'yes', 'start', 'run', 'running', 'resume', 'play', 'on', '1'].includes(normalized)) {
-            return true;
-          }
-          if (['false', 'no', 'stop', 'stopped', 'pause', 'paused', 'halt', 'off', '0'].includes(normalized)) {
-            return false;
-          }
-        }
-        return undefined;
-      };
-
-      const coerceDurationValue = (value: unknown, fallbackSeconds: number) => {
-        if (typeof value === 'number' && Number.isFinite(value)) {
-          return Math.max(1, Math.round(value));
-        }
-        if (typeof value === 'string') {
-          const cleaned = value.trim().toLowerCase();
-          if (!cleaned) return fallbackSeconds;
-          const parsed = Number.parseFloat(cleaned);
-          if (!Number.isFinite(parsed)) return fallbackSeconds;
-          const isMinutes =
-            cleaned.includes('min') ||
-            cleaned.endsWith('m') ||
-            cleaned.endsWith('minutes') ||
-            cleaned.endsWith('minute');
-          const seconds = isMinutes ? parsed * 60 : parsed;
-          return Math.max(1, Math.round(seconds));
-        }
-        return fallbackSeconds;
-      };
-
-      const coerceIntValue = (value: unknown, fallback: number) => {
-        if (typeof value === 'number' && Number.isFinite(value)) {
-          return Math.round(value);
-        }
-        if (typeof value === 'string') {
-          const parsed = Number.parseFloat(value);
-          if (Number.isFinite(parsed)) {
-            return Math.round(parsed);
-          }
-        }
-        return fallback;
-      };
-
-      if (next.durationMinutes !== undefined) {
-        const minutesValue = coerceIntValue(
-          (next as any).durationMinutes,
-          Math.max(1, Math.round(((next as any).configuredDuration ?? fallbackSeconds) as number / 60)),
-        );
-        const durationSeconds = Math.max(1, minutesValue) * 60;
-        const seconds = durationSeconds % 60;
-        const minutes = Math.floor(durationSeconds / 60);
-        next.configuredDuration = durationSeconds;
-        if (typeof next.timeLeft !== 'number') {
-          next.timeLeft = durationSeconds;
-        }
-        next.initialMinutes = minutes;
-        next.initialSeconds = seconds;
-        delete (next as any).durationMinutes;
-      }
-
-      if (next.update && typeof (next as any).update === 'object' && !Array.isArray((next as any).update)) {
-        const update = (next as any).update as Record<string, unknown>;
-        const defaultMinutes = Math.max(0, Math.floor(fallbackSeconds / 60));
-        const defaultSeconds = fallbackSeconds % 60;
-        const minutesCandidate =
-          'minutes' in update ? coerceIntValue(update.minutes, defaultMinutes) : null;
-        const secondsCandidate =
-          'seconds' in update ? coerceIntValue(update.seconds, defaultSeconds) : null;
-        if (minutesCandidate !== null || secondsCandidate !== null) {
-          const minutes =
-            minutesCandidate !== null
-              ? Math.max(0, minutesCandidate)
-              : secondsCandidate !== null
-                ? 0
-                : defaultMinutes;
-          const seconds = secondsCandidate !== null ? Math.max(0, Math.min(59, secondsCandidate)) : defaultSeconds;
-          const durationSeconds = Math.max(1, minutes * 60 + seconds);
-          next.configuredDuration = durationSeconds;
-          next.timeLeft = durationSeconds;
-          next.initialMinutes = minutes;
-          next.initialSeconds = seconds;
-          next.isFinished = false;
-          next.isRunning = false;
-        }
-        delete (next as any).update;
-      }
-
-      if (next.duration !== undefined) {
-        const durationSeconds = coerceDurationValue(
-          next.duration,
-          Math.max(1, Math.round((next as any).configuredDuration ?? fallbackSeconds)),
-        );
-        const minutes = Math.floor(durationSeconds / 60);
-        const seconds = durationSeconds % 60;
-        next.configuredDuration = durationSeconds;
-        if (typeof next.timeLeft !== 'number') {
-          next.timeLeft = durationSeconds;
-        }
-        next.initialMinutes = minutes;
-        next.initialSeconds = seconds;
-        delete next.duration;
-      }
-      if (next.durationSeconds !== undefined) {
-        const durationSeconds = coerceDurationValue(
-          (next as any).durationSeconds,
-          Math.max(1, Math.round((next as any).configuredDuration ?? fallbackSeconds)),
-        );
-        const minutes = Math.floor(durationSeconds / 60);
-        const seconds = durationSeconds % 60;
-        next.configuredDuration = durationSeconds;
-        if (typeof next.timeLeft !== 'number') {
-          next.timeLeft = durationSeconds;
-        }
-        next.initialMinutes = minutes;
-        next.initialSeconds = seconds;
-      }
-      if (next.initialMinutes !== undefined || next.initialSeconds !== undefined) {
-        const hasMinutesField = (next as any).initialMinutes !== undefined;
-        const hasSecondsField = (next as any).initialSeconds !== undefined;
-        const defaultMinutes = Math.max(
-          0,
-          Math.floor((((next as any).configuredDuration ?? fallbackSeconds) as number) / 60),
-        );
-        const defaultSeconds = (((next as any).configuredDuration ?? fallbackSeconds) as number) % 60;
-        const minutesCandidate = hasMinutesField
-          ? coerceIntValue((next as any).initialMinutes, defaultMinutes)
-          : null;
-        const secondsCandidate = hasSecondsField
-          ? coerceIntValue((next as any).initialSeconds, defaultSeconds)
-          : null;
-        if (minutesCandidate !== null || secondsCandidate !== null) {
-          const minutes =
-            minutesCandidate !== null
-              ? Math.max(0, minutesCandidate)
-              : secondsCandidate !== null
-                ? 0
-                : defaultMinutes;
-          const seconds =
-            secondsCandidate !== null ? Math.max(0, Math.min(59, secondsCandidate)) : Math.max(0, Math.min(59, defaultSeconds));
-          const totalSeconds = Math.max(1, minutes * 60 + seconds);
-          next.configuredDuration = totalSeconds;
-          if (typeof next.timeLeft !== 'number') {
-            next.timeLeft = totalSeconds;
-          }
-          next.initialMinutes = minutes;
-          next.initialSeconds = seconds;
-        }
-      }
-
-      if (typeof (next as any).state === 'string') {
-        const stateLabel = ((next as any).state as string).trim().toLowerCase();
-        delete (next as any).state;
-        const markRunning = () => {
-          next.isRunning = true;
-          next.isFinished = false;
-          if (typeof next.timeLeft !== 'number' || next.timeLeft <= 0) {
-            const durationSeconds = typeof next.configuredDuration === 'number' ? next.configuredDuration : fallbackSeconds;
-            next.timeLeft = Math.max(1, Math.round(durationSeconds));
-          }
-        };
-        const markStopped = (finished: boolean) => {
-          next.isRunning = false;
-          if (finished) {
-            next.isFinished = true;
-            if (typeof next.timeLeft !== 'number' || next.timeLeft < 0) {
-              next.timeLeft = 0;
-            }
-          }
-        };
-        if (
-          ['run', 'running', 'start', 'started', 'resume', 'resumed', 'play', 'playing', 'active'].includes(
-            stateLabel,
-          )
-        ) {
-          markRunning();
-        } else if (
-          ['paused', 'pause', 'stop', 'stopped', 'halt', 'idle', 'ready', 'standby'].includes(stateLabel)
-        ) {
-          markStopped(false);
-        } else if (
-          ['finished', 'complete', 'completed', 'done', 'expired', "time's up", 'time up', 'timeup'].includes(
-            stateLabel,
-          )
-        ) {
-          markStopped(true);
-        }
-      }
-
-      const runningValue =
-        'running' in next ? coerceBoolean(next.running) : undefined;
-      if (runningValue !== undefined) {
-        next.isRunning = runningValue;
-        if (runningValue) {
-          next.isFinished = false;
-          if (typeof next.timeLeft !== 'number' && typeof next.configuredDuration === 'number') {
-            next.timeLeft = next.configuredDuration;
-          }
-        }
-        delete next.running;
-      }
-
-      const autoStartValue =
-        'autoStart' in next ? coerceBoolean(next.autoStart) : undefined;
-      if (autoStartValue !== undefined) {
-        next.autoStart = autoStartValue;
-        next.isRunning = autoStartValue;
-        if (autoStartValue) {
-          next.isFinished = false;
-          if (typeof next.timeLeft !== 'number' && typeof next.configuredDuration === 'number') {
-            next.timeLeft = next.configuredDuration;
-          }
-        }
-      }
-
-      const statusValue =
-        'status' in next ? coerceBoolean(next.status) : undefined;
-      if (statusValue !== undefined && next.isRunning === undefined) {
-        next.isRunning = statusValue;
-        if (statusValue) {
-          next.isFinished = false;
-          if (typeof next.timeLeft !== 'number' && typeof next.configuredDuration === 'number') {
-            next.timeLeft = next.configuredDuration;
-          }
-        }
-      }
-
-      if (typeof (next as any).action === 'string') {
-        const action = ((next as any).action as string).trim().toLowerCase();
-        delete (next as any).action;
-        if (action === 'start' || action === 'resume' || action === 'run' || action === 'play') {
-          next.isRunning = true;
-          next.isFinished = false;
-          if (typeof next.timeLeft !== 'number' || next.timeLeft <= 0) {
-            const durationSeconds = typeof next.configuredDuration === 'number' ? next.configuredDuration : fallbackSeconds;
-            next.timeLeft = Math.max(1, Math.round(durationSeconds));
-          }
-        } else if (action === 'pause' || action === 'stop' || action === 'halt') {
-          next.isRunning = false;
-        } else if (action === 'reset') {
-          const durationSeconds = typeof next.configuredDuration === 'number' ? next.configuredDuration : fallbackSeconds;
-          next.timeLeft = Math.max(1, Math.round(durationSeconds));
-          next.isRunning = false;
-          next.isFinished = false;
-        }
-      }
-
-      if (typeof (next as any).command === 'string') {
-        const command = ((next as any).command as string).trim().toLowerCase();
-        delete (next as any).command;
-        if (command === 'start' || command === 'resume' || command === 'run' || command === 'play') {
-          next.isRunning = true;
-          next.isFinished = false;
-          if (typeof next.timeLeft !== 'number' || next.timeLeft <= 0) {
-            const durationSeconds = typeof next.configuredDuration === 'number' ? next.configuredDuration : fallbackSeconds;
-            next.timeLeft = Math.max(1, Math.round(durationSeconds));
-          }
-        } else if (command === 'pause' || command === 'stop' || command === 'halt') {
-          next.isRunning = false;
-        } else if (command === 'reset') {
-          const durationSeconds = typeof next.configuredDuration === 'number' ? next.configuredDuration : fallbackSeconds;
-          next.timeLeft = Math.max(1, Math.round(durationSeconds));
-          next.isRunning = false;
-          next.isFinished = false;
-        }
-      }
-
-      return next;
-    };
-
-    const toolParameters = jsonObjectSchema.default({});
+    const toolParameters = createToolParametersSchema();
     const toolContext: llm.ToolContext = {
       create_component: llm.tool({
         description: 'Create a new component on the canvas.',
@@ -1621,484 +1068,36 @@ Your only output is function calls. Never use plain text unless absolutely neces
           intentId: z.string().nullish(),
           slot: z.string().nullish(),
         }),
-        execute: async (args) => {
-          const componentType = String(args.type || '').trim();
-          if (!componentType) {
-            return { status: 'ERROR', message: 'create_component requires type' };
-          }
-
-          const normalizedType = componentType.toLowerCase();
-          if (normalizedType === 'airesponse') {
-            const roomName = job.room.name || '';
-            if (!roomName) {
-              return { status: 'ERROR', message: 'canvas room unavailable' };
-            }
-
-            const candidateTexts: Array<string | undefined> = [];
-            if (args.props && typeof args.props === 'object') {
-              const propsRecord = args.props as Record<string, unknown>;
-              if (typeof propsRecord.text === 'string') candidateTexts.push(propsRecord.text);
-              if (typeof propsRecord.content === 'string') candidateTexts.push(propsRecord.content);
-              if (typeof propsRecord.label === 'string') candidateTexts.push(propsRecord.label);
-            }
-            if (args.spec && typeof args.spec === 'object') {
-              const specRecord = args.spec as Record<string, unknown>;
-              if (typeof specRecord.text === 'string') candidateTexts.push(specRecord.text);
-              if (typeof specRecord.content === 'string') candidateTexts.push(specRecord.content);
-            }
-            if (typeof args.spec === 'string') candidateTexts.push(args.spec);
-
-            const text = candidateTexts.find((value) => typeof value === 'string' && value.trim().length > 0)?.trim();
-            if (!text) {
-              return { status: 'ERROR', message: 'AIResponse requires text content' };
-            }
-
-            const requestId = typeof args.messageId === 'string' && args.messageId.trim().length > 0
-              ? args.messageId.trim()
-              : randomUUID();
-
-            const quickTextParams: JsonObject = {
-              room: roomName,
-              text,
-              requestId,
-            };
-            if (args.props && typeof args.props === 'object') {
-              const propsRecord = args.props as Record<string, unknown>;
-              if (typeof propsRecord.x === 'number' && Number.isFinite(propsRecord.x)) {
-                quickTextParams.x = propsRecord.x as number;
-              }
-              if (typeof propsRecord.y === 'number' && Number.isFinite(propsRecord.y)) {
-                quickTextParams.y = propsRecord.y as number;
-              }
-            }
-
-            await sendToolCall('dispatch_to_conductor', {
-              task: 'canvas.quick_text',
-              params: quickTextParams,
-            });
-
-            return { status: 'queued', messageId: requestId };
-          }
-
-          if (args.spec === null) {
-            delete (args as any).spec;
-          }
-          if (args.props === null) {
-            delete (args as any).props;
-          }
-          if (args.messageId === null) {
-            delete (args as any).messageId;
-          }
-
-          const normalizedSpec = normalizeSpecInput(args.spec);
-          const initialProps = normalizeSpecInput(args.props);
-
-          let mergedProps: JsonObject = {
-            ...normalizedSpec,
-            ...initialProps,
-          };
-
-          let seededScorecardState: JsonObject | null = null;
-          let seededScorecardTopic: string | undefined;
-
-          // Component creation uses props (not TLDraw state). Normalize common runtime-style
-          // timer fields into the RetroTimerEnhanced creation schema so the first render
-          // matches user intent (e.g. "start a 5 minute timer" should auto-start).
-          if (componentType === 'RetroTimerEnhanced' || componentType === 'RetroTimer') {
-            const next: Record<string, unknown> = { ...mergedProps };
-            const coerceNumber = (value: unknown): number | undefined => {
-              if (typeof value === 'number' && Number.isFinite(value)) return value;
-              if (typeof value === 'string') {
-                const trimmed = value.trim();
-                if (!trimmed) return undefined;
-                const parsed = Number(trimmed);
-                if (Number.isFinite(parsed)) return parsed;
-              }
-              return undefined;
-            };
-            const coerceBoolean = (value: unknown): boolean | undefined => {
-              if (typeof value === 'boolean') return value;
-              if (typeof value === 'number') {
-                if (value === 1) return true;
-                if (value === 0) return false;
-              }
-              if (typeof value === 'string') {
-                const normalized = value.trim().toLowerCase();
-                if (!normalized) return undefined;
-                if (['true', 'yes', 'start', 'run', 'running', 'resume', 'play', 'on', '1'].includes(normalized)) {
-                  return true;
-                }
-                if (['false', 'no', 'stop', 'stopped', 'pause', 'paused', 'halt', 'off', '0'].includes(normalized)) {
-                  return false;
-                }
-              }
-              return undefined;
-            };
-
-            if (typeof next.autoStart !== 'boolean') {
-              const inferredAutoStart = coerceBoolean((next as any).isRunning);
-              if (typeof inferredAutoStart === 'boolean') {
-                next.autoStart = inferredAutoStart;
-              } else {
-                const prompt = (lastUserPrompt || '').toLowerCase();
-                const wantsTimer = prompt.includes('timer');
-                const wantsStart =
-                  wantsTimer && (prompt.includes('start') || prompt.includes('begin') || prompt.includes('run'));
-                const wantsNotStart =
-                  prompt.includes("don't start") ||
-                  prompt.includes('do not start') ||
-                  prompt.includes('paused') ||
-                  prompt.includes('pause');
-                if (wantsStart && !wantsNotStart) {
-                  next.autoStart = true;
-                }
-              }
-            }
-
-            const minutes = coerceNumber((next as any).initialMinutes);
-            const seconds = coerceNumber((next as any).initialSeconds);
-
-            const deriveDurationSeconds = (): number | undefined => {
-              if (minutes !== undefined || seconds !== undefined) {
-                const m = minutes !== undefined ? Math.max(1, Math.round(minutes)) : 5;
-                const s = seconds !== undefined ? Math.max(0, Math.min(59, Math.round(seconds))) : 0;
-                return m * 60 + s;
-              }
-
-              const configuredRaw = coerceNumber((next as any).configuredDuration);
-              if (configuredRaw !== undefined) {
-                // Heuristic: large multiples of 1000 are likely milliseconds.
-                const configuredSeconds =
-                  configuredRaw >= 60_000 && configuredRaw % 1000 === 0 ? configuredRaw / 1000 : configuredRaw;
-                return Math.max(1, Math.round(configuredSeconds));
-              }
-
-              const durationRaw =
-                coerceNumber((next as any).durationSeconds) ?? coerceNumber((next as any).duration);
-              if (durationRaw !== undefined) {
-                return Math.max(1, Math.round(durationRaw));
-              }
-
-              const timeLeftRaw = coerceNumber((next as any).timeLeft);
-              if (timeLeftRaw !== undefined) {
-                return Math.max(1, Math.round(timeLeftRaw));
-              }
-
-              return undefined;
-            };
-
-            const durationSeconds = deriveDurationSeconds();
-            if (durationSeconds !== undefined) {
-              const m = Math.max(1, Math.floor(durationSeconds / 60));
-              const s = Math.max(0, Math.min(59, Math.round(durationSeconds % 60)));
-              next.initialMinutes = m;
-              next.initialSeconds = s;
-            }
-
-            delete (next as any).isRunning;
-            delete (next as any).timeLeft;
-            delete (next as any).configuredDuration;
-            delete (next as any).durationSeconds;
-            delete (next as any).duration;
-
-            mergedProps = next as JsonObject;
-          }
-
-          const now = Date.now();
-          const explicitMessageId = typeof args.messageId === 'string' ? args.messageId.trim() : '';
-          const explicitIntentId = typeof args.intentId === 'string' ? args.intentId.trim() : '';
-          const hasExplicitMessageId = explicitMessageId.length > 0;
-          const hasExplicitIntentId = explicitIntentId.length > 0;
-          const useExplicitIds = hasExplicitMessageId && hasExplicitIntentId;
-          const slot = typeof args.slot === 'string' && args.slot.trim().length > 0 ? args.slot.trim() : undefined;
-          const isDebateScorecard = componentType === 'DebateScorecard';
-          const isBareScorecardRequest = isDebateScorecard && Object.keys(mergedProps).length === 0;
-          let preseededScorecardId: string | undefined;
-          let preseededScorecardIntent: string | undefined;
-          if (
-            isBareScorecardRequest &&
-            !hasExplicitMessageId &&
-            !hasExplicitIntentId &&
-            lastScorecardProvisionedAt > 0 &&
-            now - lastScorecardProvisionedAt < SCORECARD_SUPPRESS_WINDOW_MS
-          ) {
-            const latestScorecard = findLatestScorecardEntryInRoom();
-            preseededScorecardId =
-              activeScorecard?.componentId ||
-              getLastComponentForType('DebateScorecard') ||
-              latestScorecard?.id;
-            if (preseededScorecardId) {
-              const ledger = findLedgerEntryByMessage(preseededScorecardId);
-              preseededScorecardIntent = ledger?.intentId || activeScorecard?.intentId || undefined;
-              console.log('[VoiceAgent] reusing pre-seeded DebateScorecard for create_component call', {
-                componentId: preseededScorecardId,
-              });
-            }
-          }
-
-          if (isDebateScorecard && !preseededScorecardId) {
-            const topicFromSpec =
-              typeof (mergedProps as any).topic === 'string' ? String((mergedProps as any).topic).trim() : undefined;
-            const topicFromPrompt = inferScorecardTopicFromText(lastUserPrompt ?? undefined);
-
-            const pickTopic = (specTopic?: string, promptTopic?: string) => {
-              const spec = specTopic?.trim();
-              const prompt = promptTopic?.trim();
-              if (!spec && !prompt) return undefined;
-              if (!spec) return prompt;
-              if (!prompt) return spec;
-              if (spec === prompt) return spec;
-
-              const normalizeLoose = (value: string) =>
-                (() => {
-                  const trimmed = value.trim();
-                  const parts = trimmed.split(' ').filter(Boolean);
-                  let collapsed = parts.join(' ');
-                  while (collapsed.length > 0) {
-                    const last = collapsed[collapsed.length - 1];
-                    if (last === '?' || last === '!' || last === '.') {
-                      collapsed = collapsed.slice(0, -1);
-                      continue;
-                    }
-                    break;
-                  }
-                  return collapsed;
-                })();
-              const specLoose = normalizeLoose(spec);
-              const promptLoose = normalizeLoose(prompt);
-              if (specLoose === promptLoose) {
-                // Prefer the prompt version because it usually preserves punctuation.
-                return prompt;
-              }
-
-              // If one is a strict prefix of the other, prefer the longer.
-              if (prompt.startsWith(spec) || promptLoose.startsWith(specLoose)) {
-                return prompt.length >= spec.length ? prompt : spec;
-              }
-              if (spec.startsWith(prompt) || specLoose.startsWith(promptLoose)) {
-                return spec.length >= prompt.length ? spec : prompt;
-              }
-
-              // Default to prompt topic when it exists; it's closer to what the user said.
-              return prompt;
-            };
-
-            seededScorecardTopic = pickTopic(topicFromSpec, topicFromPrompt) ?? topicFromSpec ?? topicFromPrompt ?? 'Live Debate';
-
-            const seed = createDefaultScorecardState(seededScorecardTopic);
-            const playersSeed = resolveDebatePlayerSeed();
-            try {
-              if (Array.isArray((seed as any).players)) {
-                for (const update of playersSeed) {
-                  const idx = (seed as any).players.findIndex((p: any) => p?.side === update.side);
-                  if (idx === -1) continue;
-                  (seed as any).players[idx] = { ...(seed as any).players[idx], label: update.label };
-                }
-              }
-            } catch { }
-            seededScorecardState = seed as unknown as JsonObject;
-
-            // Ensure the first render has a complete state object (players, filters, etc),
-            // while still respecting any extra config the model provided.
-            mergedProps = {
-              ...(seed as unknown as JsonObject),
-              ...mergedProps,
-              topic: seededScorecardTopic,
-              players: (seed as any).players as unknown as any,
-            } as JsonObject;
-          }
-          const { intentId: autoIntentId, messageId: autoMessageId } = deriveComponentIntent({
+        execute: async (args) =>
+          executeCreateComponent(args as any, {
             roomName: job.room.name || '',
-            turnId: currentTurnId,
-            componentType,
-            spec: mergedProps,
-            slot,
-          });
-
-          let intentId = useExplicitIds ? explicitIntentId : preseededScorecardIntent ?? autoIntentId;
-          let messageId = preseededScorecardId ?? (useExplicitIds ? explicitMessageId : autoMessageId);
-
-          const existingByMessageId = getComponentEntry(messageId);
-          if (existingByMessageId && existingByMessageId.type !== componentType) {
-            const fallbackIntentId = `intent-${randomUUID()}`;
-            const fallbackMessageId = `ui-${randomUUID()}`;
-            console.warn('[VoiceAgent] messageId collision across component types; generating fresh IDs', {
-              messageId,
-              componentType,
-              existingType: existingByMessageId.type,
-            });
-            intentId = fallbackIntentId;
-            messageId = fallbackMessageId;
-          }
-
-          args.intentId = intentId;
-          args.spec = mergedProps;
-          args.messageId = messageId;
-
-          const fingerprintPayload = Object.keys(mergedProps)
-            .sort()
-            .reduce<Record<string, unknown>>((acc, key) => {
-              acc[key] = mergedProps[key];
-              return acc;
-            }, {});
-          if (slot) {
-            fingerprintPayload.__slot = slot;
-          }
-          fingerprintPayload.__type = componentType;
-          const sortedFingerprint = JSON.stringify(fingerprintPayload);
-          const recentCreate = getRecentCreateFingerprint(componentType);
-          const TTL_MS = 30000; // 30s window to absorb late replays
-          const sameTurnDuplicate =
-            !!recentCreate &&
-            recentCreate.fingerprint === sortedFingerprint &&
-            recentCreate.turnId === currentTurnId;
-          const withinGlobalTtl =
-            !!recentCreate && recentCreate.fingerprint === sortedFingerprint && now - recentCreate.createdAt < TTL_MS;
-          const intentMatches = !!recentCreate && recentCreate.intentId === intentId;
-          const slotMatches =
-            !slot || !recentCreate ? true : recentCreate.slot === slot;
-          if (intentMatches && slotMatches && (sameTurnDuplicate || withinGlobalTtl)) {
-            const recentEntry = getComponentEntry(recentCreate.messageId);
-            if (!recentEntry || recentEntry.type !== componentType) {
-              console.warn('[VoiceAgent] duplicate create fingerprint mismatch; proceeding with create', {
-                componentType,
-                recentMessageId: recentCreate.messageId,
-                recentType: recentEntry?.type,
-              });
-            } else {
-              console.log('[VoiceAgent] suppressing duplicate create_component', {
-                componentType,
-                recentMessageId: recentCreate.messageId,
-              });
-              setLastComponentForType(componentType, recentCreate.messageId);
-              setLastCreatedComponentId(recentCreate.messageId);
-              args.intentId = recentCreate.intentId;
-              args.messageId = recentCreate.messageId;
-              return { status: 'duplicate_skipped', messageId: recentCreate.messageId };
-            }
-          }
-
-          const existingComponent = getComponentEntry(messageId);
-          if (existingComponent) {
-            const fallbackSeconds =
-              typeof existingComponent?.props?.configuredDuration === 'number' &&
-                Number.isFinite(existingComponent.props.configuredDuration)
-                ? (existingComponent.props.configuredDuration as number)
-                : 300;
-            const normalizedPatch = normalizeComponentPatch(mergedProps, fallbackSeconds);
-            if (Object.keys(normalizedPatch).length === 0) {
-              console.debug('[VoiceAgent] duplicate create_component with no changes; skipping', {
-                messageId,
-                componentType,
-              });
-              return { status: 'duplicate_skipped', messageId };
-            }
-            console.log('[VoiceAgent] coalescing duplicate create_component into update_component', {
-              messageId,
-              componentType,
-            });
-            const updateParams: JsonObject = {
-              componentId: messageId,
-              patch: normalizedPatch,
-            };
-            if (intentId) {
-              updateParams.intentId = intentId;
-            }
-            if (slot) {
-              updateParams.slot = slot;
-            }
-            await sendToolCall('update_component', updateParams);
-            existingComponent.props = {
-              ...existingComponent.props,
-              ...mergedProps,
-            };
-            existingComponent.intentId = intentId;
-            if (slot) {
-              existingComponent.slot = slot;
-            }
-            if (intentId) {
-              registerLedgerEntry({
-                intentId,
-                messageId,
-                componentType,
-                slot,
-                state: 'updated',
-              });
-            }
-            setLastComponentForType(componentType, messageId);
-            setLastCreatedComponentId(messageId);
-            setRecentCreateFingerprint(componentType, {
-              fingerprint: sortedFingerprint,
-              messageId,
-              createdAt: now,
-              turnId: currentTurnId,
-              intentId,
-              slot,
-            });
-            return { status: 'queued', messageId, reusedExisting: true };
-          }
-
-          componentRegistry.set(messageId, {
-            type: componentType,
-            createdAt: Date.now(),
-            props: mergedProps as JsonObject,
-            state: {} as JsonObject,
-            intentId,
-            slot,
-            room: job.room.name || 'room',
-          });
-          if (intentId) {
-            registerLedgerEntry({
-              intentId,
-              messageId,
-              componentType,
-              slot,
-              state: 'created',
-            });
-          }
-          setLastComponentForType(componentType, messageId);
-          setLastCreatedComponentId(messageId);
-          setRecentCreateFingerprint(componentType, {
-            fingerprint: sortedFingerprint,
-            messageId,
-            createdAt: now,
-            turnId: currentTurnId,
-            intentId,
-            slot,
-          });
-
-          const payload: JsonObject = {
-            type: componentType,
-            messageId,
-          };
-          payload.spec = mergedProps as JsonObject;
-          if (initialProps && Object.keys(initialProps).length > 0) {
-            payload.props = initialProps as JsonObject;
-          }
-
-          if (intentId) {
-            payload.intentId = intentId;
-          }
-          if (slot) {
-            payload.slot = slot;
-          }
-
-          await sendToolCall('create_component', payload);
-
-          if (componentType === 'DebateScorecard') {
-            const topic = seededScorecardTopic || (typeof (mergedProps as any).topic === 'string'
-              ? String((mergedProps as any).topic).trim()
-              : inferScorecardTopicFromText(lastUserPrompt) ?? undefined) || 'Live Debate';
-            activeScorecard = { componentId: messageId, intentId, topic };
-            await sendScorecardSeedTask({
-              componentId: messageId,
-              intentId,
-              topic,
-              seedState: seededScorecardState ?? (createDefaultScorecardState(topic) as unknown as JsonObject),
-            });
-          }
-          return { status: 'queued', messageId };
-        },
+            currentTurnId,
+            scorecardSuppressWindowMs: SCORECARD_SUPPRESS_WINDOW_MS,
+            lastScorecardProvisionedAt,
+            setLastScorecardProvisionedAt: (createdAt) => {
+              lastScorecardProvisionedAt = createdAt;
+            },
+            lastUserPrompt: lastUserPrompt ?? undefined,
+            activeScorecard,
+            findLatestScorecardEntryInRoom,
+            getLastComponentForType,
+            setLastComponentForType,
+            setLastCreatedComponentId,
+            getRecentCreateFingerprint,
+            setRecentCreateFingerprint,
+            getComponentEntry,
+            setComponentEntry,
+            findIntentByMessage: findLedgerEntryByMessage,
+            findLedgerEntryByMessage,
+            registerIntentEntry: registerLedgerEntry,
+            registerLedgerEntry,
+            listRemoteParticipantLabels,
+            sendToolCall,
+            sendScorecardSeedTask,
+            setActiveScorecard: (next) => {
+              activeScorecard = next;
+            },
+          }),
       }),
       create_infographic: llm.tool({
         description: 'Create (or reuse) an Infographic widget and trigger generation from current conversation context.',
@@ -2440,10 +1439,14 @@ Your only output is function calls. Never use plain text unless absolutely neces
           }
 
           if (isDebateScorecardTarget) {
+            const inferredTopic =
+              typeof lastUserPrompt === 'string'
+                ? inferScorecardTopicFromText(lastUserPrompt)
+                : undefined;
             const patchTopic =
               typeof (patch as any)?.topic === 'string' && (patch as any).topic.trim().length > 0
                 ? String((patch as any).topic).trim()
-                : inferScorecardTopicFromText(lastUserPrompt) ?? undefined;
+                : inferredTopic;
             const patchPlayersRaw = (patch as any)?.players;
             const patchPlayers =
               Array.isArray(patchPlayersRaw) && patchPlayersRaw.length > 0
@@ -2547,7 +1550,10 @@ Your only output is function calls. Never use plain text unless absolutely neces
               typeof enrichedParams.topic !== 'string' ||
               (enrichedParams.topic as string).trim().length === 0)
           ) {
-            const inferred = inferScorecardTopicFromText(lastUserPrompt);
+            const inferred =
+              typeof lastUserPrompt === 'string'
+                ? inferScorecardTopicFromText(lastUserPrompt)
+                : null;
             if (inferred) {
               enrichedParams.topic = inferred;
             }
@@ -2597,7 +1603,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
                 ? enrichedParams.prompt.trim()
                 : undefined;
             try {
-              const ensured = await ensureDebateScorecard(topicHint, promptContext);
+              const ensured = await scorecardService.ensure(topicHint, promptContext);
               enrichedParams.componentId = ensured.componentId;
               enrichedParams.intentId = ensured.intentId;
               enrichedParams.topic = ensured.topic;
@@ -2605,7 +1611,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
                 enrichedParams.room = roomName;
               }
             } catch (error) {
-              console.warn('[VoiceAgent] ensureDebateScorecard failed during dispatch', {
+              console.warn('[VoiceAgent] scorecardService.ensure failed during dispatch', {
                 topicHint,
                 promptContext,
                 error,
@@ -2997,229 +2003,6 @@ Your only output is function calls. Never use plain text unless absolutely neces
       await generateReplySafely({ userInput: attributedInput });
     };
 
-    let ensureScorecardPromise: Promise<{ componentId: string; intentId: string; topic: string }> | null = null;
-
-    const findExistingScorecard = (topic?: string) => {
-      const currentRoom = roomKey() || job.room?.name || 'room';
-      const normalized = topic?.trim().toLowerCase();
-      let fallback: { id: string; info: ComponentRegistryEntry; topic?: string } | null = null;
-      for (const [id, info] of componentRegistry.entries()) {
-        if (info.type !== 'DebateScorecard') continue;
-        if (info.room && info.room !== currentRoom) continue;
-        const infoTopic =
-          typeof info.props?.topic === 'string' && info.props.topic.trim().length > 0
-            ? info.props.topic.trim()
-            : typeof info.state?.topic === 'string' && info.state.topic.trim().length > 0
-              ? info.state.topic.trim()
-              : undefined;
-        if (!fallback || info.createdAt > fallback.info.createdAt) {
-          fallback = { id, info, topic: infoTopic };
-        }
-        if (normalized && infoTopic?.toLowerCase() === normalized) {
-          return { id, info, topic: infoTopic };
-        }
-      }
-      return fallback;
-    };
-
-    const ensureDebateScorecard = async (topic?: string, contextText?: string) => {
-      const currentRoom = roomKey() || job.room?.name || 'room';
-      const inferredTopic = inferScorecardTopicFromText(contextText);
-      const normalizedTopic = topic && topic.trim().length ? topic.trim() : inferredTopic;
-      const normalizedLower = normalizedTopic?.toLowerCase();
-
-      if (ensureScorecardPromise) {
-        const pending = await ensureScorecardPromise;
-        if (!normalizedLower || pending.topic.toLowerCase() === normalizedLower) {
-          return pending;
-        }
-      }
-
-      if (
-        activeScorecard &&
-        (!normalizedLower || activeScorecard.topic.toLowerCase() === normalizedLower)
-      ) {
-        return activeScorecard;
-      }
-
-      const existing = findExistingScorecard(normalizedTopic);
-      if (existing) {
-        const ledgerEntry = findLedgerEntryByMessage(existing.id);
-        const resolvedTopic = normalizedTopic ?? existing.topic ?? activeScorecard?.topic ?? 'Live Debate';
-        const intentId =
-          existing.info.intentId?.trim() ||
-          ledgerEntry?.intentId ||
-          `debate-scorecard-${existing.id}`;
-        existing.info.intentId = intentId;
-        existing.info.room = currentRoom;
-        registerLedgerEntry({
-          intentId,
-          messageId: existing.id,
-          componentType: 'DebateScorecard',
-          slot: existing.info.slot,
-          state: 'updated',
-        });
-        setLastComponentForType('DebateScorecard', existing.id);
-        setLastCreatedComponentId(existing.id);
-        activeScorecard = { componentId: existing.id, intentId, topic: resolvedTopic };
-
-        const stateCandidate = (existing.info.state || existing.info.props) as any;
-        const existingPlayers = Array.isArray(stateCandidate?.players) ? stateCandidate.players : [];
-        const affLabel = existingPlayers.find((p: any) => p?.side === 'AFF')?.label;
-        const negLabel = existingPlayers.find((p: any) => p?.side === 'NEG')?.label;
-        const needsSeed =
-          (typeof normalizedTopic === 'string' &&
-            normalizedTopic.trim().length > 0 &&
-            existing.topic?.toLowerCase() !== normalizedTopic.toLowerCase()) ||
-          (typeof affLabel !== 'string' || affLabel.trim().toLowerCase() === 'affirmative') ||
-          (typeof negLabel !== 'string' || negLabel.trim().toLowerCase() === 'negative');
-
-        if (needsSeed) {
-          await sendScorecardSeedTask({
-            componentId: existing.id,
-            intentId,
-            topic: resolvedTopic,
-          });
-        }
-        return activeScorecard;
-      }
-
-      const createScorecard = async () => {
-        const topicLabel = normalizedTopic ?? activeScorecard?.topic ?? 'Live Debate';
-        const intentId = `debate-scorecard-${Date.now()}`;
-        const messageId = intentId;
-        const initialState = createDefaultScorecardState(topicLabel);
-        const seedPlayers = resolveDebatePlayerSeed();
-        initialState.players[0].label = seedPlayers[0].label;
-        initialState.players[1].label = seedPlayers[1].label;
-        initialState.status.lastAction = `Initialized debate${topicLabel ? ` on ${topicLabel}` : ''} with ${seedPlayers[0].label} vs ${seedPlayers[1].label}.`;
-        initialState.componentId = messageId;
-        initialState.version = 0;
-        const createdAt = Date.now();
-        initialState.lastUpdated = createdAt;
-
-        await sendToolCall('reserve_component', {
-          type: 'DebateScorecard',
-          intentId,
-          messageId,
-          spec: initialState as JsonObject,
-        });
-
-        await sendToolCall('create_component', {
-          type: 'DebateScorecard',
-          componentId: messageId,
-          messageId,
-          spec: initialState as JsonObject,
-        });
-
-        await sendScorecardSeedTask({
-          componentId: messageId,
-          intentId,
-          topic: topicLabel,
-          seedState: initialState as unknown as JsonObject,
-        });
-
-        componentRegistry.set(messageId, {
-          type: 'DebateScorecard',
-          createdAt,
-          props: initialState as JsonObject,
-          state: initialState as JsonObject,
-          intentId,
-          room: currentRoom,
-        });
-        lastScorecardProvisionedAt = createdAt;
-        activeScorecard = { componentId: messageId, intentId, topic: topicLabel };
-        setLastComponentForType('DebateScorecard', messageId);
-        setLastCreatedComponentId(messageId);
-        registerLedgerEntry({
-          intentId,
-          messageId,
-          componentType: 'DebateScorecard',
-          state: 'created',
-        });
-        return activeScorecard;
-      };
-
-      ensureScorecardPromise = createScorecard();
-      try {
-        return await ensureScorecardPromise;
-      } finally {
-        ensureScorecardPromise = null;
-      }
-    };
-
-    const resolveComponentId = (args: Record<string, unknown>) => {
-      const rawId = typeof args.componentId === 'string' ? args.componentId.trim() : '';
-      if (rawId) return rawId;
-
-      const currentRoom = roomKey() || job.room?.name || 'room';
-      const typeHint = typeof args.type === 'string' ? args.type.trim() : typeof args.componentType === 'string' ? args.componentType.trim() : '';
-      const allowLast = typeof args.allowLast === 'boolean' ? args.allowLast : false;
-      const acceptCandidate = (candidateId: string | undefined | null) => {
-        if (!candidateId) return '';
-        const entry = getComponentEntry(candidateId);
-        if (!entry) return '';
-        if (typeHint && entry.type !== typeHint) return '';
-        return candidateId;
-      };
-      const rawIntent = typeof args.intentId === 'string' ? args.intentId.trim() : '';
-      if (rawIntent) {
-        const entry = intentLedger.get(rawIntent);
-        if (entry) {
-          const accepted = acceptCandidate(entry.messageId);
-          if (accepted) return accepted;
-        }
-        for (const [id, info] of componentRegistry.entries()) {
-          if (info.intentId === rawIntent && (!info.room || info.room === currentRoom)) {
-            const accepted = acceptCandidate(id);
-            if (accepted) return accepted;
-          }
-        }
-      }
-
-      const rawSlot = typeof args.slot === 'string' ? args.slot.trim() : '';
-      if (rawSlot) {
-        const slotIntent = slotLedger.get(rawSlot);
-        if (slotIntent) {
-          const entry = intentLedger.get(slotIntent);
-          if (entry) {
-            const accepted = acceptCandidate(entry.messageId);
-            if (accepted) return accepted;
-          }
-        }
-        for (const [id, info] of componentRegistry.entries()) {
-          if (info.slot === rawSlot && (!info.room || info.room === currentRoom)) {
-            const accepted = acceptCandidate(id);
-            if (accepted) return accepted;
-          }
-        }
-      }
-
-      if (typeHint) {
-        const byType = getLastComponentForType(typeHint);
-        const accepted = acceptCandidate(byType);
-        if (accepted) return accepted;
-        for (const [id, info] of componentRegistry.entries()) {
-          if (info.type === typeHint && (!info.room || info.room === currentRoom)) {
-            const acceptedCandidate = acceptCandidate(id);
-            if (acceptedCandidate) return acceptedCandidate;
-          }
-        }
-      }
-      if ((typeHint === 'ResearchPanel' || allowLast) && lastResearchPanelId) {
-        const acceptedResearchPanel = acceptCandidate(lastResearchPanelId);
-        if (acceptedResearchPanel) {
-          return acceptedResearchPanel;
-        }
-      }
-      const lastCreated = getLastCreatedComponentId();
-      const acceptedLast = acceptCandidate(lastCreated);
-      if (acceptedLast) {
-        return acceptedLast;
-      }
-      return '';
-    };
-
     session.on((voice as any).AgentSessionEventTypes.FunctionToolsExecuted, async (event: any) => {
       const calls = event.functionCalls ?? [];
       console.log('[VoiceAgent] FunctionToolsExecuted', {
@@ -3523,7 +2306,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
       transcriptionProcessingEnabled = true;
       console.log('[VoiceAgent] transcription processing enabled', {
         reason,
-        buffered: pendingTranscriptions.length,
+        buffered: transcriptionBuffer.size(),
       });
       void drainPendingTranscriptions();
     };

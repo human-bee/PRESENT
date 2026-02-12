@@ -178,9 +178,9 @@ const logger = createLogger('agents:conductor:router');
 
 async function withScorecardLock<T>(key: string, fn: () => Promise<T>): Promise<T> {
   const previous = scorecardExecutionLocks.get(key) ?? Promise.resolve();
-  let release: (() => void) | null = null;
+  let release: (() => void) | undefined;
   const next = new Promise<void>((resolve) => {
-    release = resolve;
+    release = () => resolve();
   });
   const current = previous.then(() => next);
   scorecardExecutionLocks.set(key, current);
@@ -190,7 +190,7 @@ async function withScorecardLock<T>(key: string, fn: () => Promise<T>): Promise<
     return await fn();
   } finally {
     try {
-      release?.();
+      if (release) release();
     } finally {
       if (scorecardExecutionLocks.get(key) === current) {
         scorecardExecutionLocks.delete(key);
@@ -327,7 +327,7 @@ const buildIntentMetadata = (
       ? (intent.metadata as Record<string, unknown>)
       : {};
 
-  return {
+  const metadata = {
     ...base,
     contextProfile,
     spectrum: getFairyContextSpectrum(contextProfile).value,
@@ -339,6 +339,7 @@ const buildIntentMetadata = (
       summary: decision.summary,
     },
   };
+  return JSON.parse(JSON.stringify(metadata)) as JsonObject;
 };
 
 const extractContextBundle = (metadata: Record<string, unknown> | null) => {
@@ -476,10 +477,10 @@ const dispatchSummaryDocument = async (
   const summaryPatch = {
     title: formatted.title,
     summary: result.summary,
-    highlights: result.highlights,
-    decisions: result.decisions,
-    actionItems: result.actionItems,
-    tags: result.tags,
+    highlights: Array.isArray(result.highlights) ? result.highlights : [],
+    decisions: Array.isArray(result.decisions) ? result.decisions : [],
+    actionItems: Array.isArray(result.actionItems) ? result.actionItems : [],
+    tags: Array.isArray(result.tags) ? result.tags : [],
     sourceDocumentId: documentId,
     contextProfile,
     lastUpdated: Date.now(),
@@ -521,12 +522,15 @@ async function dispatchFastLane(intent: FairyIntent, decision: FairyRouteDecisio
   if (detailWithRoom && !detailWithRoom.roomName && intent.room) {
     detailWithRoom.roomName = intent.room;
   }
+  const detailPayload: JsonObject | undefined = detailWithRoom
+    ? (JSON.parse(JSON.stringify(detailWithRoom)) as JsonObject)
+    : undefined;
   await broadcastToolCall({
     room: intent.room,
     tool: 'dispatch_dom_event',
     params: {
       event: decision.fastLaneEvent,
-      detail: detailWithRoom,
+      ...(detailPayload ? { detail: detailPayload } : {}),
     },
   });
 }
@@ -624,9 +628,9 @@ async function handleFairyIntent(rawParams: JsonObject) {
         room: intent.room,
         message,
         requestId: intent.id,
-        bounds: intent.bounds,
-        selectionIds: intent.selectionIds,
-        metadata: actionMetadata,
+        ...(intent.bounds ? { bounds: intent.bounds } : {}),
+        ...(Array.isArray(intent.selectionIds) ? { selectionIds: intent.selectionIds } : {}),
+        ...(actionMetadata ? { metadata: actionMetadata } : {}),
       });
     }
 
@@ -636,7 +640,7 @@ async function handleFairyIntent(rawParams: JsonObject) {
         room: intent.room,
         componentId,
         prompt: message,
-        summary,
+        ...(summary ? { summary } : {}),
         intent: 'scorecard.run',
       });
     }
@@ -680,7 +684,7 @@ async function handleFairyIntent(rawParams: JsonObject) {
     return { status: 'skipped', intentId: intent.id, decision };
   };
 
-  const results: Array<Record<string, unknown>> = [];
+  const results: Array<unknown> = [];
   if (decision.kind !== 'bundle') {
     results.push(await executeDecision(decision));
   }

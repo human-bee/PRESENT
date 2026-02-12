@@ -35,7 +35,10 @@ export function withcustomRegistry<P extends Record<string, unknown>>(
     const effectiveProps = useMemo(() => ({ ...localProps }), [localProps]);
 
     // Generate fallback ID if no custom message ID provided
-    const effectiveMessageId = __custom_message_id || `${componentType.toLowerCase()}-${Date.now()}`;
+    const effectiveMessageId =
+      typeof __custom_message_id === 'string' && __custom_message_id.trim().length > 0
+        ? __custom_message_id
+        : `${componentType.toLowerCase()}-${Date.now()}`;
 
     // Default update handler - merge patch into props
     const defaultUpdateHandler = useCallback(

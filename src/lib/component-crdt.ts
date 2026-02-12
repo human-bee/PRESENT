@@ -56,6 +56,10 @@ export function filterNewOps(
     epoch = { epochKey, seen: new Set<string>() };
     opEpochs.set(componentId, epoch);
   }
+  if (!epoch) {
+    epoch = { epochKey, seen: new Set<string>() };
+    opEpochs.set(componentId, epoch);
+  }
 
   const fresh: unknown[] = [];
   for (const op of ops) {

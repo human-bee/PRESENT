@@ -3,7 +3,7 @@ import { AgentRequest } from '../types/AgentRequest'
 import { BasePromptPart } from '../types/BasePromptPart'
 import { PromptPartUtil } from './PromptPartUtil'
 
-interface DataPart extends BasePromptPart<'data'> {
+export interface DataPart extends BasePromptPart<'data'> {
 	data: JsonValue[]
 }
 

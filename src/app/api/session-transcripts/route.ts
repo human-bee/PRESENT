@@ -13,7 +13,9 @@ const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
 async function getServerClient(req: NextRequest): Promise<{
-  supabase: ReturnType<typeof createClient>;
+  // This route uses ad-hoc tables without generated Database types.
+  // Treat the Supabase client as untyped to avoid `never` query results.
+  supabase: any;
   isAuthenticated: boolean;
 }> {
   const authHeader = req.headers.get('Authorization');
@@ -107,7 +109,17 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  const transcript = (data || [])
+  type TranscriptRow = {
+    event_id: string;
+    participant_id: string;
+    participant_name: string | null;
+    text: string;
+    ts: number;
+    manual: boolean | null;
+  };
+
+  const rows = (data ?? []) as unknown as TranscriptRow[];
+  const transcript = rows
     .slice()
     .reverse()
     .map((row) => ({
@@ -150,11 +162,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: sessionErr.message }, { status: 500 });
   }
 
-  if (!session?.room_name) {
+  type SessionRow = { room_name: string | null };
+  const sessionRow = session as unknown as SessionRow | null;
+
+  if (!sessionRow?.room_name) {
     return NextResponse.json({ error: 'Session not found' }, { status: 404 });
   }
 
-  const roomName = String(session.room_name);
+  const roomName = String(sessionRow.room_name);
   const rows = entries.map((entry) => ({
     event_id: entry.eventId,
     session_id: sessionId,

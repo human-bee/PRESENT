@@ -142,10 +142,14 @@ const legacyActionSchemas = {
     .object({ id: z.string(), w: z.number().positive(), h: z.number().positive(), anchor: z.string().optional() })
     .passthrough(),
   rotate: z.union([canonicalRotateSchema, tldrawRotateSchema]).transform((value) => {
-    if ('shapeIds' in value) {
+    if (
+      'shapeIds' in value &&
+      Array.isArray((value as any).shapeIds) &&
+      typeof (value as any).degrees === 'number'
+    ) {
       return {
-        ids: value.shapeIds,
-        angle: (value.degrees * Math.PI) / 180,
+        ids: (value as any).shapeIds as string[],
+        angle: (((value as any).degrees as number) * Math.PI) / 180,
       };
     }
     return value;
@@ -155,9 +159,13 @@ const legacyActionSchemas = {
   align: z
     .union([canonicalAlignSchema, tldrawAlignSchema])
     .transform((value) => {
-      if ('shapeIds' in value) {
-        const { axis, mode } = mapAlignmentToAxisMode(value.alignment);
-        return { ids: value.shapeIds, axis, mode };
+      if (
+        'shapeIds' in value &&
+        Array.isArray((value as any).shapeIds) &&
+        typeof (value as any).alignment === 'string'
+      ) {
+        const { axis, mode } = mapAlignmentToAxisMode((value as any).alignment);
+        return { ids: (value as any).shapeIds as string[], axis, mode };
       }
       return value;
     }),

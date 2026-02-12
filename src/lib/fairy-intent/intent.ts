@@ -19,7 +19,7 @@ export const FairyIntentSchema = z
     timestamp: z.number().optional(),
     selectionIds: z.array(z.string()).optional(),
     bounds: FairyBoundsSchema.optional(),
-    metadata: z.record(z.unknown()).nullable().optional(),
+    metadata: z.record(z.string(), z.unknown()).nullable().optional(),
     componentId: z.string().optional(),
     contextProfile: z.enum(FAIRY_CONTEXT_PROFILES).optional(),
     spectrum: z.number().min(0).max(1).optional(),

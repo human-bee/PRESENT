@@ -2,6 +2,8 @@ import type { Editor } from '@tldraw/tldraw';
 import type { RefObject } from 'react';
 import type { CanvasEventMap } from './types';
 
+type DivRef = RefObject<HTMLDivElement | null>;
+
 function createFocusHandler(editor: Editor) {
   return (event: Event) => {
     const detail = (event as CustomEvent).detail || {};
@@ -76,7 +78,7 @@ function createZoomAllHandler(editor: Editor) {
   };
 }
 
-function createToggleGridHandler(containerRef: RefObject<HTMLDivElement>) {
+function createToggleGridHandler(containerRef: DivRef) {
   return () => {
     const el = containerRef.current;
     if (!el) return;
@@ -92,7 +94,7 @@ function createToggleGridHandler(containerRef: RefObject<HTMLDivElement>) {
   };
 }
 
-function createBackgroundHandler(containerRef: RefObject<HTMLDivElement>) {
+function createBackgroundHandler(containerRef: DivRef) {
   return (event: Event) => {
     const el = containerRef.current;
     if (!el) return;
@@ -108,7 +110,7 @@ function createBackgroundHandler(containerRef: RefObject<HTMLDivElement>) {
   };
 }
 
-function createThemeHandler(containerRef: RefObject<HTMLDivElement>) {
+function createThemeHandler(containerRef: DivRef) {
   return (event: Event) => {
     const el = containerRef.current;
     if (!el) return;
@@ -120,7 +122,7 @@ function createThemeHandler(containerRef: RefObject<HTMLDivElement>) {
 
 export function createCanvasNavigationHandlers(
   editor: Editor,
-  containerRef: RefObject<HTMLDivElement>,
+  containerRef: DivRef,
 ): CanvasEventMap {
   return {
     'tldraw:canvas_focus': createFocusHandler(editor),

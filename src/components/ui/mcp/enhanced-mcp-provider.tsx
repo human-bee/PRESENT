@@ -39,6 +39,8 @@ interface EnhancedMcpProviderProps {
  * Enhanced MCP Provider with smart error handling and connection management
  */
 let loggedNoServersOnce = false;
+const LOGS =
+  typeof process !== 'undefined' && process.env.NEXT_PUBLIC_TOOL_DISPATCHER_LOGS === 'true';
 
 export function EnhancedMcpProvider({
   children,
@@ -59,7 +61,6 @@ export function EnhancedMcpProvider({
   const [lastConnectionTime, setLastConnectionTime] = useState<number>(0);
 
   // Monitor connection status
-  const LOGS = typeof process !== 'undefined' && process.env.NEXT_PUBLIC_TOOL_DISPATCHER_LOGS === 'true';
   const updateConnectionStatus = useCallback(() => {
     const statuses = getMcpServerStatuses();
     const connected = Array.from(statuses.values()).filter((s) => s.status === 'connected').length;

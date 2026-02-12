@@ -316,8 +316,11 @@ export const MessageThreadCollapsible = React.forwardRef<
 
   type LiveTranscriptionPayload = {
     type: 'live_transcription';
+    event_id: string;
     text: string;
     speaker: string;
+    participantId: string;
+    participantName?: string;
     timestamp: number;
     is_final: boolean;
     manual: boolean;
@@ -485,11 +488,11 @@ export const MessageThreadCollapsible = React.forwardRef<
         if (params.direction) parts.push(`dir:${params.direction}`);
         return { name, preview: parts.join(' · ') };
       };
-      const names =
+      const names: string[] =
         Array.isArray(detail.actions) && detail.actions.length > 0
-          ? detail.actions.map((a: any) => a?.name || a?._type || 'unknown')
+          ? detail.actions.map((a: any) => String(a?.name || a?._type || 'unknown'))
           : [];
-      const verbCounts = names.reduce<Record<string, number>>((acc, name) => {
+      const verbCounts = names.reduce((acc: Record<string, number>, name) => {
         acc[name] = (acc[name] || 0) + 1;
         return acc;
       }, {});

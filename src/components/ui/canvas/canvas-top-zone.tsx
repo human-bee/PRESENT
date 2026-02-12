@@ -8,8 +8,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { McpConfigButton } from './mcp-config-button';
-import { McpStatusIndicator } from './mcp-status-indicator';
+import { McpConfigButton } from '@/components/ui/mcp/mcp-config-button';
+import { McpStatusIndicator } from '@/components/ui/mcp/mcp-status-indicator';
 
 type FlowchartErrorBannerState = {
   errorText: string;
