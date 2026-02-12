@@ -46,6 +46,7 @@ export function CustomShapeComponent({ shape }: { shape: CustomShape }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const scaleWrapperRef = useRef<HTMLDivElement>(null);
   const contentInnerRef = useRef<HTMLDivElement>(null);
+  const rehydrateRequestRef = useRef<string | null>(null);
   const componentStore = useContext(ComponentStoreContext);
   const editor = useEditor();
   const [, setRenderTick] = useState(0);
@@ -109,6 +110,37 @@ export function CustomShapeComponent({ shape }: { shape: CustomShape }) {
       }
     };
   }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !componentStore) return;
+    const messageId = String(shape.props.customComponent || '').trim();
+    if (!messageId) return;
+
+    const requestKey = `${shape.id}:${messageId}`;
+    if (componentStore.has(messageId)) {
+      if (rehydrateRequestRef.current === requestKey) {
+        rehydrateRequestRef.current = null;
+      }
+      return;
+    }
+    if (rehydrateRequestRef.current === requestKey) {
+      return;
+    }
+    rehydrateRequestRef.current = requestKey;
+    try {
+      window.dispatchEvent(
+        new CustomEvent('custom:rehydrateComponents', {
+          detail: {
+            force: true,
+            reason: 'shape_component_missing',
+            messageId,
+          },
+        }),
+      );
+    } catch {
+      // ignore dispatch failures in non-browser test contexts
+    }
+  }, [componentStore, shape.id, shape.props.customComponent, shape.props.name, shape.props.state]);
 
   useEffect(() => {
     autoFittedRef.current = false;

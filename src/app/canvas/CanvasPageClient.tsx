@@ -525,15 +525,17 @@ export function CanvasPageClient() {
     roomName: '',
     participantCount: 0,
   });
+  const roomNameRef = useRef(roomName);
 
   // Track component lifecycle and cleanup room
   React.useEffect(() => {
     // Update room state when room state changes
     const updateRoomState = () => {
       const remoteIdentities = Array.from(room.remoteParticipants.values()).map((p) => p.identity);
+      const currentRoomName = roomNameRef.current;
       const next = {
         isConnected: room.state === ConnectionState.Connected,
-        roomName,
+        roomName: currentRoomName,
         participantCount: room.numParticipants,
       };
       setRoomState(next);
@@ -566,13 +568,13 @@ export function CanvasPageClient() {
       room.off(RoomEvent.Reconnected, updateRoomState);
       room.off(RoomEvent.ParticipantConnected, updateRoomState);
       room.off(RoomEvent.ParticipantDisconnected, updateRoomState);
-      room.disconnect();
     };
-  }, [room, roomName]);
+  }, [room]);
 
   // Keep context roomName in sync when the computed roomName changes
   useEffect(() => {
     if (roomName) {
+      roomNameRef.current = roomName;
       setRoomState((prev) => ({ ...prev, roomName }));
     }
   }, [roomName]);
