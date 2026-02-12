@@ -14,14 +14,15 @@ import {
   LiveKitRoom,
   RoomAudioRenderer,
   useLocalParticipant,
-  useToken,
 } from '@livekit/components-react';
 import { usecustomThreadInput } from '@custom-ai/react';
 import { MediaDeviceFailure, RpcError, RpcInvocationData } from 'livekit-client';
 import { ReactNode, useEffect, useMemo, useRef, useState } from 'react';
-import { generateRandomUserId } from '@/lib/helper';
 import { Button } from '@/components/ui/shared/button';
 import { Card } from '@/components/ui/shared/card';
+import { buildLivekitTokenHeaders } from '@/components/ui/livekit/hooks/utils/lk-token';
+import { resolveEdgeIngressUrl } from '@/lib/edge-ingress';
+import { generateRandomUserId } from '@/lib/helper';
 
 // Child component that will handle RPC registration
 export function RpcHandler({ contextKey }: { contextKey: string }) {
@@ -115,6 +116,7 @@ export function LiveKitProvider({ children }: LiveKitProviderProps) {
     [],
   );
   const [shouldConnect, setShouldConnect] = useState(false);
+  const [token, setToken] = useState<string | null>(null);
 
   const tokenOptions = useMemo(() => {
     const userId = params?.get('user') ?? generateRandomUserId();
@@ -126,7 +128,43 @@ export function LiveKitProvider({ children }: LiveKitProviderProps) {
     };
   }, []);
 
-  const token = useToken(process.env.NEXT_PUBLIC_LK_TOKEN_ENDPOINT, roomName, tokenOptions);
+  useEffect(() => {
+    let cancelled = false;
+    const fetchToken = async () => {
+      try {
+        const tokenEndpoint =
+          process.env.NEXT_PUBLIC_LK_TOKEN_ENDPOINT || resolveEdgeIngressUrl('/api/token');
+        const base = typeof window !== 'undefined' ? window.location.origin : '';
+        const tokenUrl = new URL(tokenEndpoint, base);
+        tokenUrl.searchParams.set('roomName', roomName);
+        tokenUrl.searchParams.set('identity', tokenOptions.userInfo.identity);
+        tokenUrl.searchParams.set('name', tokenOptions.userInfo.name);
+        const headers = await buildLivekitTokenHeaders({
+          roomName,
+          identity: tokenOptions.userInfo.identity,
+          pathname: tokenUrl.pathname,
+        });
+        const response = await fetch(tokenUrl.toString(), { headers, cache: 'no-store' });
+        if (!response.ok) {
+          throw new Error(`Token request failed: ${response.status}`);
+        }
+        const data = await response.json();
+        const resolvedToken = data?.accessToken || data?.token || null;
+        if (!cancelled) {
+          setToken(resolvedToken);
+        }
+      } catch (error) {
+        console.error('[LiveKitProvider] token fetch failed', error);
+        if (!cancelled) {
+          setToken(null);
+        }
+      }
+    };
+    void fetchToken();
+    return () => {
+      cancelled = true;
+    };
+  }, [roomName, tokenOptions.userInfo.identity, tokenOptions.userInfo.name]);
 
   useEffect(() => {
     console.log('Token endpoint:', process.env.NEXT_PUBLIC_LK_TOKEN_ENDPOINT);
@@ -144,7 +182,7 @@ export function LiveKitProvider({ children }: LiveKitProviderProps) {
   return (
     <LiveKitRoom
       audio={true}
-      token={token}
+      token={token || undefined}
       connect={shouldConnect}
       serverUrl={process.env.NEXT_PUBLIC_LK_SERVER_URL}
       onMediaDeviceFailure={onDeviceFailure}

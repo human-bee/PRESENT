@@ -2,6 +2,7 @@
  * Type for MCP Server entries
  */
 import { createLogger } from '@/lib/utils';
+import { resolveEdgeIngressUrl } from '@/lib/edge-ingress';
 
 export type McpServer =
   | string
@@ -205,7 +206,8 @@ export function loadMcpServers(): McpServer[] {
           }
 
           // Update the URL to use our proxy
-          const proxiedUrl = `/api/mcp-proxy?target=${encodeURIComponent(url)}`;
+          const proxyBase = resolveEdgeIngressUrl('/api/mcp-proxy');
+          const proxiedUrl = `${proxyBase}?target=${encodeURIComponent(url)}`;
 
           if (typeof processedServer === 'string') {
             processedServer = proxiedUrl;

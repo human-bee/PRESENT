@@ -1,0 +1,14 @@
+name = "present-edge-ingress"
+main = "src/index.ts"
+compatibility_date = "2025-02-01"
+workers_dev = true
+preview_urls = false
+
+[observability]
+enabled = true
+
+# Required secret/config:
+# - ORIGIN_BASE_URL: Origin API base URL (e.g. https://your-app.vercel.app)
+# Optional:
+# - EDGE_ALLOWED_ORIGINS: Comma-separated origin allowlist for browser CORS
+# - EDGE_INGRESS_SHARED_SECRET: Forwarded as x-edge-ingress-secret to origin

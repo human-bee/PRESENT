@@ -1,13 +1,27 @@
 import crypto from 'node:crypto';
 import OpenAI from 'openai';
 import { z } from 'zod';
+import { consumeBudget, isCostCircuitBreakerEnabled } from '@/lib/server/traffic-guards';
 
 export const webSearchArgsSchema = z.object({
   query: z.string().min(4, 'query must be at least 4 characters').max(400),
   maxResults: z.number().int().min(1).max(6).default(3),
   includeAnswer: z.boolean().default(true),
+  claimId: z.string().optional(),
+  normalizedHint: z.string().optional(),
+  freshnessBucket: z.string().optional(),
 });
 export type WebSearchArgs = z.infer<typeof webSearchArgsSchema>;
+
+export type EvidenceCacheKey = {
+  claimId: string;
+  normalizedHint: string;
+  queryHash: string;
+  model: string;
+  freshnessBucket: string;
+  maxResults: number;
+  includeAnswer: boolean;
+};
 
 export type WebSearchHit = {
   id: string;
@@ -30,6 +44,11 @@ export type WebSearchResponse = {
 };
 
 let cachedClient: OpenAI | null = null;
+const evidenceCache = new Map<string, { response: WebSearchResponse; expiresAt: number }>();
+const FACT_CHECK_CACHE_TTL_MS = Math.max(
+  1_000,
+  Number(process.env.FACT_CHECK_CACHE_TTL_SEC ?? 900) * 1000,
+);
 
 function getClient(): OpenAI {
   if (cachedClient) return cachedClient;
@@ -43,6 +62,38 @@ function getClient(): OpenAI {
 
 function hashId(value: string): string {
   return crypto.createHash('sha1').update(value).digest('hex').slice(0, 16);
+}
+
+function normalizeHint(value: string): string {
+  return value.trim().toLowerCase().replace(/\s+/g, ' ').slice(0, 240);
+}
+
+function buildEvidenceCacheKey(args: WebSearchArgs, model: string): EvidenceCacheKey {
+  const hintBase = args.normalizedHint || args.query;
+  const claimId = (args.claimId || `query:${hashId(args.query)}`).trim();
+  const freshnessBucket =
+    args.freshnessBucket || new Date().toISOString().slice(0, 13).replace(/[:-]/g, '');
+  return {
+    claimId,
+    normalizedHint: normalizeHint(hintBase),
+    queryHash: hashId(args.query),
+    model,
+    freshnessBucket,
+    maxResults: args.maxResults,
+    includeAnswer: args.includeAnswer,
+  };
+}
+
+function stringifyEvidenceCacheKey(key: EvidenceCacheKey): string {
+  return [
+    key.claimId,
+    key.normalizedHint,
+    key.queryHash,
+    key.model,
+    key.freshnessBucket,
+    String(key.maxResults),
+    String(key.includeAnswer),
+  ].join('|');
 }
 
 function coerceArray<T>(value: unknown): T[] {
@@ -115,6 +166,21 @@ export async function performWebSearch(args: WebSearchArgs): Promise<WebSearchRe
     process.env.CANVAS_STEWARD_SEARCH_MODEL ||
     process.env.DEBATE_STEWARD_SEARCH_MODEL ||
     'gpt-5-mini';
+  if (isCostCircuitBreakerEnabled()) {
+    const searchBudgetPerMinute = Math.max(1, Number(process.env.COST_SEARCH_PER_MINUTE_LIMIT ?? 40));
+    const searchBudget = consumeBudget(`web-search:${model}`, 1, searchBudgetPerMinute, 60_000);
+    if (!searchBudget.ok) {
+      const error = new Error('WEB_SEARCH_BUDGET_EXCEEDED');
+      (error as Error & { retryAfterSec?: number }).retryAfterSec = searchBudget.retryAfterSec;
+      throw error;
+    }
+  }
+  const evidenceCacheKey = buildEvidenceCacheKey(parsed, model);
+  const cacheKey = stringifyEvidenceCacheKey(evidenceCacheKey);
+  const cached = evidenceCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) {
+    return { ...cached.response };
+  }
 
   const systemPrompt = `You are a JSON API for web evidence used in debate fact-checking.
 
@@ -204,11 +270,22 @@ Instructions:
       }
     : undefined;
 
-  return {
+  const result: WebSearchResponse = {
     summary: summary || `Top findings for "${parsed.query}"`,
     hits: normalizedHits.slice(0, parsed.maxResults),
     query: parsed.query,
     model,
     usage,
   };
+  evidenceCache.set(cacheKey, { response: result, expiresAt: Date.now() + FACT_CHECK_CACHE_TTL_MS });
+  if (evidenceCache.size > 500) {
+    const now = Date.now();
+    for (const [key, value] of evidenceCache) {
+      if (value.expiresAt <= now) {
+        evidenceCache.delete(key);
+      }
+    }
+  }
+
+  return result;
 }

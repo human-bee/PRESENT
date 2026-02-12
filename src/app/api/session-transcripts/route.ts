@@ -8,6 +8,10 @@ import { getBooleanFlag } from '@/lib/feature-flags';
 export const runtime = 'nodejs';
 
 const DEMO_MODE_ENABLED = getBooleanFlag(process.env.NEXT_PUBLIC_CANVAS_DEMO_MODE, false);
+const TRANSCRIPT_RETENTION_DAYS = Math.max(
+  1,
+  Number(process.env.TRANSCRIPT_RETENTION_DAYS ?? 30),
+);
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
@@ -97,11 +101,13 @@ export async function GET(req: NextRequest) {
   }
 
   const { sessionId, limit } = parsed.data;
+  const retentionCutoff = Date.now() - TRANSCRIPT_RETENTION_DAYS * 24 * 60 * 60 * 1000;
 
   const { data, error } = await supabase
     .from('canvas_session_transcripts')
     .select('event_id, participant_id, participant_name, text, ts, manual')
     .eq('session_id', sessionId)
+    .gte('ts', retentionCutoff)
     .order('ts', { ascending: false })
     .limit(limit);
 
@@ -151,6 +157,7 @@ export async function POST(req: NextRequest) {
   }
 
   const { sessionId, entries } = parsed.data;
+  const retentionCutoff = Date.now() - TRANSCRIPT_RETENTION_DAYS * 24 * 60 * 60 * 1000;
 
   const { data: session, error: sessionErr } = await supabase
     .from('canvas_sessions')
@@ -181,9 +188,21 @@ export async function POST(req: NextRequest) {
     manual: entry.manual ?? false,
   }));
 
+  const freshRows = rows.filter((row) => Number.isFinite(row.ts) && row.ts >= retentionCutoff);
+  if (freshRows.length === 0) {
+    return NextResponse.json({ ok: true, skipped: true });
+  }
+
+  // Opportunistic cleanup keeps transcript storage bounded without a dedicated cron.
+  void supabase
+    .from('canvas_session_transcripts')
+    .delete()
+    .eq('session_id', sessionId)
+    .lt('ts', retentionCutoff);
+
   const { error } = await supabase
     .from('canvas_session_transcripts')
-    .upsert(rows, { onConflict: 'event_id', ignoreDuplicates: true });
+    .upsert(freshRows, { onConflict: 'event_id', ignoreDuplicates: true });
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
