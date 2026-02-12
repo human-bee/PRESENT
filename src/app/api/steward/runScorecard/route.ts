@@ -6,6 +6,11 @@ import { runDebateScorecardStewardFast } from '@/lib/agents/subagents/debate-ste
 import { createLogger } from '@/lib/logging';
 import { parseJsonObject, stewardRunScorecardRequestSchema } from '@/lib/agents/shared/schemas';
 import type { JsonObject, JsonValue } from '@/lib/utils/json-schema';
+import {
+  applyOrchestrationEnvelope,
+  deriveDefaultLockKey,
+  extractOrchestrationEnvelope,
+} from '@/lib/agents/shared/orchestration-envelope';
 
 export const runtime = 'nodejs';
 
@@ -35,6 +40,10 @@ export async function POST(req: NextRequest) {
       topic,
       task,
       requestId,
+      executionId,
+      idempotencyKey,
+      lockKey,
+      attempt,
       ...rest
     } = parsed;
 
@@ -82,6 +91,32 @@ export async function POST(req: NextRequest) {
       intent: normalizedIntent,
       topic: normalizedTopic,
     });
+    const orchestrationEnvelope = extractOrchestrationEnvelope(
+      {
+        ...normalizedParams,
+        executionId,
+        idempotencyKey,
+        lockKey,
+        attempt,
+      },
+      { attempt: typeof attempt === 'number' ? attempt : undefined },
+    );
+    const normalizedLockKey =
+      orchestrationEnvelope.lockKey ??
+      deriveDefaultLockKey({
+        task: normalizedTask,
+        room: trimmedRoom,
+        componentId: trimmedComponentId,
+        componentType: 'DebateScorecard',
+      });
+    const enrichedParams = applyOrchestrationEnvelope(normalizedParams, {
+      ...orchestrationEnvelope,
+      lockKey: normalizedLockKey,
+    });
+    const normalizedRequestId =
+      typeof requestId === 'string' && requestId.trim().length > 0
+        ? requestId.trim()
+        : orchestrationEnvelope.idempotencyKey;
 
     try {
       // Lazily instantiate so `next build` doesn't require Supabase env vars.
@@ -89,9 +124,16 @@ export async function POST(req: NextRequest) {
       const enqueueResult = await queue.enqueueTask({
         room: trimmedRoom,
         task: normalizedTask,
-        params: normalizedParams,
-        requestId: typeof requestId === 'string' && requestId.trim() ? requestId.trim() : undefined,
-        resourceKeys: [`room:${trimmedRoom}`, `scorecard:${trimmedComponentId}`],
+        params: enrichedParams,
+        requestId: normalizedRequestId,
+        dedupeKey: orchestrationEnvelope.idempotencyKey,
+        lockKey: normalizedLockKey,
+        idempotencyKey: orchestrationEnvelope.idempotencyKey,
+        resourceKeys: [
+          `room:${trimmedRoom}`,
+          `scorecard:${trimmedComponentId}`,
+          ...(normalizedLockKey ? [`lock:${normalizedLockKey}`] : []),
+        ],
       });
       return NextResponse.json({ status: 'queued', task: enqueueResult }, { status: 202 });
     } catch (error) {

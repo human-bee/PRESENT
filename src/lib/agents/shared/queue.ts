@@ -34,6 +34,10 @@ export interface EnqueueTaskInput {
   resourceKeys?: string[];
   priority?: number;
   runAt?: Date;
+  executionId?: string;
+  idempotencyKey?: string;
+  lockKey?: string;
+  attempt?: number;
 }
 
 export interface ClaimOptions {
@@ -76,17 +80,45 @@ export class AgentTaskQueue {
       resourceKeys = [],
       priority = 0,
       runAt,
+      idempotencyKey,
+      lockKey,
     } = input;
 
     const nowIso = new Date().toISOString();
 
+    const paramsRecord = params as Record<string, unknown>;
+    const lockKeyFromParams =
+      typeof paramsRecord.lockKey === 'string' && paramsRecord.lockKey.trim().length > 0
+        ? paramsRecord.lockKey.trim()
+        : undefined;
+    const lockKeyNormalized =
+      (typeof lockKey === 'string' && lockKey.trim().length > 0 ? lockKey.trim() : undefined) ??
+      lockKeyFromParams;
+    const idempotencyKeyFromParams =
+      typeof paramsRecord.idempotencyKey === 'string' && paramsRecord.idempotencyKey.trim().length > 0
+        ? paramsRecord.idempotencyKey.trim()
+        : undefined;
+    const idempotencyNormalized =
+      (typeof idempotencyKey === 'string' && idempotencyKey.trim().length > 0
+        ? idempotencyKey.trim()
+        : undefined) ?? idempotencyKeyFromParams;
+
     const resourceKeySet = new Set(resourceKeys.length ? resourceKeys : [`room:${room}`]);
+    if (lockKeyNormalized) {
+      resourceKeySet.add(`lock:${lockKeyNormalized}`);
+    }
+    const resolvedRequestId =
+      (typeof requestId === 'string' && requestId.trim().length > 0 ? requestId.trim() : undefined) ??
+      idempotencyNormalized;
+    const resolvedDedupeKey =
+      (typeof dedupeKey === 'string' && dedupeKey.trim().length > 0 ? dedupeKey.trim() : undefined) ??
+      idempotencyNormalized;
 
     logger.debug('enqueueTask', {
       room,
       task,
-      requestId,
-      dedupeKey,
+      requestId: resolvedRequestId,
+      dedupeKey: resolvedDedupeKey,
       resourceKeys: Array.from(resourceKeySet),
       hasSupabase: Boolean(this.supabase),
     });
@@ -97,8 +129,8 @@ export class AgentTaskQueue {
         room,
         task,
         params,
-        request_id: requestId ?? null,
-        dedupe_key: dedupeKey ?? null,
+        request_id: resolvedRequestId ?? null,
+        dedupe_key: resolvedDedupeKey ?? null,
         resource_keys: Array.from(resourceKeySet),
         priority,
         run_at: runAt ? runAt.toISOString() : null,

@@ -1,11 +1,31 @@
 import type { SystemCapabilities } from './capabilities';
 
+type BuildVoiceAgentInstructionOptions = {
+  capabilityProfile?: 'full' | 'lean_adaptive';
+};
+
 export function buildVoiceAgentInstructions(
   systemCapabilities: SystemCapabilities,
-  componentsFallback: Array<{ name: string; description: string; examples?: string[] }>,
+  componentsFallback: Array<{
+    name: string;
+    description: string;
+    examples?: string[];
+    tier?: string;
+    group?: string;
+    critical?: boolean;
+  }>,
+  options: BuildVoiceAgentInstructionOptions = {},
 ): string {
+  const requestedProfile =
+    options.capabilityProfile ??
+    (systemCapabilities?.capabilityProfile === 'lean_adaptive'
+      ? 'lean_adaptive'
+      : 'full');
+  const isLeanProfile = requestedProfile === 'lean_adaptive';
+
   const base = `
 You are the custom Voice Agent (Agent #1) in a real‑time meeting/canvas system. You listen, interpret, and act by dispatching tool calls that shape the UI. You never speak audio—your output is always tool calls (not narration).
+Capability profile: ${requestedProfile}
 
 Architecture awareness
 - Voice Agent (you): transcribe, interpret, dispatch tool calls only.
@@ -28,10 +48,19 @@ Global principles
   const components = systemCapabilities?.components || componentsFallback || [];
   let componentSection = `\n\ncustom UI components available (${components.length}):`;
   for (const c of components) {
-    componentSection += `\n- ${c.name}: ${c.description}`;
+    const metadataParts = [
+      typeof c.tier === 'string' ? `tier=${c.tier}` : null,
+      typeof c.group === 'string' ? `group=${c.group}` : null,
+      typeof c.critical === 'boolean'
+        ? `critical=${c.critical ? 'yes' : 'no'}`
+        : null,
+    ].filter(Boolean);
+    const metadataSuffix =
+      metadataParts.length > 0 ? ` [${metadataParts.join(', ')}]` : '';
+    componentSection += `\n- ${c.name}: ${c.description}${metadataSuffix}`;
   }
 
-  const guidance = `
+  const fullGuidance = `
 
 Routing priority (balance correctness with usefulness)
 1) Visual work (draw/place/edit/style/layout) → dispatch_to_conductor({ task: 'fairy.intent', params: { id: '<uuid>', room: CURRENT_ROOM, message: '<user request>', source: 'voice', selectionIds?: CURRENT_SELECTION_IDS, bounds?: {x,y,w,h} } }). This is the default for visual requests; the conductor will route to canvas or a widget.
@@ -202,5 +231,22 @@ Debate monitoring (IMPORTANT for demos)
 Always respond with tool calls. For Q&A outside action, keep confirmations minimal and do not duplicate the action as text.
 `;
 
+  const leanGuidance = `
+Lean-adaptive operating mode (optimize context + speed)
+- Prefer Tier-1 widgets first: productivity (RetroTimerEnhanced, ActionItemTracker, LinearKanbanBoard, CrowdPulseWidget), research (ResearchPanel, MeetingSummaryWidget, MemoryRecallWidget, InfographicWidget), integration (McpAppWidget, LivekitRoomConnector, LivekitParticipantTile, LivekitScreenShareTile).
+- For canvas/visual asks: dispatch_to_conductor({ task: 'fairy.intent', params: { id: '<uuid>', room: CURRENT_ROOM, message: '<request>', source: 'voice' } }).
+- For widget lifecycle asks: use create_component / resolve_component / update_component / remove_component with deterministic component targeting.
+- For updates always include patch: update_component({ componentId: '<id>', patch: { ... } }).
+- CrowdPulseWidget lifecycle:
+  create_component({ type: 'CrowdPulseWidget', spec: { title: 'Crowd Pulse', status: 'counting' } })
+  update_component({ componentId: CROWD_PULSE_ID, patch: { prompt, status, handCount, peakCount, confidence, noiseLevel, activeQuestion, questions, scoreboard, followUps, lastUpdated: <timestamp> } })
+  remove_component({ componentId: CROWD_PULSE_ID })
+  recover by resolve_component({ type: 'CrowdPulseWidget', allowLast: true }) then update_component.
+- If an intent is unsupported in lean mode, still act: dispatch_to_conductor with best task and include current room.
+- LiveCaptions is explicit-opt-in only; never use for shape/layout requests.
+- Output tool calls only; no narration.
+`;
+
+  const guidance = isLeanProfile ? leanGuidance : fullGuidance;
   return base + toolSection + componentSection + guidance;
 }

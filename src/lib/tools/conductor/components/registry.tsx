@@ -40,6 +40,7 @@ import { InfographicWidget } from '@/components/InfographicWidget';
 
 // Context feeder widget for document/text context injection
 import { ContextFeeder, contextFeederSchema } from '@/components/ui/documents/context-feeder';
+import { getWidgetLifecycleMetadata } from '@/lib/agents/widget-lifecycle-manifest';
 
 import { componentToolboxSchema } from "@/lib/custom";
 
@@ -77,7 +78,7 @@ function LivekitParticipantTileWrapper(props: any) {
   );
 }
 
-export const components: any = [
+const baseComponents: any[] = [
   {
     name: 'YoutubeEmbed',
     description:
@@ -242,3 +243,15 @@ export const components: any = [
   },
   // Add more components here
 ];
+
+export const components: any = baseComponents.map((component) => {
+  const metadata = getWidgetLifecycleMetadata(component?.name);
+  if (!metadata) return component;
+  return {
+    ...component,
+    tier: metadata.tier,
+    group: metadata.group,
+    lifecycleOps: metadata.lifecycleOps,
+    critical: metadata.critical,
+  };
+});

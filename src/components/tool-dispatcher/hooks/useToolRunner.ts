@@ -561,6 +561,36 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
         if (tool === 'dispatch_to_conductor') {
           const task = typeof params?.task === 'string' ? params.task.trim() : '';
           const dispatchParams = (params?.params as Record<string, unknown>) || {};
+          const executionId =
+            typeof dispatchParams.executionId === 'string'
+              ? dispatchParams.executionId
+              : typeof params?.executionId === 'string'
+                ? params.executionId
+                : undefined;
+          const idempotencyKey =
+            typeof dispatchParams.idempotencyKey === 'string'
+              ? dispatchParams.idempotencyKey
+              : typeof params?.idempotencyKey === 'string'
+                ? params.idempotencyKey
+                : undefined;
+          const lockKey =
+            typeof dispatchParams.lockKey === 'string'
+              ? dispatchParams.lockKey
+              : typeof params?.lockKey === 'string'
+                ? params.lockKey
+                : undefined;
+          const attempt =
+            typeof dispatchParams.attempt === 'number'
+              ? dispatchParams.attempt
+              : typeof params?.attempt === 'number'
+                ? params.attempt
+                : undefined;
+          const requestId =
+            typeof dispatchParams.requestId === 'string'
+              ? dispatchParams.requestId
+              : typeof params?.requestId === 'string'
+                ? params.requestId
+                : idempotencyKey;
 
           if (!task) {
             const message = 'dispatch_to_conductor requires a task value';
@@ -608,6 +638,11 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
                   room: call.roomId || room?.name,
                   task,
                   params: dispatchParams,
+                  requestId,
+                  executionId,
+                  idempotencyKey,
+                  lockKey,
+                  attempt,
                   summary: typeof params?.summary === 'string' ? params.summary : undefined,
                 }),
               });
@@ -664,6 +699,11 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
               task,
               room: targetRoom,
               componentId,
+              requestId,
+              executionId,
+              idempotencyKey,
+              lockKey,
+              attempt,
               windowMs:
                 typeof dispatchParams.windowMs === 'number'
                   ? dispatchParams.windowMs

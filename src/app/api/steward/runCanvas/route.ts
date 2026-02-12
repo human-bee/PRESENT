@@ -13,6 +13,11 @@ import {
 } from '@/lib/agents/shared/schemas';
 import type { JsonObject } from '@/lib/utils/json-schema';
 import { getBooleanFlag, isFairyClientAgentEnabled } from '@/lib/feature-flags';
+import {
+  applyOrchestrationEnvelope,
+  deriveDefaultLockKey,
+  extractOrchestrationEnvelope,
+} from '@/lib/agents/shared/orchestration-envelope';
 
 export const runtime = 'nodejs';
 
@@ -92,6 +97,43 @@ export async function POST(req: NextRequest) {
       normalizedParams.summary = summary.trim();
     }
 
+    const orchestrationEnvelope = extractOrchestrationEnvelope(
+      {
+        ...normalizedParams,
+        executionId: parsed.executionId,
+        idempotencyKey: parsed.idempotencyKey,
+        lockKey: parsed.lockKey,
+        attempt: parsed.attempt,
+      },
+      { attempt: typeof parsed.attempt === 'number' ? parsed.attempt : undefined },
+    );
+    const normalizedLockKey =
+      orchestrationEnvelope.lockKey ??
+      deriveDefaultLockKey({
+        task: normalizedTask,
+        room: trimmedRoom,
+        componentId:
+          typeof normalizedParams.componentId === 'string'
+            ? normalizedParams.componentId
+            : undefined,
+        componentType:
+          typeof normalizedParams.type === 'string'
+            ? normalizedParams.type
+            : typeof normalizedParams.componentType === 'string'
+              ? normalizedParams.componentType
+              : undefined,
+      });
+    const enrichedParams = applyOrchestrationEnvelope(normalizedParams, {
+      ...orchestrationEnvelope,
+      lockKey: normalizedLockKey,
+    });
+    const normalizedRequestId =
+      typeof requestId === 'string' && requestId.trim().length > 0
+        ? requestId.trim()
+        : typeof enrichedParams.requestId === 'string' && String(enrichedParams.requestId).trim().length > 0
+          ? String(enrichedParams.requestId).trim()
+          : orchestrationEnvelope.idempotencyKey;
+
     if (normalizedTask === 'canvas.agent_prompt' && !normalizedParams.message) {
       return NextResponse.json({ error: 'Missing message for canvas.agent_prompt' }, { status: 400 });
     }
@@ -102,21 +144,27 @@ export async function POST(req: NextRequest) {
       const enqueueResult = await queue.enqueueTask({
         room: trimmedRoom,
         task: normalizedTask,
-        params: normalizedParams,
-        requestId,
-        resourceKeys: [`room:${trimmedRoom}`],
+        params: enrichedParams,
+        requestId: normalizedRequestId,
+        dedupeKey: orchestrationEnvelope.idempotencyKey,
+        lockKey: normalizedLockKey,
+        idempotencyKey: orchestrationEnvelope.idempotencyKey,
+        resourceKeys: [
+          `room:${trimmedRoom}`,
+          ...(normalizedLockKey ? [`lock:${normalizedLockKey}`] : []),
+        ],
       });
       if (normalizedTask === 'canvas.agent_prompt') {
         try {
-          const rid = (requestId && String(requestId).trim()) || randomUUID();
+          const rid = normalizedRequestId || randomUUID();
           await broadcastAgentPrompt({
             room: trimmedRoom,
             payload: {
-              message: String(normalizedParams.message || '').trim(),
+              message: String(enrichedParams.message || '').trim(),
               requestId: rid,
-              bounds: parseBounds(normalizedParams.bounds),
-              selectionIds: parseSelectionIds(normalizedParams.selectionIds),
-              metadata: parseMetadata(normalizedParams.metadata),
+              bounds: parseBounds(enrichedParams.bounds),
+              selectionIds: parseSelectionIds(enrichedParams.selectionIds),
+              metadata: parseMetadata(enrichedParams.metadata),
             },
           });
         } catch (e) {
@@ -131,15 +179,15 @@ export async function POST(req: NextRequest) {
 
       if (normalizedTask === 'canvas.agent_prompt') {
         try {
-          const rid = (requestId && String(requestId).trim()) || randomUUID();
+          const rid = normalizedRequestId || randomUUID();
           await broadcastAgentPrompt({
             room: trimmedRoom,
             payload: {
-              message: String(normalizedParams.message || '').trim(),
+              message: String(enrichedParams.message || '').trim(),
               requestId: rid,
-              bounds: parseBounds(normalizedParams.bounds),
-              selectionIds: parseSelectionIds(normalizedParams.selectionIds),
-              metadata: parseMetadata(normalizedParams.metadata),
+              bounds: parseBounds(enrichedParams.bounds),
+              selectionIds: parseSelectionIds(enrichedParams.selectionIds),
+              metadata: parseMetadata(enrichedParams.metadata),
             },
           });
         } catch (e) {
@@ -162,7 +210,7 @@ export async function POST(req: NextRequest) {
       }
 
       try {
-        await runCanvasSteward({ task: normalizedTask, params: normalizedParams });
+        await runCanvasSteward({ task: normalizedTask, params: enrichedParams });
         return NextResponse.json({ status: 'executed_fallback' }, { status: 202 });
       } catch (e) {
         logger.error('fallback execution failed', { error: e });

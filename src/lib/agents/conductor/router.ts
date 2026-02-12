@@ -45,6 +45,10 @@ import { runSummaryStewardFast } from '@/lib/agents/subagents/summary-steward-fa
 import { runCrowdPulseStewardFast } from '@/lib/agents/subagents/crowd-pulse-steward-fast';
 import { getBooleanFlag } from '@/lib/feature-flags';
 import { createLogger } from '@/lib/logging';
+import {
+  applyOrchestrationEnvelope,
+  extractOrchestrationEnvelope,
+} from '@/lib/agents/shared/orchestration-envelope';
 
 // Thin router: receives dispatch_to_conductor and hands off to stewards
 const queue = new AgentTaskQueue();
@@ -1262,12 +1266,22 @@ export async function executeTask(taskName: string, params: JsonObject) {
 
   if (taskName === 'conductor.dispatch') {
     const nextTask = typeof params?.task === 'string' ? params.task : 'auto';
-    const payload = (params?.params as JsonObject) ?? params;
+    const payloadCandidate = (params?.params as JsonObject | undefined) ?? params;
+    const payload =
+      payloadCandidate && typeof payloadCandidate === 'object' && !Array.isArray(payloadCandidate)
+        ? (payloadCandidate as JsonObject)
+        : ({} as JsonObject);
+    const envelope = extractOrchestrationEnvelope(params);
+    const enrichedPayload = applyOrchestrationEnvelope(payload, envelope);
     logger.info('[Conductor] dispatch_to_conductor routed', {
       nextTask,
-      hasPayload: payload != null,
+      hasPayload: Object.keys(payload).length > 0,
+      executionId: envelope.executionId,
+      idempotencyKey: envelope.idempotencyKey,
+      lockKey: envelope.lockKey,
+      attempt: envelope.attempt,
     });
-    return executeTask(nextTask, payload ?? {});
+    return executeTask(nextTask, enrichedPayload);
   }
 
   if (taskName.startsWith('flowchart.')) {

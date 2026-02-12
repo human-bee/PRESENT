@@ -1,6 +1,6 @@
 import { defineAgent, JobContext, cli, WorkerOptions, llm, voice } from '@livekit/agents';
 import { config } from 'dotenv';
-import { randomUUID } from 'crypto';
+import { createHash, randomUUID } from 'crypto';
 import { join } from 'path';
 import { z } from 'zod';
 // Removed temporary Responses API fallback for routing
@@ -12,7 +12,11 @@ import { realtime as openaiRealtime } from '@livekit/agents-plugin-openai';
 import { MultiParticipantTranscriptionManager } from './multi-participant-transcription';
 import { appendTranscriptCache, getTranscriptWindow, listCanvasComponents } from '@/lib/agents/shared/supabase-context';
 import { buildVoiceAgentInstructions } from '@/lib/agents/instructions';
-import { queryCapabilities, defaultCapabilities } from '@/lib/agents/capabilities';
+import {
+  queryCapabilities,
+  defaultCapabilities,
+  normalizeCapabilityProfile,
+} from '@/lib/agents/capabilities';
 import { deriveComponentIntent } from '@/lib/agents/shared/deterministic-ids';
 import type { JsonObject } from '@/lib/utils/json-schema';
 import { ConnectionState, RoomEvent, RemoteTrackPublication, Track } from 'livekit-client';
@@ -39,6 +43,11 @@ import {
   type ToolEvent,
 } from './voice-agent/tool-publishing';
 import { inferScorecardTopicFromText, resolveDebatePlayerSeedFromLabels } from './voice-agent/scorecard';
+import {
+  applyOrchestrationEnvelope,
+  deriveDefaultLockKey,
+  extractOrchestrationEnvelope,
+} from '@/lib/agents/shared/orchestration-envelope';
 
 const RATE_LIMIT_HEADER_KEYS = [
   'retry-after',
@@ -697,6 +706,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
     // We suppress duplicates aggressively within the same user turn, and apply
     // a longer global TTL to catch late replays from the model/stack.
     let currentTurnId = 0;
+    let currentExecutionId = randomUUID();
     let isGeneratingReply = false;
     let lastScorecardProvisionedAt = 0;
 
@@ -818,6 +828,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
 
     const bumpTurn = () => {
       currentTurnId += 1;
+      currentExecutionId = randomUUID();
     };
 
     const enableLossyUpdates = process.env.VOICE_AGENT_UPDATE_LOSSY !== 'false';
@@ -1019,6 +1030,73 @@ Your only output is function calls. Never use plain text unless absolutely neces
             };
           }
         }
+
+        const dispatchRecord =
+          normalizedParams && typeof normalizedParams === 'object'
+            ? ({ ...(normalizedParams as Record<string, unknown>) } as Record<string, unknown>)
+            : ({ task: 'auto', params: {} } as Record<string, unknown>);
+        const dispatchTask =
+          typeof dispatchRecord.task === 'string' && dispatchRecord.task.trim().length > 0
+            ? dispatchRecord.task.trim()
+            : 'auto';
+        const dispatchParams =
+          dispatchRecord.params && typeof dispatchRecord.params === 'object'
+            ? ({ ...(dispatchRecord.params as JsonObject) } as JsonObject)
+            : ({} as JsonObject);
+
+        const existingEnvelope = extractOrchestrationEnvelope(dispatchParams);
+        const roomHint =
+          typeof dispatchParams.room === 'string' && dispatchParams.room.trim().length > 0
+            ? dispatchParams.room.trim()
+            : job.room?.name || roomKey() || 'room';
+        const componentIdHint =
+          typeof dispatchParams.componentId === 'string'
+            ? dispatchParams.componentId
+            : typeof (normalizedParams as any)?.componentId === 'string'
+              ? (normalizedParams as any).componentId
+              : undefined;
+        const componentTypeHint =
+          typeof dispatchParams.type === 'string'
+            ? dispatchParams.type
+            : typeof dispatchParams.componentType === 'string'
+              ? dispatchParams.componentType
+              : undefined;
+        const lockKey =
+          existingEnvelope.lockKey ??
+          deriveDefaultLockKey({
+            task: dispatchTask,
+            room: roomHint,
+            componentId: componentIdHint,
+            componentType: componentTypeHint,
+          });
+        const idempotencyKey =
+          existingEnvelope.idempotencyKey ??
+          createHash('sha1')
+            .update(
+              JSON.stringify({
+                task: dispatchTask,
+                room: roomHint,
+                componentId: componentIdHint ?? null,
+                componentType: componentTypeHint ?? null,
+                message:
+                  typeof dispatchParams.message === 'string' ? dispatchParams.message.trim() : null,
+                requestId:
+                  typeof dispatchParams.requestId === 'string'
+                    ? dispatchParams.requestId.trim()
+                    : null,
+                turn: currentTurnId,
+              }),
+            )
+            .digest('hex');
+        const envelope = {
+          executionId: existingEnvelope.executionId ?? currentExecutionId,
+          idempotencyKey,
+          lockKey,
+          attempt:
+            typeof existingEnvelope.attempt === 'number' ? existingEnvelope.attempt : 0,
+        };
+        dispatchRecord.params = applyOrchestrationEnvelope(dispatchParams, envelope);
+        normalizedParams = dispatchRecord as JsonObject;
       }
 
       const entry = { event: buildToolEvent(tool, normalizedParams, job.room.name || 'unknown'), reliable };
@@ -1709,8 +1787,33 @@ Your only output is function calls. Never use plain text unless absolutely neces
     };
 
     // Build instructions and instantiate Agent + Session for Realtime
-    const systemCapabilities = await queryCapabilities(job.room as any).catch(() => defaultCapabilities);
-    instructions = buildVoiceAgentInstructions(systemCapabilities, systemCapabilities.components || []);
+    const requestedCapabilityProfile = normalizeCapabilityProfile(
+      process.env.VOICE_AGENT_CAPABILITY_PROFILE,
+    );
+    const capabilityResult = await queryCapabilities(job.room as any, {
+      profile: requestedCapabilityProfile,
+      fallbackToFull: true,
+    }).catch(() => ({
+      capabilities: defaultCapabilities,
+      capabilityProfile: 'full' as const,
+      requestedCapabilityProfile: requestedCapabilityProfile,
+      fallbackUsed: requestedCapabilityProfile !== 'full',
+      source: 'default' as const,
+    }));
+    const systemCapabilities = capabilityResult.capabilities;
+    instructions = buildVoiceAgentInstructions(
+      systemCapabilities,
+      systemCapabilities.components || [],
+      { capabilityProfile: capabilityResult.capabilityProfile },
+    );
+    console.log('[VoiceAgent] capability profile resolved', {
+      requested: capabilityResult.requestedCapabilityProfile,
+      resolved: capabilityResult.capabilityProfile,
+      fallbackUsed: capabilityResult.fallbackUsed,
+      source: capabilityResult.source,
+      componentCount: systemCapabilities.components?.length ?? 0,
+      toolCount: systemCapabilities.tools?.length ?? 0,
+    });
 
     const agent = new voice.Agent({
       instructions,
