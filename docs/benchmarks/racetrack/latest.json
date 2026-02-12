@@ -1,0 +1,47 @@
+{
+  "benchmark": "voice-agent-racetrack",
+  "recordedAt": "2026-02-12T06:26:10.990Z",
+  "commit": {
+    "hash": "fb5b69d",
+    "branch": "codex/voice-agent-crowd-pulse-lifecycle-rebase",
+    "dirty": true
+  },
+  "env": {
+    "node": "v25.2.1",
+    "platform": "darwin"
+  },
+  "metrics": {
+    "instructionBuild": {
+      "iterations": 400,
+      "totalMs": 3.635,
+      "avgMs": 0.009088,
+      "opsPerSec": 110040,
+      "chars": 16695
+    },
+    "patchNormalize": {
+      "iterations": 4000,
+      "totalMs": 6.857,
+      "avgMs": 0.001714,
+      "opsPerSec": 583320.65
+    },
+    "canvasDispatch": {
+      "iterations": 5000,
+      "totalMs": 1.442,
+      "avgMs": 0.000288,
+      "opsPerSec": 3467906.58,
+      "suppressRatePct": 25.46
+    },
+    "ledgerOps": {
+      "iterations": 5000,
+      "totalMs": 6.486,
+      "avgMs": 0.001297,
+      "opsPerSec": 770831.74
+    },
+    "queueFlush": {
+      "iterations": 250,
+      "totalMs": 2.778,
+      "avgMs": 0.011113,
+      "opsPerSec": 89982.01
+    }
+  }
+}

@@ -1,3 +1,8 @@
+import {
+  getWidgetLifecycleMetadata,
+  type WidgetGroup,
+} from './widget-lifecycle-manifest';
+
 // Accept either browser or node LiveKit Room by using a minimal interface
 export interface RoomLike {
   on: (event: string, cb: (...args: any[]) => void) => unknown;
@@ -20,7 +25,15 @@ export type CapabilityGroup =
   | 'canvas'
   | 'utility';
 export type WidgetTier = 'tier1' | 'tier2';
-export type LifecycleOp = 'create' | 'update' | 'hydrate' | 'fill' | 'edit' | 'remove' | 'recover';
+export type LifecycleOp =
+  | 'create'
+  | 'resolve'
+  | 'update'
+  | 'hydrate'
+  | 'fill'
+  | 'edit'
+  | 'remove'
+  | 'recover';
 
 export interface ToolCapability {
   name: string;
@@ -64,6 +77,7 @@ const TIER1_WIDGET_NAMES = new Set<string>([
 
 const DEFAULT_LIFECYCLE_OPS: LifecycleOp[] = [
   'create',
+  'resolve',
   'update',
   'hydrate',
   'fill',
@@ -72,9 +86,32 @@ const DEFAULT_LIFECYCLE_OPS: LifecycleOp[] = [
   'recover',
 ];
 
+const mapManifestGroupToCapabilityGroup = (
+  group: WidgetGroup,
+  componentName: string,
+): CapabilityGroup => {
+  if (group === 'productivity') return 'widget-lifecycle';
+  if (group === 'research' || group === 'documents') return 'research';
+  if (group === 'integration') {
+    return componentName.toLowerCase().includes('mcp') ? 'mcp' : 'livekit';
+  }
+  return 'utility';
+};
+
 const withComponentMetadata = (
   component: Omit<ComponentCapability, 'tier' | 'group' | 'lifecycleOps' | 'critical'>,
 ): ComponentCapability => {
+  const manifest = getWidgetLifecycleMetadata(component.name);
+  if (manifest) {
+    return {
+      ...component,
+      tier: manifest.tier,
+      group: mapManifestGroupToCapabilityGroup(manifest.group, component.name),
+      lifecycleOps: manifest.lifecycleOps as LifecycleOp[],
+      critical: manifest.critical,
+    };
+  }
+
   const tier: WidgetTier = TIER1_WIDGET_NAMES.has(component.name) ? 'tier1' : 'tier2';
   const lower = component.name.toLowerCase();
   const group: CapabilityGroup = lower.includes('livekit') || lower.includes('caption')

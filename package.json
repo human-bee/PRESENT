@@ -40,7 +40,8 @@
     "teacher:worker": "npm run teacher:build && node .parity-dist/teacher-worker/teacher-worker.js",
     "showcase:capture": "npx tsx scripts/showcase/capture-ui.ts",
     "remotion:preview": "remotion studio remotion/index.ts",
-    "remotion:render": "remotion render remotion/index.ts Showcase docs/showcase/2026-ui/showcase.mp4 --overwrite"
+    "remotion:render": "remotion render remotion/index.ts Showcase docs/showcase/2026-ui/showcase.mp4 --overwrite",
+    "bench:racetrack": "npx tsx scripts/racetrack-benchmark.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "2.0.41",

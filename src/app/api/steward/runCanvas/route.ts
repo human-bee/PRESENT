@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { BYOK_ENABLED } from '@/lib/agents/shared/byok-flags';
 import { AgentTaskQueue } from '@/lib/agents/shared/queue';
-import { runCanvasSteward } from '@/lib/agents/subagents/canvas-steward';
 import {
   broadcastAgentPrompt,
   type CanvasAgentPromptPayload,
@@ -16,6 +15,11 @@ import {
 } from '@/lib/agents/shared/schemas';
 import type { JsonObject } from '@/lib/utils/json-schema';
 import { getBooleanFlag, isFairyClientAgentEnabled } from '@/lib/feature-flags';
+import {
+  applyOrchestrationEnvelope,
+  deriveDefaultLockKey,
+  extractOrchestrationEnvelope,
+} from '@/lib/agents/shared/orchestration-envelope';
 
 export const runtime = 'nodejs';
 
@@ -30,7 +34,6 @@ const FAIRY_CLIENT_AGENT_ENABLED = isFairyClientAgentEnabled(process.env.NEXT_PU
 const CANVAS_STEWARD_ENABLED = (process.env.CANVAS_STEWARD_SERVER_EXECUTION ?? 'true') === 'true';
 const SERVER_CANVAS_AGENT_ENABLED =
   CANVAS_STEWARD_ENABLED && !CLIENT_CANVAS_AGENT_ENABLED && !FAIRY_CLIENT_AGENT_ENABLED;
-const SERVER_CANVAS_TASKS_ENABLED = CANVAS_STEWARD_ENABLED && !CLIENT_CANVAS_AGENT_ENABLED;
 const logger = createLogger('api:steward:runCanvas');
 
 const parseBounds = (value: unknown): CanvasAgentPromptPayload['bounds'] | undefined => {
@@ -71,6 +74,10 @@ export async function POST(req: NextRequest) {
     const summary = parsed.summary;
     const message = parsed.message;
     const requestId = parsed.requestId;
+    const executionId = parsed.executionId;
+    const idempotencyKey = parsed.idempotencyKey;
+    const lockKey = parsed.lockKey;
+    const attempt = parsed.attempt;
     if (room.trim().length === 0) {
       return NextResponse.json({ error: 'Missing room' }, { status: 400 });
     }
@@ -121,35 +128,78 @@ export async function POST(req: NextRequest) {
       normalizedParams.summary = summary.trim();
     }
 
+    const orchestrationEnvelope = extractOrchestrationEnvelope(
+      {
+        ...normalizedParams,
+        executionId,
+        idempotencyKey,
+        lockKey,
+        attempt,
+      },
+      { attempt: typeof attempt === 'number' ? attempt : undefined },
+    );
+    const normalizedLockKey =
+      orchestrationEnvelope.lockKey ??
+      deriveDefaultLockKey({
+        task: normalizedTask,
+        room: trimmedRoom,
+        componentId:
+          typeof normalizedParams.componentId === 'string'
+            ? normalizedParams.componentId
+            : undefined,
+        componentType:
+          typeof normalizedParams.type === 'string'
+            ? normalizedParams.type
+            : typeof normalizedParams.componentType === 'string'
+              ? normalizedParams.componentType
+              : undefined,
+      });
+    const enrichedParams = applyOrchestrationEnvelope(normalizedParams, {
+      ...orchestrationEnvelope,
+      lockKey: normalizedLockKey,
+    });
+    const normalizedRequestId =
+      typeof requestId === 'string' && requestId.trim().length > 0
+        ? requestId.trim()
+        : typeof enrichedParams.requestId === 'string' && String(enrichedParams.requestId).trim().length > 0
+          ? String(enrichedParams.requestId).trim()
+          : orchestrationEnvelope.idempotencyKey;
+
     if (normalizedTask === 'canvas.agent_prompt' && !normalizedParams.message) {
       return NextResponse.json({ error: 'Missing message for canvas.agent_prompt' }, { status: 400 });
     }
 
     try {
       // Lazily instantiate so `next build` doesn't require Supabase env vars.
-      const normalizedResourceKeys =
+      const baseResourceKeys =
         normalizedTask === 'canvas.agent_prompt' || normalizedTask === 'fairy.intent'
           ? [`room:${trimmedRoom}`, 'canvas:intent']
           : [`room:${trimmedRoom}`];
+      const normalizedResourceKeys = normalizedLockKey
+        ? [...baseResourceKeys, `lock:${normalizedLockKey}`]
+        : baseResourceKeys;
       const enqueueResult = await getQueue().enqueueTask({
         room: trimmedRoom,
         task: normalizedTask,
-        params: normalizedParams,
-        requestId,
+        params: enrichedParams,
+        requestId: normalizedRequestId,
+        dedupeKey: orchestrationEnvelope.idempotencyKey,
+        lockKey: normalizedLockKey,
+        idempotencyKey: orchestrationEnvelope.idempotencyKey,
         resourceKeys: normalizedResourceKeys,
         coalesceByResource: normalizedTask === 'canvas.agent_prompt' || normalizedTask === 'fairy.intent',
       });
       if (normalizedTask === 'canvas.agent_prompt') {
         try {
-          const rid = (requestId && String(requestId).trim()) || randomUUID();
+          const rid = normalizedRequestId || randomUUID();
           await broadcastAgentPrompt({
             room: trimmedRoom,
             payload: {
-              message: String(normalizedParams.message || '').trim(),
+              message: String(enrichedParams.message || '').trim(),
               requestId: rid,
-              bounds: parseBounds(normalizedParams.bounds),
-              selectionIds: parseSelectionIds(normalizedParams.selectionIds),
-              metadata: parseMetadata(normalizedParams.metadata),
+              bounds: parseBounds(enrichedParams.bounds),
+              selectionIds: parseSelectionIds(enrichedParams.selectionIds),
+              metadata: parseMetadata(enrichedParams.metadata),
             },
           });
         } catch (e) {
@@ -158,21 +208,20 @@ export async function POST(req: NextRequest) {
       }
       return NextResponse.json({ status: 'queued', task: enqueueResult }, { status: 202 });
     } catch (error) {
-      // Graceful fallback: if Supabase is unavailable (e.g., Cloudflare 5xx), run immediately server-side
       const msg = error instanceof Error ? error.message : String(error);
-      logger.warn('queue enqueue failed, falling back to direct run', { error: msg });
+      logger.warn('queue enqueue failed', { error: msg, queueDirectFallback: QUEUE_DIRECT_FALLBACK_ENABLED });
 
       if (normalizedTask === 'canvas.agent_prompt') {
         try {
-          const rid = (requestId && String(requestId).trim()) || randomUUID();
+          const rid = normalizedRequestId || randomUUID();
           await broadcastAgentPrompt({
             room: trimmedRoom,
             payload: {
-              message: String(normalizedParams.message || '').trim(),
+              message: String(enrichedParams.message || '').trim(),
               requestId: rid,
-              bounds: parseBounds(normalizedParams.bounds),
-              selectionIds: parseSelectionIds(normalizedParams.selectionIds),
-              metadata: parseMetadata(normalizedParams.metadata),
+              bounds: parseBounds(enrichedParams.bounds),
+              selectionIds: parseSelectionIds(enrichedParams.selectionIds),
+              metadata: parseMetadata(enrichedParams.metadata),
             },
           });
         } catch (e) {
@@ -180,27 +229,10 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      if (!QUEUE_DIRECT_FALLBACK_ENABLED) {
-        if (normalizedTask === 'canvas.agent_prompt' && !SERVER_CANVAS_AGENT_ENABLED) {
-          return NextResponse.json({ status: 'broadcast_only' }, { status: 202 });
-        }
-        return NextResponse.json({ error: 'Queue unavailable' }, { status: 503 });
-      }
-
-      // 2) Execute the canvas steward right away so the canvas updates even during queue outages
-      const canExecuteFallback =
-        normalizedTask === 'canvas.agent_prompt' ? SERVER_CANVAS_AGENT_ENABLED : SERVER_CANVAS_TASKS_ENABLED;
-      if (!canExecuteFallback) {
+      if (normalizedTask === 'canvas.agent_prompt' && !SERVER_CANVAS_AGENT_ENABLED) {
         return NextResponse.json({ status: 'broadcast_only' }, { status: 202 });
       }
-
-      try {
-        await runCanvasSteward({ task: normalizedTask, params: normalizedParams });
-        return NextResponse.json({ status: 'executed_fallback' }, { status: 202 });
-      } catch (e) {
-        logger.error('fallback execution failed', { error: e });
-        return NextResponse.json({ error: 'Dispatch failed' }, { status: 502 });
-      }
+      return NextResponse.json({ error: 'Queue unavailable' }, { status: 503 });
     }
   } catch (error) {
     logger.error('request parse failure', { error: error instanceof Error ? error.message : String(error) });
