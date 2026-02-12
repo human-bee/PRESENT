@@ -109,6 +109,10 @@ export function ToolDispatcher({
                 roomId,
                 token,
                 ts: Date.now(),
+                envelopeHash: typeof envelope?.hash === 'string' ? envelope.hash : undefined,
+                traceId: typeof envelope?.traceId === 'string' ? envelope.traceId : undefined,
+                intentId: typeof envelope?.intentId === 'string' ? envelope.intentId : undefined,
+                requestId: typeof envelope?.requestId === 'string' ? envelope.requestId : undefined,
               }),
               keepalive: true,
             });

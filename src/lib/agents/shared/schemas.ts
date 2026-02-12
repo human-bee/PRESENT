@@ -25,6 +25,8 @@ export const stewardRunCanvasRequestSchema = z
     summary: z.string().optional(),
     message: z.string().optional(),
     requestId: z.string().optional(),
+    traceId: z.string().optional(),
+    intentId: z.string().optional(),
   })
   .passthrough();
 

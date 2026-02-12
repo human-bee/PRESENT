@@ -59,12 +59,56 @@ function createSupabaseClient(options?: QueueClientOptions): SupabaseClient {
 }
 
 const logger = createLogger('agents:queue');
+const ACTIVE_DEDUPE_STATUSES: AgentTaskStatus[] = ['queued', 'running'];
 
 export class AgentTaskQueue {
   private readonly supabase: SupabaseClient;
 
   constructor(private readonly options?: QueueClientOptions) {
     this.supabase = createSupabaseClient(options);
+  }
+
+  private async findExistingTaskForDedup(args: {
+    room: string;
+    task: string;
+    requestId?: string;
+    dedupeKey?: string;
+    activeOnly?: boolean;
+  }): Promise<AgentTask | null> {
+    const { room, task, requestId, dedupeKey, activeOnly = true } = args;
+    const normalizedRequestId = typeof requestId === 'string' && requestId.trim() ? requestId.trim() : null;
+    const normalizedDedupeKey = typeof dedupeKey === 'string' && dedupeKey.trim() ? dedupeKey.trim() : null;
+    if (!normalizedRequestId && !normalizedDedupeKey) return null;
+
+    let query = this.supabase
+      .from('agent_tasks')
+      .select('*')
+      .eq('room', room)
+      .eq('task', task)
+      .order('created_at', { ascending: false })
+      .limit(1);
+    if (activeOnly) {
+      query = query.in('status', ACTIVE_DEDUPE_STATUSES);
+    }
+
+    if (normalizedRequestId) {
+      query = query.eq('request_id', normalizedRequestId);
+    } else if (normalizedDedupeKey) {
+      query = query.eq('dedupe_key', normalizedDedupeKey);
+    }
+
+    const { data, error } = await query.maybeSingle();
+    if (error) {
+      logger.warn('findExistingTaskForDedup failed', {
+        room,
+        task,
+        requestId: normalizedRequestId,
+        dedupeKey: normalizedDedupeKey,
+        error,
+      });
+      return null;
+    }
+    return (data as AgentTask | null) ?? null;
   }
 
   async enqueueTask(input: EnqueueTaskInput): Promise<AgentTask | null> {
@@ -81,6 +125,27 @@ export class AgentTaskQueue {
     } = input;
 
     const nowIso = new Date().toISOString();
+    const normalizedRequestId = typeof requestId === 'string' && requestId.trim() ? requestId.trim() : undefined;
+    const normalizedDedupeKey = typeof dedupeKey === 'string' && dedupeKey.trim() ? dedupeKey.trim() : undefined;
+
+    const existingForDedup = await this.findExistingTaskForDedup({
+      room,
+      task,
+      requestId: normalizedRequestId,
+      dedupeKey: normalizedDedupeKey,
+      activeOnly: true,
+    });
+    if (existingForDedup) {
+      logger.debug('enqueueTask dedupe pre-check hit', {
+        room,
+        task,
+        requestId: normalizedRequestId,
+        dedupeKey: normalizedDedupeKey,
+        existingTaskId: existingForDedup.id,
+        status: existingForDedup.status,
+      });
+      return existingForDedup;
+    }
 
     const resourceKeySet = new Set(resourceKeys.length ? resourceKeys : [`room:${room}`]);
     const normalizedResourceKeys = Array.from(resourceKeySet);
@@ -122,8 +187,8 @@ export class AgentTaskQueue {
     logger.debug('enqueueTask', {
       room,
       task,
-      requestId,
-      dedupeKey,
+      requestId: normalizedRequestId,
+      dedupeKey: normalizedDedupeKey,
       resourceKeys: normalizedResourceKeys,
       coalesced: shouldCoalesce,
       hasSupabase: Boolean(this.supabase),
@@ -135,8 +200,8 @@ export class AgentTaskQueue {
         room,
         task,
         params,
-        request_id: requestId ?? null,
-        dedupe_key: dedupeKey ?? null,
+        request_id: normalizedRequestId ?? null,
+        dedupe_key: normalizedDedupeKey ?? null,
         resource_keys: normalizedResourceKeys,
         priority,
         run_at: runAt ? runAt.toISOString() : null,
@@ -148,8 +213,15 @@ export class AgentTaskQueue {
 
     if (error) {
       if (error.code === '23505') {
-        logger.debug('enqueueTask dedupe hit', { room, task, requestId });
-        return null; // idempotent duplicate
+        logger.debug('enqueueTask dedupe hit', { room, task, requestId: normalizedRequestId });
+        const existingAfterConflict = await this.findExistingTaskForDedup({
+          room,
+          task,
+          requestId: normalizedRequestId,
+          dedupeKey: normalizedDedupeKey,
+          activeOnly: false,
+        });
+        return existingAfterConflict;
       }
       logger.error('enqueueTask failed', { room, task, error });
       throw error;

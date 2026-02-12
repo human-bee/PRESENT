@@ -13,6 +13,8 @@ import { applyEnvelope } from '@/components/tool-dispatcher/handlers/tldraw-acti
 import { logJourneyEvent } from '@/lib/journey-logger';
 import { fetchWithSupabaseAuth } from '@/lib/supabase/auth-headers';
 import { createLogger } from '@/lib/logging';
+import { deriveRequestCorrelation } from '@/lib/agents/shared/request-correlation';
+import type { JsonObject } from '@/lib/utils/json-schema';
 import {
   parseDecisionMessage,
   parseStewardTriggerMessage,
@@ -562,6 +564,20 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
         if (tool === 'dispatch_to_conductor') {
           const task = typeof params?.task === 'string' ? params.task.trim() : '';
           const dispatchParams = (params?.params as Record<string, unknown>) || {};
+          const correlation = deriveRequestCorrelation({
+            task,
+            requestId: params?.requestId,
+            params: dispatchParams as JsonObject,
+          });
+          if (correlation.requestId && !dispatchParams.requestId) {
+            dispatchParams.requestId = correlation.requestId;
+          }
+          if (task === 'fairy.intent' && correlation.intentId && !dispatchParams.id) {
+            dispatchParams.id = correlation.intentId;
+          }
+          if (correlation.traceId && !dispatchParams.traceId) {
+            dispatchParams.traceId = correlation.traceId;
+          }
 
           if (!task) {
             const message = 'dispatch_to_conductor requires a task value';
@@ -610,6 +626,9 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
                   task,
                   params: dispatchParams,
                   summary: typeof params?.summary === 'string' ? params.summary : undefined,
+                  requestId: correlation.requestId,
+                  traceId: correlation.traceId,
+                  intentId: correlation.intentId,
                 }),
               });
               if (!res.ok) {

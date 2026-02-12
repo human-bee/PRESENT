@@ -14,6 +14,7 @@ import {
   parseJsonObject,
   stewardRunCanvasRequestSchema,
 } from '@/lib/agents/shared/schemas';
+import { deriveRequestCorrelation } from '@/lib/agents/shared/request-correlation';
 import type { JsonObject } from '@/lib/utils/json-schema';
 import { getBooleanFlag, isFairyClientAgentEnabled } from '@/lib/feature-flags';
 
@@ -71,6 +72,8 @@ export async function POST(req: NextRequest) {
     const summary = parsed.summary;
     const message = parsed.message;
     const requestId = parsed.requestId;
+    const traceId = parsed.traceId;
+    const intentId = parsed.intentId;
     if (room.trim().length === 0) {
       return NextResponse.json({ error: 'Missing room' }, { status: 400 });
     }
@@ -121,6 +124,43 @@ export async function POST(req: NextRequest) {
       normalizedParams.summary = summary.trim();
     }
 
+    const correlation = deriveRequestCorrelation({
+      task: normalizedTask,
+      requestId: requestId ?? intentId ?? normalizedParams.requestId ?? normalizedParams.id,
+      params: normalizedParams,
+    });
+    const canonicalRequestId = correlation.requestId;
+    const canonicalTraceId =
+      correlation.traceId || (typeof traceId === 'string' && traceId.trim() ? traceId.trim() : undefined);
+    const canonicalIntentId =
+      correlation.intentId || (typeof intentId === 'string' && intentId.trim() ? intentId.trim() : undefined);
+
+    if (canonicalRequestId && !normalizedParams.requestId) {
+      normalizedParams.requestId = canonicalRequestId;
+    }
+    if (normalizedTask === 'fairy.intent' && canonicalIntentId && !normalizedParams.id) {
+      normalizedParams.id = canonicalIntentId;
+    }
+    if (canonicalTraceId && !normalizedParams.traceId) {
+      normalizedParams.traceId = canonicalTraceId;
+    }
+    const metadataForCorrelation: JsonObject = parseMetadata(normalizedParams.metadata) ?? {};
+    if (canonicalTraceId && !metadataForCorrelation.traceId) {
+      metadataForCorrelation.traceId = canonicalTraceId;
+    }
+    if (canonicalIntentId && !metadataForCorrelation.intentId) {
+      metadataForCorrelation.intentId = canonicalIntentId;
+    }
+    if (typeof traceId === 'string' && traceId.trim() && !metadataForCorrelation.traceId) {
+      metadataForCorrelation.traceId = traceId.trim();
+    }
+    if (typeof intentId === 'string' && intentId.trim() && !metadataForCorrelation.intentId) {
+      metadataForCorrelation.intentId = intentId.trim();
+    }
+    if (Object.keys(metadataForCorrelation).length > 0) {
+      normalizedParams.metadata = metadataForCorrelation;
+    }
+
     if (normalizedTask === 'canvas.agent_prompt' && !normalizedParams.message) {
       return NextResponse.json({ error: 'Missing message for canvas.agent_prompt' }, { status: 400 });
     }
@@ -135,13 +175,13 @@ export async function POST(req: NextRequest) {
         room: trimmedRoom,
         task: normalizedTask,
         params: normalizedParams,
-        requestId,
+        requestId: canonicalRequestId,
         resourceKeys: normalizedResourceKeys,
         coalesceByResource: normalizedTask === 'canvas.agent_prompt' || normalizedTask === 'fairy.intent',
       });
       if (normalizedTask === 'canvas.agent_prompt') {
         try {
-          const rid = (requestId && String(requestId).trim()) || randomUUID();
+          const rid = canonicalRequestId || randomUUID();
           await broadcastAgentPrompt({
             room: trimmedRoom,
             payload: {
@@ -156,7 +196,16 @@ export async function POST(req: NextRequest) {
           logger.warn('broadcast agent prompt failed (post-enqueue)', { error: e });
         }
       }
-      return NextResponse.json({ status: 'queued', task: enqueueResult }, { status: 202 });
+      return NextResponse.json(
+        {
+          status: 'queued',
+          task: enqueueResult,
+          requestId: canonicalRequestId ?? null,
+          traceId: canonicalTraceId ?? null,
+          intentId: canonicalIntentId ?? null,
+        },
+        { status: 202 },
+      );
     } catch (error) {
       // Graceful fallback: if Supabase is unavailable (e.g., Cloudflare 5xx), run immediately server-side
       const msg = error instanceof Error ? error.message : String(error);
@@ -164,7 +213,7 @@ export async function POST(req: NextRequest) {
 
       if (normalizedTask === 'canvas.agent_prompt') {
         try {
-          const rid = (requestId && String(requestId).trim()) || randomUUID();
+          const rid = canonicalRequestId || randomUUID();
           await broadcastAgentPrompt({
             room: trimmedRoom,
             payload: {

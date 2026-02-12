@@ -32,9 +32,13 @@ describe('agent shared schemas', () => {
       room: 'room-2',
       message: 'add swimlanes',
       params: { room: 'room-2' },
+      requestId: 'intent-1',
+      traceId: 'trace-1',
     });
 
     expect(parsed.room).toBe('room-2');
+    expect(parsed.requestId).toBe('intent-1');
+    expect(parsed.traceId).toBe('trace-1');
   });
 
   it('parses scorecard steward requests', () => {
