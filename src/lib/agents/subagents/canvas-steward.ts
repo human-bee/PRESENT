@@ -5,6 +5,7 @@ import { runCanvasAgent } from '@/lib/agents/canvas-agent/server/runner';
 import { sendActionsEnvelope } from '@/lib/agents/canvas-agent/server/wire';
 import type { AgentAction } from '@/lib/canvas-agent/contract/types';
 import { normalizeFairyContextProfile } from '@/lib/fairy-context/profiles';
+import { deriveRequestCorrelation } from '@/lib/agents/shared/request-correlation';
 
 const logWithTs = <T extends Record<string, unknown>>(label: string, payload: T) => {
   try {
@@ -52,6 +53,11 @@ export async function runCanvasSteward(args: RunCanvasStewardArgs) {
       ? payload.contextProfile
       : (payload.metadata as any)?.contextProfile,
   );
+  const correlation = deriveRequestCorrelation({
+    task,
+    requestId: payload.requestId,
+    params: payload,
+  });
 
   const taskLabel = task.startsWith('canvas.') ? task.slice('canvas.'.length) : task;
   const start = Date.now();
@@ -83,6 +89,9 @@ export async function runCanvasSteward(args: RunCanvasStewardArgs) {
       model,
       initialViewport: payload.bounds as any,
       contextProfile,
+      requestId: correlation.requestId,
+      traceId: correlation.traceId,
+      intentId: correlation.intentId,
     });
 
     logWithTs('✅ [CanvasSteward] run.complete', {

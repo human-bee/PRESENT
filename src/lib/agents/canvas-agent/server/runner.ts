@@ -53,6 +53,9 @@ type RunArgs = {
   initialViewport?: { x: number; y: number; w: number; h: number };
   hooks?: CanvasAgentHooks;
   contextProfile?: FairyContextProfile | string;
+  requestId?: string;
+  traceId?: string;
+  intentId?: string;
 };
 
 let screenshotInboxPromise: Promise<typeof import('@/server/inboxes/screenshot')> | null = null;
@@ -315,6 +318,20 @@ export async function runCanvasAgent(args: RunArgs) {
     ? rawUserMessage.trim()
     : 'Improve the layout. Clarify hierarchy and polish typography.';
   const sessionId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const requestId =
+    typeof args.requestId === 'string' && args.requestId.trim().length > 0 ? args.requestId.trim() : undefined;
+  const traceId =
+    typeof args.traceId === 'string' && args.traceId.trim().length > 0 ? args.traceId.trim() : requestId;
+  const intentId =
+    typeof args.intentId === 'string' && args.intentId.trim().length > 0 ? args.intentId.trim() : requestId;
+  const correlation =
+    traceId || intentId || requestId
+      ? {
+          ...(traceId ? { traceId } : {}),
+          ...(intentId ? { intentId } : {}),
+          ...(requestId ? { requestId } : {}),
+        }
+      : undefined;
   const cfg = loadCanvasAgentConfig();
   if (cfg.mode === 'tldraw-teacher') {
     console.info('[CanvasAgent] running in tldraw-teacher mode (vendored TLDraw agent active)', {
@@ -991,15 +1008,31 @@ const normalizeRawAction = (
         });
         if (shouldDispatch) {
           metrics.actionCount += dispatchableActions.length;
-          await sendActionsEnvelope(roomId, sessionId, seqNumber, dispatchableActions, { partial });
-          const ack = await awaitAck({ sessionId, seq: seqNumber, deadlineMs: 1200 });
+          const firstSend = await sendActionsEnvelope(roomId, sessionId, seqNumber, dispatchableActions, {
+            partial,
+            correlation,
+          });
+          const ack = await awaitAck({
+            sessionId,
+            seq: seqNumber,
+            deadlineMs: 1200,
+            expectedHash: firstSend.hash,
+          });
           if (ack && metrics.firstAckLatencyMs === undefined) {
             metrics.firstAckLatencyMs = Date.now() - metrics.startedAt;
           }
           if (!ack) {
             metrics.retryCount++;
-            await sendActionsEnvelope(roomId, sessionId, seqNumber, dispatchableActions, { partial });
-            const retryAck = await awaitAck({ sessionId, seq: seqNumber, deadlineMs: 800 });
+            const retrySend = await sendActionsEnvelope(roomId, sessionId, seqNumber, dispatchableActions, {
+              partial,
+              correlation,
+            });
+            const retryAck = await awaitAck({
+              sessionId,
+              seq: seqNumber,
+              deadlineMs: 800,
+              expectedHash: retrySend.hash,
+            });
             if (retryAck && metrics.firstAckLatencyMs === undefined) {
               metrics.firstAckLatencyMs = Date.now() - metrics.startedAt;
             }
@@ -1497,11 +1530,22 @@ const normalizeRawAction = (
       const currentSeq = seq++;
       let envelopeDispatched = false;
       try {
-        await sendActionsEnvelope(roomId, sessionId, currentSeq, fallback);
+        const firstSend = await sendActionsEnvelope(roomId, sessionId, currentSeq, fallback, { correlation });
         envelopeDispatched = true;
-        const ack = await awaitAck({ sessionId, seq: currentSeq, deadlineMs: 1200 });
+        const ack = await awaitAck({
+          sessionId,
+          seq: currentSeq,
+          deadlineMs: 1200,
+          expectedHash: firstSend.hash,
+        });
         if (!ack) {
-          await sendActionsEnvelope(roomId, sessionId, currentSeq, fallback);
+          const retrySend = await sendActionsEnvelope(roomId, sessionId, currentSeq, fallback, { correlation });
+          await awaitAck({
+            sessionId,
+            seq: currentSeq,
+            deadlineMs: 800,
+            expectedHash: retrySend.hash,
+          });
         }
       } catch (error) {
         console.warn('[CanvasAgent] fallback envelope send failed', {

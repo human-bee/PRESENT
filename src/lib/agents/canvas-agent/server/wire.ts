@@ -1,6 +1,7 @@
 import { RoomServiceClient, DataPacket_Kind } from 'livekit-server-sdk';
 import { join } from 'path';
 import { config as dotenvConfig } from 'dotenv';
+import { createHash } from 'crypto';
 import {
   ACTION_VERSION,
   type AgentAction,
@@ -46,11 +47,54 @@ async function ensureRoom(room: string) {
   return { client, normalizedRoom: name } as const;
 }
 
-export async function sendActionsEnvelope(room: string, sessionId: string, seq: number, actions: AgentAction[], options?: { partial?: boolean }) {
+const hashActionsEnvelope = (input: {
+  sessionId: string;
+  seq: number;
+  partial?: boolean;
+  actions: AgentAction[];
+  traceId?: string;
+  intentId?: string;
+  requestId?: string;
+}) => {
+  const basis = JSON.stringify({
+    sessionId: input.sessionId,
+    seq: input.seq,
+    partial: input.partial ?? false,
+    actions: input.actions,
+    traceId: input.traceId,
+    intentId: input.intentId,
+    requestId: input.requestId,
+  });
+  return createHash('sha1').update(basis).digest('hex').slice(0, 20);
+};
+
+export async function sendActionsEnvelope(
+  room: string,
+  sessionId: string,
+  seq: number,
+  actions: AgentAction[],
+  options?: {
+    partial?: boolean;
+    correlation?: { traceId?: string; intentId?: string; requestId?: string };
+  },
+) {
+  const hash = hashActionsEnvelope({
+    sessionId,
+    seq,
+    partial: options?.partial,
+    actions,
+    traceId: options?.correlation?.traceId,
+    intentId: options?.correlation?.intentId,
+    requestId: options?.correlation?.requestId,
+  });
   const envelope: AgentActionEnvelope = {
     v: ACTION_VERSION,
     sessionId,
     seq,
+    hash,
+    ...(options?.correlation?.traceId ? { traceId: options.correlation.traceId } : {}),
+    ...(options?.correlation?.intentId ? { intentId: options.correlation.intentId } : {}),
+    ...(options?.correlation?.requestId ? { requestId: options.correlation.requestId } : {}),
     partial: options?.partial,
     actions,
     ts: Date.now(),
@@ -58,6 +102,7 @@ export async function sendActionsEnvelope(room: string, sessionId: string, seq: 
   const data = new TextEncoder().encode(JSON.stringify({ type: 'agent:action', envelope }));
   const { client, normalizedRoom } = await ensureRoom(room);
   await client.sendData(normalizedRoom, data, DataPacket_Kind.RELIABLE, { topic: 'agent:action' });
+  return { hash };
 }
 
 export async function sendChat(room: string, sessionId: string, message: AgentChatMessage) {
@@ -107,7 +152,12 @@ async function loadAckModule() {
   return ackModulePromise;
 }
 
-export async function awaitAck(opts: { sessionId: string; seq: number; deadlineMs?: number }) {
+export async function awaitAck(opts: {
+  sessionId: string;
+  seq: number;
+  deadlineMs?: number;
+  expectedHash?: string;
+}) {
   const ackModule = await loadAckModule();
   const getAck =
     typeof ackModule?.getAck === 'function'
@@ -123,7 +173,19 @@ export async function awaitAck(opts: { sessionId: string; seq: number; deadlineM
   let attempt = 0;
   while (Date.now() < deadline) {
     const ack = getAck(opts.sessionId, opts.seq);
-    if (ack) return ack;
+    if (ack) {
+      if (
+        opts.expectedHash &&
+        typeof (ack as any).envelopeHash === 'string' &&
+        (ack as any).envelopeHash !== opts.expectedHash
+      ) {
+        const wait = ACK_BACKOFF_MS[Math.min(attempt, ACK_BACKOFF_MS.length - 1)];
+        attempt += 1;
+        await new Promise((resolve) => setTimeout(resolve, wait));
+        continue;
+      }
+      return ack;
+    }
     const wait = ACK_BACKOFF_MS[Math.min(attempt, ACK_BACKOFF_MS.length - 1)];
     attempt += 1;
     await new Promise((resolve) => setTimeout(resolve, wait));

@@ -1,0 +1,57 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>Pipeline Compare</title>
+<style>
+body{font-family:Menlo,ui-monospace,monospace;background:#0b1320;color:#e6edf3;padding:22px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.card{background:#111827;border:1px solid #243042;border-radius:12px;padding:14px}
+h2{margin:0 0 10px;font-size:16px}
+pre{white-space:pre-wrap;line-height:1.35;font-size:12px}
+.tag{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;background:#1f2937;color:#93c5fd;border:1px solid #334155}
+li{margin:6px 0;font-size:12px}
+</style>
+</head>
+<body>
+<h1 style="margin:0 0 12px;font-size:20px">PRESENT Pipeline: Current vs Improved</h1>
+<div class="grid">
+  <div class="card">
+    <h2>Current <span class="tag">today</span></h2>
+<pre>User
+ -> VoiceAgent (dedupe window)
+ -> LiveKit tool_call
+ -> Browser ToolRunner
+ -> /api/steward/runCanvas
+ -> agent_tasks enqueue
+ -> Conductor claim
+ -> fairy.intent route dedupe
+ -> canvas.agent_prompt
+ -> CanvasSteward / CanvasRunner
+ -> screenshot request/ingest
+ -> agent:action envelope
+ -> ack route + inbox poll
+ -> retry once on missing ack
+ -> done/error status</pre>
+  </div>
+  <div class="card">
+    <h2>Improved (implemented slice) <span class="tag">phase 1</span></h2>
+<pre>User
+ -> VoiceAgent carries execution/idempotency ids
+ -> Browser forwards canonical requestId/traceId
+ -> /api/steward/runCanvas derives canonical correlation
+ -> Queue dedupe pre-check avoids cancel-on-retry
+ -> 23505 conflict returns existing task row
+ -> CanvasRunner emits envelope hash + correlation ids
+ -> Browser ack includes hash/trace/intent/request
+ -> Ack inbox stores correlation metadata
+ -> awaitAck can reject stale hash mismatch
+ -> benchmark + visual artifacts recorded</pre>
+  </div>
+</div>
+<ul>
+  <li>Key reliability lift: retries now preserve the original queued task rather than canceling it during coalesce.</li>
+  <li>Key observability lift: request/trace intent identifiers are now propagated and visible across dispatch + ack.</li>
+</ul>
+</body>
+</html>

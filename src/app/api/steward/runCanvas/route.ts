@@ -13,6 +13,7 @@ import {
   parseJsonObject,
   stewardRunCanvasRequestSchema,
 } from '@/lib/agents/shared/schemas';
+import { deriveRequestCorrelation } from '@/lib/agents/shared/request-correlation';
 import type { JsonObject } from '@/lib/utils/json-schema';
 import { getBooleanFlag, isFairyClientAgentEnabled } from '@/lib/feature-flags';
 import {
@@ -74,10 +75,8 @@ export async function POST(req: NextRequest) {
     const summary = parsed.summary;
     const message = parsed.message;
     const requestId = parsed.requestId;
-    const executionId = parsed.executionId;
-    const idempotencyKey = parsed.idempotencyKey;
-    const lockKey = parsed.lockKey;
-    const attempt = parsed.attempt;
+    const traceId = parsed.traceId;
+    const intentId = parsed.intentId;
     if (room.trim().length === 0) {
       return NextResponse.json({ error: 'Missing room' }, { status: 400 });
     }
@@ -128,42 +127,42 @@ export async function POST(req: NextRequest) {
       normalizedParams.summary = summary.trim();
     }
 
-    const orchestrationEnvelope = extractOrchestrationEnvelope(
-      {
-        ...normalizedParams,
-        executionId,
-        idempotencyKey,
-        lockKey,
-        attempt,
-      },
-      { attempt: typeof attempt === 'number' ? attempt : undefined },
-    );
-    const normalizedLockKey =
-      orchestrationEnvelope.lockKey ??
-      deriveDefaultLockKey({
-        task: normalizedTask,
-        room: trimmedRoom,
-        componentId:
-          typeof normalizedParams.componentId === 'string'
-            ? normalizedParams.componentId
-            : undefined,
-        componentType:
-          typeof normalizedParams.type === 'string'
-            ? normalizedParams.type
-            : typeof normalizedParams.componentType === 'string'
-              ? normalizedParams.componentType
-              : undefined,
-      });
-    const enrichedParams = applyOrchestrationEnvelope(normalizedParams, {
-      ...orchestrationEnvelope,
-      lockKey: normalizedLockKey,
+    const correlation = deriveRequestCorrelation({
+      task: normalizedTask,
+      requestId: requestId ?? intentId ?? normalizedParams.requestId ?? normalizedParams.id,
+      params: normalizedParams,
     });
-    const normalizedRequestId =
-      typeof requestId === 'string' && requestId.trim().length > 0
-        ? requestId.trim()
-        : typeof enrichedParams.requestId === 'string' && String(enrichedParams.requestId).trim().length > 0
-          ? String(enrichedParams.requestId).trim()
-          : orchestrationEnvelope.idempotencyKey;
+    const canonicalRequestId = correlation.requestId;
+    const canonicalTraceId =
+      correlation.traceId || (typeof traceId === 'string' && traceId.trim() ? traceId.trim() : undefined);
+    const canonicalIntentId =
+      correlation.intentId || (typeof intentId === 'string' && intentId.trim() ? intentId.trim() : undefined);
+
+    if (canonicalRequestId && !normalizedParams.requestId) {
+      normalizedParams.requestId = canonicalRequestId;
+    }
+    if (normalizedTask === 'fairy.intent' && canonicalIntentId && !normalizedParams.id) {
+      normalizedParams.id = canonicalIntentId;
+    }
+    if (canonicalTraceId && !normalizedParams.traceId) {
+      normalizedParams.traceId = canonicalTraceId;
+    }
+    const metadataForCorrelation: JsonObject = parseMetadata(normalizedParams.metadata) ?? {};
+    if (canonicalTraceId && !metadataForCorrelation.traceId) {
+      metadataForCorrelation.traceId = canonicalTraceId;
+    }
+    if (canonicalIntentId && !metadataForCorrelation.intentId) {
+      metadataForCorrelation.intentId = canonicalIntentId;
+    }
+    if (typeof traceId === 'string' && traceId.trim() && !metadataForCorrelation.traceId) {
+      metadataForCorrelation.traceId = traceId.trim();
+    }
+    if (typeof intentId === 'string' && intentId.trim() && !metadataForCorrelation.intentId) {
+      metadataForCorrelation.intentId = intentId.trim();
+    }
+    if (Object.keys(metadataForCorrelation).length > 0) {
+      normalizedParams.metadata = metadataForCorrelation;
+    }
 
     if (normalizedTask === 'canvas.agent_prompt' && !normalizedParams.message) {
       return NextResponse.json({ error: 'Missing message for canvas.agent_prompt' }, { status: 400 });
@@ -181,17 +180,14 @@ export async function POST(req: NextRequest) {
       const enqueueResult = await getQueue().enqueueTask({
         room: trimmedRoom,
         task: normalizedTask,
-        params: enrichedParams,
-        requestId: normalizedRequestId,
-        dedupeKey: orchestrationEnvelope.idempotencyKey,
-        lockKey: normalizedLockKey,
-        idempotencyKey: orchestrationEnvelope.idempotencyKey,
+        params: normalizedParams,
+        requestId: canonicalRequestId,
         resourceKeys: normalizedResourceKeys,
         coalesceByResource: normalizedTask === 'canvas.agent_prompt' || normalizedTask === 'fairy.intent',
       });
       if (normalizedTask === 'canvas.agent_prompt') {
         try {
-          const rid = normalizedRequestId || randomUUID();
+          const rid = canonicalRequestId || randomUUID();
           await broadcastAgentPrompt({
             room: trimmedRoom,
             payload: {
@@ -206,14 +202,23 @@ export async function POST(req: NextRequest) {
           logger.warn('broadcast agent prompt failed (post-enqueue)', { error: e });
         }
       }
-      return NextResponse.json({ status: 'queued', task: enqueueResult }, { status: 202 });
+      return NextResponse.json(
+        {
+          status: 'queued',
+          task: enqueueResult,
+          requestId: canonicalRequestId ?? null,
+          traceId: canonicalTraceId ?? null,
+          intentId: canonicalIntentId ?? null,
+        },
+        { status: 202 },
+      );
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
       logger.warn('queue enqueue failed', { error: msg, queueDirectFallback: QUEUE_DIRECT_FALLBACK_ENABLED });
 
       if (normalizedTask === 'canvas.agent_prompt') {
         try {
-          const rid = normalizedRequestId || randomUUID();
+          const rid = canonicalRequestId || randomUUID();
           await broadcastAgentPrompt({
             room: trimmedRoom,
             payload: {
