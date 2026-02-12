@@ -1,0 +1,18 @@
+{
+  "extends": "./tsconfig.agent.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "incremental": false,
+    "noImplicitAny": true
+  },
+  "include": [],
+  "files": [
+    "src/lib/agents/conductor/worker.ts",
+    "src/lib/agents/shared/queue.ts",
+    "src/lib/agents/shared/schemas.ts",
+    "src/lib/logging/index.ts"
+  ],
+  "exclude": [
+    "node_modules"
+  ]
+}

@@ -1,8 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { AgentTaskQueue } from '@/lib/agents/shared/queue';
 import { runCanvasSteward } from '@/lib/agents/subagents/canvas-steward';
-import { broadcastAgentPrompt } from '@/lib/agents/shared/supabase-context';
+import {
+  broadcastAgentPrompt,
+  type CanvasAgentPromptPayload,
+} from '@/lib/agents/shared/supabase-context';
 import { randomUUID } from 'crypto';
+import { createLogger } from '@/lib/logging';
+import {
+  parseJsonObject,
+  stewardRunCanvasRequestSchema,
+} from '@/lib/agents/shared/schemas';
+import type { JsonObject } from '@/lib/utils/json-schema';
 
 export const runtime = 'nodejs';
 
@@ -13,16 +22,52 @@ const CANVAS_STEWARD_ENABLED = (process.env.CANVAS_STEWARD_SERVER_EXECUTION ?? '
 const SERVER_CANVAS_AGENT_ENABLED =
   CANVAS_STEWARD_ENABLED && !CLIENT_CANVAS_AGENT_ENABLED && !FAIRY_CLIENT_AGENT_ENABLED;
 const SERVER_CANVAS_TASKS_ENABLED = CANVAS_STEWARD_ENABLED && !CLIENT_CANVAS_AGENT_ENABLED;
+const logger = createLogger('api:steward:runCanvas');
+
+const parseBounds = (value: unknown): CanvasAgentPromptPayload['bounds'] | undefined => {
+  const record = parseJsonObject(value);
+  if (!record) return undefined;
+  if (
+    typeof record.x !== 'number' ||
+    typeof record.y !== 'number' ||
+    typeof record.w !== 'number' ||
+    typeof record.h !== 'number'
+  ) {
+    return undefined;
+  }
+  return { x: record.x, y: record.y, w: record.w, h: record.h };
+};
+
+const parseSelectionIds = (value: unknown): string[] | undefined => {
+  if (!Array.isArray(value)) return undefined;
+  const ids = value
+    .filter((entry): entry is string => typeof entry === 'string')
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+  return ids.length > 0 ? ids : undefined;
+};
+
+const parseMetadata = (value: unknown): JsonObject | null => {
+  const metadata = parseJsonObject(value);
+  return metadata ?? null;
+};
 
 export async function POST(req: NextRequest) {
   try {
-    const { room, task, params, summary, message, requestId } = await req.json();
-    if (typeof room !== 'string' || room.trim().length === 0) {
+    const body = await req.json();
+    const parsed = stewardRunCanvasRequestSchema.parse(body);
+    const room = parsed.room;
+    const task = parsed.task;
+    const params = parsed.params;
+    const summary = parsed.summary;
+    const message = parsed.message;
+    const requestId = parsed.requestId;
+    if (room.trim().length === 0) {
       return NextResponse.json({ error: 'Missing room' }, { status: 400 });
     }
 
     const normalizedTask = typeof task === 'string' && task.trim() ? task.trim() : 'canvas.agent_prompt';
-    const normalizedParams = Object(params) === params ? { ...params } : {};
+    const normalizedParams = parseJsonObject(params) || {};
     const trimmedRoom = room.trim();
 
     if (!normalizedParams.room) {
@@ -68,20 +113,20 @@ export async function POST(req: NextRequest) {
             payload: {
               message: String(normalizedParams.message || '').trim(),
               requestId: rid,
-              bounds: normalizedParams.bounds,
-              selectionIds: normalizedParams.selectionIds,
-              metadata: normalizedParams.metadata ?? null,
+              bounds: parseBounds(normalizedParams.bounds),
+              selectionIds: parseSelectionIds(normalizedParams.selectionIds),
+              metadata: parseMetadata(normalizedParams.metadata),
             },
           });
         } catch (e) {
-          console.warn('[Steward][runCanvas] broadcast agent prompt failed (post-enqueue)', e);
+          logger.warn('broadcast agent prompt failed (post-enqueue)', { error: e });
         }
       }
       return NextResponse.json({ status: 'queued', task: enqueueResult }, { status: 202 });
     } catch (error) {
       // Graceful fallback: if Supabase is unavailable (e.g., Cloudflare 5xx), run immediately server-side
       const msg = error instanceof Error ? error.message : String(error);
-      console.warn('[Steward][runCanvas] queue enqueue failed, falling back to direct run', msg);
+      logger.warn('queue enqueue failed, falling back to direct run', { error: msg });
 
       if (normalizedTask === 'canvas.agent_prompt') {
         try {
@@ -91,13 +136,13 @@ export async function POST(req: NextRequest) {
             payload: {
               message: String(normalizedParams.message || '').trim(),
               requestId: rid,
-              bounds: normalizedParams.bounds,
-              selectionIds: normalizedParams.selectionIds,
-              metadata: normalizedParams.metadata ?? null,
+              bounds: parseBounds(normalizedParams.bounds),
+              selectionIds: parseSelectionIds(normalizedParams.selectionIds),
+              metadata: parseMetadata(normalizedParams.metadata),
             },
           });
         } catch (e) {
-          console.warn('[Steward][runCanvas] broadcast agent prompt failed in fallback', e);
+          logger.warn('broadcast agent prompt failed in fallback', { error: e });
         }
       }
 
@@ -119,12 +164,12 @@ export async function POST(req: NextRequest) {
         await runCanvasSteward({ task: normalizedTask, params: normalizedParams });
         return NextResponse.json({ status: 'executed_fallback' }, { status: 202 });
       } catch (e) {
-        console.error('[Steward][runCanvas] fallback execution failed', e);
+        logger.error('fallback execution failed', { error: e });
         return NextResponse.json({ error: 'Dispatch failed' }, { status: 502 });
       }
     }
   } catch (error) {
-    console.error('[Steward][runCanvas] error', error);
+    logger.error('request parse failure', { error: error instanceof Error ? error.message : String(error) });
     return NextResponse.json({ error: 'Bad Request' }, { status: 400 });
   }
 }

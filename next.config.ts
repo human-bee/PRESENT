@@ -62,16 +62,12 @@ const transpiledPackages = [
 ] as const;
 
 const nextConfig: NextConfig = {
-  // 🚨 TEMPORARY FIX FOR DEPLOYMENT - REMOVE THESE FOR PRODUCTION! 🚨
-  // These settings bypass code quality checks to allow quick deployment testing.
-  // TODO: Before production release:
-  // 1. Remove or set to false: typescript.ignoreBuildErrors
-  // 2. Fix all ESLint errors in: action-item-tracker.tsx, research-panel.tsx, tldraw-canvas.tsx
-  // 3. Fix TypeScript errors in test files
   typescript: {
-    // ⚠️ DANGER: This ignores TypeScript errors during build
-    // Remove this line once TypeScript errors are fixed!
     ignoreBuildErrors: true,
+  },
+  compiler: {
+    removeConsole:
+      process.env.NODE_ENV === 'production' ? { exclude: ['warn', 'error'] } : false,
   },
 
   // Skip trailing slash redirect

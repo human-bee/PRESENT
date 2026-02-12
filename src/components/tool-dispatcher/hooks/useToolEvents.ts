@@ -7,6 +7,9 @@ import { ComponentRegistry } from '@/lib/component-registry';
 import { createObservabilityBridge } from '@/lib/observability-bridge';
 import { TOOL_EVENT_TOPICS } from '../utils/constants';
 import type { ToolRunResult, ToolCall } from '../utils/toolTypes';
+import { createLogger } from '@/lib/logging';
+import { parseJsonObject } from '@/lib/agents/shared/schemas';
+import type { StewardTriggerMessage } from '@/lib/livekit/protocol';
 
 export interface ToolEventsApi {
   emitRequest: (call: ToolCall) => void;
@@ -16,6 +19,7 @@ export interface ToolEventsApi {
   emitError: (call: ToolCall, error: unknown) => void;
   emitEditorAction: (payload: Record<string, unknown>) => void;
   emitDecision: (payload: Record<string, unknown>) => void;
+  emitStewardTrigger: (payload: StewardTriggerMessage['payload']) => void;
   log: (...args: unknown[]) => void;
   bus: ReturnType<typeof createLiveKitBus>;
 }
@@ -26,6 +30,7 @@ interface UseToolEventsOptions {
 
 export function useToolEvents(room: Room | undefined, options: UseToolEventsOptions = {}): ToolEventsApi {
   const { enableLogging = false } = options;
+  const logger = useMemo(() => createLogger('ToolDispatcher:events'), []);
 
   const bus = useMemo(() => createLiveKitBus(room), [room]);
 
@@ -35,16 +40,14 @@ export function useToolEvents(room: Room | undefined, options: UseToolEventsOpti
       createObservabilityBridge(room);
     } catch (error) {
       if (enableLogging) {
-        console.warn('[ToolDispatcher] observability bridge failed', error);
+        logger.warn('observability bridge failed', { error });
       }
     }
-  }, [room, enableLogging]);
+  }, [room, enableLogging, logger]);
 
   const log = (...args: unknown[]) => {
     if (!enableLogging) return;
-    try {
-      console.log('[ToolDispatcher]', ...args);
-    } catch {}
+    logger.info(...args);
   };
 
   const emit = (topic: string, payload: Record<string, unknown>) => {
@@ -52,7 +55,7 @@ export function useToolEvents(room: Room | undefined, options: UseToolEventsOpti
       bus.send(topic, payload);
     } catch (error) {
       if (enableLogging) {
-        console.warn('[ToolDispatcher] failed to publish event', topic, error);
+        logger.warn('failed to publish event', { topic, error });
       }
     }
   };
@@ -60,7 +63,7 @@ export function useToolEvents(room: Room | undefined, options: UseToolEventsOpti
   useEffect(() => {
     const pendingUpdates = new Map<
       string,
-      { message: any; enqueuedAt: number; attempts: number }
+      { message: unknown; enqueuedAt: number; attempts: number }
     >();
     const PENDING_UPDATE_MAX_AGE_MS = 20_000;
     const PENDING_UPDATE_MAX_ATTEMPTS = 80;
@@ -96,7 +99,7 @@ export function useToolEvents(room: Room | undefined, options: UseToolEventsOpti
           await applyLiveKitUpdate(entry.message, { allowQueue: false });
         } catch (error) {
           if (enableLogging) {
-            console.warn('[ToolDispatcher] pending update flush failed', { componentId, error });
+            logger.warn('pending update flush failed', { componentId, error });
           }
           pendingUpdates.set(componentId, { ...entry, attempts: entry.attempts + 1 });
         }
@@ -105,16 +108,17 @@ export function useToolEvents(room: Room | undefined, options: UseToolEventsOpti
       if (pendingUpdates.size > 0) scheduleFlush();
     };
 
-    const applyLiveKitUpdate = async (message: any, opts: { allowQueue: boolean }) => {
-      if (!message || typeof message !== 'object') return;
+    const applyLiveKitUpdate = async (message: unknown, opts: { allowQueue: boolean }) => {
+      const parsedMessage = parseJsonObject(message);
+      if (!parsedMessage) return;
       const componentId =
-        typeof message.componentId === 'string' && message.componentId.trim().length
-          ? message.componentId.trim()
+        typeof parsedMessage.componentId === 'string' && parsedMessage.componentId.trim().length
+          ? parsedMessage.componentId.trim()
           : undefined;
-      const patch = message.patch && typeof message.patch === 'object' ? message.patch : undefined;
+      const patch = parseJsonObject(parsedMessage.patch);
       if (!componentId || !patch) return;
 
-      const patchRecord = patch as Record<string, unknown>;
+      const patchRecord = patch;
       const patchVersion = typeof patchRecord.version === 'number' ? patchRecord.version : undefined;
       const patchTimestamp =
         typeof patchRecord.lastUpdated === 'number'
@@ -122,7 +126,7 @@ export function useToolEvents(room: Room | undefined, options: UseToolEventsOpti
           : typeof patchRecord.updatedAt === 'number'
             ? patchRecord.updatedAt
             : undefined;
-      const eventTimestamp = typeof message.timestamp === 'number' ? message.timestamp : Date.now();
+      const eventTimestamp = typeof parsedMessage.timestamp === 'number' ? parsedMessage.timestamp : Date.now();
 
       const componentInfo = ComponentRegistry.get(componentId);
       if (!componentInfo && opts.allowQueue) {
@@ -142,8 +146,14 @@ export function useToolEvents(room: Room | undefined, options: UseToolEventsOpti
           timestamp: patchTimestamp ?? eventTimestamp,
           source: 'livekit:update_component',
         });
+        const wasIgnored = Boolean(
+          updateResult &&
+            typeof updateResult === 'object' &&
+            'ignored' in updateResult &&
+            (updateResult as { ignored?: boolean }).ignored,
+        );
 
-        if (!updateResult?.ignored) {
+        if (!wasIgnored) {
           const refreshed = ComponentRegistry.get(componentId);
           if (refreshed?.props && refreshed.componentType) {
             try {
@@ -160,14 +170,14 @@ export function useToolEvents(room: Room | undefined, options: UseToolEventsOpti
               );
             } catch (error) {
               if (enableLogging) {
-                console.warn('[ToolDispatcher] refresh showComponent dispatch failed', { componentId, error });
+                logger.warn('refresh showComponent dispatch failed', { componentId, error });
               }
             }
           }
         }
       } catch (error) {
         if (enableLogging) {
-          console.warn('[ToolDispatcher] registry update failed', { componentId, error });
+          logger.warn('registry update failed', { componentId, error });
         }
       }
 
@@ -177,23 +187,23 @@ export function useToolEvents(room: Room | undefined, options: UseToolEventsOpti
             detail: {
               messageId: componentId,
               patch,
-              meta: { source: 'livekit:update_component', summary: message.summary },
+              meta: { source: 'livekit:update_component', summary: parsedMessage.summary },
             },
           }),
         );
       } catch (error) {
         if (enableLogging) {
-          console.warn('[ToolDispatcher] merge_component_state dispatch failed', { componentId, error });
+          logger.warn('merge_component_state dispatch failed', { componentId, error });
         }
       }
     };
 
-    const off = bus.on('update_component', async (message: any) => {
+    const off = bus.on('update_component', async (message: unknown) => {
       try {
         await applyLiveKitUpdate(message, { allowQueue: true });
       } catch (error) {
         if (enableLogging) {
-          console.warn('[ToolDispatcher] update_component handling error', error);
+          logger.warn('update_component handling error', { error });
         }
       }
     });
@@ -206,7 +216,7 @@ export function useToolEvents(room: Room | undefined, options: UseToolEventsOpti
         flushHandle = null;
       }
     };
-  }, [bus, enableLogging]);
+  }, [bus, enableLogging, logger]);
 
   const emitRequest = (call: ToolCall) => emit(TOOL_EVENT_TOPICS.request, { id: call.id, tool: call.payload.tool, timestamp: Date.now() });
   const emitStarted = (call: ToolCall) => emit(TOOL_EVENT_TOPICS.started, { id: call.id, tool: call.payload.tool, timestamp: Date.now() });
@@ -215,6 +225,12 @@ export function useToolEvents(room: Room | undefined, options: UseToolEventsOpti
   const emitError = (call: ToolCall, error: unknown) => emit(TOOL_EVENT_TOPICS.error, { id: call.id, tool: call.payload.tool, timestamp: Date.now(), error });
   const emitEditorAction = (payload: Record<string, unknown>) => emit(TOOL_EVENT_TOPICS.editorAction, payload);
   const emitDecision = (payload: Record<string, unknown>) => emit(TOOL_EVENT_TOPICS.decision, payload);
+  const emitStewardTrigger = (payload: StewardTriggerMessage['payload']) =>
+    emit(TOOL_EVENT_TOPICS.stewardTrigger, {
+      type: TOOL_EVENT_TOPICS.stewardTrigger,
+      payload,
+      timestamp: Date.now(),
+    });
 
   return {
     emitRequest,
@@ -224,6 +240,7 @@ export function useToolEvents(room: Room | undefined, options: UseToolEventsOpti
     emitError,
     emitEditorAction,
     emitDecision,
+    emitStewardTrigger,
     log,
     bus,
   };

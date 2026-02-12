@@ -1,6 +1,7 @@
 import type { AccessTokenOptions, VideoGrant } from 'livekit-server-sdk';
 import { AccessToken } from 'livekit-server-sdk';
 import { NextRequest, NextResponse } from 'next/server';
+import { createLogger } from '@/lib/logging';
 export const runtime = 'nodejs';
 
 /**
@@ -19,6 +20,7 @@ export const revalidate = 0;
 
 const apiKey = process.env.LIVEKIT_API_KEY;
 const apiSecret = process.env.LIVEKIT_API_SECRET;
+const logger = createLogger('api:token');
 
 const createToken = async (userInfo: AccessTokenOptions, grant: VideoGrant) => {
   if (!apiKey) {
@@ -34,16 +36,15 @@ const createToken = async (userInfo: AccessTokenOptions, grant: VideoGrant) => {
     at.addGrant(grant);
     return await at.toJwt();
   } catch (error) {
-    console.error('Token creation error:', error);
+    logger.error('token creation failed', { error: error instanceof Error ? error.message : String(error) });
     throw new Error(`Failed to create token: ${(error as Error).message}`);
   }
 };
 
 export async function GET(req: NextRequest) {
   try {
-    // Add debug logging
-    console.log('Token request params:', Object.fromEntries(req.nextUrl.searchParams));
-    console.log('Environment check:', {
+    logger.debug('token request received', {
+      queryKeys: Array.from(req.nextUrl.searchParams.keys()),
       hasApiKey: !!apiKey,
       hasApiSecret: !!apiSecret,
       hasLivekitUrl: !!process.env.LIVEKIT_URL,
@@ -100,8 +101,7 @@ export async function GET(req: NextRequest) {
       grant,
     );
 
-    console.log(`✅ Token created for ${identity} in room ${roomName}`);
-    console.log('🤖 Agent will automatically join via automatic dispatch');
+    logger.info('token created', { identity, roomName });
 
     return NextResponse.json(
       {
@@ -111,7 +111,7 @@ export async function GET(req: NextRequest) {
       { headers: { 'Cache-Control': 'no-store' } },
     );
   } catch (e) {
-    console.error('Token generation error:', e);
+    logger.error('token generation failed', { error: e instanceof Error ? e.message : String(e) });
     return NextResponse.json(
       {
         error: (e as Error).message,

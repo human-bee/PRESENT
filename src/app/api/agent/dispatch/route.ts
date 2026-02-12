@@ -1,7 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { AgentDispatchClient } from 'livekit-server-sdk';
+import { z } from 'zod';
+import { createLogger } from '@/lib/logging';
 
 export const runtime = 'nodejs';
+const logger = createLogger('api:agent:dispatch');
+const dispatchRequestSchema = z.object({
+  roomName: z.string().min(1),
+});
 
 /**
  * Agent Dispatch API - Manually dispatch agent to room
@@ -10,9 +16,13 @@ export const runtime = 'nodejs';
  */
 export async function POST(request: NextRequest) {
   try {
-    const { roomName } = await request.json();
-
-    console.log('📥 Agent dispatch request:', { roomName });
+    const body = await request.json();
+    const { roomName } = dispatchRequestSchema.parse(body);
+    const normalizedRoomName = roomName.trim();
+    if (!normalizedRoomName) {
+      return NextResponse.json({ error: 'Room name is required' }, { status: 400 });
+    }
+    logger.debug('dispatch request', { roomName: normalizedRoomName });
 
     const apiKey = process.env.LIVEKIT_API_KEY;
     const apiSecret = process.env.LIVEKIT_API_SECRET;
@@ -22,22 +32,30 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Missing LiveKit credentials' }, { status: 500 });
     }
 
-    if (!roomName) {
-      return NextResponse.json({ error: 'Room name is required' }, { status: 400 });
-    }
-
     try {
       // Use official AgentDispatchClient from livekit-server-sdk
       const agentDispatchUrl = serverUrl.replace('wss://', 'https://').replace('ws://', 'http://');
       const client = new AgentDispatchClient(agentDispatchUrl, apiKey, apiSecret);
-      console.log('🚀 Creating agent dispatch via SDK:', { agentDispatchUrl, roomName, agentName: 'voice-agent' });
-      const dispatch = await client.createDispatch(roomName, 'voice-agent', {
+      logger.info('creating agent dispatch', {
+        agentDispatchUrl,
+        roomName: normalizedRoomName,
+        agentName: 'voice-agent',
+      });
+      const dispatch = await client.createDispatch(normalizedRoomName, 'voice-agent', {
         metadata: JSON.stringify({ dispatchedAt: Date.now(), reason: 'manual_dispatch' }),
       });
-      console.log('✅ Agent dispatch successful:', dispatch);
-      return NextResponse.json({ success: true, dispatch, agentName: 'voice-agent', room: roomName });
+      logger.info('agent dispatch succeeded', { roomName: normalizedRoomName });
+      return NextResponse.json({
+        success: true,
+        dispatch,
+        agentName: 'voice-agent',
+        room: normalizedRoomName,
+      });
     } catch (dispatchError) {
-      console.error('❌ Agent dispatch error:', dispatchError);
+      logger.error('agent dispatch failed', {
+        error:
+          dispatchError instanceof Error ? dispatchError.message : 'Unknown dispatch error',
+      });
 
       return NextResponse.json(
         {
@@ -48,7 +66,10 @@ export async function POST(request: NextRequest) {
       );
     }
   } catch (error) {
-    console.error('❌ Dispatch API error:', error);
+    if (error instanceof z.ZodError) {
+      return NextResponse.json({ error: 'Room name is required' }, { status: 400 });
+    }
+    logger.error('dispatch api error', { error: error instanceof Error ? error.message : String(error) });
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

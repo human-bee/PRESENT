@@ -53,4 +53,5 @@ export type ToolEventTopic =
   | 'tool:done'
   | 'tool:error'
   | 'editor_action'
-  | 'decision';
+  | 'decision'
+  | 'steward_trigger';

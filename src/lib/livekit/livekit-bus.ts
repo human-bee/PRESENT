@@ -1,7 +1,7 @@
 export type { DataMessage } from '@livekit/components-react';
 
 import { Room, RoomEvent, ParticipantKind } from 'livekit-client';
-import { createLogger } from '@/lib/utils';
+import { createLogger } from '@/lib/logging';
 
 type ChunkEnvelope = {
   __chunked: true;
@@ -117,8 +117,8 @@ function createLiveKitBusInstance(room: Room | null | undefined) {
   if (shouldLogBusInit()) {
     try {
       const label = `${room!.name ?? 'unknown'}#${room!.sid}`;
-      console.debug('[LiveKitBus][debug] createLiveKitBus', { label, state: room?.state });
-      console.debug('[LiveKitBus][debug] instantiated', { label, state: room?.state });
+      logger.debug('createLiveKitBus', { label, state: room?.state });
+      logger.debug('instantiated', { label, state: room?.state });
     } catch {}
   }
   let lastWarnedDisconnectedAt = 0;
@@ -145,29 +145,30 @@ function createLiveKitBusInstance(room: Room | null | undefined) {
   };
 
   const isVoiceAgentPresent = () => {
-    if (!room) return false;
-    try {
-      const participants = Array.from(room.remoteParticipants.values());
-      return participants.some((participant: any) => {
-        if (participant?.kind === ParticipantKind.AGENT) return true;
-        const identity = String(participant?.identity || '').toLowerCase();
-        const metadata = String(participant?.metadata || '').toLowerCase();
-        return (
-          identity.includes('voice-agent') ||
-          identity === 'voiceagent' ||
-          metadata.includes('voice-agent') ||
-          metadata.includes('voiceagent')
-        );
-      });
-    } catch {
-      return false;
-    }
+      if (!room) return false;
+      try {
+        const participants = Array.from(room.remoteParticipants.values());
+        return participants.some((participant) => {
+          if (participant?.kind === ParticipantKind.AGENT) return true;
+          const identity = String(participant?.identity || '').toLowerCase();
+          const metadata = String(participant?.metadata || '').toLowerCase();
+          return (
+            identity.includes('voice-agent') ||
+            identity === 'voiceagent' ||
+            metadata.includes('voice-agent') ||
+            metadata.includes('voiceagent')
+          );
+        });
+      } catch {
+        return false;
+      }
   };
 
   const shouldWaitForAgent = (topic: string, payload: unknown): boolean => {
     if (topic !== 'transcription') return false;
     if (!payload || typeof payload !== 'object') return false;
-    return Boolean((payload as any).manual);
+    const record = payload as Record<string, unknown>;
+    return Boolean(record.manual);
   };
 
   const prunePendingQueue = () => {
@@ -395,8 +396,13 @@ function createLiveKitBusInstance(room: Room | null | undefined) {
       };
 
       // Create the actual listener that will be registered
-      const dataReceivedHandler = (data: Uint8Array, _p: any, _k: any, t: any) => {
-        if (t === topic) {
+      const dataReceivedHandler = (
+        data: Uint8Array,
+        _participant: unknown,
+        _kind: unknown,
+        topicName: unknown,
+      ) => {
+        if (topicName === topic) {
           try {
             const decoded = decodeUtf8(data);
             const msg = JSON.parse(decoded) as ChunkEnvelope | Record<string, unknown>;
