@@ -20,6 +20,8 @@ import {
   type StewardTriggerMessage,
 } from '@/lib/livekit/protocol';
 import { ACTION_VERSION, AgentActionEnvelopeSchema } from '@/lib/canvas-agent/contract/types';
+import { useRoomExecutor } from '@/hooks/use-room-executor';
+import { shouldExecuteIncomingToolCall } from './tool-call-execution-guard';
 
 type ToolMetricEntry = {
   callId: string;
@@ -47,6 +49,7 @@ export interface ToolRunnerApi {
 
 export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
   const { contextKey, events, room, stewardEnabled } = options;
+  const executor = useRoomExecutor(room);
   const queue = useToolQueue();
   const logger = useMemo(() => createLogger('ToolDispatcher:runner'), []);
   const runtimeMetricsFlag = typeof window !== 'undefined' && window.__presentDispatcherMetrics === true;
@@ -54,6 +57,7 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
     process.env.NEXT_PUBLIC_TOOL_DISPATCHER_METRICS === 'true' || runtimeMetricsFlag;
   const metricsByCallRef = useRef<Map<string, ToolMetricEntry>>(new Map());
   const messageToCallsRef = useRef<Map<string, Set<string>>>(new Map());
+  const processedToolCallIdsRef = useRef<Map<string, number>>(new Map());
   const metricsAdapter = useMemo(() => {
     if (!metricsEnabled) return undefined;
     return {
@@ -455,6 +459,10 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
             .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))[0];
           if (latestScorecard) {
             const messageId = latestScorecard.messageId;
+            const nextVersion =
+              typeof latestScorecard.version === 'number' && Number.isFinite(latestScorecard.version)
+                ? latestScorecard.version + 1
+                : 1;
             const patch: Record<string, unknown> = {
               timeline: [
                 {
@@ -464,9 +472,12 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
                   timestamp: new Date().toISOString(),
                 },
               ],
+              version: nextVersion,
+              lastUpdated: Date.now(),
             };
             try {
               await ComponentRegistry.update(messageId, patch, {
+                version: nextVersion,
                 timestamp: Date.now(),
                 source: 'tool:exa',
               });
@@ -946,6 +957,43 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
         const params = parsed.payload.params || {};
         const callId = parsed.id || `${Date.now()}`;
         const context = toRecord(parsed.payload.context);
+        const roomKey =
+          (typeof parsed.roomId === 'string' && parsed.roomId.trim()) ||
+          (typeof room?.name === 'string' ? room.name : '') ||
+          'unknown-room';
+        const now = Date.now();
+        const executionDecision = shouldExecuteIncomingToolCall({
+          isExecutor: executor.isExecutor,
+          processed: processedToolCallIdsRef.current,
+          roomKey,
+          callId,
+          now,
+        });
+
+        if (!executionDecision.execute) {
+          if (metricsEnabled && typeof window !== 'undefined') {
+            try {
+              window.dispatchEvent(
+                new CustomEvent('present:tool_call_skipped', {
+                  detail: {
+                    callId,
+                    tool: tool || 'unknown',
+                    reason: executionDecision.reason || 'unknown',
+                    executorIdentity: executor.executorIdentity,
+                  },
+                }),
+              );
+            } catch {}
+          }
+          return;
+        }
+        if (typeof window !== 'undefined') {
+          try {
+            const w = window as any;
+            w.__present = w.__present || {};
+            w.__present.lastProcessedToolCallId = callId;
+          } catch {}
+        }
         if (metricsEnabled && typeof window !== 'undefined') {
           try {
             const nestedParams = toRecord(params.params);
@@ -1201,7 +1249,7 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
       offStewardTrigger();
       offDecision();
     };
-  }, [bus, executeToolCall, log, logger, room, scheduleStewardRun, stewardEnabled, metricsEnabled]);
+  }, [bus, executeToolCall, log, logger, room, scheduleStewardRun, stewardEnabled, metricsEnabled, executor.executorIdentity, executor.isExecutor]);
 
   useEffect(() => {
     if (!stewardEnabled) return;

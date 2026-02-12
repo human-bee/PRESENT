@@ -81,18 +81,33 @@ type RegistryComponentEntry = {
 function LivekitParticipantTileWrapper(props: any) {
   // In CustomShapeComponent, props.state contains the component state.
   // We fallback to top-level props if state is missing (for backward compat or direct usage).
+  const slotId =
+    props.state?.slotId ??
+    props.slotId ??
+    props.__custom_message_id ??
+    props.componentId;
   const participantIdentity = props.state?.participantIdentity ?? props.participantIdentity;
+  const assignmentStatus =
+    props.state?.assignmentStatus ??
+    props.assignmentStatus ??
+    (participantIdentity ? 'assigned' : 'unassigned');
 
   const handleIdentityChange = (id: string) => {
     // updateState is injected by CustomShapeComponent
     if (props.updateState) {
-      props.updateState({ participantIdentity: id });
+      props.updateState({
+        slotId,
+        participantIdentity: id,
+        assignmentStatus: id ? 'assigned' : 'unassigned',
+      });
     }
   };
 
   return (
     <LivekitParticipantTile
       {...props}
+      slotId={slotId}
+      assignmentStatus={assignmentStatus}
       participantIdentity={participantIdentity}
       onIdentityChange={handleIdentityChange}
     />

@@ -26,6 +26,7 @@ import { initializeMCPBridge } from '@/lib/mcp-bridge';
 import { AgentCapabilitiesBridge } from '@/components/ui/integrations/agent-capabilities-bridge';
 import { LiveKitStateBridge } from '@/lib/livekit/livekit-state-bridge';
 import LiveKitDebugConsole from '@/components/LiveKitDebugConsole';
+import { RealtimeSyncHealth } from '@/components/ui/diagnostics/realtime-sync-health';
 import {
   initJourneyLogger,
   persistJourneyRunId,
@@ -35,6 +36,11 @@ import {
 } from '@/lib/journey-logger';
 import { fetchWithSupabaseAuth } from '@/lib/supabase/auth-headers';
 import { getBooleanFlag } from '@/lib/feature-flags';
+import {
+  buildCanvasRoomName,
+  buildSyncContract,
+  getCanvasIdFromCurrentUrl,
+} from '@/lib/realtime/sync-contract';
 
 // Suppress development warnings for cleaner console
 suppressDevelopmentWarnings();
@@ -55,7 +61,7 @@ export function CanvasPageClient() {
   const demoMode = getBooleanFlag(process.env.NEXT_PUBLIC_CANVAS_DEMO_MODE, false);
   const searchParamsKey = searchParams?.toString() ?? '';
   // Track resolved canvas id and room name; do not render until resolved
-  const [, setCanvasId] = useState<string | null>(null);
+  const [canvasId, setCanvasId] = useState<string | null>(null);
   const [roomName, setRoomName] = useState<string>('');
   const [demoNameDraft, setDemoNameDraft] = useState('');
   const [demoAuthAttempted, setDemoAuthAttempted] = useState(false);
@@ -116,6 +122,37 @@ export function CanvasPageClient() {
       });
     } catch { }
   }, [roomName]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (!roomName) return;
+    try {
+      const contract = buildSyncContract({
+        roomName,
+        canvasId: canvasId ?? getCanvasIdFromCurrentUrl(),
+        tldrawRoomId: roomName,
+      });
+      const w = window as any;
+      w.__present = w.__present || {};
+      w.__present.syncContract = contract;
+      w.__present.syncDiagnostics = w.__present.syncDiagnostics || {};
+      w.__present.syncDiagnostics.contract = {
+        ok: contract.errors.length === 0,
+        canvasId: contract.canvasId,
+        roomName: contract.livekitRoomName,
+        tldrawRoomId: contract.tldrawRoomId,
+        errors: contract.errors,
+        updatedAt: Date.now(),
+      };
+      window.dispatchEvent(
+        new CustomEvent('present:sync-contract', {
+          detail: contract,
+        }),
+      );
+    } catch {
+      // noop
+    }
+  }, [canvasId, roomName]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -228,7 +265,7 @@ export function CanvasPageClient() {
 
       if (idParam) {
         setCanvasId(idParam);
-        setRoomName(`canvas-${idParam}`);
+        setRoomName(buildCanvasRoomName(idParam));
         try {
           localStorage.setItem('present:lastCanvasId', idParam);
         } catch { }
@@ -254,7 +291,7 @@ export function CanvasPageClient() {
         url.searchParams.set('id', lastId);
         window.history.replaceState({}, '', url.toString());
         setCanvasId(lastId);
-        setRoomName(`canvas-${lastId}`);
+        setRoomName(buildCanvasRoomName(lastId));
         try {
           window.dispatchEvent(new Event('present:canvas-id-changed'));
         } catch { }
@@ -280,7 +317,7 @@ export function CanvasPageClient() {
             url.searchParams.set('id', generatedId);
             window.history.replaceState({}, '', url.toString());
             setCanvasId(generatedId);
-            setRoomName(`canvas-${generatedId}`);
+            setRoomName(buildCanvasRoomName(generatedId));
             try {
               localStorage.setItem(devKey, generatedId);
             } catch { }
@@ -367,7 +404,7 @@ export function CanvasPageClient() {
       url.searchParams.set('id', createdId);
       window.history.replaceState({}, '', url.toString());
       setCanvasId(createdId);
-      setRoomName(`canvas-${createdId}`);
+      setRoomName(buildCanvasRoomName(createdId));
       try {
         localStorage.setItem('present:lastCanvasId', createdId);
       } catch { }
@@ -386,8 +423,8 @@ export function CanvasPageClient() {
         const current = new URL(window.location.href).searchParams.get('id');
         if (current) {
           setCanvasId(current);
-          setRoomName(`canvas-${current}`);
-          console.log('setRoomName called with:', `canvas-${current}`);
+          setRoomName(buildCanvasRoomName(current));
+          console.log('setRoomName called with:', buildCanvasRoomName(current));
           try {
             localStorage.setItem('present:lastCanvasId', current);
           } catch { }
@@ -488,15 +525,17 @@ export function CanvasPageClient() {
     roomName: '',
     participantCount: 0,
   });
+  const roomNameRef = useRef(roomName);
 
   // Track component lifecycle and cleanup room
   React.useEffect(() => {
     // Update room state when room state changes
     const updateRoomState = () => {
       const remoteIdentities = Array.from(room.remoteParticipants.values()).map((p) => p.identity);
+      const currentRoomName = roomNameRef.current;
       const next = {
         isConnected: room.state === ConnectionState.Connected,
-        roomName,
+        roomName: currentRoomName,
         participantCount: room.numParticipants,
       };
       setRoomState(next);
@@ -529,13 +568,13 @@ export function CanvasPageClient() {
       room.off(RoomEvent.Reconnected, updateRoomState);
       room.off(RoomEvent.ParticipantConnected, updateRoomState);
       room.off(RoomEvent.ParticipantDisconnected, updateRoomState);
-      room.disconnect();
     };
-  }, [room, roomName]);
+  }, [room]);
 
   // Keep context roomName in sync when the computed roomName changes
   useEffect(() => {
     if (roomName) {
+      roomNameRef.current = roomName;
       setRoomState((prev) => ({ ...prev, roomName }));
     }
   }, [roomName]);
@@ -680,6 +719,7 @@ export function CanvasPageClient() {
                     isOpen={isTranscriptOpen}
                     onClose={toggleTranscript}
                   />
+                  <RealtimeSyncHealth enabled={enableDebugConsole} />
                 </CanvasLiveKitContext.Provider>
               </ToolDispatcher>
             </RoomScopedProviders>
@@ -710,6 +750,7 @@ export function CanvasPageClient() {
                   isOpen={isTranscriptOpen}
                   onClose={toggleTranscript}
                 />
+                <RealtimeSyncHealth enabled={enableDebugConsole} />
               </CanvasLiveKitContext.Provider>
             </ToolDispatcher>
           </RoomScopedProviders>

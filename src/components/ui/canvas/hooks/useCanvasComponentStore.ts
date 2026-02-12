@@ -30,6 +30,57 @@ function emitComponentStoreUpdated() {
   }
 }
 
+const RESERVED_COMPONENT_STATE_KEYS = new Set([
+  'children',
+  'componentId',
+  'contextKey',
+  'messageId',
+  'state',
+  'updateState',
+  '__custom_message_id',
+]);
+
+function cloneSerializable(value: unknown): unknown {
+  try {
+    const serialized = JSON.stringify(value);
+    if (serialized === undefined) return undefined;
+    return JSON.parse(serialized);
+  } catch {
+    return undefined;
+  }
+}
+
+function extractComponentStateFromNode(component: React.ReactNode): Record<string, unknown> | undefined {
+  if (!React.isValidElement(component)) return undefined;
+  const props = (component.props ?? {}) as Record<string, unknown>;
+  const extracted: Record<string, unknown> = {};
+
+  const embeddedState =
+    props.state && typeof props.state === 'object' && !Array.isArray(props.state)
+      ? cloneSerializable(props.state)
+      : undefined;
+  if (embeddedState && typeof embeddedState === 'object' && !Array.isArray(embeddedState)) {
+    Object.assign(extracted, embeddedState as Record<string, unknown>);
+  }
+
+  for (const [key, value] of Object.entries(props)) {
+    if (RESERVED_COMPONENT_STATE_KEYS.has(key)) continue;
+    if (typeof value === 'function' || value === undefined) continue;
+    const cloned = cloneSerializable(value);
+    if (cloned !== undefined) {
+      extracted[key] = cloned;
+    }
+  }
+
+  if (Object.keys(extracted).length === 0) {
+    return undefined;
+  }
+  if (typeof extracted.updatedAt !== 'number') {
+    extracted.updatedAt = Date.now();
+  }
+  return extracted;
+}
+
 export function useCanvasComponentStore(
   editor: Editor | null,
   logger: CanvasLogger,
@@ -86,12 +137,20 @@ export function useCanvasComponentStore(
 
       componentStore.current.set(messageId, component);
       emitComponentStoreUpdated();
+      const componentState = extractComponentStateFromNode(component);
 
       const existingShapeId = messageIdToShapeIdMap.get(messageId);
 
       if (existingShapeId) {
         const existingShape = editor.getShape<CustomShape>(existingShapeId);
         const prevProps = existingShape?.props;
+        const prevState =
+          prevProps?.state && typeof prevProps.state === 'object' && !Array.isArray(prevProps.state)
+            ? (prevProps.state as Record<string, unknown>)
+            : undefined;
+        const mergedState = componentState
+          ? { ...(prevState || {}), ...componentState }
+          : prevState;
 
         editor.updateShapes<CustomShape>([
           {
@@ -101,6 +160,7 @@ export function useCanvasComponentStore(
               ...(prevProps ?? {}),
               customComponent: messageId,
               name: componentName || `Component ${messageId}`,
+              ...(mergedState ? { state: mergedState } : {}),
             },
           },
         ]);
@@ -159,6 +219,7 @@ export function useCanvasComponentStore(
             name: componentName || `Component ${messageId}`,
             w: initialSize.w,
             h: initialSize.h,
+            ...(componentState ? { state: componentState } : {}),
           },
         },
       ]);
