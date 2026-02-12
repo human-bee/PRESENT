@@ -12,6 +12,14 @@ import { ComponentRegistry } from '@/lib/component-registry';
 import { applyEnvelope } from '@/components/tool-dispatcher/handlers/tldraw-actions';
 import { logJourneyEvent } from '@/lib/journey-logger';
 import { fetchWithSupabaseAuth } from '@/lib/supabase/auth-headers';
+import { createLogger } from '@/lib/logging';
+import {
+  parseDecisionMessage,
+  parseStewardTriggerMessage,
+  parseToolCallMessage,
+  type StewardTriggerMessage,
+} from '@/lib/livekit/protocol';
+import { ACTION_VERSION, AgentActionEnvelopeSchema } from '@/lib/canvas-agent/contract/types';
 
 type ToolMetricEntry = {
   callId: string;
@@ -1069,10 +1077,15 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
               });
               await runStewardTrigger(legacyTrigger);
               return;
-            }
-            const intentSummary = typeof originalText === 'string' && originalText.trim() ? originalText.trim() : summary;
-            log('canvas steward trigger received', { room: roomName, summary: intentSummary });
-            const body = {
+	            }
+	            const intentSummary = typeof originalText === 'string' && originalText.trim() ? originalText.trim() : summary;
+	            const roomName = (parsed.roomId || room?.name || '').trim();
+	            if (!roomName) {
+	              logger.warn('skipping canvas steward trigger without room name');
+	              return;
+	            }
+	            log('canvas steward trigger received', { room: roomName, summary: intentSummary });
+	            const body = {
               room: roomName,
               task: 'canvas.draw',
               params: {

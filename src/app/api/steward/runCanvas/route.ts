@@ -9,6 +9,13 @@ import {
 import { randomUUID } from 'crypto';
 import { assertCanvasMember, parseCanvasIdFromRoom } from '@/lib/agents/shared/canvas-billing';
 import { resolveRequestUserId } from '@/lib/supabase/server/resolve-request-user';
+import { createLogger } from '@/lib/logging';
+import {
+  parseJsonObject,
+  stewardRunCanvasRequestSchema,
+} from '@/lib/agents/shared/schemas';
+import type { JsonObject } from '@/lib/utils/json-schema';
+import { getBooleanFlag, isFairyClientAgentEnabled } from '@/lib/feature-flags';
 
 export const runtime = 'nodejs';
 
@@ -120,6 +127,10 @@ export async function POST(req: NextRequest) {
 
     try {
       // Lazily instantiate so `next build` doesn't require Supabase env vars.
+      const normalizedResourceKeys =
+        normalizedTask === 'canvas.agent_prompt' || normalizedTask === 'fairy.intent'
+          ? [`room:${trimmedRoom}`, 'canvas:intent']
+          : [`room:${trimmedRoom}`];
       const enqueueResult = await getQueue().enqueueTask({
         room: trimmedRoom,
         task: normalizedTask,

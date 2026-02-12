@@ -1,7 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { createHash } from 'crypto';
 import { BYOK_ENABLED } from '@/lib/agents/shared/byok-flags';
 import { resolveRequestUserId } from '@/lib/supabase/server/resolve-request-user';
 import { getDecryptedUserModelKey } from '@/lib/agents/shared/user-model-keys';
+import { getRequestUserId } from '@/lib/supabase/server/request-user';
+import {
+  consumeBudget,
+  consumeWindowedLimit,
+  isCostCircuitBreakerEnabled,
+} from '@/lib/server/traffic-guards';
 export const runtime = 'nodejs';
 
 const maxBodyBytes = Math.max(64_000, Number(process.env.TRANSCRIBE_MAX_BODY_BYTES ?? 3_000_000));
@@ -76,6 +83,26 @@ export async function POST(req: NextRequest) {
 
     if (!audio) {
       return NextResponse.json({ error: 'Missing audio data' }, { status: 400 });
+    }
+
+    const estimatedAudioBytes = Math.ceil((audio.length * 3) / 4);
+    if (estimatedAudioBytes > maxAudioBytes) {
+      return NextResponse.json({ error: 'Audio payload too large' }, { status: 413 });
+    }
+
+    if (isCostCircuitBreakerEnabled()) {
+      const budget = consumeBudget(
+        `transcribe-audio:${userId}`,
+        estimatedAudioBytes,
+        transcribeBudgetPerMinute,
+        60_000,
+      );
+      if (!budget.ok) {
+        return NextResponse.json(
+          { error: 'Transcription budget exceeded', retryAfterSec: budget.retryAfterSec },
+          { status: 429, headers: { 'Retry-After': String(budget.retryAfterSec) } },
+        );
+      }
     }
 
     let openaiApiKey: string | null = null;

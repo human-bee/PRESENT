@@ -43,7 +43,7 @@ export async function POST(req: NextRequest) {
 		return jsonError('messages must be a non-empty array', 400)
 	}
 
-	let service
+	let service: CanvasAgentService
 	try {
 		service = getCanvasAgentService()
 	} catch (error: any) {
@@ -56,23 +56,22 @@ export async function POST(req: NextRequest) {
 		allowOverride: true,
 	})
 
-  let service = getCanvasAgentService()
-  if (BYOK_ENABLED) {
-    const userId = await resolveRequestUserId(req)
-    if (!userId) {
-      return jsonError('unauthorized', 401)
-    }
-    const [openaiKey, anthropicKey, googleKey] = await Promise.all([
-      getDecryptedUserModelKey({ userId, provider: 'openai' }),
-      getDecryptedUserModelKey({ userId, provider: 'anthropic' }),
-      getDecryptedUserModelKey({ userId, provider: 'google' }),
-    ])
-    service = new CanvasAgentService({
-      ...(openaiKey ? { OPENAI_API_KEY: openaiKey } : {}),
-      ...(anthropicKey ? { ANTHROPIC_API_KEY: anthropicKey } : {}),
-      ...(googleKey ? { GOOGLE_API_KEY: googleKey } : {}),
-    })
-  }
+	if (BYOK_ENABLED) {
+		const userId = await resolveRequestUserId(req)
+		if (!userId) {
+			return jsonError('unauthorized', 401)
+		}
+		const [openaiKey, anthropicKey, googleKey] = await Promise.all([
+			getDecryptedUserModelKey({ userId, provider: 'openai' }),
+			getDecryptedUserModelKey({ userId, provider: 'anthropic' }),
+			getDecryptedUserModelKey({ userId, provider: 'google' }),
+		])
+		service = new CanvasAgentService({
+			...(openaiKey ? { OPENAI_API_KEY: openaiKey } : {}),
+			...(anthropicKey ? { ANTHROPIC_API_KEY: anthropicKey } : {}),
+			...(googleKey ? { GOOGLE_API_KEY: googleKey } : {}),
+		})
+	}
 
 	const { model, modelDefinition, providerOptions } = service.getModelForStreaming(desiredModel)
 	debugLog('stream.start', {

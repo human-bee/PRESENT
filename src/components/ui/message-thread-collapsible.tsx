@@ -162,8 +162,11 @@ export const MessageThreadCollapsible = React.forwardRef<
 
   type LiveTranscriptionPayload = {
     type: 'live_transcription';
+    event_id?: string;
     text: string;
     speaker: string;
+    participantId?: string;
+    participantName?: string;
     timestamp: number;
     is_final: boolean;
     manual: boolean;

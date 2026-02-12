@@ -1,27 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { z } from 'zod';
 import { AgentTaskQueue } from '@/lib/agents/shared/queue';
+import { queueTaskEnvelopeSchema } from '@/lib/agents/shared/schemas';
 import { BYOK_ENABLED } from '@/lib/agents/shared/byok-flags';
 import { resolveRequestUserId } from '@/lib/supabase/server/resolve-request-user';
 import { assertCanvasMember, parseCanvasIdFromRoom } from '@/lib/agents/shared/canvas-billing';
+import { createLogger } from '@/lib/logging';
 
 export const runtime = 'nodejs';
+const logger = createLogger('api:agent:enqueue');
 
 let queue: AgentTaskQueue | null = null;
 const getQueue = () => {
   if (!queue) queue = new AgentTaskQueue();
   return queue;
 };
-const requestSchema = z.object({
-  room: z.string().min(1),
-  task: z.string().min(1),
-  params: z.record(z.string(), z.any()).default({}),
-  requestId: z.string().optional(),
-  resourceKeys: z.array(z.string()).optional(),
-  priority: z.number().int().min(0).default(0),
-  runAt: z.coerce.date().optional(),
-});
-
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
@@ -40,7 +32,7 @@ export async function POST(request: NextRequest) {
       }
       try {
         const membership = await assertCanvasMember({ canvasId, requesterUserId });
-        (payload.params as any).billingUserId = membership.ownerUserId;
+        payload.params.billingUserId = membership.ownerUserId;
       } catch (error) {
         const code = (error as Error & { code?: string }).code;
         if (code === 'forbidden') {

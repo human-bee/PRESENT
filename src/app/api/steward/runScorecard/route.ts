@@ -7,6 +7,9 @@ import { runDebateScorecardStewardFast } from '@/lib/agents/subagents/debate-ste
 import { assertCanvasMember, parseCanvasIdFromRoom } from '@/lib/agents/shared/canvas-billing';
 import { resolveRequestUserId } from '@/lib/supabase/server/resolve-request-user';
 import { getDecryptedUserModelKey } from '@/lib/agents/shared/user-model-keys';
+import { createLogger } from '@/lib/logging';
+import { parseJsonObject, stewardRunScorecardRequestSchema } from '@/lib/agents/shared/schemas';
+import type { JsonObject, JsonValue } from '@/lib/utils/json-schema';
 
 export const runtime = 'nodejs';
 
@@ -110,7 +113,7 @@ export async function POST(req: NextRequest) {
       intent: normalizedIntent,
       topic: normalizedTopic,
       ...(billingUserId ? { billingUserId } : {}),
-    } as const;
+    } as const);
 
     try {
       // Lazily instantiate so `next build` doesn't require Supabase env vars.
