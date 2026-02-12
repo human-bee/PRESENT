@@ -122,7 +122,7 @@ const createHarness = (options: HarnessOptions = {}) => {
 
 describe('ScorecardService', () => {
   it('reuses an existing scorecard by exact topic match and updates ledger pointers', async () => {
-    const harness = createHarness();
+    const harness = createHarness({ now: () => 777 });
     harness.componentRegistry.set(
       'score-latest',
       buildScorecardEntry({ topic: 'Climate Policy', createdAt: 200, intentId: 'intent-latest' }),
@@ -145,6 +145,7 @@ describe('ScorecardService', () => {
     expect(harness.getActiveScorecard()).toEqual(ensured);
     expect(harness.getLastComponentForType('DebateScorecard')).toBe('score-match');
     expect(harness.getLastCreatedId()).toBe('score-match');
+    expect(harness.getLastProvisionedAt()).toBe(777);
     expect(harness.registerLedgerCalls).toContainEqual(
       expect.objectContaining({
         intentId: 'ledger-intent-match',
@@ -284,4 +285,3 @@ describe('ScorecardService', () => {
     expect(harness.seedCalls).toHaveLength(1);
   });
 });
-

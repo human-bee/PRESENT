@@ -79,22 +79,34 @@ export function extractFirstToolCall(response: unknown): ExtractedToolCall | nul
   if (!parsed.ok) return null;
 
   const toolCalls = parsed.message.tool_calls;
-  if (!Array.isArray(toolCalls) || toolCalls.length === 0) return null;
+  if (Array.isArray(toolCalls) && toolCalls.length > 0) {
+    const toolCall = asRecord(toolCalls[0]);
+    if (!toolCall) return null;
 
-  const toolCall = asRecord(toolCalls[0]);
-  if (!toolCall) return null;
+    const fn = asRecord(toolCall.function);
+    if (!fn) return null;
 
-  const fn = asRecord(toolCall.function);
-  if (!fn) return null;
+    const name = asString(fn.name);
+    const argumentsRaw = asString(fn.arguments);
+    if (!name || argumentsRaw === null) return null;
 
-  const name = asString(fn.name);
-  const argumentsRaw = asString(fn.arguments);
+    return {
+      name,
+      argumentsRaw,
+      raw: toolCall,
+    };
+  }
+
+  // Backward compatibility for providers that return legacy function_call shape.
+  const legacyFunctionCall = asRecord(parsed.message.function_call);
+  if (!legacyFunctionCall) return null;
+  const name = asString(legacyFunctionCall.name);
+  const argumentsRaw = asString(legacyFunctionCall.arguments);
   if (!name || argumentsRaw === null) return null;
-
   return {
     name,
     argumentsRaw,
-    raw: toolCall,
+    raw: legacyFunctionCall,
   };
 }
 
