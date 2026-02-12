@@ -118,7 +118,8 @@ export async function POST(req: NextRequest) {
 
     const wavBuffer = createWavBuffer(audioBuffer, sampleRate);
     const formData = new FormData();
-    const audioBlob = new Blob([wavBuffer], { type: 'audio/wav' });
+    const wavBytes = new Uint8Array(wavBuffer);
+    const audioBlob = new Blob([wavBytes], { type: 'audio/wav' });
     formData.append('file', audioBlob, 'audio.wav');
     formData.append('model', 'whisper-1');
     formData.append('language', 'en');

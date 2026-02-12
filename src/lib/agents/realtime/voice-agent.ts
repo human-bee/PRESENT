@@ -165,7 +165,7 @@ export default defineAgent({
       throw error;
     }
     console.log('[VoiceAgent] Connected to room:', job.room.name);
-    const liveKitBus = createLiveKitBus(job.room);
+    const liveKitBus = createLiveKitBus(job.room as any);
     const allowSensitiveLogging = process.env.NODE_ENV !== 'production';
 
     // Data messages (topic: "transcription") can arrive immediately after the agent joins the room.
