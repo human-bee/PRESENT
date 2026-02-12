@@ -16,10 +16,10 @@ import { queryCapabilities, defaultCapabilities } from '@/lib/agents/capabilitie
 import { deriveComponentIntent } from '@/lib/agents/shared/deterministic-ids';
 import type { JsonObject } from '@/lib/utils/json-schema';
 import { ConnectionState, RoomEvent, RemoteTrackPublication, Track } from 'livekit-client';
-import { createDefaultScorecardState } from '@/lib/agents/debate-scorecard-schema';
 import { createLiveKitBus } from '@/lib/livekit/livekit-bus';
 import { createManualInputRouter } from './voice-agent/manual-routing';
 import { VoiceComponentLedger } from './voice-agent/component-ledger';
+import { ScorecardService } from './voice-agent/scorecard-service';
 import { TranscriptionBuffer, type PendingTranscriptionMessage } from './voice-agent/transcription-buffer';
 import {
   executeCreateComponent,
@@ -441,19 +441,6 @@ Your only output is function calls. Never use plain text unless absolutely neces
     const componentRegistry = new Map<string, ComponentRegistryEntry>();
     const roomKey = () => job.room.name || 'room';
     const componentLedger = new VoiceComponentLedger(roomKey);
-    type IntentLedgerEntry = {
-      intentId: string;
-      messageId: string;
-      componentType: string;
-      slot?: string;
-      reservedAt: number;
-      updatedAt: number;
-      state: 'reserved' | 'created' | 'updated';
-    };
-    const intentLedger = new Map<string, IntentLedgerEntry>();
-    const slotLedger = new Map<string, string>();
-    const messageToIntent = new Map<string, string>();
-    const LEDGER_TTL_MS = 5 * 60 * 1000;
     let lastResearchPanelId: string | null = null;
     let activeScorecard: { componentId: string; intentId: string; topic: string } | null = null;
     const getLastComponentForType = (type: string) => componentLedger.getLastComponentForType(type);
@@ -534,61 +521,17 @@ Your only output is function calls. Never use plain text unless absolutely neces
       return { componentId: messageId, intentId };
     };
 
-    const cleanupLedger = () => {
-      const now = Date.now();
-      for (const [intentId, entry] of intentLedger.entries()) {
-        if (now - entry.updatedAt > LEDGER_TTL_MS) {
-          intentLedger.delete(intentId);
-          if (entry.slot) {
-            const currentIntent = slotLedger.get(entry.slot);
-            if (currentIntent === intentId) {
-              slotLedger.delete(entry.slot);
-            }
-          }
-          const mappedIntent = messageToIntent.get(entry.messageId);
-          if (mappedIntent === intentId) {
-            messageToIntent.delete(entry.messageId);
-          }
-        }
-      }
-    };
-
     const registerLedgerEntry = (entry: {
       intentId: string;
       messageId: string;
       componentType: string;
       slot?: string;
-      state?: IntentLedgerEntry['state'];
-    }) => {
-      const now = Date.now();
-      const existing = intentLedger.get(entry.intentId);
-      const next: IntentLedgerEntry = {
-        intentId: entry.intentId,
-        messageId: entry.messageId,
-        componentType: entry.componentType,
-        slot: entry.slot ?? existing?.slot,
-        reservedAt: existing?.reservedAt ?? now,
-        updatedAt: now,
-        state: entry.state ?? existing?.state ?? 'reserved',
-      };
-      if (entry.slot) {
-        next.slot = entry.slot;
-      }
-      intentLedger.set(next.intentId, next);
-      messageToIntent.set(next.messageId, next.intentId);
-      if (next.slot) {
-        slotLedger.set(next.slot, next.intentId);
-      }
-      cleanupLedger();
-      return next;
-    };
+      state?: 'reserved' | 'created' | 'updated';
+    }) => componentLedger.registerIntentEntry(entry);
 
     const findLedgerEntryByMessage = (messageId: string) => {
-      const intentId = messageToIntent.get(messageId);
-      if (intentId) {
-        return intentLedger.get(intentId);
-      }
-      return undefined;
+      componentLedger.cleanupExpired();
+      return componentLedger.findIntentByMessage(messageId);
     };
 
     const hydrateComponentsFromCanvas = async () => {
@@ -840,6 +783,16 @@ Your only output is function calls. Never use plain text unless absolutely neces
       return latest;
     };
 
+    const resolveComponentId = (args: Record<string, unknown>) => {
+      componentLedger.cleanupExpired();
+      return componentLedger.resolveComponentId(args, {
+        getComponentEntry,
+        listComponentEntries: () => componentRegistry.entries(),
+        lastResearchPanelId,
+        roomKey: roomKey() || job.room?.name || 'room',
+      });
+    };
+
     const bumpTurn = () => {
       currentTurnId += 1;
     };
@@ -1084,6 +1037,25 @@ Your only output is function calls. Never use plain text unless absolutely neces
       }
     };
 
+    const scorecardService = new ScorecardService({
+      getRoomName: () => roomKey() || job.room?.name || 'room',
+      componentRegistry,
+      getActiveScorecard: () => activeScorecard,
+      setActiveScorecard: (scorecard) => {
+        activeScorecard = scorecard;
+      },
+      findLedgerEntryByMessage,
+      registerLedgerEntry,
+      setLastComponentForType,
+      setLastCreatedComponentId,
+      setLastScorecardProvisionedAt: (createdAt) => {
+        lastScorecardProvisionedAt = createdAt;
+      },
+      listRemoteParticipantLabels,
+      sendToolCall,
+      sendScorecardSeedTask,
+    });
+
     const toolParameters = createToolParametersSchema();
     const toolContext: llm.ToolContext = {
       create_component: llm.tool({
@@ -1102,6 +1074,9 @@ Your only output is function calls. Never use plain text unless absolutely neces
             currentTurnId,
             scorecardSuppressWindowMs: SCORECARD_SUPPRESS_WINDOW_MS,
             lastScorecardProvisionedAt,
+            setLastScorecardProvisionedAt: (createdAt) => {
+              lastScorecardProvisionedAt = createdAt;
+            },
             lastUserPrompt: lastUserPrompt ?? undefined,
             activeScorecard,
             findLatestScorecardEntryInRoom,
@@ -1112,7 +1087,9 @@ Your only output is function calls. Never use plain text unless absolutely neces
             setRecentCreateFingerprint,
             getComponentEntry,
             setComponentEntry,
+            findIntentByMessage: findLedgerEntryByMessage,
             findLedgerEntryByMessage,
+            registerIntentEntry: registerLedgerEntry,
             registerLedgerEntry,
             listRemoteParticipantLabels,
             sendToolCall,
@@ -1626,7 +1603,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
                 ? enrichedParams.prompt.trim()
                 : undefined;
             try {
-              const ensured = await ensureDebateScorecard(topicHint, promptContext);
+              const ensured = await scorecardService.ensure(topicHint, promptContext);
               enrichedParams.componentId = ensured.componentId;
               enrichedParams.intentId = ensured.intentId;
               enrichedParams.topic = ensured.topic;
@@ -1634,7 +1611,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
                 enrichedParams.room = roomName;
               }
             } catch (error) {
-              console.warn('[VoiceAgent] ensureDebateScorecard failed during dispatch', {
+              console.warn('[VoiceAgent] scorecardService.ensure failed during dispatch', {
                 topicHint,
                 promptContext,
                 error,
@@ -2024,229 +2001,6 @@ Your only output is function calls. Never use plain text unless absolutely neces
       }
 
       await generateReplySafely({ userInput: attributedInput });
-    };
-
-    let ensureScorecardPromise: Promise<{ componentId: string; intentId: string; topic: string }> | null = null;
-
-    const findExistingScorecard = (topic?: string) => {
-      const currentRoom = roomKey() || job.room?.name || 'room';
-      const normalized = topic?.trim().toLowerCase();
-      let fallback: { id: string; info: ComponentRegistryEntry; topic?: string } | null = null;
-      for (const [id, info] of componentRegistry.entries()) {
-        if (info.type !== 'DebateScorecard') continue;
-        if (info.room && info.room !== currentRoom) continue;
-        const infoTopic =
-          typeof info.props?.topic === 'string' && info.props.topic.trim().length > 0
-            ? info.props.topic.trim()
-            : typeof info.state?.topic === 'string' && info.state.topic.trim().length > 0
-              ? info.state.topic.trim()
-              : undefined;
-        if (!fallback || info.createdAt > fallback.info.createdAt) {
-          fallback = { id, info, topic: infoTopic };
-        }
-        if (normalized && infoTopic?.toLowerCase() === normalized) {
-          return { id, info, topic: infoTopic };
-        }
-      }
-      return fallback;
-    };
-
-    const ensureDebateScorecard = async (topic?: string, contextText?: string) => {
-      const currentRoom = roomKey() || job.room?.name || 'room';
-      const inferredTopic = inferScorecardTopicFromText(contextText);
-      const normalizedTopic = topic && topic.trim().length ? topic.trim() : inferredTopic;
-      const normalizedLower = normalizedTopic?.toLowerCase();
-
-      if (ensureScorecardPromise) {
-        const pending = await ensureScorecardPromise;
-        if (!normalizedLower || pending.topic.toLowerCase() === normalizedLower) {
-          return pending;
-        }
-      }
-
-      if (
-        activeScorecard &&
-        (!normalizedLower || activeScorecard.topic.toLowerCase() === normalizedLower)
-      ) {
-        return activeScorecard;
-      }
-
-      const existing = findExistingScorecard(normalizedTopic);
-      if (existing) {
-        const ledgerEntry = findLedgerEntryByMessage(existing.id);
-        const resolvedTopic = normalizedTopic ?? existing.topic ?? activeScorecard?.topic ?? 'Live Debate';
-        const intentId =
-          existing.info.intentId?.trim() ||
-          ledgerEntry?.intentId ||
-          `debate-scorecard-${existing.id}`;
-        existing.info.intentId = intentId;
-        existing.info.room = currentRoom;
-        registerLedgerEntry({
-          intentId,
-          messageId: existing.id,
-          componentType: 'DebateScorecard',
-          slot: existing.info.slot,
-          state: 'updated',
-        });
-        setLastComponentForType('DebateScorecard', existing.id);
-        setLastCreatedComponentId(existing.id);
-        activeScorecard = { componentId: existing.id, intentId, topic: resolvedTopic };
-
-        const stateCandidate = (existing.info.state || existing.info.props) as any;
-        const existingPlayers = Array.isArray(stateCandidate?.players) ? stateCandidate.players : [];
-        const affLabel = existingPlayers.find((p: any) => p?.side === 'AFF')?.label;
-        const negLabel = existingPlayers.find((p: any) => p?.side === 'NEG')?.label;
-        const needsSeed =
-          (typeof normalizedTopic === 'string' &&
-            normalizedTopic.trim().length > 0 &&
-            existing.topic?.toLowerCase() !== normalizedTopic.toLowerCase()) ||
-          (typeof affLabel !== 'string' || affLabel.trim().toLowerCase() === 'affirmative') ||
-          (typeof negLabel !== 'string' || negLabel.trim().toLowerCase() === 'negative');
-
-        if (needsSeed) {
-          await sendScorecardSeedTask({
-            componentId: existing.id,
-            intentId,
-            topic: resolvedTopic,
-          });
-        }
-        return activeScorecard;
-      }
-
-      const createScorecard = async () => {
-        const topicLabel = normalizedTopic ?? activeScorecard?.topic ?? 'Live Debate';
-        const intentId = `debate-scorecard-${Date.now()}`;
-        const messageId = intentId;
-        const initialState = createDefaultScorecardState(topicLabel);
-        const seedPlayers = resolveDebatePlayerSeedFromLabels(listRemoteParticipantLabels());
-        initialState.players[0].label = seedPlayers[0].label;
-        initialState.players[1].label = seedPlayers[1].label;
-        initialState.status.lastAction = `Initialized debate${topicLabel ? ` on ${topicLabel}` : ''} with ${seedPlayers[0].label} vs ${seedPlayers[1].label}.`;
-        initialState.componentId = messageId;
-        initialState.version = 0;
-        const createdAt = Date.now();
-        initialState.lastUpdated = createdAt;
-
-        await sendToolCall('reserve_component', {
-          type: 'DebateScorecard',
-          intentId,
-          messageId,
-          spec: initialState as JsonObject,
-        });
-
-        await sendToolCall('create_component', {
-          type: 'DebateScorecard',
-          componentId: messageId,
-          messageId,
-          spec: initialState as JsonObject,
-        });
-
-        await sendScorecardSeedTask({
-          componentId: messageId,
-          intentId,
-          topic: topicLabel,
-          seedState: initialState as unknown as JsonObject,
-        });
-
-        componentRegistry.set(messageId, {
-          type: 'DebateScorecard',
-          createdAt,
-          props: initialState as JsonObject,
-          state: initialState as JsonObject,
-          intentId,
-          room: currentRoom,
-        });
-        lastScorecardProvisionedAt = createdAt;
-        activeScorecard = { componentId: messageId, intentId, topic: topicLabel };
-        setLastComponentForType('DebateScorecard', messageId);
-        setLastCreatedComponentId(messageId);
-        registerLedgerEntry({
-          intentId,
-          messageId,
-          componentType: 'DebateScorecard',
-          state: 'created',
-        });
-        return activeScorecard;
-      };
-
-      ensureScorecardPromise = createScorecard();
-      try {
-        return await ensureScorecardPromise;
-      } finally {
-        ensureScorecardPromise = null;
-      }
-    };
-
-    const resolveComponentId = (args: Record<string, unknown>) => {
-      const rawId = typeof args.componentId === 'string' ? args.componentId.trim() : '';
-      if (rawId) return rawId;
-
-      const currentRoom = roomKey() || job.room?.name || 'room';
-      const typeHint = typeof args.type === 'string' ? args.type.trim() : typeof args.componentType === 'string' ? args.componentType.trim() : '';
-      const allowLast = typeof args.allowLast === 'boolean' ? args.allowLast : false;
-      const acceptCandidate = (candidateId: string | undefined | null) => {
-        if (!candidateId) return '';
-        const entry = getComponentEntry(candidateId);
-        if (!entry) return '';
-        if (typeHint && entry.type !== typeHint) return '';
-        return candidateId;
-      };
-      const rawIntent = typeof args.intentId === 'string' ? args.intentId.trim() : '';
-      if (rawIntent) {
-        const entry = intentLedger.get(rawIntent);
-        if (entry) {
-          const accepted = acceptCandidate(entry.messageId);
-          if (accepted) return accepted;
-        }
-        for (const [id, info] of componentRegistry.entries()) {
-          if (info.intentId === rawIntent && (!info.room || info.room === currentRoom)) {
-            const accepted = acceptCandidate(id);
-            if (accepted) return accepted;
-          }
-        }
-      }
-
-      const rawSlot = typeof args.slot === 'string' ? args.slot.trim() : '';
-      if (rawSlot) {
-        const slotIntent = slotLedger.get(rawSlot);
-        if (slotIntent) {
-          const entry = intentLedger.get(slotIntent);
-          if (entry) {
-            const accepted = acceptCandidate(entry.messageId);
-            if (accepted) return accepted;
-          }
-        }
-        for (const [id, info] of componentRegistry.entries()) {
-          if (info.slot === rawSlot && (!info.room || info.room === currentRoom)) {
-            const accepted = acceptCandidate(id);
-            if (accepted) return accepted;
-          }
-        }
-      }
-
-      if (typeHint) {
-        const byType = getLastComponentForType(typeHint);
-        const accepted = acceptCandidate(byType);
-        if (accepted) return accepted;
-        for (const [id, info] of componentRegistry.entries()) {
-          if (info.type === typeHint && (!info.room || info.room === currentRoom)) {
-            const acceptedCandidate = acceptCandidate(id);
-            if (acceptedCandidate) return acceptedCandidate;
-          }
-        }
-      }
-      if ((typeHint === 'ResearchPanel' || allowLast) && lastResearchPanelId) {
-        const acceptedResearchPanel = acceptCandidate(lastResearchPanelId);
-        if (acceptedResearchPanel) {
-          return acceptedResearchPanel;
-        }
-      }
-      const lastCreated = getLastCreatedComponentId();
-      const acceptedLast = acceptCandidate(lastCreated);
-      if (acceptedLast) {
-        return acceptedLast;
-      }
-      return '';
     };
 
     session.on((voice as any).AgentSessionEventTypes.FunctionToolsExecuted, async (event: any) => {

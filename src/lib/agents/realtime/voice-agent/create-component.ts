@@ -51,6 +51,7 @@ export type ExecuteCreateComponentDeps = {
   currentTurnId: number;
   scorecardSuppressWindowMs: number;
   lastScorecardProvisionedAt: number;
+  setLastScorecardProvisionedAt?: (createdAt: number) => void;
   lastUserPrompt?: string;
   activeScorecard: ActiveScorecard;
   findLatestScorecardEntryInRoom: () => { id: string; entry: ComponentRegistryEntry } | null;
@@ -61,8 +62,10 @@ export type ExecuteCreateComponentDeps = {
   setRecentCreateFingerprint: (type: string, fingerprint: RecentCreateFingerprint) => void;
   getComponentEntry: (messageId: string) => ComponentRegistryEntry | undefined;
   setComponentEntry: (messageId: string, entry: ComponentRegistryEntry) => void;
-  findLedgerEntryByMessage: (messageId: string) => IntentLedgerSummary | undefined;
-  registerLedgerEntry: (entry: RegisterLedgerInput) => void;
+  findIntentByMessage?: (messageId: string) => IntentLedgerSummary | undefined;
+  findLedgerEntryByMessage?: (messageId: string) => IntentLedgerSummary | undefined;
+  registerIntentEntry?: (entry: RegisterLedgerInput) => void;
+  registerLedgerEntry?: (entry: RegisterLedgerInput) => void;
   listRemoteParticipantLabels: () => string[];
   sendToolCall: (tool: string, params: JsonObject) => Promise<void>;
   sendScorecardSeedTask: (payload: {
@@ -216,6 +219,15 @@ export async function executeCreateComponent(
   args: CreateComponentArgs,
   deps: ExecuteCreateComponentDeps,
 ): Promise<Record<string, unknown>> {
+  const findIntentByMessage =
+    deps.findIntentByMessage ??
+    deps.findLedgerEntryByMessage ??
+    (() => undefined);
+  const registerIntentEntry =
+    deps.registerIntentEntry ??
+    deps.registerLedgerEntry ??
+    (() => undefined);
+
   const componentType = String(args.type || '').trim();
   if (!componentType) {
     return { status: 'ERROR', message: 'create_component requires type' };
@@ -315,7 +327,7 @@ export async function executeCreateComponent(
       deps.getLastComponentForType('DebateScorecard') ||
       latestScorecard?.id;
     if (preseededScorecardId) {
-      const ledger = deps.findLedgerEntryByMessage(preseededScorecardId);
+      const ledger = findIntentByMessage(preseededScorecardId);
       preseededScorecardIntent = ledger?.intentId || deps.activeScorecard?.intentId || undefined;
       console.log('[VoiceAgent] reusing pre-seeded DebateScorecard for create_component call', {
         componentId: preseededScorecardId,
@@ -459,7 +471,7 @@ export async function executeCreateComponent(
       existingComponent.slot = slot;
     }
     if (intentId) {
-      deps.registerLedgerEntry({
+      registerIntentEntry({
         intentId,
         messageId,
         componentType,
@@ -482,7 +494,7 @@ export async function executeCreateComponent(
 
   deps.setComponentEntry(messageId, {
     type: componentType,
-    createdAt: Date.now(),
+    createdAt: now,
     props: mergedProps as JsonObject,
     state: {} as JsonObject,
     intentId,
@@ -490,7 +502,7 @@ export async function executeCreateComponent(
     room: deps.roomName || 'room',
   });
   if (intentId) {
-    deps.registerLedgerEntry({
+    registerIntentEntry({
       intentId,
       messageId,
       componentType,
@@ -537,6 +549,7 @@ export async function executeCreateComponent(
         ? String((mergedProps as { topic?: unknown }).topic).trim()
         : inferredTopic) ||
       'Live Debate';
+    deps.setLastScorecardProvisionedAt?.(now);
     deps.setActiveScorecard({ componentId: messageId, intentId, topic });
     await deps.sendScorecardSeedTask({
       componentId: messageId,

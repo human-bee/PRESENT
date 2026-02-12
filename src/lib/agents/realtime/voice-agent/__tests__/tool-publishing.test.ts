@@ -1,3 +1,4 @@
+import type { JsonObject } from '@/lib/utils/json-schema';
 import {
   buildToolEvent,
   coerceComponentPatch,
@@ -7,23 +8,56 @@ import {
 } from '../tool-publishing';
 
 describe('voice-agent tool publishing helpers', () => {
-  it('builds tool_call events with expected shape', () => {
-    const event = buildToolEvent('create_component', { type: 'RetroTimerEnhanced' }, 'room-a');
-    expect(event.type).toBe('tool_call');
-    expect(event.roomId).toBe('room-a');
-    expect(event.payload.tool).toBe('create_component');
-    expect(event.payload.params).toEqual({ type: 'RetroTimerEnhanced' });
-    expect(typeof event.id).toBe('string');
+  it('builds stable core tool_call envelopes for create/update/dispatch tools', () => {
+    const nowSpy = jest.spyOn(Date, 'now').mockReturnValue(1_111);
+    try {
+      const toolCases: Array<{ tool: string; params: JsonObject }> = [
+        {
+          tool: 'create_component',
+          params: { type: 'Checklist', messageId: 'ui-1', spec: { title: 'Agenda' } },
+        },
+        {
+          tool: 'update_component',
+          params: { componentId: 'ui-1', patch: { instruction: 'summarize this' } },
+        },
+        {
+          tool: 'dispatch_to_conductor',
+          params: {
+            task: 'canvas.quick_text',
+            params: { room: 'room-a', text: 'hello from ai', requestId: 'req-1' },
+          },
+        },
+      ];
+
+      for (const entry of toolCases) {
+        const event = buildToolEvent(entry.tool, entry.params, 'room-a');
+        expect(event).toMatchObject({
+          roomId: 'room-a',
+          type: 'tool_call',
+          payload: {
+            tool: entry.tool,
+            params: entry.params,
+            context: { source: 'voice', timestamp: 1_111 },
+          },
+          timestamp: 1_111,
+          source: 'voice',
+        });
+        expect(typeof event.id).toBe('string');
+        expect(Object.keys(event).sort()).toEqual(['id', 'payload', 'roomId', 'source', 'timestamp', 'type']);
+        expect(Object.keys(event.payload).sort()).toEqual(['context', 'params', 'tool']);
+        expect(Object.keys(event.payload.context).sort()).toEqual(['source', 'timestamp']);
+      }
+    } finally {
+      nowSpy.mockRestore();
+    }
   });
 
   it('forces reliable update when instruction patch is present', () => {
     expect(
-      shouldForceReliableUpdate('update_component', { patch: { instruction: 'summarize this' } } as any),
+      shouldForceReliableUpdate('update_component', { patch: { instruction: 'summarize this' } }),
     ).toBe(true);
-    expect(shouldForceReliableUpdate('update_component', { patch: {} } as any)).toBe(false);
-    expect(
-      shouldForceReliableUpdate('create_component', { patch: { instruction: 'x' } } as any),
-    ).toBe(false);
+    expect(shouldForceReliableUpdate('update_component', { patch: {} })).toBe(false);
+    expect(shouldForceReliableUpdate('create_component', { patch: { instruction: 'x' } })).toBe(false);
   });
 
   it('coerces string patch into instruction fallback when json is invalid', () => {
@@ -102,6 +136,50 @@ describe('voice-agent tool publishing helpers', () => {
     });
     expect(secondDrain).toBe(true);
     expect(queue).toHaveLength(0);
+  });
+
+  it('keeps failed entry at the front after partial drain and reports publish errors', async () => {
+    const queue = [
+      { event: buildToolEvent('create_component', { messageId: 'ui-1' }, 'room-a'), reliable: true },
+      {
+        event: buildToolEvent('update_component', { componentId: 'ui-1', patch: { text: 'patched' } }, 'room-a'),
+        reliable: false,
+      },
+      {
+        event: buildToolEvent(
+          'dispatch_to_conductor',
+          { task: 'canvas.quick_text', params: { room: 'room-a', text: 'next' } },
+          'room-a',
+        ),
+        reliable: true,
+      },
+    ];
+    const publishError = new Error('simulated publish error');
+    const onPublishError = jest.fn();
+    const publish = jest.fn(async (entry: { event: { payload: { tool: string } } }) => {
+      if (entry.event.payload.tool === 'update_component') {
+        throw publishError;
+      }
+      return true;
+    });
+
+    const drained = await flushPendingToolCallQueue({
+      queue,
+      isConnected: true,
+      publish,
+      onPublishError,
+    });
+
+    expect(drained).toBe(false);
+    expect(publish).toHaveBeenCalledTimes(2);
+    expect(onPublishError).toHaveBeenCalledTimes(1);
+    expect(onPublishError.mock.calls[0]?.[0]).toBe(publishError);
+    expect(onPublishError.mock.calls[0]?.[1]).toMatchObject({
+      event: { payload: { tool: 'update_component' } },
+    });
+    expect(queue).toHaveLength(2);
+    expect(queue[0]?.event.payload.tool).toBe('update_component');
+    expect(queue[1]?.event.payload.tool).toBe('dispatch_to_conductor');
   });
 
   it('does not drain queue while disconnected and preserves entries for reconnect', async () => {
