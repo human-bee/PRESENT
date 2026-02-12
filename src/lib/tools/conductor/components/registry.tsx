@@ -70,7 +70,7 @@ type RegistryComponentEntry = {
   name: string;
   description: string;
   component: any;
-  propsSchema: z.AnyZodObject;
+  propsSchema: z.ZodObject<any>;
   tier?: WidgetTier;
   group?: CapabilityGroup;
   lifecycleOps?: LifecycleOp[];
