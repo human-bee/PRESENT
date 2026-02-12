@@ -39,6 +39,12 @@ export class MutationArbiter {
     }
   }
 
+  private cleanupAllCompleted(now: number) {
+    for (const lockKey of this.completedByLock.keys()) {
+      this.cleanupCompleted(lockKey, now);
+    }
+  }
+
   private isDeduped(lockKey: string, idempotencyKey: string, now: number): boolean {
     this.cleanupCompleted(lockKey, now);
     return Boolean(this.completedByLock.get(lockKey)?.has(idempotencyKey));
@@ -72,6 +78,7 @@ export class MutationArbiter {
     }
 
     const now = Date.now();
+    this.cleanupAllCompleted(now);
     const state = this.getLockState(lockKey);
     state.pending += 1;
 
@@ -102,4 +109,3 @@ export class MutationArbiter {
     }
   }
 }
-

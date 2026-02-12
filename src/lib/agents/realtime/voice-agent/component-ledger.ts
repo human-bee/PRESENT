@@ -121,23 +121,6 @@ export class VoiceComponentLedger {
     this.getRecentCreateMap().set(type, fingerprint);
   }
 
-  clearIntentForMessage(messageId: string) {
-    const messageIntentMap = this.getMessageIntentMap();
-    const intentMap = this.getIntentMap();
-    const slotMap = this.getSlotMap();
-    const intentId = messageIntentMap.get(messageId);
-    if (!intentId) return;
-    messageIntentMap.delete(messageId);
-    const entry = intentMap.get(intentId);
-    if (entry?.slot) {
-      const currentIntent = slotMap.get(entry.slot);
-      if (currentIntent === intentId) {
-        slotMap.delete(entry.slot);
-      }
-    }
-    intentMap.delete(intentId);
-  }
-
   private getIntentMap() {
     const key = this.getRoomKey();
     let map = this.intentLedgerByRoom.get(key);
