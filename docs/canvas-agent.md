@@ -262,9 +262,12 @@ type AgentActionEnvelope = {
 ```typescript
 { type: 'agent:chat', sessionId: string, message: { role: 'assistant'|'system', text: string } }
 { type: 'agent:status', sessionId: string, state: 'waiting_context'|'calling_model'|'streaming'|'scheduled'|'done'|'canceled'|'error', detail?: unknown }
+{ type: 'agent:trace', sessionId: string, step: 'run_start'|'screenshot_requested'|'screenshot_received'|'screenshot_failed'|'model_call'|'chunk_processed'|'actions_dispatched'|'ack_received'|'ack_timeout'|'ack_retry'|'followup_enqueued'|'run_complete'|'run_error', traceId?: string, intentId?: string, requestId?: string, seq?: number, partial?: boolean, actionCount?: number, detail?: unknown }
 ```
 
-**Topics**: `agent:chat`, `agent:status`
+**Topics**: `agent:chat`, `agent:status`, `agent:trace`
+
+Trace emission is non-blocking and sampled/budgeted (`CANVAS_AGENT_TRACE_MAX_EVENTS`, default `120` per run) so instrumentation does not block action dispatch.
 
 ## TLDraw-native Action Vocabulary
 
@@ -295,6 +298,7 @@ CANVAS_AGENT_SCREENSHOT_RETRIES=1
 CANVAS_AGENT_SCREENSHOT_RETRY_DELAY_MS=450
 CANVAS_AGENT_LOW_ACTION_THRESHOLD=6
 CANVAS_AGENT_DURABLE_FOLLOWUPS=true
+CANVAS_AGENT_TRACE_MAX_EVENTS=120
 CANVAS_AGENT_TTFB_SLO_MS=200
 NEXT_PUBLIC_CANVAS_AGENT_CLIENT_ENABLED=false  # legacy client agent (archived, leave false unless forced fallback)
 NEXT_PUBLIC_CANVAS_AGENT_THEME_ENABLED=true

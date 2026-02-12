@@ -6,6 +6,7 @@ import {
   ACTION_VERSION,
   type AgentAction,
   type AgentActionEnvelope,
+  type AgentTraceEvent,
   type ScreenshotRequest,
   type AgentChatMessage,
 } from '@/lib/canvas-agent/contract/types';
@@ -115,6 +116,22 @@ export async function sendStatus(room: string, sessionId: string, state: 'waitin
   const data = new TextEncoder().encode(JSON.stringify({ type: 'agent:status', sessionId, state, detail }));
   const { client, normalizedRoom } = await ensureRoom(room);
   await client.sendData(normalizedRoom, data, DataPacket_Kind.RELIABLE, { topic: 'agent:status' });
+}
+
+export async function sendTrace(
+  room: string,
+  payload: Omit<AgentTraceEvent, 'type' | 'at'> & { at?: number },
+) {
+  const normalizedRoom = room.trim();
+  if (!normalizedRoom) return;
+  const tracePayload: AgentTraceEvent = {
+    ...payload,
+    type: 'agent:trace',
+    at: payload.at ?? Date.now(),
+  };
+  const data = new TextEncoder().encode(JSON.stringify(tracePayload));
+  const client = getClient();
+  await client.sendData(normalizedRoom, data, DataPacket_Kind.RELIABLE, { topic: 'agent:trace' });
 }
 
 export async function requestScreenshot(room: string, request: Omit<ScreenshotRequest, 'type'>): Promise<void> {

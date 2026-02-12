@@ -60,6 +60,40 @@ export const AgentActionEnvelopeSchema = z.object({
 
 export type AgentActionEnvelope = z.infer<typeof AgentActionEnvelopeSchema>;
 
+export const AGENT_TRACE_STEPS = [
+  'run_start',
+  'screenshot_requested',
+  'screenshot_received',
+  'screenshot_failed',
+  'model_call',
+  'chunk_processed',
+  'actions_dispatched',
+  'ack_received',
+  'ack_timeout',
+  'ack_retry',
+  'followup_enqueued',
+  'run_complete',
+  'run_error',
+] as const;
+
+export const AgentTraceStepSchema = z.enum(AGENT_TRACE_STEPS);
+
+export const AgentTraceEventSchema = z.object({
+  type: z.literal('agent:trace'),
+  sessionId: z.string(),
+  step: AgentTraceStepSchema,
+  at: z.number().int(),
+  traceId: z.string().optional(),
+  intentId: z.string().optional(),
+  requestId: z.string().optional(),
+  seq: z.number().int().nonnegative().optional(),
+  partial: z.boolean().optional(),
+  actionCount: z.number().int().nonnegative().optional(),
+  detail: z.unknown().optional(),
+});
+
+export type AgentTraceEvent = z.infer<typeof AgentTraceEventSchema>;
+
 export type AgentChatMessage = { role: 'assistant' | 'system'; text: string };
 
 export type ScreenshotImage = {

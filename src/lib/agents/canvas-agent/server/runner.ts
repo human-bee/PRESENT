@@ -2,7 +2,7 @@ import { randomUUID } from 'crypto';
 import { selectModel } from './models';
 import { buildPromptParts } from './context';
 import { sanitizeActions } from './sanitize';
-import { requestScreenshot, sendActionsEnvelope, sendChat, sendStatus, awaitAck } from './wire';
+import { requestScreenshot, sendActionsEnvelope, sendChat, sendStatus, sendTrace, awaitAck } from './wire';
 import { broadcastToolCall } from '@/lib/agents/shared/supabase-context';
 import type { CanvasShapeSummary } from '@/lib/agents/shared/supabase-context';
 import { ACTION_VERSION } from '@/lib/canvas-agent/contract/types';
@@ -409,8 +409,61 @@ export async function runCanvasAgent(args: RunArgs) {
     retryCount: 0,
     preset: cfg.preset,
   };
+  const traceEventBudget = Math.max(
+    0,
+    Number.parseInt(process.env.CANVAS_AGENT_TRACE_MAX_EVENTS ?? '120', 10) || 120,
+  );
+  let traceEventsSent = 0;
+
+  const emitTrace = (
+    step:
+      | 'run_start'
+      | 'screenshot_requested'
+      | 'screenshot_received'
+      | 'screenshot_failed'
+      | 'model_call'
+      | 'chunk_processed'
+      | 'actions_dispatched'
+      | 'ack_received'
+      | 'ack_timeout'
+      | 'ack_retry'
+      | 'followup_enqueued'
+      | 'run_complete'
+      | 'run_error',
+    extras?: {
+      seq?: number;
+      partial?: boolean;
+      actionCount?: number;
+      detail?: Record<string, unknown>;
+    },
+  ) => {
+    if (traceEventBudget <= 0) return;
+    if (traceEventsSent >= traceEventBudget) return;
+    if (step === 'chunk_processed' && extras?.partial && typeof extras.seq === 'number' && extras.seq % 5 !== 0) {
+      return;
+    }
+    traceEventsSent += 1;
+    void sendTrace(roomId, {
+      sessionId,
+      step,
+      ...(correlation?.traceId ? { traceId: correlation.traceId } : {}),
+      ...(correlation?.intentId ? { intentId: correlation.intentId } : {}),
+      ...(correlation?.requestId ? { requestId: correlation.requestId } : {}),
+      ...(typeof extras?.seq === 'number' ? { seq: extras.seq } : {}),
+      ...(typeof extras?.partial === 'boolean' ? { partial: extras.partial } : {}),
+      ...(typeof extras?.actionCount === 'number' ? { actionCount: extras.actionCount } : {}),
+      ...(extras?.detail ? { detail: extras.detail } : {}),
+    }).catch(() => {});
+  };
 
   logMetrics(metrics, cfg, 'start');
+  emitTrace('run_start', {
+    detail: {
+      mode: cfg.mode,
+      followupDepth: currentFollowupDepth,
+      followupsDurable: cfg.followups.durable && Boolean(durableQueue),
+    },
+  });
 
   let latestScreenshot: ScreenshotPayload | null = null;
   let screenshotEdge = cfg.screenshot.maxEdge;
@@ -433,6 +486,14 @@ export async function runCanvasAgent(args: RunArgs) {
     metrics.screenshotRequestId = requestId;
     metrics.screenshotTimeoutMs = cfg.screenshot.timeoutMs;
     metrics.screenshotRequestedAt = Date.now();
+    emitTrace('screenshot_requested', {
+      detail: {
+        label,
+        attempt,
+        requestId,
+        timeoutMs: cfg.screenshot.timeoutMs,
+      },
+    });
     try {
       await requestScreenshot(roomId, {
         sessionId,
@@ -443,6 +504,15 @@ export async function runCanvasAgent(args: RunArgs) {
     } catch (error) {
       metrics.screenshotResult = 'error';
       logMetrics(metrics, cfg, 'screenshot', `${label}:error`);
+      emitTrace('screenshot_failed', {
+        detail: {
+          label,
+          requestId,
+          reason: 'request_error',
+          error: error instanceof Error ? error.message : String(error),
+          attempt,
+        },
+      });
       if (cfg.debug) {
         console.warn('[CanvasAgent:Screenshot]', `Request failed (${label})`, error);
       }
@@ -464,6 +534,14 @@ export async function runCanvasAgent(args: RunArgs) {
         }
         metrics.screenshotResult = 'received';
         logMetrics(metrics, cfg, 'screenshot', `${label}:received`);
+        emitTrace('screenshot_received', {
+          detail: {
+            label,
+            requestId,
+            bytes: maybeScreenshot.image?.bytes,
+            rttMs: metrics.screenshotRtt,
+          },
+        });
         return maybeScreenshot;
       }
       await delay(20);
@@ -471,6 +549,14 @@ export async function runCanvasAgent(args: RunArgs) {
 
     metrics.screenshotResult = 'timeout';
     logMetrics(metrics, cfg, 'screenshot', `${label}:timeout`);
+    emitTrace('screenshot_failed', {
+      detail: {
+        label,
+        requestId,
+        reason: 'timeout',
+        attempt,
+      },
+    });
     if (attempt < cfg.screenshot.retries) {
       if (cfg.debug) {
         console.warn('[CanvasAgent:Screenshot]', `Retrying ${label} capture (attempt ${attempt + 2})`);
@@ -756,6 +842,14 @@ export async function runCanvasAgent(args: RunArgs) {
             { ...followup, depth: normalizedDepth },
           );
           if (accepted) {
+            emitTrace('followup_enqueued', {
+              detail: {
+                mode: 'durable',
+                depth: normalizedDepth,
+                reason: followup.reason ?? null,
+                strict: followup.strict === true,
+              },
+            });
             return true;
           }
         } catch (error) {
@@ -780,7 +874,18 @@ export async function runCanvasAgent(args: RunArgs) {
       if (Array.isArray(followup.targetIds) && followup.targetIds.length > 0) {
         fallbackInput.targetIds = followup.targetIds;
       }
-      return scheduler.enqueue(sessionId, { input: fallbackInput, depth: normalizedDepth });
+      const accepted = scheduler.enqueue(sessionId, { input: fallbackInput, depth: normalizedDepth });
+      if (accepted) {
+        emitTrace('followup_enqueued', {
+          detail: {
+            mode: 'session',
+            depth: normalizedDepth,
+            reason: followup.reason ?? null,
+            strict: followup.strict === true,
+          },
+        });
+      }
+      return accepted;
     };
 
     const makeDetailEnqueuer =
@@ -948,6 +1053,12 @@ const normalizeRawAction = (
         } catch {}
       }
       if (!Array.isArray(rawActions) || rawActions.length === 0) return 0;
+      emitTrace('chunk_processed', {
+        seq: seqNumber,
+        partial,
+        actionCount: rawActions.length,
+        detail: { source: actionSource },
+      });
       const parsed: AgentAction[] = [];
       const dropStats = {
         duplicateCreates: 0,
@@ -1098,6 +1209,15 @@ const normalizeRawAction = (
         });
         if (shouldDispatch) {
           metrics.actionCount += dispatchableActions.length;
+          emitTrace('actions_dispatched', {
+            seq: seqNumber,
+            partial,
+            actionCount: dispatchableActions.length,
+            detail: {
+              source: actionSource,
+              verbs: dispatchableActions.slice(0, 8).map((action) => action.name),
+            },
+          });
           const firstSend = await sendActionsEnvelope(roomId, sessionId, seqNumber, dispatchableActions, {
             partial,
             correlation,
@@ -1111,8 +1231,25 @@ const normalizeRawAction = (
           if (ack && metrics.firstAckLatencyMs === undefined) {
             metrics.firstAckLatencyMs = Date.now() - metrics.startedAt;
           }
+          if (ack) {
+            emitTrace('ack_received', {
+              seq: seqNumber,
+              partial,
+              actionCount: dispatchableActions.length,
+            });
+          }
           if (!ack) {
+            emitTrace('ack_timeout', {
+              seq: seqNumber,
+              partial,
+              actionCount: dispatchableActions.length,
+            });
             metrics.retryCount++;
+            emitTrace('ack_retry', {
+              seq: seqNumber,
+              partial,
+              actionCount: dispatchableActions.length,
+            });
             const retrySend = await sendActionsEnvelope(roomId, sessionId, seqNumber, dispatchableActions, {
               partial,
               correlation,
@@ -1125,6 +1262,21 @@ const normalizeRawAction = (
             });
             if (retryAck && metrics.firstAckLatencyMs === undefined) {
               metrics.firstAckLatencyMs = Date.now() - metrics.startedAt;
+            }
+            if (retryAck) {
+              emitTrace('ack_received', {
+                seq: seqNumber,
+                partial,
+                actionCount: dispatchableActions.length,
+                detail: { retry: true },
+              });
+            } else {
+              emitTrace('ack_timeout', {
+                seq: seqNumber,
+                partial,
+                actionCount: dispatchableActions.length,
+                detail: { retry: true },
+              });
             }
           }
         }
@@ -1352,6 +1504,13 @@ const normalizeRawAction = (
     }
 
     const invokeModel = async () => {
+      emitTrace('model_call', {
+        detail: {
+          provider: provider.name,
+          mode: streamingEnabled ? 'structured' : 'fallback-stream',
+          preset: cfg.preset,
+        },
+      });
       if (streamingEnabled) {
         const streamStartedAt = Date.now();
         let firstPartialLogged = false;
@@ -1557,6 +1716,15 @@ const normalizeRawAction = (
       const followStreamingEnabled = typeof followProvider.streamStructured === 'function' && process.env.CANVAS_AGENT_STREAMING !== 'false';
       const followPresetName = (followInput.strict ? 'precise' : cfg.preset) as CanvasAgentPreset;
       const followTuning = getModelTuning(followPresetName);
+      emitTrace('model_call', {
+        detail: {
+          provider: followProvider.name,
+          mode: followStreamingEnabled ? 'structured' : 'fallback-stream',
+          preset: followPresetName,
+          phase: 'followup',
+          depth: followBaseDepth,
+        },
+      });
 
       if (followStreamingEnabled) {
         const structuredFollow = await followProvider.streamStructured?.(followPrompt, {
@@ -1621,6 +1789,12 @@ const normalizeRawAction = (
       const currentSeq = seq++;
       let envelopeDispatched = false;
       try {
+        emitTrace('actions_dispatched', {
+          seq: currentSeq,
+          partial: false,
+          actionCount: fallback.length,
+          detail: { source: 'fallback', verbs: fallback.map((action) => action.name) },
+        });
         const firstSend = await sendActionsEnvelope(roomId, sessionId, currentSeq, fallback, { correlation });
         envelopeDispatched = true;
         const ack = await awaitAck({
@@ -1629,14 +1803,49 @@ const normalizeRawAction = (
           deadlineMs: 1200,
           expectedHash: firstSend.hash,
         });
+        if (ack) {
+          emitTrace('ack_received', {
+            seq: currentSeq,
+            partial: false,
+            actionCount: fallback.length,
+            detail: { source: 'fallback' },
+          });
+        }
         if (!ack) {
+          emitTrace('ack_timeout', {
+            seq: currentSeq,
+            partial: false,
+            actionCount: fallback.length,
+            detail: { source: 'fallback' },
+          });
           const retrySend = await sendActionsEnvelope(roomId, sessionId, currentSeq, fallback, { correlation });
-          await awaitAck({
+          emitTrace('ack_retry', {
+            seq: currentSeq,
+            partial: false,
+            actionCount: fallback.length,
+            detail: { source: 'fallback' },
+          });
+          const retryAck = await awaitAck({
             sessionId,
             seq: currentSeq,
             deadlineMs: 800,
             expectedHash: retrySend.hash,
           });
+          if (retryAck) {
+            emitTrace('ack_received', {
+              seq: currentSeq,
+              partial: false,
+              actionCount: fallback.length,
+              detail: { source: 'fallback', retry: true },
+            });
+          } else {
+            emitTrace('ack_timeout', {
+              seq: currentSeq,
+              partial: false,
+              actionCount: fallback.length,
+              detail: { source: 'fallback', retry: true },
+            });
+          }
         }
       } catch (error) {
         console.warn('[CanvasAgent] fallback envelope send failed', {
@@ -1676,6 +1885,14 @@ const normalizeRawAction = (
 
     metrics.completedAt = Date.now();
     logMetrics(metrics, cfg, 'complete');
+    emitTrace('run_complete', {
+      detail: {
+        durationMs: metrics.completedAt - metrics.startedAt,
+        actionCount: metrics.actionCount,
+        followupCount: metrics.followupCount,
+        retries: metrics.retryCount,
+      },
+    });
     if (shadowTeacherPromise) {
       await shadowTeacherPromise;
     }
@@ -1699,6 +1916,11 @@ const normalizeRawAction = (
     });
     metrics.completedAt = Date.now();
     logMetrics(metrics, cfg, 'error', detail);
+    emitTrace('run_error', {
+      detail: {
+        error: detail,
+      },
+    });
     await sendStatus(roomId, sessionId, 'error', detail);
     throw error;
   }
