@@ -1,8 +1,8 @@
 {
   "benchmark": "voice-agent-racetrack",
-  "recordedAt": "2026-02-12T08:47:53.645Z",
+  "recordedAt": "2026-02-12T08:53:12.126Z",
   "commit": {
-    "hash": "10e336b",
+    "hash": "a985a2e",
     "branch": "codex/agentic-reliability-phase2",
     "dirty": true
   },
@@ -13,35 +13,35 @@
   "metrics": {
     "instructionBuild": {
       "iterations": 400,
-      "totalMs": 4.266,
-      "avgMs": 0.010665,
-      "opsPerSec": 93763.73,
+      "totalMs": 4.427,
+      "avgMs": 0.011068,
+      "opsPerSec": 90348.68,
       "chars": 16481
     },
     "patchNormalize": {
       "iterations": 4000,
-      "totalMs": 7.342,
-      "avgMs": 0.001836,
-      "opsPerSec": 544785.97
+      "totalMs": 7.306,
+      "avgMs": 0.001826,
+      "opsPerSec": 547507.73
     },
     "canvasDispatch": {
       "iterations": 5000,
-      "totalMs": 1.492,
-      "avgMs": 0.000298,
-      "opsPerSec": 3350925.62,
-      "suppressRatePct": 24.44
+      "totalMs": 1.482,
+      "avgMs": 0.000296,
+      "opsPerSec": 3373439.01,
+      "suppressRatePct": 24.82
     },
     "ledgerOps": {
       "iterations": 5000,
-      "totalMs": 6.867,
-      "avgMs": 0.001373,
-      "opsPerSec": 728128.91
+      "totalMs": 6.578,
+      "avgMs": 0.001316,
+      "opsPerSec": 760128.75
     },
     "queueFlush": {
       "iterations": 250,
-      "totalMs": 2.775,
-      "avgMs": 0.011098,
-      "opsPerSec": 90106.33
+      "totalMs": 2.669,
+      "avgMs": 0.010677,
+      "opsPerSec": 93657.83
     }
   }
 }
