@@ -42,6 +42,7 @@ import { InfographicWidget } from '@/components/InfographicWidget';
 import { ContextFeeder, contextFeederSchema } from '@/components/ui/documents/context-feeder';
 
 import { componentToolboxSchema } from "@/lib/custom";
+import type { CapabilityGroup, LifecycleOp, WidgetTier } from '@/lib/agents/capabilities';
 
 const extendedSchema = <T extends z.ZodObject<any>>(schema: T) => {
   return schema.extend({
@@ -54,6 +55,27 @@ const infographicWidgetSchema = z.object({
   useGrounding: z.boolean().optional().describe('Whether to enable Google Search grounding'),
   isShape: z.boolean().optional().default(true).describe('Render inside the canvas shape'),
 });
+
+const TIER1_LIFECYCLE_OPS: LifecycleOp[] = [
+  'create',
+  'update',
+  'hydrate',
+  'fill',
+  'edit',
+  'remove',
+  'recover',
+];
+
+type RegistryComponentEntry = {
+  name: string;
+  description: string;
+  component: any;
+  propsSchema: z.ZodObject<any>;
+  tier?: WidgetTier;
+  group?: CapabilityGroup;
+  lifecycleOps?: LifecycleOp[];
+  critical?: boolean;
+};
 
 // Wrapper for LivekitParticipantTile to map onIdentityChange to updateState
 function LivekitParticipantTileWrapper(props: any) {
@@ -77,7 +99,7 @@ function LivekitParticipantTileWrapper(props: any) {
   );
 }
 
-export const components: any = [
+export const components: RegistryComponentEntry[] = [
   {
     name: 'YoutubeEmbed',
     description:
@@ -112,6 +134,10 @@ export const components: any = [
       'An enhanced retro-styled countdown timer with AI update capabilities and new simplified component registry. Features direct AI updates, auto-registration, better state management, and preset options for 5, 10, and 20 minutes. Demonstrates the new simplified architecture without complex bus systems. Perfect for testing AI component updates!',
     component: RetroTimerEnhanced,
     propsSchema: extendedSchema(retroTimerEnhancedSchema),
+    tier: 'tier1',
+    group: 'widget-lifecycle',
+    lifecycleOps: TIER1_LIFECYCLE_OPS,
+    critical: true,
   },
   {
     name: 'DocumentEditor',
@@ -126,6 +152,10 @@ export const components: any = [
       'A sophisticated research results display panel that shows real-time research findings from MCP tools. Features source credibility ratings, fact-checking status, filtering options, bookmarking, and beautiful card-based layout. Perfect for displaying Perplexity research results, fact-checking data, and contextual information during meetings or conversations.',
     component: ResearchPanel,
     propsSchema: extendedSchema(researchPanelSchema),
+    tier: 'tier1',
+    group: 'research',
+    lifecycleOps: TIER1_LIFECYCLE_OPS,
+    critical: true,
   },
   {
     name: 'ActionItemTracker',
@@ -133,6 +163,10 @@ export const components: any = [
       'A comprehensive action item management system that tracks tasks, assignments, due dates, and progress. Can be initially created by AI with action items from meetings or conversations, then allows users to dynamically add, edit, complete, and manage items. Features priority levels, status tracking, assignee management, filtering, sorting, and persistent state. Perfect for meeting follow-ups, project management, and task coordination.',
     component: ActionItemTracker,
     propsSchema: extendedSchema(actionItemTrackerSchema),
+    tier: 'tier1',
+    group: 'widget-lifecycle',
+    lifecycleOps: TIER1_LIFECYCLE_OPS,
+    critical: true,
   },
   {
     name: 'MeetingSummaryWidget',
@@ -140,6 +174,10 @@ export const components: any = [
       'Meeting summary panel that renders CRM-ready summaries, highlights, decisions, and action items. Supports updates from the summary steward and optional MCP handoff to a CRM tool.',
     component: MeetingSummaryWidget,
     propsSchema: extendedSchema(meetingSummaryWidgetSchema),
+    tier: 'tier1',
+    group: 'research',
+    lifecycleOps: TIER1_LIFECYCLE_OPS,
+    critical: true,
   },
   {
     name: 'MemoryRecallWidget',
@@ -147,6 +185,10 @@ export const components: any = [
       'Vector memory recall panel that queries MCP memory stores (e.g. Qdrant) and lists matching context snippets.',
     component: MemoryRecallWidget,
     propsSchema: extendedSchema(memoryRecallWidgetSchema),
+    tier: 'tier1',
+    group: 'research',
+    lifecycleOps: TIER1_LIFECYCLE_OPS,
+    critical: true,
   },
   {
     name: 'CrowdPulseWidget',
@@ -154,6 +196,10 @@ export const components: any = [
       'Crowd pulse control room for stage demos. Tracks hand counts, live questions, scoreboards, and follow-up suggestions.',
     component: CrowdPulseWidget,
     propsSchema: extendedSchema(crowdPulseWidgetSchema),
+    tier: 'tier1',
+    group: 'widget-lifecycle',
+    lifecycleOps: TIER1_LIFECYCLE_OPS,
+    critical: true,
   },
   {
     name: 'McpAppWidget',
@@ -161,6 +207,10 @@ export const components: any = [
       'Render an MCP App (ui:// resource) in a sandboxed iframe and optionally call the backing MCP tool.',
     component: McpAppWidget,
     propsSchema: extendedSchema(mcpAppWidgetSchema),
+    tier: 'tier1',
+    group: 'mcp',
+    lifecycleOps: TIER1_LIFECYCLE_OPS,
+    critical: true,
   },
   {
     name: 'LivekitRoomConnector',
@@ -204,6 +254,10 @@ export const components: any = [
       'A comprehensive Linear project management kanban board with drag-and-drop functionality and MCP integration. Features multiple team support, customizable status columns (Backlog, Todo, In Progress, Delegate to Agent, Blocked, Review Required, Done), issue priority visualization with color coding, assignee management, project categorization, and pending update queue system. Supports optimistic UI updates with drag-and-drop issue movement between columns, clipboard export of pending changes, and hybrid sync workflow for reliable Linear API integration. Perfect for agile project management, sprint planning, issue tracking, and team collaboration workflows. Can be populated with real Linear data via MCP or used with demo data.',
     component: LinearKanbanBoard,
     propsSchema: extendedSchema(linearKanbanSchema),
+    tier: 'tier1',
+    group: 'widget-lifecycle',
+    lifecycleOps: TIER1_LIFECYCLE_OPS,
+    critical: true,
   },
   {
     name: 'OnboardingGuide',
@@ -225,6 +279,10 @@ export const components: any = [
       'Live debate scorecard with retro boxing aesthetic. Tracks strength, logic, sources, accuracy, BS meter, learning score, live fact checks, and timeline. Designed for real-time streams and educational debates.',
     component: DebateScorecard,
     propsSchema: extendedSchema(debateScoreCardSchema),
+    tier: 'tier1',
+    group: 'widget-lifecycle',
+    lifecycleOps: TIER1_LIFECYCLE_OPS,
+    critical: true,
   },
   {
     name: 'InfographicWidget',
@@ -232,6 +290,10 @@ export const components: any = [
       'Generates infographics from recent conversation context (Gemini image model) and allows dragging results onto the canvas.',
     component: InfographicWidget,
     propsSchema: extendedSchema(infographicWidgetSchema),
+    tier: 'tier1',
+    group: 'widget-lifecycle',
+    lifecycleOps: TIER1_LIFECYCLE_OPS,
+    critical: true,
   },
   {
     name: 'ContextFeeder',
