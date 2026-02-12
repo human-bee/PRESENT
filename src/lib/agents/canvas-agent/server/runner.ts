@@ -31,8 +31,31 @@ import {
   type TeacherService,
 } from '@/lib/canvas-agent/teacher-runtime/service-client';
 import { normalizeFairyContextProfile, type FairyContextProfile } from '@/lib/fairy-context/profiles';
+import { AgentTaskQueue } from '@/lib/agents/shared/queue';
+import { enqueueCanvasFollowup, type CanvasFollowupInput } from './followup-queue';
+import type { JsonObject } from '@/lib/utils/json-schema';
 
 let teacherRuntimeWarningLogged = false;
+let durableFollowupQueue: AgentTaskQueue | null | undefined;
+let durableFollowupQueueWarningLogged = false;
+
+const getDurableFollowupQueue = (): AgentTaskQueue | null => {
+  if (durableFollowupQueue !== undefined) {
+    return durableFollowupQueue;
+  }
+  try {
+    durableFollowupQueue = new AgentTaskQueue();
+  } catch (error) {
+    durableFollowupQueue = null;
+    if (!durableFollowupQueueWarningLogged) {
+      durableFollowupQueueWarningLogged = true;
+      console.warn('[CanvasAgent:Followups] durable queue unavailable, falling back to in-session scheduler', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+  return durableFollowupQueue;
+};
 
 
 export type CanvasAgentHooks = {
@@ -56,6 +79,8 @@ type RunArgs = {
   requestId?: string;
   traceId?: string;
   intentId?: string;
+  followupDepth?: number;
+  metadata?: JsonObject;
 };
 
 let screenshotInboxPromise: Promise<typeof import('@/server/inboxes/screenshot')> | null = null;
@@ -332,6 +357,12 @@ export async function runCanvasAgent(args: RunArgs) {
           ...(requestId ? { requestId } : {}),
         }
       : undefined;
+  const currentFollowupDepth =
+    typeof args.followupDepth === 'number' && Number.isFinite(args.followupDepth)
+      ? Math.max(0, Math.floor(args.followupDepth))
+      : 0;
+  const runMetadata =
+    args.metadata && typeof args.metadata === 'object' && !Array.isArray(args.metadata) ? args.metadata : undefined;
   const cfg = loadCanvasAgentConfig();
   if (cfg.mode === 'tldraw-teacher') {
     console.info('[CanvasAgent] running in tldraw-teacher mode (vendored TLDraw agent active)', {
@@ -347,6 +378,18 @@ export async function runCanvasAgent(args: RunArgs) {
     });
   }
   const scheduler = new SessionScheduler({ maxDepth: cfg.followups.maxDepth });
+  const durableQueue = cfg.followups.durable ? getDurableFollowupQueue() : null;
+  if (cfg.debug) {
+    try {
+      console.log('[CanvasAgent:FollowupsMode]', JSON.stringify({
+        roomId,
+        sessionId,
+        depth: currentFollowupDepth,
+        configuredDurable: cfg.followups.durable,
+        activeMode: durableQueue ? 'durable-queue' : 'session-memory',
+      }));
+    } catch {}
+  }
   const shapeTypeById = new Map<string, string>();
   const offset = new OffsetManager();
   const screenshotInbox = await loadScreenshotInbox();
@@ -695,25 +738,72 @@ export async function runCanvasAgent(args: RunArgs) {
       }
     };
 
-    const makeDetailEnqueuer = (baseMessage: string, baseDepth: number) => (params: Record<string, unknown>) => {
-      const hint = typeof params.hint === 'string' ? params.hint.trim() : '';
-      const previousDepth = typeof params.depth === 'number' ? Number(params.depth) : baseDepth;
-      const nextDepth = previousDepth + 1;
-      if (nextDepth > cfg.followups.maxDepth) return;
-      const detailInput: Record<string, unknown> = {
-        message: hint || baseMessage,
-        originalMessage: baseMessage,
-        depth: nextDepth,
-        enqueuedAt: Date.now(),
+    const enqueueFollowupTask = async (followup: CanvasFollowupInput): Promise<boolean> => {
+      const normalizedDepth = Number.isFinite(followup.depth) ? Math.max(0, Math.floor(followup.depth)) : 0;
+      if (normalizedDepth > cfg.followups.maxDepth) return false;
+
+      if (durableQueue) {
+        try {
+          const accepted = await enqueueCanvasFollowup(
+            {
+              queue: durableQueue,
+              roomId,
+              sessionId,
+              correlation,
+              metadata: runMetadata,
+              initialViewport: args.initialViewport,
+            },
+            { ...followup, depth: normalizedDepth },
+          );
+          if (accepted) {
+            return true;
+          }
+        } catch (error) {
+          console.warn('[CanvasAgent:Followups] durable follow-up enqueue failed', {
+            roomId,
+            sessionId,
+            depth: normalizedDepth,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
+
+      const fallbackInput: Record<string, unknown> = {
+        message: followup.message,
+        originalMessage: followup.originalMessage,
+        depth: normalizedDepth,
+        enqueuedAt: followup.enqueuedAt ?? Date.now(),
       };
-      if (hint) detailInput.hint = hint;
-      const targetIds = Array.isArray(params.targetIds)
-        ? params.targetIds.filter((id: unknown): id is string => typeof id === 'string' && id.length > 0)
-        : [];
-      if (targetIds.length > 0) detailInput.targetIds = targetIds;
-      const accepted = scheduler.enqueue(sessionId, { input: detailInput, depth: nextDepth });
-      if (accepted) metrics.followupCount++;
+      if (followup.hint) fallbackInput.hint = followup.hint;
+      if (followup.reason) fallbackInput.reason = followup.reason;
+      if (followup.strict) fallbackInput.strict = true;
+      if (Array.isArray(followup.targetIds) && followup.targetIds.length > 0) {
+        fallbackInput.targetIds = followup.targetIds;
+      }
+      return scheduler.enqueue(sessionId, { input: fallbackInput, depth: normalizedDepth });
     };
+
+    const makeDetailEnqueuer =
+      (baseMessage: string, baseDepth: number) => async (params: Record<string, unknown>): Promise<void> => {
+        const hint = typeof params.hint === 'string' ? params.hint.trim() : '';
+        const previousDepth = typeof params.depth === 'number' ? Number(params.depth) : baseDepth;
+        const nextDepth = previousDepth + 1;
+        if (nextDepth > cfg.followups.maxDepth) return;
+        const targetIds = Array.isArray(params.targetIds)
+          ? params.targetIds.filter((id: unknown): id is string => typeof id === 'string' && id.length > 0)
+          : [];
+        const accepted = await enqueueFollowupTask({
+          message: hint || baseMessage,
+          originalMessage: baseMessage,
+          depth: nextDepth,
+          enqueuedAt: Date.now(),
+          ...(hint ? { hint } : {}),
+          ...(typeof params.reason === 'string' && params.reason.trim() ? { reason: params.reason.trim() } : {}),
+          ...(params.strict === true ? { strict: true } : {}),
+          ...(targetIds.length > 0 ? { targetIds } : {}),
+        });
+        if (accepted) metrics.followupCount++;
+      };
 
 /**
  * normalizeRawAction keeps create/update payloads in sync with the canonical
@@ -840,7 +930,7 @@ const normalizeRawAction = (
       rawActions: unknown,
       seqNumber: number,
       partial: boolean,
-      enqueueDetail: (params: Record<string, unknown>) => void,
+      enqueueDetail: (params: Record<string, unknown>) => Promise<void>,
       options?: { dispatch?: boolean; source?: 'present' | 'teacher' },
     ) => {
       const shouldDispatch = options?.dispatch !== false;
@@ -1071,7 +1161,7 @@ const normalizeRawAction = (
             }
           }
           if (action.name === 'add_detail') {
-            enqueueDetail(((action as any).params ?? {}) as Record<string, unknown>);
+            await enqueueDetail(((action as any).params ?? {}) as Record<string, unknown>);
           }
           if (action.name === 'message') {
             const text = String((action as any).params?.text || '').trim();
@@ -1096,7 +1186,7 @@ const normalizeRawAction = (
 
     await sendStatus(roomId, sessionId, 'streaming');
     const streamingEnabled = typeof provider.streamStructured === 'function' && process.env.CANVAS_AGENT_STREAMING !== 'false';
-    const enqueueDetail = makeDetailEnqueuer(userMessage, 0);
+    const enqueueDetail = makeDetailEnqueuer(userMessage, currentFollowupDepth);
 
     if (cfg.debug) {
       try {
@@ -1377,16 +1467,17 @@ const normalizeRawAction = (
     if (!lowActionRetryScheduled && metrics.actionCount < cfg.followups.lowActionThreshold) {
       const retryHint =
         'Add more layout detail: ensure there is a headline block, supporting shapes, and three sticky notes with copy ideas.';
-      const enqueued = scheduler.enqueue(sessionId, {
-        input: {
-          message: `${userMessage}\n\nFocus on finishing the layout, not narration.`,
-          hint: retryHint,
-          strict: true,
-          reason: 'low_action',
-        },
-        depth: 1,
+      const enqueued = await enqueueFollowupTask({
+        message: `${userMessage}\n\nFocus on finishing the layout, not narration.`,
+        originalMessage: userMessage,
+        hint: retryHint,
+        strict: true,
+        reason: 'low_action',
+        depth: currentFollowupDepth + 1,
+        enqueuedAt: Date.now(),
       });
       lowActionRetryScheduled = enqueued;
+      if (enqueued) metrics.followupCount++;
       if (enqueued && cfg.debug) {
         console.log('[CanvasAgent] Scheduled low-action follow-up', {
           roomId,
@@ -1410,7 +1501,7 @@ const normalizeRawAction = (
       const followBaseDepth =
         typeof (followInput as any).depth === 'number'
           ? Number((followInput as any).depth)
-          : next.depth ?? loops;
+          : next.depth ?? currentFollowupDepth + loops;
 
       let followScreenshot: ScreenshotPayload | null = null;
       const followBounds = latestScreenshot?.bounds ?? latestScreenshot?.viewport ?? args.initialViewport;
