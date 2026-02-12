@@ -3,6 +3,8 @@ import {
   getServerClient,
   parseExecutorBody,
   readSessionLease,
+  setInMemoryExecutorLease,
+  usingInMemoryExecutorLeaseFallback,
 } from '../shared';
 
 export const runtime = 'nodejs';
@@ -50,6 +52,23 @@ export async function POST(req: NextRequest) {
       sessionId,
       executorIdentity: currentHolder,
       leaseExpiresAt: current.tool_executor_lease_expires_at,
+    });
+  }
+
+  if (usingInMemoryExecutorLeaseFallback()) {
+    setInMemoryExecutorLease({
+      sessionId,
+      roomName: current.room_name ?? roomName ?? null,
+      identity,
+      leaseExpiresAt: leaseExpiresAtIso,
+      updatedAt: nowIso,
+    });
+    return NextResponse.json({
+      acquired: true,
+      sessionId,
+      executorIdentity: identity,
+      leaseExpiresAt: leaseExpiresAtIso,
+      fallback: 'in-memory',
     });
   }
 

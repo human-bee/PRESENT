@@ -12,10 +12,17 @@ export type SyncContract = {
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const DEV_CANVAS_ID_RE =
+  /^dev-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export function isUuid(value: string | null | undefined): value is string {
   if (!value) return false;
   return UUID_RE.test(value);
+}
+
+export function isCanvasId(value: string | null | undefined): value is string {
+  if (!value) return false;
+  return isUuid(value) || DEV_CANVAS_ID_RE.test(value);
 }
 
 export function buildCanvasRoomName(canvasId: string): string {
@@ -26,10 +33,10 @@ export function extractCanvasIdFromRoomName(roomName: string | null | undefined)
   if (!roomName) return null;
   const trimmed = roomName.trim();
   const match = trimmed.match(
-    /^canvas-([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i,
+    /^canvas-((?:dev-)?[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i,
   );
   const parsed = match?.[1] ?? null;
-  return isUuid(parsed) ? parsed : null;
+  return isCanvasId(parsed) ? parsed : null;
 }
 
 export function getCanvasIdFromCurrentUrl(): string | null {
@@ -37,7 +44,7 @@ export function getCanvasIdFromCurrentUrl(): string | null {
   try {
     const params = new URLSearchParams(window.location.search);
     const raw = params.get('id');
-    return isUuid(raw) ? raw : null;
+    return isCanvasId(raw) ? raw : null;
   } catch {
     return null;
   }
@@ -51,7 +58,7 @@ type BuildSyncContractInput = {
 
 export function buildSyncContract(input: BuildSyncContractInput): SyncContract {
   const roomName = String(input.roomName || '').trim();
-  const derivedCanvasId = isUuid(input.canvasId) ? input.canvasId : extractCanvasIdFromRoomName(roomName);
+  const derivedCanvasId = isCanvasId(input.canvasId) ? input.canvasId : extractCanvasIdFromRoomName(roomName);
   const livekitRoomName = roomName;
   const tldrawRoomId = String(input.tldrawRoomId || livekitRoomName || '').trim();
   const expectedRoomForCanvas = derivedCanvasId ? buildCanvasRoomName(derivedCanvasId) : null;
@@ -87,7 +94,7 @@ type SessionPair = {
 export function validateSessionPair(contract: SyncContract, session: SessionPair): string[] {
   const errors: string[] = [];
   const sessionRoom = String(session.roomName || '').trim();
-  const sessionCanvasId = isUuid(session.canvasId) ? session.canvasId : null;
+  const sessionCanvasId = isCanvasId(session.canvasId) ? session.canvasId : null;
 
   if (sessionRoom && sessionRoom !== contract.livekitRoomName) {
     errors.push('Session room does not match current LiveKit room');
@@ -98,4 +105,3 @@ export function validateSessionPair(contract: SyncContract, session: SessionPair
 
   return errors;
 }
-

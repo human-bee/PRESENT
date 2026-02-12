@@ -3,6 +3,8 @@ import {
   getServerClient,
   parseExecutorBody,
   readSessionLease,
+  setInMemoryExecutorLease,
+  usingInMemoryExecutorLeaseFallback,
 } from '../shared';
 
 export const runtime = 'nodejs';
@@ -42,6 +44,24 @@ export async function POST(req: NextRequest) {
 
   const now = Date.now();
   const leaseExpiresAtIso = new Date(now + leaseTtlMs).toISOString();
+
+  if (usingInMemoryExecutorLeaseFallback()) {
+    setInMemoryExecutorLease({
+      sessionId,
+      roomName: current.room_name ?? null,
+      identity,
+      leaseExpiresAt: leaseExpiresAtIso,
+      updatedAt: new Date(now).toISOString(),
+    });
+    return NextResponse.json({
+      ok: true,
+      sessionId,
+      executorIdentity: identity,
+      leaseExpiresAt: leaseExpiresAtIso,
+      fallback: 'in-memory',
+    });
+  }
+
   const { data: updated, error: updateErr } = await supabase
     .from('canvas_sessions')
     .update({

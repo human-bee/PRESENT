@@ -1,10 +1,38 @@
 import { expect, test, type BrowserContext, type Page } from '@playwright/test';
+import { randomUUID } from 'node:crypto';
 
 async function waitForCanvasReady(page: Page) {
   await page.waitForSelector('[data-canvas-space="true"]', { timeout: 90_000 });
   await page.waitForFunction(() => {
     return Boolean((window as any).__present?.tldrawEditor);
   }, null, { timeout: 90_000 });
+}
+
+async function ensureLivekitConnected(page: Page) {
+  await expect
+    .poll(
+      async () =>
+        page.evaluate(() => {
+          const present = (window as any).__present ?? {};
+          if (present.livekitConnected === true) return true;
+
+          const buttons = Array.from(document.querySelectorAll('button'));
+          const connect = buttons.find((button) => {
+            const label = (button.textContent || '').trim();
+            const htmlButton = button as HTMLButtonElement;
+            return (
+              label === 'Connect' &&
+              !htmlButton.disabled &&
+              htmlButton.offsetParent !== null
+            );
+          }) as HTMLButtonElement | undefined;
+          connect?.click();
+
+          return Boolean((window as any).__present?.livekitConnected === true);
+        }),
+      { timeout: 90_000 },
+    )
+    .toBe(true);
 }
 
 async function waitForRealtimeHealthy(page: Page) {
@@ -23,8 +51,25 @@ async function waitForRealtimeHealthy(page: Page) {
 async function openSharedCanvas(
   browser: any,
 ): Promise<{ ctxA: BrowserContext; ctxB: BrowserContext; pageA: Page; pageB: Page; canvasId: string }> {
+  const canvasId = `dev-${randomUUID()}`;
+  const roomName = `canvas-${canvasId}`;
+  await fetch('http://localhost:3000/api/session', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      room_name: roomName,
+      canvas_id: null,
+      participants: [],
+      transcript: [],
+      canvas_state: null,
+      events: [],
+    }),
+  }).catch(() => {});
+
   const ctxA = await browser.newContext();
   const ctxB = await browser.newContext();
+  await ctxA.grantPermissions(['microphone', 'camera'], { origin: 'http://localhost:3000' });
+  await ctxB.grantPermissions(['microphone', 'camera'], { origin: 'http://localhost:3000' });
   await ctxA.addInitScript(() => {
     window.localStorage.setItem('present:display_name', 'Alice');
   });
@@ -35,21 +80,17 @@ async function openSharedCanvas(
   const pageA = await ctxA.newPage();
   const pageB = await ctxB.newPage();
 
-  await pageA.goto('/canvas', { waitUntil: 'domcontentloaded' });
-  await waitForCanvasReady(pageA);
-
-  const canvasId = await pageA.evaluate(() => {
-    const id = new URL(window.location.href).searchParams.get('id');
-    if (!id) {
-      throw new Error('Missing canvas id in URL');
-    }
-    return id;
+  await pageA.goto(`/canvas?id=${encodeURIComponent(canvasId)}`, {
+    waitUntil: 'domcontentloaded',
   });
+  await waitForCanvasReady(pageA);
+  await ensureLivekitConnected(pageA);
 
   await pageB.goto(`/canvas?id=${encodeURIComponent(canvasId)}`, {
     waitUntil: 'domcontentloaded',
   });
   await waitForCanvasReady(pageB);
+  await ensureLivekitConnected(pageB);
 
   await waitForRealtimeHealthy(pageA);
   await waitForRealtimeHealthy(pageB);
@@ -157,8 +198,29 @@ test.describe('Realtime Sync Multiuser', () => {
   test('widget state patch from user A rehydrates on user B', async ({ browser }) => {
     const { ctxA, ctxB, pageA, pageB } = await openSharedCanvas(browser);
     try {
+      const executorTab = await expect
+        .poll(
+          async () => {
+            const [aIsExecutor, bIsExecutor] = await Promise.all([
+              pageA.evaluate(() => Boolean((window as any).__present?.executor?.isExecutor)),
+              pageB.evaluate(() => Boolean((window as any).__present?.executor?.isExecutor)),
+            ]);
+            if (aIsExecutor) return 'A';
+            if (bIsExecutor) return 'B';
+            return null;
+          },
+          { timeout: 45_000 },
+        )
+        .toBeTruthy()
+        .then(async () => {
+          const aIsExecutor = await pageA.evaluate(() => Boolean((window as any).__present?.executor?.isExecutor));
+          return aIsExecutor ? 'A' : 'B';
+        });
+
+      const sourcePage = executorTab === 'A' ? pageA : pageB;
+      const observerPage = executorTab === 'A' ? pageB : pageA;
       const messageId = `e2e-crowd-pulse-${Date.now()}`;
-      const created = await pageA.evaluate(async (id) => {
+      const created = await sourcePage.evaluate(async (id) => {
         const exec = (window as any).__presentToolDispatcherExecute;
         if (typeof exec !== 'function') return false;
         await exec({
@@ -167,8 +229,9 @@ test.describe('Realtime Sync Multiuser', () => {
           payload: {
             tool: 'create_component',
             params: {
-              componentType: 'CrowdPulseWidget',
-              componentProps: {
+              type: 'CrowdPulseWidget',
+              messageId: id,
+              props: {
                 __custom_message_id: id,
                 title: 'Sync Probe',
                 handCount: 0,
@@ -188,20 +251,7 @@ test.describe('Realtime Sync Multiuser', () => {
 
       await expect
         .poll(
-          async () =>
-            pageB.evaluate((id) => {
-              const editor = (window as any).__present?.tldrawEditor;
-              if (!editor?.store?.allRecords) return false;
-              const records = editor.store.allRecords();
-              return records.some((record: any) => {
-                if (record?.typeName !== 'shape') return false;
-                const props = record?.props ?? {};
-                return (
-                  (props.componentType === 'CrowdPulseWidget' || props.type === 'CrowdPulseWidget') &&
-                  (props.__custom_message_id === id || props.title === 'Sync Probe')
-                );
-              });
-            }, messageId),
+          async () => (await observerPage.getByText('Sync Probe', { exact: true }).count()) > 0,
           { timeout: 30_000 },
         )
         .toBe(true);

@@ -1,5 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerClient, parseExecutorBody } from '../shared';
+import {
+  getServerClient,
+  parseExecutorBody,
+  readSessionLease,
+  setInMemoryExecutorLease,
+  usingInMemoryExecutorLeaseFallback,
+} from '../shared';
 
 export const runtime = 'nodejs';
 
@@ -13,6 +19,35 @@ export async function POST(req: NextRequest) {
       { error: 'sessionId and identity are required' },
       { status: 400 },
     );
+  }
+
+  if (usingInMemoryExecutorLeaseFallback()) {
+    const { data: current, error: readErr } = await readSessionLease(supabase, sessionId);
+    if (readErr) {
+      return NextResponse.json({ error: readErr.message }, { status: 500 });
+    }
+    if (!current) {
+      return NextResponse.json({ error: 'Session not found' }, { status: 404 });
+    }
+    const currentHolder =
+      typeof current.tool_executor_identity === 'string'
+        ? current.tool_executor_identity
+        : null;
+    const released = currentHolder === identity;
+    if (released) {
+      setInMemoryExecutorLease({
+        sessionId,
+        roomName: current.room_name ?? null,
+        identity: null,
+        leaseExpiresAt: null,
+        updatedAt: new Date().toISOString(),
+      });
+    }
+    return NextResponse.json({
+      released,
+      sessionId,
+      fallback: 'in-memory',
+    });
   }
 
   const { data, error } = await supabase
@@ -36,4 +71,3 @@ export async function POST(req: NextRequest) {
     sessionId,
   });
 }
-
