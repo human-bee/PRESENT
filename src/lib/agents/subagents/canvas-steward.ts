@@ -48,6 +48,11 @@ export async function runCanvasSteward(args: RunCanvasStewardArgs) {
   const payload = jsonObjectSchema.parse(entriesToObject(normalizedEntries));
   const room = extractRoom(payload);
   const model = typeof payload.model === 'string' ? payload.model : undefined;
+  const followupDepth = extractFollowupDepth(payload);
+  const metadata =
+    payload.metadata && typeof payload.metadata === 'object' && !Array.isArray(payload.metadata)
+      ? (payload.metadata as JsonObject)
+      : undefined;
   const contextProfile = normalizeFairyContextProfile(
     typeof payload.contextProfile === 'string'
       ? payload.contextProfile
@@ -92,6 +97,8 @@ export async function runCanvasSteward(args: RunCanvasStewardArgs) {
       requestId: correlation.requestId,
       traceId: correlation.traceId,
       intentId: correlation.intentId,
+      followupDepth,
+      metadata,
     });
 
     logWithTs('✅ [CanvasSteward] run.complete', {
@@ -133,6 +140,47 @@ function extractQuickText(payload: JsonObject): string {
     return raw.trim();
   }
   throw new Error('canvas.quick_text requires text content');
+}
+
+const coerceDepth = (value: unknown): number | undefined => {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return Math.max(0, Math.floor(value));
+  }
+  if (typeof value === 'string') {
+    const parsed = Number.parseInt(value.trim(), 10);
+    if (Number.isFinite(parsed)) {
+      return Math.max(0, parsed);
+    }
+  }
+  return undefined;
+};
+
+function extractFollowupDepth(payload: JsonObject): number {
+  const direct = coerceDepth(payload.depth);
+  if (typeof direct === 'number') return direct;
+
+  const followup =
+    payload.followup && typeof payload.followup === 'object' && !Array.isArray(payload.followup)
+      ? (payload.followup as JsonObject)
+      : undefined;
+  const nested = coerceDepth(followup?.depth);
+  if (typeof nested === 'number') return nested;
+
+  const metadata =
+    payload.metadata && typeof payload.metadata === 'object' && !Array.isArray(payload.metadata)
+      ? (payload.metadata as JsonObject)
+      : undefined;
+  const metadataDepth = coerceDepth(metadata?.followupDepth);
+  if (typeof metadataDepth === 'number') return metadataDepth;
+
+  const metadataFollowup =
+    metadata?.followup && typeof metadata.followup === 'object' && !Array.isArray(metadata.followup)
+      ? (metadata.followup as JsonObject)
+      : undefined;
+  const metadataNested = coerceDepth(metadataFollowup?.depth);
+  if (typeof metadataNested === 'number') return metadataNested;
+
+  return 0;
 }
 
 async function handleQuickTextTask(room: string, payload: JsonObject) {

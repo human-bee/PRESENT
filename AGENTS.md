@@ -90,6 +90,7 @@
   - `NEXT_PUBLIC_CANVAS_AGENT_THEME_ENABLED=true` keeps the TLDraw branding enabled even when the legacy client agent is off.
   - `CANVAS_QUEUE_DIRECT_FALLBACK=false` ensures canvas jobs only run via the queue/worker. Set to `true` only if Supabase is offline and you explicitly want synchronous execution (actions may duplicate).
   - `CANVAS_AGENT_MAX_FOLLOWUPS=3` max bounded depth for add_detail follow-up loops.
+  - `CANVAS_AGENT_DURABLE_FOLLOWUPS=true` schedules follow-ups onto `agent_tasks` (`canvas.followup`) by default; if queue creds are unavailable the runner falls back to in-memory follow-up scheduling.
 
 # Agents: Runtime, Roles & Contracts
 
