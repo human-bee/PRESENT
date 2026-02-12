@@ -1,6 +1,6 @@
 import { defineAgent, JobContext, cli, WorkerOptions, llm, voice } from '@livekit/agents';
 import { config } from 'dotenv';
-import { randomUUID } from 'crypto';
+import { createHash, randomUUID } from 'crypto';
 import { join } from 'path';
 import { z } from 'zod';
 import { createAnthropic } from '@ai-sdk/anthropic';
@@ -13,8 +13,15 @@ try {
 import { realtime as openaiRealtime } from '@livekit/agents-plugin-openai';
 import { MultiParticipantTranscriptionManager } from './multi-participant-transcription';
 import { appendTranscriptCache, getTranscriptWindow, listCanvasComponents } from '@/lib/agents/shared/supabase-context';
+import { MutationArbiter } from '@/lib/agents/shared/mutation-arbiter';
 import { buildVoiceAgentInstructions } from '@/lib/agents/instructions';
-import { queryCapabilities, defaultCapabilities } from '@/lib/agents/capabilities';
+import {
+  queryCapabilities,
+  defaultCapabilities,
+  resolveCapabilityProfile,
+  type CapabilityProfile,
+  type SystemCapabilities,
+} from '@/lib/agents/capabilities';
 import { deriveComponentIntent } from '@/lib/agents/shared/deterministic-ids';
 import { jsonObjectSchema, type JsonObject } from '@/lib/utils/json-schema';
 import { ConnectionState, RoomEvent, RemoteTrackPublication, Track } from 'livekit-client';
@@ -88,6 +95,40 @@ const routeManualInput = async (text: string) => {
   const parsed = routerDecisionSchema.safeParse(object);
   if (!parsed.success) return null;
   return parsed.data as { route: 'canvas' | 'none'; message?: string };
+};
+
+type IntentRoute = 'visual' | 'widget-lifecycle' | 'research' | 'livekit' | 'mcp' | 'general';
+
+const intentClassifier = (text: string): IntentRoute => {
+  const normalized = text.toLowerCase();
+  if (
+    /(draw|shape|align|layout|canvas|style|color|arrow|rectangle|circle|ellipse|sticky|note|frame|grid|zoom|focus)/i.test(
+      normalized,
+    )
+  ) {
+    return 'visual';
+  }
+  if (/(livekit|captions|participant|screen share|screenshare|subtitle|transcribe)/i.test(normalized)) {
+    return 'livekit';
+  }
+  if (/(mcp|tool call|server tool|connector app)/i.test(normalized)) {
+    return 'mcp';
+  }
+  if (
+    /(research|summar|memory|recall|fact check|fact-check|source|transcript|search the web|news)/i.test(
+      normalized,
+    )
+  ) {
+    return 'research';
+  }
+  if (
+    /(create|update|edit|remove|delete|recover|restore|hydrate|timer|kanban|action item|scorecard|crowd pulse|infographic|meeting summary)/i.test(
+      normalized,
+    )
+  ) {
+    return 'widget-lifecycle';
+  }
+  return 'general';
 };
 
 const extractRateLimitHeaders = (headers: unknown) => {
@@ -498,6 +539,70 @@ Examples:
 - User: "hi" → (no tool needed, stay silent)
 
 Your only output is function calls. Never use plain text unless absolutely necessary.`;
+    const configuredCapabilityProfile = resolveCapabilityProfile(
+      process.env.VOICE_AGENT_CAPABILITY_PROFILE || 'full',
+    );
+    const capabilityQueryTimeoutMs = (() => {
+      const raw = process.env.VOICE_AGENT_CAPABILITY_TIMEOUT_MS;
+      const parsed = raw ? Number(raw) : Number.NaN;
+      if (!Number.isFinite(parsed) || parsed <= 250) return 3000;
+      return Math.max(250, Math.min(8000, Math.floor(parsed)));
+    })();
+    const capabilityCacheTtlMs = (() => {
+      const raw = process.env.VOICE_AGENT_CAPABILITY_CACHE_TTL_MS;
+      const parsed = raw ? Number(raw) : Number.NaN;
+      if (!Number.isFinite(parsed) || parsed <= 500) return 15000;
+      return Math.max(500, Math.min(120000, Math.floor(parsed)));
+    })();
+    const capabilityCache = new Map<string, { fetchedAt: number; capabilities: SystemCapabilities }>();
+    const orchestrationMetrics = {
+      routeCounts: new Map<IntentRoute, number>(),
+      capabilityCacheHits: 0,
+      capabilityFallbacks: 0,
+      mutationEnqueued: 0,
+      mutationDeduped: 0,
+    };
+
+    const trackRoute = (route: IntentRoute) => {
+      const current = orchestrationMetrics.routeCounts.get(route) || 0;
+      orchestrationMetrics.routeCounts.set(route, current + 1);
+    };
+
+    const maybeLogOrchestrationMetrics = () => {
+      const mutationTotal =
+        orchestrationMetrics.mutationEnqueued + orchestrationMetrics.mutationDeduped;
+      if (mutationTotal > 0 && mutationTotal % 20 === 0) {
+        console.log('[VoiceAgent] orchestration metrics', {
+          mutationEnqueued: orchestrationMetrics.mutationEnqueued,
+          mutationDeduped: orchestrationMetrics.mutationDeduped,
+          capabilityCacheHits: orchestrationMetrics.capabilityCacheHits,
+          capabilityFallbacks: orchestrationMetrics.capabilityFallbacks,
+          routes: Array.from(orchestrationMetrics.routeCounts.entries()),
+        });
+      }
+    };
+
+    const getCapabilitiesCached = async (profile: CapabilityProfile): Promise<SystemCapabilities> => {
+      const key = `${job.room.name || 'room'}::${profile}`;
+      const now = Date.now();
+      const cached = capabilityCache.get(key);
+      if (cached && now - cached.fetchedAt < capabilityCacheTtlMs) {
+        orchestrationMetrics.capabilityCacheHits += 1;
+        return cached.capabilities;
+      }
+      const queried = await queryCapabilities(job.room as any, {
+        profile,
+        timeoutMs: capabilityQueryTimeoutMs,
+      }).catch(() => ({
+        ...defaultCapabilities,
+        fallbackReason: 'error' as const,
+      }));
+      if (queried.fallbackReason) {
+        orchestrationMetrics.capabilityFallbacks += 1;
+      }
+      capabilityCache.set(key, { fetchedAt: now, capabilities: queried });
+      return queried;
+    };
 
     type ComponentRegistryEntry = {
       type: string;
@@ -1054,20 +1159,126 @@ Your only output is function calls. Never use plain text unless absolutely neces
 
     const enableLossyUpdates = process.env.VOICE_AGENT_UPDATE_LOSSY !== 'false';
 
+    type MutationEnvelope = {
+      executionId: string;
+      idempotencyKey: string;
+      lockKey: string;
+      attempt: number;
+      route: IntentRoute;
+      capabilityProfile: CapabilityProfile;
+      ts: number;
+    };
+
     type ToolEvent = {
       id: string;
       roomId: string;
       type: 'tool_call';
-      payload: { tool: string; params: JsonObject; context: { source: 'voice'; timestamp: number } };
+      payload: {
+        tool: string;
+        params: JsonObject;
+        context: {
+          source: 'voice';
+          timestamp: number;
+          orchestration?: MutationEnvelope;
+        };
+      };
       timestamp: number;
       source: 'voice';
     };
 
-    const buildToolEvent = (tool: string, params: JsonObject): ToolEvent => ({
+    let currentIntentRoute: IntentRoute = 'general';
+    const mutationAttempts = new Map<string, number>();
+    const mutationArbiter = new MutationArbiter(30_000);
+    const MUTATING_TOOLS = new Set([
+      'create_component',
+      'update_component',
+      'remove_component',
+      'reserve_component',
+      'dispatch_to_conductor',
+    ]);
+
+    const stableStringify = (value: unknown): string => {
+      if (value === null || typeof value !== 'object') {
+        return JSON.stringify(value);
+      }
+      if (Array.isArray(value)) {
+        return `[${value.map((entry) => stableStringify(entry)).join(',')}]`;
+      }
+      const record = value as Record<string, unknown>;
+      return `{${Object.keys(record)
+        .sort()
+        .map((key) => `${JSON.stringify(key)}:${stableStringify(record[key])}`)
+        .join(',')}}`;
+    };
+
+    const getMutationLockKey = (tool: string, params: JsonObject): string => {
+      const directComponentId =
+        typeof (params as any)?.componentId === 'string' && (params as any).componentId.trim().length > 0
+          ? (params as any).componentId.trim()
+          : '';
+      if (directComponentId) {
+        return `component:${directComponentId}`;
+      }
+      if (tool === 'create_component') {
+        const messageId =
+          typeof (params as any)?.messageId === 'string' && (params as any).messageId.trim().length > 0
+            ? (params as any).messageId.trim()
+            : '';
+        if (messageId) {
+          return `component:${messageId}`;
+        }
+        const typeName =
+          typeof (params as any)?.type === 'string' && (params as any).type.trim().length > 0
+            ? (params as any).type.trim()
+            : 'unknown';
+        return `type:${typeName}`;
+      }
+      if (tool === 'dispatch_to_conductor') {
+        const taskName =
+          typeof (params as any)?.task === 'string' && (params as any).task.trim().length > 0
+            ? (params as any).task.trim()
+            : 'unknown';
+        const dispatchId =
+          typeof (params as any)?.params?.id === 'string' && (params as any).params.id.trim().length > 0
+            ? (params as any).params.id.trim()
+            : '';
+        if (dispatchId) {
+          return `dispatch:${dispatchId}`;
+        }
+        return `task:${taskName}`;
+      }
+      return `tool:${tool}`;
+    };
+
+    const buildMutationEnvelope = (tool: string, params: JsonObject): MutationEnvelope => {
+      const lockKey = getMutationLockKey(tool, params);
+      const base =
+        `${job.room.name || 'room'}::${tool}::${lockKey}::` +
+        `${stableStringify(params)}::turn:${currentTurnId}`;
+      const idempotencyKey = createHash('sha1').update(base).digest('hex').slice(0, 20);
+      const previousAttempts = mutationAttempts.get(idempotencyKey) || 0;
+      const attempt = previousAttempts + 1;
+      mutationAttempts.set(idempotencyKey, attempt);
+      return {
+        executionId: randomUUID(),
+        idempotencyKey,
+        lockKey,
+        attempt,
+        route: currentIntentRoute,
+        capabilityProfile: configuredCapabilityProfile,
+        ts: Date.now(),
+      };
+    };
+
+    const buildToolEvent = (tool: string, params: JsonObject, orchestration?: MutationEnvelope): ToolEvent => ({
       id: randomUUID(),
       roomId: job.room.name || 'unknown',
       type: 'tool_call' as const,
-      payload: { tool, params, context: { source: 'voice', timestamp: Date.now() } },
+      payload: {
+        tool,
+        params,
+        context: { source: 'voice', timestamp: Date.now(), ...(orchestration ? { orchestration } : {}) },
+      },
       timestamp: Date.now(),
       source: 'voice' as const,
     });
@@ -1283,26 +1494,98 @@ Your only output is function calls. Never use plain text unless absolutely neces
         }
       }
 
-      const entry = { event: buildToolEvent(tool, normalizedParams), reliable };
-      if (!job.room.localParticipant) {
-        pendingToolCalls.push(entry);
-        console.info('[VoiceAgent] queueing tool_call until room connects', {
-          tool,
-          queueLength: pendingToolCalls.length,
-          state: job.room.connectionState,
-        });
-        if (!flushToolCallsHandle) {
-          flushToolCallsHandle = setTimeout(() => {
-            flushToolCallsHandle = null;
-            void flushPendingToolCalls();
-          }, 250);
+      if (tool === 'dispatch_to_conductor') {
+        const dispatchParams =
+          normalizedParams && typeof (normalizedParams as any).params === 'object'
+            ? ({ ...((normalizedParams as any).params as Record<string, unknown>) } as JsonObject)
+            : ({} as JsonObject);
+        const baseParamsForHash: JsonObject = { ...dispatchParams };
+        delete (baseParamsForHash as any).executionId;
+        delete (baseParamsForHash as any).idempotencyKey;
+        delete (baseParamsForHash as any).attempt;
+        delete (baseParamsForHash as any).lockKey;
+        if (!dispatchParams.idempotencyKey) {
+          const dispatchHashBase = `${job.room.name || 'room'}::dispatch_to_conductor::${stableStringify({
+            task: (normalizedParams as any)?.task,
+            params: baseParamsForHash,
+            turnId: currentTurnId,
+          })}`;
+          dispatchParams.idempotencyKey = createHash('sha1').update(dispatchHashBase).digest('hex').slice(0, 20);
         }
-        return;
+        if (!dispatchParams.executionId) {
+          dispatchParams.executionId = randomUUID();
+        }
+        if (!dispatchParams.lockKey) {
+          const dispatchComponentId =
+            typeof dispatchParams.componentId === 'string' && dispatchParams.componentId.trim().length > 0
+              ? dispatchParams.componentId.trim()
+              : '';
+          const dispatchTask =
+            typeof (normalizedParams as any)?.task === 'string' && (normalizedParams as any).task.trim().length > 0
+              ? (normalizedParams as any).task.trim()
+              : 'unknown';
+          dispatchParams.lockKey = dispatchComponentId ? `component:${dispatchComponentId}` : `task:${dispatchTask}`;
+        }
+        if (typeof dispatchParams.attempt !== 'number') {
+          dispatchParams.attempt = 1;
+        }
+        normalizedParams = {
+          ...normalizedParams,
+          params: dispatchParams,
+        };
       }
-      try {
-        const sent = await publishToolCall(entry);
-        if (!sent) {
+
+      const orchestration = MUTATING_TOOLS.has(tool)
+        ? buildMutationEnvelope(tool, normalizedParams)
+        : undefined;
+      if (tool === 'dispatch_to_conductor' && orchestration) {
+        const existingParams =
+          normalizedParams && typeof (normalizedParams as any).params === 'object'
+            ? ({ ...((normalizedParams as any).params as Record<string, unknown>) } as JsonObject)
+            : ({} as JsonObject);
+        normalizedParams = {
+          ...normalizedParams,
+          params: {
+            ...existingParams,
+            executionId: orchestration.executionId,
+            idempotencyKey: orchestration.idempotencyKey,
+            lockKey: orchestration.lockKey,
+            attempt: orchestration.attempt,
+          } as JsonObject,
+        };
+      }
+      const entry = { event: buildToolEvent(tool, normalizedParams, orchestration), reliable };
+
+      const publishOrQueueToolCall = async () => {
+        if (!job.room.localParticipant) {
           pendingToolCalls.push(entry);
+          console.info('[VoiceAgent] queueing tool_call until room connects', {
+            tool,
+            queueLength: pendingToolCalls.length,
+            state: job.room.connectionState,
+          });
+          if (!flushToolCallsHandle) {
+            flushToolCallsHandle = setTimeout(() => {
+              flushToolCallsHandle = null;
+              void flushPendingToolCalls();
+            }, 250);
+          }
+          return;
+        }
+        try {
+          const sent = await publishToolCall(entry);
+          if (!sent) {
+            pendingToolCalls.push(entry);
+            if (!flushToolCallsHandle) {
+              flushToolCallsHandle = setTimeout(() => {
+                flushToolCallsHandle = null;
+                void flushPendingToolCalls();
+              }, 250);
+            }
+          }
+        } catch (error) {
+          console.error('[VoiceAgent] publishData threw', { tool, error });
+          pendingToolCalls.unshift(entry);
           if (!flushToolCallsHandle) {
             flushToolCallsHandle = setTimeout(() => {
               flushToolCallsHandle = null;
@@ -1310,16 +1593,30 @@ Your only output is function calls. Never use plain text unless absolutely neces
             }, 250);
           }
         }
-      } catch (error) {
-        console.error('[VoiceAgent] publishData threw', { tool, error });
-        pendingToolCalls.unshift(entry);
-        if (!flushToolCallsHandle) {
-          flushToolCallsHandle = setTimeout(() => {
-            flushToolCallsHandle = null;
-            void flushPendingToolCalls();
-          }, 250);
-        }
+      };
+
+      if (!orchestration) {
+        await publishOrQueueToolCall();
+        return;
       }
+
+      orchestrationMetrics.mutationEnqueued += 1;
+      const result = await mutationArbiter.run(
+        {
+          idempotencyKey: orchestration.idempotencyKey,
+          lockKey: orchestration.lockKey,
+        },
+        publishOrQueueToolCall,
+      );
+      if (result.deduped) {
+        orchestrationMetrics.mutationDeduped += 1;
+        console.debug('[VoiceAgent] dropping duplicate mutation by idempotency key', {
+          tool,
+          idempotencyKey: orchestration.idempotencyKey,
+          lockKey: orchestration.lockKey,
+        });
+      }
+      maybeLogOrchestrationMetrics();
     };
 
     const safeCloneJson = (value: unknown): JsonObject => {
@@ -2717,8 +3014,28 @@ Your only output is function calls. Never use plain text unless absolutely neces
     };
 
     // Build instructions and instantiate Agent + Session for Realtime
-    const systemCapabilities = await queryCapabilities(job.room as any).catch(() => defaultCapabilities);
-    instructions = buildVoiceAgentInstructions(systemCapabilities, systemCapabilities.components || []);
+    const systemCapabilities = await getCapabilitiesCached(configuredCapabilityProfile).catch(() => ({
+      ...defaultCapabilities,
+      fallbackReason: 'error' as const,
+    }));
+    if (systemCapabilities.fallbackReason) {
+      console.warn('[VoiceAgent] capability query fallback engaged', {
+        configuredCapabilityProfile,
+        fallbackReason: systemCapabilities.fallbackReason,
+      });
+    }
+    instructions = buildVoiceAgentInstructions(
+      systemCapabilities,
+      systemCapabilities.components || [],
+      { profile: systemCapabilities.capabilityProfile || configuredCapabilityProfile },
+    );
+    console.log('[VoiceAgent] capability profile resolved', {
+      configuredCapabilityProfile,
+      resolvedCapabilityProfile: systemCapabilities.capabilityProfile,
+      tools: systemCapabilities.tools.length,
+      components: (systemCapabilities.components || []).length,
+      manifestVersion: systemCapabilities.manifestVersion,
+    });
 
     const agent = new voice.Agent({
       instructions,
@@ -2755,6 +3072,8 @@ Your only output is function calls. Never use plain text unless absolutely neces
     let lastUserPrompt: string | null = null;
     let latestAgentState: voice.AgentState = 'initializing';
     let recoveringActiveResponse = false;
+    const lastPrewarmAtByRoute = new Map<IntentRoute, number>();
+    const PREWARM_TTL_MS = 4000;
 
     const isActiveResponseError = (error: unknown) => {
       if (!error) return false;
@@ -2859,6 +3178,43 @@ Your only output is function calls. Never use plain text unless absolutely neces
       }
     };
 
+    const prewarmRouteContext = async (route: IntentRoute, text: string) => {
+      const now = Date.now();
+      const lastPrewarmAt = lastPrewarmAtByRoute.get(route) || 0;
+      if (now - lastPrewarmAt < PREWARM_TTL_MS) {
+        return;
+      }
+      lastPrewarmAtByRoute.set(route, now);
+
+      const roomName = job.room.name || '';
+      if (!roomName) return;
+
+      const tasks: Array<Promise<unknown>> = [];
+      if (route === 'research') {
+        tasks.push(
+          getTranscriptWindow(roomName, 90_000).catch(() => null),
+        );
+      }
+      if (route === 'widget-lifecycle' || route === 'research' || route === 'mcp') {
+        tasks.push(
+          listCanvasComponents(roomName).catch(() => null),
+        );
+      }
+      if (route === 'livekit') {
+        tasks.push(
+          Promise.resolve(listRemoteParticipantLabels()).catch(() => null),
+        );
+      }
+      if (route === 'visual') {
+        tasks.push(
+          Promise.resolve(intentClassifier(text)).catch(() => null),
+        );
+      }
+
+      if (tasks.length === 0) return;
+      await Promise.allSettled(tasks);
+    };
+
     handleBufferedTranscription = async ({
       text,
       speaker,
@@ -2876,6 +3232,9 @@ Your only output is function calls. Never use plain text unless absolutely neces
         topic: 'transcription',
       });
       lastUserPrompt = text;
+      currentIntentRoute = intentClassifier(text);
+      trackRoute(currentIntentRoute);
+      await prewarmRouteContext(currentIntentRoute, text);
 
       // New user turn begins on a final transcript (manual or server STT).
       bumpTurn();

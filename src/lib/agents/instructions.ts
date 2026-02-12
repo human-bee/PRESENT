@@ -1,9 +1,18 @@
-import type { SystemCapabilities } from './capabilities';
+import type {
+  CapabilityProfile,
+  ComponentCapability,
+  SystemCapabilities,
+  ToolCapability,
+} from './capabilities';
 
 export function buildVoiceAgentInstructions(
   systemCapabilities: SystemCapabilities,
-  componentsFallback: Array<{ name: string; description: string; examples?: string[] }>,
+  componentsFallback: Array<ComponentCapability>,
+  options: { profile?: CapabilityProfile } = {},
 ): string {
+  const profile = options.profile || systemCapabilities?.capabilityProfile || 'full';
+  const isLeanProfile = profile === 'lean_adaptive';
+
   const base = `
 You are the custom Voice Agent (Agent #1) in a real‑time meeting/canvas system. You listen, interpret, and act by dispatching tool calls that shape the UI. You never speak audio—your output is always tool calls (not narration).
 
@@ -18,20 +27,44 @@ Global principles
 - Never echo the user request; act. If you must clarify, ask exactly one short question, then act.
 `;
 
-  const tools = systemCapabilities?.tools || [];
-  let toolSection = `\nYou have access to ${tools.length} tools:`;
+  const tools: ToolCapability[] = systemCapabilities?.tools || [];
+  const listedTools = isLeanProfile
+    ? tools
+        .filter((tool) => tool.critical || ['visual', 'widget-lifecycle', 'research', 'mcp'].includes(String(tool.group || '')))
+        .slice(0, 14)
+    : tools;
+  let toolSection = `\nCapability profile: ${profile}. You have access to ${tools.length} tools.`;
+  toolSection += isLeanProfile ? '\nUse the smallest matching critical tool first:' : '\nTool reference:';
   for (const t of tools) {
+    if (!listedTools.some((tool) => tool.name === t.name)) continue;
     toolSection += `\n- ${t.name}: ${t.description}`;
-    if (t.examples && t.examples.length) toolSection += `\n  Examples: ${t.examples.slice(0, 2).join(', ')}`;
+    if (!isLeanProfile && t.examples && t.examples.length) {
+      toolSection += `\n  Examples: ${t.examples.slice(0, 2).join(', ')}`;
+    }
+    if (isLeanProfile && t.group) {
+      toolSection += `\n  Group: ${t.group}`;
+    }
+  }
+  if (isLeanProfile && tools.length > listedTools.length) {
+    toolSection += `\n- Additional tools are available on-demand via capability refresh.`;
   }
 
-  const components = systemCapabilities?.components || componentsFallback || [];
+  const components: ComponentCapability[] = systemCapabilities?.components || componentsFallback || [];
+  const listedComponents = isLeanProfile
+    ? components.filter((component) => component.tier === 'tier1' || component.critical).slice(0, 16)
+    : components;
   let componentSection = `\n\ncustom UI components available (${components.length}):`;
-  for (const c of components) {
+  for (const c of listedComponents) {
     componentSection += `\n- ${c.name}: ${c.description}`;
+    if (isLeanProfile && c.group) {
+      componentSection += `\n  Group: ${c.group}${c.tier ? `, Tier: ${c.tier}` : ''}`;
+    }
+  }
+  if (isLeanProfile && components.length > listedComponents.length) {
+    componentSection += '\n- Additional components are available on-demand via capability refresh/fallback.';
   }
 
-  const guidance = `
+  const fullGuidance = `
 
 Routing priority (balance correctness with usefulness)
 1) Visual work (draw/place/edit/style/layout) → dispatch_to_conductor({ task: 'fairy.intent', params: { id: '<uuid>', room: CURRENT_ROOM, message: '<user request>', source: 'voice', selectionIds?: CURRENT_SELECTION_IDS, bounds?: {x,y,w,h} } }). This is the default for visual requests; the conductor will route to canvas or a widget.
@@ -201,6 +234,33 @@ Debate monitoring (IMPORTANT for demos)
 
 Always respond with tool calls. For Q&A outside action, keep confirmations minimal and do not duplicate the action as text.
 `;
+
+  const leanGuidance = `
+
+Lean routing policy (speed + parity)
+1) Visual requests (draw/layout/style/place/edit) -> dispatch_to_conductor({ task: 'fairy.intent', params: { id: '<uuid>', room: CURRENT_ROOM, message: '<user request>', source: 'voice' } }).
+2) Widget lifecycle requests -> create_component / update_component / remove_component / resolve_component.
+3) Research + transcript context -> research_search / transcript_search, then update or create the target widget.
+4) Unknown intent -> dispatch_to_conductor first, then fallback to component tools.
+
+Mutation safety contract
+- Every mutating tool call should remain deterministic: resolve ID first when uncertain.
+- update_component MUST include patch: update_component({ componentId: '<id>', patch: { ... } }).
+- For remove flows, prefer componentId; if unknown use resolve_component(type, allowLast).
+
+Tier-1 lifecycle focus
+- Priority widgets: CrowdPulseWidget, RetroTimerEnhanced, ActionItemTracker, LinearKanbanBoard, DebateScorecard, ResearchPanel, MeetingSummaryWidget, MemoryRecallWidget, InfographicWidget, McpAppWidget.
+- Ensure create -> hydrate -> fill/edit -> update -> remove -> recover behavior with deterministic IDs.
+
+Escalation/fallback rules
+- If a required capability appears missing, fallback to conductor dispatch.
+- For debate turns with existing scorecard: resolve_component(type='DebateScorecard', allowLast=true) then dispatch_to_conductor('scorecard.run').
+- For drawing/style requests never substitute LiveCaptions.
+
+Always respond with tool calls. Keep confirmations minimal.
+`;
+
+  const guidance = isLeanProfile ? leanGuidance : fullGuidance;
 
   return base + toolSection + componentSection + guidance;
 }
