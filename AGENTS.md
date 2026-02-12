@@ -91,6 +91,7 @@
   - `CANVAS_QUEUE_DIRECT_FALLBACK=false` ensures canvas jobs only run via the queue/worker. Set to `true` only if Supabase is offline and you explicitly want synchronous execution (actions may duplicate).
   - `CANVAS_AGENT_MAX_FOLLOWUPS=3` max bounded depth for add_detail follow-up loops.
   - `CANVAS_AGENT_DURABLE_FOLLOWUPS=true` schedules follow-ups onto `agent_tasks` (`canvas.followup`) by default; if queue creds are unavailable the runner falls back to in-memory follow-up scheduling.
+  - `CANVAS_AGENT_TRACE_MAX_EVENTS=120` caps `agent:trace` emission per run so observability stays non-blocking under heavy streaming.
 
 # Agents: Runtime, Roles & Contracts
 
