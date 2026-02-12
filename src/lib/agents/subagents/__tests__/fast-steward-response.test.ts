@@ -45,6 +45,29 @@ describe('fast-steward-response', () => {
     expect(extractFirstToolCall(response)).toBeNull();
   });
 
+  it('falls back to legacy function_call shape when tool_calls are absent', () => {
+    const response = {
+      choices: [
+        {
+          message: {
+            function_call: {
+              name: 'commit_action',
+              arguments: '{"kind":"search","query":"legacy"}',
+            },
+          },
+        },
+      ],
+    };
+    expect(extractFirstToolCall(response)).toEqual({
+      name: 'commit_action',
+      argumentsRaw: '{"kind":"search","query":"legacy"}',
+      raw: {
+        name: 'commit_action',
+        arguments: '{"kind":"search","query":"legacy"}',
+      },
+    });
+  });
+
   it('returns structured parse errors for invalid tool arguments', () => {
     const result = parseToolArgumentsResult('{bad-json');
     expect(result.ok).toBe(false);

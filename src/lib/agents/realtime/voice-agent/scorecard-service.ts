@@ -130,6 +130,7 @@ export class ScorecardService {
         slot: existing.info.slot,
         state: 'updated',
       });
+      this.deps.setLastScorecardProvisionedAt(this.now());
       this.deps.setLastComponentForType('DebateScorecard', existing.id);
       this.deps.setLastCreatedComponentId(existing.id);
 
