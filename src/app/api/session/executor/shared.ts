@@ -22,7 +22,7 @@ export async function parseExecutorBody(req: NextRequest) {
 }
 
 export async function readSessionLease(
-  supabase: ReturnType<typeof createClient>,
+  supabase: ReturnType<typeof getServerClient>,
   sessionId: string,
 ) {
   const { data, error } = await supabase

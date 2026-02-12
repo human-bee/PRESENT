@@ -86,7 +86,6 @@ export function useTLDrawSync(
         roomName: contract.livekitRoomName,
         tldrawRoomId: contract.tldrawRoomId,
         syncStatus: store?.status ?? 'unknown',
-        connectionStatus: store?.connectionStatus ?? 'unknown',
         errors: contract.errors,
         updatedAt: Date.now(),
       };
@@ -102,7 +101,7 @@ export function useTLDrawSync(
     } catch {
       // noop
     }
-  }, [roomName, store?.status, store?.connectionStatus]);
+  }, [roomName, store?.status]);
 
   // Log sync host once per session in dev
   try {
