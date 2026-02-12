@@ -1,5 +1,9 @@
 import { AgentService } from '@/lib/fairy-worker/agent-service';
-import type { FairyWorkerEnv, FairyUserStub } from '@/lib/fairy-worker/environment';
+import {
+  type FairyWorkerEnv,
+  type FairyUserStub,
+  getFairyConfigurationError,
+} from '@/lib/fairy-worker/environment';
 import type { AgentPrompt } from '@/lib/fairy-worker/types';
 import { NextRequest } from 'next/server';
 import { getRequestUserId } from '@/lib/supabase/server/request-user';
@@ -27,6 +31,14 @@ export async function POST(request: NextRequest) {
     FAIRY_MODEL: process.env.FAIRY_MODEL,
     IS_LOCAL: process.env.NODE_ENV === 'production' ? 'false' : 'true',
   };
+
+  const configError = getFairyConfigurationError(env);
+  if (configError) {
+    return new Response(JSON.stringify({ error: configError }), {
+      status: 503,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
 
   const service = new AgentService(env);
   const encoder = new TextEncoder();

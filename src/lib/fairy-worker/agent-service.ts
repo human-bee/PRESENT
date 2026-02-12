@@ -11,7 +11,12 @@ import type { DebugPart } from '@tldraw/fairy-shared/schema/PromptPartDefinition
 import type { Streaming } from '@tldraw/fairy-shared/types/Streaming'
 import { LanguageModel, ModelMessage, streamText } from 'ai'
 import { INTERNAL_BASE_URL } from './constants'
-import { FairyWorkerEnv, FairyUserStub } from './environment'
+import {
+	FairyWorkerEnv,
+	FairyUserStub,
+	getFairyConfigurationError,
+	getRequiredProviderEnvKey,
+} from './environment'
 import { buildMessages } from './prompt/buildMessages'
 import { buildSystemPrompt } from './prompt/buildSystemPrompt'
 import { getModelName } from './prompt/getModelName'
@@ -25,21 +30,30 @@ import type { AgentPrompt } from './types'
 
 export class AgentService {
 	private readonly env: FairyWorkerEnv
-	openai: OpenAIProvider
-	anthropic: AnthropicProvider
-	google: GoogleGenerativeAIProvider
+	openai: OpenAIProvider | null
+	anthropic: AnthropicProvider | null
+	google: GoogleGenerativeAIProvider | null
 
 	constructor(env: FairyWorkerEnv) {
 		this.env = env
-		this.openai = createOpenAI({ apiKey: env.OPENAI_API_KEY })
-		this.anthropic = createAnthropic({ apiKey: env.ANTHROPIC_API_KEY })
-		this.google = createGoogleGenerativeAI({ apiKey: env.GOOGLE_API_KEY })
+		const configError = getFairyConfigurationError(env)
+		if (configError) {
+			throw new Error(configError)
+		}
+		this.openai = env.OPENAI_API_KEY ? createOpenAI({ apiKey: env.OPENAI_API_KEY }) : null
+		this.anthropic = env.ANTHROPIC_API_KEY ? createAnthropic({ apiKey: env.ANTHROPIC_API_KEY }) : null
+		this.google = env.GOOGLE_API_KEY ? createGoogleGenerativeAI({ apiKey: env.GOOGLE_API_KEY }) : null
 	}
 
 	getModel(modelName: AgentModelName): LanguageModel {
 		const modelDefinition = getAgentModelDefinition(modelName)
-		const provider = modelDefinition.provider
-		return this[provider](modelDefinition.id)
+		const provider = modelDefinition.provider as 'openai' | 'anthropic' | 'google'
+		const providerFactory = this[provider]
+		if (!providerFactory) {
+			const requiredKey = getRequiredProviderEnvKey(modelName)
+			throw new Error(`Fairy model "${modelName}" requires ${requiredKey} to be configured.`)
+		}
+		return providerFactory(modelDefinition.id)
 	}
 
 	private async handleFinish(

@@ -9,7 +9,12 @@ import { generateObject, type LanguageModel } from 'ai';
 import type { ProviderOptions } from '@ai-sdk/provider-utils';
 import { z } from 'zod';
 import { jsonValueSchema, type JsonObject, type JsonValue } from '@/lib/utils/json-schema';
-import { getCanvasModelDefinition, type CanvasModelDefinition, type CanvasModelName } from './canvas-models';
+import {
+	getCanvasModelDefinition,
+	resolveCanvasModelName,
+	type CanvasModelDefinition,
+	type CanvasModelName,
+} from './canvas-models';
 
 const canvasActionSchema = z.object({
 	tool: z
@@ -40,6 +45,12 @@ type ProviderMap = {
 	openai: OpenAIProvider | null;
 	anthropic: AnthropicProvider | null;
 	google: GoogleGenerativeAIProvider | null;
+};
+
+const PROVIDER_ENV_KEYS: Record<ProviderKind, string> = {
+	openai: 'OPENAI_API_KEY',
+	anthropic: 'ANTHROPIC_API_KEY',
+	google: 'GOOGLE_API_KEY',
 };
 
 const CANVAS_STEWARD_DEBUG = process.env.CANVAS_STEWARD_DEBUG === 'true';
@@ -140,6 +151,11 @@ export class CanvasAgentService {
 		modelDefinition: CanvasModelDefinition;
 	} {
 		const orderedModels = getModelPreferenceList(preferredModel);
+		if (!this.hasAnyProvider()) {
+			throw new Error(
+				`No canvas model providers configured. Set at least one of: ${Object.values(PROVIDER_ENV_KEYS).join(', ')}`,
+			);
+		}
 
 		for (const name of orderedModels) {
 			const definition = getCanvasModelDefinition(name);
@@ -151,7 +167,34 @@ export class CanvasAgentService {
 			};
 		}
 
-		throw new Error('No configured model provider available for canvas steward');
+		const preferredProvider = getCanvasModelDefinition(preferredModel).provider as ProviderKind;
+		const requiredKey = PROVIDER_ENV_KEYS[preferredProvider];
+		throw new Error(
+			`Canvas model "${preferredModel}" requires ${requiredKey}; no compatible fallback provider is configured.`,
+		);
+	}
+
+	assertConfiguration(preferredModel: CanvasModelName): void {
+		if (!this.hasAnyProvider()) {
+			throw new Error(
+				`No canvas model providers configured. Set at least one of: ${Object.values(PROVIDER_ENV_KEYS).join(', ')}`,
+			);
+		}
+		const preferredProvider = getCanvasModelDefinition(preferredModel).provider as ProviderKind;
+		if (!this.providers[preferredProvider]) {
+			const requiredKey = PROVIDER_ENV_KEYS[preferredProvider];
+			debugLog('configuration.warning', {
+				preferredModel,
+				missingKey: requiredKey,
+				fallbackProviders: Object.entries(this.providers)
+					.filter(([, provider]) => Boolean(provider))
+					.map(([name]) => name),
+			});
+		}
+	}
+
+	private hasAnyProvider(): boolean {
+		return Object.values(this.providers).some(Boolean);
 	}
 }
 
@@ -210,5 +253,6 @@ export function getCanvasAgentService() {
 	if (!singleton) {
 		singleton = new CanvasAgentService();
 	}
+	singleton.assertConfiguration(resolveCanvasModelName());
 	return singleton;
 }

@@ -1,15 +1,33 @@
 #!/bin/sh
+set -eu
 
-if [ "$SERVICE_TYPE" = "sync" ]; then
-  echo "Starting Sync Server..."
-  npm run sync:dev
-elif [ "$SERVICE_TYPE" = "agent" ]; then
-  echo "Starting Agent..."
-  npm run agent:conductor
-elif [ "$SERVICE_TYPE" = "realtime" ]; then
-  echo "Starting Realtime Agent..."
-  npm run agent:realtime
-else
-  echo "Error: SERVICE_TYPE env var not set or invalid (value: $SERVICE_TYPE). defaulting to sync"
-  npm run sync:dev
-fi
+# Default to web for generic deployments that don't inject SERVICE_TYPE.
+SERVICE_TYPE="${SERVICE_TYPE:-web}"
+
+case "$SERVICE_TYPE" in
+  sync)
+    echo "Starting Sync Server..."
+    exec npm run sync:dev
+    ;;
+  agent|conductor)
+    echo "Starting Conductor Agent..."
+    exec npm run agent:conductor
+    ;;
+  realtime)
+    echo "Starting Realtime Agent..."
+    exec npm run agent:realtime
+    ;;
+  web|present|app)
+    echo "Starting Web App..."
+    if [ ! -d ".next" ]; then
+      echo "No .next build output found. Running build..."
+      npm run build
+    fi
+    exec npm run start
+    ;;
+  *)
+    echo "Error: unsupported SERVICE_TYPE value: ${SERVICE_TYPE:-<unset>}" >&2
+    echo "Expected one of: sync, agent, conductor, realtime, web, present, app" >&2
+    exit 1
+    ;;
+esac

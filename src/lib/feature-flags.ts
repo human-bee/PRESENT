@@ -8,6 +8,10 @@ export function getBooleanFlag(envVar: string | undefined, defaultValue: boolean
   return defaultValue;
 }
 
+export function isFairyClientAgentEnabled(envVar: string | undefined): boolean {
+  return getBooleanFlag(envVar, false);
+}
+
 export const flags = {
   localToolRoutingEnabled: getBooleanFlag(process.env.NEXT_PUBLIC_LOCAL_TOOL_ROUTING_ENABLED, true),
   mcpEarlyInitEnabled: getBooleanFlag(process.env.NEXT_PUBLIC_MCP_EARLY_INIT_ENABLED, true),

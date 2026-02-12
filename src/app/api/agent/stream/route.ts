@@ -7,7 +7,6 @@ import { getCanvasAgentService } from '@/lib/agents/subagents/canvas-agent-servi
 import { resolveCanvasModelName } from '@/lib/agents/subagents/canvas-models'
 
 const isDevEnv = process.env.NODE_ENV !== 'production'
-const service = getCanvasAgentService()
 const CANVAS_STEWARD_DEBUG = process.env.CANVAS_STEWARD_DEBUG === 'true'
 const debugLog = (...args: unknown[]) => {
 	if (CANVAS_STEWARD_DEBUG) {
@@ -39,6 +38,13 @@ export async function POST(req: NextRequest) {
 
 	if (!Array.isArray(messages) || messages.length === 0) {
 		return jsonError('messages must be a non-empty array', 400)
+	}
+
+	let service
+	try {
+		service = getCanvasAgentService()
+	} catch (error: any) {
+		return jsonError(error?.message ?? 'Canvas agent service is not configured', 503)
 	}
 
 	const requestedDefinition = getAgentModelDefinition(modelName)

@@ -10,7 +10,7 @@ import { createLiveKitBus } from '@/lib/livekit/livekit-bus';
 import { useFairyApp } from '@/vendor/tldraw-fairy/fairy/fairy-app/FairyAppProvider';
 import type { FairyAgent } from '@/vendor/tldraw-fairy/fairy/fairy-agent/FairyAgent';
 import { useFairyPromptData } from './fairy-prompt-data';
-import { getBooleanFlag } from '@/lib/feature-flags';
+import { isFairyClientAgentEnabled } from '@/lib/feature-flags';
 
 interface FairyLiveKitBridgeProps {
   room?: Room;
@@ -21,7 +21,7 @@ interface AgentHostState {
   hostId: string | null;
 }
 
-const FAIRY_CLIENT_AGENT_ENABLED = getBooleanFlag(process.env.NEXT_PUBLIC_FAIRY_CLIENT_AGENT_ENABLED, true);
+const FAIRY_CLIENT_AGENT_ENABLED = isFairyClientAgentEnabled(process.env.NEXT_PUBLIC_FAIRY_CLIENT_AGENT_ENABLED);
 
 function useIsAgentHost(room?: Room) {
   const [hostState, setHostState] = useState<AgentHostState>({ isHost: false, hostId: null });
