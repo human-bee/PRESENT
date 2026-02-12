@@ -1,0 +1,1768 @@
+<!doctype html>
+  <html>
+    <head>
+      <meta charset="utf-8" />
+      <title>PRESENT Hand Count Journey (2026-02-11)</title>
+      <link rel="preconnect" href="https://fonts.googleapis.com">
+      <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+      <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+      <style>
+        :root {
+          color-scheme: light;
+          --bg: #05070f;
+          --surface: rgba(12, 18, 35, 0.9);
+          --card: rgba(15, 23, 42, 0.92);
+          --accent: #38bdf8;
+          --accent-2: #a78bfa;
+          --text: #e2e8f0;
+          --muted: #94a3b8;
+          --pass: #22c55e;
+          --warn: #f59e0b;
+          --fail: #ef4444;
+        }
+        * { box-sizing: border-box; }
+        body {
+          margin: 0;
+          font-family: 'Space Grotesk', system-ui, sans-serif;
+          background:
+            radial-gradient(1200px 600px at 15% -10%, rgba(56, 189, 248, 0.35), transparent 60%),
+            radial-gradient(800px 500px at 85% 0%, rgba(167, 139, 250, 0.3), transparent 60%),
+            var(--bg);
+          color: var(--text);
+          padding: 40px 32px 80px;
+        }
+        header {
+          display: grid;
+          grid-template-columns: 1fr 280px;
+          gap: 24px;
+          align-items: start;
+        }
+        h1 { margin: 0; font-size: 32px; letter-spacing: -0.02em; }
+        h2 { margin: 36px 0 16px; font-size: 20px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+        h3 { margin: 0 0 6px; font-size: 16px; }
+        .story { font-size: 15px; color: var(--muted); margin-top: 8px; max-width: 720px; }
+        .mono { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--muted); }
+        .card {
+          background: var(--surface);
+          border: 1px solid rgba(148, 163, 184, 0.15);
+          border-radius: 16px;
+          padding: 16px 18px;
+          box-shadow: 0 16px 40px rgba(2, 6, 23, 0.55);
+        }
+        .run-card { display: flex; flex-direction: column; gap: 8px; }
+        .stat-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+          gap: 14px;
+          margin-top: 24px;
+        }
+        .stat {
+          background: var(--card);
+          border: 1px solid rgba(148, 163, 184, 0.2);
+          border-radius: 14px;
+          padding: 12px 14px;
+        }
+        .stat span { display: block; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+        .stat strong { font-size: 18px; margin-top: 6px; display: block; }
+        .pill {
+          padding: 4px 10px;
+          border-radius: 999px;
+          font-size: 11px;
+          font-weight: 700;
+          text-transform: uppercase;
+        }
+        .pill-pass { background: rgba(34, 197, 94, 0.2); color: var(--pass); }
+        .pill-warn { background: rgba(245, 158, 11, 0.2); color: var(--warn); }
+        .pill-fail { background: rgba(239, 68, 68, 0.2); color: var(--fail); }
+        .hero-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+          gap: 18px;
+        }
+        .hero-card {
+          background: var(--card);
+          border-radius: 18px;
+          overflow: hidden;
+          border: 1px solid rgba(56, 189, 248, 0.35);
+          box-shadow: 0 18px 40px rgba(15, 23, 42, 0.6);
+        }
+        .hero-card img { width: 100%; display: block; }
+        .hero-meta { padding: 12px 14px; }
+        .hero-meta p { margin: 0; font-size: 12px; color: var(--muted); }
+        .perf-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+          gap: 14px;
+          margin-bottom: 18px;
+        }
+        .perf-card {
+          background: var(--card);
+          border-radius: 14px;
+          border: 1px solid rgba(148, 163, 184, 0.2);
+          padding: 12px 14px;
+        }
+        .perf-title { font-size: 13px; font-weight: 600; }
+        .perf-meta { font-size: 12px; color: var(--muted); margin-top: 6px; }
+        .perf-bar {
+          margin-top: 10px;
+          height: 8px;
+          background: rgba(148, 163, 184, 0.2);
+          border-radius: 999px;
+          overflow: hidden;
+        }
+        .perf-bar span { display: block; height: 100%; border-radius: 999px; }
+        .bar-pass { background: linear-gradient(90deg, rgba(34, 197, 94, 0.4), rgba(34, 197, 94, 0.9)); }
+        .bar-warn { background: linear-gradient(90deg, rgba(245, 158, 11, 0.4), rgba(245, 158, 11, 0.9)); }
+        table {
+          width: 100%;
+          border-collapse: collapse;
+          font-size: 13px;
+          background: var(--card);
+          border-radius: 12px;
+          overflow: hidden;
+        }
+        th, td { padding: 10px 12px; border-bottom: 1px solid rgba(148, 163, 184, 0.12); }
+        th { text-align: left; background: rgba(15, 23, 42, 0.65); }
+        a { color: var(--accent); }
+        .section-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+          gap: 20px;
+        }
+        .transcript-list {
+          display: grid;
+          gap: 8px;
+        }
+        .transcript-row {
+          display: grid;
+          grid-template-columns: 84px 120px 1fr;
+          gap: 10px;
+          padding: 10px 12px;
+          background: rgba(15, 23, 42, 0.6);
+          border-radius: 10px;
+          border: 1px solid rgba(148, 163, 184, 0.12);
+        }
+        .transcript-time { font-size: 11px; color: var(--muted); }
+        .transcript-speaker { font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--accent); }
+        .transcript-text { font-size: 14px; }
+        .asset-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+          gap: 16px;
+        }
+        figure { margin: 0; background: var(--card); border-radius: 14px; padding: 10px; box-shadow: 0 10px 24px rgba(15, 23, 42, 0.5); }
+        figure img { width: 100%; border-radius: 12px; display: block; }
+        figcaption { font-size: 12px; color: var(--muted); margin-top: 6px; }
+        .chip-grid { display: flex; flex-wrap: wrap; gap: 10px; }
+        .chip { display: flex; align-items: center; gap: 8px; border-radius: 999px; background: rgba(56, 189, 248, 0.12); color: var(--text); padding: 6px 12px; font-size: 12px; }
+        .chip strong { color: var(--accent); font-size: 12px; }
+        ul { padding-left: 18px; color: var(--muted); }
+        .empty { color: var(--muted); }
+        .pulse-list { display: grid; gap: 8px; }
+        .pulse-row {
+          display: grid;
+          grid-template-columns: 90px 130px 160px 1fr;
+          gap: 12px;
+          padding: 10px 12px;
+          border-radius: 10px;
+          background: rgba(15, 23, 42, 0.55);
+          border: 1px solid rgba(148, 163, 184, 0.14);
+          font-size: 12px;
+        }
+        .pulse-time { color: var(--muted); font-family: 'JetBrains Mono', monospace; }
+        .pulse-type { text-transform: uppercase; letter-spacing: 0.08em; color: var(--accent-2); font-size: 11px; }
+        .pulse-tool { color: var(--accent); font-weight: 600; }
+      </style>
+    </head>
+    <body>
+      <header>
+        <div>
+          <h1>PRESENT Hand Count Journey (2026-02-11)</h1>
+          <div class="story">Crowd Q&amp;A -&gt; Hand Count -&gt; Question Queue -&gt; Follow-ups -&gt; View Shift</div>
+          <div class="mono">Run ID: 20260211-005809-crowd</div>
+        </div>
+        <div class="card run-card">
+          <div class="mono">Total runtime</div>
+          <div style="font-size: 22px; font-weight: 700;">50845 ms</div>
+          <div class="mono">Latency grade</div>
+          <div style="font-size: 18px; font-weight: 600;">FAST</div>
+        </div>
+      </header>
+
+      <section class="stat-grid">
+        <div class="stat"><span>Transcript turns</span><strong>19</strong></div>
+        <div class="stat"><span>Tool calls</span><strong>12</strong></div>
+        <div class="stat"><span>Tool results</span><strong>12</strong></div>
+        <div class="stat"><span>Tool errors</span><strong>0</strong></div>
+        <div class="stat"><span>MCP calls</span><strong>1</strong></div>
+        <div class="stat"><span>MCP results</span><strong>1</strong></div>
+        <div class="stat"><span>MCP errors</span><strong>0</strong></div>
+        <div class="stat"><span>Assets captured</span><strong>21</strong></div>
+        <div class="stat"><span>Avg paint</span><strong>4 ms</strong></div>
+        <div class="stat"><span>Avg network</span><strong>0 ms</strong></div>
+        <div class="stat"><span>Tool throughput</span><strong>14/min</strong></div>
+        <div class="stat"><span>P50 paint</span><strong>0 ms</strong></div>
+        <div class="stat"><span>P90 paint</span><strong>12 ms</strong></div>
+        <div class="stat"><span>P95 paint</span><strong>20 ms</strong></div>
+      </section>
+
+      <h2>Hero moments</h2>
+      <section class="hero-grid">
+        
+        <article class="hero-card">
+          <img src="./assets/2026-02-11/20260211-005809-crowd-03-crowd-created.png" alt="Crowd Pulse Dashboard" />
+          <div class="hero-meta">
+            <h3>Crowd Pulse Dashboard</h3>
+            
+          </div>
+        </article>
+      
+
+        <article class="hero-card">
+          <img src="./assets/2026-02-11/20260211-005809-crowd-04-crowd-signals.png" alt="Crowd Pulse Update (hand count + questions)" />
+          <div class="hero-meta">
+            <h3>Crowd Pulse Update (hand count + questions)</h3>
+            
+          </div>
+        </article>
+      
+
+        <article class="hero-card">
+          <img src="./assets/2026-02-11/20260211-005809-crowd-05-crowd-followups.png" alt="Crowd Pulse Follow-ups" />
+          <div class="hero-meta">
+            <h3>Crowd Pulse Follow-ups</h3>
+            
+          </div>
+        </article>
+      
+
+        <article class="hero-card">
+          <img src="./assets/2026-02-11/20260211-005809-crowd-10-speaker-view.png" alt="Speaker View Preset" />
+          <div class="hero-meta">
+            <h3>Speaker View Preset</h3>
+            
+          </div>
+        </article>
+      
+      </section>
+
+      <h2>Conversation timeline</h2>
+      <div class="card">
+        
+        <div class="transcript-list">
+          
+                <div class="transcript-row">
+                  <div class="transcript-time">12:58:41 AM</div>
+                  <div class="transcript-speaker">Host</div>
+                  <div class="transcript-text">Welcome everyone. We are capturing crowd signals in real time.</div>
+                </div>
+              
+
+                <div class="transcript-row">
+                  <div class="transcript-time">12:58:41 AM</div>
+                  <div class="transcript-speaker">Host</div>
+                  <div class="transcript-text">First question: who wants an AI summary after the session?</div>
+                </div>
+              
+
+                <div class="transcript-row">
+                  <div class="transcript-time">12:58:41 AM</div>
+                  <div class="transcript-speaker">Audience</div>
+                  <div class="transcript-text">Hands are going up across the room.</div>
+                </div>
+              
+
+                <div class="transcript-row">
+                  <div class="transcript-time">12:58:41 AM</div>
+                  <div class="transcript-speaker">Host</div>
+                  <div class="transcript-text">We are counting hands and updating the crowd pulse dashboard.</div>
+                </div>
+              
+
+                <div class="transcript-row">
+                  <div class="transcript-time">12:58:41 AM</div>
+                  <div class="transcript-speaker">Audience</div>
+                  <div class="transcript-text">Question: how do you cluster similar questions?</div>
+                </div>
+              
+
+                <div class="transcript-row">
+                  <div class="transcript-time">12:58:41 AM</div>
+                  <div class="transcript-speaker">Host</div>
+                  <div class="transcript-text">We auto-group by topic and highlight the top votes.</div>
+                </div>
+              
+
+                <div class="transcript-row">
+                  <div class="transcript-time">12:58:41 AM</div>
+                  <div class="transcript-speaker">Audience</div>
+                  <div class="transcript-text">Can we see the leaderboard of questions?</div>
+                </div>
+              
+
+                <div class="transcript-row">
+                  <div class="transcript-time">12:58:41 AM</div>
+                  <div class="transcript-speaker">Host</div>
+                  <div class="transcript-text">Yes, it is visible with live vote totals.</div>
+                </div>
+              
+
+                <div class="transcript-row">
+                  <div class="transcript-time">12:58:41 AM</div>
+                  <div class="transcript-speaker">Audience</div>
+                  <div class="transcript-text">What is the current top theme?</div>
+                </div>
+              
+
+                <div class="transcript-row">
+                  <div class="transcript-time">12:58:41 AM</div>
+                  <div class="transcript-speaker">Host</div>
+                  <div class="transcript-text">Security and safety evaluations are leading.</div>
+                </div>
+              
+
+                <div class="transcript-row">
+                  <div class="transcript-time">12:58:41 AM</div>
+                  <div class="transcript-speaker">Audience</div>
+                  <div class="transcript-text">How fast can we switch to presenter view?</div>
+                </div>
+              
+
+                <div class="transcript-row">
+                  <div class="transcript-time">12:58:41 AM</div>
+                  <div class="transcript-speaker">Host</div>
+                  <div class="transcript-text">We trigger a fast-lane preset instantly.</div>
+                </div>
+              
+
+                <div class="transcript-row">
+                  <div class="transcript-time">12:58:41 AM</div>
+                  <div class="transcript-speaker">Audience</div>
+                  <div class="transcript-text">Add follow-up suggestions for the top theme.</div>
+                </div>
+              
+
+                <div class="transcript-row">
+                  <div class="transcript-time">12:58:41 AM</div>
+                  <div class="transcript-speaker">Host</div>
+                  <div class="transcript-text">We will generate follow-up prompts now.</div>
+                </div>
+              
+
+                <div class="transcript-row">
+                  <div class="transcript-time">12:58:41 AM</div>
+                  <div class="transcript-speaker">Audience</div>
+                  <div class="transcript-text">Let us capture action items from this crowd Q&amp;A.</div>
+                </div>
+              
+
+                <div class="transcript-row">
+                  <div class="transcript-time">12:58:41 AM</div>
+                  <div class="transcript-speaker">Host</div>
+                  <div class="transcript-text">We will log the summary to memory.</div>
+                </div>
+              
+
+                <div class="transcript-row">
+                  <div class="transcript-time">12:58:41 AM</div>
+                  <div class="transcript-speaker">Audience</div>
+                  <div class="transcript-text">Closing question: can we access this later?</div>
+                </div>
+              
+
+                <div class="transcript-row">
+                  <div class="transcript-time">12:58:41 AM</div>
+                  <div class="transcript-speaker">Host</div>
+                  <div class="transcript-text">Yes, the memory recall widget will surface it.</div>
+                </div>
+              
+
+                <div class="transcript-row">
+                  <div class="transcript-time">12:58:41 AM</div>
+                  <div class="transcript-speaker">Host</div>
+                  <div class="transcript-text">Thanks everyone, closing the live demo.</div>
+                </div>
+              
+        </div>
+      
+      </div>
+
+      <h2>Widget coverage</h2>
+      <div class="card">
+        
+        <div class="chip-grid">
+          
+                <div class="chip">
+                  <span>Canvas ready</span>
+                  <strong>1</strong>
+                </div>
+              
+
+                <div class="chip">
+                  <span>Transcript panel</span>
+                  <strong>1</strong>
+                </div>
+              
+
+                <div class="chip">
+                  <span>LivekitRoomConnector</span>
+                  <strong>1</strong>
+                </div>
+              
+
+                <div class="chip">
+                  <span>LivekitParticipantTile</span>
+                  <strong>4</strong>
+                </div>
+              
+
+                <div class="chip">
+                  <span>LiveKit tiles (demo)</span>
+                  <strong>1</strong>
+                </div>
+              
+
+                <div class="chip">
+                  <span>CrowdPulseWidget</span>
+                  <strong>5</strong>
+                </div>
+              
+
+                <div class="chip">
+                  <span>Crowd pulse widget</span>
+                  <strong>1</strong>
+                </div>
+              
+
+                <div class="chip">
+                  <span>Crowd pulse signals</span>
+                  <strong>1</strong>
+                </div>
+              
+
+                <div class="chip">
+                  <span>Crowd follow-ups</span>
+                  <strong>1</strong>
+                </div>
+              
+
+                <div class="chip">
+                  <span>Crowd pulse rehydrated after reload</span>
+                  <strong>1</strong>
+                </div>
+              
+
+                <div class="chip">
+                  <span>Crowd pulse removed</span>
+                  <strong>1</strong>
+                </div>
+              
+
+                <div class="chip">
+                  <span>Crowd pulse still removed after reload</span>
+                  <strong>1</strong>
+                </div>
+              
+
+                <div class="chip">
+                  <span>Crowd pulse recreated with same id</span>
+                  <strong>1</strong>
+                </div>
+              
+
+                <div class="chip">
+                  <span>Speaker preset</span>
+                  <strong>1</strong>
+                </div>
+              
+        </div>
+      
+      </div>
+
+      <h2>Journey evidence</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Step</th>
+            <th>Status</th>
+            <th>Duration (ms)</th>
+            <th>Screenshot</th>
+            <th>Notes</th>
+          </tr>
+        </thead>
+        <tbody>
+          
+        <tr>
+          <td>Sign in / sign up</td>
+          <td><span class="pill pill-pass">PASS</span></td>
+          <td>18065</td>
+          <td></td>
+          <td></td>
+        </tr>
+      
+
+        <tr>
+          <td>Canvas loaded</td>
+          <td><span class="pill pill-pass">PASS</span></td>
+          <td>13319</td>
+          <td><a href="./assets/2026-02-11/20260211-005809-crowd-00-canvas.png">view</a></td>
+          <td></td>
+        </tr>
+      
+
+        <tr>
+          <td>Simulate transcript (19 turns)</td>
+          <td><span class="pill pill-pass">PASS</span></td>
+          <td>811</td>
+          <td></td>
+          <td>19 turns</td>
+        </tr>
+      
+
+        <tr>
+          <td>Open transcript panel</td>
+          <td><span class="pill pill-pass">PASS</span></td>
+          <td>1446</td>
+          <td><a href="./assets/2026-02-11/20260211-005809-crowd-01-transcript.png">view</a></td>
+          <td></td>
+        </tr>
+      
+
+        <tr>
+          <td>Spawn LiveKit tiles (demo)</td>
+          <td><span class="pill pill-pass">PASS</span></td>
+          <td>1761</td>
+          <td><a href="./assets/2026-02-11/20260211-005809-crowd-02-livekit.png">view</a></td>
+          <td></td>
+        </tr>
+      
+
+        <tr>
+          <td>Create Crowd Pulse widget</td>
+          <td><span class="pill pill-pass">PASS</span></td>
+          <td>1030</td>
+          <td><a href="./assets/2026-02-11/20260211-005809-crowd-03-crowd-created.png">view</a></td>
+          <td>paint 0 ms</td>
+        </tr>
+      
+
+        <tr>
+          <td>Update Crowd Pulse with live signals</td>
+          <td><span class="pill pill-pass">PASS</span></td>
+          <td>1135</td>
+          <td><a href="./assets/2026-02-11/20260211-005809-crowd-04-crowd-signals.png">view</a></td>
+          <td>paint 12 ms</td>
+        </tr>
+      
+
+        <tr>
+          <td>Add follow-up prompts + scores</td>
+          <td><span class="pill pill-pass">PASS</span></td>
+          <td>971</td>
+          <td><a href="./assets/2026-02-11/20260211-005809-crowd-05-crowd-followups.png">view</a></td>
+          <td>paint 12 ms</td>
+        </tr>
+      
+
+        <tr>
+          <td>Reload + rehydrate Crowd Pulse widget</td>
+          <td><span class="pill pill-pass">PASS</span></td>
+          <td>4199</td>
+          <td><a href="./assets/2026-02-11/20260211-005809-crowd-06-crowd-rehydrated.png">view</a></td>
+          <td></td>
+        </tr>
+      
+
+        <tr>
+          <td>Remove Crowd Pulse widget</td>
+          <td><span class="pill pill-pass">PASS</span></td>
+          <td>2666</td>
+          <td><a href="./assets/2026-02-11/20260211-005809-crowd-07-crowd-removed.png">view</a></td>
+          <td>paint 3 ms</td>
+        </tr>
+      
+
+        <tr>
+          <td>Reload after remove (no respawn)</td>
+          <td><span class="pill pill-pass">PASS</span></td>
+          <td>3375</td>
+          <td><a href="./assets/2026-02-11/20260211-005809-crowd-08-crowd-removed-reload.png">view</a></td>
+          <td></td>
+        </tr>
+      
+
+        <tr>
+          <td>Recreate Crowd Pulse with same componentId</td>
+          <td><span class="pill pill-pass">PASS</span></td>
+          <td>1130</td>
+          <td><a href="./assets/2026-02-11/20260211-005809-crowd-09-crowd-recreated.png">view</a></td>
+          <td>paint 0 ms</td>
+        </tr>
+      
+
+        <tr>
+          <td>Apply speaker view preset</td>
+          <td><span class="pill pill-pass">PASS</span></td>
+          <td>937</td>
+          <td><a href="./assets/2026-02-11/20260211-005809-crowd-10-speaker-view.png">view</a></td>
+          <td>applied in 353 ms</td>
+        </tr>
+      
+        </tbody>
+      </table>
+
+      <h2>Speed benchmarks</h2>
+      
+        <div class="perf-grid">
+          
+                <div class="perf-card">
+                  <div class="perf-title">create_component (CrowdPulseWidget)</div>
+                  <div class="perf-meta">0 ms / 1300 ms</div>
+                  <div class="perf-bar">
+                    <span class="bar-pass" style="width:6%"></span>
+                  </div>
+                </div>
+              
+
+                <div class="perf-card">
+                  <div class="perf-title">update_component (CrowdPulseWidget)</div>
+                  <div class="perf-meta">12 ms / 900 ms</div>
+                  <div class="perf-bar">
+                    <span class="bar-pass" style="width:6%"></span>
+                  </div>
+                </div>
+              
+
+                <div class="perf-card">
+                  <div class="perf-title">update_component (CrowdPulseWidget follow-ups)</div>
+                  <div class="perf-meta">12 ms / 900 ms</div>
+                  <div class="perf-bar">
+                    <span class="bar-pass" style="width:6%"></span>
+                  </div>
+                </div>
+              
+
+                <div class="perf-card">
+                  <div class="perf-title">update_component (CrowdPulseWidget post-rehydrate)</div>
+                  <div class="perf-meta">20 ms / 900 ms</div>
+                  <div class="perf-bar">
+                    <span class="bar-pass" style="width:6%"></span>
+                  </div>
+                </div>
+              
+
+                <div class="perf-card">
+                  <div class="perf-title">remove_component (CrowdPulseWidget)</div>
+                  <div class="perf-meta">3 ms / 900 ms</div>
+                  <div class="perf-bar">
+                    <span class="bar-pass" style="width:6%"></span>
+                  </div>
+                </div>
+              
+
+                <div class="perf-card">
+                  <div class="perf-title">create_component (CrowdPulseWidget recreate same id)</div>
+                  <div class="perf-meta">0 ms / 1300 ms</div>
+                  <div class="perf-bar">
+                    <span class="bar-pass" style="width:6%"></span>
+                  </div>
+                </div>
+              
+
+                <div class="perf-card">
+                  <div class="perf-title">fast-lane view preset (speaker)</div>
+                  <div class="perf-meta">353 ms / 500 ms</div>
+                  <div class="perf-bar">
+                    <span class="bar-pass" style="width:71%"></span>
+                  </div>
+                </div>
+              
+        </div>
+      
+      <table>
+        <thead>
+          <tr>
+            <th>Operation</th>
+            <th>Duration (ms)</th>
+            <th>Budget (ms)</th>
+            <th>Result</th>
+          </tr>
+        </thead>
+        <tbody>
+          
+        <tr>
+          <td>create_component (CrowdPulseWidget)</td>
+          <td>0</td>
+          <td>1300</td>
+          <td><span class="pill pill-pass">PASS</span></td>
+        </tr>
+      
+
+        <tr>
+          <td>update_component (CrowdPulseWidget)</td>
+          <td>12</td>
+          <td>900</td>
+          <td><span class="pill pill-pass">PASS</span></td>
+        </tr>
+      
+
+        <tr>
+          <td>update_component (CrowdPulseWidget follow-ups)</td>
+          <td>12</td>
+          <td>900</td>
+          <td><span class="pill pill-pass">PASS</span></td>
+        </tr>
+      
+
+        <tr>
+          <td>update_component (CrowdPulseWidget post-rehydrate)</td>
+          <td>20</td>
+          <td>900</td>
+          <td><span class="pill pill-pass">PASS</span></td>
+        </tr>
+      
+
+        <tr>
+          <td>remove_component (CrowdPulseWidget)</td>
+          <td>3</td>
+          <td>900</td>
+          <td><span class="pill pill-pass">PASS</span></td>
+        </tr>
+      
+
+        <tr>
+          <td>create_component (CrowdPulseWidget recreate same id)</td>
+          <td>0</td>
+          <td>1300</td>
+          <td><span class="pill pill-pass">PASS</span></td>
+        </tr>
+      
+
+        <tr>
+          <td>fast-lane view preset (speaker)</td>
+          <td>353</td>
+          <td>500</td>
+          <td><span class="pill pill-pass">PASS</span></td>
+        </tr>
+      
+        </tbody>
+      </table>
+
+      <h2>System pulse</h2>
+      <div class="card">
+        
+        <div class="pulse-list">
+          
+                <div class="pulse-row">
+                  <span class="pulse-time">12:58:41 AM</span>
+                  <span class="pulse-type">transcript</span>
+                  <span class="pulse-tool"></span>
+                  <span class="pulse-note"></span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">12:58:41 AM</span>
+                  <span class="pulse-type">transcript</span>
+                  <span class="pulse-tool"></span>
+                  <span class="pulse-note"></span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">12:58:41 AM</span>
+                  <span class="pulse-type">transcript</span>
+                  <span class="pulse-tool"></span>
+                  <span class="pulse-note"></span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">12:58:41 AM</span>
+                  <span class="pulse-type">transcript</span>
+                  <span class="pulse-tool"></span>
+                  <span class="pulse-note"></span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">12:58:41 AM</span>
+                  <span class="pulse-type">transcript</span>
+                  <span class="pulse-tool"></span>
+                  <span class="pulse-note"></span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">12:58:41 AM</span>
+                  <span class="pulse-type">transcript</span>
+                  <span class="pulse-tool"></span>
+                  <span class="pulse-note"></span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">12:58:41 AM</span>
+                  <span class="pulse-type">transcript</span>
+                  <span class="pulse-tool"></span>
+                  <span class="pulse-note"></span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">12:58:41 AM</span>
+                  <span class="pulse-type">transcript</span>
+                  <span class="pulse-tool"></span>
+                  <span class="pulse-note"></span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">12:58:41 AM</span>
+                  <span class="pulse-type">transcript</span>
+                  <span class="pulse-tool"></span>
+                  <span class="pulse-note"></span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">12:58:41 AM</span>
+                  <span class="pulse-type">transcript</span>
+                  <span class="pulse-tool"></span>
+                  <span class="pulse-note"></span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">12:58:41 AM</span>
+                  <span class="pulse-type">transcript</span>
+                  <span class="pulse-tool"></span>
+                  <span class="pulse-note"></span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">12:58:41 AM</span>
+                  <span class="pulse-type">transcript</span>
+                  <span class="pulse-tool"></span>
+                  <span class="pulse-note"></span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">12:58:41 AM</span>
+                  <span class="pulse-type">transcript</span>
+                  <span class="pulse-tool"></span>
+                  <span class="pulse-note"></span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">12:58:41 AM</span>
+                  <span class="pulse-type">transcript</span>
+                  <span class="pulse-tool"></span>
+                  <span class="pulse-note"></span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">12:58:41 AM</span>
+                  <span class="pulse-type">transcript</span>
+                  <span class="pulse-tool"></span>
+                  <span class="pulse-note"></span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">12:58:41 AM</span>
+                  <span class="pulse-type">transcript</span>
+                  <span class="pulse-tool"></span>
+                  <span class="pulse-note"></span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">12:58:41 AM</span>
+                  <span class="pulse-type">transcript</span>
+                  <span class="pulse-tool"></span>
+                  <span class="pulse-note"></span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">12:58:41 AM</span>
+                  <span class="pulse-type">transcript</span>
+                  <span class="pulse-tool"></span>
+                  <span class="pulse-note"></span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">12:58:41 AM</span>
+                  <span class="pulse-type">transcript</span>
+                  <span class="pulse-tool"></span>
+                  <span class="pulse-note"></span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">12:58:43 AM</span>
+                  <span class="pulse-type">tool_call</span>
+                  <span class="pulse-tool">create_component</span>
+                  <span class="pulse-note">Create LiveKit room connector</span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">12:58:43 AM</span>
+                  <span class="pulse-type">tool_result</span>
+                  <span class="pulse-tool">create_component</span>
+                  <span class="pulse-note">Create LiveKit room connector</span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">12:58:43 AM</span>
+                  <span class="pulse-type">tool_call</span>
+                  <span class="pulse-tool">create_component</span>
+                  <span class="pulse-note">Create LiveKit participant tile</span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">12:58:44 AM</span>
+                  <span class="pulse-type">tool_metrics</span>
+                  <span class="pulse-tool">create_component</span>
+                  <span class="pulse-note"></span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">12:58:44 AM</span>
+                  <span class="pulse-type">tool_result</span>
+                  <span class="pulse-tool">create_component</span>
+                  <span class="pulse-note">Create LiveKit participant tile</span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">12:58:44 AM</span>
+                  <span class="pulse-type">tool_call</span>
+                  <span class="pulse-tool">create_component</span>
+                  <span class="pulse-note">Create LiveKit participant tile</span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">12:58:44 AM</span>
+                  <span class="pulse-type">tool_result</span>
+                  <span class="pulse-tool">create_component</span>
+                  <span class="pulse-note">Create LiveKit participant tile</span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">12:58:44 AM</span>
+                  <span class="pulse-type">tool_metrics</span>
+                  <span class="pulse-tool">create_component</span>
+                  <span class="pulse-note"></span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">12:58:44 AM</span>
+                  <span class="pulse-type">tool_metrics</span>
+                  <span class="pulse-tool">create_component</span>
+                  <span class="pulse-note"></span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">12:58:44 AM</span>
+                  <span class="pulse-type">tool_call</span>
+                  <span class="pulse-tool">create_component</span>
+                  <span class="pulse-note">Create LiveKit participant tile</span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">12:58:44 AM</span>
+                  <span class="pulse-type">tool_result</span>
+                  <span class="pulse-tool">create_component</span>
+                  <span class="pulse-note">Create LiveKit participant tile</span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">12:58:44 AM</span>
+                  <span class="pulse-type">tool_call</span>
+                  <span class="pulse-tool">create_component</span>
+                  <span class="pulse-note">Create LiveKit participant tile</span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">12:58:44 AM</span>
+                  <span class="pulse-type">tool_result</span>
+                  <span class="pulse-tool">create_component</span>
+                  <span class="pulse-note">Create LiveKit participant tile</span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">12:58:44 AM</span>
+                  <span class="pulse-type">tool_metrics</span>
+                  <span class="pulse-tool">create_component</span>
+                  <span class="pulse-note"></span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">12:58:44 AM</span>
+                  <span class="pulse-type">tool_metrics</span>
+                  <span class="pulse-tool">create_component</span>
+                  <span class="pulse-note"></span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">12:58:45 AM</span>
+                  <span class="pulse-type">tool_call</span>
+                  <span class="pulse-tool">create_component</span>
+                  <span class="pulse-note">Create Crowd Pulse widget</span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">12:58:45 AM</span>
+                  <span class="pulse-type">tool_result</span>
+                  <span class="pulse-tool">create_component</span>
+                  <span class="pulse-note">Create Crowd Pulse widget</span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">12:58:45 AM</span>
+                  <span class="pulse-type">tool_metrics</span>
+                  <span class="pulse-tool">create_component</span>
+                  <span class="pulse-note"></span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">12:58:46 AM</span>
+                  <span class="pulse-type">tool_call</span>
+                  <span class="pulse-tool">update_component</span>
+                  <span class="pulse-note">Update Crowd Pulse signals</span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">12:58:46 AM</span>
+                  <span class="pulse-type">tool_result</span>
+                  <span class="pulse-tool">update_component</span>
+                  <span class="pulse-note">Update Crowd Pulse signals</span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">12:58:46 AM</span>
+                  <span class="pulse-type">tool_metrics</span>
+                  <span class="pulse-tool">update_component</span>
+                  <span class="pulse-note"></span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">12:58:47 AM</span>
+                  <span class="pulse-type">tool_call</span>
+                  <span class="pulse-tool">update_component</span>
+                  <span class="pulse-note">Update Crowd Pulse follow-ups</span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">12:58:47 AM</span>
+                  <span class="pulse-type">tool_result</span>
+                  <span class="pulse-tool">update_component</span>
+                  <span class="pulse-note">Update Crowd Pulse follow-ups</span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">12:58:47 AM</span>
+                  <span class="pulse-type">mcp_call</span>
+                  <span class="pulse-tool">memory_upsert</span>
+                  <span class="pulse-note">Crowd Q&amp;A follow-ups</span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">12:58:47 AM</span>
+                  <span class="pulse-type">mcp_result</span>
+                  <span class="pulse-tool">memory_upsert</span>
+                  <span class="pulse-note"></span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">12:58:47 AM</span>
+                  <span class="pulse-type">tool_metrics</span>
+                  <span class="pulse-tool">update_component</span>
+                  <span class="pulse-note"></span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">12:58:51 AM</span>
+                  <span class="pulse-type">tool_call</span>
+                  <span class="pulse-tool">update_component</span>
+                  <span class="pulse-note">Update Crowd Pulse after rehydrate</span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">12:58:52 AM</span>
+                  <span class="pulse-type">tool_result</span>
+                  <span class="pulse-tool">update_component</span>
+                  <span class="pulse-note">Update Crowd Pulse after rehydrate</span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">12:58:52 AM</span>
+                  <span class="pulse-type">tool_metrics</span>
+                  <span class="pulse-tool">update_component</span>
+                  <span class="pulse-note"></span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">12:58:52 AM</span>
+                  <span class="pulse-type">tool_call</span>
+                  <span class="pulse-tool">remove_component</span>
+                  <span class="pulse-note">Remove Crowd Pulse widget</span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">12:58:53 AM</span>
+                  <span class="pulse-type">tool_result</span>
+                  <span class="pulse-tool">remove_component</span>
+                  <span class="pulse-note">Remove Crowd Pulse widget</span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">12:58:53 AM</span>
+                  <span class="pulse-type">tool_metrics</span>
+                  <span class="pulse-tool">remove_component</span>
+                  <span class="pulse-note"></span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">12:58:53 AM</span>
+                  <span class="pulse-type">tool_call</span>
+                  <span class="pulse-tool">update_component</span>
+                  <span class="pulse-note">Update Crowd Pulse after remove</span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">12:58:53 AM</span>
+                  <span class="pulse-type">tool_result</span>
+                  <span class="pulse-tool">update_component</span>
+                  <span class="pulse-note">Update Crowd Pulse after remove</span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">12:58:58 AM</span>
+                  <span class="pulse-type">tool_call</span>
+                  <span class="pulse-tool">create_component</span>
+                  <span class="pulse-note">Recreate Crowd Pulse widget</span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">12:58:59 AM</span>
+                  <span class="pulse-type">tool_result</span>
+                  <span class="pulse-tool">create_component</span>
+                  <span class="pulse-note">Recreate Crowd Pulse widget</span>
+                </div>
+              
+
+                <div class="pulse-row">
+                  <span class="pulse-time">12:58:59 AM</span>
+                  <span class="pulse-type">tool_metrics</span>
+                  <span class="pulse-tool">create_component</span>
+                  <span class="pulse-note"></span>
+                </div>
+              
+        </div>
+      
+      </div>
+
+      <h2>Tool call timeline</h2>
+      
+        <table>
+          <thead>
+            <tr>
+              <th>Time</th>
+              <th>Type</th>
+              <th>Tool</th>
+              <th>Duration</th>
+              <th>Notes</th>
+            </tr>
+          </thead>
+          <tbody>
+            
+                  <tr>
+                    <td>12:58:43 AM</td>
+                    <td>tool_call</td>
+                    <td>create_component</td>
+                    <td></td>
+                    <td>LivekitRoomConnector</td>
+                  </tr>
+                
+
+                  <tr>
+                    <td>12:58:43 AM</td>
+                    <td>tool_result</td>
+                    <td>create_component</td>
+                    <td>0</td>
+                    <td>LivekitRoomConnector</td>
+                  </tr>
+                
+
+                  <tr>
+                    <td>12:58:43 AM</td>
+                    <td>tool_call</td>
+                    <td>create_component</td>
+                    <td></td>
+                    <td>LivekitParticipantTile</td>
+                  </tr>
+                
+
+                  <tr>
+                    <td>12:58:44 AM</td>
+                    <td>tool_metrics</td>
+                    <td>create_component</td>
+                    <td>0</td>
+                    <td>LivekitRoomConnector</td>
+                  </tr>
+                
+
+                  <tr>
+                    <td>12:58:44 AM</td>
+                    <td>tool_result</td>
+                    <td>create_component</td>
+                    <td>0</td>
+                    <td>LivekitParticipantTile</td>
+                  </tr>
+                
+
+                  <tr>
+                    <td>12:58:44 AM</td>
+                    <td>tool_call</td>
+                    <td>create_component</td>
+                    <td></td>
+                    <td>LivekitParticipantTile</td>
+                  </tr>
+                
+
+                  <tr>
+                    <td>12:58:44 AM</td>
+                    <td>tool_result</td>
+                    <td>create_component</td>
+                    <td>0</td>
+                    <td>LivekitParticipantTile</td>
+                  </tr>
+                
+
+                  <tr>
+                    <td>12:58:44 AM</td>
+                    <td>tool_metrics</td>
+                    <td>create_component</td>
+                    <td>0</td>
+                    <td>LivekitParticipantTile</td>
+                  </tr>
+                
+
+                  <tr>
+                    <td>12:58:44 AM</td>
+                    <td>tool_metrics</td>
+                    <td>create_component</td>
+                    <td>0</td>
+                    <td>LivekitParticipantTile</td>
+                  </tr>
+                
+
+                  <tr>
+                    <td>12:58:44 AM</td>
+                    <td>tool_call</td>
+                    <td>create_component</td>
+                    <td></td>
+                    <td>LivekitParticipantTile</td>
+                  </tr>
+                
+
+                  <tr>
+                    <td>12:58:44 AM</td>
+                    <td>tool_result</td>
+                    <td>create_component</td>
+                    <td>0</td>
+                    <td>LivekitParticipantTile</td>
+                  </tr>
+                
+
+                  <tr>
+                    <td>12:58:44 AM</td>
+                    <td>tool_call</td>
+                    <td>create_component</td>
+                    <td></td>
+                    <td>LivekitParticipantTile</td>
+                  </tr>
+                
+
+                  <tr>
+                    <td>12:58:44 AM</td>
+                    <td>tool_result</td>
+                    <td>create_component</td>
+                    <td>0</td>
+                    <td>LivekitParticipantTile</td>
+                  </tr>
+                
+
+                  <tr>
+                    <td>12:58:44 AM</td>
+                    <td>tool_metrics</td>
+                    <td>create_component</td>
+                    <td>0</td>
+                    <td>LivekitParticipantTile</td>
+                  </tr>
+                
+
+                  <tr>
+                    <td>12:58:44 AM</td>
+                    <td>tool_metrics</td>
+                    <td>create_component</td>
+                    <td>0</td>
+                    <td>LivekitParticipantTile</td>
+                  </tr>
+                
+
+                  <tr>
+                    <td>12:58:45 AM</td>
+                    <td>tool_call</td>
+                    <td>create_component</td>
+                    <td></td>
+                    <td>CrowdPulseWidget</td>
+                  </tr>
+                
+
+                  <tr>
+                    <td>12:58:45 AM</td>
+                    <td>tool_result</td>
+                    <td>create_component</td>
+                    <td>0</td>
+                    <td>CrowdPulseWidget</td>
+                  </tr>
+                
+
+                  <tr>
+                    <td>12:58:45 AM</td>
+                    <td>tool_metrics</td>
+                    <td>create_component</td>
+                    <td>0</td>
+                    <td>CrowdPulseWidget</td>
+                  </tr>
+                
+
+                  <tr>
+                    <td>12:58:46 AM</td>
+                    <td>tool_call</td>
+                    <td>update_component</td>
+                    <td></td>
+                    <td></td>
+                  </tr>
+                
+
+                  <tr>
+                    <td>12:58:46 AM</td>
+                    <td>tool_result</td>
+                    <td>update_component</td>
+                    <td>12</td>
+                    <td></td>
+                  </tr>
+                
+
+                  <tr>
+                    <td>12:58:46 AM</td>
+                    <td>tool_metrics</td>
+                    <td>update_component</td>
+                    <td>12</td>
+                    <td>CrowdPulseWidget</td>
+                  </tr>
+                
+
+                  <tr>
+                    <td>12:58:47 AM</td>
+                    <td>tool_call</td>
+                    <td>update_component</td>
+                    <td></td>
+                    <td></td>
+                  </tr>
+                
+
+                  <tr>
+                    <td>12:58:47 AM</td>
+                    <td>tool_result</td>
+                    <td>update_component</td>
+                    <td>12</td>
+                    <td></td>
+                  </tr>
+                
+
+                  <tr>
+                    <td>12:58:47 AM</td>
+                    <td>tool_metrics</td>
+                    <td>update_component</td>
+                    <td>12</td>
+                    <td>CrowdPulseWidget</td>
+                  </tr>
+                
+
+                  <tr>
+                    <td>12:58:51 AM</td>
+                    <td>tool_call</td>
+                    <td>update_component</td>
+                    <td></td>
+                    <td></td>
+                  </tr>
+                
+
+                  <tr>
+                    <td>12:58:52 AM</td>
+                    <td>tool_result</td>
+                    <td>update_component</td>
+                    <td>20</td>
+                    <td></td>
+                  </tr>
+                
+
+                  <tr>
+                    <td>12:58:52 AM</td>
+                    <td>tool_metrics</td>
+                    <td>update_component</td>
+                    <td>20</td>
+                    <td>CrowdPulseWidget</td>
+                  </tr>
+                
+
+                  <tr>
+                    <td>12:58:52 AM</td>
+                    <td>tool_call</td>
+                    <td>remove_component</td>
+                    <td></td>
+                    <td></td>
+                  </tr>
+                
+
+                  <tr>
+                    <td>12:58:53 AM</td>
+                    <td>tool_result</td>
+                    <td>remove_component</td>
+                    <td>3</td>
+                    <td></td>
+                  </tr>
+                
+
+                  <tr>
+                    <td>12:58:53 AM</td>
+                    <td>tool_metrics</td>
+                    <td>remove_component</td>
+                    <td>3</td>
+                    <td>CrowdPulseWidget</td>
+                  </tr>
+                
+
+                  <tr>
+                    <td>12:58:53 AM</td>
+                    <td>tool_call</td>
+                    <td>update_component</td>
+                    <td></td>
+                    <td></td>
+                  </tr>
+                
+
+                  <tr>
+                    <td>12:58:53 AM</td>
+                    <td>tool_result</td>
+                    <td>update_component</td>
+                    <td></td>
+                    <td></td>
+                  </tr>
+                
+
+                  <tr>
+                    <td>12:58:58 AM</td>
+                    <td>tool_call</td>
+                    <td>create_component</td>
+                    <td></td>
+                    <td>CrowdPulseWidget</td>
+                  </tr>
+                
+
+                  <tr>
+                    <td>12:58:59 AM</td>
+                    <td>tool_result</td>
+                    <td>create_component</td>
+                    <td>0</td>
+                    <td>CrowdPulseWidget</td>
+                  </tr>
+                
+
+                  <tr>
+                    <td>12:58:59 AM</td>
+                    <td>tool_metrics</td>
+                    <td>create_component</td>
+                    <td>0</td>
+                    <td>CrowdPulseWidget</td>
+                  </tr>
+                
+          </tbody>
+        </table>
+      
+
+      <h2>MCP timeline</h2>
+      
+        <table>
+          <thead>
+            <tr>
+              <th>Time</th>
+              <th>Type</th>
+              <th>Tool</th>
+              <th>Duration</th>
+              <th>Notes</th>
+            </tr>
+          </thead>
+          <tbody>
+            
+                  <tr>
+                    <td>12:58:47 AM</td>
+                    <td>mcp_call</td>
+                    <td>memory_upsert</td>
+                    <td></td>
+                    <td></td>
+                  </tr>
+                
+
+                  <tr>
+                    <td>12:58:47 AM</td>
+                    <td>mcp_result</td>
+                    <td>memory_upsert</td>
+                    <td>240</td>
+                    <td></td>
+                  </tr>
+                
+          </tbody>
+        </table>
+      
+
+      <h2>Assets</h2>
+      
+        <div class="asset-grid">
+          
+                <figure>
+                  <img src="./assets/2026-02-11/20260211-005809-crowd-00-canvas.png" alt="Canvas ready" />
+                  <figcaption>Canvas ready</figcaption>
+                </figure>
+              
+
+                <figure>
+                  <img src="./assets/2026-02-11/20260211-005809-crowd-01-transcript.png" alt="Transcript panel" />
+                  <figcaption>Transcript panel</figcaption>
+                </figure>
+              
+
+                <figure>
+                  
+                  <figcaption>LivekitRoomConnector</figcaption>
+                </figure>
+              
+
+                <figure>
+                  
+                  <figcaption>LivekitParticipantTile</figcaption>
+                </figure>
+              
+
+                <figure>
+                  
+                  <figcaption>LivekitParticipantTile</figcaption>
+                </figure>
+              
+
+                <figure>
+                  
+                  <figcaption>LivekitParticipantTile</figcaption>
+                </figure>
+              
+
+                <figure>
+                  
+                  <figcaption>LivekitParticipantTile</figcaption>
+                </figure>
+              
+
+                <figure>
+                  <img src="./assets/2026-02-11/20260211-005809-crowd-02-livekit.png" alt="LiveKit tiles (demo)" />
+                  <figcaption>LiveKit tiles (demo)</figcaption>
+                </figure>
+              
+
+                <figure>
+                  
+                  <figcaption>CrowdPulseWidget</figcaption>
+                </figure>
+              
+
+                <figure>
+                  <img src="./assets/2026-02-11/20260211-005809-crowd-03-crowd-created.png" alt="Crowd pulse widget" />
+                  <figcaption>Crowd pulse widget</figcaption>
+                </figure>
+              
+
+                <figure>
+                  
+                  <figcaption>CrowdPulseWidget</figcaption>
+                </figure>
+              
+
+                <figure>
+                  <img src="./assets/2026-02-11/20260211-005809-crowd-04-crowd-signals.png" alt="Crowd pulse signals" />
+                  <figcaption>Crowd pulse signals</figcaption>
+                </figure>
+              
+
+                <figure>
+                  
+                  <figcaption>CrowdPulseWidget</figcaption>
+                </figure>
+              
+
+                <figure>
+                  <img src="./assets/2026-02-11/20260211-005809-crowd-05-crowd-followups.png" alt="Crowd follow-ups" />
+                  <figcaption>Crowd follow-ups</figcaption>
+                </figure>
+              
+
+                <figure>
+                  
+                  <figcaption>CrowdPulseWidget</figcaption>
+                </figure>
+              
+
+                <figure>
+                  <img src="./assets/2026-02-11/20260211-005809-crowd-06-crowd-rehydrated.png" alt="Crowd pulse rehydrated after reload" />
+                  <figcaption>Crowd pulse rehydrated after reload</figcaption>
+                </figure>
+              
+
+                <figure>
+                  <img src="./assets/2026-02-11/20260211-005809-crowd-07-crowd-removed.png" alt="Crowd pulse removed" />
+                  <figcaption>Crowd pulse removed</figcaption>
+                </figure>
+              
+
+                <figure>
+                  <img src="./assets/2026-02-11/20260211-005809-crowd-08-crowd-removed-reload.png" alt="Crowd pulse still removed after reload" />
+                  <figcaption>Crowd pulse still removed after reload</figcaption>
+                </figure>
+              
+
+                <figure>
+                  
+                  <figcaption>CrowdPulseWidget</figcaption>
+                </figure>
+              
+
+                <figure>
+                  <img src="./assets/2026-02-11/20260211-005809-crowd-09-crowd-recreated.png" alt="Crowd pulse recreated with same id" />
+                  <figcaption>Crowd pulse recreated with same id</figcaption>
+                </figure>
+              
+
+                <figure>
+                  <img src="./assets/2026-02-11/20260211-005809-crowd-10-speaker-view.png" alt="Speaker preset" />
+                  <figcaption>Speaker preset</figcaption>
+                </figure>
+              
+        </div>
+      
+
+      <h2>Event breakdown</h2>
+      <div class="card">
+        
+        <div class="chip-grid">
+          
+                <div class="chip">
+                  <span>asset</span>
+                  <strong>21</strong>
+                </div>
+              
+
+                <div class="chip">
+                  <span>transcript</span>
+                  <strong>19</strong>
+                </div>
+              
+
+                <div class="chip">
+                  <span>tool call</span>
+                  <strong>12</strong>
+                </div>
+              
+
+                <div class="chip">
+                  <span>tool result</span>
+                  <strong>12</strong>
+                </div>
+              
+
+                <div class="chip">
+                  <span>tool metrics</span>
+                  <strong>11</strong>
+                </div>
+              
+
+                <div class="chip">
+                  <span>run start</span>
+                  <strong>3</strong>
+                </div>
+              
+
+                <div class="chip">
+                  <span>mcp call</span>
+                  <strong>1</strong>
+                </div>
+              
+
+                <div class="chip">
+                  <span>mcp result</span>
+                  <strong>1</strong>
+                </div>
+              
+        </div>
+      
+      </div>
+
+      <h2>Notes</h2>
+      <ul><li>Crowd pulse widget captures hand counts + question queue in real time.</li>
+<li>Question clustering and follow-ups are reflected in the widget.</li>
+<li>Speaker preset is applied via tldraw:applyViewPreset.</li>
+<li>Transcript events are simulated for deterministic story capture.</li></ul>
+    </body>
+  </html>

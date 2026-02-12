@@ -43,6 +43,10 @@ export function useCanvasComponentStore(
     () => new Map(),
   );
   const [addedMessageIds, setAddedMessageIds] = useState<Set<string>>(() => new Set());
+  const messageIdToShapeIdRef = useRef<Map<string, TLShapeId>>(messageIdToShapeIdMap);
+  useEffect(() => {
+    messageIdToShapeIdRef.current = messageIdToShapeIdMap;
+  }, [messageIdToShapeIdMap]);
 
   const findTiledPlacement = useCallback(
     (size: { w: number; h: number }): { x: number; y: number } => {
@@ -207,18 +211,94 @@ export function useCanvasComponentStore(
   }, []);
 
   const drainPendingComponents = useCallback(
-    (onMounted?: (messageId: string, name?: string) => void) => {
+    (
+      onMounted?: (messageId: string, name?: string) => void,
+      shouldMount?: (messageId: string, name?: string) => boolean,
+    ) => {
       if (!editor || pendingComponentsRef.current.length === 0) return;
 
       const queued = [...pendingComponentsRef.current];
       pendingComponentsRef.current = [];
       queued.forEach(({ messageId, node, name }) => {
+        if (shouldMount && !shouldMount(messageId, name)) {
+          logger.debug('⏭️  Skipping queued component mount:', name || 'component', { messageId });
+          return;
+        }
         addComponentToCanvas(messageId, node, name);
         onMounted?.(messageId, name);
         logger.debug('▶️  Rendered queued component:', name || 'component');
       });
     },
     [addComponentToCanvas, editor, logger],
+  );
+
+  const removeComponentFromCanvas = useCallback(
+    (messageId: string) => {
+      const trimmedId = String(messageId || '').trim();
+      if (!trimmedId) return { ok: false as const, reason: 'missing_message_id' as const };
+
+      // Always remove the node first so the UI doesn't keep rendering it while we delete the shape.
+      componentStore.current.delete(trimmedId);
+      emitComponentStoreUpdated();
+
+      setAddedMessageIds((prev) => {
+        if (!prev.has(trimmedId)) return prev;
+        const next = new Set(prev);
+        next.delete(trimmedId);
+        return next;
+      });
+
+      setMessageIdToShapeIdMap((prev) => {
+        if (!prev.has(trimmedId)) return prev;
+        const next = new Map(prev);
+        next.delete(trimmedId);
+        return next;
+      });
+
+      if (!editor) {
+        logger.warn('Editor not available, cannot remove component on canvas.', { messageId: trimmedId });
+        return { ok: false as const, reason: 'no_editor' as const };
+      }
+
+      let shapeId = messageIdToShapeIdRef.current.get(trimmedId);
+      if (!shapeId) {
+        const candidate = (editor.getCurrentPageShapes?.() as any[] | undefined)?.find(
+          (shape) => shape?.type === 'custom' && String(shape?.props?.customComponent || '') === trimmedId,
+        );
+        if (candidate?.id) {
+          shapeId = candidate.id as TLShapeId;
+        }
+      }
+
+      if (shapeId) {
+        try {
+          editor.deleteShapes?.([shapeId as any]);
+        } catch (error) {
+          logger.warn('Failed to delete custom component shape', { messageId: trimmedId, shapeId, error });
+        }
+      }
+
+      try {
+        const existingState = systemRegistry.getState(trimmedId);
+        systemRegistry.ingestState({
+          id: trimmedId,
+          kind: 'component_removed',
+          payload: {
+            componentName: trimmedId,
+            shapeId: shapeId || null,
+            canvasId: editor.store.id || 'default-canvas',
+          },
+          version: (existingState?.version || 0) + 1,
+          ts: Date.now(),
+          origin: 'browser',
+        } as any);
+      } catch {
+        /* noop */
+      }
+
+      return { ok: true as const, shapeId: shapeId ?? null };
+    },
+    [editor, logger],
   );
 
   useMergeComponentStateBridge(editor, logger, messageIdToShapeIdMap, setMessageIdToShapeIdMap);
@@ -233,6 +313,7 @@ export function useCanvasComponentStore(
     addComponentToCanvas,
     queuePendingComponent,
     drainPendingComponents,
+    removeComponentFromCanvas,
   };
 }
 

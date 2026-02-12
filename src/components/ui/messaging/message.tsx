@@ -323,6 +323,7 @@ const MessageRenderedComponentArea = React.forwardRef<
                     new CustomEvent('custom:showComponent', {
                       detail: {
                         messageId: message?.id ?? `msg-${Date.now()}`,
+                        lifecycleAction: 'create',
                         component: message.renderedComponent,
                       },
                     }),

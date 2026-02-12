@@ -108,6 +108,7 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
   const { thread } = usecustom();
   const [editor, setEditor] = useState<Editor | null>(null);
   const previousThreadId = useRef<string | null>(null);
+  const removedMessageIdsRef = useRef<Set<string>>(new Set());
   const livekitCtx = React.useContext(CanvasLiveKitContext);
   const room = useRoomContext();
   const bus = React.useMemo(() => createLiveKitBus(room), [room]);
@@ -207,6 +208,87 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
     return off;
   }, [bus, emitComponentSnapshot, livekitCtx?.roomName, room?.name]);
   const logger = createLogger('CanvasSpace');
+  const getRemovedStorageKey = React.useCallback(() => {
+    if (typeof window === 'undefined') {
+      return 'present:removed-components:server';
+    }
+    try {
+      const id = new URL(window.location.href).searchParams.get('id')?.trim();
+      if (id) {
+        return `present:removed-components:${id}`;
+      }
+    } catch {
+      /* noop */
+    }
+    const roomScoped = (livekitCtx?.roomName || room?.name || '').trim();
+    return roomScoped
+      ? `present:removed-components:${roomScoped}`
+      : 'present:removed-components:unknown';
+  }, [livekitCtx?.roomName, room?.name]);
+  const readRemovedMessageIds = React.useCallback(() => {
+    if (typeof window === 'undefined') {
+      return new Set<string>();
+    }
+    try {
+      const raw = window.localStorage.getItem(getRemovedStorageKey());
+      if (!raw) return new Set<string>();
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return new Set<string>();
+      return new Set(parsed.filter((item): item is string => typeof item === 'string' && item.trim().length > 0));
+    } catch {
+      return new Set<string>();
+    }
+  }, [getRemovedStorageKey]);
+  const persistRemovedMessageIds = React.useCallback(
+    (next: Set<string>) => {
+      if (typeof window === 'undefined') return;
+      try {
+        const values = Array.from(next).filter((item) => item.trim().length > 0);
+        if (values.length === 0) {
+          window.localStorage.removeItem(getRemovedStorageKey());
+          return;
+        }
+        window.localStorage.setItem(getRemovedStorageKey(), JSON.stringify(values));
+      } catch {
+        /* noop */
+      }
+    },
+    [getRemovedStorageKey],
+  );
+  const isMessageRemoved = React.useCallback((messageId: string) => {
+    const trimmedId = String(messageId || '').trim();
+    if (!trimmedId) return false;
+    return removedMessageIdsRef.current.has(trimmedId);
+  }, []);
+  const markMessageRemoved = React.useCallback(
+    (messageId: string) => {
+      const trimmedId = String(messageId || '').trim();
+      if (!trimmedId) return;
+      if (removedMessageIdsRef.current.has(trimmedId)) return;
+      const next = new Set(removedMessageIdsRef.current);
+      next.add(trimmedId);
+      removedMessageIdsRef.current = next;
+      persistRemovedMessageIds(next);
+    },
+    [persistRemovedMessageIds],
+  );
+  const clearRemovedMessageId = React.useCallback(
+    (messageId: string) => {
+      const trimmedId = String(messageId || '').trim();
+      if (!trimmedId) return;
+      if (!removedMessageIdsRef.current.has(trimmedId)) return;
+      const next = new Set(removedMessageIdsRef.current);
+      next.delete(trimmedId);
+      removedMessageIdsRef.current = next;
+      persistRemovedMessageIds(next);
+    },
+    [persistRemovedMessageIds],
+  );
+
+  useEffect(() => {
+    removedMessageIdsRef.current = readRemovedMessageIds();
+  }, [readRemovedMessageIds]);
+
   const branding = useTldrawBranding({
     defaultFont: 'sans',
     defaultSize: 'm',
@@ -230,7 +312,20 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
     addComponentToCanvas,
     queuePendingComponent,
     drainPendingComponents,
+    removeComponentFromCanvas,
   } = useCanvasComponentStore(editor, logger);
+
+  const addComponentToCanvasTracked = React.useCallback(
+    (messageId: string, component: React.ReactNode, componentName?: string) => {
+      const trimmedId = String(messageId || '').trim();
+      if (trimmedId && removedMessageIdsRef.current.has(trimmedId)) {
+        logger.debug('⛔ Skipping add for removed component id', { messageId: trimmedId, componentName });
+        return;
+      }
+      addComponentToCanvas(messageId, component, componentName);
+    },
+    [addComponentToCanvas, logger],
+  );
 
   const { onDragOver, onDrop, toggleComponentToolbox, showOnboarding } = useCanvasInteractions({
     editor,
@@ -244,6 +339,7 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
     setMessageIdToShapeIdMap,
     setAddedMessageIds,
     logger,
+    isMessageRemoved,
   });
 
   useCanvasThreadReset({
@@ -258,12 +354,33 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
 
   useCanvasEvents({
     editor,
-    addComponentToCanvas,
+    addComponentToCanvas: addComponentToCanvasTracked,
     queuePendingComponent,
     drainPendingComponents,
     bus,
     logger,
+    isMessageRemoved,
+    clearRemovedMessageId,
   });
+
+  useEffect(() => {
+    const handler = (event: Event) => {
+      try {
+        const detail = (event as CustomEvent<{ messageId?: string; componentId?: string }>).detail;
+        const messageIdRaw = detail?.messageId ?? detail?.componentId;
+        const messageId = typeof messageIdRaw === 'string' ? messageIdRaw.trim() : '';
+        if (!messageId) return;
+        markMessageRemoved(messageId);
+        removeComponentFromCanvas(messageId);
+      } catch (error) {
+        logger.warn('remove_component handler failed', error);
+      }
+    };
+    window.addEventListener('present:remove_component', handler as EventListener);
+    return () => {
+      window.removeEventListener('present:remove_component', handler as EventListener);
+    };
+  }, [markMessageRemoved, removeComponentFromCanvas, logger]);
 
   // Provide shape utils synchronously at first render so the store registers them on mount
   const customShapeUtils = React.useMemo(() => {
@@ -284,6 +401,7 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
     if (!existing || existing.length === 0) return;
     logger.info(`🧭 Reconciling ${existing.length} components from registry`);
     existing.forEach((info) => {
+      if (isMessageRemoved(info.messageId)) return;
       if (addedMessageIds.has(info.messageId)) return;
       const compDef = components.find((c) => c.name === info.componentType);
       let node: React.ReactNode = null;
@@ -301,10 +419,10 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
         // Fallback minimal node
         node = React.createElement('div', null, `${info.componentType}`);
       }
-      addComponentToCanvas(info.messageId, node, info.componentType);
+      addComponentToCanvasTracked(info.messageId, node, info.componentType);
       logger.debug('✅ Reconciled component:', info.componentType, info.messageId);
     });
-  }, [editor, addComponentToCanvas, addedMessageIds, logger]);
+  }, [editor, addComponentToCanvasTracked, addedMessageIds, isMessageRemoved, logger]);
 
   /**
    * Effect to automatically add the latest component from thread messages (optimized with debouncing)
@@ -324,6 +442,9 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
         const latestMessage: any = messagesWithComponents[messagesWithComponents.length - 1];
 
         const messageId = latestMessage.id || `msg-${Date.now()}`;
+        if (isMessageRemoved(messageId)) {
+          return;
+        }
         // Check using addedMessageIds state
         if (!addedMessageIds.has(messageId) && latestMessage.renderedComponent) {
           // Normalize renderedComponent into a real React element when needed
@@ -358,7 +479,7 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
             }
           }
 
-          addComponentToCanvas(
+          addComponentToCanvasTracked(
             messageId,
             node,
             latestMessage.role === 'assistant' ? 'AI Response' : 'User Input',
@@ -368,7 +489,7 @@ export function CanvasSpace({ className, onTranscriptToggle }: CanvasSpaceProps)
     }, 100); // 100ms debounce
 
     return () => clearTimeout(timeoutId);
-  }, [thread?.messages, editor, addComponentToCanvas, addedMessageIds]);
+  }, [thread?.messages, editor, addComponentToCanvasTracked, addedMessageIds, isMessageRemoved]);
 
 
   // Export functionality is now handled by TldrawWithPersistence component

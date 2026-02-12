@@ -74,6 +74,21 @@ export class VoiceComponentLedger {
     this.getLastComponentMap().set(type, messageId);
   }
 
+  clearLastComponentForType(type: string, expectedMessageId?: string) {
+    const map = this.getLastComponentMap();
+    const current = map.get(type);
+    if (!current) return false;
+
+    const normalizedExpected =
+      typeof expectedMessageId === 'string' ? expectedMessageId.trim() : '';
+    if (normalizedExpected && current !== normalizedExpected) {
+      return false;
+    }
+
+    map.delete(type);
+    return true;
+  }
+
   getLastCreatedComponentId() {
     const key = this.getRoomKey();
     return this.lastCreatedComponentIdByRoom.get(key) ?? null;
@@ -170,6 +185,31 @@ export class VoiceComponentLedger {
     const intentId = this.getMessageIntentMap().get(messageId);
     if (!intentId) return undefined;
     return this.getIntentMap().get(intentId);
+  }
+
+  clearIntentForMessage(messageId: string) {
+    const normalizedMessageId = messageId.trim();
+    if (!normalizedMessageId) return undefined;
+
+    const messageIntentMap = this.getMessageIntentMap();
+    const intentId = messageIntentMap.get(normalizedMessageId);
+    if (!intentId) return undefined;
+
+    messageIntentMap.delete(normalizedMessageId);
+
+    const intentMap = this.getIntentMap();
+    const entry = intentMap.get(intentId);
+    intentMap.delete(intentId);
+
+    if (entry?.slot) {
+      const slotMap = this.getSlotMap();
+      const currentIntent = slotMap.get(entry.slot);
+      if (currentIntent === intentId) {
+        slotMap.delete(entry.slot);
+      }
+    }
+
+    return entry;
   }
 
   cleanupExpired(now: number = Date.now()) {

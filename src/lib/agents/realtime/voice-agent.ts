@@ -445,6 +445,8 @@ Your only output is function calls. Never use plain text unless absolutely neces
     let activeScorecard: { componentId: string; intentId: string; topic: string } | null = null;
     const getLastComponentForType = (type: string) => componentLedger.getLastComponentForType(type);
     const setLastComponentForType = (type: string, messageId: string) => componentLedger.setLastComponentForType(type, messageId);
+    const clearLastComponentForType = (type: string, expectedMessageId?: string) =>
+      componentLedger.clearLastComponentForType(type, expectedMessageId);
 
     const rememberResearchPanel = (candidate?: string | null) => {
       if (typeof candidate !== 'string') return;
@@ -769,6 +771,27 @@ Your only output is function calls. Never use plain text unless absolutely neces
     };
     const setComponentEntry = (id: string, entry: ComponentRegistryEntry) => {
       componentRegistry.set(id, entry);
+    };
+    const pruneRemovedComponentState = (resolvedId: string, typeHint?: string) => {
+      const existing = getComponentEntry(resolvedId);
+      const normalizedTypeHint =
+        typeof typeHint === 'string' && typeHint.trim().length > 0 ? typeHint.trim() : '';
+      const removedType = existing?.type || normalizedTypeHint;
+
+      componentRegistry.delete(resolvedId);
+
+      if (removedType) {
+        clearLastComponentForType(removedType, resolvedId);
+      }
+      if (getLastCreatedComponentId() === resolvedId) {
+        setLastCreatedComponentId(null);
+      }
+      if (removedType === 'ResearchPanel' && lastResearchPanelId === resolvedId) {
+        lastResearchPanelId = null;
+      }
+
+      componentLedger.clearIntentForMessage(resolvedId);
+      return removedType;
     };
     const findLatestScorecardEntryInRoom = () => {
       const key = roomKey();
@@ -1521,6 +1544,57 @@ Your only output is function calls. Never use plain text unless absolutely neces
           return { status: 'queued', componentId: resolvedId };
         },
       }),
+      remove_component: llm.tool({
+        description: 'Remove an existing component from the canvas (delete its UI widget).',
+        parameters: z.object({
+          componentId: z.string().nullish(),
+          type: z.string().nullish(),
+          intentId: z.string().nullish(),
+          slot: z.string().nullish(),
+          allowLast: z.boolean().nullish(),
+        }),
+        execute: async (args) => {
+          let resolvedId =
+            typeof args.componentId === 'string' && args.componentId.trim().length > 0
+              ? args.componentId.trim()
+              : '';
+
+          const typeHint = typeof args.type === 'string' && args.type.trim().length > 0 ? args.type.trim() : '';
+          if (!resolvedId && typeHint) {
+            const byType = getLastComponentForType(typeHint);
+            if (byType) resolvedId = byType;
+          }
+
+          if (!resolvedId && args.allowLast) {
+            const lastCreated = getLastCreatedComponentId();
+            if (lastCreated) resolvedId = lastCreated;
+          }
+
+          if (!resolvedId) {
+            console.warn('[VoiceAgent] remove_component missing componentId and no resolvable target', args);
+            return { status: 'ERROR', message: 'Missing componentId for remove_component' };
+          }
+
+          const slot = typeof args.slot === 'string' && args.slot.trim().length > 0 ? args.slot.trim() : undefined;
+          const existing = getComponentEntry(resolvedId);
+          const intentId =
+            typeof args.intentId === 'string' && args.intentId.trim().length > 0
+              ? args.intentId.trim()
+              : existing?.intentId;
+
+          const payload: JsonObject = { componentId: resolvedId };
+          if (intentId) payload.intentId = intentId;
+          if (slot) payload.slot = slot;
+          if (typeHint) payload.type = typeHint;
+
+          await sendToolCall('remove_component', payload);
+
+          // Local bookkeeping so follow-up tool calls don't keep targeting a removed widget.
+          pruneRemovedComponentState(resolvedId, existing?.type || typeHint);
+
+          return { status: 'queued', componentId: resolvedId };
+        },
+      }),
       dispatch_to_conductor: llm.tool({
         description: 'Ask the conductor to run a steward for complex tasks like flowcharts or canvas drawing.',
         parameters: z.object({ task: z.string(), params: toolParameters }),
@@ -2017,6 +2091,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
             ![
               'create_component',
               'update_component',
+              'remove_component',
               'dispatch_to_conductor',
               'reserve_component',
               'resolve_component',
@@ -2135,6 +2210,21 @@ Your only output is function calls. Never use plain text unless absolutely neces
               });
             }
             setLastCreatedComponentId(resolvedId);
+          }
+          if (fnCall.name === 'remove_component') {
+            const resolvedId = resolveComponentId(args);
+            if (!resolvedId) {
+              console.warn('[VoiceAgent] Skipping remove_component without componentId', args);
+              continue;
+            }
+            args.componentId = resolvedId;
+
+            const existingFT = getComponentEntry(resolvedId);
+            const componentType =
+              existingFT?.type ||
+              (typeof args.type === 'string' && args.type.trim().length > 0 ? args.type.trim() : '');
+
+            pruneRemovedComponentState(resolvedId, componentType);
           }
           if (fnCall.name === 'reserve_component') {
             const componentType = typeof args.type === 'string' ? args.type.trim() : '';
