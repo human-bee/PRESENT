@@ -1,8 +1,12 @@
 import { z } from 'zod';
+import { NextRequest, NextResponse } from 'next/server';
+import { BYOK_ENABLED } from '@/lib/agents/shared/byok-flags';
+import { resolveRequestUserId } from '@/lib/supabase/server/resolve-request-user';
+import { getDecryptedUserModelKey } from '@/lib/agents/shared/user-model-keys';
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   const json = await req.json();
-  const { prompt, userAPIKey, iterativeMode, style } = z
+  const { prompt, userAPIKey, iterativeMode, style, model: requestModel } = z
     .object({
       prompt: z.string(),
       iterativeMode: z.boolean(),
@@ -12,8 +16,18 @@ export async function POST(req: Request) {
     })
     .parse(json);
 
-  // Check for Together API key
-  const apiKey = userAPIKey || process.env.TOGETHER_API_KEY;
+  let userId: string | null = null;
+  if (BYOK_ENABLED) {
+    userId = await resolveRequestUserId(req);
+    if (!userId) {
+      return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+    }
+  }
+
+  // Check for Together API key (BYOK uses user-stored keys; demo/bypass can still use env or legacy body field)
+  const togetherApiKey = BYOK_ENABLED
+    ? await getDecryptedUserModelKey({ userId: userId!, provider: 'together' })
+    : (userAPIKey || process.env.TOGETHER_API_KEY);
 
   // Build the final prompt with style if provided
   let finalPrompt = prompt;
@@ -23,7 +37,6 @@ export async function POST(req: Request) {
 
   let response;
   try {
-    const requestModel = (json as any).model;
     let geminiError = null;
     let providerUsed: string | null = null;
     let fallbackReason: string | null = null;
@@ -32,7 +45,9 @@ export async function POST(req: Request) {
       console.log('[generateImages] Using Gemini 3 Pro (nanobanana) model...');
       try {
         // Prefer GEMINI_API_KEY (Google AI Studio) if available, otherwise fallback to Vertex AI
-        const geminiApiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
+        const geminiApiKey = BYOK_ENABLED
+          ? await getDecryptedUserModelKey({ userId: userId!, provider: 'google' })
+          : (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY);
         console.log('[generateImages] GEMINI_API_KEY available:', !!geminiApiKey);
 
         if (geminiApiKey) {
@@ -104,6 +119,11 @@ export async function POST(req: Request) {
             providerUsed,
             fallbackReason,
           });
+        }
+
+        if (BYOK_ENABLED) {
+          // No server/provider fallback in BYOK mode.
+          throw new Error('BYOK_MISSING_KEY:google');
         }
 
         providerUsed = 'vertex_ai';
@@ -193,7 +213,7 @@ export async function POST(req: Request) {
     }
 
     // Default / Fallback to Together AI (FLUX)
-    if (!apiKey) {
+    if (!togetherApiKey) {
       if (geminiError) {
         throw geminiError; // Re-throw Gemini error if we can't fallback
       }
@@ -205,7 +225,7 @@ export async function POST(req: Request) {
     response = await fetch('https://api.together.xyz/v1/images/generations', {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${apiKey}`,
+        Authorization: `Bearer ${togetherApiKey}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({

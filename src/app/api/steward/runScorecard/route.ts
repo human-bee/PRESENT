@@ -1,14 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { BYOK_ENABLED } from '@/lib/agents/shared/byok-flags';
 import { AgentTaskQueue } from '@/lib/agents/shared/queue';
 import { isFastStewardReady } from '@/lib/agents/fast-steward-config';
 import { runDebateScorecardSteward } from '@/lib/agents/debate-judge';
 import { runDebateScorecardStewardFast } from '@/lib/agents/subagents/debate-steward-fast';
+import { assertCanvasMember, parseCanvasIdFromRoom } from '@/lib/agents/shared/canvas-billing';
+import { resolveRequestUserId } from '@/lib/supabase/server/resolve-request-user';
+import { getDecryptedUserModelKey } from '@/lib/agents/shared/user-model-keys';
 import { createLogger } from '@/lib/logging';
 import { parseJsonObject, stewardRunScorecardRequestSchema } from '@/lib/agents/shared/schemas';
 import type { JsonObject, JsonValue } from '@/lib/utils/json-schema';
 
 export const runtime = 'nodejs';
 
+let queue: AgentTaskQueue | null = null;
+function getQueue() {
+  if (!queue) queue = new AgentTaskQueue();
+  return queue;
+}
 const QUEUE_DIRECT_FALLBACK_ENABLED = process.env.SCORECARD_QUEUE_DIRECT_FALLBACK === 'true';
 const logger = createLogger('api:steward:runScorecard');
 
@@ -40,6 +49,28 @@ export async function POST(req: NextRequest) {
 
     const trimmedRoom = room.trim();
     const trimmedComponentId = componentId.trim();
+
+    let billingUserId: string | null = null;
+    if (BYOK_ENABLED) {
+      const requesterUserId = await resolveRequestUserId(req);
+      if (!requesterUserId) {
+        return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+      }
+      const canvasId = parseCanvasIdFromRoom(trimmedRoom);
+      if (!canvasId) {
+        return NextResponse.json({ error: 'invalid_room' }, { status: 400 });
+      }
+      try {
+        const membership = await assertCanvasMember({ canvasId, requesterUserId });
+        billingUserId = membership.ownerUserId;
+      } catch (error) {
+        const code = (error as Error & { code?: string }).code;
+        if (code === 'forbidden') {
+          return NextResponse.json({ error: 'forbidden' }, { status: 403 });
+        }
+        throw error;
+      }
+    }
     const resolvedWindow =
       windowMs === undefined || windowMs === null ? undefined : Number(windowMs);
     if (resolvedWindow !== undefined && Number.isNaN(resolvedWindow)) {
@@ -81,12 +112,12 @@ export async function POST(req: NextRequest) {
       prompt: normalizedPrompt,
       intent: normalizedIntent,
       topic: normalizedTopic,
-    });
+      ...(billingUserId ? { billingUserId } : {}),
+    } as const);
 
     try {
       // Lazily instantiate so `next build` doesn't require Supabase env vars.
-      const queue = new AgentTaskQueue();
-      const enqueueResult = await queue.enqueueTask({
+      const enqueueResult = await getQueue().enqueueTask({
         room: trimmedRoom,
         task: normalizedTask,
         params: normalizedParams,
@@ -101,7 +132,11 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: 'Queue unavailable' }, { status: 503 });
       }
 
-      const useFast = isFastStewardReady() && normalizedTask !== 'scorecard.fact_check';
+      const cerebrasKey =
+        BYOK_ENABLED && billingUserId
+          ? await getDecryptedUserModelKey({ userId: billingUserId, provider: 'cerebras' })
+          : null;
+      const useFast = normalizedTask !== 'scorecard.fact_check' && isFastStewardReady(cerebrasKey ?? undefined);
       try {
         if (useFast) {
           await runDebateScorecardStewardFast({
@@ -111,6 +146,7 @@ export async function POST(req: NextRequest) {
             summary: normalizedSummary,
             prompt: normalizedPrompt,
             topic: normalizedTopic,
+            ...(billingUserId ? { billingUserId } : {}),
           });
         } else {
           await runDebateScorecardSteward({
@@ -121,6 +157,7 @@ export async function POST(req: NextRequest) {
             summary: normalizedSummary,
             prompt: normalizedPrompt,
             topic: normalizedTopic,
+            ...(billingUserId ? { billingUserId } : {}),
           });
         }
         return NextResponse.json({ status: 'executed_fallback' }, { status: 202 });

@@ -17,15 +17,20 @@ import Cerebras from '@cerebras/cerebras_cloud_sdk';
 export const FAST_STEWARD_MODEL = process.env.FAST_STEWARD_MODEL || 'llama3.3-70b';
 
 // Shared Cerebras client - reused across all fast stewards
-let _client: Cerebras | null = null;
+const clientByKey = new Map<string, Cerebras>();
 
-export function getCerebrasClient(): Cerebras {
-  if (!_client) {
-    _client = new Cerebras({
-      apiKey: process.env.CEREBRAS_API_KEY,
-    });
+export function getCerebrasClient(apiKey?: string): Cerebras {
+  const resolved = (apiKey ?? process.env.CEREBRAS_API_KEY ?? '').trim();
+  if (!resolved) {
+    throw new Error('CEREBRAS_API_KEY missing for FAST stewards');
   }
-  return _client;
+
+  const cached = clientByKey.get(resolved);
+  if (cached) return cached;
+
+  const client = new Cerebras({ apiKey: resolved });
+  clientByKey.set(resolved, client);
+  return client;
 }
 
 // Helper to get model with optional per-steward override
@@ -37,10 +42,9 @@ export function getModelForSteward(stewardEnvVar?: string): string {
 }
 
 // Check if Cerebras is configured
-export function isFastStewardReady(): boolean {
-  return Boolean(process.env.CEREBRAS_API_KEY);
+export function isFastStewardReady(apiKey?: string): boolean {
+  return Boolean((apiKey ?? process.env.CEREBRAS_API_KEY ?? '').trim());
 }
-
 
 
 

@@ -14,6 +14,7 @@ import { createLiveKitBus } from '../../../lib/livekit/livekit-bus';
 import { useContextKey } from '@/components/RoomScopedProviders';
 import { useRealtimeSessionTranscript } from '@/hooks/use-realtime-session-transcript';
 import { supabase } from '@/lib/supabase';
+import { fetchWithSupabaseAuth } from '@/lib/supabase/auth-headers';
 import { CanvasLiveKitContext } from '../livekit/livekit-room-connector';
 import { useAuth } from '@/hooks/use-auth';
 import { useAllTranscripts, useTranscriptStore, type Transcript as StoreTranscript } from '@/lib/stores/transcript-store';
@@ -430,7 +431,7 @@ export const MessageThreadCollapsible = React.forwardRef<
           };
         }
       } catch { }
-      const res = await fetch('/api/steward/runCanvas', {
+      const res = await fetchWithSupabaseAuth('/api/steward/runCanvas', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
