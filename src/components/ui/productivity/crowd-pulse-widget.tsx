@@ -20,6 +20,28 @@ import {
 } from './crowd-pulse-hand-utils';
 import { WidgetFrame } from './widget-frame';
 
+const normalizeStatus = (value: unknown): CrowdPulseState['status'] | undefined => {
+  if (typeof value !== 'string') return undefined;
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) return undefined;
+  if (normalized === 'idle' || normalized === 'counting' || normalized === 'locked' || normalized === 'q_and_a') {
+    return normalized;
+  }
+  if (normalized === 'q&a' || normalized === 'qa' || normalized === 'q and a') {
+    return 'q_and_a';
+  }
+  return undefined;
+};
+
+const formatStatusLabel = (status: CrowdPulseState['status']) =>
+  status === 'q_and_a' ? 'Q&A' : status.toUpperCase();
+
+const normalizeQuestionText = (value: unknown): string | null => {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+};
+
 export default function CrowdPulseWidget(props: CrowdPulseWidgetProps) {
   const {
     __custom_message_id,
@@ -38,7 +60,7 @@ export default function CrowdPulseWidget(props: CrowdPulseWidgetProps) {
   const [state, setState] = useState<CrowdPulseState>(() => ({
     title: initial.title ?? 'Crowd Pulse',
     prompt: initial.prompt,
-    status: initial.status ?? 'idle',
+    status: normalizeStatus(initial.status) ?? 'idle',
     handCount: initial.handCount ?? 0,
     peakCount: initial.peakCount ?? 0,
     confidence: initial.confidence ?? 0,
@@ -50,7 +72,7 @@ export default function CrowdPulseWidget(props: CrowdPulseWidgetProps) {
     version: typeof initial.version === 'number' ? initial.version : 1,
     lastUpdated: initial.lastUpdated,
     demoMode: initial.demoMode ?? false,
-    sensorEnabled: initial.sensorEnabled ?? true,
+    sensorEnabled: initial.sensorEnabled ?? false,
     showPreview: initial.showPreview ?? true,
     className,
   }));
@@ -67,19 +89,24 @@ export default function CrowdPulseWidget(props: CrowdPulseWidgetProps) {
   const applyPatch = useCallback((patch: Record<string, unknown>) => {
     setState((prev) => {
       const next: CrowdPulseState = { ...prev };
+      const hasExplicitMetricsPatch =
+        typeof patch.handCount === 'number' ||
+        typeof patch.peakCount === 'number' ||
+        typeof patch.confidence === 'number' ||
+        typeof patch.noiseLevel === 'number';
+
       if (typeof patch.title === 'string') next.title = patch.title;
       if (typeof patch.prompt === 'string') next.prompt = patch.prompt;
-      if (typeof patch.status === 'string') {
-        const status = patch.status as CrowdPulseState['status'];
-        if (status === 'idle' || status === 'counting' || status === 'locked') {
-          next.status = status;
-        }
+      const normalizedStatus = normalizeStatus(patch.status);
+      if (normalizedStatus) {
+        next.status = normalizedStatus;
       }
       if (typeof patch.handCount === 'number') next.handCount = patch.handCount;
       if (typeof patch.peakCount === 'number') next.peakCount = patch.peakCount;
       if (typeof patch.confidence === 'number') next.confidence = patch.confidence;
       if (typeof patch.noiseLevel === 'number') next.noiseLevel = patch.noiseLevel;
-      if (typeof patch.activeQuestion === 'string') next.activeQuestion = patch.activeQuestion;
+      const nextQuestionText = normalizeQuestionText(patch.activeQuestion);
+      if (nextQuestionText) next.activeQuestion = nextQuestionText;
       if (Array.isArray(patch.questions)) next.questions = patch.questions as CrowdPulseState['questions'];
       if (Array.isArray(patch.scoreboard)) next.scoreboard = patch.scoreboard as CrowdPulseState['scoreboard'];
       if (Array.isArray(patch.followUps)) next.followUps = patch.followUps as string[];
@@ -87,7 +114,27 @@ export default function CrowdPulseWidget(props: CrowdPulseWidgetProps) {
       if (typeof patch.version === 'number') next.version = patch.version;
       if (typeof patch.demoMode === 'boolean') next.demoMode = patch.demoMode;
       if (typeof patch.sensorEnabled === 'boolean') next.sensorEnabled = patch.sensorEnabled;
+      if (hasExplicitMetricsPatch && typeof patch.sensorEnabled !== 'boolean') {
+        // Steward-supplied metrics should not be immediately overwritten by local camera telemetry.
+        next.sensorEnabled = false;
+      }
       if (typeof patch.showPreview === 'boolean') next.showPreview = patch.showPreview;
+
+      if (!Array.isArray(patch.questions) && nextQuestionText) {
+        const exists = next.questions.some((question) => question.text.trim().toLowerCase() === nextQuestionText.toLowerCase());
+        if (!exists) {
+          next.questions = [
+            {
+              id: `q-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
+              text: nextQuestionText,
+              votes: 0,
+              status: 'open',
+            },
+            ...next.questions,
+          ].slice(0, 20);
+        }
+      }
+
       return next;
     });
   }, []);
@@ -304,12 +351,14 @@ export default function CrowdPulseWidget(props: CrowdPulseWidgetProps) {
             'rounded-full px-2 py-1 text-xs font-semibold border',
             state.status === 'locked'
               ? 'bg-success-surface text-success border-success-surface'
+              : state.status === 'q_and_a'
+                ? 'bg-success-surface text-success border-success-surface'
               : state.status === 'counting'
                 ? 'bg-info-surface text-info border-info-surface'
                 : 'bg-surface-secondary text-secondary border-default',
           )}
         >
-          {state.status.toUpperCase()}
+          {formatStatusLabel(state.status)}
         </span>
       }
       className={className}

@@ -5,6 +5,9 @@ import { jsonObjectSchema, type JsonObject } from '@/lib/utils/json-schema';
 import {
   broadcastAgentPrompt,
   broadcastToolCall,
+  commitDebateScorecard,
+  getDebateScorecard,
+  listCanvasComponents,
   type CanvasAgentPromptPayload,
 } from '@/lib/agents/shared/supabase-context';
 import { activeFlowchartSteward } from '../subagents/flowchart-steward-registry';
@@ -13,7 +16,7 @@ import { AgentTaskQueue } from '@/lib/agents/shared/queue';
 import { resolveIntent, getObject, getString } from './intent-resolver';
 import { runDebateScorecardSteward, seedScorecardState } from '@/lib/agents/debate-judge';
 import { runDebateScorecardStewardFast } from '@/lib/agents/subagents/debate-steward-fast';
-import { getDebateScorecard, commitDebateScorecard } from '@/lib/agents/shared/supabase-context';
+import { isFastStewardReady } from '@/lib/agents/fast-steward-config';
 import {
   createDefaultPlayers,
   debateSideEnum,
@@ -43,7 +46,7 @@ import {
 import { formatFairyContextParts } from '@/lib/fairy-context/format';
 import { runSummaryStewardFast } from '@/lib/agents/subagents/summary-steward-fast';
 import { runCrowdPulseStewardFast } from '@/lib/agents/subagents/crowd-pulse-steward-fast';
-import { getBooleanFlag } from '@/lib/feature-flags';
+import { getBooleanFlag, isFairyClientAgentEnabled } from '@/lib/feature-flags';
 import { createLogger } from '@/lib/logging';
 import {
   applyOrchestrationEnvelope,
@@ -60,7 +63,7 @@ const fairyIntentDedupe = new Map<string, number>();
 const CLIENT_CANVAS_AGENT_ENABLED = getBooleanFlag(process.env.NEXT_PUBLIC_CANVAS_AGENT_CLIENT_ENABLED, false);
 // Fairy is now the default canvas manipulation layer; allow overriding via env for emergency fallback.
 const FAIRY_UI_ENABLED = getBooleanFlag(process.env.NEXT_PUBLIC_FAIRY_ENABLED, true);
-const FAIRY_CLIENT_AGENT_ENABLED = getBooleanFlag(process.env.NEXT_PUBLIC_FAIRY_CLIENT_AGENT_ENABLED, true);
+const FAIRY_CLIENT_AGENT_ENABLED = isFairyClientAgentEnabled(process.env.NEXT_PUBLIC_FAIRY_CLIENT_AGENT_ENABLED);
 const CANVAS_STEWARD_ENABLED = (process.env.CANVAS_STEWARD_SERVER_EXECUTION ?? 'true') === 'true';
 const DEFAULT_SUMMARY_MEMORY_TOOL = process.env.SUMMARY_MEMORY_MCP_TOOL;
 const DEFAULT_SUMMARY_AUTO_SEND = process.env.SUMMARY_MEMORY_AUTO_SEND === 'true';
@@ -540,7 +543,38 @@ async function dispatchFastLane(intent: FairyIntent, decision: FairyRouteDecisio
 }
 
 async function ensureWidgetComponent(intent: FairyIntent, componentType: string) {
-  const componentId = intent.componentId?.trim() || `${componentType}-${intent.id}`;
+  const requestedId = intent.componentId?.trim();
+  let components: Awaited<ReturnType<typeof listCanvasComponents>> = [];
+  try {
+    components = await listCanvasComponents(intent.room);
+  } catch (error) {
+    logger.warn('[Conductor] failed to list canvas components for widget ensure', {
+      room: intent.room,
+      componentType,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+
+  if (requestedId) {
+    const existingById = components.find((component) => component.componentId === requestedId);
+    if (existingById && existingById.componentType === componentType) {
+      return requestedId;
+    }
+  }
+
+  const existingByType = components
+    .filter((component) => component.componentType === componentType)
+    .sort((a, b) => {
+      const aStamp = typeof a.lastUpdated === 'number' ? a.lastUpdated : 0;
+      const bStamp = typeof b.lastUpdated === 'number' ? b.lastUpdated : 0;
+      return bStamp - aStamp;
+    })[0];
+
+  if (existingByType?.componentId) {
+    return existingByType.componentId;
+  }
+
+  const componentId = requestedId || `${componentType}-${intent.id}`;
   await broadcastToolCall({
     room: intent.room,
     tool: 'create_component',
@@ -1293,7 +1327,7 @@ export async function executeTask(taskName: string, params: JsonObject) {
     const parsed = ScorecardTaskArgs.parse(params);
     const isFactCheckTask =
       taskName === 'scorecard.fact_check' || taskName === 'scorecard.verify' || taskName === 'scorecard.refute';
-    const useFast = !isFactCheckTask && taskName !== 'scorecard.seed';
+    const canUseFast = !isFactCheckTask && taskName !== 'scorecard.seed' && isFastStewardReady();
 
     return withScorecardLock(`${parsed.room}:${parsed.componentId}`, async () => {
       if (taskName === 'scorecard.patch') {
@@ -1327,7 +1361,7 @@ export async function executeTask(taskName: string, params: JsonObject) {
         room: parsed.room,
         componentId: parsed.componentId,
         intent: isFactCheckTask ? 'scorecard.fact_check' : parsed.intent ?? taskName,
-        useFast,
+        canUseFast,
       });
 
       const factCheckDirective =
@@ -1344,34 +1378,63 @@ export async function executeTask(taskName: string, params: JsonObject) {
             ? `${factCheckDirective}\n\nUser request: ${parsed.summary}`
             : factCheckDirective ?? parsed.prompt;
 
-      const output = useFast
-        ? await runDebateScorecardStewardFast({
+      let output: unknown;
+      let usedFast = false;
+
+      if (canUseFast) {
+        try {
+          const fastOutput = await runDebateScorecardStewardFast({
             room: parsed.room,
             componentId: parsed.componentId,
-            intent: isFactCheckTask ? 'scorecard.fact_check' : parsed.intent ?? taskName,
-            summary: parsed.summary,
-            prompt: stewardPrompt,
-            topic: parsed.topic,
-          })
-        : await runDebateScorecardSteward({
-            room: parsed.room,
-            componentId: parsed.componentId,
-            windowMs: parsed.windowMs,
             intent: isFactCheckTask ? 'scorecard.fact_check' : parsed.intent ?? taskName,
             summary: parsed.summary,
             prompt: stewardPrompt,
             topic: parsed.topic,
           });
+          if (
+            fastOutput &&
+            typeof fastOutput === 'object' &&
+            (fastOutput as { status?: unknown }).status === 'error'
+          ) {
+            throw new Error(
+              String(
+                (fastOutput as { summary?: unknown }).summary ??
+                  'fast scorecard steward returned error status',
+              ),
+            );
+          }
+          output = fastOutput;
+          usedFast = true;
+        } catch (error) {
+          logger.warn('[Conductor] fast scorecard steward failed; falling back to full steward', {
+            room: parsed.room,
+            componentId: parsed.componentId,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
+
+      if (typeof output === 'undefined') {
+        output = await runDebateScorecardSteward({
+          room: parsed.room,
+          componentId: parsed.componentId,
+          windowMs: parsed.windowMs,
+          intent: isFactCheckTask ? 'scorecard.fact_check' : parsed.intent ?? taskName,
+          summary: parsed.summary,
+          prompt: stewardPrompt,
+          topic: parsed.topic,
+        });
+      }
 
       logger.info('[Conductor] scorecard steward completed', {
         taskName,
         room: parsed.room,
         componentId: parsed.componentId,
         ok: true,
-        useFast,
+        usedFast,
       });
 
-      if (useFast) {
+      if (usedFast) {
         try {
           await maybeEnqueueAutoFactChecks(parsed, taskName);
         } catch (error) {

@@ -7,7 +7,11 @@ const statusStyles: Record<CrowdPulseState['status'], string> = {
   idle: 'bg-surface-secondary text-secondary border border-default',
   counting: 'bg-info-surface text-info border border-info-surface',
   locked: 'bg-success-surface text-success border border-success-surface',
+  q_and_a: 'bg-success-surface text-success border border-success-surface',
 };
+
+const formatStatusLabel = (status: CrowdPulseState['status']) =>
+  status === 'q_and_a' ? 'Q&A' : status.toUpperCase();
 
 const formatPercent = (value: number) => `${Math.round(value * 100)}%`;
 
@@ -30,7 +34,7 @@ export function CrowdPulseHeader({ title, prompt, status, updatedLabel }: Header
       </div>
       <div className="flex flex-col items-end gap-2">
         <span className={cn('rounded-full px-2 py-1 text-xs font-semibold', statusStyles[status])}>
-          {status.toUpperCase()}
+          {formatStatusLabel(status)}
         </span>
         <span className="text-[10px] text-tertiary">Updated {updatedLabel}</span>
       </div>
