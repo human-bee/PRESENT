@@ -20,6 +20,8 @@ import {
 } from './crowd-pulse-hand-utils';
 import { WidgetFrame } from './widget-frame';
 
+const STEWARD_METRICS_HOLD_MS = 15_000;
+
 const normalizeStatus = (value: unknown): CrowdPulseState['status'] | undefined => {
   if (typeof value !== 'string') return undefined;
   const normalized = value.trim().toLowerCase();
@@ -72,7 +74,7 @@ export default function CrowdPulseWidget(props: CrowdPulseWidgetProps) {
     version: typeof initial.version === 'number' ? initial.version : 1,
     lastUpdated: initial.lastUpdated,
     demoMode: initial.demoMode ?? false,
-    sensorEnabled: initial.sensorEnabled ?? false,
+    sensorEnabled: initial.sensorEnabled ?? true,
     showPreview: initial.showPreview ?? true,
     className,
   }));
@@ -85,6 +87,7 @@ export default function CrowdPulseWidget(props: CrowdPulseWidgetProps) {
   const lastDetectRef = useRef<number>(0);
   const lastEmitRef = useRef<number>(0);
   const peakRef = useRef<number>(state.peakCount ?? 0);
+  const stewardMetricsHoldUntilRef = useRef<number>(0);
 
   const applyPatch = useCallback((patch: Record<string, unknown>) => {
     setState((prev) => {
@@ -114,9 +117,9 @@ export default function CrowdPulseWidget(props: CrowdPulseWidgetProps) {
       if (typeof patch.version === 'number') next.version = patch.version;
       if (typeof patch.demoMode === 'boolean') next.demoMode = patch.demoMode;
       if (typeof patch.sensorEnabled === 'boolean') next.sensorEnabled = patch.sensorEnabled;
-      if (hasExplicitMetricsPatch && typeof patch.sensorEnabled !== 'boolean') {
-        // Steward-supplied metrics should not be immediately overwritten by local camera telemetry.
-        next.sensorEnabled = false;
+      if (hasExplicitMetricsPatch) {
+        // Prevent local camera telemetry from immediately clobbering explicit steward updates.
+        stewardMetricsHoldUntilRef.current = Date.now() + STEWARD_METRICS_HOLD_MS;
       }
       if (typeof patch.showPreview === 'boolean') next.showPreview = patch.showPreview;
 
@@ -272,6 +275,10 @@ export default function CrowdPulseWidget(props: CrowdPulseWidgetProps) {
           if (metrics.handCount > peakRef.current) peakRef.current = metrics.handCount;
 
           if (now - lastEmitRef.current > 120) {
+            if (Date.now() < stewardMetricsHoldUntilRef.current) {
+              animationRef.current = requestAnimationFrame(loop);
+              return;
+            }
             lastEmitRef.current = now;
             setState((prev) => {
               const next: CrowdPulseState = { ...prev };

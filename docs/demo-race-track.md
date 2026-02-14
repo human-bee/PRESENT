@@ -3,7 +3,7 @@
 Goal: a repeatable “lap” that stress-tests the **Voice Agent → Tool calls → Widgets → Linear MCP/GraphQL → Stewards** pipeline.
 
 For a concurrency-first variant that combines CrowdPulse + DebateScorecard + Fairy canvas orchestration, see:
-`/Users/bsteinher/.codex/worktrees/eba1/PRESENT/docs/demo-race-night-v2.md`
+`docs/demo-race-night-v2.md`
 
 ## Starting Line (consistent for every lap)
 
