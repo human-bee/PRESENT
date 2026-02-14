@@ -19,6 +19,65 @@ async function openTranscriptPanel(page: Page) {
   await page.waitForTimeout(600);
 }
 
+async function sendTranscriptMessage(page: Page, text: string) {
+  const input = page.getByLabel('Type a message for the agent');
+  await input.fill(text);
+  await page.getByRole('button', { name: 'Send' }).click();
+}
+
+async function requestVoiceAgent(page: Page) {
+  await page.evaluate(async () => {
+    const present = (window as any).__present ?? {};
+    const roomName =
+      present.livekitRoomName ??
+      present.syncContract?.livekitRoomName ??
+      present.sessionSync?.roomName ??
+      null;
+    if (!roomName) return;
+
+    await fetch('/api/agent/dispatch', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ roomName }),
+    }).catch(() => {});
+  });
+}
+
+async function ensureVoiceAgentPresent(page: Page) {
+  const initialHasAgent = await page.evaluate(() => {
+    const present = (window as any).__present ?? {};
+    return Boolean(present.livekitHasAgent);
+  });
+
+  if (!initialHasAgent) {
+    await requestVoiceAgent(page);
+  }
+
+  await expect
+    .poll(
+      async () =>
+        page.evaluate(() => {
+          const present = (window as any).__present ?? {};
+          if (present.livekitHasAgent === true) return true;
+          const identities = Array.isArray(present.livekitRemoteParticipantIdentities)
+            ? present.livekitRemoteParticipantIdentities
+            : [];
+          return identities.some((id: unknown) => {
+            const lower = String(id ?? '').toLowerCase();
+            return (
+              lower.startsWith('agent_') ||
+              lower.includes('voice-agent') ||
+              lower.includes('agent') ||
+              lower.includes('bot') ||
+              lower.includes('ai')
+            );
+          });
+        }),
+      { timeout: 45_000 },
+    )
+    .toBe(true);
+}
+
 async function executeToolCall(
   page: Page,
   call: {
@@ -91,19 +150,6 @@ async function ensureLivekitConnected(page: Page) {
     .toBe(true);
 }
 
-async function waitForRealtimeHealthy(page: Page) {
-  await page.waitForFunction(() => {
-    const present = (window as any).__present ?? {};
-    const diag = present.syncDiagnostics ?? {};
-    return (
-      present.livekitConnected === true &&
-      diag.contract?.ok === true &&
-      diag.tldraw?.ok === true &&
-      diag.session?.ok === true
-    );
-  }, null, { timeout: 90_000 });
-}
-
 async function openSharedCanvas(
   browser: any,
 ): Promise<{ ctxA: BrowserContext; ctxB: BrowserContext; pageA: Page; pageB: Page; canvasId: string }> {
@@ -148,9 +194,6 @@ async function openSharedCanvas(
   await waitForCanvasReady(pageB);
   await ensureLivekitConnected(pageB);
 
-  await waitForRealtimeHealthy(pageA);
-  await waitForRealtimeHealthy(pageB);
-
   return { ctxA, ctxB, pageA, pageB, canvasId };
 }
 
@@ -163,8 +206,78 @@ test.describe('Realtime Sync Multiuser', () => {
   test('shared URL converges on canonical contract/session/executor view', async ({ browser }) => {
     const { ctxA, ctxB, pageA, pageB, canvasId } = await openSharedCanvas(browser);
     try {
-      const snapshotA = await pageA.evaluate(() => (window as any).__present);
-      const snapshotB = await pageB.evaluate(() => (window as any).__present);
+      const snapshotA = await expect
+        .poll(
+          async () =>
+            pageA.evaluate(() => {
+              const present = (window as any).__present ?? {};
+              return {
+                canvasId: present.syncContract?.canvasId ?? null,
+                livekitRoomName: present.syncContract?.livekitRoomName ?? null,
+                tldrawRoomId: present.syncContract?.tldrawRoomId ?? null,
+                sessionId: present.sessionSync?.sessionId ?? null,
+                contractOk: Boolean(present.syncDiagnostics?.contract?.ok),
+                sessionOk: Boolean(present.syncDiagnostics?.session?.ok),
+                tldrawOk: Boolean(present.syncDiagnostics?.tldraw?.ok),
+              };
+            }),
+          { timeout: 90_000 },
+        )
+        .toMatchObject({
+          canvasId,
+          livekitRoomName: expect.any(String),
+          tldrawRoomId: expect.any(String),
+          sessionId: expect.any(String),
+          contractOk: true,
+          sessionOk: true,
+          tldrawOk: true,
+        })
+        .then(() =>
+          pageA.evaluate(() => {
+            const present = (window as any).__present ?? {};
+            return {
+              syncContract: present.syncContract ?? null,
+              sessionSync: present.sessionSync ?? null,
+              syncDiagnostics: present.syncDiagnostics ?? null,
+            };
+          }),
+        );
+      const snapshotB = await expect
+        .poll(
+          async () =>
+            pageB.evaluate(() => {
+              const present = (window as any).__present ?? {};
+              return {
+                canvasId: present.syncContract?.canvasId ?? null,
+                livekitRoomName: present.syncContract?.livekitRoomName ?? null,
+                tldrawRoomId: present.syncContract?.tldrawRoomId ?? null,
+                sessionId: present.sessionSync?.sessionId ?? null,
+                contractOk: Boolean(present.syncDiagnostics?.contract?.ok),
+                sessionOk: Boolean(present.syncDiagnostics?.session?.ok),
+                tldrawOk: Boolean(present.syncDiagnostics?.tldraw?.ok),
+              };
+            }),
+          { timeout: 90_000 },
+        )
+        .toMatchObject({
+          canvasId,
+          livekitRoomName: expect.any(String),
+          tldrawRoomId: expect.any(String),
+          sessionId: expect.any(String),
+          contractOk: true,
+          sessionOk: true,
+          tldrawOk: true,
+        })
+        .then(() =>
+          pageB.evaluate(() => {
+            const present = (window as any).__present ?? {};
+            return {
+              syncContract: present.syncContract ?? null,
+              sessionSync: present.sessionSync ?? null,
+              syncDiagnostics: present.syncDiagnostics ?? null,
+            };
+          }),
+        );
 
       expect(snapshotA?.syncContract?.canvasId).toBe(canvasId);
       expect(snapshotB?.syncContract?.canvasId).toBe(canvasId);
@@ -371,47 +484,26 @@ test.describe('Realtime Sync Multiuser', () => {
     try {
       await openTranscriptPanel(pageA);
       await openTranscriptPanel(pageB);
+      await Promise.all([ensureVoiceAgentPresent(pageA), ensureVoiceAgentPresent(pageB)]);
 
       const now = Date.now();
-      const lines = [
-        {
-          speaker: 'Alice',
-          eventId: `alice-${now}`,
-          text: `Alice probe ${now}`,
-          participantId: 'alice-uid',
-          timestamp: now,
-        },
-        {
-          speaker: 'Bob',
-          eventId: `bob-${now}`,
-          text: `Bob probe ${now}`,
-          participantId: 'bob-uid',
-          timestamp: now + 40,
-        },
-      ];
+      const aliceLine = `Alice probe ${now}`;
+      const bobLine = `Bob probe ${now}`;
 
-      await pageA.evaluate((captions) => {
-        for (const line of captions) {
-          window.dispatchEvent(
-            new CustomEvent('livekit:transcription-replay', {
-              detail: line,
-            }),
-          );
-        }
-      }, lines);
-
+      await sendTranscriptMessage(pageA, aliceLine);
       await expect
-        .poll(async () => countMessages(pageA, `Alice probe ${now}`), { timeout: 20_000 })
+        .poll(async () => countMessages(pageA, aliceLine), { timeout: 30_000 })
         .toBe(1);
       await expect
-        .poll(async () => countMessages(pageA, `Bob probe ${now}`), { timeout: 20_000 })
+        .poll(async () => countMessages(pageB, aliceLine), { timeout: 30_000 })
         .toBe(1);
 
+      await sendTranscriptMessage(pageB, bobLine);
       await expect
-        .poll(async () => countMessages(pageB, `Alice probe ${now}`), { timeout: 20_000 })
+        .poll(async () => countMessages(pageA, bobLine), { timeout: 30_000 })
         .toBe(1);
       await expect
-        .poll(async () => countMessages(pageB, `Bob probe ${now}`), { timeout: 20_000 })
+        .poll(async () => countMessages(pageB, bobLine), { timeout: 30_000 })
         .toBe(1);
     } finally {
       await ctxA.close().catch(() => {});

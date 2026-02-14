@@ -41,8 +41,22 @@ export async function buildLivekitTokenHeaders(args: {
   init?: HeadersInit;
 }): Promise<Headers> {
   const token = await getSupabaseAccessToken(1_500);
+  const requireAuth =
+    (process.env.NEXT_PUBLIC_TOKEN_REQUIRE_AUTH ??
+      (process.env.NODE_ENV === 'production' ? 'true' : 'false')) === 'true';
+  const requireSignedNonce =
+    (process.env.NEXT_PUBLIC_TOKEN_REQUIRE_SIGNED_NONCE ??
+      (process.env.NODE_ENV === 'production' ? 'true' : 'false')) === 'true';
+
+  const headers = new Headers(args.init);
+
+  // In local/dev test lanes, token minting can run with TOKEN_REQUIRE_AUTH=false.
+  // Preserve strict behavior when auth/signed nonce is explicitly required.
   if (!token) {
-    throw new Error('Missing Supabase auth token for LiveKit token minting');
+    if (requireAuth || requireSignedNonce) {
+      throw new Error('Missing Supabase auth token for LiveKit token minting');
+    }
+    return headers;
   }
 
   const timestamp = Date.now().toString();
@@ -50,8 +64,6 @@ export async function buildLivekitTokenHeaders(args: {
   const pathname = args.pathname || '/api/token';
   const payload = ['GET', pathname, args.roomName, args.identity, timestamp, nonce].join('.');
   const signature = await sha256Hex(`${token}.${payload}`);
-
-  const headers = new Headers(args.init);
   headers.set('Authorization', `Bearer ${token}`);
   headers.set('x-timestamp', timestamp);
   headers.set('x-nonce', nonce);
