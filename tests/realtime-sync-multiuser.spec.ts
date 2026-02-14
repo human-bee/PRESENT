@@ -1,6 +1,62 @@
 import { expect, test, type BrowserContext, type Page } from '@playwright/test';
 import { randomUUID } from 'node:crypto';
 
+function transcriptShortcut() {
+  return process.platform === 'darwin' ? 'Meta+KeyK' : 'Control+K';
+}
+
+async function countMessages(page: Page, needle: string) {
+  return page.evaluate((text) => {
+    const panel = document.querySelector('[data-present-transcript-panel="true"]');
+    if (!panel) return 0;
+    const lines = Array.from(panel.querySelectorAll('div.text-sm'));
+    return lines.filter((line) => (line.textContent || '').includes(text)).length;
+  }, needle);
+}
+
+async function openTranscriptPanel(page: Page) {
+  await page.keyboard.press(transcriptShortcut());
+  await page.waitForTimeout(600);
+}
+
+async function executeToolCall(
+  page: Page,
+  call: {
+    id: string;
+    type: string;
+    payload: Record<string, unknown>;
+    timestamp: number;
+    source: string;
+    roomId?: string;
+  },
+) {
+  await page.evaluate(
+    async ({ call }) => {
+      const exec = (window as any).__presentToolDispatcherExecute;
+      if (typeof exec !== 'function') {
+        throw new Error('Tool dispatcher not ready');
+      }
+      await exec(call);
+    },
+    { call },
+  );
+}
+
+async function countShapesByMessageId(page: Page, messageId: string) {
+  return page.evaluate((id) => {
+    const editor = (window as any).__present?.tldrawEditor;
+    if (!editor) return 0;
+    const shapes: Array<Record<string, any>> = editor.getCurrentPageShapes?.() || [];
+    return shapes.filter((shape) => {
+      const props = shape.props || {};
+      return (
+        shape.type === 'custom' &&
+        [props.customComponent, props.messageId, props.__custom_message_id, props.componentId].includes(id)
+      );
+    }).length;
+  }, messageId);
+}
+
 async function waitForCanvasReady(page: Page) {
   await page.waitForSelector('[data-canvas-space="true"]', { timeout: 90_000 });
   await page.waitForFunction(() => {
@@ -261,11 +317,105 @@ test.describe('Realtime Sync Multiuser', () => {
     }
   });
 
-  test('single tool_call creates one component (no duplicates)', async () => {
-    test.skip(true, 'Requires deterministic tool_call publish harness from LiveKit room participant API.');
+  test('single tool_call creates one component (no duplicates)', async ({ browser }) => {
+    const { ctxA, ctxB, pageA, pageB } = await openSharedCanvas(browser);
+    try {
+      const base = `dup-tool-${Date.now()}`;
+      const sharedCallId = `realtime-tool-${base}`;
+      const messageId = `message-${base}`;
+      const call = {
+        id: sharedCallId,
+        type: 'tool_call',
+        payload: {
+          tool: 'create_component',
+          params: {
+            type: 'CrowdPulseWidget',
+            messageId,
+            props: {
+              __custom_message_id: messageId,
+              title: 'No Duplicate Probe',
+              handCount: 0,
+              peakCount: 0,
+              version: 1,
+              lastUpdated: Date.now(),
+            },
+          },
+        },
+        timestamp: Date.now(),
+        source: 'playwright',
+      };
+
+      await executeToolCall(pageA, call);
+      await expect
+        .poll(async () => countShapesByMessageId(pageA, messageId), { timeout: 30_000 })
+        .toBe(1);
+      await expect
+        .poll(async () => countShapesByMessageId(pageB, messageId), { timeout: 30_000 })
+        .toBe(1);
+
+      await executeToolCall(pageA, call);
+      await expect
+        .poll(async () => countShapesByMessageId(pageA, messageId), { timeout: 30_000 })
+        .toBe(1);
+      await expect
+        .poll(async () => countShapesByMessageId(pageB, messageId), { timeout: 30_000 })
+        .toBe(1);
+    } finally {
+      await ctxA.close();
+      await ctxB.close();
+    }
   });
 
-  test('transcript remains shared and non-duplicated across participants', async () => {
-    test.skip(true, 'Requires deterministic dual-mic or transcript fixture orchestration.');
+  test('transcript remains shared and non-duplicated across participants', async ({ browser }) => {
+    const { ctxA, ctxB, pageA, pageB } = await openSharedCanvas(browser);
+    try {
+      await openTranscriptPanel(pageA);
+      await openTranscriptPanel(pageB);
+
+      const now = Date.now();
+      const lines = [
+        {
+          speaker: 'Alice',
+          eventId: `alice-${now}`,
+          text: `Alice probe ${now}`,
+          participantId: 'alice-uid',
+          timestamp: now,
+        },
+        {
+          speaker: 'Bob',
+          eventId: `bob-${now}`,
+          text: `Bob probe ${now}`,
+          participantId: 'bob-uid',
+          timestamp: now + 40,
+        },
+      ];
+
+      await pageA.evaluate((captions) => {
+        for (const line of captions) {
+          window.dispatchEvent(
+            new CustomEvent('livekit:transcription-replay', {
+              detail: line,
+            }),
+          );
+        }
+      }, lines);
+
+      await expect
+        .poll(async () => countMessages(pageA, `Alice probe ${now}`), { timeout: 20_000 })
+        .toBe(1);
+      await expect
+        .poll(async () => countMessages(pageA, `Bob probe ${now}`), { timeout: 20_000 })
+        .toBe(1);
+
+      await expect
+        .poll(async () => countMessages(pageB, `Alice probe ${now}`), { timeout: 20_000 })
+        .toBe(1);
+      await expect
+        .poll(async () => countMessages(pageB, `Bob probe ${now}`), { timeout: 20_000 })
+        .toBe(1);
+    } finally {
+      await ctxA.close().catch(() => {});
+      await ctxB.close().catch(() => {});
+    }
   });
 });
