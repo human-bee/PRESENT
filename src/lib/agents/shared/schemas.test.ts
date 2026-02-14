@@ -12,10 +12,18 @@ describe('agent shared schemas', () => {
       task: 'conductor.dispatch',
       params: { room: 'room-1' },
       resourceKeys: ['room:room-1'],
+      executionId: 'exec-1',
+      idempotencyKey: 'idem-1',
+      lockKey: 'widget:abc',
+      attempt: 1,
     });
 
     expect(parsed.room).toBe('room-1');
     expect(parsed.priority).toBe(0);
+    expect(parsed.executionId).toBe('exec-1');
+    expect(parsed.idempotencyKey).toBe('idem-1');
+    expect(parsed.lockKey).toBe('widget:abc');
+    expect(parsed.attempt).toBe(1);
   });
 
   it('rejects invalid queue envelopes', () => {
@@ -32,9 +40,15 @@ describe('agent shared schemas', () => {
       room: 'room-2',
       message: 'add swimlanes',
       params: { room: 'room-2' },
+      executionId: 'exec-canvas',
+      idempotencyKey: 'idem-canvas',
+      lockKey: 'room:room-2:canvas',
+      attempt: 2,
     });
 
     expect(parsed.room).toBe('room-2');
+    expect(parsed.executionId).toBe('exec-canvas');
+    expect(parsed.idempotencyKey).toBe('idem-canvas');
   });
 
   it('parses scorecard steward requests', () => {
@@ -42,9 +56,14 @@ describe('agent shared schemas', () => {
       room: 'room-3',
       componentId: 'cmp-1',
       intent: 'scorecard.run',
+      executionId: 'exec-score',
+      idempotencyKey: 'idem-score',
+      lockKey: 'widget:cmp-1',
     });
 
     expect(parsed.componentId).toBe('cmp-1');
+    expect(parsed.executionId).toBe('exec-score');
+    expect(parsed.idempotencyKey).toBe('idem-score');
   });
 
   it('parseJsonObject returns null for non-objects', () => {

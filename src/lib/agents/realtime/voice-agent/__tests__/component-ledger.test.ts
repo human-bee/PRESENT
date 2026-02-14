@@ -175,4 +175,33 @@ describe('VoiceComponentLedger', () => {
     expect(ledger.findIntentByMessage('ttl-component')).toBeUndefined();
     expect(ledger.resolveComponentId({ slot: 'ttl-slot' }, context)).toBe('');
   });
+
+  it('recovers from stale component ids by resolving latest matching type', () => {
+    const ledger = new VoiceComponentLedger(() => 'room-a');
+    const components = new Map<string, TestComponentEntry>([
+      ['crowd-current', { type: 'CrowdPulseWidget', room: 'room-a' }],
+    ]);
+    const context: ResolveComponentContext = {
+      getComponentEntry: (id) => components.get(id),
+      listComponentEntries: () => components.entries(),
+    };
+
+    ledger.setLastComponentForType('CrowdPulseWidget', 'crowd-stale');
+    ledger.setLastCreatedComponentId('crowd-stale');
+    ledger.registerIntentEntry({
+      intentId: 'crowd-intent',
+      messageId: 'crowd-stale',
+      componentType: 'CrowdPulseWidget',
+      state: 'updated',
+    });
+    ledger.clearIntentForMessage('crowd-stale');
+    ledger.clearLastComponentForType('CrowdPulseWidget', 'crowd-stale');
+
+    const resolved = ledger.resolveComponentId(
+      { type: 'CrowdPulseWidget', allowLast: true },
+      context,
+    );
+
+    expect(resolved).toBe('crowd-current');
+  });
 });

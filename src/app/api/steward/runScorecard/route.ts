@@ -1,15 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { BYOK_ENABLED } from '@/lib/agents/shared/byok-flags';
 import { AgentTaskQueue } from '@/lib/agents/shared/queue';
-import { isFastStewardReady } from '@/lib/agents/fast-steward-config';
-import { runDebateScorecardSteward } from '@/lib/agents/debate-judge';
-import { runDebateScorecardStewardFast } from '@/lib/agents/subagents/debate-steward-fast';
 import { assertCanvasMember, parseCanvasIdFromRoom } from '@/lib/agents/shared/canvas-billing';
 import { resolveRequestUserId } from '@/lib/supabase/server/resolve-request-user';
-import { getDecryptedUserModelKey } from '@/lib/agents/shared/user-model-keys';
 import { createLogger } from '@/lib/logging';
 import { parseJsonObject, stewardRunScorecardRequestSchema } from '@/lib/agents/shared/schemas';
 import type { JsonObject, JsonValue } from '@/lib/utils/json-schema';
+import {
+  applyOrchestrationEnvelope,
+  deriveDefaultLockKey,
+  extractOrchestrationEnvelope,
+} from '@/lib/agents/shared/orchestration-envelope';
 
 export const runtime = 'nodejs';
 
@@ -44,6 +45,10 @@ export async function POST(req: NextRequest) {
       topic,
       task,
       requestId,
+      executionId,
+      idempotencyKey,
+      lockKey,
+      attempt,
       ...rest
     } = parsed;
 
@@ -114,57 +119,52 @@ export async function POST(req: NextRequest) {
       topic: normalizedTopic,
       ...(billingUserId ? { billingUserId } : {}),
     } as const);
+    const orchestrationEnvelope = extractOrchestrationEnvelope(
+      {
+        ...normalizedParams,
+        executionId,
+        idempotencyKey,
+        lockKey,
+        attempt,
+      },
+      { attempt: typeof attempt === 'number' ? attempt : undefined },
+    );
+    const normalizedLockKey =
+      orchestrationEnvelope.lockKey ??
+      deriveDefaultLockKey({
+        task: normalizedTask,
+        room: trimmedRoom,
+        componentId: trimmedComponentId,
+        componentType: 'DebateScorecard',
+      });
+    const enrichedParams = applyOrchestrationEnvelope(normalizedParams, {
+      ...orchestrationEnvelope,
+      lockKey: normalizedLockKey,
+    });
+    const normalizedRequestId =
+      typeof requestId === 'string' && requestId.trim() ? requestId.trim() : orchestrationEnvelope.idempotencyKey;
 
     try {
       // Lazily instantiate so `next build` doesn't require Supabase env vars.
       const enqueueResult = await getQueue().enqueueTask({
         room: trimmedRoom,
         task: normalizedTask,
-        params: normalizedParams,
-        requestId: typeof requestId === 'string' && requestId.trim() ? requestId.trim() : undefined,
-        resourceKeys: [`room:${trimmedRoom}`, `scorecard:${trimmedComponentId}`],
+        params: enrichedParams,
+        requestId: normalizedRequestId,
+        dedupeKey: orchestrationEnvelope.idempotencyKey,
+        lockKey: normalizedLockKey,
+        idempotencyKey: orchestrationEnvelope.idempotencyKey,
+        resourceKeys: [
+          `room:${trimmedRoom}`,
+          `scorecard:${trimmedComponentId}`,
+          ...(normalizedLockKey ? [`lock:${normalizedLockKey}`] : []),
+        ],
       });
       return NextResponse.json({ status: 'queued', task: enqueueResult }, { status: 202 });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      logger.warn('queue enqueue failed', { message });
-      if (!QUEUE_DIRECT_FALLBACK_ENABLED) {
-        return NextResponse.json({ error: 'Queue unavailable' }, { status: 503 });
-      }
-
-      const cerebrasKey =
-        BYOK_ENABLED && billingUserId
-          ? await getDecryptedUserModelKey({ userId: billingUserId, provider: 'cerebras' })
-          : null;
-      const useFast = normalizedTask !== 'scorecard.fact_check' && isFastStewardReady(cerebrasKey ?? undefined);
-      try {
-        if (useFast) {
-          await runDebateScorecardStewardFast({
-            room: trimmedRoom,
-            componentId: trimmedComponentId,
-            intent: normalizedIntent ?? normalizedTask,
-            summary: normalizedSummary,
-            prompt: normalizedPrompt,
-            topic: normalizedTopic,
-            ...(billingUserId ? { billingUserId } : {}),
-          });
-        } else {
-          await runDebateScorecardSteward({
-            room: trimmedRoom,
-            componentId: trimmedComponentId,
-            windowMs: resolvedWindow,
-            intent: normalizedIntent ?? normalizedTask,
-            summary: normalizedSummary,
-            prompt: normalizedPrompt,
-            topic: normalizedTopic,
-            ...(billingUserId ? { billingUserId } : {}),
-          });
-        }
-        return NextResponse.json({ status: 'executed_fallback' }, { status: 202 });
-      } catch (fallbackError) {
-        logger.error('fallback execution failed', { error: fallbackError });
-        return NextResponse.json({ error: 'Dispatch failed' }, { status: 502 });
-      }
+      logger.warn('queue enqueue failed', { message, queueDirectFallback: QUEUE_DIRECT_FALLBACK_ENABLED });
+      return NextResponse.json({ error: 'Queue unavailable' }, { status: 503 });
     }
   } catch (error) {
     logger.error('invalid request', { error: error instanceof Error ? error.message : String(error) });

@@ -5,6 +5,12 @@ export const JsonValueSchema = jsonValueSchema;
 export const JsonObjectSchema = jsonObjectSchema;
 
 export const queueTaskParamsSchema = JsonObjectSchema.default({});
+export const orchestrationEnvelopeSchema = z.object({
+  executionId: z.string().min(1).optional(),
+  idempotencyKey: z.string().min(1).optional(),
+  lockKey: z.string().min(1).optional(),
+  attempt: z.number().int().min(0).optional(),
+});
 
 export const queueTaskEnvelopeSchema = z.object({
   room: z.string().min(1),
@@ -15,7 +21,7 @@ export const queueTaskEnvelopeSchema = z.object({
   resourceKeys: z.array(z.string().min(1)).optional(),
   priority: z.number().int().min(0).default(0),
   runAt: z.coerce.date().optional(),
-});
+}).merge(orchestrationEnvelopeSchema.partial());
 
 export const stewardRunCanvasRequestSchema = z
   .object({
@@ -26,6 +32,7 @@ export const stewardRunCanvasRequestSchema = z
     message: z.string().optional(),
     requestId: z.string().optional(),
   })
+  .merge(orchestrationEnvelopeSchema.partial())
   .passthrough();
 
 export const stewardRunScorecardRequestSchema = z
@@ -40,6 +47,7 @@ export const stewardRunScorecardRequestSchema = z
     task: z.string().optional(),
     requestId: z.string().optional(),
   })
+  .merge(orchestrationEnvelopeSchema.partial())
   .passthrough();
 
 export const isJsonObject = (value: unknown): value is z.infer<typeof JsonObjectSchema> => {

@@ -1,0 +1,47 @@
+{
+  "benchmark": "voice-agent-racetrack",
+  "recordedAt": "2026-02-14T01:07:27.536Z",
+  "commit": {
+    "hash": "1b61e59",
+    "branch": "codex/pr80-refresh",
+    "dirty": true
+  },
+  "env": {
+    "node": "v25.2.1",
+    "platform": "darwin"
+  },
+  "metrics": {
+    "instructionBuild": {
+      "iterations": 400,
+      "totalMs": 4.206,
+      "avgMs": 0.010515,
+      "opsPerSec": 95103.16,
+      "chars": 16481
+    },
+    "patchNormalize": {
+      "iterations": 4000,
+      "totalMs": 6.973,
+      "avgMs": 0.001743,
+      "opsPerSec": 573627.53
+    },
+    "canvasDispatch": {
+      "iterations": 5000,
+      "totalMs": 1.323,
+      "avgMs": 0.000265,
+      "opsPerSec": 3777978.77,
+      "suppressRatePct": 24.62
+    },
+    "ledgerOps": {
+      "iterations": 5000,
+      "totalMs": 6.329,
+      "avgMs": 0.001266,
+      "opsPerSec": 790055.79
+    },
+    "queueFlush": {
+      "iterations": 250,
+      "totalMs": 2.472,
+      "avgMs": 0.00989,
+      "opsPerSec": 101115.63
+    }
+  }
+}

@@ -31,6 +31,10 @@ export interface EnqueueTaskInput {
   params?: JsonObject;
   requestId?: string;
   dedupeKey?: string;
+  executionId?: string;
+  idempotencyKey?: string;
+  lockKey?: string;
+  attempt?: number;
   resourceKeys?: string[];
   priority?: number;
   runAt?: Date;
@@ -74,6 +78,8 @@ export class AgentTaskQueue {
       params = {},
       requestId,
       dedupeKey,
+      idempotencyKey,
+      lockKey,
       resourceKeys = [],
       priority = 0,
       runAt,
@@ -82,8 +88,34 @@ export class AgentTaskQueue {
 
     const nowIso = new Date().toISOString();
 
+    const paramsRecord = params as Record<string, unknown>;
+    const lockKeyFromParams =
+      typeof paramsRecord.lockKey === 'string' && paramsRecord.lockKey.trim().length > 0
+        ? paramsRecord.lockKey.trim()
+        : undefined;
+    const lockKeyNormalized =
+      (typeof lockKey === 'string' && lockKey.trim().length > 0 ? lockKey.trim() : undefined) ??
+      lockKeyFromParams;
+    const idempotencyKeyFromParams =
+      typeof paramsRecord.idempotencyKey === 'string' && paramsRecord.idempotencyKey.trim().length > 0
+        ? paramsRecord.idempotencyKey.trim()
+        : undefined;
+    const idempotencyNormalized =
+      (typeof idempotencyKey === 'string' && idempotencyKey.trim().length > 0
+        ? idempotencyKey.trim()
+        : undefined) ?? idempotencyKeyFromParams;
+
     const resourceKeySet = new Set(resourceKeys.length ? resourceKeys : [`room:${room}`]);
+    if (lockKeyNormalized) {
+      resourceKeySet.add(`lock:${lockKeyNormalized}`);
+    }
     const normalizedResourceKeys = Array.from(resourceKeySet);
+    const resolvedRequestId =
+      (typeof requestId === 'string' && requestId.trim().length > 0 ? requestId.trim() : undefined) ??
+      idempotencyNormalized;
+    const resolvedDedupeKey =
+      (typeof dedupeKey === 'string' && dedupeKey.trim().length > 0 ? dedupeKey.trim() : undefined) ??
+      idempotencyNormalized;
     const queueDepthLimit = Number(process.env.TASK_QUEUE_MAX_DEPTH_PER_ROOM ?? 0);
     if (Number.isFinite(queueDepthLimit) && queueDepthLimit > 0) {
       const { count, error: countError } = await this.supabase
@@ -122,8 +154,8 @@ export class AgentTaskQueue {
     logger.debug('enqueueTask', {
       room,
       task,
-      requestId,
-      dedupeKey,
+      requestId: resolvedRequestId,
+      dedupeKey: resolvedDedupeKey,
       resourceKeys: normalizedResourceKeys,
       coalesced: shouldCoalesce,
       hasSupabase: Boolean(this.supabase),
@@ -135,8 +167,8 @@ export class AgentTaskQueue {
         room,
         task,
         params,
-        request_id: requestId ?? null,
-        dedupe_key: dedupeKey ?? null,
+        request_id: resolvedRequestId ?? null,
+        dedupe_key: resolvedDedupeKey ?? null,
         resource_keys: normalizedResourceKeys,
         priority,
         run_at: runAt ? runAt.toISOString() : null,
@@ -148,7 +180,7 @@ export class AgentTaskQueue {
 
     if (error) {
       if (error.code === '23505') {
-        logger.debug('enqueueTask dedupe hit', { room, task, requestId });
+        logger.debug('enqueueTask dedupe hit', { room, task, requestId: resolvedRequestId });
         return null; // idempotent duplicate
       }
       logger.error('enqueueTask failed', { room, task, error });
