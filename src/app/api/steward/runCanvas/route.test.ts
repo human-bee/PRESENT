@@ -10,12 +10,12 @@ jest.mock('@/lib/agents/shared/queue', () => ({
   })),
 }));
 
-jest.mock('@/lib/agents/shared/supabase-context', () => ({
-  broadcastAgentPrompt: broadcastAgentPromptMock,
+jest.mock('@/lib/agents/shared/byok-flags', () => ({
+  BYOK_ENABLED: false,
 }));
 
-jest.mock('@/lib/agents/subagents/canvas-steward', () => ({
-  runCanvasSteward: jest.fn(),
+jest.mock('@/lib/agents/shared/supabase-context', () => ({
+  broadcastAgentPrompt: broadcastAgentPromptMock,
 }));
 
 const { POST } = require('./route');
@@ -55,15 +55,18 @@ describe('/api/steward/runCanvas', () => {
         task: 'canvas.agent_prompt',
         requestId: 'idem-canvas-1',
         dedupeKey: 'idem-canvas-1',
-        lockKey: 'room:demo-room:canvas',
+        lockKey: 'room:demo-room:task:canvas.agent_prompt',
         idempotencyKey: 'idem-canvas-1',
-        resourceKeys: expect.arrayContaining(['room:demo-room', 'lock:room:demo-room:canvas']),
+        resourceKeys: expect.arrayContaining([
+          'room:demo-room',
+          'lock:room:demo-room:task:canvas.agent_prompt',
+        ]),
         params: expect.objectContaining({
           room: 'demo-room',
           message: 'draw a swimlane',
           executionId: 'exec-canvas-1',
           idempotencyKey: 'idem-canvas-1',
-          lockKey: 'room:demo-room:canvas',
+          lockKey: 'room:demo-room:task:canvas.agent_prompt',
           attempt: 2,
         }),
       }),
@@ -78,5 +81,24 @@ describe('/api/steward/runCanvas', () => {
         }),
       }),
     );
+  });
+
+  it('returns 503 on queue failure (queue-only writer)', async () => {
+    enqueueTaskMock.mockRejectedValueOnce(new Error('queue down'));
+    const request = new Request('http://localhost/api/steward/runCanvas', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        room: 'demo-room',
+        task: 'canvas.quick_text',
+        params: {
+          room: 'demo-room',
+          message: 'hello',
+        },
+      }),
+    });
+
+    const response = await POST(request as any);
+    expect(response.status).toBe(503);
   });
 });

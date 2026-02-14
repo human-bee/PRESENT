@@ -78,16 +78,17 @@ export const deriveDefaultLockKey = (input: {
   const task = normalizeString(input.task);
   const room = normalizeString(input.room);
   if (!task) return undefined;
+
+  const taskLane = task.replace(/[^a-zA-Z0-9_.:-]/g, '_');
   if (task.startsWith('canvas.') || task.startsWith('fairy.')) {
-    return room ? `room:${room}:canvas` : 'canvas:global';
+    return room ? `room:${room}:task:${taskLane}` : `task:${taskLane}`;
   }
   if (task.startsWith('search.')) {
-    return room ? `room:${room}:search` : 'search:global';
+    return room ? `room:${room}:task:${taskLane}` : `task:${taskLane}`;
   }
   if (task.startsWith('scorecard.')) {
-    return room ? `room:${room}:scorecard` : 'scorecard:global';
+    return room ? `room:${room}:task:${taskLane}` : `task:${taskLane}`;
   }
 
-  return room ? `room:${room}:${task}` : undefined;
+  return room ? `room:${room}:task:${taskLane}` : `task:${taskLane}`;
 };
-

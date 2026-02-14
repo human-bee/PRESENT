@@ -9,16 +9,8 @@ jest.mock('@/lib/agents/shared/queue', () => ({
   })),
 }));
 
-jest.mock('@/lib/agents/fast-steward-config', () => ({
-  isFastStewardReady: jest.fn(() => false),
-}));
-
-jest.mock('@/lib/agents/debate-judge', () => ({
-  runDebateScorecardSteward: jest.fn(),
-}));
-
-jest.mock('@/lib/agents/subagents/debate-steward-fast', () => ({
-  runDebateScorecardStewardFast: jest.fn(),
+jest.mock('@/lib/agents/shared/byok-flags', () => ({
+  BYOK_ENABLED: false,
 }));
 
 const { POST } = require('./route');
@@ -72,5 +64,21 @@ describe('/api/steward/runScorecard', () => {
         }),
       }),
     );
+  });
+
+  it('returns 503 on queue failure (queue-only writer)', async () => {
+    enqueueTaskMock.mockRejectedValueOnce(new Error('queue down'));
+    const request = new Request('http://localhost/api/steward/runScorecard', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        room: 'demo-room',
+        componentId: 'scorecard-123',
+        task: 'scorecard.run',
+      }),
+    });
+
+    const response = await POST(request as any);
+    expect(response.status).toBe(503);
   });
 });
