@@ -74,6 +74,7 @@ export type PromptConfig = {
 export type FollowupConfig = {
   maxDepth: number;
   lowActionThreshold: number;
+  durable: boolean;
 };
 
 export type CanvasAgentMode = 'present' | 'tldraw-teacher' | 'shadow';
@@ -119,6 +120,14 @@ const parseAgentMode = (raw?: string): CanvasAgentMode => {
   return 'present';
 };
 
+const coerceBoolean = (value: string | undefined, fallback: boolean): boolean => {
+  if (typeof value !== 'string' || !value.trim()) return fallback;
+  const normalized = value.trim().toLowerCase();
+  if (normalized === '1' || normalized === 'true' || normalized === 'yes' || normalized === 'on') return true;
+  if (normalized === '0' || normalized === 'false' || normalized === 'no' || normalized === 'off') return false;
+  return fallback;
+};
+
 export function loadCanvasAgentConfig(env: NodeJS.ProcessEnv = process.env): CanvasAgentConfig {
   const preset = resolvePreset(env);
   const screenshotMaxEdge = clampScreenshotEdge(env.CANVAS_AGENT_SCREENSHOT_MAX_SIZE);
@@ -159,6 +168,7 @@ export function loadCanvasAgentConfig(env: NodeJS.ProcessEnv = process.env): Can
     followups: {
       maxDepth: resolveFollowupDepth(env, preset),
       lowActionThreshold: Math.max(0, Number.parseInt(env.CANVAS_AGENT_LOW_ACTION_THRESHOLD ?? '6', 10) || 6),
+      durable: coerceBoolean(env.CANVAS_AGENT_DURABLE_FOLLOWUPS, true),
     },
   };
 

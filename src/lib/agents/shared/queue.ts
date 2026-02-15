@@ -2,6 +2,8 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { randomUUID } from 'crypto';
 import type { JsonObject } from '@/lib/utils/json-schema';
 import { createLogger } from '@/lib/logging';
+import { deriveRequestCorrelation } from './request-correlation';
+import { recordAgentTraceEvent, recordTaskTraceFromParams } from './trace-events';
 
 export type AgentTaskStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'canceled';
 
@@ -63,12 +65,56 @@ function createSupabaseClient(options?: QueueClientOptions): SupabaseClient {
 }
 
 const logger = createLogger('agents:queue');
+const ACTIVE_DEDUPE_STATUSES: AgentTaskStatus[] = ['queued', 'running'];
 
 export class AgentTaskQueue {
   private readonly supabase: SupabaseClient;
 
   constructor(private readonly options?: QueueClientOptions) {
     this.supabase = createSupabaseClient(options);
+  }
+
+  private async findExistingTaskForDedup(args: {
+    room: string;
+    task: string;
+    requestId?: string;
+    dedupeKey?: string;
+    activeOnly?: boolean;
+  }): Promise<AgentTask | null> {
+    const { room, task, requestId, dedupeKey, activeOnly = true } = args;
+    const normalizedRequestId = typeof requestId === 'string' && requestId.trim() ? requestId.trim() : null;
+    const normalizedDedupeKey = typeof dedupeKey === 'string' && dedupeKey.trim() ? dedupeKey.trim() : null;
+    if (!normalizedRequestId && !normalizedDedupeKey) return null;
+
+    let query = this.supabase
+      .from('agent_tasks')
+      .select('*')
+      .eq('room', room)
+      .eq('task', task)
+      .order('created_at', { ascending: false })
+      .limit(1);
+    if (activeOnly) {
+      query = query.in('status', ACTIVE_DEDUPE_STATUSES);
+    }
+
+    if (normalizedRequestId) {
+      query = query.eq('request_id', normalizedRequestId);
+    } else if (normalizedDedupeKey) {
+      query = query.eq('dedupe_key', normalizedDedupeKey);
+    }
+
+    const { data, error } = await query.maybeSingle();
+    if (error) {
+      logger.warn('findExistingTaskForDedup failed', {
+        room,
+        task,
+        requestId: normalizedRequestId,
+        dedupeKey: normalizedDedupeKey,
+        error,
+      });
+      return null;
+    }
+    return (data as AgentTask | null) ?? null;
   }
 
   async enqueueTask(input: EnqueueTaskInput): Promise<AgentTask | null> {
@@ -87,6 +133,8 @@ export class AgentTaskQueue {
     } = input;
 
     const nowIso = new Date().toISOString();
+    const normalizedRequestId = typeof requestId === 'string' && requestId.trim() ? requestId.trim() : undefined;
+    const normalizedDedupeKey = typeof dedupeKey === 'string' && dedupeKey.trim() ? dedupeKey.trim() : undefined;
 
     const paramsRecord = params as Record<string, unknown>;
     const lockKeyFromParams =
@@ -116,6 +164,39 @@ export class AgentTaskQueue {
     const resolvedDedupeKey =
       (typeof dedupeKey === 'string' && dedupeKey.trim().length > 0 ? dedupeKey.trim() : undefined) ??
       idempotencyNormalized;
+    const existingForDedup = await this.findExistingTaskForDedup({
+      room,
+      task,
+      requestId: resolvedRequestId,
+      dedupeKey: resolvedDedupeKey,
+      activeOnly: true,
+    });
+    if (existingForDedup) {
+      logger.debug('enqueueTask dedupe pre-check hit', {
+        room,
+        task,
+        requestId: resolvedRequestId,
+        dedupeKey: resolvedDedupeKey,
+        existingTaskId: existingForDedup.id,
+        status: existingForDedup.status,
+      });
+      const correlation = deriveRequestCorrelation({
+        task,
+        requestId: resolvedRequestId,
+        params,
+      });
+      void recordAgentTraceEvent({
+        stage: 'deduped',
+        status: existingForDedup.status,
+        traceId: correlation.traceId,
+        requestId: correlation.requestId,
+        intentId: correlation.intentId,
+        taskId: existingForDedup.id,
+        task,
+        room,
+      });
+      return existingForDedup;
+    }
     const queueDepthLimit = Number(process.env.TASK_QUEUE_MAX_DEPTH_PER_ROOM ?? 0);
     if (Number.isFinite(queueDepthLimit) && queueDepthLimit > 0) {
       const { count, error: countError } = await this.supabase
@@ -181,13 +262,30 @@ export class AgentTaskQueue {
     if (error) {
       if (error.code === '23505') {
         logger.debug('enqueueTask dedupe hit', { room, task, requestId: resolvedRequestId });
-        return null; // idempotent duplicate
+        const existingAfterConflict = await this.findExistingTaskForDedup({
+          room,
+          task,
+          requestId: resolvedRequestId,
+          dedupeKey: resolvedDedupeKey,
+          activeOnly: false,
+        });
+        return existingAfterConflict;
       }
       logger.error('enqueueTask failed', { room, task, error });
       throw error;
     }
 
     logger.debug('enqueueTask inserted', { id: data?.id, room, task });
+    if (data?.id) {
+      void recordTaskTraceFromParams({
+        stage: 'queued',
+        status: 'queued',
+        taskId: data.id,
+        task,
+        room,
+        params,
+      });
+    }
 
     return data;
   }
@@ -205,6 +303,17 @@ export class AgentTaskQueue {
     });
 
     if (error) throw error;
+    for (const task of (data as AgentTask[] | null) ?? []) {
+      void recordTaskTraceFromParams({
+        stage: 'claimed',
+        status: 'running',
+        taskId: task.id,
+        task: task.task,
+        room: task.room,
+        params: task.params,
+        attempt: task.attempt,
+      });
+    }
 
     return { leaseToken, tasks: (data as AgentTask[] | null) ?? [] };
   }

@@ -1,4 +1,4 @@
-import { getBooleanFlag, isFairyClientAgentEnabled } from './feature-flags';
+import { getBooleanFlag, getNumberFlag, isFairyClientAgentEnabled, parseCsvFlag } from './feature-flags';
 
 describe('feature flags', () => {
   it('parses quoted booleans', () => {
@@ -13,5 +13,15 @@ describe('feature flags', () => {
   it('respects explicit fairy client agent flag values', () => {
     expect(isFairyClientAgentEnabled('true')).toBe(true);
     expect(isFairyClientAgentEnabled('false')).toBe(false);
+  });
+
+  it('parses numbers with fallback', () => {
+    expect(getNumberFlag('42', 7)).toBe(42);
+    expect(getNumberFlag('bad', 7)).toBe(7);
+  });
+
+  it('parses csv lists', () => {
+    expect(parseCsvFlag('a, b , ,c')).toEqual(['a', 'b', 'c']);
+    expect(parseCsvFlag(undefined)).toEqual([]);
   });
 });

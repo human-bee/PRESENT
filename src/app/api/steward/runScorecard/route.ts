@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { BYOK_ENABLED } from '@/lib/agents/shared/byok-flags';
 import { AgentTaskQueue } from '@/lib/agents/shared/queue';
+import { isFastStewardReady } from '@/lib/agents/fast-steward-config';
+import { runDebateScorecardSteward } from '@/lib/agents/debate-judge';
+import { runDebateScorecardStewardFast } from '@/lib/agents/subagents/debate-steward-fast';
 import { assertCanvasMember, parseCanvasIdFromRoom } from '@/lib/agents/shared/canvas-billing';
 import { resolveRequestUserId } from '@/lib/supabase/server/resolve-request-user';
+import { getDecryptedUserModelKey } from '@/lib/agents/shared/user-model-keys';
 import { createLogger } from '@/lib/logging';
 import { parseJsonObject, stewardRunScorecardRequestSchema } from '@/lib/agents/shared/schemas';
 import type { JsonObject, JsonValue } from '@/lib/utils/json-schema';
@@ -145,7 +149,6 @@ export async function POST(req: NextRequest) {
       typeof requestId === 'string' && requestId.trim() ? requestId.trim() : orchestrationEnvelope.idempotencyKey;
 
     try {
-      // Lazily instantiate so `next build` doesn't require Supabase env vars.
       const enqueueResult = await getQueue().enqueueTask({
         room: trimmedRoom,
         task: normalizedTask,
@@ -163,8 +166,43 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ status: 'queued', task: enqueueResult }, { status: 202 });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      logger.warn('queue enqueue failed', { message, queueDirectFallback: QUEUE_DIRECT_FALLBACK_ENABLED });
-      return NextResponse.json({ error: 'Queue unavailable' }, { status: 503 });
+      logger.warn('queue enqueue failed', { message });
+      if (!QUEUE_DIRECT_FALLBACK_ENABLED) {
+        return NextResponse.json({ error: 'Queue unavailable' }, { status: 503 });
+      }
+
+      const cerebrasKey =
+        BYOK_ENABLED && billingUserId
+          ? await getDecryptedUserModelKey({ userId: billingUserId, provider: 'cerebras' })
+          : null;
+      const useFast = normalizedTask !== 'scorecard.fact_check' && isFastStewardReady(cerebrasKey ?? undefined);
+      try {
+        if (useFast) {
+          await runDebateScorecardStewardFast({
+            room: trimmedRoom,
+            componentId: trimmedComponentId,
+            intent: normalizedIntent ?? normalizedTask,
+            summary: normalizedSummary,
+            prompt: normalizedPrompt,
+            topic: normalizedTopic,
+            cerebrasApiKey: cerebrasKey ?? undefined,
+          });
+        } else {
+          await runDebateScorecardSteward({
+            room: trimmedRoom,
+            componentId: trimmedComponentId,
+            windowMs: resolvedWindow,
+            intent: normalizedIntent ?? normalizedTask,
+            summary: normalizedSummary,
+            prompt: normalizedPrompt,
+            topic: normalizedTopic,
+          });
+        }
+        return NextResponse.json({ status: 'executed_fallback' }, { status: 202 });
+      } catch (fallbackError) {
+        logger.error('fallback execution failed', { error: fallbackError });
+        return NextResponse.json({ error: 'Dispatch failed' }, { status: 502 });
+      }
     }
   } catch (error) {
     logger.error('invalid request', { error: error instanceof Error ? error.message : String(error) });

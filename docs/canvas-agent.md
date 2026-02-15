@@ -140,7 +140,8 @@ Validates and sanitizes model outputs:
 - Config via env:
 - `CANVAS_AGENT_SCREENSHOT_RETRIES` — additional attempts after the initial timeout (default `1`).
 - `CANVAS_AGENT_SCREENSHOT_RETRY_DELAY_MS` — wait between attempts (default `450` ms).
-- `CANVAS_AGENT_LOW_ACTION_THRESHOLD` — if a model run emits fewer actions than this value (default `6`), the scheduler enqueues a deterministic follow-up with stricter sampling.
+- `CANVAS_AGENT_LOW_ACTION_THRESHOLD` — if a model run emits fewer actions than this value (default `6`), the agent schedules a deterministic follow-up with stricter sampling.
+- `CANVAS_AGENT_DURABLE_FOLLOWUPS` — when `true` (default), follow-ups are enqueued as durable `canvas.followup` queue tasks with correlation + dedupe keys. If queue credentials are unavailable, the runner falls back to in-session memory scheduling.
 - `CANVAS_AGENT_CONFIG` — optional JSON blob that overrides the knobs above in one place (example: `{"screenshot":{"timeoutMs":5000,"retries":2},"followups":{"lowActionThreshold":4}}`). Use this to keep parity with the starter kit defaults without juggling multiple env vars.
 - Follow-up passes always request a fresh screenshot, even when the legacy client agent is disabled.
 
@@ -153,7 +154,9 @@ Validates and sanitizes model outputs:
 
 Task queue and todo management:
 
-- Per-session FIFO queue with bounded depth (`CANVAS_AGENT_MAX_FOLLOWUPS=3`)
+- Follow-ups default to durable queue tasks (`canvas.followup`) so work survives worker restarts/retries
+- In-memory per-session FIFO scheduler remains as automatic fallback when durable queueing is unavailable
+- Follow-up depth remains bounded (`CANVAS_AGENT_MAX_FOLLOWUPS=3`)
 - Watchdog timer (60s) to prevent runaway loops
 - Persist todos to Supabase `canvas_agent_todos` table
 - Reflect changes via `agent:chat`
@@ -259,9 +262,12 @@ type AgentActionEnvelope = {
 ```typescript
 { type: 'agent:chat', sessionId: string, message: { role: 'assistant'|'system', text: string } }
 { type: 'agent:status', sessionId: string, state: 'waiting_context'|'calling_model'|'streaming'|'scheduled'|'done'|'canceled'|'error', detail?: unknown }
+{ type: 'agent:trace', sessionId: string, step: 'run_start'|'screenshot_requested'|'screenshot_received'|'screenshot_failed'|'model_call'|'chunk_processed'|'actions_dispatched'|'ack_received'|'ack_timeout'|'ack_retry'|'followup_enqueued'|'run_complete'|'run_error', traceId?: string, intentId?: string, requestId?: string, seq?: number, partial?: boolean, actionCount?: number, detail?: unknown }
 ```
 
-**Topics**: `agent:chat`, `agent:status`
+**Topics**: `agent:chat`, `agent:status`, `agent:trace`
+
+Trace emission is non-blocking and sampled/budgeted (`CANVAS_AGENT_TRACE_MAX_EVENTS`, default `120` per run) so instrumentation does not block action dispatch.
 
 ## TLDraw-native Action Vocabulary
 
@@ -291,6 +297,8 @@ CANVAS_AGENT_SCREENSHOT_TIMEOUT_MS=3500
 CANVAS_AGENT_SCREENSHOT_RETRIES=1
 CANVAS_AGENT_SCREENSHOT_RETRY_DELAY_MS=450
 CANVAS_AGENT_LOW_ACTION_THRESHOLD=6
+CANVAS_AGENT_DURABLE_FOLLOWUPS=true
+CANVAS_AGENT_TRACE_MAX_EVENTS=120
 CANVAS_AGENT_TTFB_SLO_MS=200
 NEXT_PUBLIC_CANVAS_AGENT_CLIENT_ENABLED=false  # legacy client agent (archived, leave false unless forced fallback)
 NEXT_PUBLIC_CANVAS_AGENT_THEME_ENABLED=true
