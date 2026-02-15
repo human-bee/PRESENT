@@ -109,6 +109,10 @@ export function ToolDispatcher({
                 roomId,
                 token,
                 ts: Date.now(),
+                envelopeHash: typeof envelope?.hash === 'string' ? envelope.hash : undefined,
+                traceId: typeof envelope?.traceId === 'string' ? envelope.traceId : undefined,
+                intentId: typeof envelope?.intentId === 'string' ? envelope.intentId : undefined,
+                requestId: typeof envelope?.requestId === 'string' ? envelope.requestId : undefined,
               }),
               keepalive: true,
             });
@@ -126,6 +130,17 @@ export function ToolDispatcher({
       try {
         if (!message || message.type !== 'agent:status') return;
         window.dispatchEvent(new CustomEvent('present:agent_status', { detail: message }));
+      } catch {}
+    });
+    return () => { off?.(); };
+  }, [events.bus, room]);
+
+  useEffect(() => {
+    if (!room) return;
+    const off = events.bus.on('agent:trace', (message: any) => {
+      try {
+        if (!message || message.type !== 'agent:trace') return;
+        window.dispatchEvent(new CustomEvent('present:agent_trace', { detail: message }));
       } catch {}
     });
     return () => { off?.(); };

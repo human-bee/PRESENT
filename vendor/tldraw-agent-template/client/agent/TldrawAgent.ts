@@ -60,6 +60,9 @@ export class TldrawAgent {
 	/** An id to differentiate the agent from other agents. */
 	id: string
 
+	/** A stable-per-instance key used to scope server-side stream sessions. */
+	streamSessionId: string
+
 	/** A callback for when an error occurs. */
 	onError: (e: any) => void
 
@@ -120,6 +123,7 @@ export class TldrawAgent {
 	constructor({ editor, id, onError }: TldrawAgentOptions) {
 		this.editor = editor
 		this.id = id
+		this.streamSessionId = createStreamSessionId(id)
 		this.onError = onError
 
 		$agentsAtom.update(editor, (agents) => [...agents, this])
@@ -743,7 +747,7 @@ function requestAgent({ agent, request }: { agent: TldrawAgent; request: AgentRe
 		let incompleteDiff: RecordsDiff<TLRecord> | null = null
 		const actionPromises: Promise<void>[] = []
 		try {
-			for await (const action of streamAgent({ prompt, signal })) {
+				for await (const action of streamAgent({ prompt, signal, agentSessionId: agent.streamSessionId })) {
 				if (cancelled) break
 				editor.run(
 					() => {
@@ -808,15 +812,18 @@ function requestAgent({ agent, request }: { agent: TldrawAgent; request: AgentRe
 async function* streamAgent({
 	prompt,
 	signal,
+	agentSessionId,
 }: {
 	prompt: BaseAgentPrompt
 	signal: AbortSignal
+	agentSessionId: string
 }): AsyncGenerator<Streaming<AgentAction>> {
 	const res = await fetch('/stream', {
 		method: 'POST',
 		body: JSON.stringify(prompt),
 		headers: {
 			'Content-Type': 'application/json',
+			'X-Tldraw-Agent-Id': agentSessionId,
 		},
 		signal,
 	})
@@ -860,6 +867,15 @@ async function* streamAgent({
 	} finally {
 		reader.releaseLock()
 	}
+}
+
+function createStreamSessionId(agentId: string): string {
+	const randomPart =
+		typeof globalThis.crypto?.randomUUID === 'function'
+			? globalThis.crypto.randomUUID()
+			: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`
+
+	return `${agentId}:${randomPart}`
 }
 
 /**

@@ -4,6 +4,7 @@ import { generateObject, streamObject } from 'ai';
 import { z } from 'zod';
 import type { StructuredStream } from './streaming';
 import type { ModelTuning } from './model/presets';
+import { getRuntimeModelKey } from '@/lib/agents/shared/model-runtime-context';
 
 const agentActionListSchema = z
   .object({
@@ -88,8 +89,10 @@ class AiSdkProvider implements StreamingProvider {
   }
 
   private resolveModel() {
-    const openai = process.env.OPENAI_API_KEY ? createOpenAI({ apiKey: process.env.OPENAI_API_KEY }) : null;
-    const anthropic = process.env.ANTHROPIC_API_KEY ? createAnthropic({ apiKey: process.env.ANTHROPIC_API_KEY }) : null;
+    const openaiKey = getRuntimeModelKey('OPENAI_API_KEY') ?? process.env.OPENAI_API_KEY;
+    const anthropicKey = getRuntimeModelKey('ANTHROPIC_API_KEY') ?? process.env.ANTHROPIC_API_KEY;
+    const openai = openaiKey ? createOpenAI({ apiKey: openaiKey }) : null;
+    const anthropic = anthropicKey ? createAnthropic({ apiKey: anthropicKey }) : null;
     const modelFn = this.provider === 'openai' ? openai : anthropic;
     if (!modelFn) throw new Error(`Provider not configured: ${this.provider}`);
     return modelFn(this.modelId);
@@ -202,7 +205,10 @@ const ensureDynamicProvider = (name: string): StreamingProvider | null => {
   if (registry.has(trimmed)) return registry.get(trimmed)!;
 
   const create = (provider: 'anthropic' | 'openai', modelId: string, key?: string) => {
-    const hasAuth = provider === 'anthropic' ? !!process.env.ANTHROPIC_API_KEY : !!process.env.OPENAI_API_KEY;
+    const hasAuth =
+      provider === 'anthropic'
+        ? !!(getRuntimeModelKey('ANTHROPIC_API_KEY') ?? process.env.ANTHROPIC_API_KEY)
+        : !!(getRuntimeModelKey('OPENAI_API_KEY') ?? process.env.OPENAI_API_KEY);
     if (!hasAuth) return null;
     const registryKey = key ?? `${provider}:${modelId}`;
     registerProvider(registryKey, provider, modelId);

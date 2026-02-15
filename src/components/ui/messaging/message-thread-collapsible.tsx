@@ -102,11 +102,16 @@ export const MessageThreadCollapsible = React.forwardRef<
   const [agentEvents, setAgentEvents] = React.useState<
     Array<{
       ts: number;
+      kind?: 'action' | 'status' | 'trace';
       sessionId?: string;
       seq?: number;
       actionCount?: number;
       verbCounts?: Record<string, number>;
       status?: string;
+      traceStep?: string;
+      traceId?: string;
+      intentId?: string;
+      requestId?: string;
       raw?: any;
       firstAction?: { name?: string; preview?: string };
     }>
@@ -508,6 +513,7 @@ export const MessageThreadCollapsible = React.forwardRef<
         const next = [
           {
             ts: Date.now(),
+            kind: 'action' as const,
             sessionId: detail.sessionId,
             seq: detail.seq,
             actionCount: Array.isArray(detail.actions) ? detail.actions.length : undefined,
@@ -526,8 +532,31 @@ export const MessageThreadCollapsible = React.forwardRef<
       setAgentEvents((prev) => [
         {
           ts: Date.now(),
+          kind: 'status' as const,
           sessionId: detail.sessionId,
-          status: detail.status,
+          status: typeof detail.state === 'string' ? detail.state : undefined,
+          traceId: typeof detail.traceId === 'string' ? detail.traceId : undefined,
+          intentId: typeof detail.intentId === 'string' ? detail.intentId : undefined,
+          requestId: typeof detail.requestId === 'string' ? detail.requestId : undefined,
+          raw: detail,
+        },
+        ...prev,
+      ].slice(0, 50));
+    };
+    const handleTrace = (event: Event) => {
+      const detail = (event as CustomEvent).detail as any;
+      if (!detail) return;
+      setAgentEvents((prev) => [
+        {
+          ts: Date.now(),
+          kind: 'trace' as const,
+          sessionId: detail.sessionId,
+          seq: typeof detail.seq === 'number' ? detail.seq : undefined,
+          actionCount: typeof detail.actionCount === 'number' ? detail.actionCount : undefined,
+          traceStep: typeof detail.step === 'string' ? detail.step : undefined,
+          traceId: typeof detail.traceId === 'string' ? detail.traceId : undefined,
+          intentId: typeof detail.intentId === 'string' ? detail.intentId : undefined,
+          requestId: typeof detail.requestId === 'string' ? detail.requestId : undefined,
           raw: detail,
         },
         ...prev,
@@ -535,9 +564,11 @@ export const MessageThreadCollapsible = React.forwardRef<
     };
     window.addEventListener('present:agent_actions', handleActions as EventListener);
     window.addEventListener('present:agent_status', handleStatus as EventListener);
+    window.addEventListener('present:agent_trace', handleTrace as EventListener);
     return () => {
       window.removeEventListener('present:agent_actions', handleActions as EventListener);
       window.removeEventListener('present:agent_status', handleStatus as EventListener);
+      window.removeEventListener('present:agent_trace', handleTrace as EventListener);
     };
   }, [showAgentEvents]);
 
@@ -808,7 +839,9 @@ export const MessageThreadCollapsible = React.forwardRef<
                                   {new Date(e.ts).toLocaleTimeString('en-US', { hour12: false })}
                                 </span>
                                 <span className="flex items-center gap-2">
+                                  {e.kind && <span className="uppercase tracking-wide text-[10px]">{e.kind}</span>}
                                   {e.status && <span>{e.status}</span>}
+                                  {e.traceStep && <span>{e.traceStep}</span>}
                                   {typeof e.seq === 'number' && <span>seq {e.seq}</span>}
                                   {e.actionCount !== undefined && <span>{e.actionCount} actions</span>}
                                 </span>
@@ -823,6 +856,15 @@ export const MessageThreadCollapsible = React.forwardRef<
                                   {Object.entries(e.verbCounts)
                                     .map(([k, v]) => `${k}:${v}`)
                                     .join(', ')}
+                                </div>
+                              )}
+                              {(e.traceId || e.intentId || e.requestId) && (
+                                <div className="text-[11px] mt-0.5">
+                                  {e.traceId ? `trace:${e.traceId}` : ''}
+                                  {e.traceId && e.intentId ? ' · ' : ''}
+                                  {e.intentId ? `intent:${e.intentId}` : ''}
+                                  {(e.traceId || e.intentId) && e.requestId ? ' · ' : ''}
+                                  {e.requestId ? `request:${e.requestId}` : ''}
                                 </div>
                               )}
                               {e.raw && (

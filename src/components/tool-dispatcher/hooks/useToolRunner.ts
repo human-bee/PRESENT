@@ -13,6 +13,8 @@ import { applyEnvelope } from '@/components/tool-dispatcher/handlers/tldraw-acti
 import { logJourneyEvent } from '@/lib/journey-logger';
 import { fetchWithSupabaseAuth } from '@/lib/supabase/auth-headers';
 import { createLogger } from '@/lib/logging';
+import { deriveRequestCorrelation } from '@/lib/agents/shared/request-correlation';
+import type { JsonObject } from '@/lib/utils/json-schema';
 import {
   parseDecisionMessage,
   parseStewardTriggerMessage,
@@ -573,36 +575,45 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
         if (tool === 'dispatch_to_conductor') {
           const task = typeof params?.task === 'string' ? params.task.trim() : '';
           const dispatchParams = (params?.params as Record<string, unknown>) || {};
+          const correlation = deriveRequestCorrelation({
+            task,
+            requestId: params?.requestId,
+            params: dispatchParams as JsonObject,
+          });
+          if (correlation.requestId && !dispatchParams.requestId) {
+            dispatchParams.requestId = correlation.requestId;
+          }
+          if (task === 'fairy.intent' && correlation.intentId && !dispatchParams.id) {
+            dispatchParams.id = correlation.intentId;
+          }
+          if (correlation.traceId && !dispatchParams.traceId) {
+            dispatchParams.traceId = correlation.traceId;
+          }
+          const requestId = correlation.requestId;
           const executionId =
-            typeof dispatchParams.executionId === 'string'
-              ? dispatchParams.executionId
-              : typeof params?.executionId === 'string'
-                ? params.executionId
+            typeof dispatchParams.executionId === 'string' && dispatchParams.executionId.trim().length > 0
+              ? dispatchParams.executionId.trim()
+              : typeof params?.executionId === 'string' && params.executionId.trim().length > 0
+                ? params.executionId.trim()
                 : undefined;
           const idempotencyKey =
-            typeof dispatchParams.idempotencyKey === 'string'
-              ? dispatchParams.idempotencyKey
-              : typeof params?.idempotencyKey === 'string'
-                ? params.idempotencyKey
-                : undefined;
+            typeof dispatchParams.idempotencyKey === 'string' && dispatchParams.idempotencyKey.trim().length > 0
+              ? dispatchParams.idempotencyKey.trim()
+              : typeof params?.idempotencyKey === 'string' && params.idempotencyKey.trim().length > 0
+                ? params.idempotencyKey.trim()
+                : requestId;
           const lockKey =
-            typeof dispatchParams.lockKey === 'string'
-              ? dispatchParams.lockKey
-              : typeof params?.lockKey === 'string'
-                ? params.lockKey
+            typeof dispatchParams.lockKey === 'string' && dispatchParams.lockKey.trim().length > 0
+              ? dispatchParams.lockKey.trim()
+              : typeof params?.lockKey === 'string' && params.lockKey.trim().length > 0
+                ? params.lockKey.trim()
                 : undefined;
           const attempt =
-            typeof dispatchParams.attempt === 'number'
+            typeof dispatchParams.attempt === 'number' && Number.isFinite(dispatchParams.attempt)
               ? dispatchParams.attempt
-              : typeof params?.attempt === 'number'
+              : typeof params?.attempt === 'number' && Number.isFinite(params.attempt)
                 ? params.attempt
                 : undefined;
-          const requestId =
-            typeof dispatchParams.requestId === 'string'
-              ? dispatchParams.requestId
-              : typeof params?.requestId === 'string'
-                ? params.requestId
-                : idempotencyKey;
 
           if (!task) {
             const message = 'dispatch_to_conductor requires a task value';
@@ -650,12 +661,14 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
                   room: call.roomId || room?.name,
                   task,
                   params: dispatchParams,
-                  requestId,
                   executionId,
                   idempotencyKey,
                   lockKey,
                   attempt,
                   summary: typeof params?.summary === 'string' ? params.summary : undefined,
+                  requestId: correlation.requestId,
+                  traceId: correlation.traceId,
+                  intentId: correlation.intentId,
                 }),
               });
               if (!res.ok) {

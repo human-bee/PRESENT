@@ -6,6 +6,10 @@ type AckRecord = {
   seq: number;
   clientId: string;
   ts: number;
+  envelopeHash?: string;
+  traceId?: string;
+  intentId?: string;
+  requestId?: string;
 };
 
 type AckEnvelope = {
@@ -108,13 +112,46 @@ function maybeCleanup() {
   prunePersisted(now);
 }
 
-export function recordAck(sessionId: string, seq: number, clientId: string, ts: number) {
+export function recordAck(
+  sessionId: string,
+  seq: number,
+  clientId: string,
+  ts: number,
+  extras?: {
+    envelopeHash?: string;
+    traceId?: string;
+    intentId?: string;
+    requestId?: string;
+  },
+) {
+  const normalizeOptional = (value: string | undefined) => {
+    if (typeof value !== 'string') return undefined;
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : undefined;
+  };
   const envelope: AckEnvelope = {
-    record: { seq, clientId, ts },
+    record: {
+      seq,
+      clientId,
+      ts,
+      ...(normalizeOptional(extras?.envelopeHash) ? { envelopeHash: normalizeOptional(extras?.envelopeHash) } : {}),
+      ...(normalizeOptional(extras?.traceId) ? { traceId: normalizeOptional(extras?.traceId) } : {}),
+      ...(normalizeOptional(extras?.intentId) ? { intentId: normalizeOptional(extras?.intentId) } : {}),
+      ...(normalizeOptional(extras?.requestId) ? { requestId: normalizeOptional(extras?.requestId) } : {}),
+    },
     storedAt: Date.now(),
   };
   const session = inbox.get(sessionId) ?? new Map<number, AckEnvelope>();
-  if (!session.has(seq)) {
+  const existing = session.get(seq);
+  const incomingHash = normalizeOptional(envelope.record.envelopeHash);
+  const existingHash = normalizeOptional(existing?.record.envelopeHash);
+  const shouldReplace =
+    !existing ||
+    envelope.record.ts > existing.record.ts ||
+    (envelope.record.ts === existing.record.ts &&
+      incomingHash !== undefined &&
+      incomingHash !== existingHash);
+  if (shouldReplace) {
     session.set(seq, envelope);
     inbox.set(sessionId, session);
     persistAck(sessionId, seq, envelope);

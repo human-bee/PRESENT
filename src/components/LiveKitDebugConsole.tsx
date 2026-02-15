@@ -35,6 +35,7 @@ export function LiveKitDebugConsole({ enabled = true }: { enabled?: boolean }) {
     const offEditor = bus.on('editor_action', (m) => log('editor_action', m));
     const offCapability = bus.on('capability_query', (m) => log('capability', m));
     const offUpdateComponent = bus.on('update_component', (m) => log('update_component', m));
+    const offTrace = bus.on('agent:trace', (m) => log('agent_trace', m));
 
     return () => {
       offDecision?.();
@@ -44,6 +45,7 @@ export function LiveKitDebugConsole({ enabled = true }: { enabled?: boolean }) {
       offEditor?.();
       offCapability?.();
       offUpdateComponent?.();
+      offTrace?.();
     };
   }, [enabled, room, bus]);
 
@@ -51,4 +53,3 @@ export function LiveKitDebugConsole({ enabled = true }: { enabled?: boolean }) {
 }
 
 export default LiveKitDebugConsole;
-

@@ -12,6 +12,7 @@ import {
   type PendingToolCallEntry,
 } from '../src/lib/agents/realtime/voice-agent/tool-publishing';
 import { VoiceComponentLedger } from '../src/lib/agents/realtime/voice-agent/component-ledger';
+import { buildSwarmDecision } from '../src/lib/agents/swarm/policy';
 
 type Summary = {
   iterations: number;
@@ -38,6 +39,7 @@ type RacetrackResult = {
     canvasDispatch: Summary & { suppressRatePct: number };
     ledgerOps: Summary;
     queueFlush: Summary;
+    swarmDecision: Summary;
   };
 };
 
@@ -61,6 +63,14 @@ const runSyncBenchmark = (iterations: number, fn: () => void): Summary => {
   const start = nowMs();
   for (let i = 0; i < iterations; i += 1) {
     fn();
+  }
+  return toSummary(iterations, nowMs() - start);
+};
+
+const runAsyncBenchmark = async (iterations: number, fn: () => Promise<void>): Promise<Summary> => {
+  const start = nowMs();
+  for (let i = 0; i < iterations; i += 1) {
+    await fn();
   }
   return toSummary(iterations, nowMs() - start);
 };
@@ -174,6 +184,16 @@ const main = async () => {
 
   const ledgerOps = runLedgerBenchmark(5000);
   const queueFlush = await runQueueFlushBenchmark(250);
+  const swarmDecision = await runAsyncBenchmark(250, async () => {
+    await buildSwarmDecision('auto', {
+      room: 'race-room',
+      message: 'draw a cat near selected shapes',
+      selectionIds: ['shape:a', 'shape:b'],
+      bounds: { x: 10, y: 20, w: 500, h: 300 },
+      requestId: 'race-request',
+      traceId: 'race-trace',
+    });
+  });
 
   const result: RacetrackResult = {
     benchmark: 'voice-agent-racetrack',
@@ -196,6 +216,7 @@ const main = async () => {
       },
       ledgerOps,
       queueFlush,
+      swarmDecision,
     },
   };
 
