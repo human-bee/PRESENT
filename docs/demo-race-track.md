@@ -2,6 +2,9 @@
 
 Goal: a repeatable “lap” that stress-tests the **Voice Agent → Tool calls → Widgets → Linear MCP/GraphQL → Stewards** pipeline.
 
+For a concurrency-first variant that combines CrowdPulse + DebateScorecard + Fairy canvas orchestration, see:
+`docs/demo-race-night-v2.md`
+
 ## Starting Line (consistent for every lap)
 
 - Stack is running: `npm run stack:start` (or `agent:realtime`, `agent:conductor`, `dev`)

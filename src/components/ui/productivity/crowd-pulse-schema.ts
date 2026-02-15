@@ -18,7 +18,7 @@ export const crowdScoreSchema = z.object({
 export const crowdPulseWidgetSchema = z.object({
   title: z.string().optional(),
   prompt: z.string().optional(),
-  status: z.enum(['idle', 'counting', 'locked']).optional(),
+  status: z.enum(['idle', 'counting', 'locked', 'q_and_a']).optional(),
   handCount: z.number().optional(),
   peakCount: z.number().optional(),
   confidence: z.number().optional(),
@@ -47,7 +47,7 @@ export type CrowdPulseWidgetProps = z.infer<typeof crowdPulseWidgetSchema> & {
 export type CrowdPulseState = {
   title: string;
   prompt?: string;
-  status: 'idle' | 'counting' | 'locked';
+  status: 'idle' | 'counting' | 'locked' | 'q_and_a';
   handCount: number;
   peakCount: number;
   confidence: number;

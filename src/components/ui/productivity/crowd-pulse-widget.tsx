@@ -20,6 +20,30 @@ import {
 } from './crowd-pulse-hand-utils';
 import { WidgetFrame } from './widget-frame';
 
+const STEWARD_METRICS_HOLD_MS = 15_000;
+
+const normalizeStatus = (value: unknown): CrowdPulseState['status'] | undefined => {
+  if (typeof value !== 'string') return undefined;
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) return undefined;
+  if (normalized === 'idle' || normalized === 'counting' || normalized === 'locked' || normalized === 'q_and_a') {
+    return normalized;
+  }
+  if (normalized === 'q&a' || normalized === 'qa' || normalized === 'q and a') {
+    return 'q_and_a';
+  }
+  return undefined;
+};
+
+const formatStatusLabel = (status: CrowdPulseState['status']) =>
+  status === 'q_and_a' ? 'Q&A' : status.toUpperCase();
+
+const normalizeQuestionText = (value: unknown): string | null => {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+};
+
 export default function CrowdPulseWidget(props: CrowdPulseWidgetProps) {
   const {
     __custom_message_id,
@@ -38,7 +62,7 @@ export default function CrowdPulseWidget(props: CrowdPulseWidgetProps) {
   const [state, setState] = useState<CrowdPulseState>(() => ({
     title: initial.title ?? 'Crowd Pulse',
     prompt: initial.prompt,
-    status: initial.status ?? 'idle',
+    status: normalizeStatus(initial.status) ?? 'idle',
     handCount: initial.handCount ?? 0,
     peakCount: initial.peakCount ?? 0,
     confidence: initial.confidence ?? 0,
@@ -63,23 +87,41 @@ export default function CrowdPulseWidget(props: CrowdPulseWidgetProps) {
   const lastDetectRef = useRef<number>(0);
   const lastEmitRef = useRef<number>(0);
   const peakRef = useRef<number>(state.peakCount ?? 0);
+  const stewardMetricsHoldUntilRef = useRef<number>(0);
 
   const applyPatch = useCallback((patch: Record<string, unknown>) => {
     setState((prev) => {
       const next: CrowdPulseState = { ...prev };
+      const hasExplicitMetricsPatch =
+        typeof patch.handCount === 'number' ||
+        typeof patch.peakCount === 'number' ||
+        typeof patch.confidence === 'number' ||
+        typeof patch.noiseLevel === 'number';
+
       if (typeof patch.title === 'string') next.title = patch.title;
       if (typeof patch.prompt === 'string') next.prompt = patch.prompt;
-      if (typeof patch.status === 'string') {
-        const status = patch.status as CrowdPulseState['status'];
-        if (status === 'idle' || status === 'counting' || status === 'locked') {
-          next.status = status;
-        }
+      const normalizedStatus = normalizeStatus(patch.status);
+      if (normalizedStatus) {
+        next.status = normalizedStatus;
       }
       if (typeof patch.handCount === 'number') next.handCount = patch.handCount;
       if (typeof patch.peakCount === 'number') next.peakCount = patch.peakCount;
       if (typeof patch.confidence === 'number') next.confidence = patch.confidence;
       if (typeof patch.noiseLevel === 'number') next.noiseLevel = patch.noiseLevel;
-      if (typeof patch.activeQuestion === 'string') next.activeQuestion = patch.activeQuestion;
+      const hasActiveQuestionPatch = Object.prototype.hasOwnProperty.call(patch, 'activeQuestion');
+      let nextQuestionText: string | null = null;
+      if (hasActiveQuestionPatch) {
+        if (typeof patch.activeQuestion === 'string') {
+          nextQuestionText = normalizeQuestionText(patch.activeQuestion);
+          if (nextQuestionText === null) {
+            next.activeQuestion = undefined;
+          } else {
+            next.activeQuestion = nextQuestionText;
+          }
+        } else if (patch.activeQuestion === null) {
+          next.activeQuestion = undefined;
+        }
+      }
       if (Array.isArray(patch.questions)) next.questions = patch.questions as CrowdPulseState['questions'];
       if (Array.isArray(patch.scoreboard)) next.scoreboard = patch.scoreboard as CrowdPulseState['scoreboard'];
       if (Array.isArray(patch.followUps)) next.followUps = patch.followUps as string[];
@@ -87,7 +129,27 @@ export default function CrowdPulseWidget(props: CrowdPulseWidgetProps) {
       if (typeof patch.version === 'number') next.version = patch.version;
       if (typeof patch.demoMode === 'boolean') next.demoMode = patch.demoMode;
       if (typeof patch.sensorEnabled === 'boolean') next.sensorEnabled = patch.sensorEnabled;
+      if (hasExplicitMetricsPatch) {
+        // Prevent local camera telemetry from immediately clobbering explicit steward updates.
+        stewardMetricsHoldUntilRef.current = Date.now() + STEWARD_METRICS_HOLD_MS;
+      }
       if (typeof patch.showPreview === 'boolean') next.showPreview = patch.showPreview;
+
+      if (!Array.isArray(patch.questions) && hasActiveQuestionPatch && nextQuestionText) {
+        const exists = next.questions.some((question) => question.text.trim().toLowerCase() === nextQuestionText.toLowerCase());
+        if (!exists) {
+          next.questions = [
+            {
+              id: `q-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
+              text: nextQuestionText,
+              votes: 0,
+              status: 'open',
+            },
+            ...next.questions,
+          ].slice(0, 20);
+        }
+      }
+
       return next;
     });
   }, []);
@@ -225,6 +287,10 @@ export default function CrowdPulseWidget(props: CrowdPulseWidgetProps) {
           if (metrics.handCount > peakRef.current) peakRef.current = metrics.handCount;
 
           if (now - lastEmitRef.current > 120) {
+            if (Date.now() < stewardMetricsHoldUntilRef.current) {
+              animationRef.current = requestAnimationFrame(loop);
+              return;
+            }
             lastEmitRef.current = now;
             setState((prev) => {
               const next: CrowdPulseState = { ...prev };
@@ -304,12 +370,14 @@ export default function CrowdPulseWidget(props: CrowdPulseWidgetProps) {
             'rounded-full px-2 py-1 text-xs font-semibold border',
             state.status === 'locked'
               ? 'bg-success-surface text-success border-success-surface'
+              : state.status === 'q_and_a'
+                ? 'bg-success-surface text-success border-success-surface'
               : state.status === 'counting'
                 ? 'bg-info-surface text-info border-info-surface'
                 : 'bg-surface-secondary text-secondary border-default',
           )}
         >
-          {state.status.toUpperCase()}
+          {formatStatusLabel(state.status)}
         </span>
       }
       className={className}

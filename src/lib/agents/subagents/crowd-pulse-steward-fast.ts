@@ -9,6 +9,11 @@ import {
   formatContextDocuments,
 } from '@/lib/agents/shared/supabase-context';
 import { extractFirstToolCall, parseToolArgumentsResult } from './fast-steward-response';
+import {
+  normalizeCrowdPulseStatus,
+  parseCrowdPulseFallbackInstruction,
+  type CrowdPulsePatch,
+} from './crowd-pulse-parser';
 
 const CEREBRAS_MODEL = getModelForSteward('CROWD_PULSE_STEWARD_FAST_MODEL');
 
@@ -31,7 +36,7 @@ const crowdPulseTools = [
         properties: {
           title: { type: 'string' },
           prompt: { type: 'string' },
-          status: { type: 'string', enum: ['idle', 'counting', 'locked'] },
+          status: { type: 'string', enum: ['idle', 'counting', 'locked', 'q_and_a'] },
           handCount: { type: 'number' },
           peakCount: { type: 'number' },
           confidence: { type: 'number' },
@@ -73,27 +78,6 @@ const crowdPulseTools = [
     },
   },
 ];
-
-export type CrowdPulsePatch = {
-  title?: string;
-  prompt?: string;
-  status?: 'idle' | 'counting' | 'locked';
-  handCount?: number;
-  peakCount?: number;
-  confidence?: number;
-  noiseLevel?: number;
-  activeQuestion?: string;
-  questions?: Array<{
-    id: string;
-    text: string;
-    votes?: number;
-    status?: string;
-    tags?: string[];
-    speaker?: string;
-  }>;
-  scoreboard?: Array<{ label: string; score: number; delta?: number }>;
-  followUps?: string[];
-};
 
 const resolveWindowMs = (profile?: string) => {
   if (profile === 'glance') return 20_000;
@@ -139,7 +123,7 @@ export async function runCrowdPulseStewardFast(params: {
   ];
 
   if (!isFastStewardReady()) {
-    return instruction ? { prompt: instruction.slice(0, 180) } : {};
+    return parseCrowdPulseFallbackInstruction(instruction);
   }
 
   try {
@@ -156,17 +140,15 @@ export async function runCrowdPulseStewardFast(params: {
       const argsResult = parseToolArgumentsResult(toolCall.argumentsRaw);
       if (!argsResult.ok) {
         console.warn('[CrowdPulseStewardFast] Invalid tool arguments', { reason: argsResult.error });
-        return instruction ? { prompt: instruction.slice(0, 180) } : {};
+        return parseCrowdPulseFallbackInstruction(instruction);
       }
       const args = argsResult.args;
       const patch: CrowdPulsePatch = {};
       if (typeof args.title === 'string') patch.title = args.title.trim();
       if (typeof args.prompt === 'string') patch.prompt = args.prompt.trim();
-      if (typeof args.status === 'string') {
-        const status = args.status;
-        if (status === 'idle' || status === 'counting' || status === 'locked') {
-          patch.status = status;
-        }
+      const parsedStatus = normalizeCrowdPulseStatus(args.status);
+      if (parsedStatus) {
+        patch.status = parsedStatus;
       }
       if (typeof args.handCount === 'number') patch.handCount = args.handCount;
       if (typeof args.peakCount === 'number') patch.peakCount = args.peakCount;
@@ -176,11 +158,11 @@ export async function runCrowdPulseStewardFast(params: {
       if (Array.isArray(args.questions)) patch.questions = args.questions;
       if (Array.isArray(args.scoreboard)) patch.scoreboard = args.scoreboard;
       if (Array.isArray(args.followUps)) patch.followUps = args.followUps;
-      return patch;
+      return Object.keys(patch).length > 0 ? patch : parseCrowdPulseFallbackInstruction(instruction);
     }
   } catch (error) {
     console.error('[CrowdPulseStewardFast] Error:', error);
   }
 
-  return instruction ? { prompt: instruction.slice(0, 180) } : {};
+  return parseCrowdPulseFallbackInstruction(instruction);
 }
