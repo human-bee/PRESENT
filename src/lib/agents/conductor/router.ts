@@ -560,6 +560,26 @@ async function ensureWidgetComponent(intent: FairyIntent, componentType: string)
     if (existingById && existingById.componentType === componentType) {
       return requestedId;
     }
+    if (existingById && existingById.componentType !== componentType) {
+      logger.warn('[Conductor] requested widget id resolves to a different component type', {
+        room: intent.room,
+        requestedId,
+        requestedType: componentType,
+        existingType: existingById.componentType,
+      });
+      return requestedId;
+    }
+
+    await broadcastToolCall({
+      room: intent.room,
+      tool: 'create_component',
+      params: {
+        type: componentType,
+        messageId: requestedId,
+        intentId: intent.id,
+      },
+    });
+    return requestedId;
   }
 
   const existingByType = components

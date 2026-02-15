@@ -108,8 +108,20 @@ export default function CrowdPulseWidget(props: CrowdPulseWidgetProps) {
       if (typeof patch.peakCount === 'number') next.peakCount = patch.peakCount;
       if (typeof patch.confidence === 'number') next.confidence = patch.confidence;
       if (typeof patch.noiseLevel === 'number') next.noiseLevel = patch.noiseLevel;
-      const nextQuestionText = normalizeQuestionText(patch.activeQuestion);
-      if (nextQuestionText) next.activeQuestion = nextQuestionText;
+      const hasActiveQuestionPatch = Object.prototype.hasOwnProperty.call(patch, 'activeQuestion');
+      let nextQuestionText: string | null = null;
+      if (hasActiveQuestionPatch) {
+        if (typeof patch.activeQuestion === 'string') {
+          nextQuestionText = normalizeQuestionText(patch.activeQuestion);
+          if (nextQuestionText === null) {
+            next.activeQuestion = undefined;
+          } else {
+            next.activeQuestion = nextQuestionText;
+          }
+        } else if (patch.activeQuestion === null) {
+          next.activeQuestion = undefined;
+        }
+      }
       if (Array.isArray(patch.questions)) next.questions = patch.questions as CrowdPulseState['questions'];
       if (Array.isArray(patch.scoreboard)) next.scoreboard = patch.scoreboard as CrowdPulseState['scoreboard'];
       if (Array.isArray(patch.followUps)) next.followUps = patch.followUps as string[];
@@ -123,7 +135,7 @@ export default function CrowdPulseWidget(props: CrowdPulseWidgetProps) {
       }
       if (typeof patch.showPreview === 'boolean') next.showPreview = patch.showPreview;
 
-      if (!Array.isArray(patch.questions) && nextQuestionText) {
+      if (!Array.isArray(patch.questions) && hasActiveQuestionPatch && nextQuestionText) {
         const exists = next.questions.some((question) => question.text.trim().toLowerCase() === nextQuestionText.toLowerCase());
         if (!exists) {
           next.questions = [
