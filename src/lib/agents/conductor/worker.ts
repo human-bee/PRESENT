@@ -1,4 +1,5 @@
 import { setTimeout as delay } from 'node:timers/promises';
+import { randomUUID } from 'node:crypto';
 import { AgentTaskQueue } from '@/lib/agents/shared/queue';
 import type { JsonObject } from '@/lib/utils/json-schema';
 import { createLogger } from '@/lib/logging';
@@ -12,13 +13,17 @@ import {
   incrementOrchestrationCounter,
   recordOrchestrationTiming,
 } from '@/lib/agents/shared/orchestration-metrics';
+import { recordTaskTraceFromParams, recordWorkerHeartbeat } from '@/lib/agents/shared/trace-events';
 
 const TASK_LEASE_TTL_MS = Number(process.env.TASK_LEASE_TTL_MS ?? 15_000);
 const ROOM_CONCURRENCY = Number(process.env.ROOM_CONCURRENCY ?? 2);
+const WORKER_HEARTBEAT_MS = Number(process.env.AGENT_WORKER_HEARTBEAT_MS ?? 5_000);
 
 const queue = new AgentTaskQueue();
 const logger = createLogger('agents:conductor:worker');
 const mutationArbiter = new MutationArbiter();
+const workerId = process.env.AGENT_WORKER_ID || `conductor-${process.pid}-${randomUUID().slice(0, 8)}`;
+let activeTaskCount = 0;
 
 type ExecuteTaskFn = (taskName: string, params: JsonObject) => Promise<unknown>;
 
@@ -118,6 +123,16 @@ async function workerLoop(executeTask: ExecuteTaskFn) {
             if (!task) break;
             const stopLeaseExtender = createLeaseExtender(task.id, leaseToken);
             try {
+              activeTaskCount += 1;
+              void recordTaskTraceFromParams({
+                stage: 'executing',
+                status: 'running',
+                taskId: task.id,
+                task: task.task,
+                room: task.room,
+                params: task.params,
+                attempt: task.attempt,
+              });
               const startedAt = Date.now();
               const paramsRecord = task.params as Record<string, unknown>;
               const envelope = extractOrchestrationEnvelope(paramsRecord, {
@@ -185,6 +200,19 @@ async function workerLoop(executeTask: ExecuteTaskFn) {
                   : ({ status: 'completed' } as JsonObject);
               await queue.completeTask(task.id, leaseToken, jsonResult);
               const durationMs = Date.now() - startedAt;
+              void recordTaskTraceFromParams({
+                stage: 'completed',
+                status: 'succeeded',
+                taskId: task.id,
+                task: task.task,
+                room: task.room,
+                params: task.params,
+                attempt: task.attempt,
+                latencyMs: durationMs,
+                payload: {
+                  leaseToken,
+                },
+              });
               logger.info('task completed', { roomKey, taskId: task.id, durationMs });
               logger.debug('orchestration metrics', {
                 taskId: task.id,
@@ -203,7 +231,21 @@ async function workerLoop(executeTask: ExecuteTaskFn) {
                 error: message,
               });
               await queue.failTask(task.id, leaseToken, { error: message, retryAt });
+              void recordTaskTraceFromParams({
+                stage: 'failed',
+                status: 'failed',
+                taskId: task.id,
+                task: task.task,
+                room: task.room,
+                params: task.params,
+                attempt: task.attempt,
+                payload: {
+                  error: message,
+                  retryAt: retryAt ? retryAt.toISOString() : null,
+                },
+              });
             } finally {
+              activeTaskCount = Math.max(0, activeTaskCount - 1);
               stopLeaseExtender();
             }
           }
@@ -214,7 +256,21 @@ async function workerLoop(executeTask: ExecuteTaskFn) {
   }
 }
 
+function startHeartbeat() {
+  const emitHeartbeat = async () => {
+    await recordWorkerHeartbeat({
+      workerId,
+      activeTasks: activeTaskCount,
+    });
+  };
+  void emitHeartbeat();
+  return setInterval(() => {
+    void emitHeartbeat();
+  }, Math.max(1_000, WORKER_HEARTBEAT_MS));
+}
+
 export async function startConductorWorker(executeTask: ExecuteTaskFn) {
+  startHeartbeat();
   for (;;) {
     try {
       await workerLoop(executeTask);

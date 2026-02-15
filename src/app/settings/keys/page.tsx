@@ -16,9 +16,21 @@ type ProviderStatus = {
   updatedAt?: string;
 };
 
+type ProviderLinkState = {
+  provider: ProviderId;
+  state: 'linked_supported' | 'linked_unsupported' | 'api_key_configured' | 'missing';
+  linked: boolean;
+  apiKeyConfigured: boolean;
+};
+
 const demoMode = getBooleanFlag(process.env.NEXT_PUBLIC_CANVAS_DEMO_MODE, false);
 const bypassAuth = getBooleanFlag(process.env.NEXT_PUBLIC_CANVAS_DEV_BYPASS, false);
 const byokEnabled = !demoMode && !bypassAuth;
+
+const getErrorMessage = (error: unknown, fallback: string): string => {
+  if (error instanceof Error && error.message.trim()) return error.message;
+  return fallback;
+};
 
 const PROVIDERS: Array<{
   id: ProviderId;
@@ -84,6 +96,13 @@ export default function ModelKeysPage() {
     cerebras: false,
   });
   const [error, setError] = useState<string | null>(null);
+  const [providerLinks, setProviderLinks] = useState<Record<ProviderId, ProviderLinkState | undefined>>({
+    openai: undefined,
+    anthropic: undefined,
+    google: undefined,
+    together: undefined,
+    cerebras: undefined,
+  });
 
   const statusByProvider = useMemo(() => {
     const map = new Map<ProviderId, ProviderStatus>();
@@ -111,8 +130,30 @@ export default function ModelKeysPage() {
       const json = await res.json();
       const keys = Array.isArray(json?.keys) ? (json.keys as ProviderStatus[]) : [];
       setStatuses(keys);
-    } catch (e: any) {
-      setError(e?.message || 'Failed to load key status');
+      try {
+        const linksRes = await fetchWithSupabaseAuth('/api/provider-links');
+        if (linksRes.ok) {
+          const linksJson = await linksRes.json();
+          const links = Array.isArray(linksJson?.links) ? (linksJson.links as ProviderLinkState[]) : [];
+          const linkMap: Record<ProviderId, ProviderLinkState | undefined> = {
+            openai: undefined,
+            anthropic: undefined,
+            google: undefined,
+            together: undefined,
+            cerebras: undefined,
+          };
+          for (const link of links) {
+            if (link?.provider && link.provider in linkMap) {
+              linkMap[link.provider] = link;
+            }
+          }
+          setProviderLinks(linkMap);
+        }
+      } catch {
+        // Non-fatal: key status still renders even if provider-link endpoint is unavailable.
+      }
+    } catch (error: unknown) {
+      setError(getErrorMessage(error, 'Failed to load key status'));
       setStatuses(null);
     }
   }, []);
@@ -123,9 +164,9 @@ export default function ModelKeysPage() {
     void refresh();
   }, [user, refresh]);
 
-  const setDraft = (provider: ProviderId, value: string) => {
+  const setDraft = useCallback((provider: ProviderId, value: string) => {
     setDrafts((prev) => ({ ...prev, [provider]: value }));
-  };
+  }, []);
 
   const save = useCallback(
     async (provider: ProviderId) => {
@@ -145,13 +186,13 @@ export default function ModelKeysPage() {
         }
         await refresh();
         setDraft(provider, '');
-      } catch (e: any) {
-        setError(e?.message || 'Failed to save key');
+      } catch (error: unknown) {
+        setError(getErrorMessage(error, 'Failed to save key'));
       } finally {
         setBusy((prev) => ({ ...prev, [provider]: false }));
       }
     },
-    [drafts, refresh],
+    [drafts, refresh, setDraft],
   );
 
   const clear = useCallback(
@@ -169,8 +210,8 @@ export default function ModelKeysPage() {
           throw new Error(text || `Failed to delete (${res.status})`);
         }
         await refresh();
-      } catch (e: any) {
-        setError(e?.message || 'Failed to delete key');
+      } catch (error: unknown) {
+        setError(getErrorMessage(error, 'Failed to delete key'));
       } finally {
         setBusy((prev) => ({ ...prev, [provider]: false }));
       }
@@ -232,6 +273,7 @@ export default function ModelKeysPage() {
               const configured = status?.configured === true;
               const last4 = status?.last4 ? `••••${status.last4}` : '';
               const updatedAt = status?.updatedAt ? new Date(status.updatedAt).toLocaleString() : '';
+              const linkState = providerLinks[p.id];
               const isBusy = busy[p.id];
 
               return (
@@ -260,6 +302,11 @@ export default function ModelKeysPage() {
                           </>
                         ) : (
                           'Not configured'
+                        )}
+                        {linkState && (
+                          <span className="ml-2 inline-flex items-center rounded border border-slate-200 px-1.5 py-0.5 text-[10px] uppercase text-slate-600">
+                            {linkState.state.replace('_', ' ')}
+                          </span>
                         )}
                         <span className="ml-2">
                           <a className="text-blue-600 underline" href={p.helpUrl} target="_blank" rel="noreferrer">
@@ -309,4 +356,3 @@ export default function ModelKeysPage() {
     </div>
   );
 }
-

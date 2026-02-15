@@ -35,23 +35,23 @@ li{margin:6px 0;font-size:12px}
  -> done/error status</pre>
   </div>
   <div class="card">
-    <h2>Improved (implemented slice) <span class="tag">phase 1</span></h2>
+    <h2>Improved (implemented slice) <span class="tag">swarm + admin</span></h2>
 <pre>User
  -> VoiceAgent carries execution/idempotency ids
- -> Browser forwards canonical requestId/traceId
- -> /api/steward/runCanvas derives canonical correlation
- -> Queue dedupe pre-check avoids cancel-on-retry
- -> 23505 conflict returns existing task row
- -> CanvasRunner emits envelope hash + correlation ids
- -> Browser ack includes hash/trace/intent/request
- -> Ack inbox stores correlation metadata
- -> awaitAck can reject stale hash mismatch
- -> benchmark + visual artifacts recorded</pre>
+ -> Browser forwards canonical requestId/traceId/intentId
+ -> /api/steward/runCanvas validates BYOK + provider context
+ -> Queue writes queued/claimed/executing/completed traces
+ -> Swarm orchestrator routes (fairy-first + fallback)
+ -> CanvasSteward injects runtime model keys per billing user
+ -> CanvasRunner emits action and ack correlation
+ -> /api/canvas-agent/ack writes canonical ack trace event
+ -> /api/traces/:traceId replays end-to-end timeline
+ -> /admin/agents shows queue + traces + workers + safe actions</pre>
   </div>
 </div>
 <ul>
-  <li>Key reliability lift: retries now preserve the original queued task rather than canceling it during coalesce.</li>
-  <li>Key observability lift: request/trace intent identifiers are now propagated and visible across dispatch + ack.</li>
+  <li>Key reliability lift: worker heartbeats and safe admin actions (`cancel`, `retry`, `requeue`) are now auditable.</li>
+  <li>Key observability lift: trace events are persisted server-side and replayable by trace id.</li>
 </ul>
 </body>
 </html>

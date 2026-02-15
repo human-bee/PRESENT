@@ -13,6 +13,7 @@ import { AgentTaskQueue } from '@/lib/agents/shared/queue';
 import { resolveIntent, getObject, getString } from './intent-resolver';
 import { runDebateScorecardSteward, seedScorecardState } from '@/lib/agents/debate-judge';
 import { runDebateScorecardStewardFast } from '@/lib/agents/subagents/debate-steward-fast';
+import { isFastStewardReady } from '@/lib/agents/fast-steward-config';
 import { getDebateScorecard, commitDebateScorecard } from '@/lib/agents/shared/supabase-context';
 import {
   createDefaultPlayers,
@@ -43,12 +44,14 @@ import {
 import { formatFairyContextParts } from '@/lib/fairy-context/format';
 import { runSummaryStewardFast } from '@/lib/agents/subagents/summary-steward-fast';
 import { runCrowdPulseStewardFast } from '@/lib/agents/subagents/crowd-pulse-steward-fast';
-import { getBooleanFlag } from '@/lib/feature-flags';
+import { flags, getBooleanFlag } from '@/lib/feature-flags';
 import { createLogger } from '@/lib/logging';
 import {
   applyOrchestrationEnvelope,
   extractOrchestrationEnvelope,
 } from '@/lib/agents/shared/orchestration-envelope';
+import { createSwarmOrchestrator } from '@/lib/agents/swarm/orchestrator';
+import { getDecryptedUserModelKey } from '@/lib/agents/shared/user-model-keys';
 
 // Thin router: receives dispatch_to_conductor and hands off to stewards
 const queue = new AgentTaskQueue();
@@ -123,6 +126,7 @@ const ScorecardTaskArgs = z
     claimId: z.string().optional(),
     claimIds: z.array(z.string().min(1)).optional(),
     claimHint: z.string().optional(),
+    billingUserId: z.string().optional(),
   })
   .passthrough();
 
@@ -179,6 +183,16 @@ const SCORECARD_AUTO_FACT_CHECK_MAX_CLAIMS = Number(process.env.SCORECARD_AUTO_F
 const scorecardAutoFactCheckLedger = new Map<string, number>();
 const scorecardExecutionLocks = new Map<string, Promise<void>>();
 const logger = createLogger('agents:conductor:router');
+let swarmOrchestrator: ReturnType<typeof createSwarmOrchestrator> | null = null;
+
+const getSwarmOrchestrator = () => {
+  if (!swarmOrchestrator) {
+    swarmOrchestrator = createSwarmOrchestrator({
+      executeLegacy: executeTaskLegacy,
+    });
+  }
+  return swarmOrchestrator;
+};
 
 async function withScorecardLock<T>(key: string, fn: () => Promise<T>): Promise<T> {
   const previous = scorecardExecutionLocks.get(key) ?? Promise.resolve();
@@ -628,7 +642,7 @@ async function handleFairyIntent(rawParams: JsonObject) {
     }
 
     if (decisionLike.kind === 'canvas') {
-      return executeTask('canvas.agent_prompt', {
+      return executeTaskLegacy('canvas.agent_prompt', {
         room: intent.room,
         message,
         requestId: intent.id,
@@ -640,7 +654,7 @@ async function handleFairyIntent(rawParams: JsonObject) {
 
     if (decisionLike.kind === 'scorecard') {
       const componentId = await ensureWidgetComponent(intent, 'DebateScorecard');
-      return executeTask('scorecard.run', {
+      return executeTaskLegacy('scorecard.run', {
         room: intent.room,
         componentId,
         prompt: message,
@@ -1251,17 +1265,17 @@ async function runScorecardPatchTask(parsed: ScorecardTaskInput, rawParams: Json
   return { status: 'ok', version: committed.version, lastAction };
 }
 
-export async function executeTask(taskName: string, params: JsonObject) {
+async function executeTaskLegacy(taskName: string, params: JsonObject) {
   if (!taskName || taskName === 'auto') {
     const resolution = resolveIntent(params);
     if (resolution) {
       const nextParams = resolution.params ? { ...params, ...resolution.params } : params;
-      return executeTask(resolution.task, nextParams);
+      return executeTaskLegacy(resolution.task, nextParams);
     }
     const fallbackParams = params.message
       ? params
       : { ...params, message: resolveIntentText(params) };
-    return executeTask('fairy.intent', { ...fallbackParams, source: 'system' });
+    return executeTaskLegacy('fairy.intent', { ...fallbackParams, source: 'system' });
   }
 
   if (taskName === 'conductor.dispatch') {
@@ -1281,7 +1295,7 @@ export async function executeTask(taskName: string, params: JsonObject) {
       lockKey: envelope.lockKey,
       attempt: envelope.attempt,
     });
-    return executeTask(nextTask, enrichedPayload);
+    return executeTaskLegacy(nextTask, enrichedPayload);
   }
 
   if (taskName.startsWith('flowchart.')) {
@@ -1343,8 +1357,17 @@ export async function executeTask(taskName: string, params: JsonObject) {
           : factCheckDirective && typeof parsed.summary === 'string' && parsed.summary.trim().length > 0
             ? `${factCheckDirective}\n\nUser request: ${parsed.summary}`
             : factCheckDirective ?? parsed.prompt;
+      const billingUserId =
+        typeof parsed.billingUserId === 'string' && parsed.billingUserId.trim().length > 0
+          ? parsed.billingUserId.trim()
+          : null;
+      const cerebrasApiKey =
+        useFast && billingUserId
+          ? await getDecryptedUserModelKey({ userId: billingUserId, provider: 'cerebras' })
+          : null;
+      const useFastPath = useFast && isFastStewardReady(cerebrasApiKey ?? undefined);
 
-      const output = useFast
+      const output = useFastPath
         ? await runDebateScorecardStewardFast({
             room: parsed.room,
             componentId: parsed.componentId,
@@ -1352,6 +1375,7 @@ export async function executeTask(taskName: string, params: JsonObject) {
             summary: parsed.summary,
             prompt: stewardPrompt,
             topic: parsed.topic,
+            cerebrasApiKey: cerebrasApiKey ?? undefined,
           })
         : await runDebateScorecardSteward({
             room: parsed.room,
@@ -1368,10 +1392,10 @@ export async function executeTask(taskName: string, params: JsonObject) {
         room: parsed.room,
         componentId: parsed.componentId,
         ok: true,
-        useFast,
+        useFast: useFastPath,
       });
 
-      if (useFast) {
+      if (useFastPath) {
         try {
           await maybeEnqueueAutoFactChecks(parsed, taskName);
         } catch (error) {
@@ -1473,6 +1497,14 @@ export async function executeTask(taskName: string, params: JsonObject) {
   }
 
   throw new Error(`No steward for task: ${taskName}`);
+}
+
+export async function executeTask(taskName: string, params: JsonObject) {
+  if (!flags.swarmOrchestrationEnabled) {
+    return executeTaskLegacy(taskName, params);
+  }
+  const orchestrator = getSwarmOrchestrator();
+  return orchestrator.execute({ taskName, params });
 }
 
 function resolveIntentText(params: JsonObject): string {

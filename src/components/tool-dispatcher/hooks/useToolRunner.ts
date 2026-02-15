@@ -589,6 +589,31 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
           if (correlation.traceId && !dispatchParams.traceId) {
             dispatchParams.traceId = correlation.traceId;
           }
+          const requestId = correlation.requestId;
+          const executionId =
+            typeof dispatchParams.executionId === 'string' && dispatchParams.executionId.trim().length > 0
+              ? dispatchParams.executionId.trim()
+              : typeof params?.executionId === 'string' && params.executionId.trim().length > 0
+                ? params.executionId.trim()
+                : undefined;
+          const idempotencyKey =
+            typeof dispatchParams.idempotencyKey === 'string' && dispatchParams.idempotencyKey.trim().length > 0
+              ? dispatchParams.idempotencyKey.trim()
+              : typeof params?.idempotencyKey === 'string' && params.idempotencyKey.trim().length > 0
+                ? params.idempotencyKey.trim()
+                : requestId;
+          const lockKey =
+            typeof dispatchParams.lockKey === 'string' && dispatchParams.lockKey.trim().length > 0
+              ? dispatchParams.lockKey.trim()
+              : typeof params?.lockKey === 'string' && params.lockKey.trim().length > 0
+                ? params.lockKey.trim()
+                : undefined;
+          const attempt =
+            typeof dispatchParams.attempt === 'number' && Number.isFinite(dispatchParams.attempt)
+              ? dispatchParams.attempt
+              : typeof params?.attempt === 'number' && Number.isFinite(params.attempt)
+                ? params.attempt
+                : undefined;
 
           if (!task) {
             const message = 'dispatch_to_conductor requires a task value';
@@ -636,7 +661,6 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
                   room: call.roomId || room?.name,
                   task,
                   params: dispatchParams,
-                  requestId,
                   executionId,
                   idempotencyKey,
                   lockKey,

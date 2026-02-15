@@ -42,11 +42,19 @@ describe('agent shared schemas', () => {
       params: { room: 'room-2' },
       requestId: 'intent-1',
       traceId: 'trace-1',
+      provider: 'openai',
+      model: 'openai:gpt-5',
+      taskId: 'task-1',
+      attempt: 2,
     });
 
     expect(parsed.room).toBe('room-2');
     expect(parsed.requestId).toBe('intent-1');
     expect(parsed.traceId).toBe('trace-1');
+    expect(parsed.provider).toBe('openai');
+    expect(parsed.model).toBe('openai:gpt-5');
+    expect(parsed.taskId).toBe('task-1');
+    expect(parsed.attempt).toBe(2);
   });
 
   it('parses scorecard steward requests', () => {

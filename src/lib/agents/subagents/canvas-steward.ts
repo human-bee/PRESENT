@@ -6,19 +6,20 @@ import { sendActionsEnvelope } from '@/lib/agents/canvas-agent/server/wire';
 import type { AgentAction } from '@/lib/canvas-agent/contract/types';
 import { normalizeFairyContextProfile } from '@/lib/fairy-context/profiles';
 import { deriveRequestCorrelation } from '@/lib/agents/shared/request-correlation';
+import { getDecryptedUserModelKey, type ModelKeyProvider } from '@/lib/agents/shared/user-model-keys';
+import { withRuntimeModelKeys } from '@/lib/agents/shared/model-runtime-context';
+import { createLogger } from '@/lib/logging';
+
+const logger = createLogger('agents:subagents:canvas-steward');
 
 const logWithTs = <T extends Record<string, unknown>>(label: string, payload: T) => {
-  try {
-    console.log(label, { ts: new Date().toISOString(), ...payload });
-  } catch {}
+  logger.info(label, { ts: new Date().toISOString(), ...payload });
 };
 
 const CANVAS_STEWARD_DEBUG = process.env.CANVAS_STEWARD_DEBUG === 'true';
 const debugLog = (...args: unknown[]) => {
   if (CANVAS_STEWARD_DEBUG) {
-    try {
-      console.log('[CanvasSteward]', ...args);
-    } catch {}
+    logger.debug('[CanvasSteward]', ...args);
   }
 };
 const _debugJson = (label: string, value: unknown, max = 2000) => {
@@ -42,6 +43,47 @@ type RunCanvasStewardArgs = {
   params: JsonObject | ParamEntryType[];
 };
 
+type CanvasViewport = { x: number; y: number; w: number; h: number };
+
+const inferProviderFromModel = (model?: string): ModelKeyProvider | null => {
+  if (!model) return null;
+  const normalized = model.trim().toLowerCase();
+  if (!normalized) return null;
+  if (normalized.startsWith('openai:') || normalized.startsWith('gpt')) return 'openai';
+  if (normalized.startsWith('anthropic:') || normalized.startsWith('claude')) return 'anthropic';
+  if (normalized.startsWith('google:') || normalized.startsWith('gemini')) return 'google';
+  return null;
+};
+
+const normalizeProvider = (value: unknown): ModelKeyProvider | null => {
+  if (typeof value !== 'string') return null;
+  const normalized = value.trim().toLowerCase();
+  if (normalized === 'openai') return 'openai';
+  if (normalized === 'anthropic') return 'anthropic';
+  if (normalized === 'google') return 'google';
+  if (normalized === 'together') return 'together';
+  if (normalized === 'cerebras') return 'cerebras';
+  return null;
+};
+
+const parseViewport = (value: unknown): CanvasViewport | undefined => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const candidate = value as Record<string, unknown>;
+  if (
+    typeof candidate.x !== 'number' ||
+    !Number.isFinite(candidate.x) ||
+    typeof candidate.y !== 'number' ||
+    !Number.isFinite(candidate.y) ||
+    typeof candidate.w !== 'number' ||
+    !Number.isFinite(candidate.w) ||
+    typeof candidate.h !== 'number' ||
+    !Number.isFinite(candidate.h)
+  ) {
+    return undefined;
+  }
+  return { x: candidate.x, y: candidate.y, w: candidate.w, h: candidate.h };
+};
+
 export async function runCanvasSteward(args: RunCanvasStewardArgs) {
   const { task, params } = args;
   const normalizedEntries = objectToEntries(params);
@@ -56,7 +98,7 @@ export async function runCanvasSteward(args: RunCanvasStewardArgs) {
   const contextProfile = normalizeFairyContextProfile(
     typeof payload.contextProfile === 'string'
       ? payload.contextProfile
-      : (payload.metadata as any)?.contextProfile,
+      : metadata?.contextProfile,
   );
   const correlation = deriveRequestCorrelation({
     task,
@@ -87,19 +129,45 @@ export async function runCanvasSteward(args: RunCanvasStewardArgs) {
     }
 
     const message = extractMessage(payload);
-    // Call unified Canvas Agent server runner
-    await runCanvasAgent({
-      roomId: room,
-      userMessage: message,
-      model,
-      initialViewport: payload.bounds as any,
-      contextProfile,
-      requestId: correlation.requestId,
-      traceId: correlation.traceId,
-      intentId: correlation.intentId,
-      followupDepth,
-      metadata,
-    });
+    const billingUserId =
+      typeof payload.billingUserId === 'string' && payload.billingUserId.trim()
+        ? payload.billingUserId.trim()
+        : undefined;
+    const provider = normalizeProvider(payload.provider) ?? inferProviderFromModel(model) ?? 'openai';
+    const initialViewport = parseViewport(payload.bounds);
+    const invokeCanvasRunner = async () =>
+      runCanvasAgent({
+        roomId: room,
+        userMessage: message,
+        model,
+        initialViewport,
+        contextProfile,
+        requestId: correlation.requestId,
+        traceId: correlation.traceId,
+        intentId: correlation.intentId,
+        followupDepth,
+        metadata,
+      });
+    if (billingUserId && ['openai', 'anthropic', 'google'].includes(provider)) {
+      const providerKey = await getDecryptedUserModelKey({
+        userId: billingUserId,
+        provider,
+      });
+      if (!providerKey) {
+        throw new Error(`BYOK_MISSING_KEY:${provider}`);
+      }
+      const keyName =
+        provider === 'openai'
+          ? 'OPENAI_API_KEY'
+          : provider === 'anthropic'
+            ? 'ANTHROPIC_API_KEY'
+            : 'GOOGLE_API_KEY';
+      const runtimeKeys: { OPENAI_API_KEY?: string; ANTHROPIC_API_KEY?: string; GOOGLE_API_KEY?: string } = {};
+      runtimeKeys[keyName] = providerKey;
+      await withRuntimeModelKeys(runtimeKeys, invokeCanvasRunner);
+    } else {
+      await invokeCanvasRunner();
+    }
 
     logWithTs('✅ [CanvasSteward] run.complete', {
       task,

@@ -5,6 +5,7 @@ import { BYOK_ENABLED } from '@/lib/agents/shared/byok-flags';
 import { resolveRequestUserId } from '@/lib/supabase/server/resolve-request-user';
 import { assertCanvasMember, parseCanvasIdFromRoom } from '@/lib/agents/shared/canvas-billing';
 import { createLogger } from '@/lib/logging';
+import { recordTaskTraceFromParams } from '@/lib/agents/shared/trace-events';
 
 export const runtime = 'nodejs';
 const logger = createLogger('api:agent:enqueue');
@@ -18,6 +19,13 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const payload = queueTaskEnvelopeSchema.parse(body);
+    await recordTaskTraceFromParams({
+      stage: 'api_received',
+      status: 'ok',
+      task: payload.task,
+      room: payload.room,
+      params: payload.params,
+    });
 
     // Lazily instantiate so `next build` doesn't require Supabase env vars.
     if (BYOK_ENABLED) {

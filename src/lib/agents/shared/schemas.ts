@@ -33,6 +33,11 @@ export const stewardRunCanvasRequestSchema = z
     requestId: z.string().optional(),
     traceId: z.string().optional(),
     intentId: z.string().optional(),
+    taskId: z.string().optional(),
+    attempt: z.number().int().min(0).optional(),
+    provider: z.string().optional(),
+    model: z.string().optional(),
+    authRailHint: z.string().optional(),
   })
   .merge(orchestrationEnvelopeSchema.partial())
   .passthrough();

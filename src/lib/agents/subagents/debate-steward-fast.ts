@@ -152,11 +152,12 @@ export async function runDebateScorecardStewardFast(params: {
   summary?: string;
   prompt?: string;
   topic?: string;
+  cerebrasApiKey?: string;
 }) {
-  const { room, componentId, intent, summary, prompt, topic } = params;
+  const { room, componentId, intent, summary, prompt, topic, cerebrasApiKey } = params;
   const start = Date.now();
 
-  if (!isFastStewardReady()) {
+  if (!isFastStewardReady(cerebrasApiKey)) {
     throw new Error('DebateStewardFast requires CEREBRAS_API_KEY');
   }
 
@@ -182,7 +183,7 @@ export async function runDebateScorecardStewardFast(params: {
   ];
 
   try {
-    const client = getCerebrasClient();
+    const client = getCerebrasClient(cerebrasApiKey);
     const response = await client.chat.completions.create({
       model: CEREBRAS_MODEL,
       messages,

@@ -2,6 +2,8 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { randomUUID } from 'crypto';
 import type { JsonObject } from '@/lib/utils/json-schema';
 import { createLogger } from '@/lib/logging';
+import { deriveRequestCorrelation } from './request-correlation';
+import { recordAgentTraceEvent, recordTaskTraceFromParams } from './trace-events';
 
 export type AgentTaskStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'canceled';
 
@@ -150,6 +152,21 @@ export class AgentTaskQueue {
         existingTaskId: existingForDedup.id,
         status: existingForDedup.status,
       });
+      const correlation = deriveRequestCorrelation({
+        task,
+        requestId: normalizedRequestId,
+        params,
+      });
+      void recordAgentTraceEvent({
+        stage: 'deduped',
+        status: existingForDedup.status,
+        traceId: correlation.traceId,
+        requestId: correlation.requestId,
+        intentId: correlation.intentId,
+        taskId: existingForDedup.id,
+        task,
+        room,
+      });
       return existingForDedup;
     }
 
@@ -260,6 +277,16 @@ export class AgentTaskQueue {
     }
 
     logger.debug('enqueueTask inserted', { id: data?.id, room, task });
+    if (data?.id) {
+      void recordTaskTraceFromParams({
+        stage: 'queued',
+        status: 'queued',
+        taskId: data.id,
+        task,
+        room,
+        params,
+      });
+    }
 
     return data;
   }
@@ -277,6 +304,17 @@ export class AgentTaskQueue {
     });
 
     if (error) throw error;
+    for (const task of (data as AgentTask[] | null) ?? []) {
+      void recordTaskTraceFromParams({
+        stage: 'claimed',
+        status: 'running',
+        taskId: task.id,
+        task: task.task,
+        room: task.room,
+        params: task.params,
+        attempt: task.attempt,
+      });
+    }
 
     return { leaseToken, tasks: (data as AgentTask[] | null) ?? [] };
   }

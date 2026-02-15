@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { recordAck } from '@/server/inboxes/ack';
 import { verifyAgentToken } from '@/lib/agents/canvas-agent/server/auth/agentTokens';
+import { recordAgentTraceEvent } from '@/lib/agents/shared/trace-events';
 
 const REQUIRE_AGENT_TOKEN = process.env.CANVAS_AGENT_REQUIRE_TOKEN === 'true';
 
@@ -36,6 +37,20 @@ export async function POST(req: NextRequest) {
       traceId,
       intentId,
       requestId,
+    });
+    await recordAgentTraceEvent({
+      stage: 'ack_received',
+      status: 'ok',
+      traceId,
+      requestId,
+      intentId,
+      room: roomId || undefined,
+      task: 'canvas.agent_prompt',
+      payload: {
+        sessionId,
+        seq,
+        envelopeHash: envelopeHash ?? null,
+      },
     });
     return NextResponse.json({ ok: true });
   } catch (error) {
