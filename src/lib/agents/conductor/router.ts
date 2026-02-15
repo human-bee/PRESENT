@@ -561,13 +561,30 @@ async function ensureWidgetComponent(intent: FairyIntent, componentType: string)
       return requestedId;
     }
     if (existingById && existingById.componentType !== componentType) {
+      const remappedComponentId = `${componentType}-${intent.id}`;
       logger.warn('[Conductor] requested widget id resolves to a different component type', {
         room: intent.room,
         requestedId,
         requestedType: componentType,
         existingType: existingById.componentType,
+        remappedComponentId,
       });
-      return requestedId;
+      const existingRemapped = components.find(
+        (component) => component.componentId === remappedComponentId && component.componentType === componentType,
+      );
+      if (existingRemapped) {
+        return remappedComponentId;
+      }
+      await broadcastToolCall({
+        room: intent.room,
+        tool: 'create_component',
+        params: {
+          type: componentType,
+          messageId: remappedComponentId,
+          intentId: intent.id,
+        },
+      });
+      return remappedComponentId;
     }
 
     await broadcastToolCall({
