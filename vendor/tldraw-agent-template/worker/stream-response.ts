@@ -6,7 +6,7 @@ const STREAM_RESPONSE_HEADERS = {
 	'Transfer-Encoding': 'chunked',
 	'Access-Control-Allow-Origin': '*',
 	'Access-Control-Allow-Methods': 'POST, OPTIONS',
-	'Access-Control-Allow-Headers': 'Content-Type',
+	'Access-Control-Allow-Headers': 'Content-Type, X-Tldraw-Agent-Id, X-Agent-Session-Id',
 } as const
 
 export function createStreamResponse(body: BodyInit | null, init?: Omit<ResponseInit, 'headers'>) {

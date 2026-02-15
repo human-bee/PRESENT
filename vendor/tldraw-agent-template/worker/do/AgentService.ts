@@ -35,11 +35,11 @@ export class AgentService {
 		return this[provider](modelDefinition.id)
 	}
 
-	async *stream(prompt: AgentPrompt): AsyncGenerator<Streaming<AgentAction>> {
+	async *stream(prompt: AgentPrompt, signal?: AbortSignal): AsyncGenerator<Streaming<AgentAction>> {
 		try {
 			const modelName = getModelName(prompt)
 			const model = this.getModel(modelName)
-			for await (const event of streamActions(model, prompt)) {
+			for await (const event of streamActions(model, prompt, signal)) {
 				yield event
 			}
 		} catch (error: any) {
@@ -51,7 +51,8 @@ export class AgentService {
 
 async function* streamActions(
 	model: LanguageModel,
-	prompt: AgentPrompt
+	prompt: AgentPrompt,
+	signal?: AbortSignal
 ): AsyncGenerator<Streaming<AgentAction>> {
 	if (typeof model === 'string') {
 		throw new Error('Model is a string, not a LanguageModel')
@@ -73,6 +74,7 @@ async function* streamActions(
 			messages,
 			maxOutputTokens: 8192,
 			temperature: 0,
+			abortSignal: signal,
 			providerOptions: {
 				anthropic: {
 					thinking: { type: 'disabled' },
@@ -87,49 +89,50 @@ async function* streamActions(
 			},
 		})
 
-			const canForceResponseStart =
-				model.provider === 'anthropic.messages' || model.provider === 'google.generative-ai'
-			let buffer = canForceResponseStart ? '{"actions": [{"_type":' : ''
-			let cursor = 0
-			let maybeIncompleteAction: AgentAction | null = null
+		const canForceResponseStart =
+			model.provider === 'anthropic.messages' || model.provider === 'google.generative-ai'
+		let buffer = canForceResponseStart ? '{"actions": [{"_type":' : ''
+		let cursor = 0
+		let maybeIncompleteAction: AgentAction | null = null
 
-			let startTime = Date.now()
-			for await (const text of textStream) {
-				buffer += text
-				if (buffer.length > MAX_STREAM_BUFFER_CHARS) {
-					throw new Error('Agent stream response exceeded parser buffer limit')
+		let startTime = Date.now()
+		for await (const text of textStream) {
+			if (signal?.aborted) break
+			buffer += text
+			if (buffer.length > MAX_STREAM_BUFFER_CHARS) {
+				throw new Error('Agent stream response exceeded parser buffer limit')
+			}
+
+			const partialObject = closeAndParseJson(buffer)
+			if (!partialObject) continue
+
+			const actions = partialObject.actions
+			if (!Array.isArray(actions)) continue
+			if (actions.length === 0) continue
+
+			// Drain all actions that are now complete. The current action at `cursor`
+			// remains incomplete until we observe a following action.
+			while (actions.length > cursor + 1) {
+				const action = actions[cursor] as AgentAction | undefined
+				if (!action) break
+
+				yield {
+					...action,
+					complete: true,
+					time: Date.now() - startTime,
 				}
+				cursor++
+				maybeIncompleteAction = null
+				startTime = Date.now()
+			}
 
-				const partialObject = closeAndParseJson(buffer)
-				if (!partialObject) continue
-
-				const actions = partialObject.actions
-				if (!Array.isArray(actions)) continue
-				if (actions.length === 0) continue
-
-				// Drain all actions that are now complete. The current action at `cursor`
-				// remains incomplete until we observe a following action.
-				while (actions.length > cursor + 1) {
-					const action = actions[cursor] as AgentAction | undefined
-					if (!action) break
-
-					yield {
-						...action,
-						complete: true,
-						time: Date.now() - startTime,
-					}
-					cursor++
-					maybeIncompleteAction = null
+			// Yield the current action in its potentially incomplete state.
+			const action = actions[cursor] as AgentAction | undefined
+			if (action) {
+				// If we don't have an incomplete event yet, this is the start of a new one
+				if (!maybeIncompleteAction) {
 					startTime = Date.now()
 				}
-
-				// Yield the current action in its potentially incomplete state.
-				const action = actions[cursor] as AgentAction | undefined
-				if (action) {
-					// If we don't have an incomplete event yet, this is the start of a new one
-					if (!maybeIncompleteAction) {
-						startTime = Date.now()
-					}
 
 				maybeIncompleteAction = action
 
