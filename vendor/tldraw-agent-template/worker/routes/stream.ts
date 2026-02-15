@@ -10,18 +10,18 @@ export async function stream(request: IRequest, env: Environment) {
 		body: request.body as any,
 	})
 
-		return new Response(response.body as BodyInit, {
-			headers: {
-				'Content-Type': 'text/event-stream',
-				'Cache-Control': 'no-cache, no-transform',
-				Connection: 'keep-alive',
-				'X-Accel-Buffering': 'no',
-				'Transfer-Encoding': 'chunked',
-				'Access-Control-Allow-Origin': '*',
-				'Access-Control-Allow-Methods': 'POST, OPTIONS',
-				'Access-Control-Allow-Headers': 'Content-Type, X-Tldraw-Agent-Id, X-Agent-Session-Id',
-			},
-			})
+	return new Response(response.body as BodyInit, {
+		headers: {
+			'Content-Type': 'text/event-stream',
+			'Cache-Control': 'no-cache, no-transform',
+			Connection: 'keep-alive',
+			'X-Accel-Buffering': 'no',
+			'Transfer-Encoding': 'chunked',
+			'Access-Control-Allow-Origin': '*',
+			'Access-Control-Allow-Methods': 'POST, OPTIONS',
+			'Access-Control-Allow-Headers': 'Content-Type, X-Tldraw-Agent-Id, X-Agent-Session-Id',
+		},
+	})
 }
 
 function getDurableObjectKey(request: IRequest): string {
