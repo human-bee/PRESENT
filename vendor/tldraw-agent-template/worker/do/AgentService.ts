@@ -16,6 +16,8 @@ import { buildSystemPrompt } from '../prompt/buildSystemPrompt'
 import { getModelName } from '../prompt/getModelName'
 import { closeAndParseJson } from './closeAndParseJson'
 
+const MAX_STREAM_BUFFER_CHARS = 200_000
+
 export class AgentService {
 	openai: OpenAIProvider
 	anthropic: AnthropicProvider
@@ -85,46 +87,49 @@ async function* streamActions(
 			},
 		})
 
-		const canForceResponseStart =
-			model.provider === 'anthropic.messages' || model.provider === 'google.generative-ai'
-		let buffer = canForceResponseStart ? '{"actions": [{"_type":' : ''
-		let cursor = 0
-		let maybeIncompleteAction: AgentAction | null = null
+			const canForceResponseStart =
+				model.provider === 'anthropic.messages' || model.provider === 'google.generative-ai'
+			let buffer = canForceResponseStart ? '{"actions": [{"_type":' : ''
+			let cursor = 0
+			let maybeIncompleteAction: AgentAction | null = null
 
-		let startTime = Date.now()
-		for await (const text of textStream) {
-			buffer += text
+			let startTime = Date.now()
+			for await (const text of textStream) {
+				buffer += text
+				if (buffer.length > MAX_STREAM_BUFFER_CHARS) {
+					throw new Error('Agent stream response exceeded parser buffer limit')
+				}
 
-			const partialObject = closeAndParseJson(buffer)
-			if (!partialObject) continue
+				const partialObject = closeAndParseJson(buffer)
+				if (!partialObject) continue
 
-			const actions = partialObject.actions
-			if (!Array.isArray(actions)) continue
-			if (actions.length === 0) continue
+				const actions = partialObject.actions
+				if (!Array.isArray(actions)) continue
+				if (actions.length === 0) continue
 
-			// If the events list is ahead of the cursor, we know we've completed the current event
-			// We can complete the event and move the cursor forward
-			if (actions.length > cursor) {
-				const action = actions[cursor - 1] as AgentAction
-				if (action) {
+				// Drain all actions that are now complete. The current action at `cursor`
+				// remains incomplete until we observe a following action.
+				while (actions.length > cursor + 1) {
+					const action = actions[cursor] as AgentAction | undefined
+					if (!action) break
+
 					yield {
 						...action,
 						complete: true,
 						time: Date.now() - startTime,
 					}
+					cursor++
 					maybeIncompleteAction = null
-				}
-				cursor++
-			}
-
-			// Now let's check the (potentially new) current event
-			// And let's yield it in its (potentially incomplete) state
-			const action = actions[cursor - 1] as AgentAction
-			if (action) {
-				// If we don't have an incomplete event yet, this is the start of a new one
-				if (!maybeIncompleteAction) {
 					startTime = Date.now()
 				}
+
+				// Yield the current action in its potentially incomplete state.
+				const action = actions[cursor] as AgentAction | undefined
+				if (action) {
+					// If we don't have an incomplete event yet, this is the start of a new one
+					if (!maybeIncompleteAction) {
+						startTime = Date.now()
+					}
 
 				maybeIncompleteAction = action
 

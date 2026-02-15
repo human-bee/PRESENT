@@ -4,6 +4,7 @@ import { AgentAction } from '../../shared/types/AgentAction'
 import { AgentPrompt } from '../../shared/types/AgentPrompt'
 import { Streaming } from '../../shared/types/Streaming'
 import { Environment } from '../environment'
+import { createStreamResponse } from '../stream-response'
 import { AgentService } from './AgentService'
 
 export class AgentDurableObject extends DurableObject<Environment> {
@@ -64,17 +65,6 @@ export class AgentDurableObject extends DurableObject<Environment> {
 			}
 		})()
 
-		return new Response(readable, {
-			headers: {
-				'Content-Type': 'text/event-stream',
-				'Cache-Control': 'no-cache, no-transform',
-				Connection: 'keep-alive',
-				'X-Accel-Buffering': 'no',
-				'Transfer-Encoding': 'chunked',
-				'Access-Control-Allow-Origin': '*',
-				'Access-Control-Allow-Methods': 'POST, OPTIONS',
-				'Access-Control-Allow-Headers': 'Content-Type',
-			},
-		})
+		return createStreamResponse(readable)
 	}
 }
