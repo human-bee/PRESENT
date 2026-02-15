@@ -33,11 +33,11 @@ export class AgentService {
 		return this[provider](modelDefinition.id)
 	}
 
-	async *stream(prompt: AgentPrompt): AsyncGenerator<Streaming<AgentAction>> {
+	async *stream(prompt: AgentPrompt, signal?: AbortSignal): AsyncGenerator<Streaming<AgentAction>> {
 		try {
 			const modelName = getModelName(prompt)
 			const model = this.getModel(modelName)
-			for await (const event of streamActions(model, prompt)) {
+			for await (const event of streamActions(model, prompt, signal)) {
 				yield event
 			}
 		} catch (error: any) {
@@ -49,7 +49,8 @@ export class AgentService {
 
 async function* streamActions(
 	model: LanguageModel,
-	prompt: AgentPrompt
+	prompt: AgentPrompt,
+	signal?: AbortSignal
 ): AsyncGenerator<Streaming<AgentAction>> {
 	if (typeof model === 'string') {
 		throw new Error('Model is a string, not a LanguageModel')
@@ -65,17 +66,18 @@ async function* streamActions(
 			role: 'assistant',
 			content: '{"actions": [{"_type":',
 		})
-		const { textStream } = streamText({
-			model,
-			system: systemPrompt,
-			messages,
-			maxOutputTokens: 8192,
-			temperature: 0,
-			providerOptions: {
-				anthropic: {
-					thinking: { type: 'disabled' },
-				} satisfies AnthropicProviderOptions,
-				google: {
+			const { textStream } = streamText({
+				model,
+				system: systemPrompt,
+				messages,
+				maxOutputTokens: 8192,
+				temperature: 0,
+				abortSignal: signal,
+				providerOptions: {
+					anthropic: {
+						thinking: { type: 'disabled' },
+					} satisfies AnthropicProviderOptions,
+					google: {
 					thinkingConfig: { thinkingBudget: geminiThinkingBudget },
 				} satisfies GoogleGenerativeAIProviderOptions,
 			},
@@ -89,11 +91,12 @@ async function* streamActions(
 			model.provider === 'anthropic.messages' || model.provider === 'google.generative-ai'
 		let buffer = canForceResponseStart ? '{"actions": [{"_type":' : ''
 		let cursor = 0
-		let maybeIncompleteAction: AgentAction | null = null
+			let maybeIncompleteAction: AgentAction | null = null
 
-		let startTime = Date.now()
-		for await (const text of textStream) {
-			buffer += text
+			let startTime = Date.now()
+			for await (const text of textStream) {
+				if (signal?.aborted) break
+				buffer += text
 
 			const partialObject = closeAndParseJson(buffer)
 			if (!partialObject) continue
