@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { randomUUID } from 'crypto';
 import { jsonObjectSchema, jsonValueSchema, type JsonObject, type JsonValue } from '@/lib/utils/json-schema';
 import { runCanvasAgent } from '@/lib/agents/canvas-agent/server/runner';
+import type { CanvasFollowupInput } from '@/lib/agents/canvas-agent/server/followup-queue';
 import { sendActionsEnvelope } from '@/lib/agents/canvas-agent/server/wire';
 import type { AgentAction } from '@/lib/canvas-agent/contract/types';
 import { normalizeFairyContextProfile } from '@/lib/fairy-context/profiles';
@@ -135,6 +136,7 @@ export async function runCanvasSteward(args: RunCanvasStewardArgs) {
         : undefined;
     const provider = normalizeProvider(payload.provider) ?? inferProviderFromModel(model) ?? 'openai';
     const initialViewport = parseViewport(payload.bounds);
+    const initialFollowup = extractInitialFollowup(payload, message, followupDepth);
     const invokeCanvasRunner = async () =>
       runCanvasAgent({
         roomId: room,
@@ -146,6 +148,7 @@ export async function runCanvasSteward(args: RunCanvasStewardArgs) {
         traceId: correlation.traceId,
         intentId: correlation.intentId,
         followupDepth,
+        initialFollowup,
         metadata,
       });
     if (billingUserId && ['openai', 'anthropic', 'google'].includes(provider)) {
@@ -249,6 +252,51 @@ function extractFollowupDepth(payload: JsonObject): number {
   if (typeof metadataNested === 'number') return metadataNested;
 
   return 0;
+}
+
+function extractInitialFollowup(
+  payload: JsonObject,
+  defaultMessage: string,
+  followupDepth: number,
+): CanvasFollowupInput | undefined {
+  const followup =
+    payload.followup && typeof payload.followup === 'object' && !Array.isArray(payload.followup)
+      ? (payload.followup as JsonObject)
+      : undefined;
+  if (!followup) return undefined;
+
+  const message = typeof followup.message === 'string' && followup.message.trim().length > 0
+    ? followup.message.trim()
+    : defaultMessage;
+  const originalMessage =
+    typeof followup.originalMessage === 'string' && followup.originalMessage.trim().length > 0
+      ? followup.originalMessage.trim()
+      : defaultMessage;
+  const depth = coerceDepth(followup.depth) ?? followupDepth;
+  const initial: CanvasFollowupInput = { message, originalMessage, depth };
+
+  if (typeof followup.hint === 'string' && followup.hint.trim().length > 0) {
+    initial.hint = followup.hint.trim();
+  }
+  if (typeof followup.reason === 'string' && followup.reason.trim().length > 0) {
+    initial.reason = followup.reason.trim();
+  }
+  if (followup.strict === true) {
+    initial.strict = true;
+  }
+  if (Array.isArray(followup.targetIds)) {
+    const targetIds = followup.targetIds.filter(
+      (id): id is string => typeof id === 'string' && id.trim().length > 0,
+    );
+    if (targetIds.length > 0) {
+      initial.targetIds = Array.from(new Set(targetIds));
+    }
+  }
+  if (typeof followup.enqueuedAt === 'number' && Number.isFinite(followup.enqueuedAt)) {
+    initial.enqueuedAt = followup.enqueuedAt;
+  }
+
+  return initial;
 }
 
 async function handleQuickTextTask(room: string, payload: JsonObject) {

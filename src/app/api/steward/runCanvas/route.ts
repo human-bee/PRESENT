@@ -217,25 +217,28 @@ export async function POST(req: NextRequest) {
       params: enrichedParams,
     });
     const canonicalRequestId = correlation.requestId;
+    const explicitTraceId = typeof traceId === 'string' && traceId.trim() ? traceId.trim() : undefined;
+    const explicitIntentId = typeof intentId === 'string' && intentId.trim() ? intentId.trim() : undefined;
     const canonicalTraceId =
-      correlation.traceId || (typeof traceId === 'string' && traceId.trim() ? traceId.trim() : undefined);
-    const canonicalIntentId =
-      correlation.intentId || (typeof intentId === 'string' && intentId.trim() ? intentId.trim() : undefined);
+      explicitTraceId ??
+      (typeof enrichedParams.traceId === 'string' && enrichedParams.traceId.trim() ? enrichedParams.traceId.trim() : undefined) ??
+      correlation.traceId;
+    const canonicalIntentId = explicitIntentId ?? correlation.intentId;
 
     if (canonicalRequestId && !enrichedParams.requestId) {
       enrichedParams.requestId = canonicalRequestId;
     }
-    if (normalizedTask === 'fairy.intent' && canonicalIntentId && !enrichedParams.id) {
+    if (normalizedTask === 'fairy.intent' && canonicalIntentId && (!enrichedParams.id || explicitIntentId)) {
       enrichedParams.id = canonicalIntentId;
     }
-    if (canonicalTraceId && !enrichedParams.traceId) {
+    if (canonicalTraceId && (!enrichedParams.traceId || explicitTraceId)) {
       enrichedParams.traceId = canonicalTraceId;
     }
     const metadataForCorrelation: JsonObject = parseMetadata(enrichedParams.metadata) ?? {};
-    if (canonicalTraceId && !metadataForCorrelation.traceId) {
+    if (canonicalTraceId && (!metadataForCorrelation.traceId || explicitTraceId)) {
       metadataForCorrelation.traceId = canonicalTraceId;
     }
-    if (canonicalIntentId && !metadataForCorrelation.intentId) {
+    if (canonicalIntentId && (!metadataForCorrelation.intentId || explicitIntentId)) {
       metadataForCorrelation.intentId = canonicalIntentId;
     }
     if (Object.keys(metadataForCorrelation).length > 0) {

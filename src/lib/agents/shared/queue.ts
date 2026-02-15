@@ -136,40 +136,6 @@ export class AgentTaskQueue {
     const normalizedRequestId = typeof requestId === 'string' && requestId.trim() ? requestId.trim() : undefined;
     const normalizedDedupeKey = typeof dedupeKey === 'string' && dedupeKey.trim() ? dedupeKey.trim() : undefined;
 
-    const existingForDedup = await this.findExistingTaskForDedup({
-      room,
-      task,
-      requestId: normalizedRequestId,
-      dedupeKey: normalizedDedupeKey,
-      activeOnly: true,
-    });
-    if (existingForDedup) {
-      logger.debug('enqueueTask dedupe pre-check hit', {
-        room,
-        task,
-        requestId: normalizedRequestId,
-        dedupeKey: normalizedDedupeKey,
-        existingTaskId: existingForDedup.id,
-        status: existingForDedup.status,
-      });
-      const correlation = deriveRequestCorrelation({
-        task,
-        requestId: normalizedRequestId,
-        params,
-      });
-      void recordAgentTraceEvent({
-        stage: 'deduped',
-        status: existingForDedup.status,
-        traceId: correlation.traceId,
-        requestId: correlation.requestId,
-        intentId: correlation.intentId,
-        taskId: existingForDedup.id,
-        task,
-        room,
-      });
-      return existingForDedup;
-    }
-
     const paramsRecord = params as Record<string, unknown>;
     const lockKeyFromParams =
       typeof paramsRecord.lockKey === 'string' && paramsRecord.lockKey.trim().length > 0
@@ -198,6 +164,39 @@ export class AgentTaskQueue {
     const resolvedDedupeKey =
       (typeof dedupeKey === 'string' && dedupeKey.trim().length > 0 ? dedupeKey.trim() : undefined) ??
       idempotencyNormalized;
+    const existingForDedup = await this.findExistingTaskForDedup({
+      room,
+      task,
+      requestId: resolvedRequestId,
+      dedupeKey: resolvedDedupeKey,
+      activeOnly: true,
+    });
+    if (existingForDedup) {
+      logger.debug('enqueueTask dedupe pre-check hit', {
+        room,
+        task,
+        requestId: resolvedRequestId,
+        dedupeKey: resolvedDedupeKey,
+        existingTaskId: existingForDedup.id,
+        status: existingForDedup.status,
+      });
+      const correlation = deriveRequestCorrelation({
+        task,
+        requestId: resolvedRequestId,
+        params,
+      });
+      void recordAgentTraceEvent({
+        stage: 'deduped',
+        status: existingForDedup.status,
+        traceId: correlation.traceId,
+        requestId: correlation.requestId,
+        intentId: correlation.intentId,
+        taskId: existingForDedup.id,
+        task,
+        room,
+      });
+      return existingForDedup;
+    }
     const queueDepthLimit = Number(process.env.TASK_QUEUE_MAX_DEPTH_PER_ROOM ?? 0);
     if (Number.isFinite(queueDepthLimit) && queueDepthLimit > 0) {
       const { count, error: countError } = await this.supabase
@@ -236,8 +235,8 @@ export class AgentTaskQueue {
     logger.debug('enqueueTask', {
       room,
       task,
-      requestId: normalizedRequestId,
-      dedupeKey: normalizedDedupeKey,
+      requestId: resolvedRequestId,
+      dedupeKey: resolvedDedupeKey,
       resourceKeys: normalizedResourceKeys,
       coalesced: shouldCoalesce,
       hasSupabase: Boolean(this.supabase),
@@ -249,8 +248,8 @@ export class AgentTaskQueue {
         room,
         task,
         params,
-        request_id: normalizedRequestId ?? null,
-        dedupe_key: normalizedDedupeKey ?? null,
+        request_id: resolvedRequestId ?? null,
+        dedupe_key: resolvedDedupeKey ?? null,
         resource_keys: normalizedResourceKeys,
         priority,
         run_at: runAt ? runAt.toISOString() : null,
@@ -262,12 +261,12 @@ export class AgentTaskQueue {
 
     if (error) {
       if (error.code === '23505') {
-        logger.debug('enqueueTask dedupe hit', { room, task, requestId: normalizedRequestId });
+        logger.debug('enqueueTask dedupe hit', { room, task, requestId: resolvedRequestId });
         const existingAfterConflict = await this.findExistingTaskForDedup({
           room,
           task,
-          requestId: normalizedRequestId,
-          dedupeKey: normalizedDedupeKey,
+          requestId: resolvedRequestId,
+          dedupeKey: resolvedDedupeKey,
           activeOnly: false,
         });
         return existingAfterConflict;

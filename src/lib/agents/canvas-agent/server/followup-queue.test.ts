@@ -31,8 +31,8 @@ describe('followup-queue', () => {
     });
     expect(fingerprintA).toBe(fingerprintB);
 
-    const requestIdA = buildFollowupRequestId('session-1', correlation, followupInput);
-    const requestIdB = buildFollowupRequestId('session-1', correlation, {
+    const requestIdA = buildFollowupRequestId('room-1', correlation, followupInput);
+    const requestIdB = buildFollowupRequestId('room-1', correlation, {
       ...followupInput,
       targetIds: ['shape:b', 'shape:a'],
     });

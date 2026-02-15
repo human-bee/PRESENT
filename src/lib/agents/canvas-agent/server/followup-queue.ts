@@ -94,19 +94,19 @@ const hashFingerprint = (fingerprint: string): string => {
 };
 
 export const buildFollowupRequestId = (
-  sessionId: string,
+  roomId: string,
   correlation: RequestCorrelation | undefined,
   input: CanvasFollowupInput,
 ): string | null => {
-  const fingerprint = buildFollowupFingerprint(sessionId, correlation, input);
+  const fingerprint = buildFollowupFingerprint(roomId, correlation, input);
   if (!fingerprint) return null;
   const digest = hashFingerprint(fingerprint).slice(0, 10);
   const normalized = toNormalizedFollowup(input);
   if (!normalized) return null;
 
   const prefixSource =
-    correlation?.requestId || correlation?.traceId || correlation?.intentId || `canvas-followup:${sessionId}`;
-  const prefix = normalizeCorrelationId(prefixSource) || `canvas-followup:${sessionId}`;
+    correlation?.requestId || correlation?.traceId || correlation?.intentId || `canvas-followup:${roomId}`;
+  const prefix = normalizeCorrelationId(prefixSource) || `canvas-followup:${roomId}`;
   return normalizeCorrelationId(`${prefix}:d${normalized.depth}:${digest}`) || `${prefix.slice(0, 120)}:${digest}`;
 };
 
@@ -177,15 +177,23 @@ export async function enqueueCanvasFollowup(
 
   const fingerprint = buildFollowupFingerprint(options.roomId, options.correlation, normalized);
   if (!fingerprint) return false;
-  const requestId = buildFollowupRequestId(options.sessionId, options.correlation, normalized);
+  const requestId = buildFollowupRequestId(options.roomId, options.correlation, normalized);
   if (!requestId) return false;
 
   const payload = buildFollowupPayload(options, normalized, requestId);
   const dedupeKey = hashFingerprint(fingerprint);
+  const followupScopeKey =
+    options.correlation?.intentId
+      ? `intent:${options.correlation.intentId}`
+      : options.correlation?.traceId
+        ? `trace:${options.correlation.traceId}`
+        : options.correlation?.requestId
+          ? `request:${options.correlation.requestId}`
+          : 'followup:unscoped';
   const resourceKeys = [
     `room:${options.roomId}`,
     'canvas:followup',
-    options.correlation?.intentId ? `intent:${options.correlation.intentId}` : `session:${options.sessionId}`,
+    followupScopeKey,
     `followup-depth:${normalized.depth}`,
   ];
 

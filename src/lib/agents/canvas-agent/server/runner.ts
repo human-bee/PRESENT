@@ -80,6 +80,7 @@ type RunArgs = {
   traceId?: string;
   intentId?: string;
   followupDepth?: number;
+  initialFollowup?: CanvasFollowupInput;
   metadata?: JsonObject;
 };
 
@@ -89,6 +90,47 @@ const delay = (ms: number) =>
   new Promise((resolve) => {
     setTimeout(resolve, ms);
   });
+
+const parseTraceEventBudget = (): number => {
+  const raw = process.env.CANVAS_AGENT_TRACE_MAX_EVENTS;
+  if (typeof raw !== 'string' || raw.trim().length === 0) return 120;
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed)) return 120;
+  return Math.max(0, parsed);
+};
+
+const normalizeInitialFollowup = (
+  input: CanvasFollowupInput | undefined,
+  fallbackMessage: string,
+  fallbackDepth: number,
+): CanvasFollowupInput | null => {
+  if (!input || typeof input !== 'object') return null;
+  const message = typeof input.message === 'string' && input.message.trim().length > 0
+    ? input.message.trim()
+    : fallbackMessage;
+  const originalMessage = typeof input.originalMessage === 'string' && input.originalMessage.trim().length > 0
+    ? input.originalMessage.trim()
+    : fallbackMessage;
+  const depth = Number.isFinite(input.depth) ? Math.max(0, Math.floor(input.depth)) : fallbackDepth;
+  const normalized: CanvasFollowupInput = {
+    message,
+    originalMessage,
+    depth,
+  };
+  if (typeof input.hint === 'string' && input.hint.trim().length > 0) normalized.hint = input.hint.trim();
+  if (typeof input.reason === 'string' && input.reason.trim().length > 0) normalized.reason = input.reason.trim();
+  if (input.strict === true) normalized.strict = true;
+  if (Array.isArray(input.targetIds)) {
+    const targetIds = input.targetIds.filter((id): id is string => typeof id === 'string' && id.trim().length > 0);
+    if (targetIds.length > 0) {
+      normalized.targetIds = Array.from(new Set(targetIds));
+    }
+  }
+  if (typeof input.enqueuedAt === 'number' && Number.isFinite(input.enqueuedAt)) {
+    normalized.enqueuedAt = input.enqueuedAt;
+  }
+  return normalized;
+};
 
 function loadScreenshotInbox() {
   if (!screenshotInboxPromise) {
@@ -361,6 +403,7 @@ export async function runCanvasAgent(args: RunArgs) {
     typeof args.followupDepth === 'number' && Number.isFinite(args.followupDepth)
       ? Math.max(0, Math.floor(args.followupDepth))
       : 0;
+  const initialFollowup = normalizeInitialFollowup(args.initialFollowup, userMessage, currentFollowupDepth);
   const runMetadata =
     args.metadata && typeof args.metadata === 'object' && !Array.isArray(args.metadata) ? args.metadata : undefined;
   const cfg = loadCanvasAgentConfig();
@@ -409,10 +452,7 @@ export async function runCanvasAgent(args: RunArgs) {
     retryCount: 0,
     preset: cfg.preset,
   };
-  const traceEventBudget = Math.max(
-    0,
-    Number.parseInt(process.env.CANVAS_AGENT_TRACE_MAX_EVENTS ?? '120', 10) || 120,
-  );
+  const traceEventBudget = parseTraceEventBudget();
   let traceEventsSent = 0;
 
   const emitTrace = (
@@ -647,7 +687,7 @@ export async function runCanvasAgent(args: RunArgs) {
       const parts = await buildPromptParts(roomId, {
         windowMs: transcriptWindowMs,
         viewport: latestScreenshot?.viewport ?? args.initialViewport,
-        selection: latestScreenshot?.selection ?? [],
+        selection: initialFollowup?.targetIds ?? latestScreenshot?.selection ?? [],
         sessionId,
         screenshot: latestScreenshot
           ? {
@@ -683,7 +723,11 @@ export async function runCanvasAgent(args: RunArgs) {
           screenshotBytes,
         }));
       }
-      return { parts, prompt: JSON.stringify({ user: userMessage, parts }), buildMs };
+      const promptPayload: Record<string, unknown> = { user: userMessage, parts };
+      if (initialFollowup) {
+        promptPayload.followup = initialFollowup;
+      }
+      return { parts, prompt: JSON.stringify(promptPayload), buildMs };
     };
 
     const downscaleEdges = cfg.prompt.downscaleEdges;
@@ -793,7 +837,8 @@ export async function runCanvasAgent(args: RunArgs) {
     await sendStatus(roomId, sessionId, 'calling_model');
     const requestedModel = model || cfg.modelName;
     const provider = selectModel(requestedModel);
-    const tuning = getModelTuning(cfg.preset);
+    const primaryPresetName = (initialFollowup?.strict ? 'precise' : cfg.preset) as CanvasAgentPreset;
+    const tuning = getModelTuning(primaryPresetName);
     if (cfg.debug) {
       try {
         console.log('[CanvasAgent:Model]', JSON.stringify({
@@ -802,7 +847,7 @@ export async function runCanvasAgent(args: RunArgs) {
           requestedModel,
           provider: provider.name,
           streamingCapable: typeof provider.streamStructured === 'function',
-          preset: cfg.preset,
+          preset: primaryPresetName,
           tuning,
         }));
       } catch {}
@@ -1508,7 +1553,7 @@ const normalizeRawAction = (
         detail: {
           provider: provider.name,
           mode: streamingEnabled ? 'structured' : 'fallback-stream',
-          preset: cfg.preset,
+          preset: primaryPresetName,
         },
       });
       if (streamingEnabled) {

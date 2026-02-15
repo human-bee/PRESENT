@@ -173,4 +173,34 @@ describe('/api/steward/runCanvas', () => {
     expect(response.status).toBe(401);
     expect(json.error).toBe('unauthorized');
   });
+
+  it('prefers explicit trace/intent ids over correlation fallback when enqueuing', async () => {
+    const POST = await loadPost({ queueFallback: false, byok: false });
+    const request = new Request('http://localhost/api/steward/runCanvas', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        room: 'demo-room',
+        task: 'canvas.agent_prompt',
+        requestId: 'req-123',
+        traceId: 'trace-explicit',
+        intentId: 'intent-explicit',
+        message: 'draw a swimlane',
+        params: {
+          traceId: 'req-123',
+          intentId: 'req-123',
+          metadata: { traceId: 'req-123', intentId: 'req-123' },
+        },
+      }),
+    });
+
+    const response = await POST(toNextRequest(request));
+    expect(response.status).toBe(202);
+
+    const [enqueued] = enqueueTaskMock.mock.calls[0] as [Record<string, any>];
+    expect(enqueued.requestId).toBe('req-123');
+    expect(enqueued.params.traceId).toBe('trace-explicit');
+    expect(enqueued.params.metadata.traceId).toBe('trace-explicit');
+    expect(enqueued.params.metadata.intentId).toBe('intent-explicit');
+  });
 });
