@@ -41,21 +41,10 @@ export async function buildLivekitTokenHeaders(args: {
   init?: HeadersInit;
 }): Promise<Headers> {
   const token = await getSupabaseAccessToken(1_500);
-  const requireAuth =
-    (process.env.NEXT_PUBLIC_TOKEN_REQUIRE_AUTH ??
-      (process.env.NODE_ENV === 'production' ? 'true' : 'false')) === 'true';
-  const requireSignedNonce =
-    (process.env.NEXT_PUBLIC_TOKEN_REQUIRE_SIGNED_NONCE ??
-      (process.env.NODE_ENV === 'production' ? 'true' : 'false')) === 'true';
-
   const headers = new Headers(args.init);
 
-  // In local/dev test lanes, token minting can run with TOKEN_REQUIRE_AUTH=false.
-  // Preserve strict behavior when auth/signed nonce is explicitly required.
+  // Server route is the source of truth for token auth/signature enforcement.
   if (!token) {
-    if (requireAuth || requireSignedNonce) {
-      throw new Error('Missing Supabase auth token for LiveKit token minting');
-    }
     return headers;
   }
 

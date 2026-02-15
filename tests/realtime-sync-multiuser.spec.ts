@@ -25,54 +25,69 @@ async function sendTranscriptMessage(page: Page, text: string) {
   await page.getByRole('button', { name: 'Send' }).click();
 }
 
-async function requestVoiceAgent(page: Page) {
-  await page.evaluate(async () => {
+async function isVoiceAgentPresent(page: Page) {
+  return page.evaluate(() => {
+    const present = (window as any).__present ?? {};
+    if (present.livekitHasAgent === true) return true;
+    const identities = Array.isArray(present.livekitRemoteParticipantIdentities)
+      ? present.livekitRemoteParticipantIdentities
+      : [];
+    return identities.some((id: unknown) => {
+      const lower = String(id ?? '').trim().toLowerCase();
+      return (
+        lower.startsWith('agent_') ||
+        lower.startsWith('voice-agent') ||
+        lower.includes('voice-agent')
+      );
+    });
+  });
+}
+
+async function resolveRoomName(page: Page, timeoutMs = 20_000): Promise<string> {
+  const handle = await page.waitForFunction(() => {
     const present = (window as any).__present ?? {};
     const roomName =
       present.livekitRoomName ??
       present.syncContract?.livekitRoomName ??
       present.sessionSync?.roomName ??
       null;
-    if (!roomName) return;
+    if (typeof roomName !== 'string') return null;
+    const trimmed = roomName.trim();
+    return trimmed.length > 0 ? trimmed : null;
+  }, null, { timeout: timeoutMs });
+  const roomName = await handle.jsonValue();
+  if (typeof roomName !== 'string' || roomName.trim().length === 0) {
+    throw new Error('Timed out waiting for realtime room name');
+  }
+  return roomName;
+}
 
+async function requestVoiceAgent(page: Page, roomName: string): Promise<void> {
+  await page.evaluate(async (resolvedRoomName) => {
     await fetch('/api/agent/dispatch', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ roomName }),
+      body: JSON.stringify({ roomName: resolvedRoomName }),
     }).catch(() => {});
-  });
+  }, roomName);
 }
 
 async function ensureVoiceAgentPresent(page: Page) {
-  const initialHasAgent = await page.evaluate(() => {
-    const present = (window as any).__present ?? {};
-    return Boolean(present.livekitHasAgent);
-  });
+  const initialHasAgent = await isVoiceAgentPresent(page);
 
   if (!initialHasAgent) {
-    await requestVoiceAgent(page);
+    const roomName = await resolveRoomName(page, 45_000);
+    const dispatchAttempts = 3;
+    for (let attempt = 0; attempt < dispatchAttempts; attempt += 1) {
+      if (await isVoiceAgentPresent(page)) break;
+      await requestVoiceAgent(page, roomName);
+      await page.waitForTimeout(1_000);
+    }
   }
 
   await expect
     .poll(
-      async () =>
-        page.evaluate(() => {
-          const present = (window as any).__present ?? {};
-          if (present.livekitHasAgent === true) return true;
-          const identities = Array.isArray(present.livekitRemoteParticipantIdentities)
-            ? present.livekitRemoteParticipantIdentities
-            : [];
-          return identities.some((id: unknown) => {
-            const lower = String(id ?? '').toLowerCase();
-            return (
-              lower.startsWith('agent_') ||
-              lower.includes('voice-agent') ||
-              lower.includes('agent') ||
-              lower.includes('bot') ||
-              lower.includes('ai')
-            );
-          });
-        }),
+      async () => isVoiceAgentPresent(page),
       { timeout: 45_000 },
     )
     .toBe(true);
@@ -150,6 +165,28 @@ async function ensureLivekitConnected(page: Page) {
     .toBe(true);
 }
 
+async function waitForRealtimeHealthy(page: Page) {
+  await expect
+    .poll(
+      async () =>
+        page.evaluate(() => {
+          const present = (window as any).__present ?? {};
+          const diagnostics = present.syncDiagnostics ?? {};
+          const roomName = present.syncContract?.livekitRoomName ?? present.livekitRoomName ?? null;
+          return Boolean(
+            present.livekitConnected === true &&
+            diagnostics.contract?.ok === true &&
+            diagnostics.session?.ok === true &&
+            diagnostics.tldraw?.ok === true &&
+            typeof roomName === 'string' &&
+            roomName.trim().length > 0,
+          );
+        }),
+      { timeout: 90_000 },
+    )
+    .toBe(true);
+}
+
 async function openSharedCanvas(
   browser: any,
 ): Promise<{ ctxA: BrowserContext; ctxB: BrowserContext; pageA: Page; pageB: Page; canvasId: string }> {
@@ -193,6 +230,9 @@ async function openSharedCanvas(
   });
   await waitForCanvasReady(pageB);
   await ensureLivekitConnected(pageB);
+
+  await waitForRealtimeHealthy(pageA);
+  await waitForRealtimeHealthy(pageB);
 
   return { ctxA, ctxB, pageA, pageB, canvasId };
 }
@@ -313,21 +353,35 @@ test.describe('Realtime Sync Multiuser', () => {
   test('executor lease fails over after executor tab closes', async ({ browser }) => {
     const { ctxA, ctxB, pageA, pageB } = await openSharedCanvas(browser);
     try {
-      const stateA = await pageA.evaluate(() => ({
-        localIdentity:
-          (window as any).__present?.livekitLocalIdentity ??
-          (window as any).__present?.executor?.executorIdentity,
-        isExecutor: Boolean((window as any).__present?.executor?.isExecutor),
-      }));
-      const stateB = await pageB.evaluate(() => ({
-        localIdentity:
-          (window as any).__present?.livekitLocalIdentity ??
-          (window as any).__present?.executor?.executorIdentity,
-        isExecutor: Boolean((window as any).__present?.executor?.isExecutor),
-      }));
+      let executorTab: 'A' | 'B' | null = null;
+      await expect
+        .poll(
+          async () => {
+            const [stateA, stateB] = await Promise.all([
+              pageA.evaluate(() => ({
+                isExecutor: Boolean((window as any).__present?.executor?.isExecutor),
+                executorIdentity: (window as any).__present?.executor?.executorIdentity ?? null,
+              })),
+              pageB.evaluate(() => ({
+                isExecutor: Boolean((window as any).__present?.executor?.isExecutor),
+                executorIdentity: (window as any).__present?.executor?.executorIdentity ?? null,
+              })),
+            ]);
+            if (stateA.isExecutor && typeof stateA.executorIdentity === 'string') {
+              executorTab = 'A';
+              return true;
+            }
+            if (stateB.isExecutor && typeof stateB.executorIdentity === 'string') {
+              executorTab = 'B';
+              return true;
+            }
+            return false;
+          },
+          { timeout: 45_000 },
+        )
+        .toBe(true);
 
-      const executorIsA = stateA.isExecutor || !stateB.isExecutor;
-      if (executorIsA) {
+      if (executorTab === 'A') {
         await ctxA.close();
         await expect
           .poll(
@@ -342,7 +396,7 @@ test.describe('Realtime Sync Multiuser', () => {
             isExecutor: true,
             executorIdentity: expect.any(String),
           });
-      } else {
+      } else if (executorTab === 'B') {
         await ctxB.close();
         await expect
           .poll(
@@ -357,6 +411,8 @@ test.describe('Realtime Sync Multiuser', () => {
             isExecutor: true,
             executorIdentity: expect.any(String),
           });
+      } else {
+        throw new Error('Executor tab did not resolve before failover check');
       }
     } finally {
       await ctxA.close().catch(() => {});
