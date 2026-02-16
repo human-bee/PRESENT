@@ -46,7 +46,7 @@ import {
 import { formatFairyContextParts } from '@/lib/fairy-context/format';
 import { runSummaryStewardFast } from '@/lib/agents/subagents/summary-steward-fast';
 import { runCrowdPulseStewardFast } from '@/lib/agents/subagents/crowd-pulse-steward-fast';
-import { flags, getBooleanFlag, isFairyClientAgentEnabled } from '@/lib/feature-flags';
+import { flags, getBooleanFlag } from '@/lib/feature-flags';
 import { createLogger } from '@/lib/logging';
 import {
   applyOrchestrationEnvelope,
@@ -64,15 +64,13 @@ const fairyIntentDedupe = new Map<string, number>();
 
 const CLIENT_CANVAS_AGENT_ENABLED = getBooleanFlag(process.env.NEXT_PUBLIC_CANVAS_AGENT_CLIENT_ENABLED, false);
 const FAIRY_UI_ENABLED = getBooleanFlag(process.env.NEXT_PUBLIC_FAIRY_ENABLED, false);
-const FAIRY_CLIENT_AGENT_ENABLED = isFairyClientAgentEnabled(process.env.NEXT_PUBLIC_FAIRY_CLIENT_AGENT_ENABLED);
 const CANVAS_STEWARD_ENABLED = (process.env.CANVAS_STEWARD_SERVER_EXECUTION ?? 'true') === 'true';
 const DEFAULT_SUMMARY_MEMORY_TOOL = process.env.SUMMARY_MEMORY_MCP_TOOL;
 const DEFAULT_SUMMARY_AUTO_SEND = process.env.SUMMARY_MEMORY_AUTO_SEND === 'true';
 const DEFAULT_SUMMARY_MEMORY_COLLECTION = process.env.SUMMARY_MEMORY_MCP_COLLECTION;
 const DEFAULT_SUMMARY_MEMORY_INDEX = process.env.SUMMARY_MEMORY_MCP_INDEX;
 const DEFAULT_SUMMARY_MEMORY_NAMESPACE = process.env.SUMMARY_MEMORY_MCP_NAMESPACE;
-const SERVER_CANVAS_AGENT_ENABLED =
-  CANVAS_STEWARD_ENABLED && !CLIENT_CANVAS_AGENT_ENABLED && !FAIRY_CLIENT_AGENT_ENABLED;
+const SERVER_CANVAS_AGENT_ENABLED = CANVAS_STEWARD_ENABLED && !CLIENT_CANVAS_AGENT_ENABLED;
 const SERVER_CANVAS_TASKS_ENABLED = CANVAS_STEWARD_ENABLED && !CLIENT_CANVAS_AGENT_ENABLED;
 
 const CanvasAgentPromptSchema = z
@@ -1580,7 +1578,6 @@ async function executeTaskLegacy(taskName: string, params: JsonObject) {
       logger.info('[Conductor] server canvas steward skipped for canvas.agent_prompt', {
         clientLegacyEnabled: CLIENT_CANVAS_AGENT_ENABLED,
         fairyUiEnabled: FAIRY_UI_ENABLED,
-        fairyClientEnabled: FAIRY_CLIENT_AGENT_ENABLED,
       });
     }
     return { ...promptResult, status: 'queued' };
