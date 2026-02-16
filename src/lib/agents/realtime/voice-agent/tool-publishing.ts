@@ -20,6 +20,31 @@ export type CanvasDispatchEntry = {
   requestId?: string;
 };
 
+export const resolveDispatchSuppressionScope = ({
+  task,
+  roomName,
+  currentTurnId,
+  requestId,
+  intentId,
+}: {
+  task: string;
+  roomName: string;
+  currentTurnId: number;
+  requestId?: string;
+  intentId?: string;
+}): { suppressRoomName: string; suppressRequestId?: string } => {
+  const suppressRequestId =
+    task === 'fairy.intent' ? intentId ?? requestId : requestId ?? intentId;
+  const suppressRoomName =
+    task === 'fairy.intent' && !suppressRequestId
+      ? `${roomName}::turn:${currentTurnId}`
+      : roomName;
+  return {
+    suppressRoomName,
+    suppressRequestId,
+  };
+};
+
 export const CANVAS_DISPATCH_SUPPRESS_MS = 3000;
 
 export const buildToolEvent = (tool: string, params: JsonObject, roomId: string): ToolEvent => ({

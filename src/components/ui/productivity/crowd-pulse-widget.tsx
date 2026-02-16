@@ -135,7 +135,14 @@ export default function CrowdPulseWidget(props: CrowdPulseWidgetProps) {
       }
       if (typeof patch.showPreview === 'boolean') next.showPreview = patch.showPreview;
 
-      if (!Array.isArray(patch.questions) && hasActiveQuestionPatch && nextQuestionText) {
+      const explicitQuestionsPatch = Array.isArray(patch.questions)
+        ? (patch.questions as CrowdPulseState['questions'])
+        : undefined;
+      const hasExplicitQuestionsPatch = Array.isArray(explicitQuestionsPatch);
+      const shouldAutoAppendQuestion =
+        !hasExplicitQuestionsPatch ||
+        (hasExplicitQuestionsPatch && explicitQuestionsPatch.length === 0);
+      if (shouldAutoAppendQuestion && hasActiveQuestionPatch && nextQuestionText) {
         const exists = next.questions.some((question) => question.text.trim().toLowerCase() === nextQuestionText.toLowerCase());
         if (!exists) {
           next.questions = [
