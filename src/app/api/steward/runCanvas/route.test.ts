@@ -203,4 +203,62 @@ describe('/api/steward/runCanvas', () => {
     expect(enqueued.params.metadata.traceId).toBe('trace-explicit');
     expect(enqueued.params.metadata.intentId).toBe('intent-explicit');
   });
+
+  it('queues fairy.intent with coalescing resource keys and idempotency envelope', async () => {
+    const POST = await loadPost({ queueFallback: false, byok: false });
+    const request = new Request('http://localhost/api/steward/runCanvas', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        room: 'demo-room',
+        task: 'fairy.intent',
+        requestId: 'req-fairy-1',
+        executionId: 'exec-1',
+        idempotencyKey: 'idem-1',
+        attempt: 2,
+        params: {
+          message: 'draw a roadmap',
+          contextProfile: 'standard',
+        },
+      }),
+    });
+
+    const response = await POST(toNextRequest(request));
+    expect(response.status).toBe(202);
+
+    const [enqueued] = enqueueTaskMock.mock.calls[0] as [Record<string, any>];
+    expect(enqueued.task).toBe('fairy.intent');
+    expect(enqueued.coalesceByResource).toBe(true);
+    expect(enqueued.requestId).toBe('req-fairy-1');
+    expect(enqueued.dedupeKey).toBe('idem-1');
+    expect(enqueued.idempotencyKey).toBe('idem-1');
+    expect(enqueued.resourceKeys).toEqual(expect.arrayContaining(['room:demo-room', 'canvas:intent']));
+    expect(enqueued.resourceKeys.join(',')).toContain('lock:');
+    expect(enqueued.params.executionId).toBe('exec-1');
+    expect(enqueued.params.idempotencyKey).toBe('idem-1');
+    expect(enqueued.params.attempt).toBe(2);
+  });
+
+  it('maps explicit intent id onto fairy.intent params.id', async () => {
+    const POST = await loadPost({ queueFallback: false, byok: false });
+    const request = new Request('http://localhost/api/steward/runCanvas', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        room: 'demo-room',
+        task: 'fairy.intent',
+        intentId: 'intent-explicit',
+        params: {
+          message: 'draw',
+        },
+      }),
+    });
+
+    const response = await POST(toNextRequest(request));
+    expect(response.status).toBe(202);
+
+    const [enqueued] = enqueueTaskMock.mock.calls[0] as [Record<string, any>];
+    expect(enqueued.params.id).toBe('intent-explicit');
+    expect(enqueued.params.metadata.intentId).toBe('intent-explicit');
+  });
 });

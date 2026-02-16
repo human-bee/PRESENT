@@ -63,8 +63,7 @@ const FAIRY_INTENT_DEDUPE_MAX = Number(process.env.FAIRY_INTENT_DEDUPE_MAX ?? 20
 const fairyIntentDedupe = new Map<string, number>();
 
 const CLIENT_CANVAS_AGENT_ENABLED = getBooleanFlag(process.env.NEXT_PUBLIC_CANVAS_AGENT_CLIENT_ENABLED, false);
-// Fairy is now the default canvas manipulation layer; allow overriding via env for emergency fallback.
-const FAIRY_UI_ENABLED = getBooleanFlag(process.env.NEXT_PUBLIC_FAIRY_ENABLED, true);
+const FAIRY_UI_ENABLED = getBooleanFlag(process.env.NEXT_PUBLIC_FAIRY_ENABLED, false);
 const FAIRY_CLIENT_AGENT_ENABLED = isFairyClientAgentEnabled(process.env.NEXT_PUBLIC_FAIRY_CLIENT_AGENT_ENABLED);
 const CANVAS_STEWARD_ENABLED = (process.env.CANVAS_STEWARD_SERVER_EXECUTION ?? 'true') === 'true';
 const DEFAULT_SUMMARY_MEMORY_TOOL = process.env.SUMMARY_MEMORY_MCP_TOOL;
