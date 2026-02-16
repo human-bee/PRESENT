@@ -1,16 +1,18 @@
-# Vector Memory MCP (Summaries → Vector Store)
+# Vector Memory MCP (Summaries to Vector Store)
 
-This app can auto-send meeting summaries to a vector-memory MCP tool for long-term recall.
+This app can send meeting/summary artifacts to a memory MCP tool for long-term recall.
 
-## How it works
-- `MeetingSummaryWidget` emits a **memory payload** whenever the summary is sent.
-- Payloads are adapted for common vector MCP tools:
-  - `qdrant-store` → `{ information, metadata, collection_name? }`
-  - `upsert-records` → `{ records: [{ id, text, metadata }], index?, namespace? }`
-- If your MCP server expects a different schema, set a custom tool name and adjust the widget payload fields accordingly.
+## How it fits the runtime
+
+Memory writes are triggered from supported widget/steward flows and run under the same server-first orchestration model used across the app.
+
+- Input intent flows through queue/steward execution.
+- Memory payloads are adapted to target MCP tool shape.
+- Success/failure should be handled as side-effect status, not destructive primary-state mutation.
 
 ## Env knobs
-```
+
+```bash
 SUMMARY_MEMORY_MCP_TOOL=qdrant-store
 SUMMARY_MEMORY_MCP_COLLECTION=present-memory
 SUMMARY_MEMORY_MCP_INDEX=present-memory
@@ -28,35 +30,15 @@ NEXT_PUBLIC_MEMORY_RECALL_MCP_NAMESPACE=present
 NEXT_PUBLIC_MEMORY_RECALL_AUTO_SEARCH=true
 ```
 
-## MCP config
-1) Start your MCP server (e.g. Qdrant MCP or Pinecone MCP).
-2) Open `/mcp-config` and add the server URL.
-3) Verify the tool name matches `SUMMARY_MEMORY_MCP_TOOL`.
-4) Use the MeetingSummaryWidget "Send" button (or enable `SUMMARY_MEMORY_AUTO_SEND`).
+## MCP setup
 
-## Memory Recall Widget
-- Create via `create_component` with type `MemoryRecallWidget`.
-- Set `query` (and optionally `autoSearch=true`) to run a memory lookup.
-- The widget calls `NEXT_PUBLIC_MEMORY_RECALL_MCP_TOOL` (default `qdrant-find`).
+1. Start MCP server (Qdrant/Pinecone-compatible toolset).
+2. Configure server in `/mcp-config`.
+3. Verify tool names match env settings.
+4. Trigger summary/memory actions from supported widget paths.
 
-## Local Qdrant MCP (recommended)
-1) Start Qdrant (local or container).
-2) Run the official MCP server with a local Qdrant path or a Qdrant URL:
-   - Local embedded Qdrant:
-     - `QDRANT_LOCAL_PATH=/path/to/qdrant-data`
-     - `COLLECTION_NAME=present-memory`
-     - `uvx mcp-server-qdrant --transport sse`
-   - External Qdrant:
-     - `QDRANT_URL=http://localhost:6333`
-     - `COLLECTION_NAME=present-memory`
-     - `uvx mcp-server-qdrant --transport sse`
-3) Add the MCP server URL (printed on startup) to `/mcp-config` and click **Verify & Map**.
+## Compatibility notes
 
-## Tool compatibility notes
-- **Qdrant MCP** exposes `qdrant-store` + `qdrant-find`, expects `information` + `metadata` + `collection_name`.
-- **Pinecone MCP** exposes `upsert-records` + `search-records` and requires an index with **integrated inference**.
-
-## Customization
-You can override the target per-summary via metadata:
-- `metadata.summaryMcpTool` or `metadata.crmToolName`
-- `metadata.memoryCollection`, `metadata.memoryIndex`, `metadata.memoryNamespace`
+- Keep tool names and payload contracts additive.
+- Do not couple memory write success to critical UI correctness paths.
+- Prefer explicit metadata tags (`collection`, `index`, `namespace`) for deterministic routing.

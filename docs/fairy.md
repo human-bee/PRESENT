@@ -1,31 +1,49 @@
-# Fairy System (Local Dev)
+# Fairy Ingress (Server-First)
 
-## Enable the Fairy system
+This project uses a **server-first fairy intent pipeline**.
 
-1. Set env vars in `.env.local`:
+## Supported execution path
 
+All supported fairy/canvas intent execution goes through:
+
+1. `POST /api/steward/runCanvas`
+2. `task: "fairy.intent"` (or `canvas.agent_prompt` for direct canvas prompts)
+3. Conductor routing + queue arbitration
+4. Server steward execution + broadcast
+
+This keeps lock/idempotency/trace behavior consistent with the rest of the agent runtime.
+
+## Unsupported legacy path
+
+Client-side fairy execution via `/api/fairy/stream-actions` is retired.
+Do not use or reintroduce it for production/demo flows.
+
+## Runtime flags (recommended)
+
+```bash
+NEXT_PUBLIC_CANVAS_AGENT_CLIENT_ENABLED=false
+NEXT_PUBLIC_FAIRY_CLIENT_AGENT_ENABLED=false
+CANVAS_STEWARD_SERVER_EXECUTION=true
+CANVAS_QUEUE_DIRECT_FALLBACK=false
 ```
-NEXT_PUBLIC_FAIRY_ENABLED=true
-NEXT_PUBLIC_FAIRY_DEV_PANEL=true
-NEXT_PUBLIC_FAIRY_WORKER_URL=/api/fairy
-FAIRY_MODEL=gpt-5.1
-OPENAI_API_KEY=your_openai_api_key
-```
 
-`NEXT_PUBLIC_FAIRY_DEV_PANEL` is optional; it shows the compact Fairy Control panel in addition to the full HUD.
+`NEXT_PUBLIC_FAIRY_ENABLED` controls whether fairy UI affordances are shown.
+It does **not** change the server-first execution contract.
 
-2. Start the stack:
+## Local verification
 
-```
+1. Start stack:
+
+```bash
 npm run stack:start
 ```
 
-3. Open `http://localhost:3000/canvas` and use the **Fairy Control** panel to summon + prompt.
+2. Open `/canvas` and connect room/agent.
+3. Send a fairy-style request via voice or supported UI prompt.
+4. Verify queued dispatch in logs and request path:
+   - `/api/steward/runCanvas`
+   - `task: "fairy.intent"`
 
-## Run the Fairy Lap Playwright test
+## Debug note
 
-```
-npx playwright test tests/fairy-lap-report.e2e.spec.ts
-```
-
-Artifacts are written to `test-results/fairy-lap-<timestamp>/` with `report.md` and screenshots.
+If you need emergency debugging of legacy behavior, document it explicitly in a throwaway branch and do not ship it to `main`.

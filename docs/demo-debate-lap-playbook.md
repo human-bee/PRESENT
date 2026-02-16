@@ -1,79 +1,51 @@
-# Demo Racetrack: 5‑Minute Debate Lap
+# Demo Racetrack: 5-Minute Debate Lap
 
-Goal: a repeatable, voice‑agent‑driven lap that shows off realtime orchestration + stewards + canvas artifacts.
+Goal: showcase realtime voice + scorecard + canvas behavior on the **supported server-first path**.
 
 ## Prereqs
 
-- Copy `example.env.local` → `.env.local` and fill required keys (LiveKit + OpenAI + Supabase).
-- Optional (recommended for the demo): set `LINEAR_API_KEY` in `.env.local` so the Linear Kanban loads immediately in dev.
-- Start the stack (3 terminals or one script):
-  - `npm run stack:start`
-  - (or manually: `npm run agent:realtime`, `npm run agent:conductor`, `npm run sync:dev`, `npm run dev`, plus LiveKit server)
+- `.env.local` configured for LiveKit/OpenAI/Supabase.
+- Optional: `LINEAR_API_KEY` for board steps.
+- Start stack: `npm run stack:start`.
+- Keep client agents off:
+  - `NEXT_PUBLIC_CANVAS_AGENT_CLIENT_ENABLED=false`
+  - `NEXT_PUBLIC_FAIRY_CLIENT_AGENT_ENABLED=false`
 
-## Lap Script (what you say to the voice agent)
+## Lap script (voice)
 
-### 0:00–0:20 — Setup widgets
+### 0:00-0:20
 
-1) “Start a 5 minute timer and start it now.”
-2) “Create a Linear Kanban board.”
-3) “Start a debate analysis scorecard about: Should AI labs be required to publish safety evals before release?”
+1) "Start a 5 minute timer and start it now."
+2) "Create a Linear Kanban board."
+3) "Start a debate scorecard about should AI labs publish safety evals before release."
 
-Expected:
-- Timer shows running countdown.
-- Kanban appears (and loads issues if `LINEAR_API_KEY` is present).
-- DebateScorecard title matches the topic; sides are labeled (e.g. “You” vs “Opponent” or participant names).
+### 0:20-4:00
 
-### 0:20–4:00 — Debate (compressed or real‑time)
+Run short debate turns for both sides and optionally request fact-check.
 
-Feed turns like:
-- “Affirmative: Publishing evals reduces catastrophic risk and improves accountability.”
-- “Negative: Mandatory pre‑release eval publication risks leaks and slows innovation; do evals privately.”
-- “Affirmative rebuttal: Private evals are not credible—publish at least summaries + methodology.”
-- “Negative rebuttal: Publication incentives can lead to performative safety theater; focus on audits.”
-- “Judge: propose a phased disclosure policy and weigh transparency vs security risks.”
+### 4:00-5:00
 
-Expected:
-- Scorecard ledger fills with claims.
-- Total points exchanged increments.
-- Timeline records debate + scoring events.
+1) "Canvas: create a clean flowchart summary of the debate."
+2) "Generate an infographic summarizing the debate."
+3) "Canvas: add a playful readable doodle that represents the debate."
 
-Optional (explicit “bells & whistles”):
-- “Fact-check the two most important factual claims and add sources to the scorecard.”
+### Finish
 
-Expected:
-- Sources tab populates (links/evidence refs).
-- Some claims move to CHECKING/VERIFIED/REFUTED.
+"On the kanban board add two research tickets, one pro and one con."
 
-### 4:00–5:00 — Canvas extravaganza
+## Validation checklist
 
-1) “Canvas: create a clean flowchart summary of the debate (clear nodes + arrows).”
-2) “Generate an infographic summarizing the debate.”
-3) “Canvas: add a playful doodle that represents the debate (fun but readable).”
+- Scorecard claim/timeline updates appear.
+- Canvas output appears without client fairy execution.
+- Relevant API calls route through `/api/steward/runCanvas`.
+- No dependency on `/api/fairy/stream-actions`.
 
-Expected:
-- Flowchart shapes appear on canvas.
-- Infographic widget renders a generated image.
-- A draw/doodle shape appears.
+## Optional verification harness
 
-### Finish — Follow-up tickets
+Run:
 
-“On the kanban board: add two tickets: ‘Research pro (transparency)’ assigned to me, and ‘Research con (private evals)’ assigned to the other participant.”
+```bash
+npx playwright test tests/fairy-voice-agent-lap.e2e.spec.ts
+```
 
-Expected:
-- Two new tickets appear on the board.
-
-## One-command “verified report” (screenshots + assertions)
-
-Runs the lap via Playwright, asserts each deliverable, and writes a Markdown report with screenshots:
-
-- `npx playwright test tests/debate-lap-report.e2e.spec.ts`
-
-Output directory:
-- `~/Downloads/present-demo-debate-lap-report-<timestamp>/`
-
-## Troubleshooting
-
-- Scorecard title/labels not updating: restart the stack (`npm run stack:restart`) to ensure agents are on the latest code.
-- Linear board shows API key prompt: set `LINEAR_API_KEY` in `.env.local` (dev fallback) or save a key in the UI.
-- Widgets overlap: use the toolbox to add widgets; non-canvas-agent widgets are auto‑tiled on placement.
-
+Use generated report/screenshots to compare lap quality between commits.
