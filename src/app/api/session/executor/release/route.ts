@@ -63,6 +63,20 @@ export async function POST(req: NextRequest) {
     .maybeSingle();
 
   if (error) {
+    const code = (error as { code?: string }).code;
+    const message = String(error.message || '').toLowerCase();
+    const noMatchingLease =
+      code === 'PGRST116' ||
+      message.includes('0 rows') ||
+      message.includes('no rows') ||
+      message.includes('results contain 0 rows');
+    if (noMatchingLease) {
+      return NextResponse.json({
+        released: false,
+        sessionId,
+        reason: 'lease_not_owned_or_already_released',
+      });
+    }
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 

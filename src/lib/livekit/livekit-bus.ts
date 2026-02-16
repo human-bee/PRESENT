@@ -10,6 +10,12 @@ type ChunkEnvelope = {
   encoding: 'base64';
 };
 
+export type LiveKitBusSendResult = {
+  status: 'sent' | 'queued' | 'failed';
+  reason?: string;
+  queueLength?: number;
+};
+
 const MAX_DATA_CHANNEL_BYTES = 60_000; // LiveKit hard limit is 65_535 bytes
 const MAX_CHUNK_STRING_LENGTH = 40_000; // leave headroom for JSON metadata
 const CHUNK_TTL_MS = 60_000;
@@ -87,6 +93,9 @@ type BusCacheEntry = { bus: BusInstance; room: Room };
 const busCacheBySid = new Map<string, BusCacheEntry>();
 const stubBus: BusInstance = {
   send() {},
+  async sendWithResult() {
+    return { status: 'failed', reason: 'room_unavailable' as const };
+  },
   on() {
     return () => {};
   },
@@ -135,7 +144,10 @@ function createLiveKitBusInstance(room: Room | null | undefined) {
     requiresAgent?: boolean;
   }> = [];
   let listenersAttached = false;
-  const handleStateChange = () => flushPending();
+  let flushInFlight = false;
+  const handleStateChange = () => {
+    void flushPending();
+  };
 
   let flushRetryHandle: ReturnType<typeof setTimeout> | null = null;
   const scheduleFlushRetry = () => {
@@ -143,28 +155,28 @@ function createLiveKitBusInstance(room: Room | null | undefined) {
     if (flushRetryHandle) return;
     flushRetryHandle = setTimeout(() => {
       flushRetryHandle = null;
-      flushPending();
+      void flushPending();
     }, 250);
   };
 
   const isVoiceAgentPresent = () => {
-      if (!room) return false;
-      try {
-        const participants = Array.from(room.remoteParticipants.values());
-        return participants.some((participant) => {
-          if (participant?.kind === ParticipantKind.AGENT) return true;
-          const identity = String(participant?.identity || '').toLowerCase();
-          const metadata = String(participant?.metadata || '').toLowerCase();
-          return (
-            identity.includes('voice-agent') ||
-            identity === 'voiceagent' ||
-            metadata.includes('voice-agent') ||
-            metadata.includes('voiceagent')
-          );
-        });
-      } catch {
-        return false;
-      }
+    if (!room) return false;
+    try {
+      const participants = Array.from(room.remoteParticipants.values());
+      return participants.some((participant) => {
+        if (participant?.kind === ParticipantKind.AGENT) return true;
+        const identity = String(participant?.identity || '').toLowerCase();
+        const metadata = String(participant?.metadata || '').toLowerCase();
+        return (
+          identity.includes('voice-agent') ||
+          identity === 'voiceagent' ||
+          metadata.includes('voice-agent') ||
+          metadata.includes('voiceagent')
+        );
+      });
+    } catch {
+      return false;
+    }
   };
 
   const shouldWaitForAgent = (topic: string, payload: unknown): boolean => {
@@ -186,7 +198,7 @@ function createLiveKitBusInstance(room: Room | null | undefined) {
     }
   };
 
-  const publishPayload = (topic: string, payload: unknown): boolean => {
+  const publishPayload = async (topic: string, payload: unknown): Promise<boolean> => {
     if (!room) return false;
 
     const json = JSON.stringify(payload);
@@ -198,7 +210,11 @@ function createLiveKitBusInstance(room: Room | null | undefined) {
           reliable: true,
           topic,
         });
-        handlePublishResult(result, topic);
+        if (!result) {
+          logger.warn('Failed to send: local participant unavailable', { topic });
+          return false;
+        }
+        await Promise.resolve(result);
         return true;
       } catch (err) {
         logger.error('Failed to send', topic, err);
@@ -234,7 +250,15 @@ function createLiveKitBusInstance(room: Room | null | undefined) {
           reliable: true,
           topic,
         });
-        handlePublishResult(result, topic, { messageId, index });
+        if (!result) {
+          logger.warn('Failed to send chunk: local participant unavailable', {
+            topic,
+            messageId,
+            index,
+          });
+          return false;
+        }
+        await Promise.resolve(result);
       } catch (err) {
         logger.error('Failed to send chunk', { topic, messageId, index }, err);
         return false;
@@ -243,38 +267,44 @@ function createLiveKitBusInstance(room: Room | null | undefined) {
     return true;
   };
 
-  const flushPending = () => {
+  const flushPending = async () => {
     if (!room || room.state !== 'connected') return;
-    prunePendingQueue();
-    if (pendingQueue.length === 0) return;
+    if (flushInFlight) return;
+    flushInFlight = true;
+    try {
+      prunePendingQueue();
+      if (pendingQueue.length === 0) return;
 
-    const agentReady = isVoiceAgentPresent();
-    const retained: typeof pendingQueue = [];
+      const agentReady = isVoiceAgentPresent();
+      const retained: typeof pendingQueue = [];
 
-    while (pendingQueue.length > 0) {
-      const next = pendingQueue.shift();
-      if (!next) continue;
-      if (next.requiresAgent && !agentReady) {
-        retained.push(next);
-        continue;
+      while (pendingQueue.length > 0) {
+        const next = pendingQueue.shift();
+        if (!next) continue;
+        if (next.requiresAgent && !agentReady) {
+          retained.push(next);
+          continue;
+        }
+
+        const sent = await publishPayload(next.topic, next.payload);
+        if (!sent) {
+          retained.unshift(next);
+          retained.push(...pendingQueue.splice(0));
+          break;
+        }
       }
 
-      const sent = publishPayload(next.topic, next.payload);
-      if (!sent) {
-        retained.unshift(next);
-        retained.push(...pendingQueue.splice(0));
-        break;
-      }
-    }
+      pendingQueue.push(...retained);
 
-    pendingQueue.push(...retained);
-
-    if (pendingQueue.length > 0) {
-      const shouldRetrySoon =
-        agentReady || pendingQueue.some((entry) => !entry.requiresAgent);
-      if (shouldRetrySoon) {
-        scheduleFlushRetry();
+      if (pendingQueue.length > 0) {
+        const shouldRetrySoon =
+          agentReady || pendingQueue.some((entry) => !entry.requiresAgent);
+        if (shouldRetrySoon) {
+          scheduleFlushRetry();
+        }
       }
+    } finally {
+      flushInFlight = false;
     }
   };
 
@@ -316,64 +346,76 @@ function createLiveKitBusInstance(room: Room | null | undefined) {
       room.on(RoomEvent.ConnectionStateChanged, attachWhenSidReady);
     }
 
-    flushPending();
+    void flushPending();
   };
   ensureListeners();
 
-  const handlePublishResult = (result: unknown, topic: string, context?: Record<string, unknown>) => {
-    if (result && typeof (result as PromiseLike<unknown>).then === 'function') {
-      Promise.resolve(result).catch((err) => {
-        logger.error('Failed to send', { topic, ...context }, err);
-      });
+  const sendWithResult = async (topic: string, payload: unknown): Promise<LiveKitBusSendResult> => {
+    if (!room) {
+      return { status: 'failed', reason: 'room_unavailable' };
     }
+
+    ensureListeners();
+
+    const requiresAgent = shouldWaitForAgent(topic, payload);
+
+    if (room.state !== 'connected') {
+      pendingQueue.push({ topic, payload, queuedAt: Date.now(), requiresAgent });
+      prunePendingQueue();
+      const now = Date.now();
+      if (now - lastWarnedDisconnectedAt > DISCONNECT_WARN_THROTTLE_MS) {
+        lastWarnedDisconnectedAt = now;
+        logger.info('Queueing payload until room is connected', {
+          topic,
+          queueLength: pendingQueue.length,
+          currentState: room.state,
+        });
+      }
+      return {
+        status: 'queued',
+        reason: 'room_not_connected',
+        queueLength: pendingQueue.length,
+      };
+    }
+
+    if (requiresAgent && !isVoiceAgentPresent()) {
+      pendingQueue.push({ topic, payload, queuedAt: Date.now(), requiresAgent: true });
+      prunePendingQueue();
+      logger.debug?.('Queueing transcription until voice agent joins', {
+        topic,
+        queueLength: pendingQueue.length,
+      });
+      return {
+        status: 'queued',
+        reason: 'agent_not_joined',
+        queueLength: pendingQueue.length,
+      };
+    }
+
+    const sent = await publishPayload(topic, payload);
+    if (!sent) {
+      pendingQueue.unshift({ topic, payload, queuedAt: Date.now(), requiresAgent });
+      prunePendingQueue();
+      scheduleFlushRetry();
+      return {
+        status: 'queued',
+        reason: 'publish_retry_queued',
+        queueLength: pendingQueue.length,
+      };
+    }
+    return { status: 'sent' };
   };
 
   return {
     /** Publish a JSON-serialisable payload under the given topic */
     send(topic: string, payload: unknown) {
-      // Guard against stale or disconnected rooms. Calling publishData when
-      // the underlying PeerConnection is already closed will throw
-      // `UnexpectedConnectionState: PC manager is closed` inside livekit-client.
-      // This tends to happen during fast refresh, tab closes, and reconnect churn.
+      void sendWithResult(topic, payload).catch((error) => {
+        logger.error('Failed to queue/publish bus payload', { topic }, error);
+      });
+    },
 
-      // 1. Room reference must exist.
-      if (!room) return;
-
-      ensureListeners();
-
-      const requiresAgent = shouldWaitForAgent(topic, payload);
-
-      if (room.state !== 'connected') {
-        pendingQueue.push({ topic, payload, queuedAt: Date.now(), requiresAgent });
-        prunePendingQueue();
-        const now = Date.now();
-        if (now - lastWarnedDisconnectedAt > DISCONNECT_WARN_THROTTLE_MS) {
-          lastWarnedDisconnectedAt = now;
-          logger.info('Queueing payload until room is connected', {
-            topic,
-            queueLength: pendingQueue.length,
-            currentState: room.state,
-          });
-        }
-        return;
-      }
-
-      if (requiresAgent && !isVoiceAgentPresent()) {
-        pendingQueue.push({ topic, payload, queuedAt: Date.now(), requiresAgent: true });
-        prunePendingQueue();
-        logger.debug?.('Queueing transcription until voice agent joins', {
-          topic,
-          queueLength: pendingQueue.length,
-        });
-        return;
-      }
-
-      const sent = publishPayload(topic, payload);
-      if (!sent) {
-        pendingQueue.unshift({ topic, payload, queuedAt: Date.now(), requiresAgent });
-        prunePendingQueue();
-        scheduleFlushRetry();
-      }
+    async sendWithResult(topic: string, payload: unknown) {
+      return sendWithResult(topic, payload);
     },
 
     /**

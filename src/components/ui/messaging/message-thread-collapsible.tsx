@@ -129,6 +129,21 @@ export const MessageThreadCollapsible = React.forwardRef<
       type: 'system_call';
     }>
   >([]);
+
+  const appendSystemCall = React.useCallback((text: string, speaker = 'system') => {
+    setSystemCalls((prev) => [
+      ...prev,
+      {
+        id: `system-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        speaker,
+        text,
+        timestamp: Date.now(),
+        isFinal: true,
+        source: 'system' as const,
+        type: 'system_call' as const,
+      },
+    ]);
+  }, []);
   
   // Get transcripts from centralized store
   const storeTranscripts = useAllTranscripts();
@@ -441,11 +456,12 @@ export const MessageThreadCollapsible = React.forwardRef<
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           room: roomName,
-          task: 'canvas.agent_prompt',
+          task: 'fairy.intent',
           params: {
+            id: requestId,
             room: roomName,
             message,
-            requestId,
+            source: 'voice',
           },
         }),
       });
@@ -1001,7 +1017,49 @@ export const MessageThreadCollapsible = React.forwardRef<
                       } else if (mentionActive) {
                         await sendCanvasAgentPrompt(textForDispatch);
                       } else {
-                        bus.send('transcription', payload);
+                        const busWithDelivery = bus as typeof bus & {
+                          sendWithResult?: (topic: string, payload: unknown) => Promise<{
+                            status: 'sent' | 'queued' | 'failed';
+                            reason?: string;
+                            queueLength?: number;
+                          }>;
+                        };
+                        if (typeof busWithDelivery.sendWithResult === 'function') {
+                          const delivery = await busWithDelivery.sendWithResult('transcription', payload);
+                          if (delivery.status === 'failed') {
+                            throw new Error(
+                              `Delivery failed${delivery.reason ? `: ${delivery.reason}` : ''}`,
+                            );
+                          }
+                          if (delivery.status === 'queued') {
+                            const queueHint =
+                              typeof delivery.queueLength === 'number'
+                                ? ` Queue depth: ${delivery.queueLength}.`
+                                : '';
+                            if (delivery.reason === 'agent_not_joined') {
+                              appendSystemCall(
+                                `Agent is not joined yet. Your message is queued until the agent joins.${queueHint}`,
+                                'voice-agent',
+                              );
+                              if (livekitCtx?.roomName || room?.name) {
+                                window.dispatchEvent(
+                                  new CustomEvent('livekit:request-agent', {
+                                    detail: {
+                                      roomName: livekitCtx?.roomName || room?.name,
+                                    },
+                                  }),
+                                );
+                              }
+                            } else {
+                              appendSystemCall(
+                                `Room is reconnecting. Your message is queued and will send automatically.${queueHint}`,
+                                'voice-agent',
+                              );
+                            }
+                          }
+                        } else {
+                          bus.send('transcription', payload);
+                        }
                       }
 
                       try {
@@ -1027,6 +1085,14 @@ export const MessageThreadCollapsible = React.forwardRef<
                       completed = true;
                     } catch (error) {
                       console.error('[Transcript] Failed to send agent prompt', error);
+                      const errorMessage =
+                        error instanceof Error && error.message.trim().length > 0
+                          ? error.message
+                          : 'Unknown error';
+                      appendSystemCall(
+                        `Could not deliver your message to the voice agent (${errorMessage}). Use /canvas as a direct fallback.`,
+                        'voice-agent',
+                      );
                     } finally {
                       if (completed) {
                         setTypedMessage('');

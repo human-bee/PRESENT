@@ -343,7 +343,8 @@ export default defineAgent({
       false;
     const transcriptionEnabled =
       transcriptionEnabledFlag ?? (!multiParticipantTranscriptionEnabled && Boolean(resolvedInputTranscriptionModel));
-    const resolvedTranscriptionLanguage = envTranscriptionLanguage || fallbackTranscriptionLanguage || undefined;
+    const resolvedTranscriptionLanguage =
+      envTranscriptionLanguage || fallbackTranscriptionLanguage || 'en';
     const inputAudioTranscription = transcriptionEnabled
       ? {
         model: resolvedSttModel,
@@ -467,14 +468,15 @@ export default defineAgent({
     let instructions = `You are a UI automation agent. You NEVER speak—you only act by calling tools.
 
 CRITICAL RULES:
-1. For canvas work (draw, sticky note, shapes): call dispatch_to_conductor({ task: "canvas.agent_prompt", params: { room: CURRENT_ROOM, message: "<user request>", requestId: "<uuid>", bounds?, selectionIds? } }). Generate a fresh UUID when you create requestId.
+1. For canvas work (draw, sticky note, shapes): call dispatch_to_conductor({ task: "fairy.intent", params: { id: "<uuid>", room: CURRENT_ROOM, message: "<user request>", source: "voice", bounds?, selectionIds? } }). Generate a fresh UUID when you create id.
 2. For component creation/updates: call create_component or update_component.
-3. NEVER respond with conversational text. If uncertain, call a tool anyway.
-4. Do not greet, explain, or narrate. Tool calls only.
+3. Never claim a mutation is complete until you have apply evidence. If apply is pending, say it is queued/in progress.
+4. NEVER respond with conversational text. If uncertain, call a tool anyway.
+5. Do not greet, explain, or narrate. Tool calls only.
 
 Examples:
-- User: "draw a cat" → dispatch_to_conductor({ task: "canvas.agent_prompt", params: { room: CURRENT_ROOM, message: "draw a cat", requestId: "..." } })
-- User: "focus on the selected rectangles" → dispatch_to_conductor({ task: "canvas.agent_prompt", params: { room: CURRENT_ROOM, message: "focus on the selected rectangles", requestId: "...", selectionIds: CURRENT_SELECTION_IDS } })
+- User: "draw a cat" → dispatch_to_conductor({ task: "fairy.intent", params: { id: "...", room: CURRENT_ROOM, message: "draw a cat", source: "voice" } })
+- User: "focus on the selected rectangles" → dispatch_to_conductor({ task: "fairy.intent", params: { id: "...", room: CURRENT_ROOM, message: "focus on the selected rectangles", source: "voice", selectionIds: CURRENT_SELECTION_IDS } })
 - User: "add a timer" → create_component({ type: "RetroTimerEnhanced", spec: "{}" })
 - User: "hi" → (no tool needed, stay silent)
 
@@ -796,6 +798,83 @@ Your only output is function calls. Never use plain text unless absolutely neces
       }
     });
 
+    liveKitBus.on('tool_result', (message: unknown) => {
+      try {
+        const record = message && typeof message === 'object' ? (message as Record<string, unknown>) : null;
+        if (!record) return;
+        const callId = typeof record.id === 'string' && record.id.trim().length > 0 ? record.id.trim() : undefined;
+        const payload = record.payload && typeof record.payload === 'object'
+          ? (record.payload as Record<string, unknown>)
+          : null;
+        const result =
+          (payload?.result && typeof payload.result === 'object'
+            ? (payload.result as Record<string, unknown>)
+            : null) ??
+          (record.result && typeof record.result === 'object'
+            ? (record.result as Record<string, unknown>)
+            : null);
+        const statusRaw =
+          (typeof payload?.status === 'string' ? payload.status : undefined) ??
+          (typeof record.status === 'string' ? record.status : undefined) ??
+          (typeof result?.status === 'string' ? result.status : undefined) ??
+          '';
+        const status = statusRaw.trim().toUpperCase();
+        if (!callId || !pendingMutationDispatches.has(callId)) return;
+        const pending = pendingMutationDispatches.get(callId);
+        if (!pending) return;
+
+        if (pending.tool === 'dispatch_to_conductor') {
+          if (status && FAILURE_TOOL_STATUSES.has(status)) {
+            markMutationFailed(callId, `dispatch_to_conductor:${status.toLowerCase()}`);
+          }
+          return;
+        }
+
+        if (status && SUCCESS_TOOL_STATUSES.has(status)) {
+          markMutationApplied(callId);
+          return;
+        }
+
+        if (status && FAILURE_TOOL_STATUSES.has(status)) {
+          markMutationFailed(callId, `${pending.tool}:${status.toLowerCase()}`);
+          return;
+        }
+
+        if (!status) {
+          markMutationApplied(callId);
+        }
+      } catch (error) {
+        console.warn('[VoiceAgent] failed to process tool_result for mutation confirmation', error);
+      }
+    });
+
+    liveKitBus.on('tool_error', (message: unknown) => {
+      try {
+        const record = message && typeof message === 'object' ? (message as Record<string, unknown>) : null;
+        if (!record) return;
+        const callId = typeof record.id === 'string' && record.id.trim().length > 0 ? record.id.trim() : undefined;
+        const payload = record.payload && typeof record.payload === 'object'
+          ? (record.payload as Record<string, unknown>)
+          : null;
+        const errorValue = payload?.error ?? record.error;
+        const reason =
+          typeof errorValue === 'string'
+            ? errorValue
+            : errorValue && typeof errorValue === 'object' && typeof (errorValue as any).message === 'string'
+              ? (errorValue as any).message
+              : 'tool_error';
+        if (!callId || !pendingMutationDispatches.has(callId)) {
+          if (pendingMutationDispatches.size > 0) {
+            markMutationFailed(undefined, String(reason));
+          }
+          return;
+        }
+        markMutationFailed(callId, String(reason));
+      } catch (error) {
+        console.warn('[VoiceAgent] failed to process tool_error for mutation confirmation', error);
+      }
+    });
+
     requestComponentSnapshot();
 
     const SCORECARD_SUPPRESS_WINDOW_MS = 10_000;
@@ -948,6 +1027,115 @@ Your only output is function calls. Never use plain text unless absolutely neces
       'reserve_component',
       'dispatch_to_conductor',
     ]);
+    const MUTATION_CONFIRMATION_WINDOW_MS = Math.max(
+      5_000,
+      Number(process.env.VOICE_AGENT_MUTATION_CONFIRMATION_WINDOW_MS ?? 20_000),
+    );
+    const MUTATION_PENDING_TTL_MS = Math.max(
+      MUTATION_CONFIRMATION_WINDOW_MS,
+      Number(process.env.VOICE_AGENT_MUTATION_PENDING_TTL_MS ?? 30_000),
+    );
+    const OPTIMISTIC_CONFIRMATION_PATTERN =
+      /\b(updated|created|restored|removed|deleted|added|set(?:\s+up)?|done|ready|working on|coming to the canvas|now active|now restored|is now)\b/i;
+    const MUTATION_CONTEXT_PATTERN =
+      /\b(canvas|fair(?:y|ies)|crowd ?pulse|scorecard|research|claim|question|widget|shape|sticky|roadmap|timer)\b/i;
+    const SUCCESS_TOOL_STATUSES = new Set(['SUCCESS', 'APPLIED', 'OK', 'COMPLETED']);
+    const FAILURE_TOOL_STATUSES = new Set(['ERROR', 'FAILED', 'FAILURE', 'REJECTED', 'TIMEOUT', 'IGNORED']);
+
+    type PendingMutationDispatch = {
+      tool: string;
+      task?: string;
+      queuedAt: number;
+    };
+
+    const pendingMutationDispatches = new Map<string, PendingMutationDispatch>();
+    const mutationState = {
+      lastDispatchedAt: 0,
+      lastAppliedAt: 0,
+      lastFailedAt: 0,
+      lastFailureReason: '',
+    };
+
+    const pruneStalePendingMutations = (now = Date.now()) => {
+      for (const [callId, pending] of pendingMutationDispatches.entries()) {
+        if (now - pending.queuedAt > MUTATION_PENDING_TTL_MS) {
+          pendingMutationDispatches.delete(callId);
+          mutationState.lastFailedAt = now;
+          mutationState.lastFailureReason = 'timed_out_waiting_for_apply';
+        }
+      }
+    };
+
+    const trackPendingMutation = (event: ToolEvent) => {
+      const toolName = event?.payload?.tool;
+      if (!toolName || !MUTATING_TOOLS.has(toolName)) return;
+      if (pendingMutationDispatches.has(event.id)) return;
+      const params = event.payload?.params as Record<string, unknown> | undefined;
+      const task = typeof params?.task === 'string' ? params.task.trim() : '';
+      pendingMutationDispatches.set(event.id, {
+        tool: toolName,
+        task: task || undefined,
+        queuedAt: Date.now(),
+      });
+      mutationState.lastDispatchedAt = Date.now();
+      pruneStalePendingMutations();
+    };
+
+    const markMutationApplied = (callId: string) => {
+      if (pendingMutationDispatches.has(callId)) {
+        pendingMutationDispatches.delete(callId);
+      }
+      mutationState.lastAppliedAt = Date.now();
+      mutationState.lastFailureReason = '';
+      pruneStalePendingMutations();
+    };
+
+    const markMutationFailed = (callId: string | undefined, reason: string) => {
+      if (callId && pendingMutationDispatches.has(callId)) {
+        pendingMutationDispatches.delete(callId);
+      }
+      mutationState.lastFailedAt = Date.now();
+      mutationState.lastFailureReason = reason.trim().slice(0, 240);
+      pruneStalePendingMutations();
+    };
+
+    const normalizeAssistantMutationText = (text: string): string => {
+      const trimmed = text.trim();
+      if (!trimmed) return text;
+      pruneStalePendingMutations();
+      const now = Date.now();
+      const dispatchRecently = now - mutationState.lastDispatchedAt <= MUTATION_CONFIRMATION_WINDOW_MS;
+      if (!dispatchRecently) {
+        return text;
+      }
+      const likelyMutationAck =
+        OPTIMISTIC_CONFIRMATION_PATTERN.test(trimmed) || MUTATION_CONTEXT_PATTERN.test(trimmed);
+      if (!likelyMutationAck) {
+        return text;
+      }
+
+      if (pendingMutationDispatches.size > 0) {
+        return 'Request received. Changes are queued or still applying; I will confirm once they are visible on canvas.';
+      }
+
+      if (
+        mutationState.lastFailedAt >= mutationState.lastDispatchedAt &&
+        mutationState.lastFailedAt > mutationState.lastAppliedAt
+      ) {
+        const reason = mutationState.lastFailureReason
+          ? ` (${mutationState.lastFailureReason})`
+          : '';
+        return `I could not apply that change yet${reason}. Please retry or use /canvas as a direct fallback.`;
+      }
+
+      const appliedAfterDispatch =
+        mutationState.lastAppliedAt >= mutationState.lastDispatchedAt &&
+        now - mutationState.lastAppliedAt <= MUTATION_CONFIRMATION_WINDOW_MS;
+      if (!appliedAfterDispatch) {
+        return 'Request received. It is still in progress; I will confirm when apply is complete.';
+      }
+      return text;
+    };
 
     const stableStringify = (value: unknown): string => {
       if (value === null || typeof value !== 'object') {
@@ -1048,12 +1236,20 @@ Your only output is function calls. Never use plain text unless absolutely neces
       // Add timeout to prevent hanging on publish
       if (publishResult && typeof (publishResult as PromiseLike<unknown>).then === 'function') {
         const timeoutMs = 3000;
-        await Promise.race([
-          publishResult,
-          new Promise((_, reject) => setTimeout(() => reject(new Error('publish timeout')), timeoutMs)),
-        ]).catch((err) => {
-          console.warn('[VoiceAgent] publishData timed out or failed, continuing anyway', { tool: entry.event.payload.tool, err });
-        });
+        try {
+          await Promise.race([
+            publishResult,
+            new Promise((_, reject) =>
+              setTimeout(() => reject(new Error('publish timeout')), timeoutMs),
+            ),
+          ]);
+        } catch (err) {
+          console.warn('[VoiceAgent] publishData timed out or failed', {
+            tool: entry.event.payload.tool,
+            err,
+          });
+          return false;
+        }
       }
       console.log('[VoiceAgent] tool_call publish complete', {
         tool: entry.event.payload.tool,
@@ -1287,33 +1483,58 @@ Your only output is function calls. Never use plain text unless absolutely neces
           return;
         }
 
-        if (task === 'canvas.agent_prompt' || task === 'auto') {
+        if (task === 'canvas.agent_prompt' || task === 'auto' || task === 'fairy.intent') {
           const canvasParams = taskParams;
           const roomName = typeof canvasParams.room === 'string' && canvasParams.room.trim()
             ? canvasParams.room.trim()
             : job.room?.name || roomKey() || 'room';
           const message = typeof canvasParams.message === 'string' ? canvasParams.message.trim() : '';
           const requestId = typeof canvasParams.requestId === 'string' ? canvasParams.requestId.trim() : undefined;
+          const intentIdFromParams =
+            typeof canvasParams.id === 'string' && canvasParams.id.trim().length > 0
+              ? canvasParams.id.trim()
+              : undefined;
+          const suppressRequestId =
+            task === 'fairy.intent' ? requestId : requestId ?? intentIdFromParams;
+          const suppressRoomName =
+            task === 'fairy.intent' && !suppressRequestId
+              ? `${roomName}::turn:${currentTurnId}`
+              : roomName;
           const nowTs = Date.now();
           if (
             message &&
             shouldSuppressCanvasDispatch({
               dispatches: recentCanvasDispatches,
-              roomName,
+              roomName: suppressRoomName,
               message,
-              requestId,
+              requestId: suppressRequestId,
               now: nowTs,
               suppressMs: CANVAS_DISPATCH_SUPPRESS_MS,
             })
           ) {
-            console.info('[VoiceAgent] suppressing duplicate canvas.agent_prompt dispatch', {
+            console.info('[VoiceAgent] suppressing duplicate canvas/fairy dispatch', {
               room: roomName,
-              requestId,
+              requestId: suppressRequestId,
+              task,
             });
             return;
           }
 
-          if (message) {
+          if (task === 'fairy.intent') {
+            normalizedParams = {
+              ...normalizedParams,
+              task: 'fairy.intent',
+              params: {
+                ...canvasParams,
+                id: intentIdFromParams || requestId || randomUUID(),
+                room: roomName,
+                source:
+                  typeof canvasParams.source === 'string' && canvasParams.source.trim().length > 0
+                    ? canvasParams.source.trim()
+                    : 'voice',
+              },
+            };
+          } else if (message) {
             const selectionIds = Array.isArray(canvasParams.selectionIds)
               ? canvasParams.selectionIds.filter((id) => typeof id === 'string')
               : undefined;
@@ -1337,7 +1558,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
                 ? (JSON.parse(JSON.stringify(canvasParams.metadata)) as any)
                 : null;
             const intentId =
-              requestId || randomUUID();
+              intentIdFromParams || requestId || randomUUID();
             normalizedParams = {
               task: 'fairy.intent',
               params: {
@@ -1448,6 +1669,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
       const entry = { event: buildToolEvent(tool, normalizedParams, roomName), reliable };
 
       const publishOrQueueToolCall = async () => {
+        trackPendingMutation(entry.event);
         if (!job.room.localParticipant) {
           pendingToolCalls.push(entry);
           console.info('[VoiceAgent] queueing tool_call until room connects', {
@@ -2418,10 +2640,12 @@ Your only output is function calls. Never use plain text unless absolutely neces
               : trimmed;
           const room = roomKey() || job.room?.name || 'room';
           await sendToolCall('dispatch_to_conductor', {
-            task: 'canvas.agent_prompt',
+            task: 'fairy.intent',
             params: {
+              id: randomUUID(),
               room,
               message: message || trimmed,
+              source: 'voice',
             },
           });
           return;
@@ -2844,25 +3068,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
       });
     }
 
-    session.on(voice.AgentSessionEventTypes.ConversationItemAdded, async (event) => {
-      if (allowSensitiveLogging) {
-        console.log('[VoiceAgent] ConversationItem FULL', {
-          type: event.item.type,
-          role: event.item.role,
-          hasFunctionCall: !!(event.item as any).functionCall,
-          functionCall: (event.item as any).functionCall,
-          functionCallId: (event.item as any).function_call_id,
-          toolCalls: (event.item as any).tool_calls,
-          content: (event.item as any).content,
-          contentKinds: Array.isArray((event.item as any).content)
-            ? (event.item as any).content.map((c: any) => c.type)
-            : undefined,
-        });
-      }
-      if (event.item.role !== 'assistant') return;
-      const text = event.item.textContent ?? '';
-      if (!text.trim()) return;
-
+    const publishAgentTranscript = async (text: string) => {
       const payload = {
         type: 'live_transcription',
         event_id: randomUUID(),
@@ -2886,7 +3092,29 @@ Your only output is function calls. Never use plain text unless absolutely neces
           timestamp: Date.now(),
           manual: false,
         });
-      } catch { }
+      } catch {}
+    };
+
+    session.on(voice.AgentSessionEventTypes.ConversationItemAdded, async (event) => {
+      if (allowSensitiveLogging) {
+        console.log('[VoiceAgent] ConversationItem FULL', {
+          type: event.item.type,
+          role: event.item.role,
+          hasFunctionCall: !!(event.item as any).functionCall,
+          functionCall: (event.item as any).functionCall,
+          functionCallId: (event.item as any).function_call_id,
+          toolCalls: (event.item as any).tool_calls,
+          content: (event.item as any).content,
+          contentKinds: Array.isArray((event.item as any).content)
+            ? (event.item as any).content.map((c: any) => c.type)
+            : undefined,
+        });
+      }
+      if (event.item.role !== 'assistant') return;
+      const originalText = event.item.textContent ?? '';
+      const text = normalizeAssistantMutationText(originalText);
+      if (!text.trim()) return;
+      await publishAgentTranscript(text);
     });
 
     session.on(voice.AgentSessionEventTypes.Error, (event) => {
