@@ -45,7 +45,7 @@ Run short debate turns for both sides and optionally request fact-check.
 Run:
 
 ```bash
-npx playwright test tests/fairy-voice-agent-lap.e2e.spec.ts
+npx playwright test tests/debate-lap-report.e2e.spec.ts
 ```
 
 Use generated report/screenshots to compare lap quality between commits.

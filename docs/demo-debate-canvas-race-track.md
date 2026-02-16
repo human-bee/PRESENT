@@ -17,8 +17,7 @@ Goal: a repeatable 5-minute run combining DebateScorecard and canvas outputs und
 ### 0:00-0:20 setup
 
 1) "Create a timer for five minutes. Start the timer."
-2) "Create a kanban board."
-3) "Start a debate scorecard about: should AI labs publish safety evals before release?"
+2) "Start a debate scorecard about: should AI labs publish safety evals before release?"
 
 ### 0:20-4:00 debate turns
 
@@ -26,9 +25,9 @@ Use short alternating affirmative/negative turns and optionally request fact-che
 
 ### 4:00-5:00 canvas finish
 
-4) "Canvas: summarize debate as a flowchart with 6-10 nodes."
-5) "Create an infographic summarizing the debate."
-6) "Canvas: add a playful, readable doodle representing the debate."
+3) "Canvas: summarize debate as a flowchart with 6-10 nodes."
+4) "Create an infographic summarizing the debate."
+5) "Canvas: add a playful, readable doodle representing the debate."
 
 ## Expected outcomes
 

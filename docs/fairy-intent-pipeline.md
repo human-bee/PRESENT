@@ -61,7 +61,7 @@ For `fairy.intent` and `canvas.agent_prompt`, requests are coalesced by resource
 When queue enqueue fails:
 
 - If direct fallback is disabled: return queue-unavailable semantics (`503`) or `broadcast_only` when appropriate.
-- If direct fallback is enabled and server steward is allowed: execute steward directly and emit trace stage `executed_fallback`.
+- If direct fallback is enabled and server steward is allowed: execute steward directly and emit trace with `stage: "completed"` and `status: "executed_fallback"`.
 
 ## Feature flags and execution authority
 

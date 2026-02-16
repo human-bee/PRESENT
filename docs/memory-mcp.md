@@ -4,11 +4,12 @@ This app can send meeting/summary artifacts to a memory MCP tool for long-term r
 
 ## How it fits the runtime
 
-Memory writes are triggered from supported widget/steward flows and run under the same server-first orchestration model used across the app.
+Memory writes are triggered from supported widget flows and dispatched through MCP tool calls from the app surfaces that own the feature.
 
-- Input intent flows through queue/steward execution.
+- Input intent may originate from voice, but memory side effects are typically executed by the destination widget/surface (not the canvas queue lane).
 - Memory payloads are adapted to target MCP tool shape.
 - Success/failure should be handled as side-effect status, not destructive primary-state mutation.
+- Do not assume `runCanvas` queue traces for memory writes unless a specific feature explicitly routes there.
 
 ## Env knobs
 

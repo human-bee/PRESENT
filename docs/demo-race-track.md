@@ -27,20 +27,20 @@ For concurrency-first CrowdPulse/Scorecard/Fairy variant, see:
 ## Lap: 10 fast steps (0:00-2:00)
 
 1-2) "Create a kanban board and a context feeder."
-3) "Create a timer for five minutes."
-4) "Start the timer."
-5) "Create a YouTube embed for video id dQw4w9WgXcQ."
-6) "Create a document editor."
-7) "Create a component toolbox."
-8) "On the kanban board, queue: move PRE-161 to Done."
-9) "On the kanban board, queue: move PRE-162 to In Progress."
-10) "Sync to Linear."
+3) In the board, create two deterministic seed issues and note their keys as `<ISSUE_A>` and `<ISSUE_B>`.
+4) "Create a timer for five minutes."
+5) "Start the timer."
+6) "Create a YouTube embed for video id dQw4w9WgXcQ."
+7) "Create a document editor."
+8) "Create a component toolbox."
+9) "On the kanban board, queue: move <ISSUE_A> to Done."
+10) "On the kanban board, queue: move <ISSUE_B> to In Progress."
 
 ## Lap: 5 deeper steps (2:00-5:00)
 
-11) Paste ContextFeeder backlog.
-12) Rename PRE-161 from context doc.
-13) Move PRE-162 to Done.
+11) Paste ContextFeeder backlog with explicit references to `<ISSUE_A>` and `<ISSUE_B>`.
+12) Rename `<ISSUE_A>` from context doc guidance.
+13) Move `<ISSUE_B>` to Done.
 14) Sync to Linear.
 15) Create an infographic.
 
