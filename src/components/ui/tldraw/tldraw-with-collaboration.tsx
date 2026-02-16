@@ -47,7 +47,7 @@ export function TldrawWithCollaboration({
   const livekitCtx = useContext(CanvasLiveKitContext);
   const roomName = livekitCtx?.roomName ?? 'custom-canvas-room';
   const room = useRoomContext();
-  const isFairyEnabled = getBooleanFlag(process.env.NEXT_PUBLIC_FAIRY_ENABLED, true);
+  const isFairyEnabled = getBooleanFlag(process.env.NEXT_PUBLIC_FAIRY_ENABLED, false);
 
   const collaboration = useCollaborationSession({ roomName, room, shapeUtils });
   const computedReadOnly = readOnly || collaboration.isReadOnly;
@@ -109,11 +109,7 @@ export function TldrawWithCollaboration({
             overrides={overrides}
             forceMobile
           >
-            <CollaborationEditorEffects
-              room={room}
-              containerRef={containerRef}
-              onMount={onMount}
-            />
+            <CollaborationEditorEffects room={room} containerRef={containerRef} onMount={onMount} />
           </Tldraw>
         </ComponentStoreContext.Provider>
       </TldrawUiToastsProvider>
@@ -135,7 +131,7 @@ function CollaborationEditorEffects({
   onMount,
 }: CollaborationEditorEffectsProps) {
   const { editor, ready } = useEditorReady();
-  const isFairyEnabled = getBooleanFlag(process.env.NEXT_PUBLIC_FAIRY_ENABLED, true);
+  const isFairyEnabled = getBooleanFlag(process.env.NEXT_PUBLIC_FAIRY_ENABLED, false);
   const theme = usePresentTheme();
 
   useTldrawEditorBridge(editor, { onMount });

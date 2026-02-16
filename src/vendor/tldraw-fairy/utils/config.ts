@@ -1,2 +1,2 @@
-export const FAIRY_WORKER =
-  (typeof process !== 'undefined' && process.env.NEXT_PUBLIC_FAIRY_WORKER_URL) || '/api/fairy';
+// Client fairy worker endpoint is retired. Keep a non-routable placeholder.
+export const FAIRY_WORKER = '/api/retired-fairy-worker';

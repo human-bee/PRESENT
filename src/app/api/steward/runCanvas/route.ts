@@ -16,7 +16,7 @@ import {
 } from '@/lib/agents/shared/schemas';
 import { deriveRequestCorrelation } from '@/lib/agents/shared/request-correlation';
 import type { JsonObject } from '@/lib/utils/json-schema';
-import { getBooleanFlag, isFairyClientAgentEnabled } from '@/lib/feature-flags';
+import { getBooleanFlag } from '@/lib/feature-flags';
 import {
   applyOrchestrationEnvelope,
   deriveDefaultLockKey,
@@ -34,10 +34,8 @@ function getQueue() {
 }
 const QUEUE_DIRECT_FALLBACK_ENABLED = process.env.CANVAS_QUEUE_DIRECT_FALLBACK === 'true';
 const CLIENT_CANVAS_AGENT_ENABLED = getBooleanFlag(process.env.NEXT_PUBLIC_CANVAS_AGENT_CLIENT_ENABLED, false);
-const FAIRY_CLIENT_AGENT_ENABLED = isFairyClientAgentEnabled(process.env.NEXT_PUBLIC_FAIRY_CLIENT_AGENT_ENABLED);
 const CANVAS_STEWARD_ENABLED = (process.env.CANVAS_STEWARD_SERVER_EXECUTION ?? 'true') === 'true';
-const SERVER_CANVAS_AGENT_ENABLED =
-  CANVAS_STEWARD_ENABLED && !CLIENT_CANVAS_AGENT_ENABLED && !FAIRY_CLIENT_AGENT_ENABLED;
+const SERVER_CANVAS_AGENT_ENABLED = CANVAS_STEWARD_ENABLED && !CLIENT_CANVAS_AGENT_ENABLED;
 const SERVER_CANVAS_TASKS_ENABLED = CANVAS_STEWARD_ENABLED && !CLIENT_CANVAS_AGENT_ENABLED;
 const logger = createLogger('api:steward:runCanvas');
 

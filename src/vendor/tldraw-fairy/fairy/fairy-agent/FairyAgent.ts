@@ -20,7 +20,6 @@ import {
 	PromptPart,
 	Streaming,
 } from '@tldraw/fairy-shared'
-import { fetch } from '@/vendor/tldraw-fairy/compat/tldraw-compat'
 import {
 	Atom,
 	atom,
@@ -36,7 +35,6 @@ import {
 	uniqueId,
 	VecModel,
 } from 'tldraw'
-import { FAIRY_WORKER } from '../../utils/config'
 import { FairyApp } from '../fairy-app/FairyApp'
 import { getRandomFairyHat } from '../fairy-helpers/getRandomFairyHat'
 import { getRandomFairyHatColor } from '../fairy-helpers/getRandomFairyHatColor'
@@ -717,69 +715,11 @@ export class FairyAgent {
 		prompt: BaseAgentPrompt
 		signal: AbortSignal
 	}): AsyncGenerator<Streaming<AgentAction>> {
-		const headers: HeadersInit = {
-			'Content-Type': 'application/json',
-		}
-
-		// Add authentication token if available
-		if (this.getToken) {
-			const token = await this.getToken()
-			if (token) {
-				headers['Authorization'] = `Bearer ${token}`
-			}
-		}
-
-		const res = await fetch(`${FAIRY_WORKER}/stream-actions`, {
-			method: 'POST',
-			body: JSON.stringify(prompt),
-			headers,
-			signal,
-		})
-
-		if (!res.ok) {
-			const errorData = await res.json().catch(() => ({ error: 'Unknown error' }))
-			throw new Error(errorData.error || 'Request failed')
-		}
-
-		if (!res.body) {
-			throw Error('No body in response')
-		}
-
-		const reader = res.body.getReader()
-		const decoder = new TextDecoder()
-		let buffer = ''
-
-		try {
-			while (true) {
-				const { value, done } = await reader.read()
-				if (done) break
-
-				buffer += decoder.decode(value, { stream: true })
-				const actions = buffer.split('\n\n')
-				buffer = actions.pop() || ''
-
-				for (const action of actions) {
-					const match = action.match(/^data: (.+)$/m)
-					if (match) {
-						try {
-							const data = JSON.parse(match[1])
-
-							// If the response contains an error, throw it
-							if ('error' in data) {
-								throw new Error(data.error)
-							}
-
-							const agentAction: Streaming<AgentAction> = data
-							yield agentAction
-						} catch (err: any) {
-							throw new Error(err.message)
-						}
-					}
-				}
-			}
-		} finally {
-			reader.releaseLock()
-		}
+		void prompt
+		void signal
+		throw new Error(
+			'Client fairy execution is retired. Dispatch intents through /api/steward/runCanvas task=fairy.intent.'
+		)
 	}
 
 	/**

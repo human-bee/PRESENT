@@ -34,7 +34,9 @@ async function getCounts(page: any): Promise<FairyCounts> {
   });
 }
 
-test.describe('Fairy lap (super)', () => {
+// Legacy client-side fairy swarm flow retained for historical reference only.
+// Supported runtime path is server-first via /api/steward/runCanvas (see fairy-voice-agent-lap.e2e.spec.ts).
+test.describe.skip('Fairy lap (super, legacy client swarm)', () => {
   test('group orchestration builds a multi-step storyboard', async ({ page }) => {
     test.setTimeout(10 * 60 * 1000);
 
