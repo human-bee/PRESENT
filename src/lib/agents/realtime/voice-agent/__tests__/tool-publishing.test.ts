@@ -3,6 +3,7 @@ import {
   buildToolEvent,
   coerceComponentPatch,
   flushPendingToolCallQueue,
+  resolveDispatchSuppressionScope,
   shouldSuppressCanvasDispatch,
   shouldForceReliableUpdate,
 } from '../tool-publishing';
@@ -106,6 +107,44 @@ describe('voice-agent tool publishing helpers', () => {
     }
     expect(dispatches.has('room-a::draw a roadmap')).toBe(false);
     expect(dispatches.has('room-a::m-24')).toBe(true);
+  });
+
+  it('prefers fairy intent id for duplicate suppression and falls back to request/turn scope', () => {
+    const withIntentId = resolveDispatchSuppressionScope({
+      task: 'fairy.intent',
+      roomName: 'room-a',
+      currentTurnId: 7,
+      requestId: undefined,
+      intentId: 'intent-123',
+    });
+    expect(withIntentId).toEqual({
+      suppressRoomName: 'room-a',
+      suppressRequestId: 'intent-123',
+    });
+
+    const withoutIds = resolveDispatchSuppressionScope({
+      task: 'fairy.intent',
+      roomName: 'room-a',
+      currentTurnId: 8,
+      requestId: undefined,
+      intentId: undefined,
+    });
+    expect(withoutIds).toEqual({
+      suppressRoomName: 'room-a::turn:8',
+      suppressRequestId: undefined,
+    });
+
+    const nonFairyDispatch = resolveDispatchSuppressionScope({
+      task: 'canvas.agent_prompt',
+      roomName: 'room-a',
+      currentTurnId: 9,
+      requestId: 'req-1',
+      intentId: 'intent-456',
+    });
+    expect(nonFairyDispatch).toEqual({
+      suppressRoomName: 'room-a',
+      suppressRequestId: 'req-1',
+    });
   });
 
   it('flushes queued tool calls and re-queues when publish fails', async () => {

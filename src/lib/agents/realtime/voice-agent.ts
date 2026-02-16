@@ -40,6 +40,7 @@ import {
   flushPendingToolCallQueue,
   normalizeComponentPatch,
   normalizeSpecInput,
+  resolveDispatchSuppressionScope,
   shouldSuppressCanvasDispatch,
   shouldForceReliableUpdate,
   type PendingToolCallEntry,
@@ -1494,12 +1495,13 @@ Your only output is function calls. Never use plain text unless absolutely neces
             typeof canvasParams.id === 'string' && canvasParams.id.trim().length > 0
               ? canvasParams.id.trim()
               : undefined;
-          const suppressRequestId =
-            task === 'fairy.intent' ? requestId : requestId ?? intentIdFromParams;
-          const suppressRoomName =
-            task === 'fairy.intent' && !suppressRequestId
-              ? `${roomName}::turn:${currentTurnId}`
-              : roomName;
+          const { suppressRequestId, suppressRoomName } = resolveDispatchSuppressionScope({
+            task,
+            roomName,
+            currentTurnId,
+            requestId,
+            intentId: intentIdFromParams,
+          });
           const nowTs = Date.now();
           if (
             message &&
