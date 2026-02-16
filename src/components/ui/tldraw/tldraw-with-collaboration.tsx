@@ -109,11 +109,7 @@ export function TldrawWithCollaboration({
             overrides={overrides}
             forceMobile
           >
-            <CollaborationEditorEffects
-              room={room}
-              containerRef={containerRef}
-              onMount={onMount}
-            />
+            <CollaborationEditorEffects room={room} containerRef={containerRef} onMount={onMount} />
           </Tldraw>
         </ComponentStoreContext.Provider>
       </TldrawUiToastsProvider>

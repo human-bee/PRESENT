@@ -6,6 +6,7 @@ import { useFairyPromptData } from './fairy-prompt-data';
 import {
   DEFAULT_FAIRY_CONTEXT_PROFILE,
   FAIRY_CONTEXT_PROFILES,
+  FairyContextProfile,
   getFairyContextSpectrum,
 } from '@/lib/fairy-context/profiles';
 import { useCanvasContext } from '@/lib/hooks/use-canvas-context';
@@ -18,7 +19,9 @@ export function FairyPromptPanel() {
   const [message, setMessage] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [contextProfile, setContextProfile] = useState<string>(DEFAULT_FAIRY_CONTEXT_PROFILE);
+  const [contextProfile, setContextProfile] = useState<FairyContextProfile>(
+    DEFAULT_FAIRY_CONTEXT_PROFILE,
+  );
 
   const handleSend = useCallback(async () => {
     const trimmed = message.trim();
@@ -28,19 +31,11 @@ export function FairyPromptPanel() {
       setIsSending(true);
       setError(null);
 
-      const selectionIds =
-        editor && typeof (editor as any).getSelectedShapeIds === 'function'
-          ? (editor as any).getSelectedShapeIds()
-          : [];
-      const bounds =
-        editor && typeof (editor as any).getViewportPageBounds === 'function'
-          ? (editor as any).getViewportPageBounds()
-          : undefined;
+      const selectionIds = editor ? editor.getSelectedShapeIds() : [];
+      const bounds = editor ? editor.getViewportPageBounds() : undefined;
 
       const bundle = buildPromptData({ selectionIds, profile: contextProfile });
-      const spectrum = getFairyContextSpectrum(
-        (contextProfile as any) || DEFAULT_FAIRY_CONTEXT_PROFILE,
-      ).value;
+      const spectrum = getFairyContextSpectrum(contextProfile).value;
 
       const counts: Record<string, number> = {};
       widgets.forEach((widget) => {
@@ -106,7 +101,9 @@ export function FairyPromptPanel() {
         <span>Fairy Intent Control</span>
         <span className="text-xs text-slate-500">server queue</span>
       </div>
-      <div className="text-xs text-slate-500">Dispatches `fairy.intent` via `/api/steward/runCanvas`.</div>
+      <div className="text-xs text-slate-500">
+        Dispatches `fairy.intent` via `/api/steward/runCanvas`.
+      </div>
       <div className="flex items-center gap-2">
         <input
           data-testid="fairy-input"
@@ -136,7 +133,7 @@ export function FairyPromptPanel() {
         <select
           className="rounded border border-slate-200 bg-white px-1 py-0.5 text-[11px] text-slate-700"
           value={contextProfile}
-          onChange={(event) => setContextProfile(event.target.value)}
+          onChange={(event) => setContextProfile(event.target.value as FairyContextProfile)}
         >
           {FAIRY_CONTEXT_PROFILES.map((profile) => (
             <option key={profile} value={profile}>
