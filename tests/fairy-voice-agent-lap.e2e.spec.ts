@@ -667,7 +667,41 @@ test.describe('Voice agent + Fairy pipeline lap', () => {
       return '06-fairy-canvas-draw.png';
     });
 
+    await recordStep('Voice agent routes explicit fairy intent through runCanvas', async () => {
+      const fairyCountBefore = fairyRequests.length;
+      await sendAgentLine(
+        page,
+        'Have the fairies add a sticky note labeled "Fairy Intent Queue Check".',
+      );
+      await closeTranscriptPanelIfPresent(page);
+
+      const start = Date.now();
+      while (Date.now() - start < 120_000) {
+        if (fairyRequests.length > fairyCountBefore) break;
+        await page.waitForTimeout(250);
+      }
+
+      if (fairyRequests.length <= fairyCountBefore) {
+        throw new Error(
+          `Expected at least one fairy.intent request via /api/steward/runCanvas. before=${fairyCountBefore} after=${fairyRequests.length}`,
+        );
+      }
+
+      const latest = fairyRequests.at(-1);
+      if (!latest?.body.includes('fairy.intent')) {
+        throw new Error(
+          `Latest fairy request did not include fairy.intent payload. Body: ${String(latest?.body).slice(0, 200)}`,
+        );
+      }
+
+      await snapStable(page, imagesDir, '07-fairy-intent-queue-check.png');
+      return '07-fairy-intent-queue-check.png';
+    });
+
     const finalCounts = await getLapCounts(page, { fairyRequests, stewardRequests });
+    if (finalCounts.fairyRequests < 1) {
+      throw new Error('Expected at least one fairy.intent request during lap, found zero.');
+    }
     const toolSummary = await getToolSummary(page);
     const dispatchTasks = Object.entries(toolSummary.taskSummary)
       .map(([task, count]) => `${task} (${count})`)
@@ -685,7 +719,7 @@ test.describe('Voice agent + Fairy pipeline lap', () => {
   });
 });
 
-test.describe.skip('Voice agent + Fairy pipeline lap (medium)', () => {
+test.describe.skip('Voice agent + Fairy pipeline lap (medium, legacy client swarm variant)', () => {
   test('medium: duo fairies + debate + widgets', async ({ page, context }) => {
     test.setTimeout(12 * 60 * 1000);
     await context.grantPermissions(['microphone', 'camera'], { origin: BASE_URL });
@@ -973,7 +1007,7 @@ test.describe.skip('Voice agent + Fairy pipeline lap (medium)', () => {
   });
 });
 
-test.describe.skip('Voice agent + Fairy pipeline lap (hard)', () => {
+test.describe.skip('Voice agent + Fairy pipeline lap (hard, legacy client swarm variant)', () => {
   test('hard: multi-fairy orchestration + multi-widget race', async ({ page, context }) => {
     test.setTimeout(15 * 60 * 1000);
     await context.grantPermissions(['microphone', 'camera'], { origin: BASE_URL });

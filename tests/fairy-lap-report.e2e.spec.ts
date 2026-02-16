@@ -9,7 +9,9 @@ import {
   type StepResult,
 } from './fairy-lap-utils';
 
-test.describe('Fairy lap (report)', () => {
+// Legacy client-side fairy UI flow retained for historical reference only.
+// Supported runtime path is server-first via /api/steward/runCanvas (see fairy-voice-agent-lap.e2e.spec.ts).
+test.describe.skip('Fairy lap (report, legacy client UI)', () => {
   test('runs a fairy prompt and writes a verified screenshot report', async ({ page }) => {
     test.setTimeout(6 * 60 * 1000);
 
