@@ -1,68 +1,36 @@
 # Linear MCP Integration
 
-This document outlines the architecture and pipeline for the Linear MCP integration in PRESENT.
+This document describes the Linear pipeline as it exists today.
 
-## Architecture Overview
+## Architecture overview
 
-The integration connects to Linear's hosted MCP server via HTTP (`https://mcp.linear.app/mcp`). It uses a "Generic Delegation" pattern where the Voice Agent delegates all Linear-related tasks to a specialized sub-agent (`LinearKanbanBoard` + `LinearSteward`).
+Linear operations are issued by the `LinearKanbanBoard` surface and resolved by the board's steward + MCP calls.
 
-### Key Components
+- UI captures user intent (`instruction`, drag/drop, sync actions).
+- Voice can still trigger board updates, but it does so by mutating the board component state first.
+- `LinearKanbanBoard` then runs `/api/ai/linear-steward` and MCP tool calls for actual Linear side effects.
+- UI applies optimistic state and reconciles pending updates.
 
-1.  **`LinearMcpClient` (`src/lib/linear-mcp-client.ts`)**:
-    *   **Role**: A "dumb" HTTP client responsible ONLY for the MCP protocol (tools/list, tools/call) and authentication.
-    *   **Auth**: Sends the user's Linear API key in the `Authorization: Bearer <token>` header.
-    *   **No Logic**: Does NOT interpret natural language or guess tool names.
+## Where this sits in the agent pipeline
 
-2.  **`LinearSteward` (`src/lib/agents/subagents/linear-steward-fast.ts`)**:
-    *   **Role**: A fast LLM agent (Groq/Cerebras) that interprets natural language instructions.
-    *   **Output**: Returns **Structured Actions** (JSON) that map user intent to specific MCP tool calls.
+For voice-driven updates, intent reaches Linear via widget patching (`create_component` / `update_component`) and then the board's own execution path.
 
-3.  **`LinearKanbanBoard` (`src/components/ui/productivity/linear-kanban-board.tsx`)**:
-    *   **Role**: The UI component that manages the board state, optimistic updates, and sync queue.
-    *   **Pipeline**: Receives instructions -> Calls Steward -> Applies Optimistic Update -> Triggers MCP Call.
+Important: Linear side effects are not currently executed on the `runCanvas` queue lane, so queue-level lock ordering and trace semantics from canvas do not automatically apply to every Linear mutation.
 
-## Detailed Pipelines
+## Security notes
 
-### 1. Initial Board Load
-*   **Trigger**: Component mount.
-*   **Flow**:
-    1.  `LinearKanbanBoard` initializes `useComponentSubAgent`.
-    2.  `dataEnricher` (defined in `subAgentConfig`) is called.
-    3.  `dataEnricher` calls `tools.linear.execute('linear_issues_search', { query: ... })`.
-    4.  `LinearMcpClient` sends a `tools/call` request to the Linear MCP server.
-    5.  Results are returned and populated into `state.issues`.
+- Linear API key is user-provided and scoped to the integration surface.
+- Keep key handling in approved storage/transport paths only.
+- Do not bypass steward/conductor contract with ad-hoc direct mutation paths.
 
-### 2. Voice / Natural Language Update
-*   **Trigger**: User says "Move task X to Done".
-*   **Flow**:
-    1.  **Voice Agent**: Identifies the intent and calls `update_component(id, { instruction: "Move task X to Done" })`.
-    2.  **Registration**: `useComponentRegistration` receives the update and calls `processInstruction` in `LinearKanbanBoard`.
-    3.  **Steward**: `processInstruction` calls the `/api/ai/linear-steward` endpoint.
-    4.  **Interpretation**: `LinearSteward` analyzes the text and returns a `LinearStewardAction` (e.g., `{ kind: 'moveIssue', issueId: '...', toStatus: 'Done', mcpTool: { name: 'linear_issue_update', args: { ... } } }`).
-    5.  **Optimistic Update**: `LinearKanbanBoard` immediately updates the UI state (moves the card).
-    6.  **Pending Queue**: A new entry is added to `state.pendingUpdates` with status `pending`.
-    7.  **Sync**: The component triggers `subAgent.trigger({ action })`.
-    8.  **Execution**: The sub-agent executes the `mcpTool` defined in the action via `LinearMcpClient`.
-    9.  **Completion**: On success, the pending item is marked `synced`. On failure, it is marked `failed`.
+## Operational notes
 
-### 3. Manual UI Actions (Drag & Drop)
-*   **Trigger**: User drags a card to a new column.
-*   **Flow**:
-    1.  **Handler**: `handleDrop` is triggered.
-    2.  **Optimistic Update**: The UI updates immediately to show the card in the new column.
-    3.  **Queue**: A pending update is added to `state.pendingUpdates`.
-    4.  **Sync**: The component calls `LinearMcpClient` directly (or via a helper) to execute the update.
-    5.  **Feedback**: Success/Failure is reflected in the "Pending Changes" dropdown.
+- Prefer issue identifiers in voice commands for deterministic updates.
+- Expect board-local pending/synced/failed status in the UI.
+- Rate-limit or auth failures should be surfaced without mutating unrelated board state.
 
-## Security Note
+## Future work
 
-*   **API Key**: The Linear API key is stored in the user's local browser storage (via the Kanban settings UI) and passed to the server-side proxy via headers.
-*   **Transmission**: The key is sent as `X-Linear-Key` (or `Authorization`) to the proxy, which forwards it to Linear.
-*   **Future**: We plan to move to OAuth 2.0 to avoid handling raw API keys and to provide a better user experience.
-
-## Future Work
-
-*   **OAuth Integration**: Implement full OAuth flow for secure authentication.
-*   **Project Filtering**: Allow users to filter issues by Linear project.
-*   **Two-Way Sync**: Implement polling or webhooks to reflect changes made in Linear back to the board in real-time.
-*   **Rich Metadata**: Display more issue details (assignee avatars, priority icons) on the cards.
+- OAuth-based auth flow.
+- Stronger bidirectional reconciliation.
+- Additional metadata and project-level filters.
