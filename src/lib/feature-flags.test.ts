@@ -4,6 +4,8 @@ describe('feature flags', () => {
   it('parses quoted booleans', () => {
     expect(getBooleanFlag('"true"', false)).toBe(true);
     expect(getBooleanFlag('"false"', true)).toBe(false);
+    expect(getBooleanFlag('"true\\n"', false)).toBe(true);
+    expect(getBooleanFlag('FALSE', true)).toBe(false);
   });
 
   it('defaults fairy client agent flag to false when unset', () => {

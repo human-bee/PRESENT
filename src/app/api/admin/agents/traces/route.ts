@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAgentAdminUserId } from '@/lib/agents/admin/auth';
 import { getAdminSupabaseClient } from '@/lib/agents/admin/supabase-admin';
+import { isMissingRelationError } from '@/lib/agents/admin/supabase-errors';
+import { buildTaskBackedTraceRows, type AgentTaskTraceSourceRow } from '@/lib/agents/admin/trace-fallback';
 
 export const runtime = 'nodejs';
 
@@ -32,6 +34,7 @@ export async function GET(req: NextRequest) {
   const stage = readOptional(searchParams, 'stage');
   const status = readOptional(searchParams, 'status');
   const limit = parseLimit(searchParams);
+  const normalizedStage = stage?.trim().toLowerCase();
 
   try {
     const db = getAdminSupabaseClient();
@@ -43,6 +46,31 @@ export async function GET(req: NextRequest) {
     if (status) query = query.eq('status', status);
 
     const { data, error } = await query;
+    if (error && isMissingRelationError(error, 'agent_trace_events')) {
+      const fallbackLimit = traceId ? 2_000 : limit;
+      let taskQuery = db
+        .from('agent_tasks')
+        .select('id,room,task,status,attempt,error,request_id,params,created_at,updated_at')
+        .order('updated_at', { ascending: false })
+        .limit(fallbackLimit);
+      if (room) taskQuery = taskQuery.eq('room', room);
+      if (task) taskQuery = taskQuery.eq('task', task);
+      if (status) taskQuery = taskQuery.eq('status', status);
+
+      const { data: fallbackData, error: fallbackError } = await taskQuery;
+      if (fallbackError) throw fallbackError;
+
+      let fallbackTraces = buildTaskBackedTraceRows((fallbackData ?? []) as AgentTaskTraceSourceRow[]);
+      if (traceId) fallbackTraces = fallbackTraces.filter((row) => row.trace_id === traceId);
+      if (normalizedStage) fallbackTraces = fallbackTraces.filter((row) => row.stage.toLowerCase() === normalizedStage);
+      fallbackTraces = fallbackTraces.slice(0, limit);
+
+      return NextResponse.json({
+        ok: true,
+        actorUserId: admin.userId,
+        traces: fallbackTraces,
+      });
+    }
     if (error) throw error;
 
     return NextResponse.json({

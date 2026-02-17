@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAgentAdminUserId } from '@/lib/agents/admin/auth';
 import { getAdminSupabaseClient } from '@/lib/agents/admin/supabase-admin';
+import { isMissingRelationError } from '@/lib/agents/admin/supabase-errors';
 
 export const runtime = 'nodejs';
 
@@ -19,6 +20,13 @@ export async function GET(req: NextRequest) {
       .select('*')
       .order('created_at', { ascending: false })
       .limit(limit);
+    if (error && isMissingRelationError(error, 'agent_ops_audit_log')) {
+      return NextResponse.json({
+        ok: true,
+        actorUserId: admin.userId,
+        entries: [],
+      });
+    }
     if (error) throw error;
     return NextResponse.json({
       ok: true,

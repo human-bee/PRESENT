@@ -1,7 +1,14 @@
 export function getBooleanFlag(envVar: string | undefined, defaultValue: boolean): boolean {
   const normalized =
     typeof envVar === 'string'
-      ? envVar.trim().replace(/^"/, '').replace(/"$/, '')
+      ? envVar
+          .trim()
+          .replace(/^"/, '')
+          .replace(/"$/, '')
+          .replace(/\\n/g, '')
+          .replace(/\\r/g, '')
+          .trim()
+          .toLowerCase()
       : undefined;
   if (normalized === 'true') return true;
   if (normalized === 'false') return false;

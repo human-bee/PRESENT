@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAgentAdminUserId } from '@/lib/agents/admin/auth';
 import { getAdminSupabaseClient } from '@/lib/agents/admin/supabase-admin';
+import { isMissingRelationError } from '@/lib/agents/admin/supabase-errors';
 
 export const runtime = 'nodejs';
 
@@ -27,6 +28,13 @@ export async function GET(req: NextRequest) {
       .select('*')
       .order('updated_at', { ascending: false })
       .limit(200);
+    if (error && isMissingRelationError(error, 'agent_worker_heartbeats')) {
+      return NextResponse.json({
+        ok: true,
+        actorUserId: admin.userId,
+        workers: [],
+      });
+    }
     if (error) throw error;
 
     const workers = (data ?? []).map((worker: Record<string, unknown>) => ({

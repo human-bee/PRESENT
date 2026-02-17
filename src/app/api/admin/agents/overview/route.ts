@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAgentAdminUserId } from '@/lib/agents/admin/auth';
 import { getAdminSupabaseClient } from '@/lib/agents/admin/supabase-admin';
+import { isMissingRelationError } from '@/lib/agents/admin/supabase-errors';
 
 export const runtime = 'nodejs';
 
@@ -29,14 +30,26 @@ export async function GET(req: NextRequest) {
       .from('agent_trace_events')
       .select('id', { count: 'exact', head: true })
       .gte('created_at', sinceIso);
-    if (traceCountError) throw traceCountError;
+    let tracesLastHour = recentTraceCount ?? 0;
+    if (traceCountError && isMissingRelationError(traceCountError, 'agent_trace_events')) {
+      const { count: fallbackTraceCount, error: fallbackTraceError } = await db
+        .from('agent_tasks')
+        .select('id', { count: 'exact', head: true })
+        .gte('created_at', sinceIso);
+      if (fallbackTraceError) throw fallbackTraceError;
+      tracesLastHour = fallbackTraceCount ?? 0;
+    } else if (traceCountError) {
+      throw traceCountError;
+    }
 
     const { data: workers, error: workersError } = await db
       .from('agent_worker_heartbeats')
       .select('worker_id,updated_at,active_tasks,queue_lag_ms,host,pid,version')
       .order('updated_at', { ascending: false })
       .limit(50);
-    if (workersError) throw workersError;
+    const normalizedWorkers =
+      workersError && isMissingRelationError(workersError, 'agent_worker_heartbeats') ? [] : workers;
+    if (workersError && !isMissingRelationError(workersError, 'agent_worker_heartbeats')) throw workersError;
 
     return NextResponse.json({
       ok: true,
@@ -44,8 +57,8 @@ export async function GET(req: NextRequest) {
       actorAccessMode: admin.mode,
       safeActionsAllowed: admin.mode === 'allowlist',
       queue: statusCounts,
-      tracesLastHour: recentTraceCount ?? 0,
-      workers: workers ?? [],
+      tracesLastHour,
+      workers: normalizedWorkers ?? [],
       generatedAt: new Date().toISOString(),
     });
   } catch (error) {
