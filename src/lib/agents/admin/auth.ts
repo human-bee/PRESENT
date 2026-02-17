@@ -1,30 +1,62 @@
 import type { NextRequest } from 'next/server';
-import { parseCsvFlag } from '@/lib/feature-flags';
+import { getBooleanFlag, parseCsvFlag } from '@/lib/feature-flags';
 import { resolveRequestUser } from '@/lib/supabase/server/resolve-request-user';
+
+export type AgentAdminAccessMode = 'allowlist' | 'open_access';
+
+type AgentAdminAuthResult =
+  | { ok: true; userId: string; mode: AgentAdminAccessMode }
+  | { ok: false; status: number; error: string };
 
 export function getAgentAdminAllowlistUserIds(): string[] {
   return parseCsvFlag(process.env.AGENT_ADMIN_ALLOWLIST_USER_IDS);
 }
 
-export async function requireAgentAdminUserId(
+export function isAgentAdminAuthenticatedOpenAccessEnabled(): boolean {
+  return getBooleanFlag(process.env.AGENT_ADMIN_AUTHENTICATED_OPEN_ACCESS, false);
+}
+
+const isAllowlistedUser = (allowlist: Set<string>, userId: string, email: string | null): boolean => {
+  const allowedById = allowlist.has(userId.toLowerCase());
+  const allowedByEmail =
+    typeof email === 'string' && email.trim().length > 0 && allowlist.has(email.trim().toLowerCase());
+  return allowedById || allowedByEmail;
+};
+
+async function requireAgentAdminUser(
   req: NextRequest,
-): Promise<{ ok: true; userId: string } | { ok: false; status: number; error: string }> {
+  options: { allowOpenAccess: boolean },
+): Promise<AgentAdminAuthResult> {
   const user = await resolveRequestUser(req);
   if (!user?.id) {
     return { ok: false, status: 401, error: 'unauthorized' };
   }
+
   const allowlist = getAgentAdminAllowlistUserIds();
+  const normalizedAllowlist = new Set(allowlist.map((entry) => entry.trim().toLowerCase()));
+  if (isAllowlistedUser(normalizedAllowlist, user.id, user.email)) {
+    return { ok: true, userId: user.id, mode: 'allowlist' };
+  }
+
+  if (options.allowOpenAccess && isAgentAdminAuthenticatedOpenAccessEnabled()) {
+    return { ok: true, userId: user.id, mode: 'open_access' };
+  }
+
   if (allowlist.length === 0) {
     return { ok: false, status: 403, error: 'admin_allowlist_not_configured' };
   }
-  const normalizedAllowlist = new Set(allowlist.map((entry) => entry.trim().toLowerCase()));
-  const allowedById = normalizedAllowlist.has(user.id.toLowerCase());
-  const allowedByEmail =
-    typeof user.email === 'string' &&
-    user.email.trim().length > 0 &&
-    normalizedAllowlist.has(user.email.trim().toLowerCase());
-  if (!allowedById && !allowedByEmail) {
-    return { ok: false, status: 403, error: 'forbidden' };
-  }
-  return { ok: true, userId: user.id };
+
+  return { ok: false, status: 403, error: 'forbidden' };
+}
+
+export async function requireAgentAdminUserId(
+  req: NextRequest,
+): Promise<AgentAdminAuthResult> {
+  return requireAgentAdminUser(req, { allowOpenAccess: true });
+}
+
+export async function requireAgentAdminActionUserId(
+  req: NextRequest,
+): Promise<AgentAdminAuthResult> {
+  return requireAgentAdminUser(req, { allowOpenAccess: false });
 }

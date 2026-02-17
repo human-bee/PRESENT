@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { flags } from '@/lib/feature-flags';
-import { requireAgentAdminUserId } from '@/lib/agents/admin/auth';
+import { requireAgentAdminActionUserId } from '@/lib/agents/admin/auth';
 import { parseAgentActionInput, runAgentSafeAction } from '@/lib/agents/admin/actions';
 
 export const runtime = 'nodejs';
 
 export async function POST(req: NextRequest) {
-  const admin = await requireAgentAdminUserId(req);
+  const admin = await requireAgentAdminActionUserId(req);
   if (!admin.ok) {
     return NextResponse.json({ error: admin.error }, { status: admin.status });
   }
