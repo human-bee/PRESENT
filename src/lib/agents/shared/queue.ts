@@ -299,18 +299,18 @@ export class AgentTaskQueue {
         .insert(baseInsertPayload)
         .select()
         .single();
-      if (insertResult.data && typeof (insertResult.data as Record<string, unknown>).trace_id === 'undefined') {
-        insertResult = {
-          ...insertResult,
-          data: {
-            ...(insertResult.data as Record<string, unknown>),
-            trace_id: null,
-          } as AgentTask,
-        };
-      }
     }
 
-    const { data, error } = insertResult;
+    const data = insertResult.data
+      ? ({
+          ...(insertResult.data as Record<string, unknown>),
+          trace_id:
+            typeof (insertResult.data as Record<string, unknown>).trace_id === 'undefined'
+              ? null
+              : (insertResult.data as Record<string, unknown>).trace_id,
+        } as AgentTask)
+      : null;
+    const { error } = insertResult;
 
     if (error) {
       if (error.code === '23505') {
