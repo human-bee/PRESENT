@@ -1,5 +1,8 @@
 export type AgentOverviewResponse = {
   ok: boolean;
+  actorUserId: string;
+  actorAccessMode?: 'allowlist' | 'open_access';
+  safeActionsAllowed?: boolean;
   queue: Record<string, number>;
   tracesLastHour: number;
   workers: Array<Record<string, unknown>>;
