@@ -14,6 +14,7 @@ export interface AgentTask {
   room: string;
   task: string;
   params: JsonObject;
+  trace_id: string | null;
   status: AgentTaskStatus;
   priority: number;
   run_at: string | null;
@@ -133,9 +134,6 @@ export class AgentTaskQueue {
     } = input;
 
     const nowIso = new Date().toISOString();
-    const normalizedRequestId = typeof requestId === 'string' && requestId.trim() ? requestId.trim() : undefined;
-    const normalizedDedupeKey = typeof dedupeKey === 'string' && dedupeKey.trim() ? dedupeKey.trim() : undefined;
-
     const paramsRecord = params as Record<string, unknown>;
     const lockKeyFromParams =
       typeof paramsRecord.lockKey === 'string' && paramsRecord.lockKey.trim().length > 0
@@ -242,6 +240,16 @@ export class AgentTaskQueue {
       hasSupabase: Boolean(this.supabase),
     });
 
+    const correlation = deriveRequestCorrelation({
+      task,
+      requestId: resolvedRequestId,
+      params,
+    });
+    const resolvedTraceId =
+      typeof correlation.traceId === 'string' && correlation.traceId.trim().length > 0
+        ? correlation.traceId.trim()
+        : null;
+
     const { data, error } = await this.supabase
       .from('agent_tasks')
       .insert({
@@ -249,6 +257,7 @@ export class AgentTaskQueue {
         task,
         params,
         request_id: resolvedRequestId ?? null,
+        trace_id: resolvedTraceId,
         dedupe_key: resolvedDedupeKey ?? null,
         resource_keys: normalizedResourceKeys,
         priority,

@@ -827,6 +827,10 @@ Your only output is function calls. Never use plain text unless absolutely neces
         if (pending.tool === 'dispatch_to_conductor') {
           if (status && FAILURE_TOOL_STATUSES.has(status)) {
             markMutationFailed(callId, `dispatch_to_conductor:${status.toLowerCase()}`);
+            return;
+          }
+          if (status === 'APPLIED' || status === 'COMPLETED') {
+            markMutationApplied(callId);
           }
           return;
         }

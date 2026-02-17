@@ -168,11 +168,13 @@ export function useSessionSync(roomName: string) {
   }, [flushTranscriptBatch]);
 
   const ensureSession = useMemo(() => {
-    const fetchSession = async (canvasId: string | null) => {
+    const fetchSession = async (canvasId: string | null, options?: { byRoomOnly?: boolean }) => {
       const headers = await getAuthHeaders();
       const params = new URLSearchParams({ roomName });
-      if (canvasId !== null) params.set('canvasId', canvasId);
-      else params.set('canvasId', 'null');
+      if (!options?.byRoomOnly) {
+        if (canvasId !== null) params.set('canvasId', canvasId);
+        else params.set('canvasId', 'null');
+      }
 
       const res = await fetch(`/api/session?${params.toString()}`, { headers });
       if (res.status === 404) return null;
@@ -242,6 +244,14 @@ export function useSessionSync(roomName: string) {
         setSessionId(existing.id);
         return;
       }
+      if (!cancelledRef.current && initialCanvasId) {
+        const byRoom = await fetchSession(initialCanvasId, { byRoomOnly: true });
+        reportSessionPair(byRoom);
+        if (byRoom?.id) {
+          setSessionId(byRoom.id);
+          return;
+        }
+      }
 
       // Create new
       const participants = room ? mapParticipants(room) : [];
@@ -267,6 +277,14 @@ export function useSessionSync(roomName: string) {
               setSessionId(existingAfterConflict.id);
             }
             return;
+          }
+          if (initialCanvasId) {
+            const existingByRoom = await fetchSession(initialCanvasId, { byRoomOnly: true });
+            reportSessionPair(existingByRoom);
+            if (existingByRoom?.id && !cancelledRef.current) {
+              setSessionId(existingByRoom.id);
+              return;
+            }
           }
         }
 
