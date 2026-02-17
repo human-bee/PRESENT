@@ -1623,7 +1623,6 @@ Your only output is function calls. Never use plain text unless absolutely neces
           const dispatchHashBase = `${job.room.name || 'room'}::dispatch_to_conductor::${stableStringify({
             task: (normalizedParams as any)?.task,
             params: baseParamsForHash,
-            turnId: currentTurnId,
           })}`;
           dispatchParams.idempotencyKey = createHash('sha1').update(dispatchHashBase).digest('hex').slice(0, 20);
         }
@@ -2654,33 +2653,33 @@ Your only output is function calls. Never use plain text unless absolutely neces
         return;
       }
 
-      // Demo-lap fast paths: for explicit, high-confidence commands we bypass the LLM to avoid
-      // timeouts and reduce accidental duplicate tool calls. These are intentionally narrow.
-      const looksLikeTimerCommand =
-        (lower.startsWith('start') || lower.startsWith('create')) &&
-        lower.includes('timer') &&
-        (lower.includes('minute') || lower.includes('min'));
-      if (looksLikeTimerCommand) {
-        const tokens = lower.split(' ').filter(Boolean);
-        let minutes: number | undefined;
-        for (let i = 0; i < tokens.length; i += 1) {
-          const token = tokens[i];
-          if (token === 'minute' || token === 'minutes' || token === 'min' || token === 'mins') {
-            const prev = tokens[i - 1] || '';
-            const parsed = Number(prev);
-            if (Number.isFinite(parsed) && parsed > 0) {
-              minutes = Math.max(1, Math.round(parsed));
+      // Demo-lap fast paths are manual-only guardrails for transcript command mode.
+      if (isManual) {
+        const looksLikeTimerCommand =
+          (lower.startsWith('start') || lower.startsWith('create')) &&
+          lower.includes('timer') &&
+          (lower.includes('minute') || lower.includes('min'));
+        if (looksLikeTimerCommand) {
+          const tokens = lower.split(' ').filter(Boolean);
+          let minutes: number | undefined;
+          for (let i = 0; i < tokens.length; i += 1) {
+            const token = tokens[i];
+            if (token === 'minute' || token === 'minutes' || token === 'min' || token === 'mins') {
+              const prev = tokens[i - 1] || '';
+              const parsed = Number(prev);
+              if (Number.isFinite(parsed) && parsed > 0) {
+                minutes = Math.max(1, Math.round(parsed));
+              }
+              break;
             }
-            break;
           }
+          const initialMinutes = minutes ?? 5;
+          await (toolContext as any).create_component.execute({
+            type: 'RetroTimerEnhanced',
+            spec: { initialMinutes, initialSeconds: 0, autoStart: true },
+          });
+          return;
         }
-        const initialMinutes = minutes ?? 5;
-        await (toolContext as any).create_component.execute({
-          type: 'RetroTimerEnhanced',
-          spec: { initialMinutes, initialSeconds: 0, autoStart: true },
-        });
-        return;
-      }
 
       const looksLikeTimerUpdate =
         lower.includes('timer') &&
@@ -2688,7 +2687,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
           lower.includes('stop') ||
           lower.includes('resume') ||
           lower.includes('reset') ||
-          lower.includes('set'));
+          /\bset\s+timer\b/.test(lower));
       if (looksLikeTimerUpdate) {
         const timerId =
           getLastComponentForType('RetroTimerEnhanced') || getLastComponentForType('RetroTimer');
@@ -2708,7 +2707,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
           }
           const shouldPause = lower.includes('pause') || lower.includes('stop');
           const shouldResume = lower.includes('resume') || lower.includes('start');
-          const shouldReset = lower.includes('reset') || lower.includes('set');
+          const shouldReset = lower.includes('reset') || /\bset\s+timer\b/.test(lower);
           const patch: Record<string, unknown> = {};
           if (typeof minutes === 'number' && Number.isFinite(minutes)) {
             const durationSeconds = Math.max(1, Math.round(minutes)) * 60;
@@ -2842,6 +2841,8 @@ Your only output is function calls. Never use plain text unless absolutely neces
           },
         });
         return;
+      }
+
       }
 
       if (isManual && (process.env.VOICE_AGENT_ROUTER_ENABLED ?? 'true') !== 'false') {
