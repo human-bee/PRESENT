@@ -70,6 +70,10 @@ export async function GET(req: NextRequest) {
         return NextResponse.json({ error: byRoomError.message }, { status: 500 });
       }
       if (byRoom) {
+        if (typeof byRoom.canvas_id === 'string' && byRoom.canvas_id !== normalizedCanvasId) {
+          // Never retarget across explicit canvas ids.
+          return NextResponse.json({ error: 'Not found' }, { status: 404 });
+        }
         if (!byRoom.canvas_id) {
           const { data: repaired } = await supabase
             .from('canvas_sessions')
@@ -163,6 +167,12 @@ export async function POST(req: NextRequest) {
           return NextResponse.json({ error: existingByRoomErr.message }, { status: 500 });
         }
         if (existingByRoom) {
+          if (canvasId && typeof existingByRoom.canvas_id === 'string' && existingByRoom.canvas_id !== canvasId) {
+            return NextResponse.json(
+              { error: 'Session exists for room with different canvas_id', code: 'SESSION_CANVAS_MISMATCH' },
+              { status: 409 },
+            );
+          }
           if (canvasId && !existingByRoom.canvas_id) {
             const { data: repaired } = await supabase
               .from('canvas_sessions')
