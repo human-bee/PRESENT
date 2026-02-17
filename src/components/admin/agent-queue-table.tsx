@@ -17,9 +17,11 @@ export function AgentQueueTable({ tasks, onSelectTask }: Props) {
             <tr>
               <th className="px-2 py-2">Task</th>
               <th className="px-2 py-2">Room</th>
+              <th className="px-2 py-2">Worker</th>
               <th className="px-2 py-2">Trace</th>
               <th className="px-2 py-2">Status</th>
               <th className="px-2 py-2">Attempt</th>
+              <th className="px-2 py-2">Failure Reason</th>
               <th className="px-2 py-2">Created</th>
             </tr>
           </thead>
@@ -32,11 +34,15 @@ export function AgentQueueTable({ tasks, onSelectTask }: Props) {
               >
                 <td className="px-2 py-2 font-mono text-[#111827]">{task.task}</td>
                 <td className="px-2 py-2 text-[#334155]">{task.room}</td>
+                <td className="px-2 py-2 font-mono text-xs text-[#334155]">{task.worker_id || 'n/a'}</td>
                 <td className="px-2 py-2 font-mono text-xs text-[#334155]">
                   {task.trace_id ? task.trace_id.slice(0, 18) : 'n/a'}
                 </td>
                 <td className="px-2 py-2 text-[#334155]">{task.status}</td>
                 <td className="px-2 py-2 text-[#334155]">{task.attempt}</td>
+                <td className="max-w-[340px] truncate px-2 py-2 text-[#334155]" title={task.last_failure_reason || undefined}>
+                  {task.last_failure_reason || 'n/a'}
+                </td>
                 <td className="px-2 py-2 text-[#475569]">
                   {task.created_at ? new Date(task.created_at).toLocaleTimeString() : 'n/a'}
                 </td>
@@ -44,7 +50,7 @@ export function AgentQueueTable({ tasks, onSelectTask }: Props) {
             ))}
             {tasks.length === 0 && (
               <tr>
-                <td className="px-2 py-4 text-center text-[#475569]" colSpan={6}>
+                <td className="px-2 py-4 text-center text-[#475569]" colSpan={8}>
                   No tasks
                 </td>
               </tr>
