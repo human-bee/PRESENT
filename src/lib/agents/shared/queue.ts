@@ -386,6 +386,7 @@ export class AgentTaskQueue {
         lease_token: null,
         lease_expires_at: null,
         result: result ?? null,
+        error: null,
       })
       .eq('id', taskId)
       .eq('lease_token', leaseToken);

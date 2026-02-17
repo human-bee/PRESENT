@@ -2,6 +2,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
+import { randomUUID } from 'node:crypto';
 import { chromium } from 'playwright';
 
 const nowIso = () => new Date().toISOString();
@@ -128,6 +129,7 @@ function scoreSignals(text) {
     crowdPulseVisible: /crowd pulse/.test(lower),
     debateVisible: /debate/.test(lower),
     stickyMarkerVisible: /launch_confidence_check/.test(text),
+    secondStickyVisible: /next_move_release_readiness/.test(text),
     fairyMentioned: /fairies|fairy/.test(lower),
     agentJoinedBannerMissing: !/agent not joined/i.test(text),
   };
@@ -135,8 +137,8 @@ function scoreSignals(text) {
 
 async function run() {
   const args = parseArgs(process.argv);
-  const runId = `showcase-${Date.now()}`;
-  const canvasId = `showcase-${Date.now()}`;
+  const canvasId = randomUUID();
+  const runId = `showcase-${Date.now()}-${canvasId.slice(0, 8)}`;
   const room = `canvas-${canvasId}`;
   const outputDir = path.join(args.outDir, runId);
   await fs.mkdir(outputDir, { recursive: true });
@@ -153,13 +155,13 @@ async function run() {
   const turns = [
     'Start a two-minute timer widget near the top left.',
     'Create a Crowd Pulse widget titled Launch Pulse.',
-    'Set Crowd Pulse question to: What excites you most about this release?',
-    'Update Crowd Pulse with hand count 12 and status Q&A and add question: Can we ship Friday?',
+    'Update Crowd Pulse hand count to 12, status Q&A, and question: What excites you most about this release?',
+    'Update Crowd Pulse hand count to 17 and add question: Can we ship Friday?',
     'Create a Debate Scorecard on topic: Should we ship Friday?',
-    'Add an affirmative claim: rollback plan is tested.',
-    'Add a negative claim: auth edge cases are still unresolved.',
+    'Affirmative: rollback plan is tested and release train is green.',
+    'Negative: auth edge cases are still unresolved in production.',
     'Have the fairies draw a neon bunny outline and add a sticky note that says exactly LAUNCH_CONFIDENCE_CHECK.',
-    'Now add one more sticky note near the bunny saying NEXT_MOVE_RELEASE_READINESS.',
+    'Have the fairies add one more sticky note near the bunny that says exactly NEXT_MOVE_RELEASE_READINESS.',
   ].slice(0, Math.max(1, Math.min(args.maxTurns, 20)));
 
   const result = {
@@ -194,9 +196,12 @@ async function run() {
     for (let i = 0; i < turns.length; i += 1) {
       const turn = turns[i];
       if (!result.transcriptOpened) break;
-      const ack = await sendTurn(page, turn, Math.min(12_000, args.timeoutMs));
+      const ack = await sendTurn(page, turn, Math.min(18_000, args.timeoutMs));
       result.turns.push(ack);
-      await page.waitForTimeout(1800);
+      process.stdout.write(
+        `[showcase] turn ${String(i + 1).padStart(2, '0')}/${turns.length} ack=${ack.acked ? 'yes' : 'no'}\n`,
+      );
+      await page.waitForTimeout(3200);
       await fitCanvasToContent(page);
       const shot = path.join(outputDir, `turn-${String(i + 1).padStart(2, '0')}.png`);
       await page.screenshot({ path: shot, fullPage: false });
@@ -214,18 +219,36 @@ async function run() {
     const bodyText = await page.evaluate(() => document.body.innerText || '');
     result.signals = scoreSignals(bodyText);
 
-    const sessionResponse = await page.request.get(
-      `/api/admin/agents/session?room=${encodeURIComponent(room)}&limit=300`,
-    );
-    const sessionBody = await sessionResponse.json().catch(() => null);
-    result.sessionCorrelation = {
-      status: sessionResponse.status(),
-      ok: sessionResponse.ok(),
-      body: sessionBody,
-    };
+    const sessionController = new AbortController();
+    const sessionTimeout = setTimeout(() => {
+      sessionController.abort();
+    }, 10_000);
+    try {
+      const sessionResponse = await page.request.get(
+        `/api/admin/agents/session?room=${encodeURIComponent(room)}&limit=300`,
+        { signal: sessionController.signal },
+      );
+      const sessionBody = await sessionResponse.json().catch(() => null);
+      result.sessionCorrelation = {
+        status: sessionResponse.status(),
+        ok: sessionResponse.ok(),
+        body: sessionBody,
+      };
 
-    if (!sessionResponse.ok()) {
-      result.notes.push('Session correlation endpoint was not accessible from this run context.');
+      if (!sessionResponse.ok()) {
+        result.notes.push('Session correlation endpoint was not accessible from this run context.');
+      }
+    } catch (error) {
+      result.sessionCorrelation = {
+        status: 0,
+        ok: false,
+        body: null,
+      };
+      result.notes.push(
+        `Session correlation request failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    } finally {
+      clearTimeout(sessionTimeout);
     }
   } catch (error) {
     result.notes.push(error instanceof Error ? error.message : String(error));

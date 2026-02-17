@@ -46,7 +46,15 @@ import {
   type PendingToolCallEntry,
   type ToolEvent,
 } from './voice-agent/tool-publishing';
-import { inferScorecardTopicFromText, resolveDebatePlayerSeedFromLabels } from './voice-agent/scorecard';
+import {
+  inferScorecardTopicFromText,
+  parseManualScorecardClaimPatch,
+  resolveDebatePlayerSeedFromLabels,
+} from './voice-agent/scorecard';
+import {
+  normalizeCrowdPulseActiveQuestionInput,
+  parseCrowdPulseFallbackInstruction,
+} from '@/lib/agents/subagents/crowd-pulse-parser';
 
 const RATE_LIMIT_HEADER_KEYS = [
   'retry-after',
@@ -2740,6 +2748,63 @@ Your only output is function calls. Never use plain text unless absolutely neces
         return;
       }
 
+      const crowdPulseMentioned = /\bcrowd\s*pulse\b/.test(lower);
+      const crowdPulseMutation =
+        crowdPulseMentioned &&
+        /\b(question|prompt|hand|hands|count|status|q&a|qa|follow[-\s]?up)\b/.test(lower);
+      const crowdPulseCreate =
+        crowdPulseMentioned &&
+        (lower.startsWith('create') || lower.startsWith('start') || lower.startsWith('open'));
+      if (crowdPulseMutation || crowdPulseCreate) {
+        const patch = parseCrowdPulseFallbackInstruction(trimmed);
+        const inferredTitle = (() => {
+          const titleMatch =
+            trimmed.match(/title(?:d)?(?:\s*(?:to|is|:))?\s*["“]?([^"”\n]+)["”]?/i) ??
+            trimmed.match(/crowd\s*pulse\s*(?:for|on)\s*["“]?([^"”\n]+)["”]?/i);
+          if (!titleMatch?.[1]) return undefined;
+          const next = titleMatch[1].trim();
+          return next.length > 0 ? next.slice(0, 140) : undefined;
+        })();
+        let crowdPulseId =
+          resolveComponentId({ type: 'CrowdPulseWidget', allowLast: true }) || getLastComponentForType('CrowdPulseWidget');
+        if (!crowdPulseId && crowdPulseCreate) {
+          const created = await (toolContext as any).create_component.execute({
+            type: 'CrowdPulseWidget',
+            ...(inferredTitle ? { spec: { title: inferredTitle } } : {}),
+          });
+          crowdPulseId =
+            (created && typeof created === 'object' && typeof (created as any).messageId === 'string'
+              ? (created as any).messageId
+              : undefined) ??
+            (created && typeof created === 'object' && typeof (created as any).componentId === 'string'
+              ? (created as any).componentId
+              : undefined) ??
+            resolveComponentId({ type: 'CrowdPulseWidget', allowLast: true }) ??
+            getLastComponentForType('CrowdPulseWidget');
+        }
+        if (crowdPulseId && Object.keys(patch).length > 0) {
+          const normalizedPatch: Record<string, unknown> = { ...patch };
+          const normalizedQuestion = normalizeCrowdPulseActiveQuestionInput(
+            (patch as Record<string, unknown>).activeQuestion,
+            trimmed,
+          );
+          if (typeof normalizedQuestion === 'string') {
+            normalizedPatch.activeQuestion = normalizedQuestion;
+          } else {
+            delete normalizedPatch.activeQuestion;
+          }
+          await (toolContext as any).update_component.execute({
+            componentId: crowdPulseId,
+            patch: normalizedPatch,
+          });
+          return;
+        }
+        if (!crowdPulseId && crowdPulseCreate) {
+          await (toolContext as any).create_component.execute({ type: 'CrowdPulseWidget' });
+          return;
+        }
+      }
+
       const looksLikeScorecardCommand =
         (lower.startsWith('start') || lower.startsWith('create') || lower.startsWith('open')) &&
         lower.includes('debate') &&
@@ -2783,14 +2848,53 @@ Your only output is function calls. Never use plain text unless absolutely neces
         'negative rebuttal:',
         'judge:',
       ];
+      const ensureManualScorecardTarget = async () => {
+        if (activeScorecard?.componentId) {
+          return activeScorecard;
+        }
+        try {
+          const ensured = await scorecardService.ensure(inferScorecardTopicFromText(trimmed), trimmed);
+          return ensured;
+        } catch (error) {
+          console.warn('[VoiceAgent] failed to ensure scorecard for manual mutation', {
+            prompt: trimmed,
+            error: error instanceof Error ? error.message : String(error),
+          });
+          return null;
+        }
+      };
       const looksLikeDebateLine = debateLinePrefixes.some((prefix) => lower.startsWith(prefix));
-      if (looksLikeDebateLine && activeScorecard?.componentId) {
+      if (looksLikeDebateLine) {
+        const target = await ensureManualScorecardTarget();
+        if (!target?.componentId) {
+          return;
+        }
+        const claimPatch = parseManualScorecardClaimPatch(trimmed);
+        if (claimPatch) {
+          await (toolContext as any).dispatch_to_conductor.execute({
+            task: 'scorecard.patch',
+            params: {
+              componentId: target.componentId,
+              topic: target.topic,
+              claimPatches: [
+                {
+                  op: 'upsert',
+                  side: claimPatch.side,
+                  speech: claimPatch.speech,
+                  quote: claimPatch.quote,
+                  summary: claimPatch.summary,
+                },
+              ],
+            },
+          });
+          return;
+        }
         await (toolContext as any).dispatch_to_conductor.execute({
           task: 'scorecard.run',
           params: {
-            componentId: activeScorecard.componentId,
+            componentId: target.componentId,
             prompt: trimmed,
-            topic: activeScorecard.topic,
+            topic: target.topic,
           },
         });
         return;
@@ -2803,29 +2907,56 @@ Your only output is function calls. Never use plain text unless absolutely neces
         lower.includes('add sources') ||
         lower.includes('verify the') ||
         lower.includes('verify this');
-      if (looksLikeFactCheckCommand && activeScorecard?.componentId) {
+      if (looksLikeFactCheckCommand) {
+        const target = await ensureManualScorecardTarget();
+        if (!target?.componentId) {
+          return;
+        }
         await (toolContext as any).dispatch_to_conductor.execute({
           task: 'scorecard.fact_check',
           params: {
-            componentId: activeScorecard.componentId,
+            componentId: target.componentId,
             summary: trimmed.slice(0, 240),
-            topic: activeScorecard.topic,
+            topic: target.topic,
           },
         });
         return;
       }
 
       const looksLikeScorecardMutation =
-        Boolean(activeScorecard?.componentId) &&
         /\b(scorecard|claim|rebuttal|counterclaim|counter\s+claim|affirmative|negative|judge|verdict|argument)\b/.test(lower) &&
         !looksLikeFactCheckCommand;
-      if (looksLikeScorecardMutation && activeScorecard?.componentId) {
+      if (looksLikeScorecardMutation) {
+        const target = await ensureManualScorecardTarget();
+        if (!target?.componentId) {
+          return;
+        }
+        const claimPatch = parseManualScorecardClaimPatch(trimmed);
+        if (claimPatch) {
+          await (toolContext as any).dispatch_to_conductor.execute({
+            task: 'scorecard.patch',
+            params: {
+              componentId: target.componentId,
+              topic: target.topic,
+              claimPatches: [
+                {
+                  op: 'upsert',
+                  side: claimPatch.side,
+                  speech: claimPatch.speech,
+                  quote: claimPatch.quote,
+                  summary: claimPatch.summary,
+                },
+              ],
+            },
+          });
+          return;
+        }
         await (toolContext as any).dispatch_to_conductor.execute({
           task: 'scorecard.run',
           params: {
-            componentId: activeScorecard.componentId,
+            componentId: target.componentId,
             prompt: trimmed,
-            topic: activeScorecard.topic,
+            topic: target.topic,
           },
         });
         return;

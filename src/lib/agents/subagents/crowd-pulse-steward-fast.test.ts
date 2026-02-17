@@ -1,4 +1,8 @@
-import { parseCrowdPulseFallbackInstruction } from './crowd-pulse-parser';
+import {
+  normalizeCrowdPulseActiveQuestionInput,
+  parseCrowdPulseFallbackInstruction,
+  shouldClearCrowdPulseQuestion,
+} from './crowd-pulse-parser';
 
 describe('parseCrowdPulseFallbackInstruction', () => {
   it('parses hand count, q_and_a status, and active question', () => {
@@ -35,5 +39,16 @@ describe('parseCrowdPulseFallbackInstruction', () => {
     expect(patch).toEqual({
       prompt: 'Sync crowd pulse context from transcript.',
     });
+  });
+
+  it('treats explicit question-clear instructions as an empty activeQuestion patch', () => {
+    const patch = parseCrowdPulseFallbackInstruction('Clear the crowd pulse question now.');
+    expect(patch.activeQuestion).toBe('');
+    expect(shouldClearCrowdPulseQuestion('Clear the crowd pulse question now.')).toBe(true);
+  });
+
+  it('does not treat blank activeQuestion as clear without explicit clear intent', () => {
+    expect(normalizeCrowdPulseActiveQuestionInput('   ', 'Update crowd pulse question')).toBeUndefined();
+    expect(normalizeCrowdPulseActiveQuestionInput('   ', 'Clear the question prompt')).toBe('');
   });
 });

@@ -11,6 +11,7 @@ import {
 import { extractFirstToolCall, parseToolArgumentsResult } from './fast-steward-response';
 import {
   normalizeCrowdPulseStatus,
+  normalizeCrowdPulseActiveQuestionInput,
   parseCrowdPulseFallbackInstruction,
   type CrowdPulsePatch,
 } from './crowd-pulse-parser';
@@ -154,7 +155,13 @@ export async function runCrowdPulseStewardFast(params: {
       if (typeof args.peakCount === 'number') patch.peakCount = args.peakCount;
       if (typeof args.confidence === 'number') patch.confidence = args.confidence;
       if (typeof args.noiseLevel === 'number') patch.noiseLevel = args.noiseLevel;
-      if (typeof args.activeQuestion === 'string') patch.activeQuestion = args.activeQuestion.trim();
+      const normalizedActiveQuestion = normalizeCrowdPulseActiveQuestionInput(
+        args.activeQuestion,
+        instruction,
+      );
+      if (typeof normalizedActiveQuestion === 'string') {
+        patch.activeQuestion = normalizedActiveQuestion;
+      }
       if (Array.isArray(args.questions)) patch.questions = args.questions;
       if (Array.isArray(args.scoreboard)) patch.scoreboard = args.scoreboard;
       if (Array.isArray(args.followUps)) patch.followUps = args.followUps;

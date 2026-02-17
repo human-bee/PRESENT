@@ -46,6 +46,7 @@ import {
 import { formatFairyContextParts } from '@/lib/fairy-context/format';
 import { runSummaryStewardFast } from '@/lib/agents/subagents/summary-steward-fast';
 import { runCrowdPulseStewardFast } from '@/lib/agents/subagents/crowd-pulse-steward-fast';
+import { normalizeCrowdPulseActiveQuestionInput } from '@/lib/agents/subagents/crowd-pulse-parser';
 import { flags, getBooleanFlag } from '@/lib/feature-flags';
 import { createLogger } from '@/lib/logging';
 import {
@@ -711,10 +712,18 @@ async function handleFairyIntent(rawParams: JsonObject) {
         contextBundle: bundleText,
         contextProfile: actionProfile,
       });
+      const normalizedActiveQuestion = normalizeCrowdPulseActiveQuestionInput(
+        patch.activeQuestion,
+        message,
+      );
       const inferredQuestion =
-        typeof patch.activeQuestion === 'string' ? undefined : inferCrowdPulseQuestion(message);
+        typeof normalizedActiveQuestion === 'string' ? undefined : inferCrowdPulseQuestion(message);
+      const { activeQuestion: _ignoredActiveQuestion, ...patchWithoutActiveQuestion } = patch;
       const updatePatch = {
-        ...patch,
+        ...patchWithoutActiveQuestion,
+        ...(typeof normalizedActiveQuestion === 'string'
+          ? { activeQuestion: normalizedActiveQuestion }
+          : {}),
         ...(inferredQuestion ? { activeQuestion: inferredQuestion } : {}),
         lastUpdated: Date.now(),
       };
