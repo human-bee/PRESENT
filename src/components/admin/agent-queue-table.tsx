@@ -17,6 +17,7 @@ export function AgentQueueTable({ tasks, onSelectTask }: Props) {
             <tr>
               <th className="px-2 py-2">Task</th>
               <th className="px-2 py-2">Room</th>
+              <th className="px-2 py-2">Trace</th>
               <th className="px-2 py-2">Status</th>
               <th className="px-2 py-2">Attempt</th>
               <th className="px-2 py-2">Created</th>
@@ -31,6 +32,9 @@ export function AgentQueueTable({ tasks, onSelectTask }: Props) {
               >
                 <td className="px-2 py-2 font-mono text-slate-900">{task.task}</td>
                 <td className="px-2 py-2 text-slate-700">{task.room}</td>
+                <td className="px-2 py-2 font-mono text-[11px] text-slate-600">
+                  {task.trace_id ? task.trace_id.slice(0, 18) : 'n/a'}
+                </td>
                 <td className="px-2 py-2 text-slate-700">{task.status}</td>
                 <td className="px-2 py-2 text-slate-700">{task.attempt}</td>
                 <td className="px-2 py-2 text-slate-500">
@@ -40,7 +44,7 @@ export function AgentQueueTable({ tasks, onSelectTask }: Props) {
             ))}
             {tasks.length === 0 && (
               <tr>
-                <td className="px-2 py-4 text-center text-slate-500" colSpan={5}>
+                <td className="px-2 py-4 text-center text-slate-500" colSpan={6}>
                   No tasks
                 </td>
               </tr>

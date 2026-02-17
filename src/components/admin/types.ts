@@ -15,6 +15,7 @@ export type AgentQueueTask = {
   attempt: number;
   error?: string | null;
   request_id?: string | null;
+  trace_id?: string | null;
   resource_keys?: string[];
   lease_expires_at?: string | null;
   created_at?: string;
