@@ -33,24 +33,48 @@ export async function GET(req: NextRequest) {
 
   try {
     const db = getAdminSupabaseClient();
-    let query = db
-      .from('agent_tasks')
-      .select(
-        'id,room,task,status,priority,attempt,error,request_id,trace_id,resource_keys,lease_expires_at,created_at,updated_at',
-      )
-      .order('created_at', { ascending: false })
-      .limit(limit);
-    if (room) query = query.eq('room', room);
-    if (status) query = query.eq('status', status);
-    if (task) query = query.eq('task', task);
+    const buildQuery = (selectColumns: string) => {
+      let query = db
+        .from('agent_tasks')
+        .select(selectColumns)
+        .order('created_at', { ascending: false })
+        .limit(limit);
+      if (room) query = query.eq('room', room);
+      if (status) query = query.eq('status', status);
+      if (task) query = query.eq('task', task);
+      return query;
+    };
 
-    const { data, error } = await query;
-    if (error) throw error;
+    const selectWithTraceId =
+      'id,room,task,status,priority,attempt,error,request_id,trace_id,resource_keys,lease_expires_at,created_at,updated_at';
+    const selectCompat =
+      'id,room,task,status,priority,attempt,error,request_id,resource_keys,lease_expires_at,created_at,updated_at';
+
+    const withTrace = await buildQuery(selectWithTraceId);
+    if (withTrace.error && /trace_id/i.test(withTrace.error.message)) {
+      const compat = await buildQuery(selectCompat);
+      if (compat.error) throw compat.error;
+      const compatTasks = Array.isArray(compat.data)
+        ? compat.data.map((row) => {
+            const base =
+              row && typeof row === 'object' && !Array.isArray(row)
+                ? (row as Record<string, unknown>)
+                : {};
+            return { ...base, trace_id: null };
+          })
+        : [];
+      return NextResponse.json({
+        ok: true,
+        actorUserId: admin.userId,
+        tasks: compatTasks,
+      });
+    }
+    if (withTrace.error) throw withTrace.error;
 
     return NextResponse.json({
       ok: true,
       actorUserId: admin.userId,
-      tasks: data ?? [],
+      tasks: withTrace.data ?? [],
     });
   } catch (error) {
     return NextResponse.json(
