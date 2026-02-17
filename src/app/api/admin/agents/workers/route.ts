@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAgentAdminUserId } from '@/lib/agents/admin/auth';
+import { requireAgentAdminSignedInUserId } from '@/lib/agents/admin/auth';
 import { getAdminSupabaseClient } from '@/lib/agents/admin/supabase-admin';
 import { isMissingRelationError } from '@/lib/agents/admin/supabase-errors';
 
@@ -16,7 +16,7 @@ const resolveHealth = (updatedAt: string): WorkerHealth => {
 };
 
 export async function GET(req: NextRequest) {
-  const admin = await requireAgentAdminUserId(req);
+  const admin = await requireAgentAdminSignedInUserId(req);
   if (!admin.ok) {
     return NextResponse.json({ error: admin.error }, { status: admin.status });
   }
@@ -25,7 +25,7 @@ export async function GET(req: NextRequest) {
     const db = getAdminSupabaseClient();
     const { data, error } = await db
       .from('agent_worker_heartbeats')
-      .select('*')
+      .select('worker_id,updated_at,host,pid,version,active_tasks,queue_lag_ms')
       .order('updated_at', { ascending: false })
       .limit(200);
     if (error && isMissingRelationError(error, 'agent_worker_heartbeats')) {

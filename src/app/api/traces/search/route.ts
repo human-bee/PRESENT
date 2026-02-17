@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAgentAdminUserId } from '@/lib/agents/admin/auth';
+import { requireAgentAdminSignedInUserId } from '@/lib/agents/admin/auth';
 import { getAdminSupabaseClient } from '@/lib/agents/admin/supabase-admin';
 
 export const runtime = 'nodejs';
@@ -12,7 +12,7 @@ const readOptional = (searchParams: URLSearchParams, key: string): string | unde
 };
 
 export async function GET(req: NextRequest) {
-  const admin = await requireAgentAdminUserId(req);
+  const admin = await requireAgentAdminSignedInUserId(req);
   if (!admin.ok) {
     return NextResponse.json({ error: admin.error }, { status: admin.status });
   }
@@ -22,11 +22,15 @@ export async function GET(req: NextRequest) {
   const status = readOptional(searchParams, 'status');
   const from = readOptional(searchParams, 'from');
   const to = readOptional(searchParams, 'to');
-  const limit = Math.max(1, Math.min(500, Number(searchParams.get('limit') ?? 200)));
+  const limit = Math.max(1, Math.min(250, Number(searchParams.get('limit') ?? 100)));
 
   try {
     const db = getAdminSupabaseClient();
-    let query = db.from('agent_trace_events').select('*').order('created_at', { ascending: false }).limit(limit);
+    let query = db
+      .from('agent_trace_events')
+      .select('id,trace_id,request_id,intent_id,room,task_id,task,stage,status,latency_ms,created_at,payload')
+      .order('created_at', { ascending: false })
+      .limit(limit);
     if (room) query = query.eq('room', room);
     if (task) query = query.eq('task', task);
     if (status) query = query.eq('status', status);
