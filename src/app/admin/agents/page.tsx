@@ -46,6 +46,8 @@ export default function AgentAdminPage() {
   const [selectedTraceEvents, setSelectedTraceEvents] = useState<AgentTraceEventRow[]>([]);
   const [selectedTraceLoading, setSelectedTraceLoading] = useState(false);
   const [selectedTraceError, setSelectedTraceError] = useState<string | null>(null);
+  const [accessMode, setAccessMode] = useState<'allowlist' | 'open_access' | null>(null);
+  const [safeActionsAllowed, setSafeActionsAllowed] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [pollingEnabled, setPollingEnabled] = useState(true);
@@ -115,7 +117,7 @@ export default function AgentAdminPage() {
     setError(null);
     try {
       const [overviewRes, queueRes, tracesRes, workersRes, auditRes] = await Promise.all([
-        readJson<{ ok: boolean } & AgentOverviewResponse>('/api/admin/agents/overview'),
+        readJson<AgentOverviewResponse>('/api/admin/agents/overview'),
         readJson<{ tasks: AgentQueueTask[] }>(
           withQuery('/api/admin/agents/queue', {
             limit: 200,
@@ -132,6 +134,8 @@ export default function AgentAdminPage() {
         readJson<{ entries: AgentAuditEntry[] }>('/api/admin/agents/audit?limit=120'),
       ]);
       setOverview(overviewRes);
+      setAccessMode(overviewRes.actorAccessMode ?? 'allowlist');
+      setSafeActionsAllowed(overviewRes.safeActionsAllowed !== false);
       setTasks(Array.isArray(queueRes.tasks) ? queueRes.tasks : []);
       setTraces(Array.isArray(tracesRes.traces) ? tracesRes.traces : []);
       setWorkers(Array.isArray(workersRes.workers) ? workersRes.workers : []);
@@ -142,6 +146,8 @@ export default function AgentAdminPage() {
       }
     } catch (e) {
       const message = e instanceof Error ? e.message : 'Failed to load admin data';
+      setAccessMode(null);
+      setSafeActionsAllowed(false);
       if (message.includes('admin_allowlist_not_configured')) {
         setError('Admin allowlist is not configured. Set AGENT_ADMIN_ALLOWLIST_USER_IDS to access this page.');
         setPollingEnabled(false);
@@ -173,13 +179,18 @@ export default function AgentAdminPage() {
   }, [pollingEnabled, refresh]);
 
   return (
-    <main className="min-h-screen bg-slate-100 px-4 py-6">
+    <main
+      data-theme="light"
+      className="min-h-screen bg-slate-50 px-4 py-6 text-slate-900 dark:bg-slate-950 dark:text-slate-100"
+    >
       <div className="mx-auto max-w-7xl space-y-4">
         <header className="flex items-center justify-between">
           <div>
-            <h1 className="text-xl font-semibold text-slate-900">Agent Observability Admin</h1>
-            <p className="text-sm text-slate-600">Swarm orchestration traces, queue state, worker health, and safe actions.</p>
-            <p className="mt-1 text-xs text-slate-500">
+            <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">Agent Observability Admin</h1>
+            <p className="text-sm text-slate-700 dark:text-slate-300">
+              Swarm orchestration traces, queue state, worker health, and safe actions.
+            </p>
+            <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
               Filter by room for per-canvas diagnostics (example: <span className="font-mono">canvas-1234...</span>).
             </p>
           </div>
@@ -196,18 +207,18 @@ export default function AgentAdminPage() {
                 value={roomFilterDraft}
                 onChange={(event) => setRoomFilterDraft(event.target.value)}
                 placeholder="Filter room (canvas-...)"
-                className="w-64 rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-900"
+                className="w-64 rounded border border-slate-300 bg-white px-2 py-1 text-sm text-slate-900 placeholder:text-slate-500 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:placeholder:text-slate-400"
               />
               <button
                 type="submit"
-                className="rounded bg-slate-900 px-3 py-2 text-xs text-white disabled:opacity-50"
+                className="rounded bg-slate-900 px-3 py-2 text-sm text-white disabled:opacity-50 dark:bg-slate-200 dark:text-slate-900"
                 disabled={loading}
               >
                 Apply
               </button>
               <button
                 type="button"
-                className="rounded border border-slate-300 bg-white px-3 py-2 text-xs text-slate-700 disabled:opacity-50"
+                className="rounded border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 disabled:opacity-50 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200"
                 disabled={loading || (!roomFilter && !roomFilterDraft)}
                 onClick={() => {
                   setRoomFilterDraft('');
@@ -232,11 +243,11 @@ export default function AgentAdminPage() {
                 value={traceFilterDraft}
                 onChange={(event) => setTraceFilterDraft(event.target.value)}
                 placeholder="Trace id"
-                className="w-56 rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-900"
+                className="w-56 rounded border border-slate-300 bg-white px-2 py-1 text-sm text-slate-900 placeholder:text-slate-500 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:placeholder:text-slate-400"
               />
               <button
                 type="submit"
-                className="rounded border border-slate-300 bg-white px-3 py-2 text-xs text-slate-700 disabled:opacity-50"
+                className="rounded border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 disabled:opacity-50 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200"
                 disabled={loading || traceFilterDraft.trim().length === 0}
               >
                 Open Trace
@@ -245,21 +256,28 @@ export default function AgentAdminPage() {
             <button
               onClick={() => void refresh()}
               disabled={loading}
-              className="rounded bg-slate-900 px-3 py-2 text-xs text-white disabled:opacity-50"
+              className="rounded bg-slate-900 px-3 py-2 text-sm text-white disabled:opacity-50 dark:bg-slate-200 dark:text-slate-900"
             >
               {loading ? 'Refreshing…' : 'Refresh'}
             </button>
           </div>
         </header>
 
+        {accessMode === 'open_access' && (
+          <div className="rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-500/50 dark:bg-amber-500/10 dark:text-amber-100">
+            Authenticated open access is active. Read views are open to signed-in users; safe actions still require
+            allowlist membership.
+          </div>
+        )}
+
         {error && (
-          <div className="rounded border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
+          <div className="rounded border border-rose-300 bg-rose-50 p-3 text-sm text-rose-800 dark:border-rose-500/60 dark:bg-rose-500/10 dark:text-rose-200">
             {error}
           </div>
         )}
 
         {roomFilter && (
-          <div className="rounded border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-800">
+          <div className="rounded border border-sky-300 bg-sky-50 px-3 py-2 text-sm text-sky-900 dark:border-sky-500/60 dark:bg-sky-500/10 dark:text-sky-100">
             Active room filter: <span className="font-mono">{roomFilter}</span>
           </div>
         )}
@@ -288,50 +306,53 @@ export default function AgentAdminPage() {
         </div>
 
         {selectedTraceId && (
-          <section className="rounded border border-slate-200 bg-white p-4">
+          <section className="rounded border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900">
             <div className="flex items-center justify-between gap-2">
-              <h2 className="text-sm font-semibold text-slate-900">
-                Trace Detail <span className="font-mono text-xs text-slate-600">{selectedTraceId}</span>
+              <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">
+                Trace Detail <span className="font-mono text-sm text-slate-700 dark:text-slate-300">{selectedTraceId}</span>
               </h2>
               <div className="flex items-center gap-2">
                 <button
                   type="button"
                   onClick={() => void loadTrace(selectedTraceId)}
-                  className="rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700"
+                  className="rounded border border-slate-300 bg-white px-2 py-1 text-sm text-slate-700 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200"
                 >
                   {selectedTraceLoading ? 'Loading…' : 'Reload'}
                 </button>
                 <button
                   type="button"
                   onClick={clearTraceSelection}
-                  className="rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700"
+                  className="rounded border border-slate-300 bg-white px-2 py-1 text-sm text-slate-700 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200"
                 >
                   Close
                 </button>
               </div>
             </div>
             {selectedTraceError && (
-              <p className="mt-2 rounded border border-rose-200 bg-rose-50 px-2 py-1 text-xs text-rose-700">
+              <p className="mt-2 rounded border border-rose-300 bg-rose-50 px-2 py-1 text-sm text-rose-800 dark:border-rose-500/60 dark:bg-rose-500/10 dark:text-rose-200">
                 {selectedTraceError}
               </p>
             )}
-            <ol className="mt-3 max-h-[280px] space-y-2 overflow-auto text-xs">
+            <ol className="mt-3 max-h-[280px] space-y-2 overflow-auto text-sm">
               {selectedTraceEvents.map((event) => (
-                <li key={event.id} className="rounded border border-slate-200 bg-slate-50 p-2">
+                <li
+                  key={event.id}
+                  className="rounded border border-slate-200 bg-slate-50 p-2 dark:border-slate-700 dark:bg-slate-800"
+                >
                   <div className="flex items-center justify-between gap-2">
-                    <span className="font-mono text-slate-900">
+                    <span className="font-mono text-slate-900 dark:text-slate-100">
                       {event.stage}
                       {event.status ? ` · ${event.status}` : ''}
                     </span>
-                    <span className="text-slate-500">
+                    <span className="text-slate-600 dark:text-slate-300">
                       {event.created_at ? new Date(event.created_at).toLocaleTimeString() : 'n/a'}
                     </span>
                   </div>
-                  <div className="mt-1 text-slate-600">
+                  <div className="mt-1 text-slate-700 dark:text-slate-300">
                     {(event.task || 'unknown-task')}{event.room ? ` · ${event.room}` : ''}
                   </div>
                   {(event.request_id || event.intent_id || event.task_id) && (
-                    <div className="mt-1 font-mono text-[11px] text-slate-500">
+                    <div className="mt-1 font-mono text-xs text-slate-600 dark:text-slate-300">
                       {event.request_id ? `request:${event.request_id} ` : ''}
                       {event.intent_id ? `intent:${event.intent_id} ` : ''}
                       {event.task_id ? `task:${event.task_id}` : ''}
@@ -340,7 +361,7 @@ export default function AgentAdminPage() {
                 </li>
               ))}
               {!selectedTraceLoading && selectedTraceEvents.length === 0 && !selectedTraceError && (
-                <li className="text-slate-500">No events found for this trace.</li>
+                <li className="text-slate-600 dark:text-slate-300">No events found for this trace.</li>
               )}
             </ol>
           </section>
@@ -348,7 +369,7 @@ export default function AgentAdminPage() {
 
         <div className="grid gap-4 xl:grid-cols-2">
           <AgentWorkerHealth workers={workers} />
-          <AgentSafeActions selectedTask={selectedTask} onApplied={refresh} />
+          <AgentSafeActions selectedTask={selectedTask} onApplied={refresh} actionsAllowed={safeActionsAllowed} />
         </div>
 
         <AgentAuditLog entries={auditEntries} />

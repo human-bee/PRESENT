@@ -41,6 +41,8 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       ok: true,
       actorUserId: admin.userId,
+      actorAccessMode: admin.mode,
+      safeActionsAllowed: admin.mode === 'allowlist',
       queue: statusCounts,
       tracesLastHour: recentTraceCount ?? 0,
       workers: workers ?? [],

@@ -14,8 +14,11 @@
 ## Access Control
 
 - Requires authenticated user.
-- Requires `AGENT_ADMIN_ALLOWLIST_USER_IDS` (comma-separated Supabase user IDs).
-- If the allowlist is empty or unset, APIs return `admin_allowlist_not_configured`.
+- Default mode requires `AGENT_ADMIN_ALLOWLIST_USER_IDS` (comma-separated Supabase user IDs or emails).
+- Optional temporary mode: set `AGENT_ADMIN_AUTHENTICATED_OPEN_ACCESS=true` to allow any authenticated user to read admin observability endpoints.
+- Always set `AGENT_ADMIN_AUTHENTICATED_OPEN_ACCESS=false` after debugging windows close.
+- Safe action writes (`POST /api/admin/agents/actions`) always require allowlist membership, even when authenticated open access is enabled.
+- If the allowlist is empty or unset, action APIs return `admin_allowlist_not_configured`.
 
 ## Safe Actions
 
