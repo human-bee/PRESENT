@@ -2,11 +2,11 @@
  * @jest-environment node
  */
 
-const requireAgentAdminUserIdMock = jest.fn();
+const requireAgentAdminSignedInUserIdMock = jest.fn();
 const getAdminSupabaseClientMock = jest.fn();
 
 jest.mock('@/lib/agents/admin/auth', () => ({
-  requireAgentAdminUserId: requireAgentAdminUserIdMock,
+  requireAgentAdminSignedInUserId: requireAgentAdminSignedInUserIdMock,
 }));
 
 jest.mock('@/lib/agents/admin/supabase-admin', () => ({
@@ -53,12 +53,12 @@ const buildQuery = (result: { data: unknown[]; error: null | { message: string }
 
 describe('/api/admin/agents/traces', () => {
   beforeEach(() => {
-    requireAgentAdminUserIdMock.mockReset();
+    requireAgentAdminSignedInUserIdMock.mockReset();
     getAdminSupabaseClientMock.mockReset();
   });
 
   it('falls back to safe default limit when query param is not numeric', async () => {
-    requireAgentAdminUserIdMock.mockResolvedValue({ ok: true, userId: 'admin-1' });
+    requireAgentAdminSignedInUserIdMock.mockResolvedValue({ ok: true, userId: 'admin-1' });
     const { query, getLimit } = buildQuery({ data: [], error: null });
     getAdminSupabaseClientMock.mockReturnValue({
       from: jest.fn(() => query),
@@ -71,13 +71,13 @@ describe('/api/admin/agents/traces', () => {
     const json = await response.json();
 
     expect(response.status).toBe(200);
-    expect(getLimit()).toBe(200);
+    expect(getLimit()).toBe(100);
     expect(json.ok).toBe(true);
     expect(json.traces).toEqual([]);
   });
 
   it('falls back to task-backed traces when trace ledger table is missing', async () => {
-    requireAgentAdminUserIdMock.mockResolvedValue({ ok: true, userId: 'admin-2' });
+    requireAgentAdminSignedInUserIdMock.mockResolvedValue({ ok: true, userId: 'admin-2' });
     const tracesQuery = buildQuery({
       data: [],
       error: { message: 'relation "public.agent_trace_events" does not exist' },
@@ -130,6 +130,7 @@ describe('/api/admin/agents/traces', () => {
       stage: 'executing',
       room: 'canvas-room-1',
       task_id: 'task-1',
+      subsystem: 'worker',
     });
     expect(tasksQuery.getLimit()).toBe(2000);
     expect(tasksQuery.getFilters()).toEqual([]);
