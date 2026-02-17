@@ -40,6 +40,12 @@ export function AgentTraceTimeline({
               <div className="mt-1 text-[#334155]">
                 {(event.task || 'unknown-task')}{event.room ? ` · ${event.room}` : ''}
               </div>
+              {(event.subsystem || event.failure_reason) && (
+                <div className="mt-1 text-xs text-[#475569]">
+                  {event.subsystem ? `subsystem:${event.subsystem}` : ''}
+                  {event.failure_reason ? `${event.subsystem ? ' · ' : ''}${event.failure_reason}` : ''}
+                </div>
+              )}
               {(event.trace_id || event.request_id || event.intent_id) && (
                 <div className="mt-1 font-mono text-xs text-[#475569]">
                   {event.trace_id ? (
