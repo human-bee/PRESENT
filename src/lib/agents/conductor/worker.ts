@@ -19,6 +19,8 @@ import { recordTaskTraceFromParams, recordWorkerHeartbeat } from '@/lib/agents/s
 const TASK_LEASE_TTL_MS = Number(process.env.TASK_LEASE_TTL_MS ?? 15_000);
 const ROOM_CONCURRENCY = Number(process.env.ROOM_CONCURRENCY ?? 2);
 const WORKER_HEARTBEAT_MS = Number(process.env.AGENT_WORKER_HEARTBEAT_MS ?? 5_000);
+const TASK_IDLE_POLL_MS = Number(process.env.TASK_IDLE_POLL_MS ?? 500);
+const TASK_IDLE_POLL_MAX_MS = Number(process.env.TASK_IDLE_POLL_MAX_MS ?? 1_000);
 
 const queue = new AgentTaskQueue();
 const logger = createLogger('agents:conductor:worker');
@@ -94,6 +96,13 @@ function createLeaseExtender(taskId: string, leaseToken: string) {
 }
 
 async function workerLoop(executeTask: ExecuteTaskFn) {
+  const baseIdlePollMs = Math.max(250, Number.isFinite(TASK_IDLE_POLL_MS) ? Math.floor(TASK_IDLE_POLL_MS) : 2_000);
+  const maxIdlePollMs = Math.max(
+    baseIdlePollMs,
+    Number.isFinite(TASK_IDLE_POLL_MAX_MS) ? Math.floor(TASK_IDLE_POLL_MAX_MS) : 10_000,
+  );
+  let idlePollMs = baseIdlePollMs;
+
   while (true) {
     const { leaseToken, tasks } = await queue.claimTasks({
       limit: Number(process.env.TASK_DEFAULT_CONCURRENCY ?? 10),
@@ -101,9 +110,12 @@ async function workerLoop(executeTask: ExecuteTaskFn) {
     });
 
     if (tasks.length === 0) {
-      await delay(500);
+      await delay(idlePollMs);
+      idlePollMs = Math.min(maxIdlePollMs, idlePollMs * 2);
       continue;
     }
+
+    idlePollMs = baseIdlePollMs;
 
     logger.info('claimed tasks', {
       count: tasks.length,
