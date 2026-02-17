@@ -12,6 +12,7 @@ describe('agent admin auth', () => {
     delete process.env.AGENT_ADMIN_ALLOWLIST_USER_IDS;
     delete process.env.AGENT_ADMIN_AUTHENTICATED_OPEN_ACCESS;
     delete process.env.AGENT_ADMIN_PUBLIC_READ_ACCESS;
+    delete process.env.AGENT_ADMIN_DETAIL_SIGNED_IN_REQUIRED;
   });
 
   it('returns unauthorized when no session user exists', async () => {
@@ -104,5 +105,34 @@ describe('agent admin auth', () => {
     const result = await requireAgentAdminActionUserId(fakeRequest);
 
     expect(result).toEqual({ ok: false, status: 401, error: 'unauthorized' });
+  });
+
+  it('denies anonymous users for detail routes when signed-in detail access is required', async () => {
+    resolveRequestUserMock.mockResolvedValue(null);
+    process.env.AGENT_ADMIN_PUBLIC_READ_ACCESS = 'true';
+    const { requireAgentAdminSignedInUserId } = await import('@/lib/agents/admin/auth');
+    const result = await requireAgentAdminSignedInUserId(fakeRequest);
+
+    expect(result).toEqual({ ok: false, status: 401, error: 'unauthorized' });
+  });
+
+  it('allows anonymous users for detail routes when signed-in detail access is disabled', async () => {
+    resolveRequestUserMock.mockResolvedValue(null);
+    process.env.AGENT_ADMIN_PUBLIC_READ_ACCESS = 'true';
+    process.env.AGENT_ADMIN_DETAIL_SIGNED_IN_REQUIRED = 'false';
+    const { requireAgentAdminSignedInUserId } = await import('@/lib/agents/admin/auth');
+    const result = await requireAgentAdminSignedInUserId(fakeRequest);
+
+    expect(result).toEqual({ ok: true, userId: 'anonymous', mode: 'open_access' });
+  });
+
+  it('allows signed-in open-access users for detail routes', async () => {
+    resolveRequestUserMock.mockResolvedValue({ id: 'user-7', email: 'user7@example.com' });
+    process.env.AGENT_ADMIN_ALLOWLIST_USER_IDS = '';
+    process.env.AGENT_ADMIN_AUTHENTICATED_OPEN_ACCESS = 'true';
+    const { requireAgentAdminSignedInUserId } = await import('@/lib/agents/admin/auth');
+    const result = await requireAgentAdminSignedInUserId(fakeRequest);
+
+    expect(result).toEqual({ ok: true, userId: 'user-7', mode: 'open_access' });
   });
 });

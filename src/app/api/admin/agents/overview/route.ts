@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAgentAdminUserId } from '@/lib/agents/admin/auth';
+import {
+  isAgentAdminDetailGlobalScopeEnabled,
+  isAgentAdminDetailMaskDefaultEnabled,
+  requireAgentAdminUserId,
+} from '@/lib/agents/admin/auth';
 import { getAdminSupabaseClient } from '@/lib/agents/admin/supabase-admin';
 import { isMissingRelationError } from '@/lib/agents/admin/supabase-errors';
 
@@ -25,6 +29,23 @@ export async function GET(req: NextRequest) {
       if (error) throw error;
       statusCounts[status] = count ?? 0;
     }
+
+    const { data: oldestQueuedRows, error: oldestQueuedError } = await db
+      .from('agent_tasks')
+      .select('created_at')
+      .eq('status', 'queued')
+      .order('created_at', { ascending: true })
+      .limit(1);
+    if (oldestQueuedError) throw oldestQueuedError;
+    const oldestQueuedAt =
+      Array.isArray(oldestQueuedRows) &&
+      oldestQueuedRows.length > 0 &&
+      typeof oldestQueuedRows[0]?.created_at === 'string'
+        ? oldestQueuedRows[0].created_at
+        : null;
+    const oldestQueuedAgeMs = oldestQueuedAt
+      ? Math.max(0, Date.now() - new Date(oldestQueuedAt).getTime())
+      : null;
 
     const { count: recentTraceCount, error: traceCountError } = await db
       .from('agent_trace_events')
@@ -56,8 +77,13 @@ export async function GET(req: NextRequest) {
       actorUserId: admin.userId,
       actorAccessMode: admin.mode,
       safeActionsAllowed: admin.mode === 'allowlist',
+      detailGlobalScope: isAgentAdminDetailGlobalScopeEnabled(),
+      detailMaskDefault: isAgentAdminDetailMaskDefaultEnabled(),
       queue: statusCounts,
+      queueOldestQueuedAt: oldestQueuedAt,
+      queueOldestQueuedAgeMs: oldestQueuedAgeMs,
       tracesLastHour,
+      activeWorkers: (normalizedWorkers ?? []).length,
       workers: normalizedWorkers ?? [],
       generatedAt: new Date().toISOString(),
     });

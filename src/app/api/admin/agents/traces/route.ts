@@ -1,8 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAgentAdminUserId } from '@/lib/agents/admin/auth';
+import { requireAgentAdminSignedInUserId } from '@/lib/agents/admin/auth';
 import { getAdminSupabaseClient } from '@/lib/agents/admin/supabase-admin';
 import { isMissingRelationError } from '@/lib/agents/admin/supabase-errors';
 import { buildTaskBackedTraceRows, type AgentTaskTraceSourceRow } from '@/lib/agents/admin/trace-fallback';
+import {
+  classifyTraceSubsystem,
+  extractFailureReason,
+  extractWorkerIdentity,
+} from '@/lib/agents/admin/trace-diagnostics';
 
 export const runtime = 'nodejs';
 
@@ -15,14 +20,29 @@ const readOptional = (searchParams: URLSearchParams, key: string): string | unde
 
 const parseLimit = (searchParams: URLSearchParams): number => {
   const raw = searchParams.get('limit');
-  if (!raw) return 200;
+  if (!raw) return 100;
   const parsed = Number(raw);
-  if (!Number.isFinite(parsed)) return 200;
-  return Math.max(1, Math.min(500, Math.floor(parsed)));
+  if (!Number.isFinite(parsed)) return 100;
+  return Math.max(1, Math.min(250, Math.floor(parsed)));
 };
 
+const TRACE_SELECT_COLUMNS = [
+  'id',
+  'trace_id',
+  'request_id',
+  'intent_id',
+  'room',
+  'task_id',
+  'task',
+  'stage',
+  'status',
+  'latency_ms',
+  'created_at',
+  'payload',
+].join(',');
+
 export async function GET(req: NextRequest) {
-  const admin = await requireAgentAdminUserId(req);
+  const admin = await requireAgentAdminSignedInUserId(req);
   if (!admin.ok) {
     return NextResponse.json({ error: admin.error }, { status: admin.status });
   }
@@ -38,7 +58,11 @@ export async function GET(req: NextRequest) {
 
   try {
     const db = getAdminSupabaseClient();
-    let query = db.from('agent_trace_events').select('*').order('created_at', { ascending: false }).limit(limit);
+    let query = db
+      .from('agent_trace_events')
+      .select(TRACE_SELECT_COLUMNS)
+      .order('created_at', { ascending: false })
+      .limit(limit);
     if (traceId) query = query.eq('trace_id', traceId);
     if (room) query = query.eq('room', room);
     if (task) query = query.eq('task', task);
@@ -65,18 +89,49 @@ export async function GET(req: NextRequest) {
       if (normalizedStage) fallbackTraces = fallbackTraces.filter((row) => row.stage.toLowerCase() === normalizedStage);
       fallbackTraces = fallbackTraces.slice(0, limit);
 
+      const enrichedFallbackTraces = fallbackTraces.map((row) => ({
+        ...row,
+        subsystem: classifyTraceSubsystem(row.stage),
+        worker_id: null,
+        worker_host: null,
+        worker_pid: null,
+        failure_reason: extractFailureReason(row.payload),
+      }));
+
       return NextResponse.json({
         ok: true,
         actorUserId: admin.userId,
-        traces: fallbackTraces,
+        traces: enrichedFallbackTraces,
       });
     }
     if (error) throw error;
 
+    const enrichedTraces = (data ?? []).map((row) => {
+      const rowRecord =
+        row && typeof row === 'object' && !Array.isArray(row)
+          ? (row as unknown as Record<string, unknown>)
+          : {};
+      const payload =
+        row && typeof row === 'object' && !Array.isArray(row)
+          ? rowRecord.payload
+          : null;
+      const worker = extractWorkerIdentity(payload);
+      const status = rowRecord.status ?? null;
+      const stage = rowRecord.stage ?? null;
+      return {
+        ...rowRecord,
+        subsystem: classifyTraceSubsystem(typeof stage === 'string' ? stage : null),
+        worker_id: worker.workerId,
+        worker_host: worker.workerHost,
+        worker_pid: worker.workerPid,
+        failure_reason: extractFailureReason(payload, typeof status === 'string' ? status : null),
+      };
+    });
+
     return NextResponse.json({
       ok: true,
       actorUserId: admin.userId,
-      traces: data ?? [],
+      traces: enrichedTraces,
     });
   } catch (error) {
     return NextResponse.json(
