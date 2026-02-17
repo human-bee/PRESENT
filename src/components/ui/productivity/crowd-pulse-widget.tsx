@@ -46,6 +46,27 @@ const normalizeQuestionText = (value: unknown): string | null => {
   return trimmed.length > 0 ? trimmed : null;
 };
 
+const seedQuestionQueue = (
+  activeQuestion: string | undefined,
+  questions: CrowdPulseState['questions'],
+): CrowdPulseState['questions'] => {
+  const normalizedActive = normalizeQuestionText(activeQuestion);
+  if (!normalizedActive) return questions;
+  const exists = questions.some(
+    (question) => question.text.trim().toLowerCase() === normalizedActive.toLowerCase(),
+  );
+  if (exists) return questions;
+  return [
+    {
+      id: `q-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
+      text: normalizedActive,
+      votes: 0,
+      status: 'open',
+    },
+    ...questions,
+  ].slice(0, 20);
+};
+
 export default function CrowdPulseWidget(props: CrowdPulseWidgetProps) {
   const {
     __custom_message_id,
@@ -62,6 +83,14 @@ export default function CrowdPulseWidget(props: CrowdPulseWidgetProps) {
   const messageId = (__custom_message_id || propMessageId || fallbackIdRef.current)!;
 
   const [state, setState] = useState<CrowdPulseState>(() => ({
+    ...(() => {
+      const nextActiveQuestion = normalizeQuestionText(initial.activeQuestion) ?? undefined;
+      const nextQuestions = seedQuestionQueue(nextActiveQuestion, initial.questions ?? []);
+      return {
+        activeQuestion: nextActiveQuestion,
+        questions: nextQuestions,
+      };
+    })(),
     title: initial.title ?? 'Crowd Pulse',
     prompt: initial.prompt,
     status: normalizeStatus(initial.status) ?? 'idle',
@@ -69,8 +98,6 @@ export default function CrowdPulseWidget(props: CrowdPulseWidgetProps) {
     peakCount: initial.peakCount ?? 0,
     confidence: initial.confidence ?? 0,
     noiseLevel: initial.noiseLevel ?? 0,
-    activeQuestion: initial.activeQuestion,
-    questions: initial.questions ?? [],
     scoreboard: initial.scoreboard ?? [],
     followUps: initial.followUps ?? [],
     version: typeof initial.version === 'number' ? initial.version : 1,
