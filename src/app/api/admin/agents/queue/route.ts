@@ -33,18 +33,30 @@ export async function GET(req: NextRequest) {
 
   try {
     const db = getAdminSupabaseClient();
-    let query = db
-      .from('agent_tasks')
-      .select(
-        'id,room,task,status,priority,attempt,error,request_id,trace_id,resource_keys,lease_expires_at,created_at,updated_at',
-      )
-      .order('created_at', { ascending: false })
-      .limit(limit);
-    if (room) query = query.eq('room', room);
-    if (status) query = query.eq('status', status);
-    if (task) query = query.eq('task', task);
+    const buildQuery = (selectColumns: string) => {
+      let query = db
+        .from('agent_tasks')
+        .select(selectColumns)
+        .order('created_at', { ascending: false })
+        .limit(limit);
+      if (room) query = query.eq('room', room);
+      if (status) query = query.eq('status', status);
+      if (task) query = query.eq('task', task);
+      return query;
+    };
 
-    const { data, error } = await query;
+    const selectWithTraceId =
+      'id,room,task,status,priority,attempt,error,request_id,trace_id,resource_keys,lease_expires_at,created_at,updated_at';
+    const selectCompat =
+      'id,room,task,status,priority,attempt,error,request_id,resource_keys,lease_expires_at,created_at,updated_at';
+
+    let { data, error } = await buildQuery(selectWithTraceId);
+    if (error && /trace_id/i.test(error.message)) {
+      ({ data, error } = await buildQuery(selectCompat));
+      if (!error && Array.isArray(data)) {
+        data = data.map((row) => ({ ...row, trace_id: null }));
+      }
+    }
     if (error) throw error;
 
     return NextResponse.json({
