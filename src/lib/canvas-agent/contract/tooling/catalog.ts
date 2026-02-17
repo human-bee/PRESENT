@@ -10,11 +10,19 @@ if (ACTION_NAMES.length === 0) {
 }
 const ACTION_NAME_TUPLE = ACTION_NAMES as [string, ...string[]];
 
+const isZodSchemaLike = (value: unknown): value is z.ZodTypeAny => {
+  if (!value || typeof value !== 'object') return false;
+  const candidate = value as Record<string, unknown>;
+  return typeof candidate.safeParse === 'function';
+};
+
 const actionSchemas = ACTION_NAME_TUPLE.map((actionName) =>
   z.object({
     id: z.union([z.string(), z.number()]).optional(),
     name: z.literal(actionName),
-    params: actionParamSchemas[actionName],
+    params: isZodSchemaLike(actionParamSchemas[actionName])
+      ? actionParamSchemas[actionName]
+      : z.record(z.string(), z.unknown()),
   }),
 ) as unknown as [z.ZodTypeAny, ...z.ZodTypeAny[]];
 
@@ -38,10 +46,36 @@ export function validateCanonicalAction(action: unknown) {
   };
 }
 
-const ACTION_SCHEMA_JSON = zodToJsonSchema(ActionListSchema as any, {
-  name: 'CanvasAgentActions',
-  $refStrategy: 'root',
-});
+const ACTION_SCHEMA_JSON = (() => {
+  try {
+    return zodToJsonSchema(ActionListSchema as any, {
+      name: 'CanvasAgentActions',
+      $refStrategy: 'root',
+    });
+  } catch (error) {
+    console.warn('[CanvasAgentContract] failed to build JSON schema; using fallback schema', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return {
+      type: 'object',
+      properties: {
+        actions: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              name: { type: 'string' },
+              params: { type: 'object', additionalProperties: true },
+            },
+            required: ['name'],
+          },
+        },
+      },
+      required: ['actions'],
+      additionalProperties: false,
+    };
+  }
+})();
 
 export function getActionSchemaJson() {
   return ACTION_SCHEMA_JSON;
