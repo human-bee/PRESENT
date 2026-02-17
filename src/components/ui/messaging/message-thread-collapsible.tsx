@@ -175,6 +175,7 @@ export const MessageThreadCollapsible = React.forwardRef<
 
   // Ref for auto-scroll
   const transcriptContainerRef = React.useRef<HTMLDivElement>(null);
+  const refreshRafPendingRef = React.useRef(false);
 
   // LiveKit room context and bus for transcript functionality
   const room = useRoomContext();
@@ -283,7 +284,12 @@ export const MessageThreadCollapsible = React.forwardRef<
       refreshCanvasComponents();
     };
     const handleRaf: EventListener = () => {
-      window.requestAnimationFrame(() => refreshCanvasComponents());
+      if (refreshRafPendingRef.current) return;
+      refreshRafPendingRef.current = true;
+      window.requestAnimationFrame(() => {
+        refreshRafPendingRef.current = false;
+        refreshCanvasComponents();
+      });
     };
     window.addEventListener('present:component-registered', handleImmediate);
     window.addEventListener('present:component-store-updated', handleImmediate);

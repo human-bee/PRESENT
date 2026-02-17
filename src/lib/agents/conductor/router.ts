@@ -286,6 +286,24 @@ const buildFairyIntentFingerprint = (intent: FairyIntent) => {
   return [intent.room, intent.source, messageKey, intent.componentId ?? '', selectionKey, boundsKey].join('|');
 };
 
+const inferCrowdPulseQuestion = (message: string): string | undefined => {
+  const trimmed = message.trim();
+  if (!trimmed) return undefined;
+  const explicit =
+    trimmed.match(/(?:question|ask|prompt)(?:\s*(?:is|:|to))?\s*["“]?([^"”\n]+)["”]?/i) ??
+    trimmed.match(/add\s+question(?:\s*(?:is|:|to))?\s*["“]?([^"”\n]+)["”]?/i);
+  if (explicit?.[1]) {
+    const candidate = explicit[1].trim();
+    if (candidate.length > 0) return candidate.replace(/[.]+$/, '');
+  }
+  const firstQuestion = trimmed.match(/([^.!?\n]*\?)/);
+  if (firstQuestion?.[1]) {
+    const candidate = firstQuestion[1].trim();
+    if (candidate.length > 0) return candidate;
+  }
+  return undefined;
+};
+
 const shouldDedupeFairyIntent = (intent: FairyIntent) => {
   if (!FAIRY_INTENT_DEDUPE_MS || FAIRY_INTENT_DEDUPE_MS < 1) return false;
   const metadata = intent.metadata as Record<string, unknown> | null;
@@ -693,8 +711,11 @@ async function handleFairyIntent(rawParams: JsonObject) {
         contextBundle: bundleText,
         contextProfile: actionProfile,
       });
+      const inferredQuestion =
+        typeof patch.activeQuestion === 'string' ? undefined : inferCrowdPulseQuestion(message);
       const updatePatch = {
         ...patch,
+        ...(inferredQuestion ? { activeQuestion: inferredQuestion } : {}),
         lastUpdated: Date.now(),
       };
       await broadcastToolCall({

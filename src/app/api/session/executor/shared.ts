@@ -64,7 +64,11 @@ export async function readSessionLease(
       return { data, error };
     }
 
-    if (!/tool_executor_(identity|lease_expires_at).*does not exist/i.test(error.message ?? '')) {
+    const message = error.message ?? '';
+    const missingExecutorColumns =
+      /tool_executor_(identity|lease_expires_at)/i.test(message) &&
+      /(does not exist|column|schema cache|could not find)/i.test(message);
+    if (!missingExecutorColumns) {
       return { data: null, error };
     }
 

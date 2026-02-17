@@ -24,10 +24,15 @@ export async function POST(req: NextRequest) {
   if (usingInMemoryExecutorLeaseFallback()) {
     const { data: current, error: readErr } = await readSessionLease(supabase, sessionId);
     if (readErr) {
-      return NextResponse.json({ error: readErr.message }, { status: 500 });
+      // Best-effort release: treat read failures as non-fatal to avoid noisy unload loops.
+      return NextResponse.json({
+        released: false,
+        sessionId,
+        reason: 'best_effort_read_failed',
+      });
     }
     if (!current) {
-      return NextResponse.json({ error: 'Session not found' }, { status: 404 });
+      return NextResponse.json({ released: false, sessionId, reason: 'session_not_found' });
     }
     const currentHolder =
       typeof current.tool_executor_identity === 'string'
@@ -77,7 +82,11 @@ export async function POST(req: NextRequest) {
         reason: 'lease_not_owned_or_already_released',
       });
     }
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({
+      released: false,
+      sessionId,
+      reason: 'best_effort_release_failed',
+    });
   }
 
   return NextResponse.json({
