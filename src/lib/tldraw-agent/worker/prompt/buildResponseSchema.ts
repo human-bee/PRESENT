@@ -4,14 +4,14 @@ import { getAgentActionUtilsRecord } from '../../shared/AgentUtils'
 
 export function buildResponseSchema() {
 	const actionUtils = getAgentActionUtilsRecord()
-	const actionSchemas = Object.values(actionUtils)
+	const actionSchemasRaw = Object.values(actionUtils)
 		.map((util) => util.getSchema())
-		.filter((schema): schema is z.ZodTypeAny => {
+		.filter((schema) => {
 			if (!schema || typeof schema !== 'object') return false
 			return typeof (schema as z.ZodTypeAny).safeParse === 'function'
-		})
+		}) as z.ZodTypeAny[]
 
-	if (actionSchemas.length === 0) {
+	if (actionSchemasRaw.length === 0) {
 		console.warn('[TLAgent] no action schemas resolved; using fallback response schema')
 		return {
 			type: 'object',
@@ -33,7 +33,7 @@ export function buildResponseSchema() {
 		}
 	}
 
-	const actionSchema = z.union(actionSchemas)
+	const actionSchema = z.union(actionSchemasRaw as [z.ZodTypeAny, ...z.ZodTypeAny[]])
 	const schema = z.object({
 		actions: z.array(actionSchema),
 	})
