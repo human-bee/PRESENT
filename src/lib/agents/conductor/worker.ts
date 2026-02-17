@@ -1,5 +1,6 @@
 import { setTimeout as delay } from 'node:timers/promises';
 import { randomUUID } from 'node:crypto';
+import os from 'node:os';
 import { AgentTaskQueue } from '@/lib/agents/shared/queue';
 import type { JsonObject } from '@/lib/utils/json-schema';
 import { createLogger } from '@/lib/logging';
@@ -23,6 +24,8 @@ const queue = new AgentTaskQueue();
 const logger = createLogger('agents:conductor:worker');
 const mutationArbiter = new MutationArbiter();
 const workerId = process.env.AGENT_WORKER_ID || `conductor-${process.pid}-${randomUUID().slice(0, 8)}`;
+const workerHost = os.hostname();
+const workerPid = String(process.pid);
 let activeTaskCount = 0;
 
 type ExecuteTaskFn = (taskName: string, params: JsonObject) => Promise<unknown>;
@@ -122,8 +125,11 @@ async function workerLoop(executeTask: ExecuteTaskFn) {
             const task = queueList.shift();
             if (!task) break;
             const stopLeaseExtender = createLeaseExtender(task.id, leaseToken);
+            let route: ReturnType<typeof classifyTaskRoute> = classifyTaskRoute(task.task);
+            let lockKey: string | null = null;
             try {
               activeTaskCount += 1;
+              route = classifyTaskRoute(task.task);
               void recordTaskTraceFromParams({
                 stage: 'executing',
                 status: 'running',
@@ -132,6 +138,13 @@ async function workerLoop(executeTask: ExecuteTaskFn) {
                 room: task.room,
                 params: task.params,
                 attempt: task.attempt,
+                payload: {
+                  workerId,
+                  workerHost,
+                  workerPid,
+                  route,
+                  leaseToken,
+                },
               });
               const startedAt = Date.now();
               const paramsRecord = task.params as Record<string, unknown>;
@@ -141,7 +154,7 @@ async function workerLoop(executeTask: ExecuteTaskFn) {
               const lockKeyFromResource = task.resource_keys
                 .find((key) => key.startsWith('lock:'))
                 ?.slice('lock:'.length);
-              const lockKey =
+              lockKey =
                 envelope.lockKey ??
                 lockKeyFromResource ??
                 deriveDefaultLockKey({
@@ -157,11 +170,11 @@ async function workerLoop(executeTask: ExecuteTaskFn) {
                       : typeof paramsRecord.componentType === 'string'
                         ? paramsRecord.componentType
                         : undefined,
-                });
-              const route = classifyTaskRoute(task.task);
+                }) ??
+                null;
               const executeStart = Date.now();
               const execution = await mutationArbiter.execute(
-                { ...envelope, lockKey, attempt: task.attempt },
+                { ...envelope, lockKey: lockKey ?? undefined, attempt: task.attempt },
                 async () => executeTask(task.task, task.params),
               );
               recordOrchestrationTiming({
@@ -210,6 +223,12 @@ async function workerLoop(executeTask: ExecuteTaskFn) {
                 attempt: task.attempt,
                 latencyMs: durationMs,
                 payload: {
+                  workerId,
+                  workerHost,
+                  workerPid,
+                  route,
+                  lockKey: lockKey ?? null,
+                  deduped: execution.deduped,
                   leaseToken,
                 },
               });
@@ -240,6 +259,11 @@ async function workerLoop(executeTask: ExecuteTaskFn) {
                 params: task.params,
                 attempt: task.attempt,
                 payload: {
+                  workerId,
+                  workerHost,
+                  workerPid,
+                  route,
+                  lockKey: lockKey ?? null,
                   error: message,
                   retryAt: retryAt ? retryAt.toISOString() : null,
                 },

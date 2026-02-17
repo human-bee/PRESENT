@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAgentAdminUserId } from '@/lib/agents/admin/auth';
+import { requireAgentAdminSignedInUserId } from '@/lib/agents/admin/auth';
 import { getAdminSupabaseClient } from '@/lib/agents/admin/supabase-admin';
 import { isMissingRelationError } from '@/lib/agents/admin/supabase-errors';
 
 export const runtime = 'nodejs';
 
 export async function GET(req: NextRequest) {
-  const admin = await requireAgentAdminUserId(req);
+  const admin = await requireAgentAdminSignedInUserId(req);
   if (!admin.ok) {
     return NextResponse.json({ error: admin.error }, { status: admin.status });
   }
