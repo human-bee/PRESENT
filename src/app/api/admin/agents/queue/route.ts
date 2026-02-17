@@ -50,25 +50,31 @@ export async function GET(req: NextRequest) {
     const selectCompat =
       'id,room,task,status,priority,attempt,error,request_id,resource_keys,lease_expires_at,created_at,updated_at';
 
-    let { data, error } = await buildQuery(selectWithTraceId);
-    if (error && /trace_id/i.test(error.message)) {
-      ({ data, error } = await buildQuery(selectCompat));
-      if (!error && Array.isArray(data)) {
-        data = data.map((row) => {
-          const base =
-            row && typeof row === 'object' && !Array.isArray(row)
-              ? (row as Record<string, unknown>)
-              : {};
-          return { ...base, trace_id: null };
-        });
-      }
+    const withTrace = await buildQuery(selectWithTraceId);
+    if (withTrace.error && /trace_id/i.test(withTrace.error.message)) {
+      const compat = await buildQuery(selectCompat);
+      if (compat.error) throw compat.error;
+      const compatTasks = Array.isArray(compat.data)
+        ? compat.data.map((row) => {
+            const base =
+              row && typeof row === 'object' && !Array.isArray(row)
+                ? (row as Record<string, unknown>)
+                : {};
+            return { ...base, trace_id: null };
+          })
+        : [];
+      return NextResponse.json({
+        ok: true,
+        actorUserId: admin.userId,
+        tasks: compatTasks,
+      });
     }
-    if (error) throw error;
+    if (withTrace.error) throw withTrace.error;
 
     return NextResponse.json({
       ok: true,
       actorUserId: admin.userId,
-      tasks: data ?? [],
+      tasks: withTrace.data ?? [],
     });
   } catch (error) {
     return NextResponse.json(
