@@ -47,6 +47,7 @@ export default function AgentAdminPage() {
   const [selectedTraceLoading, setSelectedTraceLoading] = useState(false);
   const [selectedTraceError, setSelectedTraceError] = useState<string | null>(null);
   const [accessMode, setAccessMode] = useState<'allowlist' | 'open_access' | null>(null);
+  const [actorUserId, setActorUserId] = useState<string | null>(null);
   const [safeActionsAllowed, setSafeActionsAllowed] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -135,6 +136,7 @@ export default function AgentAdminPage() {
       ]);
       setOverview(overviewRes);
       setAccessMode(overviewRes.actorAccessMode ?? 'allowlist');
+      setActorUserId(typeof overviewRes.actorUserId === 'string' ? overviewRes.actorUserId : null);
       setSafeActionsAllowed(overviewRes.safeActionsAllowed !== false);
       setTasks(Array.isArray(queueRes.tasks) ? queueRes.tasks : []);
       setTraces(Array.isArray(tracesRes.traces) ? tracesRes.traces : []);
@@ -147,6 +149,7 @@ export default function AgentAdminPage() {
     } catch (e) {
       const message = e instanceof Error ? e.message : 'Failed to load admin data';
       setAccessMode(null);
+      setActorUserId(null);
       setSafeActionsAllowed(false);
       if (message.includes('admin_allowlist_not_configured')) {
         setError('Admin allowlist is not configured. Set AGENT_ADMIN_ALLOWLIST_USER_IDS to access this page.');
@@ -265,8 +268,9 @@ export default function AgentAdminPage() {
 
         {accessMode === 'open_access' && (
           <div className="rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-500/50 dark:bg-amber-500/10 dark:text-amber-100">
-            Authenticated open access is active. Read views are open to signed-in users; safe actions still require
-            allowlist membership.
+            {actorUserId === 'anonymous'
+              ? 'Public read access is active. Anyone can view observability data; safe actions still require allowlist membership.'
+              : 'Authenticated open access is active. Read views are open to signed-in users; safe actions still require allowlist membership.'}
           </div>
         )}
 

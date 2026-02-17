@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAgentAdminUserId } from '@/lib/agents/admin/auth';
 import { getAdminSupabaseClient } from '@/lib/agents/admin/supabase-admin';
+import { isMissingColumnError } from '@/lib/agents/admin/supabase-errors';
 
 export const runtime = 'nodejs';
 
@@ -51,7 +52,7 @@ export async function GET(req: NextRequest) {
       'id,room,task,status,priority,attempt,error,request_id,resource_keys,lease_expires_at,created_at,updated_at';
 
     const withTrace = await buildQuery(selectWithTraceId);
-    if (withTrace.error && /trace_id/i.test(withTrace.error.message)) {
+    if (withTrace.error && isMissingColumnError(withTrace.error, 'trace_id')) {
       const compat = await buildQuery(selectCompat);
       if (compat.error) throw compat.error;
       const compatTasks = Array.isArray(compat.data)

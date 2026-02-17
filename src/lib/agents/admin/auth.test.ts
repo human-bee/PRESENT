@@ -11,6 +11,7 @@ describe('agent admin auth', () => {
     resolveRequestUserMock.mockReset();
     delete process.env.AGENT_ADMIN_ALLOWLIST_USER_IDS;
     delete process.env.AGENT_ADMIN_AUTHENTICATED_OPEN_ACCESS;
+    delete process.env.AGENT_ADMIN_PUBLIC_READ_ACCESS;
   });
 
   it('returns unauthorized when no session user exists', async () => {
@@ -38,6 +39,15 @@ describe('agent admin auth', () => {
     const result = await requireAgentAdminUserId(fakeRequest);
 
     expect(result).toEqual({ ok: true, userId: 'user-1', mode: 'open_access' });
+  });
+
+  it('returns open-access mode when public-read-access is enabled without a session', async () => {
+    resolveRequestUserMock.mockResolvedValue(null);
+    process.env.AGENT_ADMIN_PUBLIC_READ_ACCESS = 'true';
+    const { requireAgentAdminUserId } = await import('@/lib/agents/admin/auth');
+    const result = await requireAgentAdminUserId(fakeRequest);
+
+    expect(result).toEqual({ ok: true, userId: 'anonymous', mode: 'open_access' });
   });
 
   it('returns forbidden when user is not in allowlist', async () => {
@@ -85,5 +95,14 @@ describe('agent admin auth', () => {
     const result = await requireAgentAdminActionUserId(fakeRequest);
 
     expect(result).toEqual({ ok: true, userId: 'user-3', mode: 'allowlist' });
+  });
+
+  it('still requires a signed-in user for safe actions when public read access is enabled', async () => {
+    resolveRequestUserMock.mockResolvedValue(null);
+    process.env.AGENT_ADMIN_PUBLIC_READ_ACCESS = 'true';
+    const { requireAgentAdminActionUserId } = await import('@/lib/agents/admin/auth');
+    const result = await requireAgentAdminActionUserId(fakeRequest);
+
+    expect(result).toEqual({ ok: false, status: 401, error: 'unauthorized' });
   });
 });

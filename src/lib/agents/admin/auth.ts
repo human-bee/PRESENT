@@ -16,6 +16,10 @@ export function isAgentAdminAuthenticatedOpenAccessEnabled(): boolean {
   return getBooleanFlag(process.env.AGENT_ADMIN_AUTHENTICATED_OPEN_ACCESS, false);
 }
 
+export function isAgentAdminPublicReadAccessEnabled(): boolean {
+  return getBooleanFlag(process.env.AGENT_ADMIN_PUBLIC_READ_ACCESS, false);
+}
+
 const isAllowlistedUser = (allowlist: Set<string>, userId: string, email: string | null): boolean => {
   const allowedById = allowlist.has(userId.toLowerCase());
   const allowedByEmail =
@@ -29,6 +33,9 @@ async function requireAgentAdminUser(
 ): Promise<AgentAdminAuthResult> {
   const user = await resolveRequestUser(req);
   if (!user?.id) {
+    if (options.allowOpenAccess && isAgentAdminPublicReadAccessEnabled()) {
+      return { ok: true, userId: 'anonymous', mode: 'open_access' };
+    }
     return { ok: false, status: 401, error: 'unauthorized' };
   }
 
