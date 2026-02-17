@@ -141,4 +141,57 @@ describe('AgentTaskQueue enqueue dedupe behavior', () => {
     expect(harness.queries[0]?.in).toHaveBeenCalledWith('status', ['queued', 'running']);
     expect(harness.queries[3]?.in).not.toHaveBeenCalledWith('status', ['queued', 'running']);
   });
+
+  test('retries insert without trace_id when trace_id column is missing', async () => {
+    const harness = createHarness();
+    harness.maybeSingleQueue.push({ data: null, error: null });
+    harness.singleQueue.push({
+      data: null,
+      error: {
+        code: 'PGRST204',
+        message: "Could not find the 'trace_id' column of 'agent_tasks' in the schema cache",
+      },
+    });
+    harness.singleQueue.push({
+      data: {
+        id: 'task-retry-success',
+        room: 'room-1',
+        task: 'fairy.intent',
+        params: {} as JsonObject,
+        status: 'queued',
+        priority: 0,
+        run_at: null,
+        attempt: 0,
+        error: null,
+        request_id: 'req-retry',
+        dedupe_key: null,
+        resource_keys: ['room:room-1'],
+        lease_token: null,
+        lease_expires_at: null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        result: null,
+      },
+      error: null,
+    });
+
+    const { AgentTaskQueue } = await import('@/lib/agents/shared/queue');
+    const queue = new AgentTaskQueue({ url: 'http://localhost:54321', serviceRoleKey: 'test-key' });
+    const result = await queue.enqueueTask({
+      room: 'room-1',
+      task: 'fairy.intent',
+      params: { room: 'room-1', id: 'req-retry' },
+      requestId: 'req-retry',
+    });
+
+    expect(result?.id).toBe('task-retry-success');
+    expect((result as any)?.trace_id).toBeNull();
+    expect(harness.queries).toHaveLength(4);
+    expect(harness.queries[2]?.insert).toHaveBeenCalledWith(
+      expect.objectContaining({ trace_id: expect.any(String) }),
+    );
+    expect(harness.queries[3]?.insert).toHaveBeenCalledWith(
+      expect.not.objectContaining({ trace_id: expect.anything() }),
+    );
+  });
 });

@@ -88,6 +88,28 @@ const deriveProviderFromModel = (model: unknown): ModelKeyProvider | null => {
   return null;
 };
 
+const summarizeQueueError = (error: unknown): string => {
+  if (error instanceof Error && typeof error.message === 'string' && error.message.trim()) {
+    return error.message.trim();
+  }
+  if (error && typeof error === 'object') {
+    const record = error as Record<string, unknown>;
+    const parts = ['code', 'message', 'details', 'hint']
+      .map((key) => {
+        const value = record[key];
+        return typeof value === 'string' && value.trim() ? value.trim() : null;
+      })
+      .filter((value): value is string => Boolean(value));
+    if (parts.length > 0) return parts.join(' | ');
+    try {
+      return JSON.stringify(record);
+    } catch {
+      // fall through to generic cast
+    }
+  }
+  return String(error);
+};
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
@@ -312,7 +334,7 @@ export async function POST(req: NextRequest) {
         { status: 202 },
       );
     } catch (error) {
-      const msg = error instanceof Error ? error.message : String(error);
+      const msg = summarizeQueueError(error);
       logger.warn('queue enqueue failed, falling back to direct run', { error: msg });
 
       await recordAgentTraceEvent({
