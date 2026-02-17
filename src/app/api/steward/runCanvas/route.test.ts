@@ -129,6 +129,34 @@ describe('/api/steward/runCanvas', () => {
     expect(runCanvasStewardMock).not.toHaveBeenCalled();
   });
 
+  it('records structured queue error text instead of object cast noise', async () => {
+    enqueueTaskMock.mockRejectedValueOnce({
+      code: 'PGRST204',
+      message: "Could not find the 'trace_id' column in schema cache",
+      details: 'agent_tasks.trace_id missing',
+    });
+    const POST = await loadPost({ queueFallback: false, byok: false });
+    const request = new Request('http://localhost/api/steward/runCanvas', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        room: 'demo-room',
+        task: 'fairy.intent',
+        message: 'draw bunny',
+      }),
+    });
+
+    const response = await POST(toNextRequest(request));
+    expect(response.status).toBe(503);
+
+    const queueErrorCall = recordAgentTraceEventMock.mock.calls.find(
+      (call) => call?.[0]?.stage === 'fallback',
+    );
+    expect(queueErrorCall?.[0]?.status).toBe('queue_error');
+    expect(String(queueErrorCall?.[0]?.payload?.reason || '')).toContain('trace_id');
+    expect(String(queueErrorCall?.[0]?.payload?.reason || '')).not.toContain('[object Object]');
+  });
+
   it('executes direct fallback when queue is unavailable and fallback is enabled', async () => {
     enqueueTaskMock.mockRejectedValueOnce(new Error('queue down'));
     const POST = await loadPost({ queueFallback: true, byok: false });

@@ -68,6 +68,22 @@ function createSupabaseClient(options?: QueueClientOptions): SupabaseClient {
 const logger = createLogger('agents:queue');
 const ACTIVE_DEDUPE_STATUSES: AgentTaskStatus[] = ['queued', 'running'];
 
+const readErrorText = (error: unknown, key: 'message' | 'details' | 'hint' | 'code'): string => {
+  if (!error || typeof error !== 'object') return '';
+  const value = (error as Record<string, unknown>)[key];
+  if (typeof value !== 'string') return '';
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : '';
+};
+
+const isMissingTraceIdColumnError = (error: unknown): boolean => {
+  const message = readErrorText(error, 'message');
+  const details = readErrorText(error, 'details');
+  const hint = readErrorText(error, 'hint');
+  const combined = `${message} ${details} ${hint}`.toLowerCase();
+  return combined.includes('trace_id') && (combined.includes('column') || combined.includes('schema cache'));
+};
+
 export class AgentTaskQueue {
   private readonly supabase: SupabaseClient;
 
@@ -250,23 +266,51 @@ export class AgentTaskQueue {
         ? correlation.traceId.trim()
         : null;
 
-    const { data, error } = await this.supabase
+    const baseInsertPayload = {
+      room,
+      task,
+      params,
+      request_id: resolvedRequestId ?? null,
+      dedupe_key: resolvedDedupeKey ?? null,
+      resource_keys: normalizedResourceKeys,
+      priority,
+      run_at: runAt ? runAt.toISOString() : null,
+      created_at: nowIso,
+      updated_at: nowIso,
+    };
+
+    let insertResult = await this.supabase
       .from('agent_tasks')
       .insert({
-        room,
-        task,
-        params,
-        request_id: resolvedRequestId ?? null,
+        ...baseInsertPayload,
         trace_id: resolvedTraceId,
-        dedupe_key: resolvedDedupeKey ?? null,
-        resource_keys: normalizedResourceKeys,
-        priority,
-        run_at: runAt ? runAt.toISOString() : null,
-        created_at: nowIso,
-        updated_at: nowIso,
       })
       .select()
       .single();
+
+    if (insertResult.error && isMissingTraceIdColumnError(insertResult.error)) {
+      logger.warn('agent_tasks.trace_id unavailable; retrying enqueue without trace_id', {
+        room,
+        task,
+        requestId: resolvedRequestId,
+      });
+      insertResult = await this.supabase
+        .from('agent_tasks')
+        .insert(baseInsertPayload)
+        .select()
+        .single();
+    }
+
+    const data = insertResult.data
+      ? ({
+          ...(insertResult.data as Record<string, unknown>),
+          trace_id:
+            typeof (insertResult.data as Record<string, unknown>).trace_id === 'undefined'
+              ? null
+              : (insertResult.data as Record<string, unknown>).trace_id,
+        } as AgentTask)
+      : null;
+    const { error } = insertResult;
 
     if (error) {
       if (error.code === '23505') {
