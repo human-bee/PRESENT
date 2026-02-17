@@ -54,7 +54,13 @@ export async function GET(req: NextRequest) {
     if (error && /trace_id/i.test(error.message)) {
       ({ data, error } = await buildQuery(selectCompat));
       if (!error && Array.isArray(data)) {
-        data = data.map((row) => ({ ...row, trace_id: null }));
+        data = data.map((row) => {
+          const base =
+            row && typeof row === 'object' && !Array.isArray(row)
+              ? (row as Record<string, unknown>)
+              : {};
+          return { ...base, trace_id: null };
+        });
       }
     }
     if (error) throw error;
