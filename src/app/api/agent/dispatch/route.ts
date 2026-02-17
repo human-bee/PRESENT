@@ -36,19 +36,21 @@ export async function POST(request: NextRequest) {
       // Use official AgentDispatchClient from livekit-server-sdk
       const agentDispatchUrl = serverUrl.replace('wss://', 'https://').replace('ws://', 'http://');
       const client = new AgentDispatchClient(agentDispatchUrl, apiKey, apiSecret);
+      const agentName =
+        (process.env.LIVEKIT_VOICE_AGENT_NAME || process.env.LIVEKIT_AGENT_NAME || 'voice-agent').trim();
       logger.info('creating agent dispatch', {
         agentDispatchUrl,
         roomName: normalizedRoomName,
-        agentName: 'voice-agent',
+        agentName,
       });
-      const dispatch = await client.createDispatch(normalizedRoomName, 'voice-agent', {
+      const dispatch = await client.createDispatch(normalizedRoomName, agentName, {
         metadata: JSON.stringify({ dispatchedAt: Date.now(), reason: 'manual_dispatch' }),
       });
       logger.info('agent dispatch succeeded', { roomName: normalizedRoomName });
       return NextResponse.json({
         success: true,
         dispatch,
-        agentName: 'voice-agent',
+        agentName,
         room: normalizedRoomName,
       });
     } catch (dispatchError) {

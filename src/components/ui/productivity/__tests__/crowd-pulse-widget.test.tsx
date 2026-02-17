@@ -81,6 +81,21 @@ describe('CrowdPulseWidget question ledger', () => {
     expect(renderedQuestionText.length).toBeGreaterThanOrEqual(2);
   });
 
+  it('hydrates initial activeQuestion into the question queue when questions are empty', () => {
+    render(
+      <CrowdPulseWidget
+        __custom_message_id="crowd-test-0"
+        title="Launch Readiness"
+        sensorEnabled={false}
+        activeQuestion="What blocks GA?"
+        questions={[]}
+      />,
+    );
+
+    const renderedQuestionText = screen.getAllByText('What blocks GA?');
+    expect(renderedQuestionText.length).toBeGreaterThanOrEqual(2);
+  });
+
   it('treats an explicit empty-string activeQuestion as a clear operation', () => {
     render(
       <CrowdPulseWidget
