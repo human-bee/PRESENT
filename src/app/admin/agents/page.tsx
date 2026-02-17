@@ -51,6 +51,7 @@ export default function AgentAdminPage() {
   const [pollingEnabled, setPollingEnabled] = useState(true);
   const [roomFilterDraft, setRoomFilterDraft] = useState('');
   const [roomFilter, setRoomFilter] = useState('');
+  const [traceFilterDraft, setTraceFilterDraft] = useState('');
   const selectedTraceIdRef = useRef<string | null>(null);
   const traceLoadRequestSeqRef = useRef(0);
 
@@ -105,6 +106,7 @@ export default function AgentAdminPage() {
     setSelectedTraceEvents([]);
     setSelectedTraceError(null);
     setSelectedTraceLoading(false);
+    setTraceFilterDraft('');
   }, []);
 
   const refresh = useCallback(async () => {
@@ -216,6 +218,30 @@ export default function AgentAdminPage() {
                 Clear
               </button>
             </form>
+            <form
+              className="flex items-center gap-2"
+              onSubmit={(event) => {
+                event.preventDefault();
+                const normalizedTraceId = traceFilterDraft.trim();
+                if (!normalizedTraceId) return;
+                void loadTrace(normalizedTraceId);
+              }}
+            >
+              <input
+                type="text"
+                value={traceFilterDraft}
+                onChange={(event) => setTraceFilterDraft(event.target.value)}
+                placeholder="Trace id"
+                className="w-56 rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-900"
+              />
+              <button
+                type="submit"
+                className="rounded border border-slate-300 bg-white px-3 py-2 text-xs text-slate-700 disabled:opacity-50"
+                disabled={loading || traceFilterDraft.trim().length === 0}
+              >
+                Open Trace
+              </button>
+            </form>
             <button
               onClick={() => void refresh()}
               disabled={loading}
@@ -241,11 +267,21 @@ export default function AgentAdminPage() {
         <AgentOpsOverview overview={overview} />
 
         <div className="grid gap-4 xl:grid-cols-2">
-          <AgentQueueTable tasks={tasks} onSelectTask={setSelectedTask} />
+          <AgentQueueTable
+            tasks={tasks}
+            onSelectTask={(task) => {
+              setSelectedTask(task);
+              if (task.trace_id) {
+                setTraceFilterDraft(task.trace_id);
+                void loadTrace(task.trace_id);
+              }
+            }}
+          />
           <AgentTraceTimeline
             traces={traces}
             selectedTraceId={selectedTraceId}
             onSelectTraceId={(traceId) => {
+              setTraceFilterDraft(traceId);
               void loadTrace(traceId);
             }}
           />

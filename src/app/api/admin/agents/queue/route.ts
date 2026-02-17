@@ -11,6 +11,14 @@ const readOptional = (searchParams: URLSearchParams, key: string): string | unde
   return trimmed.length > 0 ? trimmed : undefined;
 };
 
+const parseLimit = (searchParams: URLSearchParams): number => {
+  const raw = searchParams.get('limit');
+  if (!raw) return 200;
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed)) return 200;
+  return Math.max(1, Math.min(500, Math.floor(parsed)));
+};
+
 export async function GET(req: NextRequest) {
   const admin = await requireAgentAdminUserId(req);
   if (!admin.ok) {
@@ -21,14 +29,14 @@ export async function GET(req: NextRequest) {
   const room = readOptional(searchParams, 'room');
   const status = readOptional(searchParams, 'status');
   const task = readOptional(searchParams, 'task');
-  const limit = Math.max(1, Math.min(500, Number(searchParams.get('limit') ?? 200)));
+  const limit = parseLimit(searchParams);
 
   try {
     const db = getAdminSupabaseClient();
     let query = db
       .from('agent_tasks')
       .select(
-        'id,room,task,status,priority,attempt,error,request_id,resource_keys,lease_expires_at,created_at,updated_at',
+        'id,room,task,status,priority,attempt,error,request_id,trace_id,resource_keys,lease_expires_at,created_at,updated_at',
       )
       .order('created_at', { ascending: false })
       .limit(limit);
