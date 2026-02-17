@@ -20,6 +20,18 @@ export function isAgentAdminPublicReadAccessEnabled(): boolean {
   return getBooleanFlag(process.env.AGENT_ADMIN_PUBLIC_READ_ACCESS, false);
 }
 
+export function isAgentAdminDetailSignedInRequiredEnabled(): boolean {
+  return getBooleanFlag(process.env.AGENT_ADMIN_DETAIL_SIGNED_IN_REQUIRED, true);
+}
+
+export function isAgentAdminDetailGlobalScopeEnabled(): boolean {
+  return getBooleanFlag(process.env.AGENT_ADMIN_DETAIL_GLOBAL_SCOPE, true);
+}
+
+export function isAgentAdminDetailMaskDefaultEnabled(): boolean {
+  return getBooleanFlag(process.env.AGENT_ADMIN_DETAIL_MASK_DEFAULT, true);
+}
+
 const isAllowlistedUser = (allowlist: Set<string>, userId: string, email: string | null): boolean => {
   const allowedById = allowlist.has(userId.toLowerCase());
   const allowedByEmail =
@@ -60,6 +72,17 @@ export async function requireAgentAdminUserId(
   req: NextRequest,
 ): Promise<AgentAdminAuthResult> {
   return requireAgentAdminUser(req, { allowOpenAccess: true });
+}
+
+export async function requireAgentAdminSignedInUserId(
+  req: NextRequest,
+): Promise<AgentAdminAuthResult> {
+  const result = await requireAgentAdminUser(req, { allowOpenAccess: true });
+  if (!result.ok) return result;
+  if (isAgentAdminDetailSignedInRequiredEnabled() && result.userId === 'anonymous') {
+    return { ok: false, status: 401, error: 'unauthorized' };
+  }
+  return result;
 }
 
 export async function requireAgentAdminActionUserId(
