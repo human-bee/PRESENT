@@ -20,7 +20,9 @@ import {
 } from './crowd-pulse-hand-utils';
 import { WidgetFrame } from './widget-frame';
 
-const STEWARD_METRICS_HOLD_MS = 15_000;
+const STEWARD_METRICS_HOLD_MS = 120_000;
+const SENSOR_DETECT_INTERVAL_MS = 240;
+const SENSOR_EMIT_INTERVAL_MS = 300;
 
 const normalizeStatus = (value: unknown): CrowdPulseState['status'] | undefined => {
   if (typeof value !== 'string') return undefined;
@@ -262,7 +264,7 @@ export default function CrowdPulseWidget(props: CrowdPulseWidgetProps) {
         const loop = () => {
           if (!mounted || !video || !handLandmarker) return;
           const now = performance.now();
-          if (now - lastDetectRef.current < 100) {
+          if (now - lastDetectRef.current < SENSOR_DETECT_INTERVAL_MS) {
             animationRef.current = requestAnimationFrame(loop);
             return;
           }
@@ -293,7 +295,7 @@ export default function CrowdPulseWidget(props: CrowdPulseWidgetProps) {
           const metrics = computeCrowdMetrics(landmarks, handedness);
           if (metrics.handCount > peakRef.current) peakRef.current = metrics.handCount;
 
-          if (now - lastEmitRef.current > 120) {
+          if (now - lastEmitRef.current > SENSOR_EMIT_INTERVAL_MS) {
             if (Date.now() < stewardMetricsHoldUntilRef.current) {
               animationRef.current = requestAnimationFrame(loop);
               return;

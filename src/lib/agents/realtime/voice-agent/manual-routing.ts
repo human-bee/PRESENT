@@ -9,6 +9,46 @@ export type ManualRouteDecision = z.infer<typeof routerDecisionSchema>;
 
 export function createManualInputRouter() {
   let routerModelCache: any = null;
+  const localHeuristicRoute = (text: string): ManualRouteDecision | null => {
+    const normalized = text.trim().toLowerCase();
+    if (!normalized) return null;
+    const canvasKeywords = [
+      'draw',
+      'sketch',
+      'illustrate',
+      'canvas',
+      'roadmap',
+      'diagram',
+      'sticky note',
+      'sticky',
+      'shape',
+      'arrow',
+      'rectangle',
+      'circle',
+      'ellipse',
+      'line',
+      'connect',
+      'focus',
+      'zoom',
+      'move',
+      'align',
+    ];
+    const nonCanvasKeywords = [
+      'scorecard',
+      'debate',
+      'crowd pulse',
+      'timer',
+      'research',
+      'kanban',
+      'infographic',
+    ];
+    const hasCanvasKeyword = canvasKeywords.some((keyword) => normalized.includes(keyword));
+    const hasNonCanvasKeyword = nonCanvasKeywords.some((keyword) => normalized.includes(keyword));
+    if (hasCanvasKeyword && !hasNonCanvasKeyword) {
+      return { route: 'canvas', message: text.trim() };
+    }
+    return { route: 'none' };
+  };
 
   const getRouterModel = async () => {
     if (routerModelCache) return routerModelCache;
@@ -23,7 +63,7 @@ export function createManualInputRouter() {
 
   return async (text: string): Promise<ManualRouteDecision | null> => {
     const model = await getRouterModel();
-    if (!model) return null;
+    if (!model) return localHeuristicRoute(text);
 
     const system = [
       'You are a routing assistant for a real-time UI voice agent.',
@@ -44,7 +84,7 @@ export function createManualInputRouter() {
     });
 
     const parsed = routerDecisionSchema.safeParse(object);
-    if (!parsed.success) return null;
+    if (!parsed.success) return localHeuristicRoute(text);
     return parsed.data;
   };
 }

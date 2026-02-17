@@ -1105,13 +1105,17 @@ Your only output is function calls. Never use plain text unless absolutely neces
       if (!trimmed) return text;
       pruneStalePendingMutations();
       const now = Date.now();
-      const dispatchRecently = now - mutationState.lastDispatchedAt <= MUTATION_CONFIRMATION_WINDOW_MS;
-      if (!dispatchRecently) {
-        return text;
-      }
       const likelyMutationAck =
         OPTIMISTIC_CONFIRMATION_PATTERN.test(trimmed) || MUTATION_CONTEXT_PATTERN.test(trimmed);
       if (!likelyMutationAck) {
+        return text;
+      }
+      const dispatchRecently = now - mutationState.lastDispatchedAt <= MUTATION_CONFIRMATION_WINDOW_MS;
+      const appliedRecently = now - mutationState.lastAppliedAt <= MUTATION_CONFIRMATION_WINDOW_MS;
+      const failedRecently = now - mutationState.lastFailedAt <= MUTATION_CONFIRMATION_WINDOW_MS;
+      const hasRecentMutationContext =
+        dispatchRecently || appliedRecently || failedRecently || pendingMutationDispatches.size > 0;
+      if (!hasRecentMutationContext) {
         return text;
       }
 
@@ -1129,10 +1133,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
         return `I could not apply that change yet${reason}. Please retry or use /canvas as a direct fallback.`;
       }
 
-      const appliedAfterDispatch =
-        mutationState.lastAppliedAt >= mutationState.lastDispatchedAt &&
-        now - mutationState.lastAppliedAt <= MUTATION_CONFIRMATION_WINDOW_MS;
-      if (!appliedAfterDispatch) {
+      if (!appliedRecently || (dispatchRecently && mutationState.lastAppliedAt < mutationState.lastDispatchedAt)) {
         return 'Request received. It is still in progress; I will confirm when apply is complete.';
       }
       return text;
@@ -2628,38 +2629,70 @@ Your only output is function calls. Never use plain text unless absolutely neces
         });
       } catch { }
 
+      const trimmed = text.trim();
+      const lower = trimmed.toLowerCase();
+      const room = roomKey() || job.room?.name || 'room';
+
       // Explicit "Canvas:" prefix routes directly to the Canvas steward (no extra LLM roundtrip).
       // This is an opt-in command style used by the demo harness and the transcript UI hint.
-      if (isManual) {
-        const trimmed = text.trim();
-        const lower = trimmed.toLowerCase();
-        const isCanvasPrefixed = lower.startsWith('canvas:') || lower.startsWith('/canvas');
-        if (isCanvasPrefixed) {
-          const message = trimmed.includes(':')
-            ? trimmed.slice(trimmed.indexOf(':') + 1).trim()
-            : lower.startsWith('/canvas')
-              ? trimmed.slice('/canvas'.length).trim()
-              : trimmed;
-          const room = roomKey() || job.room?.name || 'room';
-          await sendToolCall('dispatch_to_conductor', {
-            task: 'fairy.intent',
-            params: {
-              id: randomUUID(),
-              room,
-              message: message || trimmed,
-              source: 'voice',
-            },
-          });
-          return;
-        }
+      const isCanvasPrefixed = lower.startsWith('canvas:') || lower.startsWith('/canvas');
+      if (isCanvasPrefixed) {
+        const message = trimmed.includes(':')
+          ? trimmed.slice(trimmed.indexOf(':') + 1).trim()
+          : lower.startsWith('/canvas')
+            ? trimmed.slice('/canvas'.length).trim()
+            : trimmed;
+        await sendToolCall('dispatch_to_conductor', {
+          task: 'fairy.intent',
+          params: {
+            id: randomUUID(),
+            room,
+            message: message || trimmed,
+            source: 'voice',
+          },
+        });
+        return;
+      }
 
-        // Demo-lap fast paths: for explicit, high-confidence commands we bypass the LLM to avoid
-        // timeouts and reduce accidental duplicate tool calls. These are intentionally narrow.
-        const looksLikeTimerCommand =
-          (lower.startsWith('start') || lower.startsWith('create')) &&
-          lower.includes('timer') &&
-          (lower.includes('minute') || lower.includes('min'));
-        if (looksLikeTimerCommand) {
+      // Demo-lap fast paths: for explicit, high-confidence commands we bypass the LLM to avoid
+      // timeouts and reduce accidental duplicate tool calls. These are intentionally narrow.
+      const looksLikeTimerCommand =
+        (lower.startsWith('start') || lower.startsWith('create')) &&
+        lower.includes('timer') &&
+        (lower.includes('minute') || lower.includes('min'));
+      if (looksLikeTimerCommand) {
+        const tokens = lower.split(' ').filter(Boolean);
+        let minutes: number | undefined;
+        for (let i = 0; i < tokens.length; i += 1) {
+          const token = tokens[i];
+          if (token === 'minute' || token === 'minutes' || token === 'min' || token === 'mins') {
+            const prev = tokens[i - 1] || '';
+            const parsed = Number(prev);
+            if (Number.isFinite(parsed) && parsed > 0) {
+              minutes = Math.max(1, Math.round(parsed));
+            }
+            break;
+          }
+        }
+        const initialMinutes = minutes ?? 5;
+        await (toolContext as any).create_component.execute({
+          type: 'RetroTimerEnhanced',
+          spec: { initialMinutes, initialSeconds: 0, autoStart: true },
+        });
+        return;
+      }
+
+      const looksLikeTimerUpdate =
+        lower.includes('timer') &&
+        (lower.includes('pause') ||
+          lower.includes('stop') ||
+          lower.includes('resume') ||
+          lower.includes('reset') ||
+          lower.includes('set'));
+      if (looksLikeTimerUpdate) {
+        const timerId =
+          getLastComponentForType('RetroTimerEnhanced') || getLastComponentForType('RetroTimer');
+        if (timerId) {
           const tokens = lower.split(' ').filter(Boolean);
           let minutes: number | undefined;
           for (let i = 0; i < tokens.length; i += 1) {
@@ -2673,132 +2706,148 @@ Your only output is function calls. Never use plain text unless absolutely neces
               break;
             }
           }
-          const initialMinutes = minutes ?? 5;
-          await (toolContext as any).create_component.execute({
-            type: 'RetroTimerEnhanced',
-            spec: { initialMinutes, initialSeconds: 0, autoStart: true },
-          });
-          return;
-        }
-
-        const looksLikeTimerUpdate =
-          lower.includes('timer') &&
-          (lower.includes('pause') ||
-            lower.includes('stop') ||
-            lower.includes('resume') ||
-            lower.includes('reset') ||
-            lower.includes('set'));
-        if (looksLikeTimerUpdate) {
-          const timerId =
-            getLastComponentForType('RetroTimerEnhanced') || getLastComponentForType('RetroTimer');
-          if (timerId) {
-            const tokens = lower.split(' ').filter(Boolean);
-            let minutes: number | undefined;
-            for (let i = 0; i < tokens.length; i += 1) {
-              const token = tokens[i];
-              if (token === 'minute' || token === 'minutes' || token === 'min' || token === 'mins') {
-                const prev = tokens[i - 1] || '';
-                const parsed = Number(prev);
-                if (Number.isFinite(parsed) && parsed > 0) {
-                  minutes = Math.max(1, Math.round(parsed));
-                }
-                break;
-              }
-            }
-            const shouldPause = lower.includes('pause') || lower.includes('stop');
-            const shouldResume = lower.includes('resume') || lower.includes('start');
-            const shouldReset = lower.includes('reset') || lower.includes('set');
-            const patch: Record<string, unknown> = {};
-            if (typeof minutes === 'number' && Number.isFinite(minutes)) {
-              const durationSeconds = Math.max(1, Math.round(minutes)) * 60;
-              patch.configuredDuration = durationSeconds;
-              patch.timeLeft = durationSeconds;
-            }
-            if (shouldPause) patch.isRunning = false;
-            if (shouldResume && !shouldPause) patch.isRunning = true;
-            if (shouldReset && !('isRunning' in patch)) {
-              patch.isRunning = false;
-            }
-            await (toolContext as any).update_component.execute({
-              componentId: timerId,
-              patch,
-            });
-            return;
+          const shouldPause = lower.includes('pause') || lower.includes('stop');
+          const shouldResume = lower.includes('resume') || lower.includes('start');
+          const shouldReset = lower.includes('reset') || lower.includes('set');
+          const patch: Record<string, unknown> = {};
+          if (typeof minutes === 'number' && Number.isFinite(minutes)) {
+            const durationSeconds = Math.max(1, Math.round(minutes)) * 60;
+            patch.configuredDuration = durationSeconds;
+            patch.timeLeft = durationSeconds;
           }
-        }
-
-        const looksLikeLinearKanbanCommand =
-          (lower.startsWith('create') || lower.startsWith('add') || lower.startsWith('open')) &&
-          lower.includes('linear') &&
-          lower.includes('kanban');
-        if (looksLikeLinearKanbanCommand) {
-          await (toolContext as any).create_component.execute({ type: 'LinearKanbanBoard' });
-          return;
-        }
-
-        const looksLikeScorecardCommand =
-          (lower.startsWith('start') || lower.startsWith('create') || lower.startsWith('open')) &&
-          lower.includes('debate') &&
-          (lower.includes('scorecard') || lower.includes('analysis'));
-        if (looksLikeScorecardCommand) {
-          const topic = inferScorecardTopicFromText(trimmed) ?? undefined;
-          await (toolContext as any).create_component.execute({
-            type: 'DebateScorecard',
-            ...(topic ? { spec: { topic } } : {}),
-          });
-          return;
-        }
-
-        const looksLikeInfographicCommand = lower.includes('infographic') && (lower.startsWith('generate') || lower.startsWith('create'));
-        if (looksLikeInfographicCommand) {
-          await (toolContext as any).create_infographic.execute({});
-          return;
-        }
-
-        const debateLinePrefixes = [
-          'affirmative:',
-          'negative:',
-          'affirmative rebuttal:',
-          'negative rebuttal:',
-          'judge:',
-        ];
-        const looksLikeDebateLine = debateLinePrefixes.some((prefix) => lower.startsWith(prefix));
-        if (looksLikeDebateLine && activeScorecard?.componentId) {
-          await (toolContext as any).dispatch_to_conductor.execute({
-            task: 'scorecard.run',
-            params: {
-              componentId: activeScorecard.componentId,
-              prompt: trimmed,
-              topic: activeScorecard.topic,
-            },
-          });
-          return;
-        }
-
-        const looksLikeFactCheckCommand =
-          lower.includes('fact-check') ||
-          lower.includes('fact check') ||
-          lower.startsWith('factcheck') ||
-          lower.includes('add sources') ||
-          lower.includes('verify the') ||
-          lower.includes('verify this');
-        if (looksLikeFactCheckCommand && activeScorecard?.componentId) {
-          await (toolContext as any).dispatch_to_conductor.execute({
-            task: 'scorecard.fact_check',
-            params: {
-              componentId: activeScorecard.componentId,
-              summary: trimmed.slice(0, 240),
-              topic: activeScorecard.topic,
-            },
+          if (shouldPause) patch.isRunning = false;
+          if (shouldResume && !shouldPause) patch.isRunning = true;
+          if (shouldReset && !('isRunning' in patch)) {
+            patch.isRunning = false;
+          }
+          await (toolContext as any).update_component.execute({
+            componentId: timerId,
+            patch,
           });
           return;
         }
       }
+
+      const looksLikeLinearKanbanCommand =
+        (lower.startsWith('create') || lower.startsWith('add') || lower.startsWith('open')) &&
+        lower.includes('linear') &&
+        lower.includes('kanban');
+      if (looksLikeLinearKanbanCommand) {
+        await (toolContext as any).create_component.execute({ type: 'LinearKanbanBoard' });
+        return;
+      }
+
+      const looksLikeScorecardCommand =
+        (lower.startsWith('start') || lower.startsWith('create') || lower.startsWith('open')) &&
+        lower.includes('debate') &&
+        (lower.includes('scorecard') || lower.includes('analysis'));
+      if (looksLikeScorecardCommand) {
+        const topic = inferScorecardTopicFromText(trimmed) ?? undefined;
+        await (toolContext as any).create_component.execute({
+          type: 'DebateScorecard',
+          ...(topic ? { spec: { topic } } : {}),
+        });
+        return;
+      }
+
+      const looksLikeInfographicCommand =
+        lower.includes('infographic') && (lower.startsWith('generate') || lower.startsWith('create'));
+      if (looksLikeInfographicCommand) {
+        await (toolContext as any).create_infographic.execute({});
+        return;
+      }
+
+      const looksLikeCanvasDrawCommand =
+        /\b(draw|sketch|illustrate|diagram|roadmap|sticky(?:\s+note)?|shape|arrow|rectangle|circle|ellipse|line|text box|callout)\b/.test(lower) &&
+        !/\b(scorecard|debate|crowd\s*pulse|research|timer|kanban|infographic)\b/.test(lower);
+      if (looksLikeCanvasDrawCommand) {
+        await sendToolCall('dispatch_to_conductor', {
+          task: 'fairy.intent',
+          params: {
+            id: randomUUID(),
+            room,
+            message: trimmed,
+            source: 'voice',
+          },
+        });
+        return;
+      }
+
+      const debateLinePrefixes = [
+        'affirmative:',
+        'negative:',
+        'affirmative rebuttal:',
+        'negative rebuttal:',
+        'judge:',
+      ];
+      const looksLikeDebateLine = debateLinePrefixes.some((prefix) => lower.startsWith(prefix));
+      if (looksLikeDebateLine && activeScorecard?.componentId) {
+        await (toolContext as any).dispatch_to_conductor.execute({
+          task: 'scorecard.run',
+          params: {
+            componentId: activeScorecard.componentId,
+            prompt: trimmed,
+            topic: activeScorecard.topic,
+          },
+        });
+        return;
+      }
+
+      const looksLikeFactCheckCommand =
+        lower.includes('fact-check') ||
+        lower.includes('fact check') ||
+        lower.startsWith('factcheck') ||
+        lower.includes('add sources') ||
+        lower.includes('verify the') ||
+        lower.includes('verify this');
+      if (looksLikeFactCheckCommand && activeScorecard?.componentId) {
+        await (toolContext as any).dispatch_to_conductor.execute({
+          task: 'scorecard.fact_check',
+          params: {
+            componentId: activeScorecard.componentId,
+            summary: trimmed.slice(0, 240),
+            topic: activeScorecard.topic,
+          },
+        });
+        return;
+      }
+
+      const looksLikeScorecardMutation =
+        Boolean(activeScorecard?.componentId) &&
+        /\b(scorecard|claim|rebuttal|counterclaim|counter\s+claim|affirmative|negative|judge|verdict|argument)\b/.test(lower) &&
+        !looksLikeFactCheckCommand;
+      if (looksLikeScorecardMutation && activeScorecard?.componentId) {
+        await (toolContext as any).dispatch_to_conductor.execute({
+          task: 'scorecard.run',
+          params: {
+            componentId: activeScorecard.componentId,
+            prompt: trimmed,
+            topic: activeScorecard.topic,
+          },
+        });
+        return;
+      }
+
+      const looksLikeResearchCommand =
+        /\b(background research|do\s+(?:a\s+little\s+)?research|research this|find sources|look up|search the web)\b/.test(lower);
+      if (looksLikeResearchCommand) {
+        const inferredTopic = inferScorecardTopicFromText(trimmed);
+        const query = inferredTopic || activeScorecard?.topic || trimmed;
+        await sendToolCall('dispatch_to_conductor', {
+          task: 'search.run',
+          params: {
+            room,
+            query,
+            ...(activeScorecard?.topic ? { topic: activeScorecard.topic } : {}),
+          },
+        });
+        return;
+      }
+
       if (isManual && (process.env.VOICE_AGENT_ROUTER_ENABLED ?? 'true') !== 'false') {
         try {
           const routed = await routeManualInput(text);
           if (routed?.route === 'canvas') {
-            const room = roomKey() || job.room?.name || 'room';
             await sendToolCall('dispatch_to_conductor', {
               task: 'fairy.intent',
               params: {

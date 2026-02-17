@@ -1,6 +1,6 @@
 import type { NextRequest } from 'next/server';
 import { parseCsvFlag } from '@/lib/feature-flags';
-import { resolveRequestUserId } from '@/lib/supabase/server/resolve-request-user';
+import { resolveRequestUser } from '@/lib/supabase/server/resolve-request-user';
 
 export function getAgentAdminAllowlistUserIds(): string[] {
   return parseCsvFlag(process.env.AGENT_ADMIN_ALLOWLIST_USER_IDS);
@@ -9,16 +9,22 @@ export function getAgentAdminAllowlistUserIds(): string[] {
 export async function requireAgentAdminUserId(
   req: NextRequest,
 ): Promise<{ ok: true; userId: string } | { ok: false; status: number; error: string }> {
-  const userId = await resolveRequestUserId(req);
-  if (!userId) {
+  const user = await resolveRequestUser(req);
+  if (!user?.id) {
     return { ok: false, status: 401, error: 'unauthorized' };
   }
   const allowlist = getAgentAdminAllowlistUserIds();
   if (allowlist.length === 0) {
     return { ok: false, status: 403, error: 'admin_allowlist_not_configured' };
   }
-  if (!allowlist.includes(userId)) {
+  const normalizedAllowlist = new Set(allowlist.map((entry) => entry.trim().toLowerCase()));
+  const allowedById = normalizedAllowlist.has(user.id.toLowerCase());
+  const allowedByEmail =
+    typeof user.email === 'string' &&
+    user.email.trim().length > 0 &&
+    normalizedAllowlist.has(user.email.trim().toLowerCase());
+  if (!allowedById && !allowedByEmail) {
     return { ok: false, status: 403, error: 'forbidden' };
   }
-  return { ok: true, userId };
+  return { ok: true, userId: user.id };
 }
