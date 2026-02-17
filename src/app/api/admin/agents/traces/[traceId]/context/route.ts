@@ -161,7 +161,7 @@ async function loadTraceEvents(
       .order('updated_at', { ascending: true })
       .limit(2_000);
     if (fallbackError) throw fallbackError;
-    const fallbackEvents = buildTaskBackedTraceRows((fallbackRows ?? []) as AgentTaskTraceSourceRow[], {
+    const fallbackEvents = buildTaskBackedTraceRows((fallbackRows ?? []) as unknown as AgentTaskTraceSourceRow[], {
       order: 'asc',
     }).filter((row) => row.trace_id === traceId);
     return fallbackEvents.map((row) => ({
@@ -180,7 +180,7 @@ async function loadTraceEvents(
     }));
   }
   if (error) throw error;
-  return normalizeTraceRows((data ?? []) as TraceRow[]);
+  return normalizeTraceRows((data ?? []) as unknown as TraceRow[]);
 }
 
 async function loadTaskSnapshot(

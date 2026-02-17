@@ -192,7 +192,10 @@ export async function GET(req: NextRequest) {
     }
     if (withTrace.error) throw withTrace.error;
 
-    const enrichedTasks = await enrichWithTraceDiagnostics(db, (withTrace.data ?? []) as AgentTaskRow[]);
+    const withTraceRows = Array.isArray(withTrace.data)
+      ? (withTrace.data as unknown as AgentTaskRow[])
+      : [];
+    const enrichedTasks = await enrichWithTraceDiagnostics(db, withTraceRows);
 
     return NextResponse.json({
       ok: true,

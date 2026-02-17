@@ -107,21 +107,19 @@ export async function GET(req: NextRequest) {
     if (error) throw error;
 
     const enrichedTraces = (data ?? []).map((row) => {
+      const rowRecord =
+        row && typeof row === 'object' && !Array.isArray(row)
+          ? (row as unknown as Record<string, unknown>)
+          : {};
       const payload =
         row && typeof row === 'object' && !Array.isArray(row)
-          ? (row as Record<string, unknown>).payload
+          ? rowRecord.payload
           : null;
       const worker = extractWorkerIdentity(payload);
-      const status =
-        row && typeof row === 'object' && !Array.isArray(row)
-          ? (row as Record<string, unknown>).status
-          : null;
-      const stage =
-        row && typeof row === 'object' && !Array.isArray(row)
-          ? (row as Record<string, unknown>).stage
-          : null;
+      const status = rowRecord.status ?? null;
+      const stage = rowRecord.stage ?? null;
       return {
-        ...(row as Record<string, unknown>),
+        ...rowRecord,
         subsystem: classifyTraceSubsystem(typeof stage === 'string' ? stage : null),
         worker_id: worker.workerId,
         worker_host: worker.workerHost,

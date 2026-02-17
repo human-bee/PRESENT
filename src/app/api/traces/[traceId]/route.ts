@@ -57,7 +57,10 @@ export async function GET(
       if (taskError) {
         return NextResponse.json({ error: taskError.message }, { status: 500 });
       }
-      const fallbackEvents = buildTaskBackedTraceRows((taskData ?? []) as AgentTaskTraceSourceRow[], {
+      const fallbackRows = Array.isArray(taskData)
+        ? (taskData as unknown as AgentTaskTraceSourceRow[])
+        : [];
+      const fallbackEvents = buildTaskBackedTraceRows(fallbackRows, {
         order: 'asc',
       }).filter((row) => row.trace_id === normalizedTraceId);
       const enrichedFallbackEvents = fallbackEvents.map((row) => ({
@@ -77,21 +80,17 @@ export async function GET(
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
     const enrichedEvents = (data ?? []).map((row) => {
+      const rowRecord =
+        row && typeof row === 'object' && !Array.isArray(row)
+          ? (row as unknown as Record<string, unknown>)
+          : {};
       const payload =
-        row && typeof row === 'object' && !Array.isArray(row)
-          ? (row as Record<string, unknown>).payload
-          : null;
+        row && typeof row === 'object' && !Array.isArray(row) ? rowRecord.payload : null;
       const worker = extractWorkerIdentity(payload);
-      const stage =
-        row && typeof row === 'object' && !Array.isArray(row)
-          ? (row as Record<string, unknown>).stage
-          : null;
-      const status =
-        row && typeof row === 'object' && !Array.isArray(row)
-          ? (row as Record<string, unknown>).status
-          : null;
+      const stage = rowRecord.stage ?? null;
+      const status = rowRecord.status ?? null;
       return {
-        ...(row as Record<string, unknown>),
+        ...rowRecord,
         subsystem: classifyTraceSubsystem(typeof stage === 'string' ? stage : null),
         worker_id: worker.workerId,
         worker_host: worker.workerHost,
