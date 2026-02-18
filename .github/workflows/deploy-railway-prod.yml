@@ -1,0 +1,186 @@
+name: Deploy Railway Prod
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/lib/agents/**'
+      - 'scripts/start-service.sh'
+      - 'railway.toml'
+      - 'Dockerfile'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/deploy-railway-prod.yml'
+  workflow_dispatch:
+    inputs:
+      force_conductor:
+        description: 'Force deploy present-conductor'
+        required: false
+        default: false
+        type: boolean
+      force_realtime:
+        description: 'Force deploy present-realtime'
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-railway-prod-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  RAILWAY_PROJECT_ID: 98df8e65-3c11-452c-beb7-8fd0cb3754d3
+  RAILWAY_ENVIRONMENT: production
+  RAILWAY_CONDUCTOR_SERVICE: present-conductor
+  RAILWAY_REALTIME_SERVICE: present-realtime
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      deploy_conductor: ${{ steps.plan.outputs.deploy_conductor }}
+      deploy_realtime: ${{ steps.plan.outputs.deploy_realtime }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Detect changed paths
+        id: paths
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            agents:
+              - 'src/lib/agents/**'
+            shared:
+              - 'scripts/start-service.sh'
+              - 'railway.toml'
+              - 'Dockerfile'
+              - 'package.json'
+              - 'package-lock.json'
+              - 'src/lib/agents/shared/**'
+              - '.github/workflows/deploy-railway-prod.yml'
+            conductor:
+              - 'src/lib/agents/conductor/**'
+              - 'src/lib/agents/subagents/**'
+            realtime:
+              - 'src/lib/agents/realtime/**'
+
+      - name: Resolve deploy plan
+        id: plan
+        run: |
+          set -euo pipefail
+          deploy_conductor=false
+          deploy_realtime=false
+          is_dispatch_from_main=false
+
+          if [ "${{ github.event_name }}" != "workflow_dispatch" ] || [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            is_dispatch_from_main=true
+          fi
+
+          if [ "${{ steps.paths.outputs.shared }}" = "true" ] || \
+             [ "${{ steps.paths.outputs.conductor }}" = "true" ] || \
+             [ "${{ steps.paths.outputs.agents }}" = "true" ]; then
+            deploy_conductor=true
+          fi
+
+          if [ "${{ steps.paths.outputs.shared }}" = "true" ] || \
+             [ "${{ steps.paths.outputs.realtime }}" = "true" ] || \
+             [ "${{ steps.paths.outputs.agents }}" = "true" ]; then
+            deploy_realtime=true
+          fi
+
+          if [ "${{ github.event.inputs.force_conductor || 'false' }}" = "true" ]; then
+            deploy_conductor=true
+          fi
+
+          if [ "${{ github.event.inputs.force_realtime || 'false' }}" = "true" ]; then
+            deploy_realtime=true
+          fi
+
+          if [ "$is_dispatch_from_main" = false ]; then
+            deploy_conductor=false
+            deploy_realtime=false
+          fi
+
+          echo "deploy_conductor=$deploy_conductor" >> "$GITHUB_OUTPUT"
+          echo "deploy_realtime=$deploy_realtime" >> "$GITHUB_OUTPUT"
+          echo "deploy_conductor=$deploy_conductor"
+          echo "deploy_realtime=$deploy_realtime"
+
+  deploy-conductor:
+    runs-on: ubuntu-latest
+    needs: plan
+    if: needs.plan.outputs.deploy_conductor == 'true'
+    steps:
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install Railway CLI
+        run: npm install --global @railway/cli
+
+      - name: Redeploy present-conductor
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          TASK_IDLE_POLL_MS: ${{ vars.TASK_IDLE_POLL_MS || '500' }}
+          TASK_IDLE_POLL_MAX_MS: ${{ vars.TASK_IDLE_POLL_MAX_MS || '1000' }}
+          AGENT_WORKER_HEARTBEAT_MS: ${{ vars.AGENT_WORKER_HEARTBEAT_MS || '5000' }}
+        run: |
+          set -euo pipefail
+          tmp_dir="$(mktemp -d)"
+          cd "$tmp_dir"
+          validate_positive_int() {
+            local name="$1"
+            local value="$2"
+            if ! [[ "$value" =~ ^[0-9]+$ ]] || [ "$value" -eq 0 ]; then
+              echo "::error::${name} must be a positive integer."
+              exit 1
+            fi
+          }
+
+          validate_positive_int TASK_IDLE_POLL_MS "$TASK_IDLE_POLL_MS"
+          validate_positive_int TASK_IDLE_POLL_MAX_MS "$TASK_IDLE_POLL_MAX_MS"
+          validate_positive_int AGENT_WORKER_HEARTBEAT_MS "$AGENT_WORKER_HEARTBEAT_MS"
+
+          if [ "$TASK_IDLE_POLL_MAX_MS" -lt "$TASK_IDLE_POLL_MS" ]; then
+            echo "::error::TASK_IDLE_POLL_MAX_MS must be greater than or equal to TASK_IDLE_POLL_MS."
+            exit 1
+          fi
+
+          railway link -p "$RAILWAY_PROJECT_ID" -e "$RAILWAY_ENVIRONMENT" >/dev/null
+          # Keep core runtime flags synced before the deploy.
+          railway variables \
+            --service "$RAILWAY_CONDUCTOR_SERVICE" \
+            --environment "$RAILWAY_ENVIRONMENT" \
+            --set "TASK_IDLE_POLL_MS=$TASK_IDLE_POLL_MS" \
+            --set "TASK_IDLE_POLL_MAX_MS=$TASK_IDLE_POLL_MAX_MS" \
+            --set "AGENT_WORKER_HEARTBEAT_MS=$AGENT_WORKER_HEARTBEAT_MS" \
+            --skip-deploys >/dev/null
+          railway redeploy --service "$RAILWAY_CONDUCTOR_SERVICE" --yes
+
+  deploy-realtime:
+    runs-on: ubuntu-latest
+    needs: plan
+    if: needs.plan.outputs.deploy_realtime == 'true'
+    steps:
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install Railway CLI
+        run: npm install --global @railway/cli
+
+      - name: Redeploy present-realtime
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: |
+          set -euo pipefail
+          tmp_dir="$(mktemp -d)"
+          cd "$tmp_dir"
+          railway link -p "$RAILWAY_PROJECT_ID" -e "$RAILWAY_ENVIRONMENT" >/dev/null
+          railway redeploy --service "$RAILWAY_REALTIME_SERVICE" --yes
