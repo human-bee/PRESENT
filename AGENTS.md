@@ -63,6 +63,7 @@
 - Commits: Imperative ("fix: handle LiveKit reconnect").
 - PRs: Include summary, linked issues, screenshots/logs for agent changes.
 - Requirements: Passing `npm test`, `npm run lint`; no uncommitted changes.
+- Railway prod deploys run on `main` via `.github/workflows/deploy-railway-prod.yml` and only redeploy changed services (`present-conductor` / `present-realtime`) based on path filters; use manual workflow dispatch force flags for env-only updates.
 
 ## Data Compatibility & Persistence
 
