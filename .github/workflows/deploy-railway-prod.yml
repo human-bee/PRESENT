@@ -125,18 +125,45 @@ jobs:
 
       - name: Redeploy present-conductor
         env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_API_KEY || secrets.RAILWAY_TOKEN }}
+          RAILWAY_API_KEY: ${{ secrets.RAILWAY_API_KEY || '' }}
+          RAILWAY_PROJECT_TOKEN: ${{ secrets.RAILWAY_TOKEN || '' }}
           TASK_IDLE_POLL_MS: ${{ vars.TASK_IDLE_POLL_MS || '500' }}
           TASK_IDLE_POLL_MAX_MS: ${{ vars.TASK_IDLE_POLL_MAX_MS || '1000' }}
           AGENT_WORKER_HEARTBEAT_MS: ${{ vars.AGENT_WORKER_HEARTBEAT_MS || '5000' }}
         run: |
           set -euo pipefail
-          if [ -z "${RAILWAY_TOKEN:-}" ]; then
-            echo "::error::Missing Railway token. Set RAILWAY_API_KEY or RAILWAY_TOKEN in GitHub Actions secrets."
+          if [ -z "${RAILWAY_API_KEY:-}" ] && [ -z "${RAILWAY_PROJECT_TOKEN:-}" ]; then
+            echo "::error::Missing Railway auth. Set RAILWAY_API_KEY and/or RAILWAY_TOKEN in GitHub Actions secrets."
             exit 1
           fi
           tmp_dir="$(mktemp -d)"
           cd "$tmp_dir"
+          run_with_railway_auth() {
+            local action="$1"
+            shift
+            local code=1
+            if [ -n "${RAILWAY_API_KEY:-}" ]; then
+              set +e
+              RAILWAY_API_TOKEN="$RAILWAY_API_KEY" RAILWAY_TOKEN="" "$@"
+              code=$?
+              set -e
+              if [ "$code" -eq 0 ]; then
+                echo "auth_source=RAILWAY_API_KEY action=$action"
+                return 0
+              fi
+            fi
+            if [ -n "${RAILWAY_PROJECT_TOKEN:-}" ]; then
+              set +e
+              RAILWAY_API_TOKEN="" RAILWAY_TOKEN="$RAILWAY_PROJECT_TOKEN" "$@"
+              code=$?
+              set -e
+              if [ "$code" -eq 0 ]; then
+                echo "auth_source=RAILWAY_TOKEN action=$action"
+                return 0
+              fi
+            fi
+            return "$code"
+          }
           validate_positive_int() {
             local name="$1"
             local value="$2"
@@ -155,16 +182,16 @@ jobs:
             exit 1
           fi
 
-          railway link -p "$RAILWAY_PROJECT_ID" -e "$RAILWAY_ENVIRONMENT" >/dev/null
+          run_with_railway_auth link railway link -p "$RAILWAY_PROJECT_ID" -e "$RAILWAY_ENVIRONMENT"
           # Keep core runtime flags synced before the deploy.
-          railway variables \
+          run_with_railway_auth variables railway variables \
             --service "$RAILWAY_CONDUCTOR_SERVICE" \
             --environment "$RAILWAY_ENVIRONMENT" \
             --set "TASK_IDLE_POLL_MS=$TASK_IDLE_POLL_MS" \
             --set "TASK_IDLE_POLL_MAX_MS=$TASK_IDLE_POLL_MAX_MS" \
             --set "AGENT_WORKER_HEARTBEAT_MS=$AGENT_WORKER_HEARTBEAT_MS" \
-            --skip-deploys >/dev/null
-          railway redeploy --service "$RAILWAY_CONDUCTOR_SERVICE" --yes
+            --skip-deploys
+          run_with_railway_auth redeploy railway redeploy --service "$RAILWAY_CONDUCTOR_SERVICE" --yes
 
   deploy-realtime:
     runs-on: ubuntu-latest
@@ -181,14 +208,42 @@ jobs:
 
       - name: Redeploy present-realtime
         env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_API_KEY || secrets.RAILWAY_TOKEN }}
+          RAILWAY_API_KEY: ${{ secrets.RAILWAY_API_KEY || '' }}
+          RAILWAY_PROJECT_TOKEN: ${{ secrets.RAILWAY_TOKEN || '' }}
         run: |
           set -euo pipefail
-          if [ -z "${RAILWAY_TOKEN:-}" ]; then
-            echo "::error::Missing Railway token. Set RAILWAY_API_KEY or RAILWAY_TOKEN in GitHub Actions secrets."
+          if [ -z "${RAILWAY_API_KEY:-}" ] && [ -z "${RAILWAY_PROJECT_TOKEN:-}" ]; then
+            echo "::error::Missing Railway auth. Set RAILWAY_API_KEY and/or RAILWAY_TOKEN in GitHub Actions secrets."
             exit 1
           fi
           tmp_dir="$(mktemp -d)"
           cd "$tmp_dir"
-          railway link -p "$RAILWAY_PROJECT_ID" -e "$RAILWAY_ENVIRONMENT" >/dev/null
-          railway redeploy --service "$RAILWAY_REALTIME_SERVICE" --yes
+          run_with_railway_auth() {
+            local action="$1"
+            shift
+            local code=1
+            if [ -n "${RAILWAY_API_KEY:-}" ]; then
+              set +e
+              RAILWAY_API_TOKEN="$RAILWAY_API_KEY" RAILWAY_TOKEN="" "$@"
+              code=$?
+              set -e
+              if [ "$code" -eq 0 ]; then
+                echo "auth_source=RAILWAY_API_KEY action=$action"
+                return 0
+              fi
+            fi
+            if [ -n "${RAILWAY_PROJECT_TOKEN:-}" ]; then
+              set +e
+              RAILWAY_API_TOKEN="" RAILWAY_TOKEN="$RAILWAY_PROJECT_TOKEN" "$@"
+              code=$?
+              set -e
+              if [ "$code" -eq 0 ]; then
+                echo "auth_source=RAILWAY_TOKEN action=$action"
+                return 0
+              fi
+            fi
+            return "$code"
+          }
+
+          run_with_railway_auth link railway link -p "$RAILWAY_PROJECT_ID" -e "$RAILWAY_ENVIRONMENT"
+          run_with_railway_auth redeploy railway redeploy --service "$RAILWAY_REALTIME_SERVICE" --yes
