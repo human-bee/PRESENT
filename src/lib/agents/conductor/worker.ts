@@ -15,6 +15,7 @@ import {
   recordOrchestrationTiming,
 } from '@/lib/agents/shared/orchestration-metrics';
 import { recordTaskTraceFromParams, recordWorkerHeartbeat } from '@/lib/agents/shared/trace-events';
+import { deriveProviderParity } from '@/lib/agents/admin/provider-parity';
 
 const TASK_LEASE_TTL_MS = Number(process.env.TASK_LEASE_TTL_MS ?? 15_000);
 const ROOM_CONCURRENCY = Number(process.env.ROOM_CONCURRENCY ?? 2);
@@ -31,6 +32,95 @@ const workerPid = String(process.pid);
 let activeTaskCount = 0;
 
 type ExecuteTaskFn = (taskName: string, params: JsonObject) => Promise<unknown>;
+
+const normalizeString = (value: unknown): string | null => {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+};
+
+const asRecord = (value: unknown): Record<string, unknown> | null => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  return value as Record<string, unknown>;
+};
+
+const deriveRuntimeProviderHint = (
+  taskName: string,
+  result: unknown,
+): {
+  provider?: string;
+  model?: string;
+  providerSource?: string;
+  providerPath?: string;
+  providerRequestId?: string;
+} => {
+  const resultRecord = asRecord(result);
+  const outputRecord = asRecord(resultRecord?.output ?? resultRecord);
+  const traceRecord = asRecord(resultRecord?._trace) ?? asRecord(outputRecord?._trace);
+  if (traceRecord) {
+    return {
+      provider: normalizeString(traceRecord.provider) ?? undefined,
+      model: normalizeString(traceRecord.model) ?? undefined,
+      providerSource: normalizeString(traceRecord.providerSource) ?? normalizeString(traceRecord.provider_source) ?? undefined,
+      providerPath: normalizeString(traceRecord.providerPath) ?? normalizeString(traceRecord.provider_path) ?? undefined,
+      providerRequestId: normalizeString(traceRecord.providerRequestId) ?? normalizeString(traceRecord.provider_request_id) ?? undefined,
+    };
+  }
+
+  const normalizedTask = taskName.toLowerCase();
+  if (normalizedTask.startsWith('search.')) {
+    return {
+      provider: 'openai',
+      providerSource: 'runtime_selected',
+      providerPath: 'primary',
+      model:
+        process.env.CANVAS_STEWARD_SEARCH_MODEL ||
+        process.env.DEBATE_STEWARD_SEARCH_MODEL ||
+        'gpt-5-mini',
+    };
+  }
+
+  if (normalizedTask.startsWith('flowchart.')) {
+    return {
+      provider: 'openai',
+      providerSource: 'runtime_selected',
+      providerPath: 'primary',
+      model: 'gpt-5-mini',
+    };
+  }
+
+  if (normalizedTask.startsWith('scorecard.')) {
+    if (
+      normalizedTask === 'scorecard.fact_check' ||
+      normalizedTask === 'scorecard.verify' ||
+      normalizedTask === 'scorecard.refute'
+    ) {
+      return {
+        provider: 'openai',
+        providerSource: 'runtime_selected',
+        providerPath: 'primary',
+      };
+    }
+
+    const fastStatus = normalizeString(outputRecord?.status)?.toLowerCase();
+    if (fastStatus === 'ok' || fastStatus === 'no_change' || fastStatus === 'error') {
+      return {
+        provider: 'cerebras',
+        providerSource: 'runtime_selected',
+        providerPath: 'fast',
+        model: process.env.DEBATE_STEWARD_FAST_MODEL || undefined,
+      };
+    }
+
+    return {
+      provider: 'openai',
+      providerSource: 'runtime_selected',
+      providerPath: 'primary',
+    };
+  }
+
+  return {};
+};
 
 const classifyTaskRoute = (taskName: string): 'visual' | 'widget-lifecycle' | 'research' | 'livekit' | 'mcp' | 'other' => {
   if (taskName.startsWith('canvas.') || taskName.startsWith('fairy.')) return 'visual';
@@ -139,6 +229,11 @@ async function workerLoop(executeTask: ExecuteTaskFn) {
             const stopLeaseExtender = createLeaseExtender(task.id, leaseToken);
             let route: ReturnType<typeof classifyTaskRoute> = classifyTaskRoute(task.task);
             let lockKey: string | null = null;
+            const executingProviderParity = deriveProviderParity({
+              task: task.task,
+              status: 'running',
+              params: task.params,
+            });
             try {
               activeTaskCount += 1;
               route = classifyTaskRoute(task.task);
@@ -150,12 +245,22 @@ async function workerLoop(executeTask: ExecuteTaskFn) {
                 room: task.room,
                 params: task.params,
                 attempt: task.attempt,
+                provider: executingProviderParity.provider,
+                model: executingProviderParity.model ?? undefined,
+                providerSource: executingProviderParity.providerSource,
+                providerPath: executingProviderParity.providerPath,
+                providerRequestId: executingProviderParity.providerRequestId ?? undefined,
                 payload: {
                   workerId,
                   workerHost,
                   workerPid,
                   route,
                   leaseToken,
+                  provider: executingProviderParity.provider,
+                  model: executingProviderParity.model,
+                  providerSource: executingProviderParity.providerSource,
+                  providerPath: executingProviderParity.providerPath,
+                  providerRequestId: executingProviderParity.providerRequestId,
                 },
               });
               const startedAt = Date.now();
@@ -225,6 +330,18 @@ async function workerLoop(executeTask: ExecuteTaskFn) {
                   : ({ status: 'completed' } as JsonObject);
               await queue.completeTask(task.id, leaseToken, jsonResult);
               const durationMs = Date.now() - startedAt;
+              const runtimeProviderHint = deriveRuntimeProviderHint(task.task, result);
+              const completedProviderParity = deriveProviderParity({
+                task: task.task,
+                status: 'succeeded',
+                params: task.params,
+                payload: asRecord(result) ? (result as JsonObject) : undefined,
+                provider: runtimeProviderHint.provider,
+                model: runtimeProviderHint.model,
+                providerSource: runtimeProviderHint.providerSource,
+                providerPath: runtimeProviderHint.providerPath,
+                providerRequestId: runtimeProviderHint.providerRequestId,
+              });
               void recordTaskTraceFromParams({
                 stage: 'completed',
                 status: 'succeeded',
@@ -234,6 +351,11 @@ async function workerLoop(executeTask: ExecuteTaskFn) {
                 params: task.params,
                 attempt: task.attempt,
                 latencyMs: durationMs,
+                provider: completedProviderParity.provider,
+                model: completedProviderParity.model ?? undefined,
+                providerSource: completedProviderParity.providerSource,
+                providerPath: completedProviderParity.providerPath,
+                providerRequestId: completedProviderParity.providerRequestId ?? undefined,
                 payload: {
                   workerId,
                   workerHost,
@@ -242,6 +364,11 @@ async function workerLoop(executeTask: ExecuteTaskFn) {
                   lockKey: lockKey ?? null,
                   deduped: execution.deduped,
                   leaseToken,
+                  provider: completedProviderParity.provider,
+                  model: completedProviderParity.model,
+                  providerSource: completedProviderParity.providerSource,
+                  providerPath: completedProviderParity.providerPath,
+                  providerRequestId: completedProviderParity.providerRequestId,
                 },
               });
               logger.info('task completed', { roomKey, taskId: task.id, durationMs });
@@ -262,6 +389,16 @@ async function workerLoop(executeTask: ExecuteTaskFn) {
                 error: message,
               });
               await queue.failTask(task.id, leaseToken, { error: message, retryAt });
+              const failedProviderParity = deriveProviderParity({
+                task: task.task,
+                status: 'failed',
+                params: task.params,
+                provider: executingProviderParity.provider,
+                model: executingProviderParity.model ?? undefined,
+                providerSource: executingProviderParity.providerSource,
+                providerPath: executingProviderParity.providerPath,
+                providerRequestId: executingProviderParity.providerRequestId ?? undefined,
+              });
               void recordTaskTraceFromParams({
                 stage: 'failed',
                 status: 'failed',
@@ -270,6 +407,11 @@ async function workerLoop(executeTask: ExecuteTaskFn) {
                 room: task.room,
                 params: task.params,
                 attempt: task.attempt,
+                provider: failedProviderParity.provider,
+                model: failedProviderParity.model ?? undefined,
+                providerSource: failedProviderParity.providerSource,
+                providerPath: failedProviderParity.providerPath,
+                providerRequestId: failedProviderParity.providerRequestId ?? undefined,
                 payload: {
                   workerId,
                   workerHost,
@@ -278,6 +420,11 @@ async function workerLoop(executeTask: ExecuteTaskFn) {
                   lockKey: lockKey ?? null,
                   error: message,
                   retryAt: retryAt ? retryAt.toISOString() : null,
+                  provider: failedProviderParity.provider,
+                  model: failedProviderParity.model,
+                  providerSource: failedProviderParity.providerSource,
+                  providerPath: failedProviderParity.providerPath,
+                  providerRequestId: failedProviderParity.providerRequestId,
                 },
               });
             } finally {

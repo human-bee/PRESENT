@@ -9,6 +9,12 @@ import { debateScorecardStateSchema, type DebateScorecardState } from '@/lib/age
 import { extractFirstMessageContent } from './fast-steward-response';
 
 const CEREBRAS_MODEL = getModelForSteward('DEBATE_STEWARD_FAST_MODEL');
+const DEBATE_FAST_TRACE = {
+  provider: 'cerebras' as const,
+  model: CEREBRAS_MODEL,
+  providerSource: 'runtime_selected' as const,
+  providerPath: 'fast' as const,
+};
 
 const DEBATE_STEWARD_FAST_INSTRUCTIONS = `
 You are a fast debate scorecard assistant. Given the current state, context documents, and an instruction, update the state.
@@ -193,7 +199,7 @@ export async function runDebateScorecardStewardFast(params: {
     const parsedResponse = extractJsonCandidate(rawContent);
     if (!parsedResponse || typeof parsedResponse !== 'object') {
       console.warn('[DebateStewardFast] No JSON update captured');
-      return { status: 'no_change', summary: 'No update needed' };
+      return { status: 'no_change', summary: 'No update needed', _trace: DEBATE_FAST_TRACE };
     }
 
     const summaryText =
@@ -222,7 +228,11 @@ export async function runDebateScorecardStewardFast(params: {
     }
     if (!updatedState) {
       console.error('[DebateStewardFast] Failed to parse updated state JSON');
-      return { status: 'error', summary: 'Failed to parse updated scorecard state' };
+      return {
+        status: 'error',
+        summary: 'Failed to parse updated scorecard state',
+        _trace: DEBATE_FAST_TRACE,
+      };
     }
 
     const ensurePositiveScoreDeltas = (
@@ -285,6 +295,7 @@ export async function runDebateScorecardStewardFast(params: {
       status: 'ok',
       summary: summaryText,
       version: committed.version,
+      _trace: DEBATE_FAST_TRACE,
     };
 
   } catch (error) {
@@ -292,6 +303,7 @@ export async function runDebateScorecardStewardFast(params: {
     return {
       status: 'error',
       summary: error instanceof Error ? error.message : 'Unknown error',
+      _trace: DEBATE_FAST_TRACE,
     };
   }
 }

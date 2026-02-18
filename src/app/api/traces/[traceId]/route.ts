@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAgentAdminSignedInUserId } from '@/lib/agents/admin/auth';
 import { getAdminSupabaseClient } from '@/lib/agents/admin/supabase-admin';
-import { isMissingRelationError } from '@/lib/agents/admin/supabase-errors';
+import { isMissingColumnError, isMissingRelationError } from '@/lib/agents/admin/supabase-errors';
 import { buildTaskBackedTraceRows, type AgentTaskTraceSourceRow } from '@/lib/agents/admin/trace-fallback';
 import {
   classifyTraceSubsystem,
+  extractProviderIdentity,
   extractFailureReason,
   extractWorkerIdentity,
 } from '@/lib/agents/admin/trace-diagnostics';
@@ -12,6 +13,26 @@ import {
 export const runtime = 'nodejs';
 
 const TRACE_SELECT_COLUMNS = [
+  'id',
+  'trace_id',
+  'request_id',
+  'intent_id',
+  'room',
+  'task_id',
+  'task',
+  'stage',
+  'status',
+  'provider',
+  'model',
+  'provider_source',
+  'provider_path',
+  'provider_request_id',
+  'latency_ms',
+  'created_at',
+  'payload',
+].join(',');
+
+const TRACE_SELECT_COLUMNS_COMPAT = [
   'id',
   'trace_id',
   'request_id',
@@ -42,12 +63,19 @@ export async function GET(
 
   try {
     const db = getAdminSupabaseClient();
-    const { data, error } = await db
-      .from('agent_trace_events')
-      .select(TRACE_SELECT_COLUMNS)
-      .eq('trace_id', normalizedTraceId)
-      .order('created_at', { ascending: true })
-      .limit(2_000);
+    const buildTraceQuery = (columns: string) =>
+      db
+        .from('agent_trace_events')
+        .select(columns)
+        .eq('trace_id', normalizedTraceId)
+        .order('created_at', { ascending: true })
+        .limit(2_000);
+    let { data, error } = await buildTraceQuery(TRACE_SELECT_COLUMNS);
+    if (error && isMissingColumnError(error, 'provider')) {
+      const compat = await buildTraceQuery(TRACE_SELECT_COLUMNS_COMPAT);
+      data = compat.data;
+      error = compat.error;
+    }
     if (error && isMissingRelationError(error, 'agent_trace_events')) {
       const { data: taskData, error: taskError } = await db
         .from('agent_tasks')
@@ -70,6 +98,12 @@ export async function GET(
         worker_host: null,
         worker_pid: null,
         failure_reason: extractFailureReason(row.payload),
+        provider: row.provider,
+        model: row.model,
+        provider_source: row.provider_source,
+        provider_path: row.provider_path,
+        provider_request_id: row.provider_request_id,
+        provider_context_url: extractProviderIdentity(row).providerContextUrl,
       }));
       return NextResponse.json({
         traceId: normalizedTraceId,
@@ -89,6 +123,10 @@ export async function GET(
       const worker = extractWorkerIdentity(payload);
       const stage = rowRecord.stage ?? null;
       const status = rowRecord.status ?? null;
+      const providerIdentity = extractProviderIdentity({
+        ...rowRecord,
+        payload,
+      });
       return {
         ...rowRecord,
         subsystem: classifyTraceSubsystem(typeof stage === 'string' ? stage : null),
@@ -96,6 +134,12 @@ export async function GET(
         worker_host: worker.workerHost,
         worker_pid: worker.workerPid,
         failure_reason: extractFailureReason(payload, typeof status === 'string' ? status : null),
+        provider: providerIdentity.provider,
+        model: providerIdentity.model,
+        provider_source: providerIdentity.providerSource,
+        provider_path: providerIdentity.providerPath,
+        provider_request_id: providerIdentity.providerRequestId,
+        provider_context_url: providerIdentity.providerContextUrl,
       };
     });
 

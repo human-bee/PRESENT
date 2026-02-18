@@ -5,6 +5,8 @@ import { flags } from '@/lib/feature-flags';
 import { createLogger } from '@/lib/logging';
 import { deriveRequestCorrelation } from './request-correlation';
 import type { JsonObject } from '@/lib/utils/json-schema';
+import { deriveProviderParity } from '@/lib/agents/admin/provider-parity';
+import { isMissingColumnError } from '@/lib/agents/admin/supabase-errors';
 
 export type AgentTraceStage =
   | 'api_received'
@@ -32,6 +34,12 @@ type AgentTraceEventInput = {
   task?: string;
   component?: string;
   latencyMs?: number;
+  provider?: string;
+  model?: string;
+  providerSource?: string;
+  providerPath?: string;
+  providerRequestId?: string;
+  params?: JsonObject;
   payload?: JsonObject;
 };
 
@@ -82,7 +90,19 @@ export async function recordAgentTraceEvent(input: AgentTraceEventInput): Promis
   try {
     const db = getSupabaseClient();
     const payload = toSafePayload(input.payload);
-    await db.from('agent_trace_events').insert({
+    const parity = deriveProviderParity({
+      provider: input.provider,
+      model: input.model,
+      providerSource: input.providerSource,
+      providerPath: input.providerPath,
+      providerRequestId: input.providerRequestId,
+      stage: input.stage,
+      status: input.status,
+      task: input.task,
+      params: input.params,
+      payload,
+    });
+    const baseRow = {
       id: randomUUID(),
       created_at: new Date().toISOString(),
       trace_id: normalizeOptional(input.traceId) ?? null,
@@ -98,7 +118,23 @@ export async function recordAgentTraceEvent(input: AgentTraceEventInput): Promis
       latency_ms: typeof input.latencyMs === 'number' && Number.isFinite(input.latencyMs) ? Math.max(0, Math.floor(input.latencyMs)) : null,
       payload: payload ?? null,
       sampled: true,
-    });
+    };
+    const withProviderRow = {
+      ...baseRow,
+      provider: parity.provider,
+      model: parity.model,
+      provider_source: parity.providerSource,
+      provider_path: parity.providerPath,
+      provider_request_id: parity.providerRequestId,
+    };
+    let { error } = await db.from('agent_trace_events').insert(withProviderRow);
+    if (error && isMissingColumnError(error, 'provider')) {
+      const compat = await db.from('agent_trace_events').insert(baseRow);
+      error = compat.error;
+    }
+    if (error) {
+      throw error;
+    }
   } catch (error) {
     logger.warn('trace write failed', { error: error instanceof Error ? error.message : String(error), stage: input.stage });
   }
@@ -107,12 +143,20 @@ export async function recordAgentTraceEvent(input: AgentTraceEventInput): Promis
 type TaskTraceInput = {
   stage: AgentTraceStage;
   status?: string;
+  traceId?: string;
+  requestId?: string;
+  intentId?: string;
   taskId?: string;
   attempt?: number;
   room?: string;
   task: string;
   params?: JsonObject;
   latencyMs?: number;
+  provider?: string;
+  model?: string;
+  providerSource?: string;
+  providerPath?: string;
+  providerRequestId?: string;
   payload?: JsonObject;
 };
 
@@ -125,13 +169,19 @@ export async function recordTaskTraceFromParams(input: TaskTraceInput): Promise<
   await recordAgentTraceEvent({
     stage: input.stage,
     status: input.status,
-    traceId: correlation.traceId,
-    requestId: correlation.requestId,
-    intentId: correlation.intentId,
+    traceId: normalizeOptional(input.traceId) ?? correlation.traceId,
+    requestId: normalizeOptional(input.requestId) ?? correlation.requestId,
+    intentId: normalizeOptional(input.intentId) ?? correlation.intentId,
     taskId: input.taskId,
     attempt: input.attempt,
     room: input.room,
     task: input.task,
+    provider: input.provider,
+    model: input.model,
+    providerSource: input.providerSource,
+    providerPath: input.providerPath,
+    providerRequestId: input.providerRequestId,
+    params: input.params,
     latencyMs: input.latencyMs,
     payload: input.payload,
   });

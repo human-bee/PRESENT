@@ -109,15 +109,33 @@ describe('/api/admin/agents/queue', () => {
       data: [
         {
           task_id: 'task-1',
+          trace_id: 'trace-1',
+          request_id: 'req-1',
+          room: 'canvas-room-1',
+          task: 'fairy.intent',
           stage: 'executing',
           status: 'running',
+          provider: 'openai',
+          model: 'gpt-5-mini',
+          provider_source: 'task_params',
+          provider_path: 'primary',
+          provider_request_id: 'provider-req-1',
           created_at: '2026-02-17T12:00:02.000Z',
           payload: { workerId: 'worker-1' },
         },
         {
           task_id: 'task-1',
+          trace_id: 'trace-1',
+          request_id: 'req-1',
+          room: 'canvas-room-1',
+          task: 'fairy.intent',
           stage: 'failed',
           status: 'failed',
+          provider: 'openai',
+          model: 'gpt-5-mini',
+          provider_source: 'task_params',
+          provider_path: 'primary',
+          provider_request_id: 'provider-req-1',
           created_at: '2026-02-17T12:00:01.000Z',
           payload: { error: 'tool crashed' },
         },
@@ -147,9 +165,138 @@ describe('/api/admin/agents/queue', () => {
       last_failure_stage: 'failed',
       last_failure_reason: 'tool crashed',
       last_failure_at: '2026-02-17T12:00:01.000Z',
+      provider: 'openai',
+      model: 'gpt-5-mini',
+      provider_source: 'task_params',
+      provider_path: 'primary',
     });
     expect(traceQuery.getInFilters()).toEqual([
       { column: 'task_id', value: ['task-1'] },
     ]);
+  });
+
+  it('filters queue rows by provider', async () => {
+    requireAgentAdminSignedInUserIdMock.mockResolvedValue({ ok: true, userId: 'admin-3' });
+    const taskQuery = buildQuery({
+      data: [
+        {
+          id: 'task-1',
+          room: 'canvas-room-1',
+          task: 'fairy.intent',
+          status: 'running',
+          priority: 100,
+          attempt: 1,
+          error: null,
+          request_id: 'req-1',
+          trace_id: 'trace-1',
+          params: {},
+          resource_keys: ['room:canvas-room-1'],
+          lease_expires_at: null,
+          created_at: '2026-02-17T12:00:00.000Z',
+          updated_at: '2026-02-17T12:00:01.000Z',
+        },
+        {
+          id: 'task-2',
+          room: 'canvas-room-1',
+          task: 'fairy.intent',
+          status: 'running',
+          priority: 100,
+          attempt: 1,
+          error: null,
+          request_id: 'req-2',
+          trace_id: 'trace-2',
+          params: {},
+          resource_keys: ['room:canvas-room-1'],
+          lease_expires_at: null,
+          created_at: '2026-02-17T12:01:00.000Z',
+          updated_at: '2026-02-17T12:01:01.000Z',
+        },
+      ],
+      error: null,
+    });
+    const traceQuery = buildQuery({
+      data: [
+        {
+          task_id: 'task-1',
+          trace_id: 'trace-1',
+          request_id: 'req-1',
+          room: 'canvas-room-1',
+          task: 'fairy.intent',
+          stage: 'executing',
+          status: 'running',
+          provider: 'openai',
+          model: 'gpt-5-mini',
+          provider_source: 'task_params',
+          provider_path: 'primary',
+          provider_request_id: null,
+          created_at: '2026-02-17T12:00:02.000Z',
+          payload: { workerId: 'worker-1' },
+        },
+        {
+          task_id: 'task-2',
+          trace_id: 'trace-2',
+          request_id: 'req-2',
+          room: 'canvas-room-1',
+          task: 'fairy.intent',
+          stage: 'executing',
+          status: 'running',
+          provider: 'anthropic',
+          model: 'claude-3-5-sonnet',
+          provider_source: 'task_params',
+          provider_path: 'primary',
+          provider_request_id: null,
+          created_at: '2026-02-17T12:01:02.000Z',
+          payload: { workerId: 'worker-2' },
+        },
+      ],
+      error: null,
+    });
+    getAdminSupabaseClientMock.mockReturnValue({
+      from: jest.fn((table: string) => {
+        if (table === 'agent_tasks') return taskQuery.query;
+        if (table === 'agent_trace_events') return traceQuery.query;
+        throw new Error(`Unexpected table ${table}`);
+      }),
+    });
+
+    const GET = await loadGet();
+    const response = await GET({
+      nextUrl: new URL('http://localhost/api/admin/agents/queue?provider=openai'),
+    } as import('next/server').NextRequest);
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.tasks).toHaveLength(1);
+    expect(json.tasks[0]).toMatchObject({
+      id: 'task-1',
+      provider: 'openai',
+    });
+  });
+
+  it('falls back when agent_tasks.params column is unavailable', async () => {
+    requireAgentAdminSignedInUserIdMock.mockResolvedValue({ ok: true, userId: 'admin-4' });
+    const taskQueries = [
+      buildQuery({ data: [], error: { code: '42703', message: 'column "params" does not exist' } }),
+      buildQuery({ data: [], error: null }),
+    ];
+
+    getAdminSupabaseClientMock.mockReturnValue({
+      from: jest.fn((table: string) => {
+        if (table !== 'agent_tasks') throw new Error(`Unexpected table ${table}`);
+        const next = taskQueries.shift();
+        if (!next) throw new Error('Unexpected extra query');
+        return next.query;
+      }),
+    });
+
+    const GET = await loadGet();
+    const response = await GET({
+      nextUrl: new URL('http://localhost/api/admin/agents/queue'),
+    } as import('next/server').NextRequest);
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.ok).toBe(true);
+    expect(json.tasks).toEqual([]);
   });
 });

@@ -24,6 +24,7 @@ import {
 } from '@/lib/agents/shared/orchestration-envelope';
 import { getDecryptedUserModelKey, type ModelKeyProvider } from '@/lib/agents/shared/user-model-keys';
 import { recordAgentTraceEvent } from '@/lib/agents/shared/trace-events';
+import { deriveProviderParity } from '@/lib/agents/admin/provider-parity';
 
 export const runtime = 'nodejs';
 
@@ -85,6 +86,8 @@ const deriveProviderFromModel = (model: unknown): ModelKeyProvider | null => {
   if (normalized.startsWith('openai:') || normalized.startsWith('gpt')) return 'openai';
   if (normalized.startsWith('anthropic:') || normalized.startsWith('claude')) return 'anthropic';
   if (normalized.startsWith('google:') || normalized.startsWith('gemini')) return 'google';
+  if (normalized.startsWith('cerebras:') || normalized.startsWith('llama') || normalized.startsWith('qwen') || normalized.startsWith('gpt-oss')) return 'cerebras';
+  if (normalized.startsWith('together:') || normalized.includes('black-forest-labs/') || normalized.includes('flux')) return 'together';
   return null;
 };
 
@@ -127,7 +130,17 @@ export async function POST(req: NextRequest) {
     const attempt = parsed.attempt;
     const normalizedParams: JsonObject = { ...(parsed.params ?? {}) };
 
-    const provider = normalizeProvider(parsed.provider) ?? normalizeProvider(normalizedParams.provider);
+    const explicitProvider = normalizeProvider(parsed.provider);
+    const paramProvider = normalizeProvider(normalizedParams.provider);
+    const provider = explicitProvider ?? paramProvider;
+    const providerSource =
+      explicitProvider
+        ? 'explicit'
+        : paramProvider
+          ? 'task_params'
+          : typeof parsed.model === 'string' || typeof normalizedParams.model === 'string'
+            ? 'model_inferred'
+            : 'unknown';
     const model =
       typeof parsed.model === 'string' && parsed.model.trim()
         ? parsed.model.trim()
@@ -226,6 +239,24 @@ export async function POST(req: NextRequest) {
       ...orchestrationEnvelope,
       lockKey: normalizedLockKey,
     });
+    const providerParity = deriveProviderParity({
+      task: normalizedTask,
+      status: 'ok',
+      provider: provider ?? undefined,
+      model,
+      providerSource,
+      providerPath: 'primary',
+      params: enrichedParams,
+    });
+    enrichedParams.provider = providerParity.provider;
+    if (providerParity.model) {
+      enrichedParams.model = providerParity.model;
+    }
+    enrichedParams.provider_source = providerParity.providerSource;
+    enrichedParams.provider_path = providerParity.providerPath;
+    if (providerParity.providerRequestId) {
+      enrichedParams.provider_request_id = providerParity.providerRequestId;
+    }
 
     const correlation = deriveRequestCorrelation({
       task: normalizedTask,
@@ -277,9 +308,18 @@ export async function POST(req: NextRequest) {
       intentId: canonicalIntentId,
       room: trimmedRoom,
       task: normalizedTask,
+      provider: providerParity.provider,
+      model: providerParity.model ?? undefined,
+      providerSource: providerParity.providerSource,
+      providerPath: providerParity.providerPath,
+      providerRequestId: providerParity.providerRequestId ?? undefined,
+      params: enrichedParams,
       payload: {
-        provider: provider ?? null,
-        model: model ?? null,
+        provider: providerParity.provider,
+        model: providerParity.model,
+        providerSource: providerParity.providerSource,
+        providerPath: providerParity.providerPath,
+        providerRequestId: providerParity.providerRequestId,
       },
     });
 
@@ -345,7 +385,20 @@ export async function POST(req: NextRequest) {
         intentId: canonicalIntentId,
         room: trimmedRoom,
         task: normalizedTask,
-        payload: { reason: msg },
+        provider: providerParity.provider,
+        model: providerParity.model ?? undefined,
+        providerSource: providerParity.providerSource,
+        providerPath: 'fallback',
+        providerRequestId: providerParity.providerRequestId ?? undefined,
+        params: enrichedParams,
+        payload: {
+          reason: msg,
+          provider: providerParity.provider,
+          model: providerParity.model,
+          providerSource: providerParity.providerSource,
+          providerPath: 'fallback',
+          providerRequestId: providerParity.providerRequestId,
+        },
       });
 
       if (normalizedTask === 'canvas.agent_prompt') {
@@ -389,6 +442,19 @@ export async function POST(req: NextRequest) {
           intentId: canonicalIntentId,
           room: trimmedRoom,
           task: normalizedTask,
+          provider: providerParity.provider,
+          model: providerParity.model ?? undefined,
+          providerSource: providerParity.providerSource,
+          providerPath: 'fallback',
+          providerRequestId: providerParity.providerRequestId ?? undefined,
+          params: enrichedParams,
+          payload: {
+            provider: providerParity.provider,
+            model: providerParity.model,
+            providerSource: providerParity.providerSource,
+            providerPath: 'fallback',
+            providerRequestId: providerParity.providerRequestId,
+          },
         });
         return NextResponse.json({ status: 'executed_fallback' }, { status: 202 });
       } catch (e) {
@@ -401,8 +467,19 @@ export async function POST(req: NextRequest) {
           intentId: canonicalIntentId,
           room: trimmedRoom,
           task: normalizedTask,
+          provider: providerParity.provider,
+          model: providerParity.model ?? undefined,
+          providerSource: providerParity.providerSource,
+          providerPath: 'fallback',
+          providerRequestId: providerParity.providerRequestId ?? undefined,
+          params: enrichedParams,
           payload: {
             error: e instanceof Error ? e.message : String(e),
+            provider: providerParity.provider,
+            model: providerParity.model,
+            providerSource: providerParity.providerSource,
+            providerPath: 'fallback',
+            providerRequestId: providerParity.providerRequestId,
           },
         });
         return NextResponse.json({ error: 'Dispatch failed' }, { status: 502 });

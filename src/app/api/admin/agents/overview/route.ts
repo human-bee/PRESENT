@@ -5,9 +5,29 @@ import {
   requireAgentAdminUserId,
 } from '@/lib/agents/admin/auth';
 import { getAdminSupabaseClient } from '@/lib/agents/admin/supabase-admin';
-import { isMissingRelationError } from '@/lib/agents/admin/supabase-errors';
+import { isMissingColumnError, isMissingRelationError } from '@/lib/agents/admin/supabase-errors';
 
 export const runtime = 'nodejs';
+
+const PROVIDERS = [
+  'openai',
+  'anthropic',
+  'google',
+  'cerebras',
+  'together',
+  'debug',
+  'unknown',
+] as const;
+
+const FAILURE_STATUSES = ['failed', 'error', 'fallback_error', 'queue_error'];
+
+const initProviderCounts = () =>
+  Object.fromEntries(PROVIDERS.map((provider) => [provider, 0])) as Record<
+    (typeof PROVIDERS)[number],
+    number
+  >;
+
+const KNOWN_PROVIDERS = PROVIDERS.filter((provider) => provider !== 'unknown');
 
 export async function GET(req: NextRequest) {
   const admin = await requireAgentAdminUserId(req);
@@ -52,6 +72,9 @@ export async function GET(req: NextRequest) {
       .select('id', { count: 'exact', head: true })
       .gte('created_at', sinceIso);
     let tracesLastHour = recentTraceCount ?? 0;
+    let failedTracesLastHour = 0;
+    const providerMix = initProviderCounts();
+    const providerFailures = initProviderCounts();
     if (traceCountError && isMissingRelationError(traceCountError, 'agent_trace_events')) {
       const { count: fallbackTraceCount, error: fallbackTraceError } = await db
         .from('agent_tasks')
@@ -59,8 +82,73 @@ export async function GET(req: NextRequest) {
         .gte('created_at', sinceIso);
       if (fallbackTraceError) throw fallbackTraceError;
       tracesLastHour = fallbackTraceCount ?? 0;
+      const { count: fallbackFailedCount, error: fallbackFailedError } = await db
+        .from('agent_tasks')
+        .select('id', { count: 'exact', head: true })
+        .eq('status', 'failed')
+        .gte('created_at', sinceIso);
+      if (fallbackFailedError) throw fallbackFailedError;
+      failedTracesLastHour = fallbackFailedCount ?? 0;
+      providerMix.unknown = tracesLastHour;
+      providerFailures.unknown = failedTracesLastHour;
     } else if (traceCountError) {
       throw traceCountError;
+    } else {
+      const { count: failedTraceCount, error: failedTraceError } = await db
+        .from('agent_trace_events')
+        .select('id', { count: 'exact', head: true })
+        .gte('created_at', sinceIso)
+        .in('status', FAILURE_STATUSES);
+      if (failedTraceError) throw failedTraceError;
+      failedTracesLastHour = failedTraceCount ?? 0;
+
+      const providerProbe = await db
+        .from('agent_trace_events')
+        .select('provider', { count: 'exact', head: true })
+        .gte('created_at', sinceIso);
+
+      if (providerProbe.error && isMissingColumnError(providerProbe.error, 'provider')) {
+        providerMix.unknown = tracesLastHour;
+        providerFailures.unknown = failedTracesLastHour;
+      } else if (providerProbe.error) {
+        throw providerProbe.error;
+      } else {
+        const providerTotals = await Promise.all(
+          KNOWN_PROVIDERS.map(async (provider) => {
+            const { count, error } = await db
+              .from('agent_trace_events')
+              .select('id', { count: 'exact', head: true })
+              .gte('created_at', sinceIso)
+              .eq('provider', provider);
+            if (error) throw error;
+            return { provider, count: count ?? 0 };
+          }),
+        );
+        const providerFailureTotals = await Promise.all(
+          KNOWN_PROVIDERS.map(async (provider) => {
+            const { count, error } = await db
+              .from('agent_trace_events')
+              .select('id', { count: 'exact', head: true })
+              .gte('created_at', sinceIso)
+              .eq('provider', provider)
+              .in('status', FAILURE_STATUSES);
+            if (error) throw error;
+            return { provider, count: count ?? 0 };
+          }),
+        );
+        let knownTotal = 0;
+        for (const { provider, count } of providerTotals) {
+          providerMix[provider] = count;
+          knownTotal += count;
+        }
+        let knownFailure = 0;
+        for (const { provider, count } of providerFailureTotals) {
+          providerFailures[provider] = count;
+          knownFailure += count;
+        }
+        providerMix.unknown = Math.max(0, tracesLastHour - knownTotal);
+        providerFailures.unknown = Math.max(0, failedTracesLastHour - knownFailure);
+      }
     }
 
     const { data: workers, error: workersError } = await db
@@ -83,6 +171,8 @@ export async function GET(req: NextRequest) {
       queueOldestQueuedAt: oldestQueuedAt,
       queueOldestQueuedAgeMs: oldestQueuedAgeMs,
       tracesLastHour,
+      providerMix,
+      providerFailures,
       activeWorkers: (normalizedWorkers ?? []).length,
       workers: normalizedWorkers ?? [],
       generatedAt: new Date().toISOString(),
