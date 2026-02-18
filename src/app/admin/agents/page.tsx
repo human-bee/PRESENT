@@ -12,6 +12,8 @@ import { formatJsonForDisplay, type JsonDisplayMode } from '@/lib/agents/admin/j
 import type {
   AgentAuditEntry,
   AgentOverviewResponse,
+  AgentProvider,
+  AgentProviderPath,
   AgentQueueTask,
   AgentTraceContextResponse,
   AgentTraceEventRow,
@@ -23,6 +25,24 @@ import type {
 
 const LIST_POLL_MS = 15_000;
 const TRACE_CONTEXT_PAGE_LIMIT = 200;
+const PROVIDER_FILTER_OPTIONS: Array<{ value: AgentProvider; label: string }> = [
+  { value: 'openai', label: 'OpenAI' },
+  { value: 'anthropic', label: 'Anthropic' },
+  { value: 'google', label: 'Google' },
+  { value: 'cerebras', label: 'Cerebras' },
+  { value: 'together', label: 'Together' },
+  { value: 'debug', label: 'Debug' },
+  { value: 'unknown', label: 'Unknown' },
+];
+const PROVIDER_PATH_FILTER_OPTIONS: Array<{ value: AgentProviderPath; label: string }> = [
+  { value: 'primary', label: 'Primary' },
+  { value: 'fallback', label: 'Fallback' },
+  { value: 'fast', label: 'Fast' },
+  { value: 'slow', label: 'Slow' },
+  { value: 'shadow', label: 'Shadow' },
+  { value: 'teacher', label: 'Teacher' },
+  { value: 'unknown', label: 'Unknown' },
+];
 
 async function readJson<T>(url: string): Promise<T> {
   const res = await fetchWithSupabaseAuth(url, { cache: 'no-store' });
@@ -107,6 +127,10 @@ export default function AgentAdminPage() {
   const [isPageVisible, setIsPageVisible] = useState(true);
   const [roomFilterDraft, setRoomFilterDraft] = useState('');
   const [roomFilter, setRoomFilter] = useState('');
+  const [providerFilterDraft, setProviderFilterDraft] = useState('');
+  const [providerFilter, setProviderFilter] = useState('');
+  const [providerPathFilterDraft, setProviderPathFilterDraft] = useState('');
+  const [providerPathFilter, setProviderPathFilter] = useState('');
   const [traceFilterDraft, setTraceFilterDraft] = useState('');
   const [jsonMode, setJsonMode] = useState<JsonDisplayMode>('pretty');
   const [maskSensitive, setMaskSensitive] = useState(true);
@@ -291,6 +315,8 @@ export default function AgentAdminPage() {
 
   const refresh = useCallback(async () => {
     const normalizedRoomFilter = roomFilter.trim() || undefined;
+    const normalizedProviderFilter = providerFilter.trim() || undefined;
+    const normalizedProviderPathFilter = providerPathFilter.trim() || undefined;
     setLoading(true);
     setError(null);
     setDetailError(null);
@@ -327,12 +353,16 @@ export default function AgentAdminPage() {
             withQuery('/api/admin/agents/queue', {
               limit: 100,
               room: normalizedRoomFilter,
+              provider: normalizedProviderFilter,
+              providerPath: normalizedProviderPathFilter,
             }),
           ),
           readJson<{ traces: AgentTraceEventRow[] }>(
             withQuery('/api/admin/agents/traces', {
               limit: 100,
               room: normalizedRoomFilter,
+              provider: normalizedProviderFilter,
+              providerPath: normalizedProviderPathFilter,
             }),
           ),
           readJson<{ workers: AgentWorkerHeartbeat[] }>('/api/admin/agents/workers'),
@@ -379,7 +409,7 @@ export default function AgentAdminPage() {
     } finally {
       setLoading(false);
     }
-  }, [clearTraceSelection, roomFilter]);
+  }, [clearTraceSelection, providerFilter, providerPathFilter, roomFilter]);
 
   useEffect(() => {
     if (typeof document === 'undefined') return;
@@ -436,10 +466,23 @@ export default function AgentAdminPage() {
       task_id: failed.task_id || null,
       task: failed.task || null,
       worker_id: failed.worker_id || null,
+      provider: failed.provider || 'unknown',
+      model: failed.model || null,
+      provider_source: failed.provider_source || 'unknown',
+      provider_path: failed.provider_path || 'unknown',
+      provider_request_id: failed.provider_request_id || null,
+      provider_context_url: failed.provider_context_url || null,
     };
   }, [selectedTraceContext, selectedTraceEvents]);
 
   const selectedTaskSnapshot: AgentTraceTaskSnapshot = selectedTraceContext?.taskSnapshot ?? null;
+  const selectedProviderContextUrl = useMemo(() => {
+    if (selectedFailureSummary?.provider_context_url) return selectedFailureSummary.provider_context_url;
+    return (
+      selectedTraceEvents.find((event) => typeof event.provider_context_url === 'string' && event.provider_context_url.trim().length > 0)
+        ?.provider_context_url ?? null
+    );
+  }, [selectedFailureSummary?.provider_context_url, selectedTraceEvents]);
 
   const onMaskToggle = useCallback(
     (nextMaskEnabled: boolean) => {
@@ -496,6 +539,8 @@ export default function AgentAdminPage() {
               onSubmit={(event) => {
                 event.preventDefault();
                 setRoomFilter(roomFilterDraft.trim());
+                setProviderFilter(providerFilterDraft.trim());
+                setProviderPathFilter(providerPathFilterDraft.trim());
               }}
             >
               <input
@@ -512,13 +557,49 @@ export default function AgentAdminPage() {
               >
                 Apply
               </button>
+              <select
+                value={providerFilterDraft}
+                onChange={(event) => setProviderFilterDraft(event.target.value)}
+                className="rounded border border-slate-300 bg-white px-2 py-1 text-sm text-slate-900 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
+              >
+                <option value="">All providers</option>
+                {PROVIDER_FILTER_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={providerPathFilterDraft}
+                onChange={(event) => setProviderPathFilterDraft(event.target.value)}
+                className="rounded border border-slate-300 bg-white px-2 py-1 text-sm text-slate-900 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
+              >
+                <option value="">All paths</option>
+                {PROVIDER_PATH_FILTER_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
               <button
                 type="button"
                 className="rounded border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 disabled:opacity-50 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200"
-                disabled={loading || (!roomFilter && !roomFilterDraft)}
+                disabled={
+                  loading ||
+                  (!roomFilter &&
+                    !roomFilterDraft &&
+                    !providerFilter &&
+                    !providerFilterDraft &&
+                    !providerPathFilter &&
+                    !providerPathFilterDraft)
+                }
                 onClick={() => {
                   setRoomFilterDraft('');
                   setRoomFilter('');
+                  setProviderFilterDraft('');
+                  setProviderFilter('');
+                  setProviderPathFilterDraft('');
+                  setProviderPathFilter('');
                   clearTraceSelection();
                 }}
               >
@@ -590,6 +671,21 @@ export default function AgentAdminPage() {
             Active room filter: <span className="font-mono">{roomFilter}</span>
           </div>
         )}
+        {(providerFilter || providerPathFilter) && (
+          <div className="rounded border border-sky-300 bg-sky-50 px-3 py-2 text-sm text-sky-900 dark:border-sky-500/60 dark:bg-sky-500/10 dark:text-sky-100">
+            Active provider filters:
+            {providerFilter ? (
+              <span className="ml-1 font-mono">provider={providerFilter}</span>
+            ) : (
+              <span className="ml-1 font-mono">provider=all</span>
+            )}
+            {providerPathFilter ? (
+              <span className="ml-2 font-mono">path={providerPathFilter}</span>
+            ) : (
+              <span className="ml-2 font-mono">path=all</span>
+            )}
+          </div>
+        )}
 
         <AgentOpsOverview overview={overview} />
 
@@ -637,6 +733,16 @@ export default function AgentAdminPage() {
                 >
                   Close
                 </button>
+                {selectedProviderContextUrl && (
+                  <a
+                    href={selectedProviderContextUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="rounded border border-sky-300 bg-sky-50 px-2 py-1 text-sm text-sky-900 dark:border-sky-500/60 dark:bg-sky-500/10 dark:text-sky-100"
+                  >
+                    Open Provider Context
+                  </a>
+                )}
               </div>
             </div>
 
@@ -725,12 +831,28 @@ export default function AgentAdminPage() {
                   Subsystem: <span className="font-mono">{selectedFailureSummary.subsystem || 'unknown'}</span> ·
                   Worker: <span className="font-mono">{selectedFailureSummary.worker_id || 'n/a'}</span>
                 </div>
+                <div className="mt-1">
+                  Provider: <span className="font-mono">{selectedFailureSummary.provider}</span> ·
+                  Model: <span className="font-mono">{selectedFailureSummary.model || 'n/a'}</span> ·
+                  Path: <span className="font-mono">{selectedFailureSummary.provider_path}</span> ·
+                  Source: <span className="font-mono">{selectedFailureSummary.provider_source}</span>
+                </div>
                 <div className="mt-1 font-mono text-xs">
                   {selectedFailureSummary.created_at ? `at:${selectedFailureSummary.created_at} ` : ''}
                   {selectedFailureSummary.request_id ? `request:${selectedFailureSummary.request_id} ` : ''}
                   {selectedFailureSummary.intent_id ? `intent:${selectedFailureSummary.intent_id} ` : ''}
                   {selectedFailureSummary.task_id ? `task:${selectedFailureSummary.task_id}` : ''}
                 </div>
+                {selectedFailureSummary.provider_context_url && (
+                  <a
+                    href={selectedFailureSummary.provider_context_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="mt-2 inline-flex rounded border border-rose-400 bg-white px-2 py-1 text-xs text-rose-900"
+                  >
+                    Open Provider Context
+                  </a>
+                )}
               </div>
             )}
 
@@ -778,6 +900,10 @@ export default function AgentAdminPage() {
                       subsystem:{event.subsystem || 'unknown'} · worker:{event.worker_id || 'n/a'}
                       {event.failure_reason ? ` · failure:${event.failure_reason}` : ''}
                     </div>
+                    <div className="mt-1 text-xs text-slate-600 dark:text-slate-300">
+                      provider:{event.provider || 'unknown'} · model:{event.model || 'n/a'} ·
+                      path:{event.provider_path || 'unknown'} · source:{event.provider_source || 'unknown'}
+                    </div>
                     {(event.request_id || event.intent_id || event.task_id) && (
                       <div className="mt-1 font-mono text-xs text-slate-600 dark:text-slate-300">
                         {event.request_id ? `request:${event.request_id} ` : ''}
@@ -800,6 +926,16 @@ export default function AgentAdminPage() {
                       >
                         {payloadExpanded ? 'Hide Payload' : 'Show Payload'}
                       </button>
+                      {event.provider_context_url && (
+                        <a
+                          href={event.provider_context_url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="ml-2 rounded border border-sky-300 bg-sky-50 px-2 py-1 text-xs text-sky-900"
+                        >
+                          Provider Context
+                        </a>
+                      )}
                     </div>
                     {payloadExpanded && hasPayload && (
                       <pre className="mt-2 max-h-64 overflow-auto rounded border border-slate-200 bg-white p-2 text-xs text-slate-800 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">

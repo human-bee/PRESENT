@@ -80,6 +80,11 @@ describe('/api/traces/[traceId]', () => {
           task: 'fairy.intent',
           stage: 'failed',
           status: 'failed',
+          provider: 'openai',
+          model: 'gpt-5-mini',
+          provider_source: 'task_params',
+          provider_path: 'primary',
+          provider_request_id: 'provider-1',
           created_at: '2026-02-17T12:00:00.000Z',
           latency_ms: 22,
           payload: { error: 'model timeout', workerId: 'worker-1' },
@@ -105,6 +110,10 @@ describe('/api/traces/[traceId]', () => {
       subsystem: 'worker',
       worker_id: 'worker-1',
       failure_reason: 'model timeout',
+      provider: 'openai',
+      model: 'gpt-5-mini',
+      provider_source: 'task_params',
+      provider_path: 'primary',
     });
   });
 });

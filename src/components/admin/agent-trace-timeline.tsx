@@ -40,6 +40,11 @@ export function AgentTraceTimeline({
               <div className="mt-1 text-[#334155]">
                 {(event.task || 'unknown-task')}{event.room ? ` · ${event.room}` : ''}
               </div>
+              <div className="mt-1 text-xs text-[#475569]">
+                provider:{event.provider || 'unknown'}
+                {event.model ? ` · model:${event.model}` : ''}
+                {event.provider_path ? ` · path:${event.provider_path}` : ''}
+              </div>
               {(event.subsystem || event.failure_reason) && (
                 <div className="mt-1 text-xs text-[#475569]">
                   {event.subsystem ? `subsystem:${event.subsystem}` : ''}

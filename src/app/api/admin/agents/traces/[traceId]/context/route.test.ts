@@ -102,6 +102,11 @@ describe('/api/admin/agents/traces/[traceId]/context', () => {
           task: 'fairy.intent',
           stage: 'failed',
           status: 'failed',
+          provider: 'openai',
+          model: 'gpt-5-mini',
+          provider_source: 'task_params',
+          provider_path: 'primary',
+          provider_request_id: 'provider-1',
           latency_ms: 15,
           created_at: '2026-02-17T12:00:00.000Z',
           payload: { error: 'model timeout', workerId: 'worker-7' },
@@ -155,6 +160,10 @@ describe('/api/admin/agents/traces/[traceId]/context', () => {
       subsystem: 'worker',
       worker_id: 'worker-7',
       task_id: 'task-1',
+      provider: 'openai',
+      model: 'gpt-5-mini',
+      provider_source: 'task_params',
+      provider_path: 'primary',
     });
     expect(json.taskSnapshot).toMatchObject({
       id: 'task-1',

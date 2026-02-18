@@ -3,7 +3,7 @@ import { randomUUID } from 'crypto';
 import type { JsonObject } from '@/lib/utils/json-schema';
 import { createLogger } from '@/lib/logging';
 import { deriveRequestCorrelation } from './request-correlation';
-import { recordAgentTraceEvent, recordTaskTraceFromParams } from './trace-events';
+import { recordTaskTraceFromParams } from './trace-events';
 
 export type AgentTaskStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'canceled';
 
@@ -199,7 +199,7 @@ export class AgentTaskQueue {
         requestId: resolvedRequestId,
         params,
       });
-      void recordAgentTraceEvent({
+      void recordTaskTraceFromParams({
         stage: 'deduped',
         status: existingForDedup.status,
         traceId: correlation.traceId,
@@ -208,6 +208,13 @@ export class AgentTaskQueue {
         taskId: existingForDedup.id,
         task,
         room,
+        params: (existingForDedup.params ?? params) as JsonObject,
+        attempt: existingForDedup.attempt,
+        payload: {
+          dedupeTraceId: correlation.traceId ?? null,
+          dedupeRequestId: correlation.requestId ?? null,
+          dedupeIntentId: correlation.intentId ?? null,
+        },
       });
       return existingForDedup;
     }

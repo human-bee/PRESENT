@@ -2,7 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAgentAdminSignedInUserId } from '@/lib/agents/admin/auth';
 import { getAdminSupabaseClient } from '@/lib/agents/admin/supabase-admin';
 import { isMissingColumnError, isMissingRelationError } from '@/lib/agents/admin/supabase-errors';
-import { extractFailureReason, extractWorkerIdentity } from '@/lib/agents/admin/trace-diagnostics';
+import {
+  extractFailureReason,
+  extractProviderIdentity,
+  extractWorkerIdentity,
+} from '@/lib/agents/admin/trace-diagnostics';
+import { normalizeProvider, normalizeProviderPath } from '@/lib/agents/admin/provider-parity';
 
 export const runtime = 'nodejs';
 
@@ -21,6 +26,18 @@ const parseLimit = (searchParams: URLSearchParams): number => {
   return Math.max(1, Math.min(250, Math.floor(parsed)));
 };
 
+const MAX_PROVIDER_FILTER_SCAN = 5_000;
+const PROVIDER_PARITY_COLUMNS = [
+  'provider',
+  'model',
+  'provider_source',
+  'provider_path',
+  'provider_request_id',
+] as const;
+
+const isMissingProviderParityColumnError = (error: unknown): boolean =>
+  PROVIDER_PARITY_COLUMNS.some((column) => isMissingColumnError(error, column));
+
 type AgentTaskRow = {
   id: string;
   room: string | null;
@@ -31,6 +48,7 @@ type AgentTaskRow = {
   error: string | null;
   request_id: string | null;
   trace_id?: string | null;
+  params?: Record<string, unknown> | null;
   resource_keys: string[] | null;
   lease_expires_at: string | null;
   created_at: string | null;
@@ -42,6 +60,15 @@ type TraceMetaRow = {
   stage: string | null;
   status: string | null;
   created_at: string | null;
+  trace_id?: string | null;
+  request_id?: string | null;
+  room?: string | null;
+  task?: string | null;
+  provider?: string | null;
+  model?: string | null;
+  provider_source?: string | null;
+  provider_path?: string | null;
+  provider_request_id?: string | null;
   payload: Record<string, unknown> | null;
 };
 
@@ -50,13 +77,54 @@ type QueueTaskWithDiagnostics = AgentTaskRow & {
   last_failure_stage: string | null;
   last_failure_reason: string | null;
   last_failure_at: string | null;
+  provider: string;
+  model: string | null;
+  provider_source: string;
+  provider_path: string;
+  provider_request_id: string | null;
+  provider_context_url: string | null;
 };
 
-const TASK_SELECT_WITH_TRACE_ID =
-  'id,room,task,status,priority,attempt,error,request_id,trace_id,resource_keys,lease_expires_at,created_at,updated_at';
-const TASK_SELECT_COMPAT =
-  'id,room,task,status,priority,attempt,error,request_id,resource_keys,lease_expires_at,created_at,updated_at';
-const TRACE_META_SELECT = 'task_id,stage,status,created_at,payload';
+const TASK_SELECT_BASE_COLUMNS = [
+  'id',
+  'room',
+  'task',
+  'status',
+  'priority',
+  'attempt',
+  'error',
+  'request_id',
+  'resource_keys',
+  'lease_expires_at',
+  'created_at',
+  'updated_at',
+];
+const buildTaskSelectColumns = (options: {
+  includeTraceId: boolean;
+  includeParams: boolean;
+}): string =>
+  [
+    ...TASK_SELECT_BASE_COLUMNS,
+    ...(options.includeTraceId ? ['trace_id'] : []),
+    ...(options.includeParams ? ['params'] : []),
+  ].join(',');
+const TRACE_META_SELECT = [
+  'task_id',
+  'trace_id',
+  'request_id',
+  'room',
+  'task',
+  'stage',
+  'status',
+  'provider',
+  'model',
+  'provider_source',
+  'provider_path',
+  'provider_request_id',
+  'created_at',
+  'payload',
+].join(',');
+const TRACE_META_SELECT_COMPAT = 'task_id,trace_id,request_id,room,task,stage,status,created_at,payload';
 
 const normalizeTask = (row: AgentTaskRow): AgentTaskRow => ({
   ...row,
@@ -68,6 +136,10 @@ const normalizeTask = (row: AgentTaskRow): AgentTaskRow => ({
   error: typeof row.error === 'string' ? row.error : null,
   request_id: typeof row.request_id === 'string' ? row.request_id : null,
   trace_id: typeof row.trace_id === 'string' ? row.trace_id : null,
+  params:
+    row.params && typeof row.params === 'object' && !Array.isArray(row.params)
+      ? (row.params as Record<string, unknown>)
+      : null,
   resource_keys: Array.isArray(row.resource_keys) ? row.resource_keys : [],
   lease_expires_at: typeof row.lease_expires_at === 'string' ? row.lease_expires_at : null,
   created_at: typeof row.created_at === 'string' ? row.created_at : null,
@@ -85,12 +157,26 @@ const enrichWithTraceDiagnostics = async (
 
   const taskIds = normalizedTasks.map((task) => task.id);
   const traceLimit = Math.max(250, Math.min(4_000, taskIds.length * 8));
-  const { data: traceRows, error: traceError } = await db
+  const primaryTraceQuery = await db
     .from('agent_trace_events')
     .select(TRACE_META_SELECT)
     .in('task_id', taskIds)
     .order('created_at', { ascending: false })
     .limit(traceLimit);
+  let traceRows: TraceMetaRow[] | null = Array.isArray(primaryTraceQuery.data)
+    ? (primaryTraceQuery.data as unknown as TraceMetaRow[])
+    : null;
+  let traceError: unknown = primaryTraceQuery.error;
+  if (traceError && isMissingProviderParityColumnError(traceError)) {
+    const compat = await db
+      .from('agent_trace_events')
+      .select(TRACE_META_SELECT_COMPAT)
+      .in('task_id', taskIds)
+      .order('created_at', { ascending: false })
+      .limit(traceLimit);
+    traceRows = Array.isArray(compat.data) ? (compat.data as unknown as TraceMetaRow[]) : null;
+    traceError = compat.error;
+  }
 
   if (traceError && !isMissingRelationError(traceError, 'agent_trace_events')) {
     throw traceError;
@@ -134,12 +220,35 @@ const enrichWithTraceDiagnostics = async (
       (failure && typeof failure.created_at === 'string' ? failure.created_at : null) ??
       (task.status?.toLowerCase() === 'failed' ? task.updated_at ?? task.created_at : null);
 
+    const providerIdentity = latest
+      ? extractProviderIdentity({
+        ...latest,
+        params: task.params ?? undefined,
+      })
+      : extractProviderIdentity({
+        task: task.task,
+        status: task.status,
+        room: task.room,
+        task_id: task.id,
+        request_id: task.request_id,
+        trace_id: task.trace_id ?? undefined,
+        params: task.params ?? undefined,
+        payload: { error: task.error },
+      });
+
+    const { params: _params, ...taskPublicFields } = task;
     return {
-      ...task,
+      ...taskPublicFields,
       worker_id: latestWorker.workerId,
       last_failure_stage: failureStage,
       last_failure_reason: failureReason,
       last_failure_at: failureAt,
+      provider: providerIdentity.provider,
+      model: providerIdentity.model,
+      provider_source: providerIdentity.providerSource,
+      provider_path: providerIdentity.providerPath,
+      provider_request_id: providerIdentity.providerRequestId,
+      provider_context_url: providerIdentity.providerContextUrl,
     };
   });
 };
@@ -154,54 +263,95 @@ export async function GET(req: NextRequest) {
   const room = readOptional(searchParams, 'room');
   const status = readOptional(searchParams, 'status');
   const task = readOptional(searchParams, 'task');
+  const provider = readOptional(searchParams, 'provider');
+  const providerPath = readOptional(searchParams, 'providerPath');
   const limit = parseLimit(searchParams);
+  const normalizedProvider = provider ? normalizeProvider(provider) : undefined;
+  const normalizedProviderPath = providerPath ? normalizeProviderPath(providerPath) : undefined;
+  const queryLimit =
+    normalizedProvider || normalizedProviderPath
+      ? Math.max(limit, Math.min(1_000, limit * 4))
+      : limit;
 
   try {
     const db = getAdminSupabaseClient();
-    const buildQuery = (selectColumns: string) => {
+    const buildQuery = (selectColumns: string, rowLimit: number) => {
       let query = db
         .from('agent_tasks')
         .select(selectColumns)
         .order('created_at', { ascending: false })
-        .limit(limit);
+        .limit(rowLimit);
       if (room) query = query.eq('room', room);
       if (status) query = query.eq('status', status);
       if (task) query = query.eq('task', task);
       return query;
     };
 
-    const withTrace = await buildQuery(TASK_SELECT_WITH_TRACE_ID);
-    if (withTrace.error && isMissingColumnError(withTrace.error, 'trace_id')) {
-      const compat = await buildQuery(TASK_SELECT_COMPAT);
-      if (compat.error) throw compat.error;
-      const compatTasks = Array.isArray(compat.data)
-        ? compat.data.map((row) => {
-          const base =
-            row && typeof row === 'object' && !Array.isArray(row)
-              ? (row as Record<string, unknown>)
-              : {};
-            return { ...base, trace_id: null } as AgentTaskRow;
-          })
-        : [];
-      const enrichedCompatTasks = await enrichWithTraceDiagnostics(db, compatTasks);
-      return NextResponse.json({
-        ok: true,
-        actorUserId: admin.userId,
-        tasks: enrichedCompatTasks,
-      });
+    let includeTraceId = true;
+    let includeParams = true;
+    let fetchLimit = queryLimit;
+
+    while (true) {
+      let taskRows: AgentTaskRow[] = [];
+      while (true) {
+        const columns = buildTaskSelectColumns({ includeTraceId, includeParams });
+        const queryResult = await buildQuery(columns, fetchLimit);
+        if (!queryResult.error) {
+          taskRows = Array.isArray(queryResult.data)
+            ? queryResult.data.map((row) => {
+                const base =
+                  row && typeof row === 'object' && !Array.isArray(row)
+                    ? (row as Record<string, unknown>)
+                    : {};
+                return {
+                  ...base,
+                  trace_id:
+                    includeTraceId && typeof base.trace_id === 'string' ? base.trace_id : null,
+                  params:
+                    includeParams &&
+                    base.params &&
+                    typeof base.params === 'object' &&
+                    !Array.isArray(base.params)
+                      ? (base.params as Record<string, unknown>)
+                      : null,
+                } as AgentTaskRow;
+              })
+            : [];
+          break;
+        }
+
+        if (isMissingColumnError(queryResult.error, 'trace_id') && includeTraceId) {
+          includeTraceId = false;
+          continue;
+        }
+        if (isMissingColumnError(queryResult.error, 'params') && includeParams) {
+          includeParams = false;
+          continue;
+        }
+        throw queryResult.error;
+      }
+
+      const enrichedTasks = await enrichWithTraceDiagnostics(db, taskRows);
+      const filteredTasks = enrichedTasks
+        .filter((item) => (normalizedProvider ? item.provider === normalizedProvider : true))
+        .filter((item) => (normalizedProviderPath ? item.provider_path === normalizedProviderPath : true))
+        .slice(0, limit);
+
+      const shouldExpandScan =
+        Boolean(normalizedProvider || normalizedProviderPath) &&
+        filteredTasks.length < limit &&
+        taskRows.length >= fetchLimit &&
+        fetchLimit < MAX_PROVIDER_FILTER_SCAN;
+      if (!shouldExpandScan) {
+        return NextResponse.json({
+          ok: true,
+          actorUserId: admin.userId,
+          tasks: filteredTasks,
+        });
+      }
+
+      fetchLimit = Math.min(MAX_PROVIDER_FILTER_SCAN, fetchLimit * 2);
     }
-    if (withTrace.error) throw withTrace.error;
-
-    const withTraceRows = Array.isArray(withTrace.data)
-      ? (withTrace.data as unknown as AgentTaskRow[])
-      : [];
-    const enrichedTasks = await enrichWithTraceDiagnostics(db, withTraceRows);
-
-    return NextResponse.json({
-      ok: true,
-      actorUserId: admin.userId,
-      tasks: enrichedTasks,
-    });
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'failed to load queue' },

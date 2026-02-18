@@ -1,3 +1,5 @@
+import { deriveProviderParity } from './provider-parity';
+
 type JsonRecord = Record<string, unknown>;
 
 export type AgentTaskTraceSourceRow = {
@@ -26,6 +28,11 @@ export type AgentTraceFallbackRow = {
   latency_ms: null;
   created_at: string | null;
   payload: JsonRecord;
+  provider: string;
+  model: string | null;
+  provider_source: string;
+  provider_path: string;
+  provider_request_id: string | null;
 };
 
 const normalizeString = (value: unknown): string | null => {
@@ -122,6 +129,13 @@ export const buildTaskBackedTraceRows = (
     const stage = statusToStage(status);
     const createdAt = normalizeString(row.updated_at) ?? normalizeString(row.created_at);
     const attempt = typeof row.attempt === 'number' && Number.isFinite(row.attempt) ? Math.max(0, Math.floor(row.attempt)) : 0;
+    const provider = deriveProviderParity({
+      task: normalizeString(row.task) ?? undefined,
+      status,
+      stage,
+      params: row.params ?? undefined,
+      payload: { error: normalizeString(row.error), attempt },
+    });
 
     return {
       id: `${row.id}:${createdAt ?? 'na'}:${stage}`,
@@ -139,11 +153,20 @@ export const buildTaskBackedTraceRows = (
         source: 'agent_tasks_fallback',
         attempt,
         error: normalizeString(row.error),
+        provider: provider.provider,
+        model: provider.model,
+        providerSource: provider.providerSource,
+        providerPath: provider.providerPath,
+        providerRequestId: provider.providerRequestId,
       },
+      provider: provider.provider,
+      model: provider.model,
+      provider_source: provider.providerSource,
+      provider_path: provider.providerPath,
+      provider_request_id: provider.providerRequestId,
     };
   });
 
   traces.sort(options?.order === 'asc' ? compareCreatedAtAsc : compareCreatedAtDesc);
   return traces;
 };
-

@@ -72,6 +72,19 @@ type FlowchartResult = {
   rationale?: string;
   version?: number;
   error?: string;
+  _trace?: {
+    provider: 'cerebras';
+    model: string;
+    providerSource: 'runtime_selected';
+    providerPath: 'fast';
+  };
+};
+
+const FLOWCHART_FAST_TRACE = {
+  provider: 'cerebras' as const,
+  model: CEREBRAS_MODEL,
+  providerSource: 'runtime_selected' as const,
+  providerPath: 'fast' as const,
 };
 
 export async function runFlowchartStewardFast(params: {
@@ -86,6 +99,7 @@ export async function runFlowchartStewardFast(params: {
     return {
       status: 'error',
       error: 'FAST Flowchart steward unavailable (missing CEREBRAS_API_KEY)',
+      _trace: FLOWCHART_FAST_TRACE,
     };
   }
 
@@ -176,16 +190,18 @@ export async function runFlowchartStewardFast(params: {
         doc,
         rationale: typeof args.rationale === 'string' ? args.rationale : undefined,
         version: committed.version,
+        _trace: FLOWCHART_FAST_TRACE,
       };
     }
 
     logFastMetric('agent.run.no_change', { room, docId });
-    return { status: 'no_change' };
+    return { status: 'no_change', _trace: FLOWCHART_FAST_TRACE };
   } catch (error) {
     console.error('[FlowchartStewardFast] error', error);
     return {
       status: 'error',
       error: error instanceof Error ? error.message : 'Unknown error',
+      _trace: FLOWCHART_FAST_TRACE,
     };
   }
 }
@@ -203,6 +219,7 @@ export async function runFlowchartInstruction(params: {
     return {
       status: 'error',
       error: 'FAST Flowchart steward unavailable (missing CEREBRAS_API_KEY)',
+      _trace: FLOWCHART_FAST_TRACE,
     };
   }
 
@@ -271,15 +288,17 @@ export async function runFlowchartInstruction(params: {
         doc,
         rationale: typeof args.rationale === 'string' ? args.rationale : undefined,
         version: committed.version,
+        _trace: FLOWCHART_FAST_TRACE,
       };
     }
 
-    return { status: 'no_change' };
+    return { status: 'no_change', _trace: FLOWCHART_FAST_TRACE };
   } catch (error) {
     console.error('[FlowchartInstruction] error', error);
     return {
       status: 'error',
       error: error instanceof Error ? error.message : 'Unknown error',
+      _trace: FLOWCHART_FAST_TRACE,
     };
   }
 }

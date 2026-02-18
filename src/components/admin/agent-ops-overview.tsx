@@ -10,6 +10,16 @@ const QUEUE_STATUS_LABELS: Record<string, string> = {
   canceled: 'Canceled Tasks',
 };
 
+const PROVIDER_LABELS: Record<string, string> = {
+  openai: 'OpenAI',
+  anthropic: 'Anthropic',
+  google: 'Google',
+  cerebras: 'Cerebras',
+  together: 'Together',
+  debug: 'Debug',
+  unknown: 'Unknown',
+};
+
 const formatDuration = (durationMs: number | null | undefined): string => {
   if (typeof durationMs !== 'number' || !Number.isFinite(durationMs) || durationMs <= 0) {
     return 'n/a';
@@ -35,6 +45,14 @@ export function AgentOpsOverview({ overview }: { overview: AgentOverviewResponse
 
   const queueEntries = Object.entries(overview.queue || {}).sort(([left], [right]) => {
     const order = ['queued', 'running', 'failed', 'succeeded', 'canceled'];
+    return order.indexOf(left) - order.indexOf(right);
+  });
+  const providerMixEntries = Object.entries(overview.providerMix || {}).sort(([left], [right]) => {
+    const order = ['openai', 'anthropic', 'google', 'cerebras', 'together', 'debug', 'unknown'];
+    return order.indexOf(left) - order.indexOf(right);
+  });
+  const providerFailureEntries = Object.entries(overview.providerFailures || {}).sort(([left], [right]) => {
+    const order = ['openai', 'anthropic', 'google', 'cerebras', 'together', 'debug', 'unknown'];
     return order.indexOf(left) - order.indexOf(right);
   });
 
@@ -64,6 +82,32 @@ export function AgentOpsOverview({ overview }: { overview: AgentOverviewResponse
       <p className="mt-2 text-sm text-[#475569]">
         Oldest queued age: {formatDuration(overview.queueOldestQueuedAgeMs)}
       </p>
+      {(providerMixEntries.length > 0 || providerFailureEntries.length > 0) && (
+        <div className="mt-3 grid gap-3 md:grid-cols-2">
+          <div className="rounded border border-[#cbd5e1] bg-[#f8fafc] p-2">
+            <div className="text-xs uppercase text-[#334155]">Provider Mix (1h)</div>
+            <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
+              {providerMixEntries.map(([provider, count]) => (
+                <div key={`mix-${provider}`} className="rounded border border-[#dbe3ed] bg-white px-2 py-1">
+                  <span className="text-[#334155]">{PROVIDER_LABELS[provider] ?? provider}</span>
+                  <span className="ml-2 font-semibold text-[#111827]">{count}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="rounded border border-[#cbd5e1] bg-[#f8fafc] p-2">
+            <div className="text-xs uppercase text-[#334155]">Provider Failures (1h)</div>
+            <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
+              {providerFailureEntries.map(([provider, count]) => (
+                <div key={`failure-${provider}`} className="rounded border border-[#dbe3ed] bg-white px-2 py-1">
+                  <span className="text-[#334155]">{PROVIDER_LABELS[provider] ?? provider}</span>
+                  <span className="ml-2 font-semibold text-[#111827]">{count}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
       <p className="mt-3 text-sm text-[#475569]">
         Actor <span className="font-mono">{overview.actorUserId}</span> · Generated{' '}
         {new Date(overview.generatedAt).toLocaleString()}

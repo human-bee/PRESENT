@@ -30,6 +30,11 @@ type TraceRow = {
   task: string | null;
   stage: string;
   status: string | null;
+  provider?: string | null;
+  model?: string | null;
+  provider_source?: string | null;
+  provider_path?: string | null;
+  provider_request_id?: string | null;
   latency_ms: number | null;
   created_at: string | null;
   payload: Record<string, unknown> | null;
@@ -46,6 +51,7 @@ type TaskSnapshot = {
   trace_id: string | null;
   created_at: string | null;
   updated_at: string | null;
+  params?: Record<string, unknown> | null;
 };
 
 type TranscriptEntry = {
@@ -58,6 +64,25 @@ type TranscriptEntry = {
 };
 
 const TRACE_SELECT_COLUMNS = [
+  'id',
+  'trace_id',
+  'request_id',
+  'intent_id',
+  'room',
+  'task_id',
+  'task',
+  'stage',
+  'status',
+  'provider',
+  'model',
+  'provider_source',
+  'provider_path',
+  'provider_request_id',
+  'latency_ms',
+  'created_at',
+  'payload',
+].join(',');
+const TRACE_SELECT_COLUMNS_COMPAT = [
   'id',
   'trace_id',
   'request_id',
@@ -115,6 +140,10 @@ const normalizeTaskSnapshot = (value: Record<string, unknown>): TaskSnapshot => 
   trace_id: typeof value.trace_id === 'string' ? value.trace_id : null,
   created_at: typeof value.created_at === 'string' ? value.created_at : null,
   updated_at: typeof value.updated_at === 'string' ? value.updated_at : null,
+  params:
+    value.params && typeof value.params === 'object' && !Array.isArray(value.params)
+      ? (value.params as Record<string, unknown>)
+      : null,
 });
 
 const normalizeTraceRows = (rows: TraceRow[]): TraceRow[] =>
@@ -127,6 +156,12 @@ const normalizeTraceRows = (rows: TraceRow[]): TraceRow[] =>
     task_id: typeof row.task_id === 'string' ? row.task_id : null,
     task: typeof row.task === 'string' ? row.task : null,
     status: typeof row.status === 'string' ? row.status : null,
+    provider: typeof row.provider === 'string' ? row.provider : null,
+    model: typeof row.model === 'string' ? row.model : null,
+    provider_source: typeof row.provider_source === 'string' ? row.provider_source : null,
+    provider_path: typeof row.provider_path === 'string' ? row.provider_path : null,
+    provider_request_id:
+      typeof row.provider_request_id === 'string' ? row.provider_request_id : null,
     created_at: typeof row.created_at === 'string' ? row.created_at : null,
     payload:
       row.payload && typeof row.payload === 'object' && !Array.isArray(row.payload)
@@ -148,12 +183,19 @@ async function loadTraceEvents(
   db: ReturnType<typeof getAdminSupabaseClient>,
   traceId: string,
 ): Promise<TraceRow[]> {
-  const { data, error } = await db
-    .from('agent_trace_events')
-    .select(TRACE_SELECT_COLUMNS)
-    .eq('trace_id', traceId)
-    .order('created_at', { ascending: true })
-    .limit(2_000);
+  const buildTraceQuery = (columns: string) =>
+    db
+      .from('agent_trace_events')
+      .select(columns)
+      .eq('trace_id', traceId)
+      .order('created_at', { ascending: true })
+      .limit(2_000);
+  let { data, error } = await buildTraceQuery(TRACE_SELECT_COLUMNS);
+  if (error && isMissingColumnError(error, 'provider')) {
+    const compat = await buildTraceQuery(TRACE_SELECT_COLUMNS_COMPAT);
+    data = compat.data;
+    error = compat.error;
+  }
   if (error && isMissingRelationError(error, 'agent_trace_events')) {
     const { data: fallbackRows, error: fallbackError } = await db
       .from('agent_tasks')
@@ -174,6 +216,11 @@ async function loadTraceEvents(
       task: row.task,
       stage: row.stage,
       status: row.status,
+      provider: row.provider,
+      model: row.model,
+      provider_source: row.provider_source,
+      provider_path: row.provider_path,
+      provider_request_id: row.provider_request_id,
       latency_ms: row.latency_ms,
       created_at: row.created_at,
       payload: row.payload,
@@ -412,6 +459,8 @@ export async function GET(
       request_id: taskSnapshot?.request_id ?? null,
       task_id: taskSnapshot?.id ?? latestTaskId,
       task: taskSnapshot?.task ?? null,
+      room: taskSnapshot?.room ?? null,
+      params: taskSnapshot?.params ?? undefined,
     });
 
     const room =
@@ -446,12 +495,27 @@ export async function GET(
       },
     });
 
+    const taskSnapshotResponse = taskSnapshot
+      ? {
+        id: taskSnapshot.id,
+        room: taskSnapshot.room,
+        task: taskSnapshot.task,
+        status: taskSnapshot.status,
+        attempt: taskSnapshot.attempt,
+        error: taskSnapshot.error,
+        request_id: taskSnapshot.request_id,
+        trace_id: taskSnapshot.trace_id,
+        created_at: taskSnapshot.created_at,
+        updated_at: taskSnapshot.updated_at,
+      }
+      : null;
+
     return NextResponse.json({
       ok: true,
       actorUserId: admin.userId,
       traceId: normalizedTraceId,
       failure,
-      taskSnapshot,
+      taskSnapshot: taskSnapshotResponse,
       transcriptPage,
     });
   } catch (error) {

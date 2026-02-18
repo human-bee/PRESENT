@@ -15,6 +15,7 @@ import {
   deriveDefaultLockKey,
   extractOrchestrationEnvelope,
 } from '@/lib/agents/shared/orchestration-envelope';
+import { deriveProviderParity } from '@/lib/agents/admin/provider-parity';
 
 export const runtime = 'nodejs';
 
@@ -101,6 +102,12 @@ export async function POST(req: NextRequest) {
           ? normalizedIntent
           : 'scorecard.run';
     const normalizedTask = normalizedTaskCandidate.startsWith('scorecard.') ? normalizedTaskCandidate : 'scorecard.run';
+    const scorecardFastEligible =
+      normalizedTask !== 'scorecard.fact_check' &&
+      normalizedTask !== 'scorecard.verify' &&
+      normalizedTask !== 'scorecard.refute' &&
+      normalizedTask !== 'scorecard.seed';
+    const predictedFastPath = scorecardFastEligible && isFastStewardReady();
 
     logger.debug('POST received', {
       room: trimmedRoom,
@@ -145,6 +152,36 @@ export async function POST(req: NextRequest) {
       ...orchestrationEnvelope,
       lockKey: normalizedLockKey,
     });
+    const restRecord = parseJsonObject(rest) ?? {};
+    const providerParity = deriveProviderParity({
+      task: normalizedTask,
+      status: 'queued',
+      provider:
+        typeof restRecord.provider === 'string' ? restRecord.provider : predictedFastPath ? 'cerebras' : 'openai',
+      model: typeof restRecord.model === 'string' ? restRecord.model : undefined,
+      providerSource:
+        typeof restRecord.provider === 'string' ? 'explicit' : 'runtime_selected',
+      providerPath:
+        typeof restRecord.provider_path === 'string'
+          ? restRecord.provider_path
+          : predictedFastPath
+            ? 'fast'
+            : 'primary',
+      providerRequestId:
+        typeof restRecord.provider_request_id === 'string'
+          ? restRecord.provider_request_id
+          : undefined,
+      params: enrichedParams,
+    });
+    enrichedParams.provider = providerParity.provider;
+    if (providerParity.model) {
+      enrichedParams.model = providerParity.model;
+    }
+    enrichedParams.provider_source = providerParity.providerSource;
+    enrichedParams.provider_path = providerParity.providerPath;
+    if (providerParity.providerRequestId) {
+      enrichedParams.provider_request_id = providerParity.providerRequestId;
+    }
     const normalizedRequestId =
       typeof requestId === 'string' && requestId.trim() ? requestId.trim() : orchestrationEnvelope.idempotencyKey;
 
