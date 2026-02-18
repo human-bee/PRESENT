@@ -31,6 +31,7 @@ import {
   persistJourneyRunId,
   resolveJourneyConfig,
   updateJourneyRoom,
+  logJourneyEvent,
 } from '@/lib/journey-logger';
 
 // Suppress development warnings for cleaner console
@@ -80,6 +81,32 @@ export function CanvasPageClient() {
       });
     } catch { }
   }, [roomName]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const url = new URL(window.location.href);
+      const shareParam = url.searchParams.get('share');
+      if (!shareParam || shareParam === '0' || shareParam === 'false') return;
+
+      const roomParam = url.searchParams.get('room');
+      const roomMatch = roomParam?.match(/^canvas-([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i);
+      const idFromRoom = roomMatch?.[1] || null;
+      const id = url.searchParams.get('id') || idFromRoom;
+      const key = `present:share-opened:${id || 'unknown'}`;
+      if (window.sessionStorage.getItem(key)) return;
+      window.sessionStorage.setItem(key, '1');
+
+      logJourneyEvent({
+        eventType: 'share_link_opened',
+        source: 'ui',
+        payload: { canvasId: id || null },
+      });
+
+      url.searchParams.delete('share');
+      window.history.replaceState({}, '', url.toString());
+    } catch { }
+  }, []);
 
   const isUuid = (value: string | null | undefined) =>
     !!value && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
