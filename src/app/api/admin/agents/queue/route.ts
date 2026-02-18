@@ -157,12 +157,16 @@ const enrichWithTraceDiagnostics = async (
 
   const taskIds = normalizedTasks.map((task) => task.id);
   const traceLimit = Math.max(250, Math.min(4_000, taskIds.length * 8));
-  let { data: traceRows, error: traceError } = await db
+  const primaryTraceQuery = await db
     .from('agent_trace_events')
     .select(TRACE_META_SELECT)
     .in('task_id', taskIds)
     .order('created_at', { ascending: false })
     .limit(traceLimit);
+  let traceRows: TraceMetaRow[] | null = Array.isArray(primaryTraceQuery.data)
+    ? (primaryTraceQuery.data as unknown as TraceMetaRow[])
+    : null;
+  let traceError: unknown = primaryTraceQuery.error;
   if (traceError && isMissingProviderParityColumnError(traceError)) {
     const compat = await db
       .from('agent_trace_events')
@@ -170,7 +174,7 @@ const enrichWithTraceDiagnostics = async (
       .in('task_id', taskIds)
       .order('created_at', { ascending: false })
       .limit(traceLimit);
-    traceRows = compat.data;
+    traceRows = Array.isArray(compat.data) ? (compat.data as unknown as TraceMetaRow[]) : null;
     traceError = compat.error;
   }
 
