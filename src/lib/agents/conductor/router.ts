@@ -1030,6 +1030,13 @@ async function maybeEnqueueAutoFactChecks(params: ScorecardTaskInput, taskName: 
       componentId: params.componentId,
       claimIds: candidates.map((c) => c.id),
       claimHint: typeof hint === 'string' && hint.trim() ? hint.trim().slice(0, 240) : undefined,
+      provider: 'openai',
+      provider_source: 'runtime_selected',
+      provider_path: 'primary',
+      model:
+        process.env.CANVAS_STEWARD_SEARCH_MODEL ||
+        process.env.DEBATE_STEWARD_SEARCH_MODEL ||
+        'gpt-5-mini',
     } as unknown as JsonObject,
     dedupeKey: `scorecard.fact_check:auto:${params.componentId}:${candidates.map((c) => c.id).join(',')}`,
     resourceKeys: [`room:${params.room}`, `scorecard:${params.componentId}`],

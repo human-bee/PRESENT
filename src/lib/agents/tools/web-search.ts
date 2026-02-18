@@ -41,6 +41,13 @@ export type WebSearchResponse = {
     outputTokens?: number;
     searchTokens?: number;
   };
+  _trace?: {
+    provider: 'openai';
+    model: string;
+    providerSource: 'runtime_selected';
+    providerPath: 'primary';
+    providerRequestId?: string;
+  };
 };
 
 let cachedClient: OpenAI | null = null;
@@ -159,6 +166,12 @@ export async function performWebSearch(args: WebSearchArgs): Promise<WebSearchRe
       hits,
       query: parsed.query,
       model: 'mock-web-search',
+      _trace: {
+        provider: 'openai',
+        model: 'mock-web-search',
+        providerSource: 'runtime_selected',
+        providerPath: 'primary',
+      },
     };
   }
   const client = getClient();
@@ -276,6 +289,16 @@ Instructions:
     query: parsed.query,
     model,
     usage,
+    _trace: {
+      provider: 'openai',
+      model,
+      providerSource: 'runtime_selected',
+      providerPath: 'primary',
+      providerRequestId:
+        typeof (response as { id?: unknown }).id === 'string'
+          ? (response as { id: string }).id
+          : undefined,
+    },
   };
   evidenceCache.set(cacheKey, { response: result, expiresAt: Date.now() + FACT_CHECK_CACHE_TTL_MS });
   if (evidenceCache.size > 500) {

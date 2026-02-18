@@ -1,3 +1,38 @@
+export type AgentProvider =
+  | 'openai'
+  | 'anthropic'
+  | 'google'
+  | 'cerebras'
+  | 'together'
+  | 'debug'
+  | 'unknown';
+
+export type AgentProviderSource =
+  | 'explicit'
+  | 'model_inferred'
+  | 'runtime_selected'
+  | 'task_params'
+  | 'payload'
+  | 'unknown';
+
+export type AgentProviderPath =
+  | 'primary'
+  | 'fallback'
+  | 'fast'
+  | 'slow'
+  | 'shadow'
+  | 'teacher'
+  | 'unknown';
+
+export type AgentProviderSummary = {
+  provider: AgentProvider;
+  model: string | null;
+  provider_source: AgentProviderSource;
+  provider_path: AgentProviderPath;
+  provider_request_id: string | null;
+  provider_context_url?: string | null;
+};
+
 export type AgentOverviewResponse = {
   ok: boolean;
   actorUserId: string;
@@ -9,6 +44,8 @@ export type AgentOverviewResponse = {
   queueOldestQueuedAt?: string | null;
   queueOldestQueuedAgeMs?: number | null;
   tracesLastHour: number;
+  providerMix?: Record<AgentProvider, number>;
+  providerFailures?: Record<AgentProvider, number>;
   activeWorkers?: number;
   workers: Array<Record<string, unknown>>;
   generatedAt: string;
@@ -28,6 +65,12 @@ export type AgentQueueTask = {
   last_failure_stage?: string | null;
   last_failure_reason?: string | null;
   last_failure_at?: string | null;
+  provider?: AgentProvider;
+  model?: string | null;
+  provider_source?: AgentProviderSource;
+  provider_path?: AgentProviderPath;
+  provider_request_id?: string | null;
+  provider_context_url?: string | null;
   resource_keys?: string[];
   lease_expires_at?: string | null;
   created_at?: string;
@@ -48,6 +91,12 @@ export type AgentTraceEventRow = {
   worker_host?: string | null;
   worker_pid?: string | null;
   failure_reason?: string | null;
+  provider?: AgentProvider;
+  model?: string | null;
+  provider_source?: AgentProviderSource;
+  provider_path?: AgentProviderPath;
+  provider_request_id?: string | null;
+  provider_context_url?: string | null;
   latency_ms?: number | null;
   created_at?: string;
   payload?: Record<string, unknown> | null;
@@ -65,7 +114,7 @@ export type AgentTraceFailure = {
   task_id: string | null;
   task: string | null;
   worker_id: string | null;
-};
+} & AgentProviderSummary;
 
 export type AgentTraceContextTranscriptEntry = {
   eventId: string;

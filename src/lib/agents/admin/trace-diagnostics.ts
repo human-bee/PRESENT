@@ -1,3 +1,11 @@
+import {
+  buildProviderLinkUrl,
+  deriveProviderParity,
+  type AgentProvider,
+  type AgentProviderPath,
+  type AgentProviderSource,
+} from './provider-parity';
+
 type JsonRecord = Record<string, unknown>;
 
 export type AgentTraceSubsystem = 'api' | 'queue' | 'worker' | 'router' | 'client-ack' | 'unknown';
@@ -7,11 +15,18 @@ type EventLike = {
   status?: string | null;
   created_at?: string | null;
   payload?: unknown;
+  params?: unknown;
+  provider?: unknown;
+  model?: unknown;
+  provider_source?: unknown;
+  provider_path?: unknown;
+  provider_request_id?: unknown;
   request_id?: string | null;
   intent_id?: string | null;
   trace_id?: string | null;
   task_id?: string | null;
   task?: string | null;
+  room?: string | null;
 };
 
 type FallbackTaskState = {
@@ -22,6 +37,13 @@ type FallbackTaskState = {
   request_id?: string | null;
   task_id?: string | null;
   task?: string | null;
+  room?: string | null;
+  params?: unknown;
+  provider?: unknown;
+  model?: unknown;
+  provider_source?: unknown;
+  provider_path?: unknown;
+  provider_request_id?: unknown;
 };
 
 export type TraceFailureSummary = {
@@ -36,12 +58,27 @@ export type TraceFailureSummary = {
   task_id: string | null;
   task: string | null;
   worker_id: string | null;
+  provider: AgentProvider;
+  model: string | null;
+  provider_source: AgentProviderSource;
+  provider_path: AgentProviderPath;
+  provider_request_id: string | null;
+  provider_context_url: string | null;
 };
 
 export type TraceWorkerIdentity = {
   workerId: string | null;
   workerHost: string | null;
   workerPid: string | null;
+};
+
+export type TraceProviderIdentity = {
+  provider: AgentProvider;
+  model: string | null;
+  providerSource: AgentProviderSource;
+  providerPath: AgentProviderPath;
+  providerRequestId: string | null;
+  providerContextUrl: string | null;
 };
 
 const STAGE_TO_SUBSYSTEM: Record<string, AgentTraceSubsystem> = {
@@ -140,6 +177,37 @@ export const extractWorkerIdentity = (payload: unknown): TraceWorkerIdentity => 
   return { workerId, workerHost, workerPid };
 };
 
+export const extractProviderIdentity = (event: EventLike): TraceProviderIdentity => {
+  const parity = deriveProviderParity({
+    provider: event.provider,
+    model: event.model,
+    providerSource: event.provider_source,
+    providerPath: event.provider_path,
+    providerRequestId: event.provider_request_id,
+    stage: event.stage,
+    status: event.status,
+    task: event.task,
+    params: event.params,
+    payload: event.payload,
+  });
+  const providerContextUrl = buildProviderLinkUrl(parity.provider, {
+    traceId: normalizeString(event.trace_id),
+    requestId: normalizeString(event.request_id),
+    providerRequestId: parity.providerRequestId,
+    model: parity.model,
+    room: normalizeString(event.room),
+    taskId: normalizeString(event.task_id),
+  });
+  return {
+    provider: parity.provider,
+    model: parity.model,
+    providerSource: parity.providerSource,
+    providerPath: parity.providerPath,
+    providerRequestId: parity.providerRequestId,
+    providerContextUrl,
+  };
+};
+
 export const deriveTraceFailureSummary = (
   events: EventLike[],
   fallbackTaskState?: FallbackTaskState,
@@ -155,6 +223,7 @@ export const deriveTraceFailureSummary = (
     const stage = normalizeString(failingEvent.stage);
     const status = normalizeString(failingEvent.status) ?? 'failed';
     const worker = extractWorkerIdentity(failingEvent.payload);
+    const provider = extractProviderIdentity(failingEvent);
     return {
       status,
       stage,
@@ -167,12 +236,34 @@ export const deriveTraceFailureSummary = (
       task_id: normalizeString(failingEvent.task_id),
       task: normalizeString(failingEvent.task),
       worker_id: worker.workerId,
+      provider: provider.provider,
+      model: provider.model,
+      provider_source: provider.providerSource,
+      provider_path: provider.providerPath,
+      provider_request_id: provider.providerRequestId,
+      provider_context_url: provider.providerContextUrl,
     };
   }
 
   const fallbackStatus = normalizeString(fallbackTaskState?.status)?.toLowerCase();
   const fallbackError = normalizeString(fallbackTaskState?.error);
   if (fallbackStatus === 'failed' || fallbackError) {
+    const provider = extractProviderIdentity({
+      stage: 'task_status_fallback',
+      status: fallbackStatus,
+      payload: { error: fallbackError },
+      params: fallbackTaskState?.params,
+      provider: fallbackTaskState?.provider,
+      model: fallbackTaskState?.model,
+      provider_source: fallbackTaskState?.provider_source,
+      provider_path: fallbackTaskState?.provider_path,
+      provider_request_id: fallbackTaskState?.provider_request_id,
+      request_id: fallbackTaskState?.request_id,
+      trace_id: fallbackTaskState?.trace_id,
+      task_id: fallbackTaskState?.task_id,
+      task: fallbackTaskState?.task,
+      room: fallbackTaskState?.room,
+    });
     return {
       status: fallbackStatus ?? 'failed',
       stage: 'task_status_fallback',
@@ -185,6 +276,12 @@ export const deriveTraceFailureSummary = (
       task_id: normalizeString(fallbackTaskState?.task_id),
       task: normalizeString(fallbackTaskState?.task),
       worker_id: null,
+      provider: provider.provider,
+      model: provider.model,
+      provider_source: provider.providerSource,
+      provider_path: provider.providerPath,
+      provider_request_id: provider.providerRequestId,
+      provider_context_url: provider.providerContextUrl,
     };
   }
 

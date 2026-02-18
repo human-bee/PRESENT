@@ -76,6 +76,58 @@ describe('/api/admin/agents/traces', () => {
     expect(json.traces).toEqual([]);
   });
 
+  it('filters traces by provider when provider query is supplied', async () => {
+    requireAgentAdminSignedInUserIdMock.mockResolvedValue({ ok: true, userId: 'admin-provider' });
+    const { query } = buildQuery({
+      data: [
+        {
+          id: 'evt-1',
+          trace_id: 'trace-1',
+          task: 'fairy.intent',
+          stage: 'completed',
+          status: 'succeeded',
+          provider: 'openai',
+          model: 'gpt-5-mini',
+          provider_source: 'explicit',
+          provider_path: 'primary',
+          provider_request_id: 'openai-1',
+          payload: {},
+        },
+        {
+          id: 'evt-2',
+          trace_id: 'trace-2',
+          task: 'fairy.intent',
+          stage: 'failed',
+          status: 'failed',
+          provider: 'anthropic',
+          model: 'claude-3-5-sonnet',
+          provider_source: 'explicit',
+          provider_path: 'primary',
+          provider_request_id: 'anthropic-1',
+          payload: {},
+        },
+      ],
+      error: null,
+    });
+    getAdminSupabaseClientMock.mockReturnValue({
+      from: jest.fn(() => query),
+    });
+
+    const GET = await loadGet();
+    const response = await GET({
+      nextUrl: new URL('http://localhost/api/admin/agents/traces?provider=openai'),
+    } as import('next/server').NextRequest);
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.traces).toHaveLength(1);
+    expect(json.traces[0]).toMatchObject({
+      id: 'evt-1',
+      provider: 'openai',
+      model: 'gpt-5-mini',
+    });
+  });
+
   it('falls back to task-backed traces when trace ledger table is missing', async () => {
     requireAgentAdminSignedInUserIdMock.mockResolvedValue({ ok: true, userId: 'admin-2' });
     const tracesQuery = buildQuery({

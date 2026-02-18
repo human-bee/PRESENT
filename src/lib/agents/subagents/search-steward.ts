@@ -53,6 +53,13 @@ export type SearchStewardResult = {
     summary: string;
     model: string;
     hits: WebSearchHit[];
+    _trace?: {
+      provider: 'openai';
+      model: string;
+      providerSource: 'runtime_selected';
+      providerPath: 'primary';
+      providerRequestId?: string;
+    };
   };
   panel?: ResearchPanelPayload;
   componentId?: string;
@@ -98,6 +105,7 @@ async function runGeneralSearch(rawParams: JsonObject): Promise<SearchStewardRes
         summary: searchResponse.summary,
         model: searchResponse.model,
         hits: searchResponse.hits,
+        _trace: searchResponse._trace,
       },
       panel,
       componentId: parsed.componentId,
