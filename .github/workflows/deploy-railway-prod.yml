@@ -52,6 +52,8 @@ jobs:
         uses: dorny/paths-filter@v3
         with:
           filters: |
+            agents:
+              - 'src/lib/agents/**'
             shared:
               - 'scripts/start-service.sh'
               - 'railway.toml'
@@ -72,12 +74,21 @@ jobs:
           set -euo pipefail
           deploy_conductor=false
           deploy_realtime=false
+          is_dispatch_from_main=false
 
-          if [ "${{ steps.paths.outputs.shared }}" = "true" ] || [ "${{ steps.paths.outputs.conductor }}" = "true" ]; then
+          if [ "${{ github.event_name }}" != "workflow_dispatch" ] || [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            is_dispatch_from_main=true
+          fi
+
+          if [ "${{ steps.paths.outputs.shared }}" = "true" ] || \
+             [ "${{ steps.paths.outputs.conductor }}" = "true" ] || \
+             [ "${{ steps.paths.outputs.agents }}" = "true" ]; then
             deploy_conductor=true
           fi
 
-          if [ "${{ steps.paths.outputs.shared }}" = "true" ] || [ "${{ steps.paths.outputs.realtime }}" = "true" ]; then
+          if [ "${{ steps.paths.outputs.shared }}" = "true" ] || \
+             [ "${{ steps.paths.outputs.realtime }}" = "true" ] || \
+             [ "${{ steps.paths.outputs.agents }}" = "true" ]; then
             deploy_realtime=true
           fi
 
@@ -87,6 +98,11 @@ jobs:
 
           if [ "${{ github.event.inputs.force_realtime || 'false' }}" = "true" ]; then
             deploy_realtime=true
+          fi
+
+          if [ "$is_dispatch_from_main" = false ]; then
+            deploy_conductor=false
+            deploy_realtime=false
           fi
 
           echo "deploy_conductor=$deploy_conductor" >> "$GITHUB_OUTPUT"
@@ -117,6 +133,24 @@ jobs:
           set -euo pipefail
           tmp_dir="$(mktemp -d)"
           cd "$tmp_dir"
+          validate_positive_int() {
+            local name="$1"
+            local value="$2"
+            if ! [[ "$value" =~ ^[0-9]+$ ]] || [ "$value" -eq 0 ]; then
+              echo "::error::${name} must be a positive integer."
+              exit 1
+            fi
+          }
+
+          validate_positive_int TASK_IDLE_POLL_MS "$TASK_IDLE_POLL_MS"
+          validate_positive_int TASK_IDLE_POLL_MAX_MS "$TASK_IDLE_POLL_MAX_MS"
+          validate_positive_int AGENT_WORKER_HEARTBEAT_MS "$AGENT_WORKER_HEARTBEAT_MS"
+
+          if [ "$TASK_IDLE_POLL_MAX_MS" -lt "$TASK_IDLE_POLL_MS" ]; then
+            echo "::error::TASK_IDLE_POLL_MAX_MS must be greater than or equal to TASK_IDLE_POLL_MS."
+            exit 1
+          fi
+
           railway link -p "$RAILWAY_PROJECT_ID" -e "$RAILWAY_ENVIRONMENT" >/dev/null
           # Keep core runtime flags synced before the deploy.
           railway variables \

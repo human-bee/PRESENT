@@ -63,7 +63,8 @@
 - Commits: Imperative ("fix: handle LiveKit reconnect").
 - PRs: Include summary, linked issues, screenshots/logs for agent changes.
 - Requirements: Passing `npm test`, `npm run lint`; no uncommitted changes.
-- Railway prod deploys run on `main` via `.github/workflows/deploy-railway-prod.yml` and only redeploy changed services (`present-conductor` / `present-realtime`) based on path filters; use manual workflow dispatch force flags for env-only updates.
+- Railway prod deploys run on `main` via `.github/workflows/deploy-railway-prod.yml`; changed paths under `src/lib/agents/**` will redeploy `present-conductor` and `present-realtime` as needed, based on path filters.
+- Manual workflow dispatch is supported for env updates (`force_conductor`, `force_realtime`) and is ignored unless triggered from `main` (non-main manual triggers are a no-op).
 
 ## Data Compatibility & Persistence
 
