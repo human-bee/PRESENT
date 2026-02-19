@@ -1,4 +1,4 @@
-import { shouldExecuteIncomingToolCall } from './tool-call-execution-guard';
+import { shouldDeferToolCallWhenNotExecutor, shouldExecuteIncomingToolCall } from './tool-call-execution-guard';
 
 describe('shouldExecuteIncomingToolCall', () => {
   it('skips execution for non-executor clients', () => {
@@ -42,5 +42,47 @@ describe('shouldExecuteIncomingToolCall', () => {
     expect(result.execute).toBe(true);
     expect(result.reason).toBeUndefined();
     expect(processed.has('canvas-room:c1')).toBe(true);
+  });
+});
+
+describe('shouldDeferToolCallWhenNotExecutor', () => {
+  it('defers when no executor identity is known yet', () => {
+    expect(
+      shouldDeferToolCallWhenNotExecutor({
+        reason: 'not_executor',
+        executorIdentity: null,
+        localIdentity: 'Canvas-User-1',
+      }),
+    ).toBe(true);
+  });
+
+  it('defers when executor identity already matches local identity', () => {
+    expect(
+      shouldDeferToolCallWhenNotExecutor({
+        reason: 'not_executor',
+        executorIdentity: 'Canvas-User-1',
+        localIdentity: 'Canvas-User-1',
+      }),
+    ).toBe(true);
+  });
+
+  it('does not defer when another executor is known', () => {
+    expect(
+      shouldDeferToolCallWhenNotExecutor({
+        reason: 'not_executor',
+        executorIdentity: 'Canvas-User-2',
+        localIdentity: 'Canvas-User-1',
+      }),
+    ).toBe(false);
+  });
+
+  it('does not defer deduped calls', () => {
+    expect(
+      shouldDeferToolCallWhenNotExecutor({
+        reason: 'deduped',
+        executorIdentity: null,
+        localIdentity: 'Canvas-User-1',
+      }),
+    ).toBe(false);
   });
 });

@@ -93,8 +93,11 @@ const buildDrawSegments = (points: { x: number; y: number }[], isClosed: boolean
   };
 };
 
+export const CLEAR_ALL_SHAPES_SENTINEL = '__all__';
+
 const teacherConverters: Partial<Record<TeacherActionName, (payload: Record<string, unknown>) => CanonicalAction | null>> =
   {
+    clear: () => ({ name: 'delete_shape', params: { ids: [CLEAR_ALL_SHAPES_SENTINEL] } }),
     message: (payload) => {
       const text = typeof payload.text === 'string' ? payload.text : '';
       return { name: 'message', params: { text } };

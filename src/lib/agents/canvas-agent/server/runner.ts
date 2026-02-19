@@ -33,6 +33,11 @@ import {
 import { normalizeFairyContextProfile, type FairyContextProfile } from '@/lib/fairy-context/profiles';
 import { AgentTaskQueue } from '@/lib/agents/shared/queue';
 import { enqueueCanvasFollowup, type CanvasFollowupInput } from './followup-queue';
+import {
+  mergeFollowupWithInferredTargets,
+  normalizeShapeIdForLookup,
+  resolveMissingTargetIds,
+} from './target-id-contract';
 import type { JsonObject } from '@/lib/utils/json-schema';
 import {
   describeRetryError,
@@ -486,9 +491,14 @@ export async function runCanvasAgent(args: RunArgs) {
     typeof args.followupDepth === 'number' && Number.isFinite(args.followupDepth)
       ? Math.max(0, Math.floor(args.followupDepth))
       : 0;
-  const initialFollowup = normalizeInitialFollowup(args.initialFollowup, userMessage, currentFollowupDepth);
+  const initialFollowup = mergeFollowupWithInferredTargets(
+    normalizeInitialFollowup(args.initialFollowup, userMessage, currentFollowupDepth),
+    userMessage,
+    currentFollowupDepth,
+  );
   const runMetadata =
     args.metadata && typeof args.metadata === 'object' && !Array.isArray(args.metadata) ? args.metadata : undefined;
+  const hasExplicitTargetContract = Array.isArray(initialFollowup?.targetIds) && initialFollowup.targetIds.length > 0;
   const cfg = loadCanvasAgentConfig();
   if (cfg.mode === 'tldraw-teacher') {
     console.info('[CanvasAgent] running in tldraw-teacher mode (vendored TLDraw agent active)', {
@@ -1004,8 +1014,98 @@ export async function runCanvasAgent(args: RunArgs) {
       return accepted;
     };
 
+    const scheduleMissingTargetIdsFollowup = async (
+      sourceFollowup: CanvasFollowupInput | null,
+      phase: 'initial' | 'followup',
+    ): Promise<boolean> => {
+      if (!sourceFollowup || !Array.isArray(sourceFollowup.targetIds) || sourceFollowup.targetIds.length === 0) {
+        return false;
+      }
+
+      const baseDepth = Number.isFinite(sourceFollowup.depth) ? Math.max(0, Math.floor(sourceFollowup.depth)) : 0;
+      const nextDepth = baseDepth + 1;
+      if (nextDepth > cfg.followups.maxDepth) {
+        return false;
+      }
+
+      const knownShapeIds = new Set<string>();
+      try {
+        const canvasSummary = await getCanvasShapeSummary(roomId);
+        for (const shape of canvasSummary.shapes) {
+          const normalized = normalizeShapeIdForLookup(shape.id);
+          if (normalized) knownShapeIds.add(normalized);
+        }
+      } catch (error) {
+        if (cfg.debug) {
+          console.warn('[CanvasAgent:Followups] failed to read canvas summary for target-id verification', {
+            roomId,
+            sessionId,
+            phase,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
+      for (const createdId of sessionCreatedIds) {
+        const normalized = normalizeShapeIdForLookup(createdId);
+        if (normalized) knownShapeIds.add(normalized);
+      }
+
+      const missingTargetIds = resolveMissingTargetIds(sourceFollowup.targetIds, knownShapeIds);
+      if (missingTargetIds.length === 0) {
+        return false;
+      }
+
+      const sourceMessage =
+        typeof sourceFollowup.message === 'string' && sourceFollowup.message.trim().length > 0
+          ? sourceFollowup.message.trim()
+          : userMessage;
+      const sourceOriginalMessage =
+        typeof sourceFollowup.originalMessage === 'string' && sourceFollowup.originalMessage.trim().length > 0
+          ? sourceFollowup.originalMessage.trim()
+          : userMessage;
+      const reason = sourceFollowup.reason?.trim() || 'missing_target_ids';
+      const hint = `Ensure these exact shape ids exist and are applied: ${missingTargetIds.join(', ')}.`;
+
+      const followupPayload: Record<string, unknown> = {
+        message: sourceMessage,
+        originalMessage: sourceOriginalMessage,
+        depth: nextDepth,
+        targetIds: missingTargetIds,
+        strict: true,
+        reason,
+        hint,
+        enqueuedAt: Date.now(),
+      };
+      const accepted = scheduler.enqueue(sessionId, { input: followupPayload, depth: nextDepth });
+      if (accepted) {
+        metrics.followupCount++;
+        emitTrace('followup_enqueued', {
+          detail: {
+            mode: 'session',
+            phase,
+            depth: nextDepth,
+            reason,
+            strict: true,
+            targetIds: missingTargetIds,
+          },
+        });
+        if (cfg.debug) {
+          console.log('[CanvasAgent:Followups] scheduled missing-target-ids follow-up', {
+            roomId,
+            sessionId,
+            phase,
+            baseDepth,
+            nextDepth,
+            missingTargetIds,
+          });
+        }
+      }
+      return accepted;
+    };
+
     const makeDetailEnqueuer =
-      (baseMessage: string, baseDepth: number) => async (params: Record<string, unknown>): Promise<void> => {
+      (baseMessage: string, baseDepth: number, inheritedTargetIds: string[] = []) =>
+      async (params: Record<string, unknown>): Promise<void> => {
         const hint = typeof params.hint === 'string' ? params.hint.trim() : '';
         const previousDepth = typeof params.depth === 'number' ? Number(params.depth) : baseDepth;
         const nextDepth = previousDepth + 1;
@@ -1013,6 +1113,7 @@ export async function runCanvasAgent(args: RunArgs) {
         const targetIds = Array.isArray(params.targetIds)
           ? params.targetIds.filter((id: unknown): id is string => typeof id === 'string' && id.length > 0)
           : [];
+        const resolvedTargetIds = targetIds.length > 0 ? targetIds : inheritedTargetIds;
         const accepted = await enqueueFollowupTask({
           message: hint || baseMessage,
           originalMessage: baseMessage,
@@ -1020,18 +1121,17 @@ export async function runCanvasAgent(args: RunArgs) {
           enqueuedAt: Date.now(),
           ...(hint ? { hint } : {}),
           ...(typeof params.reason === 'string' && params.reason.trim() ? { reason: params.reason.trim() } : {}),
-          ...(params.strict === true ? { strict: true } : {}),
-          ...(targetIds.length > 0 ? { targetIds } : {}),
+          ...(params.strict === true || resolvedTargetIds.length > 0 ? { strict: true } : {}),
+          ...(resolvedTargetIds.length > 0 ? { targetIds: resolvedTargetIds } : {}),
         });
         if (accepted) metrics.followupCount++;
       };
 
 /**
  * normalizeRawAction keeps create/update payloads in sync with the canonical
- * contract before we run schema validation. Most adjustments are structural
- * (moving props, coercing dimensions, resolving shape kinds). The lone
- * semantic fallback is the `line` → `rectangle` rewrite noted below, which is
- * a temporary crutch until the TLDraw contract exposes sized lines.
+ * contract before we run schema validation. Adjustments are structural:
+ * moving top-level params into props, coercing numerics, and resolving
+ * shape kinds so downstream validation sees one consistent shape schema.
  */
 const normalizeRawAction = (
   raw: unknown,
@@ -1048,18 +1148,6 @@ const normalizeRawAction = (
     let resolvedType = candidateType ? resolveShapeType(candidateType) : undefined;
     if (!resolvedType) {
       return null;
-    }
-    const hasDimension =
-      coerceNumeric(params.w) !== undefined ||
-      coerceNumeric(params.width) !== undefined ||
-      coerceNumeric(params.h) !== undefined ||
-      coerceNumeric(params.height) !== undefined;
-    if (resolvedType === 'line' && hasDimension) {
-      // Semantic rewrite: TLDraw's teacher can emit `line` shapes with width &
-      // height, which PRESENT cannot render faithfully. For now we coerce
-      // those into rectangles and document the hack so a parity pass can
-      // remove it once prompts/examples converge.
-      resolvedType = 'rectangle';
     }
     params.type = resolvedType;
     delete params.kind;
@@ -1096,6 +1184,10 @@ const normalizeRawAction = (
     moveNumericToProps('height', 'h');
     moveNumericToProps('rx');
     moveNumericToProps('ry');
+    moveNumericToProps('x1');
+    moveNumericToProps('y1');
+    moveNumericToProps('x2');
+    moveNumericToProps('y2');
     moveToProps('text');
     moveToProps('label', 'text');
     moveToProps('font');
@@ -1103,6 +1195,35 @@ const normalizeRawAction = (
     moveToProps('color');
     moveToProps('fill');
     moveToProps('dash');
+    moveToProps('points');
+    moveToProps('startPoint');
+    moveToProps('endPoint');
+    moveToProps('start');
+    moveToProps('end');
+
+    if (params.type === 'line') {
+      const x1 = coerceNumeric(props.x1);
+      const y1 = coerceNumeric(props.y1);
+      const x2 = coerceNumeric(props.x2);
+      const y2 = coerceNumeric(props.y2);
+      const hasLinePointsLike =
+        props.points !== undefined || props.startPoint !== undefined || props.endPoint !== undefined;
+      if (!hasLinePointsLike && x1 !== undefined && y1 !== undefined && x2 !== undefined && y2 !== undefined) {
+        props.startPoint = { x: x1, y: y1 };
+        props.endPoint = { x: x2, y: y2 };
+      } else if (!hasLinePointsLike) {
+        const w = coerceNumeric(props.w);
+        const h = coerceNumeric(props.h);
+        if (w !== undefined || h !== undefined) {
+          props.startPoint = { x: 0, y: 0 };
+          props.endPoint = { x: w ?? 100, y: h ?? 0 };
+        }
+      }
+      delete props.x1;
+      delete props.y1;
+      delete props.x2;
+      delete props.y2;
+    }
 
     if (Object.keys(props).length > 0) {
       const sanitized = sanitizeProps(props, params.type);
@@ -1152,7 +1273,11 @@ const normalizeRawAction = (
       seqNumber: number,
       partial: boolean,
       enqueueDetail: (params: Record<string, unknown>) => Promise<void>,
-      options?: { dispatch?: boolean; source?: 'present' | 'teacher' },
+      options?: {
+        dispatch?: boolean;
+        source?: 'present' | 'teacher';
+        promoteMissingUpdateShapeIds?: string[];
+      },
     ) => {
       const shouldDispatch = options?.dispatch !== false;
       const actionSource = options?.source ?? 'present';
@@ -1284,7 +1409,10 @@ const normalizeRawAction = (
       }
       const exists = (id: string) =>
         sessionCreatedIds.has(id) || chunkCreatedIds.has(id) || existingShapeIds.has(id);
-      const clean = sanitizeActions(parsed, exists);
+      const clean = sanitizeActions(parsed, exists, {
+        promoteMissingUpdateShapeIds: options?.promoteMissingUpdateShapeIds,
+        knownShapeIds: [...existingShapeIds, ...sessionCreatedIds, ...chunkCreatedIds],
+      });
       if (shouldDispatch) {
         rememberCreatedIds(clean);
       }
@@ -1456,7 +1584,7 @@ const normalizeRawAction = (
 
     await sendStatus(roomId, sessionId, 'streaming');
     const streamingEnabled = typeof provider.streamStructured === 'function' && process.env.CANVAS_AGENT_STREAMING !== 'false';
-    const enqueueDetail = makeDetailEnqueuer(userMessage, currentFollowupDepth);
+    const enqueueDetail = makeDetailEnqueuer(userMessage, currentFollowupDepth, initialFollowup?.targetIds ?? []);
 
     if (cfg.debug) {
       try {
@@ -1581,6 +1709,7 @@ const normalizeRawAction = (
           await processActions([event], currentSeq, false, enqueueDetail, {
             dispatch: dispatchActions,
             source: 'teacher',
+            promoteMissingUpdateShapeIds: initialFollowup?.targetIds ?? [],
           });
         }
       };
@@ -1675,7 +1804,9 @@ const normalizeRawAction = (
               }
               metrics.chunkCount++;
               const currentSeq = seq++;
-              await processActions(delta, currentSeq, true, enqueueDetail);
+              await processActions(delta, currentSeq, true, enqueueDetail, {
+                promoteMissingUpdateShapeIds: initialFollowup?.targetIds ?? [],
+              });
               rawProcessed += delta.length;
             },
             async (finalActions) => {
@@ -1684,7 +1815,9 @@ const normalizeRawAction = (
               rawProcessed = finalActions.length;
               if (pending.length === 0) return;
               const currentSeq = seq++;
-              await processActions(pending, currentSeq, false, enqueueDetail);
+              await processActions(pending, currentSeq, false, enqueueDetail, {
+                promoteMissingUpdateShapeIds: initialFollowup?.targetIds ?? [],
+              });
             },
           );
         }
@@ -1718,7 +1851,9 @@ const normalizeRawAction = (
         }
         metrics.chunkCount++;
         const currentSeq = seq++;
-        await processActions(actionsRaw, currentSeq, true, enqueueDetail);
+        await processActions(actionsRaw, currentSeq, true, enqueueDetail, {
+          promoteMissingUpdateShapeIds: initialFollowup?.targetIds ?? [],
+        });
       }
     };
 
@@ -1779,10 +1914,13 @@ const normalizeRawAction = (
       }
     }
 
+    await scheduleMissingTargetIdsFollowup(initialFollowup, 'initial');
+
     if (
       !lowActionRetryScheduled &&
       cfg.followups.lowActionThreshold > 0 &&
-      metrics.mutatingActionCount < cfg.followups.lowActionThreshold
+      metrics.mutatingActionCount < cfg.followups.lowActionThreshold &&
+      !hasExplicitTargetContract
     ) {
       const retryHint =
         'Add more layout detail: ensure there is a headline block, supporting shapes, and three sticky notes with copy ideas.';
@@ -1881,7 +2019,11 @@ const normalizeRawAction = (
       const followPrompt = JSON.stringify(followPayload);
       const followProvider = selectModel(model || cfg.modelName);
       let followSeq = 0;
-      const followEnqueueDetail = makeDetailEnqueuer(followMessage, followBaseDepth);
+      const followEnqueueDetail = makeDetailEnqueuer(
+        followMessage,
+        followBaseDepth,
+        followTargetIds.length > 0 ? followTargetIds : initialFollowup?.targetIds ?? [],
+      );
       const followStreamingEnabled = typeof followProvider.streamStructured === 'function' && process.env.CANVAS_AGENT_STREAMING !== 'false';
       const followPresetName = (followInput.strict ? 'precise' : cfg.preset) as CanvasAgentPreset;
       const followTuning = getModelTuning(followPresetName);
@@ -1909,7 +2051,10 @@ const normalizeRawAction = (
                 if (!Array.isArray(delta) || delta.length === 0) return;
                 metrics.chunkCount++;
                 const currentSeq = followSeq++;
-                await processActions(delta, currentSeq, true, followEnqueueDetail);
+                await processActions(delta, currentSeq, true, followEnqueueDetail, {
+                  promoteMissingUpdateShapeIds:
+                    followTargetIds.length > 0 ? followTargetIds : initialFollowup?.targetIds ?? [],
+                });
                 followRawProcessed += delta.length;
               },
               async (finalActions) => {
@@ -1918,7 +2063,10 @@ const normalizeRawAction = (
                 followRawProcessed = finalActions.length;
                 if (pending.length === 0) return;
                 const currentSeq = followSeq++;
-                await processActions(pending, currentSeq, false, followEnqueueDetail);
+                await processActions(pending, currentSeq, false, followEnqueueDetail, {
+                  promoteMissingUpdateShapeIds:
+                    followTargetIds.length > 0 ? followTargetIds : initialFollowup?.targetIds ?? [],
+                });
               },
             );
           }
@@ -1930,7 +2078,10 @@ const normalizeRawAction = (
           if (!Array.isArray(actionsRaw) || actionsRaw.length === 0) continue;
           metrics.chunkCount++;
           const currentSeq = followSeq++;
-          await processActions(actionsRaw, currentSeq, true, followEnqueueDetail);
+          await processActions(actionsRaw, currentSeq, true, followEnqueueDetail, {
+            promoteMissingUpdateShapeIds:
+              followTargetIds.length > 0 ? followTargetIds : initialFollowup?.targetIds ?? [],
+          });
         }
       };
 
@@ -1983,11 +2134,28 @@ const normalizeRawAction = (
           throw error;
         }
       }
+
+      const followOriginalMessageRaw =
+        typeof (followInput as any).originalMessage === 'string' ? (followInput as any).originalMessage : undefined;
+      const followReasonRaw = typeof (followInput as any).reason === 'string' ? (followInput as any).reason : undefined;
+      const normalizedFollowup: CanvasFollowupInput = {
+        message: followMessage,
+        originalMessage:
+          followOriginalMessageRaw && followOriginalMessageRaw.trim().length > 0
+            ? followOriginalMessageRaw.trim()
+            : userMessage,
+        depth: followBaseDepth,
+        ...(followTargetIds.length > 0 ? { targetIds: followTargetIds } : {}),
+        ...(followInput.strict === true ? { strict: true } : {}),
+        ...(followReasonRaw && followReasonRaw.trim().length > 0 ? { reason: followReasonRaw.trim() } : {}),
+      };
+      await scheduleMissingTargetIdsFollowup(normalizedFollowup, 'followup');
+
       next = scheduler.dequeue(sessionId);
     }
 
     // Guarantee at least one visible action for simple create prompts if the model emitted nothing.
-    if (metrics.actionCount === 0) {
+    if (metrics.actionCount === 0 && !hasExplicitTargetContract) {
       const fallbackId = `rect-${Date.now().toString(36)}`;
       const fallback = [
         {

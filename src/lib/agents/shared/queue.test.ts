@@ -277,4 +277,61 @@ describe('AgentTaskQueue enqueue dedupe behavior', () => {
     expect(coalesceQuery).toBeDefined();
     expect(coalesceQuery?.in).toHaveBeenCalledWith('task', ['canvas.agent_prompt']);
   });
+
+  test('requeues a leased task without incrementing attempts', async () => {
+    const harness = createHarness();
+    harness.maybeSingleQueue.push({ data: null, error: null });
+    harness.singleQueue.push({
+      data: {
+        id: 'task-requeue',
+        room: 'room-1',
+        task: 'fairy.intent',
+        params: {} as JsonObject,
+        trace_id: null,
+        status: 'queued',
+        priority: 0,
+        run_at: null,
+        attempt: 0,
+        error: null,
+        request_id: 'req-requeue',
+        dedupe_key: null,
+        resource_keys: ['room:room-1'],
+        lease_token: null,
+        lease_expires_at: null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        result: null,
+      },
+      error: null,
+    });
+
+    const { AgentTaskQueue } = await import('@/lib/agents/shared/queue');
+    const queue = new AgentTaskQueue({ url: 'http://localhost:54321', serviceRoleKey: 'test-key' });
+    await queue.enqueueTask({
+      room: 'room-1',
+      task: 'fairy.intent',
+      params: { room: 'room-1', message: 'draw a bunny' },
+      requestId: 'req-requeue',
+    });
+
+    const queryCountBeforeRequeue = harness.queries.length;
+    await queue.requeueTask('task-requeue', 'lease-1', {
+      runAt: new Date('2026-02-19T12:00:00.000Z'),
+      resourceKeys: ['room:room-1', 'skip-host:host-a'],
+    });
+
+    expect(harness.queries.length).toBe(queryCountBeforeRequeue + 1);
+    const requeueQuery = harness.queries[queryCountBeforeRequeue];
+    expect(requeueQuery?.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: 'queued',
+        lease_token: null,
+        lease_expires_at: null,
+        run_at: '2026-02-19T12:00:00.000Z',
+        resource_keys: ['room:room-1', 'skip-host:host-a'],
+      }),
+    );
+    expect(requeueQuery?.eq).toHaveBeenCalledWith('id', 'task-requeue');
+    expect(requeueQuery?.eq).toHaveBeenCalledWith('lease_token', 'lease-1');
+  });
 });

@@ -52,7 +52,7 @@ describe('followup-queue', () => {
           traceId: 'trace-1',
           intentId: 'intent-1',
         },
-        metadata: { contextProfile: 'deep' },
+        metadata: { contextProfile: 'deep', runtimeScope: 'ws://localhost:7880' },
       },
       followupInput,
     );
@@ -67,6 +67,7 @@ describe('followup-queue', () => {
     expect(payload.params.depth).toBe(2);
     expect(payload.params.traceId).toBe('trace-1');
     expect(payload.params.intentId).toBe('intent-1');
+    expect(payload.params.runtimeScope).toBe('localhost:7880');
     expect(payload.params.selectionIds).toEqual(['shape:a', 'shape:b']);
     expect(payload.params.followup).toMatchObject({
       reason: 'low_action',
@@ -77,6 +78,9 @@ describe('followup-queue', () => {
       depth: 2,
       parentSessionId: 'session-1',
     });
+    expect(payload.resourceKeys).toEqual(
+      expect.arrayContaining(['runtime-scope:localhost:7880']),
+    );
   });
 
   it('rejects empty followups without hitting the queue', async () => {

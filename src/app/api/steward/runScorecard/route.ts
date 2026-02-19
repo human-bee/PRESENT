@@ -16,6 +16,11 @@ import {
   extractOrchestrationEnvelope,
 } from '@/lib/agents/shared/orchestration-envelope';
 import { deriveProviderParity } from '@/lib/agents/admin/provider-parity';
+import {
+  getRuntimeScopeResourceKey,
+  normalizeRuntimeScope,
+  resolveRuntimeScopeFromEnv,
+} from '@/lib/agents/shared/runtime-scope';
 
 export const runtime = 'nodejs';
 
@@ -182,10 +187,26 @@ export async function POST(req: NextRequest) {
     if (providerParity.providerRequestId) {
       enrichedParams.provider_request_id = providerParity.providerRequestId;
     }
+    const runtimeScope =
+      normalizeRuntimeScope(enrichedParams.runtimeScope) ?? resolveRuntimeScopeFromEnv();
+    if (runtimeScope) {
+      enrichedParams.runtimeScope = runtimeScope;
+      const metadata =
+        enrichedParams.metadata && typeof enrichedParams.metadata === 'object' && !Array.isArray(enrichedParams.metadata)
+          ? ({ ...(enrichedParams.metadata as JsonObject) } as JsonObject)
+          : ({} as JsonObject);
+      if (!metadata.runtimeScope) {
+        metadata.runtimeScope = runtimeScope;
+      }
+      enrichedParams.metadata = metadata;
+    }
     const normalizedRequestId =
       typeof requestId === 'string' && requestId.trim() ? requestId.trim() : orchestrationEnvelope.idempotencyKey;
 
     try {
+      const runtimeScopeKey = getRuntimeScopeResourceKey(
+        typeof enrichedParams.runtimeScope === 'string' ? enrichedParams.runtimeScope : undefined,
+      );
       const enqueueResult = await getQueue().enqueueTask({
         room: trimmedRoom,
         task: normalizedTask,
@@ -197,6 +218,7 @@ export async function POST(req: NextRequest) {
         resourceKeys: [
           `room:${trimmedRoom}`,
           `scorecard:${trimmedComponentId}`,
+          ...(runtimeScopeKey ? [runtimeScopeKey] : []),
           ...(normalizedLockKey ? [`lock:${normalizedLockKey}`] : []),
         ],
       });

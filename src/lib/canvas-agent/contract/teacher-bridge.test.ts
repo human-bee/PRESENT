@@ -1,4 +1,4 @@
-import { convertTeacherAction } from './teacher-bridge';
+import { CLEAR_ALL_SHAPES_SENTINEL, convertTeacherAction } from './teacher-bridge';
 
 describe('convertTeacherAction', () => {
   it('converts teacher create into canonical create_shape', () => {
@@ -68,5 +68,18 @@ describe('convertTeacherAction', () => {
     const segments = (converted?.params as any).props.segments;
     expect(Array.isArray(segments)).toBe(true);
     expect(segments[0].points.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('converts teacher clear into delete_shape sentinel payload', () => {
+    const action = {
+      _type: 'clear',
+    };
+
+    const converted = convertTeacherAction(action);
+    expect(converted).toBeTruthy();
+    expect(converted?.name).toBe('delete_shape');
+    expect(converted?.params).toMatchObject({
+      ids: [CLEAR_ALL_SHAPES_SENTINEL],
+    });
   });
 });

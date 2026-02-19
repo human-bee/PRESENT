@@ -1,6 +1,7 @@
 import type { Editor } from '@tldraw/tldraw';
 import { toRichText } from '@tldraw/tldraw';
 import { ACTION_VERSION, type AgentAction, type AgentActionEnvelope } from '@/lib/canvas-agent/contract/types';
+import { sanitizeShapeProps } from '@/lib/canvas-agent/contract/shape-utils';
 
 type ApplyContext = {
   editor: Editor;
@@ -210,13 +211,60 @@ function normalizeCreate(shape: {
   y1?: number;
   x2?: number;
   y2?: number;
+  startPoint?: unknown;
+  endPoint?: unknown;
+  points?: unknown;
   props?: Record<string, unknown>;
 }) {
   const id = withPrefix(shape.id || `ag_${Date.now().toString(36)}`);
   const rawType = String(shape.type || '').toLowerCase();
   const props: Record<string, unknown> = { ...(shape.props || {}) };
+  if (shape.startPoint !== undefined && props.startPoint === undefined) {
+    props.startPoint = shape.startPoint;
+  }
+  if (shape.endPoint !== undefined && props.endPoint === undefined) {
+    props.endPoint = shape.endPoint;
+  }
+  if (shape.points !== undefined && props.points === undefined) {
+    props.points = shape.points;
+  }
   const x = typeof shape.x === 'number' ? shape.x : undefined;
   const y = typeof shape.y === 'number' ? shape.y : undefined;
+  const toFinite = (value: unknown): number | undefined =>
+    typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+  const tupleFromPoint = (value: unknown): [number, number] | null => {
+    if (Array.isArray(value) && value.length >= 2) {
+      const px = toFinite(value[0]);
+      const py = toFinite(value[1]);
+      if (px !== undefined && py !== undefined) return [px, py];
+      return null;
+    }
+    if (!value || typeof value !== 'object') return null;
+    const point = value as Record<string, unknown>;
+    const px = toFinite(point.x);
+    const py = toFinite(point.y);
+    if (px === undefined || py === undefined) return null;
+    return [px, py];
+  };
+  const coerceLinePoints = (value: unknown): [number, number][] => {
+    if (Array.isArray(value)) {
+      const tuples = value.map(tupleFromPoint).filter((point): point is [number, number] => Boolean(point));
+      return tuples.length >= 2 ? tuples : [];
+    }
+    if (!value || typeof value !== 'object') return [];
+    const tuples = Object.values(value)
+      .map((point) => tupleFromPoint(point))
+      .filter((point): point is [number, number] => Boolean(point));
+    return tuples.length >= 2 ? tuples : [];
+  };
+  const toLinePointsRecord = (points: [number, number][]) => {
+    const record: Record<string, { id: string; index: string; x: number; y: number }> = {};
+    points.forEach((point, idx) => {
+      const pointId = `a${idx + 1}`;
+      record[pointId] = { id: pointId, index: pointId, x: point[0], y: point[1] };
+    });
+    return record;
+  };
 
   const geoKinds = new Set(['rectangle', 'ellipse', 'triangle', 'diamond', 'rhombus', 'hexagon', 'star']);
   if (geoKinds.has(rawType)) {
@@ -225,10 +273,67 @@ function normalizeCreate(shape: {
     if ('content' in props) delete (props as any).content;
     return { id, type: 'geo', x, y, props: { ...props, geo: rawType } };
   }
-  if (rawType === 'note' || rawType === 'text') {
+  if (rawType === 'note') {
+    const nextProps = { ...props };
+    if ('text' in nextProps) delete (nextProps as any).text;
+    return { id, type: 'note', x, y, props: nextProps };
+  }
+  if (rawType === 'text') {
     const nextProps = { ...props };
     if ('text' in nextProps) delete (nextProps as any).text;
     return { id, type: 'text', x, y, props: nextProps };
+  }
+  if (rawType === 'line') {
+    const nextProps = { ...props } as Record<string, unknown>;
+    const explicitPoints = coerceLinePoints((nextProps as any).points);
+    let points = explicitPoints;
+    let normalizedX = x;
+    let normalizedY = y;
+    const hasOrigin = normalizedX !== undefined && normalizedY !== undefined;
+
+    const maybeRebasePoints = (sourcePoints: [number, number][]) => {
+      if (sourcePoints.length < 2) return sourcePoints;
+      if (hasOrigin) {
+        const [firstX, firstY] = sourcePoints[0];
+        const originMatchesFirstPoint =
+          Math.abs(firstX - Number(normalizedX)) < 0.001 &&
+          Math.abs(firstY - Number(normalizedY)) < 0.001;
+        if (originMatchesFirstPoint) {
+          return sourcePoints.map((point) => [point[0] - Number(normalizedX), point[1] - Number(normalizedY)] as [number, number]);
+        }
+        return sourcePoints;
+      }
+      const minX = Math.min(...sourcePoints.map((point) => point[0]));
+      const minY = Math.min(...sourcePoints.map((point) => point[1]));
+      normalizedX = minX;
+      normalizedY = minY;
+      return sourcePoints.map((point) => [point[0] - minX, point[1] - minY] as [number, number]);
+    };
+
+    if (points.length >= 2) {
+      points = maybeRebasePoints(points);
+    }
+
+    if (points.length < 2) {
+      const explicitStart = tupleFromPoint((nextProps as any).startPoint);
+      const explicitEnd =
+        tupleFromPoint((nextProps as any).endPoint) ??
+        tupleFromPoint((nextProps as any).end) ??
+        null;
+      const start = explicitStart ?? [0, 0];
+      const end = explicitEnd ?? [100, 0];
+      points = maybeRebasePoints([start, end]);
+    }
+    delete (nextProps as any).startPoint;
+    delete (nextProps as any).endPoint;
+    nextProps.points = toLinePointsRecord(points);
+    const allowedLineProps = new Set(['color', 'dash', 'size', 'spline', 'scale', 'points']);
+    for (const key of Object.keys(nextProps)) {
+      if (!allowedLineProps.has(key)) {
+        delete nextProps[key];
+      }
+    }
+    return { id, type: 'line', x: normalizedX, y: normalizedY, props: nextProps };
   }
 	  if (rawType === 'arrow') {
 	    if ('text' in props) delete (props as any).text;
@@ -351,8 +456,8 @@ export function applyAction(ctx: ApplyContext, action: AgentAction, batch?: Batc
 
   switch (action.name) {
     case 'create_shape': {
-      const { id, type, x, y, props, x1, y1, x2, y2 } = action.params as any;
-      const normalized = normalizeCreate({ id, type, x, y, x1, y1, x2, y2, props });
+      const { id, type, x, y, x1, y1, x2, y2, startPoint, endPoint, points, props } = action.params as any;
+      const normalized = normalizeCreate({ id, type, x, y, x1, y1, x2, y2, startPoint, endPoint, points, props });
       localBatch.creates.push(normalized);
       mutated = true;
 
@@ -385,6 +490,13 @@ export function applyAction(ctx: ApplyContext, action: AgentAction, batch?: Batc
         // fromId/toId are not valid TLArrowShape props (bindings are separate records).
         delete (nextProps as any).fromId;
         delete (nextProps as any).toId;
+      }
+      if (String(shape.type) === 'line') {
+        const sanitizedLineProps = sanitizeShapeProps(nextProps, 'line');
+        for (const key of Object.keys(nextProps)) {
+          delete (nextProps as any)[key];
+        }
+        Object.assign(nextProps, sanitizedLineProps);
       }
       if (String(shape.type) === 'text' && 'align' in nextProps && !('textAlign' in nextProps)) {
         const alignValue = String((nextProps as any).align || '').trim().toLowerCase();

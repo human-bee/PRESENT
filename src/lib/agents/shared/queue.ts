@@ -1,9 +1,19 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { randomUUID } from 'crypto';
+import os from 'node:os';
 import type { JsonObject } from '@/lib/utils/json-schema';
 import { createLogger } from '@/lib/logging';
+import { isMissingRelationError } from '@/lib/agents/admin/supabase-errors';
 import { deriveRequestCorrelation } from './request-correlation';
 import { recordTaskTraceFromParams } from './trace-events';
+import {
+  areWorkerHostsEquivalent,
+  extractRuntimeScopeFromParams,
+  getRuntimeScopeResourceKey,
+  getWorkerHostSkipResourceKey,
+  isLocalRuntimeScope,
+  normalizeWorkerHostIdentity,
+} from './runtime-scope';
 
 export type AgentTaskStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'canceled';
 
@@ -51,6 +61,22 @@ export interface ClaimOptions {
   leaseTtlMs?: number;
 }
 
+export interface ClaimLocalScopeTasksOptions {
+  limit?: number;
+  leaseTtlMs?: number;
+  runtimeScope?: string | null;
+}
+
+// Backward-compatible alias for existing call sites/tests.
+export type ClaimLocalScopeFairyOptions = ClaimLocalScopeTasksOptions;
+
+export interface RequeueTaskOptions {
+  runAt?: Date | null;
+  error?: string | null;
+  params?: JsonObject;
+  resourceKeys?: string[];
+}
+
 export interface QueueClientOptions {
   anonKey?: string;
   serviceRoleKey?: string;
@@ -68,6 +94,20 @@ function createSupabaseClient(options?: QueueClientOptions): SupabaseClient {
 
 const logger = createLogger('agents:queue');
 const ACTIVE_DEDUPE_STATUSES: AgentTaskStatus[] = ['queued', 'running'];
+const LOCAL_SCOPE_HOST_FENCE_ENABLED = process.env.AGENT_LOCAL_SCOPE_HOST_FENCE !== 'false';
+const LOCAL_SCOPE_HOST_FENCE_LOOKBACK_MS = Math.max(
+  5_000,
+  Number.parseInt(process.env.AGENT_LOCAL_SCOPE_HOST_FENCE_LOOKBACK_MS ?? '120000', 10) || 120_000,
+);
+const LOCAL_SCOPE_HOST_FENCE_LIMIT = Math.max(
+  5,
+  Number.parseInt(process.env.AGENT_LOCAL_SCOPE_HOST_FENCE_LIMIT ?? '120', 10) || 120,
+);
+const LOCAL_SCOPE_TASK_ISOLATION_ENABLED =
+  (process.env.AGENT_LOCAL_SCOPE_TASK_ISOLATION ??
+    process.env.AGENT_LOCAL_SCOPE_FAIRY_ISOLATION ??
+    'true') !== 'false';
+const LOCAL_SCOPE_DIRECT_CLAIM_RESOURCE_KEY = 'queue-mode:local-scope-direct-claim';
 
 const readErrorText = (error: unknown, key: 'message' | 'details' | 'hint' | 'code'): string => {
   if (!error || typeof error !== 'object') return '';
@@ -83,6 +123,15 @@ const isMissingTraceIdColumnError = (error: unknown): boolean => {
   const hint = readErrorText(error, 'hint');
   const combined = `${message} ${details} ${hint}`.toLowerCase();
   return combined.includes('trace_id') && (combined.includes('column') || combined.includes('schema cache'));
+};
+
+const shouldUseLocalScopeDirectClaim = (args: {
+  runtimeScope: string | null;
+  task: string;
+}): boolean => {
+  if (!LOCAL_SCOPE_TASK_ISOLATION_ENABLED) return false;
+  if (!isLocalRuntimeScope(args.runtimeScope)) return false;
+  return true;
 };
 
 export class AgentTaskQueue {
@@ -135,6 +184,44 @@ export class AgentTaskQueue {
     return (data as AgentTask | null) ?? null;
   }
 
+  private async resolveLocalScopeForeignHostSkipKeys(runtimeScope: string | null): Promise<string[]> {
+    if (!LOCAL_SCOPE_HOST_FENCE_ENABLED) return [];
+    if (!isLocalRuntimeScope(runtimeScope)) return [];
+
+    const localHost = normalizeWorkerHostIdentity(os.hostname());
+    if (!localHost) return [];
+
+    const { data, error } = await this.supabase
+      .from('agent_worker_heartbeats')
+      .select('host,updated_at')
+      .order('updated_at', { ascending: false })
+      .limit(LOCAL_SCOPE_HOST_FENCE_LIMIT);
+
+    if (error) {
+      if (isMissingRelationError(error, 'agent_worker_heartbeats')) return [];
+      logger.warn('resolveLocalScopeForeignHostSkipKeys failed', {
+        runtimeScope,
+        error,
+      });
+      return [];
+    }
+
+    const cutoffMs = Date.now() - LOCAL_SCOPE_HOST_FENCE_LOOKBACK_MS;
+    const foreignHosts = new Set<string>();
+    for (const row of (data as Array<{ host?: unknown; updated_at?: unknown }> | null) ?? []) {
+      const host = normalizeWorkerHostIdentity(row.host);
+      if (!host || areWorkerHostsEquivalent(host, localHost)) continue;
+      const updatedAtMs =
+        typeof row.updated_at === 'string' && row.updated_at.trim().length > 0
+          ? Date.parse(row.updated_at)
+          : Number.NaN;
+      if (!Number.isFinite(updatedAtMs) || updatedAtMs < cutoffMs) continue;
+      foreignHosts.add(host);
+    }
+
+    return Array.from(foreignHosts).map((host) => getWorkerHostSkipResourceKey(host));
+  }
+
   async enqueueTask(input: EnqueueTaskInput): Promise<AgentTask | null> {
     const {
       room,
@@ -171,6 +258,18 @@ export class AgentTaskQueue {
     const resourceKeySet = new Set(resourceKeys.length ? resourceKeys : [`room:${room}`]);
     if (lockKeyNormalized) {
       resourceKeySet.add(`lock:${lockKeyNormalized}`);
+    }
+    const runtimeScope = extractRuntimeScopeFromParams(params);
+    const localScopeDirectClaim = shouldUseLocalScopeDirectClaim({
+      runtimeScope,
+      task,
+    });
+    const localScopeForeignHostSkipKeys = await this.resolveLocalScopeForeignHostSkipKeys(runtimeScope);
+    for (const skipHostKey of localScopeForeignHostSkipKeys) {
+      resourceKeySet.add(skipHostKey);
+    }
+    if (localScopeDirectClaim) {
+      resourceKeySet.add(LOCAL_SCOPE_DIRECT_CLAIM_RESOURCE_KEY);
     }
     const normalizedResourceKeys = Array.from(resourceKeySet);
     const resolvedRequestId =
@@ -232,6 +331,9 @@ export class AgentTaskQueue {
       }
     }
 
+    // Keep mutation-bearing fairy/quick_text tasks out of default coalescing:
+    // sequential fan-out intents must not cancel each other. Dedupe for retries
+    // is handled via request/idempotency keys instead.
     const defaultCoalescingTaskNames = ['canvas.agent_prompt'];
     const coalescingTaskNames = Array.from(
       new Set([...(input.coalesceTaskFilter ?? []), ...defaultCoalescingTaskNames]),
@@ -281,11 +383,14 @@ export class AgentTaskQueue {
       room,
       task,
       params,
+      status: localScopeDirectClaim ? ('running' as const) : ('queued' as const),
       request_id: resolvedRequestId ?? null,
       dedupe_key: resolvedDedupeKey ?? null,
       resource_keys: normalizedResourceKeys,
       priority,
       run_at: runAt ? runAt.toISOString() : null,
+      lease_token: null,
+      lease_expires_at: null,
       created_at: nowIso,
       updated_at: nowIso,
     };
@@ -343,11 +448,17 @@ export class AgentTaskQueue {
     if (data?.id) {
       void recordTaskTraceFromParams({
         stage: 'queued',
-        status: 'queued',
+        status: localScopeDirectClaim ? 'running' : 'queued',
         taskId: data.id,
         task,
         room,
         params,
+        payload: localScopeDirectClaim
+          ? {
+              queueMode: 'local_scope_direct_claim',
+              runtimeScope,
+            }
+          : undefined,
       });
     }
 
@@ -382,6 +493,79 @@ export class AgentTaskQueue {
     return { leaseToken, tasks: (data as AgentTask[] | null) ?? [] };
   }
 
+  async claimLocalScopeTasks(options: ClaimLocalScopeTasksOptions = {}) {
+    const leaseToken = randomUUID();
+    const limit = Math.max(1, options.limit ?? 1);
+    const leaseExpiresAt = new Date(Date.now() + (options.leaseTtlMs ?? 15_000)).toISOString();
+    const scopeKey = getRuntimeScopeResourceKey(options.runtimeScope ?? null);
+    if (!scopeKey) {
+      return { leaseToken, tasks: [] as AgentTask[] };
+    }
+
+    const nowMs = Date.now();
+    const fetchLimit = Math.max(limit * 4, 20);
+    const { data: candidates, error } = await this.supabase
+      .from('agent_tasks')
+      .select('*')
+      .eq('status', 'running')
+      .is('lease_token', null)
+      .contains('resource_keys', [scopeKey])
+      .contains('resource_keys', [LOCAL_SCOPE_DIRECT_CLAIM_RESOURCE_KEY])
+      .order('priority', { ascending: false })
+      .order('created_at', { ascending: true })
+      .limit(fetchLimit);
+    if (error) throw error;
+
+    const dueCandidates = ((candidates as AgentTask[] | null) ?? []).filter((task) => {
+      if (!task.run_at) return true;
+      const runAtMs = Date.parse(task.run_at);
+      if (!Number.isFinite(runAtMs)) return true;
+      return runAtMs <= nowMs;
+    });
+
+    const claimed: AgentTask[] = [];
+    for (const candidate of dueCandidates) {
+      if (claimed.length >= limit) break;
+      const { data: updated, error: updateError } = await this.supabase
+        .from('agent_tasks')
+        .update({
+          lease_token: leaseToken,
+          lease_expires_at: leaseExpiresAt,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', candidate.id)
+        .eq('status', 'running')
+        .is('lease_token', null)
+        .select('*')
+        .maybeSingle();
+      if (updateError) throw updateError;
+      if (!updated) continue;
+      claimed.push(updated as AgentTask);
+    }
+
+    for (const task of claimed) {
+      void recordTaskTraceFromParams({
+        stage: 'claimed',
+        status: 'running',
+        taskId: task.id,
+        task: task.task,
+        room: task.room,
+        params: task.params,
+        attempt: task.attempt,
+        payload: {
+          claimMode: 'local_scope_direct_claim',
+          runtimeScope: options.runtimeScope ?? null,
+        },
+      });
+    }
+
+    return { leaseToken, tasks: claimed };
+  }
+
+  async claimLocalScopeFairyTasks(options: ClaimLocalScopeFairyOptions = {}) {
+    return this.claimLocalScopeTasks(options);
+  }
+
   async completeTask(taskId: string, leaseToken: string, result?: JsonObject) {
     const { error } = await this.supabase
       .from('agent_tasks')
@@ -398,18 +582,51 @@ export class AgentTaskQueue {
     if (error) throw error;
   }
 
-  async failTask(taskId: string, leaseToken: string, opts: { error: string; retryAt?: Date }) {
+  async failTask(
+    taskId: string,
+    leaseToken: string,
+    opts: { error: string; retryAt?: Date; keepInRunningLane?: boolean },
+  ) {
     await this.supabase.rpc('increment_agent_task_attempt', { task_id: taskId });
 
     const { error } = await this.supabase
       .from('agent_tasks')
       .update({
-        status: opts.retryAt ? 'queued' : 'failed',
+        status: opts.retryAt ? (opts.keepInRunningLane ? 'running' : 'queued') : 'failed',
         lease_token: null,
         lease_expires_at: null,
         run_at: opts.retryAt ? opts.retryAt.toISOString() : null,
         error: opts.error,
       })
+      .eq('id', taskId)
+      .eq('lease_token', leaseToken);
+
+    if (error) throw error;
+  }
+
+  async requeueTask(taskId: string, leaseToken: string, opts: RequeueTaskOptions = {}) {
+    const updatePayload: Record<string, unknown> = {
+      status: 'queued',
+      lease_token: null,
+      lease_expires_at: null,
+      updated_at: new Date().toISOString(),
+    };
+    if (Object.prototype.hasOwnProperty.call(opts, 'runAt')) {
+      updatePayload.run_at = opts.runAt ? opts.runAt.toISOString() : null;
+    }
+    if (Object.prototype.hasOwnProperty.call(opts, 'error')) {
+      updatePayload.error = opts.error ?? null;
+    }
+    if (opts.params) {
+      updatePayload.params = opts.params;
+    }
+    if (Array.isArray(opts.resourceKeys) && opts.resourceKeys.length > 0) {
+      updatePayload.resource_keys = Array.from(new Set(opts.resourceKeys));
+    }
+
+    const { error } = await this.supabase
+      .from('agent_tasks')
+      .update(updatePayload)
       .eq('id', taskId)
       .eq('lease_token', leaseToken);
 

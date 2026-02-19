@@ -18,6 +18,7 @@ import {
   getSessionById,
   loadState,
   saveState,
+  upsertSession,
   type FairyCliSession,
   type FairyCliState,
   type FairyCliSubagentRun,
@@ -246,7 +247,7 @@ async function handleSessions(state: FairyCliState, parsed: ParsedArgs, cwd: str
     const name = readFlagString(parsed.flags, 'name') ?? undefined;
     const session = createSession({ room, name, baseUrl });
     const next = {
-      ...upsertStateSession(state, session),
+      ...upsertSession(state, session),
       currentSessionId: session.id,
     };
     await saveState(cwd, next);
@@ -298,7 +299,7 @@ async function handleSessions(state: FairyCliState, parsed: ParsedArgs, cwd: str
 
     const nextSession = updateSessionWithMutation(session, result);
     const nextState = {
-      ...upsertStateSession(state, nextSession),
+      ...upsertSession(state, nextSession),
       currentSessionId: nextSession.id,
     };
     await saveState(cwd, nextState);
@@ -477,7 +478,7 @@ async function handleSubagents(state: FairyCliState, parsed: ParsedArgs, cwd: st
     const run = state.subagentRuns.find((entry) => entry.id === runId);
     if (!run) throw new Error(`Subagent run not found: ${runId}`);
     const reason = readFlagString(parsed.flags, 'reason') ?? 'Canceled from fairy CLI';
-    const results = [];
+    const results: Array<{ taskId: string; ok: boolean; status: number; body: unknown }> = [];
     for (const task of run.tasks) {
       if (!task.taskId) continue;
       const response = await runAdminAction(
@@ -526,8 +527,12 @@ async function handleTrace(state: FairyCliState, parsed: ParsedArgs, asJson: boo
     const requestId = readFlagString(parsed.flags, 'requestId') ?? session.lastRequestId ?? null;
     const traceId = readFlagString(parsed.flags, 'traceId') ?? session.lastTraceId ?? null;
     const sessionResponse = await getTraceSession({ baseUrl, token }, { room, limit });
-    const traces = Array.isArray(sessionResponse.body?.traces) ? sessionResponse.body.traces : [];
-    const tasks = Array.isArray(sessionResponse.body?.tasks) ? sessionResponse.body.tasks : [];
+    const sessionBody =
+      sessionResponse.body && typeof sessionResponse.body === 'object' && !Array.isArray(sessionResponse.body)
+        ? (sessionResponse.body as Record<string, unknown>)
+        : null;
+    const traces = Array.isArray(sessionBody?.traces) ? sessionBody.traces : [];
+    const tasks = Array.isArray(sessionBody?.tasks) ? sessionBody.tasks : [];
     const traceCandidates = new Set([traceId, requestId].filter(Boolean));
     const taskCandidates = new Set([taskId, requestId].filter(Boolean));
     const matchedTraces = traces
@@ -641,7 +646,19 @@ async function handleSmoke(state: FairyCliState, parsed: ParsedArgs, cwd: string
   }
 
   printResult({ ok: true, preset, room: session.room, results }, asJson);
-  return results.some((entry) => entry.result.status === 'failed') ? FAIRY_CLI_EXIT_CODES.FAILED : FAIRY_CLI_EXIT_CODES.APPLIED;
+  if (results.some((entry) => entry.result.status === 'failed')) {
+    return FAIRY_CLI_EXIT_CODES.FAILED;
+  }
+  if (results.some((entry) => entry.result.status === 'timeout')) {
+    return FAIRY_CLI_EXIT_CODES.TIMEOUT;
+  }
+  if (results.some((entry) => entry.result.status === 'unauthorized' || entry.result.status === 'invalid')) {
+    return FAIRY_CLI_EXIT_CODES.AUTH_OR_CONFIG;
+  }
+  if (results.some((entry) => entry.result.status === 'queued')) {
+    return FAIRY_CLI_EXIT_CODES.QUEUED;
+  }
+  return FAIRY_CLI_EXIT_CODES.APPLIED;
 }
 
 function printUsage() {
@@ -662,13 +679,6 @@ Global options:
 `;
   process.stdout.write(`${usage.trim()}\n`);
 }
-
-const upsertStateSession = (state: FairyCliState, session: FairyCliSession): FairyCliState => {
-  return {
-    ...state,
-    sessions: [...state.sessions.filter((entry) => entry.id !== session.id), session],
-  };
-};
 
 export async function runCli(argv: string[], cwd = process.cwd()): Promise<number> {
   const parsed = parseArgs(argv);

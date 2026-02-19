@@ -55,6 +55,7 @@ import {
   normalizeCrowdPulseActiveQuestionInput,
   parseCrowdPulseFallbackInstruction,
 } from '@/lib/agents/subagents/crowd-pulse-parser';
+import { isDeterministicCanvasCommand } from './voice-agent/deterministic-routing';
 
 const RATE_LIMIT_HEADER_KEYS = [
   'retry-after',
@@ -216,6 +217,16 @@ export default defineAgent({
     }
     console.log('[VoiceAgent] Connected to room:', job.room.name);
     const liveKitBus = createLiveKitBus(job.room as any);
+    const workerId = (() => {
+      const participantIdentity =
+        typeof job.room?.localParticipant?.identity === 'string'
+          ? job.room.localParticipant.identity.trim()
+          : '';
+      if (participantIdentity.length > 0) return participantIdentity;
+      const roomName = typeof job.room?.name === 'string' ? job.room.name.trim() : '';
+      if (roomName.length > 0) return roomName;
+      return `pid-${process.pid}`;
+    })();
     const allowSensitiveLogging = process.env.NODE_ENV !== 'production';
 
     // Data messages (topic: "transcription") can arrive immediately after the agent joins the room.
@@ -2666,7 +2677,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
       const room = roomKey();
       if (!room) {
         console.warn('[VoiceAgent] skipped scorecard.verify dispatch due to missing room identity');
-        return null;
+        return;
       }
 
       // Explicit "Canvas:" prefix routes directly to the Canvas steward (no extra LLM roundtrip).
@@ -2684,6 +2695,21 @@ Your only output is function calls. Never use plain text unless absolutely neces
             id: randomUUID(),
             room,
             message: message || trimmed,
+            source: 'voice',
+          },
+        });
+        return;
+      }
+
+      // Structured geometry/ID commands must always route to fairy intent,
+      // even when the incoming transcription is not tagged as "manual".
+      if (isDeterministicCanvasCommand(trimmed)) {
+        await sendToolCall('dispatch_to_conductor', {
+          task: 'fairy.intent',
+          params: {
+            id: randomUUID(),
+            room,
+            message: trimmed,
             source: 'voice',
           },
         });

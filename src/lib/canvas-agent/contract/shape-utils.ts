@@ -121,11 +121,77 @@ const stripUnsupportedProps = (props: Record<string, unknown>, shapeType: string
     delete props.h;
     delete props.text;
   }
-  if (shapeType === 'line' || shapeType === 'arrow') {
+  if (shapeType === 'line') {
+    const allowedLineProps = new Set(['color', 'dash', 'size', 'spline', 'scale', 'points']);
+    for (const key of Object.keys(props)) {
+      if (!allowedLineProps.has(key)) {
+        delete props[key];
+      }
+    }
+  }
+  if (shapeType === 'arrow') {
     delete props.w;
     delete props.h;
   }
   return props;
+};
+
+const readPointTuple = (value: unknown): [number, number] | null => {
+  if (Array.isArray(value) && value.length >= 2) {
+    const x = Number(value[0]);
+    const y = Number(value[1]);
+    if (Number.isFinite(x) && Number.isFinite(y)) {
+      return [x, y];
+    }
+    return null;
+  }
+  if (!value || typeof value !== 'object') return null;
+  const record = value as Record<string, unknown>;
+  const x = Number(record.x);
+  const y = Number(record.y);
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+  return [x, y];
+};
+
+const toLinePointsRecord = (points: [number, number][]) => {
+  const record: Record<string, { id: string; index: string; x: number; y: number }> = {};
+  points.forEach((point, idx) => {
+    const pointId = `a${idx + 1}`;
+    record[pointId] = { id: pointId, index: pointId, x: point[0], y: point[1] };
+  });
+  return record;
+};
+
+const normalizeLineLikePoints = (props: Record<string, unknown>) => {
+  const start = readPointTuple(props.startPoint) ?? [0, 0];
+  const end = readPointTuple(props.endPoint);
+  const existingPointsRaw = props.points;
+  const existingPoints = Array.isArray(existingPointsRaw)
+    ? existingPointsRaw
+    : existingPointsRaw && typeof existingPointsRaw === 'object'
+      ? Object.values(existingPointsRaw as Record<string, unknown>)
+      : [];
+
+  let normalized = existingPoints
+    .map((point) => readPointTuple(point))
+    .filter((point): point is [number, number] => Array.isArray(point));
+
+  if (normalized.length === 1) {
+    const [x, y] = normalized[0];
+    normalized = [normalized[0], [x + 120, y]];
+  }
+  if (normalized.length < 2) {
+    const fallbackEnd: [number, number] = end ?? [start[0] + 120, start[1]];
+    const resolvedEnd =
+      fallbackEnd[0] === start[0] && fallbackEnd[1] === start[1]
+        ? [start[0] + 120, start[1]]
+        : fallbackEnd;
+    normalized = [start, resolvedEnd];
+  }
+  props.points = toLinePointsRecord(normalized);
+
+  delete props.startPoint;
+  delete props.endPoint;
 };
 
 const buildRichTextDoc = (value: string) => {
@@ -157,6 +223,11 @@ export const sanitizeShapeProps = (
   options?: SanitizeShapeOptions,
 ) => {
   const next: Record<string, unknown> = { ...rawProps };
+
+  if (shapeType === 'line' || shapeType === 'arrow') {
+    normalizeLineLikePoints(next);
+  }
+
   const color = resolveColorName(next.color ?? next.stroke ?? next.strokeColor, options?.colorAliases);
   if (color) next.color = color;
   else delete next.color;

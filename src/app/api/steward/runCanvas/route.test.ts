@@ -295,4 +295,38 @@ describe('/api/steward/runCanvas', () => {
     expect(params.id).toBe('intent-explicit');
     expect(metadata.intentId).toBe('intent-explicit');
   });
+
+  it('stamps runtime scope onto params and resource keys', async () => {
+    const previousLivekitUrl = process.env.LIVEKIT_URL;
+    process.env.LIVEKIT_URL = 'ws://localhost:7880';
+    try {
+      const POST = await loadPost({ queueFallback: false, byok: false });
+      const request = new Request('http://localhost/api/steward/runCanvas', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          room: 'demo-room',
+          task: 'fairy.intent',
+          message: 'draw bunny',
+        }),
+      });
+
+      const response = await POST(toNextRequest(request));
+      expect(response.status).toBe(202);
+
+      const [enqueued] = enqueueTaskMock.mock.calls[0] as [Record<string, unknown>];
+      const params = enqueued.params as Record<string, unknown>;
+      const metadata = params.metadata as Record<string, unknown>;
+      const resourceKeys = enqueued.resourceKeys as string[];
+      expect(params.runtimeScope).toBe('localhost:7880');
+      expect(metadata.runtimeScope).toBe('localhost:7880');
+      expect(resourceKeys).toEqual(expect.arrayContaining(['runtime-scope:localhost:7880']));
+    } finally {
+      if (previousLivekitUrl === undefined) {
+        delete process.env.LIVEKIT_URL;
+      } else {
+        process.env.LIVEKIT_URL = previousLivekitUrl;
+      }
+    }
+  });
 });

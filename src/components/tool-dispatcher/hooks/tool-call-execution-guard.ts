@@ -23,3 +23,14 @@ export function shouldExecuteIncomingToolCall(args: {
   return { execute: true, key };
 }
 
+export function shouldDeferToolCallWhenNotExecutor(args: {
+  reason?: 'not_executor' | 'deduped';
+  executorIdentity?: string | null;
+  localIdentity?: string | null;
+}): boolean {
+  if (args.reason !== 'not_executor') return false;
+  const executorIdentity = typeof args.executorIdentity === 'string' ? args.executorIdentity.trim() : '';
+  const localIdentity = typeof args.localIdentity === 'string' ? args.localIdentity.trim() : '';
+  if (!executorIdentity) return true;
+  return Boolean(localIdentity) && executorIdentity === localIdentity;
+}

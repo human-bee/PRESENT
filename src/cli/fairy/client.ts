@@ -120,7 +120,18 @@ export async function pollTaskStatus(
         continue;
       }
     }
-    const task = normalizeTaskSnapshot((statusBody?.task as Record<string, unknown>) ?? null);
+    const statusRecord =
+      statusBody && typeof statusBody === 'object' && !Array.isArray(statusBody)
+        ? (statusBody as Record<string, unknown>)
+        : null;
+    const taskRecord =
+      statusRecord &&
+      statusRecord.task &&
+      typeof statusRecord.task === 'object' &&
+      !Array.isArray(statusRecord.task)
+        ? (statusRecord.task as Record<string, unknown>)
+        : null;
+    const task = normalizeTaskSnapshot(taskRecord);
     if (!task) {
       await new Promise((resolve) => setTimeout(resolve, 300));
       continue;

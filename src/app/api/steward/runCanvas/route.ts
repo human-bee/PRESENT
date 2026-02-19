@@ -27,6 +27,11 @@ import {
 import { getDecryptedUserModelKey, type ModelKeyProvider } from '@/lib/agents/shared/user-model-keys';
 import { recordAgentTraceEvent } from '@/lib/agents/shared/trace-events';
 import { deriveProviderParity } from '@/lib/agents/admin/provider-parity';
+import {
+  getRuntimeScopeResourceKey,
+  normalizeRuntimeScope,
+  resolveRuntimeScopeFromEnv,
+} from '@/lib/agents/shared/runtime-scope';
 
 export const runtime = 'nodejs';
 
@@ -371,6 +376,14 @@ export async function POST(req: NextRequest) {
     if (canonicalIntentId && (!metadataForCorrelation.intentId || explicitIntentId)) {
       metadataForCorrelation.intentId = canonicalIntentId;
     }
+    const runtimeScope =
+      normalizeRuntimeScope(enrichedParams.runtimeScope) ?? resolveRuntimeScopeFromEnv();
+    if (runtimeScope) {
+      enrichedParams.runtimeScope = runtimeScope;
+      if (!metadataForCorrelation.runtimeScope) {
+        metadataForCorrelation.runtimeScope = runtimeScope;
+      }
+    }
     if (Object.keys(metadataForCorrelation).length > 0) {
       enrichedParams.metadata = metadataForCorrelation;
     }
@@ -407,9 +420,13 @@ export async function POST(req: NextRequest) {
         normalizedTask === 'canvas.agent_prompt' || normalizedTask === 'fairy.intent'
           ? [`room:${trimmedRoom}`, 'canvas:intent']
           : [`room:${trimmedRoom}`];
+      const runtimeScopeKey = getRuntimeScopeResourceKey(
+        typeof enrichedParams.runtimeScope === 'string' ? enrichedParams.runtimeScope : undefined,
+      );
+      const scopedResourceKeys = runtimeScopeKey ? [...baseResourceKeys, runtimeScopeKey] : baseResourceKeys;
       const normalizedResourceKeys = normalizedLockKey
-        ? [...baseResourceKeys, `lock:${normalizedLockKey}`]
-        : baseResourceKeys;
+        ? [...scopedResourceKeys, `lock:${normalizedLockKey}`]
+        : scopedResourceKeys;
 
       const enqueueResult = await getQueue().enqueueTask({
         room: trimmedRoom,

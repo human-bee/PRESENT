@@ -72,6 +72,134 @@ function makeEnvelope(action: any): any {
 }
 
 describe('tldraw action handlers', () => {
+  it('preserves note shapes for sticky-note creates', () => {
+    const editor = createMockEditor();
+    applyEnvelope(
+      { editor, isHost: true, appliedIds: new Set() },
+      makeEnvelope({
+        id: 'action-note',
+        name: 'create_shape',
+        params: {
+          id: 'sticky-1',
+          type: 'note',
+          x: 24,
+          y: 48,
+          props: {
+            text: 'BUNNY_LOOKS_ENERGETIC',
+            color: 'yellow',
+            size: 'm',
+          },
+        },
+      }),
+    );
+
+    const createCall = editor.calls.find((c: any[]) => c[0] === 'createShapes');
+    expect(createCall).toBeTruthy();
+    const createdShape = createCall[1][0];
+    expect(createdShape.type).toBe('note');
+    expect(createdShape.props.text).toBeUndefined();
+
+    const updateCall = editor.calls.find((c: any[]) => c[0] === 'updateShapes');
+    expect(updateCall).toBeTruthy();
+    expect(updateCall[1][0].props.richText).toBe('BUNNY_LOOKS_ENERGETIC');
+  });
+
+  it('sanitizes line endPoint props into points tuples', () => {
+    const editor = createMockEditor();
+    applyEnvelope(
+      { editor, isHost: true, appliedIds: new Set() },
+      makeEnvelope({
+        id: 'action-line',
+        name: 'create_shape',
+        params: {
+          id: 'line-1',
+          type: 'line',
+          x: -30,
+          y: -160,
+          props: {
+            endPoint: { x: 10, y: 100 },
+            endArrowType: 'arrow',
+            color: 'red',
+            dash: 'solid',
+          },
+        },
+      }),
+    );
+
+    const createCall = editor.calls.find((c: any[]) => c[0] === 'createShapes');
+    expect(createCall).toBeTruthy();
+    const createdShape = createCall[1][0];
+    expect(createdShape.type).toBe('line');
+    expect(createdShape.props.endPoint).toBeUndefined();
+    expect(createdShape.props.endArrowType).toBeUndefined();
+    expect(createdShape.props.points).toEqual({
+      a1: { id: 'a1', index: 'a1', x: 0, y: 0 },
+      a2: { id: 'a2', index: 'a2', x: 10, y: 100 },
+    });
+  });
+
+  it('normalizes top-level line endpoints when props are omitted', () => {
+    const editor = createMockEditor();
+    applyEnvelope(
+      { editor, isHost: true, appliedIds: new Set() },
+      makeEnvelope({
+        id: 'action-line-top-level',
+        name: 'create_shape',
+        params: {
+          id: 'line-top-level',
+          type: 'line',
+          x: -30,
+          y: -160,
+          startPoint: { x: -30, y: -160 },
+          endPoint: { x: 20, y: -60 },
+          color: 'red',
+        },
+      }),
+    );
+
+    const createCall = editor.calls.find((c: any[]) => c[0] === 'createShapes');
+    expect(createCall).toBeTruthy();
+    const createdShape = createCall[1][0];
+    expect(createdShape.type).toBe('line');
+    expect(createdShape.props.points).toEqual({
+      a1: { id: 'a1', index: 'a1', x: 0, y: 0 },
+      a2: { id: 'a2', index: 'a2', x: 50, y: 100 },
+    });
+  });
+
+  it('rebases absolute line points against provided x/y origin', () => {
+    const editor = createMockEditor();
+    applyEnvelope(
+      { editor, isHost: true, appliedIds: new Set() },
+      makeEnvelope({
+        id: 'action-line-absolute',
+        name: 'create_shape',
+        params: {
+          id: 'forest-tree-1',
+          type: 'line',
+          x: -180,
+          y: -20,
+          props: {
+            startPoint: { x: -180, y: -20 },
+            endPoint: { x: -180, y: 150 },
+            color: 'green',
+            size: 'l',
+          },
+        },
+      }),
+    );
+
+    const createCall = editor.calls.find((c: any[]) => c[0] === 'createShapes');
+    expect(createCall).toBeTruthy();
+    const createdShape = createCall[1][0];
+    expect(createdShape.x).toBe(-180);
+    expect(createdShape.y).toBe(-20);
+    expect(createdShape.props.points).toEqual({
+      a1: { id: 'a1', index: 'a1', x: 0, y: 0 },
+      a2: { id: 'a2', index: 'a2', x: 0, y: 170 },
+    });
+  });
+
   it('creates draw shapes when type=draw', () => {
     const editor = createMockEditor();
     applyEnvelope(
@@ -233,5 +361,48 @@ describe('tldraw action handlers', () => {
     expect(y).toBe(80);
     expect(props.text).toBeUndefined();
     expect(props.richText).toBeDefined();
+  });
+
+  it('sanitizes line update props to avoid invalid endpoint payloads', () => {
+    const editor = createMockEditor([
+      {
+        id: 'shape:line-1',
+        type: 'line',
+        x: 0,
+        y: 0,
+        props: {
+          points: {
+            a1: { id: 'a1', index: 'a1', x: 0, y: 0 },
+            a2: { id: 'a2', index: 'a2', x: 20, y: 20 },
+          },
+        },
+      },
+    ]);
+    applyEnvelope(
+      { editor, isHost: true, appliedIds: new Set() },
+      makeEnvelope({
+        id: 'line-update-invalid',
+        name: 'update_shape',
+        params: {
+          id: 'line-1',
+          props: {
+            endPoint: { x: 100, y: 0 },
+            endArrowType: 'arrow',
+            points: [{ x: 0, y: 0 }, { x: 100, y: 0 }],
+            color: 'green',
+          },
+        },
+      }),
+    );
+
+    const updateCall = editor.calls.find((c: any[]) => c[0] === 'updateShapes');
+    expect(updateCall).toBeTruthy();
+    const update = updateCall[1][0];
+    expect(update.props.endPoint).toBeUndefined();
+    expect(update.props.endArrowType).toBeUndefined();
+    expect(update.props.points).toEqual({
+      a1: { id: 'a1', index: 'a1', x: 0, y: 0 },
+      a2: { id: 'a2', index: 'a2', x: 100, y: 0 },
+    });
   });
 });

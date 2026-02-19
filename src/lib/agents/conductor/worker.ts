@@ -16,6 +16,13 @@ import {
 } from '@/lib/agents/shared/orchestration-metrics';
 import { recordTaskTraceFromParams, recordWorkerHeartbeat } from '@/lib/agents/shared/trace-events';
 import { deriveProviderParity } from '@/lib/agents/admin/provider-parity';
+import {
+  extractRuntimeScopeFromParams,
+  hasRuntimeScopeMismatch,
+  getWorkerHostSkipResourceKey,
+  isLocalRuntimeScope,
+  resolveRuntimeScopeFromEnv,
+} from '@/lib/agents/shared/runtime-scope';
 
 const TASK_LEASE_TTL_MS = Number(process.env.TASK_LEASE_TTL_MS ?? 15_000);
 const ROOM_CONCURRENCY = Math.max(1, Number.parseInt(process.env.ROOM_CONCURRENCY ?? '2', 10) || 2);
@@ -38,6 +45,10 @@ const TASK_RETRY_JITTER_RATIO = Math.min(
   0.9,
   Math.max(0, Number.parseFloat(process.env.TASK_RETRY_JITTER_RATIO ?? '0.2') || 0.2),
 );
+const TASK_SCOPE_MISMATCH_REQUEUE_DELAY_MS = Math.max(
+  100,
+  Number.parseInt(process.env.TASK_SCOPE_MISMATCH_REQUEUE_DELAY_MS ?? '300', 10) || 300,
+);
 
 const queue = new AgentTaskQueue();
 const logger = createLogger('agents:conductor:worker');
@@ -45,6 +56,18 @@ const mutationArbiter = new MutationArbiter();
 const workerId = process.env.AGENT_WORKER_ID || `conductor-${process.pid}-${randomUUID().slice(0, 8)}`;
 const workerHost = os.hostname();
 const workerPid = String(process.pid);
+const workerRuntimeScope = resolveRuntimeScopeFromEnv();
+const workerHandlesLocalScopeDirectClaim =
+  (process.env.AGENT_LOCAL_SCOPE_TASK_ISOLATION ?? process.env.AGENT_LOCAL_SCOPE_FAIRY_ISOLATION ?? 'true') !==
+    'false' && isLocalRuntimeScope(workerRuntimeScope);
+const workerHostSkipResourceKey = getWorkerHostSkipResourceKey(workerHost);
+const additionalClaimResourceLocks = String(process.env.AGENT_WORKER_RESOURCE_LOCKS ?? '')
+  .split(',')
+  .map((entry) => entry.trim())
+  .filter(Boolean);
+const workerClaimResourceLocks = Array.from(
+  new Set([workerHostSkipResourceKey, ...additionalClaimResourceLocks]),
+);
 let activeTaskCount = 0;
 let leasedTaskCount = 0;
 type RoomLaneState = {
@@ -68,12 +91,20 @@ type ClaimedTask = {
   task: AgentTask;
   leaseToken: string;
   stopLeaseExtender: () => void;
+  claimMode: 'rpc' | 'local_scope_direct_claim';
 };
 
 const normalizeString = (value: unknown): string | null => {
   if (typeof value !== 'string') return null;
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : null;
+};
+
+const normalizeTaskResourceKeys = (value: unknown): string[] => {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((entry) => normalizeString(entry))
+    .filter((entry): entry is string => Boolean(entry));
 };
 
 const asRecord = (value: unknown): Record<string, unknown> | null => {
@@ -291,8 +322,9 @@ async function acquireRoomSlot(roomKey: string): Promise<() => void> {
 
 async function processClaimedTasks(executeTask: ExecuteTaskFn, claimedTasks: ClaimedTask[]) {
   const roomBuckets = claimedTasks.reduce<Record<string, ClaimedTask[]>>((acc, claimed) => {
+    const resourceKeys = normalizeTaskResourceKeys(claimed.task.resource_keys);
     const roomKey =
-      claimed.task.resource_keys.find((key) => key.startsWith('room:')) || 'room:default';
+      resourceKeys.find((key) => key.startsWith('room:')) || 'room:default';
     if (!acc[roomKey]) acc[roomKey] = [];
     acc[roomKey].push(claimed);
     return acc;
@@ -306,10 +338,11 @@ async function processClaimedTasks(executeTask: ExecuteTaskFn, claimedTasks: Cla
           const claimed = queueList.shift();
           if (!claimed) break;
 
-          const { task, leaseToken, stopLeaseExtender } = claimed;
+          const { task, leaseToken, stopLeaseExtender, claimMode } = claimed;
           const releaseRoomSlot = await acquireRoomSlot(roomKey);
           let route: ReturnType<typeof classifyTaskRoute> = classifyTaskRoute(task.task);
           let lockKey: string | null = null;
+          let countedActiveTask = false;
           const executingProviderParity = deriveProviderParity({
             task: task.task,
             status: 'running',
@@ -317,7 +350,48 @@ async function processClaimedTasks(executeTask: ExecuteTaskFn, claimedTasks: Cla
           });
 
           try {
+            const taskResourceKeys = normalizeTaskResourceKeys(task.resource_keys);
+            const taskRuntimeScope = extractRuntimeScopeFromParams(task.params);
+            if (hasRuntimeScopeMismatch(taskRuntimeScope, workerRuntimeScope)) {
+              const existingKeys = taskResourceKeys;
+              const nextResourceKeys = Array.from(new Set([...existingKeys, workerHostSkipResourceKey]));
+              const retryAt = new Date(Date.now() + TASK_SCOPE_MISMATCH_REQUEUE_DELAY_MS);
+              await queue.requeueTask(task.id, leaseToken, {
+                runAt: retryAt,
+                error: null,
+                resourceKeys: nextResourceKeys,
+              });
+              void recordTaskTraceFromParams({
+                stage: 'claimed',
+                status: 'scope_mismatch_requeued',
+                taskId: task.id,
+                task: task.task,
+                room: task.room,
+                params: task.params,
+                attempt: task.attempt,
+                payload: {
+                  workerId,
+                  workerHost,
+                  workerPid,
+                  taskRuntimeScope,
+                  workerRuntimeScope,
+                  skipKey: workerHostSkipResourceKey,
+                  retryAt: retryAt.toISOString(),
+                },
+              });
+              logger.info('requeued task after runtime scope mismatch', {
+                taskId: task.id,
+                room: task.room,
+                task: task.task,
+                taskRuntimeScope,
+                workerRuntimeScope,
+                skipKey: workerHostSkipResourceKey,
+                retryAt: retryAt.toISOString(),
+              });
+              continue;
+            }
             activeTaskCount += 1;
+            countedActiveTask = true;
             route = classifyTaskRoute(task.task);
             void recordTaskTraceFromParams({
               stage: 'executing',
@@ -350,7 +424,7 @@ async function processClaimedTasks(executeTask: ExecuteTaskFn, claimedTasks: Cla
             const envelope = extractOrchestrationEnvelope(paramsRecord, {
               attempt: task.attempt,
             });
-            const lockKeyFromResource = task.resource_keys
+            const lockKeyFromResource = taskResourceKeys
               .find((key) => key.startsWith('lock:'))
               ?.slice('lock:'.length);
             lockKey =
@@ -476,7 +550,11 @@ async function processClaimedTasks(executeTask: ExecuteTaskFn, claimedTasks: Cla
               ...(described.stack ? { stack: described.stack } : {}),
               ...(described.detail ? { detail: described.detail } : {}),
             });
-            await queue.failTask(task.id, leaseToken, { error: message, retryAt });
+            await queue.failTask(task.id, leaseToken, {
+              error: message,
+              retryAt,
+              keepInRunningLane: claimMode === 'local_scope_direct_claim',
+            });
             const failedProviderParity = deriveProviderParity({
               task: task.task,
               status: 'failed',
@@ -509,6 +587,7 @@ async function processClaimedTasks(executeTask: ExecuteTaskFn, claimedTasks: Cla
                 error: message,
                 retryDelayMs: retryDelayMs ?? null,
                 retryAt: retryAt ? retryAt.toISOString() : null,
+                claimMode,
                 provider: failedProviderParity.provider,
                 model: failedProviderParity.model,
                 providerSource: failedProviderParity.providerSource,
@@ -518,7 +597,9 @@ async function processClaimedTasks(executeTask: ExecuteTaskFn, claimedTasks: Cla
             });
           } finally {
             releaseRoomSlot();
-            activeTaskCount = Math.max(0, activeTaskCount - 1);
+            if (countedActiveTask) {
+              activeTaskCount = Math.max(0, activeTaskCount - 1);
+            }
             leasedTaskCount = Math.max(0, leasedTaskCount - 1);
             stopLeaseExtender();
           }
@@ -545,32 +626,56 @@ async function workerLoop(executeTask: ExecuteTaskFn) {
       continue;
     }
 
-    const { leaseToken, tasks } = await queue.claimTasks({
-      limit: availableCapacity,
-      leaseTtlMs: TASK_LEASE_TTL_MS,
-    });
+    const localScopeDirectClaim = workerHandlesLocalScopeDirectClaim
+      ? await queue.claimLocalScopeTasks({
+          limit: availableCapacity,
+          leaseTtlMs: TASK_LEASE_TTL_MS,
+          runtimeScope: workerRuntimeScope,
+        })
+      : { leaseToken: null, tasks: [] as AgentTask[] };
+    const remainingCapacity = Math.max(0, availableCapacity - localScopeDirectClaim.tasks.length);
+    const rpcClaim =
+      remainingCapacity > 0
+        ? await queue.claimTasks({
+            limit: remainingCapacity,
+            leaseTtlMs: TASK_LEASE_TTL_MS,
+            resourceLocks: workerClaimResourceLocks,
+          })
+        : { leaseToken: '', tasks: [] as AgentTask[] };
 
-    if (tasks.length === 0) {
+    if (localScopeDirectClaim.tasks.length === 0 && rpcClaim.tasks.length === 0) {
       await delay(idlePollMs);
       idlePollMs = Math.min(maxIdlePollMs, idlePollMs * 2);
       continue;
     }
 
     idlePollMs = baseIdlePollMs;
+    const tasks = [...localScopeDirectClaim.tasks, ...rpcClaim.tasks];
 
     logger.info('claimed tasks', {
       count: tasks.length,
+      localScopeDirectCount: localScopeDirectClaim.tasks.length,
+      rpcCount: rpcClaim.tasks.length,
       taskNames: tasks.map((task) => task.task),
       leasedTaskCount,
       availableCapacity,
     });
 
     leasedTaskCount += tasks.length;
-    const claimedTasks = tasks.map((task) => ({
-      task,
-      leaseToken,
-      stopLeaseExtender: createLeaseExtender(task.id, leaseToken),
-    }));
+    const claimedTasks: ClaimedTask[] = [
+      ...localScopeDirectClaim.tasks.map((task) => ({
+        task,
+        leaseToken: localScopeDirectClaim.leaseToken ?? '',
+        stopLeaseExtender: createLeaseExtender(task.id, localScopeDirectClaim.leaseToken ?? ''),
+        claimMode: 'local_scope_direct_claim' as const,
+      })),
+      ...rpcClaim.tasks.map((task) => ({
+        task,
+        leaseToken: rpcClaim.leaseToken,
+        stopLeaseExtender: createLeaseExtender(task.id, rpcClaim.leaseToken),
+        claimMode: 'rpc' as const,
+      })),
+    ];
 
     void processClaimedTasks(executeTask, claimedTasks);
   }
