@@ -305,21 +305,62 @@ async function handleQuickTextTask(room: string, payload: JsonObject) {
     ? payload.requestId.trim()
     : randomUUID();
   const sessionId = `quick-text-${requestId}`;
+  const normalizedRequestId = requestId.replace(/[^a-zA-Z0-9_-]/g, '');
   const shapeId =
     typeof payload.shapeId === 'string' && payload.shapeId.trim().length > 0
       ? payload.shapeId.trim()
-      : `qt_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+      : `qt_${normalizedRequestId.slice(0, 24) || randomUUID().slice(0, 12)}`;
+
+  const deterministicAnchor = (() => {
+    const source = `${requestId}::${text}`.trim();
+    let hash = 0;
+    for (let i = 0; i < source.length; i += 1) {
+      hash = (hash * 31 + source.charCodeAt(i)) | 0;
+    }
+    const normalized = Math.abs(hash);
+    const col = normalized % 9;
+    const row = Math.floor(normalized / 9) % 7;
+    return {
+      x: (col - 4) * 140,
+      y: (row - 3) * 110,
+    };
+  })();
+
+  const viewportBounds = parseViewport(payload.bounds);
+  const metadata =
+    payload.metadata && typeof payload.metadata === 'object' && !Array.isArray(payload.metadata)
+      ? (payload.metadata as JsonObject)
+      : undefined;
+  const metadataAnchor =
+    metadata?.anchor && typeof metadata.anchor === 'object' && !Array.isArray(metadata.anchor)
+      ? (metadata.anchor as Record<string, unknown>)
+      : undefined;
+
+  const anchorX = typeof metadataAnchor?.x === 'number' && Number.isFinite(metadataAnchor.x)
+    ? metadataAnchor.x
+    : undefined;
+  const anchorY = typeof metadataAnchor?.y === 'number' && Number.isFinite(metadataAnchor.y)
+    ? metadataAnchor.y
+    : undefined;
 
   const x = typeof payload.x === 'number' && Number.isFinite(payload.x)
     ? payload.x
-    : Math.round((Math.random() - 0.5) * 400);
+    : anchorX !== undefined
+      ? anchorX
+      : viewportBounds
+        ? Math.round(viewportBounds.x + viewportBounds.w * 0.08)
+        : deterministicAnchor.x;
   const y = typeof payload.y === 'number' && Number.isFinite(payload.y)
     ? payload.y
-    : Math.round((Math.random() - 0.5) * 250);
+    : anchorY !== undefined
+      ? anchorY
+      : viewportBounds
+        ? Math.round(viewportBounds.y + viewportBounds.h * 0.08)
+        : deterministicAnchor.y;
 
   const actions: AgentAction[] = [
     {
-      id: `create-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
+      id: `create-${shapeId}`,
       name: 'create_shape',
       params: {
         id: shapeId,

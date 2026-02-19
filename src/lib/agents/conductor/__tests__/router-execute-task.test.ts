@@ -140,4 +140,47 @@ describe('conductor router executeTask', () => {
       }),
     });
   });
+
+  it('assigns deterministic per-action request ids for bundle fairy canvas fan-out', async () => {
+    const { flags } = await import('@/lib/feature-flags');
+    const { runCanvasSteward } = await import('@/lib/agents/subagents/canvas-steward');
+
+    mockRouteFairyIntent.mockResolvedValueOnce({
+      kind: 'bundle',
+      confidence: 0.9,
+      summary: 'fan out',
+      actions: [
+        { kind: 'canvas', message: 'draw tree one' },
+        { kind: 'canvas', message: 'draw tree two' },
+      ],
+    });
+
+    flags.swarmOrchestrationEnabled = false;
+    const { executeTask } = await import('@/lib/agents/conductor/router');
+
+    await executeTask('conductor.dispatch', {
+      task: 'fairy.intent',
+      params: {
+        id: 'intent-forest',
+        room: 'canvas-room-2',
+        message: 'Please execute a bundled multi-step canvas plan.',
+        source: 'voice',
+      },
+    });
+
+    const canvasCalls = (runCanvasSteward as jest.Mock).mock.calls
+      .map((args) => args[0])
+      .filter((payload) => payload?.task === 'canvas.agent_prompt');
+    expect(canvasCalls).toHaveLength(2);
+    expect(canvasCalls[0]).toEqual(
+      expect.objectContaining({
+        params: expect.objectContaining({ requestId: 'intent-forest' }),
+      }),
+    );
+    expect(canvasCalls[1]).toEqual(
+      expect.objectContaining({
+        params: expect.objectContaining({ requestId: 'intent-forest:1' }),
+      }),
+    );
+  });
 });
