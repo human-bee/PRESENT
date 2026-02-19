@@ -54,14 +54,17 @@ export function CustomShapeComponent({ shape }: { shape: CustomShape }) {
   const [localPin, setLocalPinState] = useState<LocalPinData | null>(null);
 
   const [naturalSize, setNaturalSize] = useState<{ w: number; h: number } | null>(null);
+  const [pinnedNaturalSize, setPinnedNaturalSize] = useState<{ w: number; h: number } | null>(null);
   const autoFittedRef = useRef(false);
   const lastMeasuredSizeRef = useRef<{ w: number; h: number } | null>(null);
 
   const sizeInfo = getComponentSizeInfo(shape.props.name);
   const sizingPolicy = sizeInfo.sizingPolicy || 'fit_until_user_resize';
+  const isFixedLivekitTile =
+    shape.props.name === 'LivekitParticipantTile' || shape.props.name === 'LivekitScreenShareTile';
 
   useEffect(() => {
-    if (sizingPolicy === 'scale_only') return;
+    if (sizingPolicy === 'scale_only' || localPin || isFixedLivekitTile) return;
     const el = contentInnerRef.current;
     if (!el) return;
 
@@ -92,12 +95,28 @@ export function CustomShapeComponent({ shape }: { shape: CustomShape }) {
       if (frame !== null) cancelAnimationFrame(frame);
       observer.disconnect();
     };
-  }, [sizingPolicy]);
+  }, [sizingPolicy, localPin, isFixedLivekitTile]);
 
   useEffect(() => {
     lastMeasuredSizeRef.current = null;
     setNaturalSize(null);
   }, [shape.props.customComponent]);
+
+  useEffect(() => {
+    if (localPin) {
+      setPinnedNaturalSize((prev) => {
+        if (naturalSize) {
+          if (!prev || Math.abs(prev.w - naturalSize.w) > 1 || Math.abs(prev.h - naturalSize.h) > 1) {
+            return naturalSize;
+          }
+          return prev;
+        }
+        return prev ?? { w: sizeInfo.naturalWidth, h: sizeInfo.naturalHeight };
+      });
+      return;
+    }
+    setPinnedNaturalSize(null);
+  }, [localPin, naturalSize, sizeInfo.naturalHeight, sizeInfo.naturalWidth]);
 
   useEffect(() => {
     const rerender = () => setRenderTick((x) => x + 1);
@@ -166,7 +185,7 @@ export function CustomShapeComponent({ shape }: { shape: CustomShape }) {
   }, [roomName, shape.id]);
 
   useEffect(() => {
-    if (!editor || !naturalSize) return;
+    if (!editor || !naturalSize || localPin || isFixedLivekitTile) return;
     const unsafeEditor = editor as any;
 
     const policy = sizingPolicy;
@@ -196,29 +215,45 @@ export function CustomShapeComponent({ shape }: { shape: CustomShape }) {
         if (!allowMultiple) autoFittedRef.current = true;
       }
     }
-  }, [editor, naturalSize, shape.id, shape.props.name, shape.props.userResized, shape.props.w, shape.props.h, sizingPolicy, sizeInfo.naturalWidth, sizeInfo.minHeight]);
+  }, [editor, naturalSize, shape.id, shape.props.name, shape.props.userResized, shape.props.w, shape.props.h, sizingPolicy, sizeInfo.naturalWidth, sizeInfo.minHeight, localPin, isFixedLivekitTile]);
 
   // For width: Always use the component's design width to avoid feedback loops
   // (components like DebateScorecard have fixed widths like w-[1200px])
   // For height: Use measured height for dynamic content, or natural height for scale_only
   const baseW = sizeInfo.naturalWidth;
-  const baseH = sizingPolicy === 'scale_only' ? sizeInfo.naturalHeight : (naturalSize?.h ?? sizeInfo.naturalHeight);
+  const measuredHeight = isFixedLivekitTile
+    ? sizeInfo.naturalHeight
+    : localPin
+      ? (pinnedNaturalSize?.h ?? naturalSize?.h ?? sizeInfo.naturalHeight)
+      : (naturalSize?.h ?? sizeInfo.naturalHeight);
+  const baseH = sizingPolicy === 'scale_only' ? sizeInfo.naturalHeight : measuredHeight;
 
-  const scaleX = shape.props.w / baseW;
-  const scaleY = shape.props.h / baseH;
+  const pinnedShapeW =
+    localPin && Number.isFinite(localPin.shapeW) && (localPin.shapeW as number) > 0
+      ? (localPin.shapeW as number)
+      : undefined;
+  const pinnedShapeH =
+    localPin && Number.isFinite(localPin.shapeH) && (localPin.shapeH as number) > 0
+      ? (localPin.shapeH as number)
+      : undefined;
+  const layoutW = pinnedShapeW ?? shape.props.w;
+  const layoutH = pinnedShapeH ?? shape.props.h;
+
+  const scaleX = layoutW / baseW;
+  const scaleY = layoutH / baseH;
   const scale = Math.min(scaleX, scaleY);
 
   const scaledWidth = baseW * scale;
   const scaledHeight = baseH * scale;
-  const offsetX = (shape.props.w - scaledWidth) / 2;
-  const offsetY = (shape.props.h - scaledHeight) / 2;
+  const offsetX = (layoutW - scaledWidth) / 2;
+  const offsetY = (layoutH - scaledHeight) / 2;
 
   const content = (
     <div
       ref={containerRef}
       style={{
-        width: `${shape.props.w}px`,
-        height: `${shape.props.h}px`,
+        width: `${layoutW}px`,
+        height: `${layoutH}px`,
         overflow: 'hidden',
         position: 'relative',
         background: 'transparent',
@@ -280,15 +315,55 @@ export function CustomShapeComponent({ shape }: { shape: CustomShape }) {
   );
 
   if (localPin && typeof document !== 'undefined') {
-    const left = `${localPin.pinnedX * 100}vw`;
-    const top = `${localPin.pinnedY * 100}vh`;
+    const viewportBounds = (editor as any)?.getViewportScreenBounds?.();
+    const viewportXRaw = Number((viewportBounds as any)?.x);
+    const viewportYRaw = Number((viewportBounds as any)?.y);
+    const viewportWRaw = Number((viewportBounds as any)?.width);
+    const viewportHRaw = Number((viewportBounds as any)?.height);
+    const viewportX = Number.isFinite(viewportXRaw) ? viewportXRaw : 0;
+    const viewportY = Number.isFinite(viewportYRaw) ? viewportYRaw : 0;
+    const viewportW =
+      Number.isFinite(viewportWRaw) && viewportWRaw > 0 ? viewportWRaw : Math.max(1, window.innerWidth || 1);
+    const viewportH =
+      Number.isFinite(viewportHRaw) && viewportHRaw > 0 ? viewportHRaw : Math.max(1, window.innerHeight || 1);
+    const hasTopLeftAnchor =
+      Number.isFinite(localPin.pinnedLeft) &&
+      Number.isFinite(localPin.pinnedTop);
+    const hasLegacyScreenAnchor =
+      Number.isFinite(localPin.screenLeft) &&
+      Number.isFinite(localPin.screenTop);
+    const leftPx = hasTopLeftAnchor
+      ? viewportX + (localPin.pinnedLeft as number) * viewportW
+      : hasLegacyScreenAnchor
+        ? (localPin.screenLeft as number)
+        : viewportX + localPin.pinnedX * viewportW;
+    const topPx = hasTopLeftAnchor
+      ? viewportY + (localPin.pinnedTop as number) * viewportH
+      : hasLegacyScreenAnchor
+        ? (localPin.screenTop as number)
+        : viewportY + localPin.pinnedY * viewportH;
+    const left = `${leftPx}px`;
+    const top = `${topPx}px`;
+    const useCenterTranslate = !hasTopLeftAnchor && !hasLegacyScreenAnchor;
+    const pinnedW = Number.isFinite(localPin.screenW) && (localPin.screenW as number) > 0
+      ? (localPin.screenW as number)
+      : shape.props.w;
+    const pinnedH = Number.isFinite(localPin.screenH) && (localPin.screenH as number) > 0
+      ? (localPin.screenH as number)
+      : shape.props.h;
+    const pinnedBaseW = pinnedShapeW ?? shape.props.w;
+    const pinnedBaseH = pinnedShapeH ?? shape.props.h;
+    const scaleX = pinnedBaseW > 0 ? pinnedW / pinnedBaseW : 1;
+    const scaleY = pinnedBaseH > 0 ? pinnedH / pinnedBaseH : 1;
     const portal = createPortal(
       <div
         style={{
           position: 'fixed',
           left,
           top,
-          transform: 'translate(-50%, -50%)',
+          transform: useCenterTranslate ? 'translate(-50%, -50%)' : undefined,
+          width: `${pinnedW}px`,
+          height: `${pinnedH}px`,
           zIndex: 1100,
           pointerEvents: 'auto',
         }}
@@ -305,7 +380,17 @@ export function CustomShapeComponent({ shape }: { shape: CustomShape }) {
             Unpin
           </button>
         </div>
-        {content}
+        <div
+          style={{
+            position: 'absolute',
+            left: 0,
+            top: 0,
+            transform: `scale(${scaleX}, ${scaleY})`,
+            transformOrigin: 'top left',
+          }}
+        >
+          {content}
+        </div>
       </div>,
       document.body,
     );
@@ -341,7 +426,12 @@ interface RenderStoredComponentArgs {
   editor: ReturnType<typeof useEditor>;
 }
 
-function renderStoredComponent({ shapeId, shapeProps, componentStore, editor }: RenderStoredComponentArgs) {
+function renderStoredComponent({
+  shapeId,
+  shapeProps,
+  componentStore,
+  editor,
+}: RenderStoredComponentArgs) {
   const stored = componentStore?.get(shapeProps.customComponent);
   let node: ReactNode = null;
 
