@@ -169,6 +169,8 @@ const verifyTaskContract = (
   result: unknown,
 ): { ok: boolean; reason?: string } => {
   const paramsRecord = params as Record<string, unknown>;
+  const resultRecord = asRecord(result);
+  const resultStatus = normalizeString(resultRecord?.status)?.toLowerCase();
   if (taskName === 'canvas.agent_prompt') {
     const nestedParams =
       paramsRecord.params && typeof paramsRecord.params === 'object'
@@ -183,14 +185,16 @@ const verifyTaskContract = (
     if (!message) {
       return { ok: false, reason: 'canvas.agent_prompt requires message' };
     }
-    if (
-      result &&
-      typeof result === 'object' &&
-      typeof (result as Record<string, unknown>).status === 'string' &&
-      ((result as Record<string, unknown>).status as string).toLowerCase() === 'skipped'
-    ) {
+    if (resultStatus === 'skipped') {
+      const skipReason = normalizeString(resultRecord?.reason)?.toLowerCase();
+      if (skipReason === 'server_canvas_steward_disabled') {
+        return { ok: true };
+      }
       return { ok: false, reason: 'canvas.agent_prompt was skipped before steward execution' };
     }
+  }
+  if (taskName.startsWith('canvas.') && resultStatus === 'skipped') {
+    return { ok: true };
   }
   if (taskName.startsWith('scorecard.')) {
     const componentId =
