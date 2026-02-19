@@ -269,6 +269,7 @@ export function CustomShapeComponent({ shape }: { shape: CustomShape }) {
                 shapeProps: shape.props,
                 componentStore,
                 editor,
+                isPinned: Boolean(localPin),
               })
             ) : (
               <div style={{ padding: 10, color: 'var(--color-text-muted)' }}>No component loaded</div>
@@ -339,9 +340,16 @@ interface RenderStoredComponentArgs {
   shapeProps: CustomShape['props'];
   componentStore: Map<string, ReactNode> | null;
   editor: ReturnType<typeof useEditor>;
+  isPinned: boolean;
 }
 
-function renderStoredComponent({ shapeId, shapeProps, componentStore, editor }: RenderStoredComponentArgs) {
+function renderStoredComponent({
+  shapeId,
+  shapeProps,
+  componentStore,
+  editor,
+  isPinned,
+}: RenderStoredComponentArgs) {
   const stored = componentStore?.get(shapeProps.customComponent);
   let node: ReactNode = null;
 
@@ -362,6 +370,7 @@ function renderStoredComponent({ shapeId, shapeProps, componentStore, editor }: 
   const injectedBase = {
     __custom_message_id: shapeProps.customComponent,
     state: (shapeProps.state as Record<string, unknown>) || {},
+    ...(shapeProps.name === 'LivekitParticipantTile' ? { isPinned } : {}),
   } as const;
 
   if (React.isValidElement(stored)) {

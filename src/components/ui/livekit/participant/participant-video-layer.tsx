@@ -13,6 +13,7 @@ type ParticipantVideoLayerProps = {
   isLocal: boolean;
   mirrorLocal: boolean;
   fit: 'cover' | 'contain';
+  isPinned?: boolean;
   isAgent: boolean;
 };
 
@@ -24,11 +25,13 @@ export function ParticipantVideoLayer({
   isLocal,
   mirrorLocal,
   fit,
+  isPinned = false,
   isAgent,
 }: ParticipantVideoLayerProps) {
   if (!showVideo || isMinimized) return null;
 
   if (videoTrackRef && isTrackReference(videoTrackRef) && !videoPublication?.isMuted) {
+    const effectiveFit = isPinned ? 'contain' : fit;
     return (
       <div
         className={cn('absolute inset-0 w-full h-full', isLocal && mirrorLocal && '[transform:scaleX(-1)]')}
@@ -37,7 +40,10 @@ export function ParticipantVideoLayer({
         <VideoTrack
           trackRef={videoTrackRef}
           playsInline
-          className={cn('w-full h-full bg-black', fit === 'contain' ? 'object-contain' : 'object-cover')}
+          className={cn(
+            'w-full h-full bg-black',
+            effectiveFit === 'contain' ? 'object-contain' : 'object-cover',
+          )}
         />
       </div>
     );
