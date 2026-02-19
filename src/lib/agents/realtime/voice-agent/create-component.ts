@@ -499,7 +499,7 @@ export async function executeCreateComponent(
     state: {} as JsonObject,
     intentId,
     slot,
-    room: deps.roomName || 'room',
+    room: typeof deps.roomName === 'string' ? deps.roomName.trim() : '',
   });
   if (intentId) {
     registerIntentEntry({

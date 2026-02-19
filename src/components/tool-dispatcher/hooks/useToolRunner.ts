@@ -698,6 +698,12 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
 
           if (stewardEnabled && (task.startsWith('canvas.') || task.startsWith('fairy.'))) {
             const targetRoom = call.roomId || room?.name;
+            if (!targetRoom || targetRoom.trim().length === 0) {
+              const message = 'dispatch_to_conductor requires a room identity';
+              queue.markError(call.id, message);
+              emitError(call, message);
+              return { status: 'ERROR', message };
+            }
             if (task === 'canvas.agent_prompt') {
               if (!dispatchParams.message && typeof params?.message === 'string') {
                 dispatchParams.message = params.message;
@@ -708,7 +714,7 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
               if (!dispatchParams.requestId && typeof params?.requestId === 'string') {
                 dispatchParams.requestId = params.requestId;
               }
-              const currentRoom = call.roomId || room?.name || 'room';
+              const currentRoom = targetRoom;
               const active = activeCanvasDispatchRef.current;
               if (
                 active &&

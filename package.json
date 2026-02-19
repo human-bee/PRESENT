@@ -35,6 +35,7 @@
     "journey:run": "npx tsx scripts/journey/run-multiuser.ts",
     "journey:tts": "npx tsx scripts/journey/run-multiuser-tts.ts",
     "journey:report": "npx tsx scripts/journey/generate-report.ts",
+    "fairy:cli": "npx tsx src/cli/fairy/index.ts",
     "bench:racetrack": "npx tsx scripts/racetrack-benchmark.ts",
     "byok:setup": "node scripts/byok-setup.mjs",
     "teacher:build": "esbuild scripts/teacher-worker.ts --bundle --platform=node --target=node22 --outfile=.parity-dist/teacher-worker/teacher-worker.js --tsconfig=tsconfig.teacher-worker.json",

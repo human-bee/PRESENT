@@ -234,7 +234,7 @@ describe('/api/steward/runCanvas', () => {
     expect(metadata.intentId).toBe('intent-explicit');
   });
 
-  it('queues fairy.intent with coalescing resource keys and idempotency envelope', async () => {
+  it('queues fairy.intent without resource coalescing and preserves idempotency envelope', async () => {
     const POST = await loadPost({ queueFallback: false, byok: false });
     const request = new Request('http://localhost/api/steward/runCanvas', {
       method: 'POST',
@@ -260,7 +260,7 @@ describe('/api/steward/runCanvas', () => {
     const params = enqueued.params as Record<string, unknown>;
     const resourceKeys = enqueued.resourceKeys as string[];
     expect(enqueued.task).toBe('fairy.intent');
-    expect(enqueued.coalesceByResource).toBe(true);
+    expect(enqueued.coalesceByResource).toBe(false);
     expect(enqueued.requestId).toBe('req-fairy-1');
     expect(enqueued.dedupeKey).toBe('idem-1');
     expect(enqueued.idempotencyKey).toBe('idem-1');

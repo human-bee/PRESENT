@@ -42,6 +42,7 @@ export interface EnqueueTaskInput {
   priority?: number;
   runAt?: Date;
   coalesceByResource?: boolean;
+  coalesceTaskFilter?: string[];
 }
 
 export interface ClaimOptions {
@@ -231,7 +232,10 @@ export class AgentTaskQueue {
       }
     }
 
-    const coalescingTaskNames = ['fairy.intent', 'canvas.agent_prompt', 'canvas.quick_text'];
+    const defaultCoalescingTaskNames = ['canvas.agent_prompt'];
+    const coalescingTaskNames = Array.from(
+      new Set([...(input.coalesceTaskFilter ?? []), ...defaultCoalescingTaskNames]),
+    );
     const shouldCoalesce = coalesceByResource || coalescingTaskNames.includes(task);
     const coalesceTaskFilter = coalesceByResource
       ? Array.from(new Set([...coalescingTaskNames, task]))

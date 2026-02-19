@@ -186,12 +186,95 @@ describe('AgentTaskQueue enqueue dedupe behavior', () => {
 
     expect(result?.id).toBe('task-retry-success');
     expect((result as any)?.trace_id).toBeNull();
-    expect(harness.queries).toHaveLength(4);
-    expect(harness.queries[2]?.insert).toHaveBeenCalledWith(
+    expect(harness.queries).toHaveLength(3);
+    expect(harness.queries[1]?.insert).toHaveBeenCalledWith(
       expect.objectContaining({ trace_id: expect.any(String) }),
     );
-    expect(harness.queries[3]?.insert).toHaveBeenCalledWith(
+    expect(harness.queries[2]?.insert).toHaveBeenCalledWith(
       expect.not.objectContaining({ trace_id: expect.anything() }),
     );
+  });
+
+  test('does not coalesce queued fairy.intent tasks by default', async () => {
+    const harness = createHarness();
+    harness.maybeSingleQueue.push({ data: null, error: null });
+    harness.singleQueue.push({
+      data: {
+        id: 'task-fairy',
+        room: 'room-1',
+        task: 'fairy.intent',
+        params: {} as JsonObject,
+        trace_id: null,
+        status: 'queued',
+        priority: 0,
+        run_at: null,
+        attempt: 0,
+        error: null,
+        request_id: 'req-fairy',
+        dedupe_key: null,
+        resource_keys: ['room:room-1'],
+        lease_token: null,
+        lease_expires_at: null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        result: null,
+      },
+      error: null,
+    });
+
+    const { AgentTaskQueue } = await import('@/lib/agents/shared/queue');
+    const queue = new AgentTaskQueue({ url: 'http://localhost:54321', serviceRoleKey: 'test-key' });
+    const result = await queue.enqueueTask({
+      room: 'room-1',
+      task: 'fairy.intent',
+      params: { room: 'room-1', message: 'draw a bunny' },
+      requestId: 'req-fairy',
+    });
+
+    expect(result?.id).toBe('task-fairy');
+    const updateCalls = harness.queries.reduce((acc, query) => acc + query.update.mock.calls.length, 0);
+    expect(updateCalls).toBe(0);
+  });
+
+  test('coalesces queued canvas.agent_prompt tasks by default', async () => {
+    const harness = createHarness();
+    harness.maybeSingleQueue.push({ data: null, error: null });
+    harness.singleQueue.push({
+      data: {
+        id: 'task-canvas',
+        room: 'room-1',
+        task: 'canvas.agent_prompt',
+        params: {} as JsonObject,
+        trace_id: null,
+        status: 'queued',
+        priority: 0,
+        run_at: null,
+        attempt: 0,
+        error: null,
+        request_id: 'req-canvas',
+        dedupe_key: null,
+        resource_keys: ['room:room-1'],
+        lease_token: null,
+        lease_expires_at: null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        result: null,
+      },
+      error: null,
+    });
+
+    const { AgentTaskQueue } = await import('@/lib/agents/shared/queue');
+    const queue = new AgentTaskQueue({ url: 'http://localhost:54321', serviceRoleKey: 'test-key' });
+    const result = await queue.enqueueTask({
+      room: 'room-1',
+      task: 'canvas.agent_prompt',
+      params: { room: 'room-1', message: 'draw roadmap' },
+      requestId: 'req-canvas',
+    });
+
+    expect(result?.id).toBe('task-canvas');
+    const coalesceQuery = harness.queries.find((query) => query.update.mock.calls.length > 0);
+    expect(coalesceQuery).toBeDefined();
+    expect(coalesceQuery?.in).toHaveBeenCalledWith('task', ['canvas.agent_prompt']);
   });
 });

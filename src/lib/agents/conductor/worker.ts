@@ -22,6 +22,22 @@ const ROOM_CONCURRENCY = Math.max(1, Number.parseInt(process.env.ROOM_CONCURRENC
 const WORKER_HEARTBEAT_MS = Number(process.env.AGENT_WORKER_HEARTBEAT_MS ?? 5_000);
 const TASK_IDLE_POLL_MS = Number(process.env.TASK_IDLE_POLL_MS ?? 500);
 const TASK_IDLE_POLL_MAX_MS = Number(process.env.TASK_IDLE_POLL_MAX_MS ?? 1_000);
+const TASK_MAX_RETRY_ATTEMPTS = Math.max(
+  1,
+  Number.parseInt(process.env.TASK_MAX_RETRY_ATTEMPTS ?? '5', 10) || 5,
+);
+const TASK_RETRY_BASE_DELAY_MS = Math.max(
+  100,
+  Number.parseInt(process.env.TASK_RETRY_BASE_DELAY_MS ?? '1000', 10) || 1_000,
+);
+const TASK_RETRY_MAX_DELAY_MS = Math.max(
+  TASK_RETRY_BASE_DELAY_MS,
+  Number.parseInt(process.env.TASK_RETRY_MAX_DELAY_MS ?? '15000', 10) || 15_000,
+);
+const TASK_RETRY_JITTER_RATIO = Math.min(
+  0.9,
+  Math.max(0, Number.parseFloat(process.env.TASK_RETRY_JITTER_RATIO ?? '0.2') || 0.2),
+);
 
 const queue = new AgentTaskQueue();
 const logger = createLogger('agents:conductor:worker');
@@ -36,6 +52,16 @@ type RoomLaneState = {
   waiters: Array<() => void>;
 };
 const roomLaneStates = new Map<string, RoomLaneState>();
+
+const computeTaskRetryDelayMs = (attempt: number): number => {
+  const exponent = Math.max(0, attempt - 1);
+  const base = Math.min(TASK_RETRY_MAX_DELAY_MS, TASK_RETRY_BASE_DELAY_MS * 2 ** exponent);
+  if (TASK_RETRY_JITTER_RATIO <= 0 || base <= 0) {
+    return Math.round(base);
+  }
+  const jitter = base * TASK_RETRY_JITTER_RATIO;
+  return Math.max(0, Math.round(base - jitter + Math.random() * jitter * 2));
+};
 
 type ExecuteTaskFn = (taskName: string, params: JsonObject) => Promise<unknown>;
 type ClaimedTask = {
@@ -436,12 +462,15 @@ async function processClaimedTasks(executeTask: ExecuteTaskFn, claimedTasks: Cla
           } catch (error) {
             const described = describeUnknownError(error);
             const message = described.message;
-            const retryAt = task.attempt < 3 ? new Date(Date.now() + 2 ** task.attempt * 1000) : undefined;
+            const shouldRetry = task.attempt < TASK_MAX_RETRY_ATTEMPTS;
+            const retryDelayMs = shouldRetry ? computeTaskRetryDelayMs(task.attempt) : undefined;
+            const retryAt = retryDelayMs !== undefined ? new Date(Date.now() + retryDelayMs) : undefined;
             logger.warn('task failed', {
               roomKey,
               taskId: task.id,
               task: task.task,
               attempt: task.attempt,
+              retryDelayMs,
               retryAt,
               error: message,
               ...(described.stack ? { stack: described.stack } : {}),
@@ -478,6 +507,7 @@ async function processClaimedTasks(executeTask: ExecuteTaskFn, claimedTasks: Cla
                 route,
                 lockKey: lockKey ?? null,
                 error: message,
+                retryDelayMs: retryDelayMs ?? null,
                 retryAt: retryAt ? retryAt.toISOString() : null,
                 provider: failedProviderParity.provider,
                 model: failedProviderParity.model,

@@ -420,7 +420,8 @@ export async function POST(req: NextRequest) {
         lockKey: normalizedLockKey,
         idempotencyKey: orchestrationEnvelope.idempotencyKey,
         resourceKeys: normalizedResourceKeys,
-        coalesceByResource: normalizedTask === 'canvas.agent_prompt' || normalizedTask === 'fairy.intent',
+        coalesceByResource: normalizedTask === 'canvas.agent_prompt',
+        coalesceTaskFilter: normalizedTask === 'canvas.agent_prompt' ? ['canvas.agent_prompt'] : undefined,
       });
 
       if (normalizedTask === 'canvas.agent_prompt') {

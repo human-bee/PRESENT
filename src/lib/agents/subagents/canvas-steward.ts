@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { randomUUID } from 'crypto';
+import { createHash, randomUUID } from 'crypto';
 import { jsonObjectSchema, jsonValueSchema, type JsonObject, type JsonValue } from '@/lib/utils/json-schema';
 import { runCanvasAgent } from '@/lib/agents/canvas-agent/server/runner';
 import type { CanvasFollowupInput } from '@/lib/agents/canvas-agent/server/followup-queue';
@@ -83,6 +83,58 @@ const parseViewport = (value: unknown): CanvasViewport | undefined => {
     return undefined;
   }
   return { x: candidate.x, y: candidate.y, w: candidate.w, h: candidate.h };
+};
+
+const readJsonObject = (value: unknown): Record<string, unknown> | null => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  return value as Record<string, unknown>;
+};
+
+const deterministicNumberFromHex = (hex: string, min: number, max: number): number => {
+  if (max <= min) return min;
+  const parsed = Number.parseInt(hex, 16);
+  const range = max - min + 1;
+  const normalized = Number.isFinite(parsed) ? parsed : 0;
+  return min + (Math.abs(normalized) % range);
+};
+
+const pickQuickTextPlacementBounds = (payload: JsonObject): CanvasViewport | undefined => {
+  const metadata = readJsonObject(payload.metadata);
+  const viewContext = readJsonObject(metadata?.viewContext);
+  const promptSummary = readJsonObject(metadata?.promptSummary);
+
+  return (
+    parseViewport(payload.bounds) ??
+    parseViewport(payload.viewport) ??
+    parseViewport(payload.selectionBounds) ??
+    parseViewport(metadata?.bounds) ??
+    parseViewport(metadata?.viewport) ??
+    parseViewport(viewContext?.viewport) ??
+    parseViewport(promptSummary?.viewport)
+  );
+};
+
+const resolveQuickTextPlacement = (room: string, requestId: string, text: string, payload: JsonObject): { x: number; y: number } => {
+  const explicitX = typeof payload.x === 'number' && Number.isFinite(payload.x) ? payload.x : undefined;
+  const explicitY = typeof payload.y === 'number' && Number.isFinite(payload.y) ? payload.y : undefined;
+  if (typeof explicitX === 'number' && typeof explicitY === 'number') {
+    return { x: Math.round(explicitX), y: Math.round(explicitY) };
+  }
+
+  const bounds = pickQuickTextPlacementBounds(payload);
+  if (bounds) {
+    const insetX = Math.max(24, Math.min(120, Math.round(bounds.w * 0.12)));
+    const insetY = Math.max(20, Math.min(96, Math.round(bounds.h * 0.14)));
+    return {
+      x: Math.round(bounds.x + insetX),
+      y: Math.round(bounds.y + insetY),
+    };
+  }
+
+  const seed = createHash('sha1').update(`${room}|${requestId}|${text}`).digest('hex');
+  const x = deterministicNumberFromHex(seed.slice(0, 8), -360, 360);
+  const y = deterministicNumberFromHex(seed.slice(8, 16), -240, 240);
+  return { x, y };
 };
 
 export async function runCanvasSteward(args: RunCanvasStewardArgs) {
@@ -305,21 +357,17 @@ async function handleQuickTextTask(room: string, payload: JsonObject) {
     ? payload.requestId.trim()
     : randomUUID();
   const sessionId = `quick-text-${requestId}`;
+  const deterministicSeed = createHash('sha1').update(`${room}|${requestId}|${text}`).digest('hex');
   const shapeId =
     typeof payload.shapeId === 'string' && payload.shapeId.trim().length > 0
       ? payload.shapeId.trim()
-      : `qt_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+      : `qt_${deterministicSeed.slice(0, 12)}`;
 
-  const x = typeof payload.x === 'number' && Number.isFinite(payload.x)
-    ? payload.x
-    : Math.round((Math.random() - 0.5) * 400);
-  const y = typeof payload.y === 'number' && Number.isFinite(payload.y)
-    ? payload.y
-    : Math.round((Math.random() - 0.5) * 250);
+  const { x, y } = resolveQuickTextPlacement(room, requestId, text, payload);
 
   const actions: AgentAction[] = [
     {
-      id: `create-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
+      id: `create-${deterministicSeed.slice(12, 24)}`,
       name: 'create_shape',
       params: {
         id: shapeId,
