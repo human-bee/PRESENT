@@ -260,11 +260,11 @@ describe('/api/steward/runCanvas', () => {
     const params = enqueued.params as Record<string, unknown>;
     const resourceKeys = enqueued.resourceKeys as string[];
     expect(enqueued.task).toBe('fairy.intent');
-    expect(enqueued.coalesceByResource).toBe(false);
+    expect(enqueued.coalesceByResource).toBe(true);
     expect(enqueued.requestId).toBe('req-fairy-1');
     expect(enqueued.dedupeKey).toBe('idem-1');
     expect(enqueued.idempotencyKey).toBe('idem-1');
-    expect(resourceKeys).toEqual(expect.arrayContaining(['room:demo-room', 'canvas:intent', 'intent:req-fairy-1']));
+    expect(resourceKeys).toEqual(expect.arrayContaining(['room:demo-room', 'canvas:intent']));
     expect(resourceKeys.join(',')).toContain('lock:');
     expect(params.executionId).toBe('exec-1');
     expect(params.idempotencyKey).toBe('idem-1');

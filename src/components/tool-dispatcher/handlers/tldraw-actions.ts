@@ -20,16 +20,6 @@ const withPrefixes = (sids: string[]) => (Array.isArray(sids) ? sids.map(withPre
 const fallbackNumber = (value: unknown, fallback = 0) => (typeof value === 'number' && Number.isFinite(value) ? value : fallback);
 
 type ShapeSnapshot = { id: string; type: string; x: number; y: number; w: number; h: number };
-type ShapeBounds = {
-  minX: number;
-  minY: number;
-  maxX: number;
-  maxY: number;
-  width: number;
-  height: number;
-  midX: number;
-  midY: number;
-};
 
 function getShapeSnapshot(editor: Editor, shapeId: string): ShapeSnapshot | null {
   const shape = editor.getShape?.(shapeId as any) as any;
@@ -44,25 +34,6 @@ function getShapeSnapshot(editor: Editor, shapeId: string): ShapeSnapshot | null
     w: w > 0 ? w : 0,
     h: h > 0 ? h : 0,
   };
-}
-
-function getShapeBounds(editor: Editor, shapeId: string): ShapeBounds | null {
-  const shape = editor.getShape?.(shapeId as any);
-  if (!shape) return null;
-  const bounds =
-    (editor.getShapePageBounds?.(shapeId as any) as any) ??
-    (editor.getShapePageBounds?.(shape as any) as any);
-  if (!bounds) return null;
-
-  const minX = fallbackNumber(bounds.minX, fallbackNumber(bounds.x));
-  const minY = fallbackNumber(bounds.minY, fallbackNumber(bounds.y));
-  const width = fallbackNumber(bounds.width, fallbackNumber(bounds.w, Math.max(0, fallbackNumber(bounds.maxX) - minX)));
-  const height = fallbackNumber(bounds.height, fallbackNumber(bounds.h, Math.max(0, fallbackNumber(bounds.maxY) - minY)));
-  const maxX = fallbackNumber(bounds.maxX, minX + width);
-  const maxY = fallbackNumber(bounds.maxY, minY + height);
-  const midX = fallbackNumber(bounds.midX, minX + width / 2);
-  const midY = fallbackNumber(bounds.midY, minY + height / 2);
-  return { minX, minY, maxX, maxY, width, height, midX, midY };
 }
 
 function alignShapes(editor: Editor, ids: string[], axis: 'x' | 'y', mode: 'start' | 'center' | 'end', collect: BatchCollector) {
@@ -445,14 +416,6 @@ export function applyAction(ctx: ApplyContext, action: AgentAction, batch?: Batc
       mutated = true;
       break;
     }
-    case 'clear': {
-      const allShapes = editor.getCurrentPageShapes?.() ?? [];
-      allShapes.forEach((shape: any) => {
-        if (shape?.id) localBatch.deletes.add(String(shape.id));
-      });
-      mutated = allShapes.length > 0;
-      break;
-    }
     case 'move': {
       const { ids, dx, dy, target } = action.params as any;
       const idList = Array.isArray(ids) ? (ids as string[]) : [];
@@ -477,63 +440,7 @@ export function applyAction(ctx: ApplyContext, action: AgentAction, batch?: Batc
       break;
     }
     case 'resize': {
-      const { id, w, h, shapeIds, scaleX, scaleY, originX, originY } = action.params as any;
-      const hasTeacherScalePayload =
-        Array.isArray(shapeIds) &&
-        typeof scaleX === 'number' &&
-        Number.isFinite(scaleX) &&
-        typeof scaleY === 'number' &&
-        Number.isFinite(scaleY) &&
-        typeof originX === 'number' &&
-        Number.isFinite(originX) &&
-        typeof originY === 'number' &&
-        Number.isFinite(originY);
-
-      if (hasTeacherScalePayload) {
-        for (const rawId of shapeIds as string[]) {
-          const sid = withPrefix(rawId);
-          const shape = editor.getShape?.(sid as any) as any;
-          if (!shape) continue;
-
-          if (typeof (editor as any).resizeShape === 'function') {
-            try {
-              (editor as any).resizeShape(
-                sid as any,
-                { x: scaleX, y: scaleY },
-                { scaleOrigin: { x: originX, y: originY } },
-              );
-              mutated = true;
-              continue;
-            } catch {}
-          }
-
-          const snapshot = getShapeSnapshot(editor, sid);
-          if (!snapshot) continue;
-          const nx = originX + (snapshot.x - originX) * scaleX;
-          const ny = originY + (snapshot.y - originY) * scaleY;
-          const nextW = snapshot.w > 0 ? Math.max(1, snapshot.w * Math.abs(scaleX)) : undefined;
-          const nextH = snapshot.h > 0 ? Math.max(1, snapshot.h * Math.abs(scaleY)) : undefined;
-          const nextProps: Record<string, unknown> = { ...(shape.props ?? {}) };
-          if (nextW !== undefined) {
-            if (typeof (nextProps as any).w === 'number') (nextProps as any).w = nextW;
-            if (typeof (nextProps as any).width === 'number') (nextProps as any).width = nextW;
-          }
-          if (nextH !== undefined) {
-            if (typeof (nextProps as any).h === 'number') (nextProps as any).h = nextH;
-            if (typeof (nextProps as any).height === 'number') (nextProps as any).height = nextH;
-          }
-          localBatch.updates.push({
-            id: sid,
-            type: shape.type ?? 'geo',
-            x: nx,
-            y: ny,
-            props: nextProps,
-          });
-          mutated = true;
-        }
-        break;
-      }
-
+      const { id, w, h } = action.params as any;
       if (typeof w !== 'number' || typeof h !== 'number') break;
       const sid = withPrefix(id);
       const shape = editor.getShape?.(sid as any) as any;
@@ -618,69 +525,6 @@ export function applyAction(ctx: ApplyContext, action: AgentAction, batch?: Batc
           editor.zoomToBounds(bounds, { inset: 32, animation: { duration: 120 } });
         } catch {}
       }
-      break;
-    }
-    case 'place': {
-      const {
-        shapeId,
-        referenceShapeId,
-        side,
-        align,
-        sideOffset = 0,
-        alignOffset = 0,
-      } = action.params as any;
-      const targetId = withPrefix(String(shapeId || ''));
-      const referenceId = withPrefix(String(referenceShapeId || ''));
-      const targetShape = editor.getShape?.(targetId as any) as any;
-      if (!targetShape) break;
-      const targetBounds = getShapeBounds(editor, targetId);
-      const referenceBounds = getShapeBounds(editor, referenceId);
-      if (!targetBounds || !referenceBounds) break;
-
-      const resolvedAlign = align === 'start' || align === 'end' ? align : 'center';
-      const resolvedSideOffset = typeof sideOffset === 'number' && Number.isFinite(sideOffset) ? sideOffset : 0;
-      const resolvedAlignOffset = typeof alignOffset === 'number' && Number.isFinite(alignOffset) ? alignOffset : 0;
-      let x = targetBounds.minX;
-      let y = targetBounds.minY;
-
-      if (side === 'top') {
-        y = referenceBounds.minY - targetBounds.height - resolvedSideOffset;
-        x =
-          resolvedAlign === 'start'
-            ? referenceBounds.minX + resolvedAlignOffset
-            : resolvedAlign === 'end'
-              ? referenceBounds.maxX - targetBounds.width - resolvedAlignOffset
-              : referenceBounds.midX - targetBounds.width / 2 + resolvedAlignOffset;
-      } else if (side === 'bottom') {
-        y = referenceBounds.maxY + resolvedSideOffset;
-        x =
-          resolvedAlign === 'start'
-            ? referenceBounds.minX + resolvedAlignOffset
-            : resolvedAlign === 'end'
-              ? referenceBounds.maxX - targetBounds.width - resolvedAlignOffset
-              : referenceBounds.midX - targetBounds.width / 2 + resolvedAlignOffset;
-      } else if (side === 'left') {
-        x = referenceBounds.minX - targetBounds.width - resolvedSideOffset;
-        y =
-          resolvedAlign === 'start'
-            ? referenceBounds.minY + resolvedAlignOffset
-            : resolvedAlign === 'end'
-              ? referenceBounds.maxY - targetBounds.height - resolvedAlignOffset
-              : referenceBounds.midY - targetBounds.height / 2 + resolvedAlignOffset;
-      } else if (side === 'right') {
-        x = referenceBounds.maxX + resolvedSideOffset;
-        y =
-          resolvedAlign === 'start'
-            ? referenceBounds.minY + resolvedAlignOffset
-            : resolvedAlign === 'end'
-              ? referenceBounds.maxY - targetBounds.height - resolvedAlignOffset
-              : referenceBounds.midY - targetBounds.height / 2 + resolvedAlignOffset;
-      }
-
-      const absolute = moveShapeToAbsoluteTarget(editor, targetId, { x, y });
-      if (!absolute) break;
-      localBatch.updates.push(absolute);
-      mutated = true;
       break;
     }
     default:

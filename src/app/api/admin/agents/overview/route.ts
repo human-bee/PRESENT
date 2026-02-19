@@ -184,31 +184,9 @@ export async function GET(req: NextRequest) {
       generatedAt: new Date().toISOString(),
     });
   } catch (error) {
-    const reason = error instanceof Error ? error.message : 'failed to load overview';
-    return NextResponse.json({
-      ok: false,
-      degraded: true,
-      actorUserId: admin.userId,
-      actorAccessMode: admin.mode,
-      safeActionsAllowed: admin.mode === 'allowlist',
-      detailGlobalScope: isAgentAdminDetailGlobalScopeEnabled(),
-      detailMaskDefault: isAgentAdminDetailMaskDefaultEnabled(),
-      queue: {
-        queued: 0,
-        running: 0,
-        failed: 0,
-        succeeded: 0,
-        canceled: 0,
-      },
-      queueOldestQueuedAt: null,
-      queueOldestQueuedAgeMs: null,
-      tracesLastHour: 0,
-      providerMix: initProviderCounts(),
-      providerFailures: initProviderCounts(),
-      activeWorkers: 0,
-      workers: [],
-      errors: [{ scope: 'overview', reason }],
-      generatedAt: new Date().toISOString(),
-    });
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'failed to load overview' },
+      { status: 500 },
+    );
   }
 }

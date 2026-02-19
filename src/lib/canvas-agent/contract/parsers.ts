@@ -84,27 +84,6 @@ const moveSingleAbsoluteSchema = z
   .object({ shapeId: z.string(), x: z.number(), y: z.number() })
   .transform((value) => ({ ids: [value.shapeId], target: { x: value.x, y: value.y } }));
 
-const teacherResizeSchema = z
-  .object({
-    shapeIds: z.array(z.string()).min(1),
-    originX: z.number(),
-    originY: z.number(),
-    scaleX: z.number(),
-    scaleY: z.number(),
-  })
-  .passthrough();
-
-const teacherPlaceSchema = z
-  .object({
-    shapeId: z.string(),
-    referenceShapeId: z.string(),
-    side: z.enum(['top', 'bottom', 'left', 'right']),
-    sideOffset: z.number().optional(),
-    align: z.enum(['start', 'center', 'end']).optional(),
-    alignOffset: z.number().optional(),
-  })
-  .passthrough();
-
 const legacyActionSchemas = {
   create_shape: z
     .object({
@@ -159,10 +138,9 @@ const legacyActionSchemas = {
     .passthrough(),
   delete_shape: z.object({ ids: z.array(z.string()).min(1) }).passthrough(),
   move: z.union([moveDeltaSchema, moveAbsoluteSchema, moveSingleAbsoluteSchema]),
-  resize: z.union([
-    z.object({ id: z.string(), w: z.number().positive(), h: z.number().positive(), anchor: z.string().optional() }).passthrough(),
-    teacherResizeSchema,
-  ]),
+  resize: z
+    .object({ id: z.string(), w: z.number().positive(), h: z.number().positive(), anchor: z.string().optional() })
+    .passthrough(),
   rotate: z.union([canonicalRotateSchema, tldrawRotateSchema]).transform((value) => {
     if (
       'shapeIds' in value &&
@@ -236,43 +214,23 @@ const legacyActionSchemas = {
     })
     .passthrough(),
   message: z.object({ text: z.string() }).passthrough(),
-  clear: z.object({}).passthrough(),
-  count: z.object({ expression: z.string() }).passthrough(),
-  countryInfo: z.object({ code: z.string() }).passthrough(),
-  getInspiration: z.object({}).passthrough(),
-  label: z.object({ shapeId: z.string(), text: z.string(), intent: z.string().optional() }).passthrough(),
-  place: teacherPlaceSchema,
-  review: z
-    .object({
-      x: z.number(),
-      y: z.number(),
-      w: z.number(),
-      h: z.number(),
-      intent: z.string().optional(),
-    })
-    .passthrough(),
 } satisfies Record<string, z.ZodTypeAny>;
 
 type LegacyActionKey = keyof typeof legacyActionSchemas;
+
+const unsupportedTeacherActionSchema = z.never();
 
 const teacherNameAliases: Partial<Record<TeacherActionName, LegacyActionKey>> = {
   'add-detail': 'add_detail',
   align: 'align',
   bringToFront: 'reorder',
-  clear: 'clear',
-  count: 'count',
-  countryInfo: 'countryInfo',
   create: 'create_shape',
   delete: 'delete_shape',
   distribute: 'distribute',
-  getInspiration: 'getInspiration',
-  label: 'label',
   message: 'message',
   move: 'move',
   pen: 'create_shape',
-  place: 'place',
   resize: 'resize',
-  review: 'review',
   rotate: 'rotate',
   stack: 'stack',
   sendToBack: 'reorder',
@@ -292,7 +250,7 @@ TEACHER_ACTIONS.forEach((teacherName) => {
   if (alias && legacyActionSchemas[alias]) {
     actionParamSchemasMap[teacherName] = legacyActionSchemas[alias];
   } else {
-    actionParamSchemasMap[teacherName] = z.record(z.string(), z.unknown());
+    actionParamSchemasMap[teacherName] = unsupportedTeacherActionSchema;
   }
 });
 

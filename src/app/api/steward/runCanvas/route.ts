@@ -346,7 +346,7 @@ export async function POST(req: NextRequest) {
       explicitTraceId ??
       (typeof enrichedParams.traceId === 'string' && enrichedParams.traceId.trim() ? enrichedParams.traceId.trim() : undefined) ??
       correlation.traceId;
-    let canonicalIntentId = explicitIntentId ?? correlation.intentId;
+    const canonicalIntentId = explicitIntentId ?? correlation.intentId;
     const generatedCorrelationId = randomUUID();
     if (!canonicalRequestId) {
       canonicalRequestId = `req-${generatedCorrelationId}`;
@@ -354,14 +354,11 @@ export async function POST(req: NextRequest) {
     if (!canonicalTraceId) {
       canonicalTraceId = canonicalRequestId;
     }
-    if (normalizedTask === 'fairy.intent' && !canonicalIntentId) {
-      canonicalIntentId = canonicalRequestId;
-    }
 
     if (canonicalRequestId && !enrichedParams.requestId) {
       enrichedParams.requestId = canonicalRequestId;
     }
-    if (normalizedTask === 'fairy.intent' && canonicalIntentId) {
+    if (normalizedTask === 'fairy.intent' && canonicalIntentId && (!enrichedParams.id || explicitIntentId)) {
       enrichedParams.id = canonicalIntentId;
     }
     if (canonicalTraceId && (!enrichedParams.traceId || explicitTraceId)) {
@@ -410,16 +407,9 @@ export async function POST(req: NextRequest) {
         normalizedTask === 'canvas.agent_prompt' || normalizedTask === 'fairy.intent'
           ? [`room:${trimmedRoom}`, 'canvas:intent']
           : [`room:${trimmedRoom}`];
-      const sequenceKey =
-        normalizedTask === 'fairy.intent' && canonicalIntentId
-          ? `intent:${canonicalIntentId}`
-          : undefined;
       const normalizedResourceKeys = normalizedLockKey
         ? [...baseResourceKeys, `lock:${normalizedLockKey}`]
         : baseResourceKeys;
-      if (sequenceKey && !normalizedResourceKeys.includes(sequenceKey)) {
-        normalizedResourceKeys.push(sequenceKey);
-      }
 
       const enqueueResult = await getQueue().enqueueTask({
         room: trimmedRoom,
@@ -430,7 +420,7 @@ export async function POST(req: NextRequest) {
         lockKey: normalizedLockKey,
         idempotencyKey: orchestrationEnvelope.idempotencyKey,
         resourceKeys: normalizedResourceKeys,
-        coalesceByResource: normalizedTask === 'canvas.agent_prompt',
+        coalesceByResource: normalizedTask === 'canvas.agent_prompt' || normalizedTask === 'fairy.intent',
       });
 
       if (normalizedTask === 'canvas.agent_prompt') {

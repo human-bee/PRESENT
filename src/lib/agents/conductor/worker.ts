@@ -16,40 +16,12 @@ import {
 } from '@/lib/agents/shared/orchestration-metrics';
 import { recordTaskTraceFromParams, recordWorkerHeartbeat } from '@/lib/agents/shared/trace-events';
 import { deriveProviderParity } from '@/lib/agents/admin/provider-parity';
-import { isRetryableProviderError, parseRetryEnvInt } from '@/lib/agents/shared/provider-retry';
 
 const TASK_LEASE_TTL_MS = Number(process.env.TASK_LEASE_TTL_MS ?? 15_000);
 const ROOM_CONCURRENCY = Math.max(1, Number.parseInt(process.env.ROOM_CONCURRENCY ?? '2', 10) || 2);
 const WORKER_HEARTBEAT_MS = Number(process.env.AGENT_WORKER_HEARTBEAT_MS ?? 5_000);
 const TASK_IDLE_POLL_MS = Number(process.env.TASK_IDLE_POLL_MS ?? 500);
 const TASK_IDLE_POLL_MAX_MS = Number(process.env.TASK_IDLE_POLL_MAX_MS ?? 1_000);
-const TASK_RETRY_ATTEMPTS = parseRetryEnvInt(process.env.TASK_RETRY_ATTEMPTS, 5, {
-  min: 1,
-  max: 12,
-});
-const TASK_RETRY_BASE_DELAY_MS = parseRetryEnvInt(process.env.TASK_RETRY_BASE_DELAY_MS, 1_000, {
-  min: 100,
-  max: 120_000,
-});
-const TASK_RETRY_MAX_DELAY_MS = parseRetryEnvInt(process.env.TASK_RETRY_MAX_DELAY_MS, 30_000, {
-  min: 500,
-  max: 600_000,
-});
-const TASK_RETRY_JITTER_RATIO = (() => {
-  const parsed = Number(process.env.TASK_RETRY_JITTER_RATIO ?? '0.2');
-  if (!Number.isFinite(parsed)) return 0.2;
-  return Math.max(0, Math.min(0.95, parsed));
-})();
-
-const computeRetryDelayMs = (attempt: number) => {
-  const exponential = Math.min(
-    TASK_RETRY_MAX_DELAY_MS,
-    TASK_RETRY_BASE_DELAY_MS * 2 ** Math.max(0, attempt - 1),
-  );
-  if (TASK_RETRY_JITTER_RATIO <= 0) return Math.round(exponential);
-  const jitter = exponential * TASK_RETRY_JITTER_RATIO;
-  return Math.max(0, Math.round(exponential - jitter + Math.random() * jitter * 2));
-};
 
 const queue = new AgentTaskQueue();
 const logger = createLogger('agents:conductor:worker');
@@ -464,17 +436,12 @@ async function processClaimedTasks(executeTask: ExecuteTaskFn, claimedTasks: Cla
           } catch (error) {
             const described = describeUnknownError(error);
             const message = described.message;
-            const retryable = isRetryableProviderError(error) || /queue_depth_limit_reached/i.test(message);
-            const nextAttempt = task.attempt + 1;
-            const shouldRetry = retryable && nextAttempt < TASK_RETRY_ATTEMPTS;
-            const retryAt = shouldRetry ? new Date(Date.now() + computeRetryDelayMs(nextAttempt)) : undefined;
+            const retryAt = task.attempt < 3 ? new Date(Date.now() + 2 ** task.attempt * 1000) : undefined;
             logger.warn('task failed', {
               roomKey,
               taskId: task.id,
               task: task.task,
               attempt: task.attempt,
-              retryable,
-              maxAttempts: TASK_RETRY_ATTEMPTS,
               retryAt,
               error: message,
               ...(described.stack ? { stack: described.stack } : {}),

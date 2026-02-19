@@ -671,62 +671,6 @@ export const MessageThreadCollapsible = React.forwardRef<
     };
   }, [handlecustomComponent]);
 
-  React.useEffect(() => {
-    const handleVoiceToolStatus = (event: Event) => {
-      const detail =
-        event instanceof CustomEvent && event.detail && typeof event.detail === 'object'
-          ? (event.detail as Record<string, unknown>)
-          : null;
-      if (!detail) return;
-
-      const task =
-        typeof detail.task === 'string' && detail.task.trim().length > 0
-          ? detail.task.trim()
-          : 'steward task';
-      const status =
-        typeof detail.status === 'string' && detail.status.trim().length > 0
-          ? detail.status.trim().toLowerCase()
-          : 'queued';
-      const taskId =
-        typeof detail.taskId === 'string' && detail.taskId.trim().length > 0
-          ? detail.taskId.trim()
-          : null;
-      const traceId =
-        typeof detail.traceId === 'string' && detail.traceId.trim().length > 0
-          ? detail.traceId.trim()
-          : null;
-      const reason =
-        typeof detail.message === 'string' && detail.message.trim().length > 0
-          ? detail.message.trim()
-          : null;
-
-      const parts = [`${task}`];
-      if (taskId) parts.push(`task ${taskId.slice(0, 8)}`);
-      if (traceId) parts.push(`trace ${traceId.slice(0, 8)}`);
-      const correlation = parts.length > 1 ? ` (${parts.slice(1).join(' · ')})` : '';
-
-      if (status === 'queued') {
-        appendSystemCall(`${parts[0]} queued${correlation}.`, 'voice-agent');
-        return;
-      }
-      if (status === 'applied') {
-        appendSystemCall(`${parts[0]} applied${correlation}.`, 'voice-agent');
-        return;
-      }
-      if (status === 'timeout') {
-        appendSystemCall(`${parts[0]} is still running${correlation}.`, 'voice-agent');
-        return;
-      }
-      const failureSuffix = reason ? `: ${reason}` : '.';
-      appendSystemCall(`${parts[0]} failed${correlation}${failureSuffix}`, 'voice-agent');
-    };
-
-    window.addEventListener('present:voice_tool_status', handleVoiceToolStatus as EventListener);
-    return () => {
-      window.removeEventListener('present:voice_tool_status', handleVoiceToolStatus as EventListener);
-    };
-  }, [appendSystemCall]);
-
   // Auto-scroll transcript when new entries are added
   React.useEffect(() => {
     if (transcriptContainerRef.current) {

@@ -63,59 +63,6 @@ describe('Canvas Agent Parsers', () => {
         parseAction({ id: 'test', name: 'delete_shape', params: {} });
       }).toThrow();
     });
-
-    it('should parse teacher clear action params', () => {
-      const result = parseAction({
-        id: 'teacher-clear',
-        name: 'clear',
-        params: {},
-      });
-      expect(result.name).toBe('clear');
-      expect(result.params).toEqual({});
-    });
-
-    it('should parse teacher place action params', () => {
-      const result = parseAction({
-        id: 'teacher-place',
-        name: 'place',
-        params: {
-          shapeId: 'shape-1',
-          referenceShapeId: 'shape-2',
-          side: 'right',
-          sideOffset: 12,
-          align: 'center',
-          alignOffset: 4,
-        },
-      });
-      expect(result.name).toBe('place');
-      expect(result.params).toMatchObject({
-        shapeId: 'shape-1',
-        referenceShapeId: 'shape-2',
-        side: 'right',
-      });
-    });
-
-    it('should parse teacher resize scale payload', () => {
-      const result = parseAction({
-        id: 'teacher-resize',
-        name: 'resize',
-        params: {
-          shapeIds: ['a', 'b'],
-          originX: 0,
-          originY: 0,
-          scaleX: 1.2,
-          scaleY: 0.9,
-        },
-      });
-      expect(result.name).toBe('resize');
-      expect(result.params).toMatchObject({
-        shapeIds: ['a', 'b'],
-        originX: 0,
-        originY: 0,
-        scaleX: 1.2,
-        scaleY: 0.9,
-      });
-    });
   });
 
   describe('parseEnvelope', () => {
@@ -214,12 +161,6 @@ describe('Canvas Agent Parsers', () => {
         expect(actionParamSchemas[name]).toBeDefined();
       });
     });
-
-    it('should not leave any teacher action on z.never schema', () => {
-      const neverActions = TEACHER_ACTIONS.filter(
-        (name) => (actionParamSchemas[name] as any)?._def?.typeName === 'ZodNever',
-      );
-      expect(neverActions).toEqual([]);
-    });
   });
 });
+

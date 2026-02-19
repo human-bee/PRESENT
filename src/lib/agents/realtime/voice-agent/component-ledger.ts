@@ -239,7 +239,7 @@ export class VoiceComponentLedger {
     const rawId = typeof args.componentId === 'string' ? args.componentId.trim() : '';
     if (rawId) return rawId;
 
-    const currentRoom = context.roomKey || this.getRoomKey() || '';
+    const currentRoom = context.roomKey || this.getRoomKey() || 'room';
     const typeHint =
       typeof args.type === 'string'
         ? args.type.trim()

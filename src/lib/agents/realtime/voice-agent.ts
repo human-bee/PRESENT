@@ -534,7 +534,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
     };
 
     const getCapabilitiesCached = async (profile: CapabilityProfile): Promise<SystemCapabilities> => {
-      const key = `${job.room.name || ''}::${profile}`;
+      const key = `${job.room.name || 'room'}::${profile}`;
       const now = Date.now();
       const cached = capabilityCache.get(key);
       if (cached && now - cached.fetchedAt < capabilityCacheTtlMs) {
@@ -556,7 +556,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
     };
 
     const componentRegistry = new Map<string, ComponentRegistryEntry>();
-    const roomKey = () => (typeof job.room?.name === 'string' ? job.room.name.trim() : '');
+    const roomKey = () => job.room.name || 'room';
     const componentLedger = new VoiceComponentLedger(roomKey);
     let lastResearchPanelId: string | null = null;
     let activeScorecard: { componentId: string; intentId: string; topic: string } | null = null;
@@ -605,7 +605,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
           state: {} as JsonObject,
           intentId,
           slot: undefined,
-          room: job.room.name || '',
+          room: job.room.name || 'room',
         });
       } else {
         existing.intentId = intentId;
@@ -924,7 +924,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
       topic?: string;
       seedState?: JsonObject;
     }) => {
-      const room = roomKey() || job.room?.name || '';
+      const room = roomKey() || job.room?.name || 'room';
       const componentId = payload.componentId.trim();
       if (!componentId) return;
       const players = resolveDebatePlayerSeedFromLabels(listRemoteParticipantLabels());
@@ -1010,7 +1010,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
         getComponentEntry,
         listComponentEntries: () => componentRegistry.entries(),
         lastResearchPanelId,
-        roomKey: roomKey() || job.room?.name || '',
+        roomKey: roomKey() || job.room?.name || 'room',
       });
     };
 
@@ -1207,7 +1207,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
     const buildMutationEnvelope = (tool: string, params: JsonObject): MutationEnvelope => {
       const lockKey = getMutationLockKey(tool, params);
       const base =
-        `${job.room.name || ''}::${tool}::${lockKey}::` +
+        `${job.room.name || 'room'}::${tool}::${lockKey}::` +
         `${stableStringify(params)}::turn:${currentTurnId}`;
       const idempotencyKey = createHash('sha1').update(base).digest('hex').slice(0, 20);
       const previousAttempts = mutationAttempts.get(idempotencyKey) || 0;
@@ -1501,7 +1501,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
           const canvasParams = taskParams;
           const roomName = typeof canvasParams.room === 'string' && canvasParams.room.trim()
             ? canvasParams.room.trim()
-            : job.room?.name || roomKey() || '';
+            : job.room?.name || roomKey() || 'room';
           const message = typeof canvasParams.message === 'string' ? canvasParams.message.trim() : '';
           const requestId = typeof canvasParams.requestId === 'string' ? canvasParams.requestId.trim() : undefined;
           const intentIdFromParams =
@@ -1590,10 +1590,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
         }
       }
 
-      const roomName = job.room.name || roomKey() || '';
-      if (!roomName && tool === 'dispatch_to_conductor') {
-        throw new Error('dispatch_to_conductor requires an active room name');
-      }
+      const roomName = job.room.name || roomKey() || 'room';
       const budget = consumeRoomEventBudget(roomName);
       if (!budget.ok) {
         console.warn('[VoiceAgent] tool_call budget exceeded, dropping event', {
@@ -1635,7 +1632,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
         delete (baseParamsForHash as any).attempt;
         delete (baseParamsForHash as any).lockKey;
         if (!dispatchParams.idempotencyKey) {
-          const dispatchHashBase = `${job.room.name || ''}::dispatch_to_conductor::${stableStringify({
+          const dispatchHashBase = `${job.room.name || 'room'}::dispatch_to_conductor::${stableStringify({
             task: (normalizedParams as any)?.task,
             params: baseParamsForHash,
           })}`;
@@ -1750,7 +1747,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
     };
 
     const scorecardService = new ScorecardService({
-      getRoomName: () => roomKey() || job.room?.name || '',
+      getRoomName: () => roomKey() || job.room?.name || 'room',
       componentRegistry,
       getActiveScorecard: () => activeScorecard,
       setActiveScorecard: (scorecard) => {
@@ -2645,7 +2642,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
 
       const trimmed = text.trim();
       const lower = trimmed.toLowerCase();
-      const room = roomKey() || job.room?.name || '';
+      const room = roomKey() || job.room?.name || 'room';
 
       // Explicit "Canvas:" prefix routes directly to the Canvas steward (no extra LLM roundtrip).
       // This is an opt-in command style used by the demo harness and the transcript UI hint.
@@ -3081,7 +3078,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
                 if (slot) {
                   existing.slot = slot;
                 }
-                existing.room = job.room.name || '';
+                existing.room = job.room.name || 'room';
               } else {
                 componentRegistry.set(messageId, {
                   type: componentType,
@@ -3090,7 +3087,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
                   state: {} as JsonObject,
                   intentId,
                   slot,
-                  room: job.room.name || '',
+                  room: job.room.name || 'room',
                 });
               }
               if (intentId) {

@@ -42,7 +42,6 @@ function createMockEditor(initial: ShapeRecord[] = []) {
     },
     zoomToBounds: (bounds: any, options: any) => calls.push(['zoomToBounds', bounds, options]),
     fitBoundsToContent: (ids: any, opts: any) => calls.push(['fitBoundsToContent', ids, opts]),
-    resizeShape: (id: any, scale: any, opts: any) => calls.push(['resizeShape', id, scale, opts]),
     bringToFront: (ids: any) => calls.push(['bringToFront', ids]),
     sendToBack: (ids: any) => calls.push(['sendToBack', ids]),
     bringForward: (ids: any) => calls.push(['bringForward', ids]),
@@ -55,7 +54,6 @@ function createMockEditor(initial: ShapeRecord[] = []) {
       const h = typeof shape.props?.h === 'number' ? shape.props.h : 0;
       return { minX: shape.x ?? 0, minY: shape.y ?? 0, maxX: (shape.x ?? 0) + w, maxY: (shape.y ?? 0) + h };
     },
-    getCurrentPageShapes: () => Array.from(shapeMap.values()),
     createShapeId: () => 'generated-id',
     _shapes: shapeMap,
   } as any;
@@ -235,74 +233,5 @@ describe('tldraw action handlers', () => {
     expect(y).toBe(80);
     expect(props.text).toBeUndefined();
     expect(props.richText).toBeDefined();
-  });
-
-  it('clears all shapes on clear action', () => {
-    const editor = createMockEditor([
-      { id: 'shape:a', type: 'geo', x: 0, y: 0, props: { w: 10, h: 10 } },
-      { id: 'shape:b', type: 'geo', x: 20, y: 20, props: { w: 10, h: 10 } },
-    ]);
-    applyEnvelope(
-      { editor, isHost: true, appliedIds: new Set() },
-      makeEnvelope({
-        id: 'clear-1',
-        name: 'clear',
-        params: {},
-      }),
-    );
-    const deleteCall = editor.calls.find((c: any[]) => c[0] === 'deleteShapes');
-    expect(deleteCall).toBeTruthy();
-    expect(deleteCall[1]).toEqual(expect.arrayContaining(['shape:a', 'shape:b']));
-  });
-
-  it('places shapes relative to reference bounds', () => {
-    const editor = createMockEditor([
-      { id: 'shape:target', type: 'geo', x: 0, y: 0, props: { w: 40, h: 20 } },
-      { id: 'shape:ref', type: 'geo', x: 100, y: 200, props: { w: 80, h: 60 } },
-    ]);
-    applyEnvelope(
-      { editor, isHost: true, appliedIds: new Set() },
-      makeEnvelope({
-        id: 'place-1',
-        name: 'place',
-        params: {
-          shapeId: 'target',
-          referenceShapeId: 'ref',
-          side: 'right',
-          sideOffset: 10,
-          align: 'center',
-          alignOffset: 6,
-        },
-      }),
-    );
-    const updateCall = editor.calls.find((c: any[]) => c[0] === 'updateShapes');
-    expect(updateCall).toBeTruthy();
-    const [update] = updateCall[1];
-    expect(update.id).toBe('shape:target');
-    expect(update.x).toBe(190);
-    expect(update.y).toBe(226);
-  });
-
-  it('uses resizeShape for teacher scale-based resize payloads', () => {
-    const editor = createMockEditor([
-      { id: 'shape:a', type: 'geo', x: 0, y: 0, props: { w: 100, h: 50 } },
-    ]);
-    applyEnvelope(
-      { editor, isHost: true, appliedIds: new Set() },
-      makeEnvelope({
-        id: 'resize-teacher',
-        name: 'resize',
-        params: {
-          shapeIds: ['a'],
-          originX: 0,
-          originY: 0,
-          scaleX: 1.5,
-          scaleY: 0.5,
-        },
-      }),
-    );
-    const resizeCall = editor.calls.find((c: any[]) => c[0] === 'resizeShape');
-    expect(resizeCall).toBeTruthy();
-    expect(resizeCall[1]).toBe('shape:a');
   });
 });

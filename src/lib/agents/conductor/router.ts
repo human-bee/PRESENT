@@ -687,10 +687,7 @@ async function handleFairyIntent(rawParams: JsonObject) {
       : null,
   );
 
-  const executeDecision = async (
-    decisionLike: Partial<FairyRouteDecision> & { kind?: string },
-    sequenceIndex: number,
-  ) => {
+  const executeDecision = async (decisionLike: Partial<FairyRouteDecision> & { kind?: string }) => {
     const actionProfile =
       normalizeFairyContextProfile(decisionLike.contextProfile) ?? contextProfile;
     const actionMetadata =
@@ -699,7 +696,6 @@ async function handleFairyIntent(rawParams: JsonObject) {
         : { ...mergedMetadata, contextProfile: actionProfile };
     const message = decisionLike.message?.trim() || intent.message;
     const summary = typeof decisionLike.summary === 'string' ? decisionLike.summary : decision.summary;
-    const actionRequestId = sequenceIndex > 0 ? `${intent.id}:${sequenceIndex}` : intent.id;
 
     if (decisionLike.fastLaneEvent) {
       try {
@@ -764,19 +760,13 @@ async function handleFairyIntent(rawParams: JsonObject) {
     }
 
     if (decisionLike.kind === 'canvas') {
-      const canvasMetadata = actionMetadata && typeof actionMetadata === 'object' && !Array.isArray(actionMetadata)
-        ? { ...actionMetadata }
-        : {};
-      canvasMetadata.fairyIntentId = intent.id;
-      canvasMetadata.fairySequenceIndex = sequenceIndex;
-      canvasMetadata.fairyDecisionKind = decisionLike.kind;
       return executeTaskLegacy('canvas.agent_prompt', {
         room: intent.room,
         message,
-        requestId: actionRequestId,
+        requestId: intent.id,
         ...(intent.bounds ? { bounds: intent.bounds } : {}),
         ...(Array.isArray(intent.selectionIds) ? { selectionIds: intent.selectionIds } : {}),
-        ...(Object.keys(canvasMetadata).length > 0 ? { metadata: canvasMetadata } : {}),
+        ...(actionMetadata ? { metadata: actionMetadata } : {}),
       });
     }
 
@@ -831,15 +821,12 @@ async function handleFairyIntent(rawParams: JsonObject) {
   };
 
   const results: Array<unknown> = [];
-  let sequenceIndex = 0;
   if (decision.kind !== 'bundle') {
-    results.push(await executeDecision(decision, sequenceIndex));
-    sequenceIndex += 1;
+    results.push(await executeDecision(decision));
   }
   if (Array.isArray((decision as any).actions)) {
     for (const action of (decision as any).actions) {
-      results.push(await executeDecision(action, sequenceIndex));
-      sequenceIndex += 1;
+      results.push(await executeDecision(action));
     }
   }
 
