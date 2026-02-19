@@ -231,11 +231,9 @@ export class AgentTaskQueue {
       }
     }
 
-    const coalescingTaskNames = ['fairy.intent', 'canvas.agent_prompt', 'canvas.quick_text'];
+    const coalescingTaskNames = ['canvas.agent_prompt'];
     const shouldCoalesce = coalesceByResource || coalescingTaskNames.includes(task);
-    const coalesceTaskFilter = coalesceByResource
-      ? Array.from(new Set([...coalescingTaskNames, task]))
-      : coalescingTaskNames;
+    const coalesceTaskFilter = coalesceByResource ? [task] : coalescingTaskNames;
     if (shouldCoalesce) {
       const { error: coalesceError } = await this.supabase
         .from('agent_tasks')

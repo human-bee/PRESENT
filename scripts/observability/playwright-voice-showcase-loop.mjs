@@ -442,6 +442,45 @@ const countBy = (values) =>
     return acc;
   }, {});
 
+const summarizeProof = (sessionBody) => {
+  const summary = sessionBody?.summary && typeof sessionBody.summary === 'object' ? sessionBody.summary : {};
+  const stageCounts =
+    summary.traceStageCounts && typeof summary.traceStageCounts === 'object' ? summary.traceStageCounts : {};
+  const actionsDispatchedCount = Number(stageCounts.actions_dispatched ?? 0);
+  const completedCount = Number(stageCounts.completed ?? 0);
+  const tasks = Array.isArray(sessionBody?.tasks) ? sessionBody.tasks : [];
+  const traces = Array.isArray(sessionBody?.traces) ? sessionBody.traces : [];
+  const fairySucceededTasks = tasks.filter((task) => {
+    const taskName = readString(task?.task);
+    const status = readString(task?.status)?.toLowerCase();
+    return taskName === 'fairy.intent' && status === 'succeeded';
+  });
+  const cleanFairySucceededCount = fairySucceededTasks.filter((task) => !readString(task?.error)).length;
+  const zodErrorCount = tasks.filter((task) => {
+    const taskName = readString(task?.task);
+    if (taskName !== 'fairy.intent') return false;
+    const errorText = readString(task?.error)?.toLowerCase() ?? '';
+    return errorText.includes('_zod');
+  }).length;
+  const dispatchedTraceCount = traces.filter((trace) => readString(trace?.stage) === 'actions_dispatched').length;
+  const completedFairyTraces = traces.filter((trace) => {
+    const stage = readString(trace?.stage)?.toLowerCase();
+    const task = readString(trace?.task);
+    const status = readString(trace?.status)?.toLowerCase();
+    return stage === 'completed' && task === 'fairy.intent' && status === 'succeeded';
+  }).length;
+
+  return {
+    actionsDispatchedCount,
+    completedCount,
+    dispatchedTraceCount,
+    completedFairyTraces,
+    fairySucceededCount: fairySucceededTasks.length,
+    cleanFairySucceededCount,
+    zodErrorCount,
+  };
+};
+
 async function fetchSessionCorrelationViaSupabase(room, limit = 300) {
   const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -531,6 +570,7 @@ async function fetchSessionCorrelationViaSupabase(room, limit = 300) {
 
 async function run() {
   const args = parseArgs(process.argv);
+  const logBrowserConsole = process.env.SHOWCASE_LOG_BROWSER_CONSOLE === 'true';
   const canvasId = randomUUID();
   const runId = `showcase-${Date.now()}-${canvasId.slice(0, 8)}`;
   const room = `canvas-${canvasId}`;
@@ -545,6 +585,24 @@ async function run() {
     recordVideo: { dir: outputDir, size: { width: 1720, height: 980 } },
   });
   const page = await context.newPage();
+  if (logBrowserConsole) {
+    page.on('console', (message) => {
+      try {
+        const text = message.text();
+        if (!text) return;
+        if (
+          text.includes('ScreenshotHandler') ||
+          text.includes('agent:screenshot_request') ||
+          text.includes('ToolDispatcher') ||
+          text.includes('AgentBridge')
+        ) {
+          console.log(`[browser:${message.type()}] ${text}`);
+        }
+      } catch {
+        // ignore console listener failures
+      }
+    });
+  }
 
   const turns = [
     'Start a five-minute timer widget near the top right.',
@@ -641,96 +699,100 @@ async function run() {
 
     let sessionBody = null;
     try {
-      sessionBody = await fetchSessionCorrelationViaSupabase(room, 300);
-      if (sessionBody) {
-        result.sessionCorrelation = {
-          status: 200,
-          ok: true,
-          source: 'supabase',
-          body: sessionBody,
-        };
-      } else {
-        const sessionController = new AbortController();
-        const sessionTimeout = setTimeout(() => {
-          sessionController.abort();
-        }, 10_000);
-        try {
-          const sessionResponse = await page.request.get(
-            `/api/admin/agents/session?room=${encodeURIComponent(room)}&limit=300`,
-            { signal: sessionController.signal },
-          );
-          sessionBody = await sessionResponse.json().catch(() => null);
+      const proofWaitTimeoutMs = Number(process.env.SHOWCASE_PROOF_TIMEOUT_MS ?? 120_000);
+      const proofPollMs = Number(process.env.SHOWCASE_PROOF_POLL_MS ?? 2_500);
+      const proofDeadline = Date.now() + Math.max(10_000, proofWaitTimeoutMs);
+      let lastProofError = 'Session correlation payload missing.';
+
+      while (Date.now() <= proofDeadline) {
+        sessionBody = await fetchSessionCorrelationViaSupabase(room, 300);
+        if (sessionBody) {
           result.sessionCorrelation = {
-            status: sessionResponse.status(),
-            ok: sessionResponse.ok(),
-            source: 'admin-endpoint',
+            status: 200,
+            ok: true,
+            source: 'supabase',
             body: sessionBody,
           };
-          if (!sessionResponse.ok()) {
-            throw new Error('Session correlation endpoint was not accessible from this run context.');
+        } else {
+          const sessionController = new AbortController();
+          const sessionTimeout = setTimeout(() => {
+            sessionController.abort();
+          }, 10_000);
+          try {
+            const sessionResponse = await page.request.get(
+              `/api/admin/agents/session?room=${encodeURIComponent(room)}&limit=300`,
+              { signal: sessionController.signal },
+            );
+            sessionBody = await sessionResponse.json().catch(() => null);
+            result.sessionCorrelation = {
+              status: sessionResponse.status(),
+              ok: sessionResponse.ok(),
+              source: 'admin-endpoint',
+              body: sessionBody,
+            };
+            if (!sessionResponse.ok()) {
+              lastProofError = 'Session correlation endpoint was not accessible from this run context.';
+              if (Date.now() >= proofDeadline) {
+                throw new Error(lastProofError);
+              }
+              await page.waitForTimeout(proofPollMs);
+              continue;
+            }
+          } finally {
+            clearTimeout(sessionTimeout);
           }
-        } finally {
-          clearTimeout(sessionTimeout);
         }
+
+        if (!sessionBody) {
+          lastProofError = 'Session correlation payload missing.';
+          if (Date.now() >= proofDeadline) {
+            throw new Error(lastProofError);
+          }
+          await page.waitForTimeout(proofPollMs);
+          continue;
+        }
+
+        const proof = summarizeProof(sessionBody);
+        result.proof = proof;
+        if (proof.zodErrorCount > 0) {
+          throw new Error(`Showcase proof failed: detected ${proof.zodErrorCount} fairy.intent _zod error(s).`);
+        }
+        if (proof.cleanFairySucceededCount >= 1 && proof.completedFairyTraces >= 1) {
+          break;
+        }
+        lastProofError =
+          proof.cleanFairySucceededCount < 1
+            ? 'Showcase proof failed: no clean succeeded fairy.intent task found for room.'
+            : 'Showcase proof failed: no completed fairy.intent trace found for room.';
+        if (Date.now() >= proofDeadline) {
+          throw new Error(lastProofError);
+        }
+        await page.waitForTimeout(proofPollMs);
       }
 
-      const summary =
-        sessionBody?.summary && typeof sessionBody.summary === 'object' ? sessionBody.summary : {};
-      const stageCounts =
-        summary.traceStageCounts && typeof summary.traceStageCounts === 'object'
-          ? summary.traceStageCounts
-          : {};
-      const actionsDispatchedCount = Number(stageCounts.actions_dispatched ?? 0);
-      const completedCount = Number(stageCounts.completed ?? 0);
-      const tasks = Array.isArray(sessionBody?.tasks) ? sessionBody.tasks : [];
-      const traces = Array.isArray(sessionBody?.traces) ? sessionBody.traces : [];
-      const fairySucceededTasks = tasks.filter((task) => {
-        const taskName = readString(task?.task);
-        const status = readString(task?.status)?.toLowerCase();
-        return taskName === 'fairy.intent' && status === 'succeeded';
-      });
-      const cleanFairySucceededCount = fairySucceededTasks.filter(
-        (task) => !readString(task?.error),
-      ).length;
-      const zodErrorCount = tasks.filter((task) => {
-        const taskName = readString(task?.task);
-        if (taskName !== 'fairy.intent') return false;
-        const errorText = readString(task?.error)?.toLowerCase() ?? '';
-        return errorText.includes('_zod');
-      }).length;
-      const dispatchedTraceCount = traces.filter(
-        (trace) => readString(trace?.stage) === 'actions_dispatched',
-      ).length;
-      const completedFairyTraces = traces.filter((trace) => {
-        const stage = readString(trace?.stage)?.toLowerCase();
-        const task = readString(trace?.task);
-        const status = readString(trace?.status)?.toLowerCase();
-        return stage === 'completed' && task === 'fairy.intent' && status === 'succeeded';
-      }).length;
-      result.proof = {
-        actionsDispatchedCount,
-        completedCount,
-        dispatchedTraceCount,
-        completedFairyTraces,
-        fairySucceededCount: fairySucceededTasks.length,
-        cleanFairySucceededCount,
-        zodErrorCount,
-      };
-      if (cleanFairySucceededCount < 1) {
+      if (!result.proof) {
+        throw new Error('Showcase proof failed: proof summary missing.');
+      }
+      if (result.proof.cleanFairySucceededCount < 1) {
         throw new Error('Showcase proof failed: no clean succeeded fairy.intent task found for room.');
       }
-      if (zodErrorCount > 0) {
-        throw new Error(`Showcase proof failed: detected ${zodErrorCount} fairy.intent _zod error(s).`);
-      }
-      if (completedFairyTraces < 1) {
+      if (result.proof.completedFairyTraces < 1) {
         throw new Error('Showcase proof failed: no completed fairy.intent trace found for room.');
       }
       if (!result.signals?.stickyMarkerVisible || !result.signals?.secondStickyVisible) {
         throw new Error('Showcase proof failed: expected sticky-note markers were not visible.');
       }
       result.notes.push(
-        `Proof linked: completed=${completedCount}, actions_dispatched=${actionsDispatchedCount}, fairy_completed=${completedFairyTraces}, fairy_clean_succeeded=${cleanFairySucceededCount}`,
+        `Proof linked: completed=${result.proof.completedCount}, actions_dispatched=${result.proof.actionsDispatchedCount}, fairy_completed=${result.proof.completedFairyTraces}, fairy_clean_succeeded=${result.proof.cleanFairySucceededCount}`,
       );
+
+      await page.waitForTimeout(1200);
+      await fitCanvasToContent(page);
+      await ensureTranscriptOpen(page);
+      await page.waitForTimeout(300);
+      const settledShot = path.join(outputDir, 'final-proof.png');
+      await page.screenshot({ path: settledShot, fullPage: false });
+      result.screenshots.push(settledShot);
     } catch (error) {
       if (!result.sessionCorrelation) {
         result.sessionCorrelation = {

@@ -195,6 +195,72 @@ const teacherConverters: Partial<Record<TeacherActionName, (payload: Record<stri
       if (!ids) return null;
       return { name: 'reorder', params: { ids, where: 'back' } };
     },
+    clear: () => ({ name: 'clear', params: {} }),
+    count: (payload) => {
+      const expression = asString(payload.expression);
+      if (!expression) return null;
+      return { name: 'think', params: { text: `count:${expression}` } };
+    },
+    countryInfo: (payload) => {
+      const code = asString(payload.code);
+      if (!code) return null;
+      return { name: 'think', params: { text: `countryInfo:${code}` } };
+    },
+    getInspiration: () => ({ name: 'think', params: { text: 'getInspiration' } }),
+    label: (payload) => {
+      const shapeId = asString(payload.shapeId);
+      const text = asString(payload.text);
+      if (!shapeId || text === undefined) return null;
+      return {
+        name: 'update_shape',
+        params: {
+          id: shapeId,
+          props: { text },
+        },
+      };
+    },
+    place: (payload) => {
+      const shapeId = asString(payload.shapeId);
+      const referenceShapeId = asString(payload.referenceShapeId);
+      const side = asString(payload.side);
+      if (!shapeId || !referenceShapeId || !side) return null;
+      const align = asString(payload.align) ?? 'center';
+      const sideOffset = toNumber(payload.sideOffset) ?? 0;
+      const alignOffset = toNumber(payload.alignOffset) ?? 0;
+      return {
+        name: 'place',
+        params: {
+          shapeId,
+          referenceShapeId,
+          side,
+          sideOffset,
+          align,
+          alignOffset,
+        },
+      };
+    },
+    resize: (payload) => {
+      const shapeIds = asStringArray(payload.shapeIds);
+      const originX = toNumber(payload.originX);
+      const originY = toNumber(payload.originY);
+      const scaleX = toNumber(payload.scaleX);
+      const scaleY = toNumber(payload.scaleY);
+      if (!shapeIds || originX === undefined || originY === undefined || scaleX === undefined || scaleY === undefined) {
+        return null;
+      }
+      return {
+        name: 'resize',
+        params: { shapeIds, originX, originY, scaleX, scaleY },
+      };
+    },
+    review: (payload) => {
+      const x = toNumber(payload.x);
+      const y = toNumber(payload.y);
+      const w = toNumber(payload.w);
+      const h = toNumber(payload.h);
+      if (x === undefined || y === undefined || w === undefined || h === undefined) return null;
+      return { name: 'set_viewport', params: { bounds: { x, y, w, h }, smooth: false } };
+    },
     pen: (payload) => {
       const points = normalizePenPoints(payload.points);
       if (points.length < 2) return null;

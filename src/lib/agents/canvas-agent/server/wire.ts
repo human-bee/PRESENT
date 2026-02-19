@@ -285,6 +285,15 @@ export async function requestScreenshot(room: string, request: Omit<ScreenshotRe
     topic: 'agent:screenshot_request',
     data,
   });
+  // Compatibility fan-out: some LiveKit client flows are known to miss custom
+  // screenshot topics under churn. Mirror the payload on `agent:action`, which
+  // is already a proven reliable transport channel in this stack. Consumers
+  // gate on `type`, so non-screenshot handlers ignore this packet.
+  await sendRoomData({
+    room,
+    topic: 'agent:action',
+    data,
+  });
 }
 
 // Keep ack polling snappy; this path is latency-sensitive and tests run in a noisy event loop.

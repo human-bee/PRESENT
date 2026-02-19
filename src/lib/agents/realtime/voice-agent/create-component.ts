@@ -276,6 +276,25 @@ export async function executeCreateComponent(
       if (typeof propsRecord.y === 'number' && Number.isFinite(propsRecord.y)) {
         quickTextParams.y = propsRecord.y;
       }
+      const boundsCandidate = propsRecord.bounds;
+      if (
+        boundsCandidate &&
+        typeof boundsCandidate === 'object' &&
+        typeof (boundsCandidate as any).x === 'number' &&
+        typeof (boundsCandidate as any).y === 'number' &&
+        typeof (boundsCandidate as any).w === 'number' &&
+        typeof (boundsCandidate as any).h === 'number'
+      ) {
+        quickTextParams.bounds = {
+          x: (boundsCandidate as any).x,
+          y: (boundsCandidate as any).y,
+          w: (boundsCandidate as any).w,
+          h: (boundsCandidate as any).h,
+        } as JsonObject;
+      }
+      if (propsRecord.metadata && typeof propsRecord.metadata === 'object' && !Array.isArray(propsRecord.metadata)) {
+        quickTextParams.metadata = propsRecord.metadata as JsonObject;
+      }
     }
 
     await deps.sendToolCall('dispatch_to_conductor', {
@@ -499,7 +518,7 @@ export async function executeCreateComponent(
     state: {} as JsonObject,
     intentId,
     slot,
-    room: deps.roomName || 'room',
+    room: deps.roomName || '',
   });
   if (intentId) {
     registerIntentEntry({

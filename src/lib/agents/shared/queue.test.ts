@@ -186,12 +186,90 @@ describe('AgentTaskQueue enqueue dedupe behavior', () => {
 
     expect(result?.id).toBe('task-retry-success');
     expect((result as any)?.trace_id).toBeNull();
-    expect(harness.queries).toHaveLength(4);
-    expect(harness.queries[2]?.insert).toHaveBeenCalledWith(
+    expect(harness.queries).toHaveLength(3);
+    expect(harness.queries[1]?.insert).toHaveBeenCalledWith(
       expect.objectContaining({ trace_id: expect.any(String) }),
     );
-    expect(harness.queries[3]?.insert).toHaveBeenCalledWith(
+    expect(harness.queries[2]?.insert).toHaveBeenCalledWith(
       expect.not.objectContaining({ trace_id: expect.anything() }),
     );
+  });
+
+  test('does not coalesce fairy.intent tasks by default', async () => {
+    const harness = createHarness();
+    harness.maybeSingleQueue.push({ data: null, error: null });
+    harness.singleQueue.push({
+      data: {
+        id: 'fairy-task',
+        room: 'room-1',
+        task: 'fairy.intent',
+        params: {} as JsonObject,
+        status: 'queued',
+        priority: 0,
+        run_at: null,
+        attempt: 0,
+        error: null,
+        request_id: 'req-fairy',
+        dedupe_key: null,
+        resource_keys: ['room:room-1'],
+        lease_token: null,
+        lease_expires_at: null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        result: null,
+      },
+      error: null,
+    });
+
+    const { AgentTaskQueue } = await import('@/lib/agents/shared/queue');
+    const queue = new AgentTaskQueue({ url: 'http://localhost:54321', serviceRoleKey: 'test-key' });
+    await queue.enqueueTask({
+      room: 'room-1',
+      task: 'fairy.intent',
+      params: { room: 'room-1', message: 'draw bunny' },
+      requestId: 'req-fairy',
+    });
+
+    const coalesceCalls = harness.queries.flatMap((query) => query.update.mock.calls);
+    expect(coalesceCalls).toHaveLength(0);
+  });
+
+  test('coalesces canvas.agent_prompt tasks by default', async () => {
+    const harness = createHarness();
+    harness.maybeSingleQueue.push({ data: null, error: null });
+    harness.singleQueue.push({
+      data: {
+        id: 'canvas-task',
+        room: 'room-1',
+        task: 'canvas.agent_prompt',
+        params: {} as JsonObject,
+        status: 'queued',
+        priority: 0,
+        run_at: null,
+        attempt: 0,
+        error: null,
+        request_id: 'req-canvas',
+        dedupe_key: null,
+        resource_keys: ['room:room-1'],
+        lease_token: null,
+        lease_expires_at: null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        result: null,
+      },
+      error: null,
+    });
+
+    const { AgentTaskQueue } = await import('@/lib/agents/shared/queue');
+    const queue = new AgentTaskQueue({ url: 'http://localhost:54321', serviceRoleKey: 'test-key' });
+    await queue.enqueueTask({
+      room: 'room-1',
+      task: 'canvas.agent_prompt',
+      params: { room: 'room-1', message: 'draw bunny' },
+      requestId: 'req-canvas',
+    });
+
+    const coalesceCalls = harness.queries.flatMap((query) => query.update.mock.calls);
+    expect(coalesceCalls.length).toBeGreaterThan(0);
   });
 });
