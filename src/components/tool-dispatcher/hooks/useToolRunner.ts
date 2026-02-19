@@ -37,6 +37,16 @@ type ToolMetricEntry = {
   loggedMessages: Set<string>;
 };
 
+type VoiceToolStatusDetail = {
+  task: string;
+  status: 'queued' | 'applied' | 'failed' | 'timeout';
+  message: string;
+  taskId?: string;
+  traceId?: string;
+  requestId?: string;
+  intentId?: string;
+};
+
 interface UseToolRunnerOptions {
   contextKey?: string;
   events: ToolEventsApi;
@@ -187,6 +197,12 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
   const STEWARD_TASK_POLL_TIMEOUT_MS = 30_000;
   const STEWARD_TASK_POLL_INITIAL_DELAY_MS = 300;
   const STEWARD_TASK_POLL_MAX_DELAY_MS = 1_500;
+  const emitVoiceToolStatus = useCallback((detail: VoiceToolStatusDetail) => {
+    if (typeof window === 'undefined') return;
+    try {
+      window.dispatchEvent(new CustomEvent('present:voice_tool_status', { detail }));
+    } catch {}
+  }, []);
 
   const stewardPendingRef = useRef(false);
   const queuedRunRef = useRef<
@@ -340,12 +356,25 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
                 : null;
             const status =
               typeof taskRecord?.status === "string" ? taskRecord.status.trim().toLowerCase() : "";
+            const traceId = typeof taskRecord?.traceId === "string" ? taskRecord.traceId : undefined;
+            const requestId = typeof taskRecord?.requestId === "string" ? taskRecord.requestId : undefined;
 
             if (status === "succeeded") {
+              const message = `${taskName} applied`;
               emitDone(call, {
                 status: "COMPLETED",
-                message: `${taskName} applied`,
+                message,
                 taskId,
+                ...(traceId ? { traceId } : {}),
+                ...(requestId ? { requestId } : {}),
+              });
+              emitVoiceToolStatus({
+                task: taskName,
+                status: 'applied',
+                message,
+                taskId,
+                ...(traceId ? { traceId } : {}),
+                ...(requestId ? { requestId } : {}),
               });
               return;
             }
@@ -358,13 +387,30 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
                 status: "FAILED",
                 message: failureMessage,
                 taskId,
+                ...(traceId ? { traceId } : {}),
+                ...(requestId ? { requestId } : {}),
+              });
+              emitVoiceToolStatus({
+                task: taskName,
+                status: 'failed',
+                message: failureMessage,
+                taskId,
+                ...(traceId ? { traceId } : {}),
+                ...(requestId ? { requestId } : {}),
               });
               return;
             }
           } else if (res.status === 401 || res.status === 403 || res.status === 404) {
+            const message = `Unable to verify ${taskName} completion (HTTP ${res.status})`;
             emitDone(call, {
               status: "FAILED",
-              message: `Unable to verify ${taskName} completion (HTTP ${res.status})`,
+              message,
+              taskId,
+            });
+            emitVoiceToolStatus({
+              task: taskName,
+              status: 'failed',
+              message,
               taskId,
             });
             return;
@@ -382,13 +428,20 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
         delayMs = Math.min(STEWARD_TASK_POLL_MAX_DELAY_MS, Math.round(delayMs * 1.5));
       }
 
+      const timeoutMessage = `${taskName} is still running`;
       emitDone(call, {
         status: "TIMEOUT",
-        message: `${taskName} is still running`,
+        message: timeoutMessage,
+        taskId,
+      });
+      emitVoiceToolStatus({
+        task: taskName,
+        status: 'timeout',
+        message: timeoutMessage,
         taskId,
       });
     },
-    [emitDone, logger],
+    [emitDone, emitVoiceToolStatus, logger],
   );
 
   useEffect(
@@ -698,6 +751,12 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
 
           if (stewardEnabled && (task.startsWith('canvas.') || task.startsWith('fairy.'))) {
             const targetRoom = call.roomId || room?.name;
+            if (!targetRoom || typeof targetRoom !== 'string' || targetRoom.trim().length === 0) {
+              const message = `${task} dispatch requires an active room`;
+              queue.markError(call.id, message);
+              emitError(call, message);
+              return { status: 'ERROR', message };
+            }
             if (task === 'canvas.agent_prompt') {
               if (!dispatchParams.message && typeof params?.message === 'string') {
                 dispatchParams.message = params.message;
@@ -708,7 +767,13 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
               if (!dispatchParams.requestId && typeof params?.requestId === 'string') {
                 dispatchParams.requestId = params.requestId;
               }
-              const currentRoom = call.roomId || room?.name || 'room';
+              const currentRoom = (call.roomId || room?.name || '').trim();
+              if (!currentRoom) {
+                const message = 'canvas.agent_prompt dispatch requires an active room';
+                queue.markError(call.id, message);
+                emitError(call, message);
+                return { status: 'ERROR', message };
+              }
               const active = activeCanvasDispatchRef.current;
               if (
                 active &&
@@ -770,20 +835,65 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
                   : typeof responseTask?.id === "string"
                     ? responseTask.id
                     : undefined;
+              const responseTraceId =
+                typeof responseRecord.traceId === "string"
+                  ? responseRecord.traceId
+                  : typeof responseTask?.trace_id === "string"
+                    ? responseTask.trace_id
+                    : undefined;
+              const responseIntentId =
+                typeof responseRecord.intentId === "string"
+                  ? responseRecord.intentId
+                  : typeof dispatchParams.id === "string"
+                    ? dispatchParams.id
+                    : undefined;
+              const responseRequestId =
+                typeof responseRecord.requestId === "string"
+                  ? responseRecord.requestId
+                  : typeof dispatchParams.requestId === "string"
+                    ? dispatchParams.requestId
+                    : undefined;
               const responseStatus =
                 typeof responseRecord.status === "string"
                   ? responseRecord.status.trim().toLowerCase()
                   : "queued";
+              if (responseStatus !== "executed_fallback" && !taskId) {
+                const message = `Steward dispatch missing task id for ${task}`;
+                queue.markError(call.id, message);
+                emitError(call, message);
+                if (task === 'canvas.agent_prompt') {
+                  activeCanvasDispatchRef.current = null;
+                }
+                emitVoiceToolStatus({
+                  task,
+                  status: 'failed',
+                  message,
+                });
+                return { status: 'ERROR', message };
+              }
+              const statusMessage =
+                responseStatus === "executed_fallback"
+                  ? "Steward fallback execution completed"
+                  : "Steward task queued";
               const result = {
                 status: responseStatus === "executed_fallback" ? "COMPLETED" : "QUEUED",
-                message:
-                  responseStatus === "executed_fallback"
-                    ? "Steward fallback execution completed"
-                    : "Steward task queued",
+                message: statusMessage,
                 ...(taskId ? { taskId } : {}),
+                ...(responseTraceId ? { traceId: responseTraceId } : {}),
+                ...(responseIntentId ? { intentId: responseIntentId } : {}),
+                ...(responseRequestId ? { requestId: responseRequestId } : {}),
               } as ToolRunResult;
               queue.markComplete(call.id, result.message);
               emitDone(call, result);
+              emitVoiceToolStatus({
+                task,
+                status: responseStatus === "executed_fallback" ? 'applied' : 'queued',
+                message: statusMessage,
+                ...(taskId ? { taskId } : {}),
+                ...(responseTraceId ? { traceId: responseTraceId } : {}),
+                ...(responseIntentId ? { intentId: responseIntentId } : {}),
+                ...(responseRequestId ? { requestId: responseRequestId } : {}),
+              });
               if (taskId && typeof targetRoom === "string" && targetRoom.trim().length > 0) {
                 void pollStewardTaskCompletion({
                   call,
@@ -800,6 +910,11 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
               const message = `Steward dispatch error: ${error instanceof Error ? error.message : String(error)}`;
               queue.markError(call.id, message);
               emitError(call, message);
+              emitVoiceToolStatus({
+                task,
+                status: 'failed',
+                message,
+              });
               if (task === 'canvas.agent_prompt') {
                 activeCanvasDispatchRef.current = null;
               }
@@ -880,6 +995,11 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
                 const message = `Scorecard steward dispatch failed: HTTP ${res.status}`;
                 queue.markError(call.id, message);
                 emitError(call, message);
+                emitVoiceToolStatus({
+                  task,
+                  status: 'failed',
+                  message,
+                });
                 return { status: 'ERROR', message };
               }
               const responseJson = await res.json().catch(() => ({}));
@@ -901,16 +1021,50 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
                 typeof responseRecord.status === "string"
                   ? responseRecord.status.trim().toLowerCase()
                   : "queued";
+              const responseTraceId =
+                typeof responseRecord.traceId === "string"
+                  ? responseRecord.traceId
+                  : typeof responseTask?.trace_id === "string"
+                    ? responseTask.trace_id
+                    : undefined;
+              const responseIntentId =
+                typeof responseRecord.intentId === "string"
+                  ? responseRecord.intentId
+                  : typeof dispatchParams.intent === "string"
+                    ? dispatchParams.intent
+                    : undefined;
+              if (responseStatus !== "executed_fallback" && !taskId) {
+                const message = `Scorecard steward dispatch missing task id for ${task}`;
+                queue.markError(call.id, message);
+                emitError(call, message);
+                emitVoiceToolStatus({
+                  task,
+                  status: 'failed',
+                  message,
+                });
+                return { status: 'ERROR', message };
+              }
+              const statusMessage =
+                responseStatus === "executed_fallback"
+                  ? "Scorecard steward fallback execution completed"
+                  : "Scorecard steward task queued";
               const result = {
                 status: responseStatus === "executed_fallback" ? "COMPLETED" : "QUEUED",
-                message:
-                  responseStatus === "executed_fallback"
-                    ? "Scorecard steward fallback execution completed"
-                    : "Scorecard steward task queued",
+                message: statusMessage,
                 ...(taskId ? { taskId } : {}),
+                ...(responseTraceId ? { traceId: responseTraceId } : {}),
+                ...(responseIntentId ? { intentId: responseIntentId } : {}),
               } as ToolRunResult;
               queue.markComplete(call.id, result.message);
               emitDone(call, result);
+              emitVoiceToolStatus({
+                task,
+                status: responseStatus === "executed_fallback" ? 'applied' : 'queued',
+                message: statusMessage,
+                ...(taskId ? { taskId } : {}),
+                ...(responseTraceId ? { traceId: responseTraceId } : {}),
+                ...(responseIntentId ? { intentId: responseIntentId } : {}),
+              });
               if (taskId) {
                 void pollStewardTaskCompletion({
                   call,
@@ -924,6 +1078,11 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
               const message = `Scorecard steward dispatch error: ${error instanceof Error ? error.message : String(error)}`;
               queue.markError(call.id, message);
               emitError(call, message);
+              emitVoiceToolStatus({
+                task,
+                status: 'failed',
+                message,
+              });
               return { status: 'ERROR', message };
             }
           }

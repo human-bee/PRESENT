@@ -112,6 +112,47 @@ describe('/api/steward/task-status', () => {
     });
   });
 
+  it('falls back when trace_id column is unavailable', async () => {
+    const maybeSingleMock = jest
+      .fn()
+      .mockResolvedValueOnce({
+        data: null,
+        error: { code: '42703', message: 'column "trace_id" does not exist' },
+      })
+      .mockResolvedValueOnce({
+        data: {
+          id: 'task-legacy',
+          room: 'canvas-1',
+          task: 'fairy.intent',
+          status: 'queued',
+          attempt: 0,
+          error: null,
+          result: null,
+          request_id: 'req-legacy',
+          created_at: '2026-02-17T01:00:00.000Z',
+          updated_at: '2026-02-17T01:00:05.000Z',
+        },
+        error: null,
+      });
+    const eqMock = jest.fn(() => ({ maybeSingle: maybeSingleMock }));
+    const selectMock = jest.fn(() => ({ eq: eqMock }));
+    getAdminSupabaseClientMock.mockReturnValue({
+      from: jest.fn(() => ({ select: selectMock })),
+    });
+
+    const GET = await loadGet();
+    const response = await GET({
+      nextUrl: new URL('http://localhost/api/steward/task-status?taskId=task-legacy&room=canvas-1'),
+    } as import('next/server').NextRequest);
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.ok).toBe(true);
+    expect(json.task.id).toBe('task-legacy');
+    expect(json.task.traceId).toBeNull();
+    expect(maybeSingleMock).toHaveBeenCalledTimes(2);
+  });
+
   it('allows room-scoped polling when canvas row is not yet persisted', async () => {
     const maybeSingleMock = jest.fn().mockResolvedValue({
       data: {
