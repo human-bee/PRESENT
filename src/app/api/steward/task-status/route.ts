@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAdminSupabaseClient } from '@/lib/agents/admin/supabase-admin';
+import { isMissingColumnError } from '@/lib/agents/admin/supabase-errors';
 import { assertCanvasMember, parseCanvasIdFromRoom } from '@/lib/agents/shared/canvas-billing';
 import { resolveRequestUserId } from '@/lib/supabase/server/resolve-request-user';
 
@@ -21,6 +22,7 @@ const toTaskPayload = (task: {
   error: unknown;
   result: unknown;
   request_id: unknown;
+  trace_id: unknown;
   created_at: unknown;
   updated_at: unknown;
 }) => ({
@@ -32,6 +34,7 @@ const toTaskPayload = (task: {
   error: task.error,
   result: task.result,
   requestId: task.request_id,
+  traceId: task.trace_id,
   createdAt: task.created_at,
   updatedAt: task.updated_at,
 });
@@ -51,11 +54,25 @@ export async function GET(req: NextRequest) {
   }
 
   const db = getAdminSupabaseClient();
-  const { data: task, error } = await db
-    .from('agent_tasks')
-    .select('id, room, task, status, attempt, error, result, request_id, created_at, updated_at')
-    .eq('id', taskId)
-    .maybeSingle();
+  const selectWithTraceId =
+    'id, room, task, status, attempt, error, result, request_id, trace_id, created_at, updated_at';
+  const selectWithoutTraceId = 'id, room, task, status, attempt, error, result, request_id, created_at, updated_at';
+  let query = db.from('agent_tasks').select(selectWithTraceId).eq('id', taskId).maybeSingle();
+  let { data: task, error } = await query;
+  if (error && isMissingColumnError(error, 'trace_id')) {
+    const fallback = await db
+      .from('agent_tasks')
+      .select(selectWithoutTraceId)
+      .eq('id', taskId)
+      .maybeSingle();
+    task = fallback.data
+      ? ({
+          ...(fallback.data as Record<string, unknown>),
+          trace_id: null,
+        } as typeof task)
+      : fallback.data;
+    error = fallback.error;
+  }
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
