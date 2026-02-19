@@ -8,7 +8,7 @@ import type { CanvasShapeSummary } from '@/lib/agents/shared/supabase-context';
 import { ACTION_VERSION } from '@/lib/canvas-agent/contract/types';
 import { OffsetManager, interpretBounds } from './offset';
 import { handleStructuredStreaming } from './streaming';
-import type { AgentAction } from '@/lib/canvas-agent/contract/types';
+import type { AgentAction, AgentTraceEvent } from '@/lib/canvas-agent/contract/types';
 import { parseAction } from '@/lib/canvas-agent/contract/parsers';
 import { SessionScheduler } from './scheduler';
 import { addTodo, listTodos, type TodoItem as StoredTodoItem } from './todos';
@@ -199,6 +199,33 @@ const isPromptTooLongError = (error: unknown): boolean => {
   if (direct.includes('prompt is too long')) return true;
   const nested = typeof (error as any)?.data?.error?.message === 'string' ? String((error as any).data.error.message).toLowerCase() : '';
   return nested.includes('prompt is too long');
+};
+
+const isStructuredOutputSchemaRetryableError = (error: unknown): boolean => {
+  if (!error || typeof error !== 'object') return false;
+  const candidate = error as {
+    name?: unknown;
+    message?: unknown;
+    text?: unknown;
+    cause?: unknown;
+  };
+  const name = typeof candidate.name === 'string' ? candidate.name.toLowerCase() : '';
+  const message = typeof candidate.message === 'string' ? candidate.message.toLowerCase() : '';
+  const text = typeof candidate.text === 'string' ? candidate.text.toLowerCase() : '';
+  const causeMessage =
+    candidate.cause && typeof candidate.cause === 'object' && typeof (candidate.cause as any).message === 'string'
+      ? String((candidate.cause as any).message).toLowerCase()
+      : '';
+  const combined = `${name} ${message} ${causeMessage}`;
+  const isSchemaFailure =
+    combined.includes('no object generated') ||
+    combined.includes('type validation failed') ||
+    combined.includes('did not match schema');
+  if (!isSchemaFailure) return false;
+
+  if (combined.includes('expected array') && combined.includes('received string')) return true;
+  if (text.includes('"actions"') && text.includes('[') && text.includes(']')) return true;
+  return false;
 };
 
 const BRAND_COLOR_ALIASES: Record<string, string> = {
@@ -513,21 +540,7 @@ export async function runCanvasAgent(args: RunArgs) {
   let traceEventsSent = 0;
 
   const emitTrace = (
-    step:
-      | 'run_start'
-      | 'screenshot_requested'
-      | 'screenshot_received'
-      | 'screenshot_failed'
-      | 'model_call'
-      | 'model_retry'
-      | 'chunk_processed'
-      | 'actions_dispatched'
-      | 'ack_received'
-      | 'ack_timeout'
-      | 'ack_retry'
-      | 'followup_enqueued'
-      | 'run_complete'
-      | 'run_error',
+    step: AgentTraceEvent['step'],
     extras?: {
       seq?: number;
       partial?: boolean;
@@ -1725,7 +1738,9 @@ const normalizeRawAction = (
             continue;
           }
         }
-        if (isRetryableProviderError(error)) {
+        const retryableProviderFailure = isRetryableProviderError(error);
+        const retryableSchemaFailure = isStructuredOutputSchemaRetryableError(error);
+        if (retryableProviderFailure || retryableSchemaFailure) {
           invokeRetryAttempt += 1;
           const canRetry = invokeRetryAttempt < INVOKE_RETRY_ATTEMPTS;
           if (canRetry) {
@@ -1735,7 +1750,9 @@ const normalizeRawAction = (
                 attempt: invokeRetryAttempt,
                 maxAttempts: INVOKE_RETRY_ATTEMPTS,
                 delayMs,
-                reason: describeRetryError(error),
+                reason: retryableProviderFailure
+                  ? describeRetryError(error)
+                  : 'structured_output_schema_mismatch',
               },
             });
             if (cfg.debug) {
@@ -1743,11 +1760,15 @@ const normalizeRawAction = (
                 console.warn('[CanvasAgent:ModelCall] transient provider failure, retrying', {
                   roomId,
                   sessionId,
-                  attempt: invokeRetryAttempt,
-                  maxAttempts: INVOKE_RETRY_ATTEMPTS,
-                  delayMs,
-                  error: describeRetryError(error),
-                });
+                    attempt: invokeRetryAttempt,
+                    maxAttempts: INVOKE_RETRY_ATTEMPTS,
+                    delayMs,
+                    error: retryableProviderFailure
+                      ? describeRetryError(error)
+                      : error instanceof Error
+                        ? `${error.name}: ${error.message}`
+                        : String(error),
+                  });
               } catch {}
             }
             await delay(delayMs);
@@ -1919,7 +1940,9 @@ const normalizeRawAction = (
           await invokeFollowModel();
           break;
         } catch (error) {
-          if (isRetryableProviderError(error)) {
+          const retryableProviderFailure = isRetryableProviderError(error);
+          const retryableSchemaFailure = isStructuredOutputSchemaRetryableError(error);
+          if (retryableProviderFailure || retryableSchemaFailure) {
             followInvokeRetryAttempt += 1;
             const canRetry = followInvokeRetryAttempt < FOLLOWUP_INVOKE_RETRY_ATTEMPTS;
             if (canRetry) {
@@ -1931,7 +1954,9 @@ const normalizeRawAction = (
                   attempt: followInvokeRetryAttempt,
                   maxAttempts: FOLLOWUP_INVOKE_RETRY_ATTEMPTS,
                   delayMs,
-                  reason: describeRetryError(error),
+                  reason: retryableProviderFailure
+                    ? describeRetryError(error)
+                    : 'structured_output_schema_mismatch',
                 },
               });
               if (cfg.debug) {
@@ -1943,7 +1968,11 @@ const normalizeRawAction = (
                     attempt: followInvokeRetryAttempt,
                     maxAttempts: FOLLOWUP_INVOKE_RETRY_ATTEMPTS,
                     delayMs,
-                    error: describeRetryError(error),
+                    error: retryableProviderFailure
+                      ? describeRetryError(error)
+                      : error instanceof Error
+                        ? `${error.name}: ${error.message}`
+                        : String(error),
                   });
                 } catch {}
               }

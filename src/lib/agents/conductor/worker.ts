@@ -18,7 +18,7 @@ import { recordTaskTraceFromParams, recordWorkerHeartbeat } from '@/lib/agents/s
 import { deriveProviderParity } from '@/lib/agents/admin/provider-parity';
 
 const TASK_LEASE_TTL_MS = Number(process.env.TASK_LEASE_TTL_MS ?? 15_000);
-const ROOM_CONCURRENCY = Number(process.env.ROOM_CONCURRENCY ?? 2);
+const ROOM_CONCURRENCY = Math.max(1, Number.parseInt(process.env.ROOM_CONCURRENCY ?? '2', 10) || 2);
 const WORKER_HEARTBEAT_MS = Number(process.env.AGENT_WORKER_HEARTBEAT_MS ?? 5_000);
 const TASK_IDLE_POLL_MS = Number(process.env.TASK_IDLE_POLL_MS ?? 500);
 const TASK_IDLE_POLL_MAX_MS = Number(process.env.TASK_IDLE_POLL_MAX_MS ?? 1_000);
@@ -31,6 +31,11 @@ const workerHost = os.hostname();
 const workerPid = String(process.pid);
 let activeTaskCount = 0;
 let leasedTaskCount = 0;
+type RoomLaneState = {
+  active: number;
+  waiters: Array<() => void>;
+};
+const roomLaneStates = new Map<string, RoomLaneState>();
 
 type ExecuteTaskFn = (taskName: string, params: JsonObject) => Promise<unknown>;
 type ClaimedTask = {
@@ -229,6 +234,35 @@ function createLeaseExtender(taskId: string, leaseToken: string) {
   };
 }
 
+async function acquireRoomSlot(roomKey: string): Promise<() => void> {
+  const state = roomLaneStates.get(roomKey) ?? { active: 0, waiters: [] };
+  if (!roomLaneStates.has(roomKey)) {
+    roomLaneStates.set(roomKey, state);
+  }
+
+  if (state.active >= ROOM_CONCURRENCY) {
+    await new Promise<void>((resolve) => {
+      state.waiters.push(resolve);
+    });
+  }
+
+  state.active += 1;
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    state.active = Math.max(0, state.active - 1);
+    const next = state.waiters.shift();
+    if (next) {
+      next();
+      return;
+    }
+    if (state.active === 0) {
+      roomLaneStates.delete(roomKey);
+    }
+  };
+}
+
 async function processClaimedTasks(executeTask: ExecuteTaskFn, claimedTasks: ClaimedTask[]) {
   const roomBuckets = claimedTasks.reduce<Record<string, ClaimedTask[]>>((acc, claimed) => {
     const roomKey =
@@ -247,6 +281,7 @@ async function processClaimedTasks(executeTask: ExecuteTaskFn, claimedTasks: Cla
           if (!claimed) break;
 
           const { task, leaseToken, stopLeaseExtender } = claimed;
+          const releaseRoomSlot = await acquireRoomSlot(roomKey);
           let route: ReturnType<typeof classifyTaskRoute> = classifyTaskRoute(task.task);
           let lockKey: string | null = null;
           const executingProviderParity = deriveProviderParity({
@@ -452,6 +487,7 @@ async function processClaimedTasks(executeTask: ExecuteTaskFn, claimedTasks: Cla
               },
             });
           } finally {
+            releaseRoomSlot();
             activeTaskCount = Math.max(0, activeTaskCount - 1);
             leasedTaskCount = Math.max(0, leasedTaskCount - 1);
             stopLeaseExtender();

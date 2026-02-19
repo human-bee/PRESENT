@@ -91,7 +91,9 @@ async function signInWithEmail(page, options = {}) {
   if (!email || !password) {
     return { mode: 'signin', email: email ?? null, ok: false, error: 'Missing email/password' };
   }
-  await page.goto('/auth/signin', { waitUntil: 'networkidle' });
+  // `networkidle` is brittle in dev because webpack/hot-reload asset requests can
+  // keep the page "busy" while first compile warms up.
+  await page.goto('/auth/signin', { waitUntil: 'domcontentloaded', timeout: 90_000 });
   await page.waitForTimeout(1000);
   const emailField = page.locator('#email').first();
   const passwordField = page.locator('#password').first();
@@ -118,9 +120,11 @@ async function signInWithEmail(page, options = {}) {
 }
 
 function buildAuthSeedCredentials() {
+  const fallbackEmail = process.env.PLAYWRIGHT_SEED_EMAIL || 'showcase-fixed@present.local';
+  const fallbackPassword = process.env.PLAYWRIGHT_SEED_PASSWORD || 'Devtools!FixedA1';
   return {
-    email: `showcase+${Date.now()}_${Math.random().toString(36).slice(2, 8)}@present.local`,
-    password: `Devtools!${Math.random().toString(36).slice(2, 9)}A1`,
+    email: fallbackEmail,
+    password: fallbackPassword,
     name: 'Codex Showcase',
   };
 }
@@ -140,9 +144,40 @@ async function ensureSeededAuthUser(credentials) {
     user_metadata: { full_name: credentials.name },
   });
 
-  // Allow "already exists" to continue if credentials were externally provided.
   if (error && !/already been registered|already exists/i.test(error.message || '')) {
     return { seeded: false, reason: error.message || 'unknown_error' };
+  }
+  if (error) {
+    const targetEmail = credentials.email.trim().toLowerCase();
+    let page = 1;
+    let userId = null;
+    while (!userId && page <= 10) {
+      const { data: listedUsers, error: listError } = await adminClient.auth.admin.listUsers({
+        page,
+        perPage: 200,
+      });
+      if (listError) {
+        return { seeded: false, reason: listError.message || 'list_users_failed' };
+      }
+      const users = Array.isArray(listedUsers?.users) ? listedUsers.users : [];
+      const matchedUser = users.find((user) => (user.email || '').trim().toLowerCase() === targetEmail);
+      if (matchedUser?.id) {
+        userId = matchedUser.id;
+        break;
+      }
+      if (users.length < 200) break;
+      page += 1;
+    }
+    if (userId) {
+      const { error: updateError } = await adminClient.auth.admin.updateUserById(userId, {
+        password: credentials.password,
+        email_confirm: true,
+        user_metadata: { full_name: credentials.name },
+      });
+      if (updateError) {
+        return { seeded: false, reason: updateError.message || 'update_user_failed' };
+      }
+    }
   }
   return { seeded: true, reason: null };
 }

@@ -2782,7 +2782,8 @@ Your only output is function calls. Never use plain text unless absolutely neces
             resolveComponentId({ type: 'CrowdPulseWidget', allowLast: true }) ??
             getLastComponentForType('CrowdPulseWidget');
         }
-        if (crowdPulseId && Object.keys(patch).length > 0) {
+        const hasCrowdPulsePatch = Object.keys(patch).length > 0;
+        if (crowdPulseId && hasCrowdPulsePatch) {
           const normalizedPatch: Record<string, unknown> = { ...patch };
           const normalizedQuestion = normalizeCrowdPulseActiveQuestionInput(
             (patch as Record<string, unknown>).activeQuestion,
@@ -2799,8 +2800,12 @@ Your only output is function calls. Never use plain text unless absolutely neces
           });
           return;
         }
-        if (!crowdPulseId && crowdPulseCreate) {
-          await (toolContext as any).create_component.execute({ type: 'CrowdPulseWidget' });
+        if (crowdPulseCreate) {
+          if (!crowdPulseId) {
+            await (toolContext as any).create_component.execute({ type: 'CrowdPulseWidget' });
+          }
+          // Pure create/open commands should stop here so they do not spill into
+          // unrelated downstream heuristics (scorecard/research/fallback).
           return;
         }
       }

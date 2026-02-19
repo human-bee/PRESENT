@@ -46,6 +46,17 @@ describe('canvas action contract', () => {
     expect(parsed.success).toBe(true);
   });
 
+  it('accepts model retry trace events', () => {
+    const parsed = AgentTraceEventSchema.safeParse({
+      type: 'agent:trace',
+      sessionId: 'session-1',
+      step: 'model_retry',
+      at: Date.now(),
+      detail: { attempt: 2, reason: 'provider_529' },
+    });
+    expect(parsed.success).toBe(true);
+  });
+
   it('rejects invalid trace events', () => {
     const parsed = AgentTraceEventSchema.safeParse({
       type: 'agent:trace',

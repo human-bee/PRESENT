@@ -370,8 +370,9 @@ export async function GET(req: NextRequest) {
         .filter((item) => (normalizedProviderPath ? item.provider_path === normalizedProviderPath : true))
         .slice(0, limit);
 
+      const needsCompatTraceScan = Boolean(traceId && !includeTraceId);
       const shouldExpandScan =
-        Boolean(normalizedProvider || normalizedProviderPath) &&
+        Boolean(normalizedProvider || normalizedProviderPath || needsCompatTraceScan) &&
         filteredTasks.length < limit &&
         taskRows.length >= fetchLimit &&
         fetchLimit < MAX_PROVIDER_FILTER_SCAN;

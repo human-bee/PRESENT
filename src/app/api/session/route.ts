@@ -64,7 +64,9 @@ async function findLatestSessionWithRetry(
 ) {
   for (let attempt = 0; attempt < SESSION_GET_RETRY_ATTEMPTS; attempt += 1) {
     const result = await findLatestSession(supabase, roomName, canvasId);
-    if (result.error || result.data) {
+    // maybeSingle() returning { data: null, error: null } is a definitive miss.
+    // Retrying that shape only adds latency on cold/session-create paths.
+    if (result.error || result.data || result.data === null) {
       return result;
     }
     if (attempt + 1 < SESSION_GET_RETRY_ATTEMPTS && SESSION_GET_RETRY_DELAY_MS > 0) {

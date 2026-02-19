@@ -5,7 +5,7 @@ import {
   requireAgentAdminUserId,
 } from '@/lib/agents/admin/auth';
 import { getAdminSupabaseClient } from '@/lib/agents/admin/supabase-admin';
-import { isMissingColumnError, isMissingRelationError } from '@/lib/agents/admin/supabase-errors';
+import { isMissingRelationError } from '@/lib/agents/admin/supabase-errors';
 
 export const runtime = 'nodejs';
 
@@ -107,47 +107,53 @@ export async function GET(req: NextRequest) {
         .select('provider', { count: 'exact', head: true })
         .gte('created_at', sinceIso);
 
-      if (providerProbe.error && isMissingColumnError(providerProbe.error, 'provider')) {
+      if (providerProbe.error) {
         providerMix.unknown = tracesLastHour;
         providerFailures.unknown = failedTracesLastHour;
-      } else if (providerProbe.error) {
-        throw providerProbe.error;
       } else {
         const providerTotals = await Promise.all(
           KNOWN_PROVIDERS.map(async (provider) => {
-            const { count, error } = await db
+            const response = await db
               .from('agent_trace_events')
               .select('id', { count: 'exact', head: true })
               .gte('created_at', sinceIso)
               .eq('provider', provider);
-            if (error) throw error;
-            return { provider, count: count ?? 0 };
+            return { provider, count: response.count ?? 0, error: response.error };
           }),
         );
         const providerFailureTotals = await Promise.all(
           KNOWN_PROVIDERS.map(async (provider) => {
-            const { count, error } = await db
+            const response = await db
               .from('agent_trace_events')
               .select('id', { count: 'exact', head: true })
               .gte('created_at', sinceIso)
               .eq('provider', provider)
               .in('status', FAILURE_STATUSES);
-            if (error) throw error;
-            return { provider, count: count ?? 0 };
+            return { provider, count: response.count ?? 0, error: response.error };
           }),
         );
-        let knownTotal = 0;
-        for (const { provider, count } of providerTotals) {
-          providerMix[provider] = count;
-          knownTotal += count;
+        const providerQueryError =
+          providerTotals.some(({ error }) => Boolean(error)) ||
+          providerFailureTotals.some(({ error }) => Boolean(error));
+        if (providerQueryError) {
+          // Provider-level dimensions are optional for diagnostics; keep overview
+          // available with unknown buckets when older schemas or API quirks fail.
+          providerMix.unknown = tracesLastHour;
+          providerFailures.unknown = failedTracesLastHour;
+        } else {
+          let knownTotal = 0;
+          for (const { provider, count } of providerTotals) {
+            providerMix[provider] = count;
+            knownTotal += count;
+          }
+          let knownFailure = 0;
+          for (const { provider, count } of providerFailureTotals) {
+            providerFailures[provider] = count;
+            knownFailure += count;
+          }
+          providerMix.unknown = Math.max(0, tracesLastHour - knownTotal);
+          providerFailures.unknown = Math.max(0, failedTracesLastHour - knownFailure);
         }
-        let knownFailure = 0;
-        for (const { provider, count } of providerFailureTotals) {
-          providerFailures[provider] = count;
-          knownFailure += count;
-        }
-        providerMix.unknown = Math.max(0, tracesLastHour - knownTotal);
-        providerFailures.unknown = Math.max(0, failedTracesLastHour - knownFailure);
       }
     }
 

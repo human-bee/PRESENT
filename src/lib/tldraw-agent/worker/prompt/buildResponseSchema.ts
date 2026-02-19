@@ -43,7 +43,7 @@ export function buildResponseSchema() {
 				return null
 			}
 		})
-		.filter((schema): schema is z.ZodTypeAny => isZodSchemaLike(schema))
+		.filter((schema): schema is NonNullable<typeof schema> => isZodSchemaLike(schema))
 	const schemaTuple = asSchemaTuple(actionSchemas)
 
 	if (!schemaTuple) {

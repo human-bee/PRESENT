@@ -442,6 +442,108 @@ describe('/api/admin/agents/queue', () => {
     expect(json.tasks[0].trace_id).toBe('trace-compat-1');
   });
 
+  it('expands compat traceId scans when the first page has no matches', async () => {
+    requireAgentAdminSignedInUserIdMock.mockResolvedValue({ ok: true, userId: 'admin-4b' });
+    const withTraceQuery = buildQuery({
+      data: [],
+      error: {
+        code: '42703',
+        message: 'column "trace_id" does not exist',
+      },
+    });
+    const firstCompatTaskPage = buildQuery({
+      data: [
+        {
+          id: 'task-1',
+          room: 'canvas-room-1',
+          task: 'fairy.intent',
+          status: 'failed',
+          priority: 100,
+          attempt: 1,
+          error: 'first page miss',
+          request_id: 'req-1',
+          resource_keys: ['room:canvas-room-1'],
+          lease_expires_at: null,
+          created_at: '2026-02-17T12:00:00.000Z',
+          updated_at: '2026-02-17T12:00:01.000Z',
+        },
+      ],
+      error: null,
+    });
+    const expandedCompatTaskPage = buildQuery({
+      data: [
+        {
+          id: 'task-1',
+          room: 'canvas-room-1',
+          task: 'fairy.intent',
+          status: 'failed',
+          priority: 100,
+          attempt: 1,
+          error: 'first page miss',
+          request_id: 'req-1',
+          resource_keys: ['room:canvas-room-1'],
+          lease_expires_at: null,
+          created_at: '2026-02-17T12:00:00.000Z',
+          updated_at: '2026-02-17T12:00:01.000Z',
+        },
+        {
+          id: 'task-2',
+          room: 'canvas-room-1',
+          task: 'fairy.intent',
+          status: 'failed',
+          priority: 100,
+          attempt: 1,
+          error: 'second page hit',
+          request_id: 'req-2',
+          resource_keys: ['room:canvas-room-1'],
+          lease_expires_at: null,
+          created_at: '2026-02-17T12:01:00.000Z',
+          updated_at: '2026-02-17T12:01:01.000Z',
+        },
+      ],
+      error: null,
+    });
+    const traceQuery = buildQuery({
+      data: [
+        {
+          task_id: 'task-2',
+          trace_id: 'trace-compat-expanded',
+          stage: 'failed',
+          status: 'failed',
+          created_at: '2026-02-17T12:01:02.000Z',
+          payload: { error: 'expanded match' },
+        },
+      ],
+      error: null,
+    });
+
+    let taskCallCount = 0;
+    getAdminSupabaseClientMock.mockReturnValue({
+      from: jest.fn((table: string) => {
+        if (table === 'agent_tasks') {
+          taskCallCount += 1;
+          if (taskCallCount === 1) return withTraceQuery.query;
+          if (taskCallCount === 2) return firstCompatTaskPage.query;
+          return expandedCompatTaskPage.query;
+        }
+        if (table === 'agent_trace_events') return traceQuery.query;
+        throw new Error(`Unexpected table ${table}`);
+      }),
+    });
+
+    const GET = await loadGet();
+    const response = await GET({
+      nextUrl: new URL('http://localhost/api/admin/agents/queue?traceId=trace-compat-expanded&limit=1'),
+    } as import('next/server').NextRequest);
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.ok).toBe(true);
+    expect(json.tasks).toHaveLength(1);
+    expect(json.tasks[0].id).toBe('task-2');
+    expect(expandedCompatTaskPage.getLimit()).toBe(2);
+  });
+
   it('falls back when agent_tasks.params column is unavailable', async () => {
     requireAgentAdminSignedInUserIdMock.mockResolvedValue({ ok: true, userId: 'admin-5' });
     const taskQueries = [
