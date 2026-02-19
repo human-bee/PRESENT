@@ -269,7 +269,6 @@ export function CustomShapeComponent({ shape }: { shape: CustomShape }) {
                 shapeProps: shape.props,
                 componentStore,
                 editor,
-                isPinned: Boolean(localPin),
               })
             ) : (
               <div style={{ padding: 10, color: 'var(--color-text-muted)' }}>No component loaded</div>
@@ -283,6 +282,14 @@ export function CustomShapeComponent({ shape }: { shape: CustomShape }) {
   if (localPin && typeof document !== 'undefined') {
     const left = `${localPin.pinnedX * 100}vw`;
     const top = `${localPin.pinnedY * 100}vh`;
+    const pinnedW = Number.isFinite(localPin.screenW) && (localPin.screenW as number) > 0
+      ? (localPin.screenW as number)
+      : shape.props.w;
+    const pinnedH = Number.isFinite(localPin.screenH) && (localPin.screenH as number) > 0
+      ? (localPin.screenH as number)
+      : shape.props.h;
+    const scaleX = shape.props.w > 0 ? pinnedW / shape.props.w : 1;
+    const scaleY = shape.props.h > 0 ? pinnedH / shape.props.h : 1;
     const portal = createPortal(
       <div
         style={{
@@ -290,6 +297,8 @@ export function CustomShapeComponent({ shape }: { shape: CustomShape }) {
           left,
           top,
           transform: 'translate(-50%, -50%)',
+          width: `${pinnedW}px`,
+          height: `${pinnedH}px`,
           zIndex: 1100,
           pointerEvents: 'auto',
         }}
@@ -306,7 +315,17 @@ export function CustomShapeComponent({ shape }: { shape: CustomShape }) {
             Unpin
           </button>
         </div>
-        {content}
+        <div
+          style={{
+            position: 'absolute',
+            left: 0,
+            top: 0,
+            transform: `scale(${scaleX}, ${scaleY})`,
+            transformOrigin: 'top left',
+          }}
+        >
+          {content}
+        </div>
       </div>,
       document.body,
     );
@@ -340,7 +359,6 @@ interface RenderStoredComponentArgs {
   shapeProps: CustomShape['props'];
   componentStore: Map<string, ReactNode> | null;
   editor: ReturnType<typeof useEditor>;
-  isPinned: boolean;
 }
 
 function renderStoredComponent({
@@ -348,7 +366,6 @@ function renderStoredComponent({
   shapeProps,
   componentStore,
   editor,
-  isPinned,
 }: RenderStoredComponentArgs) {
   const stored = componentStore?.get(shapeProps.customComponent);
   let node: ReactNode = null;
@@ -370,7 +387,6 @@ function renderStoredComponent({
   const injectedBase = {
     __custom_message_id: shapeProps.customComponent,
     state: (shapeProps.state as Record<string, unknown>) || {},
-    ...(shapeProps.name === 'LivekitParticipantTile' ? { isPinned } : {}),
   } as const;
 
   if (React.isValidElement(stored)) {

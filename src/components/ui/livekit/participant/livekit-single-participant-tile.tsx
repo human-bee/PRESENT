@@ -37,7 +37,6 @@ export type SingleParticipantTileProps = {
   isAgent: boolean;
   mirrorLocal: boolean;
   fit: 'cover' | 'contain';
-  isPinned?: boolean;
   trackPreference: 'auto' | 'camera' | 'screen';
   onSelectParticipant?: (id: string) => void;
   state: LivekitParticipantTileState | undefined;
@@ -56,7 +55,6 @@ export function SingleParticipantTile({
   isAgent,
   mirrorLocal,
   fit,
-  isPinned = false,
   trackPreference,
   onSelectParticipant,
   state,
@@ -255,7 +253,6 @@ export function SingleParticipantTile({
           isLocal={isLocal}
           mirrorLocal={mirrorLocal}
           fit={fit}
-          isPinned={isPinned}
           isAgent={isAgent}
         />
 

@@ -60,10 +60,6 @@ export const livekitParticipantTileSchema = z.object({
     .optional()
     .describe('Prefer which video source when both are present (default: auto)'),
   isAgent: z.boolean().optional().describe('Whether this participant is an AI agent (shows bot icon)'),
-  isPinned: z
-    .boolean()
-    .optional()
-    .describe('Internal render hint: when true, preserve full video frame while pinned'),
   // Relaxed schema to avoid Zod version compatibility issues with function().args()
   onIdentityChange: z
     .any() 
@@ -89,7 +85,6 @@ export const LivekitParticipantTile = React.memo(function LivekitParticipantTile
   fit = 'cover',
   trackPreference = 'camera',
   demoMode = false,
-  isPinned = false,
   onIdentityChange,
 }: LivekitParticipantTileProps) {
   const [state] = React.useState<LivekitParticipantTileState>({
@@ -230,7 +225,6 @@ export const LivekitParticipantTile = React.memo(function LivekitParticipantTile
         isAgent={isAgent}
         mirrorLocal={mirrorLocal}
         fit={fit}
-        isPinned={isPinned}
         trackPreference={trackPreference}
         onSelectParticipant={onIdentityChange}
         state={state}

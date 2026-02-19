@@ -20,11 +20,17 @@ export function createCanvasPinHandlers({ editor, roomName }: PinHandlersDeps): 
         const bounds = editor.getShapePageBounds(shape.id as any);
         if (!bounds) continue;
         const screenPoint = editor.pageToScreen({ x: bounds.x + bounds.w / 2, y: bounds.y + bounds.h / 2 });
+        const topLeft = editor.pageToScreen({ x: bounds.x, y: bounds.y });
+        const bottomRight = editor.pageToScreen({ x: bounds.x + bounds.w, y: bounds.y + bounds.h });
         const pinnedX = screenPoint.x / viewport.width;
         const pinnedY = screenPoint.y / viewport.height;
+        const screenW = Math.max(1, Math.abs(bottomRight.x - topLeft.x));
+        const screenH = Math.max(1, Math.abs(bottomRight.y - topLeft.y));
         setLocalPin(resolvedRoom, String(shape.id), {
           pinnedX,
           pinnedY,
+          screenW,
+          screenH,
         });
       }
     } catch (error) {
