@@ -116,6 +116,14 @@ const hasFailureSignal = (event: EventLike): boolean => {
   return false;
 };
 
+const hasSuccessSignal = (event: EventLike): boolean => {
+  const stage = normalizeString(event.stage)?.toLowerCase();
+  const status = normalizeString(event.status)?.toLowerCase();
+  if (stage === 'completed') return true;
+  if (status === 'completed' || status === 'succeeded' || status === 'ok') return true;
+  return false;
+};
+
 const toMillis = (value: string | null | undefined): number => {
   if (!value) return Number.NEGATIVE_INFINITY;
   const parsed = Date.parse(value);
@@ -217,7 +225,13 @@ export const deriveTraceFailureSummary = (
     if (delta !== 0) return delta;
     return 0;
   });
-  const failingEvent = sorted.find((event) => hasFailureSignal(event));
+  const latestSuccessEvent = sorted.find((event) => hasSuccessSignal(event));
+  const latestSuccessMillis = latestSuccessEvent ? toMillis(latestSuccessEvent.created_at) : Number.NEGATIVE_INFINITY;
+  const failingEvent = sorted.find((event) => {
+    if (!hasFailureSignal(event)) return false;
+    if (!latestSuccessEvent) return true;
+    return toMillis(event.created_at) > latestSuccessMillis;
+  });
 
   if (failingEvent) {
     const stage = normalizeString(failingEvent.stage);
@@ -247,7 +261,14 @@ export const deriveTraceFailureSummary = (
 
   const fallbackStatus = normalizeString(fallbackTaskState?.status)?.toLowerCase();
   const fallbackError = normalizeString(fallbackTaskState?.error);
-  if (fallbackStatus === 'failed' || fallbackError) {
+  const isFallbackFailureStatus =
+    fallbackStatus === 'failed' ||
+    fallbackStatus === 'error' ||
+    fallbackStatus === 'fallback_error' ||
+    fallbackStatus === 'queue_error' ||
+    fallbackStatus === 'canceled';
+  const hasNoTerminalFallbackStatus = !fallbackStatus;
+  if (isFallbackFailureStatus || (hasNoTerminalFallbackStatus && fallbackError)) {
     const provider = extractProviderIdentity({
       stage: 'task_status_fallback',
       status: fallbackStatus,

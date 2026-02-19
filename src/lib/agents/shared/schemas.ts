@@ -70,3 +70,39 @@ export const parseJsonValue = (value: unknown): z.infer<typeof JsonValueSchema> 
   const parsed = JsonValueSchema.safeParse(value);
   return parsed.success ? parsed.data : null;
 };
+
+const sanitizeUnknown = (value: unknown): unknown => {
+  if (value === undefined) return undefined;
+  if (value === null) return null;
+  if (Array.isArray(value)) {
+    const next = value
+      .map((entry) => sanitizeUnknown(entry))
+      .filter((entry) => entry !== undefined);
+    return next;
+  }
+  if (typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+    const next: Record<string, unknown> = {};
+    for (const [key, entry] of Object.entries(record)) {
+      const sanitized = sanitizeUnknown(entry);
+      if (sanitized !== undefined) {
+        next[key] = sanitized;
+      }
+    }
+    return next;
+  }
+  return value;
+};
+
+export const stripUndefinedDeep = <T>(value: T): T => {
+  if (value === undefined) {
+    return value;
+  }
+  return sanitizeUnknown(value) as T;
+};
+
+export const isZodSchemaLike = (value: unknown): value is z.ZodTypeAny => {
+  if (!value || typeof value !== 'object') return false;
+  const candidate = value as Partial<z.ZodTypeAny>;
+  return typeof candidate.parse === 'function' && typeof candidate.safeParse === 'function';
+};

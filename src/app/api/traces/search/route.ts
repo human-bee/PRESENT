@@ -11,6 +11,14 @@ const readOptional = (searchParams: URLSearchParams, key: string): string | unde
   return trimmed.length > 0 ? trimmed : undefined;
 };
 
+const parseLimit = (searchParams: URLSearchParams): number => {
+  const raw = searchParams.get('limit');
+  if (!raw) return 100;
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed)) return 100;
+  return Math.max(1, Math.min(250, Math.floor(parsed)));
+};
+
 export async function GET(req: NextRequest) {
   const admin = await requireAgentAdminSignedInUserId(req);
   if (!admin.ok) {
@@ -20,9 +28,10 @@ export async function GET(req: NextRequest) {
   const room = readOptional(searchParams, 'room');
   const task = readOptional(searchParams, 'task');
   const status = readOptional(searchParams, 'status');
+  const traceId = readOptional(searchParams, 'traceId');
   const from = readOptional(searchParams, 'from');
   const to = readOptional(searchParams, 'to');
-  const limit = Math.max(1, Math.min(250, Number(searchParams.get('limit') ?? 100)));
+  const limit = parseLimit(searchParams);
 
   try {
     const db = getAdminSupabaseClient();
@@ -34,6 +43,7 @@ export async function GET(req: NextRequest) {
     if (room) query = query.eq('room', room);
     if (task) query = query.eq('task', task);
     if (status) query = query.eq('status', status);
+    if (traceId) query = query.eq('trace_id', traceId);
     if (from) query = query.gte('created_at', from);
     if (to) query = query.lte('created_at', to);
 

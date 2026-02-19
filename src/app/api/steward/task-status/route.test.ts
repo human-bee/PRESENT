@@ -111,4 +111,42 @@ describe('/api/steward/task-status', () => {
       requesterUserId: 'user-1',
     });
   });
+
+  it('allows room-scoped polling when canvas row is not yet persisted', async () => {
+    const maybeSingleMock = jest.fn().mockResolvedValue({
+      data: {
+        id: 'task-ephemeral',
+        room: 'canvas-ephemeral',
+        task: 'fairy.intent',
+        status: 'running',
+        attempt: 1,
+        error: null,
+        result: null,
+        request_id: 'req-ephemeral',
+        created_at: '2026-02-17T01:00:00.000Z',
+        updated_at: '2026-02-17T01:00:05.000Z',
+      },
+      error: null,
+    });
+    const eqMock = jest.fn(() => ({ maybeSingle: maybeSingleMock }));
+    const selectMock = jest.fn(() => ({ eq: eqMock }));
+    getAdminSupabaseClientMock.mockReturnValue({
+      from: jest.fn(() => ({ select: selectMock })),
+    });
+    parseCanvasIdFromRoomMock.mockReturnValueOnce('ephemeral');
+    assertCanvasMemberMock.mockRejectedValueOnce(new Error('Canvas not found'));
+
+    const GET = await loadGet();
+    const response = await GET({
+      nextUrl: new URL(
+        'http://localhost/api/steward/task-status?taskId=task-ephemeral&room=canvas-ephemeral',
+      ),
+    } as import('next/server').NextRequest);
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.ok).toBe(true);
+    expect(json.task.id).toBe('task-ephemeral');
+    expect(json.task.status).toBe('running');
+  });
 });

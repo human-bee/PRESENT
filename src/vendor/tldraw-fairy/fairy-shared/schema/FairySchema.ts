@@ -167,7 +167,28 @@ export const PROMPT_PART_DEFINITIONS = [
 	CurrentProjectOrchestratorPartDefinition,
 ] as const satisfies PromptPartDefinition<BasePromptPart>[]
 
-export const AGENT_ACTION_TYPES = AGENT_ACTION_SCHEMAS.map((schema) => schema.shape._type.value)
+const extractActionType = (schema: unknown): string | null => {
+	if (!schema || typeof schema !== 'object') return null
+	const shape = (schema as { shape?: { _type?: unknown } }).shape
+	const literal = shape?._type as
+		| {
+				value?: unknown
+				_def?: { value?: unknown }
+		  }
+		| undefined
+	if (!literal || typeof literal !== 'object') return null
+	if (typeof literal.value === 'string' && literal.value.trim().length > 0) {
+		return literal.value
+	}
+	if (typeof literal._def?.value === 'string' && literal._def.value.trim().length > 0) {
+		return literal._def.value
+	}
+	return null
+}
+
+export const AGENT_ACTION_TYPES = AGENT_ACTION_SCHEMAS.map((schema) => extractActionType(schema)).filter(
+	(type): type is string => Boolean(type)
+)
 export const PROMPT_PART_TYPES = PROMPT_PART_DEFINITIONS.map((definition) => definition.type)
 
 export function getPromptPartDefinition<T extends PromptPart>(

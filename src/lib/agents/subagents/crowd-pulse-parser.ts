@@ -59,6 +59,25 @@ export const normalizeCrowdPulseStatus = (value: unknown): CrowdPulsePatch['stat
   return undefined;
 };
 
+export const shouldClearCrowdPulseQuestion = (instruction?: string): boolean => {
+  if (typeof instruction !== 'string') return false;
+  const normalized = instruction.trim().toLowerCase();
+  if (!normalized) return false;
+  const hasQuestionTarget = /\b(question|prompt)\b/.test(normalized);
+  if (!hasQuestionTarget) return false;
+  return /\b(clear|remove|reset|unset|delete)\b/.test(normalized);
+};
+
+export const normalizeCrowdPulseActiveQuestionInput = (
+  value: unknown,
+  instruction?: string,
+): string | undefined => {
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  if (trimmed.length > 0) return trimmed;
+  return shouldClearCrowdPulseQuestion(instruction) ? '' : undefined;
+};
+
 const parseCountToken = (value: string): number | undefined => {
   const cleaned = value.trim().toLowerCase().replace(/[^a-z0-9.-]/g, '');
   if (!cleaned) return undefined;
@@ -127,9 +146,12 @@ export const parseCrowdPulseFallbackInstruction = (instruction?: string): CrowdP
     }
   }
 
-  const question = extractQuestion(trimmedInstruction);
+  const clearRequested = shouldClearCrowdPulseQuestion(trimmedInstruction);
+  const question = clearRequested ? undefined : extractQuestion(trimmedInstruction);
   if (question) {
     patch.activeQuestion = question;
+  } else if (clearRequested) {
+    patch.activeQuestion = '';
   }
 
   if (/prompt/i.test(trimmedInstruction) && !patch.activeQuestion) {

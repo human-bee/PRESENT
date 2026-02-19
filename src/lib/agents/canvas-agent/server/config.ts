@@ -167,7 +167,11 @@ export function loadCanvasAgentConfig(env: NodeJS.ProcessEnv = process.env): Can
     },
     followups: {
       maxDepth: resolveFollowupDepth(env, preset),
-      lowActionThreshold: Math.max(0, Number.parseInt(env.CANVAS_AGENT_LOW_ACTION_THRESHOLD ?? '6', 10) || 6),
+      lowActionThreshold: (() => {
+        const parsed = Number.parseInt(env.CANVAS_AGENT_LOW_ACTION_THRESHOLD ?? '1', 10);
+        if (!Number.isFinite(parsed)) return 1;
+        return Math.max(0, parsed);
+      })(),
       durable: coerceBoolean(env.CANVAS_AGENT_DURABLE_FOLLOWUPS, true),
     },
   };

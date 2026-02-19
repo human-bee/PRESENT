@@ -5,6 +5,8 @@ import { LivekitRoomConnectorState } from './types';
 type MergeFn = (patch: Partial<LivekitRoomConnectorState>) => void;
 type GetStateFn = () => LivekitRoomConnectorState;
 
+const normalizeRoomName = (value: string): string => value.trim();
+
 export function useAgentDispatch(
   roomName: string,
   connectionState: LivekitRoomConnectorState['connectionState'],
@@ -13,15 +15,36 @@ export function useAgentDispatch(
 ) {
   const dispatchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const dispatchInFlightRef = useRef(false);
+  const lastDispatchAtRef = useRef(0);
 
   // Trigger agent join
   const requestAgent = useCallback(async () => {
     if (dispatchInFlightRef.current) {
       return;
     }
+    const latestState = getState();
+    if (latestState.agentStatus === 'joined' && latestState.agentIdentity) {
+      return;
+    }
+    if (latestState.agentStatus === 'dispatching') {
+      return;
+    }
+    const nowMs = Date.now();
+    if (nowMs - lastDispatchAtRef.current < 5000) {
+      return;
+    }
+    const normalizedRoomName = normalizeRoomName(roomName);
+    if (!normalizedRoomName) {
+      mergeState({
+        agentStatus: 'failed',
+        errorMessage: 'Cannot dispatch agent without a room name',
+      });
+      return;
+    }
     dispatchInFlightRef.current = true;
+    lastDispatchAtRef.current = nowMs;
     try {
-      console.log(`🤖 [LiveKitConnector-${roomName}] Triggering agent join...`);
+      console.log(`🤖 [LiveKitConnector-${normalizedRoomName}] Triggering agent join...`);
 
       mergeState({
         agentStatus: 'dispatching',
@@ -34,7 +57,7 @@ export function useAgentDispatch(
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          roomName,
+          roomName: normalizedRoomName,
           trigger: 'participant_connected',
           timestamp: Date.now(),
         }),
@@ -42,7 +65,15 @@ export function useAgentDispatch(
 
       if (response.ok) {
         const result = await response.json();
-        console.log(`✅ [LiveKitConnector-${roomName}] Agent dispatch triggered:`, result);
+        console.log(`✅ [LiveKitConnector-${normalizedRoomName}] Agent dispatch triggered:`, result);
+        if (result?.alreadyJoined || result?.reason === 'agent_already_joined') {
+          mergeState({
+            agentStatus: 'joined',
+            agentIdentity: latestState.agentIdentity,
+            errorMessage: null,
+          });
+          return;
+        }
 
         if (typeof window !== 'undefined') {
           if (dispatchTimeoutRef.current) {
@@ -53,7 +84,7 @@ export function useAgentDispatch(
             const latest = getState();
             if (latest.agentStatus === 'dispatching') {
               console.warn(
-                `⏰ [LiveKitConnector-${roomName}] Agent dispatch timeout - no agent joined within 30 seconds`,
+                `⏰ [LiveKitConnector-${normalizedRoomName}] Agent dispatch timeout - no agent joined within 30 seconds`,
               );
               mergeState({
                 agentStatus: 'failed',
@@ -65,7 +96,7 @@ export function useAgentDispatch(
       } else {
         const errorData = await response.json().catch(() => ({}));
         console.warn(
-          `⚠️ [LiveKitConnector-${roomName}] Agent dispatch failed:`,
+          `⚠️ [LiveKitConnector-${normalizedRoomName}] Agent dispatch failed:`,
           response.status,
           errorData,
         );
@@ -75,7 +106,7 @@ export function useAgentDispatch(
         });
       }
     } catch (error) {
-      console.error(`❌ [LiveKitConnector-${roomName}] Agent dispatch error:`, error);
+      console.error(`❌ [LiveKitConnector-${normalizedRoomName}] Agent dispatch error:`, error);
       mergeState({
         agentStatus: 'failed',
         errorMessage: error instanceof Error ? error.message : 'Unknown dispatch error',
@@ -94,8 +125,11 @@ export function useAgentDispatch(
     const handleAgentRequest = (event: Event) => {
       const customEvent = event as CustomEvent;
       const { roomName: requestedRoom } = customEvent.detail ?? {};
-      if (requestedRoom === roomName && connectionState === 'connected') {
-        console.log(`🎯 [LiveKitConnector-${roomName}] Manual agent request received`);
+      if (
+        normalizeRoomName(requestedRoom ?? '') === normalizeRoomName(roomName) &&
+        connectionState === 'connected'
+      ) {
+        console.log(`🎯 [LiveKitConnector-${normalizeRoomName(roomName)}] Manual agent request received`);
         void requestAgent();
       }
     };

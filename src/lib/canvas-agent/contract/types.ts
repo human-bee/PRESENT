@@ -66,6 +66,7 @@ export const AGENT_TRACE_STEPS = [
   'screenshot_received',
   'screenshot_failed',
   'model_call',
+  'model_retry',
   'chunk_processed',
   'actions_dispatched',
   'ack_received',

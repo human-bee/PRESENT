@@ -14,6 +14,20 @@ if (!globalLocks[SESSION_CREATE_LOCKS_KEY]) {
   globalLocks[SESSION_CREATE_LOCKS_KEY] = sessionCreateLocks;
 }
 
+const SESSION_GET_RETRY_ATTEMPTS = Math.max(
+  1,
+  Number.parseInt(process.env.SESSION_GET_RETRY_ATTEMPTS ?? '8', 10) || 8,
+);
+const SESSION_GET_RETRY_DELAY_MS = Math.max(
+  0,
+  Number.parseInt(process.env.SESSION_GET_RETRY_DELAY_MS ?? '250', 10) || 250,
+);
+
+const sleep = (ms: number) =>
+  new Promise<void>((resolve) => {
+    setTimeout(resolve, ms);
+  });
+
 function getServerClient(authHeader?: string | null) {
   const token = authHeader?.startsWith('Bearer ') ? authHeader : undefined;
   return createClient(url, anon, {
@@ -43,6 +57,25 @@ async function findLatestSession(
   return query.limit(1).maybeSingle();
 }
 
+async function findLatestSessionWithRetry(
+  supabase: ReturnType<typeof getServerClient>,
+  roomName: string,
+  canvasId?: string | null,
+) {
+  for (let attempt = 0; attempt < SESSION_GET_RETRY_ATTEMPTS; attempt += 1) {
+    const result = await findLatestSession(supabase, roomName, canvasId);
+    // maybeSingle() returning { data: null, error: null } is a definitive miss.
+    // Retrying that shape only adds latency on cold/session-create paths.
+    if (result.error || result.data || result.data === null) {
+      return result;
+    }
+    if (attempt + 1 < SESSION_GET_RETRY_ATTEMPTS && SESSION_GET_RETRY_DELAY_MS > 0) {
+      await sleep(SESSION_GET_RETRY_DELAY_MS);
+    }
+  }
+  return { data: null, error: null };
+}
+
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const roomName = searchParams.get('roomName');
@@ -58,14 +91,14 @@ export async function GET(req: NextRequest) {
   try {
     const normalizedCanvasId =
       canvasId === null || canvasId === 'null' || canvasId === '' ? null : canvasId;
-    const { data, error } = await findLatestSession(supabase, roomName, normalizedCanvasId);
+    const { data, error } = await findLatestSessionWithRetry(supabase, roomName, normalizedCanvasId);
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
     if (!data && normalizedCanvasId) {
       // Self-heal legacy rows where room_name exists but canvas_id stayed null or drifted.
-      const { data: byRoom, error: byRoomError } = await findLatestSession(supabase, roomName);
+      const { data: byRoom, error: byRoomError } = await findLatestSessionWithRetry(supabase, roomName);
       if (byRoomError) {
         return NextResponse.json({ error: byRoomError.message }, { status: 500 });
       }
@@ -115,8 +148,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Missing room_name' }, { status: 400 });
     }
 
-    const findExistingSession = async () => findLatestSession(supabase, roomName, canvasId);
-    const findExistingByRoom = async () => findLatestSession(supabase, roomName);
+    const findExistingSession = async () => findLatestSessionWithRetry(supabase, roomName, canvasId);
+    const findExistingByRoom = async () => findLatestSessionWithRetry(supabase, roomName);
 
     const lockKey = `${roomName}::${canvasId ?? 'null'}`;
     const inFlight = sessionCreateLocks.get(lockKey);

@@ -5,6 +5,7 @@ import process from 'node:process';
 import { chromium } from 'playwright';
 
 const now = () => new Date().toISOString();
+const readString = (value) => (typeof value === 'string' && value.trim().length > 0 ? value.trim() : null);
 
 function parseArgs(argv) {
   const args = {
@@ -140,6 +141,7 @@ async function run() {
     request: null,
     taskStatus: null,
     sessionCorrelation: null,
+    proof: null,
     notes: [],
     screenshot: null,
     error: null,
@@ -187,14 +189,21 @@ async function run() {
     };
 
     const taskId = typeof runCanvasBody?.taskId === 'string' ? runCanvasBody.taskId : null;
-    if (taskId) {
-      result.taskStatus = await pollTaskStatus(page.request, {
-        taskId,
-        room: result.room,
-        timeoutMs: args.timeoutMs,
-      });
-    } else {
-      result.notes.push('runCanvas did not return taskId; unable to poll /api/steward/task-status');
+    if (!runCanvasResponse.ok()) {
+      throw new Error(`runCanvas request failed with status ${runCanvasResponse.status()}`);
+    }
+    if (!taskId) {
+      throw new Error('runCanvas did not return taskId; cannot prove queue-to-worker execution.');
+    }
+
+    result.taskStatus = await pollTaskStatus(page.request, {
+      taskId,
+      room: result.room,
+      timeoutMs: args.timeoutMs,
+    });
+    const finalTaskStatus = readString(result.taskStatus?.status);
+    if (finalTaskStatus !== 'succeeded') {
+      throw new Error(`task ${taskId} did not succeed (status=${finalTaskStatus ?? 'unknown'})`);
     }
 
     const sessionResponse = await page.request.get(
@@ -207,11 +216,84 @@ async function run() {
       body: sessionBody,
     };
     if (!sessionResponse.ok()) {
-      result.notes.push(
-        'Admin session correlation endpoint not accessible in current browser auth context. ' +
-          'Sign in with allowlisted user or set AGENT_ADMIN_AUTHENTICATED_OPEN_ACCESS=true temporarily.',
+      throw new Error(
+        'Admin session correlation endpoint was not accessible for this smoke run. ' +
+          'Enable AGENT_ADMIN_AUTHENTICATED_OPEN_ACCESS or use an allowlisted user.',
       );
     }
+
+    const taskRecord = (result.taskStatus?.body?.task && typeof result.taskStatus.body.task === 'object')
+      ? result.taskStatus.body.task
+      : null;
+    const taskTraceId = readString(taskRecord?.trace_id) ?? readString(taskRecord?.traceId);
+    const taskRequestId = readString(taskRecord?.request_id) ?? readString(taskRecord?.requestId);
+    const requestTraceId = readString(runCanvasBody?.traceId);
+    const requestRequestId = readString(runCanvasBody?.requestId);
+
+    const summary = sessionBody?.summary && typeof sessionBody.summary === 'object' ? sessionBody.summary : {};
+    const stageCounts =
+      summary.traceStageCounts && typeof summary.traceStageCounts === 'object'
+        ? summary.traceStageCounts
+        : {};
+    const actionsDispatchedCount = Number(stageCounts.actions_dispatched ?? 0);
+    const missingTraceOnTasks = Number(summary.missingTraceOnTasks ?? 0);
+
+    if (!Number.isFinite(actionsDispatchedCount) || actionsDispatchedCount < 1) {
+      throw new Error('Session correlation contains no actions_dispatched traces.');
+    }
+    if (Number.isFinite(missingTraceOnTasks) && missingTraceOnTasks > 0) {
+      throw new Error(`Session correlation reported missingTraceOnTasks=${missingTraceOnTasks}.`);
+    }
+
+    const traceCandidates = new Set(
+      [taskTraceId, requestTraceId].filter((value) => Boolean(value)),
+    );
+    const requestCandidates = new Set(
+      [taskRequestId, requestRequestId, taskId].filter((value) => Boolean(value)),
+    );
+    const traces = Array.isArray(sessionBody?.traces) ? sessionBody.traces : [];
+    const matchedDispatchTraces = traces.filter((trace) => {
+      const stage = readString(trace?.stage)?.toLowerCase();
+      if (stage !== 'actions_dispatched') return false;
+      const traceId = readString(trace?.trace_id) ?? readString(trace?.traceId);
+      const requestId = readString(trace?.request_id) ?? readString(trace?.requestId);
+      return (
+        (traceId && traceCandidates.has(traceId)) ||
+        (requestId && requestCandidates.has(requestId))
+      );
+    });
+
+    if (matchedDispatchTraces.length === 0) {
+      throw new Error(
+        `No actions_dispatched trace matched task ${taskId} ` +
+          `(trace candidates=${Array.from(traceCandidates).join(',') || 'none'}, request candidates=${
+            Array.from(requestCandidates).join(',') || 'none'
+          }).`,
+      );
+    }
+
+    result.proof = {
+      taskId,
+      taskStatus: finalTaskStatus,
+      traceId: taskTraceId ?? requestTraceId,
+      requestId: taskRequestId ?? requestRequestId ?? taskId,
+      actionsDispatchedCount,
+      matchedDispatchTraceCount: matchedDispatchTraces.length,
+    };
+    await fs.writeFile(path.join(outputDir, 'task-status.json'), JSON.stringify(result.taskStatus, null, 2), 'utf8');
+    await fs.writeFile(
+      path.join(outputDir, 'session-correlation.json'),
+      JSON.stringify(result.sessionCorrelation, null, 2),
+      'utf8',
+    );
+    await fs.writeFile(
+      path.join(outputDir, 'dispatch-traces.json'),
+      JSON.stringify(matchedDispatchTraces, null, 2),
+      'utf8',
+    );
+    result.notes.push(
+      `Proof linked: task=${taskId}, trace=${result.proof.traceId ?? 'n/a'}, actions_dispatched=${actionsDispatchedCount}`,
+    );
 
     const screenshotPath = path.join(outputDir, 'canvas.png');
     await page.screenshot({ path: screenshotPath, fullPage: true });

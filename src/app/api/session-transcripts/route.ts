@@ -81,6 +81,58 @@ const PostSchema = z
   })
   .strict();
 
+type TranscriptFallbackEntry = {
+  eventId: string;
+  participantId: string;
+  participantName: string | null;
+  text: string;
+  timestamp: number;
+  manual: boolean;
+  roomName?: string | null;
+};
+
+const TRANSCRIPT_FALLBACK_KEY = '__present_session_transcript_fallback_store__';
+const fallbackGlobal = globalThis as typeof globalThis & {
+  [TRANSCRIPT_FALLBACK_KEY]?: Map<string, Map<string, TranscriptFallbackEntry>>;
+};
+const transcriptFallbackStore =
+  fallbackGlobal[TRANSCRIPT_FALLBACK_KEY] ?? new Map<string, Map<string, TranscriptFallbackEntry>>();
+if (!fallbackGlobal[TRANSCRIPT_FALLBACK_KEY]) {
+  fallbackGlobal[TRANSCRIPT_FALLBACK_KEY] = transcriptFallbackStore;
+}
+
+const canUseTranscriptFallback = () => process.env.NODE_ENV !== 'production';
+
+const upsertTranscriptFallback = (sessionId: string, entries: TranscriptFallbackEntry[], retentionCutoff: number) => {
+  const existing = transcriptFallbackStore.get(sessionId) ?? new Map<string, TranscriptFallbackEntry>();
+  for (const entry of entries) {
+    if (!Number.isFinite(entry.timestamp) || entry.timestamp < retentionCutoff) continue;
+    existing.set(entry.eventId, entry);
+  }
+  for (const [eventId, entry] of existing.entries()) {
+    if (!Number.isFinite(entry.timestamp) || entry.timestamp < retentionCutoff) {
+      existing.delete(eventId);
+    }
+  }
+  transcriptFallbackStore.set(sessionId, existing);
+};
+
+const readTranscriptFallback = (sessionId: string, limit: number, retentionCutoff: number) => {
+  const entries = Array.from(transcriptFallbackStore.get(sessionId)?.values() ?? [])
+    .filter((entry) => Number.isFinite(entry.timestamp) && entry.timestamp >= retentionCutoff)
+    .sort((a, b) => a.timestamp - b.timestamp)
+    .slice(Math.max(0, (transcriptFallbackStore.get(sessionId)?.size ?? 0) - limit))
+    .map((entry) => ({
+      eventId: entry.eventId,
+      participantId: entry.participantId,
+      participantName: entry.participantName,
+      text: entry.text,
+      timestamp: entry.timestamp,
+      manual: Boolean(entry.manual),
+    }));
+  return entries;
+};
+
 export async function GET(req: NextRequest) {
   const { supabase, isAuthenticated } = await getServerClient(req);
 
@@ -112,6 +164,11 @@ export async function GET(req: NextRequest) {
     .limit(limit);
 
   if (error) {
+    if (canUseTranscriptFallback()) {
+      return NextResponse.json({
+        transcript: readTranscriptFallback(sessionId, limit, retentionCutoff),
+      });
+    }
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
@@ -158,6 +215,14 @@ export async function POST(req: NextRequest) {
 
   const { sessionId, entries } = parsed.data;
   const retentionCutoff = Date.now() - TRANSCRIPT_RETENTION_DAYS * 24 * 60 * 60 * 1000;
+  const fallbackRows: TranscriptFallbackEntry[] = entries.map((entry) => ({
+    eventId: entry.eventId,
+    participantId: entry.participantId,
+    participantName: entry.participantName ?? null,
+    text: entry.text,
+    timestamp: entry.timestamp,
+    manual: entry.manual ?? false,
+  }));
 
   const { data: session, error: sessionErr } = await supabase
     .from('canvas_sessions')
@@ -166,6 +231,10 @@ export async function POST(req: NextRequest) {
     .maybeSingle();
 
   if (sessionErr) {
+    if (canUseTranscriptFallback()) {
+      upsertTranscriptFallback(sessionId, fallbackRows, retentionCutoff);
+      return NextResponse.json({ ok: true, fallback: true });
+    }
     return NextResponse.json({ error: sessionErr.message }, { status: 500 });
   }
 
@@ -173,6 +242,10 @@ export async function POST(req: NextRequest) {
   const sessionRow = session as unknown as SessionRow | null;
 
   if (!sessionRow?.room_name) {
+    if (canUseTranscriptFallback()) {
+      upsertTranscriptFallback(sessionId, fallbackRows, retentionCutoff);
+      return NextResponse.json({ ok: true, fallback: true });
+    }
     return NextResponse.json({ error: 'Session not found' }, { status: 404 });
   }
 
@@ -205,6 +278,14 @@ export async function POST(req: NextRequest) {
     .upsert(freshRows, { onConflict: 'event_id', ignoreDuplicates: true });
 
   if (error) {
+    if (canUseTranscriptFallback()) {
+      upsertTranscriptFallback(
+        sessionId,
+        fallbackRows.map((entry) => ({ ...entry, roomName })),
+        retentionCutoff,
+      );
+      return NextResponse.json({ ok: true, fallback: true });
+    }
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 

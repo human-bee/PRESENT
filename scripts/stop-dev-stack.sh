@@ -104,66 +104,115 @@ should_stop() {
   return 1
 }
 
-stop_process() {
-  local label="$1"
-  local script="$2"
-  local pid_file="$LOG_DIR/$script.pid"
+service_pattern() {
+  local script="$1"
+  case "$script" in
+    "lk:server:dev")
+      echo "livekit-server --dev"
+      ;;
+    "sync:dev")
+      echo "scripts/tldraw-sync-server/server.ts"
+      ;;
+    "agent:conductor")
+      echo "src/lib/agents/conductor/index.ts"
+      ;;
+    "agent:realtime")
+      echo "src/lib/agents/realtime/voice-agent.ts"
+      ;;
+    "dev")
+      echo "next dev --webpack"
+      ;;
+    *)
+      echo ""
+      ;;
+  esac
+}
 
-  if [ ! -f "$pid_file" ]; then
-    echo "[$label] no pid file, nothing to stop."
+pid_matches_root() {
+  local pid="$1"
+  if ! ps -p "$pid" >/dev/null 2>&1; then
+    return 1
+  fi
+  if ! command -v lsof >/dev/null 2>&1; then
+    return 0
+  fi
+  lsof -p "$pid" 2>/dev/null | grep "cwd" | grep -q "$ROOT_DIR"
+}
+
+find_service_pids() {
+  local script="$1"
+  local pattern
+  pattern="$(service_pattern "$script")"
+  if [[ -z "$pattern" ]]; then
+    return
+  fi
+
+  local candidates
+  candidates=$(pgrep -f "$pattern" 2>/dev/null || true)
+  if [[ -z "$candidates" ]]; then
     return
   fi
 
   local pid
-  pid="$(cat "$pid_file")"
+  for pid in $candidates; do
+    if pid_matches_root "$pid"; then
+      echo "$pid"
+    fi
+  done
+}
 
+terminate_pid() {
+  local pid="$1"
+  local label="$2"
   if ! ps -p "$pid" >/dev/null 2>&1; then
-    echo "[$label] process $pid not running (removing stale pid file)."
-    rm -f "$pid_file"
     return
   fi
-
   echo "[$label] stopping pid $pid..."
   kill "$pid" >/dev/null 2>&1 || true
-
   for _ in {1..10}; do
     if ps -p "$pid" >/dev/null 2>&1; then
-      sleep 0.5
+      sleep 0.3
     else
       break
     fi
   done
-
   if ps -p "$pid" >/dev/null 2>&1; then
-    echo "[$label] still running; sending SIGKILL."
+    echo "[$label] still running; sending SIGKILL to $pid."
     kill -9 "$pid" >/dev/null 2>&1 || true
   fi
-
-  rm -f "$pid_file"
-  echo "[$label] stopped."
 }
 
-kill_by_cwd() {
-  local script_name="$1"
-  local label="$2"
-  
-  # Find PIDs matching the npm run command
-  local pids
-  pids=$(pgrep -f "npm run $script_name" || echo "")
-  
-  for pid in $pids; do
-    # Check if the process CWD matches our ROOT_DIR
-    # lsof output format: command pid user fd type device size/off node name
-    # We grep for 'cwd' and the ROOT_DIR
-    if lsof -p "$pid" 2>/dev/null | grep "cwd" | grep -q "$ROOT_DIR"; then
-      echo "[$label] killing process $pid (cwd match)"
-      kill "$pid" 2>/dev/null || true
-      sleep 0.2
-      if ps -p "$pid" >/dev/null 2>&1; then
-        kill -9 "$pid" 2>/dev/null || true
-      fi
+stop_process() {
+  local label="$1"
+  local script="$2"
+  local pid_file="$LOG_DIR/$script.pid"
+  local stopped_any=0
+
+  if [[ -f "$pid_file" ]]; then
+    local pid
+    pid="$(cat "$pid_file")"
+    if [[ -n "$pid" ]]; then
+      terminate_pid "$pid" "$label"
+      stopped_any=1
     fi
-  done
+    rm -f "$pid_file"
+  fi
+
+  local discovered
+  discovered="$(find_service_pids "$script" | tr '\n' ' ' | xargs || true)"
+  if [[ -n "$discovered" ]]; then
+    local pid
+    for pid in $discovered; do
+      terminate_pid "$pid" "$label"
+      stopped_any=1
+    done
+  fi
+
+  if [[ "$stopped_any" -eq 0 ]]; then
+    echo "[$label] no matching processes found."
+  else
+    echo "[$label] stopped."
+  fi
 }
 
 kill_port() {
@@ -203,7 +252,6 @@ if should_stop "agent:realtime"; then
 fi
 if should_stop "dev"; then
   stop_process "Next dev" "dev"
-  kill_by_cwd "dev" "ProcessGuard:Web"
   kill_port 3000 "PortGuard:Web"
 fi
 if should_stop "lk:server:dev"; then

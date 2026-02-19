@@ -128,4 +128,61 @@ describe('/api/admin/agents/overview', () => {
     });
     expect(json.activeWorkers).toBe(2);
   });
+
+  it('falls back to unknown provider buckets when provider queries error', async () => {
+    requireAgentAdminUserIdMock.mockResolvedValue({ ok: true, userId: 'admin-1', mode: 'allowlist' });
+
+    const queryResults: QueryResult[] = [
+      { count: 0, error: null },
+      { count: 1, error: null },
+      { count: 0, error: null },
+      { count: 4, error: null },
+      { count: 0, error: null },
+      { data: [], error: null },
+      { count: 9, error: null },
+      { count: 2, error: null },
+      { error: { message: '' } },
+      {
+        data: [{ worker_id: 'worker-1', updated_at: '2026-02-19T00:00:00.000Z' }],
+        error: null,
+      },
+    ];
+
+    getAdminSupabaseClientMock.mockReturnValue({
+      from: jest.fn(() => {
+        const next = queryResults.shift();
+        if (!next) {
+          throw new Error('Unexpected query invocation');
+        }
+        return buildQuery(next);
+      }),
+    });
+
+    const GET = await loadGet();
+    const response = await GET({
+      nextUrl: new URL('http://localhost/api/admin/agents/overview'),
+    } as import('next/server').NextRequest);
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.providerMix).toMatchObject({
+      openai: 0,
+      anthropic: 0,
+      google: 0,
+      cerebras: 0,
+      together: 0,
+      debug: 0,
+      unknown: 9,
+    });
+    expect(json.providerFailures).toMatchObject({
+      openai: 0,
+      anthropic: 0,
+      google: 0,
+      cerebras: 0,
+      together: 0,
+      debug: 0,
+      unknown: 2,
+    });
+    expect(json.activeWorkers).toBe(1);
+  });
 });

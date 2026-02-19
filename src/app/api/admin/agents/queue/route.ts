@@ -27,6 +27,7 @@ const parseLimit = (searchParams: URLSearchParams): number => {
 };
 
 const MAX_PROVIDER_FILTER_SCAN = 5_000;
+const MAX_TRACE_DIAGNOSTIC_ROWS = 50_000;
 const PROVIDER_PARITY_COLUMNS = [
   'provider',
   'model',
@@ -149,6 +150,7 @@ const normalizeTask = (row: AgentTaskRow): AgentTaskRow => ({
 const enrichWithTraceDiagnostics = async (
   db: ReturnType<typeof getAdminSupabaseClient>,
   tasks: AgentTaskRow[],
+  traceIdFilter?: string,
 ): Promise<QueueTaskWithDiagnostics[]> => {
   const normalizedTasks = tasks.map(normalizeTask);
   if (normalizedTasks.length === 0) {
@@ -156,7 +158,7 @@ const enrichWithTraceDiagnostics = async (
   }
 
   const taskIds = normalizedTasks.map((task) => task.id);
-  const traceLimit = Math.max(250, Math.min(4_000, taskIds.length * 8));
+  const traceLimit = Math.max(500, Math.min(MAX_TRACE_DIAGNOSTIC_ROWS, taskIds.length * 12));
   const primaryTraceQuery = await db
     .from('agent_trace_events')
     .select(TRACE_META_SELECT)
@@ -184,15 +186,33 @@ const enrichWithTraceDiagnostics = async (
 
   const latestByTaskId = new Map<string, TraceMetaRow>();
   const failureByTaskId = new Map<string, TraceMetaRow>();
+  const successByTaskId = new Map<string, TraceMetaRow>();
+  const traceIdByTaskId = new Map<string, string>();
+  const toMillis = (value: string | null | undefined): number => {
+    if (!value) return Number.NEGATIVE_INFINITY;
+    const parsed = Date.parse(value);
+    return Number.isFinite(parsed) ? parsed : Number.NEGATIVE_INFINITY;
+  };
   if (Array.isArray(traceRows)) {
     for (const row of traceRows as TraceMetaRow[]) {
       const taskId = typeof row.task_id === 'string' ? row.task_id : null;
       if (!taskId) continue;
+      if (!traceIdByTaskId.has(taskId) && typeof row.trace_id === 'string' && row.trace_id.trim().length > 0) {
+        traceIdByTaskId.set(taskId, row.trace_id.trim());
+      }
       if (!latestByTaskId.has(taskId)) {
         latestByTaskId.set(taskId, row);
       }
       const normalizedStage = typeof row.stage === 'string' ? row.stage.toLowerCase() : null;
       const normalizedStatus = typeof row.status === 'string' ? row.status.toLowerCase() : null;
+      const isSuccessEvent =
+        normalizedStage === 'completed' ||
+        normalizedStatus === 'succeeded' ||
+        normalizedStatus === 'ok' ||
+        normalizedStatus === 'completed';
+      if (isSuccessEvent && !successByTaskId.has(taskId)) {
+        successByTaskId.set(taskId, row);
+      }
       const isFailureEvent =
         normalizedStage === 'failed' ||
         normalizedStatus === 'failed' ||
@@ -207,9 +227,19 @@ const enrichWithTraceDiagnostics = async (
 
   return normalizedTasks.map((task) => {
     const latest = latestByTaskId.get(task.id) ?? null;
+    const fallbackTraceId = traceIdByTaskId.get(task.id) ?? null;
     const latestWorker = latest ? extractWorkerIdentity(latest.payload) : { workerId: null };
-    const failure = failureByTaskId.get(task.id) ?? null;
-    const fallbackFailureReason = task.error ?? null;
+    const latestFailure = failureByTaskId.get(task.id) ?? null;
+    const latestSuccess = successByTaskId.get(task.id) ?? null;
+    const taskSucceeded = task.status?.toLowerCase() === 'succeeded';
+    const failure =
+      latestFailure &&
+      taskSucceeded &&
+      latestSuccess &&
+      toMillis(latestFailure.created_at) <= toMillis(latestSuccess.created_at)
+        ? null
+        : latestFailure;
+    const fallbackFailureReason = taskSucceeded ? null : task.error ?? null;
     const failureReason = failure
       ? extractFailureReason(failure.payload, fallbackFailureReason)
       : fallbackFailureReason;
@@ -239,6 +269,7 @@ const enrichWithTraceDiagnostics = async (
     const { params: _params, ...taskPublicFields } = task;
     return {
       ...taskPublicFields,
+      trace_id: task.trace_id ?? fallbackTraceId,
       worker_id: latestWorker.workerId,
       last_failure_stage: failureStage,
       last_failure_reason: failureReason,
@@ -250,7 +281,7 @@ const enrichWithTraceDiagnostics = async (
       provider_request_id: providerIdentity.providerRequestId,
       provider_context_url: providerIdentity.providerContextUrl,
     };
-  });
+  }).filter((task) => (traceIdFilter ? task.trace_id === traceIdFilter : true));
 };
 
 export async function GET(req: NextRequest) {
@@ -263,6 +294,7 @@ export async function GET(req: NextRequest) {
   const room = readOptional(searchParams, 'room');
   const status = readOptional(searchParams, 'status');
   const task = readOptional(searchParams, 'task');
+  const traceId = readOptional(searchParams, 'traceId');
   const provider = readOptional(searchParams, 'provider');
   const providerPath = readOptional(searchParams, 'providerPath');
   const limit = parseLimit(searchParams);
@@ -284,6 +316,7 @@ export async function GET(req: NextRequest) {
       if (room) query = query.eq('room', room);
       if (status) query = query.eq('status', status);
       if (task) query = query.eq('task', task);
+      if (traceId && selectColumns.includes('trace_id')) query = query.eq('trace_id', traceId);
       return query;
     };
 
@@ -331,14 +364,15 @@ export async function GET(req: NextRequest) {
         throw queryResult.error;
       }
 
-      const enrichedTasks = await enrichWithTraceDiagnostics(db, taskRows);
+      const enrichedTasks = await enrichWithTraceDiagnostics(db, taskRows, traceId);
       const filteredTasks = enrichedTasks
         .filter((item) => (normalizedProvider ? item.provider === normalizedProvider : true))
         .filter((item) => (normalizedProviderPath ? item.provider_path === normalizedProviderPath : true))
         .slice(0, limit);
 
+      const needsCompatTraceScan = Boolean(traceId && !includeTraceId);
       const shouldExpandScan =
-        Boolean(normalizedProvider || normalizedProviderPath) &&
+        Boolean(normalizedProvider || normalizedProviderPath || needsCompatTraceScan) &&
         filteredTasks.length < limit &&
         taskRows.length >= fetchLimit &&
         fetchLimit < MAX_PROVIDER_FILTER_SCAN;

@@ -8,7 +8,7 @@ import type { CanvasShapeSummary } from '@/lib/agents/shared/supabase-context';
 import { ACTION_VERSION } from '@/lib/canvas-agent/contract/types';
 import { OffsetManager, interpretBounds } from './offset';
 import { handleStructuredStreaming } from './streaming';
-import type { AgentAction } from '@/lib/canvas-agent/contract/types';
+import type { AgentAction, AgentTraceEvent } from '@/lib/canvas-agent/contract/types';
 import { parseAction } from '@/lib/canvas-agent/contract/parsers';
 import { SessionScheduler } from './scheduler';
 import { addTodo, listTodos, type TodoItem as StoredTodoItem } from './todos';
@@ -34,6 +34,11 @@ import { normalizeFairyContextProfile, type FairyContextProfile } from '@/lib/fa
 import { AgentTaskQueue } from '@/lib/agents/shared/queue';
 import { enqueueCanvasFollowup, type CanvasFollowupInput } from './followup-queue';
 import type { JsonObject } from '@/lib/utils/json-schema';
+import {
+  describeRetryError,
+  isRetryableProviderError,
+  parseRetryEnvInt,
+} from '@/lib/agents/shared/provider-retry';
 
 let teacherRuntimeWarningLogged = false;
 let durableFollowupQueue: AgentTaskQueue | null | undefined;
@@ -91,6 +96,55 @@ const delay = (ms: number) =>
     setTimeout(resolve, ms);
   });
 
+const INVOKE_RETRY_ATTEMPTS = parseRetryEnvInt(process.env.CANVAS_AGENT_INVOKE_RETRY_ATTEMPTS, 3, {
+  min: 1,
+  max: 8,
+});
+const INVOKE_RETRY_BASE_DELAY_MS = parseRetryEnvInt(process.env.CANVAS_AGENT_INVOKE_RETRY_BASE_DELAY_MS, 300, {
+  min: 0,
+  max: 10_000,
+});
+const INVOKE_RETRY_MAX_DELAY_MS = parseRetryEnvInt(process.env.CANVAS_AGENT_INVOKE_RETRY_MAX_DELAY_MS, 4_000, {
+  min: 1,
+  max: 30_000,
+});
+const FOLLOWUP_INVOKE_RETRY_ATTEMPTS = parseRetryEnvInt(process.env.CANVAS_AGENT_FOLLOWUP_INVOKE_RETRY_ATTEMPTS, 3, {
+  min: 1,
+  max: 8,
+});
+const FOLLOWUP_INVOKE_RETRY_BASE_DELAY_MS = parseRetryEnvInt(process.env.CANVAS_AGENT_FOLLOWUP_INVOKE_RETRY_BASE_DELAY_MS, 400, {
+  min: 0,
+  max: 10_000,
+});
+const FOLLOWUP_INVOKE_RETRY_MAX_DELAY_MS = parseRetryEnvInt(process.env.CANVAS_AGENT_FOLLOWUP_INVOKE_RETRY_MAX_DELAY_MS, 5_000, {
+  min: 1,
+  max: 30_000,
+});
+const FOLLOWUP_LOOP_BASE_DELAY_MS = parseRetryEnvInt(process.env.CANVAS_AGENT_FOLLOWUP_LOOP_BASE_DELAY_MS, 300, {
+  min: 0,
+  max: 5_000,
+});
+const FOLLOWUP_LOOP_MAX_DELAY_MS = parseRetryEnvInt(process.env.CANVAS_AGENT_FOLLOWUP_LOOP_MAX_DELAY_MS, 2_500, {
+  min: 1,
+  max: 15_000,
+});
+
+const computeInvokeRetryDelayMs = (attempt: number) =>
+  Math.min(
+    INVOKE_RETRY_MAX_DELAY_MS,
+    INVOKE_RETRY_BASE_DELAY_MS * 2 ** Math.max(0, attempt - 1),
+  );
+const computeFollowupInvokeRetryDelayMs = (attempt: number) =>
+  Math.min(
+    FOLLOWUP_INVOKE_RETRY_MAX_DELAY_MS,
+    FOLLOWUP_INVOKE_RETRY_BASE_DELAY_MS * 2 ** Math.max(0, attempt - 1),
+  );
+const computeFollowupLoopDelayMs = (depth: number) =>
+  Math.min(
+    FOLLOWUP_LOOP_MAX_DELAY_MS,
+    FOLLOWUP_LOOP_BASE_DELAY_MS * 2 ** Math.max(0, depth - 1),
+  );
+
 const parseTraceEventBudget = (): number => {
   const raw = process.env.CANVAS_AGENT_TRACE_MAX_EVENTS;
   if (typeof raw !== 'string' || raw.trim().length === 0) return 120;
@@ -145,6 +199,33 @@ const isPromptTooLongError = (error: unknown): boolean => {
   if (direct.includes('prompt is too long')) return true;
   const nested = typeof (error as any)?.data?.error?.message === 'string' ? String((error as any).data.error.message).toLowerCase() : '';
   return nested.includes('prompt is too long');
+};
+
+const isStructuredOutputSchemaRetryableError = (error: unknown): boolean => {
+  if (!error || typeof error !== 'object') return false;
+  const candidate = error as {
+    name?: unknown;
+    message?: unknown;
+    text?: unknown;
+    cause?: unknown;
+  };
+  const name = typeof candidate.name === 'string' ? candidate.name.toLowerCase() : '';
+  const message = typeof candidate.message === 'string' ? candidate.message.toLowerCase() : '';
+  const text = typeof candidate.text === 'string' ? candidate.text.toLowerCase() : '';
+  const causeMessage =
+    candidate.cause && typeof candidate.cause === 'object' && typeof (candidate.cause as any).message === 'string'
+      ? String((candidate.cause as any).message).toLowerCase()
+      : '';
+  const combined = `${name} ${message} ${causeMessage}`;
+  const isSchemaFailure =
+    combined.includes('no object generated') ||
+    combined.includes('type validation failed') ||
+    combined.includes('did not match schema');
+  if (!isSchemaFailure) return false;
+
+  if (combined.includes('expected array') && combined.includes('received string')) return true;
+  if (text.includes('"actions"') && text.includes('[') && text.includes(']')) return true;
+  return false;
 };
 
 const BRAND_COLOR_ALIASES: Record<string, string> = {
@@ -312,6 +393,7 @@ type SessionMetrics = {
   docVersion?: string;
   chunkCount: number;
   actionCount: number;
+  mutatingActionCount: number;
   followupCount: number;
   retryCount: number;
   ttfb?: number;
@@ -364,6 +446,7 @@ function logMetrics(
     payload.duration = metrics.completedAt ? metrics.completedAt - metrics.startedAt : 0;
     payload.chunkCount = metrics.chunkCount;
     payload.actionCount = metrics.actionCount;
+    payload.mutatingActionCount = metrics.mutatingActionCount;
     payload.followupCount = metrics.followupCount;
     payload.shapeCount = metrics.shapeCount;
     payload.transcriptLines = metrics.transcriptLines;
@@ -448,6 +531,7 @@ export async function runCanvasAgent(args: RunArgs) {
     startedAt: Date.now(),
     chunkCount: 0,
     actionCount: 0,
+    mutatingActionCount: 0,
     followupCount: 0,
     retryCount: 0,
     preset: cfg.preset,
@@ -456,20 +540,7 @@ export async function runCanvasAgent(args: RunArgs) {
   let traceEventsSent = 0;
 
   const emitTrace = (
-    step:
-      | 'run_start'
-      | 'screenshot_requested'
-      | 'screenshot_received'
-      | 'screenshot_failed'
-      | 'model_call'
-      | 'chunk_processed'
-      | 'actions_dispatched'
-      | 'ack_received'
-      | 'ack_timeout'
-      | 'ack_retry'
-      | 'followup_enqueued'
-      | 'run_complete'
-      | 'run_error',
+    step: AgentTraceEvent['step'],
     extras?: {
       seq?: number;
       partial?: boolean;
@@ -1241,6 +1312,7 @@ const normalizeRawAction = (
       if (worldActions.length === 0) return 0;
 
       const dispatchableActions = worldActions.filter((action) => action.name !== 'message');
+      const mutatingActions = dispatchableActions.filter((action) => action.name !== 'think');
       const chatOnlyActions = worldActions.filter((action) => action.name === 'message');
 
       if (dispatchableActions.length > 0) {
@@ -1254,6 +1326,7 @@ const normalizeRawAction = (
         });
         if (shouldDispatch) {
           metrics.actionCount += dispatchableActions.length;
+          metrics.mutatingActionCount += mutatingActions.length;
           emitTrace('actions_dispatched', {
             seq: seqNumber,
             partial,
@@ -1649,6 +1722,7 @@ const normalizeRawAction = (
       }
     };
 
+    let invokeRetryAttempt = 0;
     while (true) {
       try {
         await invokeModel();
@@ -1664,11 +1738,52 @@ const normalizeRawAction = (
             continue;
           }
         }
+        const retryableProviderFailure = isRetryableProviderError(error);
+        const retryableSchemaFailure = isStructuredOutputSchemaRetryableError(error);
+        if (retryableProviderFailure || retryableSchemaFailure) {
+          invokeRetryAttempt += 1;
+          const canRetry = invokeRetryAttempt < INVOKE_RETRY_ATTEMPTS;
+          if (canRetry) {
+            const delayMs = computeInvokeRetryDelayMs(invokeRetryAttempt);
+            emitTrace('model_retry', {
+              detail: {
+                attempt: invokeRetryAttempt,
+                maxAttempts: INVOKE_RETRY_ATTEMPTS,
+                delayMs,
+                reason: retryableProviderFailure
+                  ? describeRetryError(error)
+                  : 'structured_output_schema_mismatch',
+              },
+            });
+            if (cfg.debug) {
+              try {
+                console.warn('[CanvasAgent:ModelCall] transient provider failure, retrying', {
+                  roomId,
+                  sessionId,
+                    attempt: invokeRetryAttempt,
+                    maxAttempts: INVOKE_RETRY_ATTEMPTS,
+                    delayMs,
+                    error: retryableProviderFailure
+                      ? describeRetryError(error)
+                      : error instanceof Error
+                        ? `${error.name}: ${error.message}`
+                        : String(error),
+                  });
+              } catch {}
+            }
+            await delay(delayMs);
+            continue;
+          }
+        }
         throw error;
       }
     }
 
-    if (!lowActionRetryScheduled && metrics.actionCount < cfg.followups.lowActionThreshold) {
+    if (
+      !lowActionRetryScheduled &&
+      cfg.followups.lowActionThreshold > 0 &&
+      metrics.mutatingActionCount < cfg.followups.lowActionThreshold
+    ) {
       const retryHint =
         'Add more layout detail: ensure there is a headline block, supporting shapes, and three sticky notes with copy ideas.';
       const enqueued = await enqueueFollowupTask({
@@ -1697,6 +1812,15 @@ const normalizeRawAction = (
       loops++;
       const followInputRaw = (next.input || {}) as Record<string, unknown>;
       const followInput = { ...followInputRaw };
+      const followEnqueuedAt =
+        typeof (followInput as any).enqueuedAt === 'number' && Number.isFinite((followInput as any).enqueuedAt)
+          ? Number((followInput as any).enqueuedAt)
+          : Date.now();
+      const requiredFollowupDelayMs = computeFollowupLoopDelayMs(loops);
+      const elapsedSinceFollowupEnqueueMs = Date.now() - followEnqueuedAt;
+      if (requiredFollowupDelayMs > elapsedSinceFollowupEnqueueMs) {
+        await delay(requiredFollowupDelayMs - elapsedSinceFollowupEnqueueMs);
+      }
       const followTargetIds = Array.isArray((followInput as any).targetIds)
         ? (followInput as any).targetIds.filter((id: unknown): id is string => typeof id === 'string' && id.length > 0)
         : [];
@@ -1771,33 +1895,35 @@ const normalizeRawAction = (
         },
       });
 
-      if (followStreamingEnabled) {
-        const structuredFollow = await followProvider.streamStructured?.(followPrompt, {
-          system: CANVAS_AGENT_SYSTEM_PROMPT,
-          tuning: followTuning,
-        });
-        if (structuredFollow) {
-          let followRawProcessed = 0;
-          await handleStructuredStreaming(
-            structuredFollow,
-            async (delta) => {
-              if (!Array.isArray(delta) || delta.length === 0) return;
-              metrics.chunkCount++;
-              const currentSeq = followSeq++;
-              await processActions(delta, currentSeq, true, followEnqueueDetail);
-              followRawProcessed += delta.length;
-            },
-            async (finalActions) => {
-              if (!Array.isArray(finalActions) || finalActions.length === 0) return;
-              const pending = finalActions.slice(followRawProcessed);
-              followRawProcessed = finalActions.length;
-              if (pending.length === 0) return;
-              const currentSeq = followSeq++;
-              await processActions(pending, currentSeq, false, followEnqueueDetail);
-            },
-          );
+      const invokeFollowModel = async () => {
+        if (followStreamingEnabled) {
+          const structuredFollow = await followProvider.streamStructured?.(followPrompt, {
+            system: CANVAS_AGENT_SYSTEM_PROMPT,
+            tuning: followTuning,
+          });
+          if (structuredFollow) {
+            let followRawProcessed = 0;
+            await handleStructuredStreaming(
+              structuredFollow,
+              async (delta) => {
+                if (!Array.isArray(delta) || delta.length === 0) return;
+                metrics.chunkCount++;
+                const currentSeq = followSeq++;
+                await processActions(delta, currentSeq, true, followEnqueueDetail);
+                followRawProcessed += delta.length;
+              },
+              async (finalActions) => {
+                if (!Array.isArray(finalActions) || finalActions.length === 0) return;
+                const pending = finalActions.slice(followRawProcessed);
+                followRawProcessed = finalActions.length;
+                if (pending.length === 0) return;
+                const currentSeq = followSeq++;
+                await processActions(pending, currentSeq, false, followEnqueueDetail);
+              },
+            );
+          }
+          return;
         }
-      } else {
         for await (const chunk of followProvider.stream(followPrompt, { system: CANVAS_AGENT_SYSTEM_PROMPT, tuning: followTuning })) {
           if (chunk.type !== 'json') continue;
           const actionsRaw = (chunk.data as any)?.actions;
@@ -1805,6 +1931,56 @@ const normalizeRawAction = (
           metrics.chunkCount++;
           const currentSeq = followSeq++;
           await processActions(actionsRaw, currentSeq, true, followEnqueueDetail);
+        }
+      };
+
+      let followInvokeRetryAttempt = 0;
+      while (true) {
+        try {
+          await invokeFollowModel();
+          break;
+        } catch (error) {
+          const retryableProviderFailure = isRetryableProviderError(error);
+          const retryableSchemaFailure = isStructuredOutputSchemaRetryableError(error);
+          if (retryableProviderFailure || retryableSchemaFailure) {
+            followInvokeRetryAttempt += 1;
+            const canRetry = followInvokeRetryAttempt < FOLLOWUP_INVOKE_RETRY_ATTEMPTS;
+            if (canRetry) {
+              const delayMs = computeFollowupInvokeRetryDelayMs(followInvokeRetryAttempt);
+              emitTrace('model_retry', {
+                detail: {
+                  phase: 'followup',
+                  depth: followBaseDepth,
+                  attempt: followInvokeRetryAttempt,
+                  maxAttempts: FOLLOWUP_INVOKE_RETRY_ATTEMPTS,
+                  delayMs,
+                  reason: retryableProviderFailure
+                    ? describeRetryError(error)
+                    : 'structured_output_schema_mismatch',
+                },
+              });
+              if (cfg.debug) {
+                try {
+                  console.warn('[CanvasAgent:FollowupModelCall] transient provider failure, retrying', {
+                    roomId,
+                    sessionId,
+                    depth: followBaseDepth,
+                    attempt: followInvokeRetryAttempt,
+                    maxAttempts: FOLLOWUP_INVOKE_RETRY_ATTEMPTS,
+                    delayMs,
+                    error: retryableProviderFailure
+                      ? describeRetryError(error)
+                      : error instanceof Error
+                        ? `${error.name}: ${error.message}`
+                        : String(error),
+                  });
+                } catch {}
+              }
+              await delay(delayMs);
+              continue;
+            }
+          }
+          throw error;
         }
       }
       next = scheduler.dequeue(sessionId);

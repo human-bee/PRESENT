@@ -198,6 +198,14 @@ const deriveCanvasLookup = (room: string) => {
 
 const LIVEKIT_ROOM_WAIT_TIMEOUT_MS = Number(process.env.LIVEKIT_ROOM_WAIT_TIMEOUT_MS ?? 5000);
 const LIVEKIT_ROOM_WAIT_INTERVAL_MS = Number(process.env.LIVEKIT_ROOM_WAIT_INTERVAL_MS ?? 250);
+const LIVEKIT_SEND_RETRY_ATTEMPTS = Math.max(
+  1,
+  Number.parseInt(process.env.LIVEKIT_SEND_RETRY_ATTEMPTS ?? '3', 10) || 3,
+);
+const LIVEKIT_SEND_RETRY_DELAY_MS = Math.max(
+  0,
+  Number.parseInt(process.env.LIVEKIT_SEND_RETRY_DELAY_MS ?? '200', 10) || 200,
+);
 
 let cachedRoomServiceClient: RoomServiceClient | null = null;
 let cachedLivekitRestUrl: string | null = null;
@@ -207,6 +215,7 @@ const resolveLivekitRestUrl = () => {
     process.env.LIVEKIT_REST_URL ||
     process.env.LIVEKIT_URL ||
     process.env.NEXT_PUBLIC_LK_SERVER_URL ||
+    process.env.NEXT_PUBLIC_LIVEKIT_URL ||
     process.env.LIVEKIT_HOST;
 
   if (!raw) {
@@ -226,9 +235,8 @@ const resolveLivekitRestUrl = () => {
 };
 
 const getRoomServiceClient = () => {
-  if (cachedRoomServiceClient) {
-    return cachedRoomServiceClient;
-  }
+  const restUrl = resolveLivekitRestUrl();
+  if (cachedRoomServiceClient && cachedLivekitRestUrl === restUrl) return cachedRoomServiceClient;
 
   const apiKey = process.env.LIVEKIT_API_KEY;
   const apiSecret = process.env.LIVEKIT_API_SECRET;
@@ -237,7 +245,6 @@ const getRoomServiceClient = () => {
     throw new Error('LiveKit API key/secret missing for REST broadcast');
   }
 
-  const restUrl = resolveLivekitRestUrl();
   cachedLivekitRestUrl = restUrl;
   cachedRoomServiceClient = new RoomServiceClient(restUrl, apiKey, apiSecret);
   return cachedRoomServiceClient;
@@ -245,7 +252,42 @@ const getRoomServiceClient = () => {
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-const ensureLivekitRoom = async (room: string) => {
+type LivekitRoomResolution = {
+  client: RoomServiceClient;
+  normalizedRoom: string;
+  roomReady: boolean;
+  waitError?: string | null;
+};
+
+const isRoomAlreadyExistsError = (error: unknown): boolean => {
+  const typed = error as { code?: unknown; status?: unknown; statusCode?: unknown } | null;
+  const numericCode =
+    typeof typed?.code === 'number'
+      ? typed.code
+      : typeof typed?.statusCode === 'number'
+        ? typed.statusCode
+        : typeof typed?.status === 'number'
+          ? typed.status
+          : null;
+  if (numericCode === 6 || numericCode === 409) return true;
+  const stringCode = typeof typed?.code === 'string' ? typed.code.trim().toLowerCase() : '';
+  if (stringCode === 'already_exists' || stringCode === 'alreadyexists') return true;
+  const message =
+    error instanceof Error
+      ? error.message
+      : typeof error === 'string'
+        ? error
+        : String(error ?? '');
+  const normalized = message.toLowerCase();
+  return (
+    normalized.includes('already exists') ||
+    normalized.includes('room already exists') ||
+    normalized.includes('alreadyexists') ||
+    normalized.includes('code = alreadyexists')
+  );
+};
+
+const ensureLivekitRoom = async (room: string): Promise<LivekitRoomResolution> => {
   const client = getRoomServiceClient();
   const normalized = normalizeRoomName(room);
   const deadline = Date.now() + LIVEKIT_ROOM_WAIT_TIMEOUT_MS;
@@ -255,12 +297,26 @@ const ensureLivekitRoom = async (room: string) => {
     try {
       const rooms = await client.listRooms([normalized]);
       if (rooms?.some((entry) => entry?.name === normalized)) {
-        return { client, normalizedRoom: normalized };
+        return { client, normalizedRoom: normalized, roomReady: true, waitError: null };
       }
     } catch (error) {
       lastError = error;
     }
     await sleep(LIVEKIT_ROOM_WAIT_INTERVAL_MS);
+  }
+
+  try {
+    await client.createRoom({
+      name: normalized,
+      emptyTimeout: 60,
+      departureTimeout: 30,
+    });
+    return { client, normalizedRoom: normalized, roomReady: true, waitError: null };
+  } catch (error) {
+    if (isRoomAlreadyExistsError(error)) {
+      return { client, normalizedRoom: normalized, roomReady: true, waitError: null };
+    }
+    lastError = error ?? lastError;
   }
 
   const context = {
@@ -272,7 +328,60 @@ const ensureLivekitRoom = async (room: string) => {
   try {
     console.error('[LiveKit] Room not found before timeout', context);
   } catch { }
-  throw new Error(`LiveKit room not found before timeout: ${normalized}`);
+
+  return {
+    client,
+    normalizedRoom: normalized,
+    roomReady: false,
+    waitError:
+      lastError instanceof Error
+        ? `${lastError.message}${cachedLivekitRestUrl ? ` (rest=${cachedLivekitRestUrl})` : ''}`
+        : String(lastError ?? ''),
+  };
+};
+
+const sendLivekitData = async (params: {
+  room: string;
+  topic: string;
+  data: Uint8Array;
+}) => {
+  const { room, topic, data } = params;
+  let resolution = await ensureLivekitRoom(room);
+  let lastError: unknown =
+    resolution.roomReady
+      ? null
+      : new Error(
+          resolution.waitError && resolution.waitError.trim().length > 0
+            ? `LiveKit room readiness failed for ${resolution.normalizedRoom}: ${resolution.waitError}`
+            : `LiveKit room not found before timeout: ${resolution.normalizedRoom}`,
+        );
+
+  for (let attempt = 0; attempt < LIVEKIT_SEND_RETRY_ATTEMPTS; attempt += 1) {
+    try {
+      await resolution.client.sendData(
+        resolution.normalizedRoom,
+        data,
+        DataPacket_Kind.RELIABLE,
+        { topic },
+      );
+      return;
+    } catch (error) {
+      lastError = error;
+      if (attempt + 1 >= LIVEKIT_SEND_RETRY_ATTEMPTS) {
+        break;
+      }
+      if (LIVEKIT_SEND_RETRY_DELAY_MS > 0) {
+        await sleep(LIVEKIT_SEND_RETRY_DELAY_MS);
+      }
+      resolution = await ensureLivekitRoom(room);
+    }
+  }
+
+  throw new Error(
+    `LiveKit sendData failed for ${resolution.normalizedRoom}: ${
+      lastError instanceof Error ? lastError.message : String(lastError ?? 'unknown')
+    }`,
+  );
 };
 
 const fallbackKey = (room: string, docId: string) => `${room}::${docId}`;
@@ -950,11 +1059,10 @@ export async function broadcastCanvasAction(event: {
   const { room, tool, params } = event;
   const action = { tool, params, timestamp: Date.now() };
 
-  const { client, normalizedRoom } = await ensureLivekitRoom(room);
   const data = new TextEncoder().encode(
     JSON.stringify({ type: 'tool_call', payload: action, source: 'canvas-steward', timestamp: Date.now() }),
   );
-  await client.sendData(normalizedRoom, data, DataPacket_Kind.RELIABLE, { topic: 'tool_call' });
+  await sendLivekitData({ room, data, topic: 'tool_call' });
 }
 
 export async function broadcastToolCall(event: {
@@ -966,11 +1074,10 @@ export async function broadcastToolCall(event: {
   const { room, tool, params, source = 'conductor' } = event;
   const action = { tool, params, timestamp: Date.now() };
 
-  const { client, normalizedRoom } = await ensureLivekitRoom(room);
   const data = new TextEncoder().encode(
     JSON.stringify({ type: 'tool_call', payload: action, source, timestamp: Date.now() }),
   );
-  await client.sendData(normalizedRoom, data, DataPacket_Kind.RELIABLE, { topic: 'tool_call' });
+  await sendLivekitData({ room, data, topic: 'tool_call' });
 }
 
 export async function broadcastAgentPrompt(event: {
@@ -1010,8 +1117,7 @@ export async function broadcastAgentPrompt(event: {
     }),
   );
 
-  const { client, normalizedRoom } = await ensureLivekitRoom(trimmedRoom);
-  await client.sendData(normalizedRoom, data, DataPacket_Kind.RELIABLE, { topic: 'agent_prompt' });
+  await sendLivekitData({ room: trimmedRoom, data, topic: 'agent_prompt' });
 }
 
 export async function broadcastTranscription(event: {
@@ -1037,8 +1143,7 @@ export async function broadcastTranscription(event: {
     timestamp: typeof timestamp === 'number' ? timestamp : Date.now(),
   };
   const data = new TextEncoder().encode(JSON.stringify(payload));
-  const { client, normalizedRoom } = await ensureLivekitRoom(trimmedRoom);
-  await client.sendData(normalizedRoom, data, DataPacket_Kind.RELIABLE, { topic: 'transcription' });
+  await sendLivekitData({ room: trimmedRoom, data, topic: 'transcription' });
 }
 
 export async function getTranscriptWindow(room: string, windowMs: number) {
