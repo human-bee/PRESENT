@@ -28,21 +28,29 @@ export function createCollaborationOverrides(options?: { roomName?: string }): T
               const viewport = editor.getViewportScreenBounds();
               const bounds = editor.getShapePageBounds(shape.id);
               if (bounds) {
+                const zoomRaw = Number((editor as any).getZoomLevel?.() ?? 1);
+                const zoom = Number.isFinite(zoomRaw) && zoomRaw > 0 ? zoomRaw : 1;
+                const shapeWRaw = Number((shape as any)?.props?.w ?? bounds.w);
+                const shapeHRaw = Number((shape as any)?.props?.h ?? bounds.h);
+                const shapeW = Number.isFinite(shapeWRaw) && shapeWRaw > 0 ? shapeWRaw : bounds.w;
+                const shapeH = Number.isFinite(shapeHRaw) && shapeHRaw > 0 ? shapeHRaw : bounds.h;
+                const viewportXRaw = Number((viewport as any).x);
+                const viewportYRaw = Number((viewport as any).y);
+                const viewportW = Math.max(1, Number((viewport as any).width) || 1);
+                const viewportH = Math.max(1, Number((viewport as any).height) || 1);
+                const viewportX = Number.isFinite(viewportXRaw) ? viewportXRaw : 0;
+                const viewportY = Number.isFinite(viewportYRaw) ? viewportYRaw : 0;
                 const screenPoint = editor.pageToScreen({
                   x: bounds.x + bounds.w / 2,
                   y: bounds.y + bounds.h / 2,
                 });
                 const topLeft = editor.pageToScreen({ x: bounds.x, y: bounds.y });
-                const bottomRight = editor.pageToScreen({
-                  x: bounds.x + bounds.w,
-                  y: bounds.y + bounds.h,
-                });
-                const pinnedX = screenPoint.x / viewport.width;
-                const pinnedY = screenPoint.y / viewport.height;
-                const pinnedLeft = topLeft.x / viewport.width;
-                const pinnedTop = topLeft.y / viewport.height;
-                const screenW = Math.max(1, Math.abs(bottomRight.x - topLeft.x));
-                const screenH = Math.max(1, Math.abs(bottomRight.y - topLeft.y));
+                const pinnedX = (screenPoint.x - viewportX) / viewportW;
+                const pinnedY = (screenPoint.y - viewportY) / viewportH;
+                const pinnedLeft = (topLeft.x - viewportX) / viewportW;
+                const pinnedTop = (topLeft.y - viewportY) / viewportH;
+                const screenW = Math.max(1, shapeW * zoom);
+                const screenH = Math.max(1, shapeH * zoom);
 
                 setLocalPin(roomName, String(shape.id), {
                   pinnedX: Math.max(0, Math.min(1, pinnedX)),
@@ -51,6 +59,8 @@ export function createCollaborationOverrides(options?: { roomName?: string }): T
                   pinnedTop: Math.max(0, Math.min(1, pinnedTop)),
                   screenW,
                   screenH,
+                  shapeW,
+                  shapeH,
                 });
               }
             } else {

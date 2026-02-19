@@ -1,0 +1,80 @@
+{
+  "runId": "2026-02-19T09-39-02-431Z",
+  "outDir": "/Users/bsteinher/.codex/worktrees/3e66/PRESENT/docs/scrapbooks/assets/livekit-pin-crop-mobile/2026-02-19T09-39-02-431Z",
+  "baseUrl": "http://localhost:3300",
+  "canvasId": "dev-495d07fd-0e08-4361-b172-edc149496073",
+  "componentId": "multi-pin-tile-a-mlt9rqb4",
+  "secondaryComponentId": "multi-pin-tile-b-mlt9rqb4",
+  "shapeIdA": "shape:shape-HXs2s2gLh_DUaYDWLQX5q",
+  "shapeIdB": "shape:shape-HXs2s2gLh_DUaYDWLQX5q",
+  "shape2IdA": "shape:shape-CiW5NuCRIMVmJ-GvqXR3k",
+  "shape2IdB": "shape:shape-CiW5NuCRIMVmJ-GvqXR3k",
+  "pinMethod": "event:tldraw:pinSelected",
+  "pinStateA": {
+    "key": "present:pins:canvas",
+    "entry": {
+      "pinnedX": 0.5,
+      "pinnedY": 0.5,
+      "pinnedLeft": 0.02325581395348838,
+      "pinnedTop": 0.31017402551590334,
+      "screenW": 224.65753424657535,
+      "screenH": 168.49315068493152,
+      "shapeW": 320,
+      "shapeH": 240
+    }
+  },
+  "pinDeltaA": {
+    "dx": 0,
+    "dy": 0,
+    "dw": 0,
+    "dh": 0
+  },
+  "before": {
+    "clientA": {
+      "screenshot": "/Users/bsteinher/.codex/worktrees/3e66/PRESENT/docs/scrapbooks/assets/livekit-pin-crop-mobile/2026-02-19T09-39-02-431Z/before-pin-client-a.png",
+      "rect": {
+        "x": 10.000000000000004,
+        "y": 289.0821917808219,
+        "width": 410,
+        "height": 353.8356164383562,
+        "centerX": 215,
+        "centerY": 466
+      }
+    },
+    "clientB": {
+      "screenshot": "/Users/bsteinher/.codex/worktrees/3e66/PRESENT/docs/scrapbooks/assets/livekit-pin-crop-mobile/2026-02-19T09-39-02-431Z/before-pin-client-b.png",
+      "rect": {
+        "x": 10.000000000000004,
+        "y": 289.0821917808219,
+        "width": 410,
+        "height": 353.8356164383562,
+        "centerX": 215,
+        "centerY": 466
+      }
+    }
+  },
+  "after": {
+    "clientA": {
+      "screenshot": "/Users/bsteinher/.codex/worktrees/3e66/PRESENT/docs/scrapbooks/assets/livekit-pin-crop-mobile/2026-02-19T09-39-02-431Z/after-pin-client-a.png",
+      "rect": {
+        "x": 10.000000000000004,
+        "y": 289.0821917808219,
+        "width": 410,
+        "height": 353.8356164383562,
+        "centerX": 215,
+        "centerY": 466
+      }
+    },
+    "clientB": {
+      "screenshot": "/Users/bsteinher/.codex/worktrees/3e66/PRESENT/docs/scrapbooks/assets/livekit-pin-crop-mobile/2026-02-19T09-39-02-431Z/after-pin-client-b.png",
+      "rect": {
+        "x": -17.810958904109587,
+        "y": 264.0002397260274,
+        "width": 403.8500000000001,
+        "height": 348.52808219178087,
+        "centerX": 184.11404109589046,
+        "centerY": 438.26428082191785
+      }
+    }
+  }
+}

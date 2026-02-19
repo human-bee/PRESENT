@@ -37,8 +37,19 @@ export function ParticipantToolbar({
 }: ParticipantToolbarProps) {
   if (!visible) return null;
 
+  const buttonSizeClass = isCoarsePointer ? 'h-12 w-12 rounded-lg' : 'h-11 w-11 rounded-md';
+  const iconSizeClass = isCoarsePointer ? 'h-5 w-5' : 'h-4 w-4';
+  const toolbarChromeClass = isCoarsePointer
+    ? 'rounded-2xl bg-black/65 px-2 py-2'
+    : 'rounded-lg bg-black/55 p-1.5';
+
   const renderButtons = () => (
-    <div className="bg-black/55 backdrop-blur-md rounded-lg p-1.5 flex items-center gap-1 shadow-lg">
+    <div
+      className={cn(
+        toolbarChromeClass,
+        'flex max-w-full items-center justify-center gap-1.5 shadow-lg backdrop-blur-md',
+      )}
+    >
       <button
         aria-label={
           effectiveAudioMuted
@@ -58,13 +69,18 @@ export function ParticipantToolbar({
           onToggleRemoteAudio();
         }}
         className={cn(
-          'w-11 h-11 rounded-md grid place-items-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--present-accent-ring)]',
+          buttonSizeClass,
+          'touch-manipulation grid place-items-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--present-accent-ring)]',
           effectiveAudioMuted
             ? 'bg-danger-solid text-white hover:opacity-90'
             : 'bg-white/10 text-white hover:bg-white/20',
         )}
       >
-        {effectiveAudioMuted ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+        {effectiveAudioMuted ? (
+          <MicOff className={iconSizeClass} />
+        ) : (
+          <Mic className={iconSizeClass} />
+        )}
       </button>
 
       <button
@@ -74,11 +90,12 @@ export function ParticipantToolbar({
           await onToggleLocalCamera();
         }}
         className={cn(
-          'w-11 h-11 rounded-md grid place-items-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--present-accent-ring)]',
+          buttonSizeClass,
+          'touch-manipulation grid place-items-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--present-accent-ring)]',
           videoMuted ? 'bg-danger-solid text-white hover:opacity-90' : 'bg-white/10 text-white hover:bg-white/20',
         )}
       >
-        {videoMuted ? <VideoOff className="w-4 h-4" /> : <Video className="w-4 h-4" />}
+        {videoMuted ? <VideoOff className={iconSizeClass} /> : <Video className={iconSizeClass} />}
       </button>
 
       {isLocal && (
@@ -87,9 +104,12 @@ export function ParticipantToolbar({
           onClick={async () => {
             await onToggleScreenShare();
           }}
-          className="w-11 h-11 rounded-md grid place-items-center bg-white/10 text-white hover:bg-white/20 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--present-accent-ring)]"
+          className={cn(
+            buttonSizeClass,
+            'touch-manipulation grid place-items-center bg-white/10 text-white transition-colors hover:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--present-accent-ring)]',
+          )}
         >
-          <ScreenShare className="w-4 h-4" />
+          <ScreenShare className={iconSizeClass} />
         </button>
       )}
 
@@ -97,9 +117,12 @@ export function ParticipantToolbar({
         aria-label="Tile options"
         onClick={openOptions}
         ref={optionsButtonRef}
-        className="w-11 h-11 rounded-md grid place-items-center bg-white/10 text-white hover:bg-white/20 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--present-accent-ring)]"
+        className={cn(
+          buttonSizeClass,
+          'touch-manipulation grid place-items-center bg-white/10 text-white transition-colors hover:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--present-accent-ring)]',
+        )}
       >
-        <MoreHorizontal className="w-4 h-4" />
+        <MoreHorizontal className={iconSizeClass} />
       </button>
     </div>
   );
@@ -115,7 +138,14 @@ export function ParticipantToolbar({
         aria-hidden={!overlayVisible}
       >
         <div
-          className="absolute bottom-2 right-2 pointer-events-auto"
+          className={cn(
+            'absolute pointer-events-auto',
+            isCoarsePointer
+              ? isMinimized
+                ? 'bottom-1 left-2 right-2 flex justify-center'
+                : 'bottom-2 left-2 right-2 flex justify-center'
+              : 'bottom-2 right-2',
+          )}
           onMouseDown={(e) => e.stopPropagation()}
           onPointerDown={(e) => e.stopPropagation()}
           onClick={(e) => e.stopPropagation()}
@@ -125,19 +155,6 @@ export function ParticipantToolbar({
           {renderButtons()}
         </div>
       </div>
-
-      {isCoarsePointer && !isMinimized && (
-        <div className="absolute bottom-2 right-2 pointer-events-auto">
-          <button
-            aria-label="Tile options"
-            onClick={openOptions}
-            ref={optionsButtonRef}
-            className="w-11 h-11 rounded-full bg-black/55 text-white backdrop-blur-md grid place-items-center shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--present-accent-ring)]"
-          >
-            <MoreHorizontal className="w-5 h-5" />
-          </button>
-        </div>
-      )}
     </>
   );
 }
