@@ -50,7 +50,7 @@ export const livekitParticipantTileSchema = z.object({
     .boolean()
     .optional()
     .describe('Mirror local self-view horizontally (default: true)'),
-  fit: z.enum(['cover', 'contain']).optional().describe('Video object-fit policy (default: cover)'),
+  fit: z.enum(['cover', 'contain']).optional().describe('Video object-fit policy (default: contain)'),
   demoMode: z
     .boolean()
     .optional()
@@ -82,7 +82,7 @@ export const LivekitParticipantTile = React.memo(function LivekitParticipantTile
   showParticipantName = true,
   isAgent = false,
   mirrorLocal = true,
-  fit = 'cover',
+  fit = 'contain',
   trackPreference = 'camera',
   demoMode = false,
   onIdentityChange,
