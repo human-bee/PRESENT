@@ -625,7 +625,10 @@ async function handleQuickShapesTask(room: string, payload: JsonObject) {
   }
 
   const shapeIds = actions
-    .map((action) => (typeof action.params?.id === 'string' ? action.params.id : null))
+    .map((action) => {
+      const params = action.params as Record<string, unknown> | undefined;
+      return typeof params?.id === 'string' ? params.id : null;
+    })
     .filter((id): id is string => Boolean(id && id.trim()));
 
   if (!ack) {

@@ -42,7 +42,7 @@ export const normalizeRuntimeScope = (value: unknown): string | null => {
 };
 
 export const resolveRuntimeScopeFromEnv = (
-  env: Partial<Record<(typeof LIVEKIT_SCOPE_ENV_KEYS)[number], string | undefined>> = process.env,
+  env: Record<string, string | undefined> = process.env as Record<string, string | undefined>,
 ): string | null => {
   for (const key of LIVEKIT_SCOPE_ENV_KEYS) {
     const normalized = normalizeRuntimeScope(env[key]);

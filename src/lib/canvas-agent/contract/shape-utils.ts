@@ -182,7 +182,7 @@ const normalizeLineLikePoints = (props: Record<string, unknown>) => {
   }
   if (normalized.length < 2) {
     const fallbackEnd: [number, number] = end ?? [start[0] + 120, start[1]];
-    const resolvedEnd =
+    const resolvedEnd: [number, number] =
       fallbackEnd[0] === start[0] && fallbackEnd[1] === start[1]
         ? [start[0] + 120, start[1]]
         : fallbackEnd;
