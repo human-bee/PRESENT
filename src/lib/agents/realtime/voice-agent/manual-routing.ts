@@ -1,4 +1,10 @@
 import { z } from 'zod';
+import {
+  describeRetryError,
+  isRetryableProviderError,
+  parseRetryEnvInt,
+  withProviderRetry,
+} from '@/lib/agents/shared/provider-retry';
 
 const routerDecisionSchema = z.object({
   route: z.enum(['canvas', 'none']),
@@ -9,6 +15,19 @@ export type ManualRouteDecision = z.infer<typeof routerDecisionSchema>;
 
 export function createManualInputRouter() {
   let routerModelCache: any = null;
+  const retryAttempts = parseRetryEnvInt(process.env.VOICE_AGENT_ROUTER_RETRY_ATTEMPTS, 3, {
+    min: 1,
+    max: 6,
+  });
+  const retryBaseDelayMs = parseRetryEnvInt(process.env.VOICE_AGENT_ROUTER_RETRY_BASE_DELAY_MS, 200, {
+    min: 0,
+    max: 10_000,
+  });
+  const retryMaxDelayMs = parseRetryEnvInt(process.env.VOICE_AGENT_ROUTER_RETRY_MAX_DELAY_MS, 2_500, {
+    min: 1,
+    max: 20_000,
+  });
+
   const localHeuristicRoute = (text: string): ManualRouteDecision | null => {
     const normalized = text.trim().toLowerCase();
     if (!normalized) return null;
@@ -74,14 +93,43 @@ export function createManualInputRouter() {
     ].join(' ');
 
     const { generateObject } = await import('ai');
-    const { object } = await (generateObject as unknown as (args: any) => Promise<{ object: any }>)({
-      model,
-      system,
-      prompt: text,
-      schema: routerDecisionSchema,
-      temperature: 0,
-      maxOutputTokens: 120,
-    });
+    let object: unknown;
+    try {
+      const response = await withProviderRetry(
+        async () =>
+          (generateObject as unknown as (args: any) => Promise<{ object: any }>)({
+            model,
+            system,
+            prompt: text,
+            schema: routerDecisionSchema,
+            temperature: 0,
+            maxOutputTokens: 120,
+          }),
+        {
+          provider: 'anthropic',
+          attempts: retryAttempts,
+          initialDelayMs: retryBaseDelayMs,
+          maxDelayMs: retryMaxDelayMs,
+          onRetry: ({ attempt, maxAttempts, delayMs, error }) => {
+            console.warn('[VoiceAgent] manual routing transient retry', {
+              attempt,
+              maxAttempts,
+              delayMs,
+              error: describeRetryError(error),
+            });
+          },
+        },
+      );
+      object = response.object;
+    } catch (error) {
+      if (isRetryableProviderError(error, { provider: 'anthropic' })) {
+        console.warn('[VoiceAgent] manual routing exhausted transient retries, using heuristic', {
+          error: describeRetryError(error),
+        });
+        return localHeuristicRoute(text);
+      }
+      throw error;
+    }
 
     const parsed = routerDecisionSchema.safeParse(object);
     if (!parsed.success) return localHeuristicRoute(text);

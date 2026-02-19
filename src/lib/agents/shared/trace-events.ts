@@ -45,6 +45,16 @@ type AgentTraceEventInput = {
 
 let supabase: SupabaseClient | null = null;
 const logger = createLogger('agents:trace-events');
+const TRACE_OPTIONAL_COLUMNS = [
+  'sampled',
+  'provider',
+  'model',
+  'provider_source',
+  'provider_path',
+  'provider_request_id',
+] as const;
+type TraceOptionalColumn = (typeof TRACE_OPTIONAL_COLUMNS)[number];
+const missingTraceColumns = new Set<TraceOptionalColumn>();
 
 const normalizeOptional = (value: unknown): string | undefined => {
   if (typeof value !== 'string') return undefined;
@@ -81,6 +91,93 @@ const toSafePayload = (value: unknown): JsonObject | undefined => {
   }
 };
 
+const includeTraceColumn = (column: TraceOptionalColumn): boolean => !missingTraceColumns.has(column);
+
+const buildTraceInsertRow = (
+  baseRow: Record<string, unknown>,
+  parity: ReturnType<typeof deriveProviderParity>,
+): Record<string, unknown> => {
+  const row: Record<string, unknown> = { ...baseRow };
+  if (includeTraceColumn('sampled')) {
+    row.sampled = true;
+  }
+  if (includeTraceColumn('provider')) {
+    row.provider = parity.provider;
+  }
+  if (includeTraceColumn('model')) {
+    row.model = parity.model;
+  }
+  if (includeTraceColumn('provider_source')) {
+    row.provider_source = parity.providerSource;
+  }
+  if (includeTraceColumn('provider_path')) {
+    row.provider_path = parity.providerPath;
+  }
+  if (includeTraceColumn('provider_request_id')) {
+    row.provider_request_id = parity.providerRequestId;
+  }
+  return row;
+};
+
+const learnMissingTraceColumn = (error: unknown): TraceOptionalColumn | null => {
+  for (const column of TRACE_OPTIONAL_COLUMNS) {
+    if (!isMissingColumnError(error, column)) continue;
+    if (!missingTraceColumns.has(column)) {
+      missingTraceColumns.add(column);
+      logger.warn('trace optional column missing; enabling compatibility mode', { column });
+    }
+    return column;
+  }
+  return null;
+};
+
+const describeTraceWriteError = (error: unknown): {
+  message: string;
+  details?: string;
+  hint?: string;
+  code?: string;
+  stack?: string;
+  raw?: string;
+} => {
+  if (error instanceof Error) {
+    const typed = error as Error & {
+      details?: unknown;
+      hint?: unknown;
+      code?: unknown;
+      cause?: unknown;
+    };
+    return {
+      message: typed.message,
+      ...(typeof typed.details === 'string' ? { details: typed.details } : {}),
+      ...(typeof typed.hint === 'string' ? { hint: typed.hint } : {}),
+      ...(typeof typed.code === 'string' ? { code: typed.code } : {}),
+      ...(typeof typed.stack === 'string' ? { stack: typed.stack } : {}),
+    };
+  }
+  const candidate = error as {
+    message?: unknown;
+    details?: unknown;
+    hint?: unknown;
+    code?: unknown;
+  } | null;
+  let raw: string | undefined;
+  try {
+    raw = JSON.stringify(error);
+  } catch {
+    raw = String(error);
+  }
+  return {
+    message:
+      candidate && typeof candidate.message === 'string'
+        ? candidate.message
+        : raw ?? 'unknown error',
+    ...(candidate && typeof candidate.details === 'string' ? { details: candidate.details } : {}),
+    ...(candidate && typeof candidate.hint === 'string' ? { hint: candidate.hint } : {}),
+    ...(candidate && typeof candidate.code === 'string' ? { code: candidate.code } : {}),
+    ...(raw ? { raw } : {}),
+  };
+};
+
 export async function recordAgentTraceEvent(input: AgentTraceEventInput): Promise<void> {
   if (!flags.agentTraceLedgerEnabled) return;
   const sampleRate = flags.agentTraceSampleRate;
@@ -102,7 +199,7 @@ export async function recordAgentTraceEvent(input: AgentTraceEventInput): Promis
       params: input.params,
       payload,
     });
-    const baseRow = {
+    const baseRow: Record<string, unknown> = {
       id: randomUUID(),
       created_at: new Date().toISOString(),
       trace_id: normalizeOptional(input.traceId) ?? null,
@@ -117,26 +214,33 @@ export async function recordAgentTraceEvent(input: AgentTraceEventInput): Promis
       status: normalizeOptional(input.status) ?? null,
       latency_ms: typeof input.latencyMs === 'number' && Number.isFinite(input.latencyMs) ? Math.max(0, Math.floor(input.latencyMs)) : null,
       payload: payload ?? null,
-      sampled: true,
     };
-    const withProviderRow = {
-      ...baseRow,
-      provider: parity.provider,
-      model: parity.model,
-      provider_source: parity.providerSource,
-      provider_path: parity.providerPath,
-      provider_request_id: parity.providerRequestId,
-    };
-    let { error } = await db.from('agent_trace_events').insert(withProviderRow);
-    if (error && isMissingColumnError(error, 'provider')) {
-      const compat = await db.from('agent_trace_events').insert(baseRow);
-      error = compat.error;
+    let row = buildTraceInsertRow(baseRow, parity);
+    let lastInsertError: unknown = null;
+    for (let attempt = 0; attempt <= TRACE_OPTIONAL_COLUMNS.length; attempt += 1) {
+      const { error } = await db.from('agent_trace_events').insert(row);
+      if (!error) {
+        return;
+      }
+      lastInsertError = error;
+      const missingColumn = learnMissingTraceColumn(error);
+      if (!missingColumn) {
+        throw error;
+      }
+      row = buildTraceInsertRow(baseRow, parity);
     }
-    if (error) {
-      throw error;
-    }
+    throw lastInsertError ?? new Error('agent_trace_events insert exhausted compatibility retries');
   } catch (error) {
-    logger.warn('trace write failed', { error: error instanceof Error ? error.message : String(error), stage: input.stage });
+    const described = describeTraceWriteError(error);
+    logger.warn('trace write failed', {
+      error: described.message,
+      ...(described.details ? { details: described.details } : {}),
+      ...(described.hint ? { hint: described.hint } : {}),
+      ...(described.code ? { code: described.code } : {}),
+      ...(described.stack ? { stack: described.stack } : {}),
+      ...(described.raw ? { raw: described.raw } : {}),
+      stage: input.stage,
+    });
   }
 }
 

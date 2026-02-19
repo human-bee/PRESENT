@@ -317,6 +317,7 @@ export default function AgentAdminPage() {
     const normalizedRoomFilter = roomFilter.trim() || undefined;
     const normalizedProviderFilter = providerFilter.trim() || undefined;
     const normalizedProviderPathFilter = providerPathFilter.trim() || undefined;
+    const normalizedTraceFilter = selectedTraceId?.trim() || undefined;
     setLoading(true);
     setError(null);
     setDetailError(null);
@@ -355,6 +356,7 @@ export default function AgentAdminPage() {
               room: normalizedRoomFilter,
               provider: normalizedProviderFilter,
               providerPath: normalizedProviderPathFilter,
+              traceId: normalizedTraceFilter,
             }),
           ),
           readJson<{ traces: AgentTraceEventRow[] }>(
@@ -363,6 +365,7 @@ export default function AgentAdminPage() {
               room: normalizedRoomFilter,
               provider: normalizedProviderFilter,
               providerPath: normalizedProviderPathFilter,
+              traceId: normalizedTraceFilter,
             }),
           ),
           readJson<{ workers: AgentWorkerHeartbeat[] }>('/api/admin/agents/workers'),
@@ -409,7 +412,7 @@ export default function AgentAdminPage() {
     } finally {
       setLoading(false);
     }
-  }, [clearTraceSelection, providerFilter, providerPathFilter, roomFilter]);
+  }, [clearTraceSelection, providerFilter, providerPathFilter, roomFilter, selectedTraceId]);
 
   useEffect(() => {
     if (typeof document === 'undefined') return;
@@ -530,7 +533,7 @@ export default function AgentAdminPage() {
               Swarm orchestration traces, queue state, worker health, and safe actions.
             </p>
             <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
-              Filter by room for per-canvas diagnostics (example: <span className="font-mono">canvas-1234...</span>).
+              Filter by exact room id for per-canvas diagnostics (example: <span className="font-mono">canvas-1234...</span>).
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -547,7 +550,7 @@ export default function AgentAdminPage() {
                 type="text"
                 value={roomFilterDraft}
                 onChange={(event) => setRoomFilterDraft(event.target.value)}
-                placeholder="Filter room (canvas-...)"
+                placeholder="Filter room (exact canvas-...)"
                 className="w-64 rounded border border-slate-300 bg-white px-2 py-1 text-sm text-slate-900 placeholder:text-slate-500 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:placeholder:text-slate-400"
               />
               <button

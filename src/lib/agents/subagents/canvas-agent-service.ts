@@ -10,6 +10,11 @@ import type { ProviderOptions } from '@ai-sdk/provider-utils';
 import { z } from 'zod';
 import { jsonValueSchema, type JsonObject, type JsonValue } from '@/lib/utils/json-schema';
 import {
+  describeRetryError,
+  parseRetryEnvInt,
+  withProviderRetry,
+} from '@/lib/agents/shared/provider-retry';
+import {
 	getCanvasModelDefinition,
 	resolveCanvasModelName,
 	type CanvasModelDefinition,
@@ -73,6 +78,29 @@ const debugJson = (label: string, value: unknown, max = 2000) => {
 
 const unsafeGenerateObject = generateObject as unknown as (args: any) => Promise<{ object: any }>;
 
+const CANVAS_STEWARD_RETRY_ATTEMPTS = parseRetryEnvInt(process.env.CANVAS_STEWARD_RETRY_ATTEMPTS, 3, {
+  min: 1,
+  max: 6,
+});
+const CANVAS_STEWARD_RETRY_BASE_DELAY_MS = parseRetryEnvInt(
+  process.env.CANVAS_STEWARD_RETRY_BASE_DELAY_MS,
+  250,
+  { min: 0, max: 10_000 },
+);
+const CANVAS_STEWARD_RETRY_MAX_DELAY_MS = parseRetryEnvInt(
+  process.env.CANVAS_STEWARD_RETRY_MAX_DELAY_MS,
+  3_000,
+  { min: 1, max: 20_000 },
+);
+
+const ensureSchema = (schema: unknown, label: string): z.ZodTypeAny => {
+  const candidate = schema as Partial<z.ZodTypeAny> | null | undefined;
+  if (!candidate || typeof candidate.parse !== 'function' || typeof candidate.safeParse !== 'function') {
+    throw new Error(`schema_missing:${label}`);
+  }
+  return schema as z.ZodTypeAny;
+};
+
 export interface CanvasPlanRequest {
 	modelName: CanvasModelName;
 	system: string;
@@ -110,15 +138,34 @@ export class CanvasAgentService {
 			prompt,
 		});
 
-		const { object } = await unsafeGenerateObject({
-			model,
-			system,
-			prompt,
-			schema: canvasPlanRuntimeSchema,
-			temperature: 0,
-			maxOutputTokens: maxOutputTokens ?? 4096,
-			providerOptions: buildProviderOptions(modelDefinition.provider),
-		});
+		const { object } = await withProviderRetry(
+			() =>
+				unsafeGenerateObject({
+					model,
+					system,
+					prompt,
+					schema: ensureSchema(canvasPlanRuntimeSchema, 'canvas_plan'),
+					temperature: 0,
+					maxOutputTokens: maxOutputTokens ?? 4096,
+					providerOptions: buildProviderOptions(modelDefinition.provider),
+				}),
+			{
+				provider: modelDefinition.provider,
+				attempts: CANVAS_STEWARD_RETRY_ATTEMPTS,
+				initialDelayMs: CANVAS_STEWARD_RETRY_BASE_DELAY_MS,
+				maxDelayMs: CANVAS_STEWARD_RETRY_MAX_DELAY_MS,
+				onRetry: ({ attempt, maxAttempts, delayMs, error }) => {
+					debugLog('generatePlan.retry', {
+						model: modelDefinition.name,
+						provider: modelDefinition.provider,
+						attempt,
+						maxAttempts,
+						delayMs,
+						error: describeRetryError(error),
+					});
+				},
+			},
+		);
 
 		if (!object) {
 			throw new Error('Canvas steward produced no plan');
@@ -211,7 +258,10 @@ function sanitizeCanvasPlan(plan: CanvasPlan): CanvasPlan {
 
 function sanitizeParams(params: JsonObject | undefined): JsonObject {
 	if (!params) return {};
-  const parsed = z.record(z.string(), jsonValueSchema).parse(params) as Record<string, JsonValue>;
+  const parsed = ensureSchema(
+    z.record(z.string(), jsonValueSchema),
+    'canvas_action_params',
+  ).parse(params) as Record<string, JsonValue>;
 	return Object.fromEntries(
 		Object.entries(parsed).map(([key, value]) => [key.trim(), value]),
 	);

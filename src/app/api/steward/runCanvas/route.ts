@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
 import { BYOK_ENABLED } from '@/lib/agents/shared/byok-flags';
 import { AgentTaskQueue } from '@/lib/agents/shared/queue';
 import { runCanvasSteward } from '@/lib/agents/subagents/canvas-steward';
@@ -11,12 +12,13 @@ import { assertCanvasMember, parseCanvasIdFromRoom } from '@/lib/agents/shared/c
 import { resolveRequestUserId } from '@/lib/supabase/server/resolve-request-user';
 import { createLogger } from '@/lib/logging';
 import {
+  isZodSchemaLike,
   parseJsonObject,
+  stripUndefinedDeep,
   stewardRunCanvasRequestSchema,
 } from '@/lib/agents/shared/schemas';
 import { deriveRequestCorrelation } from '@/lib/agents/shared/request-correlation';
 import type { JsonObject } from '@/lib/utils/json-schema';
-import { getBooleanFlag } from '@/lib/feature-flags';
 import {
   applyOrchestrationEnvelope,
   deriveDefaultLockKey,
@@ -34,10 +36,10 @@ function getQueue() {
   return queue;
 }
 const QUEUE_DIRECT_FALLBACK_ENABLED = process.env.CANVAS_QUEUE_DIRECT_FALLBACK === 'true';
-const CLIENT_CANVAS_AGENT_ENABLED = getBooleanFlag(process.env.NEXT_PUBLIC_CANVAS_AGENT_CLIENT_ENABLED, false);
 const CANVAS_STEWARD_ENABLED = (process.env.CANVAS_STEWARD_SERVER_EXECUTION ?? 'true') === 'true';
-const SERVER_CANVAS_AGENT_ENABLED = CANVAS_STEWARD_ENABLED && !CLIENT_CANVAS_AGENT_ENABLED;
-const SERVER_CANVAS_TASKS_ENABLED = CANVAS_STEWARD_ENABLED && !CLIENT_CANVAS_AGENT_ENABLED;
+// Server-first execution is canonical: client legacy flags must not disable steward execution.
+const SERVER_CANVAS_AGENT_ENABLED = CANVAS_STEWARD_ENABLED;
+const SERVER_CANVAS_TASKS_ENABLED = CANVAS_STEWARD_ENABLED;
 const logger = createLogger('api:steward:runCanvas');
 
 const parseBounds = (value: unknown): CanvasAgentPromptPayload['bounds'] | undefined => {
@@ -113,10 +115,80 @@ const summarizeQueueError = (error: unknown): string => {
   return String(error);
 };
 
+const summarizeSchemaIssues = (error: z.ZodError): string[] => {
+  return error.issues.slice(0, 8).map((issue) => {
+    const path = issue.path.length > 0 ? issue.path.join('.') : 'root';
+    return `${path}: ${issue.message}`;
+  });
+};
+
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
-    const parsed = stewardRunCanvasRequestSchema.parse(body);
+    const rawBody = await req.json();
+    const body = stripUndefinedDeep(rawBody);
+    if (!isZodSchemaLike(stewardRunCanvasRequestSchema)) {
+      logger.error('runCanvas schema unavailable');
+      return NextResponse.json({ error: 'Schema unavailable', code: 'schema_missing' }, { status: 500 });
+    }
+
+    const parsedResult = stewardRunCanvasRequestSchema.safeParse(body);
+    if (!parsedResult.success) {
+      const schemaIssues = summarizeSchemaIssues(parsedResult.error);
+      const bodyRecord = body && typeof body === 'object' ? (body as Record<string, unknown>) : null;
+      const traceRoom =
+        bodyRecord && typeof bodyRecord.room === 'string' && bodyRecord.room.trim().length > 0
+          ? bodyRecord.room.trim()
+          : undefined;
+      const traceTask =
+        bodyRecord && typeof bodyRecord.task === 'string' && bodyRecord.task.trim().length > 0
+          ? bodyRecord.task.trim()
+          : 'canvas.agent_prompt';
+      const traceRequestId =
+        bodyRecord && typeof bodyRecord.requestId === 'string' && bodyRecord.requestId.trim().length > 0
+          ? bodyRecord.requestId.trim()
+          : undefined;
+      const traceIntentId =
+        bodyRecord && typeof bodyRecord.intentId === 'string' && bodyRecord.intentId.trim().length > 0
+          ? bodyRecord.intentId.trim()
+          : undefined;
+      const traceTraceId =
+        bodyRecord && typeof bodyRecord.traceId === 'string' && bodyRecord.traceId.trim().length > 0
+          ? bodyRecord.traceId.trim()
+          : undefined;
+
+      logger.warn('runCanvas schema validation failed', {
+        issues: schemaIssues,
+        room: traceRoom,
+        task: traceTask,
+      });
+
+      if (traceRoom) {
+        await recordAgentTraceEvent({
+          stage: 'failed',
+          status: 'schema_invalid',
+          traceId: traceTraceId,
+          requestId: traceRequestId,
+          intentId: traceIntentId,
+          room: traceRoom,
+          task: traceTask,
+          payload: {
+            code: 'schema_invalid',
+            issues: schemaIssues,
+          },
+        });
+      }
+
+      return NextResponse.json(
+        {
+          error: 'Bad Request',
+          code: 'schema_invalid',
+          issues: schemaIssues,
+        },
+        { status: 400 },
+      );
+    }
+
+    const parsed = parsedResult.data;
     const room = parsed.room;
     const task = parsed.task;
     const summary = parsed.summary;
@@ -267,14 +339,21 @@ export async function POST(req: NextRequest) {
         (typeof enrichedParams.requestId === 'string' ? enrichedParams.requestId : undefined),
       params: enrichedParams,
     });
-    const canonicalRequestId = correlation.requestId;
+    let canonicalRequestId = correlation.requestId;
     const explicitTraceId = typeof traceId === 'string' && traceId.trim() ? traceId.trim() : undefined;
     const explicitIntentId = typeof intentId === 'string' && intentId.trim() ? intentId.trim() : undefined;
-    const canonicalTraceId =
+    let canonicalTraceId =
       explicitTraceId ??
       (typeof enrichedParams.traceId === 'string' && enrichedParams.traceId.trim() ? enrichedParams.traceId.trim() : undefined) ??
       correlation.traceId;
     const canonicalIntentId = explicitIntentId ?? correlation.intentId;
+    const generatedCorrelationId = randomUUID();
+    if (!canonicalRequestId) {
+      canonicalRequestId = `req-${generatedCorrelationId}`;
+    }
+    if (!canonicalTraceId) {
+      canonicalTraceId = canonicalRequestId;
+    }
 
     if (canonicalRequestId && !enrichedParams.requestId) {
       enrichedParams.requestId = canonicalRequestId;
@@ -376,6 +455,10 @@ export async function POST(req: NextRequest) {
     } catch (error) {
       const msg = summarizeQueueError(error);
       logger.warn('queue enqueue failed, falling back to direct run', { error: msg });
+      const fallbackParams: JsonObject = {
+        ...enrichedParams,
+        provider_path: 'fallback',
+      };
 
       await recordAgentTraceEvent({
         stage: 'fallback',
@@ -390,7 +473,7 @@ export async function POST(req: NextRequest) {
         providerSource: providerParity.providerSource,
         providerPath: 'fallback',
         providerRequestId: providerParity.providerRequestId ?? undefined,
-        params: enrichedParams,
+        params: fallbackParams,
         payload: {
           reason: msg,
           provider: providerParity.provider,
@@ -433,7 +516,7 @@ export async function POST(req: NextRequest) {
       }
 
       try {
-        await runCanvasSteward({ task: normalizedTask, params: enrichedParams });
+        await runCanvasSteward({ task: normalizedTask, params: fallbackParams });
         await recordAgentTraceEvent({
           stage: 'completed',
           status: 'executed_fallback',
@@ -447,7 +530,7 @@ export async function POST(req: NextRequest) {
           providerSource: providerParity.providerSource,
           providerPath: 'fallback',
           providerRequestId: providerParity.providerRequestId ?? undefined,
-          params: enrichedParams,
+          params: fallbackParams,
           payload: {
             provider: providerParity.provider,
             model: providerParity.model,
@@ -472,7 +555,7 @@ export async function POST(req: NextRequest) {
           providerSource: providerParity.providerSource,
           providerPath: 'fallback',
           providerRequestId: providerParity.providerRequestId ?? undefined,
-          params: enrichedParams,
+          params: fallbackParams,
           payload: {
             error: e instanceof Error ? e.message : String(e),
             provider: providerParity.provider,
@@ -486,7 +569,11 @@ export async function POST(req: NextRequest) {
       }
     }
   } catch (error) {
-    logger.error('request parse failure', { error: error instanceof Error ? error.message : String(error) });
-    return NextResponse.json({ error: 'Bad Request' }, { status: 400 });
+    const message = error instanceof Error ? error.message : String(error);
+    logger.error('request parse failure', { error: message });
+    return NextResponse.json(
+      { error: 'Bad Request', code: 'invalid_request_body', detail: message.slice(0, 240) },
+      { status: 400 },
+    );
   }
 }

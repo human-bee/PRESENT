@@ -18,9 +18,30 @@ try {
 
 let cachedClient: RoomServiceClient | null = null;
 let _cachedRestUrl: string | null = null;
+const LIVEKIT_ROOM_WAIT_TIMEOUT_MS = Math.max(
+  250,
+  Number.parseInt(process.env.LIVEKIT_ROOM_WAIT_TIMEOUT_MS ?? '5000', 10) || 5000,
+);
+const LIVEKIT_ROOM_WAIT_INTERVAL_MS = Math.max(
+  50,
+  Number.parseInt(process.env.LIVEKIT_ROOM_WAIT_INTERVAL_MS ?? '250', 10) || 250,
+);
+const LIVEKIT_SEND_RETRY_ATTEMPTS = Math.max(
+  1,
+  Number.parseInt(process.env.LIVEKIT_SEND_RETRY_ATTEMPTS ?? '3', 10) || 3,
+);
+const LIVEKIT_SEND_RETRY_DELAY_MS = Math.max(
+  0,
+  Number.parseInt(process.env.LIVEKIT_SEND_RETRY_DELAY_MS ?? '200', 10) || 200,
+);
 
 function resolveRest(): string {
-  const raw = process.env.LIVEKIT_REST_URL || process.env.LIVEKIT_URL || process.env.NEXT_PUBLIC_LK_SERVER_URL || process.env.LIVEKIT_HOST;
+  const raw =
+    process.env.LIVEKIT_REST_URL ||
+    process.env.LIVEKIT_URL ||
+    process.env.NEXT_PUBLIC_LK_SERVER_URL ||
+    process.env.NEXT_PUBLIC_LIVEKIT_URL ||
+    process.env.LIVEKIT_HOST;
   if (!raw) throw new Error('LiveKit REST URL missing');
   let url = raw.trim();
   if (url.startsWith('wss://')) url = `https://${url.slice(6)}`;
@@ -30,8 +51,8 @@ function resolveRest(): string {
 }
 
 function getClient(): RoomServiceClient {
-  if (cachedClient) return cachedClient;
   const rest = resolveRest();
+  if (cachedClient && _cachedRestUrl === rest) return cachedClient;
   const apiKey = process.env.LIVEKIT_API_KEY;
   const apiSecret = process.env.LIVEKIT_API_SECRET;
   if (!apiKey || !apiSecret) throw new Error('LiveKit API credentials missing');
@@ -43,9 +64,105 @@ function getClient(): RoomServiceClient {
 async function ensureRoom(room: string) {
   const client = getClient();
   const name = room.trim();
-  const rooms = await client.listRooms([name]);
-  if (!rooms?.some((r) => r?.name === name)) throw new Error(`LiveKit room not found: ${name}`);
-  return { client, normalizedRoom: name } as const;
+  if (!name) throw new Error('LiveKit room name missing');
+
+  const deadline = Date.now() + LIVEKIT_ROOM_WAIT_TIMEOUT_MS;
+  let lastError: unknown;
+  while (Date.now() < deadline) {
+    try {
+      const rooms = await client.listRooms([name]);
+      if (rooms?.some((r) => r?.name === name)) {
+        return { client, normalizedRoom: name, roomReady: true, waitError: null } as const;
+      }
+    } catch (error) {
+      lastError = error;
+    }
+    if (LIVEKIT_ROOM_WAIT_INTERVAL_MS > 0) {
+      await new Promise((resolve) => setTimeout(resolve, LIVEKIT_ROOM_WAIT_INTERVAL_MS));
+    }
+  }
+
+  try {
+    await client.createRoom({
+      name,
+      emptyTimeout: 60,
+      departureTimeout: 30,
+    });
+    return { client, normalizedRoom: name, roomReady: true, waitError: null } as const;
+  } catch (error) {
+    const typed = error as { code?: unknown; status?: unknown; statusCode?: unknown } | null;
+    const numericCode =
+      typeof typed?.code === 'number'
+        ? typed.code
+        : typeof typed?.statusCode === 'number'
+          ? typed.statusCode
+          : typeof typed?.status === 'number'
+            ? typed.status
+            : null;
+    const stringCode = typeof typed?.code === 'string' ? typed.code.trim().toLowerCase() : '';
+    const message = error instanceof Error ? error.message.toLowerCase() : String(error ?? '').toLowerCase();
+    if (
+      numericCode === 6 ||
+      numericCode === 409 ||
+      stringCode === 'already_exists' ||
+      stringCode === 'alreadyexists' ||
+      message.includes('already exists') ||
+      message.includes('room already exists') ||
+      message.includes('alreadyexists') ||
+      message.includes('code = alreadyexists')
+    ) {
+      return { client, normalizedRoom: name, roomReady: true, waitError: null } as const;
+    }
+    lastError = error ?? lastError;
+  }
+
+  const waitError =
+    lastError instanceof Error
+      ? `${lastError.message}${_cachedRestUrl ? ` (rest=${_cachedRestUrl})` : ''}`
+      : `LiveKit room not found before timeout: ${name}`;
+  return { client, normalizedRoom: name, roomReady: false, waitError } as const;
+}
+
+async function sendRoomData(params: {
+  room: string;
+  topic: string;
+  data: Uint8Array;
+}) {
+  const { room, topic, data } = params;
+  let resolution = await ensureRoom(room);
+  let lastError: unknown =
+    resolution.roomReady
+      ? null
+      : new Error(
+          resolution.waitError && resolution.waitError.trim().length > 0
+            ? `LiveKit room readiness failed for ${resolution.normalizedRoom}: ${resolution.waitError}`
+            : `LiveKit room not found before timeout: ${resolution.normalizedRoom}`,
+        );
+
+  for (let attempt = 0; attempt < LIVEKIT_SEND_RETRY_ATTEMPTS; attempt += 1) {
+    try {
+      await resolution.client.sendData(
+        resolution.normalizedRoom,
+        data,
+        DataPacket_Kind.RELIABLE,
+        { topic },
+      );
+      return;
+    } catch (error) {
+      lastError = error;
+      if (attempt + 1 >= LIVEKIT_SEND_RETRY_ATTEMPTS) break;
+      if (LIVEKIT_SEND_RETRY_DELAY_MS > 0) {
+        await new Promise((resolve) => setTimeout(resolve, LIVEKIT_SEND_RETRY_DELAY_MS));
+      }
+      resolution = await ensureRoom(room);
+    }
+  }
+
+  throw new Error(
+    `LiveKit sendData failed for ${resolution.normalizedRoom}: ${
+      lastError instanceof Error ? lastError.message : String(lastError ?? 'unknown')
+    }`,
+  );
 }
 
 const hashActionsEnvelope = (input: {
@@ -101,21 +218,30 @@ export async function sendActionsEnvelope(
     ts: Date.now(),
   };
   const data = new TextEncoder().encode(JSON.stringify({ type: 'agent:action', envelope }));
-  const { client, normalizedRoom } = await ensureRoom(room);
-  await client.sendData(normalizedRoom, data, DataPacket_Kind.RELIABLE, { topic: 'agent:action' });
+  await sendRoomData({
+    room,
+    topic: 'agent:action',
+    data,
+  });
   return { hash };
 }
 
 export async function sendChat(room: string, sessionId: string, message: AgentChatMessage) {
   const data = new TextEncoder().encode(JSON.stringify({ type: 'agent:chat', sessionId, message }));
-  const { client, normalizedRoom } = await ensureRoom(room);
-  await client.sendData(normalizedRoom, data, DataPacket_Kind.RELIABLE, { topic: 'agent:chat' });
+  await sendRoomData({
+    room,
+    topic: 'agent:chat',
+    data,
+  });
 }
 
 export async function sendStatus(room: string, sessionId: string, state: 'waiting_context' | 'calling_model' | 'streaming' | 'scheduled' | 'done' | 'canceled' | 'error', detail?: unknown) {
   const data = new TextEncoder().encode(JSON.stringify({ type: 'agent:status', sessionId, state, detail }));
-  const { client, normalizedRoom } = await ensureRoom(room);
-  await client.sendData(normalizedRoom, data, DataPacket_Kind.RELIABLE, { topic: 'agent:status' });
+  await sendRoomData({
+    room,
+    topic: 'agent:status',
+    data,
+  });
 }
 
 export async function sendTrace(
@@ -154,8 +280,11 @@ export async function requestScreenshot(room: string, request: Omit<ScreenshotRe
     roomId: room,
   };
   const data = new TextEncoder().encode(JSON.stringify(payload));
-  const { client, normalizedRoom } = await ensureRoom(room);
-  await client.sendData(normalizedRoom, data, DataPacket_Kind.RELIABLE, { topic: 'agent:screenshot_request' });
+  await sendRoomData({
+    room,
+    topic: 'agent:screenshot_request',
+    data,
+  });
 }
 
 // Keep ack polling snappy; this path is latency-sensitive and tests run in a noisy event loop.

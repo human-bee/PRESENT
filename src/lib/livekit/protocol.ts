@@ -1,6 +1,20 @@
 import { z } from 'zod';
 import { jsonObjectSchema } from '@/lib/utils/json-schema';
 
+const isSchemaLike = (value: unknown): value is z.ZodTypeAny => {
+  if (!value || typeof value !== 'object') return false;
+  const candidate = value as Partial<z.ZodTypeAny>;
+  return typeof candidate.parse === 'function' && typeof candidate.safeParse === 'function';
+};
+
+const safeParseWithSchema = <T>(schema: z.ZodType<T>, input: unknown): T | null => {
+  if (!isSchemaLike(schema)) {
+    return null;
+  }
+  const parsed = schema.safeParse(input);
+  return parsed.success ? parsed.data : null;
+};
+
 const BaseMessageSchema = z
   .object({
     id: z.string().min(1).optional(),
@@ -79,16 +93,13 @@ export type StewardTriggerMessage = z.infer<typeof StewardTriggerMessageSchema>;
 export type DispatcherMessage = z.infer<typeof DispatcherMessageSchema>;
 
 export const parseToolCallMessage = (input: unknown): ToolCallMessage | null => {
-  const parsed = ToolCallMessageSchema.safeParse(input);
-  return parsed.success ? parsed.data : null;
+  return safeParseWithSchema(ToolCallMessageSchema, input);
 };
 
 export const parseStewardTriggerMessage = (input: unknown): StewardTriggerMessage | null => {
-  const parsed = StewardTriggerMessageSchema.safeParse(input);
-  return parsed.success ? parsed.data : null;
+  return safeParseWithSchema(StewardTriggerMessageSchema, input);
 };
 
 export const parseDecisionMessage = (input: unknown): DecisionMessage | null => {
-  const parsed = DecisionMessageSchema.safeParse(input);
-  return parsed.success ? parsed.data : null;
+  return safeParseWithSchema(DecisionMessageSchema, input);
 };

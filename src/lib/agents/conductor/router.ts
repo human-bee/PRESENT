@@ -71,8 +71,9 @@ const DEFAULT_SUMMARY_AUTO_SEND = process.env.SUMMARY_MEMORY_AUTO_SEND === 'true
 const DEFAULT_SUMMARY_MEMORY_COLLECTION = process.env.SUMMARY_MEMORY_MCP_COLLECTION;
 const DEFAULT_SUMMARY_MEMORY_INDEX = process.env.SUMMARY_MEMORY_MCP_INDEX;
 const DEFAULT_SUMMARY_MEMORY_NAMESPACE = process.env.SUMMARY_MEMORY_MCP_NAMESPACE;
-const SERVER_CANVAS_AGENT_ENABLED = CANVAS_STEWARD_ENABLED && !CLIENT_CANVAS_AGENT_ENABLED;
-const SERVER_CANVAS_TASKS_ENABLED = CANVAS_STEWARD_ENABLED && !CLIENT_CANVAS_AGENT_ENABLED;
+// Server-first execution is canonical: client legacy flags must not disable steward execution.
+const SERVER_CANVAS_AGENT_ENABLED = CANVAS_STEWARD_ENABLED;
+const SERVER_CANVAS_TASKS_ENABLED = CANVAS_STEWARD_ENABLED;
 
 const CanvasAgentPromptSchema = z
   .object({
@@ -303,6 +304,18 @@ const inferCrowdPulseQuestion = (message: string): string | undefined => {
     if (candidate.length > 0) return candidate;
   }
   return undefined;
+};
+
+const DRAW_OR_STICKY_PATTERN =
+  /\b(draw|sketch|doodle|illustrate|diagram|paint|sticky\s*note|post[-\s]?it|add\s+note|label)\b/i;
+const CANVAS_SURFACE_PATTERN = /\b(canvas|whiteboard|board|tldraw)\b/i;
+
+const shouldForceCanvasRoute = (intent: FairyIntent): boolean => {
+  const message = intent.message.trim();
+  if (!message) return false;
+  if (message.startsWith('/canvas')) return true;
+  if (DRAW_OR_STICKY_PATTERN.test(message)) return true;
+  return CANVAS_SURFACE_PATTERN.test(message) && /\b(add|place|create|move|align|near)\b/i.test(message);
 };
 
 const shouldDedupeFairyIntent = (intent: FairyIntent) => {
@@ -658,7 +671,14 @@ async function handleFairyIntent(rawParams: JsonObject) {
   if (shouldDedupeFairyIntent(intent)) {
     return { status: 'deduped', intentId: intent.id, room: intent.room };
   }
-  const decision = await routeFairyIntent(intent);
+  const decision = shouldForceCanvasRoute(intent)
+    ? {
+        kind: 'canvas' as const,
+        confidence: 0.95,
+        message: intent.message,
+        contextProfile: normalizeFairyContextProfile(intent.contextProfile) ?? DEFAULT_FAIRY_CONTEXT_PROFILE,
+      }
+    : await routeFairyIntent(intent);
   const contextProfile = resolveIntentContextProfile(intent, decision);
   const mergedMetadata = buildIntentMetadata(intent, decision, contextProfile);
   const contextBundle = extractContextBundle(
@@ -702,22 +722,23 @@ async function handleFairyIntent(rawParams: JsonObject) {
 
     if (decisionLike.kind === 'crowd_pulse') {
       const componentId = await ensureWidgetComponent(intent, 'CrowdPulseWidget');
+      const stewardInstruction = intent.message?.trim() || message;
       const bundleText =
         contextBundle && Array.isArray(contextBundle.parts)
           ? formatFairyContextParts(contextBundle.parts as any, 3000)
           : '';
       const patch = await runCrowdPulseStewardFast({
         room: intent.room,
-        instruction: message,
+        instruction: stewardInstruction,
         contextBundle: bundleText,
         contextProfile: actionProfile,
       });
       const normalizedActiveQuestion = normalizeCrowdPulseActiveQuestionInput(
         patch.activeQuestion,
-        message,
+        stewardInstruction,
       );
       const inferredQuestion =
-        typeof normalizedActiveQuestion === 'string' ? undefined : inferCrowdPulseQuestion(message);
+        typeof normalizedActiveQuestion === 'string' ? undefined : inferCrowdPulseQuestion(stewardInstruction);
       const { activeQuestion: _ignoredActiveQuestion, ...patchWithoutActiveQuestion } = patch;
       const updatePatch = {
         ...patchWithoutActiveQuestion,
@@ -1616,6 +1637,11 @@ async function executeTaskLegacy(taskName: string, params: JsonObject) {
         clientLegacyEnabled: CLIENT_CANVAS_AGENT_ENABLED,
         fairyUiEnabled: FAIRY_UI_ENABLED,
       });
+      return {
+        ...promptResult,
+        status: 'skipped',
+        reason: 'server_canvas_steward_disabled',
+      };
     }
     return { ...promptResult, status: 'queued' };
   }

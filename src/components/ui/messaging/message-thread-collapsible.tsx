@@ -360,7 +360,25 @@ export const MessageThreadCollapsible = React.forwardRef<
     process.env.NEXT_PUBLIC_LIVEKIT_URL || process.env.NEXT_PUBLIC_LK_SERVER_URL || '';
 
   const connectRoom = React.useCallback(async () => {
-    if (!room || !livekitCtx?.roomName || !wsUrl) return;
+    const guardContext = {
+      hasRoom: Boolean(room),
+      roomState: room?.state ?? 'missing',
+      roomName: livekitCtx?.roomName ?? '',
+      wsUrl,
+      connBusy,
+    };
+    try {
+      if (typeof window !== 'undefined') {
+        const globalWindow = window as unknown as Record<string, unknown>;
+        globalWindow.__livekitConnectGuard = guardContext;
+      }
+    } catch {}
+
+    if (!room || !livekitCtx?.roomName || !wsUrl) {
+      console.warn('[LiveKit] connectRoom guard blocked', guardContext);
+      return;
+    }
+
     if (room.state === 'connected' || connBusy) return;
     setConnBusy(true);
     try {

@@ -1,7 +1,7 @@
 import { setTimeout as delay } from 'node:timers/promises';
 import { randomUUID } from 'node:crypto';
 import os from 'node:os';
-import { AgentTaskQueue } from '@/lib/agents/shared/queue';
+import { AgentTaskQueue, type AgentTask } from '@/lib/agents/shared/queue';
 import type { JsonObject } from '@/lib/utils/json-schema';
 import { createLogger } from '@/lib/logging';
 import { MutationArbiter } from './mutation-arbiter';
@@ -30,8 +30,14 @@ const workerId = process.env.AGENT_WORKER_ID || `conductor-${process.pid}-${rand
 const workerHost = os.hostname();
 const workerPid = String(process.pid);
 let activeTaskCount = 0;
+let leasedTaskCount = 0;
 
 type ExecuteTaskFn = (taskName: string, params: JsonObject) => Promise<unknown>;
+type ClaimedTask = {
+  task: AgentTask;
+  leaseToken: string;
+  stopLeaseExtender: () => void;
+};
 
 const normalizeString = (value: unknown): string | null => {
   if (typeof value !== 'string') return null;
@@ -42,6 +48,32 @@ const normalizeString = (value: unknown): string | null => {
 const asRecord = (value: unknown): Record<string, unknown> | null => {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   return value as Record<string, unknown>;
+};
+
+const describeUnknownError = (error: unknown): {
+  message: string;
+  stack?: string;
+  detail?: string;
+} => {
+  if (error instanceof Error) {
+    let detail: string | undefined;
+    const extra = error as Error & { cause?: unknown };
+    if (typeof extra.cause !== 'undefined') {
+      try {
+        detail = JSON.stringify(extra.cause);
+      } catch {
+        detail = String(extra.cause);
+      }
+    }
+    return { message: error.message, stack: error.stack, ...(detail ? { detail } : {}) };
+  }
+  try {
+    const detail = JSON.stringify(error);
+    return { message: detail, detail };
+  } catch {
+    const detail = String(error);
+    return { message: detail, detail };
+  }
 };
 
 const deriveRuntimeProviderHint = (
@@ -151,6 +183,14 @@ const verifyTaskContract = (
     if (!message) {
       return { ok: false, reason: 'canvas.agent_prompt requires message' };
     }
+    if (
+      result &&
+      typeof result === 'object' &&
+      typeof (result as Record<string, unknown>).status === 'string' &&
+      ((result as Record<string, unknown>).status as string).toLowerCase() === 'skipped'
+    ) {
+      return { ok: false, reason: 'canvas.agent_prompt was skipped before steward execution' };
+    }
   }
   if (taskName.startsWith('scorecard.')) {
     const componentId =
@@ -185,17 +225,258 @@ function createLeaseExtender(taskId: string, leaseToken: string) {
   };
 }
 
+async function processClaimedTasks(executeTask: ExecuteTaskFn, claimedTasks: ClaimedTask[]) {
+  const roomBuckets = claimedTasks.reduce<Record<string, ClaimedTask[]>>((acc, claimed) => {
+    const roomKey =
+      claimed.task.resource_keys.find((key) => key.startsWith('room:')) || 'room:default';
+    if (!acc[roomKey]) acc[roomKey] = [];
+    acc[roomKey].push(claimed);
+    return acc;
+  }, {});
+
+  await Promise.allSettled(
+    Object.entries(roomBuckets).map(async ([roomKey, roomTasks]) => {
+      const queueList = [...roomTasks];
+      const workers = Array.from({ length: ROOM_CONCURRENCY }).map(async () => {
+        while (queueList.length > 0) {
+          const claimed = queueList.shift();
+          if (!claimed) break;
+
+          const { task, leaseToken, stopLeaseExtender } = claimed;
+          let route: ReturnType<typeof classifyTaskRoute> = classifyTaskRoute(task.task);
+          let lockKey: string | null = null;
+          const executingProviderParity = deriveProviderParity({
+            task: task.task,
+            status: 'running',
+            params: task.params,
+          });
+
+          try {
+            activeTaskCount += 1;
+            route = classifyTaskRoute(task.task);
+            void recordTaskTraceFromParams({
+              stage: 'executing',
+              status: 'running',
+              taskId: task.id,
+              task: task.task,
+              room: task.room,
+              params: task.params,
+              attempt: task.attempt,
+              provider: executingProviderParity.provider,
+              model: executingProviderParity.model ?? undefined,
+              providerSource: executingProviderParity.providerSource,
+              providerPath: executingProviderParity.providerPath,
+              providerRequestId: executingProviderParity.providerRequestId ?? undefined,
+              payload: {
+                workerId,
+                workerHost,
+                workerPid,
+                route,
+                leaseToken,
+                provider: executingProviderParity.provider,
+                model: executingProviderParity.model,
+                providerSource: executingProviderParity.providerSource,
+                providerPath: executingProviderParity.providerPath,
+                providerRequestId: executingProviderParity.providerRequestId,
+              },
+            });
+            const startedAt = Date.now();
+            const paramsRecord = task.params as Record<string, unknown>;
+            const envelope = extractOrchestrationEnvelope(paramsRecord, {
+              attempt: task.attempt,
+            });
+            const lockKeyFromResource = task.resource_keys
+              .find((key) => key.startsWith('lock:'))
+              ?.slice('lock:'.length);
+            lockKey =
+              envelope.lockKey ??
+              lockKeyFromResource ??
+              deriveDefaultLockKey({
+                task: task.task,
+                room: task.room,
+                componentId:
+                  typeof paramsRecord.componentId === 'string'
+                    ? paramsRecord.componentId
+                    : undefined,
+                componentType:
+                  typeof paramsRecord.type === 'string'
+                    ? paramsRecord.type
+                    : typeof paramsRecord.componentType === 'string'
+                      ? paramsRecord.componentType
+                      : undefined,
+              }) ??
+              null;
+            const executeStart = Date.now();
+            const execution = await mutationArbiter.execute(
+              { ...envelope, lockKey: lockKey ?? undefined, attempt: task.attempt },
+              async () => executeTask(task.task, task.params),
+            );
+            recordOrchestrationTiming({
+              stage: 'worker.execute',
+              task: task.task,
+              route,
+              durationMs: Date.now() - executeStart,
+            });
+            if (execution.deduped) {
+              incrementOrchestrationCounter('mutationDeduped');
+            } else {
+              incrementOrchestrationCounter('mutationExecuted');
+            }
+            const verifyStart = Date.now();
+            const verification = verifyTaskContract(task.task, task.params, execution.result);
+            recordOrchestrationTiming({
+              stage: 'worker.verify',
+              task: task.task,
+              route,
+              durationMs: Date.now() - verifyStart,
+            });
+            if (!verification.ok) {
+              incrementOrchestrationCounter('verificationFailures');
+              throw new Error(verification.reason ?? 'verification failed');
+            }
+            const result = execution.result;
+            const jsonResult =
+              result && typeof result === 'object' && !Array.isArray(result)
+                ? ({
+                    ...(result as JsonObject),
+                    executionId: envelope.executionId ?? task.id,
+                    idempotencyKey: envelope.idempotencyKey ?? null,
+                    lockKey: lockKey ?? null,
+                    deduped: execution.deduped,
+                  } as JsonObject)
+                : ({ status: 'completed' } as JsonObject);
+            await queue.completeTask(task.id, leaseToken, jsonResult);
+            const durationMs = Date.now() - startedAt;
+            const runtimeProviderHint = deriveRuntimeProviderHint(task.task, result);
+            const completedProviderParity = deriveProviderParity({
+              task: task.task,
+              status: 'succeeded',
+              params: task.params,
+              payload: asRecord(result) ? (result as JsonObject) : undefined,
+              provider: runtimeProviderHint.provider,
+              model: runtimeProviderHint.model,
+              providerSource: runtimeProviderHint.providerSource,
+              providerPath: runtimeProviderHint.providerPath,
+              providerRequestId: runtimeProviderHint.providerRequestId,
+            });
+            void recordTaskTraceFromParams({
+              stage: 'completed',
+              status: 'succeeded',
+              taskId: task.id,
+              task: task.task,
+              room: task.room,
+              params: task.params,
+              attempt: task.attempt,
+              latencyMs: durationMs,
+              provider: completedProviderParity.provider,
+              model: completedProviderParity.model ?? undefined,
+              providerSource: completedProviderParity.providerSource,
+              providerPath: completedProviderParity.providerPath,
+              providerRequestId: completedProviderParity.providerRequestId ?? undefined,
+              payload: {
+                workerId,
+                workerHost,
+                workerPid,
+                route,
+                lockKey: lockKey ?? null,
+                deduped: execution.deduped,
+                leaseToken,
+                provider: completedProviderParity.provider,
+                model: completedProviderParity.model,
+                providerSource: completedProviderParity.providerSource,
+                providerPath: completedProviderParity.providerPath,
+                providerRequestId: completedProviderParity.providerRequestId,
+              },
+            });
+            logger.info('task completed', { roomKey, taskId: task.id, durationMs });
+            logger.debug('orchestration metrics', {
+              taskId: task.id,
+              route,
+              counters: getOrchestrationMetricsSnapshot().counters,
+            });
+          } catch (error) {
+            const described = describeUnknownError(error);
+            const message = described.message;
+            const retryAt = task.attempt < 3 ? new Date(Date.now() + 2 ** task.attempt * 1000) : undefined;
+            logger.warn('task failed', {
+              roomKey,
+              taskId: task.id,
+              task: task.task,
+              attempt: task.attempt,
+              retryAt,
+              error: message,
+              ...(described.stack ? { stack: described.stack } : {}),
+              ...(described.detail ? { detail: described.detail } : {}),
+            });
+            await queue.failTask(task.id, leaseToken, { error: message, retryAt });
+            const failedProviderParity = deriveProviderParity({
+              task: task.task,
+              status: 'failed',
+              params: task.params,
+              provider: executingProviderParity.provider,
+              model: executingProviderParity.model ?? undefined,
+              providerSource: executingProviderParity.providerSource,
+              providerPath: executingProviderParity.providerPath,
+              providerRequestId: executingProviderParity.providerRequestId ?? undefined,
+            });
+            void recordTaskTraceFromParams({
+              stage: 'failed',
+              status: 'failed',
+              taskId: task.id,
+              task: task.task,
+              room: task.room,
+              params: task.params,
+              attempt: task.attempt,
+              provider: failedProviderParity.provider,
+              model: failedProviderParity.model ?? undefined,
+              providerSource: failedProviderParity.providerSource,
+              providerPath: failedProviderParity.providerPath,
+              providerRequestId: failedProviderParity.providerRequestId ?? undefined,
+              payload: {
+                workerId,
+                workerHost,
+                workerPid,
+                route,
+                lockKey: lockKey ?? null,
+                error: message,
+                retryAt: retryAt ? retryAt.toISOString() : null,
+                provider: failedProviderParity.provider,
+                model: failedProviderParity.model,
+                providerSource: failedProviderParity.providerSource,
+                providerPath: failedProviderParity.providerPath,
+                providerRequestId: failedProviderParity.providerRequestId,
+              },
+            });
+          } finally {
+            activeTaskCount = Math.max(0, activeTaskCount - 1);
+            leasedTaskCount = Math.max(0, leasedTaskCount - 1);
+            stopLeaseExtender();
+          }
+        }
+      });
+      await Promise.allSettled(workers);
+    }),
+  );
+}
+
 async function workerLoop(executeTask: ExecuteTaskFn) {
-  const baseIdlePollMs = Math.max(250, Number.isFinite(TASK_IDLE_POLL_MS) ? Math.floor(TASK_IDLE_POLL_MS) : 2_000);
+  const maxClaimConcurrency = Math.max(1, Number(process.env.TASK_DEFAULT_CONCURRENCY ?? 10));
+  const baseIdlePollMs = Math.max(5, Number.isFinite(TASK_IDLE_POLL_MS) ? Math.floor(TASK_IDLE_POLL_MS) : 500);
   const maxIdlePollMs = Math.max(
     baseIdlePollMs,
-    Number.isFinite(TASK_IDLE_POLL_MAX_MS) ? Math.floor(TASK_IDLE_POLL_MAX_MS) : 10_000,
+    Number.isFinite(TASK_IDLE_POLL_MAX_MS) ? Math.floor(TASK_IDLE_POLL_MAX_MS) : 2_000,
   );
   let idlePollMs = baseIdlePollMs;
 
   while (true) {
+    const availableCapacity = Math.max(0, maxClaimConcurrency - leasedTaskCount);
+    if (availableCapacity < 1) {
+      await delay(Math.min(100, baseIdlePollMs));
+      continue;
+    }
+
     const { leaseToken, tasks } = await queue.claimTasks({
-      limit: Number(process.env.TASK_DEFAULT_CONCURRENCY ?? 10),
+      limit: availableCapacity,
       leaseTtlMs: TASK_LEASE_TTL_MS,
     });
 
@@ -210,232 +491,18 @@ async function workerLoop(executeTask: ExecuteTaskFn) {
     logger.info('claimed tasks', {
       count: tasks.length,
       taskNames: tasks.map((task) => task.task),
+      leasedTaskCount,
+      availableCapacity,
     });
 
-    const roomBuckets = tasks.reduce<Record<string, typeof tasks>>((acc, task) => {
-      const roomKey = task.resource_keys.find((key) => key.startsWith('room:')) || 'room:default';
-      if (!acc[roomKey]) acc[roomKey] = [];
-      acc[roomKey].push(task);
-      return acc;
-    }, {});
+    leasedTaskCount += tasks.length;
+    const claimedTasks = tasks.map((task) => ({
+      task,
+      leaseToken,
+      stopLeaseExtender: createLeaseExtender(task.id, leaseToken),
+    }));
 
-    await Promise.allSettled(
-      Object.entries(roomBuckets).map(async ([roomKey, roomTasks]) => {
-        const queueList = [...roomTasks];
-        const workers = Array.from({ length: ROOM_CONCURRENCY }).map(async () => {
-          while (queueList.length > 0) {
-            const task = queueList.shift();
-            if (!task) break;
-            const stopLeaseExtender = createLeaseExtender(task.id, leaseToken);
-            let route: ReturnType<typeof classifyTaskRoute> = classifyTaskRoute(task.task);
-            let lockKey: string | null = null;
-            const executingProviderParity = deriveProviderParity({
-              task: task.task,
-              status: 'running',
-              params: task.params,
-            });
-            try {
-              activeTaskCount += 1;
-              route = classifyTaskRoute(task.task);
-              void recordTaskTraceFromParams({
-                stage: 'executing',
-                status: 'running',
-                taskId: task.id,
-                task: task.task,
-                room: task.room,
-                params: task.params,
-                attempt: task.attempt,
-                provider: executingProviderParity.provider,
-                model: executingProviderParity.model ?? undefined,
-                providerSource: executingProviderParity.providerSource,
-                providerPath: executingProviderParity.providerPath,
-                providerRequestId: executingProviderParity.providerRequestId ?? undefined,
-                payload: {
-                  workerId,
-                  workerHost,
-                  workerPid,
-                  route,
-                  leaseToken,
-                  provider: executingProviderParity.provider,
-                  model: executingProviderParity.model,
-                  providerSource: executingProviderParity.providerSource,
-                  providerPath: executingProviderParity.providerPath,
-                  providerRequestId: executingProviderParity.providerRequestId,
-                },
-              });
-              const startedAt = Date.now();
-              const paramsRecord = task.params as Record<string, unknown>;
-              const envelope = extractOrchestrationEnvelope(paramsRecord, {
-                attempt: task.attempt,
-              });
-              const lockKeyFromResource = task.resource_keys
-                .find((key) => key.startsWith('lock:'))
-                ?.slice('lock:'.length);
-              lockKey =
-                envelope.lockKey ??
-                lockKeyFromResource ??
-                deriveDefaultLockKey({
-                  task: task.task,
-                  room: task.room,
-                  componentId:
-                    typeof paramsRecord.componentId === 'string'
-                      ? paramsRecord.componentId
-                      : undefined,
-                  componentType:
-                    typeof paramsRecord.type === 'string'
-                      ? paramsRecord.type
-                      : typeof paramsRecord.componentType === 'string'
-                        ? paramsRecord.componentType
-                        : undefined,
-                }) ??
-                null;
-              const executeStart = Date.now();
-              const execution = await mutationArbiter.execute(
-                { ...envelope, lockKey: lockKey ?? undefined, attempt: task.attempt },
-                async () => executeTask(task.task, task.params),
-              );
-              recordOrchestrationTiming({
-                stage: 'worker.execute',
-                task: task.task,
-                route,
-                durationMs: Date.now() - executeStart,
-              });
-              if (execution.deduped) {
-                incrementOrchestrationCounter('mutationDeduped');
-              } else {
-                incrementOrchestrationCounter('mutationExecuted');
-              }
-              const verifyStart = Date.now();
-              const verification = verifyTaskContract(task.task, task.params, execution.result);
-              recordOrchestrationTiming({
-                stage: 'worker.verify',
-                task: task.task,
-                route,
-                durationMs: Date.now() - verifyStart,
-              });
-              if (!verification.ok) {
-                incrementOrchestrationCounter('verificationFailures');
-                throw new Error(verification.reason ?? 'verification failed');
-              }
-              const result = execution.result;
-              const jsonResult =
-                result && typeof result === 'object' && !Array.isArray(result)
-                  ? ({
-                      ...(result as JsonObject),
-                      executionId: envelope.executionId ?? task.id,
-                      idempotencyKey: envelope.idempotencyKey ?? null,
-                      lockKey: lockKey ?? null,
-                      deduped: execution.deduped,
-                    } as JsonObject)
-                  : ({ status: 'completed' } as JsonObject);
-              await queue.completeTask(task.id, leaseToken, jsonResult);
-              const durationMs = Date.now() - startedAt;
-              const runtimeProviderHint = deriveRuntimeProviderHint(task.task, result);
-              const completedProviderParity = deriveProviderParity({
-                task: task.task,
-                status: 'succeeded',
-                params: task.params,
-                payload: asRecord(result) ? (result as JsonObject) : undefined,
-                provider: runtimeProviderHint.provider,
-                model: runtimeProviderHint.model,
-                providerSource: runtimeProviderHint.providerSource,
-                providerPath: runtimeProviderHint.providerPath,
-                providerRequestId: runtimeProviderHint.providerRequestId,
-              });
-              void recordTaskTraceFromParams({
-                stage: 'completed',
-                status: 'succeeded',
-                taskId: task.id,
-                task: task.task,
-                room: task.room,
-                params: task.params,
-                attempt: task.attempt,
-                latencyMs: durationMs,
-                provider: completedProviderParity.provider,
-                model: completedProviderParity.model ?? undefined,
-                providerSource: completedProviderParity.providerSource,
-                providerPath: completedProviderParity.providerPath,
-                providerRequestId: completedProviderParity.providerRequestId ?? undefined,
-                payload: {
-                  workerId,
-                  workerHost,
-                  workerPid,
-                  route,
-                  lockKey: lockKey ?? null,
-                  deduped: execution.deduped,
-                  leaseToken,
-                  provider: completedProviderParity.provider,
-                  model: completedProviderParity.model,
-                  providerSource: completedProviderParity.providerSource,
-                  providerPath: completedProviderParity.providerPath,
-                  providerRequestId: completedProviderParity.providerRequestId,
-                },
-              });
-              logger.info('task completed', { roomKey, taskId: task.id, durationMs });
-              logger.debug('orchestration metrics', {
-                taskId: task.id,
-                route,
-                counters: getOrchestrationMetricsSnapshot().counters,
-              });
-            } catch (error) {
-              const message = error instanceof Error ? error.message : String(error);
-              const retryAt = task.attempt < 3 ? new Date(Date.now() + 2 ** task.attempt * 1000) : undefined;
-              logger.warn('task failed', {
-                roomKey,
-                taskId: task.id,
-                task: task.task,
-                attempt: task.attempt,
-                retryAt,
-                error: message,
-              });
-              await queue.failTask(task.id, leaseToken, { error: message, retryAt });
-              const failedProviderParity = deriveProviderParity({
-                task: task.task,
-                status: 'failed',
-                params: task.params,
-                provider: executingProviderParity.provider,
-                model: executingProviderParity.model ?? undefined,
-                providerSource: executingProviderParity.providerSource,
-                providerPath: executingProviderParity.providerPath,
-                providerRequestId: executingProviderParity.providerRequestId ?? undefined,
-              });
-              void recordTaskTraceFromParams({
-                stage: 'failed',
-                status: 'failed',
-                taskId: task.id,
-                task: task.task,
-                room: task.room,
-                params: task.params,
-                attempt: task.attempt,
-                provider: failedProviderParity.provider,
-                model: failedProviderParity.model ?? undefined,
-                providerSource: failedProviderParity.providerSource,
-                providerPath: failedProviderParity.providerPath,
-                providerRequestId: failedProviderParity.providerRequestId ?? undefined,
-                payload: {
-                  workerId,
-                  workerHost,
-                  workerPid,
-                  route,
-                  lockKey: lockKey ?? null,
-                  error: message,
-                  retryAt: retryAt ? retryAt.toISOString() : null,
-                  provider: failedProviderParity.provider,
-                  model: failedProviderParity.model,
-                  providerSource: failedProviderParity.providerSource,
-                  providerPath: failedProviderParity.providerPath,
-                  providerRequestId: failedProviderParity.providerRequestId,
-                },
-              });
-            } finally {
-              activeTaskCount = Math.max(0, activeTaskCount - 1);
-              stopLeaseExtender();
-            }
-          }
-        });
-        await Promise.allSettled(workers);
-      }),
-    );
+    void processClaimedTasks(executeTask, claimedTasks);
   }
 }
 

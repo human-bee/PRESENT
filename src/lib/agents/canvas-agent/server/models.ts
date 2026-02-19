@@ -5,6 +5,12 @@ import { z } from 'zod';
 import type { StructuredStream } from './streaming';
 import type { ModelTuning } from './model/presets';
 import { getRuntimeModelKey } from '@/lib/agents/shared/model-runtime-context';
+import {
+  describeRetryError,
+  parseRetryEnvInt,
+  withProviderRetry,
+  isRetryableProviderError,
+} from '@/lib/agents/shared/provider-retry';
 
 const agentActionListSchema = z
   .object({
@@ -23,6 +29,19 @@ const agentActionListSchema = z
 const unsafeStreamObject = streamObject as unknown as (args: any) => any;
 
 const unsafeGenerateObject = generateObject as unknown as (args: any) => Promise<{ object: any }>;
+
+const MODEL_RETRY_ATTEMPTS = parseRetryEnvInt(process.env.CANVAS_AGENT_MODEL_RETRY_ATTEMPTS, 3, {
+  min: 1,
+  max: 6,
+});
+const MODEL_RETRY_BASE_DELAY_MS = parseRetryEnvInt(process.env.CANVAS_AGENT_MODEL_RETRY_BASE_DELAY_MS, 250, {
+  min: 0,
+  max: 10_000,
+});
+const MODEL_RETRY_MAX_DELAY_MS = parseRetryEnvInt(process.env.CANVAS_AGENT_MODEL_RETRY_MAX_DELAY_MS, 3_000, {
+  min: 1,
+  max: 20_000,
+});
 
 export type StreamChunk = { type: 'json'; data: unknown } | { type: 'text'; data: string };
 
@@ -44,16 +63,30 @@ class AiSdkProvider implements StreamingProvider {
   }
 
   async *stream(prompt: string, options?: { system?: string; tuning?: ModelTuning }): AsyncIterable<StreamChunk> {
-    const structured = await this.streamStructured?.(prompt, options);
-    if (structured) {
-      for await (const partial of structured.partialObjectStream) {
-        yield { type: 'json', data: partial };
+    let emittedStructuredChunk = false;
+    try {
+      const structured = await this.streamStructured?.(prompt, options);
+      if (structured) {
+        for await (const partial of structured.partialObjectStream) {
+          emittedStructuredChunk = true;
+          yield { type: 'json', data: partial };
+        }
+        const final = await structured.fullStream;
+        if (final?.object) {
+          emittedStructuredChunk = true;
+          yield { type: 'json', data: final.object };
+        }
+        return;
       }
-      const final = await structured.fullStream;
-      if (final?.object) {
-        yield { type: 'json', data: final.object };
+    } catch (error) {
+      if (!isRetryableProviderError(error, { provider: this.provider }) || emittedStructuredChunk) {
+        throw error;
       }
-      return;
+      console.warn('[CanvasAgent] structured stream failed with transient provider error, falling back', {
+        provider: this.provider,
+        model: this.modelId,
+        error: describeRetryError(error),
+      });
     }
 
     const fallback = await this.generateOnce(prompt, options);
@@ -77,10 +110,14 @@ class AiSdkProvider implements StreamingProvider {
     if (this.provider !== 'anthropic' && options?.tuning?.topP !== undefined) {
       common.topP = options.tuning.topP;
     }
-    const streamed = unsafeStreamObject(common) as {
-      partialObjectStream: AsyncIterable<any>;
-      object: Promise<any>;
-    };
+    const streamed = await withProviderRetry(
+      async () =>
+        unsafeStreamObject(common) as {
+          partialObjectStream: AsyncIterable<any>;
+          object: Promise<any>;
+        },
+      this.retryOptions(),
+    );
 
     return {
       partialObjectStream: streamed.partialObjectStream,
@@ -112,7 +149,10 @@ class AiSdkProvider implements StreamingProvider {
     if (this.provider !== 'anthropic' && options?.tuning?.topP !== undefined) {
       common.topP = options.tuning.topP;
     }
-    const { object } = await unsafeGenerateObject(common);
+    const { object } = await withProviderRetry(
+      () => unsafeGenerateObject(common),
+      this.retryOptions(),
+    );
     return object;
   }
 
@@ -125,6 +165,30 @@ class AiSdkProvider implements StreamingProvider {
         cacheControl: ttl ? { type: 'ephemeral', ttl } : { type: 'ephemeral' },
       },
     };
+  }
+
+  private retryOptions() {
+    return {
+      provider: this.provider,
+      attempts: MODEL_RETRY_ATTEMPTS,
+      initialDelayMs: MODEL_RETRY_BASE_DELAY_MS,
+      maxDelayMs: MODEL_RETRY_MAX_DELAY_MS,
+      onRetry: ({ attempt, maxAttempts, delayMs, error }: {
+        attempt: number;
+        maxAttempts: number;
+        delayMs: number;
+        error: unknown;
+      }) => {
+        console.warn('[CanvasAgent] model call transient retry', {
+          provider: this.provider,
+          model: this.modelId,
+          attempt,
+          maxAttempts,
+          delayMs,
+          error: describeRetryError(error),
+        });
+      },
+    } as const;
   }
 }
 

@@ -83,6 +83,24 @@ describe('/api/admin/agents/queue', () => {
     expect(json.tasks).toEqual([]);
   });
 
+  it('applies traceId filter to queue query when trace_id column exists', async () => {
+    requireAgentAdminSignedInUserIdMock.mockResolvedValue({ ok: true, userId: 'admin-1' });
+    const taskQuery = buildQuery({ data: [], error: null });
+    getAdminSupabaseClientMock.mockReturnValue({
+      from: jest.fn(() => taskQuery.query),
+    });
+
+    const GET = await loadGet();
+    const response = await GET({
+      nextUrl: new URL('http://localhost/api/admin/agents/queue?traceId=trace-123'),
+    } as import('next/server').NextRequest);
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.ok).toBe(true);
+    expect(taskQuery.getFilters()).toEqual([{ column: 'trace_id', value: 'trace-123' }]);
+  });
+
   it('enriches queue rows with worker and failure diagnostics', async () => {
     requireAgentAdminSignedInUserIdMock.mockResolvedValue({ ok: true, userId: 'admin-2' });
     const taskQuery = buildQuery({
@@ -173,6 +191,91 @@ describe('/api/admin/agents/queue', () => {
     expect(traceQuery.getInFilters()).toEqual([
       { column: 'task_id', value: ['task-1'] },
     ]);
+  });
+
+  it('suppresses stale failure diagnostics after task succeeds', async () => {
+    requireAgentAdminSignedInUserIdMock.mockResolvedValue({ ok: true, userId: 'admin-2b' });
+    const taskQuery = buildQuery({
+      data: [
+        {
+          id: 'task-2',
+          room: 'canvas-room-2',
+          task: 'fairy.intent',
+          status: 'succeeded',
+          priority: 100,
+          attempt: 2,
+          error: 'stale fallback error',
+          request_id: 'req-2',
+          trace_id: 'trace-2',
+          resource_keys: ['room:canvas-room-2'],
+          lease_expires_at: null,
+          created_at: '2026-02-17T12:00:00.000Z',
+          updated_at: '2026-02-17T12:00:06.000Z',
+        },
+      ],
+      error: null,
+    });
+    const traceQuery = buildQuery({
+      data: [
+        {
+          task_id: 'task-2',
+          trace_id: 'trace-2',
+          request_id: 'req-2',
+          room: 'canvas-room-2',
+          task: 'fairy.intent',
+          stage: 'completed',
+          status: 'succeeded',
+          provider: 'anthropic',
+          model: 'claude-haiku-4-5',
+          provider_source: 'task_params',
+          provider_path: 'primary',
+          provider_request_id: 'provider-req-2',
+          created_at: '2026-02-17T12:00:05.000Z',
+          payload: { workerId: 'worker-2' },
+        },
+        {
+          task_id: 'task-2',
+          trace_id: 'trace-2',
+          request_id: 'req-2',
+          room: 'canvas-room-2',
+          task: 'fairy.intent',
+          stage: 'failed',
+          status: 'failed',
+          provider: 'anthropic',
+          model: 'claude-haiku-4-5',
+          provider_source: 'task_params',
+          provider_path: 'primary',
+          provider_request_id: 'provider-req-2',
+          created_at: '2026-02-17T12:00:03.000Z',
+          payload: { error: 'old failure' },
+        },
+      ],
+      error: null,
+    });
+    getAdminSupabaseClientMock.mockReturnValue({
+      from: jest.fn((table: string) => {
+        if (table === 'agent_tasks') return taskQuery.query;
+        if (table === 'agent_trace_events') return traceQuery.query;
+        throw new Error(`Unexpected table ${table}`);
+      }),
+    });
+
+    const GET = await loadGet();
+    const response = await GET({
+      nextUrl: new URL('http://localhost/api/admin/agents/queue?room=canvas-room-2'),
+    } as import('next/server').NextRequest);
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.ok).toBe(true);
+    expect(json.tasks).toHaveLength(1);
+    expect(json.tasks[0]).toMatchObject({
+      id: 'task-2',
+      worker_id: 'worker-2',
+      last_failure_stage: null,
+      last_failure_reason: null,
+      last_failure_at: null,
+    });
   });
 
   it('filters queue rows by provider', async () => {
@@ -273,8 +376,74 @@ describe('/api/admin/agents/queue', () => {
     });
   });
 
-  it('falls back when agent_tasks.params column is unavailable', async () => {
+  it('supports traceId filtering in compat mode when trace_id column is missing', async () => {
     requireAgentAdminSignedInUserIdMock.mockResolvedValue({ ok: true, userId: 'admin-4' });
+    const withTraceQuery = buildQuery({
+      data: [],
+      error: {
+        code: '42703',
+        message: 'column "trace_id" does not exist',
+      },
+    });
+    const compatTaskQuery = buildQuery({
+      data: [
+        {
+          id: 'task-1',
+          room: 'canvas-room-1',
+          task: 'fairy.intent',
+          status: 'failed',
+          priority: 100,
+          attempt: 2,
+          error: 'fallback failure',
+          request_id: 'req-1',
+          resource_keys: ['room:canvas-room-1'],
+          lease_expires_at: null,
+          created_at: '2026-02-17T12:00:00.000Z',
+          updated_at: '2026-02-17T12:00:03.000Z',
+        },
+      ],
+      error: null,
+    });
+    const traceQuery = buildQuery({
+      data: [
+        {
+          task_id: 'task-1',
+          trace_id: 'trace-compat-1',
+          stage: 'failed',
+          status: 'failed',
+          created_at: '2026-02-17T12:00:01.000Z',
+          payload: { error: 'tool crashed' },
+        },
+      ],
+      error: null,
+    });
+
+    let taskCallCount = 0;
+    getAdminSupabaseClientMock.mockReturnValue({
+      from: jest.fn((table: string) => {
+        if (table === 'agent_tasks') {
+          taskCallCount += 1;
+          return taskCallCount === 1 ? withTraceQuery.query : compatTaskQuery.query;
+        }
+        if (table === 'agent_trace_events') return traceQuery.query;
+        throw new Error(`Unexpected table ${table}`);
+      }),
+    });
+
+    const GET = await loadGet();
+    const response = await GET({
+      nextUrl: new URL('http://localhost/api/admin/agents/queue?traceId=trace-compat-1'),
+    } as import('next/server').NextRequest);
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.ok).toBe(true);
+    expect(json.tasks).toHaveLength(1);
+    expect(json.tasks[0].trace_id).toBe('trace-compat-1');
+  });
+
+  it('falls back when agent_tasks.params column is unavailable', async () => {
+    requireAgentAdminSignedInUserIdMock.mockResolvedValue({ ok: true, userId: 'admin-5' });
     const taskQueries = [
       buildQuery({ data: [], error: { code: '42703', message: 'column "params" does not exist' } }),
       buildQuery({ data: [], error: null }),

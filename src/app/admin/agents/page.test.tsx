@@ -27,7 +27,9 @@ describe('/admin/agents page', () => {
   });
 
   it('supports pretty/raw payload rendering and masking toggle', async () => {
+    const calledUrls: string[] = [];
     fetchWithSupabaseAuthMock.mockImplementation((url: string) => {
+      calledUrls.push(url);
       if (url === '/api/admin/agents/overview') {
         return Promise.resolve(
           response({
@@ -182,6 +184,16 @@ describe('/admin/agents page', () => {
     fireEvent.click(queueTask);
 
     await screen.findByText('Trace Detail');
+
+    await waitFor(() => {
+      expect(
+        calledUrls.some((url) => url.startsWith('/api/admin/agents/queue?') && url.includes('traceId=trace-1')),
+      ).toBe(true);
+      expect(
+        calledUrls.some((url) => url.startsWith('/api/admin/agents/traces?') && url.includes('traceId=trace-1')),
+      ).toBe(true);
+    });
+
     fireEvent.click(await screen.findByText('Show Payload'));
 
     await waitFor(() => {

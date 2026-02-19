@@ -107,4 +107,31 @@ describe('trace-diagnostics', () => {
       model: 'claude-3-5-sonnet',
     });
   });
+
+  it('does not report stale failure when a newer completion exists', () => {
+    const summary = deriveTraceFailureSummary([
+      {
+        trace_id: 'trace-2',
+        task_id: 'task-2',
+        stage: 'completed',
+        status: 'succeeded',
+        created_at: '2026-02-17T12:00:05.000Z',
+        payload: { workerId: 'worker-2' },
+      },
+      {
+        trace_id: 'trace-2',
+        task_id: 'task-2',
+        stage: 'failed',
+        status: 'failed',
+        created_at: '2026-02-17T12:00:02.000Z',
+        payload: { error: 'old failure' },
+      },
+    ], {
+      status: 'succeeded',
+      error: 'stale fallback error',
+      task_id: 'task-2',
+    });
+
+    expect(summary).toBeNull();
+  });
 });
