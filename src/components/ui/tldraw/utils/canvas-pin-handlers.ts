@@ -24,11 +24,15 @@ export function createCanvasPinHandlers({ editor, roomName }: PinHandlersDeps): 
         const bottomRight = editor.pageToScreen({ x: bounds.x + bounds.w, y: bounds.y + bounds.h });
         const pinnedX = screenPoint.x / viewport.width;
         const pinnedY = screenPoint.y / viewport.height;
+        const pinnedLeft = topLeft.x / viewport.width;
+        const pinnedTop = topLeft.y / viewport.height;
         const screenW = Math.max(1, Math.abs(bottomRight.x - topLeft.x));
         const screenH = Math.max(1, Math.abs(bottomRight.y - topLeft.y));
         setLocalPin(resolvedRoom, String(shape.id), {
           pinnedX,
           pinnedY,
+          pinnedLeft,
+          pinnedTop,
           screenW,
           screenH,
         });

@@ -1,0 +1,28 @@
+{
+  "pin": {
+    "pinnedX": 0.49767441860465117,
+    "pinnedY": 0.4897959183673469,
+    "pinnedLeft": 0.4046511627906977,
+    "pinnedTop": 0.3673469387755102,
+    "screenW": 320,
+    "screenH": 240
+  },
+  "portalRect": {
+    "x": 696,
+    "y": 360,
+    "width": 320,
+    "height": 240
+  },
+  "beforeRect": {
+    "x": 696,
+    "y": 360,
+    "width": 320,
+    "height": 240
+  },
+  "delta": {
+    "dx": 0,
+    "dy": 0,
+    "dw": 0,
+    "dh": 0
+  }
+}

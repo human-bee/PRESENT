@@ -1,6 +1,8 @@
 export type LocalPinData = {
   pinnedX: number;
   pinnedY: number;
+  pinnedLeft?: number;
+  pinnedTop?: number;
   screenW?: number;
   screenH?: number;
 };
@@ -57,13 +59,19 @@ export function getLocalPin(roomName: string, shapeId: string): LocalPinData | n
   const pinnedX = Number(entry.pinnedX);
   const pinnedY = Number(entry.pinnedY);
   if (!Number.isFinite(pinnedX) || !Number.isFinite(pinnedY)) return null;
+  const maybeLeft = Number((entry as any).pinnedLeft);
+  const maybeTop = Number((entry as any).pinnedTop);
   const maybeW = Number((entry as any).screenW);
   const maybeH = Number((entry as any).screenH);
+  const pinnedLeft = Number.isFinite(maybeLeft) ? Math.max(0, Math.min(1, maybeLeft)) : undefined;
+  const pinnedTop = Number.isFinite(maybeTop) ? Math.max(0, Math.min(1, maybeTop)) : undefined;
   const screenW = Number.isFinite(maybeW) && maybeW > 0 ? maybeW : undefined;
   const screenH = Number.isFinite(maybeH) && maybeH > 0 ? maybeH : undefined;
   return {
     pinnedX: Math.max(0, Math.min(1, pinnedX)),
     pinnedY: Math.max(0, Math.min(1, pinnedY)),
+    ...(pinnedLeft !== undefined ? { pinnedLeft } : {}),
+    ...(pinnedTop !== undefined ? { pinnedTop } : {}),
     ...(screenW ? { screenW } : {}),
     ...(screenH ? { screenH } : {}),
   };
@@ -71,13 +79,19 @@ export function getLocalPin(roomName: string, shapeId: string): LocalPinData | n
 
 export function setLocalPin(roomName: string, shapeId: string, data: LocalPinData) {
   const pins = readRoomPins(roomName);
+  const maybeLeft = Number((data as any).pinnedLeft);
+  const maybeTop = Number((data as any).pinnedTop);
   const maybeW = Number((data as any).screenW);
   const maybeH = Number((data as any).screenH);
+  const pinnedLeft = Number.isFinite(maybeLeft) ? Math.max(0, Math.min(1, maybeLeft)) : undefined;
+  const pinnedTop = Number.isFinite(maybeTop) ? Math.max(0, Math.min(1, maybeTop)) : undefined;
   const screenW = Number.isFinite(maybeW) && maybeW > 0 ? maybeW : undefined;
   const screenH = Number.isFinite(maybeH) && maybeH > 0 ? maybeH : undefined;
   pins[shapeId] = {
     pinnedX: Math.max(0, Math.min(1, Number(data.pinnedX))),
     pinnedY: Math.max(0, Math.min(1, Number(data.pinnedY))),
+    ...(pinnedLeft !== undefined ? { pinnedLeft } : {}),
+    ...(pinnedTop !== undefined ? { pinnedTop } : {}),
     ...(screenW ? { screenW } : {}),
     ...(screenH ? { screenH } : {}),
   };

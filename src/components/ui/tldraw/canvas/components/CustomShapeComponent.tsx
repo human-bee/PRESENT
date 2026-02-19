@@ -280,8 +280,11 @@ export function CustomShapeComponent({ shape }: { shape: CustomShape }) {
   );
 
   if (localPin && typeof document !== 'undefined') {
-    const left = `${localPin.pinnedX * 100}vw`;
-    const top = `${localPin.pinnedY * 100}vh`;
+    const hasTopLeftAnchor =
+      Number.isFinite(localPin.pinnedLeft) &&
+      Number.isFinite(localPin.pinnedTop);
+    const left = hasTopLeftAnchor ? `${(localPin.pinnedLeft as number) * 100}vw` : `${localPin.pinnedX * 100}vw`;
+    const top = hasTopLeftAnchor ? `${(localPin.pinnedTop as number) * 100}vh` : `${localPin.pinnedY * 100}vh`;
     const pinnedW = Number.isFinite(localPin.screenW) && (localPin.screenW as number) > 0
       ? (localPin.screenW as number)
       : shape.props.w;
@@ -296,7 +299,7 @@ export function CustomShapeComponent({ shape }: { shape: CustomShape }) {
           position: 'fixed',
           left,
           top,
-          transform: 'translate(-50%, -50%)',
+          transform: hasTopLeftAnchor ? undefined : 'translate(-50%, -50%)',
           width: `${pinnedW}px`,
           height: `${pinnedH}px`,
           zIndex: 1100,
