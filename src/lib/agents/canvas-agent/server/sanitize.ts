@@ -1,23 +1,19 @@
 import type { AgentAction } from '@/lib/canvas-agent/contract/types';
 import { actionParamSchemas } from '@/lib/canvas-agent/contract/parsers';
 import { newAgentShapeId } from '@/lib/canvas-agent/contract/ids';
-import { resolveShapeType, sanitizeShapeProps } from '@/lib/canvas-agent/contract/shape-utils';
 import { CLEAR_ALL_SHAPES_SENTINEL } from '@/lib/canvas-agent/contract/teacher-bridge';
 
 /**
  * Canonical sanitization happens in two passes:
  * 1. Structural parsing via the shared Zod schemas (type guardrails, defaulting).
  * 2. Graph-aware guardrails (existence checks, ID filtering, range clamps).
- * A narrow semantic rewrite is allowed for explicit target-id contracts:
- * update_shape on a missing explicit id may be promoted to create_shape so
- * deterministic "ensure this id exists" flows do not dead-loop.
  */
 
 export type CanvasShapeExistence = (id: string) => boolean;
 
 export type SanitizeActionOptions = {
-  promoteMissingUpdateShapeIds?: Iterable<string>;
   knownShapeIds?: Iterable<string>;
+  onMissingUpdateTargetDropped?: (shapeId: string) => void;
 };
 
 const normalizeShapeId = (value: unknown): string => {
@@ -25,86 +21,6 @@ const normalizeShapeId = (value: unknown): string => {
   const trimmed = value.trim();
   if (!trimmed) return '';
   return trimmed.startsWith('shape:') ? trimmed.slice('shape:'.length) : trimmed;
-};
-
-const finiteNumber = (value: unknown): number | undefined =>
-  typeof value === 'number' && Number.isFinite(value) ? value : undefined;
-
-const hasRenderableUpdatePayload = (params: Record<string, unknown>): boolean => {
-  if (finiteNumber(params.x) !== undefined || finiteNumber(params.y) !== undefined) return true;
-  const props = params.props;
-  if (!props || typeof props !== 'object') return false;
-  const record = props as Record<string, unknown>;
-  if (
-    finiteNumber(record.x) !== undefined ||
-    finiteNumber(record.y) !== undefined ||
-    finiteNumber(record.w) !== undefined ||
-    finiteNumber(record.h) !== undefined
-  ) {
-    return true;
-  }
-  if (typeof record.text === 'string' && record.text.trim().length > 0) return true;
-  if (typeof record.label === 'string' && record.label.trim().length > 0) return true;
-  if (typeof record.content === 'string' && record.content.trim().length > 0) return true;
-  if (record.richText && typeof record.richText === 'object') return true;
-  if (record.points !== undefined || record.startPoint !== undefined || record.endPoint !== undefined) return true;
-  return Object.keys(record).length > 0;
-};
-
-const inferCreateShapeTypeFromUpdate = (params: Record<string, unknown>): string => {
-  const explicitType = resolveShapeType(typeof params.type === 'string' ? params.type : undefined);
-  if (explicitType) return explicitType;
-  const props = params.props && typeof params.props === 'object' ? (params.props as Record<string, unknown>) : {};
-  if (
-    props.points !== undefined ||
-    props.startPoint !== undefined ||
-    props.endPoint !== undefined ||
-    props.start !== undefined ||
-    props.end !== undefined
-  ) {
-    return 'line';
-  }
-  if (
-    typeof props.text === 'string' ||
-    typeof props.label === 'string' ||
-    typeof props.content === 'string' ||
-    (props.richText && typeof props.richText === 'object')
-  ) {
-    return 'note';
-  }
-  return 'rectangle';
-};
-
-const buildCreateFromMissingUpdate = (action: AgentAction, params: Record<string, unknown>): AgentAction | null => {
-  const targetId = normalizeShapeId(params.id);
-  if (!targetId) return null;
-  if (!hasRenderableUpdatePayload(params)) return null;
-
-  const rawProps = params.props && typeof params.props === 'object'
-    ? { ...(params.props as Record<string, unknown>) }
-    : {};
-  const x = finiteNumber(params.x) ?? finiteNumber(rawProps.x) ?? 0;
-  const y = finiteNumber(params.y) ?? finiteNumber(rawProps.y) ?? 0;
-  delete rawProps.x;
-  delete rawProps.y;
-
-  const shapeType = inferCreateShapeTypeFromUpdate(params);
-  const sanitizedProps = sanitizeShapeProps(rawProps, shapeType);
-  const nextParams: Record<string, unknown> = {
-    id: targetId,
-    type: shapeType,
-    x,
-    y,
-  };
-  if (Object.keys(sanitizedProps).length > 0) {
-    nextParams.props = sanitizedProps;
-  }
-
-  return {
-    id: action.id,
-    name: 'create_shape',
-    params: nextParams,
-  };
 };
 
 export function sanitizeActions(
@@ -116,11 +32,6 @@ export function sanitizeActions(
   const createdIds = new Set<string>();
   const knownShapeIds = new Set<string>(
     Array.from(options?.knownShapeIds ?? [])
-      .map((id) => normalizeShapeId(id))
-      .filter((id) => id.length > 0),
-  );
-  const promoteMissingUpdateShapeIds = new Set<string>(
-    Array.from(options?.promoteMissingUpdateShapeIds ?? [])
       .map((id) => normalizeShapeId(id))
       .filter((id) => id.length > 0),
   );
@@ -178,12 +89,10 @@ export function sanitizeActions(
         case 'update_shape': {
           if (!isKnown(params.id)) {
             const targetId = normalizeShapeId(params.id);
-            if (!targetId || !promoteMissingUpdateShapeIds.has(targetId)) continue;
-            const promoted = buildCreateFromMissingUpdate(action, params as Record<string, unknown>);
-            if (!promoted) continue;
-            action = promoted;
-            params = promoted.params;
-            createdIds.add(targetId);
+            if (targetId) {
+              options?.onMissingUpdateTargetDropped?.(targetId);
+            }
+            continue;
           }
           break;
         }

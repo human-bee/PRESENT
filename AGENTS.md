@@ -115,6 +115,7 @@ If it doesn't move the canvas, it doesn't belong in the voice agent. We separate
 - **Canvas Agent (Unified, Node)**
   Server-centric "brain" that handles all TLDraw canvas operations. Builds prompts, calls models (streaming), sanitizes actions, and broadcasts TLDraw-native action envelopes to clients. Browser acts as "eyes and hands" only (viewport/selection/screenshot + action execution). See `docs/canvas-agent.md` for full architecture.
   - **Parity rule:** Treat the TLDraw SDK agent starter kit as the source of truth. Do **not** post-process or "fix" the model’s TLDraw actions on the server; instead, update prompts, tool catalog, or few-shot examples so the model emits valid TLDraw verbs on its own. Any new validation should live in the shared contract so it mirrors the upstream kit.
+  - **No semantic rescue:** Never rewrite action intent server-side (for example `update_shape` → `create_shape`). Missing targets are dropped and recovered through strict followup prompts/contracts.
 - **Conductor (Agents SDK, Node)**
   A tiny router that delegates to **steward** subagents via handoffs. No business logic. Runs on the OpenAI Agents SDK (which wraps the Responses API) so stewards can opt into Responses features without rewriting the router.
 - **Stewards (Agents SDK, Node)**
@@ -148,5 +149,6 @@ If it doesn't move the canvas, it doesn't belong in the voice agent. We separate
 - Conductor logs show claimed/completed tasks; monitor queue depth.
 - Canvas prompts should coalesce—latest wins.
 - Parallel tasks across different rooms/components run concurrently.
+- Determinism playbook: encode deterministic requirements in prompts/examples (`create_shape` before `update_shape` for uncertain ids, strict `targetIds` followups), not in runtime regex/heuristic forcing.
 
 Check `/docs` for steward-specific playbooks.

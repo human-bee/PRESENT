@@ -96,6 +96,7 @@ Provider registry with streaming interface:
 Validates and sanitizes model outputs:
 
 - Check shape existence; drop invalid refs
+- Missing `update_shape` targets are dropped (no server-side `update_shape` → `create_shape` promotion)
 - Clamp numeric bounds (NaN/Infinity guards)
 - Validate enums (color, fill, style)
 - Generate agent shape IDs (`ag:{nanoid}`)
@@ -144,6 +145,13 @@ Validates and sanitizes model outputs:
 - `CANVAS_AGENT_DURABLE_FOLLOWUPS` — when `true` (default), follow-ups are enqueued as durable `canvas.followup` queue tasks with correlation + dedupe keys. If queue credentials are unavailable, the runner falls back to in-session memory scheduling.
 - `CANVAS_AGENT_CONFIG` — optional JSON blob that overrides the knobs above in one place (example: `{"screenshot":{"timeoutMs":5000,"retries":2},"followups":{"lowActionThreshold":4}}`). Use this to keep parity with the starter kit defaults without juggling multiple env vars.
 - Follow-up passes always request a fresh screenshot, even when the legacy client agent is disabled.
+
+### Determinism playbook (parity-safe)
+
+- Keep deterministic recovery in prompts/contracts, not runtime heuristics.
+- For explicit ids: create missing ids first, then update/style them.
+- Strict followups (`targetIds`) are remediation objectives for the next model turn, not semantic rewrite triggers.
+- If completion drops, iterate prompt/few-shot guidance before adding code-path fixups.
 
 ### Evaluation snapshot
 
@@ -262,7 +270,7 @@ type AgentActionEnvelope = {
 ```typescript
 { type: 'agent:chat', sessionId: string, message: { role: 'assistant'|'system', text: string } }
 { type: 'agent:status', sessionId: string, state: 'waiting_context'|'calling_model'|'streaming'|'scheduled'|'done'|'canceled'|'error', detail?: unknown }
-{ type: 'agent:trace', sessionId: string, step: 'run_start'|'screenshot_requested'|'screenshot_received'|'screenshot_failed'|'model_call'|'chunk_processed'|'actions_dispatched'|'ack_received'|'ack_timeout'|'ack_retry'|'followup_enqueued'|'run_complete'|'run_error', traceId?: string, intentId?: string, requestId?: string, seq?: number, partial?: boolean, actionCount?: number, detail?: unknown }
+{ type: 'agent:trace', sessionId: string, step: 'run_start'|'screenshot_requested'|'screenshot_received'|'screenshot_failed'|'model_call'|'chunk_processed'|'actions_dispatched'|'ack_received'|'ack_timeout'|'ack_retry'|'update_missing_target_dropped'|'missing_target_ids_detected'|'followup_enqueued'|'strict_followup_enqueued'|'strict_followup_resolved'|'run_complete'|'run_error', traceId?: string, intentId?: string, requestId?: string, seq?: number, partial?: boolean, actionCount?: number, detail?: unknown }
 ```
 
 **Topics**: `agent:chat`, `agent:status`, `agent:trace`

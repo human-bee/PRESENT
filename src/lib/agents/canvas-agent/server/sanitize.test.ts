@@ -42,7 +42,7 @@ describe('Canvas Agent Sanitizer', () => {
     expect(result).toHaveLength(1);
   });
 
-  it('promotes missing explicit update_shape into create_shape for deterministic target-id flows', () => {
+  it('drops missing update_shape targets without semantic promotion', () => {
     const actions: AgentAction[] = [
       {
         id: 'a1',
@@ -50,19 +50,11 @@ describe('Canvas Agent Sanitizer', () => {
         params: { id: 'forest-ground', props: { x: -240, y: 170, w: 500, h: 8, color: 'green', fill: 'solid' } },
       },
     ];
-    const result = sanitizeActions(actions, mockExists, {
-      promoteMissingUpdateShapeIds: ['forest-ground'],
-    });
-    expect(result).toHaveLength(1);
-    expect(result[0].name).toBe('create_shape');
-    expect((result[0].params as any).id).toBe('forest-ground');
-    expect((result[0].params as any).type).toBe('rectangle');
-    expect((result[0].params as any).x).toBe(-240);
-    expect((result[0].params as any).y).toBe(170);
-    expect((result[0].params as any).props.w).toBe(500);
+    const result = sanitizeActions(actions, mockExists);
+    expect(result).toHaveLength(0);
   });
 
-  it('does not promote missing updates when id is not in explicit upsert set', () => {
+  it('reports dropped missing update targets via callback', () => {
     const actions: AgentAction[] = [
       {
         id: 'a1',
@@ -70,10 +62,12 @@ describe('Canvas Agent Sanitizer', () => {
         params: { id: 'forest-ground', props: { x: -240, y: 170, w: 500, h: 8 } },
       },
     ];
+    const droppedIds: string[] = [];
     const result = sanitizeActions(actions, mockExists, {
-      promoteMissingUpdateShapeIds: ['sticky-forest'],
+      onMissingUpdateTargetDropped: (shapeId) => droppedIds.push(shapeId),
     });
     expect(result).toHaveLength(0);
+    expect(droppedIds).toEqual(['forest-ground']);
   });
 
   it('should filter delete_shape ids to existing only', () => {

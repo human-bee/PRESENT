@@ -21,6 +21,7 @@ export const LEGACY_ACTION_NAMES = [
   'add_detail',
   'set_viewport',
   'apply_preset',
+  'place',
   'message',
 ] as const;
 
@@ -72,7 +73,11 @@ export const AGENT_TRACE_STEPS = [
   'ack_received',
   'ack_timeout',
   'ack_retry',
+  'update_missing_target_dropped',
+  'missing_target_ids_detected',
   'followup_enqueued',
+  'strict_followup_enqueued',
+  'strict_followup_resolved',
   'run_complete',
   'run_error',
 ] as const;

@@ -65,6 +65,32 @@ export function creativeFewShots(): FewShotExample[] {
         { name: 'add_detail', params: { hint: 'Provide copy for the three sticky notes in the cluster.', targetIds: ['idea-note-a', 'idea-note-b', 'idea-note-c'] } },
       ],
     },
+    {
+      user:
+        'Use these exact ids and geometry: forest-ground, forest-tree-1, and forest-tree-2. If any are missing, create them first, then apply style and spacing.',
+      actions: [
+        { name: 'create_shape', params: { id: 'forest-ground', type: 'rectangle', x: -240, y: 170, props: { w: 500, h: 12, color: 'green', fill: 'solid' } } },
+        { name: 'create_shape', params: { id: 'forest-tree-1', type: 'rectangle', x: -180, y: 40, props: { w: 40, h: 130, color: 'green', fill: 'solid' } } },
+        { name: 'create_shape', params: { id: 'forest-tree-2', type: 'rectangle', x: -20, y: 50, props: { w: 40, h: 120, color: 'green', fill: 'solid' } } },
+        { name: 'update_shape', params: { id: 'forest-ground', props: { color: 'green', dash: 'solid' } } },
+        { name: 'update_shape', params: { id: 'forest-tree-1', props: { color: 'green', fill: 'solid' } } },
+        { name: 'update_shape', params: { id: 'forest-tree-2', props: { color: 'green', fill: 'solid' } } },
+        { name: 'align', params: { ids: ['forest-tree-1', 'forest-tree-2'], axis: 'y', mode: 'end' } },
+        { name: 'stack', params: { ids: ['forest-tree-1', 'forest-tree-2'], direction: 'row', gap: 120 } },
+      ],
+    },
+    {
+      user:
+        'Strict followup: finish ids sticky-bunny and sticky-forest before any layout verbs, then continue.',
+      actions: [
+        { name: 'create_shape', params: { id: 'sticky-bunny', type: 'note', x: 120, y: -80, props: { text: 'Bunny copy', color: 'yellow', size: 'm' } } },
+        { name: 'create_shape', params: { id: 'sticky-forest', type: 'note', x: 300, y: -80, props: { text: 'Forest copy', color: 'yellow', size: 'm' } } },
+        { name: 'update_shape', params: { id: 'sticky-bunny', props: { color: 'yellow', fill: 'semi' } } },
+        { name: 'update_shape', params: { id: 'sticky-forest', props: { color: 'yellow', fill: 'semi' } } },
+        { name: 'stack', params: { ids: ['sticky-bunny', 'sticky-forest'], direction: 'row', gap: 48 } },
+        { name: 'add_detail', params: { hint: 'Need final copy text for sticky-bunny and sticky-forest.', targetIds: ['sticky-bunny', 'sticky-forest'], strict: true } },
+      ],
+    },
     // Layout-focused few-shot: hero block + tidy supporting cards.
     {
       user: 'Drop a hero block on the left and three supporting cards on the right, then tidy them with align/distribute/stack before summarizing progress.',

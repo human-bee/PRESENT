@@ -935,6 +935,7 @@ export async function runCanvasAgent(args: RunArgs) {
     }
     let seq = 0;
     const sessionCreatedIds = new Set<string>();
+    const droppedUpdateTargetIds = new Set<string>();
     metrics.modelCalledAt = Date.now();
 
     const rememberCreatedIds = (actions: AgentAction[]) => {
@@ -976,6 +977,16 @@ export async function runCanvasAgent(args: RunArgs) {
                 strict: followup.strict === true,
               },
             });
+            if (followup.strict === true) {
+              emitTrace('strict_followup_enqueued', {
+                detail: {
+                  mode: 'durable',
+                  depth: normalizedDepth,
+                  reason: followup.reason ?? null,
+                  targetIds: Array.isArray(followup.targetIds) ? followup.targetIds : [],
+                },
+              });
+            }
             return true;
           }
         } catch (error) {
@@ -1010,13 +1021,28 @@ export async function runCanvasAgent(args: RunArgs) {
             strict: followup.strict === true,
           },
         });
+        if (followup.strict === true) {
+          emitTrace('strict_followup_enqueued', {
+            detail: {
+              mode: 'session',
+              depth: normalizedDepth,
+              reason: followup.reason ?? null,
+              targetIds: Array.isArray(followup.targetIds) ? followup.targetIds : [],
+            },
+          });
+        }
       }
       return accepted;
     };
 
+    const knownShapeIdsByPhase = new Map<'initial' | 'followup', Set<string>>();
+
     const scheduleMissingTargetIdsFollowup = async (
       sourceFollowup: CanvasFollowupInput | null,
       phase: 'initial' | 'followup',
+      options?: {
+        knownShapeIds?: Set<string>;
+      },
     ): Promise<boolean> => {
       if (!sourceFollowup || !Array.isArray(sourceFollowup.targetIds) || sourceFollowup.targetIds.length === 0) {
         return false;
@@ -1028,32 +1054,50 @@ export async function runCanvasAgent(args: RunArgs) {
         return false;
       }
 
-      const knownShapeIds = new Set<string>();
-      try {
-        const canvasSummary = await getCanvasShapeSummary(roomId);
-        for (const shape of canvasSummary.shapes) {
-          const normalized = normalizeShapeIdForLookup(shape.id);
-          if (normalized) knownShapeIds.add(normalized);
-        }
-      } catch (error) {
-        if (cfg.debug) {
-          console.warn('[CanvasAgent:Followups] failed to read canvas summary for target-id verification', {
-            roomId,
-            sessionId,
-            phase,
-            error: error instanceof Error ? error.message : String(error),
-          });
+      const knownShapeIds = new Set<string>(options?.knownShapeIds ?? []);
+      if (!options?.knownShapeIds) {
+        try {
+          const canvasSummary = await getCanvasShapeSummary(roomId);
+          for (const shape of canvasSummary.shapes) {
+            const normalized = normalizeShapeIdForLookup(shape.id);
+            if (normalized) knownShapeIds.add(normalized);
+          }
+        } catch (error) {
+          if (cfg.debug) {
+            console.warn('[CanvasAgent:Followups] failed to read canvas summary for target-id verification', {
+              roomId,
+              sessionId,
+              phase,
+              error: error instanceof Error ? error.message : String(error),
+            });
+          }
         }
       }
       for (const createdId of sessionCreatedIds) {
         const normalized = normalizeShapeIdForLookup(createdId);
         if (normalized) knownShapeIds.add(normalized);
       }
+      knownShapeIdsByPhase.set(phase, new Set(knownShapeIds));
 
       const missingTargetIds = resolveMissingTargetIds(sourceFollowup.targetIds, knownShapeIds);
       if (missingTargetIds.length === 0) {
+        emitTrace('strict_followup_resolved', {
+          detail: {
+            phase,
+            depth: nextDepth,
+            reason: sourceFollowup.reason ?? 'missing_target_ids',
+          },
+        });
         return false;
       }
+      emitTrace('missing_target_ids_detected', {
+        actionCount: missingTargetIds.length,
+        detail: {
+          phase,
+          depth: nextDepth,
+          targetIds: missingTargetIds,
+        },
+      });
 
       const sourceMessage =
         typeof sourceFollowup.message === 'string' && sourceFollowup.message.trim().length > 0
@@ -1089,6 +1133,16 @@ export async function runCanvasAgent(args: RunArgs) {
             targetIds: missingTargetIds,
           },
         });
+        emitTrace('strict_followup_enqueued', {
+          actionCount: missingTargetIds.length,
+          detail: {
+            mode: 'session',
+            phase,
+            depth: nextDepth,
+            reason,
+            targetIds: missingTargetIds,
+          },
+        });
         if (cfg.debug) {
           console.log('[CanvasAgent:Followups] scheduled missing-target-ids follow-up', {
             roomId,
@@ -1101,6 +1155,61 @@ export async function runCanvasAgent(args: RunArgs) {
         }
       }
       return accepted;
+    };
+
+    const scheduleDroppedUpdateTargetFollowup = async (
+      phase: 'initial' | 'followup',
+      sourceFollowup: CanvasFollowupInput | null,
+    ): Promise<boolean> => {
+      if (droppedUpdateTargetIds.size === 0) {
+        return false;
+      }
+      const explicitTargetIds = new Set<string>();
+      if (Array.isArray(sourceFollowup?.targetIds)) {
+        for (const targetId of sourceFollowup.targetIds) {
+          const normalized = normalizeShapeIdForLookup(targetId);
+          if (normalized) explicitTargetIds.add(normalized);
+        }
+      }
+      const missingFromDropped = Array.from(droppedUpdateTargetIds).filter((targetId) => {
+        const normalized = normalizeShapeIdForLookup(targetId);
+        return normalized && !explicitTargetIds.has(normalized);
+      });
+      droppedUpdateTargetIds.clear();
+      if (missingFromDropped.length === 0) {
+        return false;
+      }
+
+      const baseMessage =
+        typeof sourceFollowup?.message === 'string' && sourceFollowup.message.trim().length > 0
+          ? sourceFollowup.message.trim()
+          : userMessage;
+      const baseOriginalMessage =
+        typeof sourceFollowup?.originalMessage === 'string' && sourceFollowup.originalMessage.trim().length > 0
+          ? sourceFollowup.originalMessage.trim()
+          : userMessage;
+      const sourceDepth = typeof sourceFollowup?.depth === 'number' ? sourceFollowup.depth : Number.NaN;
+      const baseDepth = Number.isFinite(sourceDepth)
+        ? Math.max(0, Math.floor(sourceDepth))
+        : currentFollowupDepth;
+      const cachedKnownShapeIds = knownShapeIdsByPhase.get(phase);
+
+      return scheduleMissingTargetIdsFollowup(
+        {
+          message: baseMessage,
+          originalMessage: baseOriginalMessage,
+          depth: baseDepth,
+          targetIds: missingFromDropped,
+          strict: true,
+          reason: 'missing_update_targets',
+        },
+        phase,
+        {
+          // Reuse known ids from this phase to avoid a duplicate
+          // canvas-summary fetch when missing update targets are immediately retried.
+          knownShapeIds: cachedKnownShapeIds && cachedKnownShapeIds.size > 0 ? cachedKnownShapeIds : undefined,
+        },
+      );
     };
 
     const makeDetailEnqueuer =
@@ -1276,7 +1385,6 @@ const normalizeRawAction = (
       options?: {
         dispatch?: boolean;
         source?: 'present' | 'teacher';
-        promoteMissingUpdateShapeIds?: string[];
       },
     ) => {
       const shouldDispatch = options?.dispatch !== false;
@@ -1304,7 +1412,9 @@ const normalizeRawAction = (
       const dropStats = {
         duplicateCreates: 0,
         invalidSchema: 0,
+        missingUpdateTargetDrops: 0,
       };
+      const missingUpdateTargetIds = new Set<string>();
       const queue: unknown[] = [];
       for (const candidate of rawActions) {
         const teacherConverted = convertTeacherAction(candidate);
@@ -1410,9 +1520,24 @@ const normalizeRawAction = (
       const exists = (id: string) =>
         sessionCreatedIds.has(id) || chunkCreatedIds.has(id) || existingShapeIds.has(id);
       const clean = sanitizeActions(parsed, exists, {
-        promoteMissingUpdateShapeIds: options?.promoteMissingUpdateShapeIds,
         knownShapeIds: [...existingShapeIds, ...sessionCreatedIds, ...chunkCreatedIds],
+        onMissingUpdateTargetDropped: (shapeId) => {
+          missingUpdateTargetIds.add(shapeId);
+          droppedUpdateTargetIds.add(shapeId);
+          dropStats.missingUpdateTargetDrops += 1;
+        },
       });
+      if (dropStats.missingUpdateTargetDrops > 0) {
+        emitTrace('update_missing_target_dropped', {
+          seq: seqNumber,
+          partial,
+          actionCount: dropStats.missingUpdateTargetDrops,
+          detail: {
+            source: actionSource,
+            targetIds: Array.from(missingUpdateTargetIds).slice(0, 16),
+          },
+        });
+      }
       if (shouldDispatch) {
         rememberCreatedIds(clean);
       }
@@ -1709,7 +1834,6 @@ const normalizeRawAction = (
           await processActions([event], currentSeq, false, enqueueDetail, {
             dispatch: dispatchActions,
             source: 'teacher',
-            promoteMissingUpdateShapeIds: initialFollowup?.targetIds ?? [],
           });
         }
       };
@@ -1804,9 +1928,7 @@ const normalizeRawAction = (
               }
               metrics.chunkCount++;
               const currentSeq = seq++;
-              await processActions(delta, currentSeq, true, enqueueDetail, {
-                promoteMissingUpdateShapeIds: initialFollowup?.targetIds ?? [],
-              });
+              await processActions(delta, currentSeq, true, enqueueDetail);
               rawProcessed += delta.length;
             },
             async (finalActions) => {
@@ -1815,9 +1937,7 @@ const normalizeRawAction = (
               rawProcessed = finalActions.length;
               if (pending.length === 0) return;
               const currentSeq = seq++;
-              await processActions(pending, currentSeq, false, enqueueDetail, {
-                promoteMissingUpdateShapeIds: initialFollowup?.targetIds ?? [],
-              });
+              await processActions(pending, currentSeq, false, enqueueDetail);
             },
           );
         }
@@ -1851,9 +1971,7 @@ const normalizeRawAction = (
         }
         metrics.chunkCount++;
         const currentSeq = seq++;
-        await processActions(actionsRaw, currentSeq, true, enqueueDetail, {
-          promoteMissingUpdateShapeIds: initialFollowup?.targetIds ?? [],
-        });
+        await processActions(actionsRaw, currentSeq, true, enqueueDetail);
       }
     };
 
@@ -1915,6 +2033,7 @@ const normalizeRawAction = (
     }
 
     await scheduleMissingTargetIdsFollowup(initialFollowup, 'initial');
+    await scheduleDroppedUpdateTargetFollowup('initial', initialFollowup);
 
     if (
       !lowActionRetryScheduled &&
@@ -2051,10 +2170,7 @@ const normalizeRawAction = (
                 if (!Array.isArray(delta) || delta.length === 0) return;
                 metrics.chunkCount++;
                 const currentSeq = followSeq++;
-                await processActions(delta, currentSeq, true, followEnqueueDetail, {
-                  promoteMissingUpdateShapeIds:
-                    followTargetIds.length > 0 ? followTargetIds : initialFollowup?.targetIds ?? [],
-                });
+                await processActions(delta, currentSeq, true, followEnqueueDetail);
                 followRawProcessed += delta.length;
               },
               async (finalActions) => {
@@ -2063,10 +2179,7 @@ const normalizeRawAction = (
                 followRawProcessed = finalActions.length;
                 if (pending.length === 0) return;
                 const currentSeq = followSeq++;
-                await processActions(pending, currentSeq, false, followEnqueueDetail, {
-                  promoteMissingUpdateShapeIds:
-                    followTargetIds.length > 0 ? followTargetIds : initialFollowup?.targetIds ?? [],
-                });
+                await processActions(pending, currentSeq, false, followEnqueueDetail);
               },
             );
           }
@@ -2078,10 +2191,7 @@ const normalizeRawAction = (
           if (!Array.isArray(actionsRaw) || actionsRaw.length === 0) continue;
           metrics.chunkCount++;
           const currentSeq = followSeq++;
-          await processActions(actionsRaw, currentSeq, true, followEnqueueDetail, {
-            promoteMissingUpdateShapeIds:
-              followTargetIds.length > 0 ? followTargetIds : initialFollowup?.targetIds ?? [],
-          });
+          await processActions(actionsRaw, currentSeq, true, followEnqueueDetail);
         }
       };
 
@@ -2150,6 +2260,7 @@ const normalizeRawAction = (
         ...(followReasonRaw && followReasonRaw.trim().length > 0 ? { reason: followReasonRaw.trim() } : {}),
       };
       await scheduleMissingTargetIdsFollowup(normalizedFollowup, 'followup');
+      await scheduleDroppedUpdateTargetFollowup('followup', normalizedFollowup);
 
       next = scheduler.dequeue(sessionId);
     }

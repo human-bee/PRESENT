@@ -55,7 +55,6 @@ import {
   normalizeCrowdPulseActiveQuestionInput,
   parseCrowdPulseFallbackInstruction,
 } from '@/lib/agents/subagents/crowd-pulse-parser';
-import { isDeterministicCanvasCommand } from './voice-agent/deterministic-routing';
 
 const RATE_LIMIT_HEADER_KEYS = [
   'retry-after',
@@ -2695,21 +2694,6 @@ Your only output is function calls. Never use plain text unless absolutely neces
             id: randomUUID(),
             room,
             message: message || trimmed,
-            source: 'voice',
-          },
-        });
-        return;
-      }
-
-      // Structured geometry/ID commands must always route to fairy intent,
-      // even when the incoming transcription is not tagged as "manual".
-      if (isDeterministicCanvasCommand(trimmed)) {
-        await sendToolCall('dispatch_to_conductor', {
-          task: 'fairy.intent',
-          params: {
-            id: randomUUID(),
-            room,
-            message: trimmed,
             source: 'voice',
           },
         });
