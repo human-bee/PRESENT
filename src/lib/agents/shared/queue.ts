@@ -530,20 +530,50 @@ export class AgentTaskQueue {
     }
 
     const nowMs = Date.now();
+    const nowIso = new Date(nowMs).toISOString();
     const fetchLimit = Math.max(limit * 4, 20);
-    const { data: candidates, error } = await this.supabase
-      .from('agent_tasks')
-      .select('*')
-      .eq('status', 'running')
-      .is('lease_token', null)
-      .contains('resource_keys', [scopeKey])
-      .contains('resource_keys', [LOCAL_SCOPE_DIRECT_CLAIM_RESOURCE_KEY])
-      .order('priority', { ascending: false })
-      .order('created_at', { ascending: true })
-      .limit(fetchLimit);
-    if (error) throw error;
+    const dueFilter = `run_at.is.null,run_at.lte.${nowIso}`;
+    const [unleasedResult, staleLeasedResult] = await Promise.all([
+      this.supabase
+        .from('agent_tasks')
+        .select('*')
+        .eq('status', 'running')
+        .is('lease_token', null)
+        .contains('resource_keys', [scopeKey])
+        .contains('resource_keys', [LOCAL_SCOPE_DIRECT_CLAIM_RESOURCE_KEY])
+        .or(dueFilter)
+        .order('priority', { ascending: false })
+        .order('created_at', { ascending: true })
+        .limit(fetchLimit),
+      this.supabase
+        .from('agent_tasks')
+        .select('*')
+        .eq('status', 'running')
+        .not('lease_token', 'is', null)
+        .lte('lease_expires_at', nowIso)
+        .contains('resource_keys', [scopeKey])
+        .contains('resource_keys', [LOCAL_SCOPE_DIRECT_CLAIM_RESOURCE_KEY])
+        .or(dueFilter)
+        .order('priority', { ascending: false })
+        .order('created_at', { ascending: true })
+        .limit(fetchLimit),
+    ]);
+    if (unleasedResult.error) throw unleasedResult.error;
+    if (staleLeasedResult.error) throw staleLeasedResult.error;
 
-    const dueCandidates = ((candidates as AgentTask[] | null) ?? []).filter((task) => {
+    const candidatesById = new Map<string, AgentTask>();
+    for (const task of (unleasedResult.data as AgentTask[] | null) ?? []) {
+      candidatesById.set(task.id, task);
+    }
+    for (const task of (staleLeasedResult.data as AgentTask[] | null) ?? []) {
+      candidatesById.set(task.id, task);
+    }
+    const candidates = Array.from(candidatesById.values()).sort((left, right) => {
+      if (left.priority !== right.priority) return right.priority - left.priority;
+      return Date.parse(left.created_at) - Date.parse(right.created_at);
+    });
+
+    const claimableCandidates = candidates.filter((task) => {
       if (!task.run_at) return true;
       const runAtMs = Date.parse(task.run_at);
       if (!Number.isFinite(runAtMs)) return true;
@@ -551,9 +581,9 @@ export class AgentTaskQueue {
     });
 
     const claimed: AgentTask[] = [];
-    for (const candidate of dueCandidates) {
+    for (const candidate of claimableCandidates) {
       if (claimed.length >= limit) break;
-      const { data: updated, error: updateError } = await this.supabase
+      let updateQuery = this.supabase
         .from('agent_tasks')
         .update({
           lease_token: leaseToken,
@@ -561,10 +591,13 @@ export class AgentTaskQueue {
           updated_at: new Date().toISOString(),
         })
         .eq('id', candidate.id)
-        .eq('status', 'running')
-        .is('lease_token', null)
-        .select('*')
-        .maybeSingle();
+        .eq('status', 'running');
+      if (typeof candidate.lease_token === 'string' && candidate.lease_token.trim().length > 0) {
+        updateQuery = updateQuery.eq('lease_token', candidate.lease_token).lte('lease_expires_at', nowIso);
+      } else {
+        updateQuery = updateQuery.is('lease_token', null);
+      }
+      const { data: updated, error: updateError } = await updateQuery.select('*').maybeSingle();
       if (updateError) throw updateError;
       if (!updated) continue;
       claimed.push(updated as AgentTask);

@@ -10,23 +10,30 @@ type QueryStub = {
   select: jest.Mock;
   eq: jest.Mock;
   in: jest.Mock;
+  is: jest.Mock;
+  not: jest.Mock;
   contains: jest.Mock;
+  or: jest.Mock;
   order: jest.Mock;
+  lte: jest.Mock;
   limit: jest.Mock;
   update: jest.Mock;
   insert: jest.Mock;
   single: jest.Mock;
   maybeSingle: jest.Mock;
+  then: (onfulfilled?: (value: { data: any; error: any }) => unknown, onrejected?: (reason: unknown) => unknown) => Promise<unknown>;
 };
 
 type QueryHarness = {
   queries: QueryStub[];
+  listQueue: Array<{ data: any; error: any }>;
   maybeSingleQueue: Array<{ data: any; error: any }>;
   singleQueue: Array<{ data: any; error: any }>;
 };
 
 const createHarness = (): QueryHarness => {
   const queries: QueryStub[] = [];
+  const listQueue: Array<{ data: any; error: any }> = [];
   const maybeSingleQueue: Array<{ data: any; error: any }> = [];
   const singleQueue: Array<{ data: any; error: any }> = [];
   createClientMock.mockImplementation(() => {
@@ -36,13 +43,19 @@ const createHarness = (): QueryHarness => {
         query.select = jest.fn(() => query);
         query.eq = jest.fn(() => query);
         query.in = jest.fn(() => query);
+        query.is = jest.fn(() => query);
+        query.not = jest.fn(() => query);
         query.contains = jest.fn(() => query);
+        query.or = jest.fn(() => query);
         query.order = jest.fn(() => query);
+        query.lte = jest.fn(() => query);
         query.limit = jest.fn(() => query);
         query.update = jest.fn(() => query);
         query.insert = jest.fn(() => query);
         query.single = jest.fn(async () => singleQueue.shift() ?? { data: null, error: null });
         query.maybeSingle = jest.fn(async () => maybeSingleQueue.shift() ?? { data: null, error: null });
+        query.then = (onfulfilled, onrejected) =>
+          Promise.resolve(listQueue.shift() ?? { data: null, error: null }).then(onfulfilled, onrejected);
         queries.push(query);
         return query;
       }),
@@ -51,7 +64,7 @@ const createHarness = (): QueryHarness => {
     return supabase;
   });
 
-  return { queries, maybeSingleQueue, singleQueue };
+  return { queries, listQueue, maybeSingleQueue, singleQueue };
 };
 
 describe('AgentTaskQueue enqueue dedupe behavior', () => {
@@ -383,5 +396,63 @@ describe('AgentTaskQueue enqueue dedupe behavior', () => {
     );
     expect(requeueQuery?.eq).toHaveBeenCalledWith('id', 'task-requeue');
     expect(requeueQuery?.eq).toHaveBeenCalledWith('lease_token', 'lease-1');
+  });
+
+  test('claimLocalScopeTasks reclaims stale leased tasks in local-scope mode', async () => {
+    const harness = createHarness();
+    const staleLeaseTask = {
+      id: 'task-stale-lease',
+      room: 'room-local',
+      task: 'fairy.intent',
+      params: {} as JsonObject,
+      trace_id: null,
+      status: 'running',
+      priority: 5,
+      run_at: null,
+      attempt: 1,
+      error: null,
+      request_id: 'req-stale-lease',
+      dedupe_key: null,
+      resource_keys: ['room:room-local', 'runtime-scope:local', 'queue-mode:local-scope-direct-claim'],
+      lease_token: 'stale-lease-token',
+      lease_expires_at: '2026-02-19T11:59:00.000Z',
+      created_at: '2026-02-19T11:50:00.000Z',
+      updated_at: '2026-02-19T11:55:00.000Z',
+      result: null,
+    };
+    harness.listQueue.push({ data: [], error: null });
+    harness.listQueue.push({ data: [staleLeaseTask], error: null });
+    harness.maybeSingleQueue.push({ data: staleLeaseTask, error: null });
+
+    const { AgentTaskQueue } = await import('@/lib/agents/shared/queue');
+    const queue = new AgentTaskQueue({ url: 'http://localhost:54321', serviceRoleKey: 'test-key' });
+    const result = await queue.claimLocalScopeTasks({ runtimeScope: 'local', limit: 1 });
+
+    expect(result.tasks).toHaveLength(1);
+    expect(result.tasks[0]?.id).toBe('task-stale-lease');
+    expect(harness.queries).toHaveLength(3);
+    const claimUpdateQuery = harness.queries[2];
+    expect(claimUpdateQuery?.eq).toHaveBeenCalledWith('lease_token', 'stale-lease-token');
+    expect(claimUpdateQuery?.lte).toHaveBeenCalledWith('lease_expires_at', expect.any(String));
+  });
+
+  test('claimLocalScopeTasks applies due-time filter before limiting candidate windows', async () => {
+    const harness = createHarness();
+    harness.listQueue.push({ data: [], error: null });
+    harness.listQueue.push({ data: [], error: null });
+
+    const { AgentTaskQueue } = await import('@/lib/agents/shared/queue');
+    const queue = new AgentTaskQueue({ url: 'http://localhost:54321', serviceRoleKey: 'test-key' });
+    await queue.claimLocalScopeTasks({ runtimeScope: 'local', limit: 2 });
+
+    expect(harness.queries).toHaveLength(2);
+    const unleasedQuery = harness.queries[0];
+    const staleLeasedQuery = harness.queries[1];
+    expect(unleasedQuery?.or).toHaveBeenCalledWith(expect.stringContaining('run_at.is.null'));
+    expect(staleLeasedQuery?.or).toHaveBeenCalledWith(expect.stringContaining('run_at.is.null'));
+    expect(unleasedQuery?.or.mock.invocationCallOrder[0]).toBeLessThan(unleasedQuery?.limit.mock.invocationCallOrder[0]);
+    expect(staleLeasedQuery?.or.mock.invocationCallOrder[0]).toBeLessThan(
+      staleLeasedQuery?.limit.mock.invocationCallOrder[0],
+    );
   });
 });
