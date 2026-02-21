@@ -21,7 +21,6 @@ type QueryStub = {
   insert: jest.Mock;
   single: jest.Mock;
   maybeSingle: jest.Mock;
-  then: (onfulfilled?: (value: { data: any; error: any }) => unknown, onrejected?: (reason: unknown) => unknown) => Promise<unknown>;
 };
 
 type QueryHarness = {
@@ -39,7 +38,9 @@ const createHarness = (): QueryHarness => {
   createClientMock.mockImplementation(() => {
     const supabase = {
       from: jest.fn(() => {
-        const query = {} as QueryStub;
+        const query = Promise.resolve().then(
+          () => listQueue.shift() ?? { data: null, error: null },
+        ) as unknown as QueryStub;
         query.select = jest.fn(() => query);
         query.eq = jest.fn(() => query);
         query.in = jest.fn(() => query);
@@ -54,8 +55,6 @@ const createHarness = (): QueryHarness => {
         query.insert = jest.fn(() => query);
         query.single = jest.fn(async () => singleQueue.shift() ?? { data: null, error: null });
         query.maybeSingle = jest.fn(async () => maybeSingleQueue.shift() ?? { data: null, error: null });
-        query.then = (onfulfilled, onrejected) =>
-          Promise.resolve(listQueue.shift() ?? { data: null, error: null }).then(onfulfilled, onrejected);
         queries.push(query);
         return query;
       }),
