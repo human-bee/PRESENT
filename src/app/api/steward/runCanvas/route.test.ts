@@ -50,9 +50,10 @@ jest.mock('@/lib/agents/shared/trace-events', () => ({
   recordAgentTraceEvent: recordAgentTraceEventMock,
 }));
 
-const loadPost = async (options?: { queueFallback?: boolean; byok?: boolean }) => {
+const loadPost = async (options?: { queueFallback?: boolean; byok?: boolean; strictTrace?: boolean }) => {
   byokEnabled = options?.byok ?? false;
   process.env.CANVAS_QUEUE_DIRECT_FALLBACK = options?.queueFallback ? 'true' : 'false';
+  process.env.CANVAS_REQUIRE_TASK_TRACE_ID = options?.strictTrace ? 'true' : 'false';
 
   let post: ((req: import('next/server').NextRequest) => Promise<Response>) | null = null;
   await jest.isolateModulesAsync(async () => {
@@ -155,6 +156,35 @@ describe('/api/steward/runCanvas', () => {
     expect(queueErrorCall?.[0]?.status).toBe('queue_error');
     expect(String(queueErrorCall?.[0]?.payload?.reason || '')).toContain('trace_id');
     expect(String(queueErrorCall?.[0]?.payload?.reason || '')).not.toContain('[object Object]');
+  });
+
+  it('returns strict trace integrity error without direct fallback when queue rejects trace guarantees', async () => {
+    enqueueTaskMock.mockRejectedValueOnce(new Error('TRACE_ID_COLUMN_REQUIRED:fairy.intent'));
+    const POST = await loadPost({ queueFallback: true, byok: false, strictTrace: true });
+    const request = new Request('http://localhost/api/steward/runCanvas', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        room: 'demo-room',
+        task: 'fairy.intent',
+        requestId: 'req-strict-trace',
+        params: {
+          message: 'draw bunny',
+        },
+      }),
+    });
+
+    const response = await POST(toNextRequest(request));
+    const json = await response.json();
+
+    expect(response.status).toBe(503);
+    expect(json).toMatchObject({
+      error: 'Queue trace integrity check failed',
+      code: 'queue_trace_integrity_error',
+    });
+    const [enqueued] = enqueueTaskMock.mock.calls[0] as [Record<string, unknown>];
+    expect(enqueued.requireTraceId).toBe(true);
+    expect(runCanvasStewardMock).not.toHaveBeenCalled();
   });
 
   it('executes direct fallback when queue is unavailable and fallback is enabled', async () => {
@@ -261,6 +291,7 @@ describe('/api/steward/runCanvas', () => {
     const resourceKeys = enqueued.resourceKeys as string[];
     expect(enqueued.task).toBe('fairy.intent');
     expect(enqueued.coalesceByResource).toBe(false);
+    expect(enqueued.requireTraceId).toBe(false);
     expect(enqueued.requestId).toBe('req-fairy-1');
     expect(enqueued.dedupeKey).toBe('idem-1');
     expect(enqueued.idempotencyKey).toBe('idem-1');

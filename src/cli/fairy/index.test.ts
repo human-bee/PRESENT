@@ -20,6 +20,14 @@ describe('fairy CLI', () => {
     await fs.rm(tmpDir, { recursive: true, force: true });
   });
 
+  const stdoutJson = () => {
+    const output = stdoutSpy.mock.calls.map((call) => String(call[0])).join('');
+    const start = output.indexOf('{');
+    const end = output.lastIndexOf('}');
+    if (start < 0 || end < start) return null;
+    return JSON.parse(output.slice(start, end + 1));
+  };
+
   it('creates and persists a session', async () => {
     const code = await runCli(
       ['sessions', 'create', '--room', 'canvas-abc', '--baseUrl', 'http://127.0.0.1:3000', '--json'],
@@ -38,5 +46,21 @@ describe('fairy CLI', () => {
   it('returns failed exit code on unknown command group', async () => {
     const code = await runCli(['banana', '--json'], tmpDir);
     expect(code).toBe(20);
+  });
+
+  it('lists contract profile capabilities for tools list', async () => {
+    const code = await runCli(['tools', 'list', '--json'], tmpDir);
+    expect(code).toBe(0);
+    const payload = stdoutJson();
+    expect(payload.profile).toBe('fairy48');
+    expect(payload?.actionCatalog?.count).toBe(48);
+  });
+
+  it('supports template24 profile for tools list', async () => {
+    const code = await runCli(['tools', 'list', '--profile', 'template24', '--json'], tmpDir);
+    expect(code).toBe(0);
+    const payload = stdoutJson();
+    expect(payload.profile).toBe('template24');
+    expect(payload?.actionCatalog?.count).toBe(24);
   });
 });

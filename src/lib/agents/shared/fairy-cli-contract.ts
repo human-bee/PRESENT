@@ -57,6 +57,19 @@ export type FairyCliTaskSnapshot = {
   updatedAt?: string | null;
 };
 
+export type FairyCliMutationEvidence = {
+  taskStatus?: FairyCliTaskSnapshot | null;
+  traceMatch?: {
+    requestedTraceId?: string | null;
+    taskTraceId?: string | null;
+    matched: boolean;
+  };
+  applyAck?: {
+    status?: string | null;
+    reason?: string | null;
+  };
+};
+
 export type FairyCliMutationResult = {
   status: FairyCliMutationStatus;
   taskId: string | null;
@@ -66,6 +79,8 @@ export type FairyCliMutationResult = {
   traceId: string | null;
   intentId: string | null;
   taskStatus?: FairyCliTaskSnapshot | null;
+  evidence?: FairyCliMutationEvidence;
+  reasonCode?: string;
   reason?: string;
 };
 

@@ -84,6 +84,7 @@ describe('/api/steward/task-status', () => {
         error: null,
         result: { ok: true },
         request_id: 'req-1',
+        trace_id: 'trace-1',
         created_at: '2026-02-17T01:00:00.000Z',
         updated_at: '2026-02-17T01:00:05.000Z',
       },
@@ -106,6 +107,8 @@ describe('/api/steward/task-status', () => {
     expect(json.task.id).toBe('task-1');
     expect(json.task.status).toBe('succeeded');
     expect(json.task.requestId).toBe('req-1');
+    expect(json.task.traceId).toBe('trace-1');
+    expect(json.task.traceIntegrity).toBe('direct');
     expect(assertCanvasMemberMock).toHaveBeenCalledWith({
       canvasId: 'canvas-1',
       requesterUserId: 'user-1',
@@ -123,6 +126,7 @@ describe('/api/steward/task-status', () => {
         error: null,
         result: null,
         request_id: 'req-ephemeral',
+        trace_id: 'trace-ephemeral',
         created_at: '2026-02-17T01:00:00.000Z',
         updated_at: '2026-02-17T01:00:05.000Z',
       },
@@ -148,5 +152,55 @@ describe('/api/steward/task-status', () => {
     expect(json.ok).toBe(true);
     expect(json.task.id).toBe('task-ephemeral');
     expect(json.task.status).toBe('running');
+    expect(json.task.traceId).toBe('trace-ephemeral');
+    expect(json.task.traceIntegrity).toBe('direct');
+  });
+
+  it('resolves trace id from trace events when task row trace_id is null', async () => {
+    const maybeSingleMock = jest.fn().mockResolvedValue({
+      data: {
+        id: 'task-2',
+        room: 'canvas-1',
+        task: 'fairy.intent',
+        status: 'succeeded',
+        attempt: 1,
+        error: null,
+        result: { ok: true },
+        request_id: 'req-2',
+        trace_id: null,
+        created_at: '2026-02-17T01:00:00.000Z',
+        updated_at: '2026-02-17T01:00:05.000Z',
+      },
+      error: null,
+    });
+    const taskEqMock = jest.fn(() => ({ maybeSingle: maybeSingleMock }));
+    const taskSelectMock = jest.fn(() => ({ eq: taskEqMock }));
+
+    const traceLimitMock = jest.fn().mockResolvedValue({
+      data: [{ trace_id: 'trace-2' }],
+      error: null,
+    });
+    const traceOrderMock = jest.fn(() => ({ limit: traceLimitMock }));
+    const traceEqMock = jest.fn(() => ({ order: traceOrderMock }));
+    const traceSelectMock = jest.fn(() => ({ eq: traceEqMock }));
+
+    getAdminSupabaseClientMock.mockReturnValue({
+      from: jest.fn((table: string) => {
+        if (table === 'agent_tasks') return { select: taskSelectMock };
+        if (table === 'agent_trace_events') return { select: traceSelectMock };
+        throw new Error(`unexpected table ${table}`);
+      }),
+    });
+
+    const GET = await loadGet();
+    const response = await GET({
+      nextUrl: new URL('http://localhost/api/steward/task-status?taskId=task-2&room=canvas-1'),
+    } as import('next/server').NextRequest);
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.ok).toBe(true);
+    expect(json.task.traceId).toBe('trace-2');
+    expect(json.task.traceIntegrity).toBe('resolved_from_events');
   });
 });

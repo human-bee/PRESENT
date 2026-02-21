@@ -80,11 +80,23 @@ async function ensureJoin(page, displayName) {
     .waitForFunction(() => document.body.textContent?.toLowerCase().includes('join the demo'), null, { timeout: 4000 })
     .then(() => true)
     .catch(() => false);
-  if (!joinVisible) return false;
+  if (!joinVisible) {
+    return page
+      .evaluate(() => {
+        const text = (document.body.textContent || '').toLowerCase();
+        return !text.includes('join the demo');
+      })
+      .catch(() => false);
+  }
   await page.locator('input').first().fill(displayName);
   await page.locator('button:has-text("Join")').first().click();
-  await page.waitForTimeout(1200);
-  return true;
+  await page.waitForTimeout(1200).catch(() => {});
+  return page
+    .evaluate(() => {
+      const text = (document.body.textContent || '').toLowerCase();
+      return !text.includes('join the demo');
+    })
+    .catch(() => false);
 }
 
 async function signInWithEmail(page, options = {}) {
@@ -1094,6 +1106,9 @@ const countBy = (values) =>
     return acc;
   }, {});
 
+const readTaskTraceId = (task) =>
+  readString(task?.trace_id) || readString(task?.resolved_trace_id) || readString(task?.traceId) || null;
+
 async function fetchSessionCorrelationViaSupabase(room, limit = 300) {
   const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -1147,10 +1162,33 @@ async function fetchSessionCorrelationViaSupabase(room, limit = 300) {
   if (tracesQuery.error) throw tracesQuery.error;
   const traces = tracesQuery.data ?? [];
 
+  const traceIdsByRequest = new Map();
+  const traceIdsByTask = new Map();
+  for (const trace of traces) {
+    const traceId = readString(trace.trace_id);
+    if (!traceId) continue;
+    const requestId = readString(trace.request_id);
+    const taskId = readString(trace.task_id);
+    if (requestId && !traceIdsByRequest.has(requestId)) traceIdsByRequest.set(requestId, traceId);
+    if (taskId && !traceIdsByTask.has(taskId)) traceIdsByTask.set(taskId, traceId);
+  }
+  tasks = tasks.map((task) => {
+    const direct = readString(task.trace_id);
+    const resolved =
+      direct ||
+      (readString(task.id) ? traceIdsByTask.get(readString(task.id)) ?? null : null) ||
+      (readString(task.request_id) ? traceIdsByRequest.get(readString(task.request_id)) ?? null : null);
+    return {
+      ...task,
+      resolved_trace_id: resolved,
+      trace_integrity: direct ? 'direct' : resolved ? 'resolved_from_events' : 'missing',
+    };
+  });
+
   const traceIds = new Set();
   const requestIds = new Set();
   for (const task of tasks) {
-    const traceId = readString(task.trace_id);
+    const traceId = readTaskTraceId(task);
     const requestId = readString(task.request_id);
     if (traceId) traceIds.add(traceId);
     if (requestId) requestIds.add(requestId);
@@ -1174,7 +1212,7 @@ async function fetchSessionCorrelationViaSupabase(room, limit = 300) {
       uniqueRequestIds: requestIds.size,
       taskStatusCounts: countBy(tasks.map((task) => task.status)),
       traceStageCounts: countBy(traces.map((trace) => trace.stage)),
-      missingTraceOnTasks: tasks.filter((task) => !readString(task.trace_id)).length,
+      missingTraceOnTasks: tasks.filter((task) => !readTaskTraceId(task)).length,
     },
     tasks,
     traces,
@@ -1257,6 +1295,7 @@ async function run() {
     }
 
     const readiness = await ensureRealtimeReady(page, 35_000);
+    result.joined = Boolean(result.joined || (readiness.connected && readiness.agentJoined));
     if (!readiness.connected) {
       result.notes.push('LiveKit did not report connected state before turns.');
     }
@@ -1355,8 +1394,11 @@ async function run() {
         summary.traceStageCounts && typeof summary.traceStageCounts === 'object'
           ? summary.traceStageCounts
           : {};
-      const actionsDispatchedCount = Number(stageCounts.actions_dispatched ?? 0);
+      const actionsDispatchedCount =
+        Number(stageCounts.actions_dispatched ?? 0) +
+        Number(stageCounts.ack_received ?? 0);
       const completedCount = Number(stageCounts.completed ?? 0);
+      const missingTraceOnTasks = Number(summary.missingTraceOnTasks ?? 0);
       const tasks = Array.isArray(sessionBody?.tasks) ? sessionBody.tasks : [];
       const traces = Array.isArray(sessionBody?.traces) ? sessionBody.traces : [];
       const fairySucceededTasks = tasks.filter((task) => {
@@ -1367,15 +1409,26 @@ async function run() {
       const cleanFairySucceededCount = fairySucceededTasks.filter(
         (task) => !readString(task?.error),
       ).length;
+      const uniqueFairyTaskIds = new Set(
+        fairySucceededTasks
+          .map((task) => readString(task?.id))
+          .filter((id) => typeof id === 'string' && id.length > 0),
+      );
+      const uniqueFairyTraceIds = new Set(
+        fairySucceededTasks
+          .map((task) => readTaskTraceId(task))
+          .filter((traceId) => typeof traceId === 'string' && traceId.length > 0),
+      );
       const zodErrorCount = tasks.filter((task) => {
         const taskName = readString(task?.task);
         if (taskName !== 'fairy.intent') return false;
         const errorText = readString(task?.error)?.toLowerCase() ?? '';
         return errorText.includes('_zod');
       }).length;
-      const dispatchedTraceCount = traces.filter(
-        (trace) => readString(trace?.stage) === 'actions_dispatched',
-      ).length;
+      const dispatchedTraceCount = traces.filter((trace) => {
+        const stage = readString(trace?.stage);
+        return stage === 'actions_dispatched' || stage === 'ack_received';
+      }).length;
       const completedFairyTraces = traces.filter((trace) => {
         const stage = readString(trace?.stage)?.toLowerCase();
         const task = readString(trace?.task);
@@ -1384,17 +1437,35 @@ async function run() {
       }).length;
       const canvasProof = result.canvasEvidence?.proof ?? null;
       result.proof = {
+        joined: Boolean(result.joined),
         actionsDispatchedCount,
         completedCount,
         dispatchedTraceCount,
         completedFairyTraces,
+        missingTraceOnTasks,
         fairySucceededCount: fairySucceededTasks.length,
         cleanFairySucceededCount,
+        multiFairyCount: uniqueFairyTaskIds.size,
+        multiFairyTraceCount: uniqueFairyTraceIds.size,
         zodErrorCount,
         canvasProof,
       };
+      if (!result.joined) {
+        throw new Error('Showcase proof failed: agent/session join was not confirmed.');
+      }
+      if (!Number.isFinite(actionsDispatchedCount) || actionsDispatchedCount < 1) {
+        throw new Error('Showcase proof failed: session correlation reported no dispatch evidence events.');
+      }
+      if (Number.isFinite(missingTraceOnTasks) && missingTraceOnTasks > 0) {
+        throw new Error(`Showcase proof failed: missingTraceOnTasks=${missingTraceOnTasks}.`);
+      }
       if (cleanFairySucceededCount < 1) {
         throw new Error('Showcase proof failed: no clean succeeded fairy.intent task found for room.');
+      }
+      if (uniqueFairyTaskIds.size < 3 || uniqueFairyTraceIds.size < 3) {
+        throw new Error(
+          `Showcase proof failed: multi-fairy fan-out evidence was insufficient (tasks=${uniqueFairyTaskIds.size}, traces=${uniqueFairyTraceIds.size}).`,
+        );
       }
       if (zodErrorCount > 0) {
         throw new Error(`Showcase proof failed: detected ${zodErrorCount} fairy.intent _zod error(s).`);

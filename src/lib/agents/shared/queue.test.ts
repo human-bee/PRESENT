@@ -195,6 +195,56 @@ describe('AgentTaskQueue enqueue dedupe behavior', () => {
     );
   });
 
+  test('throws when requireTraceId is true and no trace id can be derived', async () => {
+    const harness = createHarness();
+    harness.maybeSingleQueue.push({ data: null, error: null });
+
+    const { AgentTaskQueue } = await import('@/lib/agents/shared/queue');
+    const queue = new AgentTaskQueue({ url: 'http://localhost:54321', serviceRoleKey: 'test-key' });
+
+    await expect(
+      queue.enqueueTask({
+        room: 'room-1',
+        task: 'fairy.intent',
+        params: { room: 'room-1', message: 'draw a bunny' },
+        requireTraceId: true,
+      }),
+    ).rejects.toThrow('TRACE_ID_REQUIRED:fairy.intent');
+
+    const insertCalls = harness.queries.reduce((acc, query) => acc + query.insert.mock.calls.length, 0);
+    expect(insertCalls).toBe(0);
+  });
+
+  test('throws when requireTraceId is true and trace_id column is unavailable', async () => {
+    const harness = createHarness();
+    harness.maybeSingleQueue.push({ data: null, error: null });
+    harness.singleQueue.push({
+      data: null,
+      error: {
+        code: 'PGRST204',
+        message: "Could not find the 'trace_id' column of 'agent_tasks' in the schema cache",
+      },
+    });
+
+    const { AgentTaskQueue } = await import('@/lib/agents/shared/queue');
+    const queue = new AgentTaskQueue({ url: 'http://localhost:54321', serviceRoleKey: 'test-key' });
+
+    await expect(
+      queue.enqueueTask({
+        room: 'room-1',
+        task: 'fairy.intent',
+        params: { room: 'room-1', message: 'draw a bunny', traceId: 'trace-1' },
+        requestId: 'req-trace-strict',
+        requireTraceId: true,
+      }),
+    ).rejects.toThrow('TRACE_ID_COLUMN_REQUIRED:fairy.intent');
+
+    expect(harness.queries).toHaveLength(2);
+    expect(harness.queries[1]?.insert).toHaveBeenCalledWith(
+      expect.objectContaining({ trace_id: 'trace-1' }),
+    );
+  });
+
   test('does not coalesce queued fairy.intent tasks by default', async () => {
     const harness = createHarness();
     harness.maybeSingleQueue.push({ data: null, error: null });

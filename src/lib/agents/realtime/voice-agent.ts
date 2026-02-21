@@ -1074,7 +1074,16 @@ Your only output is function calls. Never use plain text unless absolutely neces
     const MUTATION_CONTEXT_PATTERN =
       /\b(canvas|fair(?:y|ies)|crowd ?pulse|scorecard|research|claim|question|widget|shape|sticky|roadmap|timer)\b/i;
     const SUCCESS_TOOL_STATUSES = new Set(['SUCCESS', 'APPLIED', 'OK', 'COMPLETED']);
-    const FAILURE_TOOL_STATUSES = new Set(['ERROR', 'FAILED', 'FAILURE', 'REJECTED', 'TIMEOUT', 'IGNORED']);
+    const FAILURE_TOOL_STATUSES = new Set([
+      'ERROR',
+      'FAILED',
+      'FAILURE',
+      'REJECTED',
+      'TIMEOUT',
+      'IGNORED',
+      'UNAUTHORIZED',
+      'INVALID',
+    ]);
 
     type PendingMutationDispatch = {
       tool: string;

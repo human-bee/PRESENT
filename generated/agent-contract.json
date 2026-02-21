@@ -1,1618 +1,1982 @@
 {
-  "generatedAt": "2025-11-18T10:13:02.350Z",
+  "generatedAt": "2026-02-20T03:49:01.452Z",
+  "profile": "template24",
   "source": "vendor/tldraw-agent-template",
   "actions": [
     {
       "name": "add-detail",
       "schema": {
-        "$ref": "properties/actions/items/definitions/add-detailAction",
-        "definitions": {
-          "add-detailAction": {
-            "type": "object",
-            "properties": {
-              "_type": {
-                "type": "string",
-                "const": "add-detail"
-              },
-              "intent": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "_type",
-              "intent"
-            ],
-            "additionalProperties": false
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "_type": {
+            "$ref": "#/$defs/__schema0"
+          },
+          "intent": {
+            "$ref": "#/$defs/__schema1"
           }
         },
-        "$schema": "http://json-schema.org/draft-07/schema#"
+        "required": [
+          "_type",
+          "intent"
+        ],
+        "additionalProperties": false,
+        "title": "Add Detail",
+        "description": "The AI plans further work so that it can add detail to its work.",
+        "$defs": {
+          "__schema0": {
+            "type": "string",
+            "const": "add-detail"
+          },
+          "__schema1": {
+            "type": "string"
+          }
+        }
       }
     },
     {
       "name": "align",
       "schema": {
-        "$ref": "properties/actions/items/definitions/alignAction",
-        "definitions": {
-          "alignAction": {
-            "type": "object",
-            "properties": {
-              "_type": {
-                "type": "string",
-                "const": "align"
-              },
-              "alignment": {
-                "type": "string",
-                "enum": [
-                  "top",
-                  "bottom",
-                  "left",
-                  "right",
-                  "center-horizontal",
-                  "center-vertical"
-                ]
-              },
-              "gap": {
-                "type": "number"
-              },
-              "intent": {
-                "type": "string"
-              },
-              "shapeIds": {
-                "type": "array",
-                "items": {
-                  "type": "string"
-                }
-              }
-            },
-            "required": [
-              "_type",
-              "alignment",
-              "gap",
-              "intent",
-              "shapeIds"
-            ],
-            "additionalProperties": false
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "_type": {
+            "$ref": "#/$defs/__schema0"
+          },
+          "alignment": {
+            "$ref": "#/$defs/__schema1"
+          },
+          "gap": {
+            "$ref": "#/$defs/__schema2"
+          },
+          "intent": {
+            "$ref": "#/$defs/__schema3"
+          },
+          "shapeIds": {
+            "$ref": "#/$defs/__schema4"
           }
         },
-        "$schema": "http://json-schema.org/draft-07/schema#"
+        "required": [
+          "_type",
+          "alignment",
+          "gap",
+          "intent",
+          "shapeIds"
+        ],
+        "additionalProperties": false,
+        "title": "Align",
+        "description": "The AI aligns shapes to each other on an axis.",
+        "$defs": {
+          "__schema0": {
+            "type": "string",
+            "const": "align"
+          },
+          "__schema1": {
+            "type": "string",
+            "enum": [
+              "top",
+              "bottom",
+              "left",
+              "right",
+              "center-horizontal",
+              "center-vertical"
+            ]
+          },
+          "__schema2": {
+            "type": "number"
+          },
+          "__schema3": {
+            "type": "string"
+          },
+          "__schema4": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
       }
     },
     {
       "name": "bringToFront",
       "schema": {
-        "$ref": "properties/actions/items/definitions/bringToFrontAction",
-        "definitions": {
-          "bringToFrontAction": {
-            "type": "object",
-            "properties": {
-              "_type": {
-                "type": "string",
-                "const": "bringToFront"
-              },
-              "intent": {
-                "type": "string"
-              },
-              "shapeIds": {
-                "type": "array",
-                "items": {
-                  "type": "string"
-                }
-              }
-            },
-            "required": [
-              "_type",
-              "intent",
-              "shapeIds"
-            ],
-            "additionalProperties": false
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "_type": {
+            "$ref": "#/$defs/__schema0"
+          },
+          "intent": {
+            "$ref": "#/$defs/__schema1"
+          },
+          "shapeIds": {
+            "$ref": "#/$defs/__schema2"
           }
         },
-        "$schema": "http://json-schema.org/draft-07/schema#"
+        "required": [
+          "_type",
+          "intent",
+          "shapeIds"
+        ],
+        "additionalProperties": false,
+        "title": "Bring to Front",
+        "description": "The AI brings one or more shapes to the front so that they appear in front of everything else.",
+        "$defs": {
+          "__schema0": {
+            "type": "string",
+            "const": "bringToFront"
+          },
+          "__schema1": {
+            "type": "string"
+          },
+          "__schema2": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
       }
     },
     {
       "name": "clear",
       "schema": {
-        "$ref": "properties/actions/items/definitions/clearAction",
-        "definitions": {
-          "clearAction": {
-            "type": "object",
-            "properties": {
-              "_type": {
-                "type": "string",
-                "const": "clear"
-              }
-            },
-            "required": [
-              "_type"
-            ],
-            "additionalProperties": false
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "_type": {
+            "$ref": "#/$defs/__schema0"
           }
         },
-        "$schema": "http://json-schema.org/draft-07/schema#"
+        "required": [
+          "_type"
+        ],
+        "additionalProperties": false,
+        "title": "Clear",
+        "description": "The agent deletes all shapes on the canvas.",
+        "$defs": {
+          "__schema0": {
+            "type": "string",
+            "const": "clear"
+          }
+        }
       }
     },
     {
       "name": "count",
       "schema": {
-        "$ref": "properties/actions/items/definitions/countAction",
-        "definitions": {
-          "countAction": {
-            "type": "object",
-            "properties": {
-              "_type": {
-                "type": "string",
-                "const": "count"
-              },
-              "expression": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "_type",
-              "expression"
-            ],
-            "additionalProperties": false
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "_type": {
+            "$ref": "#/$defs/__schema0"
+          },
+          "expression": {
+            "$ref": "#/$defs/__schema1"
           }
         },
-        "$schema": "http://json-schema.org/draft-07/schema#"
+        "required": [
+          "_type",
+          "expression"
+        ],
+        "additionalProperties": false,
+        "title": "Count",
+        "description": "The AI requests to count the number of shapes in the canvas. The answer will be provided to the AI in a follow-up request.",
+        "$defs": {
+          "__schema0": {
+            "type": "string",
+            "const": "count"
+          },
+          "__schema1": {
+            "type": "string"
+          }
+        }
       }
     },
     {
       "name": "countryInfo",
       "schema": {
-        "$ref": "properties/actions/items/definitions/countryInfoAction",
-        "definitions": {
-          "countryInfoAction": {
-            "type": "object",
-            "properties": {
-              "_type": {
-                "type": "string",
-                "const": "countryInfo"
-              },
-              "code": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "_type",
-              "code"
-            ],
-            "additionalProperties": false
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "_type": {
+            "$ref": "#/$defs/__schema0"
+          },
+          "code": {
+            "$ref": "#/$defs/__schema1"
           }
         },
-        "$schema": "http://json-schema.org/draft-07/schema#"
+        "required": [
+          "_type",
+          "code"
+        ],
+        "additionalProperties": false,
+        "title": "Country info",
+        "description": "The AI gets information about a country by providing its country code, eg: \"de\" for Germany.",
+        "$defs": {
+          "__schema0": {
+            "type": "string",
+            "const": "countryInfo"
+          },
+          "__schema1": {
+            "type": "string"
+          }
+        }
       }
     },
     {
       "name": "create",
       "schema": {
-        "$ref": "properties/actions/items/definitions/createAction",
-        "definitions": {
-          "createAction": {
-            "type": "object",
-            "properties": {
-              "_type": {
-                "type": "string",
-                "const": "create"
-              },
-              "intent": {
-                "type": "string"
-              },
-              "shape": {
-                "anyOf": [
-                  {
-                    "type": "object",
-                    "properties": {
-                      "_type": {
-                        "type": "string",
-                        "const": "draw"
-                      },
-                      "color": {
-                        "type": "string",
-                        "enum": [
-                          "red",
-                          "light-red",
-                          "green",
-                          "light-green",
-                          "blue",
-                          "light-blue",
-                          "orange",
-                          "yellow",
-                          "black",
-                          "violet",
-                          "light-violet",
-                          "grey",
-                          "white"
-                        ]
-                      },
-                      "fill": {
-                        "type": "string",
-                        "enum": [
-                          "none",
-                          "tint",
-                          "background",
-                          "solid",
-                          "pattern"
-                        ]
-                      },
-                      "note": {
-                        "type": "string"
-                      },
-                      "shapeId": {
-                        "type": "string"
-                      }
-                    },
-                    "required": [
-                      "_type",
-                      "color",
-                      "note",
-                      "shapeId"
-                    ],
-                    "additionalProperties": false
-                  },
-                  {
-                    "type": "object",
-                    "properties": {
-                      "_type": {
-                        "type": "string",
-                        "enum": [
-                          "rectangle",
-                          "ellipse",
-                          "triangle",
-                          "diamond",
-                          "hexagon",
-                          "pill",
-                          "cloud",
-                          "x-box",
-                          "check-box",
-                          "heart",
-                          "pentagon",
-                          "octagon",
-                          "star",
-                          "parallelogram-right",
-                          "parallelogram-left",
-                          "trapezoid",
-                          "fat-arrow-right",
-                          "fat-arrow-left",
-                          "fat-arrow-up",
-                          "fat-arrow-down"
-                        ]
-                      },
-                      "color": {
-                        "$ref": "properties/actions/items/definitions/createAction/properties/shape/anyOf/0/properties/color"
-                      },
-                      "fill": {
-                        "$ref": "properties/actions/items/definitions/createAction/properties/shape/anyOf/0/properties/fill"
-                      },
-                      "h": {
-                        "type": "number"
-                      },
-                      "note": {
-                        "type": "string"
-                      },
-                      "shapeId": {
-                        "type": "string"
-                      },
-                      "text": {
-                        "type": "string"
-                      },
-                      "textAlign": {
-                        "type": "string",
-                        "enum": [
-                          "start",
-                          "middle",
-                          "end"
-                        ]
-                      },
-                      "w": {
-                        "type": "number"
-                      },
-                      "x": {
-                        "type": "number"
-                      },
-                      "y": {
-                        "type": "number"
-                      }
-                    },
-                    "required": [
-                      "_type",
-                      "color",
-                      "fill",
-                      "h",
-                      "note",
-                      "shapeId",
-                      "w",
-                      "x",
-                      "y"
-                    ],
-                    "additionalProperties": false
-                  },
-                  {
-                    "type": "object",
-                    "properties": {
-                      "_type": {
-                        "type": "string",
-                        "const": "line"
-                      },
-                      "color": {
-                        "$ref": "properties/actions/items/definitions/createAction/properties/shape/anyOf/0/properties/color"
-                      },
-                      "note": {
-                        "type": "string"
-                      },
-                      "shapeId": {
-                        "type": "string"
-                      },
-                      "x1": {
-                        "type": "number"
-                      },
-                      "x2": {
-                        "type": "number"
-                      },
-                      "y1": {
-                        "type": "number"
-                      },
-                      "y2": {
-                        "type": "number"
-                      }
-                    },
-                    "required": [
-                      "_type",
-                      "color",
-                      "note",
-                      "shapeId",
-                      "x1",
-                      "x2",
-                      "y1",
-                      "y2"
-                    ],
-                    "additionalProperties": false
-                  },
-                  {
-                    "type": "object",
-                    "properties": {
-                      "_type": {
-                        "type": "string",
-                        "const": "text"
-                      },
-                      "color": {
-                        "$ref": "properties/actions/items/definitions/createAction/properties/shape/anyOf/0/properties/color"
-                      },
-                      "fontSize": {
-                        "type": "number"
-                      },
-                      "note": {
-                        "type": "string"
-                      },
-                      "shapeId": {
-                        "type": "string"
-                      },
-                      "text": {
-                        "$ref": "properties/actions/items/definitions/createAction/properties/shape/anyOf/1/properties/text"
-                      },
-                      "textAlign": {
-                        "type": "string",
-                        "enum": [
-                          "start",
-                          "middle",
-                          "end"
-                        ]
-                      },
-                      "width": {
-                        "type": "number"
-                      },
-                      "wrap": {
-                        "type": "boolean"
-                      },
-                      "x": {
-                        "type": "number"
-                      },
-                      "y": {
-                        "type": "number"
-                      }
-                    },
-                    "required": [
-                      "_type",
-                      "color",
-                      "note",
-                      "shapeId",
-                      "text",
-                      "x",
-                      "y"
-                    ],
-                    "additionalProperties": false
-                  },
-                  {
-                    "type": "object",
-                    "properties": {
-                      "_type": {
-                        "type": "string",
-                        "const": "arrow"
-                      },
-                      "color": {
-                        "$ref": "properties/actions/items/definitions/createAction/properties/shape/anyOf/0/properties/color"
-                      },
-                      "fromId": {
-                        "type": [
-                          "string",
-                          "null"
-                        ]
-                      },
-                      "note": {
-                        "type": "string"
-                      },
-                      "shapeId": {
-                        "type": "string"
-                      },
-                      "text": {
-                        "type": "string"
-                      },
-                      "toId": {
-                        "type": [
-                          "string",
-                          "null"
-                        ]
-                      },
-                      "x1": {
-                        "type": "number"
-                      },
-                      "x2": {
-                        "type": "number"
-                      },
-                      "y1": {
-                        "type": "number"
-                      },
-                      "y2": {
-                        "type": "number"
-                      },
-                      "bend": {
-                        "type": "number"
-                      }
-                    },
-                    "required": [
-                      "_type",
-                      "color",
-                      "fromId",
-                      "note",
-                      "shapeId",
-                      "toId",
-                      "x1",
-                      "x2",
-                      "y1",
-                      "y2"
-                    ],
-                    "additionalProperties": false
-                  },
-                  {
-                    "type": "object",
-                    "properties": {
-                      "_type": {
-                        "type": "string",
-                        "const": "note"
-                      },
-                      "color": {
-                        "$ref": "properties/actions/items/definitions/createAction/properties/shape/anyOf/0/properties/color"
-                      },
-                      "note": {
-                        "type": "string"
-                      },
-                      "shapeId": {
-                        "type": "string"
-                      },
-                      "text": {
-                        "$ref": "properties/actions/items/definitions/createAction/properties/shape/anyOf/1/properties/text"
-                      },
-                      "x": {
-                        "type": "number"
-                      },
-                      "y": {
-                        "type": "number"
-                      }
-                    },
-                    "required": [
-                      "_type",
-                      "color",
-                      "note",
-                      "shapeId",
-                      "x",
-                      "y"
-                    ],
-                    "additionalProperties": false
-                  },
-                  {
-                    "type": "object",
-                    "properties": {
-                      "_type": {
-                        "type": "string",
-                        "const": "unknown"
-                      },
-                      "note": {
-                        "type": "string"
-                      },
-                      "shapeId": {
-                        "type": "string"
-                      },
-                      "subType": {
-                        "type": "string"
-                      },
-                      "x": {
-                        "type": "number"
-                      },
-                      "y": {
-                        "type": "number"
-                      }
-                    },
-                    "required": [
-                      "_type",
-                      "note",
-                      "shapeId",
-                      "subType",
-                      "x",
-                      "y"
-                    ],
-                    "additionalProperties": false
-                  }
-                ]
-              }
-            },
-            "required": [
-              "_type",
-              "intent",
-              "shape"
-            ],
-            "additionalProperties": false
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "_type": {
+            "$ref": "#/$defs/__schema0"
+          },
+          "intent": {
+            "$ref": "#/$defs/__schema1"
+          },
+          "shape": {
+            "$ref": "#/$defs/__schema2"
           }
         },
-        "$schema": "http://json-schema.org/draft-07/schema#"
+        "required": [
+          "_type",
+          "intent",
+          "shape"
+        ],
+        "additionalProperties": false,
+        "title": "Create",
+        "description": "The AI creates a new shape.",
+        "$defs": {
+          "__schema0": {
+            "type": "string",
+            "const": "create"
+          },
+          "__schema1": {
+            "type": "string"
+          },
+          "__schema2": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "_type": {
+                    "$ref": "#/$defs/__schema3"
+                  },
+                  "color": {
+                    "$ref": "#/$defs/__schema4"
+                  },
+                  "fill": {
+                    "$ref": "#/$defs/__schema5"
+                  },
+                  "note": {
+                    "$ref": "#/$defs/__schema7"
+                  },
+                  "shapeId": {
+                    "$ref": "#/$defs/__schema8"
+                  }
+                },
+                "required": [
+                  "_type",
+                  "color",
+                  "note",
+                  "shapeId"
+                ],
+                "additionalProperties": false,
+                "title": "Draw Shape",
+                "description": "A draw shape is a freeform shape that was drawn by the pen tool. To create new draw shapes, the AI must use the pen event because it gives more control."
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "_type": {
+                    "type": "string",
+                    "enum": [
+                      "rectangle",
+                      "ellipse",
+                      "triangle",
+                      "diamond",
+                      "hexagon",
+                      "pill",
+                      "cloud",
+                      "x-box",
+                      "check-box",
+                      "heart",
+                      "pentagon",
+                      "octagon",
+                      "star",
+                      "parallelogram-right",
+                      "parallelogram-left",
+                      "trapezoid",
+                      "fat-arrow-right",
+                      "fat-arrow-left",
+                      "fat-arrow-up",
+                      "fat-arrow-down"
+                    ]
+                  },
+                  "color": {
+                    "$ref": "#/$defs/__schema4"
+                  },
+                  "fill": {
+                    "$ref": "#/$defs/__schema6"
+                  },
+                  "h": {
+                    "type": "number"
+                  },
+                  "note": {
+                    "type": "string"
+                  },
+                  "shapeId": {
+                    "type": "string"
+                  },
+                  "text": {
+                    "$ref": "#/$defs/__schema9"
+                  },
+                  "textAlign": {
+                    "type": "string",
+                    "enum": [
+                      "start",
+                      "middle",
+                      "end"
+                    ]
+                  },
+                  "w": {
+                    "type": "number"
+                  },
+                  "x": {
+                    "type": "number"
+                  },
+                  "y": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "_type",
+                  "color",
+                  "fill",
+                  "h",
+                  "note",
+                  "shapeId",
+                  "w",
+                  "x",
+                  "y"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "_type": {
+                    "type": "string",
+                    "const": "line"
+                  },
+                  "color": {
+                    "$ref": "#/$defs/__schema4"
+                  },
+                  "note": {
+                    "type": "string"
+                  },
+                  "shapeId": {
+                    "type": "string"
+                  },
+                  "x1": {
+                    "type": "number"
+                  },
+                  "x2": {
+                    "type": "number"
+                  },
+                  "y1": {
+                    "type": "number"
+                  },
+                  "y2": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "_type",
+                  "color",
+                  "note",
+                  "shapeId",
+                  "x1",
+                  "x2",
+                  "y1",
+                  "y2"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "_type": {
+                    "type": "string",
+                    "const": "text"
+                  },
+                  "color": {
+                    "$ref": "#/$defs/__schema4"
+                  },
+                  "fontSize": {
+                    "type": "number"
+                  },
+                  "note": {
+                    "type": "string"
+                  },
+                  "shapeId": {
+                    "type": "string"
+                  },
+                  "text": {
+                    "$ref": "#/$defs/__schema9"
+                  },
+                  "textAlign": {
+                    "type": "string",
+                    "enum": [
+                      "start",
+                      "middle",
+                      "end"
+                    ]
+                  },
+                  "width": {
+                    "type": "number"
+                  },
+                  "wrap": {
+                    "type": "boolean"
+                  },
+                  "x": {
+                    "type": "number"
+                  },
+                  "y": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "_type",
+                  "color",
+                  "note",
+                  "shapeId",
+                  "text",
+                  "x",
+                  "y"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "_type": {
+                    "type": "string",
+                    "const": "arrow"
+                  },
+                  "color": {
+                    "$ref": "#/$defs/__schema4"
+                  },
+                  "fromId": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "note": {
+                    "type": "string"
+                  },
+                  "shapeId": {
+                    "type": "string"
+                  },
+                  "text": {
+                    "type": "string"
+                  },
+                  "toId": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "x1": {
+                    "type": "number"
+                  },
+                  "x2": {
+                    "type": "number"
+                  },
+                  "y1": {
+                    "type": "number"
+                  },
+                  "y2": {
+                    "type": "number"
+                  },
+                  "bend": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "_type",
+                  "color",
+                  "fromId",
+                  "note",
+                  "shapeId",
+                  "toId",
+                  "x1",
+                  "x2",
+                  "y1",
+                  "y2"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "_type": {
+                    "type": "string",
+                    "const": "note"
+                  },
+                  "color": {
+                    "$ref": "#/$defs/__schema4"
+                  },
+                  "note": {
+                    "type": "string"
+                  },
+                  "shapeId": {
+                    "type": "string"
+                  },
+                  "text": {
+                    "$ref": "#/$defs/__schema9"
+                  },
+                  "x": {
+                    "type": "number"
+                  },
+                  "y": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "_type",
+                  "color",
+                  "note",
+                  "shapeId",
+                  "x",
+                  "y"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "_type": {
+                    "$ref": "#/$defs/__schema10"
+                  },
+                  "note": {
+                    "$ref": "#/$defs/__schema11"
+                  },
+                  "shapeId": {
+                    "$ref": "#/$defs/__schema12"
+                  },
+                  "subType": {
+                    "$ref": "#/$defs/__schema13"
+                  },
+                  "x": {
+                    "$ref": "#/$defs/__schema14"
+                  },
+                  "y": {
+                    "$ref": "#/$defs/__schema15"
+                  }
+                },
+                "required": [
+                  "_type",
+                  "note",
+                  "shapeId",
+                  "subType",
+                  "x",
+                  "y"
+                ],
+                "additionalProperties": false,
+                "title": "Unknown Shape",
+                "description": "A special shape that is not represented by one of the canvas's core shape types. The AI cannot create these shapes, but it *can* interact with them. eg: The AI can move these shapes. The `subType` property contains the internal name of the shape's type."
+              }
+            ]
+          },
+          "__schema3": {
+            "type": "string",
+            "const": "draw"
+          },
+          "__schema4": {
+            "type": "string",
+            "enum": [
+              "red",
+              "light-red",
+              "green",
+              "light-green",
+              "blue",
+              "light-blue",
+              "orange",
+              "yellow",
+              "black",
+              "violet",
+              "light-violet",
+              "grey",
+              "white"
+            ]
+          },
+          "__schema5": {
+            "$ref": "#/$defs/__schema6"
+          },
+          "__schema6": {
+            "type": "string",
+            "enum": [
+              "none",
+              "tint",
+              "background",
+              "solid",
+              "pattern"
+            ]
+          },
+          "__schema7": {
+            "type": "string"
+          },
+          "__schema8": {
+            "type": "string"
+          },
+          "__schema9": {
+            "type": "string"
+          },
+          "__schema10": {
+            "type": "string",
+            "const": "unknown"
+          },
+          "__schema11": {
+            "type": "string"
+          },
+          "__schema12": {
+            "type": "string"
+          },
+          "__schema13": {
+            "type": "string"
+          },
+          "__schema14": {
+            "type": "number"
+          },
+          "__schema15": {
+            "type": "number"
+          }
+        }
       }
     },
     {
       "name": "delete",
       "schema": {
-        "$ref": "properties/actions/items/definitions/deleteAction",
-        "definitions": {
-          "deleteAction": {
-            "type": "object",
-            "properties": {
-              "_type": {
-                "type": "string",
-                "const": "delete"
-              },
-              "intent": {
-                "type": "string"
-              },
-              "shapeId": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "_type",
-              "intent",
-              "shapeId"
-            ],
-            "additionalProperties": false
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "_type": {
+            "$ref": "#/$defs/__schema0"
+          },
+          "intent": {
+            "$ref": "#/$defs/__schema1"
+          },
+          "shapeId": {
+            "$ref": "#/$defs/__schema2"
           }
         },
-        "$schema": "http://json-schema.org/draft-07/schema#"
+        "required": [
+          "_type",
+          "intent",
+          "shapeId"
+        ],
+        "additionalProperties": false,
+        "title": "Delete",
+        "description": "The AI deletes a shape.",
+        "$defs": {
+          "__schema0": {
+            "type": "string",
+            "const": "delete"
+          },
+          "__schema1": {
+            "type": "string"
+          },
+          "__schema2": {
+            "type": "string"
+          }
+        }
       }
     },
     {
       "name": "distribute",
       "schema": {
-        "$ref": "properties/actions/items/definitions/distributeAction",
-        "definitions": {
-          "distributeAction": {
-            "type": "object",
-            "properties": {
-              "_type": {
-                "type": "string",
-                "const": "distribute"
-              },
-              "direction": {
-                "type": "string",
-                "enum": [
-                  "horizontal",
-                  "vertical"
-                ]
-              },
-              "intent": {
-                "type": "string"
-              },
-              "shapeIds": {
-                "type": "array",
-                "items": {
-                  "type": "string"
-                }
-              }
-            },
-            "required": [
-              "_type",
-              "direction",
-              "intent",
-              "shapeIds"
-            ],
-            "additionalProperties": false
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "_type": {
+            "$ref": "#/$defs/__schema0"
+          },
+          "direction": {
+            "$ref": "#/$defs/__schema1"
+          },
+          "intent": {
+            "$ref": "#/$defs/__schema2"
+          },
+          "shapeIds": {
+            "$ref": "#/$defs/__schema3"
           }
         },
-        "$schema": "http://json-schema.org/draft-07/schema#"
+        "required": [
+          "_type",
+          "direction",
+          "intent",
+          "shapeIds"
+        ],
+        "additionalProperties": false,
+        "title": "Distribute",
+        "description": "The AI distributes shapes horizontally or vertically.",
+        "$defs": {
+          "__schema0": {
+            "type": "string",
+            "const": "distribute"
+          },
+          "__schema1": {
+            "type": "string",
+            "enum": [
+              "horizontal",
+              "vertical"
+            ]
+          },
+          "__schema2": {
+            "type": "string"
+          },
+          "__schema3": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
       }
     },
     {
       "name": "getInspiration",
       "schema": {
-        "$ref": "properties/actions/items/definitions/getInspirationAction",
-        "definitions": {
-          "getInspirationAction": {
-            "type": "object",
-            "properties": {
-              "_type": {
-                "type": "string",
-                "const": "getInspiration"
-              }
-            },
-            "required": [
-              "_type"
-            ],
-            "additionalProperties": false
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "_type": {
+            "$ref": "#/$defs/__schema0"
           }
         },
-        "$schema": "http://json-schema.org/draft-07/schema#"
+        "required": [
+          "_type"
+        ],
+        "additionalProperties": false,
+        "title": "Get inspiration",
+        "description": "The AI gets inspiration from a random Wikipedia article.",
+        "$defs": {
+          "__schema0": {
+            "type": "string",
+            "const": "getInspiration"
+          }
+        }
       }
     },
     {
       "name": "label",
       "schema": {
-        "$ref": "properties/actions/items/definitions/labelAction",
-        "definitions": {
-          "labelAction": {
-            "type": "object",
-            "properties": {
-              "_type": {
-                "type": "string",
-                "const": "label"
-              },
-              "intent": {
-                "type": "string"
-              },
-              "shapeId": {
-                "type": "string"
-              },
-              "text": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "_type",
-              "intent",
-              "shapeId",
-              "text"
-            ],
-            "additionalProperties": false
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "_type": {
+            "$ref": "#/$defs/__schema0"
+          },
+          "intent": {
+            "$ref": "#/$defs/__schema1"
+          },
+          "shapeId": {
+            "$ref": "#/$defs/__schema2"
+          },
+          "text": {
+            "$ref": "#/$defs/__schema3"
           }
         },
-        "$schema": "http://json-schema.org/draft-07/schema#"
+        "required": [
+          "_type",
+          "intent",
+          "shapeId",
+          "text"
+        ],
+        "additionalProperties": false,
+        "title": "Label",
+        "description": "The AI changes a shape's text.",
+        "$defs": {
+          "__schema0": {
+            "type": "string",
+            "const": "label"
+          },
+          "__schema1": {
+            "type": "string"
+          },
+          "__schema2": {
+            "type": "string"
+          },
+          "__schema3": {
+            "type": "string"
+          }
+        }
       }
     },
     {
       "name": "message",
       "schema": {
-        "$ref": "properties/actions/items/definitions/messageAction",
-        "definitions": {
-          "messageAction": {
-            "type": "object",
-            "properties": {
-              "_type": {
-                "type": "string",
-                "const": "message"
-              },
-              "text": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "_type",
-              "text"
-            ],
-            "additionalProperties": false
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "_type": {
+            "$ref": "#/$defs/__schema0"
+          },
+          "text": {
+            "$ref": "#/$defs/__schema1"
           }
         },
-        "$schema": "http://json-schema.org/draft-07/schema#"
+        "required": [
+          "_type",
+          "text"
+        ],
+        "additionalProperties": false,
+        "title": "Message",
+        "description": "The AI sends a message to the user.",
+        "$defs": {
+          "__schema0": {
+            "type": "string",
+            "const": "message"
+          },
+          "__schema1": {
+            "type": "string"
+          }
+        }
       }
     },
     {
       "name": "move",
       "schema": {
-        "$ref": "properties/actions/items/definitions/moveAction",
-        "definitions": {
-          "moveAction": {
-            "type": "object",
-            "properties": {
-              "_type": {
-                "type": "string",
-                "const": "move"
-              },
-              "intent": {
-                "type": "string"
-              },
-              "shapeId": {
-                "type": "string"
-              },
-              "x": {
-                "type": "number"
-              },
-              "y": {
-                "type": "number"
-              }
-            },
-            "required": [
-              "_type",
-              "intent",
-              "shapeId",
-              "x",
-              "y"
-            ],
-            "additionalProperties": false
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "_type": {
+            "$ref": "#/$defs/__schema0"
+          },
+          "intent": {
+            "$ref": "#/$defs/__schema1"
+          },
+          "shapeId": {
+            "$ref": "#/$defs/__schema2"
+          },
+          "x": {
+            "$ref": "#/$defs/__schema3"
+          },
+          "y": {
+            "$ref": "#/$defs/__schema4"
           }
         },
-        "$schema": "http://json-schema.org/draft-07/schema#"
+        "required": [
+          "_type",
+          "intent",
+          "shapeId",
+          "x",
+          "y"
+        ],
+        "additionalProperties": false,
+        "title": "Move",
+        "description": "The AI moves a shape to a new position.",
+        "$defs": {
+          "__schema0": {
+            "type": "string",
+            "const": "move"
+          },
+          "__schema1": {
+            "type": "string"
+          },
+          "__schema2": {
+            "type": "string"
+          },
+          "__schema3": {
+            "type": "number"
+          },
+          "__schema4": {
+            "type": "number"
+          }
+        }
       }
     },
     {
       "name": "pen",
       "schema": {
-        "$ref": "properties/actions/items/definitions/penAction",
-        "definitions": {
-          "penAction": {
-            "type": "object",
-            "properties": {
-              "_type": {
-                "type": "string",
-                "const": "pen"
-              },
-              "color": {
-                "type": "string",
-                "enum": [
-                  "red",
-                  "light-red",
-                  "green",
-                  "light-green",
-                  "blue",
-                  "light-blue",
-                  "orange",
-                  "yellow",
-                  "black",
-                  "violet",
-                  "light-violet",
-                  "grey",
-                  "white"
-                ]
-              },
-              "closed": {
-                "type": "boolean"
-              },
-              "fill": {
-                "type": "string",
-                "enum": [
-                  "none",
-                  "tint",
-                  "background",
-                  "solid",
-                  "pattern"
-                ]
-              },
-              "intent": {
-                "type": "string"
-              },
-              "points": {
-                "type": "array",
-                "items": {
-                  "type": "object",
-                  "properties": {
-                    "x": {
-                      "type": "number"
-                    },
-                    "y": {
-                      "type": "number"
-                    }
-                  },
-                  "required": [
-                    "x",
-                    "y"
-                  ],
-                  "additionalProperties": false
-                }
-              },
-              "style": {
-                "type": "string",
-                "enum": [
-                  "smooth",
-                  "straight"
-                ]
-              }
-            },
-            "required": [
-              "_type",
-              "color",
-              "closed",
-              "fill",
-              "intent",
-              "points",
-              "style"
-            ],
-            "additionalProperties": false
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "_type": {
+            "$ref": "#/$defs/__schema0"
+          },
+          "color": {
+            "$ref": "#/$defs/__schema1"
+          },
+          "closed": {
+            "$ref": "#/$defs/__schema2"
+          },
+          "fill": {
+            "$ref": "#/$defs/__schema3"
+          },
+          "intent": {
+            "$ref": "#/$defs/__schema4"
+          },
+          "points": {
+            "$ref": "#/$defs/__schema5"
+          },
+          "style": {
+            "$ref": "#/$defs/__schema6"
           }
         },
-        "$schema": "http://json-schema.org/draft-07/schema#"
+        "required": [
+          "_type",
+          "color",
+          "closed",
+          "fill",
+          "intent",
+          "points",
+          "style"
+        ],
+        "additionalProperties": false,
+        "title": "Pen",
+        "description": "The AI draws a freeform line with a pen. This is useful for drawing custom paths that are not available with the other available shapes. The \"smooth\" style will automatically smooth the line between points. The \"straight\" style will render a straight line between points. The \"closed\" property will determine if the drawn line gets automatically closed to form a complete shape or not. Remember that the pen will be *down* until the action is over. If you want to lift up the pen, start a new pen action.",
+        "$defs": {
+          "__schema0": {
+            "type": "string",
+            "const": "pen"
+          },
+          "__schema1": {
+            "type": "string",
+            "enum": [
+              "red",
+              "light-red",
+              "green",
+              "light-green",
+              "blue",
+              "light-blue",
+              "orange",
+              "yellow",
+              "black",
+              "violet",
+              "light-violet",
+              "grey",
+              "white"
+            ]
+          },
+          "__schema2": {
+            "type": "boolean"
+          },
+          "__schema3": {
+            "type": "string",
+            "enum": [
+              "none",
+              "tint",
+              "background",
+              "solid",
+              "pattern"
+            ]
+          },
+          "__schema4": {
+            "type": "string"
+          },
+          "__schema5": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "x": {
+                  "type": "number"
+                },
+                "y": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "x",
+                "y"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "__schema6": {
+            "type": "string",
+            "enum": [
+              "smooth",
+              "straight"
+            ]
+          }
+        }
       }
     },
     {
       "name": "place",
       "schema": {
-        "$ref": "properties/actions/items/definitions/placeAction",
-        "definitions": {
-          "placeAction": {
-            "type": "object",
-            "properties": {
-              "_type": {
-                "type": "string",
-                "const": "place"
-              },
-              "align": {
-                "type": "string",
-                "enum": [
-                  "start",
-                  "center",
-                  "end"
-                ]
-              },
-              "alignOffset": {
-                "type": "number"
-              },
-              "intent": {
-                "type": "string"
-              },
-              "referenceShapeId": {
-                "type": "string"
-              },
-              "side": {
-                "type": "string",
-                "enum": [
-                  "top",
-                  "bottom",
-                  "left",
-                  "right"
-                ]
-              },
-              "sideOffset": {
-                "type": "number"
-              },
-              "shapeId": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "_type",
-              "align",
-              "alignOffset",
-              "intent",
-              "referenceShapeId",
-              "side",
-              "sideOffset",
-              "shapeId"
-            ],
-            "additionalProperties": false
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "_type": {
+            "$ref": "#/$defs/__schema0"
+          },
+          "align": {
+            "$ref": "#/$defs/__schema1"
+          },
+          "alignOffset": {
+            "$ref": "#/$defs/__schema2"
+          },
+          "intent": {
+            "$ref": "#/$defs/__schema3"
+          },
+          "referenceShapeId": {
+            "$ref": "#/$defs/__schema4"
+          },
+          "side": {
+            "$ref": "#/$defs/__schema5"
+          },
+          "sideOffset": {
+            "$ref": "#/$defs/__schema6"
+          },
+          "shapeId": {
+            "$ref": "#/$defs/__schema7"
           }
         },
-        "$schema": "http://json-schema.org/draft-07/schema#"
+        "required": [
+          "_type",
+          "align",
+          "alignOffset",
+          "intent",
+          "referenceShapeId",
+          "side",
+          "sideOffset",
+          "shapeId"
+        ],
+        "additionalProperties": false,
+        "title": "Place",
+        "description": "The AI places a shape relative to another shape.",
+        "$defs": {
+          "__schema0": {
+            "type": "string",
+            "const": "place"
+          },
+          "__schema1": {
+            "type": "string",
+            "enum": [
+              "start",
+              "center",
+              "end"
+            ]
+          },
+          "__schema2": {
+            "type": "number"
+          },
+          "__schema3": {
+            "type": "string"
+          },
+          "__schema4": {
+            "type": "string"
+          },
+          "__schema5": {
+            "type": "string",
+            "enum": [
+              "top",
+              "bottom",
+              "left",
+              "right"
+            ]
+          },
+          "__schema6": {
+            "type": "number"
+          },
+          "__schema7": {
+            "type": "string"
+          }
+        }
       }
     },
     {
       "name": "resize",
       "schema": {
-        "$ref": "properties/actions/items/definitions/resizeAction",
-        "definitions": {
-          "resizeAction": {
-            "type": "object",
-            "properties": {
-              "_type": {
-                "type": "string",
-                "const": "resize"
-              },
-              "intent": {
-                "type": "string"
-              },
-              "originX": {
-                "type": "number"
-              },
-              "originY": {
-                "type": "number"
-              },
-              "scaleX": {
-                "type": "number"
-              },
-              "scaleY": {
-                "type": "number"
-              },
-              "shapeIds": {
-                "type": "array",
-                "items": {
-                  "type": "string"
-                }
-              }
-            },
-            "required": [
-              "_type",
-              "intent",
-              "originX",
-              "originY",
-              "scaleX",
-              "scaleY",
-              "shapeIds"
-            ],
-            "additionalProperties": false
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "_type": {
+            "$ref": "#/$defs/__schema0"
+          },
+          "intent": {
+            "$ref": "#/$defs/__schema1"
+          },
+          "originX": {
+            "$ref": "#/$defs/__schema2"
+          },
+          "originY": {
+            "$ref": "#/$defs/__schema3"
+          },
+          "scaleX": {
+            "$ref": "#/$defs/__schema4"
+          },
+          "scaleY": {
+            "$ref": "#/$defs/__schema5"
+          },
+          "shapeIds": {
+            "$ref": "#/$defs/__schema6"
           }
         },
-        "$schema": "http://json-schema.org/draft-07/schema#"
+        "required": [
+          "_type",
+          "intent",
+          "originX",
+          "originY",
+          "scaleX",
+          "scaleY",
+          "shapeIds"
+        ],
+        "additionalProperties": false,
+        "title": "Resize",
+        "description": "The AI resizes one or more shapes, with the resize operation being performed relative to an origin point.",
+        "$defs": {
+          "__schema0": {
+            "type": "string",
+            "const": "resize"
+          },
+          "__schema1": {
+            "type": "string"
+          },
+          "__schema2": {
+            "type": "number"
+          },
+          "__schema3": {
+            "type": "number"
+          },
+          "__schema4": {
+            "type": "number"
+          },
+          "__schema5": {
+            "type": "number"
+          },
+          "__schema6": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
       }
     },
     {
       "name": "review",
       "schema": {
-        "$ref": "properties/actions/items/definitions/reviewAction",
-        "definitions": {
-          "reviewAction": {
-            "type": "object",
-            "properties": {
-              "_type": {
-                "type": "string",
-                "const": "review"
-              },
-              "intent": {
-                "type": "string"
-              },
-              "x": {
-                "type": "number"
-              },
-              "y": {
-                "type": "number"
-              },
-              "w": {
-                "type": "number"
-              },
-              "h": {
-                "type": "number"
-              }
-            },
-            "required": [
-              "_type",
-              "intent",
-              "x",
-              "y",
-              "w",
-              "h"
-            ],
-            "additionalProperties": false
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "_type": {
+            "$ref": "#/$defs/__schema0"
+          },
+          "intent": {
+            "$ref": "#/$defs/__schema1"
+          },
+          "x": {
+            "$ref": "#/$defs/__schema2"
+          },
+          "y": {
+            "$ref": "#/$defs/__schema3"
+          },
+          "w": {
+            "$ref": "#/$defs/__schema4"
+          },
+          "h": {
+            "$ref": "#/$defs/__schema5"
           }
         },
-        "$schema": "http://json-schema.org/draft-07/schema#"
+        "required": [
+          "_type",
+          "intent",
+          "x",
+          "y",
+          "w",
+          "h"
+        ],
+        "additionalProperties": false,
+        "title": "Review",
+        "description": "The AI schedules further work or a review so that it can look at the results of its work so far and take further action, such as reviewing what it has done or taking further steps that would benefit from seeing the results of its work so far.",
+        "$defs": {
+          "__schema0": {
+            "type": "string",
+            "const": "review"
+          },
+          "__schema1": {
+            "type": "string"
+          },
+          "__schema2": {
+            "type": "number"
+          },
+          "__schema3": {
+            "type": "number"
+          },
+          "__schema4": {
+            "type": "number"
+          },
+          "__schema5": {
+            "type": "number"
+          }
+        }
       }
     },
     {
       "name": "rotate",
       "schema": {
-        "$ref": "properties/actions/items/definitions/rotateAction",
-        "definitions": {
-          "rotateAction": {
-            "type": "object",
-            "properties": {
-              "_type": {
-                "type": "string",
-                "const": "rotate"
-              },
-              "centerY": {
-                "type": "number"
-              },
-              "degrees": {
-                "type": "number"
-              },
-              "intent": {
-                "type": "string"
-              },
-              "originX": {
-                "type": "number"
-              },
-              "originY": {
-                "type": "number"
-              },
-              "shapeIds": {
-                "type": "array",
-                "items": {
-                  "type": "string"
-                }
-              }
-            },
-            "required": [
-              "_type",
-              "centerY",
-              "degrees",
-              "intent",
-              "originX",
-              "originY",
-              "shapeIds"
-            ],
-            "additionalProperties": false
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "_type": {
+            "$ref": "#/$defs/__schema0"
+          },
+          "centerY": {
+            "$ref": "#/$defs/__schema1"
+          },
+          "degrees": {
+            "$ref": "#/$defs/__schema2"
+          },
+          "intent": {
+            "$ref": "#/$defs/__schema3"
+          },
+          "originX": {
+            "$ref": "#/$defs/__schema4"
+          },
+          "originY": {
+            "$ref": "#/$defs/__schema5"
+          },
+          "shapeIds": {
+            "$ref": "#/$defs/__schema6"
           }
         },
-        "$schema": "http://json-schema.org/draft-07/schema#"
+        "required": [
+          "_type",
+          "centerY",
+          "degrees",
+          "intent",
+          "originX",
+          "originY",
+          "shapeIds"
+        ],
+        "additionalProperties": false,
+        "title": "Rotate",
+        "description": "The AI rotates one or more shapes around an origin point.",
+        "$defs": {
+          "__schema0": {
+            "type": "string",
+            "const": "rotate"
+          },
+          "__schema1": {
+            "type": "number"
+          },
+          "__schema2": {
+            "type": "number"
+          },
+          "__schema3": {
+            "type": "string"
+          },
+          "__schema4": {
+            "type": "number"
+          },
+          "__schema5": {
+            "type": "number"
+          },
+          "__schema6": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
       }
     },
     {
       "name": "sendToBack",
       "schema": {
-        "$ref": "properties/actions/items/definitions/sendToBackAction",
-        "definitions": {
-          "sendToBackAction": {
-            "type": "object",
-            "properties": {
-              "_type": {
-                "type": "string",
-                "const": "sendToBack"
-              },
-              "intent": {
-                "type": "string"
-              },
-              "shapeIds": {
-                "type": "array",
-                "items": {
-                  "type": "string"
-                }
-              }
-            },
-            "required": [
-              "_type",
-              "intent",
-              "shapeIds"
-            ],
-            "additionalProperties": false
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "_type": {
+            "$ref": "#/$defs/__schema0"
+          },
+          "intent": {
+            "$ref": "#/$defs/__schema1"
+          },
+          "shapeIds": {
+            "$ref": "#/$defs/__schema2"
           }
         },
-        "$schema": "http://json-schema.org/draft-07/schema#"
+        "required": [
+          "_type",
+          "intent",
+          "shapeIds"
+        ],
+        "additionalProperties": false,
+        "title": "Send to Back",
+        "description": "The AI sends one or more shapes to the back so that they appear behind everything else.",
+        "$defs": {
+          "__schema0": {
+            "type": "string",
+            "const": "sendToBack"
+          },
+          "__schema1": {
+            "type": "string"
+          },
+          "__schema2": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
       }
     },
     {
       "name": "setMyView",
       "schema": {
-        "$ref": "properties/actions/items/definitions/setMyViewAction",
-        "definitions": {
-          "setMyViewAction": {
-            "type": "object",
-            "properties": {
-              "_type": {
-                "type": "string",
-                "const": "setMyView"
-              },
-              "intent": {
-                "type": "string"
-              },
-              "x": {
-                "type": "number"
-              },
-              "y": {
-                "type": "number"
-              },
-              "w": {
-                "type": "number"
-              },
-              "h": {
-                "type": "number"
-              }
-            },
-            "required": [
-              "_type",
-              "intent",
-              "x",
-              "y",
-              "w",
-              "h"
-            ],
-            "additionalProperties": false
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "_type": {
+            "$ref": "#/$defs/__schema0"
+          },
+          "intent": {
+            "$ref": "#/$defs/__schema1"
+          },
+          "x": {
+            "$ref": "#/$defs/__schema2"
+          },
+          "y": {
+            "$ref": "#/$defs/__schema3"
+          },
+          "w": {
+            "$ref": "#/$defs/__schema4"
+          },
+          "h": {
+            "$ref": "#/$defs/__schema5"
           }
         },
-        "$schema": "http://json-schema.org/draft-07/schema#"
+        "required": [
+          "_type",
+          "intent",
+          "x",
+          "y",
+          "w",
+          "h"
+        ],
+        "additionalProperties": false,
+        "title": "Set My View",
+        "description": "The AI changes the bounds of its own viewport to navigate to other areas of the canvas if needed.",
+        "$defs": {
+          "__schema0": {
+            "type": "string",
+            "const": "setMyView"
+          },
+          "__schema1": {
+            "type": "string"
+          },
+          "__schema2": {
+            "type": "number"
+          },
+          "__schema3": {
+            "type": "number"
+          },
+          "__schema4": {
+            "type": "number"
+          },
+          "__schema5": {
+            "type": "number"
+          }
+        }
       }
     },
     {
       "name": "stack",
       "schema": {
-        "$ref": "properties/actions/items/definitions/stackAction",
-        "definitions": {
-          "stackAction": {
-            "type": "object",
-            "properties": {
-              "_type": {
-                "type": "string",
-                "const": "stack"
-              },
-              "direction": {
-                "type": "string",
-                "enum": [
-                  "vertical",
-                  "horizontal"
-                ]
-              },
-              "gap": {
-                "type": "number"
-              },
-              "intent": {
-                "type": "string"
-              },
-              "shapeIds": {
-                "type": "array",
-                "items": {
-                  "type": "string"
-                }
-              }
-            },
-            "required": [
-              "_type",
-              "direction",
-              "gap",
-              "intent",
-              "shapeIds"
-            ],
-            "additionalProperties": false
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "_type": {
+            "$ref": "#/$defs/__schema0"
+          },
+          "direction": {
+            "$ref": "#/$defs/__schema1"
+          },
+          "gap": {
+            "$ref": "#/$defs/__schema2"
+          },
+          "intent": {
+            "$ref": "#/$defs/__schema3"
+          },
+          "shapeIds": {
+            "$ref": "#/$defs/__schema4"
           }
         },
-        "$schema": "http://json-schema.org/draft-07/schema#"
+        "required": [
+          "_type",
+          "direction",
+          "gap",
+          "intent",
+          "shapeIds"
+        ],
+        "additionalProperties": false,
+        "title": "Stack",
+        "description": "The AI stacks shapes horizontally or vertically. Note that this doesn't align shapes, it only stacks them along one axis.",
+        "$defs": {
+          "__schema0": {
+            "type": "string",
+            "const": "stack"
+          },
+          "__schema1": {
+            "type": "string",
+            "enum": [
+              "vertical",
+              "horizontal"
+            ]
+          },
+          "__schema2": {
+            "type": "number"
+          },
+          "__schema3": {
+            "type": "string"
+          },
+          "__schema4": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
       }
     },
     {
       "name": "think",
       "schema": {
-        "$ref": "properties/actions/items/definitions/thinkAction",
-        "definitions": {
-          "thinkAction": {
-            "type": "object",
-            "properties": {
-              "_type": {
-                "type": "string",
-                "const": "think"
-              },
-              "text": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "_type",
-              "text"
-            ],
-            "additionalProperties": false
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "_type": {
+            "$ref": "#/$defs/__schema0"
+          },
+          "text": {
+            "$ref": "#/$defs/__schema1"
           }
         },
-        "$schema": "http://json-schema.org/draft-07/schema#"
+        "required": [
+          "_type",
+          "text"
+        ],
+        "additionalProperties": false,
+        "title": "Think",
+        "description": "The AI describes its intent or reasoning.",
+        "$defs": {
+          "__schema0": {
+            "type": "string",
+            "const": "think"
+          },
+          "__schema1": {
+            "type": "string"
+          }
+        }
       }
     },
     {
       "name": "update",
       "schema": {
-        "$ref": "properties/actions/items/definitions/updateAction",
-        "definitions": {
-          "updateAction": {
-            "type": "object",
-            "properties": {
-              "_type": {
-                "type": "string",
-                "const": "update"
-              },
-              "intent": {
-                "type": "string"
-              },
-              "update": {
-                "anyOf": [
-                  {
-                    "type": "object",
-                    "properties": {
-                      "_type": {
-                        "type": "string",
-                        "const": "draw"
-                      },
-                      "color": {
-                        "type": "string",
-                        "enum": [
-                          "red",
-                          "light-red",
-                          "green",
-                          "light-green",
-                          "blue",
-                          "light-blue",
-                          "orange",
-                          "yellow",
-                          "black",
-                          "violet",
-                          "light-violet",
-                          "grey",
-                          "white"
-                        ]
-                      },
-                      "fill": {
-                        "type": "string",
-                        "enum": [
-                          "none",
-                          "tint",
-                          "background",
-                          "solid",
-                          "pattern"
-                        ]
-                      },
-                      "note": {
-                        "type": "string"
-                      },
-                      "shapeId": {
-                        "type": "string"
-                      }
-                    },
-                    "required": [
-                      "_type",
-                      "color",
-                      "note",
-                      "shapeId"
-                    ],
-                    "additionalProperties": false
-                  },
-                  {
-                    "type": "object",
-                    "properties": {
-                      "_type": {
-                        "type": "string",
-                        "enum": [
-                          "rectangle",
-                          "ellipse",
-                          "triangle",
-                          "diamond",
-                          "hexagon",
-                          "pill",
-                          "cloud",
-                          "x-box",
-                          "check-box",
-                          "heart",
-                          "pentagon",
-                          "octagon",
-                          "star",
-                          "parallelogram-right",
-                          "parallelogram-left",
-                          "trapezoid",
-                          "fat-arrow-right",
-                          "fat-arrow-left",
-                          "fat-arrow-up",
-                          "fat-arrow-down"
-                        ]
-                      },
-                      "color": {
-                        "$ref": "properties/actions/items/definitions/updateAction/properties/update/anyOf/0/properties/color"
-                      },
-                      "fill": {
-                        "$ref": "properties/actions/items/definitions/updateAction/properties/update/anyOf/0/properties/fill"
-                      },
-                      "h": {
-                        "type": "number"
-                      },
-                      "note": {
-                        "type": "string"
-                      },
-                      "shapeId": {
-                        "type": "string"
-                      },
-                      "text": {
-                        "type": "string"
-                      },
-                      "textAlign": {
-                        "type": "string",
-                        "enum": [
-                          "start",
-                          "middle",
-                          "end"
-                        ]
-                      },
-                      "w": {
-                        "type": "number"
-                      },
-                      "x": {
-                        "type": "number"
-                      },
-                      "y": {
-                        "type": "number"
-                      }
-                    },
-                    "required": [
-                      "_type",
-                      "color",
-                      "fill",
-                      "h",
-                      "note",
-                      "shapeId",
-                      "w",
-                      "x",
-                      "y"
-                    ],
-                    "additionalProperties": false
-                  },
-                  {
-                    "type": "object",
-                    "properties": {
-                      "_type": {
-                        "type": "string",
-                        "const": "line"
-                      },
-                      "color": {
-                        "$ref": "properties/actions/items/definitions/updateAction/properties/update/anyOf/0/properties/color"
-                      },
-                      "note": {
-                        "type": "string"
-                      },
-                      "shapeId": {
-                        "type": "string"
-                      },
-                      "x1": {
-                        "type": "number"
-                      },
-                      "x2": {
-                        "type": "number"
-                      },
-                      "y1": {
-                        "type": "number"
-                      },
-                      "y2": {
-                        "type": "number"
-                      }
-                    },
-                    "required": [
-                      "_type",
-                      "color",
-                      "note",
-                      "shapeId",
-                      "x1",
-                      "x2",
-                      "y1",
-                      "y2"
-                    ],
-                    "additionalProperties": false
-                  },
-                  {
-                    "type": "object",
-                    "properties": {
-                      "_type": {
-                        "type": "string",
-                        "const": "text"
-                      },
-                      "color": {
-                        "$ref": "properties/actions/items/definitions/updateAction/properties/update/anyOf/0/properties/color"
-                      },
-                      "fontSize": {
-                        "type": "number"
-                      },
-                      "note": {
-                        "type": "string"
-                      },
-                      "shapeId": {
-                        "type": "string"
-                      },
-                      "text": {
-                        "$ref": "properties/actions/items/definitions/updateAction/properties/update/anyOf/1/properties/text"
-                      },
-                      "textAlign": {
-                        "type": "string",
-                        "enum": [
-                          "start",
-                          "middle",
-                          "end"
-                        ]
-                      },
-                      "width": {
-                        "type": "number"
-                      },
-                      "wrap": {
-                        "type": "boolean"
-                      },
-                      "x": {
-                        "type": "number"
-                      },
-                      "y": {
-                        "type": "number"
-                      }
-                    },
-                    "required": [
-                      "_type",
-                      "color",
-                      "note",
-                      "shapeId",
-                      "text",
-                      "x",
-                      "y"
-                    ],
-                    "additionalProperties": false
-                  },
-                  {
-                    "type": "object",
-                    "properties": {
-                      "_type": {
-                        "type": "string",
-                        "const": "arrow"
-                      },
-                      "color": {
-                        "$ref": "properties/actions/items/definitions/updateAction/properties/update/anyOf/0/properties/color"
-                      },
-                      "fromId": {
-                        "type": [
-                          "string",
-                          "null"
-                        ]
-                      },
-                      "note": {
-                        "type": "string"
-                      },
-                      "shapeId": {
-                        "type": "string"
-                      },
-                      "text": {
-                        "type": "string"
-                      },
-                      "toId": {
-                        "type": [
-                          "string",
-                          "null"
-                        ]
-                      },
-                      "x1": {
-                        "type": "number"
-                      },
-                      "x2": {
-                        "type": "number"
-                      },
-                      "y1": {
-                        "type": "number"
-                      },
-                      "y2": {
-                        "type": "number"
-                      },
-                      "bend": {
-                        "type": "number"
-                      }
-                    },
-                    "required": [
-                      "_type",
-                      "color",
-                      "fromId",
-                      "note",
-                      "shapeId",
-                      "toId",
-                      "x1",
-                      "x2",
-                      "y1",
-                      "y2"
-                    ],
-                    "additionalProperties": false
-                  },
-                  {
-                    "type": "object",
-                    "properties": {
-                      "_type": {
-                        "type": "string",
-                        "const": "note"
-                      },
-                      "color": {
-                        "$ref": "properties/actions/items/definitions/updateAction/properties/update/anyOf/0/properties/color"
-                      },
-                      "note": {
-                        "type": "string"
-                      },
-                      "shapeId": {
-                        "type": "string"
-                      },
-                      "text": {
-                        "$ref": "properties/actions/items/definitions/updateAction/properties/update/anyOf/1/properties/text"
-                      },
-                      "x": {
-                        "type": "number"
-                      },
-                      "y": {
-                        "type": "number"
-                      }
-                    },
-                    "required": [
-                      "_type",
-                      "color",
-                      "note",
-                      "shapeId",
-                      "x",
-                      "y"
-                    ],
-                    "additionalProperties": false
-                  },
-                  {
-                    "type": "object",
-                    "properties": {
-                      "_type": {
-                        "type": "string",
-                        "const": "unknown"
-                      },
-                      "note": {
-                        "type": "string"
-                      },
-                      "shapeId": {
-                        "type": "string"
-                      },
-                      "subType": {
-                        "type": "string"
-                      },
-                      "x": {
-                        "type": "number"
-                      },
-                      "y": {
-                        "type": "number"
-                      }
-                    },
-                    "required": [
-                      "_type",
-                      "note",
-                      "shapeId",
-                      "subType",
-                      "x",
-                      "y"
-                    ],
-                    "additionalProperties": false
-                  }
-                ]
-              }
-            },
-            "required": [
-              "_type",
-              "intent",
-              "update"
-            ],
-            "additionalProperties": false
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "_type": {
+            "$ref": "#/$defs/__schema0"
+          },
+          "intent": {
+            "$ref": "#/$defs/__schema1"
+          },
+          "update": {
+            "$ref": "#/$defs/__schema2"
           }
         },
-        "$schema": "http://json-schema.org/draft-07/schema#"
+        "required": [
+          "_type",
+          "intent",
+          "update"
+        ],
+        "additionalProperties": false,
+        "title": "Update",
+        "description": "The AI updates an existing shape.",
+        "$defs": {
+          "__schema0": {
+            "type": "string",
+            "const": "update"
+          },
+          "__schema1": {
+            "type": "string"
+          },
+          "__schema2": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "_type": {
+                    "$ref": "#/$defs/__schema3"
+                  },
+                  "color": {
+                    "$ref": "#/$defs/__schema4"
+                  },
+                  "fill": {
+                    "$ref": "#/$defs/__schema5"
+                  },
+                  "note": {
+                    "$ref": "#/$defs/__schema7"
+                  },
+                  "shapeId": {
+                    "$ref": "#/$defs/__schema8"
+                  }
+                },
+                "required": [
+                  "_type",
+                  "color",
+                  "note",
+                  "shapeId"
+                ],
+                "additionalProperties": false,
+                "title": "Draw Shape",
+                "description": "A draw shape is a freeform shape that was drawn by the pen tool. To create new draw shapes, the AI must use the pen event because it gives more control."
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "_type": {
+                    "type": "string",
+                    "enum": [
+                      "rectangle",
+                      "ellipse",
+                      "triangle",
+                      "diamond",
+                      "hexagon",
+                      "pill",
+                      "cloud",
+                      "x-box",
+                      "check-box",
+                      "heart",
+                      "pentagon",
+                      "octagon",
+                      "star",
+                      "parallelogram-right",
+                      "parallelogram-left",
+                      "trapezoid",
+                      "fat-arrow-right",
+                      "fat-arrow-left",
+                      "fat-arrow-up",
+                      "fat-arrow-down"
+                    ]
+                  },
+                  "color": {
+                    "$ref": "#/$defs/__schema4"
+                  },
+                  "fill": {
+                    "$ref": "#/$defs/__schema6"
+                  },
+                  "h": {
+                    "type": "number"
+                  },
+                  "note": {
+                    "type": "string"
+                  },
+                  "shapeId": {
+                    "type": "string"
+                  },
+                  "text": {
+                    "$ref": "#/$defs/__schema9"
+                  },
+                  "textAlign": {
+                    "type": "string",
+                    "enum": [
+                      "start",
+                      "middle",
+                      "end"
+                    ]
+                  },
+                  "w": {
+                    "type": "number"
+                  },
+                  "x": {
+                    "type": "number"
+                  },
+                  "y": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "_type",
+                  "color",
+                  "fill",
+                  "h",
+                  "note",
+                  "shapeId",
+                  "w",
+                  "x",
+                  "y"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "_type": {
+                    "type": "string",
+                    "const": "line"
+                  },
+                  "color": {
+                    "$ref": "#/$defs/__schema4"
+                  },
+                  "note": {
+                    "type": "string"
+                  },
+                  "shapeId": {
+                    "type": "string"
+                  },
+                  "x1": {
+                    "type": "number"
+                  },
+                  "x2": {
+                    "type": "number"
+                  },
+                  "y1": {
+                    "type": "number"
+                  },
+                  "y2": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "_type",
+                  "color",
+                  "note",
+                  "shapeId",
+                  "x1",
+                  "x2",
+                  "y1",
+                  "y2"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "_type": {
+                    "type": "string",
+                    "const": "text"
+                  },
+                  "color": {
+                    "$ref": "#/$defs/__schema4"
+                  },
+                  "fontSize": {
+                    "type": "number"
+                  },
+                  "note": {
+                    "type": "string"
+                  },
+                  "shapeId": {
+                    "type": "string"
+                  },
+                  "text": {
+                    "$ref": "#/$defs/__schema9"
+                  },
+                  "textAlign": {
+                    "type": "string",
+                    "enum": [
+                      "start",
+                      "middle",
+                      "end"
+                    ]
+                  },
+                  "width": {
+                    "type": "number"
+                  },
+                  "wrap": {
+                    "type": "boolean"
+                  },
+                  "x": {
+                    "type": "number"
+                  },
+                  "y": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "_type",
+                  "color",
+                  "note",
+                  "shapeId",
+                  "text",
+                  "x",
+                  "y"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "_type": {
+                    "type": "string",
+                    "const": "arrow"
+                  },
+                  "color": {
+                    "$ref": "#/$defs/__schema4"
+                  },
+                  "fromId": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "note": {
+                    "type": "string"
+                  },
+                  "shapeId": {
+                    "type": "string"
+                  },
+                  "text": {
+                    "type": "string"
+                  },
+                  "toId": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "x1": {
+                    "type": "number"
+                  },
+                  "x2": {
+                    "type": "number"
+                  },
+                  "y1": {
+                    "type": "number"
+                  },
+                  "y2": {
+                    "type": "number"
+                  },
+                  "bend": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "_type",
+                  "color",
+                  "fromId",
+                  "note",
+                  "shapeId",
+                  "toId",
+                  "x1",
+                  "x2",
+                  "y1",
+                  "y2"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "_type": {
+                    "type": "string",
+                    "const": "note"
+                  },
+                  "color": {
+                    "$ref": "#/$defs/__schema4"
+                  },
+                  "note": {
+                    "type": "string"
+                  },
+                  "shapeId": {
+                    "type": "string"
+                  },
+                  "text": {
+                    "$ref": "#/$defs/__schema9"
+                  },
+                  "x": {
+                    "type": "number"
+                  },
+                  "y": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "_type",
+                  "color",
+                  "note",
+                  "shapeId",
+                  "x",
+                  "y"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "_type": {
+                    "$ref": "#/$defs/__schema10"
+                  },
+                  "note": {
+                    "$ref": "#/$defs/__schema11"
+                  },
+                  "shapeId": {
+                    "$ref": "#/$defs/__schema12"
+                  },
+                  "subType": {
+                    "$ref": "#/$defs/__schema13"
+                  },
+                  "x": {
+                    "$ref": "#/$defs/__schema14"
+                  },
+                  "y": {
+                    "$ref": "#/$defs/__schema15"
+                  }
+                },
+                "required": [
+                  "_type",
+                  "note",
+                  "shapeId",
+                  "subType",
+                  "x",
+                  "y"
+                ],
+                "additionalProperties": false,
+                "title": "Unknown Shape",
+                "description": "A special shape that is not represented by one of the canvas's core shape types. The AI cannot create these shapes, but it *can* interact with them. eg: The AI can move these shapes. The `subType` property contains the internal name of the shape's type."
+              }
+            ]
+          },
+          "__schema3": {
+            "type": "string",
+            "const": "draw"
+          },
+          "__schema4": {
+            "type": "string",
+            "enum": [
+              "red",
+              "light-red",
+              "green",
+              "light-green",
+              "blue",
+              "light-blue",
+              "orange",
+              "yellow",
+              "black",
+              "violet",
+              "light-violet",
+              "grey",
+              "white"
+            ]
+          },
+          "__schema5": {
+            "$ref": "#/$defs/__schema6"
+          },
+          "__schema6": {
+            "type": "string",
+            "enum": [
+              "none",
+              "tint",
+              "background",
+              "solid",
+              "pattern"
+            ]
+          },
+          "__schema7": {
+            "type": "string"
+          },
+          "__schema8": {
+            "type": "string"
+          },
+          "__schema9": {
+            "type": "string"
+          },
+          "__schema10": {
+            "type": "string",
+            "const": "unknown"
+          },
+          "__schema11": {
+            "type": "string"
+          },
+          "__schema12": {
+            "type": "string"
+          },
+          "__schema13": {
+            "type": "string"
+          },
+          "__schema14": {
+            "type": "number"
+          },
+          "__schema15": {
+            "type": "number"
+          }
+        }
       }
     },
     {
       "name": "update-todo-list",
       "schema": {
-        "$ref": "properties/actions/items/definitions/update-todo-listAction",
-        "definitions": {
-          "update-todo-listAction": {
-            "type": "object",
-            "properties": {
-              "_type": {
-                "type": "string",
-                "const": "update-todo-list"
-              },
-              "id": {
-                "type": "number"
-              },
-              "status": {
-                "type": "string",
-                "enum": [
-                  "todo",
-                  "in-progress",
-                  "done"
-                ]
-              },
-              "text": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "_type",
-              "id",
-              "status",
-              "text"
-            ],
-            "additionalProperties": false
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "_type": {
+            "$ref": "#/$defs/__schema0"
+          },
+          "id": {
+            "$ref": "#/$defs/__schema1"
+          },
+          "status": {
+            "$ref": "#/$defs/__schema2"
+          },
+          "text": {
+            "$ref": "#/$defs/__schema3"
           }
         },
-        "$schema": "http://json-schema.org/draft-07/schema#"
+        "required": [
+          "_type",
+          "id",
+          "status",
+          "text"
+        ],
+        "additionalProperties": false,
+        "title": "Update Todo List",
+        "description": "The AI updates a current todo list item or creates a new one",
+        "$defs": {
+          "__schema0": {
+            "type": "string",
+            "const": "update-todo-list"
+          },
+          "__schema1": {
+            "type": "number"
+          },
+          "__schema2": {
+            "type": "string",
+            "enum": [
+              "todo",
+              "in-progress",
+              "done"
+            ]
+          },
+          "__schema3": {
+            "type": "string"
+          }
+        }
       }
     }
   ]

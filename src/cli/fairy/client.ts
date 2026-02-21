@@ -73,6 +73,23 @@ const mapTaskStatus = (status: string): FairyCliMutationStatus => {
   return 'failed';
 };
 
+type PollTaskStatusResult =
+  | {
+      status: 'terminal';
+      task: FairyCliTaskSnapshot;
+      lastHttpStatus: number;
+    }
+  | {
+      status: 'unauthorized';
+      lastHttpStatus: 401 | 403;
+      reason: string;
+    }
+  | {
+      status: 'timeout';
+      lastHttpStatus: number;
+      reason: string;
+    };
+
 export async function runCanvasTask(
   options: ClientOptions,
   envelope: FairyCliRunEnvelope,
@@ -100,9 +117,10 @@ export async function runCanvasTask(
 export async function pollTaskStatus(
   options: ClientOptions,
   args: { taskId: string; room: string; timeoutMs: number },
-): Promise<FairyCliTaskSnapshot | null> {
+): Promise<PollTaskStatusResult> {
   const startedAt = Date.now();
   let attempt = 0;
+  let lastHttpStatus = 200;
   while (Date.now() - startedAt < args.timeoutMs) {
     attempt += 1;
     const statusResponse = await fetch(
@@ -112,9 +130,16 @@ export async function pollTaskStatus(
       ),
       { headers: jsonHeaders(options.token) },
     );
+    lastHttpStatus = statusResponse.status;
     const statusBody = await parseJsonSafe(statusResponse);
     if (!statusResponse.ok) {
-      if ([401, 403].includes(statusResponse.status)) return null;
+      if (statusResponse.status === 401 || statusResponse.status === 403) {
+        return {
+          status: 'unauthorized',
+          lastHttpStatus: statusResponse.status,
+          reason: `task status visibility unavailable (HTTP ${statusResponse.status})`,
+        };
+      }
       if (statusResponse.status === 404 && attempt < 3) {
         await new Promise((resolve) => setTimeout(resolve, 200 + attempt * 100));
         continue;
@@ -138,11 +163,19 @@ export async function pollTaskStatus(
     }
     const normalized = task.status.toLowerCase();
     if (normalized === 'succeeded' || normalized === 'failed' || normalized === 'canceled') {
-      return task;
+      return {
+        status: 'terminal',
+        task,
+        lastHttpStatus,
+      };
     }
     await new Promise((resolve) => setTimeout(resolve, Math.min(1200, 250 + attempt * 90)));
   }
-  return null;
+  return {
+    status: 'timeout',
+    lastHttpStatus,
+    reason: 'Timed out waiting for terminal task status',
+  };
 }
 
 export async function sendRunAndMaybeWait(
@@ -187,8 +220,31 @@ export async function sendRunAndMaybeWait(
     };
   }
 
-  const terminal = await pollTaskStatus(options, { taskId, room, timeoutMs });
-  if (!terminal) {
+  const polled = await pollTaskStatus(options, { taskId, room, timeoutMs });
+  if (polled.status === 'unauthorized') {
+    return {
+      status: 'unauthorized',
+      taskId,
+      room,
+      task,
+      requestId: readString(bodyRecord.requestId) ?? requestId,
+      traceId: readString(bodyRecord.traceId) ?? traceId,
+      intentId: readString(bodyRecord.intentId) ?? intentId,
+      taskStatus: null,
+      reasonCode: 'task_status_unauthorized',
+      reason: polled.reason,
+      evidence: {
+        taskStatus: null,
+        traceMatch: {
+          requestedTraceId: readString(bodyRecord.traceId) ?? traceId,
+          taskTraceId: null,
+          matched: false,
+        },
+      },
+    };
+  }
+
+  if (polled.status === 'timeout') {
     return {
       status: 'timeout',
       taskId,
@@ -198,9 +254,27 @@ export async function sendRunAndMaybeWait(
       traceId: readString(bodyRecord.traceId) ?? traceId,
       intentId: readString(bodyRecord.intentId) ?? intentId,
       taskStatus: null,
-      reason: 'Timed out waiting for terminal task status',
+      reasonCode: 'task_status_timeout',
+      reason: polled.reason,
+      evidence: {
+        taskStatus: null,
+        traceMatch: {
+          requestedTraceId: readString(bodyRecord.traceId) ?? traceId,
+          taskTraceId: null,
+          matched: false,
+        },
+      },
     };
   }
+
+  const terminal = polled.task;
+  const requestedTraceId = readString(bodyRecord.traceId) ?? traceId;
+  const taskTraceId = terminal.traceId ?? null;
+  const traceMatch = Boolean(
+    requestedTraceId &&
+      taskTraceId &&
+      requestedTraceId.trim().toLowerCase() === taskTraceId.trim().toLowerCase(),
+  );
 
   return {
     status: mapTaskStatus(terminal.status),
@@ -212,6 +286,18 @@ export async function sendRunAndMaybeWait(
     intentId: readString(bodyRecord.intentId) ?? intentId,
     taskStatus: terminal,
     reason: terminal.error ?? undefined,
+    evidence: {
+      taskStatus: terminal,
+      traceMatch: {
+        requestedTraceId,
+        taskTraceId,
+        matched: traceMatch,
+      },
+      applyAck: {
+        status: terminal.status,
+        reason: terminal.error ?? null,
+      },
+    },
   };
 }
 

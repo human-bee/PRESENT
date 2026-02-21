@@ -254,4 +254,41 @@ describe('canvas.quick_shapes deterministic envelope', () => {
     });
     expect(sendActionsEnvelopeMock).toHaveBeenCalledTimes(2);
   });
+
+  it('sanitizes line quick_shapes payloads before dispatch', async () => {
+    const runCanvasSteward = await loadRunCanvasSteward();
+    await runCanvasSteward({
+      task: 'canvas.quick_shapes',
+      params: {
+        room: 'canvas-quick-shapes-line',
+        requestId: 'req-quick-shapes-line',
+        actions: [
+          {
+            id: 'line-sanitize-1',
+            name: 'create_shape',
+            params: {
+              id: 'line-raw',
+              type: 'line',
+              x: -30,
+              y: -160,
+              props: {
+                endPoint: { x: 20, y: -60 },
+                endArrowType: 'arrow',
+                color: 'red',
+              },
+            },
+          },
+        ],
+      },
+    });
+
+    const dispatched = sendActionsEnvelopeMock.mock.calls[0]?.[3];
+    const params = dispatched?.[0]?.params;
+    expect(params?.props?.endPoint).toBeUndefined();
+    expect(params?.props?.endArrowType).toBeUndefined();
+    expect(params?.props?.points).toEqual({
+      a1: { id: 'a1', index: 'a1', x: 0, y: 0 },
+      a2: { id: 'a2', index: 'a2', x: 20, y: -60 },
+    });
+  });
 });

@@ -1,5 +1,8 @@
 jest.mock('@tldraw/tldraw', () => ({
   toRichText: (text: string) => text,
+  PageRecordType: {
+    createId: () => 'page-generated',
+  },
 }), { virtual: true });
 
 import { applyEnvelope } from './tldraw-actions';
@@ -46,6 +49,9 @@ function createMockEditor(initial: ShapeRecord[] = []) {
     sendToBack: (ids: any) => calls.push(['sendToBack', ids]),
     bringForward: (ids: any) => calls.push(['bringForward', ids]),
     sendBackward: (ids: any) => calls.push(['sendBackward', ids]),
+    getPages: jest.fn(() => [{ id: 'page-1', name: 'Page 1' }]),
+    createPage: jest.fn((page: any) => calls.push(['createPage', page])),
+    setCurrentPage: jest.fn((pageId: string) => calls.push(['setCurrentPage', pageId])),
     getShape: (id: string) => shapeMap.get(id) ?? null,
     getShapePageBounds: (id: string) => {
       const shape = shapeMap.get(id);
@@ -404,5 +410,126 @@ describe('tldraw action handlers', () => {
       a1: { id: 'a1', index: 'a1', x: 0, y: 0 },
       a2: { id: 'a2', index: 'a2', x: 100, y: 0 },
     });
+  });
+
+  it('places a shape relative to a reference shape', () => {
+    const editor = createMockEditor([
+      { id: 'shape:bunny', type: 'geo', x: 50, y: 40, props: { w: 100, h: 80 } },
+      { id: 'shape:sticky', type: 'note', x: 0, y: 0, props: { w: 40, h: 20 } },
+    ]);
+
+    applyEnvelope(
+      { editor, isHost: true, appliedIds: new Set() },
+      makeEnvelope({
+        id: 'place-sticky',
+        name: 'place',
+        params: {
+          shapeId: 'sticky',
+          referenceShapeId: 'bunny',
+          side: 'right',
+          align: 'center',
+          sideOffset: 10,
+          alignOffset: 5,
+        },
+      }),
+    );
+
+    const updateCall = editor.calls.find((c: any[]) => c[0] === 'updateShapes');
+    expect(updateCall).toBeTruthy();
+    const placed = updateCall[1][0];
+    expect(placed.id).toBe('shape:sticky');
+    expect(placed.x).toBe(160);
+    expect(placed.y).toBe(75);
+  });
+
+  it('supports scale-style resize payloads for multi-shape updates', () => {
+    const editor = createMockEditor([
+      { id: 'shape:geo-a', type: 'geo', x: 10, y: 20, props: { w: 20, h: 10 } },
+      {
+        id: 'shape:line-a',
+        type: 'line',
+        x: 0,
+        y: 0,
+        props: {
+          points: {
+            a1: { id: 'a1', index: 'a1', x: 0, y: 0 },
+            a2: { id: 'a2', index: 'a2', x: 10, y: 10 },
+          },
+        },
+      },
+    ]);
+
+    applyEnvelope(
+      { editor, isHost: true, appliedIds: new Set() },
+      makeEnvelope({
+        id: 'scale-resize',
+        name: 'resize',
+        params: {
+          shapeIds: ['geo-a', 'line-a'],
+          originX: 0,
+          originY: 0,
+          scaleX: 2,
+          scaleY: 3,
+        },
+      }),
+    );
+
+    const updateCall = editor.calls.find((c: any[]) => c[0] === 'updateShapes');
+    expect(updateCall).toBeTruthy();
+    const updates = updateCall[1];
+    const geoUpdate = updates.find((entry: any) => entry.id === 'shape:geo-a');
+    const lineUpdate = updates.find((entry: any) => entry.id === 'shape:line-a');
+    expect(geoUpdate).toMatchObject({
+      x: 20,
+      y: 60,
+      props: { w: 40, h: 30 },
+    });
+    expect(lineUpdate?.props?.points).toEqual({
+      a1: { id: 'a1', index: 'a1', x: 0, y: 0 },
+      a2: { id: 'a2', index: 'a2', x: 20, y: 30 },
+    });
+  });
+
+  it('creates a page and switches focus when create-page is requested', () => {
+    const editor = createMockEditor();
+    applyEnvelope(
+      { editor, isHost: true, appliedIds: new Set() },
+      makeEnvelope({
+        id: 'create-page-1',
+        name: 'create-page',
+        params: {
+          pageName: 'Storyboard',
+          switchToPage: true,
+        },
+      }),
+    );
+
+    const createPageCall = editor.calls.find((c: any[]) => c[0] === 'createPage');
+    expect(createPageCall).toBeTruthy();
+    expect(createPageCall[1]).toMatchObject({ name: 'Storyboard' });
+    const setCurrentCall = editor.calls.find((c: any[]) => c[0] === 'setCurrentPage');
+    expect(setCurrentCall).toBeTruthy();
+  });
+
+  it('switches to an existing page for change-page', () => {
+    const editor = createMockEditor();
+    editor.getPages = jest.fn(() => [
+      { id: 'page-1', name: 'Page 1' },
+      { id: 'page-2', name: 'Storyboard' },
+    ]);
+    applyEnvelope(
+      { editor, isHost: true, appliedIds: new Set() },
+      makeEnvelope({
+        id: 'change-page-1',
+        name: 'change-page',
+        params: {
+          pageName: 'Storyboard',
+        },
+      }),
+    );
+
+    const setCurrentCall = editor.calls.find((c: any[]) => c[0] === 'setCurrentPage');
+    expect(setCurrentCall).toBeTruthy();
+    expect(setCurrentCall[1]).toBe('page-2');
   });
 });

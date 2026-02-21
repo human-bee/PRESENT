@@ -11,6 +11,15 @@ import {
   type FairyCliMutationResult,
   type FairyCliRunEnvelope,
 } from '@/lib/agents/shared/fairy-cli-contract';
+import {
+  getTeacherContractMetadata,
+  TEACHER_ACTIONS_BY_PROFILE,
+  type TeacherContractProfile,
+} from '@/lib/canvas-agent/contract/teacher';
+import {
+  getFairyParityEntry,
+  getFairyParitySummary,
+} from '@/lib/canvas-agent/contract/fairy-parity-matrix';
 import { getTraceSession, pollTaskStatus, runAdminAction, sendRunAndMaybeWait } from './client';
 import {
   createSession,
@@ -25,6 +34,13 @@ import {
 } from './state';
 
 const FAIRY_TASK_SET = new Set<string>(fairyCliTaskSchema.options);
+
+const parseTeacherProfile = (value: string | null): TeacherContractProfile => {
+  const normalized = value?.trim().toLowerCase();
+  if (!normalized || normalized === 'fairy' || normalized === 'fairy48') return 'fairy48';
+  if (normalized === 'template' || normalized === 'template24') return 'template24';
+  throw new Error('Unsupported --profile value. Use fairy48 or template24.');
+};
 
 type ParsedArgs = {
   positionals: string[];
@@ -325,12 +341,46 @@ async function handleSessions(state: FairyCliState, parsed: ParsedArgs, cwd: str
 async function handleTools(state: FairyCliState, parsed: ParsedArgs, asJson: boolean): Promise<number> {
   const action = parsed.positionals[1] ?? 'list';
   if (action === 'list') {
+    const profile = parseTeacherProfile(readFlagString(parsed.flags, 'profile'));
+    const metadata = getTeacherContractMetadata(profile);
+    const actionNames = TEACHER_ACTIONS_BY_PROFILE[profile];
+    const actionCatalog = actionNames.map((name) => {
+      if (profile === 'fairy48') {
+        const parity = getFairyParityEntry(name as (typeof TEACHER_ACTIONS_BY_PROFILE.fairy48)[number]);
+        return {
+          name,
+          class: parity.class,
+          executor: parity.executor,
+          ready: parity.ready,
+          sideEffect: parity.sideEffect,
+        };
+      }
+      return {
+        name,
+        class: 'legacy',
+        executor: 'canvas-dispatch',
+        ready: true,
+      };
+    });
     const tools = fairyCliTaskSchema.options.map((task) => ({
       name: task,
       execution: 'runCanvas',
       statusTracking: '/api/steward/task-status',
     }));
-    printResult({ ok: true, tools }, asJson);
+    printResult(
+      {
+        ok: true,
+        tools,
+        profile,
+        contract: metadata,
+        actionCatalog: {
+          count: actionNames.length,
+          actions: actionCatalog,
+          paritySummary: profile === 'fairy48' ? getFairyParitySummary() : null,
+        },
+      },
+      asJson,
+    );
     return FAIRY_CLI_EXIT_CODES.APPLIED;
   }
 
@@ -454,7 +504,13 @@ async function handleSubagents(state: FairyCliState, parsed: ParsedArgs, cwd: st
         if (!task.taskId) return task;
         const snapshot = await pollTaskStatus({ baseUrl, token }, { taskId: task.taskId, room: run.room, timeoutMs });
         if (!snapshot) return { ...task, status: 'timeout' };
-        return { ...task, status: snapshot.status.toLowerCase() };
+        if (snapshot.status === 'terminal') {
+          return { ...task, status: snapshot.task.status.toLowerCase() };
+        }
+        if (snapshot.status === 'unauthorized') {
+          return { ...task, status: 'unauthorized' };
+        }
+        return { ...task, status: 'timeout' };
       }),
     );
     const nextRun = { ...run, tasks: updatedTasks };

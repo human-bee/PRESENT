@@ -53,6 +53,7 @@ export interface EnqueueTaskInput {
   runAt?: Date;
   coalesceByResource?: boolean;
   coalesceTaskFilter?: string[];
+  requireTraceId?: boolean;
 }
 
 export interface ClaimOptions {
@@ -374,10 +375,19 @@ export class AgentTaskQueue {
       requestId: resolvedRequestId,
       params,
     });
+    const requireTraceId = input.requireTraceId === true;
     const resolvedTraceId =
       typeof correlation.traceId === 'string' && correlation.traceId.trim().length > 0
         ? correlation.traceId.trim()
         : null;
+    if (requireTraceId && !resolvedTraceId) {
+      logger.error('enqueueTask trace_id missing for strict task', {
+        room,
+        task,
+        requestId: resolvedRequestId,
+      });
+      throw new Error(`TRACE_ID_REQUIRED:${task}`);
+    }
 
     const baseInsertPayload = {
       room,
@@ -405,6 +415,14 @@ export class AgentTaskQueue {
       .single();
 
     if (insertResult.error && isMissingTraceIdColumnError(insertResult.error)) {
+      if (requireTraceId) {
+        logger.error('enqueueTask strict trace_id insert failed due missing column', {
+          room,
+          task,
+          requestId: resolvedRequestId,
+        });
+        throw new Error(`TRACE_ID_COLUMN_REQUIRED:${task}`);
+      }
       logger.warn('agent_tasks.trace_id unavailable; retrying enqueue without trace_id', {
         room,
         task,
@@ -445,6 +463,15 @@ export class AgentTaskQueue {
     }
 
     logger.debug('enqueueTask inserted', { id: data?.id, room, task });
+    if (requireTraceId && (!data?.trace_id || String(data.trace_id).trim().length === 0)) {
+      logger.error('enqueueTask strict trace_id missing on inserted task', {
+        id: data?.id ?? null,
+        room,
+        task,
+        requestId: resolvedRequestId,
+      });
+      throw new Error(`TRACE_ID_NOT_PERSISTED:${task}`);
+    }
     if (data?.id) {
       void recordTaskTraceFromParams({
         stage: 'queued',

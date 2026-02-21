@@ -44,6 +44,10 @@ import {
   isRetryableProviderError,
   parseRetryEnvInt,
 } from '@/lib/agents/shared/provider-retry';
+import {
+  appendFairyOrchestrationEvent,
+  resolveLatestActiveTaskId,
+} from '@/lib/agents/shared/fairy-orchestration/service';
 
 let teacherRuntimeWarningLogged = false;
 let durableFollowupQueue: AgentTaskQueue | null | undefined;
@@ -149,6 +153,52 @@ const computeFollowupLoopDelayMs = (depth: number) =>
     FOLLOWUP_LOOP_MAX_DELAY_MS,
     FOLLOWUP_LOOP_BASE_DELAY_MS * 2 ** Math.max(0, depth - 1),
   );
+
+const CLIENT_DISPATCHABLE_ACTIONS = new Set<string>([
+  'create_shape',
+  'update_shape',
+  'delete_shape',
+  'move',
+  'resize',
+  'rotate',
+  'group',
+  'ungroup',
+  'align',
+  'distribute',
+  'stack',
+  'reorder',
+  'set_viewport',
+  'place',
+  'create-page',
+  'change-page',
+]);
+
+const ORCHESTRATION_ACTIONS = new Set<string>([
+  'start-project',
+  'start-duo-project',
+  'end-project',
+  'end-duo-project',
+  'abort-project',
+  'abort-duo-project',
+  'enter-orchestration-mode',
+  'create-task',
+  'create-project-task',
+  'create-duo-task',
+  'delete-project-task',
+  'start-task',
+  'start-duo-task',
+  'mark-task-done',
+  'mark-my-task-done',
+  'mark-duo-task-done',
+  'await-tasks-completion',
+  'await-duo-tasks-completion',
+  'direct-to-start-project-task',
+  'direct-to-start-duo-task',
+  'activate-agent',
+  'upsert-personal-todo-item',
+  'delete-personal-todo-items',
+  'claim-todo-item',
+]);
 
 const parseTraceEventBudget = (): number => {
   const raw = process.env.CANVAS_AGENT_TRACE_MAX_EVENTS;
@@ -1564,9 +1614,12 @@ const normalizeRawAction = (
       const worldActions = applyOffsetToActions(enforceShapeProps(clean));
       if (worldActions.length === 0) return 0;
 
-      const dispatchableActions = worldActions.filter((action) => action.name !== 'message');
-      const mutatingActions = dispatchableActions.filter((action) => action.name !== 'think');
+      const dispatchableActions = worldActions.filter((action) => CLIENT_DISPATCHABLE_ACTIONS.has(action.name));
+      const mutatingActions = dispatchableActions.filter((action) => action.name !== 'set_viewport');
       const chatOnlyActions = worldActions.filter((action) => action.name === 'message');
+      const serverOnlyActions = worldActions.filter(
+        (action) => !CLIENT_DISPATCHABLE_ACTIONS.has(action.name) && action.name !== 'message',
+      );
 
       if (dispatchableActions.length > 0) {
         hooks.onActions?.({
@@ -1654,7 +1707,90 @@ const normalizeRawAction = (
       }
 
       if (shouldDispatch) {
-        for (const action of [...dispatchableActions, ...chatOnlyActions]) {
+        for (const action of [...serverOnlyActions, ...chatOnlyActions]) {
+          if (ORCHESTRATION_ACTIONS.has(action.name)) {
+            const params =
+              action.params && typeof action.params === 'object' && !Array.isArray(action.params)
+                ? (action.params as Record<string, unknown>)
+                : {};
+            const readStringParam = (value: unknown): string | null =>
+              typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
+            const actionName = action.name;
+            const projectName = readStringParam(params.projectName);
+            const explicitTaskId = readStringParam(params.taskId);
+            let taskId = explicitTaskId;
+            if (
+              !taskId &&
+              (actionName === 'mark-task-done' ||
+                actionName === 'mark-my-task-done' ||
+                actionName === 'mark-duo-task-done')
+            ) {
+              taskId = await resolveLatestActiveTaskId({
+                room: roomId,
+                sessionId,
+              });
+            }
+            const taskTitle = readStringParam(params.title);
+            const assignedTo = readStringParam(params.assignedTo);
+            const payload = { ...params };
+            const eventPayload = {
+              room: roomId,
+              sessionId,
+              traceId: correlation.traceId ?? null,
+              requestId: correlation.requestId ?? null,
+              actionType: actionName,
+              projectName,
+              taskId,
+              taskTitle,
+              assignedTo,
+              payload,
+            } as Parameters<typeof appendFairyOrchestrationEvent>[0];
+
+            if (actionName === 'start-project') {
+              eventPayload.projectMode = 'solo';
+              eventPayload.projectStatus = 'active';
+            } else if (actionName === 'start-duo-project') {
+              eventPayload.projectMode = 'duo';
+              eventPayload.projectStatus = 'active';
+            } else if (actionName === 'end-project' || actionName === 'end-duo-project') {
+              eventPayload.projectStatus = 'completed';
+            } else if (actionName === 'abort-project' || actionName === 'abort-duo-project') {
+              eventPayload.projectStatus = 'aborted';
+            } else if (
+              actionName === 'create-task' ||
+              actionName === 'create-project-task' ||
+              actionName === 'create-duo-task'
+            ) {
+              eventPayload.taskStatus = 'created';
+            } else if (actionName === 'delete-project-task') {
+              eventPayload.taskStatus = 'deleted';
+            } else if (actionName === 'start-task' || actionName === 'start-duo-task') {
+              eventPayload.taskStatus = 'started';
+            } else if (
+              actionName === 'mark-task-done' ||
+              actionName === 'mark-my-task-done' ||
+              actionName === 'mark-duo-task-done'
+            ) {
+              eventPayload.taskStatus = 'done';
+            } else if (actionName === 'await-tasks-completion' || actionName === 'await-duo-tasks-completion') {
+              eventPayload.taskStatus = 'awaiting';
+            } else if (
+              actionName === 'direct-to-start-project-task' ||
+              actionName === 'direct-to-start-duo-task'
+            ) {
+              eventPayload.taskStatus = 'delegated';
+            }
+
+            const persisted = await appendFairyOrchestrationEvent(eventPayload);
+            if (!persisted.ok) {
+              console.warn('[CanvasAgent:OrchestrationLedgerError]', {
+                roomId,
+                sessionId,
+                action: actionName,
+                reason: persisted.reason,
+              });
+            }
+          }
           if (action.name === 'think') {
             const thought = String((action as any).params?.text || '');
             if (thought) {
@@ -1681,6 +1817,24 @@ const normalizeRawAction = (
                   error: todoError instanceof Error ? todoError.message : todoError,
                 });
               }
+            }
+          }
+          if (action.name === 'review') {
+            const params =
+              action.params && typeof action.params === 'object' && !Array.isArray(action.params)
+                ? (action.params as Record<string, unknown>)
+                : {};
+            await enqueueDetail(params);
+          }
+          if (action.name === 'country-info') {
+            const code =
+              action.params && typeof action.params === 'object' && !Array.isArray(action.params)
+                ? String((action.params as Record<string, unknown>).code ?? '').trim().toUpperCase()
+                : '';
+            if (code) {
+              await enqueueDetail({
+                hint: `Provide concise country information for ISO code ${code}.`,
+              });
             }
           }
           if (action.name === 'add_detail') {

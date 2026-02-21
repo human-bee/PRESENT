@@ -5,6 +5,8 @@ import { runCanvasAgent } from '@/lib/agents/canvas-agent/server/runner';
 import type { CanvasFollowupInput } from '@/lib/agents/canvas-agent/server/followup-queue';
 import { awaitAck, sendActionsEnvelope } from '@/lib/agents/canvas-agent/server/wire';
 import type { AgentAction } from '@/lib/canvas-agent/contract/types';
+import { parseAction } from '@/lib/canvas-agent/contract/parsers';
+import { resolveShapeType, sanitizeShapeProps } from '@/lib/canvas-agent/contract/shape-utils';
 import { normalizeFairyContextProfile } from '@/lib/fairy-context/profiles';
 import { deriveRequestCorrelation } from '@/lib/agents/shared/request-correlation';
 import { getDecryptedUserModelKey, type ModelKeyProvider } from '@/lib/agents/shared/user-model-keys';
@@ -556,6 +558,54 @@ function extractQuickShapeActions(payload: JsonObject): AgentAction[] {
     throw new Error('canvas.quick_shapes requires actions[]');
   }
 
+  const sanitizeQuickShapeAction = (
+    name: AgentAction['name'],
+    params: Record<string, unknown>,
+  ): Record<string, unknown> => {
+    if (name === 'create_shape') {
+      const next = { ...params };
+      const rawType = typeof next.type === 'string' ? next.type : undefined;
+      const resolvedType = resolveShapeType(rawType) ?? rawType;
+      if (resolvedType) {
+        next.type = resolvedType;
+      }
+      const rawProps =
+        next.props && typeof next.props === 'object' && !Array.isArray(next.props)
+          ? ({ ...(next.props as Record<string, unknown>) } as Record<string, unknown>)
+          : {};
+      if (resolvedType) {
+        next.props = sanitizeShapeProps(rawProps, resolvedType);
+      } else {
+        next.props = rawProps;
+      }
+      return next;
+    }
+
+    if (name === 'update_shape') {
+      const next = { ...params };
+      const rawProps =
+        next.props && typeof next.props === 'object' && !Array.isArray(next.props)
+          ? ({ ...(next.props as Record<string, unknown>) } as Record<string, unknown>)
+          : {};
+      const hintedType = typeof next.shapeType === 'string' ? resolveShapeType(next.shapeType) : undefined;
+      const inferredType =
+        hintedType ??
+        (rawProps.points || rawProps.startPoint || rawProps.endPoint
+          ? 'line'
+          : rawProps.start || rawProps.end
+            ? 'arrow'
+            : undefined);
+      if (inferredType) {
+        next.props = sanitizeShapeProps(rawProps, inferredType);
+      } else {
+        next.props = rawProps;
+      }
+      return next;
+    }
+
+    return { ...params };
+  };
+
   const parsed: AgentAction[] = [];
   for (let index = 0; index < rawActions.length; index += 1) {
     const candidate = rawActions[index];
@@ -572,11 +622,23 @@ function extractQuickShapeActions(payload: JsonObject): AgentAction[] {
       typeof actionRecord.id === 'string' && actionRecord.id.trim().length > 0
         ? actionRecord.id.trim()
         : `quick-shape-${index + 1}`;
-    parsed.push({
-      id,
-      name: name as AgentAction['name'],
-      params: params as AgentAction['params'],
-    });
+    const normalizedName = name as AgentAction['name'];
+    const sanitizedParams = sanitizeQuickShapeAction(normalizedName, params);
+    try {
+      const validated = parseAction({
+        id,
+        name: normalizedName,
+        params: sanitizedParams,
+      });
+      parsed.push({
+        id: validated.id,
+        name: validated.name,
+        params: validated.params,
+      });
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      throw new Error(`canvas.quick_shapes action[${index}] invalid: ${reason}`);
+    }
   }
 
   if (parsed.length === 0) {

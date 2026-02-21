@@ -28,6 +28,8 @@ npm run fairy:cli -- sessions send --task fairy.intent --message "Draw a bunny"
 
 # Tools
 npm run fairy:cli -- tools list
+npm run fairy:cli -- tools list --profile fairy48
+npm run fairy:cli -- tools list --profile template24
 npm run fairy:cli -- tools call fairy.intent --args '{"message":"Draw a bunny"}'
 npm run fairy:cli -- tools call dispatch_to_conductor --args '{"task":"canvas.quick_text","params":{"text":"FOREST_READY."}}'
 
@@ -55,7 +57,17 @@ npm run fairy:cli -- smoke correlate
 --baseUrl=http://127.0.0.1:3000
 --token=<bearer-token>    # or FAIRY_CLI_BEARER_TOKEN
 --session=<session-id>
+--profile=fairy48|template24
 ```
+
+## Capability inventory
+
+`tools list --json` includes:
+
+1. `profile`: selected contract profile (`fairy48` by default).
+2. `actionCatalog.count`: number of actions in that profile.
+3. `actionCatalog.actions[]`: action-level parity metadata (`class`, `executor`, `ready`, `sideEffect`) when available.
+4. `actionCatalog.paritySummary`: aggregate readiness summary for `fairy48`.
 
 ## Exit codes
 

@@ -514,15 +514,16 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
               return;
             }
           } else if (res.status === 401 || res.status === 403) {
-            const message = `${taskName} queued (status visibility unavailable: HTTP ${res.status})`;
+            const message = `${taskName} apply verification unauthorized (HTTP ${res.status})`;
             emitDone(call, {
-              status: 'QUEUED',
+              status: 'UNAUTHORIZED',
               message,
               taskId,
+              reasonCode: 'task_status_unauthorized',
             });
             emitStewardStatusTranscript({
               taskName,
-              status: 'queued',
+              status: 'failed',
               taskId,
               message,
             });
@@ -548,15 +549,16 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
         delayMs = Math.min(STEWARD_TASK_POLL_MAX_DELAY_MS, Math.round(delayMs * 1.5));
       }
 
-      const timeoutMessage = `${taskName} queued; apply evidence still pending`;
+      const timeoutMessage = `${taskName} timed out waiting for apply evidence`;
       emitDone(call, {
-        status: 'QUEUED',
+        status: 'TIMEOUT',
         message: timeoutMessage,
         taskId,
+        reasonCode: 'task_status_timeout',
       });
       emitStewardStatusTranscript({
         taskName,
-        status: 'queued',
+        status: 'failed',
         taskId,
         message: timeoutMessage,
       });
