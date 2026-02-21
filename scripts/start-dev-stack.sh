@@ -4,8 +4,128 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 LOG_DIR="$ROOT_DIR/logs"
+STACK_MONITOR_LOCK_DIR="${TMPDIR:-/tmp}/present-dev-stack-monitor.lock"
+STACK_MONITOR_LOCK_META="$STACK_MONITOR_LOCK_DIR/owner"
+STACK_MONITOR_SCRIPT_PATH="$ROOT_DIR/scripts/start-dev-stack.sh"
 
 mkdir -p "$LOG_DIR"
+
+write_stack_lock_meta() {
+  cat >"$STACK_MONITOR_LOCK_META" <<METAEOF
+pid=$$
+cwd=$ROOT_DIR
+started_at=$(date +%s)
+METAEOF
+}
+
+read_stack_lock_field() {
+  local field="$1"
+  if [[ ! -f "$STACK_MONITOR_LOCK_META" ]]; then
+    return
+  fi
+  awk -F= -v field="$field" '$1 == field { print substr($0, index($0, "=") + 1); exit }' "$STACK_MONITOR_LOCK_META" 2>/dev/null
+}
+
+process_command() {
+  local pid="$1"
+  ps -p "$pid" -o args= 2>/dev/null || true
+}
+
+pid_in_workspace() {
+  local pid="$1"
+  if ! pid_is_running "$pid"; then
+    return 1
+  fi
+
+  local args
+  args="$(process_command "$pid")"
+  if [[ "$args" == *"$ROOT_DIR"* ]]; then
+    return 0
+  fi
+
+  if ! command -v lsof >/dev/null 2>&1; then
+    return 0
+  fi
+
+  local cwd
+  cwd="$(process_cwd "$pid")"
+  [[ -n "$cwd" ]] && [[ "$cwd" == "$ROOT_DIR" ]]
+}
+
+is_stack_monitor_process() {
+  local pid="$1"
+  local command
+  command="$(process_command "$pid")"
+  [[ -n "$command" ]] && [[ "$command" == *"start-dev-stack.sh"* ]]
+}
+
+stack_monitor_lock_owner_is_monitor() {
+  local owner_pid="$1"
+  [[ -n "$owner_pid" ]] && pid_is_running "$owner_pid" && is_stack_monitor_process "$owner_pid"
+}
+
+acquire_stack_monitor_lock() {
+  local auto_stop="${STACK_AUTO_STOP_FOREIGN_MONITORS:-1}"
+  local attempts=0
+
+  while [[ "$attempts" -lt 6 ]]; do
+    if mkdir "$STACK_MONITOR_LOCK_DIR" 2>/dev/null; then
+      write_stack_lock_meta
+      return 0
+    fi
+
+    local owner_pid owner_cwd
+    owner_pid="$(read_stack_lock_field "pid")"
+    owner_cwd="$(read_stack_lock_field "cwd")"
+
+    if stack_monitor_lock_owner_is_monitor "$owner_pid"; then
+      if [[ "$owner_cwd" == "$ROOT_DIR" ]]; then
+        echo "[Stack] monitor already running for this workspace (pid=$owner_pid)."
+        return 2
+      fi
+      if [[ "$auto_stop" == "1" ]]; then
+        echo "[Stack] stopping lock owner pid=$owner_pid cwd=${owner_cwd:-unknown}"
+        kill "$owner_pid" 2>/dev/null || true
+        sleep 0.5
+        if ps -p "$owner_pid" >/dev/null 2>&1; then
+          kill -9 "$owner_pid" 2>/dev/null || true
+        fi
+      else
+        echo "[Stack] monitor lock held by pid=$owner_pid cwd=${owner_cwd:-unknown}"
+        echo "[Stack] Set STACK_AUTO_STOP_FOREIGN_MONITORS=1 to auto-stop lock holder."
+        return 1
+      fi
+    elif [[ -z "$owner_pid" ]] || ! stack_monitor_lock_owner_is_monitor "$owner_pid"; then
+      rm -rf "$STACK_MONITOR_LOCK_DIR" 2>/dev/null || true
+    fi
+
+    attempts=$((attempts + 1))
+    sleep 0.5
+  done
+
+  echo "[Stack] unable to acquire monitor lock at $STACK_MONITOR_LOCK_DIR"
+  return 1
+}
+
+release_stack_monitor_lock() {
+  if [[ ! -d "$STACK_MONITOR_LOCK_DIR" ]]; then
+    return
+  fi
+  local owner_pid owner_cwd
+  owner_pid="$(read_stack_lock_field "pid")"
+  owner_cwd="$(read_stack_lock_field "cwd")"
+  local should_release=0
+  if [[ "$owner_pid" == "$$" ]]; then
+    should_release=1
+  elif [[ "$owner_cwd" == "$ROOT_DIR" ]]; then
+    if [[ -z "$owner_pid" ]] || ! ps -p "$owner_pid" >/dev/null 2>&1; then
+      should_release=1
+    fi
+  fi
+  if [[ "$should_release" -eq 1 ]]; then
+    rm -rf "$STACK_MONITOR_LOCK_DIR" 2>/dev/null || true
+  fi
+}
 
 usage() {
   cat <<'USAGE'
@@ -155,13 +275,17 @@ service_pattern() {
 
 pid_matches_root() {
   local pid="$1"
-  if ! ps -p "$pid" >/dev/null 2>&1; then
-    return 1
-  fi
-  if ! command -v lsof >/dev/null 2>&1; then
-    return 0
-  fi
-  lsof -p "$pid" 2>/dev/null | grep "cwd" | grep -q "$ROOT_DIR"
+  pid_in_workspace "$pid"
+}
+
+pid_is_running() {
+  local pid="$1"
+  [[ -n "$pid" ]] && ps -p "$pid" >/dev/null 2>&1
+}
+
+process_cwd() {
+  local pid="$1"
+  lsof -p "$pid" 2>/dev/null | awk '/ cwd /{print $NF}' | head -n 1
 }
 
 find_service_pids() {
@@ -191,12 +315,44 @@ find_service_pids() {
   fi
 }
 
+find_foreign_service_pids() {
+  local script="$1"
+  local pattern
+  pattern="$(service_pattern "$script")"
+  if [[ -z "$pattern" ]]; then
+    return
+  fi
+
+  local candidates
+  candidates=$(pgrep -f "$pattern" 2>/dev/null || true)
+  if [[ -z "$candidates" ]]; then
+    return
+  fi
+
+  local matches=()
+  local pid
+  for pid in $candidates; do
+    if ! pid_is_running "$pid"; then
+      continue
+    fi
+    if pid_matches_root "$pid"; then
+      continue
+    fi
+    matches+=("$pid")
+  done
+
+  if [[ ${#matches[@]} -gt 0 ]]; then
+    printf '%s\n' "${matches[@]}" | sort -n
+  fi
+}
+
 select_primary_pid() {
   local raw="${1-}"
   if [[ -z "$raw" ]]; then
     return
   fi
-  echo "$raw" | tr ' ' '\n' | awk '/^[0-9]+$/{print $0}' | sort -n | tail -n 1
+  # Prefer oldest matching pid to avoid pinning transient child workers.
+  echo "$raw" | tr ' ' '\n' | awk '/^[0-9]+$/{print $0}' | sort -n | head -n 1
 }
 
 ensure_port_free() {
@@ -236,7 +392,166 @@ ensure_port_free() {
   done
 }
 
+ensure_service_ports_free() {
+  local script="$1"
+  case "$script" in
+    "lk:server:dev")
+      ensure_port_free 7880
+      ensure_port_free 7881
+      ensure_port_free 7882
+      ;;
+    "sync:dev")
+      ensure_port_free 3100
+      ;;
+    "dev")
+      ensure_port_free 3000
+      ;;
+  esac
+}
+
+stop_foreign_service_instances() {
+  local script="$1"
+  local label="$2"
+  local auto_stop="${STACK_AUTO_STOP_FOREIGN_SERVICES:-1}"
+  local foreign_pids
+  foreign_pids="$(find_foreign_service_pids "$script" | tr '\n' ' ' | xargs || true)"
+  if [[ -z "$foreign_pids" ]]; then
+    return 0
+  fi
+
+  if [[ "$auto_stop" != "1" ]]; then
+    echo "[Stack] conflicting $label process(es) outside this workspace: $foreign_pids"
+    echo "[Stack] Set STACK_AUTO_STOP_FOREIGN_SERVICES=1 to auto-stop foreign service processes."
+    return 1
+  fi
+
+  local pid
+  for pid in $foreign_pids; do
+    if ! pid_is_running "$pid"; then
+      continue
+    fi
+    local cwd
+    cwd="$(process_cwd "$pid")"
+    echo "[Stack] stopping conflicting $label pid=$pid cwd=${cwd:-unknown}"
+    kill "$pid" 2>/dev/null || true
+  done
+
+  sleep 0.6
+  for pid in $foreign_pids; do
+    if pid_is_running "$pid"; then
+      kill -9 "$pid" 2>/dev/null || true
+    fi
+  done
+
+  return 0
+}
+
+ensure_no_foreign_stack_monitors() {
+  local auto_stop="${STACK_AUTO_STOP_FOREIGN_MONITORS:-1}"
+  local self_pid="$$"
+  local owner_pid
+  local owner_cwd
+  owner_pid="$(read_stack_lock_field "pid")"
+  owner_cwd="$(read_stack_lock_field "cwd")"
+
+  if [[ -z "$owner_pid" ]] || [[ "$owner_pid" == "$self_pid" ]] || ! stack_monitor_lock_owner_is_monitor "$owner_pid"; then
+    return
+  fi
+
+  if [[ -z "$owner_cwd" ]] || [[ "$owner_cwd" == "$ROOT_DIR" ]]; then
+    return
+  fi
+
+  if [[ "$auto_stop" == "1" ]]; then
+    echo "[Stack] stopping conflicting stack monitor pid=$owner_pid cwd=$owner_cwd"
+    kill "$owner_pid" 2>/dev/null || true
+    return
+  fi
+
+  echo "[Stack] conflicting stack monitor detected pid=$owner_pid cwd=$owner_cwd"
+  echo "[Stack] Refusing to continue with foreign monitors present."
+  echo "[Stack] Set STACK_AUTO_STOP_FOREIGN_MONITORS=1 to auto-stop conflicts."
+  return 1
+}
+
+service_label() {
+  local script="$1"
+  case "$script" in
+    "lk:server:dev")
+      echo "LiveKit server"
+      ;;
+    "sync:dev")
+      echo "Sync server"
+      ;;
+    "agent:conductor")
+      echo "Conductor"
+      ;;
+    "agent:realtime")
+      echo "Realtime agent"
+      ;;
+    "dev")
+      echo "Next dev"
+      ;;
+    *)
+      echo "$script"
+      ;;
+  esac
+}
+
+service_logfile() {
+  local script="$1"
+  case "$script" in
+    "lk:server:dev")
+      echo "livekit-server.log"
+      ;;
+    "sync:dev")
+      echo "sync-dev.log"
+      ;;
+    "agent:conductor")
+      echo "agent-conductor.log"
+      ;;
+    "agent:realtime")
+      echo "agent-realtime.log"
+      ;;
+    "dev")
+      echo "next-dev.log"
+      ;;
+    *)
+      echo "stack-${script//[:\/]/-}.log"
+      ;;
+  esac
+}
+
+service_health_port() {
+  local script="$1"
+  case "$script" in
+    "lk:server:dev")
+      echo "7880"
+      ;;
+    "sync:dev")
+      echo "3100"
+      ;;
+    "dev")
+      echo "3000"
+      ;;
+    *)
+      echo ""
+      ;;
+  esac
+}
+
+add_started_service() {
+  local candidate="$1"
+  for existing in "${STARTED_SERVICES[@]:-}"; do
+    if [[ "$existing" == "$candidate" ]]; then
+      return
+    fi
+  done
+  STARTED_SERVICES+=("$candidate")
+}
+
 declare -a RUNNING_PIDS=()
+declare -a STARTED_SERVICES=()
 
 cleanup_stack() {
   local pid
@@ -249,7 +564,7 @@ cleanup_stack() {
 }
 
 if [[ "$MONITOR_MODE" -eq 1 ]]; then
-  trap 'cleanup_stack' EXIT
+  trap 'cleanup_stack; release_stack_monitor_lock' EXIT
 fi
 
 start_process() {
@@ -259,10 +574,13 @@ start_process() {
   local health_port="${4-}"
 
   local pidfile="$LOG_DIR/$script.pid"
+  if ! stop_foreign_service_instances "$script" "$label"; then
+    return 1
+  fi
   if [[ -f "$pidfile" ]]; then
     local existing_pid
     existing_pid="$(cat "$pidfile" 2>/dev/null || echo "")"
-    if [[ -n "$existing_pid" ]] && pid_matches_root "$existing_pid"; then
+    if [[ -n "$existing_pid" ]] && pid_is_running "$existing_pid"; then
       echo "[$label] already running (pid=$existing_pid)."
       return
     fi
@@ -348,6 +666,17 @@ start_process() {
 
 failures=0
 FORCE_LOCAL_LIVEKIT=0
+if [[ "$MONITOR_MODE" -eq 1 ]]; then
+  lock_result=0
+  acquire_stack_monitor_lock || lock_result=$?
+  if [[ "$lock_result" -eq 2 ]]; then
+    exit 0
+  fi
+  if [[ "$lock_result" -ne 0 ]]; then
+    exit 1
+  fi
+fi
+
 if should_run "lk:server:dev"; then
   FORCE_LOCAL_LIVEKIT=1
 fi
@@ -362,23 +691,31 @@ if [[ "$FORCE_LOCAL_LIVEKIT" -eq 1 ]]; then
   echo "[Stack] local LiveKit env forced for app/agents (set STACK_DISABLE_LOCAL_LIVEKIT_ENV=1 to bypass)"
 fi
 
+if [[ "$MONITOR_MODE" -eq 1 ]] && ! ensure_no_foreign_stack_monitors; then
+  exit 1
+fi
+
 if should_run "lk:server:dev"; then
-  ensure_port_free 7880
-  ensure_port_free 7882
+  add_started_service "lk:server:dev"
+  ensure_service_ports_free "lk:server:dev"
   start_process "LiveKit server" "lk:server:dev" "livekit-server.log" 7880 || failures=1
 fi
 if should_run "sync:dev"; then
-  ensure_port_free 3100
+  add_started_service "sync:dev"
+  ensure_service_ports_free "sync:dev"
   start_process "Sync server" "sync:dev" "sync-dev.log" || failures=1
 fi
 if should_run "agent:conductor"; then
+  add_started_service "agent:conductor"
   start_process "Conductor" "agent:conductor" "agent-conductor.log" || failures=1
 fi
 if should_run "agent:realtime"; then
+  add_started_service "agent:realtime"
   start_process "Realtime agent" "agent:realtime" "agent-realtime.log" || failures=1
 fi
 if should_run "dev"; then
-  ensure_port_free 3000
+  add_started_service "dev"
+  ensure_service_ports_free "dev"
   start_process "Next dev" "dev" "next-dev.log" || failures=1
 fi
 
@@ -395,23 +732,47 @@ if [[ "$failures" -ne 0 ]]; then
   exit 1
 fi
 
-if [[ ${#RUNNING_PIDS[@]} -gt 0 ]]; then
+if [[ ${#STARTED_SERVICES[@]} -gt 0 ]]; then
   if [[ "$MONITOR_MODE" -eq 1 ]]; then
     echo "[Stack] services running; monitor mode enabled. Keep this terminal open or Ctrl+C to stop."
     while true; do
-      for pid in "${RUNNING_PIDS[@]}"; do
-        if [[ -z "$pid" ]]; then
+      if ! ensure_no_foreign_stack_monitors; then
+        echo "[Stack] cannot continue monitor mode with foreign monitor conflict."
+        cleanup_stack
+        exit 1
+      fi
+      for script in "${STARTED_SERVICES[@]}"; do
+        if ! stop_foreign_service_instances "$script" "$(service_label "$script")"; then
+          echo "[Stack] foreign ${script} conflict remains unresolved; skipping restart check."
           continue
         fi
-        if ! kill -0 "$pid" >/dev/null 2>&1; then
-          echo "[Stack] detected service pid=$pid exit; review logs for details."
-          cleanup_stack
-          exit 1
+        local_pidfile="$LOG_DIR/$script.pid"
+        local_pid="$(cat "$local_pidfile" 2>/dev/null || echo "")"
+        if pid_is_running "$local_pid"; then
+          continue
+        fi
+
+        rediscovered=""
+        rediscovered_pid=""
+        rediscovered="$(find_service_pids "$script" | tr '\n' ' ' | xargs || true)"
+        if [[ -n "$rediscovered" ]]; then
+          rediscovered_pid="$(select_primary_pid "$rediscovered")"
+          if pid_is_running "$rediscovered_pid"; then
+            echo "$rediscovered_pid" >"$local_pidfile"
+            continue
+          fi
+        fi
+
+        echo "[Stack] detected $script stopped; attempting restart..."
+        health_port="$(service_health_port "$script")"
+        ensure_service_ports_free "$script"
+        if ! start_process "$(service_label "$script")" "$script" "$(service_logfile "$script")" "$health_port"; then
+          echo "[Stack] restart failed for $script; keeping other services alive."
         fi
       done
       sleep 3
     done
+  else
+    echo "[Stack] detached mode enabled; services continue in background (use npm run stack:stop to stop)."
   fi
-
-  echo "[Stack] detached mode enabled; services continue in background (use npm run stack:stop to stop)."
 fi

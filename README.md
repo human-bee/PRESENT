@@ -112,6 +112,17 @@ npm run stack:start
 
 This boots `livekit-server --dev` (as `lk:server:dev`), `sync:dev`, `agent:conductor`, `agent:realtime`, and `next dev` concurrently, writing output to `logs/*.log` so you can tail the services you care about.
 
+For a foreground-supervised run with auto-restart on crash (and process lock ownership across worktrees), use:
+
+```bash
+STACK_MONITOR=1 npm run stack:start -- --realtime --sync --conductor --livekit --web
+```
+
+To stop this mode cleanly, run `npm run stack:stop` from the same workspace; it now terminates any active monitor process bound to that tree first.
+
+If you have intentionally mixed ownership across worktrees, set `STACK_AUTO_STOP_FOREIGN_MONITORS=0` to fail fast instead of auto-stopping foreign monitor/stack processes.
+For service-level enforcement, set `STACK_AUTO_STOP_FOREIGN_SERVICES=0` to fail fast when existing matching services are started from another workspace; set to `1` (default) for auto-stop-and-restart semantics.
+
 To stop all background services cleanly, run:
 
 ```bash
