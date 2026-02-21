@@ -114,7 +114,13 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    const tasksWithResolvedTrace = tasks.map((task) => {
+    const tasksWithResolvedTrace: Array<
+      Record<string, unknown> & {
+        trace_id: string | null;
+        resolved_trace_id: string | null;
+        trace_integrity: 'direct' | 'resolved_from_events' | 'missing';
+      }
+    > = tasks.map((task) => {
       const traceId = readId(task.trace_id);
       const requestId = readId(task.request_id);
       const taskId = readId(task.id);
@@ -138,7 +144,7 @@ export async function GET(req: NextRequest) {
     const requestIds = new Set<string>();
     for (const task of tasksWithResolvedTrace) {
       const traceId = readId(task.resolved_trace_id) ?? readId(task.trace_id) ?? '';
-      const requestId = readId(task.request_id) ?? '';
+      const requestId = readId((task as Record<string, unknown>)['request_id']) ?? '';
       if (traceId) traceIds.add(traceId);
       if (requestId) requestIds.add(requestId);
     }
@@ -154,7 +160,13 @@ export async function GET(req: NextRequest) {
       tracesTotal: traces.length,
       uniqueTraceIds: traceIds.size,
       uniqueRequestIds: requestIds.size,
-      taskStatusCounts: countBy(tasksWithResolvedTrace.map((task) => (typeof task.status === 'string' ? task.status : null))),
+      taskStatusCounts: countBy(
+        tasksWithResolvedTrace.map((task) =>
+          typeof (task as Record<string, unknown>)['status'] === 'string'
+            ? ((task as Record<string, unknown>)['status'] as string)
+            : null,
+        ),
+      ),
       traceStageCounts: countBy(traces.map((trace) => (typeof trace.stage === 'string' ? trace.stage : null))),
       missingTraceOnTasks: tasksWithResolvedTrace.filter((task) => {
         const traceId =

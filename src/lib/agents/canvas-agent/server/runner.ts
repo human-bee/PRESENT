@@ -1736,8 +1736,8 @@ const normalizeRawAction = (
             const eventPayload = {
               room: roomId,
               sessionId,
-              traceId: correlation.traceId ?? null,
-              requestId: correlation.requestId ?? null,
+              traceId: correlation?.traceId ?? null,
+              requestId: correlation?.requestId ?? null,
               actionType: actionName,
               projectName,
               taskId,
