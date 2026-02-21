@@ -33,12 +33,21 @@ import {
 import { normalizeFairyContextProfile, type FairyContextProfile } from '@/lib/fairy-context/profiles';
 import { AgentTaskQueue } from '@/lib/agents/shared/queue';
 import { enqueueCanvasFollowup, type CanvasFollowupInput } from './followup-queue';
+import {
+  mergeFollowupWithInferredTargets,
+  normalizeShapeIdForLookup,
+  resolveMissingTargetIds,
+} from './target-id-contract';
 import type { JsonObject } from '@/lib/utils/json-schema';
 import {
   describeRetryError,
   isRetryableProviderError,
   parseRetryEnvInt,
 } from '@/lib/agents/shared/provider-retry';
+import {
+  appendFairyOrchestrationEvent,
+  resolveLatestActiveTaskId,
+} from '@/lib/agents/shared/fairy-orchestration/service';
 
 let teacherRuntimeWarningLogged = false;
 let durableFollowupQueue: AgentTaskQueue | null | undefined;
@@ -144,6 +153,52 @@ const computeFollowupLoopDelayMs = (depth: number) =>
     FOLLOWUP_LOOP_MAX_DELAY_MS,
     FOLLOWUP_LOOP_BASE_DELAY_MS * 2 ** Math.max(0, depth - 1),
   );
+
+const CLIENT_DISPATCHABLE_ACTIONS = new Set<string>([
+  'create_shape',
+  'update_shape',
+  'delete_shape',
+  'move',
+  'resize',
+  'rotate',
+  'group',
+  'ungroup',
+  'align',
+  'distribute',
+  'stack',
+  'reorder',
+  'set_viewport',
+  'place',
+  'create-page',
+  'change-page',
+]);
+
+const ORCHESTRATION_ACTIONS = new Set<string>([
+  'start-project',
+  'start-duo-project',
+  'end-project',
+  'end-duo-project',
+  'abort-project',
+  'abort-duo-project',
+  'enter-orchestration-mode',
+  'create-task',
+  'create-project-task',
+  'create-duo-task',
+  'delete-project-task',
+  'start-task',
+  'start-duo-task',
+  'mark-task-done',
+  'mark-my-task-done',
+  'mark-duo-task-done',
+  'await-tasks-completion',
+  'await-duo-tasks-completion',
+  'direct-to-start-project-task',
+  'direct-to-start-duo-task',
+  'activate-agent',
+  'upsert-personal-todo-item',
+  'delete-personal-todo-items',
+  'claim-todo-item',
+]);
 
 const parseTraceEventBudget = (): number => {
   const raw = process.env.CANVAS_AGENT_TRACE_MAX_EVENTS;
@@ -486,9 +541,14 @@ export async function runCanvasAgent(args: RunArgs) {
     typeof args.followupDepth === 'number' && Number.isFinite(args.followupDepth)
       ? Math.max(0, Math.floor(args.followupDepth))
       : 0;
-  const initialFollowup = normalizeInitialFollowup(args.initialFollowup, userMessage, currentFollowupDepth);
+  const initialFollowup = mergeFollowupWithInferredTargets(
+    normalizeInitialFollowup(args.initialFollowup, userMessage, currentFollowupDepth),
+    userMessage,
+    currentFollowupDepth,
+  );
   const runMetadata =
     args.metadata && typeof args.metadata === 'object' && !Array.isArray(args.metadata) ? args.metadata : undefined;
+  const hasExplicitTargetContract = Array.isArray(initialFollowup?.targetIds) && initialFollowup.targetIds.length > 0;
   const cfg = loadCanvasAgentConfig();
   if (cfg.mode === 'tldraw-teacher') {
     console.info('[CanvasAgent] running in tldraw-teacher mode (vendored TLDraw agent active)', {
@@ -925,6 +985,7 @@ export async function runCanvasAgent(args: RunArgs) {
     }
     let seq = 0;
     const sessionCreatedIds = new Set<string>();
+    const droppedUpdateTargetIds = new Set<string>();
     metrics.modelCalledAt = Date.now();
 
     const rememberCreatedIds = (actions: AgentAction[]) => {
@@ -966,6 +1027,16 @@ export async function runCanvasAgent(args: RunArgs) {
                 strict: followup.strict === true,
               },
             });
+            if (followup.strict === true) {
+              emitTrace('strict_followup_enqueued', {
+                detail: {
+                  mode: 'durable',
+                  depth: normalizedDepth,
+                  reason: followup.reason ?? null,
+                  targetIds: Array.isArray(followup.targetIds) ? followup.targetIds : [],
+                },
+              });
+            }
             return true;
           }
         } catch (error) {
@@ -1000,12 +1071,200 @@ export async function runCanvasAgent(args: RunArgs) {
             strict: followup.strict === true,
           },
         });
+        if (followup.strict === true) {
+          emitTrace('strict_followup_enqueued', {
+            detail: {
+              mode: 'session',
+              depth: normalizedDepth,
+              reason: followup.reason ?? null,
+              targetIds: Array.isArray(followup.targetIds) ? followup.targetIds : [],
+            },
+          });
+        }
       }
       return accepted;
     };
 
+    const knownShapeIdsByPhase = new Map<'initial' | 'followup', Set<string>>();
+
+    const scheduleMissingTargetIdsFollowup = async (
+      sourceFollowup: CanvasFollowupInput | null,
+      phase: 'initial' | 'followup',
+      options?: {
+        knownShapeIds?: Set<string>;
+      },
+    ): Promise<boolean> => {
+      if (!sourceFollowup || !Array.isArray(sourceFollowup.targetIds) || sourceFollowup.targetIds.length === 0) {
+        return false;
+      }
+
+      const baseDepth = Number.isFinite(sourceFollowup.depth) ? Math.max(0, Math.floor(sourceFollowup.depth)) : 0;
+      const nextDepth = baseDepth + 1;
+      if (nextDepth > cfg.followups.maxDepth) {
+        return false;
+      }
+
+      const knownShapeIds = new Set<string>(options?.knownShapeIds ?? []);
+      if (!options?.knownShapeIds) {
+        try {
+          const canvasSummary = await getCanvasShapeSummary(roomId);
+          for (const shape of canvasSummary.shapes) {
+            const normalized = normalizeShapeIdForLookup(shape.id);
+            if (normalized) knownShapeIds.add(normalized);
+          }
+        } catch (error) {
+          if (cfg.debug) {
+            console.warn('[CanvasAgent:Followups] failed to read canvas summary for target-id verification', {
+              roomId,
+              sessionId,
+              phase,
+              error: error instanceof Error ? error.message : String(error),
+            });
+          }
+        }
+      }
+      for (const createdId of sessionCreatedIds) {
+        const normalized = normalizeShapeIdForLookup(createdId);
+        if (normalized) knownShapeIds.add(normalized);
+      }
+      knownShapeIdsByPhase.set(phase, new Set(knownShapeIds));
+
+      const missingTargetIds = resolveMissingTargetIds(sourceFollowup.targetIds, knownShapeIds);
+      if (missingTargetIds.length === 0) {
+        emitTrace('strict_followup_resolved', {
+          detail: {
+            phase,
+            depth: nextDepth,
+            reason: sourceFollowup.reason ?? 'missing_target_ids',
+          },
+        });
+        return false;
+      }
+      emitTrace('missing_target_ids_detected', {
+        actionCount: missingTargetIds.length,
+        detail: {
+          phase,
+          depth: nextDepth,
+          targetIds: missingTargetIds,
+        },
+      });
+
+      const sourceMessage =
+        typeof sourceFollowup.message === 'string' && sourceFollowup.message.trim().length > 0
+          ? sourceFollowup.message.trim()
+          : userMessage;
+      const sourceOriginalMessage =
+        typeof sourceFollowup.originalMessage === 'string' && sourceFollowup.originalMessage.trim().length > 0
+          ? sourceFollowup.originalMessage.trim()
+          : userMessage;
+      const reason = sourceFollowup.reason?.trim() || 'missing_target_ids';
+      const hint = `Ensure these exact shape ids exist and are applied: ${missingTargetIds.join(', ')}.`;
+
+      const followupPayload: Record<string, unknown> = {
+        message: sourceMessage,
+        originalMessage: sourceOriginalMessage,
+        depth: nextDepth,
+        targetIds: missingTargetIds,
+        strict: true,
+        reason,
+        hint,
+        enqueuedAt: Date.now(),
+      };
+      const accepted = scheduler.enqueue(sessionId, { input: followupPayload, depth: nextDepth });
+      if (accepted) {
+        metrics.followupCount++;
+        emitTrace('followup_enqueued', {
+          detail: {
+            mode: 'session',
+            phase,
+            depth: nextDepth,
+            reason,
+            strict: true,
+            targetIds: missingTargetIds,
+          },
+        });
+        emitTrace('strict_followup_enqueued', {
+          actionCount: missingTargetIds.length,
+          detail: {
+            mode: 'session',
+            phase,
+            depth: nextDepth,
+            reason,
+            targetIds: missingTargetIds,
+          },
+        });
+        if (cfg.debug) {
+          console.log('[CanvasAgent:Followups] scheduled missing-target-ids follow-up', {
+            roomId,
+            sessionId,
+            phase,
+            baseDepth,
+            nextDepth,
+            missingTargetIds,
+          });
+        }
+      }
+      return accepted;
+    };
+
+    const scheduleDroppedUpdateTargetFollowup = async (
+      phase: 'initial' | 'followup',
+      sourceFollowup: CanvasFollowupInput | null,
+    ): Promise<boolean> => {
+      if (droppedUpdateTargetIds.size === 0) {
+        return false;
+      }
+      const explicitTargetIds = new Set<string>();
+      if (Array.isArray(sourceFollowup?.targetIds)) {
+        for (const targetId of sourceFollowup.targetIds) {
+          const normalized = normalizeShapeIdForLookup(targetId);
+          if (normalized) explicitTargetIds.add(normalized);
+        }
+      }
+      const missingFromDropped = Array.from(droppedUpdateTargetIds).filter((targetId) => {
+        const normalized = normalizeShapeIdForLookup(targetId);
+        return normalized && !explicitTargetIds.has(normalized);
+      });
+      droppedUpdateTargetIds.clear();
+      if (missingFromDropped.length === 0) {
+        return false;
+      }
+
+      const baseMessage =
+        typeof sourceFollowup?.message === 'string' && sourceFollowup.message.trim().length > 0
+          ? sourceFollowup.message.trim()
+          : userMessage;
+      const baseOriginalMessage =
+        typeof sourceFollowup?.originalMessage === 'string' && sourceFollowup.originalMessage.trim().length > 0
+          ? sourceFollowup.originalMessage.trim()
+          : userMessage;
+      const sourceDepth = typeof sourceFollowup?.depth === 'number' ? sourceFollowup.depth : Number.NaN;
+      const baseDepth = Number.isFinite(sourceDepth)
+        ? Math.max(0, Math.floor(sourceDepth))
+        : currentFollowupDepth;
+      const cachedKnownShapeIds = knownShapeIdsByPhase.get(phase);
+
+      return scheduleMissingTargetIdsFollowup(
+        {
+          message: baseMessage,
+          originalMessage: baseOriginalMessage,
+          depth: baseDepth,
+          targetIds: missingFromDropped,
+          strict: true,
+          reason: 'missing_update_targets',
+        },
+        phase,
+        {
+          // Reuse known ids from this phase to avoid a duplicate
+          // canvas-summary fetch when missing update targets are immediately retried.
+          knownShapeIds: cachedKnownShapeIds && cachedKnownShapeIds.size > 0 ? cachedKnownShapeIds : undefined,
+        },
+      );
+    };
+
     const makeDetailEnqueuer =
-      (baseMessage: string, baseDepth: number) => async (params: Record<string, unknown>): Promise<void> => {
+      (baseMessage: string, baseDepth: number, inheritedTargetIds: string[] = []) =>
+      async (params: Record<string, unknown>): Promise<void> => {
         const hint = typeof params.hint === 'string' ? params.hint.trim() : '';
         const previousDepth = typeof params.depth === 'number' ? Number(params.depth) : baseDepth;
         const nextDepth = previousDepth + 1;
@@ -1013,6 +1272,7 @@ export async function runCanvasAgent(args: RunArgs) {
         const targetIds = Array.isArray(params.targetIds)
           ? params.targetIds.filter((id: unknown): id is string => typeof id === 'string' && id.length > 0)
           : [];
+        const resolvedTargetIds = targetIds.length > 0 ? targetIds : inheritedTargetIds;
         const accepted = await enqueueFollowupTask({
           message: hint || baseMessage,
           originalMessage: baseMessage,
@@ -1020,18 +1280,17 @@ export async function runCanvasAgent(args: RunArgs) {
           enqueuedAt: Date.now(),
           ...(hint ? { hint } : {}),
           ...(typeof params.reason === 'string' && params.reason.trim() ? { reason: params.reason.trim() } : {}),
-          ...(params.strict === true ? { strict: true } : {}),
-          ...(targetIds.length > 0 ? { targetIds } : {}),
+          ...(params.strict === true || resolvedTargetIds.length > 0 ? { strict: true } : {}),
+          ...(resolvedTargetIds.length > 0 ? { targetIds: resolvedTargetIds } : {}),
         });
         if (accepted) metrics.followupCount++;
       };
 
 /**
  * normalizeRawAction keeps create/update payloads in sync with the canonical
- * contract before we run schema validation. Most adjustments are structural
- * (moving props, coercing dimensions, resolving shape kinds). The lone
- * semantic fallback is the `line` → `rectangle` rewrite noted below, which is
- * a temporary crutch until the TLDraw contract exposes sized lines.
+ * contract before we run schema validation. Adjustments are structural:
+ * moving top-level params into props, coercing numerics, and resolving
+ * shape kinds so downstream validation sees one consistent shape schema.
  */
 const normalizeRawAction = (
   raw: unknown,
@@ -1048,18 +1307,6 @@ const normalizeRawAction = (
     let resolvedType = candidateType ? resolveShapeType(candidateType) : undefined;
     if (!resolvedType) {
       return null;
-    }
-    const hasDimension =
-      coerceNumeric(params.w) !== undefined ||
-      coerceNumeric(params.width) !== undefined ||
-      coerceNumeric(params.h) !== undefined ||
-      coerceNumeric(params.height) !== undefined;
-    if (resolvedType === 'line' && hasDimension) {
-      // Semantic rewrite: TLDraw's teacher can emit `line` shapes with width &
-      // height, which PRESENT cannot render faithfully. For now we coerce
-      // those into rectangles and document the hack so a parity pass can
-      // remove it once prompts/examples converge.
-      resolvedType = 'rectangle';
     }
     params.type = resolvedType;
     delete params.kind;
@@ -1096,6 +1343,10 @@ const normalizeRawAction = (
     moveNumericToProps('height', 'h');
     moveNumericToProps('rx');
     moveNumericToProps('ry');
+    moveNumericToProps('x1');
+    moveNumericToProps('y1');
+    moveNumericToProps('x2');
+    moveNumericToProps('y2');
     moveToProps('text');
     moveToProps('label', 'text');
     moveToProps('font');
@@ -1103,6 +1354,35 @@ const normalizeRawAction = (
     moveToProps('color');
     moveToProps('fill');
     moveToProps('dash');
+    moveToProps('points');
+    moveToProps('startPoint');
+    moveToProps('endPoint');
+    moveToProps('start');
+    moveToProps('end');
+
+    if (params.type === 'line') {
+      const x1 = coerceNumeric(props.x1);
+      const y1 = coerceNumeric(props.y1);
+      const x2 = coerceNumeric(props.x2);
+      const y2 = coerceNumeric(props.y2);
+      const hasLinePointsLike =
+        props.points !== undefined || props.startPoint !== undefined || props.endPoint !== undefined;
+      if (!hasLinePointsLike && x1 !== undefined && y1 !== undefined && x2 !== undefined && y2 !== undefined) {
+        props.startPoint = { x: x1, y: y1 };
+        props.endPoint = { x: x2, y: y2 };
+      } else if (!hasLinePointsLike) {
+        const w = coerceNumeric(props.w);
+        const h = coerceNumeric(props.h);
+        if (w !== undefined || h !== undefined) {
+          props.startPoint = { x: 0, y: 0 };
+          props.endPoint = { x: w ?? 100, y: h ?? 0 };
+        }
+      }
+      delete props.x1;
+      delete props.y1;
+      delete props.x2;
+      delete props.y2;
+    }
 
     if (Object.keys(props).length > 0) {
       const sanitized = sanitizeProps(props, params.type);
@@ -1152,7 +1432,10 @@ const normalizeRawAction = (
       seqNumber: number,
       partial: boolean,
       enqueueDetail: (params: Record<string, unknown>) => Promise<void>,
-      options?: { dispatch?: boolean; source?: 'present' | 'teacher' },
+      options?: {
+        dispatch?: boolean;
+        source?: 'present' | 'teacher';
+      },
     ) => {
       const shouldDispatch = options?.dispatch !== false;
       const actionSource = options?.source ?? 'present';
@@ -1179,7 +1462,9 @@ const normalizeRawAction = (
       const dropStats = {
         duplicateCreates: 0,
         invalidSchema: 0,
+        missingUpdateTargetDrops: 0,
       };
+      const missingUpdateTargetIds = new Set<string>();
       const queue: unknown[] = [];
       for (const candidate of rawActions) {
         const teacherConverted = convertTeacherAction(candidate);
@@ -1284,7 +1569,25 @@ const normalizeRawAction = (
       }
       const exists = (id: string) =>
         sessionCreatedIds.has(id) || chunkCreatedIds.has(id) || existingShapeIds.has(id);
-      const clean = sanitizeActions(parsed, exists);
+      const clean = sanitizeActions(parsed, exists, {
+        knownShapeIds: [...existingShapeIds, ...sessionCreatedIds, ...chunkCreatedIds],
+        onMissingUpdateTargetDropped: (shapeId) => {
+          missingUpdateTargetIds.add(shapeId);
+          droppedUpdateTargetIds.add(shapeId);
+          dropStats.missingUpdateTargetDrops += 1;
+        },
+      });
+      if (dropStats.missingUpdateTargetDrops > 0) {
+        emitTrace('update_missing_target_dropped', {
+          seq: seqNumber,
+          partial,
+          actionCount: dropStats.missingUpdateTargetDrops,
+          detail: {
+            source: actionSource,
+            targetIds: Array.from(missingUpdateTargetIds).slice(0, 16),
+          },
+        });
+      }
       if (shouldDispatch) {
         rememberCreatedIds(clean);
       }
@@ -1311,9 +1614,12 @@ const normalizeRawAction = (
       const worldActions = applyOffsetToActions(enforceShapeProps(clean));
       if (worldActions.length === 0) return 0;
 
-      const dispatchableActions = worldActions.filter((action) => action.name !== 'message');
-      const mutatingActions = dispatchableActions.filter((action) => action.name !== 'think');
+      const dispatchableActions = worldActions.filter((action) => CLIENT_DISPATCHABLE_ACTIONS.has(action.name));
+      const mutatingActions = dispatchableActions.filter((action) => action.name !== 'set_viewport');
       const chatOnlyActions = worldActions.filter((action) => action.name === 'message');
+      const serverOnlyActions = worldActions.filter(
+        (action) => !CLIENT_DISPATCHABLE_ACTIONS.has(action.name) && action.name !== 'message',
+      );
 
       if (dispatchableActions.length > 0) {
         hooks.onActions?.({
@@ -1401,7 +1707,90 @@ const normalizeRawAction = (
       }
 
       if (shouldDispatch) {
-        for (const action of [...dispatchableActions, ...chatOnlyActions]) {
+        for (const action of [...serverOnlyActions, ...chatOnlyActions]) {
+          if (ORCHESTRATION_ACTIONS.has(action.name)) {
+            const params =
+              action.params && typeof action.params === 'object' && !Array.isArray(action.params)
+                ? (action.params as Record<string, unknown>)
+                : {};
+            const readStringParam = (value: unknown): string | null =>
+              typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
+            const actionName = action.name;
+            const projectName = readStringParam(params.projectName);
+            const explicitTaskId = readStringParam(params.taskId);
+            let taskId = explicitTaskId;
+            if (
+              !taskId &&
+              (actionName === 'mark-task-done' ||
+                actionName === 'mark-my-task-done' ||
+                actionName === 'mark-duo-task-done')
+            ) {
+              taskId = await resolveLatestActiveTaskId({
+                room: roomId,
+                sessionId,
+              });
+            }
+            const taskTitle = readStringParam(params.title);
+            const assignedTo = readStringParam(params.assignedTo);
+            const payload = { ...params };
+            const eventPayload = {
+              room: roomId,
+              sessionId,
+              traceId: correlation?.traceId ?? null,
+              requestId: correlation?.requestId ?? null,
+              actionType: actionName,
+              projectName,
+              taskId,
+              taskTitle,
+              assignedTo,
+              payload,
+            } as Parameters<typeof appendFairyOrchestrationEvent>[0];
+
+            if (actionName === 'start-project') {
+              eventPayload.projectMode = 'solo';
+              eventPayload.projectStatus = 'active';
+            } else if (actionName === 'start-duo-project') {
+              eventPayload.projectMode = 'duo';
+              eventPayload.projectStatus = 'active';
+            } else if (actionName === 'end-project' || actionName === 'end-duo-project') {
+              eventPayload.projectStatus = 'completed';
+            } else if (actionName === 'abort-project' || actionName === 'abort-duo-project') {
+              eventPayload.projectStatus = 'aborted';
+            } else if (
+              actionName === 'create-task' ||
+              actionName === 'create-project-task' ||
+              actionName === 'create-duo-task'
+            ) {
+              eventPayload.taskStatus = 'created';
+            } else if (actionName === 'delete-project-task') {
+              eventPayload.taskStatus = 'deleted';
+            } else if (actionName === 'start-task' || actionName === 'start-duo-task') {
+              eventPayload.taskStatus = 'started';
+            } else if (
+              actionName === 'mark-task-done' ||
+              actionName === 'mark-my-task-done' ||
+              actionName === 'mark-duo-task-done'
+            ) {
+              eventPayload.taskStatus = 'done';
+            } else if (actionName === 'await-tasks-completion' || actionName === 'await-duo-tasks-completion') {
+              eventPayload.taskStatus = 'awaiting';
+            } else if (
+              actionName === 'direct-to-start-project-task' ||
+              actionName === 'direct-to-start-duo-task'
+            ) {
+              eventPayload.taskStatus = 'delegated';
+            }
+
+            const persisted = await appendFairyOrchestrationEvent(eventPayload);
+            if (!persisted.ok) {
+              console.warn('[CanvasAgent:OrchestrationLedgerError]', {
+                roomId,
+                sessionId,
+                action: actionName,
+                reason: persisted.reason,
+              });
+            }
+          }
           if (action.name === 'think') {
             const thought = String((action as any).params?.text || '');
             if (thought) {
@@ -1430,6 +1819,24 @@ const normalizeRawAction = (
               }
             }
           }
+          if (action.name === 'review') {
+            const params =
+              action.params && typeof action.params === 'object' && !Array.isArray(action.params)
+                ? (action.params as Record<string, unknown>)
+                : {};
+            await enqueueDetail(params);
+          }
+          if (action.name === 'country-info') {
+            const code =
+              action.params && typeof action.params === 'object' && !Array.isArray(action.params)
+                ? String((action.params as Record<string, unknown>).code ?? '').trim().toUpperCase()
+                : '';
+            if (code) {
+              await enqueueDetail({
+                hint: `Provide concise country information for ISO code ${code}.`,
+              });
+            }
+          }
           if (action.name === 'add_detail') {
             await enqueueDetail(((action as any).params ?? {}) as Record<string, unknown>);
           }
@@ -1456,7 +1863,7 @@ const normalizeRawAction = (
 
     await sendStatus(roomId, sessionId, 'streaming');
     const streamingEnabled = typeof provider.streamStructured === 'function' && process.env.CANVAS_AGENT_STREAMING !== 'false';
-    const enqueueDetail = makeDetailEnqueuer(userMessage, currentFollowupDepth);
+    const enqueueDetail = makeDetailEnqueuer(userMessage, currentFollowupDepth, initialFollowup?.targetIds ?? []);
 
     if (cfg.debug) {
       try {
@@ -1779,10 +2186,14 @@ const normalizeRawAction = (
       }
     }
 
+    await scheduleMissingTargetIdsFollowup(initialFollowup, 'initial');
+    await scheduleDroppedUpdateTargetFollowup('initial', initialFollowup);
+
     if (
       !lowActionRetryScheduled &&
       cfg.followups.lowActionThreshold > 0 &&
-      metrics.mutatingActionCount < cfg.followups.lowActionThreshold
+      metrics.mutatingActionCount < cfg.followups.lowActionThreshold &&
+      !hasExplicitTargetContract
     ) {
       const retryHint =
         'Add more layout detail: ensure there is a headline block, supporting shapes, and three sticky notes with copy ideas.';
@@ -1881,7 +2292,11 @@ const normalizeRawAction = (
       const followPrompt = JSON.stringify(followPayload);
       const followProvider = selectModel(model || cfg.modelName);
       let followSeq = 0;
-      const followEnqueueDetail = makeDetailEnqueuer(followMessage, followBaseDepth);
+      const followEnqueueDetail = makeDetailEnqueuer(
+        followMessage,
+        followBaseDepth,
+        followTargetIds.length > 0 ? followTargetIds : initialFollowup?.targetIds ?? [],
+      );
       const followStreamingEnabled = typeof followProvider.streamStructured === 'function' && process.env.CANVAS_AGENT_STREAMING !== 'false';
       const followPresetName = (followInput.strict ? 'precise' : cfg.preset) as CanvasAgentPreset;
       const followTuning = getModelTuning(followPresetName);
@@ -1983,11 +2398,29 @@ const normalizeRawAction = (
           throw error;
         }
       }
+
+      const followOriginalMessageRaw =
+        typeof (followInput as any).originalMessage === 'string' ? (followInput as any).originalMessage : undefined;
+      const followReasonRaw = typeof (followInput as any).reason === 'string' ? (followInput as any).reason : undefined;
+      const normalizedFollowup: CanvasFollowupInput = {
+        message: followMessage,
+        originalMessage:
+          followOriginalMessageRaw && followOriginalMessageRaw.trim().length > 0
+            ? followOriginalMessageRaw.trim()
+            : userMessage,
+        depth: followBaseDepth,
+        ...(followTargetIds.length > 0 ? { targetIds: followTargetIds } : {}),
+        ...(followInput.strict === true ? { strict: true } : {}),
+        ...(followReasonRaw && followReasonRaw.trim().length > 0 ? { reason: followReasonRaw.trim() } : {}),
+      };
+      await scheduleMissingTargetIdsFollowup(normalizedFollowup, 'followup');
+      await scheduleDroppedUpdateTargetFollowup('followup', normalizedFollowup);
+
       next = scheduler.dequeue(sessionId);
     }
 
     // Guarantee at least one visible action for simple create prompts if the model emitted nothing.
-    if (metrics.actionCount === 0) {
+    if (metrics.actionCount === 0 && !hasExplicitTargetContract) {
       const fallbackId = `rect-${Date.now().toString(36)}`;
       const fallback = [
         {

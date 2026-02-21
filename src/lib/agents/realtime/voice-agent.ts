@@ -216,6 +216,16 @@ export default defineAgent({
     }
     console.log('[VoiceAgent] Connected to room:', job.room.name);
     const liveKitBus = createLiveKitBus(job.room as any);
+    const workerId = (() => {
+      const participantIdentity =
+        typeof job.room?.localParticipant?.identity === 'string'
+          ? job.room.localParticipant.identity.trim()
+          : '';
+      if (participantIdentity.length > 0) return participantIdentity;
+      const roomName = typeof job.room?.name === 'string' ? job.room.name.trim() : '';
+      if (roomName.length > 0) return roomName;
+      return `pid-${process.pid}`;
+    })();
     const allowSensitiveLogging = process.env.NODE_ENV !== 'production';
 
     // Data messages (topic: "transcription") can arrive immediately after the agent joins the room.
@@ -533,8 +543,15 @@ Your only output is function calls. Never use plain text unless absolutely neces
       }
     };
 
+    const resolveRoomName = () => {
+      const raw = typeof job.room?.name === 'string' ? job.room.name : '';
+      const trimmed = raw.trim();
+      return trimmed.length > 0 ? trimmed : '';
+    };
+
     const getCapabilitiesCached = async (profile: CapabilityProfile): Promise<SystemCapabilities> => {
-      const key = `${job.room.name || 'room'}::${profile}`;
+      const room = resolveRoomName() || `session:${workerId}`;
+      const key = `${room}::${profile}`;
       const now = Date.now();
       const cached = capabilityCache.get(key);
       if (cached && now - cached.fetchedAt < capabilityCacheTtlMs) {
@@ -556,7 +573,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
     };
 
     const componentRegistry = new Map<string, ComponentRegistryEntry>();
-    const roomKey = () => job.room.name || 'room';
+    const roomKey = () => resolveRoomName();
     const componentLedger = new VoiceComponentLedger(roomKey);
     let lastResearchPanelId: string | null = null;
     let activeScorecard: { componentId: string; intentId: string; topic: string } | null = null;
@@ -605,7 +622,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
           state: {} as JsonObject,
           intentId,
           slot: undefined,
-          room: job.room.name || 'room',
+          room: roomKey(),
         });
       } else {
         existing.intentId = intentId;
@@ -924,7 +941,11 @@ Your only output is function calls. Never use plain text unless absolutely neces
       topic?: string;
       seedState?: JsonObject;
     }) => {
-      const room = roomKey() || job.room?.name || 'room';
+      const room = roomKey();
+      if (!room) {
+        console.warn('[VoiceAgent] skipped scorecard.seed dispatch due to missing room identity');
+        return;
+      }
       const componentId = payload.componentId.trim();
       if (!componentId) return;
       const players = resolveDebatePlayerSeedFromLabels(listRemoteParticipantLabels());
@@ -1010,7 +1031,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
         getComponentEntry,
         listComponentEntries: () => componentRegistry.entries(),
         lastResearchPanelId,
-        roomKey: roomKey() || job.room?.name || 'room',
+        roomKey: roomKey(),
       });
     };
 
@@ -1053,7 +1074,16 @@ Your only output is function calls. Never use plain text unless absolutely neces
     const MUTATION_CONTEXT_PATTERN =
       /\b(canvas|fair(?:y|ies)|crowd ?pulse|scorecard|research|claim|question|widget|shape|sticky|roadmap|timer)\b/i;
     const SUCCESS_TOOL_STATUSES = new Set(['SUCCESS', 'APPLIED', 'OK', 'COMPLETED']);
-    const FAILURE_TOOL_STATUSES = new Set(['ERROR', 'FAILED', 'FAILURE', 'REJECTED', 'TIMEOUT', 'IGNORED']);
+    const FAILURE_TOOL_STATUSES = new Set([
+      'ERROR',
+      'FAILED',
+      'FAILURE',
+      'REJECTED',
+      'TIMEOUT',
+      'IGNORED',
+      'UNAUTHORIZED',
+      'INVALID',
+    ]);
 
     type PendingMutationDispatch = {
       tool: string;
@@ -1206,8 +1236,9 @@ Your only output is function calls. Never use plain text unless absolutely neces
 
     const buildMutationEnvelope = (tool: string, params: JsonObject): MutationEnvelope => {
       const lockKey = getMutationLockKey(tool, params);
+      const room = roomKey() || `session:${workerId}`;
       const base =
-        `${job.room.name || 'room'}::${tool}::${lockKey}::` +
+        `${room}::${tool}::${lockKey}::` +
         `${stableStringify(params)}::turn:${currentTurnId}`;
       const idempotencyKey = createHash('sha1').update(base).digest('hex').slice(0, 20);
       const previousAttempts = mutationAttempts.get(idempotencyKey) || 0;
@@ -1501,7 +1532,11 @@ Your only output is function calls. Never use plain text unless absolutely neces
           const canvasParams = taskParams;
           const roomName = typeof canvasParams.room === 'string' && canvasParams.room.trim()
             ? canvasParams.room.trim()
-            : job.room?.name || roomKey() || 'room';
+            : roomKey();
+          if (!roomName) {
+            console.warn('[VoiceAgent] dropped dispatch_to_conductor due to missing room identity', { task });
+            return;
+          }
           const message = typeof canvasParams.message === 'string' ? canvasParams.message.trim() : '';
           const requestId = typeof canvasParams.requestId === 'string' ? canvasParams.requestId.trim() : undefined;
           const intentIdFromParams =
@@ -1590,7 +1625,11 @@ Your only output is function calls. Never use plain text unless absolutely neces
         }
       }
 
-      const roomName = job.room.name || roomKey() || 'room';
+      const roomName = roomKey();
+      if (!roomName) {
+        console.warn('[VoiceAgent] dropped tool_call due to missing room identity', { tool });
+        return;
+      }
       const budget = consumeRoomEventBudget(roomName);
       if (!budget.ok) {
         console.warn('[VoiceAgent] tool_call budget exceeded, dropping event', {
@@ -1632,7 +1671,8 @@ Your only output is function calls. Never use plain text unless absolutely neces
         delete (baseParamsForHash as any).attempt;
         delete (baseParamsForHash as any).lockKey;
         if (!dispatchParams.idempotencyKey) {
-          const dispatchHashBase = `${job.room.name || 'room'}::dispatch_to_conductor::${stableStringify({
+          const dispatchRoom = roomKey() || `session:${workerId}`;
+          const dispatchHashBase = `${dispatchRoom}::dispatch_to_conductor::${stableStringify({
             task: (normalizedParams as any)?.task,
             params: baseParamsForHash,
           })}`;
@@ -1747,7 +1787,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
     };
 
     const scorecardService = new ScorecardService({
-      getRoomName: () => roomKey() || job.room?.name || 'room',
+      getRoomName: () => roomKey(),
       componentRegistry,
       getActiveScorecard: () => activeScorecard,
       setActiveScorecard: (scorecard) => {
@@ -2642,7 +2682,11 @@ Your only output is function calls. Never use plain text unless absolutely neces
 
       const trimmed = text.trim();
       const lower = trimmed.toLowerCase();
-      const room = roomKey() || job.room?.name || 'room';
+      const room = roomKey();
+      if (!room) {
+        console.warn('[VoiceAgent] skipped scorecard.verify dispatch due to missing room identity');
+        return;
+      }
 
       // Explicit "Canvas:" prefix routes directly to the Canvas steward (no extra LLM roundtrip).
       // This is an opt-in command style used by the demo harness and the transcript UI hint.
@@ -3078,7 +3122,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
                 if (slot) {
                   existing.slot = slot;
                 }
-                existing.room = job.room.name || 'room';
+                existing.room = roomKey();
               } else {
                 componentRegistry.set(messageId, {
                   type: componentType,
@@ -3087,7 +3131,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
                   state: {} as JsonObject,
                   intentId,
                   slot,
-                  room: job.room.name || 'room',
+                  room: roomKey(),
                 });
               }
               if (intentId) {

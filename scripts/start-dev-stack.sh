@@ -12,6 +12,7 @@ usage() {
 Usage: start-dev-stack.sh [options]
 
 Options:
+  --monitor      Keep a foreground health monitor running (default: detached)
   --realtime     Only start the realtime agent
   --conductor    Only start the conductor worker
   --sync         Only start the TLDraw sync server
@@ -26,10 +27,20 @@ When running via npm, pass flags after "--" (e.g. npm run stack:start -- --realt
 Note: the teacher worker remains an optional separate process. Start it with
   npm run teacher:worker
 after this script if you need teacher/shadow parity metrics.
+
+Set STACK_MONITOR=1 (or pass --monitor) to keep this script running and
+auto-stop launched services when the monitor exits.
 USAGE
 }
 
 declare -a SELECTED=()
+MONITOR_MODE="${STACK_MONITOR:-0}"
+if [[ "$MONITOR_MODE" == "true" ]]; then
+  MONITOR_MODE=1
+fi
+if [[ "$MONITOR_MODE" != "1" ]]; then
+  MONITOR_MODE=0
+fi
 add_target() {
   local candidate="$1"
   for existing in "${SELECTED[@]:-}"; do
@@ -41,6 +52,9 @@ add_target() {
 }
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    --monitor)
+      MONITOR_MODE=1
+      ;;
     --realtime)
       add_target "agent:realtime"
       ;;
@@ -93,6 +107,12 @@ if [[ -n "${npm_config_web-}" ]]; then
 fi
 if [[ -n "${npm_config_all-}" ]]; then
   SELECTED=()
+fi
+if [[ "${npm_config_monitor-}" == "1" || "${npm_config_monitor-}" == "true" ]]; then
+  MONITOR_MODE=1
+fi
+if [[ "${STACK_DEBUG:-0}" == "1" ]]; then
+  echo "[Stack][debug] MONITOR_MODE=$MONITOR_MODE STACK_MONITOR=${STACK_MONITOR:-} npm_config_monitor=${npm_config_monitor-}"
 fi
 
 should_run() {
@@ -228,7 +248,9 @@ cleanup_stack() {
   RUNNING_PIDS=()
 }
 
-trap 'cleanup_stack' EXIT
+if [[ "$MONITOR_MODE" -eq 1 ]]; then
+  trap 'cleanup_stack' EXIT
+fi
 
 start_process() {
   local label="$1"
@@ -367,22 +389,29 @@ else
 fi
 
 if [[ "$failures" -ne 0 ]]; then
+  if [[ "$MONITOR_MODE" -ne 1 ]]; then
+    cleanup_stack
+  fi
   exit 1
 fi
 
 if [[ ${#RUNNING_PIDS[@]} -gt 0 ]]; then
-  echo "[Stack] services running; keep this terminal open to keep the stack alive or Ctrl+C to stop."
-  while true; do
-    for pid in "${RUNNING_PIDS[@]}"; do
-      if [[ -z "$pid" ]]; then
-        continue
-      fi
-      if ! kill -0 "$pid" >/dev/null 2>&1; then
-        echo "[Stack] detected service pid=$pid exit; review logs for details."
-        cleanup_stack
-        exit 1
-      fi
+  if [[ "$MONITOR_MODE" -eq 1 ]]; then
+    echo "[Stack] services running; monitor mode enabled. Keep this terminal open or Ctrl+C to stop."
+    while true; do
+      for pid in "${RUNNING_PIDS[@]}"; do
+        if [[ -z "$pid" ]]; then
+          continue
+        fi
+        if ! kill -0 "$pid" >/dev/null 2>&1; then
+          echo "[Stack] detected service pid=$pid exit; review logs for details."
+          cleanup_stack
+          exit 1
+        fi
+      done
+      sleep 3
     done
-    sleep 3
-  done
+  fi
+
+  echo "[Stack] detached mode enabled; services continue in background (use npm run stack:stop to stop)."
 fi

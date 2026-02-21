@@ -55,6 +55,10 @@ import {
 } from '@/lib/agents/shared/orchestration-envelope';
 import { createSwarmOrchestrator } from '@/lib/agents/swarm/orchestrator';
 import { getDecryptedUserModelKey } from '@/lib/agents/shared/user-model-keys';
+import {
+  getRuntimeScopeResourceKey,
+  normalizeRuntimeScope,
+} from '@/lib/agents/shared/runtime-scope';
 
 // Thin router: receives dispatch_to_conductor and hands off to stewards
 const queue = new AgentTaskQueue();
@@ -251,7 +255,17 @@ async function handleCanvasAgentPrompt(rawParams: JsonObject) {
 }
 
 function buildFairyIntent(rawParams: JsonObject): FairyIntent {
-  const parsed: FairyIntentTaskInput = FairyIntentTaskSchema.parse(rawParams);
+  const metadata = getObject(rawParams, 'metadata');
+  const fallbackMessage =
+    getString(rawParams, 'message') ??
+    getString(rawParams, 'transcript') ??
+    getString(rawParams, 'intent') ??
+    (metadata ? getString(metadata, 'message') : undefined);
+
+  const parsed: FairyIntentTaskInput = FairyIntentTaskSchema.parse({
+    ...rawParams,
+    ...(fallbackMessage ? { message: fallbackMessage } : {}),
+  });
   const id = (parsed.id || randomUUID()).trim();
   const timestamp =
     typeof parsed.timestamp === 'number' && Number.isFinite(parsed.timestamp) ? parsed.timestamp : Date.now();
@@ -308,7 +322,28 @@ const inferCrowdPulseQuestion = (message: string): string | undefined => {
 
 const DRAW_OR_STICKY_PATTERN =
   /\b(draw|sketch|doodle|illustrate|diagram|paint|sticky\s*note|post[-\s]?it|add\s+note|label)\b/i;
+const STICKY_NOTE_PATTERN = /\b(sticky\s*note|post[-\s]?it|note)\b/i;
+const EXACT_STICKY_TEXT_PATTERN = /\bexact\s+text(?:\s*(?:is|:))?\s*/i;
 const CANVAS_SURFACE_PATTERN = /\b(canvas|whiteboard|board|tldraw)\b/i;
+const STICKY_BUNNY_TARGET_PATTERN = /\b(near|by|next to|around)\s+(?:the\s+)?bunny\b/i;
+const STICKY_FOREST_TARGET_PATTERN = /\b(near|by|next to|around)\s+(?:the\s+)?forest\b/i;
+const STICKY_ID_PATTERN = /\b(?:with\s+id|id)\s+([a-z][a-z0-9_-]*)\b/i;
+const STICKY_COORDINATE_PATTERN = /\bx\s*=\s*(-?\d+(?:\.\d+)?)\s*(?:,?\s*)y\s*=\s*(-?\d+(?:\.\d+)?)/i;
+const DETERMINISTIC_SHAPE_ID_PATTERN = '[a-z][a-z0-9_-]*(?:-[a-z0-9_-]+)+';
+const DETERMINISTIC_GEOMETRY_PATTERN = new RegExp(
+  String.raw`\b(?:with\s+id\s+)?(${DETERMINISTIC_SHAPE_ID_PATTERN})\s+(?:as\s+(?:a|an)\s+)?(?:[a-z]+\s+){0,3}?(ellipse|circle|rectangle)\s+at\s+x\s*=\s*(-?\d+(?:\.\d+)?)\s*y\s*=\s*(-?\d+(?:\.\d+)?)\s*w\s*=\s*(\d+(?:\.\d+)?)\s*h\s*=\s*(\d+(?:\.\d+)?)`,
+  'gi',
+);
+const DETERMINISTIC_LINE_PATTERN = new RegExp(
+  String.raw`\b(?:with\s+id\s+)?(${DETERMINISTIC_SHAPE_ID_PATTERN})\s+(?:as\s+(?:a|an)\s+)?(?:[a-z]+\s+){0,2}?line\s+from\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*to\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)`,
+  'gi',
+);
+
+type DeterministicQuickShapeAction = {
+  id: string;
+  name: 'create_shape';
+  params: JsonObject;
+};
 
 const shouldForceCanvasRoute = (intent: FairyIntent): boolean => {
   const message = intent.message.trim();
@@ -316,6 +351,132 @@ const shouldForceCanvasRoute = (intent: FairyIntent): boolean => {
   if (message.startsWith('/canvas')) return true;
   if (DRAW_OR_STICKY_PATTERN.test(message)) return true;
   return CANVAS_SURFACE_PATTERN.test(message) && /\b(add|place|create|move|align|near)\b/i.test(message);
+};
+
+const extractExactStickyText = (message: string): string | null => {
+  if (!STICKY_NOTE_PATTERN.test(message)) return null;
+  const normalized = message.replace(/[“”]/g, '"');
+  const marker = normalized.match(EXACT_STICKY_TEXT_PATTERN);
+  if (marker?.index == null) return null;
+  const tail = normalized.slice(marker.index + marker[0].length).trim();
+  if (!tail) return null;
+  let candidate = tail;
+  if (tail.startsWith('"')) {
+    const endQuote = tail.indexOf('"', 1);
+    if (endQuote > 1) {
+      candidate = tail.slice(1, endQuote);
+    }
+  } else {
+    candidate = candidate.split(/\bif\s+sticky[-_a-z0-9]+\b/i)[0] ?? candidate;
+    candidate = candidate.split(/\bthen\b/i)[0] ?? candidate;
+    candidate = candidate.split(/\n/)[0] ?? candidate;
+  }
+  const cleaned = candidate.trim().replace(/[.?!]+$/, '').trim();
+  return cleaned.length > 0 ? cleaned : null;
+};
+
+const extractStickyTargetHint = (message: string): 'bunny' | 'forest' | undefined => {
+  const shapeId = extractStickyShapeId(message);
+  if (shapeId === 'sticky-bunny') return 'bunny';
+  if (shapeId === 'sticky-forest') return 'forest';
+  if (STICKY_BUNNY_TARGET_PATTERN.test(message)) return 'bunny';
+  if (STICKY_FOREST_TARGET_PATTERN.test(message)) return 'forest';
+  return undefined;
+};
+
+const extractStickyShapeId = (message: string): string | undefined => {
+  const match = message.match(STICKY_ID_PATTERN);
+  const candidate = match?.[1]?.trim().toLowerCase();
+  if (!candidate || !candidate.startsWith('sticky-')) return undefined;
+  return candidate;
+};
+
+const extractStickyCoordinates = (message: string): { x: number; y: number } | undefined => {
+  const match = message.match(STICKY_COORDINATE_PATTERN);
+  if (!match) return undefined;
+  const x = Number.parseFloat(match[1] ?? '');
+  const y = Number.parseFloat(match[2] ?? '');
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return undefined;
+  return { x: Math.round(x), y: Math.round(y) };
+};
+
+const parseRounded = (value: string | undefined): number | null => {
+  if (!value) return null;
+  const parsed = Number.parseFloat(value);
+  if (!Number.isFinite(parsed)) return null;
+  return Math.round(parsed);
+};
+
+const buildDeterministicShapeColor = (shapeId: string, message: string): 'red' | 'green' => {
+  const id = shapeId.toLowerCase();
+  if (id.startsWith('forest-')) return 'green';
+  if (/\bgreen\b/i.test(message) && !id.startsWith('bunny-')) return 'green';
+  return 'red';
+};
+
+const extractDeterministicShapeActions = (message: string): DeterministicQuickShapeAction[] => {
+  const actions: DeterministicQuickShapeAction[] = [];
+
+  for (const match of message.matchAll(DETERMINISTIC_GEOMETRY_PATTERN)) {
+    const shapeId = (match[1] ?? '').trim();
+    const rawType = (match[2] ?? '').trim().toLowerCase();
+    const x = parseRounded(match[3]);
+    const y = parseRounded(match[4]);
+    const w = parseRounded(match[5]);
+    const h = parseRounded(match[6]);
+    if (!shapeId || x == null || y == null || w == null || h == null) continue;
+    const normalizedType = rawType === 'rectangle' ? 'rectangle' : 'ellipse';
+    const color = buildDeterministicShapeColor(shapeId, message);
+    const isForestShape = shapeId.toLowerCase().startsWith('forest-');
+    const props: Record<string, unknown> = {
+      w,
+      h,
+      color,
+      dash: 'solid',
+      fill: isForestShape ? 'solid' : 'none',
+    };
+    actions.push({
+      id: `det-${shapeId}`,
+      name: 'create_shape',
+      params: {
+        id: shapeId,
+        type: normalizedType,
+        x,
+        y,
+        props: props as JsonObject,
+      } as JsonObject,
+    });
+  }
+
+  for (const match of message.matchAll(DETERMINISTIC_LINE_PATTERN)) {
+    const shapeId = (match[1] ?? '').trim();
+    const x1 = parseRounded(match[2]);
+    const y1 = parseRounded(match[3]);
+    const x2 = parseRounded(match[4]);
+    const y2 = parseRounded(match[5]);
+    if (!shapeId || x1 == null || y1 == null || x2 == null || y2 == null) continue;
+    const color = buildDeterministicShapeColor(shapeId, message);
+    actions.push({
+      id: `det-${shapeId}`,
+      name: 'create_shape',
+      params: {
+        id: shapeId,
+        type: 'line',
+        x: x1,
+        y: y1,
+        props: {
+          color,
+          dash: 'solid',
+          points: {
+            a1: { id: 'a1', index: 'a1', x: 0, y: 0 },
+            a2: { id: 'a2', index: 'a2', x: x2 - x1, y: y2 - y1 },
+          },
+        },
+      } as JsonObject,
+    });
+  }
+
+  return actions;
 };
 
 const shouldDedupeFairyIntent = (intent: FairyIntent) => {
@@ -760,6 +921,47 @@ async function handleFairyIntent(rawParams: JsonObject) {
     }
 
     if (decisionLike.kind === 'canvas') {
+      const quickShapes = extractDeterministicShapeActions(message);
+      if (quickShapes.length > 0) {
+        logger.info('[Conductor] routing deterministic geometry intent to canvas.quick_shapes', {
+          intentId: intent.id,
+          room: intent.room,
+          shapeCount: quickShapes.length,
+        });
+        return executeTaskLegacy('canvas.quick_shapes', {
+          room: intent.room,
+          actions: quickShapes as unknown as any,
+          requestId: intent.id,
+          ...(intent.bounds ? { bounds: intent.bounds } : {}),
+          ...(actionMetadata ? { metadata: actionMetadata as JsonObject } : {}),
+        });
+      }
+
+      const quickText = extractExactStickyText(message);
+      if (quickText) {
+        const targetHint = extractStickyTargetHint(message);
+        const shapeId = extractStickyShapeId(message);
+        const coordinates = extractStickyCoordinates(message);
+        logger.info('[Conductor] routing exact sticky note text to canvas.quick_text', {
+          intentId: intent.id,
+          room: intent.room,
+          shapeId: shapeId ?? 'none',
+          x: coordinates?.x ?? null,
+          y: coordinates?.y ?? null,
+          targetHint: targetHint ?? 'none',
+        });
+        return executeTaskLegacy('canvas.quick_text', {
+          room: intent.room,
+          text: quickText,
+          shapeType: 'note',
+          ...(shapeId ? { shapeId } : {}),
+          ...(coordinates ? coordinates : {}),
+          ...(targetHint ? { targetHint } : {}),
+          requestId: intent.id,
+          ...(intent.bounds ? { bounds: intent.bounds } : {}),
+          ...(actionMetadata ? { metadata: actionMetadata as JsonObject } : {}),
+        });
+      }
       return executeTaskLegacy('canvas.agent_prompt', {
         room: intent.room,
         message,
@@ -1009,6 +1211,17 @@ function scoreClaimMatch(claim: Claim, hint: string, hintTokens: string[]): numb
   return score;
 }
 
+const readRuntimeScopeFromTaskParams = (params: Record<string, unknown>): string | null => {
+  const direct = normalizeRuntimeScope(params.runtimeScope);
+  if (direct) return direct;
+  const metadata =
+    params.metadata && typeof params.metadata === 'object' && !Array.isArray(params.metadata)
+      ? (params.metadata as Record<string, unknown>)
+      : null;
+  if (!metadata) return null;
+  return normalizeRuntimeScope(metadata.runtimeScope) ?? normalizeRuntimeScope(metadata.runtime_scope);
+};
+
 async function maybeEnqueueAutoFactChecks(params: ScorecardTaskInput, taskName: string) {
   if (!SCORECARD_AUTO_FACT_CHECK_ENABLED) return;
   if (taskName === 'scorecard.fact_check') return;
@@ -1052,6 +1265,8 @@ async function maybeEnqueueAutoFactChecks(params: ScorecardTaskInput, taskName: 
       error: message,
     });
   }
+  const runtimeScope = readRuntimeScopeFromTaskParams(params as Record<string, unknown>);
+  const runtimeScopeKey = getRuntimeScopeResourceKey(runtimeScope);
   await queue.enqueueTask({
     room: params.room,
     task: 'scorecard.fact_check',
@@ -1067,9 +1282,21 @@ async function maybeEnqueueAutoFactChecks(params: ScorecardTaskInput, taskName: 
         process.env.CANVAS_STEWARD_SEARCH_MODEL ||
         process.env.DEBATE_STEWARD_SEARCH_MODEL ||
         'gpt-5-mini',
+      ...(runtimeScope ? { runtimeScope } : {}),
+      ...(runtimeScope
+        ? {
+            metadata: {
+              runtimeScope,
+            } as JsonObject,
+          }
+        : {}),
     } as unknown as JsonObject,
     dedupeKey: `scorecard.fact_check:auto:${params.componentId}:${candidates.map((c) => c.id).join(',')}`,
-    resourceKeys: [`room:${params.room}`, `scorecard:${params.componentId}`],
+    resourceKeys: [
+      `room:${params.room}`,
+      `scorecard:${params.componentId}`,
+      ...(runtimeScopeKey ? [runtimeScopeKey] : []),
+    ],
     priority: 1,
   });
 

@@ -175,4 +175,38 @@ describe('/api/steward/runScorecard', () => {
     expect(response.status).toBe(401);
     expect(json.error).toBe('unauthorized');
   });
+
+  it('adds runtime scope to queued scorecard tasks', async () => {
+    const previousLivekitUrl = process.env.LIVEKIT_URL;
+    process.env.LIVEKIT_URL = 'ws://localhost:7880';
+    try {
+      const POST = await loadPost({ queueFallback: false, byok: false });
+      const request = new Request('http://localhost/api/steward/runScorecard', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          room: 'demo-room',
+          componentId: 'scorecard-1',
+          task: 'scorecard.run',
+        }),
+      });
+
+      const response = await POST(toNextRequest(request));
+      expect(response.status).toBe(202);
+
+      const [enqueued] = enqueueTaskMock.mock.calls[0] as [Record<string, unknown>];
+      const params = enqueued.params as Record<string, unknown>;
+      const metadata = params.metadata as Record<string, unknown>;
+      const resourceKeys = enqueued.resourceKeys as string[];
+      expect(params.runtimeScope).toBe('localhost:7880');
+      expect(metadata.runtimeScope).toBe('localhost:7880');
+      expect(resourceKeys).toEqual(expect.arrayContaining(['runtime-scope:localhost:7880']));
+    } finally {
+      if (previousLivekitUrl === undefined) {
+        delete process.env.LIVEKIT_URL;
+      } else {
+        process.env.LIVEKIT_URL = previousLivekitUrl;
+      }
+    }
+  });
 });

@@ -27,6 +27,11 @@ import {
 import { getDecryptedUserModelKey, type ModelKeyProvider } from '@/lib/agents/shared/user-model-keys';
 import { recordAgentTraceEvent } from '@/lib/agents/shared/trace-events';
 import { deriveProviderParity } from '@/lib/agents/admin/provider-parity';
+import {
+  getRuntimeScopeResourceKey,
+  normalizeRuntimeScope,
+  resolveRuntimeScopeFromEnv,
+} from '@/lib/agents/shared/runtime-scope';
 
 export const runtime = 'nodejs';
 
@@ -36,6 +41,7 @@ function getQueue() {
   return queue;
 }
 const QUEUE_DIRECT_FALLBACK_ENABLED = process.env.CANVAS_QUEUE_DIRECT_FALLBACK === 'true';
+const REQUIRE_TASK_TRACE_ID = process.env.CANVAS_REQUIRE_TASK_TRACE_ID === 'true';
 const CANVAS_STEWARD_ENABLED = (process.env.CANVAS_STEWARD_SERVER_EXECUTION ?? 'true') === 'true';
 // Server-first execution is canonical: client legacy flags must not disable steward execution.
 const SERVER_CANVAS_AGENT_ENABLED = CANVAS_STEWARD_ENABLED;
@@ -371,6 +377,14 @@ export async function POST(req: NextRequest) {
     if (canonicalIntentId && (!metadataForCorrelation.intentId || explicitIntentId)) {
       metadataForCorrelation.intentId = canonicalIntentId;
     }
+    const runtimeScope =
+      normalizeRuntimeScope(enrichedParams.runtimeScope) ?? resolveRuntimeScopeFromEnv();
+    if (runtimeScope) {
+      enrichedParams.runtimeScope = runtimeScope;
+      if (!metadataForCorrelation.runtimeScope) {
+        metadataForCorrelation.runtimeScope = runtimeScope;
+      }
+    }
     if (Object.keys(metadataForCorrelation).length > 0) {
       enrichedParams.metadata = metadataForCorrelation;
     }
@@ -407,9 +421,13 @@ export async function POST(req: NextRequest) {
         normalizedTask === 'canvas.agent_prompt' || normalizedTask === 'fairy.intent'
           ? [`room:${trimmedRoom}`, 'canvas:intent']
           : [`room:${trimmedRoom}`];
+      const runtimeScopeKey = getRuntimeScopeResourceKey(
+        typeof enrichedParams.runtimeScope === 'string' ? enrichedParams.runtimeScope : undefined,
+      );
+      const scopedResourceKeys = runtimeScopeKey ? [...baseResourceKeys, runtimeScopeKey] : baseResourceKeys;
       const normalizedResourceKeys = normalizedLockKey
-        ? [...baseResourceKeys, `lock:${normalizedLockKey}`]
-        : baseResourceKeys;
+        ? [...scopedResourceKeys, `lock:${normalizedLockKey}`]
+        : scopedResourceKeys;
 
       const enqueueResult = await getQueue().enqueueTask({
         room: trimmedRoom,
@@ -420,7 +438,9 @@ export async function POST(req: NextRequest) {
         lockKey: normalizedLockKey,
         idempotencyKey: orchestrationEnvelope.idempotencyKey,
         resourceKeys: normalizedResourceKeys,
-        coalesceByResource: normalizedTask === 'canvas.agent_prompt' || normalizedTask === 'fairy.intent',
+        coalesceByResource: normalizedTask === 'canvas.agent_prompt',
+        coalesceTaskFilter: normalizedTask === 'canvas.agent_prompt' ? ['canvas.agent_prompt'] : undefined,
+        requireTraceId: REQUIRE_TASK_TRACE_ID && normalizedTask === 'fairy.intent',
       });
 
       if (normalizedTask === 'canvas.agent_prompt') {
@@ -454,6 +474,40 @@ export async function POST(req: NextRequest) {
       );
     } catch (error) {
       const msg = summarizeQueueError(error);
+      const strictTraceFailure =
+        msg.includes('TRACE_ID_REQUIRED:') ||
+        msg.includes('TRACE_ID_COLUMN_REQUIRED:') ||
+        msg.includes('TRACE_ID_NOT_PERSISTED:');
+      if (strictTraceFailure) {
+        logger.error('queue enqueue failed strict trace integrity check', { error: msg });
+        await recordAgentTraceEvent({
+          stage: 'failed',
+          status: 'queue_trace_integrity_error',
+          traceId: canonicalTraceId,
+          requestId: canonicalRequestId,
+          intentId: canonicalIntentId,
+          room: trimmedRoom,
+          task: normalizedTask,
+          provider: providerParity.provider,
+          model: providerParity.model ?? undefined,
+          providerSource: providerParity.providerSource,
+          providerPath: providerParity.providerPath,
+          providerRequestId: providerParity.providerRequestId ?? undefined,
+          params: enrichedParams,
+          payload: {
+            reason: msg,
+            provider: providerParity.provider,
+            model: providerParity.model,
+            providerSource: providerParity.providerSource,
+            providerPath: providerParity.providerPath,
+            providerRequestId: providerParity.providerRequestId,
+          },
+        });
+        return NextResponse.json(
+          { error: 'Queue trace integrity check failed', code: 'queue_trace_integrity_error' },
+          { status: 503 },
+        );
+      }
       logger.warn('queue enqueue failed, falling back to direct run', { error: msg });
       const fallbackParams: JsonObject = {
         ...enrichedParams,

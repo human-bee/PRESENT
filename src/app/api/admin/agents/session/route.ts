@@ -96,17 +96,61 @@ export async function GET(req: NextRequest) {
     if (tracesQuery.error) throw tracesQuery.error;
     const traces = (tracesQuery.data ?? []) as Array<Record<string, unknown>>;
 
+    const readId = (value: unknown): string | null =>
+      typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
+
+    const traceIdsByRequest = new Map<string, string>();
+    const traceIdsByTask = new Map<string, string>();
+    for (const trace of traces) {
+      const traceId = readId(trace.trace_id);
+      if (!traceId) continue;
+      const requestId = readId(trace.request_id);
+      const taskId = readId(trace.task_id);
+      if (requestId && !traceIdsByRequest.has(requestId)) {
+        traceIdsByRequest.set(requestId, traceId);
+      }
+      if (taskId && !traceIdsByTask.has(taskId)) {
+        traceIdsByTask.set(taskId, traceId);
+      }
+    }
+
+    const tasksWithResolvedTrace: Array<
+      Record<string, unknown> & {
+        trace_id: string | null;
+        resolved_trace_id: string | null;
+        trace_integrity: 'direct' | 'resolved_from_events' | 'missing';
+      }
+    > = tasks.map((task) => {
+      const traceId = readId(task.trace_id);
+      const requestId = readId(task.request_id);
+      const taskId = readId(task.id);
+      const resolvedTraceId =
+        traceId ??
+        (taskId ? traceIdsByTask.get(taskId) ?? null : null) ??
+        (requestId ? traceIdsByRequest.get(requestId) ?? null : null);
+      return {
+        ...task,
+        trace_id: traceId,
+        resolved_trace_id: resolvedTraceId,
+        trace_integrity: traceId
+          ? 'direct'
+          : resolvedTraceId
+            ? 'resolved_from_events'
+            : 'missing',
+      };
+    });
+
     const traceIds = new Set<string>();
     const requestIds = new Set<string>();
-    for (const task of tasks) {
-      const traceId = typeof task.trace_id === 'string' ? task.trace_id.trim() : '';
-      const requestId = typeof task.request_id === 'string' ? task.request_id.trim() : '';
+    for (const task of tasksWithResolvedTrace) {
+      const traceId = readId(task.resolved_trace_id) ?? readId(task.trace_id) ?? '';
+      const requestId = readId((task as Record<string, unknown>)['request_id']) ?? '';
       if (traceId) traceIds.add(traceId);
       if (requestId) requestIds.add(requestId);
     }
     for (const trace of traces) {
-      const traceId = typeof trace.trace_id === 'string' ? trace.trace_id.trim() : '';
-      const requestId = typeof trace.request_id === 'string' ? trace.request_id.trim() : '';
+      const traceId = readId(trace.trace_id) ?? '';
+      const requestId = readId(trace.request_id) ?? '';
       if (traceId) traceIds.add(traceId);
       if (requestId) requestIds.add(requestId);
     }
@@ -116,10 +160,19 @@ export async function GET(req: NextRequest) {
       tracesTotal: traces.length,
       uniqueTraceIds: traceIds.size,
       uniqueRequestIds: requestIds.size,
-      taskStatusCounts: countBy(tasks.map((task) => (typeof task.status === 'string' ? task.status : null))),
+      taskStatusCounts: countBy(
+        tasksWithResolvedTrace.map((task) =>
+          typeof (task as Record<string, unknown>)['status'] === 'string'
+            ? ((task as Record<string, unknown>)['status'] as string)
+            : null,
+        ),
+      ),
       traceStageCounts: countBy(traces.map((trace) => (typeof trace.stage === 'string' ? trace.stage : null))),
-      missingTraceOnTasks: tasks.filter((task) => {
-        const traceId = typeof task.trace_id === 'string' ? task.trace_id.trim() : '';
+      missingTraceOnTasks: tasksWithResolvedTrace.filter((task) => {
+        const traceId =
+          typeof task.resolved_trace_id === 'string' && task.resolved_trace_id.trim().length > 0
+            ? task.resolved_trace_id.trim()
+            : '';
         return traceId.length === 0;
       }).length,
     };
@@ -130,7 +183,7 @@ export async function GET(req: NextRequest) {
       room,
       limit,
       summary,
-      tasks,
+      tasks: tasksWithResolvedTrace,
       traces,
     });
   } catch (error) {
@@ -140,4 +193,3 @@ export async function GET(req: NextRequest) {
     );
   }
 }
-

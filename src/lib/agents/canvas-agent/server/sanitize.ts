@@ -1,20 +1,40 @@
 import type { AgentAction } from '@/lib/canvas-agent/contract/types';
 import { actionParamSchemas } from '@/lib/canvas-agent/contract/parsers';
 import { newAgentShapeId } from '@/lib/canvas-agent/contract/ids';
+import { CLEAR_ALL_SHAPES_SENTINEL } from '@/lib/canvas-agent/contract/teacher-bridge';
 
 /**
  * Canonical sanitization happens in two passes:
  * 1. Structural parsing via the shared Zod schemas (type guardrails, defaulting).
  * 2. Graph-aware guardrails (existence checks, ID filtering, range clamps).
- * No semantic rewrites (e.g. changing verbs) happen here – those remain closer
- * to the prompt bridge so we can reason about them explicitly.
  */
 
 export type CanvasShapeExistence = (id: string) => boolean;
 
-export function sanitizeActions(actions: AgentAction[], exists: CanvasShapeExistence): AgentAction[] {
+export type SanitizeActionOptions = {
+  knownShapeIds?: Iterable<string>;
+  onMissingUpdateTargetDropped?: (shapeId: string) => void;
+};
+
+const normalizeShapeId = (value: unknown): string => {
+  if (typeof value !== 'string') return '';
+  const trimmed = value.trim();
+  if (!trimmed) return '';
+  return trimmed.startsWith('shape:') ? trimmed.slice('shape:'.length) : trimmed;
+};
+
+export function sanitizeActions(
+  actions: AgentAction[],
+  exists: CanvasShapeExistence,
+  options?: SanitizeActionOptions,
+): AgentAction[] {
   const parsed: Array<{ action: AgentAction; params: any }> = [];
   const createdIds = new Set<string>();
+  const knownShapeIds = new Set<string>(
+    Array.from(options?.knownShapeIds ?? [])
+      .map((id) => normalizeShapeId(id))
+      .filter((id) => id.length > 0),
+  );
 
   for (const action of actions) {
     try {
@@ -26,11 +46,19 @@ export function sanitizeActions(actions: AgentAction[], exists: CanvasShapeExist
       if (action.name === 'create_shape') {
         if (!params.id) params.id = newAgentShapeId();
         if (typeof params.id === 'string' && params.id) {
-          createdIds.add(params.id);
+          const normalized = normalizeShapeId(params.id);
+          if (normalized) {
+            createdIds.add(normalized);
+            knownShapeIds.add(normalized);
+          }
         }
       } else if (action.name === 'group') {
         if (typeof params.groupId === 'string' && params.groupId) {
-          createdIds.add(params.groupId);
+          const normalized = normalizeShapeId(params.groupId);
+          if (normalized) {
+            createdIds.add(normalized);
+            knownShapeIds.add(normalized);
+          }
         }
       }
 
@@ -40,26 +68,69 @@ export function sanitizeActions(actions: AgentAction[], exists: CanvasShapeExist
     }
   }
 
-  const isKnown = (id: string) => exists(id) || createdIds.has(id);
+  const isKnown = (id: string) => {
+    const normalized = normalizeShapeId(id);
+    if (!normalized) return false;
+    return (
+      createdIds.has(normalized) ||
+      knownShapeIds.has(normalized) ||
+      exists(normalized) ||
+      exists(`shape:${normalized}`)
+    );
+  };
   const sanitized: AgentAction[] = [];
 
-  for (const { action, params } of parsed) {
+  for (const parsedItem of parsed) {
     try {
+      let action = parsedItem.action;
+      let params = parsedItem.params;
+
       switch (action.name) {
-        case 'update_shape':
-          if (!isKnown(params.id)) continue;
+        case 'update_shape': {
+          if (!isKnown(params.id)) {
+            const targetId = normalizeShapeId(params.id);
+            if (targetId) {
+              options?.onMissingUpdateTargetDropped?.(targetId);
+            }
+            continue;
+          }
           break;
-        case 'delete_shape':
+        }
+        case 'delete_shape': {
+          const requestedIds = Array.isArray(params.ids)
+            ? (params.ids as unknown[])
+                .filter((id): id is string => typeof id === 'string' && id.trim().length > 0)
+                .map((id) => id.trim())
+            : [];
+          const requestedNormalized = requestedIds.map((id) => normalizeShapeId(id));
+          const deleteAllRequested = requestedNormalized.some(
+            (id) => id === CLEAR_ALL_SHAPES_SENTINEL || id === 'all' || id === '*',
+          );
+          if (deleteAllRequested) {
+            const ids = Array.from(knownShapeIds);
+            if (ids.length === 0) continue;
+            params.ids = ids;
+            break;
+          }
+          const filteredIds = requestedIds
+            .map((id) => normalizeShapeId(id))
+            .filter((id) => isKnown(id));
+          if (filteredIds.length === 0) continue;
+          params.ids = filteredIds;
+          break;
+        }
         case 'move':
         case 'rotate':
         case 'reorder': {
-          const filteredIds = (params.ids as string[]).filter((id) => isKnown(id));
+          const filteredIds = (params.ids as string[])
+            .map((id) => normalizeShapeId(id))
+            .filter((id) => isKnown(id));
           if (filteredIds.length === 0) continue;
           params.ids = filteredIds;
           break;
         }
         case 'group': {
-          const filtered = (params.ids as string[]).filter((id) => isKnown(id));
+          const filtered = (params.ids as string[]).map((id) => normalizeShapeId(id)).filter((id) => isKnown(id));
           if (filtered.length < 2) continue;
           params.ids = filtered;
           break;
@@ -67,12 +138,13 @@ export function sanitizeActions(actions: AgentAction[], exists: CanvasShapeExist
         case 'stack':
         case 'align':
         case 'distribute': {
-          const filtered = (params.ids as string[]).filter((id) => isKnown(id));
+          const filtered = (params.ids as string[]).map((id) => normalizeShapeId(id)).filter((id) => isKnown(id));
           if (filtered.length < 2) continue;
           params.ids = filtered;
           break;
         }
         case 'ungroup':
+          params.id = normalizeShapeId(params.id);
           if (!isKnown(params.id)) continue;
           break;
         default:

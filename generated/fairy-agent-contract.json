@@ -1,0 +1,3017 @@
+{
+  "generatedAt": "2026-02-20T03:49:01.483Z",
+  "profile": "fairy48",
+  "source": "src/vendor/tldraw-fairy",
+  "actions": [
+    {
+      "name": "abort-duo-project",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "_type": {
+            "$ref": "#/$defs/__schema0"
+          },
+          "reason": {
+            "$ref": "#/$defs/__schema1"
+          }
+        },
+        "required": [
+          "_type",
+          "reason"
+        ],
+        "additionalProperties": false,
+        "title": "Abort Duo Project",
+        "description": "The agent aborts the currently active duo project before starting it because the user's input doesn't make sense in context or is unclear. The reason should be a succinct explanation for why the project is being aborted.",
+        "$defs": {
+          "__schema0": {
+            "type": "string",
+            "const": "abort-duo-project"
+          },
+          "__schema1": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "abort-project",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "_type": {
+            "$ref": "#/$defs/__schema0"
+          },
+          "reason": {
+            "$ref": "#/$defs/__schema1"
+          }
+        },
+        "required": [
+          "_type",
+          "reason"
+        ],
+        "additionalProperties": false,
+        "title": "Abort Project",
+        "description": "The agent aborts the currently active project before starting it because the user's input doesn't make sense in context or is unclear. The reason should be a succinct explanation for why the project is being aborted.",
+        "$defs": {
+          "__schema0": {
+            "type": "string",
+            "const": "abort-project"
+          },
+          "__schema1": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "activate-agent",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "_type": {
+            "$ref": "#/$defs/__schema0"
+          },
+          "fairyId": {
+            "$ref": "#/$defs/__schema1"
+          }
+        },
+        "required": [
+          "_type",
+          "fairyId"
+        ],
+        "additionalProperties": false,
+        "title": "Activate agent",
+        "description": "The agent activates a agent so that it can start to work on its assigned tasks.",
+        "$defs": {
+          "__schema0": {
+            "type": "string",
+            "const": "activate-agent"
+          },
+          "__schema1": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "align",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "_type": {
+            "$ref": "#/$defs/__schema0"
+          },
+          "alignment": {
+            "$ref": "#/$defs/__schema1"
+          },
+          "gap": {
+            "$ref": "#/$defs/__schema2"
+          },
+          "intent": {
+            "$ref": "#/$defs/__schema3"
+          },
+          "shapeIds": {
+            "$ref": "#/$defs/__schema4"
+          }
+        },
+        "required": [
+          "_type",
+          "alignment",
+          "gap",
+          "intent",
+          "shapeIds"
+        ],
+        "additionalProperties": false,
+        "title": "Align",
+        "description": "The agent aligns shapes to each other on an axis.",
+        "$defs": {
+          "__schema0": {
+            "type": "string",
+            "const": "align"
+          },
+          "__schema1": {
+            "type": "string",
+            "enum": [
+              "top",
+              "bottom",
+              "left",
+              "right",
+              "center-horizontal",
+              "center-vertical"
+            ]
+          },
+          "__schema2": {
+            "type": "number"
+          },
+          "__schema3": {
+            "type": "string"
+          },
+          "__schema4": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "await-duo-tasks-completion",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "_type": {
+            "$ref": "#/$defs/__schema0"
+          },
+          "taskIds": {
+            "$ref": "#/$defs/__schema1"
+          }
+        },
+        "required": [
+          "_type",
+          "taskIds"
+        ],
+        "additionalProperties": false,
+        "title": "Await Duo Tasks Completion",
+        "description": "The agent waits for one or more tasks to be completed in a duo project. The agent will be notified when each task completes, allowing it to pause its work instead of repeatedly checking task status.",
+        "$defs": {
+          "__schema0": {
+            "type": "string",
+            "const": "await-duo-tasks-completion"
+          },
+          "__schema1": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "await-tasks-completion",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "_type": {
+            "$ref": "#/$defs/__schema0"
+          },
+          "taskIds": {
+            "$ref": "#/$defs/__schema1"
+          }
+        },
+        "required": [
+          "_type",
+          "taskIds"
+        ],
+        "additionalProperties": false,
+        "title": "Await Tasks Completion",
+        "description": "The agent waits for one or more tasks to be completed. The agent will be notified when each task completes, allowing it to pause its work instead of repeatedly checking task status.",
+        "$defs": {
+          "__schema0": {
+            "type": "string",
+            "const": "await-tasks-completion"
+          },
+          "__schema1": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "bring-to-front",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "_type": {
+            "$ref": "#/$defs/__schema0"
+          },
+          "intent": {
+            "$ref": "#/$defs/__schema1"
+          },
+          "shapeIds": {
+            "$ref": "#/$defs/__schema2"
+          }
+        },
+        "required": [
+          "_type",
+          "intent",
+          "shapeIds"
+        ],
+        "additionalProperties": false,
+        "title": "Bring to Front",
+        "description": "The agent brings one or more shapes to the front so that they appear in front of everything else.",
+        "$defs": {
+          "__schema0": {
+            "type": "string",
+            "const": "bring-to-front"
+          },
+          "__schema1": {
+            "type": "string"
+          },
+          "__schema2": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "change-page",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "_type": {
+            "$ref": "#/$defs/__schema0"
+          },
+          "pageName": {
+            "$ref": "#/$defs/__schema1"
+          },
+          "intent": {
+            "$ref": "#/$defs/__schema2"
+          }
+        },
+        "required": [
+          "_type",
+          "pageName",
+          "intent"
+        ],
+        "additionalProperties": false,
+        "title": "Change Page",
+        "description": "The agent changes to a different page by name. Use this to navigate between existing pages.",
+        "$defs": {
+          "__schema0": {
+            "type": "string",
+            "const": "change-page"
+          },
+          "__schema1": {
+            "type": "string"
+          },
+          "__schema2": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "claim-todo-item",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "_type": {
+            "$ref": "#/$defs/__schema0"
+          },
+          "todoItemId": {
+            "$ref": "#/$defs/__schema1"
+          }
+        },
+        "required": [
+          "_type",
+          "todoItemId"
+        ],
+        "additionalProperties": false,
+        "title": "Claim todo item",
+        "description": "The agent claims a task for themselves.",
+        "$defs": {
+          "__schema0": {
+            "type": "string",
+            "const": "claim-todo-item"
+          },
+          "__schema1": {
+            "type": "number"
+          }
+        }
+      }
+    },
+    {
+      "name": "clear",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "_type": {
+            "$ref": "#/$defs/__schema0"
+          }
+        },
+        "required": [
+          "_type"
+        ],
+        "additionalProperties": false,
+        "title": "Clear",
+        "description": "The agent deletes all shapes on the canvas.",
+        "$defs": {
+          "__schema0": {
+            "type": "string",
+            "const": "clear"
+          }
+        }
+      }
+    },
+    {
+      "name": "country-info",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "_type": {
+            "$ref": "#/$defs/__schema0"
+          },
+          "code": {
+            "$ref": "#/$defs/__schema1"
+          }
+        },
+        "required": [
+          "_type",
+          "code"
+        ],
+        "additionalProperties": false,
+        "title": "Country info",
+        "description": "The agent gets information about a country by providing its country code, eg: \"de\" for Germany.",
+        "$defs": {
+          "__schema0": {
+            "type": "string",
+            "const": "country-info"
+          },
+          "__schema1": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "create",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "_type": {
+            "$ref": "#/$defs/__schema0"
+          },
+          "intent": {
+            "$ref": "#/$defs/__schema1"
+          },
+          "shape": {
+            "$ref": "#/$defs/__schema2"
+          }
+        },
+        "required": [
+          "_type",
+          "intent",
+          "shape"
+        ],
+        "additionalProperties": false,
+        "title": "Create",
+        "description": "The agent creates a new shape.",
+        "$defs": {
+          "__schema0": {
+            "type": "string",
+            "const": "create"
+          },
+          "__schema1": {
+            "type": "string"
+          },
+          "__schema2": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "_type": {
+                    "type": "string",
+                    "enum": [
+                      "rectangle",
+                      "ellipse",
+                      "triangle",
+                      "diamond",
+                      "hexagon",
+                      "pill",
+                      "cloud",
+                      "x-box",
+                      "check-box",
+                      "heart",
+                      "pentagon",
+                      "octagon",
+                      "star",
+                      "parallelogram-right",
+                      "parallelogram-left",
+                      "trapezoid",
+                      "fat-arrow-right",
+                      "fat-arrow-left",
+                      "fat-arrow-up",
+                      "fat-arrow-down"
+                    ]
+                  },
+                  "color": {
+                    "$ref": "#/$defs/__schema3"
+                  },
+                  "fill": {
+                    "type": "string",
+                    "enum": [
+                      "none",
+                      "tint",
+                      "background",
+                      "solid",
+                      "pattern"
+                    ]
+                  },
+                  "h": {
+                    "type": "number"
+                  },
+                  "note": {
+                    "type": "string"
+                  },
+                  "shapeId": {
+                    "$ref": "#/$defs/__schema4"
+                  },
+                  "text": {
+                    "type": "string"
+                  },
+                  "textAlign": {
+                    "type": "string",
+                    "enum": [
+                      "start",
+                      "middle",
+                      "end"
+                    ]
+                  },
+                  "w": {
+                    "type": "number"
+                  },
+                  "x": {
+                    "type": "number"
+                  },
+                  "y": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "_type",
+                  "color",
+                  "fill",
+                  "h",
+                  "note",
+                  "shapeId",
+                  "w",
+                  "x",
+                  "y"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "_type": {
+                    "type": "string",
+                    "const": "line"
+                  },
+                  "color": {
+                    "$ref": "#/$defs/__schema3"
+                  },
+                  "note": {
+                    "type": "string"
+                  },
+                  "shapeId": {
+                    "$ref": "#/$defs/__schema4"
+                  },
+                  "x1": {
+                    "type": "number"
+                  },
+                  "x2": {
+                    "type": "number"
+                  },
+                  "y1": {
+                    "type": "number"
+                  },
+                  "y2": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "_type",
+                  "color",
+                  "note",
+                  "shapeId",
+                  "x1",
+                  "x2",
+                  "y1",
+                  "y2"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "_type": {
+                    "$ref": "#/$defs/__schema5"
+                  },
+                  "anchor": {
+                    "$ref": "#/$defs/__schema6"
+                  },
+                  "color": {
+                    "$ref": "#/$defs/__schema3"
+                  },
+                  "fontSize": {
+                    "$ref": "#/$defs/__schema7"
+                  },
+                  "maxWidth": {
+                    "$ref": "#/$defs/__schema8"
+                  },
+                  "note": {
+                    "$ref": "#/$defs/__schema9"
+                  },
+                  "shapeId": {
+                    "$ref": "#/$defs/__schema4"
+                  },
+                  "text": {
+                    "$ref": "#/$defs/__schema10"
+                  },
+                  "x": {
+                    "$ref": "#/$defs/__schema11"
+                  },
+                  "y": {
+                    "$ref": "#/$defs/__schema12"
+                  }
+                },
+                "required": [
+                  "_type",
+                  "anchor",
+                  "color",
+                  "maxWidth",
+                  "note",
+                  "shapeId",
+                  "text",
+                  "x",
+                  "y"
+                ],
+                "additionalProperties": false,
+                "title": "Text Shape",
+                "description": "A text shape is a shape that contains text. The `anchor` property indicates how the text shape is positioned and aligned. For example, the \"top-left\" anchor means the text shape's x and y coordinates are the top left corner of the text shape, and the text gets left aligned. A shape with the \"bottom-center\" anchor means the text shape's x and y coordinates are the bottom center of the text shape, and the text gets center aligned on the horizontal axis. By default, text shapes auto-size to fit their content. If you provide a `maxWidth`, the text will automatically wrap to the next line if it exceeds that width (there is no need to add manual line breaks for word wrapping)."
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "_type": {
+                    "type": "string",
+                    "const": "arrow"
+                  },
+                  "color": {
+                    "$ref": "#/$defs/__schema3"
+                  },
+                  "fromId": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/__schema4"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "note": {
+                    "type": "string"
+                  },
+                  "shapeId": {
+                    "$ref": "#/$defs/__schema4"
+                  },
+                  "text": {
+                    "type": "string"
+                  },
+                  "toId": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/__schema4"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "x1": {
+                    "type": "number"
+                  },
+                  "x2": {
+                    "type": "number"
+                  },
+                  "y1": {
+                    "type": "number"
+                  },
+                  "y2": {
+                    "type": "number"
+                  },
+                  "bend": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "_type",
+                  "color",
+                  "fromId",
+                  "note",
+                  "shapeId",
+                  "toId",
+                  "x1",
+                  "x2",
+                  "y1",
+                  "y2"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "_type": {
+                    "type": "string",
+                    "const": "note"
+                  },
+                  "color": {
+                    "$ref": "#/$defs/__schema3"
+                  },
+                  "note": {
+                    "type": "string"
+                  },
+                  "shapeId": {
+                    "$ref": "#/$defs/__schema4"
+                  },
+                  "text": {
+                    "type": "string"
+                  },
+                  "x": {
+                    "type": "number"
+                  },
+                  "y": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "_type",
+                  "color",
+                  "note",
+                  "shapeId",
+                  "x",
+                  "y"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          },
+          "__schema3": {
+            "type": "string",
+            "enum": [
+              "red",
+              "light-red",
+              "green",
+              "light-green",
+              "blue",
+              "light-blue",
+              "orange",
+              "yellow",
+              "black",
+              "violet",
+              "light-violet",
+              "grey",
+              "white"
+            ]
+          },
+          "__schema4": {
+            "type": "string"
+          },
+          "__schema5": {
+            "type": "string",
+            "const": "text"
+          },
+          "__schema6": {
+            "type": "string",
+            "enum": [
+              "bottom-center",
+              "bottom-left",
+              "bottom-right",
+              "center-left",
+              "center-right",
+              "center",
+              "top-center",
+              "top-left",
+              "top-right"
+            ]
+          },
+          "__schema7": {
+            "type": "number"
+          },
+          "__schema8": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "__schema9": {
+            "type": "string"
+          },
+          "__schema10": {
+            "type": "string"
+          },
+          "__schema11": {
+            "type": "number"
+          },
+          "__schema12": {
+            "type": "number"
+          }
+        }
+      }
+    },
+    {
+      "name": "create-duo-task",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "_type": {
+            "$ref": "#/$defs/__schema0"
+          },
+          "taskId": {
+            "$ref": "#/$defs/__schema1"
+          },
+          "title": {
+            "$ref": "#/$defs/__schema2"
+          },
+          "text": {
+            "$ref": "#/$defs/__schema3"
+          },
+          "assignedTo": {
+            "$ref": "#/$defs/__schema4"
+          },
+          "x": {
+            "$ref": "#/$defs/__schema5"
+          },
+          "y": {
+            "$ref": "#/$defs/__schema6"
+          },
+          "w": {
+            "$ref": "#/$defs/__schema7"
+          },
+          "h": {
+            "$ref": "#/$defs/__schema8"
+          }
+        },
+        "required": [
+          "_type",
+          "taskId",
+          "title",
+          "text",
+          "assignedTo",
+          "x",
+          "y",
+          "w",
+          "h"
+        ],
+        "additionalProperties": false,
+        "title": "Create Duo Task",
+        "description": "The agent creates a new task (with a unique, short, hypenated `taskId`) within the current duo project and assigns it to their partner. The task will automatically be associated with the current project. Each task should represent one step in the longer process. It's okay to create many tasks. Note: Creating a task and assigning it to your partner does not automatically start it. You must use the 'direct-to-start-duo-task' action to get your partner to start a task, or use 'start-duo-task' to start it yourself. Also note: Tasks get an automatic ID that's used to reference them. They start at 1, and then increment by 1 for each new task.",
+        "$defs": {
+          "__schema0": {
+            "type": "string",
+            "const": "create-duo-task"
+          },
+          "__schema1": {
+            "type": "string"
+          },
+          "__schema2": {
+            "type": "string"
+          },
+          "__schema3": {
+            "type": "string"
+          },
+          "__schema4": {
+            "type": "string"
+          },
+          "__schema5": {
+            "type": "number"
+          },
+          "__schema6": {
+            "type": "number"
+          },
+          "__schema7": {
+            "type": "number"
+          },
+          "__schema8": {
+            "type": "number"
+          }
+        }
+      }
+    },
+    {
+      "name": "create-page",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "_type": {
+            "$ref": "#/$defs/__schema0"
+          },
+          "pageName": {
+            "$ref": "#/$defs/__schema1"
+          },
+          "intent": {
+            "$ref": "#/$defs/__schema2"
+          },
+          "switchToPage": {
+            "$ref": "#/$defs/__schema3"
+          }
+        },
+        "required": [
+          "_type",
+          "pageName",
+          "intent",
+          "switchToPage"
+        ],
+        "additionalProperties": false,
+        "title": "Create Page",
+        "description": "The agent creates a new page with the specified name. If switchToPage is true, the agent will also navigate to the newly created page.",
+        "$defs": {
+          "__schema0": {
+            "type": "string",
+            "const": "create-page"
+          },
+          "__schema1": {
+            "type": "string"
+          },
+          "__schema2": {
+            "type": "string"
+          },
+          "__schema3": {
+            "type": "boolean"
+          }
+        }
+      }
+    },
+    {
+      "name": "create-project-task",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "_type": {
+            "$ref": "#/$defs/__schema0"
+          },
+          "taskId": {
+            "$ref": "#/$defs/__schema1"
+          },
+          "title": {
+            "$ref": "#/$defs/__schema2"
+          },
+          "text": {
+            "$ref": "#/$defs/__schema3"
+          },
+          "assignedTo": {
+            "$ref": "#/$defs/__schema4"
+          },
+          "x": {
+            "$ref": "#/$defs/__schema5"
+          },
+          "y": {
+            "$ref": "#/$defs/__schema6"
+          },
+          "w": {
+            "$ref": "#/$defs/__schema7"
+          },
+          "h": {
+            "$ref": "#/$defs/__schema8"
+          }
+        },
+        "required": [
+          "_type",
+          "taskId",
+          "title",
+          "text",
+          "assignedTo",
+          "x",
+          "y",
+          "w",
+          "h"
+        ],
+        "additionalProperties": false,
+        "title": "Create Project Task",
+        "description": "The agent creates a new task (with a unique, short, hypenated `taskId`) within the current project and assigns it to a specific agent. The task will automatically be associated with the current project. Each task should represent one step in the longer process. It's okay to create many tasks. Note: Creating a task and assigning it to another agent does not automatically start it. You must use the 'direct-to-start-project-task' action to get another agent to start a task. Also note: Tasks get an automatic ID that's used to reference them. They start at 1, and then increment by 1 for each new task.",
+        "$defs": {
+          "__schema0": {
+            "type": "string",
+            "const": "create-project-task"
+          },
+          "__schema1": {
+            "type": "string"
+          },
+          "__schema2": {
+            "type": "string"
+          },
+          "__schema3": {
+            "type": "string"
+          },
+          "__schema4": {
+            "type": "string"
+          },
+          "__schema5": {
+            "type": "number"
+          },
+          "__schema6": {
+            "type": "number"
+          },
+          "__schema7": {
+            "type": "number"
+          },
+          "__schema8": {
+            "type": "number"
+          }
+        }
+      }
+    },
+    {
+      "name": "create-task",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "_type": {
+            "$ref": "#/$defs/__schema0"
+          },
+          "taskId": {
+            "$ref": "#/$defs/__schema1"
+          },
+          "title": {
+            "$ref": "#/$defs/__schema2"
+          },
+          "text": {
+            "$ref": "#/$defs/__schema3"
+          },
+          "x": {
+            "$ref": "#/$defs/__schema4"
+          },
+          "y": {
+            "$ref": "#/$defs/__schema5"
+          },
+          "w": {
+            "$ref": "#/$defs/__schema6"
+          },
+          "h": {
+            "$ref": "#/$defs/__schema7"
+          }
+        },
+        "required": [
+          "_type",
+          "taskId",
+          "title",
+          "text",
+          "x",
+          "y",
+          "w",
+          "h"
+        ],
+        "additionalProperties": false,
+        "title": "Create Task",
+        "description": "The agent describes one new task (with a unique, short, hypenated `taskId`) that they'd like to do at some point in the future, as well as the area in which it should be done. Each task should represent one step in the longer process. It's okay to create many tasks. Note: Creating a task does not automatically start it. You must use the 'start-task' action to start a task. This is to allow you to create multiple tasks ahead of time, and then pick one to start with. Also note: Tasks get an automatic ID that's used to reference them. They start at 1, and then increment by 1 for each new task.",
+        "$defs": {
+          "__schema0": {
+            "type": "string",
+            "const": "create-task"
+          },
+          "__schema1": {
+            "type": "string"
+          },
+          "__schema2": {
+            "type": "string"
+          },
+          "__schema3": {
+            "type": "string"
+          },
+          "__schema4": {
+            "type": "number"
+          },
+          "__schema5": {
+            "type": "number"
+          },
+          "__schema6": {
+            "type": "number"
+          },
+          "__schema7": {
+            "type": "number"
+          }
+        }
+      }
+    },
+    {
+      "name": "delete",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "_type": {
+            "$ref": "#/$defs/__schema0"
+          },
+          "intent": {
+            "$ref": "#/$defs/__schema1"
+          },
+          "shapeId": {
+            "$ref": "#/$defs/__schema2"
+          }
+        },
+        "required": [
+          "_type",
+          "intent",
+          "shapeId"
+        ],
+        "additionalProperties": false,
+        "title": "Delete",
+        "description": "The agent deletes a shape.",
+        "$defs": {
+          "__schema0": {
+            "type": "string",
+            "const": "delete"
+          },
+          "__schema1": {
+            "type": "string"
+          },
+          "__schema2": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "delete-personal-todo-items",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "_type": {
+            "$ref": "#/$defs/__schema0"
+          },
+          "ids": {
+            "$ref": "#/$defs/__schema1"
+          }
+        },
+        "required": [
+          "_type",
+          "ids"
+        ],
+        "additionalProperties": false,
+        "title": "Delete Personal Todo Items",
+        "description": "The agent deletes one or more todo items from its personal todo list by providing the todo item ids.",
+        "$defs": {
+          "__schema0": {
+            "type": "string",
+            "const": "delete-personal-todo-items"
+          },
+          "__schema1": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "delete-project-task",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "_type": {
+            "$ref": "#/$defs/__schema0"
+          },
+          "taskId": {
+            "$ref": "#/$defs/__schema1"
+          },
+          "reason": {
+            "$ref": "#/$defs/__schema2"
+          }
+        },
+        "required": [
+          "_type",
+          "taskId",
+          "reason"
+        ],
+        "additionalProperties": false,
+        "title": "Delete Project Task",
+        "description": "The agent removes a task from the current project. Use this when the user asks to cancel or remove specific work, or when a task is no longer relevant to the project goals. Provide the taskId of the task to delete and a brief reason why it's being removed.",
+        "$defs": {
+          "__schema0": {
+            "type": "string",
+            "const": "delete-project-task"
+          },
+          "__schema1": {
+            "type": "string"
+          },
+          "__schema2": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "direct-to-start-duo-task",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "_type": {
+            "$ref": "#/$defs/__schema0"
+          },
+          "otherFairyId": {
+            "$ref": "#/$defs/__schema1"
+          },
+          "taskId": {
+            "$ref": "#/$defs/__schema2"
+          }
+        },
+        "required": [
+          "_type",
+          "otherFairyId",
+          "taskId"
+        ],
+        "additionalProperties": false,
+        "title": "Direct to start duo task",
+        "description": "The agent directs their partner to start working on a specific task within the current duo project. Only do this once the task is ready to be started.",
+        "$defs": {
+          "__schema0": {
+            "type": "string",
+            "const": "direct-to-start-duo-task"
+          },
+          "__schema1": {
+            "type": "string"
+          },
+          "__schema2": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "direct-to-start-project-task",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "_type": {
+            "$ref": "#/$defs/__schema0"
+          },
+          "otherFairyId": {
+            "$ref": "#/$defs/__schema1"
+          },
+          "taskId": {
+            "$ref": "#/$defs/__schema2"
+          }
+        },
+        "required": [
+          "_type",
+          "otherFairyId",
+          "taskId"
+        ],
+        "additionalProperties": false,
+        "title": "Direct to start project task",
+        "description": "The agent directs another agent to start working on a specific task within the current project. Only do this once the task is ready to be started.",
+        "$defs": {
+          "__schema0": {
+            "type": "string",
+            "const": "direct-to-start-project-task"
+          },
+          "__schema1": {
+            "type": "string"
+          },
+          "__schema2": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "distribute",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "_type": {
+            "$ref": "#/$defs/__schema0"
+          },
+          "direction": {
+            "$ref": "#/$defs/__schema1"
+          },
+          "intent": {
+            "$ref": "#/$defs/__schema2"
+          },
+          "shapeIds": {
+            "$ref": "#/$defs/__schema3"
+          }
+        },
+        "required": [
+          "_type",
+          "direction",
+          "intent",
+          "shapeIds"
+        ],
+        "additionalProperties": false,
+        "title": "Distribute",
+        "description": "The agent distributes shapes horizontally or vertically.",
+        "$defs": {
+          "__schema0": {
+            "type": "string",
+            "const": "distribute"
+          },
+          "__schema1": {
+            "type": "string",
+            "enum": [
+              "horizontal",
+              "vertical"
+            ]
+          },
+          "__schema2": {
+            "type": "string"
+          },
+          "__schema3": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "end-duo-project",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "_type": {
+            "$ref": "#/$defs/__schema0"
+          }
+        },
+        "required": [
+          "_type"
+        ],
+        "additionalProperties": false,
+        "title": "End Duo Project",
+        "description": "The agent ends the currently active duo project once all tasks are complete.",
+        "$defs": {
+          "__schema0": {
+            "type": "string",
+            "const": "end-duo-project"
+          }
+        }
+      }
+    },
+    {
+      "name": "end-project",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "_type": {
+            "$ref": "#/$defs/__schema0"
+          }
+        },
+        "required": [
+          "_type"
+        ],
+        "additionalProperties": false,
+        "title": "End Current Project",
+        "description": "The agent ends the currently active project once all tasks are complete.",
+        "$defs": {
+          "__schema0": {
+            "type": "string",
+            "const": "end-project"
+          }
+        }
+      }
+    },
+    {
+      "name": "enter-orchestration-mode",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "_type": {
+            "$ref": "#/$defs/__schema0"
+          }
+        },
+        "required": [
+          "_type"
+        ],
+        "additionalProperties": false,
+        "title": "Enter Orchestration Mode",
+        "description": "The agent schedules a request to enter orchestration mode.",
+        "$defs": {
+          "__schema0": {
+            "type": "string",
+            "const": "enter-orchestration-mode"
+          }
+        }
+      }
+    },
+    {
+      "name": "fly-to-bounds",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "_type": {
+            "$ref": "#/$defs/__schema0"
+          },
+          "intent": {
+            "$ref": "#/$defs/__schema1"
+          },
+          "x": {
+            "$ref": "#/$defs/__schema2"
+          },
+          "y": {
+            "$ref": "#/$defs/__schema3"
+          },
+          "w": {
+            "$ref": "#/$defs/__schema4"
+          },
+          "h": {
+            "$ref": "#/$defs/__schema5"
+          }
+        },
+        "required": [
+          "_type",
+          "intent",
+          "x",
+          "y",
+          "w",
+          "h"
+        ],
+        "additionalProperties": false,
+        "title": "Fly To Bounds",
+        "description": "The agent flies to the specified bounds of the canvas to navigate to other areas of the canvas if needed.",
+        "$defs": {
+          "__schema0": {
+            "type": "string",
+            "const": "fly-to-bounds"
+          },
+          "__schema1": {
+            "type": "string"
+          },
+          "__schema2": {
+            "type": "number"
+          },
+          "__schema3": {
+            "type": "number"
+          },
+          "__schema4": {
+            "type": "number"
+          },
+          "__schema5": {
+            "type": "number"
+          }
+        }
+      }
+    },
+    {
+      "name": "label",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "_type": {
+            "$ref": "#/$defs/__schema0"
+          },
+          "intent": {
+            "$ref": "#/$defs/__schema1"
+          },
+          "shapeId": {
+            "$ref": "#/$defs/__schema2"
+          },
+          "text": {
+            "$ref": "#/$defs/__schema3"
+          }
+        },
+        "required": [
+          "_type",
+          "intent",
+          "shapeId",
+          "text"
+        ],
+        "additionalProperties": false,
+        "title": "Label",
+        "description": "The agent changes a shape's text.",
+        "$defs": {
+          "__schema0": {
+            "type": "string",
+            "const": "label"
+          },
+          "__schema1": {
+            "type": "string"
+          },
+          "__schema2": {
+            "type": "string"
+          },
+          "__schema3": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "mark-duo-task-done",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "_type": {
+            "$ref": "#/$defs/__schema0"
+          }
+        },
+        "required": [
+          "_type"
+        ],
+        "additionalProperties": false,
+        "title": "Mark Duo Task Done",
+        "description": "The agent marks their current task as completed in a duo project. This action should be used when the agent has finished working on a task.",
+        "$defs": {
+          "__schema0": {
+            "type": "string",
+            "const": "mark-duo-task-done"
+          }
+        }
+      }
+    },
+    {
+      "name": "mark-my-task-done",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "_type": {
+            "$ref": "#/$defs/__schema0"
+          }
+        },
+        "required": [
+          "_type"
+        ],
+        "additionalProperties": false,
+        "title": "Mark Task Done",
+        "description": "The agent marks their current task as completed. This action should be used when the agent has finished working on a task.",
+        "$defs": {
+          "__schema0": {
+            "type": "string",
+            "const": "mark-my-task-done"
+          }
+        }
+      }
+    },
+    {
+      "name": "mark-task-done",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "_type": {
+            "$ref": "#/$defs/__schema0"
+          }
+        },
+        "required": [
+          "_type"
+        ],
+        "additionalProperties": false,
+        "title": "Mark Task Done",
+        "description": "The agent marks their current task as completed. This action should be used when the agent has finished working on a task.",
+        "$defs": {
+          "__schema0": {
+            "type": "string",
+            "const": "mark-task-done"
+          }
+        }
+      }
+    },
+    {
+      "name": "message",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "_type": {
+            "$ref": "#/$defs/__schema0"
+          },
+          "text": {
+            "$ref": "#/$defs/__schema1"
+          }
+        },
+        "required": [
+          "_type",
+          "text"
+        ],
+        "additionalProperties": false,
+        "title": "Message",
+        "description": "The agent sends a message to the user.",
+        "$defs": {
+          "__schema0": {
+            "type": "string",
+            "const": "message"
+          },
+          "__schema1": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "move",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "_type": {
+            "$ref": "#/$defs/__schema0"
+          },
+          "intent": {
+            "$ref": "#/$defs/__schema1"
+          },
+          "shapeId": {
+            "$ref": "#/$defs/__schema2"
+          },
+          "x": {
+            "$ref": "#/$defs/__schema3"
+          },
+          "y": {
+            "$ref": "#/$defs/__schema4"
+          },
+          "anchor": {
+            "$ref": "#/$defs/__schema5"
+          }
+        },
+        "required": [
+          "_type",
+          "intent",
+          "shapeId",
+          "x",
+          "y",
+          "anchor"
+        ],
+        "additionalProperties": false,
+        "title": "Move",
+        "description": "The agent moves a shape to a new position.",
+        "$defs": {
+          "__schema0": {
+            "type": "string",
+            "const": "move"
+          },
+          "__schema1": {
+            "type": "string"
+          },
+          "__schema2": {
+            "type": "string"
+          },
+          "__schema3": {
+            "type": "number"
+          },
+          "__schema4": {
+            "type": "number"
+          },
+          "__schema5": {
+            "type": "string",
+            "enum": [
+              "bottom-center",
+              "bottom-left",
+              "bottom-right",
+              "center-left",
+              "center-right",
+              "center",
+              "top-center",
+              "top-left",
+              "top-right"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "move-position",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "_type": {
+            "$ref": "#/$defs/__schema0"
+          },
+          "intent": {
+            "$ref": "#/$defs/__schema1"
+          },
+          "x": {
+            "$ref": "#/$defs/__schema2"
+          },
+          "y": {
+            "$ref": "#/$defs/__schema3"
+          }
+        },
+        "required": [
+          "_type",
+          "intent",
+          "x",
+          "y"
+        ],
+        "additionalProperties": false,
+        "title": "Move position",
+        "description": "The agent moves to the provided position. The viewport center will move to be centered on the position. ",
+        "$defs": {
+          "__schema0": {
+            "type": "string",
+            "const": "move-position"
+          },
+          "__schema1": {
+            "type": "string"
+          },
+          "__schema2": {
+            "type": "number"
+          },
+          "__schema3": {
+            "type": "number"
+          }
+        }
+      }
+    },
+    {
+      "name": "offset",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "_type": {
+            "$ref": "#/$defs/__schema0"
+          },
+          "intent": {
+            "$ref": "#/$defs/__schema1"
+          },
+          "shapeIds": {
+            "$ref": "#/$defs/__schema2"
+          },
+          "offsetX": {
+            "$ref": "#/$defs/__schema3"
+          },
+          "offsetY": {
+            "$ref": "#/$defs/__schema4"
+          }
+        },
+        "required": [
+          "_type",
+          "intent",
+          "shapeIds",
+          "offsetX",
+          "offsetY"
+        ],
+        "additionalProperties": false,
+        "title": "Offset",
+        "description": "The agent moves multiple shapes by the same relative offset. The offset is applied to each shape individually, moving them all by the same amount.",
+        "$defs": {
+          "__schema0": {
+            "type": "string",
+            "const": "offset"
+          },
+          "__schema1": {
+            "type": "string"
+          },
+          "__schema2": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "__schema3": {
+            "type": "number"
+          },
+          "__schema4": {
+            "type": "number"
+          }
+        }
+      }
+    },
+    {
+      "name": "pen",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "_type": {
+            "$ref": "#/$defs/__schema0"
+          },
+          "color": {
+            "$ref": "#/$defs/__schema1"
+          },
+          "closed": {
+            "$ref": "#/$defs/__schema2"
+          },
+          "fill": {
+            "$ref": "#/$defs/__schema3"
+          },
+          "intent": {
+            "$ref": "#/$defs/__schema4"
+          },
+          "points": {
+            "$ref": "#/$defs/__schema5"
+          },
+          "shapeId": {
+            "$ref": "#/$defs/__schema6"
+          },
+          "style": {
+            "$ref": "#/$defs/__schema7"
+          }
+        },
+        "required": [
+          "_type",
+          "color",
+          "closed",
+          "fill",
+          "intent",
+          "points",
+          "shapeId",
+          "style"
+        ],
+        "additionalProperties": false,
+        "title": "Pen",
+        "description": "The agent draws a freeform line with a pen. This is useful for drawing custom paths that are not available with the other available shapes. The \"smooth\" style will automatically smooth the line between points. The \"straight\" style will render a straight line between points. The \"closed\" property will determine if the drawn line gets automatically closed to form a complete shape or not. Remember that the pen will be *down* until the action is over. If you want to lift up the pen, start a new pen action.",
+        "$defs": {
+          "__schema0": {
+            "type": "string",
+            "const": "pen"
+          },
+          "__schema1": {
+            "type": "string",
+            "enum": [
+              "red",
+              "light-red",
+              "green",
+              "light-green",
+              "blue",
+              "light-blue",
+              "orange",
+              "yellow",
+              "black",
+              "violet",
+              "light-violet",
+              "grey",
+              "white"
+            ]
+          },
+          "__schema2": {
+            "type": "boolean"
+          },
+          "__schema3": {
+            "type": "string",
+            "enum": [
+              "none",
+              "tint",
+              "background",
+              "solid",
+              "pattern"
+            ]
+          },
+          "__schema4": {
+            "type": "string"
+          },
+          "__schema5": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "x": {
+                  "type": "number"
+                },
+                "y": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "x",
+                "y"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "__schema6": {
+            "type": "string"
+          },
+          "__schema7": {
+            "type": "string",
+            "enum": [
+              "smooth",
+              "straight"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "place",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "_type": {
+            "$ref": "#/$defs/__schema0"
+          },
+          "align": {
+            "$ref": "#/$defs/__schema1"
+          },
+          "alignOffset": {
+            "$ref": "#/$defs/__schema2"
+          },
+          "intent": {
+            "$ref": "#/$defs/__schema3"
+          },
+          "referenceShapeId": {
+            "$ref": "#/$defs/__schema4"
+          },
+          "side": {
+            "$ref": "#/$defs/__schema5"
+          },
+          "sideOffset": {
+            "$ref": "#/$defs/__schema6"
+          },
+          "shapeId": {
+            "$ref": "#/$defs/__schema4"
+          }
+        },
+        "required": [
+          "_type",
+          "align",
+          "alignOffset",
+          "intent",
+          "referenceShapeId",
+          "side",
+          "sideOffset",
+          "shapeId"
+        ],
+        "additionalProperties": false,
+        "title": "Place",
+        "description": "The agent places a shape relative to another shape.",
+        "$defs": {
+          "__schema0": {
+            "type": "string",
+            "const": "place"
+          },
+          "__schema1": {
+            "type": "string",
+            "enum": [
+              "start",
+              "center",
+              "end"
+            ]
+          },
+          "__schema2": {
+            "type": "number"
+          },
+          "__schema3": {
+            "type": "string"
+          },
+          "__schema4": {
+            "type": "string"
+          },
+          "__schema5": {
+            "type": "string",
+            "enum": [
+              "top",
+              "bottom",
+              "left",
+              "right"
+            ]
+          },
+          "__schema6": {
+            "type": "number"
+          }
+        }
+      }
+    },
+    {
+      "name": "resize",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "_type": {
+            "$ref": "#/$defs/__schema0"
+          },
+          "intent": {
+            "$ref": "#/$defs/__schema1"
+          },
+          "originX": {
+            "$ref": "#/$defs/__schema2"
+          },
+          "originY": {
+            "$ref": "#/$defs/__schema3"
+          },
+          "scaleX": {
+            "$ref": "#/$defs/__schema4"
+          },
+          "scaleY": {
+            "$ref": "#/$defs/__schema5"
+          },
+          "shapeIds": {
+            "$ref": "#/$defs/__schema6"
+          }
+        },
+        "required": [
+          "_type",
+          "intent",
+          "originX",
+          "originY",
+          "scaleX",
+          "scaleY",
+          "shapeIds"
+        ],
+        "additionalProperties": false,
+        "title": "Resize",
+        "description": "The agent resizes one or more shapes, with the resize operation being performed relative to an origin point.",
+        "$defs": {
+          "__schema0": {
+            "type": "string",
+            "const": "resize"
+          },
+          "__schema1": {
+            "type": "string"
+          },
+          "__schema2": {
+            "type": "number"
+          },
+          "__schema3": {
+            "type": "number"
+          },
+          "__schema4": {
+            "type": "number"
+          },
+          "__schema5": {
+            "type": "number"
+          },
+          "__schema6": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "review",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "_type": {
+            "$ref": "#/$defs/__schema0"
+          },
+          "intent": {
+            "$ref": "#/$defs/__schema1"
+          },
+          "x": {
+            "$ref": "#/$defs/__schema2"
+          },
+          "y": {
+            "$ref": "#/$defs/__schema3"
+          },
+          "w": {
+            "$ref": "#/$defs/__schema4"
+          },
+          "h": {
+            "$ref": "#/$defs/__schema5"
+          }
+        },
+        "required": [
+          "_type",
+          "intent",
+          "x",
+          "y",
+          "w",
+          "h"
+        ],
+        "additionalProperties": false,
+        "title": "Review",
+        "description": "The agent schedules further work or a review so that it can look at the results of its work so far and take further action, such as reviewing what it has done or taking further steps that would benefit from seeing the results of its work so far.",
+        "$defs": {
+          "__schema0": {
+            "type": "string",
+            "const": "review"
+          },
+          "__schema1": {
+            "type": "string"
+          },
+          "__schema2": {
+            "type": "number"
+          },
+          "__schema3": {
+            "type": "number"
+          },
+          "__schema4": {
+            "type": "number"
+          },
+          "__schema5": {
+            "type": "number"
+          }
+        }
+      }
+    },
+    {
+      "name": "rotate",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "_type": {
+            "$ref": "#/$defs/__schema0"
+          },
+          "centerY": {
+            "$ref": "#/$defs/__schema1"
+          },
+          "degrees": {
+            "$ref": "#/$defs/__schema2"
+          },
+          "intent": {
+            "$ref": "#/$defs/__schema3"
+          },
+          "originX": {
+            "$ref": "#/$defs/__schema4"
+          },
+          "originY": {
+            "$ref": "#/$defs/__schema5"
+          },
+          "shapeIds": {
+            "$ref": "#/$defs/__schema6"
+          }
+        },
+        "required": [
+          "_type",
+          "centerY",
+          "degrees",
+          "intent",
+          "originX",
+          "originY",
+          "shapeIds"
+        ],
+        "additionalProperties": false,
+        "title": "Rotate",
+        "description": "The agent rotates one or more shapes around an origin point.",
+        "$defs": {
+          "__schema0": {
+            "type": "string",
+            "const": "rotate"
+          },
+          "__schema1": {
+            "type": "number"
+          },
+          "__schema2": {
+            "type": "number"
+          },
+          "__schema3": {
+            "type": "string"
+          },
+          "__schema4": {
+            "type": "number"
+          },
+          "__schema5": {
+            "type": "number"
+          },
+          "__schema6": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "send-to-back",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "_type": {
+            "$ref": "#/$defs/__schema0"
+          },
+          "intent": {
+            "$ref": "#/$defs/__schema1"
+          },
+          "shapeIds": {
+            "$ref": "#/$defs/__schema2"
+          }
+        },
+        "required": [
+          "_type",
+          "intent",
+          "shapeIds"
+        ],
+        "additionalProperties": false,
+        "title": "Send to Back",
+        "description": "The agent sends one or more shapes to the back so that they appear behind everything else.",
+        "$defs": {
+          "__schema0": {
+            "type": "string",
+            "const": "send-to-back"
+          },
+          "__schema1": {
+            "type": "string"
+          },
+          "__schema2": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "stack",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "_type": {
+            "$ref": "#/$defs/__schema0"
+          },
+          "direction": {
+            "$ref": "#/$defs/__schema1"
+          },
+          "gap": {
+            "$ref": "#/$defs/__schema2"
+          },
+          "intent": {
+            "$ref": "#/$defs/__schema3"
+          },
+          "shapeIds": {
+            "$ref": "#/$defs/__schema4"
+          }
+        },
+        "required": [
+          "_type",
+          "direction",
+          "gap",
+          "intent",
+          "shapeIds"
+        ],
+        "additionalProperties": false,
+        "title": "Stack",
+        "description": "The agent stacks shapes horizontally or vertically. Note that this doesn't align shapes, it only stacks them along one axis.",
+        "$defs": {
+          "__schema0": {
+            "type": "string",
+            "const": "stack"
+          },
+          "__schema1": {
+            "type": "string",
+            "enum": [
+              "vertical",
+              "horizontal"
+            ]
+          },
+          "__schema2": {
+            "type": "number"
+          },
+          "__schema3": {
+            "type": "string"
+          },
+          "__schema4": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "start-duo-project",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "_type": {
+            "$ref": "#/$defs/__schema0"
+          },
+          "projectName": {
+            "$ref": "#/$defs/__schema1"
+          },
+          "projectDescription": {
+            "$ref": "#/$defs/__schema2"
+          },
+          "projectColor": {
+            "$ref": "#/$defs/__schema3"
+          },
+          "projectPlan": {
+            "$ref": "#/$defs/__schema4"
+          }
+        },
+        "required": [
+          "_type",
+          "projectName",
+          "projectDescription",
+          "projectColor",
+          "projectPlan"
+        ],
+        "additionalProperties": false,
+        "title": "Start Duo Project",
+        "description": "The agent starts and defines a new duo project (a project with exactly two fairies).",
+        "$defs": {
+          "__schema0": {
+            "type": "string",
+            "const": "start-duo-project"
+          },
+          "__schema1": {
+            "type": "string"
+          },
+          "__schema2": {
+            "type": "string"
+          },
+          "__schema3": {
+            "type": "string",
+            "enum": [
+              "red",
+              "light-red",
+              "orange",
+              "yellow",
+              "green",
+              "blue",
+              "light-violet",
+              "violet"
+            ]
+          },
+          "__schema4": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "start-duo-task",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "_type": {
+            "$ref": "#/$defs/__schema0"
+          },
+          "taskId": {
+            "$ref": "#/$defs/__schema1"
+          }
+        },
+        "required": [
+          "_type",
+          "taskId"
+        ],
+        "additionalProperties": false,
+        "title": "Start Duo Task",
+        "description": "The agent begins working on a task themselves in a duo project. This action immediately gives the agent the abilities required to complete the task, such as the ability to manipulate the canvas. Upon performing this action, the agent will immediately receive instructions on how to use those abilities.",
+        "$defs": {
+          "__schema0": {
+            "type": "string",
+            "const": "start-duo-task"
+          },
+          "__schema1": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "start-project",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "_type": {
+            "$ref": "#/$defs/__schema0"
+          },
+          "projectName": {
+            "$ref": "#/$defs/__schema1"
+          },
+          "projectDescription": {
+            "$ref": "#/$defs/__schema2"
+          },
+          "projectColor": {
+            "$ref": "#/$defs/__schema3"
+          },
+          "projectPlan": {
+            "$ref": "#/$defs/__schema4"
+          }
+        },
+        "required": [
+          "_type",
+          "projectName",
+          "projectDescription",
+          "projectColor",
+          "projectPlan"
+        ],
+        "additionalProperties": false,
+        "title": "Start Project",
+        "description": "The agent starts and defines a new project.",
+        "$defs": {
+          "__schema0": {
+            "type": "string",
+            "const": "start-project"
+          },
+          "__schema1": {
+            "type": "string"
+          },
+          "__schema2": {
+            "type": "string"
+          },
+          "__schema3": {
+            "type": "string",
+            "enum": [
+              "red",
+              "light-red",
+              "orange",
+              "yellow",
+              "green",
+              "blue",
+              "light-violet",
+              "violet"
+            ]
+          },
+          "__schema4": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "start-task",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "_type": {
+            "$ref": "#/$defs/__schema0"
+          },
+          "taskId": {
+            "$ref": "#/$defs/__schema1"
+          }
+        },
+        "required": [
+          "_type",
+          "taskId"
+        ],
+        "additionalProperties": false,
+        "title": "Start Task",
+        "description": "The agent begins working on a task. This action immediately gives the agent the abilities required to complete the task, such as the ability to manipulate the canvas. Upon performing this action, the agent will immediately receive instructions on how to use those abilities.",
+        "$defs": {
+          "__schema0": {
+            "type": "string",
+            "const": "start-task"
+          },
+          "__schema1": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "think",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "_type": {
+            "$ref": "#/$defs/__schema0"
+          },
+          "text": {
+            "$ref": "#/$defs/__schema1"
+          }
+        },
+        "required": [
+          "_type",
+          "text"
+        ],
+        "additionalProperties": false,
+        "title": "Think",
+        "description": "The agent describes its intent or reasoning.",
+        "$defs": {
+          "__schema0": {
+            "type": "string",
+            "const": "think"
+          },
+          "__schema1": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "update",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "_type": {
+            "$ref": "#/$defs/__schema0"
+          },
+          "intent": {
+            "$ref": "#/$defs/__schema1"
+          },
+          "update": {
+            "$ref": "#/$defs/__schema2"
+          }
+        },
+        "required": [
+          "_type",
+          "intent",
+          "update"
+        ],
+        "additionalProperties": false,
+        "title": "Update",
+        "description": "The agent updates an existing shape.",
+        "$defs": {
+          "__schema0": {
+            "type": "string",
+            "const": "update"
+          },
+          "__schema1": {
+            "type": "string"
+          },
+          "__schema2": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "_type": {
+                    "$ref": "#/$defs/__schema3"
+                  },
+                  "color": {
+                    "$ref": "#/$defs/__schema4"
+                  },
+                  "fill": {
+                    "$ref": "#/$defs/__schema5"
+                  },
+                  "note": {
+                    "$ref": "#/$defs/__schema7"
+                  },
+                  "shapeId": {
+                    "$ref": "#/$defs/__schema8"
+                  }
+                },
+                "required": [
+                  "_type",
+                  "color",
+                  "note",
+                  "shapeId"
+                ],
+                "additionalProperties": false,
+                "title": "Draw Shape",
+                "description": "A draw shape is a freeform shape that was drawn by the pen tool. IMPORTANT: Do not create draw shapes with the \"create\" action. To create new draw shapes, the AI must use the pen event because it gives more control."
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "_type": {
+                    "type": "string",
+                    "enum": [
+                      "rectangle",
+                      "ellipse",
+                      "triangle",
+                      "diamond",
+                      "hexagon",
+                      "pill",
+                      "cloud",
+                      "x-box",
+                      "check-box",
+                      "heart",
+                      "pentagon",
+                      "octagon",
+                      "star",
+                      "parallelogram-right",
+                      "parallelogram-left",
+                      "trapezoid",
+                      "fat-arrow-right",
+                      "fat-arrow-left",
+                      "fat-arrow-up",
+                      "fat-arrow-down"
+                    ]
+                  },
+                  "color": {
+                    "$ref": "#/$defs/__schema4"
+                  },
+                  "fill": {
+                    "$ref": "#/$defs/__schema6"
+                  },
+                  "h": {
+                    "type": "number"
+                  },
+                  "note": {
+                    "type": "string"
+                  },
+                  "shapeId": {
+                    "$ref": "#/$defs/__schema8"
+                  },
+                  "text": {
+                    "type": "string"
+                  },
+                  "textAlign": {
+                    "type": "string",
+                    "enum": [
+                      "start",
+                      "middle",
+                      "end"
+                    ]
+                  },
+                  "w": {
+                    "type": "number"
+                  },
+                  "x": {
+                    "type": "number"
+                  },
+                  "y": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "_type",
+                  "color",
+                  "fill",
+                  "h",
+                  "note",
+                  "shapeId",
+                  "w",
+                  "x",
+                  "y"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "_type": {
+                    "type": "string",
+                    "const": "line"
+                  },
+                  "color": {
+                    "$ref": "#/$defs/__schema4"
+                  },
+                  "note": {
+                    "type": "string"
+                  },
+                  "shapeId": {
+                    "$ref": "#/$defs/__schema8"
+                  },
+                  "x1": {
+                    "type": "number"
+                  },
+                  "x2": {
+                    "type": "number"
+                  },
+                  "y1": {
+                    "type": "number"
+                  },
+                  "y2": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "_type",
+                  "color",
+                  "note",
+                  "shapeId",
+                  "x1",
+                  "x2",
+                  "y1",
+                  "y2"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "_type": {
+                    "$ref": "#/$defs/__schema9"
+                  },
+                  "anchor": {
+                    "$ref": "#/$defs/__schema10"
+                  },
+                  "color": {
+                    "$ref": "#/$defs/__schema4"
+                  },
+                  "fontSize": {
+                    "$ref": "#/$defs/__schema11"
+                  },
+                  "maxWidth": {
+                    "$ref": "#/$defs/__schema12"
+                  },
+                  "note": {
+                    "$ref": "#/$defs/__schema13"
+                  },
+                  "shapeId": {
+                    "$ref": "#/$defs/__schema8"
+                  },
+                  "text": {
+                    "$ref": "#/$defs/__schema14"
+                  },
+                  "x": {
+                    "$ref": "#/$defs/__schema15"
+                  },
+                  "y": {
+                    "$ref": "#/$defs/__schema16"
+                  }
+                },
+                "required": [
+                  "_type",
+                  "anchor",
+                  "color",
+                  "maxWidth",
+                  "note",
+                  "shapeId",
+                  "text",
+                  "x",
+                  "y"
+                ],
+                "additionalProperties": false,
+                "title": "Text Shape",
+                "description": "A text shape is a shape that contains text. The `anchor` property indicates how the text shape is positioned and aligned. For example, the \"top-left\" anchor means the text shape's x and y coordinates are the top left corner of the text shape, and the text gets left aligned. A shape with the \"bottom-center\" anchor means the text shape's x and y coordinates are the bottom center of the text shape, and the text gets center aligned on the horizontal axis. By default, text shapes auto-size to fit their content. If you provide a `maxWidth`, the text will automatically wrap to the next line if it exceeds that width (there is no need to add manual line breaks for word wrapping)."
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "_type": {
+                    "type": "string",
+                    "const": "arrow"
+                  },
+                  "color": {
+                    "$ref": "#/$defs/__schema4"
+                  },
+                  "fromId": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/__schema8"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "note": {
+                    "type": "string"
+                  },
+                  "shapeId": {
+                    "$ref": "#/$defs/__schema8"
+                  },
+                  "text": {
+                    "type": "string"
+                  },
+                  "toId": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/__schema8"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "x1": {
+                    "type": "number"
+                  },
+                  "x2": {
+                    "type": "number"
+                  },
+                  "y1": {
+                    "type": "number"
+                  },
+                  "y2": {
+                    "type": "number"
+                  },
+                  "bend": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "_type",
+                  "color",
+                  "fromId",
+                  "note",
+                  "shapeId",
+                  "toId",
+                  "x1",
+                  "x2",
+                  "y1",
+                  "y2"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "_type": {
+                    "type": "string",
+                    "const": "note"
+                  },
+                  "color": {
+                    "$ref": "#/$defs/__schema4"
+                  },
+                  "note": {
+                    "type": "string"
+                  },
+                  "shapeId": {
+                    "$ref": "#/$defs/__schema8"
+                  },
+                  "text": {
+                    "type": "string"
+                  },
+                  "x": {
+                    "type": "number"
+                  },
+                  "y": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "_type",
+                  "color",
+                  "note",
+                  "shapeId",
+                  "x",
+                  "y"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "_type": {
+                    "type": "string",
+                    "const": "image"
+                  },
+                  "altText": {
+                    "type": "string"
+                  },
+                  "h": {
+                    "type": "number"
+                  },
+                  "note": {
+                    "type": "string"
+                  },
+                  "shapeId": {
+                    "$ref": "#/$defs/__schema8"
+                  },
+                  "w": {
+                    "type": "number"
+                  },
+                  "x": {
+                    "type": "number"
+                  },
+                  "y": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "_type",
+                  "altText",
+                  "h",
+                  "note",
+                  "shapeId",
+                  "w",
+                  "x",
+                  "y"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "_type": {
+                    "$ref": "#/$defs/__schema17"
+                  },
+                  "note": {
+                    "$ref": "#/$defs/__schema18"
+                  },
+                  "shapeId": {
+                    "$ref": "#/$defs/__schema8"
+                  },
+                  "subType": {
+                    "$ref": "#/$defs/__schema19"
+                  },
+                  "x": {
+                    "$ref": "#/$defs/__schema20"
+                  },
+                  "y": {
+                    "$ref": "#/$defs/__schema21"
+                  }
+                },
+                "required": [
+                  "_type",
+                  "note",
+                  "shapeId",
+                  "subType",
+                  "x",
+                  "y"
+                ],
+                "additionalProperties": false,
+                "title": "Unknown Shape",
+                "description": "A special shape that is not represented by one of the canvas's core shape types. The AI cannot create these shapes, but it *can* interact with them. eg: The AI can move these shapes. The `subType` property contains the internal name of the shape's type."
+              }
+            ]
+          },
+          "__schema3": {
+            "type": "string",
+            "const": "pen"
+          },
+          "__schema4": {
+            "type": "string",
+            "enum": [
+              "red",
+              "light-red",
+              "green",
+              "light-green",
+              "blue",
+              "light-blue",
+              "orange",
+              "yellow",
+              "black",
+              "violet",
+              "light-violet",
+              "grey",
+              "white"
+            ]
+          },
+          "__schema5": {
+            "$ref": "#/$defs/__schema6"
+          },
+          "__schema6": {
+            "type": "string",
+            "enum": [
+              "none",
+              "tint",
+              "background",
+              "solid",
+              "pattern"
+            ]
+          },
+          "__schema7": {
+            "type": "string"
+          },
+          "__schema8": {
+            "type": "string"
+          },
+          "__schema9": {
+            "type": "string",
+            "const": "text"
+          },
+          "__schema10": {
+            "type": "string",
+            "enum": [
+              "bottom-center",
+              "bottom-left",
+              "bottom-right",
+              "center-left",
+              "center-right",
+              "center",
+              "top-center",
+              "top-left",
+              "top-right"
+            ]
+          },
+          "__schema11": {
+            "type": "number"
+          },
+          "__schema12": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "__schema13": {
+            "type": "string"
+          },
+          "__schema14": {
+            "type": "string"
+          },
+          "__schema15": {
+            "type": "number"
+          },
+          "__schema16": {
+            "type": "number"
+          },
+          "__schema17": {
+            "type": "string",
+            "const": "unknown"
+          },
+          "__schema18": {
+            "type": "string"
+          },
+          "__schema19": {
+            "type": "string"
+          },
+          "__schema20": {
+            "type": "number"
+          },
+          "__schema21": {
+            "type": "number"
+          }
+        }
+      }
+    },
+    {
+      "name": "upsert-personal-todo-item",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "_type": {
+            "$ref": "#/$defs/__schema0"
+          },
+          "id": {
+            "$ref": "#/$defs/__schema1"
+          },
+          "status": {
+            "$ref": "#/$defs/__schema2"
+          },
+          "text": {
+            "$ref": "#/$defs/__schema3"
+          }
+        },
+        "required": [
+          "_type",
+          "id",
+          "status"
+        ],
+        "additionalProperties": false,
+        "title": "Upsert Personal Todo Item",
+        "description": "The agent updates or creates a new personal todo list item. If the id is provided, the todo item is updated. If the id is not provided and text is provided, a new todo item is created and its status is set to \"todo\".",
+        "$defs": {
+          "__schema0": {
+            "type": "string",
+            "const": "upsert-personal-todo-item"
+          },
+          "__schema1": {
+            "type": "string"
+          },
+          "__schema2": {
+            "type": "string",
+            "enum": [
+              "todo",
+              "in-progress",
+              "done"
+            ]
+          },
+          "__schema3": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  ]
+}

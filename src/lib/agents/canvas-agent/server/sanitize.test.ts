@@ -3,9 +3,19 @@ jest.mock('nanoid', () => ({ customAlphabet: () => () => 'mockid' }));
 
 import { sanitizeActions } from './sanitize';
 import type { AgentAction } from '@/lib/canvas-agent/contract/types';
+import { CLEAR_ALL_SHAPES_SENTINEL } from '@/lib/canvas-agent/contract/teacher-bridge';
 
 describe('Canvas Agent Sanitizer', () => {
-  const mockExists = (id: string) => id.startsWith('shape:');
+  const existingShapeIds = new Set(['shape:123', 'shape:1', 'shape:2']);
+  const mockExists = (id: string) => {
+    const trimmed = typeof id === 'string' ? id.trim() : '';
+    if (!trimmed) return false;
+    if (existingShapeIds.has(trimmed)) return true;
+    if (trimmed.startsWith('shape:')) {
+      return existingShapeIds.has(trimmed.slice('shape:'.length));
+    }
+    return existingShapeIds.has(`shape:${trimmed}`);
+  };
 
   it('should generate IDs for create_shape without id', () => {
     const actions: AgentAction[] = [
@@ -32,13 +42,41 @@ describe('Canvas Agent Sanitizer', () => {
     expect(result).toHaveLength(1);
   });
 
+  it('drops missing update_shape targets without semantic promotion', () => {
+    const actions: AgentAction[] = [
+      {
+        id: 'a1',
+        name: 'update_shape',
+        params: { id: 'forest-ground', props: { x: -240, y: 170, w: 500, h: 8, color: 'green', fill: 'solid' } },
+      },
+    ];
+    const result = sanitizeActions(actions, mockExists);
+    expect(result).toHaveLength(0);
+  });
+
+  it('reports dropped missing update targets via callback', () => {
+    const actions: AgentAction[] = [
+      {
+        id: 'a1',
+        name: 'update_shape',
+        params: { id: 'forest-ground', props: { x: -240, y: 170, w: 500, h: 8 } },
+      },
+    ];
+    const droppedIds: string[] = [];
+    const result = sanitizeActions(actions, mockExists, {
+      onMissingUpdateTargetDropped: (shapeId) => droppedIds.push(shapeId),
+    });
+    expect(result).toHaveLength(0);
+    expect(droppedIds).toEqual(['forest-ground']);
+  });
+
   it('should filter delete_shape ids to existing only', () => {
     const actions: AgentAction[] = [
       { id: 'a1', name: 'delete_shape', params: { ids: ['shape:1', 'nonexistent', 'shape:2'] } },
     ];
     const result = sanitizeActions(actions, mockExists);
     expect(result).toHaveLength(1);
-    expect((result[0].params as any).ids).toEqual(['shape:1', 'shape:2']);
+    expect((result[0].params as any).ids).toEqual(['1', '2']);
   });
 
   it('should drop delete_shape with no valid ids', () => {
@@ -162,5 +200,16 @@ describe('Canvas Agent Sanitizer', () => {
     ];
     const result = sanitizeActions(actions, mockExists);
     expect(result).toHaveLength(3);
+  });
+
+  it('expands teacher clear sentinel to known shape ids', () => {
+    const actions: AgentAction[] = [
+      { id: 'a1', name: 'delete_shape', params: { ids: [CLEAR_ALL_SHAPES_SENTINEL] } },
+    ];
+    const result = sanitizeActions(actions, mockExists, {
+      knownShapeIds: ['shape:1', 'shape:2'],
+    });
+    expect(result).toHaveLength(1);
+    expect((result[0].params as any).ids).toEqual(['1', '2']);
   });
 });

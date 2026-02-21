@@ -1,6 +1,7 @@
-import type { Editor } from '@tldraw/tldraw';
+import { PageRecordType, type Editor } from '@tldraw/tldraw';
 import { toRichText } from '@tldraw/tldraw';
 import { ACTION_VERSION, type AgentAction, type AgentActionEnvelope } from '@/lib/canvas-agent/contract/types';
+import { sanitizeShapeProps } from '@/lib/canvas-agent/contract/shape-utils';
 
 type ApplyContext = {
   editor: Editor;
@@ -21,6 +22,9 @@ const fallbackNumber = (value: unknown, fallback = 0) => (typeof value === 'numb
 
 type ShapeSnapshot = { id: string; type: string; x: number; y: number; w: number; h: number };
 
+type AlignMode = 'start' | 'center' | 'end';
+type SideMode = 'top' | 'bottom' | 'left' | 'right';
+
 function getShapeSnapshot(editor: Editor, shapeId: string): ShapeSnapshot | null {
   const shape = editor.getShape?.(shapeId as any) as any;
   if (!shape) return null;
@@ -35,6 +39,111 @@ function getShapeSnapshot(editor: Editor, shapeId: string): ShapeSnapshot | null
     h: h > 0 ? h : 0,
   };
 }
+
+const toFiniteNumber = (value: unknown): number | null => {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  return null;
+};
+
+const scaleLinePointsRecord = (
+  rawPoints: unknown,
+  scaleX: number,
+  scaleY: number,
+): Record<string, { id: string; index: string; x: number; y: number }> | null => {
+  if (!rawPoints || typeof rawPoints !== 'object' || Array.isArray(rawPoints)) return null;
+  const record = rawPoints as Record<string, unknown>;
+  const keys = Object.keys(record);
+  if (keys.length === 0) return null;
+
+  const scaled: Record<string, { id: string; index: string; x: number; y: number }> = {};
+  for (const key of keys) {
+    const point = record[key];
+    if (!point || typeof point !== 'object' || Array.isArray(point)) continue;
+    const pointRecord = point as Record<string, unknown>;
+    const x = toFiniteNumber(pointRecord.x);
+    const y = toFiniteNumber(pointRecord.y);
+    if (x === null || y === null) continue;
+    const id = typeof pointRecord.id === 'string' && pointRecord.id.trim() ? pointRecord.id.trim() : key;
+    const index =
+      typeof pointRecord.index === 'string' && pointRecord.index.trim() ? pointRecord.index.trim() : id;
+    scaled[key] = {
+      id,
+      index,
+      x: x * scaleX,
+      y: y * scaleY,
+    };
+  }
+
+  return Object.keys(scaled).length > 0 ? scaled : null;
+};
+
+const scaleArrowTerminalPoint = (
+  point: unknown,
+  scaleX: number,
+  scaleY: number,
+): { x: number; y: number } | null => {
+  if (!point || typeof point !== 'object' || Array.isArray(point)) return null;
+  const record = point as Record<string, unknown>;
+  const x = toFiniteNumber(record.x);
+  const y = toFiniteNumber(record.y);
+  if (x === null || y === null) return null;
+  return { x: x * scaleX, y: y * scaleY };
+};
+
+const scaleDrawSegments = (segments: unknown, scaleX: number, scaleY: number): unknown => {
+  if (!Array.isArray(segments)) return segments;
+  return segments.map((segment) => {
+    if (!segment || typeof segment !== 'object' || Array.isArray(segment)) return segment;
+    const segmentRecord = segment as Record<string, unknown>;
+    const points = Array.isArray(segmentRecord.points)
+      ? segmentRecord.points.map((point) => {
+          if (!point || typeof point !== 'object' || Array.isArray(point)) return point;
+          const pointRecord = point as Record<string, unknown>;
+          const x = toFiniteNumber(pointRecord.x);
+          const y = toFiniteNumber(pointRecord.y);
+          if (x === null || y === null) return point;
+          return {
+            ...pointRecord,
+            x: x * scaleX,
+            y: y * scaleY,
+          };
+        })
+      : segmentRecord.points;
+    return {
+      ...segmentRecord,
+      points,
+    };
+  });
+};
+
+const resolvePlacedOrigin = (params: {
+  shape: ShapeSnapshot;
+  reference: ShapeSnapshot;
+  side: SideMode;
+  align: AlignMode;
+  sideOffset: number;
+  alignOffset: number;
+}): { x: number; y: number } => {
+  const { shape, reference, side, align, sideOffset, alignOffset } = params;
+
+  if (side === 'top' || side === 'bottom') {
+    const y = side === 'top'
+      ? reference.y - sideOffset - shape.h
+      : reference.y + reference.h + sideOffset;
+    let x = reference.x;
+    if (align === 'center') x = reference.x + (reference.w - shape.w) / 2;
+    if (align === 'end') x = reference.x + reference.w - shape.w;
+    return { x: x + alignOffset, y };
+  }
+
+  const x = side === 'left'
+    ? reference.x - sideOffset - shape.w
+    : reference.x + reference.w + sideOffset;
+  let y = reference.y;
+  if (align === 'center') y = reference.y + (reference.h - shape.h) / 2;
+  if (align === 'end') y = reference.y + reference.h - shape.h;
+  return { x, y: y + alignOffset };
+};
 
 function alignShapes(editor: Editor, ids: string[], axis: 'x' | 'y', mode: 'start' | 'center' | 'end', collect: BatchCollector) {
   const snapshots = ids
@@ -210,13 +319,60 @@ function normalizeCreate(shape: {
   y1?: number;
   x2?: number;
   y2?: number;
+  startPoint?: unknown;
+  endPoint?: unknown;
+  points?: unknown;
   props?: Record<string, unknown>;
 }) {
   const id = withPrefix(shape.id || `ag_${Date.now().toString(36)}`);
   const rawType = String(shape.type || '').toLowerCase();
   const props: Record<string, unknown> = { ...(shape.props || {}) };
+  if (shape.startPoint !== undefined && props.startPoint === undefined) {
+    props.startPoint = shape.startPoint;
+  }
+  if (shape.endPoint !== undefined && props.endPoint === undefined) {
+    props.endPoint = shape.endPoint;
+  }
+  if (shape.points !== undefined && props.points === undefined) {
+    props.points = shape.points;
+  }
   const x = typeof shape.x === 'number' ? shape.x : undefined;
   const y = typeof shape.y === 'number' ? shape.y : undefined;
+  const toFinite = (value: unknown): number | undefined =>
+    typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+  const tupleFromPoint = (value: unknown): [number, number] | null => {
+    if (Array.isArray(value) && value.length >= 2) {
+      const px = toFinite(value[0]);
+      const py = toFinite(value[1]);
+      if (px !== undefined && py !== undefined) return [px, py];
+      return null;
+    }
+    if (!value || typeof value !== 'object') return null;
+    const point = value as Record<string, unknown>;
+    const px = toFinite(point.x);
+    const py = toFinite(point.y);
+    if (px === undefined || py === undefined) return null;
+    return [px, py];
+  };
+  const coerceLinePoints = (value: unknown): [number, number][] => {
+    if (Array.isArray(value)) {
+      const tuples = value.map(tupleFromPoint).filter((point): point is [number, number] => Boolean(point));
+      return tuples.length >= 2 ? tuples : [];
+    }
+    if (!value || typeof value !== 'object') return [];
+    const tuples = Object.values(value)
+      .map((point) => tupleFromPoint(point))
+      .filter((point): point is [number, number] => Boolean(point));
+    return tuples.length >= 2 ? tuples : [];
+  };
+  const toLinePointsRecord = (points: [number, number][]) => {
+    const record: Record<string, { id: string; index: string; x: number; y: number }> = {};
+    points.forEach((point, idx) => {
+      const pointId = `a${idx + 1}`;
+      record[pointId] = { id: pointId, index: pointId, x: point[0], y: point[1] };
+    });
+    return record;
+  };
 
   const geoKinds = new Set(['rectangle', 'ellipse', 'triangle', 'diamond', 'rhombus', 'hexagon', 'star']);
   if (geoKinds.has(rawType)) {
@@ -225,10 +381,67 @@ function normalizeCreate(shape: {
     if ('content' in props) delete (props as any).content;
     return { id, type: 'geo', x, y, props: { ...props, geo: rawType } };
   }
-  if (rawType === 'note' || rawType === 'text') {
+  if (rawType === 'note') {
+    const nextProps = { ...props };
+    if ('text' in nextProps) delete (nextProps as any).text;
+    return { id, type: 'note', x, y, props: nextProps };
+  }
+  if (rawType === 'text') {
     const nextProps = { ...props };
     if ('text' in nextProps) delete (nextProps as any).text;
     return { id, type: 'text', x, y, props: nextProps };
+  }
+  if (rawType === 'line') {
+    const nextProps = { ...props } as Record<string, unknown>;
+    const explicitPoints = coerceLinePoints((nextProps as any).points);
+    let points = explicitPoints;
+    let normalizedX = x;
+    let normalizedY = y;
+    const hasOrigin = normalizedX !== undefined && normalizedY !== undefined;
+
+    const maybeRebasePoints = (sourcePoints: [number, number][]) => {
+      if (sourcePoints.length < 2) return sourcePoints;
+      if (hasOrigin) {
+        const [firstX, firstY] = sourcePoints[0];
+        const originMatchesFirstPoint =
+          Math.abs(firstX - Number(normalizedX)) < 0.001 &&
+          Math.abs(firstY - Number(normalizedY)) < 0.001;
+        if (originMatchesFirstPoint) {
+          return sourcePoints.map((point) => [point[0] - Number(normalizedX), point[1] - Number(normalizedY)] as [number, number]);
+        }
+        return sourcePoints;
+      }
+      const minX = Math.min(...sourcePoints.map((point) => point[0]));
+      const minY = Math.min(...sourcePoints.map((point) => point[1]));
+      normalizedX = minX;
+      normalizedY = minY;
+      return sourcePoints.map((point) => [point[0] - minX, point[1] - minY] as [number, number]);
+    };
+
+    if (points.length >= 2) {
+      points = maybeRebasePoints(points);
+    }
+
+    if (points.length < 2) {
+      const explicitStart = tupleFromPoint((nextProps as any).startPoint);
+      const explicitEnd =
+        tupleFromPoint((nextProps as any).endPoint) ??
+        tupleFromPoint((nextProps as any).end) ??
+        null;
+      const start = explicitStart ?? [0, 0];
+      const end = explicitEnd ?? [100, 0];
+      points = maybeRebasePoints([start, end]);
+    }
+    delete (nextProps as any).startPoint;
+    delete (nextProps as any).endPoint;
+    nextProps.points = toLinePointsRecord(points);
+    const allowedLineProps = new Set(['color', 'dash', 'size', 'spline', 'scale', 'points']);
+    for (const key of Object.keys(nextProps)) {
+      if (!allowedLineProps.has(key)) {
+        delete nextProps[key];
+      }
+    }
+    return { id, type: 'line', x: normalizedX, y: normalizedY, props: nextProps };
   }
 	  if (rawType === 'arrow') {
 	    if ('text' in props) delete (props as any).text;
@@ -351,8 +564,8 @@ export function applyAction(ctx: ApplyContext, action: AgentAction, batch?: Batc
 
   switch (action.name) {
     case 'create_shape': {
-      const { id, type, x, y, props, x1, y1, x2, y2 } = action.params as any;
-      const normalized = normalizeCreate({ id, type, x, y, x1, y1, x2, y2, props });
+      const { id, type, x, y, x1, y1, x2, y2, startPoint, endPoint, points, props } = action.params as any;
+      const normalized = normalizeCreate({ id, type, x, y, x1, y1, x2, y2, startPoint, endPoint, points, props });
       localBatch.creates.push(normalized);
       mutated = true;
 
@@ -385,6 +598,13 @@ export function applyAction(ctx: ApplyContext, action: AgentAction, batch?: Batc
         // fromId/toId are not valid TLArrowShape props (bindings are separate records).
         delete (nextProps as any).fromId;
         delete (nextProps as any).toId;
+      }
+      if (String(shape.type) === 'line') {
+        const sanitizedLineProps = sanitizeShapeProps(nextProps, 'line');
+        for (const key of Object.keys(nextProps)) {
+          delete (nextProps as any)[key];
+        }
+        Object.assign(nextProps, sanitizedLineProps);
       }
       if (String(shape.type) === 'text' && 'align' in nextProps && !('textAlign' in nextProps)) {
         const alignValue = String((nextProps as any).align || '').trim().toLowerCase();
@@ -440,7 +660,80 @@ export function applyAction(ctx: ApplyContext, action: AgentAction, batch?: Batc
       break;
     }
     case 'resize': {
-      const { id, w, h } = action.params as any;
+      const params = action.params as any;
+      const hasScaleResize =
+        Array.isArray(params?.shapeIds) &&
+        typeof params?.scaleX === 'number' &&
+        typeof params?.scaleY === 'number' &&
+        typeof params?.originX === 'number' &&
+        typeof params?.originY === 'number';
+
+      if (hasScaleResize) {
+        const shapeIds = params.shapeIds as string[];
+        const scaleX = params.scaleX as number;
+        const scaleY = params.scaleY as number;
+        const originX = params.originX as number;
+        const originY = params.originY as number;
+
+        for (const rawId of shapeIds) {
+          const sid = withPrefix(rawId);
+          const shape = editor.getShape?.(sid as any) as any;
+          if (!shape) continue;
+
+          const currentX = fallbackNumber(shape.x);
+          const currentY = fallbackNumber(shape.y);
+          const nextX = originX + (currentX - originX) * scaleX;
+          const nextY = originY + (currentY - originY) * scaleY;
+          const nextProps: Record<string, unknown> = { ...(shape.props ?? {}) };
+          let hasPropMutation = false;
+
+          if (typeof nextProps.w === 'number' && Number.isFinite(nextProps.w)) {
+            nextProps.w = Math.max(1, nextProps.w * scaleX);
+            hasPropMutation = true;
+          }
+          if (typeof nextProps.h === 'number' && Number.isFinite(nextProps.h)) {
+            nextProps.h = Math.max(1, nextProps.h * scaleY);
+            hasPropMutation = true;
+          }
+
+          if (shape.type === 'line') {
+            const scaledPoints = scaleLinePointsRecord(nextProps.points, scaleX, scaleY);
+            if (scaledPoints) {
+              nextProps.points = scaledPoints;
+              hasPropMutation = true;
+            }
+          } else if (shape.type === 'arrow') {
+            const scaledStart = scaleArrowTerminalPoint(nextProps.start, scaleX, scaleY);
+            const scaledEnd = scaleArrowTerminalPoint(nextProps.end, scaleX, scaleY);
+            if (scaledStart) {
+              nextProps.start = scaledStart;
+              hasPropMutation = true;
+            }
+            if (scaledEnd) {
+              nextProps.end = scaledEnd;
+              hasPropMutation = true;
+            }
+          } else if (shape.type === 'draw' && Array.isArray(nextProps.segments)) {
+            nextProps.segments = scaleDrawSegments(nextProps.segments, scaleX, scaleY);
+            hasPropMutation = true;
+          }
+
+          const update: Record<string, unknown> = {
+            id: sid,
+            type: shape.type ?? 'geo',
+            x: nextX,
+            y: nextY,
+          };
+          if (hasPropMutation) {
+            update.props = nextProps;
+          }
+          localBatch.updates.push(update);
+          mutated = true;
+        }
+        break;
+      }
+
+      const { id, w, h } = params;
       if (typeof w !== 'number' || typeof h !== 'number') break;
       const sid = withPrefix(id);
       const shape = editor.getShape?.(sid as any) as any;
@@ -525,6 +818,77 @@ export function applyAction(ctx: ApplyContext, action: AgentAction, batch?: Batc
           editor.zoomToBounds(bounds, { inset: 32, animation: { duration: 120 } });
         } catch {}
       }
+      break;
+    }
+    case 'place': {
+      const { shapeId, referenceShapeId, side, align, sideOffset, alignOffset } = action.params as any;
+      if (!shapeId || !referenceShapeId) break;
+      const normalizedSide = String(side || '').trim().toLowerCase() as SideMode;
+      if (!['top', 'bottom', 'left', 'right'].includes(normalizedSide)) break;
+      const normalizedAlign = String(align || 'center').trim().toLowerCase() as AlignMode;
+      const alignment: AlignMode =
+        normalizedAlign === 'start' || normalizedAlign === 'end' ? normalizedAlign : 'center';
+
+      const shapeSnapshot = getShapeSnapshot(editor, withPrefix(String(shapeId)));
+      const referenceSnapshot = getShapeSnapshot(editor, withPrefix(String(referenceShapeId)));
+      if (!shapeSnapshot || !referenceSnapshot) break;
+
+      const origin = resolvePlacedOrigin({
+        shape: shapeSnapshot,
+        reference: referenceSnapshot,
+        side: normalizedSide,
+        align: alignment,
+        sideOffset: typeof sideOffset === 'number' && Number.isFinite(sideOffset) ? sideOffset : 0,
+        alignOffset: typeof alignOffset === 'number' && Number.isFinite(alignOffset) ? alignOffset : 0,
+      });
+
+      localBatch.updates.push({
+        id: shapeSnapshot.id,
+        type: shapeSnapshot.type,
+        x: origin.x,
+        y: origin.y,
+      });
+      mutated = true;
+      break;
+    }
+    case 'create-page': {
+      const { pageName, switchToPage } = action.params as any;
+      const normalizedPageName = typeof pageName === 'string' ? pageName.trim() : '';
+      if (!normalizedPageName) break;
+      const pages = (typeof (editor as any).getPages === 'function' ? (editor as any).getPages() : []) as Array<{
+        id: string;
+        name: string;
+      }>;
+      const existing = pages.find((page) => page?.name?.trim().toLowerCase() === normalizedPageName.toLowerCase());
+      let pageId = existing?.id ?? null;
+      if (!pageId && typeof (editor as any).createPage === 'function') {
+        try {
+          pageId = PageRecordType.createId();
+          (editor as any).createPage({ id: pageId, name: normalizedPageName });
+          mutated = true;
+        } catch {
+          pageId = null;
+        }
+      }
+      if (pageId && switchToPage !== false && typeof (editor as any).setCurrentPage === 'function') {
+        try {
+          (editor as any).setCurrentPage(pageId);
+          mutated = true;
+        } catch {}
+      }
+      break;
+    }
+    case 'change-page': {
+      const { pageName } = action.params as any;
+      const normalizedPageName = typeof pageName === 'string' ? pageName.trim() : '';
+      if (!normalizedPageName || typeof (editor as any).getPages !== 'function') break;
+      const pages = (editor as any).getPages() as Array<{ id: string; name: string }>;
+      const target = pages.find((page) => page?.name?.trim().toLowerCase() === normalizedPageName.toLowerCase());
+      if (!target?.id || typeof (editor as any).setCurrentPage !== 'function') break;
+      try {
+        (editor as any).setCurrentPage(target.id);
+        mutated = true;
+      } catch {}
       break;
     }
     default:

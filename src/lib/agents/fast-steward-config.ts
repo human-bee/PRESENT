@@ -13,8 +13,29 @@ import Cerebras from '@cerebras/cerebras_cloud_sdk';
  * Or override per-steward with {STEWARD}_FAST_MODEL (e.g., LINEAR_STEWARD_FAST_MODEL)
  */
 
-// Single env var to control all fast stewards
-export const FAST_STEWARD_MODEL = process.env.FAST_STEWARD_MODEL || 'llama3.3-70b';
+const DEFAULT_FAST_STEWARD_MODEL = 'llama3.3-70b';
+
+const MODEL_ALIASES: Record<string, string> = {
+  'llama-3.3-70b': 'llama3.3-70b',
+  'llama3-3-70b': 'llama3.3-70b',
+  'llama-3.1-8b': 'llama3.1-8b',
+  'llama3-1-8b': 'llama3.1-8b',
+  'qwen-3-32b': 'qwen3-32b',
+};
+
+export function normalizeFastStewardModel(model?: string | null): string {
+  if (typeof model !== 'string') return DEFAULT_FAST_STEWARD_MODEL;
+  const trimmed = model.trim();
+  if (!trimmed) return DEFAULT_FAST_STEWARD_MODEL;
+  const normalized = trimmed
+    .toLowerCase()
+    .replace(/^cerebras[:/]/, '')
+    .replace(/\s+/g, '');
+  return MODEL_ALIASES[normalized] ?? normalized;
+}
+
+// Single env var to control all fast stewards.
+export const FAST_STEWARD_MODEL = normalizeFastStewardModel(process.env.FAST_STEWARD_MODEL);
 
 // Shared Cerebras client - reused across all fast stewards
 const clientByKey = new Map<string, Cerebras>();
@@ -36,7 +57,7 @@ export function getCerebrasClient(apiKey?: string): Cerebras {
 // Helper to get model with optional per-steward override
 export function getModelForSteward(stewardEnvVar?: string): string {
   if (stewardEnvVar && process.env[stewardEnvVar]) {
-    return process.env[stewardEnvVar]!;
+    return normalizeFastStewardModel(process.env[stewardEnvVar]!);
   }
   return FAST_STEWARD_MODEL;
 }
@@ -45,7 +66,6 @@ export function getModelForSteward(stewardEnvVar?: string): string {
 export function isFastStewardReady(apiKey?: string): boolean {
   return Boolean((apiKey ?? process.env.CEREBRAS_API_KEY ?? '').trim());
 }
-
 
 
 

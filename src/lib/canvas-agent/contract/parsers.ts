@@ -84,6 +84,131 @@ const moveSingleAbsoluteSchema = z
   .object({ shapeId: z.string(), x: z.number(), y: z.number() })
   .transform((value) => ({ ids: [value.shapeId], target: { x: value.x, y: value.y } }));
 
+const scaleResizeSchema = z
+  .object({
+    shapeIds: z.array(z.string()).min(1),
+    originX: z.number(),
+    originY: z.number(),
+    scaleX: z.number().positive(),
+    scaleY: z.number().positive(),
+  })
+  .passthrough();
+
+const placeSchema = z
+  .object({
+    shapeId: z.string(),
+    referenceShapeId: z.string(),
+    side: z.enum(['top', 'bottom', 'left', 'right']),
+    align: z.enum(['start', 'center', 'end']).default('center'),
+    sideOffset: z.number().optional(),
+    alignOffset: z.number().optional(),
+  })
+  .passthrough();
+
+const taskIdSchema = z.string().min(1);
+const agentIdSchema = z.string().min(1);
+
+const projectStartSchema = z
+  .object({
+    projectName: z.string().min(1),
+    projectDescription: z.string().optional(),
+    projectColor: z.string().optional(),
+    projectPlan: z.string().optional(),
+  })
+  .passthrough();
+
+const taskCreateSchema = z
+  .object({
+    taskId: taskIdSchema,
+    title: z.string().min(1),
+    text: z.string().optional(),
+    assignedTo: agentIdSchema.nullable().optional(),
+    x: z.number().finite().optional(),
+    y: z.number().finite().optional(),
+    w: z.number().finite().optional(),
+    h: z.number().finite().optional(),
+  })
+  .passthrough();
+
+const taskStartSchema = z
+  .object({
+    taskId: taskIdSchema,
+  })
+  .passthrough();
+
+const taskDoneSchema = z
+  .object({
+    taskId: taskIdSchema.nullable().optional(),
+  })
+  .passthrough();
+
+const awaitTasksSchema = z
+  .object({
+    taskIds: z.array(taskIdSchema).min(1),
+  })
+  .passthrough();
+
+const projectDeleteTaskSchema = z
+  .object({
+    taskId: taskIdSchema,
+    reason: z.string().optional(),
+  })
+  .passthrough();
+
+const directStartTaskSchema = z
+  .object({
+    taskId: taskIdSchema,
+    otherFairyId: agentIdSchema,
+  })
+  .passthrough();
+
+const activateAgentSchema = z
+  .object({
+    fairyId: agentIdSchema,
+  })
+  .passthrough();
+
+const pageChangeSchema = z
+  .object({
+    pageName: z.string().min(1),
+    intent: z.string().optional(),
+  })
+  .passthrough();
+
+const pageCreateSchema = z
+  .object({
+    pageName: z.string().min(1),
+    intent: z.string().optional(),
+    switchToPage: z.boolean().optional(),
+  })
+  .passthrough();
+
+const upsertPersonalTodoSchema = z
+  .object({
+    id: taskIdSchema,
+    status: z.enum(['todo', 'in-progress', 'done']),
+    text: z.string().optional(),
+  })
+  .passthrough();
+
+const deletePersonalTodoItemsSchema = z
+  .object({
+    ids: z.array(taskIdSchema).min(1),
+  })
+  .passthrough();
+
+const claimTodoItemSchema = z
+  .object({
+    todoItemId: taskIdSchema,
+  })
+  .passthrough();
+
+const abortProjectSchema = z
+  .object({
+    reason: z.string().optional(),
+  })
+  .passthrough();
+
 const legacyActionSchemas = {
   create_shape: z
     .object({
@@ -139,8 +264,17 @@ const legacyActionSchemas = {
   delete_shape: z.object({ ids: z.array(z.string()).min(1) }).passthrough(),
   move: z.union([moveDeltaSchema, moveAbsoluteSchema, moveSingleAbsoluteSchema]),
   resize: z
-    .object({ id: z.string(), w: z.number().positive(), h: z.number().positive(), anchor: z.string().optional() })
-    .passthrough(),
+    .union([
+      z
+        .object({
+          id: z.string(),
+          w: z.number().positive(),
+          h: z.number().positive(),
+          anchor: z.string().optional(),
+      })
+      .passthrough(),
+      scaleResizeSchema,
+    ]),
   rotate: z.union([canonicalRotateSchema, tldrawRotateSchema]).transform((value) => {
     if (
       'shapeIds' in value &&
@@ -214,24 +348,67 @@ const legacyActionSchemas = {
     })
     .passthrough(),
   message: z.object({ text: z.string() }).passthrough(),
+  place: placeSchema,
+  'start-project': projectStartSchema,
+  'start-duo-project': projectStartSchema,
+  'end-project': z.object({}).passthrough(),
+  'end-duo-project': z.object({}).passthrough(),
+  'abort-project': abortProjectSchema,
+  'abort-duo-project': abortProjectSchema,
+  'enter-orchestration-mode': z.object({}).passthrough(),
+  'create-task': taskCreateSchema,
+  'create-project-task': taskCreateSchema,
+  'create-duo-task': taskCreateSchema,
+  'delete-project-task': projectDeleteTaskSchema,
+  'start-task': taskStartSchema,
+  'start-duo-task': taskStartSchema,
+  'mark-task-done': taskDoneSchema,
+  'mark-my-task-done': taskDoneSchema,
+  'mark-duo-task-done': taskDoneSchema,
+  'await-tasks-completion': awaitTasksSchema,
+  'await-duo-tasks-completion': awaitTasksSchema,
+  'direct-to-start-project-task': directStartTaskSchema,
+  'direct-to-start-duo-task': directStartTaskSchema,
+  'activate-agent': activateAgentSchema,
+  'change-page': pageChangeSchema,
+  'create-page': pageCreateSchema,
+  'upsert-personal-todo-item': upsertPersonalTodoSchema,
+  'delete-personal-todo-items': deletePersonalTodoItemsSchema,
+  'claim-todo-item': claimTodoItemSchema,
+  'country-info': z.object({ code: z.string().min(1) }).passthrough(),
 } satisfies Record<string, z.ZodTypeAny>;
 
 type LegacyActionKey = keyof typeof legacyActionSchemas;
 
-const unsupportedTeacherActionSchema = z.never();
+const fallbackTeacherActionSchema = z
+  .object({
+    _type: z.string().optional(),
+  })
+  .passthrough();
 
 const teacherNameAliases: Partial<Record<TeacherActionName, LegacyActionKey>> = {
   'add-detail': 'add_detail',
   align: 'align',
+  'bring-to-front': 'reorder',
   bringToFront: 'reorder',
+  count: 'add_detail',
+  countryInfo: 'country-info',
   create: 'create_shape',
   delete: 'delete_shape',
   distribute: 'distribute',
+  'fly-to-bounds': 'set_viewport',
+  getInspiration: 'add_detail',
+  label: 'update_shape',
   message: 'message',
   move: 'move',
+  'move-position': 'move',
+  offset: 'move',
   pen: 'create_shape',
+  place: 'place',
+  review: 'add_detail',
   resize: 'resize',
   rotate: 'rotate',
+  'send-to-back': 'reorder',
   stack: 'stack',
   sendToBack: 'reorder',
   think: 'think',
@@ -250,7 +427,7 @@ TEACHER_ACTIONS.forEach((teacherName) => {
   if (alias && legacyActionSchemas[alias]) {
     actionParamSchemasMap[teacherName] = legacyActionSchemas[alias];
   } else {
-    actionParamSchemasMap[teacherName] = unsupportedTeacherActionSchema;
+    actionParamSchemasMap[teacherName] = fallbackTeacherActionSchema;
   }
 });
 

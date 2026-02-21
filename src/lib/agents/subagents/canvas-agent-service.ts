@@ -78,9 +78,9 @@ const debugJson = (label: string, value: unknown, max = 2000) => {
 
 const unsafeGenerateObject = generateObject as unknown as (args: any) => Promise<{ object: any }>;
 
-const CANVAS_STEWARD_RETRY_ATTEMPTS = parseRetryEnvInt(process.env.CANVAS_STEWARD_RETRY_ATTEMPTS, 3, {
+const CANVAS_STEWARD_RETRY_ATTEMPTS = parseRetryEnvInt(process.env.CANVAS_STEWARD_RETRY_ATTEMPTS, 5, {
   min: 1,
-  max: 6,
+  max: 8,
 });
 const CANVAS_STEWARD_RETRY_BASE_DELAY_MS = parseRetryEnvInt(
   process.env.CANVAS_STEWARD_RETRY_BASE_DELAY_MS,

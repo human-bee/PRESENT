@@ -240,7 +240,7 @@ export class ScorecardService {
 
   private currentRoom(): string {
     const room = this.deps.getRoomName();
-    return room || 'room';
+    return room;
   }
 
   private now(): number {

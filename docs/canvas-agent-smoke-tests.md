@@ -41,6 +41,8 @@
    - If a run fails due to infrastructure (no screenshot, LiveKit room missing), fix infra first instead of reissuing prompts blindly.
 8. **Parity reminder**
    - Never add server-side patches that rewrite TLDraw actions (e.g., “fixing” draw segments). When a test fails because the model streamed an invalid action, treat it as a contract or prompt bug and align with the TLDraw starter kit instead of mutating the stream.
+   - Determinism playbook: keep deterministic intent in prompt/few-shot contracts only. Do not add regex/heuristic forced routing paths in runtime.
+   - Hard gate during parity runs: `update_missing_target_dropped` may appear, but semantic rewrite count must stay zero.
 
 ## Parity Harness & PNG Workflow
 

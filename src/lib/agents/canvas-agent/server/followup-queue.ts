@@ -2,6 +2,11 @@ import { createHash } from 'crypto';
 import type { AgentTaskQueue } from '@/lib/agents/shared/queue';
 import { normalizeCorrelationId, type RequestCorrelation } from '@/lib/agents/shared/request-correlation';
 import type { JsonObject } from '@/lib/utils/json-schema';
+import {
+  getRuntimeScopeResourceKey,
+  normalizeRuntimeScope,
+  resolveRuntimeScopeFromEnv,
+} from '@/lib/agents/shared/runtime-scope';
 
 export type CanvasFollowupInput = {
   message: string;
@@ -163,6 +168,16 @@ const buildFollowupPayload = (
   if (options.correlation?.intentId && !metadata.intentId) {
     metadata.intentId = options.correlation.intentId;
   }
+  const runtimeScope =
+    normalizeRuntimeScope(metadata.runtimeScope) ??
+    normalizeRuntimeScope((payload as Record<string, unknown>).runtimeScope) ??
+    resolveRuntimeScopeFromEnv();
+  if (runtimeScope) {
+    payload.runtimeScope = runtimeScope;
+    if (!metadata.runtimeScope) {
+      metadata.runtimeScope = runtimeScope;
+    }
+  }
   payload.metadata = metadata;
 
   return payload;
@@ -196,6 +211,12 @@ export async function enqueueCanvasFollowup(
     followupScopeKey,
     `followup-depth:${normalized.depth}`,
   ];
+  const runtimeScopeKey = getRuntimeScopeResourceKey(
+    typeof payload.runtimeScope === 'string' ? payload.runtimeScope : undefined,
+  );
+  if (runtimeScopeKey) {
+    resourceKeys.push(runtimeScopeKey);
+  }
 
   const task = await options.queue.enqueueTask({
     room: options.roomId,

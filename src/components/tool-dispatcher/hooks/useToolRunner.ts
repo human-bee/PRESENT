@@ -23,7 +23,10 @@ import {
 } from '@/lib/livekit/protocol';
 import { ACTION_VERSION, AgentActionEnvelopeSchema } from '@/lib/canvas-agent/contract/types';
 import { useRoomExecutor } from '@/hooks/use-room-executor';
-import { shouldExecuteIncomingToolCall } from './tool-call-execution-guard';
+import {
+  shouldDeferToolCallWhenNotExecutor,
+  shouldExecuteIncomingToolCall,
+} from './tool-call-execution-guard';
 
 type ToolMetricEntry = {
   callId: string;
@@ -35,6 +38,12 @@ type ToolMetricEntry = {
   arriveAt?: number;
   arrivePerf?: number;
   loggedMessages: Set<string>;
+};
+
+type DeferredToolCallEntry = {
+  call: ToolCall;
+  roomKey: string;
+  enqueuedAt: number;
 };
 
 interface UseToolRunnerOptions {
@@ -60,6 +69,9 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
   const metricsByCallRef = useRef<Map<string, ToolMetricEntry>>(new Map());
   const messageToCallsRef = useRef<Map<string, Set<string>>>(new Map());
   const processedToolCallIdsRef = useRef<Map<string, number>>(new Map());
+  const deferredToolCallsRef = useRef<Map<string, DeferredToolCallEntry>>(new Map());
+  const DEFERRED_TOOL_CALL_TTL_MS = 20_000;
+  const DEFERRED_TOOL_CALL_MAX = 128;
   const metricsAdapter = useMemo(() => {
     if (!metricsEnabled) return undefined;
     return {
@@ -198,6 +210,86 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
   const stewardCompleteRef = useRef<(() => void) | null>(null);
   const slowReleaseTimerRef = useRef<number | null>(null);
 
+  const emitStewardStatusTranscript = useCallback(
+    (input: {
+      taskName: string;
+      status: 'applied' | 'queued' | 'failed';
+      taskId?: string;
+      traceId?: string;
+      message?: string;
+    }) => {
+      if (typeof window === 'undefined') return;
+      const taskName = input.taskName.trim();
+      if (!taskName) return;
+
+      const shortTask = typeof input.taskId === 'string' && input.taskId.trim().length > 0
+        ? input.taskId.trim().slice(0, 8)
+        : null;
+      const shortTrace = typeof input.traceId === 'string' && input.traceId.trim().length > 0
+        ? input.traceId.trim().slice(0, 8)
+        : null;
+      const suffix = [shortTask ? `task ${shortTask}` : null, shortTrace ? `trace ${shortTrace}` : null]
+        .filter(Boolean)
+        .join(' · ');
+      const text =
+        typeof input.message === 'string' && input.message.trim().length > 0
+          ? input.message.trim()
+          : `${taskName} ${input.status}${suffix ? ` (${suffix})` : ''}`;
+
+      const timestamp = Date.now();
+      const eventId =
+        typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+          ? crypto.randomUUID()
+          : `${timestamp}-${Math.random().toString(36).slice(2)}`;
+
+      try {
+        window.dispatchEvent(
+          new CustomEvent('livekit:transcription-replay', {
+            detail: {
+              speaker: 'voice-agent',
+              text,
+              timestamp,
+            },
+          }),
+        );
+      } catch {}
+
+      try {
+        window.dispatchEvent(
+          new CustomEvent('custom:transcription-local', {
+            detail: {
+              type: 'live_transcription',
+              event_id: eventId,
+              text,
+              speaker: 'voice-agent',
+              participantId: 'voice-agent',
+              participantName: 'voice-agent',
+              timestamp,
+              is_final: true,
+              manual: true,
+            },
+          }),
+        );
+      } catch {}
+
+      try {
+        window.dispatchEvent(
+          new CustomEvent('present:steward-status', {
+            detail: {
+              taskName,
+              status: input.status,
+              taskId: input.taskId ?? null,
+              traceId: input.traceId ?? null,
+              text,
+              timestamp,
+            },
+          }),
+        );
+      } catch {}
+    },
+    [],
+  );
+
   const triggerStewardRun = useCallback(
     (
       roomName: string,
@@ -330,47 +422,122 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
         try {
           const search = new URLSearchParams({ taskId, room: roomName });
           const res = await fetchWithSupabaseAuth(`/api/steward/task-status?${search.toString()}`, {
-            method: "GET",
+            method: 'GET',
           });
           if (res.ok) {
             const body = await res.json().catch(() => null);
             const taskRecord =
-              body && typeof body === "object" && body.task && typeof body.task === "object"
+              body && typeof body === 'object' && body.task && typeof body.task === 'object'
                 ? (body.task as Record<string, unknown>)
                 : null;
             const status =
-              typeof taskRecord?.status === "string" ? taskRecord.status.trim().toLowerCase() : "";
+              typeof taskRecord?.status === 'string' ? taskRecord.status.trim().toLowerCase() : '';
+            const taskResult =
+              taskRecord && typeof taskRecord.result === 'object' && taskRecord.result
+                ? (taskRecord.result as Record<string, unknown>)
+                : null;
+            const taskResultStatus =
+              typeof taskResult?.status === 'string' ? taskResult.status.trim().toLowerCase() : '';
+            const taskTraceId =
+              typeof taskRecord?.trace_id === 'string' && taskRecord.trace_id.trim().length > 0
+                ? taskRecord.trace_id.trim()
+                : undefined;
 
-            if (status === "succeeded") {
+            if (status === 'succeeded') {
+              if (taskResultStatus === 'queued' || taskResultStatus === 'pending') {
+                const message = `${taskName} queued${taskId ? ` (task ${taskId.slice(0, 8)})` : ''}`;
+                emitDone(call, {
+                  status: 'QUEUED',
+                  message,
+                  taskId,
+                });
+                emitStewardStatusTranscript({
+                  taskName,
+                  status: 'queued',
+                  taskId,
+                  traceId: taskTraceId,
+                  message,
+                });
+                return;
+              }
+              if (taskResultStatus === 'failed' || taskResultStatus === 'error') {
+                const failureMessage =
+                  typeof taskResult?.error === 'string' && taskResult.error.trim()
+                    ? taskResult.error.trim()
+                    : `${taskName} failed`;
+                emitDone(call, {
+                  status: 'FAILED',
+                  message: failureMessage,
+                  taskId,
+                });
+                emitStewardStatusTranscript({
+                  taskName,
+                  status: 'failed',
+                  taskId,
+                  traceId: taskTraceId,
+                  message: failureMessage,
+                });
+                return;
+              }
+              const message = `${taskName} applied${taskId ? ` (task ${taskId.slice(0, 8)})` : ''}`;
               emitDone(call, {
-                status: "COMPLETED",
-                message: `${taskName} applied`,
+                status: 'COMPLETED',
+                message,
                 taskId,
+              });
+              emitStewardStatusTranscript({
+                taskName,
+                status: 'applied',
+                taskId,
+                traceId: taskTraceId,
+                message,
               });
               return;
             }
-            if (status === "failed" || status === "canceled") {
+            if (status === 'failed' || status === 'canceled') {
               const failureMessage =
-                typeof taskRecord?.error === "string" && taskRecord.error.trim()
+                typeof taskRecord?.error === 'string' && taskRecord.error.trim()
                   ? taskRecord.error.trim()
                   : `${taskName} ${status}`;
               emitDone(call, {
-                status: "FAILED",
+                status: 'FAILED',
                 message: failureMessage,
                 taskId,
               });
+              emitStewardStatusTranscript({
+                taskName,
+                status: 'failed',
+                taskId,
+                traceId: taskTraceId,
+                message: failureMessage,
+              });
               return;
             }
-          } else if (res.status === 401 || res.status === 403 || res.status === 404) {
+          } else if (res.status === 401 || res.status === 403) {
+            const message = `${taskName} apply verification unauthorized (HTTP ${res.status})`;
             emitDone(call, {
-              status: "FAILED",
-              message: `Unable to verify ${taskName} completion (HTTP ${res.status})`,
+              status: 'UNAUTHORIZED',
+              message,
               taskId,
+              reasonCode: 'task_status_unauthorized',
+            });
+            emitStewardStatusTranscript({
+              taskName,
+              status: 'failed',
+              taskId,
+              message,
             });
             return;
+          } else if (res.status === 404) {
+            // Eventual consistency: task row may not be visible immediately after enqueue.
+            logger.info('steward task not yet visible; retrying poll', {
+              taskId,
+              roomName,
+              taskName,
+            });
           }
         } catch (error) {
-          logger.warn("steward task completion poll failed", {
+          logger.warn('steward task completion poll failed', {
             taskId,
             roomName,
             taskName,
@@ -382,13 +549,21 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
         delayMs = Math.min(STEWARD_TASK_POLL_MAX_DELAY_MS, Math.round(delayMs * 1.5));
       }
 
+      const timeoutMessage = `${taskName} timed out waiting for apply evidence`;
       emitDone(call, {
-        status: "TIMEOUT",
-        message: `${taskName} is still running`,
+        status: 'TIMEOUT',
+        message: timeoutMessage,
         taskId,
+        reasonCode: 'task_status_timeout',
+      });
+      emitStewardStatusTranscript({
+        taskName,
+        status: 'failed',
+        taskId,
+        message: timeoutMessage,
       });
     },
-    [emitDone, logger],
+    [emitDone, emitStewardStatusTranscript, logger],
   );
 
   useEffect(
@@ -698,6 +873,12 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
 
           if (stewardEnabled && (task.startsWith('canvas.') || task.startsWith('fairy.'))) {
             const targetRoom = call.roomId || room?.name;
+            if (!targetRoom || targetRoom.trim().length === 0) {
+              const message = 'dispatch_to_conductor requires a room identity';
+              queue.markError(call.id, message);
+              emitError(call, message);
+              return { status: 'ERROR', message };
+            }
             if (task === 'canvas.agent_prompt') {
               if (!dispatchParams.message && typeof params?.message === 'string') {
                 dispatchParams.message = params.message;
@@ -708,7 +889,7 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
               if (!dispatchParams.requestId && typeof params?.requestId === 'string') {
                 dispatchParams.requestId = params.requestId;
               }
-              const currentRoom = call.roomId || room?.name || 'room';
+              const currentRoom = targetRoom;
               const active = activeCanvasDispatchRef.current;
               if (
                 active &&
@@ -774,16 +955,27 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
                 typeof responseRecord.status === "string"
                   ? responseRecord.status.trim().toLowerCase()
                   : "queued";
+              const traceId =
+                typeof responseRecord.traceId === 'string' && responseRecord.traceId.trim().length > 0
+                  ? responseRecord.traceId.trim()
+                  : undefined;
               const result = {
                 status: responseStatus === "executed_fallback" ? "COMPLETED" : "QUEUED",
                 message:
                   responseStatus === "executed_fallback"
-                    ? "Steward fallback execution completed"
-                    : "Steward task queued",
+                    ? `${task} applied (fallback)`
+                    : `${task} queued${taskId ? ` (task ${taskId.slice(0, 8)})` : ''}`,
                 ...(taskId ? { taskId } : {}),
               } as ToolRunResult;
               queue.markComplete(call.id, result.message);
               emitDone(call, result);
+              emitStewardStatusTranscript({
+                taskName: task,
+                status: result.status === 'COMPLETED' ? 'applied' : 'queued',
+                taskId,
+                traceId,
+                message: result.message,
+              });
               if (taskId && typeof targetRoom === "string" && targetRoom.trim().length > 0) {
                 void pollStewardTaskCompletion({
                   call,
@@ -901,16 +1093,27 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
                 typeof responseRecord.status === "string"
                   ? responseRecord.status.trim().toLowerCase()
                   : "queued";
+              const traceId =
+                typeof responseRecord.traceId === 'string' && responseRecord.traceId.trim().length > 0
+                  ? responseRecord.traceId.trim()
+                  : undefined;
               const result = {
                 status: responseStatus === "executed_fallback" ? "COMPLETED" : "QUEUED",
                 message:
                   responseStatus === "executed_fallback"
-                    ? "Scorecard steward fallback execution completed"
-                    : "Scorecard steward task queued",
+                    ? `${task} applied (fallback)`
+                    : `${task} queued${taskId ? ` (task ${taskId.slice(0, 8)})` : ''}`,
                 ...(taskId ? { taskId } : {}),
               } as ToolRunResult;
               queue.markComplete(call.id, result.message);
               emitDone(call, result);
+              emitStewardStatusTranscript({
+                taskName: task,
+                status: result.status === 'COMPLETED' ? 'applied' : 'queued',
+                taskId,
+                traceId,
+                message: result.message,
+              });
               if (taskId) {
                 void pollStewardTaskCompletion({
                   call,
@@ -1037,8 +1240,66 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
         return { status: 'ERROR', message };
       }
     },
-    [contextKey, dispatchTL, emitDone, emitError, emitRequest, emitEditorAction, log, logger, pollStewardTaskCompletion, queue, registry, runMcpTool, scheduleStewardRun, stewardEnabled, room?.name],
+    [contextKey, dispatchTL, emitDone, emitError, emitRequest, emitEditorAction, emitStewardStatusTranscript, log, logger, pollStewardTaskCompletion, queue, registry, runMcpTool, scheduleStewardRun, stewardEnabled, room?.name],
   );
+
+  const flushDeferredToolCalls = useCallback(async () => {
+    const deferred = deferredToolCallsRef.current;
+    if (deferred.size === 0) return;
+
+    const now = Date.now();
+    for (const [key, entry] of deferred.entries()) {
+      if (now - entry.enqueuedAt > DEFERRED_TOOL_CALL_TTL_MS) {
+        deferred.delete(key);
+      }
+    }
+    if (deferred.size === 0) return;
+
+    const localIdentity =
+      typeof room?.localParticipant?.identity === 'string'
+        ? room.localParticipant.identity.trim()
+        : '';
+    const executorIdentity =
+      typeof executor.executorIdentity === 'string' ? executor.executorIdentity.trim() : '';
+
+    if (!executor.isExecutor) {
+      if (executorIdentity && localIdentity && executorIdentity !== localIdentity) {
+        deferred.clear();
+      }
+      return;
+    }
+
+    const orderedEntries = Array.from(deferred.entries()).sort(
+      (a, b) => a[1].enqueuedAt - b[1].enqueuedAt,
+    );
+    for (const [key, entry] of orderedEntries) {
+      deferred.delete(key);
+      const decision = shouldExecuteIncomingToolCall({
+        isExecutor: true,
+        processed: processedToolCallIdsRef.current,
+        roomKey: entry.roomKey,
+        callId: entry.call.id,
+        now: Date.now(),
+      });
+      if (!decision.execute) continue;
+      try {
+        await executeToolCall(entry.call);
+      } catch (error) {
+        logger.warn('failed replaying deferred tool_call', {
+          roomKey: entry.roomKey,
+          callId: entry.call.id,
+          error,
+        });
+      }
+    }
+  }, [
+    DEFERRED_TOOL_CALL_TTL_MS,
+    executeToolCall,
+    executor.executorIdentity,
+    executor.isExecutor,
+    logger,
+    room?.localParticipant?.identity,
+  ]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -1049,6 +1310,27 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
       }
     };
   }, [executeToolCall]);
+
+  useEffect(() => {
+    void flushDeferredToolCalls();
+  }, [flushDeferredToolCalls]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const intervalMs = Math.max(500, Math.min(5000, Math.floor(DEFERRED_TOOL_CALL_TTL_MS / 4)));
+    const timer = window.setInterval(() => {
+      void flushDeferredToolCalls();
+    }, intervalMs);
+    return () => {
+      window.clearInterval(timer);
+    };
+  }, [DEFERRED_TOOL_CALL_TTL_MS, flushDeferredToolCalls]);
+
+  useEffect(() => {
+    return () => {
+      deferredToolCallsRef.current.clear();
+    };
+  }, []);
 
   useEffect(() => {
     const runStewardTrigger = async (parsed: StewardTriggerMessage) => {
@@ -1152,6 +1434,14 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
         const tool = parsed.payload.tool;
         const params = parsed.payload.params || {};
         const callId = parsed.id || `${Date.now()}`;
+        const toolCall: ToolCall = {
+          id: callId,
+          type: 'tool_call',
+          payload: { tool, params },
+          timestamp: parsed.timestamp || Date.now(),
+          source: 'dispatcher',
+          roomId: parsed.roomId,
+        };
         const context = toRecord(parsed.payload.context);
         const roomKey =
           (typeof parsed.roomId === 'string' && parsed.roomId.trim()) ||
@@ -1167,6 +1457,37 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
         });
 
         if (!executionDecision.execute) {
+          const localIdentity =
+            typeof room?.localParticipant?.identity === 'string'
+              ? room.localParticipant.identity.trim()
+              : '';
+          const shouldDefer = shouldDeferToolCallWhenNotExecutor({
+            reason: executionDecision.reason,
+            executorIdentity: executor.executorIdentity,
+            localIdentity,
+          });
+          if (shouldDefer) {
+            const deferred = deferredToolCallsRef.current;
+            if (!deferred.has(executionDecision.key)) {
+              if (deferred.size >= DEFERRED_TOOL_CALL_MAX) {
+                const oldestKey = deferred.keys().next().value;
+                if (typeof oldestKey === 'string') {
+                  deferred.delete(oldestKey);
+                }
+              }
+              deferred.set(executionDecision.key, {
+                call: toolCall,
+                roomKey,
+                enqueuedAt: now,
+              });
+              log('deferred tool_call awaiting executor lock', {
+                callId,
+                tool: tool || 'unknown',
+                roomKey,
+                queued: deferred.size,
+              });
+            }
+          }
           if (metricsEnabled && typeof window !== 'undefined') {
             try {
               window.dispatchEvent(
@@ -1247,14 +1568,7 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
           metricsByCallRef.current.set(callId, next);
         }
         log('received tool_call from data channel:', tool, params);
-        void executeToolCall({
-          id: callId,
-          type: 'tool_call',
-          payload: { tool, params },
-          timestamp: parsed.timestamp || Date.now(),
-          source: 'dispatcher',
-          roomId: parsed.roomId,
-        });
+        void executeToolCall(toolCall);
       } catch (error) {
         logger.error('failed handling tool_call', { error });
       }

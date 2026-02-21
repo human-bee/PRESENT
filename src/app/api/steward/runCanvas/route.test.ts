@@ -50,9 +50,10 @@ jest.mock('@/lib/agents/shared/trace-events', () => ({
   recordAgentTraceEvent: recordAgentTraceEventMock,
 }));
 
-const loadPost = async (options?: { queueFallback?: boolean; byok?: boolean }) => {
+const loadPost = async (options?: { queueFallback?: boolean; byok?: boolean; strictTrace?: boolean }) => {
   byokEnabled = options?.byok ?? false;
   process.env.CANVAS_QUEUE_DIRECT_FALLBACK = options?.queueFallback ? 'true' : 'false';
+  process.env.CANVAS_REQUIRE_TASK_TRACE_ID = options?.strictTrace ? 'true' : 'false';
 
   let post: ((req: import('next/server').NextRequest) => Promise<Response>) | null = null;
   await jest.isolateModulesAsync(async () => {
@@ -157,6 +158,35 @@ describe('/api/steward/runCanvas', () => {
     expect(String(queueErrorCall?.[0]?.payload?.reason || '')).not.toContain('[object Object]');
   });
 
+  it('returns strict trace integrity error without direct fallback when queue rejects trace guarantees', async () => {
+    enqueueTaskMock.mockRejectedValueOnce(new Error('TRACE_ID_COLUMN_REQUIRED:fairy.intent'));
+    const POST = await loadPost({ queueFallback: true, byok: false, strictTrace: true });
+    const request = new Request('http://localhost/api/steward/runCanvas', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        room: 'demo-room',
+        task: 'fairy.intent',
+        requestId: 'req-strict-trace',
+        params: {
+          message: 'draw bunny',
+        },
+      }),
+    });
+
+    const response = await POST(toNextRequest(request));
+    const json = await response.json();
+
+    expect(response.status).toBe(503);
+    expect(json).toMatchObject({
+      error: 'Queue trace integrity check failed',
+      code: 'queue_trace_integrity_error',
+    });
+    const [enqueued] = enqueueTaskMock.mock.calls[0] as [Record<string, unknown>];
+    expect(enqueued.requireTraceId).toBe(true);
+    expect(runCanvasStewardMock).not.toHaveBeenCalled();
+  });
+
   it('executes direct fallback when queue is unavailable and fallback is enabled', async () => {
     enqueueTaskMock.mockRejectedValueOnce(new Error('queue down'));
     const POST = await loadPost({ queueFallback: true, byok: false });
@@ -234,7 +264,7 @@ describe('/api/steward/runCanvas', () => {
     expect(metadata.intentId).toBe('intent-explicit');
   });
 
-  it('queues fairy.intent with coalescing resource keys and idempotency envelope', async () => {
+  it('queues fairy.intent without resource coalescing and preserves idempotency envelope', async () => {
     const POST = await loadPost({ queueFallback: false, byok: false });
     const request = new Request('http://localhost/api/steward/runCanvas', {
       method: 'POST',
@@ -260,7 +290,8 @@ describe('/api/steward/runCanvas', () => {
     const params = enqueued.params as Record<string, unknown>;
     const resourceKeys = enqueued.resourceKeys as string[];
     expect(enqueued.task).toBe('fairy.intent');
-    expect(enqueued.coalesceByResource).toBe(true);
+    expect(enqueued.coalesceByResource).toBe(false);
+    expect(enqueued.requireTraceId).toBe(false);
     expect(enqueued.requestId).toBe('req-fairy-1');
     expect(enqueued.dedupeKey).toBe('idem-1');
     expect(enqueued.idempotencyKey).toBe('idem-1');
@@ -294,5 +325,39 @@ describe('/api/steward/runCanvas', () => {
     const metadata = params.metadata as Record<string, unknown>;
     expect(params.id).toBe('intent-explicit');
     expect(metadata.intentId).toBe('intent-explicit');
+  });
+
+  it('stamps runtime scope onto params and resource keys', async () => {
+    const previousLivekitUrl = process.env.LIVEKIT_URL;
+    process.env.LIVEKIT_URL = 'ws://localhost:7880';
+    try {
+      const POST = await loadPost({ queueFallback: false, byok: false });
+      const request = new Request('http://localhost/api/steward/runCanvas', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          room: 'demo-room',
+          task: 'fairy.intent',
+          message: 'draw bunny',
+        }),
+      });
+
+      const response = await POST(toNextRequest(request));
+      expect(response.status).toBe(202);
+
+      const [enqueued] = enqueueTaskMock.mock.calls[0] as [Record<string, unknown>];
+      const params = enqueued.params as Record<string, unknown>;
+      const metadata = params.metadata as Record<string, unknown>;
+      const resourceKeys = enqueued.resourceKeys as string[];
+      expect(params.runtimeScope).toBe('localhost:7880');
+      expect(metadata.runtimeScope).toBe('localhost:7880');
+      expect(resourceKeys).toEqual(expect.arrayContaining(['runtime-scope:localhost:7880']));
+    } finally {
+      if (previousLivekitUrl === undefined) {
+        delete process.env.LIVEKIT_URL;
+      } else {
+        process.env.LIVEKIT_URL = previousLivekitUrl;
+      }
+    }
   });
 });

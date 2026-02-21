@@ -1,10 +1,12 @@
 import { z } from 'zod';
-import { randomUUID } from 'crypto';
+import { createHash, randomUUID } from 'crypto';
 import { jsonObjectSchema, jsonValueSchema, type JsonObject, type JsonValue } from '@/lib/utils/json-schema';
 import { runCanvasAgent } from '@/lib/agents/canvas-agent/server/runner';
 import type { CanvasFollowupInput } from '@/lib/agents/canvas-agent/server/followup-queue';
-import { sendActionsEnvelope } from '@/lib/agents/canvas-agent/server/wire';
+import { awaitAck, sendActionsEnvelope } from '@/lib/agents/canvas-agent/server/wire';
 import type { AgentAction } from '@/lib/canvas-agent/contract/types';
+import { parseAction } from '@/lib/canvas-agent/contract/parsers';
+import { resolveShapeType, sanitizeShapeProps } from '@/lib/canvas-agent/contract/shape-utils';
 import { normalizeFairyContextProfile } from '@/lib/fairy-context/profiles';
 import { deriveRequestCorrelation } from '@/lib/agents/shared/request-correlation';
 import { getDecryptedUserModelKey, type ModelKeyProvider } from '@/lib/agents/shared/user-model-keys';
@@ -45,6 +47,19 @@ type RunCanvasStewardArgs = {
 };
 
 type CanvasViewport = { x: number; y: number; w: number; h: number };
+type QuickTextShapeType = 'text' | 'note';
+type QuickTextTargetHint = 'bunny' | 'forest' | 'center';
+
+const parsePositiveInt = (value: string | undefined, fallback: number): number => {
+  if (!value) return fallback;
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
+  return parsed;
+};
+
+const QUICK_TEXT_ACK_TIMEOUT_MS = parsePositiveInt(process.env.CANVAS_QUICK_TEXT_ACK_TIMEOUT_MS, 2000);
+const QUICK_TEXT_ACK_RETRIES = parsePositiveInt(process.env.CANVAS_QUICK_TEXT_ACK_RETRIES, 2);
+const QUICK_TEXT_ACK_RETRY_DELAY_MS = parsePositiveInt(process.env.CANVAS_QUICK_TEXT_ACK_RETRY_DELAY_MS, 200);
 
 const inferProviderFromModel = (model?: string): ModelKeyProvider | null => {
   if (!model) return null;
@@ -83,6 +98,117 @@ const parseViewport = (value: unknown): CanvasViewport | undefined => {
     return undefined;
   }
   return { x: candidate.x, y: candidate.y, w: candidate.w, h: candidate.h };
+};
+
+const normalizeQuickTextShapeType = (value: unknown): QuickTextShapeType => {
+  if (typeof value !== 'string') return 'text';
+  const normalized = value.trim().toLowerCase();
+  return normalized === 'note' ? 'note' : 'text';
+};
+
+const normalizeQuickTextTargetHint = (value: unknown): QuickTextTargetHint | undefined => {
+  if (typeof value !== 'string') return undefined;
+  const normalized = value.trim().toLowerCase();
+  if (normalized === 'bunny') return 'bunny';
+  if (normalized === 'forest') return 'forest';
+  if (normalized === 'center') return 'center';
+  return undefined;
+};
+
+const readJsonObject = (value: unknown): Record<string, unknown> | null => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  return value as Record<string, unknown>;
+};
+
+const deterministicNumberFromHex = (hex: string, min: number, max: number): number => {
+  if (max <= min) return min;
+  const parsed = Number.parseInt(hex, 16);
+  const range = max - min + 1;
+  const normalized = Number.isFinite(parsed) ? parsed : 0;
+  return min + (Math.abs(normalized) % range);
+};
+
+const pickQuickTextPlacementBounds = (payload: JsonObject): CanvasViewport | undefined => {
+  const metadata = readJsonObject(payload.metadata);
+  const viewContext = readJsonObject(metadata?.viewContext);
+  const promptSummary = readJsonObject(metadata?.promptSummary);
+
+  return (
+    parseViewport(payload.bounds) ??
+    parseViewport(payload.viewport) ??
+    parseViewport(payload.selectionBounds) ??
+    parseViewport(metadata?.bounds) ??
+    parseViewport(metadata?.viewport) ??
+    parseViewport(viewContext?.viewport) ??
+    parseViewport(promptSummary?.viewport)
+  );
+};
+
+const resolveQuickTextTargetHint = (payload: JsonObject): QuickTextTargetHint | undefined => {
+  const metadata = readJsonObject(payload.metadata);
+  return (
+    normalizeQuickTextTargetHint(payload.targetHint) ??
+    normalizeQuickTextTargetHint(payload.target) ??
+    normalizeQuickTextTargetHint(metadata?.targetHint) ??
+    normalizeQuickTextTargetHint(metadata?.target)
+  );
+};
+
+const resolveQuickTextPlacement = (
+  room: string,
+  requestId: string,
+  text: string,
+  payload: JsonObject,
+  targetHint?: QuickTextTargetHint,
+): { x: number; y: number } => {
+  const explicitX = typeof payload.x === 'number' && Number.isFinite(payload.x) ? payload.x : undefined;
+  const explicitY = typeof payload.y === 'number' && Number.isFinite(payload.y) ? payload.y : undefined;
+  if (typeof explicitX === 'number' && typeof explicitY === 'number') {
+    return { x: Math.round(explicitX), y: Math.round(explicitY) };
+  }
+
+  const bounds = pickQuickTextPlacementBounds(payload);
+  if (bounds) {
+    if (targetHint === 'bunny') {
+      return {
+        x: Math.round(bounds.x + bounds.w * 0.38),
+        y: Math.round(bounds.y + bounds.h * 0.36),
+      };
+    }
+    if (targetHint === 'forest') {
+      return {
+        x: Math.round(bounds.x + bounds.w * 0.72),
+        y: Math.round(bounds.y + bounds.h * 0.62),
+      };
+    }
+    if (targetHint === 'center') {
+      return {
+        x: Math.round(bounds.x + bounds.w * 0.5),
+        y: Math.round(bounds.y + bounds.h * 0.5),
+      };
+    }
+    const insetX = Math.max(24, Math.min(120, Math.round(bounds.w * 0.12)));
+    const insetY = Math.max(20, Math.min(96, Math.round(bounds.h * 0.14)));
+    return {
+      x: Math.round(bounds.x + insetX),
+      y: Math.round(bounds.y + insetY),
+    };
+  }
+
+  if (targetHint === 'bunny') {
+    return { x: 80, y: -80 };
+  }
+  if (targetHint === 'forest') {
+    return { x: 200, y: 150 };
+  }
+  if (targetHint === 'center') {
+    return { x: 0, y: 0 };
+  }
+
+  const seed = createHash('sha1').update(`${room}|${requestId}|${text}`).digest('hex');
+  const x = deterministicNumberFromHex(seed.slice(0, 8), -360, 360);
+  const y = deterministicNumberFromHex(seed.slice(8, 16), -240, 240);
+  return { x, y };
 };
 
 export async function runCanvasSteward(args: RunCanvasStewardArgs) {
@@ -125,6 +251,17 @@ export async function runCanvasSteward(args: RunCanvasStewardArgs) {
         room,
         durationMs: Date.now() - start,
         shapeId: result.shapeId,
+      });
+      return result;
+    }
+
+    if (task === 'canvas.quick_shapes') {
+      const result = await handleQuickShapesTask(room, payload);
+      logWithTs('✅ [CanvasSteward] quick_shapes.complete', {
+        task,
+        room,
+        durationMs: Date.now() - start,
+        actionCount: result.actionCount,
       });
       return result;
     }
@@ -301,44 +438,294 @@ function extractInitialFollowup(
 
 async function handleQuickTextTask(room: string, payload: JsonObject) {
   const text = extractQuickText(payload);
+  const shapeType = normalizeQuickTextShapeType(payload.shapeType);
+  const targetHint = resolveQuickTextTargetHint(payload);
   const requestId = typeof payload.requestId === 'string' && payload.requestId.trim().length > 0
     ? payload.requestId.trim()
     : randomUUID();
   const sessionId = `quick-text-${requestId}`;
+  const deterministicSeed = createHash('sha1').update(`${room}|${requestId}|${text}`).digest('hex');
   const shapeId =
     typeof payload.shapeId === 'string' && payload.shapeId.trim().length > 0
       ? payload.shapeId.trim()
-      : `qt_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+      : `qt_${deterministicSeed.slice(0, 12)}`;
 
-  const x = typeof payload.x === 'number' && Number.isFinite(payload.x)
-    ? payload.x
-    : Math.round((Math.random() - 0.5) * 400);
-  const y = typeof payload.y === 'number' && Number.isFinite(payload.y)
-    ? payload.y
-    : Math.round((Math.random() - 0.5) * 250);
+  const { x, y } = resolveQuickTextPlacement(room, requestId, text, payload, targetHint);
+  const props =
+    shapeType === 'note'
+      ? {
+          text,
+          color:
+            typeof payload.color === 'string' && payload.color.trim().length > 0
+              ? payload.color.trim()
+              : 'yellow',
+          size:
+            typeof payload.size === 'string' && payload.size.trim().length > 0
+              ? payload.size.trim()
+              : 'm',
+        }
+      : {
+          text,
+        };
 
   const actions: AgentAction[] = [
     {
-      id: `create-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
+      id: `create-${deterministicSeed.slice(12, 24)}`,
       name: 'create_shape',
       params: {
         id: shapeId,
-        type: 'text',
+        type: shapeType,
         x,
         y,
-        props: {
-          text,
-        },
+        props,
       },
     },
   ];
 
-  await sendActionsEnvelope(room, sessionId, 0, actions);
+  const traceId =
+    typeof payload.traceId === 'string' && payload.traceId.trim().length > 0
+      ? payload.traceId.trim()
+      : requestId;
+  const intentId =
+    typeof payload.intentId === 'string' && payload.intentId.trim().length > 0
+      ? payload.intentId.trim()
+      : requestId;
+
+  let ack: Awaited<ReturnType<typeof awaitAck>> = null;
+  let envelopeHash: string | undefined;
+  for (let attempt = 0; attempt < QUICK_TEXT_ACK_RETRIES; attempt += 1) {
+    const sendResult = await sendActionsEnvelope(room, sessionId, 0, actions, {
+      correlation: {
+        traceId,
+        intentId,
+        requestId,
+      },
+    });
+    envelopeHash = sendResult.hash;
+    ack = await awaitAck({
+      sessionId,
+      seq: 0,
+      deadlineMs: QUICK_TEXT_ACK_TIMEOUT_MS,
+      expectedHash: sendResult.hash,
+    });
+    if (ack) break;
+    if (attempt + 1 < QUICK_TEXT_ACK_RETRIES && QUICK_TEXT_ACK_RETRY_DELAY_MS > 0) {
+      await new Promise((resolve) => setTimeout(resolve, QUICK_TEXT_ACK_RETRY_DELAY_MS));
+    }
+  }
+
+  if (!ack) {
+    return {
+      status: 'queued',
+      requestId,
+      shapeId,
+      shapeType,
+      targetHint,
+      reason: 'apply_evidence_pending',
+      ack: {
+        clientId: null,
+        latencyMs: null,
+        envelopeHash: envelopeHash ?? null,
+        pending: true,
+        attempts: QUICK_TEXT_ACK_RETRIES,
+      },
+    } as const;
+  }
 
   return {
-    status: 'ok',
+    status: 'applied',
     requestId,
     shapeId,
+    shapeType,
+    targetHint,
+    ack: {
+      clientId: (ack as any).clientId ?? null,
+      latencyMs:
+        typeof (ack as any).latencyMs === 'number' && Number.isFinite((ack as any).latencyMs)
+          ? (ack as any).latencyMs
+          : null,
+      envelopeHash:
+        typeof (ack as any).envelopeHash === 'string' && (ack as any).envelopeHash.trim().length > 0
+          ? (ack as any).envelopeHash
+          : envelopeHash ?? null,
+    },
+  } as const;
+}
+
+function extractQuickShapeActions(payload: JsonObject): AgentAction[] {
+  const rawActions = payload.actions;
+  if (!Array.isArray(rawActions) || rawActions.length === 0) {
+    throw new Error('canvas.quick_shapes requires actions[]');
+  }
+
+  const sanitizeQuickShapeAction = (
+    name: AgentAction['name'],
+    params: Record<string, unknown>,
+  ): Record<string, unknown> => {
+    if (name === 'create_shape') {
+      const next = { ...params };
+      const rawType = typeof next.type === 'string' ? next.type : undefined;
+      const resolvedType = resolveShapeType(rawType) ?? rawType;
+      if (resolvedType) {
+        next.type = resolvedType;
+      }
+      const rawProps =
+        next.props && typeof next.props === 'object' && !Array.isArray(next.props)
+          ? ({ ...(next.props as Record<string, unknown>) } as Record<string, unknown>)
+          : {};
+      if (resolvedType) {
+        next.props = sanitizeShapeProps(rawProps, resolvedType);
+      } else {
+        next.props = rawProps;
+      }
+      return next;
+    }
+
+    if (name === 'update_shape') {
+      const next = { ...params };
+      const rawProps =
+        next.props && typeof next.props === 'object' && !Array.isArray(next.props)
+          ? ({ ...(next.props as Record<string, unknown>) } as Record<string, unknown>)
+          : {};
+      const hintedType = typeof next.shapeType === 'string' ? resolveShapeType(next.shapeType) : undefined;
+      const inferredType =
+        hintedType ??
+        (rawProps.points || rawProps.startPoint || rawProps.endPoint
+          ? 'line'
+          : rawProps.start || rawProps.end
+            ? 'arrow'
+            : undefined);
+      if (inferredType) {
+        next.props = sanitizeShapeProps(rawProps, inferredType);
+      } else {
+        next.props = rawProps;
+      }
+      return next;
+    }
+
+    return { ...params };
+  };
+
+  const parsed: AgentAction[] = [];
+  for (let index = 0; index < rawActions.length; index += 1) {
+    const candidate = rawActions[index];
+    if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) continue;
+    const actionRecord = candidate as Record<string, unknown>;
+    const params = readJsonObject(actionRecord.params);
+    if (!params) continue;
+    const name =
+      typeof actionRecord.name === 'string' && actionRecord.name.trim().length > 0
+        ? actionRecord.name.trim()
+        : '';
+    if (name !== 'create_shape' && name !== 'update_shape' && name !== 'delete_shape') continue;
+    const id =
+      typeof actionRecord.id === 'string' && actionRecord.id.trim().length > 0
+        ? actionRecord.id.trim()
+        : `quick-shape-${index + 1}`;
+    const normalizedName = name as AgentAction['name'];
+    const sanitizedParams = sanitizeQuickShapeAction(normalizedName, params);
+    try {
+      const validated = parseAction({
+        id,
+        name: normalizedName,
+        params: sanitizedParams,
+      });
+      parsed.push({
+        id: validated.id,
+        name: validated.name,
+        params: validated.params,
+      });
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      throw new Error(`canvas.quick_shapes action[${index}] invalid: ${reason}`);
+    }
+  }
+
+  if (parsed.length === 0) {
+    throw new Error('canvas.quick_shapes requires at least one valid action');
+  }
+  return parsed;
+}
+
+async function handleQuickShapesTask(room: string, payload: JsonObject) {
+  const actions = extractQuickShapeActions(payload);
+  const requestId =
+    typeof payload.requestId === 'string' && payload.requestId.trim().length > 0
+      ? payload.requestId.trim()
+      : randomUUID();
+  const traceId =
+    typeof payload.traceId === 'string' && payload.traceId.trim().length > 0
+      ? payload.traceId.trim()
+      : requestId;
+  const intentId =
+    typeof payload.intentId === 'string' && payload.intentId.trim().length > 0
+      ? payload.intentId.trim()
+      : requestId;
+  const sessionId = `quick-shapes-${requestId}`;
+
+  let ack: Awaited<ReturnType<typeof awaitAck>> = null;
+  let envelopeHash: string | undefined;
+  for (let attempt = 0; attempt < QUICK_TEXT_ACK_RETRIES; attempt += 1) {
+    const sendResult = await sendActionsEnvelope(room, sessionId, 0, actions, {
+      correlation: {
+        traceId,
+        intentId,
+        requestId,
+      },
+    });
+    envelopeHash = sendResult.hash;
+    ack = await awaitAck({
+      sessionId,
+      seq: 0,
+      deadlineMs: QUICK_TEXT_ACK_TIMEOUT_MS,
+      expectedHash: sendResult.hash,
+    });
+    if (ack) break;
+    if (attempt + 1 < QUICK_TEXT_ACK_RETRIES && QUICK_TEXT_ACK_RETRY_DELAY_MS > 0) {
+      await new Promise((resolve) => setTimeout(resolve, QUICK_TEXT_ACK_RETRY_DELAY_MS));
+    }
+  }
+
+  const shapeIds = actions
+    .map((action) => {
+      const params = action.params as Record<string, unknown> | undefined;
+      return typeof params?.id === 'string' ? params.id : null;
+    })
+    .filter((id): id is string => Boolean(id && id.trim()));
+
+  if (!ack) {
+    return {
+      status: 'queued',
+      requestId,
+      shapeIds,
+      actionCount: actions.length,
+      reason: 'apply_evidence_pending',
+      ack: {
+        clientId: null,
+        latencyMs: null,
+        envelopeHash: envelopeHash ?? null,
+        pending: true,
+        attempts: QUICK_TEXT_ACK_RETRIES,
+      },
+    } as const;
+  }
+
+  return {
+    status: 'applied',
+    requestId,
+    shapeIds,
+    actionCount: actions.length,
+    ack: {
+      clientId: (ack as any).clientId ?? null,
+      latencyMs:
+        typeof (ack as any).latencyMs === 'number' && Number.isFinite((ack as any).latencyMs)
+          ? (ack as any).latencyMs
+          : null,
+      envelopeHash:
+        typeof (ack as any).envelopeHash === 'string' && (ack as any).envelopeHash.trim().length > 0
+          ? (ack as any).envelopeHash
+          : envelopeHash ?? null,
+    },
   } as const;
 }
 
