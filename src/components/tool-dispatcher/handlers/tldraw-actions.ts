@@ -382,8 +382,7 @@ function normalizeCreate(shape: {
     return { id, type: 'geo', x, y, props: { ...props, geo: rawType } };
   }
   if (rawType === 'note') {
-    const nextProps = { ...props };
-    if ('text' in nextProps) delete (nextProps as any).text;
+    const nextProps = sanitizeShapeProps({ ...props }, 'note');
     return { id, type: 'note', x, y, props: nextProps };
   }
   if (rawType === 'text') {
@@ -606,6 +605,13 @@ export function applyAction(ctx: ApplyContext, action: AgentAction, batch?: Batc
         }
         Object.assign(nextProps, sanitizedLineProps);
       }
+      if (String(shape.type) === 'note') {
+        const sanitizedNoteProps = sanitizeShapeProps(nextProps, 'note');
+        for (const key of Object.keys(nextProps)) {
+          delete (nextProps as any)[key];
+        }
+        Object.assign(nextProps, sanitizedNoteProps);
+      }
       if (String(shape.type) === 'text' && 'align' in nextProps && !('textAlign' in nextProps)) {
         const alignValue = String((nextProps as any).align || '').trim().toLowerCase();
         if (alignValue === 'start' || alignValue === 'left') (nextProps as any).textAlign = 'start';
@@ -738,6 +744,14 @@ export function applyAction(ctx: ApplyContext, action: AgentAction, batch?: Batc
       const sid = withPrefix(id);
       const shape = editor.getShape?.(sid as any) as any;
       if (!shape) break;
+      if (shape.type === 'note') {
+        if (typeof (editor as any).fitBoundsToContent === 'function') {
+          try {
+            (editor as any).fitBoundsToContent([sid] as any, { w, h });
+          } catch {}
+        }
+        break;
+      }
       if (shape.type === 'geo' || shape.type === 'text') {
         localBatch.updates.push({
           id: sid,

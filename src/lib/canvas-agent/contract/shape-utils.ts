@@ -118,6 +118,7 @@ const stripUnsupportedProps = (props: Record<string, unknown>, shapeType: string
     delete props.corner;
     delete props.radius;
     delete props.opacity;
+    delete props.w;
     delete props.h;
     delete props.text;
   }

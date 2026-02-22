@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAdminSupabaseClient } from '@/lib/agents/admin/supabase-admin';
+import { isMissingColumnError } from '@/lib/agents/admin/supabase-errors';
 import { assertCanvasMember, parseCanvasIdFromRoom } from '@/lib/agents/shared/canvas-billing';
 import { resolveRequestUserId } from '@/lib/supabase/server/resolve-request-user';
 
@@ -12,7 +13,7 @@ const readOptional = (params: URLSearchParams, key: string): string | undefined 
   return trimmed.length > 0 ? trimmed : undefined;
 };
 
-const toTaskPayload = (task: {
+type TaskStatusRow = {
   id: unknown;
   room: unknown;
   task: unknown;
@@ -25,7 +26,18 @@ const toTaskPayload = (task: {
   resolved_trace_id?: unknown;
   created_at: unknown;
   updated_at: unknown;
-}) => ({
+};
+
+const asTaskStatusRow = (value: unknown): TaskStatusRow | null => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  return value as TaskStatusRow;
+};
+
+const TASK_SELECT_BASE =
+  'id, room, task, status, attempt, error, result, request_id, created_at, updated_at';
+const TASK_SELECT_WITH_TRACE = `${TASK_SELECT_BASE}, trace_id`;
+
+const toTaskPayload = (task: TaskStatusRow) => ({
   id: task.id,
   room: task.room,
   task: task.task,
@@ -60,12 +72,21 @@ export async function GET(req: NextRequest) {
   }
 
   const db = getAdminSupabaseClient();
-  const { data: task, error } = await db
-    .from('agent_tasks')
-    .select('id, room, task, status, attempt, error, result, request_id, trace_id, created_at, updated_at')
-    .eq('id', taskId)
-    .maybeSingle();
+  const queryTask = async (includeTraceId: boolean) =>
+    db
+      .from('agent_tasks')
+      .select(includeTraceId ? TASK_SELECT_WITH_TRACE : TASK_SELECT_BASE)
+      .eq('id', taskId)
+      .maybeSingle();
 
+  let taskQuery = await queryTask(true);
+  if (taskQuery.error && isMissingColumnError(taskQuery.error, 'trace_id')) {
+    taskQuery = await queryTask(false);
+  }
+
+  const taskData = asTaskStatusRow(taskQuery.data);
+  const task = taskData ? ({ ...taskData, trace_id: taskData.trace_id ?? null } as TaskStatusRow) : null;
+  const error = taskQuery.error;
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
