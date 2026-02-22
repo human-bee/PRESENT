@@ -4,6 +4,60 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 LOG_DIR="$ROOT_DIR/logs"
+STACK_MONITOR_LOCK_DIR="${TMPDIR:-/tmp}/present-dev-stack-monitor.lock"
+STACK_MONITOR_LOCK_META="$STACK_MONITOR_LOCK_DIR/owner"
+
+read_stack_lock_field() {
+  local field="$1"
+  if [[ ! -f "$STACK_MONITOR_LOCK_META" ]]; then
+    return
+  fi
+  awk -F= -v field="$field" '$1 == field { print substr($0, index($0, "=") + 1); exit }' "$STACK_MONITOR_LOCK_META" 2>/dev/null
+}
+
+process_command() {
+  local pid="$1"
+  ps -p "$pid" -o args= 2>/dev/null || true
+}
+
+is_stack_monitor_process() {
+  local pid="$1"
+  local command
+  command="$(process_command "$pid")"
+  [[ -n "$command" ]] && [[ "$command" == *"start-dev-stack.sh"* ]]
+}
+
+process_cwd() {
+  local pid="$1"
+  if ! command -v lsof >/dev/null 2>&1; then
+    return
+  fi
+  lsof -p "$pid" 2>/dev/null | awk '/ cwd /{print $NF}' | head -n 1
+}
+
+stop_stack_monitors() {
+  local owner_pid owner_cwd
+  owner_pid="$(read_stack_lock_field "pid")"
+  owner_cwd="$(read_stack_lock_field "cwd")"
+  if [[ -n "$owner_pid" ]] && is_stack_monitor_process "$owner_pid"; then
+    if [[ "$owner_cwd" == "$ROOT_DIR" ]]; then
+      echo "[Stack] stopping monitor pid $owner_pid (lock owner)"
+      kill "$owner_pid" >/dev/null 2>&1 || true
+      sleep 0.3
+      if ps -p "$owner_pid" >/dev/null 2>&1; then
+        kill -9 "$owner_pid" >/dev/null 2>&1 || true
+      fi
+    fi
+  fi
+
+  owner_pid="$(read_stack_lock_field "pid")"
+  owner_cwd="$(read_stack_lock_field "cwd")"
+  if [[ "$owner_cwd" == "$ROOT_DIR" ]]; then
+    if [[ -z "$owner_pid" ]] || ! ps -p "$owner_pid" >/dev/null 2>&1; then
+      rm -rf "$STACK_MONITOR_LOCK_DIR" >/dev/null 2>&1 || true
+    fi
+  fi
+}
 
 usage() {
   cat <<'USAGE'
@@ -130,13 +184,20 @@ service_pattern() {
 
 pid_matches_root() {
   local pid="$1"
+  local args
   if ! ps -p "$pid" >/dev/null 2>&1; then
     return 1
+  fi
+  args="$(ps -p "$pid" -o args= 2>/dev/null || true)"
+  if [[ "$args" == *"$ROOT_DIR"* ]]; then
+    return 0
   fi
   if ! command -v lsof >/dev/null 2>&1; then
     return 0
   fi
-  lsof -p "$pid" 2>/dev/null | grep "cwd" | grep -q "$ROOT_DIR"
+  local cwd
+  cwd="$(process_cwd "$pid")"
+  [[ -n "$cwd" ]] && [[ "$cwd" == "$ROOT_DIR" ]]
 }
 
 find_service_pids() {
@@ -239,6 +300,10 @@ kill_port() {
     fi
   done
 }
+
+if should_stop "sync:dev" || should_stop "agent:conductor" || should_stop "agent:realtime" || should_stop "dev" || should_stop "lk:server:dev"; then
+  stop_stack_monitors
+fi
 
 if should_stop "sync:dev"; then
   stop_process "Sync server" "sync:dev"
