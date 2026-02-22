@@ -28,6 +28,11 @@ type TaskStatusRow = {
   updated_at: unknown;
 };
 
+const asTaskStatusRow = (value: unknown): TaskStatusRow | null => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  return value as TaskStatusRow;
+};
+
 const TASK_SELECT_BASE =
   'id, room, task, status, attempt, error, result, request_id, created_at, updated_at';
 const TASK_SELECT_WITH_TRACE = `${TASK_SELECT_BASE}, trace_id`;
@@ -79,9 +84,8 @@ export async function GET(req: NextRequest) {
     taskQuery = await queryTask(false);
   }
 
-  const task = taskQuery.data
-    ? ({ ...taskQuery.data, trace_id: (taskQuery.data as TaskStatusRow).trace_id ?? null } as TaskStatusRow)
-    : null;
+  const taskData = asTaskStatusRow(taskQuery.data);
+  const task = taskData ? ({ ...taskData, trace_id: taskData.trace_id ?? null } as TaskStatusRow) : null;
   const error = taskQuery.error;
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
