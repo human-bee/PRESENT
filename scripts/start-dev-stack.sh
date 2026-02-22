@@ -6,7 +6,6 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 LOG_DIR="$ROOT_DIR/logs"
 STACK_MONITOR_LOCK_DIR="${TMPDIR:-/tmp}/present-dev-stack-monitor.lock"
 STACK_MONITOR_LOCK_META="$STACK_MONITOR_LOCK_DIR/owner"
-STACK_MONITOR_SCRIPT_PATH="$ROOT_DIR/scripts/start-dev-stack.sh"
 
 mkdir -p "$LOG_DIR"
 
