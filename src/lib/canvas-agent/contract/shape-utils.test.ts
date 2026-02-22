@@ -73,3 +73,22 @@ describe('sanitizeShapeProps line normalization', () => {
     });
   });
 });
+
+describe('sanitizeShapeProps note normalization', () => {
+  it('strips unsupported width/height props for notes', () => {
+    const result = sanitizeShapeProps(
+      {
+        text: 'BUNNY_LOOKS_ENERGETIC',
+        w: 200,
+        h: 100,
+        color: 'yellow',
+      },
+      'note',
+    ) as Record<string, unknown>;
+
+    expect(result.w).toBeUndefined();
+    expect(result.h).toBeUndefined();
+    expect(result.text).toBeUndefined();
+    expect(result.richText).toBeDefined();
+  });
+});

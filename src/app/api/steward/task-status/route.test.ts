@@ -73,6 +73,66 @@ describe('/api/steward/task-status', () => {
     expect(json.error).toBe('task not found');
   });
 
+  it('falls back when agent_tasks.trace_id column is missing', async () => {
+    const taskRowWithoutTrace = {
+      id: 'task-no-trace-column',
+      room: 'canvas-1',
+      task: 'fairy.intent',
+      status: 'succeeded',
+      attempt: 1,
+      error: null,
+      result: { ok: true },
+      request_id: 'req-no-trace-column',
+      created_at: '2026-02-22T01:00:00.000Z',
+      updated_at: '2026-02-22T01:00:05.000Z',
+    };
+
+    const firstMaybeSingleMock = jest.fn().mockResolvedValue({
+      data: null,
+      error: { code: '42703', message: 'column "trace_id" does not exist' },
+    });
+    const secondMaybeSingleMock = jest.fn().mockResolvedValue({
+      data: taskRowWithoutTrace,
+      error: null,
+    });
+    const taskEqMock = jest
+      .fn()
+      .mockReturnValueOnce({ maybeSingle: firstMaybeSingleMock })
+      .mockReturnValueOnce({ maybeSingle: secondMaybeSingleMock });
+    const taskSelectMock = jest.fn(() => ({ eq: taskEqMock }));
+
+    const traceLimitMock = jest.fn().mockResolvedValue({
+      data: [{ trace_id: 'trace-fallback' }],
+      error: null,
+    });
+    const traceOrderMock = jest.fn(() => ({ limit: traceLimitMock }));
+    const traceEqMock = jest.fn(() => ({ order: traceOrderMock }));
+    const traceSelectMock = jest.fn(() => ({ eq: traceEqMock }));
+
+    getAdminSupabaseClientMock.mockReturnValue({
+      from: jest.fn((table: string) => {
+        if (table === 'agent_tasks') return { select: taskSelectMock };
+        if (table === 'agent_trace_events') return { select: traceSelectMock };
+        throw new Error(`unexpected table ${table}`);
+      }),
+    });
+
+    const GET = await loadGet();
+    const response = await GET({
+      nextUrl: new URL(
+        'http://localhost/api/steward/task-status?taskId=task-no-trace-column&room=canvas-1',
+      ),
+    } as import('next/server').NextRequest);
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.ok).toBe(true);
+    expect(json.task.id).toBe('task-no-trace-column');
+    expect(json.task.traceId).toBe('trace-fallback');
+    expect(json.task.traceIntegrity).toBe('resolved_from_events');
+    expect(taskSelectMock).toHaveBeenCalledTimes(2);
+  });
+
   it('returns task status when requester is a canvas member', async () => {
     const maybeSingleMock = jest.fn().mockResolvedValue({
       data: {

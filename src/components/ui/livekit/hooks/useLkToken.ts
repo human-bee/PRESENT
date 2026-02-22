@@ -4,6 +4,7 @@ import type { User } from '@supabase/supabase-js';
 import { connectRoomWithToken } from './utils/lk-connect';
 import { buildMetadataParam, fetchLivekitAccessToken } from './utils/lk-token';
 import type { LivekitRoomConnectorState } from './utils/lk-types';
+import { shouldReconnectForRoomSwitch } from './utils/lk-room-switch';
 
 interface UseLkTokenParams {
   room: Room | undefined;
@@ -41,6 +42,7 @@ export function useLkToken(params: UseLkTokenParams): LivekitTokenApi {
 
   const tokenFetchInProgressRef = useRef(false);
   const tokenRequestAbortRef = useRef<AbortController | null>(null);
+  const requestedRoomRef = useRef(roomName);
 
   useEffect(() => {
     return () => {
@@ -49,6 +51,53 @@ export function useLkToken(params: UseLkTokenParams): LivekitTokenApi {
       clearAgentAutoTrigger();
     };
   }, [clearAgentAutoTrigger]);
+
+  useEffect(() => {
+    const previousRequestedRoom = requestedRoomRef.current.trim();
+    const nextRequestedRoom = roomName.trim();
+    requestedRoomRef.current = roomName;
+
+    if (!room) {
+      return;
+    }
+
+    const current = getState();
+    const connectedRoomName = typeof room.name === 'string' ? room.name.trim() : '';
+    if (
+      !shouldReconnectForRoomSwitch({
+        previousRequestedRoom,
+        nextRequestedRoom,
+        connectionState: current.connectionState,
+        connectedRoomName,
+      })
+    ) {
+      return;
+    }
+
+    tokenRequestAbortRef.current?.abort();
+    tokenRequestAbortRef.current = null;
+    tokenFetchInProgressRef.current = false;
+
+    void room
+      .disconnect()
+      .catch((error) => {
+        console.warn(
+          `⚠️ [LiveKitConnector-${nextRequestedRoom}] Error during room-switch disconnect:`,
+          error,
+        );
+      })
+      .finally(() => {
+        clearAgentAutoTrigger();
+        mergeState({
+          connectionState: 'disconnected',
+          participantCount: 0,
+          agentStatus: 'not-requested',
+          agentIdentity: null,
+          errorMessage: null,
+          token: null,
+        });
+      });
+  }, [roomName, room, mergeState, getState, clearAgentAutoTrigger]);
 
   const connect = useCallback(async () => {
     if (!room) {

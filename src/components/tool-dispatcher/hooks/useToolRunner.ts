@@ -27,6 +27,11 @@ import {
   shouldDeferToolCallWhenNotExecutor,
   shouldExecuteIncomingToolCall,
 } from './tool-call-execution-guard';
+import {
+  hasExceededServerErrorBudget,
+  readTaskTraceId,
+  resolveDispatchRoom,
+} from './steward-task-utils';
 
 type ToolMetricEntry = {
   callId: string;
@@ -199,6 +204,7 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
   const STEWARD_TASK_POLL_TIMEOUT_MS = 30_000;
   const STEWARD_TASK_POLL_INITIAL_DELAY_MS = 300;
   const STEWARD_TASK_POLL_MAX_DELAY_MS = 1_500;
+  const STEWARD_TASK_POLL_MAX_SERVER_ERRORS = 5;
 
   const stewardPendingRef = useRef(false);
   const queuedRunRef = useRef<
@@ -417,6 +423,7 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
       const { call, taskId, roomName, taskName } = input;
       const deadline = Date.now() + STEWARD_TASK_POLL_TIMEOUT_MS;
       let delayMs = STEWARD_TASK_POLL_INITIAL_DELAY_MS;
+      let consecutiveServerErrorCount = 0;
 
       while (Date.now() < deadline) {
         try {
@@ -425,6 +432,7 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
             method: 'GET',
           });
           if (res.ok) {
+            consecutiveServerErrorCount = 0;
             const body = await res.json().catch(() => null);
             const taskRecord =
               body && typeof body === 'object' && body.task && typeof body.task === 'object'
@@ -438,10 +446,7 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
                 : null;
             const taskResultStatus =
               typeof taskResult?.status === 'string' ? taskResult.status.trim().toLowerCase() : '';
-            const taskTraceId =
-              typeof taskRecord?.trace_id === 'string' && taskRecord.trace_id.trim().length > 0
-                ? taskRecord.trace_id.trim()
-                : undefined;
+            const taskTraceId = readTaskTraceId(taskRecord);
 
             if (status === 'succeeded') {
               if (taskResultStatus === 'queued' || taskResultStatus === 'pending') {
@@ -534,6 +539,48 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
               taskId,
               roomName,
               taskName,
+            });
+          } else if (res.status >= 500) {
+            consecutiveServerErrorCount += 1;
+            let errorBody = '';
+            try {
+              errorBody = await res.text();
+            } catch {}
+            logger.warn('steward task-status server error; retrying poll', {
+              taskId,
+              roomName,
+              taskName,
+              status: res.status,
+              consecutiveServerErrorCount,
+              errorBody: errorBody.slice(0, 180),
+            });
+            if (
+              hasExceededServerErrorBudget(
+                consecutiveServerErrorCount,
+                STEWARD_TASK_POLL_MAX_SERVER_ERRORS,
+              )
+            ) {
+              const message = `${taskName} failed: task-status unavailable (HTTP ${res.status})`;
+              emitDone(call, {
+                status: 'FAILED',
+                message,
+                taskId,
+                reasonCode: 'task_status_server_error',
+              });
+              emitStewardStatusTranscript({
+                taskName,
+                status: 'failed',
+                taskId,
+                message,
+              });
+              return;
+            }
+          } else {
+            logger.warn('steward task-status unexpected response; retrying poll', {
+              taskId,
+              roomName,
+              taskName,
+              status: res.status,
             });
           }
         } catch (error) {
@@ -871,8 +918,32 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
             return { status: 'ERROR', message };
           }
 
+          const dispatchRoom = resolveDispatchRoom({
+            callRoomId: call.roomId,
+            activeRoomName: room?.name,
+          });
+          const { roomFromCall, activeRoomName, targetRoom, hasRoomMismatch } = dispatchRoom;
+          const requiresRoomIntegrity =
+            task.startsWith('canvas.') || task.startsWith('fairy.') || task.startsWith('scorecard.');
+
+          if (requiresRoomIntegrity && hasRoomMismatch) {
+            const message = `dispatch_to_conductor room mismatch (event ${roomFromCall}, active ${activeRoomName})`;
+            const result = {
+              status: 'FAILED',
+              message,
+              reasonCode: 'room_mismatch',
+            } as ToolRunResult;
+            queue.markError(call.id, message);
+            emitDone(call, result);
+            emitStewardStatusTranscript({
+              taskName: task,
+              status: 'failed',
+              message,
+            });
+            return result;
+          }
+
           if (stewardEnabled && (task.startsWith('canvas.') || task.startsWith('fairy.'))) {
-            const targetRoom = call.roomId || room?.name;
             if (!targetRoom || targetRoom.trim().length === 0) {
               const message = 'dispatch_to_conductor requires a room identity';
               queue.markError(call.id, message);
@@ -908,7 +979,7 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
                 requestId: typeof dispatchParams.requestId === 'string' ? dispatchParams.requestId : undefined,
               };
             }
-            log('dispatch_to_conductor forwarding steward task', { task, params: dispatchParams, room: call.roomId || room?.name });
+            log('dispatch_to_conductor forwarding steward task', { task, params: dispatchParams, room: targetRoom });
             try {
               const res = await fetchWithSupabaseAuth('/api/steward/runCanvas', {
                 method: 'POST',
@@ -1000,7 +1071,6 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
           }
 
           if (task.startsWith('scorecard.')) {
-            const targetRoom = call.roomId || room?.name;
             const componentId =
               (dispatchParams.componentId as string) ??
               (params?.componentId as string) ??

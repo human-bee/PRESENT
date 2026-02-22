@@ -50,12 +50,38 @@ function parseArgs(argv) {
   return args;
 }
 
-function transcriptInput(page) {
-  return page
-    .locator(
-      'input[placeholder*="Type a message for the agent"], input[placeholder*="Connecting to LiveKit"], input[placeholder*="message for the agent"]',
-    )
-    .first();
+function transcriptInputCandidates(page) {
+  return page.locator(
+    [
+      'input[placeholder*="Type a message for the agent"]',
+      'textarea[placeholder*="Type a message for the agent"]',
+      'input[placeholder*="message for the agent"]',
+      'textarea[placeholder*="message for the agent"]',
+      'input[placeholder*="Connecting to LiveKit"]',
+      'textarea[placeholder*="Connecting to LiveKit"]',
+    ].join(', '),
+  );
+}
+
+async function firstInViewport(page, locator) {
+  const count = await locator.count().catch(() => 0);
+  const viewport = page.viewportSize() || { width: 1720, height: 980 };
+  for (let i = 0; i < count; i += 1) {
+    const candidate = locator.nth(i);
+    const visible = await candidate.isVisible().catch(() => false);
+    if (!visible) continue;
+    const box = await candidate.boundingBox().catch(() => null);
+    if (!box) continue;
+    const inViewport =
+      box.width > 0 &&
+      box.height > 0 &&
+      box.x < viewport.width &&
+      box.y < viewport.height &&
+      box.x + box.width > 0 &&
+      box.y + box.height > 0;
+    if (inViewport) return candidate;
+  }
+  return null;
 }
 
 async function isTranscriptInteractive(page) {
@@ -110,8 +136,22 @@ async function signInWithEmail(page, options = {}) {
   // keep the page "busy" while first compile warms up.
   await page.goto('/auth/signin', { waitUntil: 'domcontentloaded', timeout: 90_000 });
   await page.waitForTimeout(600);
-  const emailField = page.locator('#email').first();
-  const passwordField = page.locator('#password').first();
+  const waitForCompileIdle = async (timeoutMs = 30_000) => {
+    const started = Date.now();
+    while (Date.now() - started < timeoutMs) {
+      const compilingVisible = await page
+        .locator('text=/Compiling\\.\\.\\.|Compiling\\s*…|Building\\s*…|Building\\.\\.\\./i')
+        .first()
+        .isVisible()
+        .catch(() => false);
+      if (!compilingVisible) return true;
+      await page.waitForTimeout(300);
+    }
+    return false;
+  };
+  await waitForCompileIdle().catch(() => {});
+  const emailField = page.locator('#email, input[type="email"], input[name="email"]').first();
+  const passwordField = page.locator('#password, input[type="password"], input[name="password"]').first();
   const signInButton = page.locator('button[type="submit"]').first();
 
   const formVisible = await Promise.all([
@@ -120,16 +160,77 @@ async function signInWithEmail(page, options = {}) {
   ]).then((values) => values.every(Boolean));
 
   if (formVisible) {
-    await emailField.fill(email);
-    await passwordField.fill(password);
-    await signInButton.click();
-    const signedIn = await page
-      .waitForURL(/\/canvas/i, { timeout: 45_000 })
-      .then(() => true)
-      .catch(() => false);
+    const ensureFieldValue = async (field, expected, attempts = 3) => {
+      for (let attempt = 1; attempt <= attempts; attempt += 1) {
+        await field.click().catch(() => {});
+        await field.fill(expected);
+        const current = await field.inputValue().catch(() => '');
+        if (current === expected) return true;
+        await page.waitForTimeout(200);
+      }
+      return false;
+    };
+
+    const emailOk = await ensureFieldValue(emailField, email);
+    const passwordOk = await ensureFieldValue(passwordField, password);
+    if (!emailOk || !passwordOk) {
+      return { mode: 'signin', email, ok: false, error: 'Unable to populate sign-in fields' };
+    }
+    const enableStart = Date.now();
+    while (Date.now() - enableStart < 20_000) {
+      const enabled = await signInButton.isEnabled().catch(() => false);
+      if (enabled) break;
+      await page.waitForTimeout(250);
+    }
+
+    let signedIn = false;
+    for (let attempt = 1; attempt <= 3 && !signedIn; attempt += 1) {
+      await waitForCompileIdle(10_000).catch(() => {});
+      const emailValue = await emailField.inputValue().catch(() => '');
+      const passwordValue = await passwordField.inputValue().catch(() => '');
+      if (emailValue !== email) {
+        await ensureFieldValue(emailField, email);
+      }
+      if (passwordValue !== password) {
+        await ensureFieldValue(passwordField, password);
+      }
+      const enabled = await signInButton.isEnabled().catch(() => false);
+      if (enabled) {
+        await signInButton.click({ force: true }).catch(() => {});
+      } else {
+        await passwordField.press('Enter').catch(() => {});
+      }
+      signedIn = await page
+        .waitForURL(/\/canvas/i, { timeout: 18_000 })
+        .then(() => true)
+        .catch(() => /\/canvas/i.test(page.url()));
+      if (!signedIn) {
+        await page.waitForTimeout(600);
+      }
+    }
     if (signedIn) {
       await page.waitForTimeout(800);
       return { mode: 'signin', email, ok: true };
+    }
+
+    // Fallback: in dev mode the redirect can be flaky/late even with a valid session.
+    // If auth cookies are present, navigate directly to /canvas and verify access.
+    const hasSessionCookie = await page.context().cookies().then((cookies) =>
+      cookies.some((cookie) =>
+        typeof cookie?.name === 'string' &&
+        /(supabase|auth|token|^sb-)/i.test(cookie.name),
+      ),
+    );
+    if (hasSessionCookie) {
+      await page.goto('/canvas', { waitUntil: 'domcontentloaded', timeout: 90_000 }).catch(() => {});
+      const reachedCanvas = await page
+        .waitForURL(/\/canvas/i, { timeout: 30_000 })
+        .then(() => true)
+        .catch(() => /\/canvas/i.test(page.url()));
+      if (reachedCanvas) {
+        await page.waitForTimeout(800);
+        return { mode: 'signin_fallback_canvas_nav', email, ok: true };
+      }
     }
   }
 
@@ -210,18 +311,19 @@ async function ensureSeededAuthUser(credentials) {
 }
 
 async function ensureTranscriptOpen(page) {
-  const input = transcriptInput(page);
   const started = Date.now();
   while (Date.now() - started < 15_000) {
+    const input = await firstInViewport(page, transcriptInputCandidates(page));
     const panelInteractive = await isTranscriptInteractive(page);
-    const inputVisible = await input.isVisible().catch(() => false);
+    const inputVisible = Boolean(input);
     if (inputVisible && panelInteractive) return true;
 
     const openDirect = page.locator('[data-testid="tools.transcript-toggle"]').first();
     if ((await openDirect.count()) && (await openDirect.isVisible().catch(() => false))) {
       await openDirect.click({ force: true });
       await page.waitForTimeout(350);
-      if ((await input.isVisible().catch(() => false)) && (await isTranscriptInteractive(page))) return true;
+      const openedInput = await firstInViewport(page, transcriptInputCandidates(page));
+      if (openedInput && (await isTranscriptInteractive(page))) return true;
     }
 
     const moreButton = page.locator('[data-testid="tools.more-button"]').first();
@@ -232,18 +334,21 @@ async function ensureTranscriptOpen(page) {
       if (await moreTranscript.count()) {
         await moreTranscript.click({ force: true });
         await page.waitForTimeout(350);
-        if ((await input.isVisible().catch(() => false)) && (await isTranscriptInteractive(page))) return true;
+        const openedInput = await firstInViewport(page, transcriptInputCandidates(page));
+        if (openedInput && (await isTranscriptInteractive(page))) return true;
       }
     }
 
-    // Avoid unconditional Meta+K because it can re-close an already-open transcript panel.
+    // Keyboard toggle once per loop; wait longer to avoid open/close thrash.
     await page.keyboard.press('Control+K').catch(() => {});
-    await page.waitForTimeout(250);
-    if ((await input.isVisible().catch(() => false)) && (await isTranscriptInteractive(page))) return true;
+    await page.waitForTimeout(550);
+    const toggledInput = await firstInViewport(page, transcriptInputCandidates(page));
+    if (toggledInput && (await isTranscriptInteractive(page))) return true;
     if (process.platform === 'darwin') {
       await page.keyboard.press('Meta+K').catch(() => {});
-      await page.waitForTimeout(250);
-      if ((await input.isVisible().catch(() => false)) && (await isTranscriptInteractive(page))) return true;
+      await page.waitForTimeout(550);
+      const metaInput = await firstInViewport(page, transcriptInputCandidates(page));
+      if (metaInput && (await isTranscriptInteractive(page))) return true;
     }
 
     await page.waitForTimeout(350);
@@ -255,10 +360,11 @@ async function maybeRequestAgent(page) {
   const notJoinedVisible = await page.getByText(/Agent not joined/i).first().isVisible().catch(() => false);
   if (!notJoinedVisible) return true;
 
-  const requestAgent = page
-    .locator('button:has-text("Request agent"), [role="button"]:has-text("Request agent"), a:has-text("Request agent")')
-    .first();
-  if (!(await requestAgent.count())) {
+  const requestAgent = await firstInViewport(
+    page,
+    page.locator('button:has-text("Request agent"), [role="button"]:has-text("Request agent"), a:has-text("Request agent")'),
+  );
+  if (!requestAgent) {
     return false;
   }
 
@@ -302,8 +408,8 @@ async function isRoomConnected(page) {
 
 async function maybeConnectRoom(page) {
   if (await isRoomConnected(page)) return true;
-  const connectButton = page.getByRole('button', { name: /^Connect$/i }).first();
-  if (!(await connectButton.count())) return false;
+  const connectButton = await firstInViewport(page, page.getByRole('button', { name: /^Connect$/i }));
+  if (!connectButton) return false;
 
   const canConnect = await connectButton.isEnabled().catch(() => false);
   if (!canConnect) return false;
@@ -328,10 +434,10 @@ async function ensureRealtimeReady(page, timeoutMs = 30_000) {
     if (connected) {
       agentJoined = await maybeRequestAgent(page);
       if (agentJoined) {
-        const input = transcriptInput(page);
-        const visible = await input.isVisible().catch(() => false);
-        const enabled = await input.isEnabled().catch(() => false);
-        const placeholder = await input.getAttribute('placeholder').catch(() => null);
+        const input = await firstInViewport(page, transcriptInputCandidates(page));
+        const visible = Boolean(input);
+        const enabled = input ? await input.isEnabled().catch(() => false) : false;
+        const placeholder = input ? await input.getAttribute('placeholder').catch(() => null) : null;
         const looksConnecting = typeof placeholder === 'string' && /connecting to livekit/i.test(placeholder);
         if (visible && enabled && !looksConnecting) {
           return { connected: true, agentJoined: true };
@@ -352,7 +458,6 @@ async function sendTurn(page, prompt, timeoutMs, options = {}) {
     typeof options.userLabel === 'string' && options.userLabel.trim().length > 0
       ? options.userLabel.trim()
       : 'Codex Showcase';
-  const input = transcriptInput(page);
   const sendButton = page.getByRole('button', { name: /^Send$/i }).first();
   let lastResult = {
     prompt,
@@ -369,6 +474,20 @@ async function sendTurn(page, prompt, timeoutMs, options = {}) {
 
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
     const readiness = await ensureRealtimeReady(page, Math.min(20_000, timeoutMs));
+    const input = await firstInViewport(page, transcriptInputCandidates(page));
+    if (!input) {
+      lastResult = {
+        ...lastResult,
+        prompt,
+        acked: false,
+        delivered: false,
+        attemptsUsed: attempt,
+        connected: readiness.connected,
+        agentJoined: readiness.agentJoined,
+      };
+      await page.waitForTimeout(400);
+      continue;
+    }
     const start = Date.now();
     while (Date.now() - start < 12_000) {
       const ready = await input.isVisible().catch(() => false);
@@ -1281,11 +1400,21 @@ async function run() {
     result.authSeed = seededUser;
     const authResult = await signInWithEmail(page, authSeed);
     result.auth = authResult;
+    await page.goto(`/canvas?id=${encodeURIComponent(canvasId)}`, { waitUntil: 'domcontentloaded' });
     if (!authResult?.ok) {
-      throw new Error(`Auth sign-in did not complete: ${authResult?.error || 'unknown'}`);
+      const authBlocked = await page
+        .locator('text=/Sign In|Please sign in/i')
+        .first()
+        .isVisible()
+        .catch(() => false);
+      if (authBlocked) {
+        throw new Error(`Auth sign-in did not complete: ${authResult?.error || 'unknown'}`);
+      }
+      result.notes.push(
+        `Auth sign-in not confirmed (${authResult?.error || 'unknown'}); continued via direct canvas access.`,
+      );
     }
 
-    await page.goto(`/canvas?id=${encodeURIComponent(canvasId)}`, { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(1200);
     result.joined = await ensureJoin(page, args.displayName);
 

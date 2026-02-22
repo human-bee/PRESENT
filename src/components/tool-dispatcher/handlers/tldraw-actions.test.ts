@@ -94,6 +94,8 @@ describe('tldraw action handlers', () => {
             text: 'BUNNY_LOOKS_ENERGETIC',
             color: 'yellow',
             size: 'm',
+            w: 220,
+            h: 140,
           },
         },
       }),
@@ -104,6 +106,8 @@ describe('tldraw action handlers', () => {
     const createdShape = createCall[1][0];
     expect(createdShape.type).toBe('note');
     expect(createdShape.props.text).toBeUndefined();
+    expect(createdShape.props.w).toBeUndefined();
+    expect(createdShape.props.h).toBeUndefined();
 
     const updateCall = editor.calls.find((c: any[]) => c[0] === 'updateShapes');
     expect(updateCall).toBeTruthy();
@@ -291,6 +295,25 @@ describe('tldraw action handlers', () => {
     expect(fitCall).toBeTruthy();
   });
 
+  it('uses fitBoundsToContent for note resize without writing w/h props', () => {
+    const editor = createMockEditor([
+      { id: 'shape:note123', type: 'note', x: 0, y: 0, props: { richText: 'hello' } },
+    ]);
+    applyEnvelope(
+      { editor, isHost: true, appliedIds: new Set() },
+      makeEnvelope({
+        id: 'resize-note',
+        name: 'resize',
+        params: { id: 'note123', w: 160, h: 120 },
+      }),
+    );
+
+    const updateCalls = editor.calls.filter((c: any[]) => c[0] === 'updateShapes');
+    expect(updateCalls).toHaveLength(0);
+    const fitCall = editor.calls.find((c: any[]) => c[0] === 'fitBoundsToContent');
+    expect(fitCall).toBeTruthy();
+  });
+
   it('aligns shapes along axis with batching', () => {
     const editor = createMockEditor([
       { id: 'shape:a', type: 'geo', x: 0, y: 0, props: { w: 20, h: 20 } },
@@ -410,6 +433,43 @@ describe('tldraw action handlers', () => {
       a1: { id: 'a1', index: 'a1', x: 0, y: 0 },
       a2: { id: 'a2', index: 'a2', x: 100, y: 0 },
     });
+  });
+
+  it('sanitizes note update props to avoid invalid width payloads', () => {
+    const editor = createMockEditor([
+      {
+        id: 'shape:sticky-1',
+        type: 'note',
+        x: 10,
+        y: 20,
+        props: {
+          richText: 'hello',
+        },
+      },
+    ]);
+    applyEnvelope(
+      { editor, isHost: true, appliedIds: new Set() },
+      makeEnvelope({
+        id: 'note-update-invalid',
+        name: 'update_shape',
+        params: {
+          id: 'sticky-1',
+          props: {
+            text: 'FOREST_READY',
+            w: 320,
+            h: 120,
+            color: 'yellow',
+          },
+        },
+      }),
+    );
+
+    const updateCall = editor.calls.find((c: any[]) => c[0] === 'updateShapes');
+    expect(updateCall).toBeTruthy();
+    const update = updateCall[1][0];
+    expect(update.props.w).toBeUndefined();
+    expect(update.props.h).toBeUndefined();
+    expect(update.props.richText).toBeDefined();
   });
 
   it('places a shape relative to a reference shape', () => {

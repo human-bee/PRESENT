@@ -122,6 +122,25 @@ async function signInWithEmail(page, options = {}) {
       await page.waitForTimeout(800);
       return { mode: 'signin', email, name, ok: true };
     }
+
+    // Fallback for dev-mode routing delays: if a session cookie exists, force /canvas navigation.
+    const hasSessionCookie = await page.context().cookies().then((cookies) =>
+      cookies.some((cookie) =>
+        typeof cookie?.name === 'string' &&
+        /(supabase|auth|token|^sb-)/i.test(cookie.name),
+      ),
+    );
+    if (hasSessionCookie) {
+      await page.goto('/canvas', { waitUntil: 'domcontentloaded', timeout: 90_000 }).catch(() => {});
+      const reachedCanvas = await page
+        .waitForURL(/\/canvas/i, { timeout: 30_000 })
+        .then(() => true)
+        .catch(() => /\/canvas/i.test(page.url()));
+      if (reachedCanvas) {
+        await page.waitForTimeout(800);
+        return { mode: 'signin_fallback_canvas_nav', email, name, ok: true };
+      }
+    }
   }
 
   const signInErrorText = await page
