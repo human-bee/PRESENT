@@ -639,6 +639,16 @@ export async function runCanvasAgent(args: RunArgs) {
   let latestScreenshot: ScreenshotPayload | null = null;
   let screenshotEdge = cfg.screenshot.maxEdge;
   let lowActionRetryScheduled = false;
+  const requesterParticipantIdHint =
+    (typeof args.metadata?.participant_id === 'string' && args.metadata.participant_id.trim().length > 0
+      ? args.metadata.participant_id.trim()
+      : undefined) ||
+    (typeof args.metadata?.participantId === 'string' && args.metadata.participantId.trim().length > 0
+      ? args.metadata.participantId.trim()
+      : undefined) ||
+    (typeof args.metadata?.requesterParticipantId === 'string' && args.metadata.requesterParticipantId.trim().length > 0
+      ? args.metadata.requesterParticipantId.trim()
+      : undefined);
   let lastDispatchedChunk: {
     seq: number;
     actionNames: string[];
@@ -671,6 +681,7 @@ export async function runCanvasAgent(args: RunArgs) {
         requestId,
         bounds,
         maxSize: maxEdge ? { w: maxEdge, h: maxEdge } : undefined,
+        ...(requesterParticipantIdHint ? { requesterParticipantId: requesterParticipantIdHint } : {}),
       });
     } catch (error) {
       metrics.screenshotResult = 'error';

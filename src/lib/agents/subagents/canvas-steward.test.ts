@@ -1,5 +1,6 @@
 const sendActionsEnvelopeMock = jest.fn();
 const awaitAckMock = jest.fn();
+const runCanvasAgentMock = jest.fn(async () => 'ok');
 
 jest.mock('@/lib/agents/canvas-agent/server/wire', () => ({
   sendActionsEnvelope: (...args: unknown[]) => sendActionsEnvelopeMock(...args),
@@ -7,7 +8,7 @@ jest.mock('@/lib/agents/canvas-agent/server/wire', () => ({
 }));
 
 jest.mock('@/lib/agents/canvas-agent/server/runner', () => ({
-  runCanvasAgent: jest.fn(async () => 'ok'),
+  runCanvasAgent: (...args: unknown[]) => runCanvasAgentMock(...args),
 }));
 
 describe('canvas.quick_text deterministic placement', () => {
@@ -290,5 +291,74 @@ describe('canvas.quick_shapes deterministic envelope', () => {
       a1: { id: 'a1', index: 'a1', x: 0, y: 0 },
       a2: { id: 'a2', index: 'a2', x: 20, y: -60 },
     });
+  });
+});
+
+describe('canvas graph fallback', () => {
+  const loadRunCanvasSteward = async () => {
+    const module = await import('./canvas-steward');
+    return module.runCanvasSteward;
+  };
+
+  beforeEach(() => {
+    sendActionsEnvelopeMock.mockReset();
+    sendActionsEnvelopeMock.mockResolvedValue({ hash: 'hash-graph-fallback' });
+    awaitAckMock.mockReset();
+    awaitAckMock.mockResolvedValue({
+      clientId: 'graph-client',
+      latencyMs: 33,
+      envelopeHash: 'hash-graph-fallback',
+    });
+    runCanvasAgentMock.mockReset();
+    runCanvasAgentMock.mockResolvedValue('ok');
+  });
+
+  it('returns degraded fallback result instead of throwing for graph-like failures', async () => {
+    const runCanvasSteward = await loadRunCanvasSteward();
+    runCanvasAgentMock.mockRejectedValueOnce(new Error('invalid graph payload'));
+
+    const result = await runCanvasSteward({
+      task: 'canvas.agent_prompt',
+      params: {
+        room: 'canvas-graph',
+        message: 'draw a graph of y = 2x + 3',
+        requestId: 'req-graph',
+      },
+    });
+
+    expect(result).toMatchObject({
+      status: 'applied',
+      degraded: true,
+      fallback: 'graph_sketch',
+      requestId: 'req-graph',
+    });
+    expect(sendActionsEnvelopeMock).toHaveBeenCalledTimes(1);
+    const dispatchedActions = sendActionsEnvelopeMock.mock.calls[0]?.[3];
+    expect(Array.isArray(dispatchedActions)).toBe(true);
+    expect(dispatchedActions?.length).toBeGreaterThanOrEqual(3);
+    expect(
+      dispatchedActions?.some(
+        (action: any) =>
+          action?.name === 'create_shape' &&
+          action?.params?.type === 'line',
+      ),
+    ).toBe(true);
+  });
+
+  it('does not apply graph fallback for non-graph failures', async () => {
+    const runCanvasSteward = await loadRunCanvasSteward();
+    runCanvasAgentMock.mockRejectedValueOnce(new Error('runner hard failure'));
+
+    await expect(
+      runCanvasSteward({
+        task: 'canvas.agent_prompt',
+        params: {
+          room: 'canvas-non-graph',
+          message: 'tidy the layout and align elements',
+          requestId: 'req-non-graph',
+        },
+      }),
+    ).rejects.toThrow('runner hard failure');
+    expect(sendActionsEnvelopeMock).not.toHaveBeenCalled();
   });
 });

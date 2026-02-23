@@ -80,6 +80,8 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const roomName = searchParams.get('roomName');
   const canvasId = searchParams.get('canvasId');
+  const allowMissing =
+    searchParams.get('allowMissing') === '1' || searchParams.get('allowMissing') === 'true';
   const authHeader = req.headers.get('Authorization');
 
   if (!roomName) {
@@ -125,6 +127,9 @@ export async function GET(req: NextRequest) {
     }
 
     if (!data) {
+      if (allowMissing) {
+        return NextResponse.json({ session: null, notFound: true }, { status: 200 });
+      }
       return NextResponse.json({ error: 'Not found' }, { status: 404 });
     }
     return NextResponse.json({ session: data });

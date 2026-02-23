@@ -60,6 +60,9 @@ const parsePositiveInt = (value: string | undefined, fallback: number): number =
 const QUICK_TEXT_ACK_TIMEOUT_MS = parsePositiveInt(process.env.CANVAS_QUICK_TEXT_ACK_TIMEOUT_MS, 2000);
 const QUICK_TEXT_ACK_RETRIES = parsePositiveInt(process.env.CANVAS_QUICK_TEXT_ACK_RETRIES, 2);
 const QUICK_TEXT_ACK_RETRY_DELAY_MS = parsePositiveInt(process.env.CANVAS_QUICK_TEXT_ACK_RETRY_DELAY_MS, 200);
+const GRAPH_FALLBACK_PATTERN =
+  /\b(graph|plot|equation|function|parabola|line graph|bar chart|axis|axes|coordinate|y\s*=|f\s*\(x\)\s*=)\b/i;
+const GRAPH_EQUATION_PATTERN = /\b(?:y|f\s*\(x\)|x)\s*=\s*([^\n]+)/i;
 
 const inferProviderFromModel = (model?: string): ModelKeyProvider | null => {
   if (!model) return null;
@@ -266,6 +269,24 @@ export async function runCanvasSteward(args: RunCanvasStewardArgs) {
       return result;
     }
 
+    if (task === 'canvas.quick_apply_proof') {
+      const requestId =
+        typeof payload.requestId === 'string' && payload.requestId.trim().length > 0
+          ? payload.requestId.trim()
+          : randomUUID();
+      return {
+        status: 'applied',
+        requestId,
+        fastRouteType:
+          typeof payload.fast_route_type === 'string' ? payload.fast_route_type : undefined,
+        participantId:
+          typeof payload.participant_id === 'string' ? payload.participant_id : undefined,
+        appliedTargetId:
+          typeof payload.applied_target_id === 'string' ? payload.applied_target_id : undefined,
+        proof: 'quick_apply_ack',
+      } as const;
+    }
+
     const message = extractMessage(payload);
     const billingUserId =
       typeof payload.billingUserId === 'string' && payload.billingUserId.trim()
@@ -317,10 +338,71 @@ export async function runCanvasSteward(args: RunCanvasStewardArgs) {
 
     return 'Canvas agent executed';
   } catch (error) {
+    const failureMessage = error instanceof Error ? error.message : String(error);
+    const graphFallbackMessage =
+      typeof payload.message === 'string'
+        ? payload.message
+        : typeof payload.instruction === 'string'
+          ? payload.instruction
+          : typeof payload.text === 'string'
+            ? payload.text
+            : '';
+    if (looksLikeGraphIntent(task, graphFallbackMessage)) {
+      try {
+        const fallbackRequestId = correlation.requestId ?? randomUUID();
+        const fallbackPayload: JsonObject = {
+          ...payload,
+          requestId: fallbackRequestId,
+          traceId: correlation.traceId ?? fallbackRequestId,
+          intentId: correlation.intentId ?? fallbackRequestId,
+          actions: buildGraphFallbackActions(
+            graphFallbackMessage || 'graph request',
+            payload,
+            fallbackRequestId,
+          ),
+        };
+        const fallbackResult = await handleQuickShapesTask(room, fallbackPayload);
+        logWithTs('⚠️ [CanvasSteward] graph_fallback.applied', {
+          task,
+          room,
+          durationMs: Date.now() - start,
+          error: failureMessage.slice(0, 240),
+          actionCount: fallbackResult.actionCount,
+          status: fallbackResult.status,
+        });
+        return {
+          status: fallbackResult.status,
+          requestId: fallbackResult.requestId,
+          actionCount: fallbackResult.actionCount,
+          shapeIds: fallbackResult.shapeIds,
+          degraded: true,
+          fallback: 'graph_sketch',
+          error: failureMessage.slice(0, 240),
+        } as const;
+      } catch (fallbackError) {
+        const fallbackMessage =
+          fallbackError instanceof Error ? fallbackError.message : String(fallbackError);
+        logWithTs('❌ [CanvasSteward] graph_fallback.failed', {
+          task,
+          room,
+          durationMs: Date.now() - start,
+          error: failureMessage.slice(0, 240),
+          fallbackError: fallbackMessage.slice(0, 240),
+        });
+        return {
+          status: 'failed',
+          requestId: correlation.requestId ?? randomUUID(),
+          degraded: true,
+          fallback: 'graph_sketch',
+          error: `graph fallback failed: ${fallbackMessage}`.slice(0, 320),
+        } as const;
+      }
+    }
+
     logWithTs('❌ [CanvasSteward] run.error', {
       task,
       room,
-      error: error instanceof Error ? error.message : String(error),
+      error: failureMessage,
     });
     throw error;
   }
@@ -341,6 +423,95 @@ function extractMessage(payload: JsonObject): string {
   }
   throw new Error('Canvas steward requires a message parameter');
 }
+
+const looksLikeGraphIntent = (task: string, message: string): boolean => {
+  if (!message.trim()) return false;
+  if (task === 'canvas.quick_shapes' || task === 'canvas.quick_text') return false;
+  return GRAPH_FALLBACK_PATTERN.test(message);
+};
+
+const extractEquationLabel = (message: string): string | null => {
+  const match = message.match(GRAPH_EQUATION_PATTERN);
+  if (!match?.[0]) return null;
+  const normalized = match[0].replace(/\s+/g, ' ').trim();
+  if (!normalized) return null;
+  return normalized.slice(0, 80);
+};
+
+const buildGraphFallbackActions = (
+  message: string,
+  payload: JsonObject,
+  requestId: string,
+): Array<{ id: string; name: AgentAction['name']; params: JsonObject }> => {
+  const deterministicSeed = createHash('sha1')
+    .update(`${requestId}|${message}`)
+    .digest('hex');
+  const bounds = pickQuickTextPlacementBounds(payload) ?? { x: -360, y: -220, w: 720, h: 440 };
+  const centerX = Math.round(bounds.x + bounds.w * 0.5);
+  const centerY = Math.round(bounds.y + bounds.h * 0.5);
+  const axisHalfWidth = Math.max(140, Math.min(420, Math.round(bounds.w * 0.42)));
+  const axisHalfHeight = Math.max(120, Math.min(300, Math.round(bounds.h * 0.42)));
+  const left = centerX - axisHalfWidth;
+  const right = centerX + axisHalfWidth;
+  const top = centerY - axisHalfHeight;
+  const bottom = centerY + axisHalfHeight;
+  const equation = extractEquationLabel(message);
+  const graphLabel = equation
+    ? `Sketch fallback (${equation})`
+    : 'Sketch fallback (graph request)';
+
+  return [
+    {
+      id: `graph-axis-x-${deterministicSeed.slice(0, 8)}`,
+      name: 'create_shape',
+      params: {
+        id: `graph-axis-x-${deterministicSeed.slice(0, 8)}`,
+        type: 'line',
+        x: left,
+        y: centerY,
+        props: {
+          startPoint: { x: left, y: centerY },
+          endPoint: { x: right, y: centerY },
+          color: 'grey',
+          dash: 'dashed',
+          size: 'm',
+        },
+      },
+    },
+    {
+      id: `graph-axis-y-${deterministicSeed.slice(8, 16)}`,
+      name: 'create_shape',
+      params: {
+        id: `graph-axis-y-${deterministicSeed.slice(8, 16)}`,
+        type: 'line',
+        x: centerX,
+        y: top,
+        props: {
+          startPoint: { x: centerX, y: top },
+          endPoint: { x: centerX, y: bottom },
+          color: 'grey',
+          dash: 'dashed',
+          size: 'm',
+        },
+      },
+    },
+    {
+      id: `graph-label-${deterministicSeed.slice(16, 24)}`,
+      name: 'create_shape',
+      params: {
+        id: `graph-label-${deterministicSeed.slice(16, 24)}`,
+        type: 'text',
+        x: left,
+        y: top - 36,
+        props: {
+          text: graphLabel,
+          color: 'black',
+          size: 'm',
+        },
+      },
+    },
+  ];
+};
 
 function extractQuickText(payload: JsonObject): string {
   const raw = payload.text || payload.message || payload.content || payload.label;

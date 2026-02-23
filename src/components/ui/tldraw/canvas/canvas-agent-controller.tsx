@@ -133,7 +133,7 @@ export function CanvasAgentController({ editor, room }: CanvasAgentControllerPro
 
   // Mount connectors regardless of client agent enablement
   useViewportSelectionPublisher(editor, room, VIEWPORT_PUBLISHER_ENABLED);
-  useScreenshotRequestHandler(editor, room);
+  useScreenshotRequestHandler(editor, room, { isHost, hostId });
 
   useEffect(() => {
     if (!bus) return;

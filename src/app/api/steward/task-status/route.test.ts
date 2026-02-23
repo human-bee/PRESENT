@@ -169,6 +169,12 @@ describe('/api/steward/task-status', () => {
     expect(json.task.requestId).toBe('req-1');
     expect(json.task.traceId).toBe('trace-1');
     expect(json.task.traceIntegrity).toBe('direct');
+    expect(json.diagnostics).toMatchObject({
+      taskRoom: 'canvas-1',
+      requestRoom: 'canvas-1',
+      traceResolutionSource: 'direct',
+      membership: 'verified',
+    });
     expect(assertCanvasMemberMock).toHaveBeenCalledWith({
       canvasId: 'canvas-1',
       requesterUserId: 'user-1',
@@ -214,6 +220,12 @@ describe('/api/steward/task-status', () => {
     expect(json.task.status).toBe('running');
     expect(json.task.traceId).toBe('trace-ephemeral');
     expect(json.task.traceIntegrity).toBe('direct');
+    expect(json.diagnostics).toMatchObject({
+      taskRoom: 'canvas-ephemeral',
+      requestRoom: 'canvas-ephemeral',
+      traceResolutionSource: 'direct',
+      membership: 'room_scoped_fallback',
+    });
   });
 
   it('resolves trace id from trace events when task row trace_id is null', async () => {

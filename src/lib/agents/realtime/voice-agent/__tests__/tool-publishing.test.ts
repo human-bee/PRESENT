@@ -53,6 +53,30 @@ describe('voice-agent tool publishing helpers', () => {
     }
   });
 
+  it('adds optional quick-lane context fields when provided', () => {
+    const event = buildToolEvent(
+      'canvas_quick_apply',
+      {
+        room: 'room-a',
+        fast_route_type: 'timer',
+        message: 'start a 5 minute timer',
+      },
+      'room-a',
+      {
+        fast_route_type: 'timer',
+        idempotency_key: 'quick-key-1',
+        participant_id: 'participant-1',
+      },
+    );
+
+    expect(event.payload.context).toMatchObject({
+      source: 'voice',
+      fast_route_type: 'timer',
+      idempotency_key: 'quick-key-1',
+      participant_id: 'participant-1',
+    });
+  });
+
   it('forces reliable update when instruction patch is present', () => {
     expect(
       shouldForceReliableUpdate('update_component', { patch: { instruction: 'summarize this' } }),

@@ -116,6 +116,7 @@ export type ScreenshotRequest = {
   maxSize?: { w: number; h: number };
   token?: string;
   roomId?: string;
+  requesterParticipantId?: string;
 };
 
 export type ScreenshotResponse = {
@@ -127,4 +128,6 @@ export type ScreenshotResponse = {
   viewport: { x: number; y: number; w: number; h: number };
   selection: string[];
   docVersion: string;
+  requesterParticipantId?: string;
+  uploaderParticipantId?: string;
 };

@@ -48,7 +48,7 @@ const TL_COLOR_KEYS = new Set([
   'white',
 ]);
 
-const TL_FILL_KEYS = new Set(['none', 'semi', 'solid', 'pattern', 'background']);
+const TL_FILL_KEYS = new Set(['none', 'semi', 'solid', 'pattern', 'fill', 'lined-fill']);
 const TL_DASH_KEYS = new Set(['draw', 'solid', 'dashed', 'dotted', 'mixed']);
 const TL_FONT_KEYS = new Set(['mono', 'sans', 'serif']);
 const TL_SIZE_KEYS = new Set(['xs', 's', 'm', 'l', 'xl']);
@@ -57,7 +57,13 @@ const FILL_SYNONYMS: Record<string, string> = {
   transparent: 'none',
   outline: 'none',
   hollow: 'none',
+  background: 'none',
   solid: 'solid',
+  filled: 'fill',
+  fill: 'fill',
+  lined: 'lined-fill',
+  linedfill: 'lined-fill',
+  'lined-fill': 'lined-fill',
   bold: 'solid',
   semi: 'semi',
 };

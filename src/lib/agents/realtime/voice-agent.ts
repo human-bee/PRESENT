@@ -89,6 +89,14 @@ const readHeaderValue = (headers: unknown, key: string): string | undefined => {
 const routeManualInput = createManualInputRouter();
 
 type IntentRoute = 'visual' | 'widget-lifecycle' | 'research' | 'livekit' | 'mcp' | 'general';
+type FastRouteType = 'timer' | 'sticky' | 'plain_text';
+
+type QuickApplyIntent = {
+  fastRouteType: FastRouteType;
+  message: string;
+  plainText?: string;
+  allowMultipleTimer?: boolean;
+};
 
 const intentClassifier = (text: string): IntentRoute => {
   const normalized = text.toLowerCase();
@@ -120,6 +128,61 @@ const intentClassifier = (text: string): IntentRoute => {
     return 'widget-lifecycle';
   }
   return 'general';
+};
+
+const QUICK_TIMER_PATTERN = /\b(timer|countdown|pomodoro)\b/i;
+const QUICK_STICKY_PATTERN = /\b(sticky(?:\s*note)?|post[-\s]?it|note\s+on\s+(?:the\s+)?canvas)\b/i;
+const QUICK_PLAIN_TEXT_PATTERN =
+  /\b(add|write|type|put|place|insert)\s+(?:plain\s+)?text\b|\bwrite\s+["“][^"”]+["”]\s+(?:on|onto)\s+(?:the\s+)?canvas\b/i;
+const MULTI_TIMER_PATTERN = /\b(another|second|third|two|three|multiple)\s+timer\b/i;
+const QUICK_DRAW_GUARD_PATTERN =
+  /\b(draw|sketch|diagram|graph|plot|equation|flowchart|shape|arrow|line|rectangle|ellipse|circle)\b/i;
+
+const extractInlineQuotedText = (input: string): string | undefined => {
+  const normalized = input.replace(/[“”]/g, '"');
+  const quoted = normalized.match(/"([^"\n]+)"/);
+  if (quoted?.[1]) {
+    const next = quoted[1].trim();
+    return next.length > 0 ? next : undefined;
+  }
+  const afterColon = normalized.match(/:\s*(.+)$/);
+  if (!afterColon?.[1]) return undefined;
+  const candidate = afterColon[1].trim().replace(/[.?!]+$/, '').trim();
+  return candidate.length > 0 ? candidate : undefined;
+};
+
+const classifyQuickApplyIntent = (message: string): QuickApplyIntent | null => {
+  const trimmed = message.trim();
+  if (!trimmed) return null;
+  if (QUICK_DRAW_GUARD_PATTERN.test(trimmed) && !QUICK_TIMER_PATTERN.test(trimmed) && !QUICK_STICKY_PATTERN.test(trimmed)) {
+    return null;
+  }
+
+  if (QUICK_TIMER_PATTERN.test(trimmed)) {
+    return {
+      fastRouteType: 'timer',
+      message: trimmed,
+      allowMultipleTimer: MULTI_TIMER_PATTERN.test(trimmed),
+    };
+  }
+
+  if (QUICK_STICKY_PATTERN.test(trimmed)) {
+    return {
+      fastRouteType: 'sticky',
+      message: trimmed,
+      plainText: extractInlineQuotedText(trimmed),
+    };
+  }
+
+  if (QUICK_PLAIN_TEXT_PATTERN.test(trimmed)) {
+    return {
+      fastRouteType: 'plain_text',
+      message: trimmed,
+      plainText: extractInlineQuotedText(trimmed),
+    };
+  }
+
+  return null;
 };
 
 const extractRateLimitHeaders = (headers: unknown) => {
@@ -1060,6 +1123,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
       'remove_component',
       'reserve_component',
       'dispatch_to_conductor',
+      'canvas_quick_apply',
     ]);
     const MUTATION_CONFIRMATION_WINDOW_MS = Math.max(
       5_000,
@@ -1195,6 +1259,16 @@ Your only output is function calls. Never use plain text unless absolutely neces
         .join(',')}}`;
     };
 
+    const buildQuickApplyIdempotencyKey = (
+      roomName: string,
+      fastRouteType: FastRouteType,
+      message: string,
+      participantId?: string,
+    ) => {
+      const base = `${roomName}::quick_apply::${fastRouteType}::${message.trim().toLowerCase()}::${participantId ?? 'unknown'}::turn:${currentTurnId}`;
+      return createHash('sha1').update(base).digest('hex').slice(0, 24);
+    };
+
     const getMutationLockKey = (tool: string, params: JsonObject): string => {
       const directComponentId =
         typeof (params as any)?.componentId === 'string' && (params as any).componentId.trim().length > 0
@@ -1231,16 +1305,42 @@ Your only output is function calls. Never use plain text unless absolutely neces
         }
         return `task:${taskName}`;
       }
+      if (tool === 'canvas_quick_apply') {
+        const quickKey =
+          typeof (params as any)?.idempotency_key === 'string' && (params as any).idempotency_key.trim().length > 0
+            ? (params as any).idempotency_key.trim()
+            : '';
+        if (quickKey) {
+          return `quick:${quickKey}`;
+        }
+        const routeType =
+          typeof (params as any)?.fast_route_type === 'string' && (params as any).fast_route_type.trim().length > 0
+            ? (params as any).fast_route_type.trim()
+            : 'unknown';
+        return `quick:${routeType}`;
+      }
       return `tool:${tool}`;
     };
 
     const buildMutationEnvelope = (tool: string, params: JsonObject): MutationEnvelope => {
       const lockKey = getMutationLockKey(tool, params);
       const room = roomKey() || `session:${workerId}`;
-      const base =
-        `${room}::${tool}::${lockKey}::` +
-        `${stableStringify(params)}::turn:${currentTurnId}`;
-      const idempotencyKey = createHash('sha1').update(base).digest('hex').slice(0, 20);
+      const explicitIdempotencyKey =
+        (tool === 'canvas_quick_apply' &&
+          typeof (params as any)?.idempotency_key === 'string' &&
+          (params as any).idempotency_key.trim().length > 0
+          ? (params as any).idempotency_key.trim()
+          : undefined) ||
+        (tool === 'dispatch_to_conductor' &&
+          typeof (params as any)?.params?.idempotencyKey === 'string' &&
+          (params as any).params.idempotencyKey.trim().length > 0
+          ? (params as any).params.idempotencyKey.trim()
+          : undefined);
+      const computedIdempotencyKey = createHash('sha1')
+        .update(`${room}::${tool}::${lockKey}::${stableStringify(params)}::turn:${currentTurnId}`)
+        .digest('hex')
+        .slice(0, 20);
+      const idempotencyKey = (explicitIdempotencyKey || computedIdempotencyKey).slice(0, 24);
       const previousAttempts = mutationAttempts.get(idempotencyKey) || 0;
       const attempt = previousAttempts + 1;
       mutationAttempts.set(idempotencyKey, attempt);
@@ -1473,6 +1573,21 @@ Your only output is function calls. Never use plain text unless absolutely neces
     };
 
     const buildFingerprint = (tool: string, normalizedParams: JsonObject): ToolCallFingerprint => {
+      if (tool === 'canvas_quick_apply') {
+        const marker = [
+          tool,
+          typeof (normalizedParams as any)?.fast_route_type === 'string'
+            ? (normalizedParams as any).fast_route_type.trim()
+            : '',
+          typeof (normalizedParams as any)?.idempotency_key === 'string'
+            ? (normalizedParams as any).idempotency_key.trim()
+            : '',
+          typeof (normalizedParams as any)?.message === 'string'
+            ? (normalizedParams as any).message.trim().toLowerCase()
+            : '',
+        ].join('|');
+        return { key: marker, ts: Date.now() };
+      }
       const task = typeof (normalizedParams as any)?.task === 'string' ? (normalizedParams as any).task : '';
       const taskParams =
         (normalizedParams as any)?.params && typeof (normalizedParams as any).params === 'object'
@@ -1503,21 +1618,23 @@ Your only output is function calls. Never use plain text unless absolutely neces
 
     const sendToolCall = async (tool: string, params: JsonObject, options: { reliable?: boolean } = {}) => {
       ensureToolCallListeners();
-      let normalizedParams = normalizeOutgoingParams(tool, params);
-      const forceReliableUpdate = shouldForceReliableUpdate(tool, normalizedParams);
-      const reliable =
-        options.reliable !== undefined
-          ? options.reliable
-          : !(tool === 'update_component' && enableLossyUpdates && !forceReliableUpdate);
+      let toolName = tool;
+      let normalizedParams = normalizeOutgoingParams(toolName, params);
+      let toolEventContext:
+        | {
+            fast_route_type?: FastRouteType;
+            idempotency_key?: string;
+            participant_id?: string;
+          }
+        | undefined;
 
-      if (tool === 'dispatch_to_conductor') {
+      if (toolName === 'dispatch_to_conductor') {
         const rawTask =
           typeof (normalizedParams as any)?.task === 'string'
             ? String((normalizedParams as any).task).trim()
             : '';
         const task = rawTask || 'auto';
-        const taskParams =
-          ((normalizedParams as any)?.params ?? {}) as Record<string, unknown>;
+        const taskParams = ((normalizedParams as any)?.params ?? {}) as Record<string, unknown>;
         const intentGate = evaluateDispatchIntent(task, taskParams);
         if (!intentGate.allow) {
           console.info('[VoiceAgent] dropped low-confidence dispatch', {
@@ -1530,10 +1647,11 @@ Your only output is function calls. Never use plain text unless absolutely neces
 
         if (task === 'canvas.agent_prompt' || task === 'auto' || task === 'fairy.intent') {
           const canvasParams = taskParams;
-          const roomName = typeof canvasParams.room === 'string' && canvasParams.room.trim()
-            ? canvasParams.room.trim()
-            : roomKey();
-          if (!roomName) {
+          const targetRoomName =
+            typeof canvasParams.room === 'string' && canvasParams.room.trim()
+              ? canvasParams.room.trim()
+              : roomKey();
+          if (!targetRoomName) {
             console.warn('[VoiceAgent] dropped dispatch_to_conductor due to missing room identity', { task });
             return;
           }
@@ -1543,9 +1661,49 @@ Your only output is function calls. Never use plain text unless absolutely neces
             typeof canvasParams.id === 'string' && canvasParams.id.trim().length > 0
               ? canvasParams.id.trim()
               : undefined;
+          const selectionIds = Array.isArray(canvasParams.selectionIds)
+            ? canvasParams.selectionIds.filter((id) => typeof id === 'string')
+            : undefined;
+          const boundsCandidate = canvasParams.bounds as any;
+          const bounds =
+            boundsCandidate &&
+            typeof boundsCandidate === 'object' &&
+            typeof boundsCandidate.x === 'number' &&
+            typeof boundsCandidate.y === 'number' &&
+            typeof boundsCandidate.w === 'number' &&
+            typeof boundsCandidate.h === 'number'
+              ? {
+                  x: boundsCandidate.x,
+                  y: boundsCandidate.y,
+                  w: boundsCandidate.w,
+                  h: boundsCandidate.h,
+                }
+              : undefined;
+          const metadataSafe =
+            canvasParams.metadata && typeof canvasParams.metadata === 'object'
+              ? (JSON.parse(JSON.stringify(canvasParams.metadata)) as JsonObject)
+              : null;
+          const participantId =
+            (typeof canvasParams.participant_id === 'string' && canvasParams.participant_id.trim()
+              ? canvasParams.participant_id.trim()
+              : undefined) ||
+            (typeof canvasParams.participantId === 'string' && canvasParams.participantId.trim()
+              ? canvasParams.participantId.trim()
+              : undefined) ||
+            (metadataSafe &&
+            typeof metadataSafe.participant_id === 'string' &&
+            metadataSafe.participant_id.trim().length > 0
+              ? metadataSafe.participant_id.trim()
+              : undefined) ||
+            lastRequesterParticipantId ||
+            undefined;
+          if (participantId && metadataSafe && !metadataSafe.participant_id) {
+            metadataSafe.participant_id = participantId;
+          }
+
           const { suppressRequestId, suppressRoomName } = resolveDispatchSuppressionScope({
             task,
-            roomName,
+            roomName: targetRoomName,
             currentTurnId,
             requestId,
             intentId: intentIdFromParams,
@@ -1563,7 +1721,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
             })
           ) {
             console.info('[VoiceAgent] suppressing duplicate canvas/fairy dispatch', {
-              room: roomName,
+              room: targetRoomName,
               requestId: suppressRequestId,
               task,
             });
@@ -1577,57 +1735,95 @@ Your only output is function calls. Never use plain text unless absolutely neces
               params: {
                 ...canvasParams,
                 id: intentIdFromParams || requestId || randomUUID(),
-                room: roomName,
+                room: targetRoomName,
                 source:
                   typeof canvasParams.source === 'string' && canvasParams.source.trim().length > 0
                     ? canvasParams.source.trim()
                     : 'voice',
+                ...(participantId ? { participant_id: participantId } : {}),
               },
             };
           } else if (message) {
-            const selectionIds = Array.isArray(canvasParams.selectionIds)
-              ? canvasParams.selectionIds.filter((id) => typeof id === 'string')
-              : undefined;
-            const boundsCandidate = canvasParams.bounds as any;
-            const bounds =
-              boundsCandidate &&
-              typeof boundsCandidate === 'object' &&
-              typeof boundsCandidate.x === 'number' &&
-              typeof boundsCandidate.y === 'number' &&
-              typeof boundsCandidate.w === 'number' &&
-              typeof boundsCandidate.h === 'number'
-                ? {
-                    x: boundsCandidate.x,
-                    y: boundsCandidate.y,
-                    w: boundsCandidate.w,
-                    h: boundsCandidate.h,
-                  }
-                : undefined;
-            const metadataSafe =
-              canvasParams.metadata && typeof canvasParams.metadata === 'object'
-                ? (JSON.parse(JSON.stringify(canvasParams.metadata)) as any)
-                : null;
-            const intentId =
-              intentIdFromParams || requestId || randomUUID();
+            const intentId = intentIdFromParams || requestId || randomUUID();
             normalizedParams = {
               task: 'fairy.intent',
               params: {
                 id: intentId,
-                room: roomName,
+                room: targetRoomName,
                 message,
                 source: 'voice',
                 metadata: metadataSafe,
                 ...(selectionIds ? { selectionIds } : {}),
                 ...(bounds ? { bounds } : {}),
+                ...(participantId ? { participant_id: participantId } : {}),
               },
+            };
+          }
+
+          const fastLaneMessage =
+            typeof ((normalizedParams as any)?.params?.message) === 'string'
+              ? String((normalizedParams as any).params.message).trim()
+              : message;
+          const quickIntent = classifyQuickApplyIntent(fastLaneMessage);
+          if (quickIntent) {
+            const quickRequestId =
+              requestId ||
+              (typeof (normalizedParams as any)?.params?.requestId === 'string'
+                ? String((normalizedParams as any).params.requestId).trim()
+                : '') ||
+              randomUUID();
+            const quickIntentId =
+              intentIdFromParams ||
+              (typeof (normalizedParams as any)?.params?.id === 'string'
+                ? String((normalizedParams as any).params.id).trim()
+                : '') ||
+              quickRequestId;
+            const explicitQuickIdempotency =
+              typeof canvasParams.idempotency_key === 'string' && canvasParams.idempotency_key.trim().length > 0
+                ? canvasParams.idempotency_key.trim()
+                : '';
+            const quickIdempotencyKey =
+              explicitQuickIdempotency ||
+              buildQuickApplyIdempotencyKey(
+                targetRoomName,
+                quickIntent.fastRouteType,
+                quickIntent.message,
+                participantId,
+              );
+
+            toolName = 'canvas_quick_apply';
+            normalizedParams = {
+              room: targetRoomName,
+              requestId: quickRequestId,
+              intentId: quickIntentId,
+              fast_route_type: quickIntent.fastRouteType,
+              idempotency_key: quickIdempotencyKey,
+              message: quickIntent.message,
+              ...(quickIntent.plainText ? { plain_text: quickIntent.plainText } : {}),
+              ...(quickIntent.allowMultipleTimer ? { allow_multiple_timer: true } : {}),
+              ...(bounds ? { bounds } : {}),
+              ...(selectionIds ? { selectionIds } : {}),
+              ...(participantId ? { participant_id: participantId } : {}),
+              ...(metadataSafe ? { metadata: metadataSafe as JsonObject } : {}),
+            };
+            toolEventContext = {
+              fast_route_type: quickIntent.fastRouteType,
+              idempotency_key: quickIdempotencyKey,
+              ...(participantId ? { participant_id: participantId } : {}),
             };
           }
         }
       }
 
+      const forceReliableUpdate = shouldForceReliableUpdate(toolName, normalizedParams);
+      const reliable =
+        options.reliable !== undefined
+          ? options.reliable
+          : !(toolName === 'update_component' && enableLossyUpdates && !forceReliableUpdate);
+
       const roomName = roomKey();
       if (!roomName) {
-        console.warn('[VoiceAgent] dropped tool_call due to missing room identity', { tool });
+        console.warn('[VoiceAgent] dropped tool_call due to missing room identity', { tool: toolName });
         return;
       }
       const budget = consumeRoomEventBudget(roomName);
@@ -1636,16 +1832,16 @@ Your only output is function calls. Never use plain text unless absolutely neces
           room: roomName,
           budget: EVENT_BUDGET_PER_SEC,
           events: budget.state.events,
-          tool,
+          tool: toolName,
         });
         return;
       }
 
-      const fingerprint = buildFingerprint(tool, normalizedParams);
+      const fingerprint = buildFingerprint(toolName, normalizedParams);
       const lastSeen = recentToolCallFingerprints.get(fingerprint.key);
       if (typeof lastSeen === 'number' && fingerprint.ts - lastSeen < TOOL_DEDUPE_WINDOW_MS) {
         console.info('[VoiceAgent] duplicate tool_call dropped', {
-          tool,
+          tool: toolName,
           ageMs: fingerprint.ts - lastSeen,
         });
         return;
@@ -1660,7 +1856,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
         }
       }
 
-      if (tool === 'dispatch_to_conductor') {
+      if (toolName === 'dispatch_to_conductor') {
         const dispatchParams =
           normalizedParams && typeof (normalizedParams as any).params === 'object'
             ? ({ ...((normalizedParams as any).params as Record<string, unknown>) } as JsonObject)
@@ -1699,12 +1895,45 @@ Your only output is function calls. Never use plain text unless absolutely neces
           ...normalizedParams,
           params: dispatchParams,
         };
+      } else if (toolName === 'canvas_quick_apply') {
+        const quickParams = { ...(normalizedParams as Record<string, unknown>) };
+        const quickRouteType =
+          typeof quickParams.fast_route_type === 'string'
+            ? (quickParams.fast_route_type.trim() as FastRouteType)
+            : undefined;
+        const participantId =
+          typeof quickParams.participant_id === 'string' && quickParams.participant_id.trim().length > 0
+            ? quickParams.participant_id.trim()
+            : undefined;
+        if (typeof quickParams.requestId !== 'string' || quickParams.requestId.trim().length === 0) {
+          quickParams.requestId = randomUUID();
+        }
+        if (typeof quickParams.intentId !== 'string' || quickParams.intentId.trim().length === 0) {
+          quickParams.intentId = String(quickParams.requestId);
+        }
+        if (typeof quickParams.idempotency_key !== 'string' || quickParams.idempotency_key.trim().length === 0) {
+          const fallbackMessage =
+            typeof quickParams.message === 'string' ? quickParams.message.trim() : 'quick-apply';
+          const computedQuickKey = buildQuickApplyIdempotencyKey(
+            roomName,
+            quickRouteType ?? 'plain_text',
+            fallbackMessage,
+            participantId,
+          );
+          quickParams.idempotency_key = computedQuickKey;
+        }
+        normalizedParams = quickParams as JsonObject;
+        toolEventContext = {
+          ...(quickRouteType ? { fast_route_type: quickRouteType } : {}),
+          idempotency_key: String(quickParams.idempotency_key),
+          ...(participantId ? { participant_id: participantId } : {}),
+        };
       }
 
-      const orchestration = MUTATING_TOOLS.has(tool)
-        ? buildMutationEnvelope(tool, normalizedParams)
+      const orchestration = MUTATING_TOOLS.has(toolName)
+        ? buildMutationEnvelope(toolName, normalizedParams)
         : undefined;
-      if (tool === 'dispatch_to_conductor' && orchestration) {
+      if (toolName === 'dispatch_to_conductor' && orchestration) {
         const existingParams =
           normalizedParams && typeof (normalizedParams as any).params === 'object'
             ? ({ ...((normalizedParams as any).params as Record<string, unknown>) } as JsonObject)
@@ -1720,14 +1949,14 @@ Your only output is function calls. Never use plain text unless absolutely neces
           } as JsonObject,
         };
       }
-      const entry = { event: buildToolEvent(tool, normalizedParams, roomName), reliable };
+      const entry = { event: buildToolEvent(toolName, normalizedParams, roomName, toolEventContext), reliable };
 
       const publishOrQueueToolCall = async () => {
         trackPendingMutation(entry.event);
         if (!job.room.localParticipant) {
           pendingToolCalls.push(entry);
           console.info('[VoiceAgent] queueing tool_call until room connects', {
-            tool,
+            tool: toolName,
             queueLength: pendingToolCalls.length,
             state: job.room.connectionState,
           });
@@ -1751,7 +1980,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
             }
           }
         } catch (error) {
-          console.error('[VoiceAgent] publishData threw', { tool, error });
+          console.error('[VoiceAgent] publishData threw', { tool: toolName, error });
           pendingToolCalls.unshift(entry);
           if (!flushToolCallsHandle) {
             flushToolCallsHandle = setTimeout(() => {
@@ -1778,7 +2007,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
       if (result.deduped) {
         orchestrationMetrics.mutationDeduped += 1;
         console.debug('[VoiceAgent] dropping duplicate mutation by idempotency key', {
-          tool,
+          tool: toolName,
           idempotencyKey: orchestration.idempotencyKey,
           lockKey: orchestration.lockKey,
         });
@@ -2321,6 +2550,68 @@ Your only output is function calls. Never use plain text unless absolutely neces
           return { status: 'queued', componentId: resolvedId };
         },
       }),
+      canvas_quick_apply: llm.tool({
+        description:
+          'Fast lane for deterministic low-risk intents (timer/sticky/plain text). Applies immediately on canvas and asynchronously persists proof.',
+        parameters: z.object({
+          fast_route_type: z.enum(['timer', 'sticky', 'plain_text']),
+          message: z.string().min(1),
+          plain_text: z.string().nullish(),
+          room: z.string().nullish(),
+          requestId: z.string().nullish(),
+          intentId: z.string().nullish(),
+          idempotency_key: z.string().nullish(),
+          participant_id: z.string().nullish(),
+          allow_multiple_timer: z.boolean().nullish(),
+          bounds: z
+            .object({
+              x: z.number(),
+              y: z.number(),
+              w: z.number(),
+              h: z.number(),
+            })
+            .nullish(),
+          selectionIds: z.array(z.string()).nullish(),
+          metadata: z.record(z.string(), z.any()).nullish(),
+        }),
+        execute: async (args) => {
+          const roomName = typeof args.room === 'string' && args.room.trim().length > 0 ? args.room.trim() : job.room.name || '';
+          if (!roomName) {
+            return { status: 'ERROR', message: 'canvas_quick_apply requires room context' };
+          }
+          const payload: JsonObject = {
+            room: roomName,
+            fast_route_type: args.fast_route_type,
+            message: args.message.trim(),
+            requestId:
+              typeof args.requestId === 'string' && args.requestId.trim().length > 0
+                ? args.requestId.trim()
+                : randomUUID(),
+            ...(typeof args.intentId === 'string' && args.intentId.trim().length > 0
+              ? { intentId: args.intentId.trim() }
+              : {}),
+            ...(typeof args.plain_text === 'string' && args.plain_text.trim().length > 0
+              ? { plain_text: args.plain_text.trim() }
+              : {}),
+            ...(typeof args.idempotency_key === 'string' && args.idempotency_key.trim().length > 0
+              ? { idempotency_key: args.idempotency_key.trim() }
+              : {}),
+            ...(typeof args.participant_id === 'string' && args.participant_id.trim().length > 0
+              ? { participant_id: args.participant_id.trim() }
+              : {}),
+            ...(typeof args.allow_multiple_timer === 'boolean'
+              ? { allow_multiple_timer: args.allow_multiple_timer }
+              : {}),
+            ...(args.bounds ? { bounds: args.bounds } : {}),
+            ...(Array.isArray(args.selectionIds) && args.selectionIds.length > 0
+              ? { selectionIds: args.selectionIds }
+              : {}),
+            ...(args.metadata && typeof args.metadata === 'object' ? { metadata: args.metadata as JsonObject } : {}),
+          };
+          await sendToolCall('canvas_quick_apply', payload);
+          return { status: 'queued' };
+        },
+      }),
       dispatch_to_conductor: llm.tool({
         description: 'Ask the conductor to run a steward for complex tasks like flowcharts or canvas drawing.',
         parameters: z.object({ task: z.string(), params: toolParameters }),
@@ -2491,6 +2782,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
     type PendingReply = { options: { userInput?: string }; attempts: number };
     const pendingReplies: PendingReply[] = [];
     let lastUserPrompt: string | null = null;
+    let lastRequesterParticipantId: string | null = null;
     let latestAgentState: voice.AgentState = 'initializing';
     let recoveringActiveResponse = false;
     const lastPrewarmAtByRoute = new Map<IntentRoute, number>();
@@ -2653,6 +2945,10 @@ Your only output is function calls. Never use plain text unless absolutely neces
         topic: 'transcription',
       });
       lastUserPrompt = text;
+      lastRequesterParticipantId =
+        typeof participantId === 'string' && participantId.trim().length > 0
+          ? participantId.trim()
+          : null;
       currentIntentRoute = intentClassifier(text);
       trackRoute(currentIntentRoute);
       await prewarmRouteContext(currentIntentRoute, text);
@@ -2716,24 +3012,17 @@ Your only output is function calls. Never use plain text unless absolutely neces
           lower.includes('timer') &&
           (lower.includes('minute') || lower.includes('min'));
         if (looksLikeTimerCommand) {
-          const tokens = lower.split(' ').filter(Boolean);
-          let minutes: number | undefined;
-          for (let i = 0; i < tokens.length; i += 1) {
-            const token = tokens[i];
-            if (token === 'minute' || token === 'minutes' || token === 'min' || token === 'mins') {
-              const prev = tokens[i - 1] || '';
-              const parsed = Number(prev);
-              if (Number.isFinite(parsed) && parsed > 0) {
-                minutes = Math.max(1, Math.round(parsed));
-              }
-              break;
-            }
-          }
-          const initialMinutes = minutes ?? 5;
-          await (toolContext as any).create_component.execute({
-            type: 'RetroTimerEnhanced',
-            spec: { initialMinutes, initialSeconds: 0, autoStart: true },
-          });
+          await sendToolCall('canvas_quick_apply', {
+            room,
+            fast_route_type: 'timer',
+            message: trimmed,
+            requestId: randomUUID(),
+            participant_id:
+              typeof participantId === 'string' && participantId.trim().length > 0
+                ? participantId.trim()
+                : undefined,
+            allow_multiple_timer: MULTI_TIMER_PATTERN.test(lower),
+          } as JsonObject);
           return;
         }
 
@@ -2745,42 +3034,17 @@ Your only output is function calls. Never use plain text unless absolutely neces
           lower.includes('reset') ||
           /\bset\s+timer\b/.test(lower));
       if (looksLikeTimerUpdate) {
-        const timerId =
-          getLastComponentForType('RetroTimerEnhanced') || getLastComponentForType('RetroTimer');
-        if (timerId) {
-          const tokens = lower.split(' ').filter(Boolean);
-          let minutes: number | undefined;
-          for (let i = 0; i < tokens.length; i += 1) {
-            const token = tokens[i];
-            if (token === 'minute' || token === 'minutes' || token === 'min' || token === 'mins') {
-              const prev = tokens[i - 1] || '';
-              const parsed = Number(prev);
-              if (Number.isFinite(parsed) && parsed > 0) {
-                minutes = Math.max(1, Math.round(parsed));
-              }
-              break;
-            }
-          }
-          const shouldPause = lower.includes('pause') || lower.includes('stop');
-          const shouldResume = lower.includes('resume') || lower.includes('start');
-          const shouldReset = lower.includes('reset') || /\bset\s+timer\b/.test(lower);
-          const patch: Record<string, unknown> = {};
-          if (typeof minutes === 'number' && Number.isFinite(minutes)) {
-            const durationSeconds = Math.max(1, Math.round(minutes)) * 60;
-            patch.configuredDuration = durationSeconds;
-            patch.timeLeft = durationSeconds;
-          }
-          if (shouldPause) patch.isRunning = false;
-          if (shouldResume && !shouldPause) patch.isRunning = true;
-          if (shouldReset && !('isRunning' in patch)) {
-            patch.isRunning = false;
-          }
-          await (toolContext as any).update_component.execute({
-            componentId: timerId,
-            patch,
-          });
-          return;
-        }
+        await sendToolCall('canvas_quick_apply', {
+          room,
+          fast_route_type: 'timer',
+          message: trimmed,
+          requestId: randomUUID(),
+          participant_id:
+            typeof participantId === 'string' && participantId.trim().length > 0
+              ? participantId.trim()
+              : undefined,
+        } as JsonObject);
+        return;
       }
 
       const looksLikeLinearKanbanCommand =
@@ -3067,6 +3331,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
               'create_component',
               'update_component',
               'remove_component',
+              'canvas_quick_apply',
               'dispatch_to_conductor',
               'reserve_component',
               'resolve_component',

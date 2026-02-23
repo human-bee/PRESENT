@@ -51,6 +51,11 @@ type DeferredToolCallEntry = {
   enqueuedAt: number;
 };
 
+type TimerIdempotencyEntry = {
+  timerId: string;
+  touchedAt: number;
+};
+
 interface UseToolRunnerOptions {
   contextKey?: string;
   events: ToolEventsApi;
@@ -75,8 +80,14 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
   const messageToCallsRef = useRef<Map<string, Set<string>>>(new Map());
   const processedToolCallIdsRef = useRef<Map<string, number>>(new Map());
   const deferredToolCallsRef = useRef<Map<string, DeferredToolCallEntry>>(new Map());
+  const timerIdByIdempotencyRef = useRef<Map<string, TimerIdempotencyEntry>>(new Map());
+  const participantViewportRef = useRef<
+    Map<string, { viewport: { x: number; y: number; w: number; h: number }; ts: number }>
+  >(new Map());
   const DEFERRED_TOOL_CALL_TTL_MS = 20_000;
   const DEFERRED_TOOL_CALL_MAX = 128;
+  const QUICK_TIMER_IDEMPOTENCY_TTL_MS = 30 * 60_000;
+  const QUICK_TIMER_IDEMPOTENCY_MAX = 256;
   const metricsAdapter = useMemo(() => {
     if (!metricsEnabled) return undefined;
     return {
@@ -868,6 +879,377 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
           }
         }
 
+        if (tool === 'canvas_quick_apply') {
+          const routeType = parseQuickApplyRouteType(params?.fast_route_type);
+          if (!routeType) {
+            const message = 'canvas_quick_apply requires fast_route_type=timer|sticky|plain_text';
+            queue.markError(call.id, message);
+            emitError(call, message);
+            return { status: 'ERROR', message };
+          }
+
+          const dispatchRoom = resolveDispatchRoom({
+            callRoomId: call.roomId,
+            activeRoomName: room?.name,
+          });
+          const targetRoom = dispatchRoom.targetRoom;
+          if (!targetRoom || targetRoom.trim().length === 0) {
+            const message = 'canvas_quick_apply requires room identity';
+            queue.markError(call.id, message);
+            emitError(call, message);
+            return { status: 'ERROR', message };
+          }
+
+          const messageText = typeof params?.message === 'string' ? params.message.trim() : '';
+          const plainTextInput =
+            typeof params?.plain_text === 'string' && params.plain_text.trim().length > 0
+              ? params.plain_text.trim()
+              : extractQuotedText(messageText || '') ?? null;
+          const requestId =
+            typeof params?.requestId === 'string' && params.requestId.trim().length > 0
+              ? params.requestId.trim()
+              : crypto.randomUUID?.() || `${Date.now()}`;
+          const intentId =
+            typeof params?.intentId === 'string' && params.intentId.trim().length > 0
+              ? params.intentId.trim()
+              : requestId;
+          const idempotencyKey =
+            typeof params?.idempotency_key === 'string' && params.idempotency_key.trim().length > 0
+              ? params.idempotency_key.trim()
+              : `quick-${routeType}-${stableQuickHash(`${targetRoom}|${requestId}|${messageText}`)}`;
+          const participantId =
+            typeof params?.participant_id === 'string' && params.participant_id.trim().length > 0
+              ? params.participant_id.trim()
+              : undefined;
+          const participantViewport =
+            participantId && participantViewportRef.current.has(participantId)
+              ? participantViewportRef.current.get(participantId)?.viewport
+              : undefined;
+
+          let localResult: ToolRunResult = { status: 'IGNORED', message: 'No quick apply action generated' };
+          let appliedTargetId: string | undefined;
+
+          if (routeType === 'timer') {
+            const createHandler = registry.getHandler('create_component');
+            const updateHandler = registry.getHandler('update_component');
+            if (!createHandler || !updateHandler) {
+              const message = 'Quick timer handler unavailable';
+              queue.markError(call.id, message);
+              emitError(call, message);
+              return { status: 'ERROR', message };
+            }
+
+            const timerList = ComponentRegistry.list()
+              .filter((component) =>
+                component.componentType === 'RetroTimerEnhanced' || component.componentType === 'RetroTimer',
+              )
+              .sort((a, b) => (b.timestamp ?? 0) - (a.timestamp ?? 0));
+            const allowMultiple = params?.allow_multiple_timer === true;
+            const now = Date.now();
+            pruneQuickTimerIdempotencyMap(
+              timerIdByIdempotencyRef.current,
+              now,
+              QUICK_TIMER_IDEMPOTENCY_TTL_MS,
+              QUICK_TIMER_IDEMPOTENCY_MAX,
+            );
+            const mappedTimerEntry = timerIdByIdempotencyRef.current.get(idempotencyKey);
+            const mappedTimerId = mappedTimerEntry?.timerId;
+            const liveTimerIds = new Set(
+              timerList
+                .map((component) =>
+                  typeof component.messageId === 'string' ? component.messageId.trim() : '',
+                )
+                .filter((value) => value.length > 0),
+            );
+            const validMappedTimerId =
+              typeof mappedTimerId === 'string' && mappedTimerId.trim().length > 0 && liveTimerIds.has(mappedTimerId)
+                ? mappedTimerId
+                : undefined;
+            if (mappedTimerId && !validMappedTimerId) {
+              timerIdByIdempotencyRef.current.delete(idempotencyKey);
+            } else if (validMappedTimerId) {
+              timerIdByIdempotencyRef.current.set(idempotencyKey, {
+                timerId: validMappedTimerId,
+                touchedAt: now,
+              });
+            }
+            const targetTimerId =
+              validMappedTimerId ||
+              (!allowMultiple && timerList.length > 0 ? timerList[0].messageId : undefined);
+            const requestedMinutes = parseMinutesFromText(messageText || '');
+            const startRequested = /\b(start|resume|run)\b/i.test(messageText || '');
+            const pauseRequested = /\b(pause|stop|halt)\b/i.test(messageText || '');
+            const resetRequested = /\b(reset|set\s+timer)\b/i.test(messageText || '');
+
+            if (targetTimerId) {
+              const patch: Record<string, unknown> = {};
+              if (typeof requestedMinutes === 'number' && Number.isFinite(requestedMinutes) && requestedMinutes > 0) {
+                const durationSeconds = Math.max(1, Math.round(requestedMinutes)) * 60;
+                patch.configuredDuration = durationSeconds;
+                patch.timeLeft = durationSeconds;
+              }
+              if (pauseRequested) patch.isRunning = false;
+              if (!pauseRequested && startRequested) patch.isRunning = true;
+              if (resetRequested && patch.isRunning === undefined) patch.isRunning = false;
+
+              localResult =
+                (await updateHandler({
+                  call,
+                  params: { componentId: targetTimerId, patch },
+                  dispatchTL,
+                  scheduleStewardRun,
+                  stewardEnabled,
+                  emitEditorAction,
+                })) ?? { status: 'IGNORED' };
+              appliedTargetId = targetTimerId;
+              timerIdByIdempotencyRef.current.set(idempotencyKey, {
+                timerId: targetTimerId,
+                touchedAt: now,
+              });
+              pruneQuickTimerIdempotencyMap(
+                timerIdByIdempotencyRef.current,
+                now,
+                QUICK_TIMER_IDEMPOTENCY_TTL_MS,
+                QUICK_TIMER_IDEMPOTENCY_MAX,
+              );
+            } else {
+              const initialMinutes =
+                typeof requestedMinutes === 'number' && Number.isFinite(requestedMinutes) && requestedMinutes > 0
+                  ? Math.max(1, Math.round(requestedMinutes))
+                  : 5;
+              localResult =
+                (await createHandler({
+                  call,
+                  params: {
+                    type: 'RetroTimerEnhanced',
+                    messageId: `timer-${stableQuickHash(`${targetRoom}|${idempotencyKey}`)}`,
+                    spec: {
+                      initialMinutes,
+                      initialSeconds: 0,
+                      autoStart: !pauseRequested,
+                    },
+                  },
+                  dispatchTL,
+                  scheduleStewardRun,
+                  stewardEnabled,
+                  emitEditorAction,
+                })) ?? { status: 'IGNORED' };
+              const createdId =
+                typeof (localResult as any)?.messageId === 'string' ? (localResult as any).messageId : undefined;
+              if (createdId) {
+                appliedTargetId = createdId;
+                timerIdByIdempotencyRef.current.set(idempotencyKey, {
+                  timerId: createdId,
+                  touchedAt: now,
+                });
+                pruneQuickTimerIdempotencyMap(
+                  timerIdByIdempotencyRef.current,
+                  now,
+                  QUICK_TIMER_IDEMPOTENCY_TTL_MS,
+                  QUICK_TIMER_IDEMPOTENCY_MAX,
+                );
+              }
+            }
+          } else {
+            const editor = getEditor();
+            if (!editor) {
+              const message = 'Quick apply requires an active editor';
+              queue.markError(call.id, message);
+              emitError(call, message);
+              return { status: 'ERROR', message };
+            }
+
+            const viewport = participantViewport ?? editor.getViewportPageBounds();
+            const requestedBounds = toRecord(params?.bounds);
+            const bounds =
+              requestedBounds &&
+              typeof requestedBounds.x === 'number' &&
+              typeof requestedBounds.y === 'number' &&
+              typeof requestedBounds.w === 'number' &&
+              typeof requestedBounds.h === 'number'
+                ? {
+                    x: requestedBounds.x,
+                    y: requestedBounds.y,
+                    w: requestedBounds.w,
+                    h: requestedBounds.h,
+                  }
+                : viewport;
+            const stickyShapeId =
+              routeType === 'sticky'
+                ? normalizeQuickShapeId(params?.shape_id) || extractQuickStickyShapeId(messageText || '')
+                : undefined;
+            const stickyCoordinates =
+              routeType === 'sticky' ? extractQuickStickyCoordinates(messageText || '') : undefined;
+            const stickyText = routeType === 'sticky' ? extractExactStickyText(messageText || '') : undefined;
+            const text =
+              plainTextInput || stickyText || messageText || (routeType === 'sticky' ? 'Sticky note' : 'Text');
+            const shapeType = routeType === 'sticky' ? 'note' : 'text';
+            const shapeId = stickyShapeId || `quick-${routeType}-${stableQuickHash(`${targetRoom}|${idempotencyKey}|${text}`)}`;
+            const x = stickyCoordinates
+              ? stickyCoordinates.x
+              : Math.round(bounds.x + bounds.w * (routeType === 'sticky' ? 0.28 : 0.5));
+            const y = stickyCoordinates
+              ? stickyCoordinates.y
+              : Math.round(bounds.y + bounds.h * (routeType === 'sticky' ? 0.26 : 0.44));
+
+            applyEnvelope(
+              { editor, isHost: true, appliedIds: new Set() },
+              {
+                v: ACTION_VERSION,
+                sessionId: `quick-apply-${requestId}`,
+                seq: 0,
+                requestId,
+                intentId,
+                traceId: requestId,
+                ts: Date.now(),
+                actions: [
+                  {
+                    id: `qa-${shapeId}`,
+                    name: 'create_shape',
+                    params: {
+                      id: shapeId,
+                      type: shapeType,
+                      x,
+                      y,
+                      props:
+                        routeType === 'sticky'
+                          ? { text, color: 'yellow', size: 'm' }
+                          : { text, size: 'm', color: 'black' },
+                    },
+                  },
+                ],
+              },
+            );
+            appliedTargetId = shapeId;
+            localResult = {
+              status: 'SUCCESS',
+              message: `${routeType} applied`,
+              shapeId,
+            };
+          }
+
+          const normalizedLocalStatus =
+            typeof localResult.status === 'string' ? localResult.status.trim().toUpperCase() : '';
+          const locallyApplied = new Set(['SUCCESS', 'COMPLETED', 'APPLIED', 'OK']);
+          if (!locallyApplied.has(normalizedLocalStatus)) {
+            const failureMessage =
+              typeof localResult.message === 'string' && localResult.message.trim().length > 0
+                ? localResult.message
+                : `quick ${routeType} failed before apply`;
+            queue.markError(call.id, failureMessage);
+            const failureResult = {
+              status: 'FAILED',
+              message: failureMessage,
+              routeType,
+              idempotencyKey,
+            } as ToolRunResult;
+            emitDone(call, failureResult);
+            emitStewardStatusTranscript({
+              taskName: 'canvas_quick_apply',
+              status: 'failed',
+              message: failureMessage,
+            });
+            return failureResult;
+          }
+
+          const failQuickApplyProof = (message: string): ToolRunResult => {
+            queue.markError(call.id, message);
+            const failedResult = {
+              status: 'FAILED',
+              message,
+              routeType,
+              idempotencyKey,
+              locallyApplied: true,
+              ...(appliedTargetId ? { targetId: appliedTargetId } : {}),
+            } as ToolRunResult;
+            emitDone(call, failedResult);
+            emitStewardStatusTranscript({
+              taskName: 'canvas_quick_apply',
+              status: 'failed',
+              message,
+            });
+            emitStewardStatusTranscript({
+              taskName: 'canvas.quick_apply_proof',
+              status: 'failed',
+              message,
+            });
+            return failedResult;
+          };
+
+          try {
+            const res = await fetchWithSupabaseAuth('/api/steward/runCanvas', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                room: targetRoom,
+                task: 'canvas.quick_apply_proof',
+                params: {
+                  room: targetRoom,
+                  requestId,
+                  intentId,
+                  fast_route_type: routeType,
+                  idempotency_key: idempotencyKey,
+                  participant_id: participantId,
+                  message: messageText,
+                  ...(plainTextInput ? { plain_text: plainTextInput } : {}),
+                  ...(appliedTargetId ? { applied_target_id: appliedTargetId } : {}),
+                },
+                requestId,
+                traceId: requestId,
+                intentId,
+                idempotencyKey,
+                lockKey: `quick:${targetRoom}:${routeType}:${participantId ?? 'unknown'}`,
+              }),
+            });
+            if (!res.ok) {
+              const message = `quick ${routeType} applied locally; proof enqueue failed (HTTP ${res.status})`;
+              logger.warn('quick apply proof dispatch failed', { status: res.status, routeType, requestId });
+              return failQuickApplyProof(message);
+            }
+            const responseJson = await res.json().catch(() => ({}));
+            const responseRecord = toRecord(responseJson) ?? {};
+            const taskRecord = toRecord(responseRecord.task);
+            const taskId =
+              typeof responseRecord.taskId === 'string'
+                ? responseRecord.taskId
+                : typeof taskRecord?.id === 'string'
+                  ? taskRecord.id
+                  : undefined;
+            if (!taskId) {
+              return failQuickApplyProof(`quick ${routeType} applied locally; proof enqueue missing task id`);
+            }
+
+            queue.markComplete(call.id, (localResult.message as string) || `${routeType} applied`);
+            const result = {
+              status: 'COMPLETED',
+              message: `quick ${routeType} applied locally; proof queued`,
+              routeType,
+              idempotencyKey,
+              ...(appliedTargetId ? { targetId: appliedTargetId } : {}),
+            } as ToolRunResult;
+            emitDone(call, result);
+            emitStewardStatusTranscript({
+              taskName: 'canvas_quick_apply',
+              status: 'queued',
+              message: String(result.message),
+            });
+            void pollStewardTaskCompletion({
+              call,
+              taskId,
+              roomName: targetRoom,
+              taskName: 'canvas.quick_apply_proof',
+            });
+            return result;
+          } catch (error) {
+            logger.warn('quick apply proof dispatch error', { error, routeType, requestId });
+            return failQuickApplyProof(
+              error instanceof Error
+                ? `quick ${routeType} applied locally; proof dispatch error: ${error.message}`
+                : `quick ${routeType} applied locally; proof dispatch error`,
+            );
+          }
+        }
+
         if (tool === 'dispatch_to_conductor') {
           const task = typeof params?.task === 'string' ? params.task.trim() : '';
           const dispatchParams = (params?.params as Record<string, unknown>) || {};
@@ -1494,6 +1876,43 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
       }
     };
 
+    const offViewport = bus.on('agent:viewport_selection', (message: unknown) => {
+      const record = toRecord(message);
+      if (!record) return;
+      const participantId =
+        typeof record.participantId === 'string' && record.participantId.trim().length > 0
+          ? record.participantId.trim()
+          : '';
+      const viewport = toRecord(record.viewport);
+      if (
+        !participantId ||
+        !viewport ||
+        typeof viewport.x !== 'number' ||
+        typeof viewport.y !== 'number' ||
+        typeof viewport.w !== 'number' ||
+        typeof viewport.h !== 'number'
+      ) {
+        return;
+      }
+      participantViewportRef.current.set(participantId, {
+        viewport: {
+          x: viewport.x,
+          y: viewport.y,
+          w: viewport.w,
+          h: viewport.h,
+        },
+        ts: Date.now(),
+      });
+      if (participantViewportRef.current.size > 64) {
+        const cutoff = Date.now() - 60_000;
+        for (const [id, entry] of participantViewportRef.current.entries()) {
+          if (entry.ts < cutoff) {
+            participantViewportRef.current.delete(id);
+          }
+        }
+      }
+    });
+
     const offTool = bus.on('tool_call', (message: unknown) => {
       try {
         const parsed = parseToolCallMessage(message);
@@ -1825,6 +2244,7 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
     });
 
     return () => {
+      offViewport();
       offTool();
       offStewardTrigger();
       offDecision();
@@ -1941,10 +2361,109 @@ function getEditor(): Editor | null {
   return editor ?? null;
 }
 
+type QuickApplyRouteType = 'timer' | 'sticky' | 'plain_text';
+
+function parseQuickApplyRouteType(value: unknown): QuickApplyRouteType | null {
+  if (typeof value !== 'string') return null;
+  const normalized = value.trim().toLowerCase();
+  if (normalized === 'timer') return 'timer';
+  if (normalized === 'sticky') return 'sticky';
+  if (normalized === 'plain_text') return 'plain_text';
+  return null;
+}
+
+function extractQuotedText(input: string): string | null {
+  const normalized = input.replace(/[“”]/g, '"');
+  const quoted = normalized.match(/"([^"\n]+)"/);
+  if (quoted?.[1]) {
+    const text = quoted[1].trim();
+    return text.length > 0 ? text : null;
+  }
+  const colon = normalized.match(/:\s*(.+)$/);
+  if (!colon?.[1]) return null;
+  const text = colon[1].trim().replace(/[.?!]+$/, '').trim();
+  return text.length > 0 ? text : null;
+}
+
+function pruneQuickTimerIdempotencyMap(
+  map: Map<string, TimerIdempotencyEntry>,
+  now: number,
+  ttlMs: number,
+  maxEntries: number,
+): void {
+  for (const [key, entry] of map.entries()) {
+    if (!entry || typeof entry.timerId !== 'string' || entry.timerId.trim().length === 0) {
+      map.delete(key);
+      continue;
+    }
+    if (!Number.isFinite(entry.touchedAt) || now - entry.touchedAt > ttlMs) {
+      map.delete(key);
+    }
+  }
+
+  if (map.size <= maxEntries) return;
+  const oldestFirst = [...map.entries()].sort((a, b) => a[1].touchedAt - b[1].touchedAt);
+  for (const [key] of oldestFirst) {
+    if (map.size <= maxEntries) break;
+    map.delete(key);
+  }
+}
+
+function stableQuickHash(input: string): string {
+  let hash = 2166136261;
+  for (let i = 0; i < input.length; i += 1) {
+    hash ^= input.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return Math.abs(hash >>> 0).toString(16).padStart(8, '0');
+}
+
 function parseMinutesFromText(text: string): number | undefined {
   const match = text.match(/\b(?:for\s+)?(\d{1,3})\s*(?:minute|minutes|mins|min|m)\b/);
   if (!match) return undefined;
   return Number(match[1]);
+}
+
+function normalizeQuickShapeId(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const candidate = value.trim().toLowerCase();
+  if (!candidate) return undefined;
+  return /^[a-z][a-z0-9_-]*$/.test(candidate) ? candidate : undefined;
+}
+
+function extractQuickStickyShapeId(input: string): string | undefined {
+  const match = input.match(/\b(?:with\s+id|id)\s+([a-z][a-z0-9_-]*)\b/i);
+  return normalizeQuickShapeId(match?.[1]);
+}
+
+function extractQuickStickyCoordinates(input: string): { x: number; y: number } | undefined {
+  const match = input.match(/\bx\s*=\s*(-?\d+(?:\.\d+)?)\s*(?:,?\s*)y\s*=\s*(-?\d+(?:\.\d+)?)/i);
+  if (!match) return undefined;
+  const x = Number.parseFloat(match[1] ?? '');
+  const y = Number.parseFloat(match[2] ?? '');
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return undefined;
+  return { x: Math.round(x), y: Math.round(y) };
+}
+
+function extractExactStickyText(input: string): string | undefined {
+  const normalized = input.replace(/[“”]/g, '"');
+  const marker = normalized.match(/\bexact\s+text(?:\s*(?:is|:))?\s*/i);
+  if (marker?.index == null) return undefined;
+  const tail = normalized.slice(marker.index + marker[0].length).trim();
+  if (!tail) return undefined;
+  let candidate = tail;
+  if (tail.startsWith('"')) {
+    const endQuote = tail.indexOf('"', 1);
+    if (endQuote > 1) {
+      candidate = tail.slice(1, endQuote);
+    }
+  } else {
+    candidate = candidate.split(/\bif\s+sticky[-_a-z0-9]+\b/i)[0] ?? candidate;
+    candidate = candidate.split(/\bthen\b/i)[0] ?? candidate;
+    candidate = candidate.split(/\n/)[0] ?? candidate;
+  }
+  const cleaned = candidate.trim().replace(/[.?!]+$/, '').trim();
+  return cleaned.length > 0 ? cleaned : undefined;
 }
 
 function toRecord(value: unknown): Record<string, unknown> | null {

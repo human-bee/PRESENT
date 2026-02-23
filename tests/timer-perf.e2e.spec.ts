@@ -1,4 +1,6 @@
 import { test, expect } from '@playwright/test';
+import { mkdir, writeFile } from 'node:fs/promises';
+import { dirname } from 'node:path';
 
 const BASE_URL = 'http://localhost:3000';
 const PASSWORD = 'Devtools123!';
@@ -23,9 +25,11 @@ async function connectRoom(page: any) {
   const modifier = isMac() ? 'Meta' : 'Control';
   await page.keyboard.press(`${modifier}+KeyK`);
   await page.waitForTimeout(500);
-  const connectButton = page.getByRole('button', { name: 'Connect' });
-  await connectButton.scrollIntoViewIfNeeded();
-  await connectButton.click();
+  const connectButton = page.getByRole('button', { name: /connect/i }).first();
+  await connectButton.waitFor({ state: 'visible', timeout: 15_000 });
+  await connectButton.evaluate((button: HTMLButtonElement) => {
+    button.click();
+  });
   await page.getByRole('button', { name: 'Disconnect' }).waitFor({ timeout: 20_000 });
 }
 
@@ -87,6 +91,13 @@ async function invokeToolWithMetrics(page: any, call: any, timeoutMs = 5_000) {
   );
 }
 
+const percentile = (sorted: number[], value: number): number => {
+  if (sorted.length === 0) return 0;
+  if (sorted.length === 1) return sorted[0];
+  const rank = Math.min(sorted.length - 1, Math.max(0, Math.ceil(sorted.length * value) - 1));
+  return sorted[rank];
+};
+
 test.describe('Timer send → paint latency', () => {
   test.beforeEach(async ({ page }) => {
     await page.addInitScript(() => {
@@ -144,6 +155,30 @@ test.describe('Timer send → paint latency', () => {
     expect(updateMetrics).toBeTruthy();
     expect(typeof updateMetrics.dtPaintMs).toBe('number');
     expect(updateMetrics.dtPaintMs).toBeLessThan(1500);
+
+    const samples = [createMetrics.dtPaintMs, updateMetrics.dtPaintMs]
+      .filter((value: unknown): value is number => typeof value === 'number' && Number.isFinite(value))
+      .sort((a, b) => a - b);
+    const p50 = percentile(samples, 0.5);
+    const p95 = percentile(samples, 0.95);
+    const summary = {
+      sampledAt: new Date().toISOString(),
+      sampleCount: samples.length,
+      p50Ms: p50,
+      p95Ms: p95,
+      samples,
+    };
+
+    const metricsPath =
+      process.env.PLAYWRIGHT_LATENCY_METRICS_FILE || 'artifacts/latency/deterministic-lane.json';
+    await mkdir(dirname(metricsPath), { recursive: true });
+    await writeFile(metricsPath, JSON.stringify(summary, null, 2), 'utf8');
+
+    if (process.env.CI_LATENCY_SOFT_GATE === 'true') {
+      expect(p95).toBeLessThanOrEqual(800);
+    } else {
+      expect(p95).toBeLessThan(1500);
+    }
 
     await page.waitForTimeout(300);
     await expect(page.getByText('07:00').first()).toBeVisible({ timeout: 5000 });

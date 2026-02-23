@@ -54,5 +54,26 @@ describe('/api/session', () => {
     expect(response.status).toBe(404);
     expect(sessionQuery.maybeSingle).toHaveBeenCalledTimes(1);
   });
-});
 
+  it('returns 200 with notFound marker when allowMissing=1', async () => {
+    const sessionQuery = buildSessionQuery({ data: null, error: null });
+    createClientMock.mockReturnValue({
+      from: jest.fn(() => sessionQuery),
+    });
+
+    const GET = await loadGet();
+    const response = await GET({
+      url: 'http://localhost/api/session?roomName=canvas-room-1&allowMissing=1',
+      nextUrl: new URL('http://localhost/api/session?roomName=canvas-room-1&allowMissing=1'),
+      headers: { get: () => null },
+    } as unknown as import('next/server').NextRequest);
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json).toEqual({
+      session: null,
+      notFound: true,
+    });
+    expect(sessionQuery.maybeSingle).toHaveBeenCalledTimes(1);
+  });
+});

@@ -119,7 +119,7 @@ const PROMPT_LINES = [
   '- For long copy, create a Quiet block then use update_shape props.text to set copy and convert to richText automatically.',
   '',
   'Colors',
-  "- When mimicking the background, prefer fill: 'background' plus color: 'grey' for strokes so shapes remain visible.",
+  "- When mimicking the background, prefer fill: 'none' with color: 'grey' so outlines stay visible.",
   '',
   'Communicating with the user',
   '- Use message actions to summarize progress; think is invisible.',

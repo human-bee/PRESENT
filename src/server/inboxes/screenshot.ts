@@ -5,6 +5,8 @@ import { join } from 'path';
 export type ScreenshotPayload = {
   sessionId: string;
   requestId: string;
+  requesterParticipantId?: string;
+  uploaderParticipantId?: string;
   image: { mime: string; dataUrl: string; bytes: number; width?: number; height?: number };
   bounds: { x: number; y: number; w: number; h: number };
   viewport: { x: number; y: number; w: number; h: number };
