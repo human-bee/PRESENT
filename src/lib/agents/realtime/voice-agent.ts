@@ -1681,7 +1681,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
               : undefined;
           const metadataSafe =
             canvasParams.metadata && typeof canvasParams.metadata === 'object'
-              ? (JSON.parse(JSON.stringify(canvasParams.metadata)) as Record<string, unknown>)
+              ? (JSON.parse(JSON.stringify(canvasParams.metadata)) as JsonObject)
               : null;
           const participantId =
             (typeof canvasParams.participant_id === 'string' && canvasParams.participant_id.trim()
@@ -2587,10 +2587,9 @@ Your only output is function calls. Never use plain text unless absolutely neces
               typeof args.requestId === 'string' && args.requestId.trim().length > 0
                 ? args.requestId.trim()
                 : randomUUID(),
-            intentId:
-              typeof args.intentId === 'string' && args.intentId.trim().length > 0
-                ? args.intentId.trim()
-                : undefined,
+            ...(typeof args.intentId === 'string' && args.intentId.trim().length > 0
+              ? { intentId: args.intentId.trim() }
+              : {}),
             ...(typeof args.plain_text === 'string' && args.plain_text.trim().length > 0
               ? { plain_text: args.plain_text.trim() }
               : {}),

@@ -1152,93 +1152,102 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
             return failureResult;
           }
 
-          queue.markComplete(call.id, (localResult.message as string) || `${routeType} applied`);
-          const result = {
-            status: 'COMPLETED',
-            message: `quick ${routeType} applied locally; proof queued`,
-            routeType,
-            idempotencyKey,
-            ...(appliedTargetId ? { targetId: appliedTargetId } : {}),
-          } as ToolRunResult;
-          emitDone(call, result);
-          emitStewardStatusTranscript({
-            taskName: 'canvas_quick_apply',
-            status: 'queued',
-            message: String(result.message),
-          });
+          const failQuickApplyProof = (message: string): ToolRunResult => {
+            queue.markError(call.id, message);
+            const failedResult = {
+              status: 'FAILED',
+              message,
+              routeType,
+              idempotencyKey,
+              locallyApplied: true,
+              ...(appliedTargetId ? { targetId: appliedTargetId } : {}),
+            } as ToolRunResult;
+            emitDone(call, failedResult);
+            emitStewardStatusTranscript({
+              taskName: 'canvas_quick_apply',
+              status: 'failed',
+              message,
+            });
+            emitStewardStatusTranscript({
+              taskName: 'canvas.quick_apply_proof',
+              status: 'failed',
+              message,
+            });
+            return failedResult;
+          };
 
-          void (async () => {
-            try {
-              const res = await fetchWithSupabaseAuth('/api/steward/runCanvas', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
+          try {
+            const res = await fetchWithSupabaseAuth('/api/steward/runCanvas', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                room: targetRoom,
+                task: 'canvas.quick_apply_proof',
+                params: {
                   room: targetRoom,
-                  task: 'canvas.quick_apply_proof',
-                  params: {
-                    room: targetRoom,
-                    requestId,
-                    intentId,
-                    fast_route_type: routeType,
-                    idempotency_key: idempotencyKey,
-                    participant_id: participantId,
-                    message: messageText,
-                    ...(plainTextInput ? { plain_text: plainTextInput } : {}),
-                    ...(appliedTargetId ? { applied_target_id: appliedTargetId } : {}),
-                  },
                   requestId,
-                  traceId: requestId,
                   intentId,
-                  idempotencyKey,
-                  lockKey: `quick:${routeType}:${participantId ?? 'unknown'}`,
-                }),
-              });
-              if (!res.ok) {
-                logger.warn('quick apply proof dispatch failed', { status: res.status, routeType, requestId });
-                emitStewardStatusTranscript({
-                  taskName: 'canvas.quick_apply_proof',
-                  status: 'failed',
-                  message: `canvas.quick_apply_proof failed to enqueue (HTTP ${res.status})`,
-                });
-                return;
-              }
-              const responseJson = await res.json().catch(() => ({}));
-              const responseRecord = toRecord(responseJson) ?? {};
-              const taskRecord = toRecord(responseRecord.task);
-              const taskId =
-                typeof responseRecord.taskId === 'string'
-                  ? responseRecord.taskId
-                  : typeof taskRecord?.id === 'string'
-                    ? taskRecord.id
-                    : undefined;
-              if (taskId) {
-                void pollStewardTaskCompletion({
-                  call,
-                  taskId,
-                  roomName: targetRoom,
-                  taskName: 'canvas.quick_apply_proof',
-                });
-                return;
-              }
-              emitStewardStatusTranscript({
-                taskName: 'canvas.quick_apply_proof',
-                status: 'failed',
-                message: 'canvas.quick_apply_proof missing task id',
-              });
-            } catch (error) {
-              logger.warn('quick apply proof dispatch error', { error, routeType, requestId });
-              emitStewardStatusTranscript({
-                taskName: 'canvas.quick_apply_proof',
-                status: 'failed',
-                message:
-                  error instanceof Error
-                    ? `canvas.quick_apply_proof dispatch error: ${error.message}`
-                    : 'canvas.quick_apply_proof dispatch error',
-              });
+                  fast_route_type: routeType,
+                  idempotency_key: idempotencyKey,
+                  participant_id: participantId,
+                  message: messageText,
+                  ...(plainTextInput ? { plain_text: plainTextInput } : {}),
+                  ...(appliedTargetId ? { applied_target_id: appliedTargetId } : {}),
+                },
+                requestId,
+                traceId: requestId,
+                intentId,
+                idempotencyKey,
+                lockKey: `quick:${targetRoom}:${routeType}:${participantId ?? 'unknown'}`,
+              }),
+            });
+            if (!res.ok) {
+              const message = `quick ${routeType} applied locally; proof enqueue failed (HTTP ${res.status})`;
+              logger.warn('quick apply proof dispatch failed', { status: res.status, routeType, requestId });
+              return failQuickApplyProof(message);
             }
-          })();
+            const responseJson = await res.json().catch(() => ({}));
+            const responseRecord = toRecord(responseJson) ?? {};
+            const taskRecord = toRecord(responseRecord.task);
+            const taskId =
+              typeof responseRecord.taskId === 'string'
+                ? responseRecord.taskId
+                : typeof taskRecord?.id === 'string'
+                  ? taskRecord.id
+                  : undefined;
+            if (!taskId) {
+              return failQuickApplyProof(`quick ${routeType} applied locally; proof enqueue missing task id`);
+            }
 
-          return result;
+            queue.markComplete(call.id, (localResult.message as string) || `${routeType} applied`);
+            const result = {
+              status: 'COMPLETED',
+              message: `quick ${routeType} applied locally; proof queued`,
+              routeType,
+              idempotencyKey,
+              ...(appliedTargetId ? { targetId: appliedTargetId } : {}),
+            } as ToolRunResult;
+            emitDone(call, result);
+            emitStewardStatusTranscript({
+              taskName: 'canvas_quick_apply',
+              status: 'queued',
+              message: String(result.message),
+            });
+            void pollStewardTaskCompletion({
+              call,
+              taskId,
+              roomName: targetRoom,
+              taskName: 'canvas.quick_apply_proof',
+            });
+            return result;
+          } catch (error) {
+            logger.warn('quick apply proof dispatch error', { error, routeType, requestId });
+            return failQuickApplyProof(
+              error instanceof Error
+                ? `quick ${routeType} applied locally; proof dispatch error: ${error.message}`
+                : `quick ${routeType} applied locally; proof dispatch error`,
+            );
+          }
         }
 
         if (tool === 'dispatch_to_conductor') {

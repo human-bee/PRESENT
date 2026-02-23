@@ -438,7 +438,11 @@ const extractEquationLabel = (message: string): string | null => {
   return normalized.slice(0, 80);
 };
 
-const buildGraphFallbackActions = (message: string, payload: JsonObject, requestId: string): AgentAction[] => {
+const buildGraphFallbackActions = (
+  message: string,
+  payload: JsonObject,
+  requestId: string,
+): Array<{ id: string; name: AgentAction['name']; params: JsonObject }> => {
   const deterministicSeed = createHash('sha1')
     .update(`${requestId}|${message}`)
     .digest('hex');

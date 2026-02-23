@@ -35,6 +35,7 @@ function parseArgs(argv) {
     headless: true,
     maxTurns: 12,
     requireAdminTraceEvidence: true,
+    canvasId: readString(process.env.PLAYWRIGHT_CANVAS_ID),
   };
   for (let i = 2; i < argv.length; i += 1) {
     const value = argv[i];
@@ -46,9 +47,12 @@ function parseArgs(argv) {
     else if (value.startsWith('--outDir=')) args.outDir = value.split('=').slice(1).join('=');
     else if (value.startsWith('--timeoutMs=')) args.timeoutMs = Number(value.split('=').slice(1).join('')) || args.timeoutMs;
     else if (value.startsWith('--maxTurns=')) args.maxTurns = Number(value.split('=').slice(1).join('')) || args.maxTurns;
+    else if (value.startsWith('--canvasId=')) args.canvasId = readString(value.split('=').slice(1).join(''));
   }
   return args;
 }
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function transcriptInputCandidates(page) {
   return page.locator(
@@ -1340,7 +1344,8 @@ async function fetchSessionCorrelationViaSupabase(room, limit = 300) {
 
 async function run() {
   const args = parseArgs(process.argv);
-  const canvasId = randomUUID();
+  const requestedCanvasId = readString(args.canvasId);
+  const canvasId = requestedCanvasId && UUID_PATTERN.test(requestedCanvasId) ? requestedCanvasId : randomUUID();
   const runId = `showcase-${Date.now()}-${canvasId.slice(0, 8)}`;
   const room = `canvas-${canvasId}`;
   const outputDir = path.join(args.outDir, runId);
