@@ -52,16 +52,14 @@ type TraceResolutionSource =
   | 'resolved_from_request_events'
   | 'missing';
 
-const extractExperimentDiagnostics = (task: TaskStatusRow): ReturnType<typeof assignmentToDiagnostics> =>
-  assignmentToDiagnostics(
-    readExperimentAssignmentFromUnknown(
-      task.params && typeof task.params === 'object' && !Array.isArray(task.params)
-        ? ((task.params as Record<string, unknown>).metadata ??
-          (task.params as Record<string, unknown>).experiment ??
-          task.params)
-        : null,
-    ),
-  );
+const extractExperimentDiagnostics = (task: TaskStatusRow): ReturnType<typeof assignmentToDiagnostics> => {
+  const params =
+    task.params && typeof task.params === 'object' && !Array.isArray(task.params)
+      ? (task.params as Record<string, unknown>)
+      : null;
+
+  return assignmentToDiagnostics(readExperimentAssignmentFromUnknown(params));
+};
 
 const toTaskPayload = (task: TaskStatusRow) => {
   const experiment = extractExperimentDiagnostics(task);

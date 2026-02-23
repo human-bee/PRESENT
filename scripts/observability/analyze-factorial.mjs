@@ -100,6 +100,10 @@ const summarize = (runs) => {
     control && Number.isFinite(control.reliabilityRate)
       ? control.reliabilityRate - reliabilityMarginPct / 100
       : null;
+  const validationErrors = [];
+  if (!control) {
+    validationErrors.push(`missing_control_variant:${controlVariantId}`);
+  }
 
   const regressions = variantRows
     .filter((row) => {
@@ -125,10 +129,11 @@ const summarize = (runs) => {
     controlVariantId,
     reliabilityMarginPct,
     reliabilityFloor,
+    validationErrors,
     variants: variantRows,
     regressions,
     globalP95,
-    status: regressions.length === 0 ? 'passed' : 'failed',
+    status: validationErrors.length > 0 || regressions.length > 0 ? 'failed' : 'passed',
   };
 };
 
