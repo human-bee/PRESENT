@@ -2962,6 +2962,29 @@ Your only output is function calls. Never use plain text unless absolutely neces
       if (timeoutHandle) clearTimeout(timeoutHandle);
       return result.ok ? { ok: true, value: (result as { ok: true; value: T }).value } : { ok: false };
     };
+    const publishAgentStatus = async (state: string, detail: Record<string, unknown>) => {
+      try {
+        await job.room.localParticipant?.publishData(
+          new TextEncoder().encode(
+            JSON.stringify({
+              type: 'agent:status',
+              state,
+              detail,
+              timestamp: Date.now(),
+            }),
+          ),
+          {
+            reliable: true,
+            topic: 'agent:status',
+          },
+        );
+      } catch (error) {
+        console.warn('[VoiceAgent] failed to publish agent status event', {
+          state,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    };
 
     type PendingReply = { options: { userInput?: string }; attempts: number };
     const pendingReplies: PendingReply[] = [];
@@ -3049,6 +3072,13 @@ Your only output is function calls. Never use plain text unless absolutely neces
                 console.warn('[VoiceAgent] dropping reply after repeated active response conflicts', {
                   attempts: recovery.attempts,
                   maxAttempts: recovery.maxAttempts,
+                  userInput: next.options.userInput ? next.options.userInput.slice(0, 120) : undefined,
+                });
+                await publishAgentStatus('active_response_recovery_dropped', {
+                  reason: 'max_recovery_attempts_exceeded',
+                  attempts: recovery.attempts,
+                  maxAttempts: recovery.maxAttempts,
+                  queuedReplies: pendingReplies.length,
                   userInput: next.options.userInput ? next.options.userInput.slice(0, 120) : undefined,
                 });
               }
