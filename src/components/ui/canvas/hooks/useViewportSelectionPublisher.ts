@@ -63,8 +63,13 @@ export function useViewportSelectionPublisher(editor: Editor | undefined, room: 
           const shouldSendViewport = viewportChanged(viewportPayload) || selectionChanged(selection);
           if (shouldSendViewport) {
             lastViewport = viewportPayload;
+            const participantId =
+              typeof room.localParticipant?.identity === 'string'
+                ? room.localParticipant.identity
+                : undefined;
             bus.send('agent:viewport_selection', {
               type: 'agent:viewport_selection',
+              ...(participantId ? { participantId } : {}),
               viewport: viewportPayload,
               selection,
               ts: now,

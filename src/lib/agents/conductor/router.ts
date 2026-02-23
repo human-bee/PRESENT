@@ -324,6 +324,8 @@ const DRAW_OR_STICKY_PATTERN =
   /\b(draw|sketch|doodle|illustrate|diagram|paint|sticky\s*note|post[-\s]?it|add\s+note|label)\b/i;
 const STICKY_NOTE_PATTERN = /\b(sticky\s*note|post[-\s]?it|note)\b/i;
 const EXACT_STICKY_TEXT_PATTERN = /\bexact\s+text(?:\s*(?:is|:))?\s*/i;
+const QUICK_PLAIN_TEXT_PATTERN =
+  /\b(add|write|type|put|place|insert)\s+(?:plain\s+)?text\b|\bwrite\s+["“][^"”]+["”]\s+(?:on|onto)\s+(?:the\s+)?canvas\b/i;
 const CANVAS_SURFACE_PATTERN = /\b(canvas|whiteboard|board|tldraw)\b/i;
 const STICKY_BUNNY_TARGET_PATTERN = /\b(near|by|next to|around)\s+(?:the\s+)?bunny\b/i;
 const STICKY_FOREST_TARGET_PATTERN = /\b(near|by|next to|around)\s+(?:the\s+)?forest\b/i;
@@ -373,6 +375,30 @@ const extractExactStickyText = (message: string): string | null => {
   }
   const cleaned = candidate.trim().replace(/[.?!]+$/, '').trim();
   return cleaned.length > 0 ? cleaned : null;
+};
+
+const extractQuickCanvasText = (message: string): { text: string; shapeType: 'note' | 'text' } | null => {
+  const stickyText = extractExactStickyText(message);
+  if (stickyText) {
+    return { text: stickyText, shapeType: 'note' };
+  }
+  if (!QUICK_PLAIN_TEXT_PATTERN.test(message)) return null;
+  const normalized = message.replace(/[“”]/g, '"');
+  const quoted = normalized.match(/"([^"\n]+)"/);
+  if (quoted?.[1]) {
+    const text = quoted[1].trim();
+    if (text.length > 0) {
+      return { text, shapeType: 'text' };
+    }
+  }
+  const afterColon = normalized.match(/:\s*(.+)$/);
+  if (afterColon?.[1]) {
+    const text = afterColon[1].trim().replace(/[.?!]+$/, '').trim();
+    if (text.length > 0) {
+      return { text, shapeType: 'text' };
+    }
+  }
+  return null;
 };
 
 const extractStickyTargetHint = (message: string): 'bunny' | 'forest' | undefined => {
@@ -937,14 +963,15 @@ async function handleFairyIntent(rawParams: JsonObject) {
         });
       }
 
-      const quickText = extractExactStickyText(message);
+      const quickText = extractQuickCanvasText(message);
       if (quickText) {
         const targetHint = extractStickyTargetHint(message);
         const shapeId = extractStickyShapeId(message);
         const coordinates = extractStickyCoordinates(message);
-        logger.info('[Conductor] routing exact sticky note text to canvas.quick_text', {
+        logger.info('[Conductor] routing quick text intent to canvas.quick_text', {
           intentId: intent.id,
           room: intent.room,
+          shapeType: quickText.shapeType,
           shapeId: shapeId ?? 'none',
           x: coordinates?.x ?? null,
           y: coordinates?.y ?? null,
@@ -952,8 +979,8 @@ async function handleFairyIntent(rawParams: JsonObject) {
         });
         return executeTaskLegacy('canvas.quick_text', {
           room: intent.room,
-          text: quickText,
-          shapeType: 'note',
+          text: quickText.text,
+          shapeType: quickText.shapeType,
           ...(shapeId ? { shapeId } : {}),
           ...(coordinates ? coordinates : {}),
           ...(targetHint ? { targetHint } : {}),

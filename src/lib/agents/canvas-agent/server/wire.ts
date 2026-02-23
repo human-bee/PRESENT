@@ -278,6 +278,9 @@ export async function requestScreenshot(room: string, request: Omit<ScreenshotRe
       : { w: maxEdge, h: maxEdge },
     token,
     roomId: room,
+    ...(typeof request.requesterParticipantId === 'string' && request.requesterParticipantId.trim().length > 0
+      ? { requesterParticipantId: request.requesterParticipantId.trim() }
+      : {}),
   };
   const data = new TextEncoder().encode(JSON.stringify(payload));
   await sendRoomData({

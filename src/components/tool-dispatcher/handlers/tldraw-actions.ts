@@ -376,10 +376,11 @@ function normalizeCreate(shape: {
 
   const geoKinds = new Set(['rectangle', 'ellipse', 'triangle', 'diamond', 'rhombus', 'hexagon', 'star']);
   if (geoKinds.has(rawType)) {
-    if ('text' in props) delete (props as any).text;
-    if ('label' in props) delete (props as any).label;
-    if ('content' in props) delete (props as any).content;
-    return { id, type: 'geo', x, y, props: { ...props, geo: rawType } };
+    const sanitizedGeoProps = sanitizeShapeProps({ ...props }, rawType);
+    if ('text' in sanitizedGeoProps) delete (sanitizedGeoProps as any).text;
+    if ('label' in sanitizedGeoProps) delete (sanitizedGeoProps as any).label;
+    if ('content' in sanitizedGeoProps) delete (sanitizedGeoProps as any).content;
+    return { id, type: 'geo', x, y, props: { ...sanitizedGeoProps, geo: rawType } };
   }
   if (rawType === 'note') {
     const nextProps = sanitizeShapeProps({ ...props }, 'note');

@@ -6,6 +6,25 @@ type MergeFn = (patch: Partial<LivekitRoomConnectorState>) => void;
 type GetStateFn = () => LivekitRoomConnectorState;
 
 const normalizeRoomName = (value: string): string => value.trim();
+const AGENT_DISPATCH_COOLDOWN_MS = Math.max(
+  1000,
+  Number.parseInt(process.env.NEXT_PUBLIC_AGENT_DISPATCH_COOLDOWN_MS ?? '5000', 10) || 5000,
+);
+const AGENT_DISPATCH_TIMEOUT_MS = Math.max(
+  5000,
+  Number.parseInt(process.env.NEXT_PUBLIC_AGENT_DISPATCH_TIMEOUT_MS ?? '30000', 10) || 30000,
+);
+const AGENT_DISPATCH_RETRY_DELAY_MS = Math.max(
+  1000,
+  Number.parseInt(process.env.NEXT_PUBLIC_AGENT_DISPATCH_RETRY_DELAY_MS ?? '2500', 10) || 2500,
+);
+const AGENT_DISPATCH_MAX_RETRIES = Math.max(
+  0,
+  Number.parseInt(process.env.NEXT_PUBLIC_AGENT_DISPATCH_MAX_RETRIES ?? '2', 10) || 2,
+);
+
+const isRetryableDispatchStatus = (status: number): boolean =>
+  status === 404 || status === 408 || status === 425 || status === 429 || status >= 500;
 
 export function useAgentDispatch(
   roomName: string,
@@ -14,23 +33,60 @@ export function useAgentDispatch(
   getState: GetStateFn,
 ) {
   const dispatchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const dispatchRetryRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const dispatchRetryCountRef = useRef(0);
   const dispatchInFlightRef = useRef(false);
   const lastDispatchAtRef = useRef(0);
 
   // Trigger agent join
-  const requestAgent = useCallback(async () => {
+  const requestAgent = useCallback(async (options?: { force?: boolean }) => {
+    const force = options?.force === true;
+    const scheduleRetry = (normalizedRoomName: string, reason: string) => {
+      if (dispatchRetryCountRef.current >= AGENT_DISPATCH_MAX_RETRIES) {
+        mergeState({
+          agentStatus: 'failed',
+          errorMessage: reason,
+        });
+        return;
+      }
+      dispatchRetryCountRef.current += 1;
+      const retryAttempt = dispatchRetryCountRef.current;
+      mergeState({
+        agentStatus: 'dispatching',
+        errorMessage: `${reason}. Retrying (${retryAttempt}/${AGENT_DISPATCH_MAX_RETRIES})`,
+      });
+      if (dispatchRetryRef.current) {
+        clearTimeout(dispatchRetryRef.current);
+      }
+      dispatchRetryRef.current = setTimeout(() => {
+        dispatchRetryRef.current = null;
+        const latest = getState();
+        if (latest.agentStatus === 'joined') {
+          dispatchRetryCountRef.current = 0;
+          return;
+        }
+        if (latest.connectionState !== 'connected' && latest.connectionState !== 'reconnecting') {
+          return;
+        }
+        console.log(`🔁 [LiveKitConnector-${normalizedRoomName}] Retrying agent dispatch...`);
+        lastDispatchAtRef.current = 0;
+        void requestAgent({ force: true });
+      }, AGENT_DISPATCH_RETRY_DELAY_MS);
+    };
+
     if (dispatchInFlightRef.current) {
       return;
     }
     const latestState = getState();
     if (latestState.agentStatus === 'joined' && latestState.agentIdentity) {
+      dispatchRetryCountRef.current = 0;
       return;
     }
-    if (latestState.agentStatus === 'dispatching') {
+    if (!force && latestState.agentStatus === 'dispatching') {
       return;
     }
     const nowMs = Date.now();
-    if (nowMs - lastDispatchAtRef.current < 5000) {
+    if (!force && nowMs - lastDispatchAtRef.current < AGENT_DISPATCH_COOLDOWN_MS) {
       return;
     }
     const normalizedRoomName = normalizeRoomName(roomName);
@@ -48,7 +104,7 @@ export function useAgentDispatch(
 
       mergeState({
         agentStatus: 'dispatching',
-        errorMessage: null,
+        errorMessage: dispatchRetryCountRef.current > 0 ? latestState.errorMessage : null,
       });
 
       const response = await fetch('/api/agent/dispatch', {
@@ -67,6 +123,11 @@ export function useAgentDispatch(
         const result = await response.json();
         console.log(`✅ [LiveKitConnector-${normalizedRoomName}] Agent dispatch triggered:`, result);
         if (result?.alreadyJoined || result?.reason === 'agent_already_joined') {
+          dispatchRetryCountRef.current = 0;
+          if (dispatchRetryRef.current) {
+            clearTimeout(dispatchRetryRef.current);
+            dispatchRetryRef.current = null;
+          }
           mergeState({
             agentStatus: 'joined',
             agentIdentity: latestState.agentIdentity,
@@ -84,14 +145,14 @@ export function useAgentDispatch(
             const latest = getState();
             if (latest.agentStatus === 'dispatching') {
               console.warn(
-                `⏰ [LiveKitConnector-${normalizedRoomName}] Agent dispatch timeout - no agent joined within 30 seconds`,
+                `⏰ [LiveKitConnector-${normalizedRoomName}] Agent dispatch timeout - no agent joined within ${AGENT_DISPATCH_TIMEOUT_MS / 1000}s`,
               );
-              mergeState({
-                agentStatus: 'failed',
-                errorMessage: 'Agent failed to join within timeout period',
-              });
+              scheduleRetry(
+                normalizedRoomName,
+                'Agent failed to join within timeout period',
+              );
             }
-          }, 30000);
+          }, AGENT_DISPATCH_TIMEOUT_MS);
         }
       } else {
         const errorData = await response.json().catch(() => ({}));
@@ -100,21 +161,37 @@ export function useAgentDispatch(
           response.status,
           errorData,
         );
+        const failureMessage = `Dispatch failed: ${errorData.message || response.statusText}`;
+        if (isRetryableDispatchStatus(response.status)) {
+          scheduleRetry(normalizedRoomName, failureMessage);
+          return;
+        }
         mergeState({
           agentStatus: 'failed',
-          errorMessage: `Dispatch failed: ${errorData.message || response.statusText}`,
+          errorMessage: failureMessage,
         });
       }
     } catch (error) {
       console.error(`❌ [LiveKitConnector-${normalizedRoomName}] Agent dispatch error:`, error);
-      mergeState({
-        agentStatus: 'failed',
-        errorMessage: error instanceof Error ? error.message : 'Unknown dispatch error',
-      });
+      const errorMessage = error instanceof Error ? error.message : 'Unknown dispatch error';
+      scheduleRetry(normalizedRoomName, errorMessage);
     } finally {
       dispatchInFlightRef.current = false;
     }
   }, [roomName, mergeState, getState]);
+
+  useEffect(() => {
+    if (connectionState !== 'disconnected' && connectionState !== 'error') return;
+    if (dispatchTimeoutRef.current) {
+      clearTimeout(dispatchTimeoutRef.current);
+      dispatchTimeoutRef.current = null;
+    }
+    if (dispatchRetryRef.current) {
+      clearTimeout(dispatchRetryRef.current);
+      dispatchRetryRef.current = null;
+    }
+    dispatchRetryCountRef.current = 0;
+  }, [connectionState]);
 
   // Listen for manual agent requests
   useEffect(() => {
@@ -141,6 +218,10 @@ export function useAgentDispatch(
       if (dispatchTimeoutRef.current) {
         clearTimeout(dispatchTimeoutRef.current);
         dispatchTimeoutRef.current = null;
+      }
+      if (dispatchRetryRef.current) {
+        clearTimeout(dispatchRetryRef.current);
+        dispatchRetryRef.current = null;
       }
     };
   }, [roomName, connectionState, requestAgent]);

@@ -171,6 +171,7 @@ export function useSessionSync(roomName: string) {
     const fetchSession = async (canvasId: string | null, options?: { byRoomOnly?: boolean }) => {
       const headers = await getAuthHeaders();
       const params = new URLSearchParams({ roomName });
+      params.set('allowMissing', '1');
       if (!options?.byRoomOnly) {
         if (canvasId !== null) params.set('canvasId', canvasId);
         else params.set('canvasId', 'null');
@@ -183,6 +184,7 @@ export function useSessionSync(roomName: string) {
         return null;
       }
       const json = await res.json();
+      if (json?.notFound === true) return null;
       return json.session;
     };
 

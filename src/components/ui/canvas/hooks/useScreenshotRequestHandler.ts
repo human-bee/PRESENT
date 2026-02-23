@@ -14,6 +14,7 @@ type ScreenshotRequest = {
   maxSize?: { w: number; h: number };
   token?: string;
   roomId?: string;
+  requesterParticipantId?: string;
 };
 
 type BurstState = {
@@ -27,7 +28,11 @@ type BurstState = {
 const resolveCoalesceWindowMs = () =>
   Math.max(75, Number(process.env.NEXT_PUBLIC_CANVAS_SCREENSHOT_COALESCE_MS ?? 250));
 
-export function useScreenshotRequestHandler(editor: Editor | undefined, room: Room | undefined) {
+export function useScreenshotRequestHandler(
+  editor: Editor | undefined,
+  room: Room | undefined,
+  options?: { isHost?: boolean; hostId?: string | null },
+) {
   useEffect(() => {
     if (!editor || !room) return;
 
@@ -59,7 +64,15 @@ export function useScreenshotRequestHandler(editor: Editor | undefined, room: Ro
       `${sessionId}:${Math.round(rawTarget.x)}:${Math.round(rawTarget.y)}:${Math.round(rawTarget.w)}:${Math.round(rawTarget.h)}`;
 
     const captureAndUpload = async (message: ScreenshotRequest, sceneHash: string, attempt = 0) => {
-      const { sessionId, requestId, bounds, maxSize, token: requestToken, roomId: messageRoomId } = message;
+      const {
+        sessionId,
+        requestId,
+        bounds,
+        maxSize,
+        token: requestToken,
+        roomId: messageRoomId,
+        requesterParticipantId,
+      } = message;
       const requestKey = `${sessionId}:${requestId}`;
       const uploadedAt = uploadedRequestAt.get(requestKey);
       if (typeof uploadedAt === 'number' && Date.now() - uploadedAt < requestUploadDedupeTtlMs) {
@@ -127,6 +140,10 @@ export function useScreenshotRequestHandler(editor: Editor | undefined, room: Ro
       const fallbackToken = (window as any).__presentCanvasAgentToken as string | undefined;
       const token = typeof requestToken === 'string' ? requestToken : fallbackToken;
       const roomId = typeof messageRoomId === 'string' && messageRoomId ? messageRoomId : room?.name || '';
+      const uploaderParticipantId =
+        typeof room?.localParticipant?.identity === 'string' && room.localParticipant.identity.trim().length > 0
+          ? room.localParticipant.identity.trim()
+          : undefined;
       const response = await fetch(resolveEdgeIngressUrl('/api/canvas-agent/screenshot'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -135,6 +152,10 @@ export function useScreenshotRequestHandler(editor: Editor | undefined, room: Ro
           requestId,
           roomId,
           token,
+          ...(typeof requesterParticipantId === 'string' && requesterParticipantId.trim().length > 0
+            ? { requesterParticipantId: requesterParticipantId.trim() }
+            : {}),
+          ...(uploaderParticipantId ? { uploaderParticipantId } : {}),
           image: { mime: 'image/png', dataUrl, bytes, width, height },
           bounds: { x: rawTarget.x, y: rawTarget.y, w: rawTarget.w, h: rawTarget.h },
           viewport: { x: viewport.x, y: viewport.y, w: viewport.w, h: viewport.h },
@@ -179,6 +200,34 @@ export function useScreenshotRequestHandler(editor: Editor | undefined, room: Ro
         const sessionId = String(request.sessionId || '').trim();
         const requestId = String(request.requestId || '').trim();
         if (!sessionId || !requestId) return;
+        const localParticipantId =
+          typeof room.localParticipant?.identity === 'string' ? room.localParticipant.identity.trim() : '';
+        const requesterParticipantId =
+          typeof request.requesterParticipantId === 'string' && request.requesterParticipantId.trim().length > 0
+            ? request.requesterParticipantId.trim()
+            : '';
+        const requesterIsLocal = Boolean(localParticipantId && requesterParticipantId && localParticipantId === requesterParticipantId);
+        const requesterIsPresent =
+          Boolean(requesterParticipantId) &&
+          (requesterIsLocal ||
+            Array.from(room.remoteParticipants.values()).some(
+              (participant) => participant.identity === requesterParticipantId,
+            ));
+        const hostFallbackEligible =
+          Boolean(options?.isHost) && (!requesterParticipantId || !requesterIsPresent);
+        const shouldRespond = requesterIsLocal || hostFallbackEligible;
+        if (!shouldRespond) {
+          if (isDev) {
+            console.log('[ScreenshotHandler] skipping request; not requester/host fallback', {
+              sessionId,
+              requestId,
+              requesterParticipantId,
+              localParticipantId,
+              hostId: options?.hostId ?? null,
+            });
+          }
+          return;
+        }
 
         const viewport = editor.getViewportPageBounds();
         const rawTarget =
@@ -230,7 +279,7 @@ export function useScreenshotRequestHandler(editor: Editor | undefined, room: Ro
       });
       burstStateByKey.clear();
     };
-  }, [editor, room]);
+  }, [editor, room, options?.isHost, options?.hostId]);
 }
 
 async function blobToDataUrl(blob: Blob): Promise<string> {

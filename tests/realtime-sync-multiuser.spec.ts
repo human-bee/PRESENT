@@ -131,6 +131,23 @@ async function countShapesByMessageId(page: Page, messageId: string) {
   }, messageId);
 }
 
+async function countWidgetsByType(page: Page, componentType: string) {
+  return page.evaluate((targetType) => {
+    const editor = (window as any).__present?.tldrawEditor;
+    if (!editor) return 0;
+    const shapes: Array<Record<string, any>> = editor.getCurrentPageShapes?.() || [];
+    return shapes.filter((shape) => {
+      const props = shape.props || {};
+      if (shape.type !== 'custom') return false;
+      return (
+        props.customComponent === targetType ||
+        props.componentType === targetType ||
+        props.widgetType === targetType
+      );
+    }).length;
+  }, componentType);
+}
+
 async function waitForCanvasReady(page: Page) {
   await page.waitForSelector('[data-canvas-space="true"]', { timeout: 90_000 });
   await page.waitForFunction(() => {
@@ -532,6 +549,48 @@ test.describe('Realtime Sync Multiuser', () => {
     } finally {
       await ctxA.close();
       await ctxB.close();
+    }
+  });
+
+  test('quick timer lane reuses timer for same idempotency key', async ({ browser }) => {
+    const { ctxA, ctxB, pageA, pageB } = await openSharedCanvas(browser);
+    try {
+      const call = {
+        id: `quick-timer-${Date.now()}`,
+        type: 'tool_call',
+        payload: {
+          tool: 'canvas_quick_apply',
+          params: {
+            fast_route_type: 'timer',
+            room: await resolveRoomName(pageA),
+            requestId: `req-${Date.now()}`,
+            intentId: `intent-${Date.now()}`,
+            idempotency_key: 'timer-e2e-idempotent',
+            message: 'start a 5 minute timer',
+          },
+        },
+        timestamp: Date.now(),
+        source: 'playwright',
+      };
+
+      await executeToolCall(pageA, call);
+      await expect
+        .poll(async () => countWidgetsByType(pageA, 'RetroTimerEnhanced'), { timeout: 30_000 })
+        .toBe(1);
+      await expect
+        .poll(async () => countWidgetsByType(pageB, 'RetroTimerEnhanced'), { timeout: 30_000 })
+        .toBe(1);
+
+      await executeToolCall(pageA, { ...call, id: `${call.id}-retry`, timestamp: Date.now() });
+      await expect
+        .poll(async () => countWidgetsByType(pageA, 'RetroTimerEnhanced'), { timeout: 30_000 })
+        .toBe(1);
+      await expect
+        .poll(async () => countWidgetsByType(pageB, 'RetroTimerEnhanced'), { timeout: 30_000 })
+        .toBe(1);
+    } finally {
+      await ctxA.close().catch(() => {});
+      await ctxB.close().catch(() => {});
     }
   });
 

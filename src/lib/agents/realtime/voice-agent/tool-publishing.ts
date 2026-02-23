@@ -5,7 +5,17 @@ export type ToolEvent = {
   id: string;
   roomId: string;
   type: 'tool_call';
-  payload: { tool: string; params: JsonObject; context: { source: 'voice'; timestamp: number } };
+  payload: {
+    tool: string;
+    params: JsonObject;
+    context: {
+      source: 'voice';
+      timestamp: number;
+      fast_route_type?: 'timer' | 'sticky' | 'plain_text';
+      idempotency_key?: string;
+      participant_id?: string;
+    };
+  };
   timestamp: number;
   source: 'voice';
 };
@@ -47,11 +57,30 @@ export const resolveDispatchSuppressionScope = ({
 
 export const CANVAS_DISPATCH_SUPPRESS_MS = 3000;
 
-export const buildToolEvent = (tool: string, params: JsonObject, roomId: string): ToolEvent => ({
+export const buildToolEvent = (
+  tool: string,
+  params: JsonObject,
+  roomId: string,
+  context?: {
+    fast_route_type?: 'timer' | 'sticky' | 'plain_text';
+    idempotency_key?: string;
+    participant_id?: string;
+  },
+): ToolEvent => ({
   id: randomUUID(),
   roomId,
   type: 'tool_call',
-  payload: { tool, params, context: { source: 'voice', timestamp: Date.now() } },
+  payload: {
+    tool,
+    params,
+    context: {
+      source: 'voice',
+      timestamp: Date.now(),
+      ...(context?.fast_route_type ? { fast_route_type: context.fast_route_type } : {}),
+      ...(context?.idempotency_key ? { idempotency_key: context.idempotency_key } : {}),
+      ...(context?.participant_id ? { participant_id: context.participant_id } : {}),
+    },
+  },
   timestamp: Date.now(),
   source: 'voice',
 });

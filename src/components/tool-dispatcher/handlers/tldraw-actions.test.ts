@@ -114,6 +114,34 @@ describe('tldraw action handlers', () => {
     expect(updateCall[1][0].props.richText).toBe('BUNNY_LOOKS_ENERGETIC');
   });
 
+  it('sanitizes deprecated geo fill values before create', () => {
+    const editor = createMockEditor();
+    applyEnvelope(
+      { editor, isHost: true, appliedIds: new Set() },
+      makeEnvelope({
+        id: 'action-geo-fill',
+        name: 'create_shape',
+        params: {
+          id: 'geo-1',
+          type: 'rectangle',
+          x: 40,
+          y: 60,
+          props: {
+            fill: 'background',
+            color: 'grey',
+          },
+        },
+      }),
+    );
+
+    const createCall = editor.calls.find((c: any[]) => c[0] === 'createShapes');
+    expect(createCall).toBeTruthy();
+    const createdShape = createCall[1][0];
+    expect(createdShape.type).toBe('geo');
+    expect(createdShape.props.fill).toBe('none');
+    expect(createdShape.props.geo).toBe('rectangle');
+  });
+
   it('sanitizes line endPoint props into points tuples', () => {
     const editor = createMockEditor();
     applyEnvelope(

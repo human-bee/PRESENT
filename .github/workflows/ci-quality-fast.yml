@@ -39,3 +39,14 @@ jobs:
 
       - name: Unit and Integration Tests
         run: npm test -- --runInBand
+
+      - name: Deterministic Latency Soft Gate
+        run: node scripts/observability/check-latency-soft-gate.mjs
+
+      - name: Upload Latency Soft Gate Artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: latency-soft-gate
+          path: artifacts/latency/
+          if-no-files-found: ignore

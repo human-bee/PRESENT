@@ -126,8 +126,7 @@ ${flagged(
 	- Note shapes are 200x200. They're sticky notes and are only suitable for tiny sentences. Use a geometric shape or text shape if you need to write more.
 	- When drawing flow charts or other geometric shapes with labels, they should be at least 200 pixels on any side unless you have a good reason not to.
 - Colors
-	- When specifying a fill, you can use \`background\` to make the shape the same color as the background${flagged(flags.hasScreenshotPart, ", which you'll see in your viewport")}. It will either be white or black, depending on the theme of the canvas.
-		- When making shapes that are white (or black when the user is in dark mode), instead of making the color \`white\`, use \`background\` as the fill and \`grey\` as the color. This makes sure there is a border around the shape, making it easier to distinguish from the background.`
+	- When matching the board background, use \`fill: "none"\` and \`color: "grey"\`${flagged(flags.hasScreenshotPart, " based on the viewport screenshot")}. This keeps outlines visible on light and dark themes.`
 )}`
 )}
 

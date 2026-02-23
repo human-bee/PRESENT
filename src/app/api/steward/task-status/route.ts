@@ -37,6 +37,12 @@ const TASK_SELECT_BASE =
   'id, room, task, status, attempt, error, result, request_id, created_at, updated_at';
 const TASK_SELECT_WITH_TRACE = `${TASK_SELECT_BASE}, trace_id`;
 
+type TraceResolutionSource =
+  | 'direct'
+  | 'resolved_from_task_events'
+  | 'resolved_from_request_events'
+  | 'missing';
+
 const toTaskPayload = (task: TaskStatusRow) => ({
   id: task.id,
   room: task.room,
@@ -110,6 +116,9 @@ export async function GET(req: NextRequest) {
 
   const directTraceId = readTrace(task.trace_id);
   let resolvedTraceId = directTraceId;
+  let traceResolutionSource: TraceResolutionSource = directTraceId ? 'direct' : 'missing';
+  let taskTraceProbeCount = 0;
+  let requestTraceProbeCount = 0;
   if (!resolvedTraceId) {
     const requestId = typeof task.request_id === 'string' ? task.request_id.trim() : '';
     const traceCandidates: string[] = [];
@@ -121,9 +130,14 @@ export async function GET(req: NextRequest) {
       .order('created_at', { ascending: false })
       .limit(3);
     if (!taskTraceQuery.error && Array.isArray(taskTraceQuery.data)) {
+      taskTraceProbeCount = taskTraceQuery.data.length;
+      const beforeTaskCandidates = traceCandidates.length;
       for (const row of taskTraceQuery.data) {
         const candidate = readTrace((row as Record<string, unknown>).trace_id);
         if (candidate) traceCandidates.push(candidate);
+      }
+      if (traceCandidates.length > beforeTaskCandidates) {
+        traceResolutionSource = 'resolved_from_task_events';
       }
     }
 
@@ -135,9 +149,14 @@ export async function GET(req: NextRequest) {
         .order('created_at', { ascending: false })
         .limit(3);
       if (!requestTraceQuery.error && Array.isArray(requestTraceQuery.data)) {
+        requestTraceProbeCount = requestTraceQuery.data.length;
+        const beforeRequestCandidates = traceCandidates.length;
         for (const row of requestTraceQuery.data) {
           const candidate = readTrace((row as Record<string, unknown>).trace_id);
           if (candidate) traceCandidates.push(candidate);
+        }
+        if (traceCandidates.length > beforeRequestCandidates) {
+          traceResolutionSource = 'resolved_from_request_events';
         }
       }
     }
@@ -173,6 +192,16 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({
         ok: true,
         task: toTaskPayload(taskWithResolvedTrace),
+        diagnostics: {
+          requestRoom: room ?? null,
+          taskRoom,
+          traceResolutionSource,
+          traceProbeCounts: {
+            taskEvents: taskTraceProbeCount,
+            requestEvents: requestTraceProbeCount,
+          },
+          membership: 'room_scoped_fallback',
+        },
       });
     }
     return NextResponse.json(
@@ -186,5 +215,15 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({
     ok: true,
     task: toTaskPayload(taskWithResolvedTrace),
+    diagnostics: {
+      requestRoom: room ?? null,
+      taskRoom,
+      traceResolutionSource,
+      traceProbeCounts: {
+        taskEvents: taskTraceProbeCount,
+        requestEvents: requestTraceProbeCount,
+      },
+      membership: 'verified',
+    },
   });
 }

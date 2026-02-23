@@ -92,3 +92,18 @@ describe('sanitizeShapeProps note normalization', () => {
     expect(result.richText).toBeDefined();
   });
 });
+
+describe('sanitizeShapeProps fill normalization', () => {
+  it('maps deprecated background fill to a valid TLDraw fill value', () => {
+    const result = sanitizeShapeProps(
+      {
+        fill: 'background',
+        color: 'grey',
+      },
+      'rectangle',
+    ) as Record<string, unknown>;
+
+    expect(result.fill).toBe('none');
+    expect(result.color).toBe('grey');
+  });
+});

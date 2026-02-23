@@ -2,6 +2,8 @@ import { resolveFollowupDepth, resolvePreset, type CanvasAgentPreset } from './m
 
 const DEFAULT_SCREENSHOT_TIMEOUT_MS = 3500;
 const MIN_SCREENSHOT_TIMEOUT_MS = 2500;
+const DEFAULT_SCREENSHOT_RETRIES = 2;
+const DEFAULT_SCREENSHOT_RETRY_DELAY_MS = 300;
 const DEFAULT_SCREENSHOT_EDGE = 1024;
 const MIN_SCREENSHOT_EDGE = 64;
 const DEFAULT_PROMPT_MAX_CHARS = 200000;
@@ -152,8 +154,20 @@ export function loadCanvasAgentConfig(env: NodeJS.ProcessEnv = process.env): Can
     transcriptWindowMs: coerceTranscriptWindowMs(env.CANVAS_AGENT_TRANSCRIPT_WINDOW_MS),
     screenshot: {
       timeoutMs: coerceScreenshotTimeout(env.CANVAS_AGENT_SCREENSHOT_TIMEOUT_MS),
-      retries: Math.max(0, Number.parseInt(env.CANVAS_AGENT_SCREENSHOT_RETRIES ?? '1', 10) || 0),
-      retryDelayMs: Math.max(100, Number.parseInt(env.CANVAS_AGENT_SCREENSHOT_RETRY_DELAY_MS ?? '450', 10) || 450),
+      retries: Math.min(
+        4,
+        Math.max(
+          0,
+          Number.parseInt(env.CANVAS_AGENT_SCREENSHOT_RETRIES ?? String(DEFAULT_SCREENSHOT_RETRIES), 10) || 0,
+        ),
+      ),
+      retryDelayMs: Math.max(
+        100,
+        Number.parseInt(
+          env.CANVAS_AGENT_SCREENSHOT_RETRY_DELAY_MS ?? String(DEFAULT_SCREENSHOT_RETRY_DELAY_MS),
+          10,
+        ) || DEFAULT_SCREENSHOT_RETRY_DELAY_MS,
+      ),
       maxEdge: screenshotMaxEdge,
       minEdge: screenshotMinEdge,
     },
