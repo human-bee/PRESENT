@@ -15,7 +15,7 @@ import {
   suppressViolationWarnings,
 } from '@/lib/mcp-utils';
 import { EnhancedMcpProvider } from '@/components/ui/mcp/enhanced-mcp-provider';
-import { Room, ConnectionState, RoomEvent, VideoPresets, RoomOptions } from 'livekit-client';
+import { Room, ConnectionState, RoomEvent, VideoPresets, RoomOptions, AudioPresets } from 'livekit-client';
 import { RoomContext } from '@livekit/components-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/hooks/use-auth';
@@ -509,8 +509,12 @@ export function CanvasPageClient() {
       audioCaptureDefaults: {
         echoCancellation: true,
         noiseSuppression: true,
+        autoGainControl: true,
+        channelCount: 1,
       },
       publishDefaults: {
+        audioPreset: AudioPresets.speech,
+        red: true,
         videoSimulcastLayers: [VideoPresets.h180, VideoPresets.h360, VideoPresets.h720],
         videoCodec: 'vp8',
       },

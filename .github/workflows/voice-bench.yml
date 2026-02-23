@@ -1,0 +1,59 @@
+name: Voice Bench
+
+on:
+  pull_request:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: voice-bench-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  voice-bench:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Baseline Replay
+        run: >
+          npx tsx scripts/voice-bench/run-replay.ts
+          --variant=baseline
+          --input=docs/voice-bench/fixtures/two-speaker-noisy-sample.json
+          --out=artifacts/voice-bench/baseline.json
+
+      - name: Candidate Replay
+        run: >
+          npx tsx scripts/voice-bench/run-replay.ts
+          --variant=candidate
+          --input=docs/voice-bench/fixtures/two-speaker-noisy-sample.json
+          --baseline=artifacts/voice-bench/baseline.json
+          --out=artifacts/voice-bench/candidate.json
+
+      - name: Score Results
+        run: >
+          npx tsx scripts/voice-bench/score-results.ts
+          --results=artifacts/voice-bench/candidate.json
+          --baseline=artifacts/voice-bench/baseline.json
+          --summary=artifacts/voice-bench/summary.md
+
+      - name: Upload Voice Bench Artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: voice-bench
+          path: artifacts/voice-bench/
+          if-no-files-found: error

@@ -2,6 +2,7 @@ import { voice } from '@livekit/agents';
 import { realtime as openaiRealtime } from '@livekit/agents-plugin-openai';
 import { randomUUID } from 'crypto';
 import { ParticipantKind, Room, RoomEvent, Track } from 'livekit-client';
+import type { RealtimeNoiseReductionOption } from './voice-agent/config';
 
 export type LiveTranscriptionPayload = {
   type: 'live_transcription';
@@ -21,6 +22,7 @@ export type MultiParticipantTranscriptionOptions = {
   maxParticipants: number;
   model: string;
   language?: string;
+  inputAudioNoiseReduction?: RealtimeNoiseReductionOption | null;
   /**
    * Called for every transcript event (interim + final).
    * The caller is responsible for publishing to the data-channel if desired.
@@ -61,6 +63,7 @@ export class MultiParticipantTranscriptionManager {
   private maxParticipants: number;
   private model: string;
   private language?: string;
+  private inputAudioNoiseReduction?: RealtimeNoiseReductionOption | null;
   private onTranscript: (payload: LiveTranscriptionPayload) => void;
 
   private sessions = new Map<string, SessionEntry>();
@@ -68,15 +71,14 @@ export class MultiParticipantTranscriptionManager {
 
   private disposers: Array<() => void> = [];
   private handleRefresh: (() => void) | null = null;
-  private handleTrackPublished:
-    | ((pub: any, participant: any) => void)
-    | null = null;
+  private handleTrackPublished: ((pub: any, participant: any) => void) | null = null;
 
   constructor(options: MultiParticipantTranscriptionOptions) {
     this.room = options.room;
     this.maxParticipants = Math.max(1, Math.floor(options.maxParticipants));
     this.model = options.model;
     this.language = options.language;
+    this.inputAudioNoiseReduction = options.inputAudioNoiseReduction;
     this.onTranscript = options.onTranscript;
   }
 
@@ -227,6 +229,9 @@ export class MultiParticipantTranscriptionManager {
         model: this.model,
         ...(this.language ? { language: this.language } : {}),
       },
+      ...(this.inputAudioNoiseReduction !== undefined
+        ? { inputAudioNoiseReduction: this.inputAudioNoiseReduction }
+        : {}),
       // Important: disable auto-response creation. We only want STT.
       turnDetection: { type: 'server_vad', create_response: false },
     });
@@ -275,8 +280,15 @@ export class MultiParticipantTranscriptionManager {
       inputOptions: {
         audioEnabled: true,
         participantIdentity: participantId,
+        audioSampleRate: 24_000,
+        audioNumChannels: 1,
       },
-      outputOptions: { audioEnabled: false, transcriptionEnabled: false },
+      outputOptions: {
+        audioEnabled: false,
+        transcriptionEnabled: false,
+        audioSampleRate: 24_000,
+        audioNumChannels: 1,
+      },
     });
 
     const stop = async () => {

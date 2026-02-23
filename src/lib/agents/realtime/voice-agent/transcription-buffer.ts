@@ -1,4 +1,5 @@
 export type PendingTranscriptionMessage = {
+  eventId?: string;
   text: string;
   speaker?: string;
   participantId?: string;

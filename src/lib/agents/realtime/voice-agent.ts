@@ -28,6 +28,8 @@ import { createManualInputRouter } from './voice-agent/manual-routing';
 import { VoiceComponentLedger } from './voice-agent/component-ledger';
 import { ScorecardService } from './voice-agent/scorecard-service';
 import { TranscriptionBuffer, type PendingTranscriptionMessage } from './voice-agent/transcription-buffer';
+import { resolveVoiceRealtimeConfig } from './voice-agent/config';
+import { ActiveResponseRecoveryGuard, TranscriptDedupeGuard, isActiveResponseError } from './voice-agent/runtime-guards';
 import {
   executeCreateComponent,
   type ComponentRegistryEntry,
@@ -299,6 +301,7 @@ export default defineAgent({
       return `pid-${process.pid}`;
     })();
     const allowSensitiveLogging = process.env.NODE_ENV !== 'production';
+    const realtimeConfig = resolveVoiceRealtimeConfig();
 
     // Data messages (topic: "transcription") can arrive immediately after the agent joins the room.
     // Attach the listener up-front and buffer until the realtime session is running so we don't drop early turns.
@@ -318,6 +321,7 @@ export default defineAgent({
     };
 
     const ingestTranscription = (message: {
+      eventId?: string;
       text: string;
       speaker?: string;
       participantId?: string;
@@ -353,6 +357,7 @@ export default defineAgent({
       }
 
       const entry: PendingTranscriptionMessage = {
+        eventId: typeof message?.eventId === 'string' ? message.eventId : undefined,
         text,
         speaker,
         participantId,
@@ -397,9 +402,11 @@ export default defineAgent({
               : true;
       const participantId = typeof message?.participantId === 'string' ? message.participantId : participant?.identity;
       const speaker = typeof message?.speaker === 'string' ? message.speaker : participant?.name || participant?.identity;
+      const eventId = typeof message?.event_id === 'string' ? message.event_id : undefined;
 
       if (!text || isReplay) return;
       ingestTranscription({
+        eventId,
         text,
         speaker: typeof speaker === 'string' ? speaker : undefined,
         participantId: typeof participantId === 'string' ? participantId : undefined,
@@ -411,56 +418,32 @@ export default defineAgent({
       });
     });
 
-    const coerceBooleanFromEnv = (value?: string | null) => {
-      if (!value) return undefined;
-      const normalized = value.trim().toLowerCase();
-      if (!normalized) return undefined;
-      if (['true', '1', 'yes', 'on'].includes(normalized)) return true;
-      if (['false', '0', 'no', 'off'].includes(normalized)) return false;
-      return undefined;
-    };
-
-    const envInputTranscriptionModel = process.env.VOICE_AGENT_INPUT_TRANSCRIPTION_MODEL?.trim();
-    const fallbackInputTranscriptionModel = process.env.AGENT_STT_MODEL?.trim();
-    const envSttModel = process.env.VOICE_AGENT_STT_MODEL?.trim();
-    const envTranscriptionLanguage = process.env.VOICE_AGENT_TRANSCRIPTION_LANGUAGE?.trim();
-    const fallbackTranscriptionLanguage = process.env.AGENT_STT_LANGUAGE?.trim();
-    const resolvedInputTranscriptionModel = envInputTranscriptionModel || fallbackInputTranscriptionModel || undefined;
-    const resolvedSttModel = envSttModel || resolvedInputTranscriptionModel || 'gpt-4o-mini-transcribe';
-    const envTurnDetection = process.env.VOICE_AGENT_TURN_DETECTION?.trim().toLowerCase();
-    const transcriptionEnabledFlag = coerceBooleanFromEnv(process.env.VOICE_AGENT_TRANSCRIPTION_ENABLED);
-    const multiParticipantTranscriptionEnabled =
-      coerceBooleanFromEnv(process.env.VOICE_AGENT_MULTI_PARTICIPANT_TRANSCRIPTION) ??
-      false;
-    const transcriptionEnabled =
-      transcriptionEnabledFlag ?? (!multiParticipantTranscriptionEnabled && Boolean(resolvedInputTranscriptionModel));
-    const resolvedTranscriptionLanguage =
-      envTranscriptionLanguage || fallbackTranscriptionLanguage || 'en';
-    const inputAudioTranscription = transcriptionEnabled
-      ? {
-        model: resolvedSttModel,
-        ...(resolvedTranscriptionLanguage ? { language: resolvedTranscriptionLanguage } : {}),
-      }
-      : null;
-    const turnDetectionOption = (() => {
-      if (!transcriptionEnabled) return null;
-      if (!envTurnDetection) return undefined; // fall back to agent default (server VAD)
-      if (envTurnDetection === 'none') return null;
-      if (envTurnDetection === 'semantic_vad') {
-        return { type: 'semantic_vad' as const };
-      }
-      if (envTurnDetection === 'server_vad') {
-        return { type: 'server_vad' as const };
-      }
-      return undefined;
-    })();
-
-    console.log('[VoiceAgent] transcription config', {
+    const {
       multiParticipantTranscriptionEnabled,
       resolvedSttModel,
       transcriptionEnabled,
       inputAudioTranscription,
+      inputAudioNoiseReduction,
       turnDetectionOption,
+      resolvedTranscriptionLanguage,
+      transcriptionMaxParticipants,
+    } = realtimeConfig;
+
+    console.log('[VoiceAgent] transcription config', {
+      micProfile: realtimeConfig.micProfile,
+      multiParticipantTranscriptionEnabled,
+      resolvedSttModel,
+      transcriptionEnabled,
+      inputAudioTranscription,
+      inputAudioNoiseReduction,
+      turnDetectionOption,
+      roomNoiseCancellationEnabled: Boolean(realtimeConfig.roomNoiseCancellation),
+      roomNoiseCancellationModuleId: realtimeConfig.roomNoiseCancellation?.moduleId,
+      transcriptionMaxParticipants,
+      inputAudioSampleRate: realtimeConfig.inputAudioSampleRate,
+      inputAudioNumChannels: realtimeConfig.inputAudioNumChannels,
+      outputAudioSampleRate: realtimeConfig.outputAudioSampleRate,
+      outputAudioNumChannels: realtimeConfig.outputAudioNumChannels,
     });
 
     const subscribeToParticipant = (participant?: any) => {
@@ -505,16 +488,6 @@ export default defineAgent({
     job.room.on(RoomEvent.ParticipantConnected, (participant) => subscribeToParticipant(participant as any));
     job.room.on(RoomEvent.TrackPublished, (_publication, participant) => subscribeToParticipant(participant as any));
 
-    const transcriptionMaxParticipants = (() => {
-      const raw =
-        process.env.VOICE_AGENT_TRANSCRIPTION_MAX_PARTICIPANTS ??
-        process.env.VOICE_AGENT_TRANSCRIBER_MAX_PARTICIPANTS ??
-        '';
-      const parsed = raw ? Number(raw) : Number.NaN;
-      if (!Number.isFinite(parsed) || parsed <= 0) return 8;
-      return Math.max(1, Math.min(16, Math.floor(parsed)));
-    })();
-
     let multiParticipantTranscriber: MultiParticipantTranscriptionManager | null = null;
     if (multiParticipantTranscriptionEnabled) {
       multiParticipantTranscriber = new MultiParticipantTranscriptionManager({
@@ -522,6 +495,7 @@ export default defineAgent({
         maxParticipants: transcriptionMaxParticipants,
         model: resolvedSttModel,
         language: resolvedTranscriptionLanguage,
+        inputAudioNoiseReduction,
         onTranscript: (payload) => {
           try {
             // Fan out to all browsers for transcript UI.
@@ -536,6 +510,7 @@ export default defineAgent({
 
           // Feed the orchestrator directly (the voice agent does not receive its own data packets).
           ingestTranscription({
+            eventId: payload.event_id,
             text: payload.text,
             speaker: payload.speaker,
             participantId: payload.participantId,
@@ -2958,17 +2933,23 @@ Your only output is function calls. Never use plain text unless absolutely neces
     });
 
     const session = new voice.AgentSession({
-      llm: new openaiRealtime.RealtimeModel({}),
+      llm: new openaiRealtime.RealtimeModel({
+        inputAudioTranscription,
+        ...(inputAudioNoiseReduction !== undefined ? { inputAudioNoiseReduction } : {}),
+        ...(turnDetectionOption !== undefined ? { turnDetection: turnDetectionOption } : {}),
+      }),
     });
 
-    const coercePositiveInt = (value: unknown, fallback: number) => {
-      const parsed = typeof value === 'string' ? Number(value) : typeof value === 'number' ? value : NaN;
-      if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
-      return Math.floor(parsed);
-    };
-    const replyTimeoutMs = coercePositiveInt(process.env.VOICE_AGENT_REPLY_TIMEOUT_MS, 8_000);
-    const interruptTimeoutMs = coercePositiveInt(process.env.VOICE_AGENT_INTERRUPT_TIMEOUT_MS, 1_500);
-    const transcriptionReadyTimeoutMs = coercePositiveInt(process.env.VOICE_AGENT_TRANSCRIPTION_READY_TIMEOUT_MS, 10_000);
+    const replyTimeoutMs = realtimeConfig.replyTimeoutMs;
+    const interruptTimeoutMs = realtimeConfig.interruptTimeoutMs;
+    const transcriptionReadyTimeoutMs = realtimeConfig.transcriptionReadyTimeoutMs;
+    const activeResponseRecoveryGuard = new ActiveResponseRecoveryGuard(
+      realtimeConfig.activeResponseRecoveryMaxAttempts,
+    );
+    const transcriptDedupeGuard = new TranscriptDedupeGuard(
+      realtimeConfig.transcriptDedupeWindowMs,
+      realtimeConfig.transcriptDedupeMaxEntries,
+    );
     const waitWithTimeout = async <T>(promise: Promise<T>, timeoutMs: number): Promise<{ ok: boolean; value?: T }> => {
       let timeoutHandle: NodeJS.Timeout | null = null;
       const timeoutPromise = new Promise<{ ok: boolean }>((resolve) => {
@@ -2990,24 +2971,6 @@ Your only output is function calls. Never use plain text unless absolutely neces
     let recoveringActiveResponse = false;
     const lastPrewarmAtByRoute = new Map<IntentRoute, number>();
     const PREWARM_TTL_MS = 4000;
-
-    const isActiveResponseError = (error: unknown) => {
-      if (!error) return false;
-      const rawMessage =
-        typeof (error as { message?: unknown })?.message === 'string'
-          ? (error as { message: string }).message
-          : '';
-      const message = rawMessage.toLowerCase();
-      const code =
-        (error as { code?: string })?.code ||
-        (error as { error?: { code?: string } })?.error?.code ||
-        (error as { detail?: { code?: string } })?.detail?.code;
-      return (
-        code === 'conversation_already_has_active_response' ||
-        message.includes('active response') ||
-        message.includes('already has an active response')
-      );
-    };
 
     const interruptRealtimeSession = async (reason: string, error?: unknown) => {
       if (recoveringActiveResponse) return;
@@ -3075,10 +3038,20 @@ Your only output is function calls. Never use plain text unless absolutely neces
                 }
               }
             }
+            activeResponseRecoveryGuard.clear();
           } catch (err) {
             if (isActiveResponseError(err)) {
-              pendingReplies.unshift({ options: next.options, attempts: next.attempts + 1 });
-              await interruptRealtimeSession('active_response_error', err);
+              const recovery = activeResponseRecoveryGuard.registerAttempt();
+              if (recovery.allowed) {
+                pendingReplies.unshift({ options: next.options, attempts: next.attempts + 1 });
+                await interruptRealtimeSession('active_response_error', err);
+              } else {
+                console.warn('[VoiceAgent] dropping reply after repeated active response conflicts', {
+                  attempts: recovery.attempts,
+                  maxAttempts: recovery.maxAttempts,
+                  userInput: next.options.userInput ? next.options.userInput.slice(0, 120) : undefined,
+                });
+              }
               continue;
             }
             throw err;
@@ -3132,13 +3105,34 @@ Your only output is function calls. Never use plain text unless absolutely neces
     };
 
     handleBufferedTranscription = async ({
+      eventId,
       text,
       speaker,
       participantId,
       participantName,
       isManual,
       timestamp,
+      serverGenerated,
     }) => {
+      const dedupe = transcriptDedupeGuard.shouldDrop({
+        eventId,
+        text,
+        speaker,
+        participantId,
+        isManual: Boolean(isManual),
+        isFinal: true,
+        timestamp,
+        serverGenerated,
+      });
+      if (dedupe.drop) {
+        console.log('[VoiceAgent] dropping duplicate transcription event', {
+          reason: dedupe.reason,
+          key: dedupe.key,
+          participantId: allowSensitiveLogging ? participantId : '[redacted]',
+        });
+        return;
+      }
+
       console.log('[VoiceAgent] DataReceived transcription', {
         text: allowSensitiveLogging ? text : `[redacted:${text.length}]`,
         isManual,
@@ -3730,13 +3724,16 @@ Your only output is function calls. Never use plain text unless absolutely neces
 
     if (!multiParticipantTranscriptionEnabled && transcriptionEnabled) {
       session.on(voice.AgentSessionEventTypes.UserInputTranscribed, async (event) => {
+        const transcriptText = typeof event.transcript === 'string' ? event.transcript : '';
+        const eventId = randomUUID();
+        const now = Date.now();
         const payload = {
           type: 'live_transcription',
-          event_id: randomUUID(),
-          text: event.transcript,
+          event_id: eventId,
+          text: transcriptText,
           speaker: 'user',
           participantId: 'user',
-          timestamp: Date.now(),
+          timestamp: now,
           is_final: event.isFinal,
           manual: false,
           server_generated: true,
@@ -3750,8 +3747,8 @@ Your only output is function calls. Never use plain text unless absolutely neces
             appendTranscriptCache(job.room.name || 'unknown', {
               participantId: 'user',
               participantName: 'user',
-              text: event.transcript,
-              timestamp: Date.now(),
+              text: transcriptText,
+              timestamp: now,
               manual: false,
             });
           } catch { }
@@ -3759,13 +3756,25 @@ Your only output is function calls. Never use plain text unless absolutely neces
           // New user turn begins on a final transcript
           bumpTurn();
 
-          const trimmed = event.transcript?.trim();
+          const trimmed = transcriptText.trim();
           if (trimmed) {
-            lastUserPrompt = trimmed;
-            try {
-              await generateReplySafely();
-            } catch (error) {
-              logRealtimeError('generateReply after transcript failed', error);
+            const dedupe = transcriptDedupeGuard.shouldDrop({
+              eventId,
+              text: trimmed,
+              participantId: 'user',
+              speaker: 'user',
+              isManual: false,
+              isFinal: true,
+              timestamp: now,
+              serverGenerated: true,
+            });
+            if (!dedupe.drop) {
+              lastUserPrompt = trimmed;
+              try {
+                await generateReplySafely();
+              } catch (error) {
+                logRealtimeError('generateReply after transcript failed', error);
+              }
             }
           }
         }
@@ -3866,16 +3875,51 @@ Your only output is function calls. Never use plain text unless absolutely neces
       }
     });
 
-    const startPromise = session.start({
-      agent,
-      room: job.room,
-      inputOptions: { audioEnabled: !multiParticipantTranscriptionEnabled },
-      outputOptions: {
-        audioEnabled: false,
-        transcriptionEnabled: !multiParticipantTranscriptionEnabled && transcriptionEnabled,
-      },
-    });
-    await startPromise;
+    const baseInputOptions = {
+      audioEnabled: !multiParticipantTranscriptionEnabled,
+      audioSampleRate: realtimeConfig.inputAudioSampleRate,
+      audioNumChannels: realtimeConfig.inputAudioNumChannels,
+      ...(realtimeConfig.roomNoiseCancellation
+        ? { noiseCancellation: realtimeConfig.roomNoiseCancellation }
+        : {}),
+    };
+    const baseOutputOptions = {
+      audioEnabled: false,
+      transcriptionEnabled: !multiParticipantTranscriptionEnabled && transcriptionEnabled,
+      audioSampleRate: realtimeConfig.outputAudioSampleRate,
+      audioNumChannels: realtimeConfig.outputAudioNumChannels,
+    };
+
+    try {
+      await session.start({
+        agent,
+        room: job.room,
+        inputOptions: baseInputOptions,
+        outputOptions: baseOutputOptions,
+      });
+    } catch (error) {
+      if (realtimeConfig.roomNoiseCancellation) {
+        console.warn('[VoiceAgent] room noise cancellation unavailable; retrying without module', {
+          moduleId: realtimeConfig.roomNoiseCancellation.moduleId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        await session.start({
+          agent,
+          room: job.room,
+          inputOptions: {
+            audioEnabled: !multiParticipantTranscriptionEnabled,
+            audioSampleRate: realtimeConfig.inputAudioSampleRate,
+            audioNumChannels: realtimeConfig.inputAudioNumChannels,
+          },
+          outputOptions: baseOutputOptions,
+        });
+        console.warn('[VoiceAgent] started without room noise cancellation module', {
+          moduleId: realtimeConfig.roomNoiseCancellation.moduleId,
+        });
+      } else {
+        throw error;
+      }
+    }
   },
 });
 
