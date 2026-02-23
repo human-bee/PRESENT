@@ -1,0 +1,32 @@
+{
+  "utterances": [
+    {
+      "utteranceId": "u1",
+      "speaker": "speaker-a",
+      "transcriptText": "start a five minute timer",
+      "referenceText": "start a five minute timer",
+      "endOfUtteranceMs": 1000,
+      "finalTranscriptMs": 1520,
+      "cpuPercent": 28
+    },
+    {
+      "utteranceId": "u2",
+      "speaker": "speaker-b",
+      "transcriptText": "add a sticky note for budget risks",
+      "referenceText": "add a sticky note for budget risks",
+      "endOfUtteranceMs": 3000,
+      "finalTranscriptMs": 3720,
+      "cpuPercent": 32
+    },
+    {
+      "utteranceId": "u3",
+      "speaker": "speaker-a",
+      "transcriptText": "pause the timer",
+      "referenceText": "pause the timer",
+      "endOfUtteranceMs": 5000,
+      "finalTranscriptMs": 5620,
+      "cpuPercent": 30,
+      "recoveryEvent": true
+    }
+  ]
+}
