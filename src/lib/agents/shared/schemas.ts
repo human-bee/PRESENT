@@ -38,6 +38,12 @@ export const stewardRunCanvasRequestSchema = z
     provider: z.string().optional(),
     model: z.string().optional(),
     authRailHint: z.string().optional(),
+    experiment_id: z.string().optional(),
+    variant_id: z.string().optional(),
+    assignment_namespace: z.string().optional(),
+    assignment_unit: z.string().optional(),
+    assignment_ts: z.string().optional(),
+    factor_levels: z.record(z.string(), z.string()).optional(),
   })
   .merge(orchestrationEnvelopeSchema.partial())
   .passthrough();

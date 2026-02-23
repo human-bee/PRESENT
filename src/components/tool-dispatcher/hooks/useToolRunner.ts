@@ -32,6 +32,10 @@ import {
   readTaskTraceId,
   resolveDispatchRoom,
 } from './steward-task-utils';
+import {
+  attachExperimentAssignmentToMetadata,
+  readExperimentAssignmentFromUnknown,
+} from '@/lib/agents/shared/experiment-assignment';
 
 type ToolMetricEntry = {
   callId: string;
@@ -814,6 +818,21 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
     async (call: ToolCall): Promise<ToolRunResult> => {
       const tool = call.payload.tool;
       const params = call.payload.params ?? {};
+      const context =
+        call.payload.context && typeof call.payload.context === 'object'
+          ? (call.payload.context as Record<string, unknown>)
+          : null;
+      const experimentAssignment = readExperimentAssignmentFromUnknown(context);
+      const experimentEnvelope = experimentAssignment
+        ? {
+            experiment_id: experimentAssignment.experiment_id,
+            variant_id: experimentAssignment.variant_id,
+            assignment_namespace: experimentAssignment.assignment_namespace,
+            assignment_unit: experimentAssignment.assignment_unit,
+            assignment_ts: experimentAssignment.assignment_ts,
+            factor_levels: experimentAssignment.factor_levels,
+          }
+        : {};
 
       log('call', tool, params);
       queue.enqueue(call.id, tool);
@@ -1177,12 +1196,19 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
           };
 
           try {
+            const proofMetadata = experimentAssignment
+              ? attachExperimentAssignmentToMetadata(
+                  (params?.metadata as JsonObject | undefined) ?? null,
+                  experimentAssignment,
+                )
+              : null;
             const res = await fetchWithSupabaseAuth('/api/steward/runCanvas', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
                 room: targetRoom,
                 task: 'canvas.quick_apply_proof',
+                ...experimentEnvelope,
                 params: {
                   room: targetRoom,
                   requestId,
@@ -1193,6 +1219,7 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
                   message: messageText,
                   ...(plainTextInput ? { plain_text: plainTextInput } : {}),
                   ...(appliedTargetId ? { applied_target_id: appliedTargetId } : {}),
+                  ...(proofMetadata ? { metadata: proofMetadata } : {}),
                 },
                 requestId,
                 traceId: requestId,
@@ -1230,8 +1257,13 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
             emitDone(call, result);
             emitStewardStatusTranscript({
               taskName: 'canvas_quick_apply',
-              status: 'queued',
+              status: 'queued+applied',
               message: String(result.message),
+            });
+            emitStewardStatusTranscript({
+              taskName: 'canvas.quick_apply_proof',
+              status: 'queued',
+              message: 'canvas.quick_apply_proof queued',
             });
             void pollStewardTaskCompletion({
               call,
@@ -1253,6 +1285,15 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
         if (tool === 'dispatch_to_conductor') {
           const task = typeof params?.task === 'string' ? params.task.trim() : '';
           const dispatchParams = (params?.params as Record<string, unknown>) || {};
+          const dispatchMetadata = experimentAssignment
+            ? attachExperimentAssignmentToMetadata(
+                (dispatchParams.metadata as JsonObject | undefined) ?? null,
+                experimentAssignment,
+              )
+            : null;
+          if (dispatchMetadata) {
+            dispatchParams.metadata = dispatchMetadata;
+          }
           const correlation = deriveRequestCorrelation({
             task,
             requestId: params?.requestId,
@@ -1370,6 +1411,7 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
                   room: targetRoom,
                   task,
                   params: dispatchParams,
+                  ...experimentEnvelope,
                   executionId,
                   idempotencyKey,
                   lockKey,
@@ -1922,16 +1964,16 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
         }
         const tool = parsed.payload.tool;
         const params = parsed.payload.params || {};
+        const context = toRecord(parsed.payload.context);
         const callId = parsed.id || `${Date.now()}`;
         const toolCall: ToolCall = {
           id: callId,
           type: 'tool_call',
-          payload: { tool, params },
+          payload: { tool, params, ...(context ? { context: context as Record<string, unknown> } : {}) },
           timestamp: parsed.timestamp || Date.now(),
           source: 'dispatcher',
           roomId: parsed.roomId,
         };
-        const context = toRecord(parsed.payload.context);
         const roomKey =
           (typeof parsed.roomId === 'string' && parsed.roomId.trim()) ||
           (typeof room?.name === 'string' ? room.name : '') ||

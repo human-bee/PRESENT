@@ -20,6 +20,29 @@ describe('livekit protocol', () => {
     expect(parsed?.payload.tool).toBe('create_component');
   });
 
+  it('preserves optional experiment metadata in tool_call context', () => {
+    const parsed = parseToolCallMessage({
+      type: 'tool_call',
+      id: 'call-exp',
+      payload: {
+        tool: 'dispatch_to_conductor',
+        params: { task: 'fairy.intent' },
+        context: {
+          experiment_id: 'voice_toolset_factorial_v1',
+          variant_id: 'v07',
+          factor_levels: {
+            initial_toolset: 'lean_adaptive',
+          },
+        },
+      },
+    });
+
+    expect(parsed).not.toBeNull();
+    expect((parsed?.payload.context as Record<string, unknown>).experiment_id).toBe(
+      'voice_toolset_factorial_v1',
+    );
+  });
+
   it('rejects invalid tool_call messages', () => {
     const parsed = parseToolCallMessage({
       type: 'tool_call',

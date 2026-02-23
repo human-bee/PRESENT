@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAgentAdminUserId } from '@/lib/agents/admin/auth';
 import { getAdminSupabaseClient } from '@/lib/agents/admin/supabase-admin';
+import {
+  assignmentToDiagnostics,
+  readExperimentAssignmentFromUnknown,
+} from '@/lib/agents/shared/experiment-assignment';
 
 export const runtime = 'nodejs';
 
@@ -35,6 +39,7 @@ type CorrelationSummary = {
   taskStatusCounts: Record<string, number>;
   traceStageCounts: Record<string, number>;
   missingTraceOnTasks: number;
+  experimentVariantCounts: Record<string, number>;
 };
 
 const countBy = (values: Array<string | null | undefined>) =>
@@ -43,6 +48,16 @@ const countBy = (values: Array<string | null | undefined>) =>
     acc[key] = (acc[key] ?? 0) + 1;
     return acc;
   }, {});
+
+const extractExperiment = (source: unknown) =>
+  assignmentToDiagnostics(
+    readExperimentAssignmentFromUnknown(source) ??
+    readExperimentAssignmentFromUnknown(
+      source && typeof source === 'object' && !Array.isArray(source)
+        ? (source as Record<string, unknown>).metadata
+        : null,
+    ),
+  );
 
 export async function GET(req: NextRequest) {
   const admin = await requireAgentAdminUserId(req);
@@ -60,9 +75,9 @@ export async function GET(req: NextRequest) {
     const db = getAdminSupabaseClient();
 
     const queueSelectWithTrace =
-      'id,room,task,status,priority,attempt,error,request_id,trace_id,resource_keys,lease_expires_at,created_at,updated_at';
+      'id,room,task,status,priority,attempt,error,request_id,trace_id,params,resource_keys,lease_expires_at,created_at,updated_at';
     const queueSelectCompat =
-      'id,room,task,status,priority,attempt,error,request_id,resource_keys,lease_expires_at,created_at,updated_at';
+      'id,room,task,status,priority,attempt,error,request_id,params,resource_keys,lease_expires_at,created_at,updated_at';
 
     const queueWithTrace = await db
       .from('agent_tasks')
@@ -72,15 +87,38 @@ export async function GET(req: NextRequest) {
       .limit(limit);
 
     let tasks: Array<Record<string, unknown>> = [];
-    if (queueWithTrace.error && /trace_id/i.test(queueWithTrace.error.message)) {
+    if (
+      queueWithTrace.error &&
+      (/trace_id/i.test(queueWithTrace.error.message) || /params/i.test(queueWithTrace.error.message))
+    ) {
       const queueCompat = await db
         .from('agent_tasks')
         .select(queueSelectCompat)
         .eq('room', room)
         .order('created_at', { ascending: false })
         .limit(limit);
-      if (queueCompat.error) throw queueCompat.error;
-      tasks = (queueCompat.data ?? []).map((row) => ({ ...(row as Record<string, unknown>), trace_id: null }));
+      if (queueCompat.error && /params/i.test(queueCompat.error.message)) {
+        const queueLegacy = await db
+          .from('agent_tasks')
+          .select(
+            'id,room,task,status,priority,attempt,error,request_id,resource_keys,lease_expires_at,created_at,updated_at',
+          )
+          .eq('room', room)
+          .order('created_at', { ascending: false })
+          .limit(limit);
+        if (queueLegacy.error) throw queueLegacy.error;
+        tasks = (queueLegacy.data ?? []).map((row) => ({
+          ...(row as Record<string, unknown>),
+          trace_id: null,
+          params: null,
+        }));
+      } else {
+        if (queueCompat.error) throw queueCompat.error;
+        tasks = (queueCompat.data ?? []).map((row) => ({
+          ...(row as Record<string, unknown>),
+          trace_id: null,
+        }));
+      }
     } else if (queueWithTrace.error) {
       throw queueWithTrace.error;
     } else {
@@ -119,6 +157,7 @@ export async function GET(req: NextRequest) {
         trace_id: string | null;
         resolved_trace_id: string | null;
         trace_integrity: 'direct' | 'resolved_from_events' | 'missing';
+        experiment?: ReturnType<typeof assignmentToDiagnostics>;
       }
     > = tasks.map((task) => {
       const traceId = readId(task.trace_id);
@@ -128,6 +167,7 @@ export async function GET(req: NextRequest) {
         traceId ??
         (taskId ? traceIdsByTask.get(taskId) ?? null : null) ??
         (requestId ? traceIdsByRequest.get(requestId) ?? null : null);
+      const experiment = extractExperiment(task.params);
       return {
         ...task,
         trace_id: traceId,
@@ -137,6 +177,7 @@ export async function GET(req: NextRequest) {
           : resolvedTraceId
             ? 'resolved_from_events'
             : 'missing',
+        ...(experiment ? { experiment } : {}),
       };
     });
 
@@ -175,6 +216,13 @@ export async function GET(req: NextRequest) {
             : '';
         return traceId.length === 0;
       }).length,
+      experimentVariantCounts: countBy(
+        tasksWithResolvedTrace.map((task) =>
+          task.experiment && typeof task.experiment.variantId === 'string'
+            ? task.experiment.variantId
+            : null,
+        ),
+      ),
     };
 
     return NextResponse.json({

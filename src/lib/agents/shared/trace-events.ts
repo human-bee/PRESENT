@@ -41,6 +41,12 @@ type AgentTraceEventInput = {
   providerRequestId?: string;
   params?: JsonObject;
   payload?: JsonObject;
+  experimentId?: string;
+  variantId?: string;
+  assignmentNamespace?: string;
+  assignmentUnit?: string;
+  assignmentTs?: string;
+  factorLevels?: Record<string, string>;
 };
 
 let supabase: SupabaseClient | null = null;
@@ -187,6 +193,34 @@ export async function recordAgentTraceEvent(input: AgentTraceEventInput): Promis
   try {
     const db = getSupabaseClient();
     const payload = toSafePayload(input.payload);
+    const payloadWithExperiment = (() => {
+      const hasExperimentFields =
+        normalizeOptional(input.experimentId) ||
+        normalizeOptional(input.variantId) ||
+        normalizeOptional(input.assignmentNamespace) ||
+        normalizeOptional(input.assignmentUnit) ||
+        normalizeOptional(input.assignmentTs) ||
+        (input.factorLevels && Object.keys(input.factorLevels).length > 0);
+      if (!hasExperimentFields) return payload;
+      const experiment: JsonObject = {
+        ...(normalizeOptional(input.experimentId) ? { experimentId: normalizeOptional(input.experimentId)! } : {}),
+        ...(normalizeOptional(input.variantId) ? { variantId: normalizeOptional(input.variantId)! } : {}),
+        ...(normalizeOptional(input.assignmentNamespace)
+          ? { assignmentNamespace: normalizeOptional(input.assignmentNamespace)! }
+          : {}),
+        ...(normalizeOptional(input.assignmentUnit)
+          ? { assignmentUnit: normalizeOptional(input.assignmentUnit)! }
+          : {}),
+        ...(normalizeOptional(input.assignmentTs) ? { assignmentTs: normalizeOptional(input.assignmentTs)! } : {}),
+        ...(input.factorLevels && Object.keys(input.factorLevels).length > 0
+          ? { factorLevels: input.factorLevels }
+          : {}),
+      };
+      return {
+        ...(payload ?? {}),
+        experiment,
+      } as JsonObject;
+    })();
     const parity = deriveProviderParity({
       provider: input.provider,
       model: input.model,
@@ -197,7 +231,7 @@ export async function recordAgentTraceEvent(input: AgentTraceEventInput): Promis
       status: input.status,
       task: input.task,
       params: input.params,
-      payload,
+      payload: payloadWithExperiment,
     });
     const baseRow: Record<string, unknown> = {
       id: randomUUID(),
@@ -213,7 +247,7 @@ export async function recordAgentTraceEvent(input: AgentTraceEventInput): Promis
       stage: input.stage,
       status: normalizeOptional(input.status) ?? null,
       latency_ms: typeof input.latencyMs === 'number' && Number.isFinite(input.latencyMs) ? Math.max(0, Math.floor(input.latencyMs)) : null,
-      payload: payload ?? null,
+      payload: payloadWithExperiment ?? null,
     };
     let row = buildTraceInsertRow(baseRow, parity);
     let lastInsertError: unknown = null;
@@ -262,6 +296,14 @@ type TaskTraceInput = {
   providerPath?: string;
   providerRequestId?: string;
   payload?: JsonObject;
+  experimentAssignment?: {
+    experimentId?: string;
+    variantId?: string;
+    assignmentNamespace?: string;
+    assignmentUnit?: string;
+    assignmentTs?: string;
+    factorLevels?: Record<string, string>;
+  };
 };
 
 export async function recordTaskTraceFromParams(input: TaskTraceInput): Promise<void> {
@@ -288,6 +330,12 @@ export async function recordTaskTraceFromParams(input: TaskTraceInput): Promise<
     params: input.params,
     latencyMs: input.latencyMs,
     payload: input.payload,
+    experimentId: input.experimentAssignment?.experimentId,
+    variantId: input.experimentAssignment?.variantId,
+    assignmentNamespace: input.experimentAssignment?.assignmentNamespace,
+    assignmentUnit: input.experimentAssignment?.assignmentUnit,
+    assignmentTs: input.experimentAssignment?.assignmentTs,
+    factorLevels: input.experimentAssignment?.factorLevels,
   });
 }
 

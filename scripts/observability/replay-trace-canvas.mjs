@@ -256,7 +256,23 @@ async function maybeConnectRoom(page) {
   if (!connectVisible) return false;
   const canConnect = await connectButton.isEnabled().catch(() => false);
   if (!canConnect) return false;
-  await connectButton.click({ force: true });
+  let clicked = false;
+  try {
+    await connectButton.scrollIntoViewIfNeeded().catch(() => {});
+    await connectButton.click({ force: true, timeout: 4_000 });
+    clicked = true;
+  } catch {
+    clicked = await page
+      .evaluate(() => {
+        const buttons = Array.from(document.querySelectorAll('button'));
+        const target = buttons.find((button) => /^connect$/i.test((button.textContent || '').trim()));
+        if (!target) return false;
+        target.click();
+        return true;
+      })
+      .catch(() => false);
+  }
+  if (!clicked) return false;
   const started = Date.now();
   while (Date.now() - started < 18_000) {
     if (await isRoomConnected(page)) return true;

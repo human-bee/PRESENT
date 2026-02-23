@@ -40,6 +40,12 @@ export const fairyCliRunEnvelopeSchema = z.object({
   params: z.record(z.string(), z.unknown()).optional(),
   summary: z.string().optional(),
   message: z.string().optional(),
+  experiment_id: z.string().min(1).optional(),
+  variant_id: z.string().min(1).optional(),
+  assignment_namespace: z.string().min(1).optional(),
+  assignment_unit: z.literal('room_session').optional(),
+  assignment_ts: z.string().min(1).optional(),
+  factor_levels: z.record(z.string(), z.string()).optional(),
 });
 
 export type FairyCliRunEnvelope = z.infer<typeof fairyCliRunEnvelopeSchema>;
@@ -82,6 +88,14 @@ export type FairyCliMutationResult = {
   evidence?: FairyCliMutationEvidence;
   reasonCode?: string;
   reason?: string;
+  experiment?: {
+    experimentId?: string | null;
+    variantId?: string | null;
+    assignmentNamespace?: string | null;
+    assignmentUnit?: string | null;
+    assignmentTs?: string | null;
+    factorLevels?: Record<string, string> | null;
+  } | null;
 };
 
 export const FAIRY_CLI_EXIT_CODES = {

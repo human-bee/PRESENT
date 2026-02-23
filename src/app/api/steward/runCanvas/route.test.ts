@@ -264,6 +264,48 @@ describe('/api/steward/runCanvas', () => {
     expect(metadata.intentId).toBe('intent-explicit');
   });
 
+  it('propagates experiment assignment metadata through queue params and response diagnostics', async () => {
+    const POST = await loadPost({ queueFallback: false, byok: false });
+    const request = new Request('http://localhost/api/steward/runCanvas', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        room: 'demo-room',
+        task: 'fairy.intent',
+        message: 'draw a roadmap',
+        experiment_id: 'voice_toolset_factorial_v1',
+        variant_id: 'v11',
+        assignment_namespace: 'voice_toolset_factorial_v1',
+        assignment_unit: 'room_session',
+        assignment_ts: '2026-02-23T03:21:00.000Z',
+        factor_levels: {
+          initial_toolset: 'lean_adaptive',
+          lazy_load_policy: 'locked_session',
+          instruction_pack: 'capability_explicit',
+          harness_mode: 'queue_first',
+        },
+      }),
+    });
+
+    const response = await POST(toNextRequest(request));
+    const json = await response.json();
+
+    expect(response.status).toBe(202);
+    expect(json.experiment).toMatchObject({
+      experimentId: 'voice_toolset_factorial_v1',
+      variantId: 'v11',
+      assignmentNamespace: 'voice_toolset_factorial_v1',
+      assignmentUnit: 'room_session',
+    });
+    const [enqueued] = enqueueTaskMock.mock.calls[0] as [Record<string, unknown>];
+    const params = enqueued.params as Record<string, unknown>;
+    const metadata = params.metadata as Record<string, unknown>;
+    const experiment = metadata.experiment as Record<string, unknown>;
+    expect(experiment.experiment_id).toBe('voice_toolset_factorial_v1');
+    expect(experiment.variant_id).toBe('v11');
+    expect((experiment.factor_levels as Record<string, unknown>).harness_mode).toBe('queue_first');
+  });
+
   it('queues fairy.intent without resource coalescing and preserves idempotency envelope', async () => {
     const POST = await loadPost({ queueFallback: false, byok: false });
     const request = new Request('http://localhost/api/steward/runCanvas', {

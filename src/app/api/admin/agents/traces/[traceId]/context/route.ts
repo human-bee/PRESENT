@@ -15,6 +15,10 @@ import {
   type TraceFailureSummary,
 } from '@/lib/agents/admin/trace-diagnostics';
 import { recordOpsAudit } from '@/lib/agents/shared/trace-events';
+import {
+  assignmentToDiagnostics,
+  readExperimentAssignmentFromUnknown,
+} from '@/lib/agents/shared/experiment-assignment';
 
 export const runtime = 'nodejs';
 
@@ -509,6 +513,12 @@ export async function GET(
         updated_at: taskSnapshot.updated_at,
       }
       : null;
+    const experiment = assignmentToDiagnostics(
+      readExperimentAssignmentFromUnknown(taskSnapshot?.params) ??
+      readExperimentAssignmentFromUnknown(
+        events.find((event) => event.payload && typeof event.payload === 'object')?.payload,
+      ),
+    );
 
     return NextResponse.json({
       ok: true,
@@ -517,6 +527,7 @@ export async function GET(
       failure,
       taskSnapshot: taskSnapshotResponse,
       transcriptPage,
+      ...(experiment ? { experiment } : {}),
     });
   } catch (error) {
     return NextResponse.json(

@@ -3,6 +3,10 @@ import { getAdminSupabaseClient } from '@/lib/agents/admin/supabase-admin';
 import { isMissingColumnError } from '@/lib/agents/admin/supabase-errors';
 import { assertCanvasMember, parseCanvasIdFromRoom } from '@/lib/agents/shared/canvas-billing';
 import { resolveRequestUserId } from '@/lib/supabase/server/resolve-request-user';
+import {
+  assignmentToDiagnostics,
+  readExperimentAssignmentFromUnknown,
+} from '@/lib/agents/shared/experiment-assignment';
 
 export const runtime = 'nodejs';
 
@@ -21,6 +25,7 @@ type TaskStatusRow = {
   attempt: unknown;
   error: unknown;
   result: unknown;
+  params?: unknown;
   request_id: unknown;
   trace_id?: unknown;
   resolved_trace_id?: unknown;
@@ -33,9 +38,13 @@ const asTaskStatusRow = (value: unknown): TaskStatusRow | null => {
   return value as TaskStatusRow;
 };
 
-const TASK_SELECT_BASE =
-  'id, room, task, status, attempt, error, result, request_id, created_at, updated_at';
-const TASK_SELECT_WITH_TRACE = `${TASK_SELECT_BASE}, trace_id`;
+const buildTaskSelect = (includeTraceId: boolean, includeParams: boolean): string => {
+  const columns = ['id', 'room', 'task', 'status', 'attempt', 'error', 'result'];
+  if (includeParams) columns.push('params');
+  columns.push('request_id', 'created_at', 'updated_at');
+  if (includeTraceId) columns.push('trace_id');
+  return columns.join(', ');
+};
 
 type TraceResolutionSource =
   | 'direct'
@@ -43,25 +52,40 @@ type TraceResolutionSource =
   | 'resolved_from_request_events'
   | 'missing';
 
-const toTaskPayload = (task: TaskStatusRow) => ({
-  id: task.id,
-  room: task.room,
-  task: task.task,
-  status: task.status,
-  attempt: task.attempt,
-  error: task.error,
-  result: task.result,
-  requestId: task.request_id,
-  traceId: task.trace_id ?? task.resolved_trace_id ?? null,
-  traceIntegrity:
-    typeof task.trace_id === 'string' && task.trace_id.trim().length > 0
-      ? 'direct'
-      : typeof task.resolved_trace_id === 'string' && task.resolved_trace_id.trim().length > 0
-        ? 'resolved_from_events'
-        : 'missing',
-  createdAt: task.created_at,
-  updatedAt: task.updated_at,
-});
+const extractExperimentDiagnostics = (task: TaskStatusRow): ReturnType<typeof assignmentToDiagnostics> =>
+  assignmentToDiagnostics(
+    readExperimentAssignmentFromUnknown(
+      task.params && typeof task.params === 'object' && !Array.isArray(task.params)
+        ? ((task.params as Record<string, unknown>).metadata ??
+          (task.params as Record<string, unknown>).experiment ??
+          task.params)
+        : null,
+    ),
+  );
+
+const toTaskPayload = (task: TaskStatusRow) => {
+  const experiment = extractExperimentDiagnostics(task);
+  return {
+    id: task.id,
+    room: task.room,
+    task: task.task,
+    status: task.status,
+    attempt: task.attempt,
+    error: task.error,
+    result: task.result,
+    requestId: task.request_id,
+    traceId: task.trace_id ?? task.resolved_trace_id ?? null,
+    traceIntegrity:
+      typeof task.trace_id === 'string' && task.trace_id.trim().length > 0
+        ? 'direct'
+        : typeof task.resolved_trace_id === 'string' && task.resolved_trace_id.trim().length > 0
+          ? 'resolved_from_events'
+          : 'missing',
+    createdAt: task.created_at,
+    updatedAt: task.updated_at,
+    ...(experiment ? { experiment } : {}),
+  };
+};
 
 export async function GET(req: NextRequest) {
   const userId = await resolveRequestUserId(req);
@@ -78,20 +102,36 @@ export async function GET(req: NextRequest) {
   }
 
   const db = getAdminSupabaseClient();
-  const queryTask = async (includeTraceId: boolean) =>
+  const queryTask = async (includeTraceId: boolean, includeParams: boolean) =>
     db
       .from('agent_tasks')
-      .select(includeTraceId ? TASK_SELECT_WITH_TRACE : TASK_SELECT_BASE)
+      .select(buildTaskSelect(includeTraceId, includeParams))
       .eq('id', taskId)
       .maybeSingle();
 
-  let taskQuery = await queryTask(true);
+  let includeTraceId = true;
+  let includeParams = true;
+  let taskQuery = await queryTask(includeTraceId, includeParams);
   if (taskQuery.error && isMissingColumnError(taskQuery.error, 'trace_id')) {
-    taskQuery = await queryTask(false);
+    includeTraceId = false;
+    taskQuery = await queryTask(includeTraceId, includeParams);
+  }
+  if (taskQuery.error && isMissingColumnError(taskQuery.error, 'params')) {
+    includeParams = false;
+    taskQuery = await queryTask(includeTraceId, includeParams);
   }
 
   const taskData = asTaskStatusRow(taskQuery.data);
-  const task = taskData ? ({ ...taskData, trace_id: taskData.trace_id ?? null } as TaskStatusRow) : null;
+  const task = taskData
+    ? ({
+      ...taskData,
+      trace_id: taskData.trace_id ?? null,
+      params:
+        includeParams && taskData.params && typeof taskData.params === 'object' && !Array.isArray(taskData.params)
+          ? taskData.params
+          : null,
+    } as TaskStatusRow)
+    : null;
   const error = taskQuery.error;
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
@@ -168,6 +208,7 @@ export async function GET(req: NextRequest) {
     ...task,
     resolved_trace_id: resolvedTraceId,
   };
+  const experimentDiagnostics = extractExperimentDiagnostics(task);
 
   const canvasId = parseCanvasIdFromRoom(taskRoom);
   if (!canvasId) {
@@ -201,6 +242,7 @@ export async function GET(req: NextRequest) {
             requestEvents: requestTraceProbeCount,
           },
           membership: 'room_scoped_fallback',
+          ...(experimentDiagnostics ? { experiment: experimentDiagnostics } : {}),
         },
       });
     }
@@ -224,6 +266,7 @@ export async function GET(req: NextRequest) {
         requestEvents: requestTraceProbeCount,
       },
       membership: 'verified',
+      ...(experimentDiagnostics ? { experiment: experimentDiagnostics } : {}),
     },
   });
 }
