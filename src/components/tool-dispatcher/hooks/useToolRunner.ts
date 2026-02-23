@@ -234,7 +234,7 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
   const emitStewardStatusTranscript = useCallback(
     (input: {
       taskName: string;
-      status: 'applied' | 'queued' | 'failed';
+      status: 'applied' | 'queued' | 'queued+applied' | 'failed';
       taskId?: string;
       traceId?: string;
       message?: string;

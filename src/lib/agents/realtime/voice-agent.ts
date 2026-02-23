@@ -1874,7 +1874,9 @@ Your only output is function calls. Never use plain text unless absolutely neces
                 room: targetRoomName,
                 message,
                 source: 'voice',
-                metadata: metadataSafeWithExperiment,
+                ...(metadataSafeWithExperiment
+                  ? { metadata: metadataSafeWithExperiment as JsonObject }
+                  : {}),
                 ...(selectionIds ? { selectionIds } : {}),
                 ...(bounds ? { bounds } : {}),
                 ...(participantId ? { participant_id: participantId } : {}),
