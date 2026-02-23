@@ -5,13 +5,16 @@ import type {
   ToolCapability,
 } from './capabilities';
 
+export type VoiceInstructionPack = 'baseline' | 'capability_explicit';
+
 export function buildVoiceAgentInstructions(
   systemCapabilities: SystemCapabilities,
   componentsFallback: Array<ComponentCapability>,
-  options: { profile?: CapabilityProfile } = {},
+  options: { profile?: CapabilityProfile; instructionPack?: VoiceInstructionPack } = {},
 ): string {
   const profile = options.profile || systemCapabilities?.capabilityProfile || 'full';
   const isLeanProfile = profile === 'lean_adaptive';
+  const instructionPack = options.instructionPack === 'capability_explicit' ? 'capability_explicit' : 'baseline';
 
   const base = `
 You are the custom Voice Agent (Agent #1) in a real‑time meeting/canvas system. You listen, interpret, and act by dispatching tool calls that shape the UI. You never speak audio—your output is always tool calls (not narration).
@@ -63,6 +66,14 @@ Global principles
   if (isLeanProfile && components.length > listedComponents.length) {
     componentSection += '\n- Additional components are available on-demand via capability refresh/fallback.';
   }
+
+  const capabilityExplicitSection = `
+
+Capability-explicit mode (experiment)
+- Use only capabilities listed in this response; treat missing tools/components as unavailable in this turn.
+- If a request needs a missing capability, route through dispatch_to_conductor with the clearest intent text.
+- Do not assume lazy-loaded capabilities are available unless explicitly re-advertised in capability metadata.
+- Preserve deterministic outcomes: reuse existing component IDs, avoid duplicate timer creation, and favor idempotent updates.`;
 
   const fullGuidance = `
 
@@ -261,6 +272,7 @@ Always respond with tool calls. Keep confirmations minimal.
 `;
 
   const guidance = isLeanProfile ? leanGuidance : fullGuidance;
+  const packGuidance = instructionPack === 'capability_explicit' ? capabilityExplicitSection : '';
 
-  return base + toolSection + componentSection + guidance;
+  return base + toolSection + componentSection + packGuidance + guidance;
 }

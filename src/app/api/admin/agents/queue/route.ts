@@ -8,6 +8,10 @@ import {
   extractWorkerIdentity,
 } from '@/lib/agents/admin/trace-diagnostics';
 import { normalizeProvider, normalizeProviderPath } from '@/lib/agents/admin/provider-parity';
+import {
+  assignmentToDiagnostics,
+  readExperimentAssignmentFromUnknown,
+} from '@/lib/agents/shared/experiment-assignment';
 
 export const runtime = 'nodejs';
 
@@ -84,6 +88,12 @@ type QueueTaskWithDiagnostics = AgentTaskRow & {
   provider_path: string;
   provider_request_id: string | null;
   provider_context_url: string | null;
+  experiment_id: string | null;
+  variant_id: string | null;
+  assignment_namespace: string | null;
+  assignment_unit: string | null;
+  assignment_ts: string | null;
+  factor_levels: Record<string, string> | null;
 };
 
 const TASK_SELECT_BASE_COLUMNS = [
@@ -265,6 +275,11 @@ const enrichWithTraceDiagnostics = async (
         params: task.params ?? undefined,
         payload: { error: task.error },
       });
+    const experiment = assignmentToDiagnostics(
+      readExperimentAssignmentFromUnknown(task.params?.metadata ?? task.params) ??
+      readExperimentAssignmentFromUnknown(latest?.payload) ??
+      readExperimentAssignmentFromUnknown(latest?.payload?.experiment),
+    );
 
     const { params: _params, ...taskPublicFields } = task;
     return {
@@ -280,6 +295,22 @@ const enrichWithTraceDiagnostics = async (
       provider_path: providerIdentity.providerPath,
       provider_request_id: providerIdentity.providerRequestId,
       provider_context_url: providerIdentity.providerContextUrl,
+      experiment_id:
+        experiment && typeof experiment.experimentId === 'string' ? experiment.experimentId : null,
+      variant_id:
+        experiment && typeof experiment.variantId === 'string' ? experiment.variantId : null,
+      assignment_namespace:
+        experiment && typeof experiment.assignmentNamespace === 'string'
+          ? experiment.assignmentNamespace
+          : null,
+      assignment_unit:
+        experiment && typeof experiment.assignmentUnit === 'string' ? experiment.assignmentUnit : null,
+      assignment_ts:
+        experiment && typeof experiment.assignmentTs === 'string' ? experiment.assignmentTs : null,
+      factor_levels:
+        experiment && experiment.factorLevels && typeof experiment.factorLevels === 'object'
+          ? (experiment.factorLevels as Record<string, string>)
+          : null,
     };
   }).filter((task) => (traceIdFilter ? task.trace_id === traceIdFilter : true));
 };

@@ -14,6 +14,12 @@ export type ToolEvent = {
       fast_route_type?: 'timer' | 'sticky' | 'plain_text';
       idempotency_key?: string;
       participant_id?: string;
+      experiment_id?: string;
+      variant_id?: string;
+      assignment_namespace?: string;
+      factor_levels?: Record<string, string>;
+      assignment_unit?: 'room_session';
+      assignment_ts?: string;
     };
   };
   timestamp: number;
@@ -65,6 +71,12 @@ export const buildToolEvent = (
     fast_route_type?: 'timer' | 'sticky' | 'plain_text';
     idempotency_key?: string;
     participant_id?: string;
+    experiment_id?: string;
+    variant_id?: string;
+    assignment_namespace?: string;
+    factor_levels?: Record<string, string>;
+    assignment_unit?: 'room_session';
+    assignment_ts?: string;
   },
 ): ToolEvent => ({
   id: randomUUID(),
@@ -79,6 +91,12 @@ export const buildToolEvent = (
       ...(context?.fast_route_type ? { fast_route_type: context.fast_route_type } : {}),
       ...(context?.idempotency_key ? { idempotency_key: context.idempotency_key } : {}),
       ...(context?.participant_id ? { participant_id: context.participant_id } : {}),
+      ...(context?.experiment_id ? { experiment_id: context.experiment_id } : {}),
+      ...(context?.variant_id ? { variant_id: context.variant_id } : {}),
+      ...(context?.assignment_namespace ? { assignment_namespace: context.assignment_namespace } : {}),
+      ...(context?.factor_levels ? { factor_levels: context.factor_levels } : {}),
+      ...(context?.assignment_unit ? { assignment_unit: context.assignment_unit } : {}),
+      ...(context?.assignment_ts ? { assignment_ts: context.assignment_ts } : {}),
     },
   },
   timestamp: Date.now(),

@@ -66,6 +66,17 @@ describe('voice-agent tool publishing helpers', () => {
         fast_route_type: 'timer',
         idempotency_key: 'quick-key-1',
         participant_id: 'participant-1',
+        experiment_id: 'voice_toolset_factorial_v1',
+        variant_id: 'v03',
+        assignment_namespace: 'voice_toolset_factorial_v1',
+        factor_levels: {
+          initial_toolset: 'lean_adaptive',
+          lazy_load_policy: 'locked_session',
+          instruction_pack: 'capability_explicit',
+          harness_mode: 'queue_first',
+        },
+        assignment_unit: 'room_session',
+        assignment_ts: '2026-02-23T03:21:00.000Z',
       },
     );
 
@@ -74,6 +85,15 @@ describe('voice-agent tool publishing helpers', () => {
       fast_route_type: 'timer',
       idempotency_key: 'quick-key-1',
       participant_id: 'participant-1',
+      experiment_id: 'voice_toolset_factorial_v1',
+      variant_id: 'v03',
+      assignment_namespace: 'voice_toolset_factorial_v1',
+      factor_levels: expect.objectContaining({
+        initial_toolset: 'lean_adaptive',
+        lazy_load_policy: 'locked_session',
+      }),
+      assignment_unit: 'room_session',
+      assignment_ts: '2026-02-23T03:21:00.000Z',
     });
   });
 

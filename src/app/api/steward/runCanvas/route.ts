@@ -32,6 +32,12 @@ import {
   normalizeRuntimeScope,
   resolveRuntimeScopeFromEnv,
 } from '@/lib/agents/shared/runtime-scope';
+import {
+  assignmentToDiagnostics,
+  attachExperimentAssignmentToMetadata,
+  normalizeExperimentAssignment,
+  readExperimentAssignmentFromUnknown,
+} from '@/lib/agents/shared/experiment-assignment';
 
 export const runtime = 'nodejs';
 
@@ -207,6 +213,19 @@ export async function POST(req: NextRequest) {
     const lockKey = parsed.lockKey;
     const attempt = parsed.attempt;
     const normalizedParams: JsonObject = { ...(parsed.params ?? {}) };
+    const explicitExperimentAssignment = normalizeExperimentAssignment({
+      experiment_id: parsed.experiment_id,
+      variant_id: parsed.variant_id,
+      assignment_namespace: parsed.assignment_namespace,
+      assignment_unit: parsed.assignment_unit,
+      assignment_ts: parsed.assignment_ts,
+      factor_levels: parsed.factor_levels,
+    });
+    const requestExperimentAssignment =
+      explicitExperimentAssignment ??
+      readExperimentAssignmentFromUnknown(normalizedParams.metadata) ??
+      readExperimentAssignmentFromUnknown(normalizedParams.experiment) ??
+      null;
 
     const explicitProvider = normalizeProvider(parsed.provider);
     const paramProvider = normalizeProvider(normalizedParams.provider);
@@ -370,7 +389,10 @@ export async function POST(req: NextRequest) {
     if (canonicalTraceId && (!enrichedParams.traceId || explicitTraceId)) {
       enrichedParams.traceId = canonicalTraceId;
     }
-    const metadataForCorrelation: JsonObject = parseMetadata(enrichedParams.metadata) ?? {};
+    const metadataForCorrelationBase: JsonObject = parseMetadata(enrichedParams.metadata) ?? {};
+    const metadataForCorrelation =
+      attachExperimentAssignmentToMetadata(metadataForCorrelationBase, requestExperimentAssignment) ??
+      metadataForCorrelationBase;
     if (canonicalTraceId && (!metadataForCorrelation.traceId || explicitTraceId)) {
       metadataForCorrelation.traceId = canonicalTraceId;
     }
@@ -388,10 +410,19 @@ export async function POST(req: NextRequest) {
     if (Object.keys(metadataForCorrelation).length > 0) {
       enrichedParams.metadata = metadataForCorrelation;
     }
+    if (requestExperimentAssignment) {
+      enrichedParams.experiment_id = requestExperimentAssignment.experiment_id;
+      enrichedParams.variant_id = requestExperimentAssignment.variant_id;
+      enrichedParams.assignment_namespace = requestExperimentAssignment.assignment_namespace;
+      enrichedParams.assignment_unit = requestExperimentAssignment.assignment_unit;
+      enrichedParams.assignment_ts = requestExperimentAssignment.assignment_ts;
+      enrichedParams.factor_levels = requestExperimentAssignment.factor_levels;
+    }
 
     if (normalizedTask === 'canvas.agent_prompt' && !enrichedParams.message) {
       return NextResponse.json({ error: 'Missing message for canvas.agent_prompt' }, { status: 400 });
     }
+    const experimentDiagnostics = assignmentToDiagnostics(requestExperimentAssignment);
 
     await recordAgentTraceEvent({
       stage: 'api_received',
@@ -413,6 +444,7 @@ export async function POST(req: NextRequest) {
         providerSource: providerParity.providerSource,
         providerPath: providerParity.providerPath,
         providerRequestId: providerParity.providerRequestId,
+        ...(experimentDiagnostics ? { experiment: experimentDiagnostics } : {}),
       },
     });
 
@@ -469,6 +501,7 @@ export async function POST(req: NextRequest) {
           requestId: canonicalRequestId ?? null,
           traceId: canonicalTraceId ?? null,
           intentId: canonicalIntentId ?? null,
+          ...(experimentDiagnostics ? { experiment: experimentDiagnostics } : {}),
         },
         { status: 202 },
       );
@@ -501,6 +534,7 @@ export async function POST(req: NextRequest) {
             providerSource: providerParity.providerSource,
             providerPath: providerParity.providerPath,
             providerRequestId: providerParity.providerRequestId,
+            ...(experimentDiagnostics ? { experiment: experimentDiagnostics } : {}),
           },
         });
         return NextResponse.json(
@@ -535,6 +569,7 @@ export async function POST(req: NextRequest) {
           providerSource: providerParity.providerSource,
           providerPath: 'fallback',
           providerRequestId: providerParity.providerRequestId,
+          ...(experimentDiagnostics ? { experiment: experimentDiagnostics } : {}),
         },
       });
 
@@ -591,6 +626,7 @@ export async function POST(req: NextRequest) {
             providerSource: providerParity.providerSource,
             providerPath: 'fallback',
             providerRequestId: providerParity.providerRequestId,
+            ...(experimentDiagnostics ? { experiment: experimentDiagnostics } : {}),
           },
         });
         return NextResponse.json({ status: 'executed_fallback' }, { status: 202 });
@@ -617,6 +653,7 @@ export async function POST(req: NextRequest) {
             providerSource: providerParity.providerSource,
             providerPath: 'fallback',
             providerRequestId: providerParity.providerRequestId,
+            ...(experimentDiagnostics ? { experiment: experimentDiagnostics } : {}),
           },
         });
         return NextResponse.json({ error: 'Dispatch failed' }, { status: 502 });

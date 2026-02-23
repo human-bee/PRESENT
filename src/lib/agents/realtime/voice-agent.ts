@@ -12,7 +12,7 @@ import { realtime as openaiRealtime } from '@livekit/agents-plugin-openai';
 import { MultiParticipantTranscriptionManager } from './multi-participant-transcription';
 import { appendTranscriptCache, getTranscriptWindow, listCanvasComponents } from '@/lib/agents/shared/supabase-context';
 import { MutationArbiter } from '@/lib/agents/shared/mutation-arbiter';
-import { buildVoiceAgentInstructions } from '@/lib/agents/instructions';
+import { buildVoiceAgentInstructions, type VoiceInstructionPack } from '@/lib/agents/instructions';
 import {
   queryCapabilities,
   defaultCapabilities,
@@ -55,6 +55,15 @@ import {
   normalizeCrowdPulseActiveQuestionInput,
   parseCrowdPulseFallbackInstruction,
 } from '@/lib/agents/subagents/crowd-pulse-parser';
+import {
+  assignVoiceFactorialVariant,
+  attachExperimentAssignmentToMetadata,
+  getDefaultAssignmentNamespace,
+  readVoiceFactorLevel,
+  type ExperimentAssignment,
+  type HarnessModeLevel,
+  type LazyLoadPolicyLevel,
+} from '@/lib/agents/shared/experiment-assignment';
 
 const RATE_LIMIT_HEADER_KEYS = [
   'retry-after',
@@ -563,8 +572,55 @@ Examples:
 - User: "hi" → (no tool needed, stay silent)
 
 Your only output is function calls. Never use plain text unless absolutely necessary.`;
-    const configuredCapabilityProfile = resolveCapabilityProfile(
+    const resolveRoomName = () => {
+      const raw = typeof job.room?.name === 'string' ? job.room.name : '';
+      const trimmed = raw.trim();
+      return trimmed.length > 0 ? trimmed : '';
+    };
+
+    const voiceExperimentEnabled = (() => {
+      const raw = process.env.VOICE_FACTORIAL_EXPERIMENT_ENABLED ?? process.env.VOICE_AGENT_EXPERIMENT_ENABLED;
+      if (typeof raw !== 'string') return false;
+      const normalized = raw.trim().toLowerCase();
+      return normalized === '1' || normalized === 'true' || normalized === 'yes' || normalized === 'on';
+    })();
+    const assignmentNamespace =
+      (process.env.VOICE_FACTORIAL_EXPERIMENT_NAMESPACE || process.env.VOICE_AGENT_EXPERIMENT_NAMESPACE || '').trim() ||
+      getDefaultAssignmentNamespace();
+    const sessionAssignmentTs = new Date().toISOString();
+    const experimentAssignment: ExperimentAssignment | null = voiceExperimentEnabled
+      ? assignVoiceFactorialVariant({
+          namespace: assignmentNamespace,
+          roomId: resolveRoomName() || `session:${workerId}`,
+          sessionStartIso: sessionAssignmentTs,
+          assignmentTs: sessionAssignmentTs,
+        })
+      : null;
+
+    const configuredCapabilityProfileFromEnv = resolveCapabilityProfile(
       process.env.VOICE_AGENT_CAPABILITY_PROFILE || 'full',
+    );
+    const configuredCapabilityProfile = resolveCapabilityProfile(
+      readVoiceFactorLevel<CapabilityProfile>(
+        experimentAssignment,
+        'initial_toolset',
+        configuredCapabilityProfileFromEnv,
+      ),
+    );
+    const lazyLoadPolicy = readVoiceFactorLevel<LazyLoadPolicyLevel>(
+      experimentAssignment,
+      'lazy_load_policy',
+      'adaptive_refresh',
+    );
+    const instructionPack = readVoiceFactorLevel<VoiceInstructionPack>(
+      experimentAssignment,
+      'instruction_pack',
+      'baseline',
+    );
+    const harnessMode = readVoiceFactorLevel<HarnessModeLevel>(
+      experimentAssignment,
+      'harness_mode',
+      'quick_first_async_proof',
     );
     const capabilityQueryTimeoutMs = (() => {
       const raw = process.env.VOICE_AGENT_CAPABILITY_TIMEOUT_MS;
@@ -606,18 +662,12 @@ Your only output is function calls. Never use plain text unless absolutely neces
       }
     };
 
-    const resolveRoomName = () => {
-      const raw = typeof job.room?.name === 'string' ? job.room.name : '';
-      const trimmed = raw.trim();
-      return trimmed.length > 0 ? trimmed : '';
-    };
-
     const getCapabilitiesCached = async (profile: CapabilityProfile): Promise<SystemCapabilities> => {
       const room = resolveRoomName() || `session:${workerId}`;
-      const key = `${room}::${profile}`;
+      const key = `${room}::${profile}::${lazyLoadPolicy}::${experimentAssignment?.variant_id ?? 'control'}`;
       const now = Date.now();
       const cached = capabilityCache.get(key);
-      if (cached && now - cached.fetchedAt < capabilityCacheTtlMs) {
+      if (cached && (lazyLoadPolicy === 'locked_session' || now - cached.fetchedAt < capabilityCacheTtlMs)) {
         orchestrationMetrics.capabilityCacheHits += 1;
         return cached.capabilities;
       }
@@ -1620,13 +1670,75 @@ Your only output is function calls. Never use plain text unless absolutely neces
       ensureToolCallListeners();
       let toolName = tool;
       let normalizedParams = normalizeOutgoingParams(toolName, params);
+      const experimentContext = experimentAssignment
+        ? {
+            experiment_id: experimentAssignment.experiment_id,
+            variant_id: experimentAssignment.variant_id,
+            assignment_namespace: experimentAssignment.assignment_namespace,
+            factor_levels: experimentAssignment.factor_levels,
+            assignment_unit: experimentAssignment.assignment_unit,
+            assignment_ts: experimentAssignment.assignment_ts,
+          }
+        : undefined;
       let toolEventContext:
         | {
             fast_route_type?: FastRouteType;
             idempotency_key?: string;
             participant_id?: string;
+            experiment_id?: string;
+            variant_id?: string;
+            assignment_namespace?: string;
+            factor_levels?: Record<string, string>;
+            assignment_unit?: 'room_session';
+            assignment_ts?: string;
           }
         | undefined;
+
+      if (toolName === 'canvas_quick_apply' && harnessMode === 'queue_first') {
+        const quickParams = normalizedParams as Record<string, unknown>;
+        const targetRoomName =
+          typeof quickParams.room === 'string' && quickParams.room.trim().length > 0
+            ? quickParams.room.trim()
+            : roomKey();
+        const quickMessage =
+          typeof quickParams.message === 'string' && quickParams.message.trim().length > 0
+            ? quickParams.message.trim()
+            : 'apply quick canvas intent';
+        if (!targetRoomName) {
+          console.warn('[VoiceAgent] dropped queue_first conversion due to missing room', {
+            tool: toolName,
+          });
+          return;
+        }
+        const metadataWithExperiment = attachExperimentAssignmentToMetadata(
+          (quickParams.metadata as JsonObject | undefined) ?? null,
+          experimentAssignment,
+        );
+        const convertedIntentId =
+          typeof quickParams.intentId === 'string' && quickParams.intentId.trim().length > 0
+            ? quickParams.intentId.trim()
+            : randomUUID();
+        normalizedParams = {
+          task: 'fairy.intent',
+          params: {
+            id: convertedIntentId,
+            room: targetRoomName,
+            message: quickMessage,
+            source: 'voice',
+            ...(metadataWithExperiment ? { metadata: metadataWithExperiment } : {}),
+            ...(typeof quickParams.participant_id === 'string' && quickParams.participant_id.trim().length > 0
+              ? { participant_id: quickParams.participant_id.trim() }
+              : {}),
+            ...(Array.isArray(quickParams.selectionIds) && quickParams.selectionIds.length > 0
+              ? { selectionIds: quickParams.selectionIds }
+              : {}),
+            ...(quickParams.bounds && typeof quickParams.bounds === 'object'
+              ? { bounds: quickParams.bounds as JsonObject }
+              : {}),
+          } as JsonObject,
+        };
+        toolName = 'dispatch_to_conductor';
+      }
 
       if (toolName === 'dispatch_to_conductor') {
         const rawTask =
@@ -1683,6 +1795,13 @@ Your only output is function calls. Never use plain text unless absolutely neces
             canvasParams.metadata && typeof canvasParams.metadata === 'object'
               ? (JSON.parse(JSON.stringify(canvasParams.metadata)) as JsonObject)
               : null;
+          const metadataWithExperiment = attachExperimentAssignmentToMetadata(
+            metadataSafe ? (metadataSafe as JsonObject) : null,
+            experimentAssignment,
+          );
+          const metadataSafeWithExperiment = metadataWithExperiment
+            ? (metadataWithExperiment as Record<string, unknown>)
+            : metadataSafe;
           const participantId =
             (typeof canvasParams.participant_id === 'string' && canvasParams.participant_id.trim()
               ? canvasParams.participant_id.trim()
@@ -1690,15 +1809,15 @@ Your only output is function calls. Never use plain text unless absolutely neces
             (typeof canvasParams.participantId === 'string' && canvasParams.participantId.trim()
               ? canvasParams.participantId.trim()
               : undefined) ||
-            (metadataSafe &&
-            typeof metadataSafe.participant_id === 'string' &&
-            metadataSafe.participant_id.trim().length > 0
-              ? metadataSafe.participant_id.trim()
+            (metadataSafeWithExperiment &&
+            typeof metadataSafeWithExperiment.participant_id === 'string' &&
+            metadataSafeWithExperiment.participant_id.trim().length > 0
+              ? metadataSafeWithExperiment.participant_id.trim()
               : undefined) ||
             lastRequesterParticipantId ||
             undefined;
-          if (participantId && metadataSafe && !metadataSafe.participant_id) {
-            metadataSafe.participant_id = participantId;
+          if (participantId && metadataSafeWithExperiment && !metadataSafeWithExperiment.participant_id) {
+            metadataSafeWithExperiment.participant_id = participantId;
           }
 
           const { suppressRequestId, suppressRoomName } = resolveDispatchSuppressionScope({
@@ -1740,6 +1859,9 @@ Your only output is function calls. Never use plain text unless absolutely neces
                   typeof canvasParams.source === 'string' && canvasParams.source.trim().length > 0
                     ? canvasParams.source.trim()
                     : 'voice',
+                ...(metadataSafeWithExperiment
+                  ? { metadata: metadataSafeWithExperiment as JsonObject }
+                  : {}),
                 ...(participantId ? { participant_id: participantId } : {}),
               },
             };
@@ -1752,7 +1874,9 @@ Your only output is function calls. Never use plain text unless absolutely neces
                 room: targetRoomName,
                 message,
                 source: 'voice',
-                metadata: metadataSafe,
+                ...(metadataSafeWithExperiment
+                  ? { metadata: metadataSafeWithExperiment as JsonObject }
+                  : {}),
                 ...(selectionIds ? { selectionIds } : {}),
                 ...(bounds ? { bounds } : {}),
                 ...(participantId ? { participant_id: participantId } : {}),
@@ -1765,7 +1889,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
               ? String((normalizedParams as any).params.message).trim()
               : message;
           const quickIntent = classifyQuickApplyIntent(fastLaneMessage);
-          if (quickIntent) {
+          if (quickIntent && harnessMode !== 'queue_first') {
             const quickRequestId =
               requestId ||
               (typeof (normalizedParams as any)?.params?.requestId === 'string'
@@ -1804,12 +1928,15 @@ Your only output is function calls. Never use plain text unless absolutely neces
               ...(bounds ? { bounds } : {}),
               ...(selectionIds ? { selectionIds } : {}),
               ...(participantId ? { participant_id: participantId } : {}),
-              ...(metadataSafe ? { metadata: metadataSafe as JsonObject } : {}),
+              ...(metadataSafeWithExperiment
+                ? { metadata: metadataSafeWithExperiment as JsonObject }
+                : {}),
             };
             toolEventContext = {
               fast_route_type: quickIntent.fastRouteType,
               idempotency_key: quickIdempotencyKey,
               ...(participantId ? { participant_id: participantId } : {}),
+              ...(experimentContext ?? {}),
             };
           }
         }
@@ -1891,6 +2018,15 @@ Your only output is function calls. Never use plain text unless absolutely neces
         if (typeof dispatchParams.attempt !== 'number') {
           dispatchParams.attempt = 1;
         }
+        if (experimentAssignment) {
+          const metadataWithExperiment = attachExperimentAssignmentToMetadata(
+            (dispatchParams.metadata as JsonObject | undefined) ?? {},
+            experimentAssignment,
+          );
+          if (metadataWithExperiment) {
+            dispatchParams.metadata = metadataWithExperiment;
+          }
+        }
         normalizedParams = {
           ...normalizedParams,
           params: dispatchParams,
@@ -1922,11 +2058,28 @@ Your only output is function calls. Never use plain text unless absolutely neces
           );
           quickParams.idempotency_key = computedQuickKey;
         }
+        if (experimentAssignment) {
+          const metadataWithExperiment = attachExperimentAssignmentToMetadata(
+            (quickParams.metadata as JsonObject | undefined) ?? {},
+            experimentAssignment,
+          );
+          if (metadataWithExperiment) {
+            quickParams.metadata = metadataWithExperiment;
+          }
+        }
         normalizedParams = quickParams as JsonObject;
         toolEventContext = {
           ...(quickRouteType ? { fast_route_type: quickRouteType } : {}),
           idempotency_key: String(quickParams.idempotency_key),
           ...(participantId ? { participant_id: participantId } : {}),
+          ...(experimentContext ?? {}),
+        };
+      }
+
+      if (experimentContext) {
+        toolEventContext = {
+          ...experimentContext,
+          ...(toolEventContext ?? {}),
         };
       }
 
@@ -2579,6 +2732,33 @@ Your only output is function calls. Never use plain text unless absolutely neces
           if (!roomName) {
             return { status: 'ERROR', message: 'canvas_quick_apply requires room context' };
           }
+          const metadataWithExperiment = attachExperimentAssignmentToMetadata(
+            (args.metadata as JsonObject | undefined) ?? {},
+            experimentAssignment,
+          );
+          if (harnessMode === 'queue_first') {
+            await sendToolCall('dispatch_to_conductor', {
+              task: 'fairy.intent',
+              params: {
+                id:
+                  typeof args.intentId === 'string' && args.intentId.trim().length > 0
+                    ? args.intentId.trim()
+                    : randomUUID(),
+                room: roomName,
+                message: args.message.trim(),
+                source: 'voice',
+                ...(metadataWithExperiment ? { metadata: metadataWithExperiment } : {}),
+                ...(Array.isArray(args.selectionIds) && args.selectionIds.length > 0
+                  ? { selectionIds: args.selectionIds }
+                  : {}),
+                ...(args.bounds ? { bounds: args.bounds } : {}),
+                ...(typeof args.participant_id === 'string' && args.participant_id.trim().length > 0
+                  ? { participant_id: args.participant_id.trim() }
+                  : {}),
+              },
+            });
+            return { status: 'queued', mode: 'queue_first' };
+          }
           const payload: JsonObject = {
             room: roomName,
             fast_route_type: args.fast_route_type,
@@ -2606,7 +2786,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
             ...(Array.isArray(args.selectionIds) && args.selectionIds.length > 0
               ? { selectionIds: args.selectionIds }
               : {}),
-            ...(args.metadata && typeof args.metadata === 'object' ? { metadata: args.metadata as JsonObject } : {}),
+            ...(metadataWithExperiment ? { metadata: metadataWithExperiment } : {}),
           };
           await sendToolCall('canvas_quick_apply', payload);
           return { status: 'queued' };
@@ -2619,6 +2799,13 @@ Your only output is function calls. Never use plain text unless absolutely neces
           const roomName = job.room.name || '';
           const params = (args?.params as JsonObject) || {};
           const enrichedParams: JsonObject = { ...params };
+          const metadataWithExperiment = attachExperimentAssignmentToMetadata(
+            (enrichedParams.metadata as JsonObject | undefined) ?? {},
+            experimentAssignment,
+          );
+          if (metadataWithExperiment) {
+            enrichedParams.metadata = metadataWithExperiment;
+          }
 
           if (!enrichedParams.room && roomName) {
             enrichedParams.room = roomName;
@@ -2739,11 +2926,27 @@ Your only output is function calls. Never use plain text unless absolutely neces
     instructions = buildVoiceAgentInstructions(
       systemCapabilities,
       systemCapabilities.components || [],
-      { profile: systemCapabilities.capabilityProfile || configuredCapabilityProfile },
+      {
+        profile: systemCapabilities.capabilityProfile || configuredCapabilityProfile,
+        instructionPack,
+      },
     );
     console.log('[VoiceAgent] capability profile resolved', {
       configuredCapabilityProfile,
       resolvedCapabilityProfile: systemCapabilities.capabilityProfile,
+      configuredCapabilityProfileFromEnv,
+      lazyLoadPolicy,
+      instructionPack,
+      harnessMode,
+      experimentAssignment:
+        experimentAssignment
+          ? {
+              experimentId: experimentAssignment.experiment_id,
+              variantId: experimentAssignment.variant_id,
+              assignmentNamespace: experimentAssignment.assignment_namespace,
+              factorLevels: experimentAssignment.factor_levels,
+            }
+          : null,
       tools: systemCapabilities.tools.length,
       components: (systemCapabilities.components || []).length,
       manifestVersion: systemCapabilities.manifestVersion,

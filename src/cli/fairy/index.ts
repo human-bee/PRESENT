@@ -204,6 +204,12 @@ const buildRunEnvelope = (session: FairyCliSession, input: {
   idempotencyKey?: string;
   lockKey?: string;
   attempt?: number;
+  experimentId?: string;
+  variantId?: string;
+  assignmentNamespace?: string;
+  assignmentUnit?: 'room_session';
+  assignmentTs?: string;
+  factorLevels?: Record<string, string>;
 }): FairyCliRunEnvelope => {
   const requestId = input.requestId ?? `cli-${randomUUID()}`;
   const traceId = input.traceId ?? requestId;
@@ -248,6 +254,12 @@ const buildRunEnvelope = (session: FairyCliSession, input: {
     params: baseParams,
     summary: input.message,
     message: input.message,
+    experiment_id: input.experimentId,
+    variant_id: input.variantId,
+    assignment_namespace: input.assignmentNamespace,
+    assignment_unit: input.assignmentUnit,
+    assignment_ts: input.assignmentTs,
+    factor_levels: input.factorLevels,
   };
 
   return fairyCliRunEnvelopeSchema.parse(envelope);
@@ -309,6 +321,23 @@ async function handleSessions(state: FairyCliState, parsed: ParsedArgs, cwd: str
       idempotencyKey: readFlagString(parsed.flags, 'idempotencyKey') ?? undefined,
       lockKey: readFlagString(parsed.flags, 'lockKey') ?? undefined,
       attempt: readFlagNumber(parsed.flags, 'attempt', 1),
+      experimentId: readFlagString(parsed.flags, 'experimentId') ?? undefined,
+      variantId: readFlagString(parsed.flags, 'variantId') ?? undefined,
+      assignmentNamespace: readFlagString(parsed.flags, 'assignmentNamespace') ?? undefined,
+      assignmentUnit:
+        (readFlagString(parsed.flags, 'assignmentUnit') as 'room_session' | null) ?? undefined,
+      assignmentTs: readFlagString(parsed.flags, 'assignmentTs') ?? undefined,
+      factorLevels: (() => {
+        const parsedFactorLevels = parseJsonFlag(parsed.flags, 'factorLevels');
+        const next: Record<string, string> = {};
+        for (const [key, value] of Object.entries(parsedFactorLevels)) {
+          if (typeof value !== 'string') continue;
+          const trimmed = value.trim();
+          if (!trimmed) continue;
+          next[key] = trimmed;
+        }
+        return Object.keys(next).length > 0 ? next : undefined;
+      })(),
     });
     const baseUrl = readFlagString(parsed.flags, 'baseUrl') ?? session.baseUrl;
     const result = await sendRunAndMaybeWait({ baseUrl, token }, envelope, wait, timeoutMs);

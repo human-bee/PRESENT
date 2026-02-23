@@ -20,6 +20,7 @@ Optional:
 
 - `--run <runId>` to set a specific run id.
 - `--script <path>` to use a custom JSON script.
+- `--room <room>` should remain stable per run so room/session assignment hashing is reproducible.
 
 Default script: `scripts/journey/sample-script.json`.
 
@@ -67,3 +68,10 @@ This captures:
 
 - This is **synthetic STT**: we send transcription data packets rather than audio. It exercises the exact same voice-agent path.
 - For true audio-based STT, use `npm run journey:tts` to publish TTS audio into LiveKit.
+- Factorial experiments can be enabled with:
+  - `VOICE_FACTORIAL_EXPERIMENT_ENABLED=true`
+  - `VOICE_FACTORIAL_EXPERIMENT_NAMESPACE=voice_toolset_factorial_v1`
+- Experiment assignment metadata is propagated into:
+  - tool-call context (`experiment_id`, `variant_id`, `factor_levels`)
+  - `/api/steward/runCanvas` metadata envelope
+  - task-status diagnostics and admin queue/session/trace APIs.

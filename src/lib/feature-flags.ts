@@ -33,6 +33,12 @@ export function parseCsvFlag(envVar: string | undefined): string[] {
     .filter(Boolean);
 }
 
+export function getStringFlag(envVar: string | undefined, defaultValue: string): string {
+  if (typeof envVar !== 'string') return defaultValue;
+  const trimmed = envVar.trim();
+  return trimmed.length > 0 ? trimmed : defaultValue;
+}
+
 export const flags = {
   localToolRoutingEnabled: getBooleanFlag(process.env.NEXT_PUBLIC_LOCAL_TOOL_ROUTING_ENABLED, true),
   mcpEarlyInitEnabled: getBooleanFlag(process.env.NEXT_PUBLIC_MCP_EARLY_INIT_ENABLED, true),
@@ -48,4 +54,12 @@ export const flags = {
   agentTraceSampleRate: getNumberFlag(process.env.AGENT_TRACE_SAMPLE_RATE, 1),
   agentTraceRetentionDays: getNumberFlag(process.env.AGENT_TRACE_RETENTION_DAYS, 30),
   agentAdminActionsEnabled: getBooleanFlag(process.env.AGENT_ADMIN_ACTIONS_ENABLED, true),
+  voiceFactorialExperimentEnabled: getBooleanFlag(
+    process.env.VOICE_FACTORIAL_EXPERIMENT_ENABLED ?? process.env.VOICE_AGENT_EXPERIMENT_ENABLED,
+    false,
+  ),
+  voiceFactorialExperimentNamespace: getStringFlag(
+    process.env.VOICE_FACTORIAL_EXPERIMENT_NAMESPACE ?? process.env.VOICE_AGENT_EXPERIMENT_NAMESPACE,
+    'voice_toolset_factorial_v1',
+  ),
 };

@@ -7,6 +7,7 @@ const metricsPath =
   process.env.LATENCY_METRICS_PATH || process.env.PLAYWRIGHT_LATENCY_METRICS_FILE || 'artifacts/latency/deterministic-lane.json';
 const summaryPath = process.env.LATENCY_SOFT_GATE_SUMMARY_PATH || 'artifacts/latency/soft-gate-summary.json';
 const thresholdMs = Number.parseInt(process.env.DETERMINISTIC_LANE_P95_THRESHOLD_MS ?? '800', 10) || 800;
+const factorialSummaryPath = process.env.FACTORIAL_SUMMARY_PATH || 'artifacts/latency/factorial-summary.json';
 
 const percentile = (sortedValues, p) => {
   if (!Array.isArray(sortedValues) || sortedValues.length === 0) return 0;
@@ -76,7 +77,22 @@ const run = async () => {
 
   const p50Ms = percentile(samples, 0.5);
   const p95Ms = percentile(samples, 0.95);
-  const passed = p95Ms <= thresholdMs;
+  let factorialStatus = 'unknown';
+  let factorialRegressions = 0;
+  try {
+    const factorialPayload = JSON.parse(await readFile(factorialSummaryPath, 'utf8'));
+    if (factorialPayload && typeof factorialPayload === 'object') {
+      factorialStatus =
+        typeof factorialPayload.status === 'string' ? factorialPayload.status : factorialStatus;
+      factorialRegressions = Array.isArray(factorialPayload.regressions)
+        ? factorialPayload.regressions.length
+        : 0;
+    }
+  } catch {
+    factorialStatus = 'missing';
+  }
+
+  const passed = p95Ms <= thresholdMs && factorialStatus !== 'failed';
   const summary = {
     status: passed ? 'passed' : 'failed',
     metricsPath,
@@ -84,6 +100,9 @@ const run = async () => {
     sampleCount: samples.length,
     p50Ms,
     p95Ms,
+    factorialStatus,
+    factorialRegressions,
+    factorialSummaryPath,
     checkedAt: new Date().toISOString(),
   };
   await writeSummary(summary);

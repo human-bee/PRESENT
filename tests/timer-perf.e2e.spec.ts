@@ -167,6 +167,8 @@ test.describe('Timer send → paint latency', () => {
       p50Ms: p50,
       p95Ms: p95,
       samples,
+      experimentId: process.env.EXPERIMENT_ID || null,
+      variantId: process.env.EXPERIMENT_VARIANT_ID || null,
     };
 
     const metricsPath =

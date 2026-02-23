@@ -133,6 +133,57 @@ describe('/api/steward/task-status', () => {
     expect(taskSelectMock).toHaveBeenCalledTimes(2);
   });
 
+  it('falls back when agent_tasks.params column is missing', async () => {
+    const taskRowWithoutParams = {
+      id: 'task-no-params-column',
+      room: 'canvas-1',
+      task: 'fairy.intent',
+      status: 'succeeded',
+      attempt: 1,
+      error: null,
+      result: { ok: true },
+      request_id: 'req-no-params-column',
+      trace_id: 'trace-no-params-column',
+      created_at: '2026-02-22T01:00:00.000Z',
+      updated_at: '2026-02-22T01:00:05.000Z',
+    };
+
+    const firstMaybeSingleMock = jest.fn().mockResolvedValue({
+      data: null,
+      error: { code: '42703', message: 'column "params" does not exist' },
+    });
+    const secondMaybeSingleMock = jest.fn().mockResolvedValue({
+      data: taskRowWithoutParams,
+      error: null,
+    });
+    const taskEqMock = jest
+      .fn()
+      .mockReturnValueOnce({ maybeSingle: firstMaybeSingleMock })
+      .mockReturnValueOnce({ maybeSingle: secondMaybeSingleMock });
+    const taskSelectMock = jest.fn(() => ({ eq: taskEqMock }));
+
+    getAdminSupabaseClientMock.mockReturnValue({
+      from: jest.fn(() => ({ select: taskSelectMock })),
+    });
+
+    const GET = await loadGet();
+    const response = await GET({
+      nextUrl: new URL(
+        'http://localhost/api/steward/task-status?taskId=task-no-params-column&room=canvas-1',
+      ),
+    } as import('next/server').NextRequest);
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.ok).toBe(true);
+    expect(json.task.id).toBe('task-no-params-column');
+    expect(taskSelectMock).toHaveBeenCalledTimes(2);
+    expect(taskSelectMock.mock.calls[0][0]).toContain('params');
+    expect(taskSelectMock.mock.calls[1][0]).not.toContain('params');
+    expect(taskSelectMock.mock.calls[1][0]).toContain('result, request_id');
+    expect(taskSelectMock.mock.calls[1][0]).not.toContain('result request_id');
+  });
+
   it('returns task status when requester is a canvas member', async () => {
     const maybeSingleMock = jest.fn().mockResolvedValue({
       data: {
@@ -143,6 +194,21 @@ describe('/api/steward/task-status', () => {
         attempt: 1,
         error: null,
         result: { ok: true },
+        params: {
+          metadata: {
+            experiment: {
+              experiment_id: 'voice_toolset_factorial_v1',
+              variant_id: 'v03',
+              assignment_namespace: 'voice_toolset_factorial_v1',
+              assignment_unit: 'room_session',
+              assignment_ts: '2026-02-23T03:21:00.000Z',
+              factor_levels: {
+                initial_toolset: 'lean_adaptive',
+                lazy_load_policy: 'locked_session',
+              },
+            },
+          },
+        },
         request_id: 'req-1',
         trace_id: 'trace-1',
         created_at: '2026-02-17T01:00:00.000Z',
@@ -169,11 +235,19 @@ describe('/api/steward/task-status', () => {
     expect(json.task.requestId).toBe('req-1');
     expect(json.task.traceId).toBe('trace-1');
     expect(json.task.traceIntegrity).toBe('direct');
+    expect(json.task.experiment).toMatchObject({
+      experimentId: 'voice_toolset_factorial_v1',
+      variantId: 'v03',
+    });
     expect(json.diagnostics).toMatchObject({
       taskRoom: 'canvas-1',
       requestRoom: 'canvas-1',
       traceResolutionSource: 'direct',
       membership: 'verified',
+      experiment: {
+        experimentId: 'voice_toolset_factorial_v1',
+        variantId: 'v03',
+      },
     });
     expect(assertCanvasMemberMock).toHaveBeenCalledWith({
       canvasId: 'canvas-1',

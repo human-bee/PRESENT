@@ -43,6 +43,52 @@ const readRecordField = (record: Record<string, unknown>, ...keys: string[]): un
   return undefined;
 };
 
+const normalizeFactorLevels = (value: unknown): Record<string, string> | null => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const next: Record<string, string> = {};
+  for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
+    if (typeof entry !== 'string') continue;
+    const trimmed = entry.trim();
+    if (!trimmed) continue;
+    next[key] = trimmed;
+  }
+  return Object.keys(next).length > 0 ? next : null;
+};
+
+const readExperimentDiagnostics = (
+  source: Record<string, unknown> | null | undefined,
+): FairyCliMutationResult['experiment'] => {
+  if (!source) return null;
+  const direct =
+    source.experiment && typeof source.experiment === 'object' && !Array.isArray(source.experiment)
+      ? (source.experiment as Record<string, unknown>)
+      : source;
+  const factorLevels = normalizeFactorLevels(
+    readRecordField(direct, 'factorLevels', 'factor_levels'),
+  );
+  const experiment = {
+    experimentId: readString(readRecordField(direct, 'experimentId', 'experiment_id')),
+    variantId: readString(readRecordField(direct, 'variantId', 'variant_id')),
+    assignmentNamespace: readString(
+      readRecordField(direct, 'assignmentNamespace', 'assignment_namespace'),
+    ),
+    assignmentUnit: readString(readRecordField(direct, 'assignmentUnit', 'assignment_unit')),
+    assignmentTs: readString(readRecordField(direct, 'assignmentTs', 'assignment_ts')),
+    factorLevels,
+  };
+  if (
+    !experiment.experimentId &&
+    !experiment.variantId &&
+    !experiment.assignmentNamespace &&
+    !experiment.assignmentUnit &&
+    !experiment.assignmentTs &&
+    !experiment.factorLevels
+  ) {
+    return null;
+  }
+  return experiment;
+};
+
 function normalizeTaskSnapshot(task: Record<string, unknown> | null): FairyCliTaskSnapshot | null {
   if (!task) return null;
   const id = readString(task.id) ?? '';
@@ -78,6 +124,7 @@ type PollTaskStatusResult =
       status: 'terminal';
       task: FairyCliTaskSnapshot;
       lastHttpStatus: number;
+      experiment?: FairyCliMutationResult['experiment'];
     }
   | {
       status: 'unauthorized';
@@ -156,6 +203,13 @@ export async function pollTaskStatus(
       !Array.isArray(statusRecord.task)
         ? (statusRecord.task as Record<string, unknown>)
         : null;
+    const diagnosticsRecord =
+      statusRecord &&
+      statusRecord.diagnostics &&
+      typeof statusRecord.diagnostics === 'object' &&
+      !Array.isArray(statusRecord.diagnostics)
+        ? (statusRecord.diagnostics as Record<string, unknown>)
+        : null;
     const task = normalizeTaskSnapshot(taskRecord);
     if (!task) {
       await new Promise((resolve) => setTimeout(resolve, 300));
@@ -167,6 +221,7 @@ export async function pollTaskStatus(
         status: 'terminal',
         task,
         lastHttpStatus,
+        experiment: readExperimentDiagnostics(diagnosticsRecord),
       };
     }
     await new Promise((resolve) => setTimeout(resolve, Math.min(1200, 250 + attempt * 90)));
@@ -217,6 +272,7 @@ export async function sendRunAndMaybeWait(
       traceId: readString(bodyRecord.traceId) ?? traceId,
       intentId: readString(bodyRecord.intentId) ?? intentId,
       taskStatus: null,
+      experiment: readExperimentDiagnostics(bodyRecord),
     };
   }
 
@@ -241,6 +297,7 @@ export async function sendRunAndMaybeWait(
           matched: false,
         },
       },
+      experiment: readExperimentDiagnostics(bodyRecord),
     };
   }
 
@@ -264,6 +321,7 @@ export async function sendRunAndMaybeWait(
           matched: false,
         },
       },
+      experiment: readExperimentDiagnostics(bodyRecord),
     };
   }
 
@@ -298,6 +356,7 @@ export async function sendRunAndMaybeWait(
         reason: terminal.error ?? null,
       },
     },
+    experiment: polled.experiment ?? readExperimentDiagnostics(bodyRecord),
   };
 }
 

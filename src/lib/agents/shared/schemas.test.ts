@@ -46,6 +46,14 @@ describe('agent shared schemas', () => {
       model: 'openai:gpt-5',
       taskId: 'task-1',
       attempt: 2,
+      experiment_id: 'voice_toolset_factorial_v1',
+      variant_id: 'v04',
+      assignment_namespace: 'voice_toolset_factorial_v1',
+      assignment_unit: 'room_session',
+      assignment_ts: '2026-02-23T03:21:00.000Z',
+      factor_levels: {
+        initial_toolset: 'lean_adaptive',
+      },
     });
 
     expect(parsed.room).toBe('room-2');
@@ -55,6 +63,9 @@ describe('agent shared schemas', () => {
     expect(parsed.model).toBe('openai:gpt-5');
     expect(parsed.taskId).toBe('task-1');
     expect(parsed.attempt).toBe(2);
+    expect(parsed.experiment_id).toBe('voice_toolset_factorial_v1');
+    expect(parsed.variant_id).toBe('v04');
+    expect(parsed.factor_levels).toEqual({ initial_toolset: 'lean_adaptive' });
   });
 
   it('parses scorecard steward requests', () => {

@@ -3,6 +3,20 @@ export type ToolParameters = Record<string, unknown>;
 export interface ToolCallPayload {
   tool: string;
   params?: ToolParameters;
+  context?: {
+    source?: string;
+    timestamp?: number;
+    fast_route_type?: 'timer' | 'sticky' | 'plain_text';
+    idempotency_key?: string;
+    participant_id?: string;
+    experiment_id?: string;
+    variant_id?: string;
+    assignment_namespace?: string;
+    assignment_unit?: 'room_session';
+    assignment_ts?: string;
+    factor_levels?: Record<string, string>;
+    [key: string]: unknown;
+  };
 }
 
 export interface ToolCall {
