@@ -2,51 +2,32 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '@/hooks/use-auth';
 import { fetchWithSupabaseAuth } from '@/lib/supabase/auth-headers';
-
-type StatusResponse = {
-  ok: boolean;
-  isAdmin: boolean;
-  unlockActive: boolean;
-  keyringPolicy?: {
-    passwordRequired: boolean;
-    updatedAt?: string;
-  };
-  resolved: {
-    configVersion: string;
-    resolvedAt: string;
-    effective: Record<string, unknown>;
-    applyModes: Record<string, string>;
-    sources: Array<Record<string, unknown>>;
-  };
-  keyStatus: Array<{
-    provider: string;
-    source: string;
-    byokConfigured: boolean;
-    byokLast4?: string;
-    sharedConfigured: boolean;
-    sharedEnabled: boolean;
-    sharedLast4?: string;
-  }>;
-};
+import { AdvancedJsonPanel } from './_components/advanced-json-panel';
+import { AdminKeyringPanel } from './_components/admin-keyring-panel';
+import { GuidedControlsPanel } from './_components/guided-controls-panel';
+import { SharedKeyUnlockPanel } from './_components/shared-key-unlock-panel';
+import { StatusSummary } from './_components/status-summary';
+import { buildPatchFromGuided, GUIDED_SECTIONS, seedGuidedValues } from './_lib/guided-config';
+import type { ModelControlStatusResponse } from './_lib/types';
 
 const pretty = (value: unknown) => JSON.stringify(value, null, 2);
 
 export default function ModelControlsPage() {
   const { user, loading } = useAuth();
   const router = useRouter();
-  const [status, setStatus] = useState<StatusResponse | null>(null);
+
+  const [status, setStatus] = useState<ModelControlStatusResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
   const [unlockPassword, setUnlockPassword] = useState('');
-  const [userConfigDraft, setUserConfigDraft] = useState(
-    pretty({
-      models: {},
-      knobs: {},
-    }),
-  );
+  const [guidedValues, setGuidedValues] = useState<Record<string, string>>({});
+  const [guidedInitialized, setGuidedInitialized] = useState(false);
+
+  const [userConfigDraft, setUserConfigDraft] = useState(pretty({ models: {}, knobs: {} }));
   const [adminProfileDraft, setAdminProfileDraft] = useState(
     pretty({
       scopeType: 'global',
@@ -59,6 +40,13 @@ export default function ModelControlsPage() {
       },
     }),
   );
+
+  const [adminScopeType, setAdminScopeType] = useState<'global' | 'room' | 'user' | 'task'>('global');
+  const [adminScopeId, setAdminScopeId] = useState('global');
+  const [adminTaskPrefix, setAdminTaskPrefix] = useState('');
+  const [adminPriority, setAdminPriority] = useState('100');
+  const [adminEnabled, setAdminEnabled] = useState(true);
+
   const [adminSharedKeyDraft, setAdminSharedKeyDraft] = useState(
     pretty({
       provider: 'openai',
@@ -87,7 +75,7 @@ export default function ModelControlsPage() {
         const text = await res.text().catch(() => '');
         throw new Error(text || `Failed to load status (${res.status})`);
       }
-      const json = (await res.json()) as StatusResponse;
+      const json = (await res.json()) as ModelControlStatusResponse;
       setStatus(json);
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : 'Failed to load model controls');
@@ -99,6 +87,12 @@ export default function ModelControlsPage() {
     void refresh();
   }, [user, refresh]);
 
+  useEffect(() => {
+    if (!status || guidedInitialized) return;
+    setGuidedValues(seedGuidedValues(status.resolved?.effective));
+    setGuidedInitialized(true);
+  }, [guidedInitialized, status]);
+
   const runAction = useCallback(
     async (request: () => Promise<Response>) => {
       setBusy(true);
@@ -107,7 +101,9 @@ export default function ModelControlsPage() {
         const res = await request();
         const payload = (await res.json().catch(() => null)) as Record<string, unknown> | null;
         if (payload && payload.ok === false) {
-          const apply = payload.apply as { steps?: Array<{ service?: string; status?: string; detail?: string }> } | undefined;
+          const apply = payload.apply as
+            | { steps?: Array<{ service?: string; status?: string; detail?: string }> }
+            | undefined;
           if (apply?.steps?.length) {
             const failed = apply.steps.filter((step) => step.status === 'failed');
             if (failed.length) {
@@ -133,23 +129,61 @@ export default function ModelControlsPage() {
     [refresh],
   );
 
-  const keySourceSummary = useMemo(() => {
-    if (!status?.keyStatus) return [];
-    return status.keyStatus.map((entry) => {
-      const label =
-        entry.source === 'byok'
-          ? 'BYOK'
-          : entry.source === 'shared'
-            ? 'Shared (Unlocked)'
-            : 'Missing';
-      return {
-        provider: entry.provider,
-        label,
-        byokLast4: entry.byokLast4,
-        sharedLast4: status.isAdmin ? entry.sharedLast4 : undefined,
+  const onLoadEffectiveValues = useCallback(() => {
+    setGuidedValues(seedGuidedValues(status?.resolved?.effective));
+  }, [status?.resolved?.effective]);
+
+  const onSaveGuidedUser = useCallback(() => {
+    try {
+      const config = buildPatchFromGuided(guidedValues);
+      setUserConfigDraft(pretty(config));
+      void runAction(async () =>
+        fetchWithSupabaseAuth('/api/model-controls/user-overrides', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            config,
+            enabled: true,
+            priority: 100,
+          }),
+        }),
+      );
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : 'Invalid guided config');
+    }
+  }, [guidedValues, runAction]);
+
+  const onSaveGuidedAdmin = useCallback(() => {
+    try {
+      const config = buildPatchFromGuided(guidedValues);
+      const priority = Number.parseInt(adminPriority, 10);
+      if (!Number.isFinite(priority) || priority < 0 || priority > 1000) {
+        throw new Error('Admin priority must be an integer between 0 and 1000');
+      }
+      const scopeId = adminScopeId.trim();
+      if (!scopeId) {
+        throw new Error('Admin scopeId is required');
+      }
+      const payload = {
+        scopeType: adminScopeType,
+        scopeId,
+        taskPrefix: adminTaskPrefix.trim() || null,
+        enabled: adminEnabled,
+        priority,
+        config,
       };
-    });
-  }, [status?.isAdmin, status?.keyStatus]);
+      setAdminProfileDraft(pretty(payload));
+      void runAction(async () =>
+        fetchWithSupabaseAuth('/api/admin/model-controls/profiles', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        }),
+      );
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : 'Invalid admin profile config');
+    }
+  }, [adminEnabled, adminPriority, adminScopeId, adminScopeType, adminTaskPrefix, guidedValues, runAction]);
 
   if (loading || !user) {
     return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
@@ -166,6 +200,9 @@ export default function ModelControlsPage() {
             </p>
           </div>
           <div className="flex gap-3 text-sm">
+            <Link className="text-blue-700 underline" href="/settings/models/reference">
+              Model Reference
+            </Link>
             <Link className="text-blue-700 underline" href="/settings/keys">
               Legacy Keys
             </Link>
@@ -179,237 +216,133 @@ export default function ModelControlsPage() {
           <div className="rounded-md border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
         ) : null}
 
-        <section className="rounded-xl border border-gray-200 bg-white p-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold">Effective Runtime Config</h2>
-            <button
-              type="button"
-              onClick={() => void refresh()}
-              className="rounded-md border px-3 py-1.5 text-sm"
-              disabled={busy}
-            >
-              Refresh
-            </button>
-          </div>
-          <div className="mt-3 grid grid-cols-1 gap-4 lg:grid-cols-3">
-            <div className="rounded-md border p-3 text-sm">
-              <div className="font-medium">Config Version</div>
-              <div className="mt-1 text-gray-700">{status?.resolved?.configVersion || 'n/a'}</div>
-              <div className="mt-3 font-medium">Resolved At</div>
-              <div className="mt-1 text-gray-700">{status?.resolved?.resolvedAt || 'n/a'}</div>
-            </div>
-            <div className="rounded-md border p-3 text-sm">
-              <div className="font-medium">Shared Unlock</div>
-              <div className="mt-1 text-gray-700">{status?.unlockActive ? 'Unlocked' : 'Locked'}</div>
-              <div className="mt-3 font-medium">Shared Password</div>
-              <div className="mt-1 text-gray-700">
-                {status?.keyringPolicy?.passwordRequired ? 'Required' : 'Not required'}
-              </div>
-              <div className="mt-3 font-medium">Admin Access</div>
-              <div className="mt-1 text-gray-700">{status?.isAdmin ? 'Allowlisted Admin' : 'Standard User'}</div>
-            </div>
-            <div className="rounded-md border p-3 text-sm">
-              <div className="font-medium">Key Source By Provider</div>
-              <ul className="mt-2 space-y-1">
-                {keySourceSummary.map((entry) => (
-                  <li key={entry.provider} className="text-gray-700">
-                    {entry.provider}: {entry.label}
-                    {entry.byokLast4 ? ` (BYOK ••••${entry.byokLast4})` : ''}
-                    {!entry.byokLast4 && entry.sharedLast4 ? ` (Shared ••••${entry.sharedLast4})` : ''}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </div>
-          <details className="mt-4">
-            <summary className="cursor-pointer text-sm font-medium text-gray-800">Show resolved config JSON</summary>
-            <pre className="mt-2 max-h-96 overflow-auto rounded-md bg-gray-900 p-3 text-xs text-gray-100">
-              {pretty(status?.resolved || {})}
-            </pre>
-          </details>
-        </section>
+        <StatusSummary status={status} busy={busy} onRefresh={() => void refresh()} />
 
-        <section className="rounded-xl border border-gray-200 bg-white p-4">
-          <h2 className="text-lg font-semibold">Shared Key Unlock</h2>
-          <p className="mt-1 text-sm text-gray-600">
-            Use optional admin password to enable shared fallback keys for this session.
-          </p>
-          <div className="mt-3 flex flex-wrap items-center gap-3">
-            <input
-              type="password"
-              value={unlockPassword}
-              onChange={(event) => setUnlockPassword(event.target.value)}
-              placeholder="Optional shared-key password"
-              className="w-80 rounded-md border px-3 py-2 text-sm"
-            />
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() =>
-                void runAction(async () =>
-                  fetchWithSupabaseAuth('/api/model-controls/unlock-shared-keys', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                      password: unlockPassword || undefined,
-                    }),
-                  }),
-                )
-              }
-              className="rounded-md bg-blue-600 px-3 py-2 text-sm text-white disabled:opacity-50"
-            >
-              Unlock Shared Keys
-            </button>
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() =>
-                void runAction(async () =>
-                  fetchWithSupabaseAuth('/api/model-controls/lock-shared-keys', {
-                    method: 'POST',
-                  }),
-                )
-              }
-              className="rounded-md border px-3 py-2 text-sm disabled:opacity-50"
-            >
-              Lock
-            </button>
-          </div>
-        </section>
+        <GuidedControlsPanel
+          sections={GUIDED_SECTIONS}
+          status={status}
+          guidedValues={guidedValues}
+          busy={busy}
+          onGuidedFieldChange={(path, value) => setGuidedValues((current) => ({ ...current, [path]: value }))}
+          onLoadEffectiveValues={onLoadEffectiveValues}
+          onSaveGuidedUser={onSaveGuidedUser}
+          onSaveGuidedAdmin={status?.isAdmin ? onSaveGuidedAdmin : undefined}
+          adminProfileForm={
+            status?.isAdmin
+              ? {
+                  scopeType: adminScopeType,
+                  scopeId: adminScopeId,
+                  taskPrefix: adminTaskPrefix,
+                  priority: adminPriority,
+                  enabled: adminEnabled,
+                  onScopeTypeChange: (value) => {
+                    setAdminScopeType(value);
+                    if (value === 'global' && !adminScopeId.trim()) {
+                      setAdminScopeId('global');
+                    }
+                  },
+                  onScopeIdChange: setAdminScopeId,
+                  onTaskPrefixChange: setAdminTaskPrefix,
+                  onPriorityChange: setAdminPriority,
+                  onEnabledChange: setAdminEnabled,
+                }
+              : undefined
+          }
+        />
 
-        <section className="rounded-xl border border-gray-200 bg-white p-4">
-          <h2 className="text-lg font-semibold">User Overrides</h2>
-          <p className="mt-1 text-sm text-gray-600">
-            Scoped to your user. JSON schema mirrors `ModelControlPatch`.
-          </p>
-          <textarea
-            value={userConfigDraft}
-            onChange={(event) => setUserConfigDraft(event.target.value)}
-            className="mt-3 h-56 w-full rounded-md border p-3 font-mono text-xs"
-          />
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() =>
+        <SharedKeyUnlockPanel
+          busy={busy}
+          unlockPassword={unlockPassword}
+          onUnlockPasswordChange={setUnlockPassword}
+          onUnlock={() =>
+            void runAction(async () =>
+              fetchWithSupabaseAuth('/api/model-controls/unlock-shared-keys', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  password: unlockPassword || undefined,
+                }),
+              }),
+            )
+          }
+          onLock={() =>
+            void runAction(async () =>
+              fetchWithSupabaseAuth('/api/model-controls/lock-shared-keys', {
+                method: 'POST',
+              }),
+            )
+          }
+        />
+
+        <AdvancedJsonPanel
+          busy={busy}
+          isAdmin={Boolean(status?.isAdmin)}
+          userConfigDraft={userConfigDraft}
+          onUserConfigDraftChange={setUserConfigDraft}
+          onSaveUserJson={() =>
+            void runAction(async () =>
+              fetchWithSupabaseAuth('/api/model-controls/user-overrides', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  config: JSON.parse(userConfigDraft),
+                  enabled: true,
+                  priority: 100,
+                }),
+              }),
+            )
+          }
+          adminProfileDraft={adminProfileDraft}
+          onAdminProfileDraftChange={setAdminProfileDraft}
+          onSaveAdminJson={() =>
+            void runAction(async () =>
+              fetchWithSupabaseAuth('/api/admin/model-controls/profiles', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: adminProfileDraft,
+              }),
+            )
+          }
+        />
+
+        {status?.isAdmin ? (
+          <AdminKeyringPanel
+            busy={busy}
+            adminSharedKeyDraft={adminSharedKeyDraft}
+            onAdminSharedKeyDraftChange={setAdminSharedKeyDraft}
+            onUpsertSharedKey={() =>
               void runAction(async () =>
-                fetchWithSupabaseAuth('/api/model-controls/user-overrides', {
-                  method: 'PUT',
+                fetchWithSupabaseAuth('/api/admin/model-controls/shared-keys', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: adminSharedKeyDraft,
+                }),
+              )
+            }
+            adminPasswordDraft={adminPasswordDraft}
+            onAdminPasswordDraftChange={setAdminPasswordDraft}
+            onUpdatePasswordPolicy={() =>
+              void runAction(async () =>
+                fetchWithSupabaseAuth('/api/admin/model-controls/shared-key-password', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: adminPasswordDraft,
+                }),
+              )
+            }
+            onApplyRestartChanges={() =>
+              void runAction(async () =>
+                fetchWithSupabaseAuth('/api/admin/model-controls/apply', {
+                  method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({
-                    config: JSON.parse(userConfigDraft),
-                    enabled: true,
-                    priority: 100,
+                    reason: 'Applied from /settings/models',
+                    targetConfigVersion: status?.resolved?.configVersion ?? null,
                   }),
                 }),
               )
             }
-            className="mt-3 rounded-md bg-gray-900 px-3 py-2 text-sm text-white disabled:opacity-50"
-          >
-            Save User Overrides
-          </button>
-        </section>
-
-        {status?.isAdmin ? (
-          <section className="space-y-6 rounded-xl border border-indigo-200 bg-indigo-50/40 p-4">
-            <h2 className="text-lg font-semibold text-indigo-900">Admin Controls</h2>
-            <div>
-              <div className="text-sm font-medium text-indigo-900">Global/Scoped Profiles</div>
-              <textarea
-                value={adminProfileDraft}
-                onChange={(event) => setAdminProfileDraft(event.target.value)}
-                className="mt-2 h-48 w-full rounded-md border p-3 font-mono text-xs"
-              />
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() =>
-                  void runAction(async () =>
-                    fetchWithSupabaseAuth('/api/admin/model-controls/profiles', {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: adminProfileDraft,
-                    }),
-                  )
-                }
-                className="mt-2 rounded-md bg-indigo-700 px-3 py-2 text-sm text-white disabled:opacity-50"
-              >
-                Upsert Profile
-              </button>
-            </div>
-
-            <div>
-              <div className="text-sm font-medium text-indigo-900">Shared Provider Keys</div>
-              <textarea
-                value={adminSharedKeyDraft}
-                onChange={(event) => setAdminSharedKeyDraft(event.target.value)}
-                className="mt-2 h-40 w-full rounded-md border p-3 font-mono text-xs"
-              />
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() =>
-                  void runAction(async () =>
-                    fetchWithSupabaseAuth('/api/admin/model-controls/shared-keys', {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: adminSharedKeyDraft,
-                    }),
-                  )
-                }
-                className="mt-2 rounded-md bg-indigo-700 px-3 py-2 text-sm text-white disabled:opacity-50"
-              >
-                Upsert Shared Key
-              </button>
-            </div>
-
-            <div>
-              <div className="text-sm font-medium text-indigo-900">Shared Key Password Policy</div>
-              <textarea
-                value={adminPasswordDraft}
-                onChange={(event) => setAdminPasswordDraft(event.target.value)}
-                className="mt-2 h-32 w-full rounded-md border p-3 font-mono text-xs"
-              />
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() =>
-                  void runAction(async () =>
-                    fetchWithSupabaseAuth('/api/admin/model-controls/shared-key-password', {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: adminPasswordDraft,
-                    }),
-                  )
-                }
-                className="mt-2 rounded-md bg-indigo-700 px-3 py-2 text-sm text-white disabled:opacity-50"
-              >
-                Update Password Policy
-              </button>
-            </div>
-
-            <div>
-              <div className="text-sm font-medium text-indigo-900">Apply Restart-Bound Changes</div>
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() =>
-                  void runAction(async () =>
-                    fetchWithSupabaseAuth('/api/admin/model-controls/apply', {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({
-                        reason: 'Applied from /settings/models',
-                        targetConfigVersion: status?.resolved?.configVersion ?? null,
-                      }),
-                    }),
-                  )
-                }
-                className="mt-2 rounded-md bg-indigo-900 px-3 py-2 text-sm text-white disabled:opacity-50"
-              >
-                Apply Restart Changes
-              </button>
-            </div>
-          </section>
+          />
         ) : null}
       </div>
     </div>

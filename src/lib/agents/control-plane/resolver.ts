@@ -92,6 +92,30 @@ const normalizePatch = (value: unknown): ModelControlPatch => {
   return partial;
 };
 
+const assignFieldSource = (
+  map: Record<
+    string,
+    {
+      scope: 'env' | 'request' | 'global' | 'room' | 'user' | 'task';
+      scopeId: string;
+      profileId?: string;
+      version?: number;
+    }
+  >,
+  patch: ModelControlPatch,
+  source: {
+    scope: 'env' | 'request' | 'global' | 'room' | 'user' | 'task';
+    scopeId: string;
+    profileId?: string;
+    version?: number;
+  },
+): void => {
+  const paths = flattenPaths(patch);
+  for (const path of paths) {
+    map[path] = source;
+  }
+};
+
 const envDefaults = (): ModelControlPatch => {
   const parseIntSafe = (value: string | undefined): number | undefined => {
     if (!value) return undefined;
@@ -204,7 +228,10 @@ export async function resolveModelControl(
     const cached = resolverCache.get(key);
     if (cached && cached.exp > now) return cached.value;
   }
-  let effective = normalizePatch(envDefaults());
+  const envPatch = normalizePatch(envDefaults());
+  let effective = envPatch;
+  const fieldSources: ResolvedModelControl['fieldSources'] = {};
+  assignFieldSource(fieldSources, envPatch, { scope: 'env', scopeId: 'env' });
   const profiles = await getModelControlProfilesForResolution({
     task: input.task,
     room: input.room,
@@ -213,7 +240,17 @@ export async function resolveModelControl(
   });
   const sources: ResolvedModelControl['sources'] = [];
   for (const profile of profiles) {
-    effective = deepMerge(effective as Record<string, unknown>, normalizePatch(profile.config) as Record<string, unknown>) as ModelControlPatch;
+    const normalizedProfilePatch = normalizePatch(profile.config);
+    effective = deepMerge(
+      effective as Record<string, unknown>,
+      normalizedProfilePatch as Record<string, unknown>,
+    ) as ModelControlPatch;
+    assignFieldSource(fieldSources, normalizedProfilePatch, {
+      scope: profile.scope_type,
+      scopeId: profile.scope_id,
+      profileId: profile.id,
+      version: profile.version,
+    });
     sources.push({
       id: profile.id,
       scope: profile.scope_type,
@@ -226,13 +263,17 @@ export async function resolveModelControl(
   if (input.allowRequestModelOverride === true && input.requestModel) {
     const task = (input.task || '').toLowerCase();
     if (task.startsWith('search.') || task.startsWith('scorecard.fact_') || task.startsWith('scorecard.verify')) {
-      effective = deepMerge(effective as Record<string, unknown>, {
+      const requestPatch = {
         models: { searchModel: input.requestModel },
-      }) as ModelControlPatch;
+      };
+      effective = deepMerge(effective as Record<string, unknown>, requestPatch) as ModelControlPatch;
+      assignFieldSource(fieldSources, requestPatch, { scope: 'request', scopeId: 'request' });
     } else {
-      effective = deepMerge(effective as Record<string, unknown>, {
+      const requestPatch = {
         models: { canvasSteward: input.requestModel },
-      }) as ModelControlPatch;
+      };
+      effective = deepMerge(effective as Record<string, unknown>, requestPatch) as ModelControlPatch;
+      assignFieldSource(fieldSources, requestPatch, { scope: 'request', scopeId: 'request' });
     }
   }
   const paths = flattenPaths(effective);
@@ -253,6 +294,7 @@ export async function resolveModelControl(
     effective,
     sources,
     applyModes,
+    fieldSources,
     resolvedAt: new Date().toISOString(),
     configVersion,
   };

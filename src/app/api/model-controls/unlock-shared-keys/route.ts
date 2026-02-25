@@ -5,6 +5,7 @@ import {
   checkUnlockRateLimit,
   createSharedUnlockSession,
   createUnlockCookieValue,
+  normalizeClientIp,
   unlockCookieName,
   validateSharedKeyPassword,
 } from '@/lib/agents/control-plane/shared-keys';
@@ -16,9 +17,9 @@ export const runtime = 'nodejs';
 const readClientIp = (req: NextRequest): string | null => {
   const forwarded = req.headers.get('x-forwarded-for');
   if (forwarded && forwarded.trim()) {
-    return forwarded.split(',')[0]?.trim() || null;
+    return normalizeClientIp(forwarded.split(',')[0]?.trim() || null);
   }
-  return req.headers.get('x-real-ip');
+  return normalizeClientIp(req.headers.get('x-real-ip'));
 };
 
 export async function POST(req: NextRequest) {
@@ -98,4 +99,3 @@ export async function POST(req: NextRequest) {
   });
   return response;
 }
-

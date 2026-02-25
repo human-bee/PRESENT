@@ -9,7 +9,9 @@ import type { ModelProvider } from './types';
 const UNLOCK_COOKIE_NAME = 'present_model_unlock';
 const UNLOCK_IDLE_MS = 20 * 60_000;
 const UNLOCK_ABSOLUTE_MS = 8 * 60 * 60_000;
-const UNLOCK_RATE_LIMIT_PER_MIN = 12;
+const UNLOCK_RATE_LIMIT_PER_MIN_USER = 12;
+const UNLOCK_RATE_LIMIT_PER_MIN_USER_IP = 12;
+const UNLOCK_RATE_LIMIT_PER_MIN_IP = 24;
 const ARGON2_MEMORY_KIB = 64 * 1024;
 const ARGON2_PASSES = 3;
 const ARGON2_PARALLELISM = 1;
@@ -58,6 +60,15 @@ const normalizeRoomScope = (value?: string | null): string | null => {
   if (typeof value !== 'string') return null;
   const trimmed = value.trim();
   return trimmed.length ? trimmed : null;
+};
+
+const normalizeClientIp = (value?: string | null): string | null => {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  if (trimmed.length > 64) return null;
+  if (!/^[0-9a-fA-F:.]+$/.test(trimmed)) return null;
+  return trimmed;
 };
 
 const passwordHashLegacyScrypt = (password: string, saltB64: string): string => {
@@ -407,7 +418,60 @@ export async function checkUnlockRateLimit(params: {
   userId: string;
   ip?: string | null;
 }): Promise<{ ok: boolean; retryAfterSec: number }> {
-  const key = `model-unlock:${params.userId}`;
-  const result = consumeWindowedLimit(key, UNLOCK_RATE_LIMIT_PER_MIN, 60_000);
-  return { ok: result.ok, retryAfterSec: result.retryAfterSec };
+  const retryAfterSec = 60;
+  const normalizedIp = normalizeClientIp(params.ip);
+  const localKey = normalizedIp
+    ? `model-unlock:${params.userId}:${normalizedIp}`
+    : `model-unlock:${params.userId}:no-ip`;
+  const localResult = consumeWindowedLimit(localKey, UNLOCK_RATE_LIMIT_PER_MIN_USER_IP, 60_000);
+  if (!localResult.ok) {
+    return { ok: false, retryAfterSec: localResult.retryAfterSec };
+  }
+  const windowStart = new Date(Date.now() - 60_000).toISOString();
+  const db = getAdminSupabaseClient();
+  const userQuery = db
+    .from('admin_model_unlock_sessions')
+    .select('id', { count: 'exact', head: true })
+    .eq('user_id', params.userId)
+    .gte('created_at', windowStart);
+  const userIpQuery =
+    normalizedIp
+      ? db
+          .from('admin_model_unlock_sessions')
+          .select('id', { count: 'exact', head: true })
+          .eq('user_id', params.userId)
+          .eq('created_by_ip', normalizedIp)
+          .gte('created_at', windowStart)
+      : null;
+  const ipQuery =
+    normalizedIp
+      ? db
+          .from('admin_model_unlock_sessions')
+          .select('id', { count: 'exact', head: true })
+          .eq('created_by_ip', normalizedIp)
+          .gte('created_at', windowStart)
+      : null;
+  const [userResult, userIpResult, ipResult] = await Promise.all([
+    userQuery,
+    userIpQuery,
+    ipQuery,
+  ]);
+  if (userResult.error) {
+    throw new Error(`Failed user unlock rate-limit query: ${userResult.error.message}`);
+  }
+  if (userIpResult?.error) {
+    throw new Error(`Failed user-ip unlock rate-limit query: ${userIpResult.error.message}`);
+  }
+  if (ipResult?.error) {
+    throw new Error(`Failed ip unlock rate-limit query: ${ipResult.error.message}`);
+  }
+  const userCount = userResult.count ?? 0;
+  const userIpCount = userIpResult?.count ?? 0;
+  const ipCount = ipResult?.count ?? 0;
+  const blockedByUser = userCount >= UNLOCK_RATE_LIMIT_PER_MIN_USER;
+  const blockedByUserIp = normalizedIp ? userIpCount >= UNLOCK_RATE_LIMIT_PER_MIN_USER_IP : false;
+  const blockedByIp = normalizedIp ? ipCount >= UNLOCK_RATE_LIMIT_PER_MIN_IP : false;
+  return { ok: !(blockedByUser || blockedByUserIp || blockedByIp), retryAfterSec };
 }
+
+export { normalizeClientIp };

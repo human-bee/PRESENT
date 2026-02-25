@@ -100,6 +100,15 @@ export type ResolvedModelControl = {
   effective: ModelControlPatch;
   sources: ModelControlScopeRef[];
   applyModes: Record<string, ApplyMode>;
+  fieldSources: Record<
+    string,
+    {
+      scope: KnobScope | 'env' | 'request';
+      scopeId: string;
+      profileId?: string;
+      version?: number;
+    }
+  >;
   resolvedAt: string;
   configVersion: string;
 };

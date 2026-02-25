@@ -138,37 +138,62 @@ export async function upsertModelControlProfile(params: {
   const scopeType = params.input.scopeType;
   const scopeId = params.input.scopeId.trim();
   const taskPrefix = normalizePrefix(params.input.taskPrefix ?? null);
-  let existingQuery = db
-    .from('agent_model_control_profiles')
-    .select('id,version,enabled,priority')
-    .eq('scope_type', scopeType)
-    .eq('scope_id', scopeId);
-  existingQuery = taskPrefix ? existingQuery.eq('task_prefix', taskPrefix) : existingQuery.is('task_prefix', null);
-  const existing = await existingQuery.maybeSingle();
-  if (existing.error && existing.error.code !== 'PGRST116') {
-    throw new Error(`Failed to load current profile version: ${existing.error.message}`);
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    let existingQuery = db
+      .from('agent_model_control_profiles')
+      .select('id,version,enabled,priority')
+      .eq('scope_type', scopeType)
+      .eq('scope_id', scopeId);
+    existingQuery = taskPrefix ? existingQuery.eq('task_prefix', taskPrefix) : existingQuery.is('task_prefix', null);
+    const existing = await existingQuery.maybeSingle();
+    if (existing.error && existing.error.code !== 'PGRST116') {
+      throw new Error(`Failed to load current profile version: ${existing.error.message}`);
+    }
+    const nextVersion = (existing.data?.version ?? 0) + 1;
+    const row = {
+      id: existing.data?.id ?? randomUUID(),
+      scope_type: scopeType,
+      scope_id: scopeId,
+      task_prefix: taskPrefix,
+      enabled: params.input.enabled ?? existing.data?.enabled ?? true,
+      priority: params.input.priority ?? existing.data?.priority ?? 100,
+      config: parsePatch(params.input.config),
+      version: nextVersion,
+      updated_by: params.actorUserId,
+      updated_at: new Date().toISOString(),
+    };
+    if (existing.data?.id) {
+      const update = await db
+        .from('agent_model_control_profiles')
+        .update(row)
+        .eq('id', existing.data.id)
+        .eq('version', existing.data.version)
+        .select(
+          'id,scope_type,scope_id,task_prefix,enabled,priority,config,version,updated_by,created_at,updated_at',
+        )
+        .maybeSingle();
+      if (update.error && update.error.code !== 'PGRST116') {
+        throw new Error(`Failed to upsert model control profile: ${update.error.message}`);
+      }
+      if (update.data) {
+        return update.data as ModelControlProfileRow;
+      }
+      continue;
+    }
+    const inserted = await db
+      .from('agent_model_control_profiles')
+      .insert(row)
+      .select(
+        'id,scope_type,scope_id,task_prefix,enabled,priority,config,version,updated_by,created_at,updated_at',
+      )
+      .single();
+    if (inserted.error) {
+      if (inserted.error.code === '23505') {
+        continue;
+      }
+      throw new Error(`Failed to upsert model control profile: ${inserted.error.message}`);
+    }
+    return inserted.data as ModelControlProfileRow;
   }
-  const nextVersion = (existing.data?.version ?? 0) + 1;
-  const row = {
-    id: existing.data?.id ?? randomUUID(),
-    scope_type: scopeType,
-    scope_id: scopeId,
-    task_prefix: taskPrefix,
-    enabled: params.input.enabled ?? existing.data?.enabled ?? true,
-    priority: params.input.priority ?? existing.data?.priority ?? 100,
-    config: parsePatch(params.input.config),
-    version: nextVersion,
-    updated_by: params.actorUserId,
-    updated_at: new Date().toISOString(),
-  };
-  const mutation = existing.data?.id
-    ? db.from('agent_model_control_profiles').update(row).eq('id', existing.data.id)
-    : db.from('agent_model_control_profiles').insert(row);
-  const { data, error } = await mutation
-    .select('id,scope_type,scope_id,task_prefix,enabled,priority,config,version,updated_by,created_at,updated_at')
-    .single();
-  if (error) {
-    throw new Error(`Failed to upsert model control profile: ${error.message}`);
-  }
-  return data as ModelControlProfileRow;
+  throw new Error('MODEL_CONTROL_PROFILE_VERSION_CONFLICT');
 }

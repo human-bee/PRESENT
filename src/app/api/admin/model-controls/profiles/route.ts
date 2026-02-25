@@ -42,10 +42,18 @@ export async function POST(req: NextRequest) {
   if (!parsed.success) {
     return NextResponse.json({ error: 'invalid_payload', details: parsed.error.flatten() }, { status: 400 });
   }
-  const profile = await upsertModelControlProfile({
-    input: parsed.data,
-    actorUserId: admin.userId,
-  });
+  let profile: Awaited<ReturnType<typeof upsertModelControlProfile>>;
+  try {
+    profile = await upsertModelControlProfile({
+      input: parsed.data,
+      actorUserId: admin.userId,
+    });
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('MODEL_CONTROL_PROFILE_VERSION_CONFLICT')) {
+      return NextResponse.json({ error: 'version_conflict' }, { status: 409 });
+    }
+    throw error;
+  }
   clearModelControlResolverCache();
   void recordOpsAudit({
     actorUserId: admin.userId,
@@ -62,4 +70,3 @@ export async function POST(req: NextRequest) {
   });
   return NextResponse.json({ ok: true, profile });
 }
-
