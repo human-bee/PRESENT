@@ -1,6 +1,11 @@
 import { z } from 'zod';
 import { performWebSearch, type WebSearchHit } from '@/lib/agents/tools/web-search';
 import type { JsonObject } from '@/lib/utils/json-schema';
+import { getDecryptedUserModelKey } from '@/lib/agents/shared/user-model-keys';
+import { resolveSharedKeyBySession } from '@/lib/agents/control-plane/shared-keys';
+import { resolveModelControl } from '@/lib/agents/control-plane/resolver';
+import type { ResolvedModelControl } from '@/lib/agents/control-plane/types';
+import { BYOK_ENABLED } from '@/lib/agents/shared/byok-flags';
 
 const GeneralSearchArgs = z
   .object({
@@ -59,6 +64,7 @@ export type SearchStewardResult = {
       providerSource: 'runtime_selected';
       providerPath: 'primary';
       providerRequestId?: string;
+      configVersion?: string;
     };
   };
   panel?: ResearchPanelPayload;
@@ -83,10 +89,67 @@ async function runGeneralSearch(rawParams: JsonObject): Promise<SearchStewardRes
   const parsed = GeneralSearchArgs.parse(rawParams);
   const { query } = parsed;
   try {
+    const requesterUserId =
+      typeof rawParams.requesterUserId === 'string' && rawParams.requesterUserId.trim()
+        ? rawParams.requesterUserId.trim()
+        : null;
+    const billingUserId =
+      BYOK_ENABLED &&
+      typeof rawParams.billingUserId === 'string' &&
+      rawParams.billingUserId.trim()
+        ? rawParams.billingUserId.trim()
+        : null;
+    const sharedUnlockSessionId =
+      BYOK_ENABLED &&
+      typeof rawParams.sharedUnlockSessionId === 'string' &&
+      rawParams.sharedUnlockSessionId.trim()
+        ? rawParams.sharedUnlockSessionId.trim()
+        : null;
+    const resolvedControl: ResolvedModelControl = await resolveModelControl({
+      task: 'search.general',
+      room: parsed.room,
+      userId: requesterUserId ?? undefined,
+      billingUserId: billingUserId ?? undefined,
+      includeUserScope: true,
+    }).catch(() => ({
+      effective: { models: {}, knobs: {} },
+      sources: [],
+      applyModes: {},
+      fieldSources: {},
+      resolvedAt: new Date().toISOString(),
+      configVersion: 'env-fallback',
+    }));
+    const resolvedSearchModel = resolvedControl.effective.models?.searchModel;
+    const resolvedSearchKnobs = resolvedControl.effective.knobs?.search;
+    const byokUserId = BYOK_ENABLED ? (billingUserId || requesterUserId) : null;
+    const byokKey = byokUserId
+      ? await getDecryptedUserModelKey({ userId: byokUserId, provider: 'openai' })
+      : null;
+    const sharedKey =
+      !byokKey && sharedUnlockSessionId && requesterUserId
+        ? await resolveSharedKeyBySession({
+            sessionId: sharedUnlockSessionId,
+            userId: requesterUserId,
+            provider: 'openai',
+            roomScope: parsed.room,
+          })
+        : null;
+    if (BYOK_ENABLED && !byokKey && !sharedKey) {
+      throw new Error('BYOK_MISSING_KEY:openai');
+    }
     const searchResponse = await performWebSearch({
       query,
-      maxResults: parsed.maxResults ?? 3,
-      includeAnswer: parsed.includeAnswer ?? true,
+      maxResults: parsed.maxResults ?? resolvedSearchKnobs?.maxResults ?? 3,
+      includeAnswer: parsed.includeAnswer ?? resolvedSearchKnobs?.includeAnswer ?? true,
+    }, {
+      apiKey: byokKey ?? sharedKey ?? undefined,
+      model: resolvedSearchModel ?? resolvedSearchKnobs?.model,
+      configVersion: resolvedControl.configVersion,
+      cacheTtlMs:
+        typeof resolvedSearchKnobs?.cacheTtlSec === 'number'
+          ? resolvedSearchKnobs.cacheTtlSec * 1000
+          : undefined,
+      costPerMinuteLimit: resolvedSearchKnobs?.costPerMinuteLimit,
     });
 
     const panel: ResearchPanelPayload = {
@@ -95,8 +158,14 @@ async function runGeneralSearch(rawParams: JsonObject): Promise<SearchStewardRes
       results: searchResponse.hits.map((hit, index) => mapHitToResult(hit, index)),
       isLive: true,
       showCredibilityFilter: true,
-      maxResults: parsed.maxResults ?? 3,
+      maxResults: parsed.maxResults ?? resolvedSearchKnobs?.maxResults ?? 3,
     };
+    const trace = searchResponse._trace
+      ? {
+          ...searchResponse._trace,
+          configVersion: resolvedControl.configVersion,
+        }
+      : undefined;
 
     return {
       status: 'ok',
@@ -105,7 +174,7 @@ async function runGeneralSearch(rawParams: JsonObject): Promise<SearchStewardRes
         summary: searchResponse.summary,
         model: searchResponse.model,
         hits: searchResponse.hits,
-        _trace: searchResponse._trace,
+        _trace: trace,
       },
       panel,
       componentId: parsed.componentId,
@@ -124,8 +193,14 @@ async function runGeneralSearch(rawParams: JsonObject): Promise<SearchStewardRes
   }
 }
 
-function mapHitToResult(hit: any, index: number): ResearchResultCard {
-  const url: string | undefined = typeof hit.url === 'string' ? hit.url : undefined;
+const asRecord = (value: unknown): Record<string, unknown> | null => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  return value as Record<string, unknown>;
+};
+
+function mapHitToResult(hit: unknown, index: number): ResearchResultCard {
+  const hitRecord = asRecord(hit) ?? {};
+  const url: string | undefined = typeof hitRecord.url === 'string' ? hitRecord.url : undefined;
   let hostname = 'web';
   if (url) {
     try {
@@ -136,17 +211,20 @@ function mapHitToResult(hit: any, index: number): ResearchResultCard {
   }
 
   return {
-    id: typeof hit.id === 'string' ? hit.id : `hit-${index}`,
-    title: (hit.title as string) || 'Untitled result',
-    content: (hit.snippet as string) || (hit.summary as string) || 'No snippet provided.',
+    id: typeof hitRecord.id === 'string' ? hitRecord.id : `hit-${index}`,
+    title: typeof hitRecord.title === 'string' ? hitRecord.title : 'Untitled result',
+    content:
+      (typeof hitRecord.snippet === 'string' && hitRecord.snippet) ||
+      (typeof hitRecord.summary === 'string' && hitRecord.summary) ||
+      'No snippet provided.',
     source: {
-      name: (hit.source as string) || hostname,
+      name: typeof hitRecord.source === 'string' ? hitRecord.source : hostname,
       url,
       ...DEFAULT_RESULT_SOURCE,
     },
     relevance: Math.max(10, 100 - index * 15),
-    timestamp: typeof hit.publishedAt === 'string' && hit.publishedAt.trim()
-      ? hit.publishedAt
+    timestamp: typeof hitRecord.publishedAt === 'string' && hitRecord.publishedAt.trim()
+      ? hitRecord.publishedAt
       : new Date().toISOString(),
     tags: [],
   };

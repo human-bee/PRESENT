@@ -26,6 +26,8 @@ export type VoiceRealtimeConfig = {
   micProfile: MicProfile;
   transcriptionEnabled: boolean;
   multiParticipantTranscriptionEnabled: boolean;
+  resolvedRealtimeModel: string;
+  resolvedRouterModel: string;
   resolvedSttModel: string;
   resolvedTranscriptionLanguage: string;
   inputAudioTranscription: {
@@ -46,6 +48,18 @@ export type VoiceRealtimeConfig = {
   outputAudioSampleRate: number;
   outputAudioNumChannels: number;
   roomNoiseCancellation: NoiseCancellationOptions | undefined;
+};
+
+export type VoiceRealtimeConfigOverrides = {
+  realtimeModel?: string;
+  routerModel?: string;
+  sttModel?: string;
+  transcriptionEnabled?: boolean;
+  turnDetection?: 'none' | 'server_vad' | 'semantic_vad';
+  inputNoiseReduction?: 'none' | 'near_field' | 'far_field';
+  replyTimeoutMs?: number;
+  interruptTimeoutMs?: number;
+  transcriptionReadyTimeoutMs?: number;
 };
 
 const ROOM_AUDIO_SAMPLE_RATE = 24_000;
@@ -195,7 +209,12 @@ const resolveRoomNoiseCancellation = (
 
 export const resolveVoiceRealtimeConfig = (
   env: NodeJS.ProcessEnv = process.env,
+  overrides: VoiceRealtimeConfigOverrides = {},
 ): VoiceRealtimeConfig => {
+  const resolvedRealtimeModel =
+    overrides.realtimeModel?.trim() || env.VOICE_AGENT_REALTIME_MODEL?.trim() || 'gpt-realtime';
+  const resolvedRouterModel =
+    overrides.routerModel?.trim() || env.VOICE_AGENT_ROUTER_MODEL?.trim() || 'claude-haiku-4-5';
   const envInputTranscriptionModel = env.VOICE_AGENT_INPUT_TRANSCRIPTION_MODEL?.trim();
   const fallbackInputTranscriptionModel = env.AGENT_STT_MODEL?.trim();
   const envSttModel = env.VOICE_AGENT_STT_MODEL?.trim();
@@ -204,11 +223,12 @@ export const resolveVoiceRealtimeConfig = (
   const resolvedInputTranscriptionModel =
     envInputTranscriptionModel || fallbackInputTranscriptionModel || undefined;
   const resolvedSttModel =
-    envSttModel || resolvedInputTranscriptionModel || 'gpt-4o-mini-transcribe';
+    overrides.sttModel?.trim() || envSttModel || resolvedInputTranscriptionModel || 'gpt-4o-mini-transcribe';
   const transcriptionEnabledFlag = parseBoolean(env.VOICE_AGENT_TRANSCRIPTION_ENABLED);
   const multiParticipantTranscriptionEnabled =
     parseBoolean(env.VOICE_AGENT_MULTI_PARTICIPANT_TRANSCRIPTION) ?? false;
   const transcriptionEnabled =
+    overrides.transcriptionEnabled ??
     transcriptionEnabledFlag ??
     (!multiParticipantTranscriptionEnabled && Boolean(resolvedInputTranscriptionModel));
   const resolvedTranscriptionLanguage =
@@ -222,12 +242,12 @@ export const resolveVoiceRealtimeConfig = (
 
   const micProfile = parseMicProfile(env.VOICE_AGENT_MIC_PROFILE);
   const inputAudioNoiseReduction = resolveNoiseReduction({
-    explicitValue: env.VOICE_AGENT_INPUT_NOISE_REDUCTION,
+    explicitValue: overrides.inputNoiseReduction ?? env.VOICE_AGENT_INPUT_NOISE_REDUCTION,
     micProfile,
   });
   const turnDetectionOption = resolveTurnDetection({
     transcriptionEnabled,
-    mode: env.VOICE_AGENT_TURN_DETECTION,
+    mode: overrides.turnDetection ?? env.VOICE_AGENT_TURN_DETECTION,
     env,
   });
   const transcriptionMaxParticipants = parsePositiveInt(
@@ -241,16 +261,28 @@ export const resolveVoiceRealtimeConfig = (
     micProfile,
     transcriptionEnabled,
     multiParticipantTranscriptionEnabled,
+    resolvedRealtimeModel,
+    resolvedRouterModel,
     resolvedSttModel,
     resolvedTranscriptionLanguage,
     inputAudioTranscription,
     inputAudioNoiseReduction,
     turnDetectionOption,
     transcriptionMaxParticipants,
-    replyTimeoutMs: parsePositiveInt(env.VOICE_AGENT_REPLY_TIMEOUT_MS, 8_000, 500, 60_000),
-    interruptTimeoutMs: parsePositiveInt(env.VOICE_AGENT_INTERRUPT_TIMEOUT_MS, 1_500, 250, 30_000),
+    replyTimeoutMs: parsePositiveInt(
+      overrides.replyTimeoutMs ?? env.VOICE_AGENT_REPLY_TIMEOUT_MS,
+      8_000,
+      500,
+      60_000,
+    ),
+    interruptTimeoutMs: parsePositiveInt(
+      overrides.interruptTimeoutMs ?? env.VOICE_AGENT_INTERRUPT_TIMEOUT_MS,
+      1_500,
+      250,
+      30_000,
+    ),
     transcriptionReadyTimeoutMs: parsePositiveInt(
-      env.VOICE_AGENT_TRANSCRIPTION_READY_TIMEOUT_MS,
+      overrides.transcriptionReadyTimeoutMs ?? env.VOICE_AGENT_TRANSCRIPTION_READY_TIMEOUT_MS,
       10_000,
       1_000,
       60_000,

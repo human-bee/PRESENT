@@ -101,6 +101,10 @@ function CustomMainMenu({ readOnly = false }: { readOnly?: boolean } & any) {
     router.push('/mcp-config');
   };
 
+  const handleModelControls = () => {
+    router.push('/settings/models');
+  };
+
   const handleExport = () => {
     // The export functionality is handled by the default menu item,
     // we just wrapping it to ensure it's exposed
@@ -183,6 +187,12 @@ function CustomMainMenu({ readOnly = false }: { readOnly?: boolean } & any) {
           label="MCP Configuration"
           icon="settings-horizontal"
           onSelect={handleMcpConfig}
+        />
+        <TldrawUiMenuItem
+          id="model-controls"
+          label="Model Controls"
+          icon="settings-horizontal"
+          onSelect={handleModelControls}
         />
 
         {/* Separator */}

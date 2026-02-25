@@ -20,7 +20,7 @@ import { BRAND_PRESETS } from '@/lib/brand/brand-presets';
 import { validateCanonicalAction } from '@/lib/canvas-agent/contract/tooling/catalog';
 import { resolveShapeType, sanitizeShapeProps } from '@/lib/canvas-agent/contract/shape-utils';
 import { CANVAS_AGENT_SYSTEM_PROMPT } from '@/lib/canvas-agent/contract/system-prompt';
-import { loadCanvasAgentConfig, type CanvasAgentConfig } from './config';
+import { loadCanvasAgentConfig, type CanvasAgentConfig, type CanvasConfigOverrides } from './config';
 import { convertTeacherAction } from '@/lib/canvas-agent/contract/teacher-bridge';
 import type { TeacherPromptContext } from '@/lib/canvas-agent/teacher-runtime/prompt';
 import { buildTeacherContextItems } from '@/lib/canvas-agent/teacher-runtime/context-items';
@@ -96,6 +96,7 @@ type RunArgs = {
   followupDepth?: number;
   initialFollowup?: CanvasFollowupInput;
   metadata?: JsonObject;
+  configOverrides?: CanvasConfigOverrides;
 };
 
 let screenshotInboxPromise: Promise<typeof import('@/server/inboxes/screenshot')> | null = null;
@@ -549,7 +550,7 @@ export async function runCanvasAgent(args: RunArgs) {
   const runMetadata =
     args.metadata && typeof args.metadata === 'object' && !Array.isArray(args.metadata) ? args.metadata : undefined;
   const hasExplicitTargetContract = Array.isArray(initialFollowup?.targetIds) && initialFollowup.targetIds.length > 0;
-  const cfg = loadCanvasAgentConfig();
+  const cfg = loadCanvasAgentConfig(process.env, args.configOverrides);
   if (cfg.mode === 'tldraw-teacher') {
     console.info('[CanvasAgent] running in tldraw-teacher mode (vendored TLDraw agent active)', {
       mode: cfg.mode,

@@ -549,46 +549,63 @@ export const get_context = tool({
   },
 });
 
-export const search_evidence = tool({
-  name: 'search_evidence',
-  description:
-    'Perform a live web search to collect supporting or refuting evidence. Returns a summary and top sources.',
-  parameters: SearchEvidenceArgs,
-  async execute({ room, componentId, query, maxResults, includeAnswer }) {
-    try {
-      const result = await performWebSearch({
-        query,
-        maxResults,
-        includeAnswer,
-      });
-      logWithTs('🔍 [DebateSteward] search_evidence', {
-        room,
-        componentId,
-        query,
-        hits: result.hits.length,
-      });
-      return {
-        status: 'ok',
-        summary: result.summary,
-        hits: result.hits,
-        model: result.model,
-        query: result.query,
-      };
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      logWithTs('⚠️ [DebateSteward] search_evidence_failed', {
-        room,
-        componentId,
-        query,
-        error: message,
-      });
-      return {
-        status: 'error',
-        error: message,
-      };
-    }
-  },
-});
+type SearchEvidenceToolConfig = {
+  searchModel?: string;
+  openaiApiKey?: string;
+  configVersion?: string;
+};
+
+const createSearchEvidenceTool = (config: SearchEvidenceToolConfig = {}) =>
+  tool({
+    name: 'search_evidence',
+    description:
+      'Perform a live web search to collect supporting or refuting evidence. Returns a summary and top sources.',
+    parameters: SearchEvidenceArgs,
+    async execute({ room, componentId, query, maxResults, includeAnswer }) {
+      try {
+        const result = await performWebSearch(
+          {
+            query,
+            maxResults,
+            includeAnswer,
+          },
+          {
+            apiKey: config.openaiApiKey,
+            model: config.searchModel,
+            configVersion: config.configVersion,
+          },
+        );
+        logWithTs('🔍 [DebateSteward] search_evidence', {
+          room,
+          componentId,
+          query,
+          hits: result.hits.length,
+          model: result.model,
+          configVersion: config.configVersion,
+        });
+        return {
+          status: 'ok',
+          summary: result.summary,
+          hits: result.hits,
+          model: result.model,
+          query: result.query,
+        };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        logWithTs('⚠️ [DebateSteward] search_evidence_failed', {
+          room,
+          componentId,
+          query,
+          error: message,
+          configVersion: config.configVersion,
+        });
+        return {
+          status: 'error',
+          error: message,
+        };
+      }
+    },
+  });
 
 export const commit_scorecard = tool({
   name: 'commit_scorecard',
@@ -724,13 +741,14 @@ Additional guidance:
  - When awarding achievements (keys: ${ACHIEVEMENT_VALUES}), append to player.achievements with structured objects ({ id, key, label, description?, awardedAt, side, claimId }) and push an "achievement" timeline entry referencing the same award id.
  - If no update is necessary, still return a short acknowledgement like "No new debate events detected."`;
 
-export const debateScorecardSteward = new Agent({
-  name: 'DebateScorecardSteward',
-  model: 'gpt-5-mini',
-  modelSettings: { providerData: { reasoning: { effort: 'low' } } },
-  instructions: DEBATE_SCORECARD_INSTRUCTIONS,
-  tools: [get_current_scorecard, get_context, search_evidence, commit_scorecard],
-});
+const createDebateScorecardSteward = (options: SearchEvidenceToolConfig & { model?: string }) =>
+  new Agent({
+    name: 'DebateScorecardSteward',
+    model: options.model || 'gpt-5-mini',
+    modelSettings: { providerData: { reasoning: { effort: 'low' } } },
+    instructions: DEBATE_SCORECARD_INSTRUCTIONS,
+    tools: [get_current_scorecard, get_context, createSearchEvidenceTool(options), commit_scorecard],
+  });
 
 export async function runDebateScorecardSteward(params: {
   room: string;
@@ -740,7 +758,17 @@ export async function runDebateScorecardSteward(params: {
   summary?: string;
   prompt?: string;
   topic?: string;
+  model?: string;
+  searchModel?: string;
+  openaiApiKey?: string;
+  configVersion?: string;
 }) {
+  const steward = createDebateScorecardSteward({
+    model: params.model,
+    searchModel: params.searchModel,
+    openaiApiKey: params.openaiApiKey,
+    configVersion: params.configVersion,
+  });
   const payload = {
     ...params,
     windowMs: params.windowMs ?? 60_000,
@@ -752,8 +780,11 @@ export async function runDebateScorecardSteward(params: {
     windowMs: payload.windowMs,
     intent: params.intent,
     topic: params.topic,
+    model: params.model || 'gpt-5-mini',
+    searchModel: params.searchModel || null,
+    configVersion: params.configVersion || null,
   });
-  const result = await run(debateScorecardSteward, JSON.stringify(payload));
+  const result = await run(steward, JSON.stringify(payload));
   logWithTs('🏁 [DebateSteward] run.complete', {
     room: params.room,
     componentId: params.componentId,

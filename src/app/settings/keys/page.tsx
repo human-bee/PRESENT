@@ -254,6 +254,13 @@ export default function ModelKeysPage() {
             <p className="mt-1 text-gray-600">
               Add your own provider API keys to share the cost of AI features. Keys are encrypted on the server; only status is shown here.
             </p>
+            <p className="mt-1 text-sm text-blue-700">
+              Unified model + knob controls are now available in{' '}
+              <Link className="underline" href="/settings/models">
+                Settings → Model Controls
+              </Link>
+              .
+            </p>
           </div>
           <Link className="text-sm text-blue-600 underline" href="/canvases">
             Back

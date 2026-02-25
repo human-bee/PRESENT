@@ -1,8 +1,9 @@
 import { getCerebrasClient, getModelForSteward, isFastStewardReady } from '../fast-steward-config';
 import { getFlowchartDoc, getTranscriptWindow, commitFlowchartDoc, getContextDocuments, formatContextDocuments } from '../shared/supabase-context';
 import { extractFirstToolCall, parseToolArgumentsResult } from './fast-steward-response';
+import { resolveFastStewardModel } from '@/lib/agents/control-plane/fast-model';
 
-const CEREBRAS_MODEL = getModelForSteward('FLOWCHART_STEWARD_FAST_MODEL');
+const getFlowchartFastModel = () => getModelForSteward('FLOWCHART_STEWARD_FAST_MODEL');
 
 export const flowchartStewardFastReady = isFastStewardReady();
 
@@ -80,12 +81,12 @@ type FlowchartResult = {
   };
 };
 
-const FLOWCHART_FAST_TRACE = {
+const flowchartFastTrace = (model: string) => ({
   provider: 'cerebras' as const,
-  model: CEREBRAS_MODEL,
+  model,
   providerSource: 'runtime_selected' as const,
   providerPath: 'fast' as const,
-};
+});
 
 export async function runFlowchartStewardFast(params: {
   room: string;
@@ -93,6 +94,13 @@ export async function runFlowchartStewardFast(params: {
   windowMs?: number;
 }): Promise<FlowchartResult> {
   const { room, docId, windowMs = 60000 } = params;
+  const { model: CEREBRAS_MODEL } = await resolveFastStewardModel({
+    steward: 'flowchart',
+    stewardEnvVar: 'FLOWCHART_STEWARD_FAST_MODEL',
+    room,
+    task: 'flowchart.fast',
+  }).catch(() => ({ model: getFlowchartFastModel() }));
+  const FLOWCHART_FAST_TRACE = flowchartFastTrace(CEREBRAS_MODEL);
   const overallStart = Date.now();
 
   if (!isFastStewardReady()) {
@@ -214,6 +222,13 @@ export async function runFlowchartInstruction(params: {
   currentVersion?: number;
 }): Promise<FlowchartResult> {
   const { instruction, room, docId, currentDoc, currentVersion = 0 } = params;
+  const { model: CEREBRAS_MODEL } = await resolveFastStewardModel({
+    steward: 'flowchart',
+    stewardEnvVar: 'FLOWCHART_STEWARD_FAST_MODEL',
+    room,
+    task: 'flowchart.fast',
+  }).catch(() => ({ model: getFlowchartFastModel() }));
+  const FLOWCHART_FAST_TRACE = flowchartFastTrace(CEREBRAS_MODEL);
 
   if (!isFastStewardReady()) {
     return {

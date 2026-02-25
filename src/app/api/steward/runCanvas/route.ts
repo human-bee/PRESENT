@@ -24,7 +24,7 @@ import {
   deriveDefaultLockKey,
   extractOrchestrationEnvelope,
 } from '@/lib/agents/shared/orchestration-envelope';
-import { getDecryptedUserModelKey, type ModelKeyProvider } from '@/lib/agents/shared/user-model-keys';
+import type { ModelKeyProvider } from '@/lib/agents/shared/user-model-keys';
 import { recordAgentTraceEvent } from '@/lib/agents/shared/trace-events';
 import { deriveProviderParity } from '@/lib/agents/admin/provider-parity';
 import {
@@ -32,6 +32,9 @@ import {
   normalizeRuntimeScope,
   resolveRuntimeScopeFromEnv,
 } from '@/lib/agents/shared/runtime-scope';
+import { resolveModelControl } from '@/lib/agents/control-plane/resolver';
+import { resolveProviderKeyWithFallback } from '@/lib/agents/control-plane/key-resolution';
+import type { ResolvedModelControl } from '@/lib/agents/control-plane/types';
 import {
   assignmentToDiagnostics,
   attachExperimentAssignmentToMetadata,
@@ -213,6 +216,12 @@ export async function POST(req: NextRequest) {
     const lockKey = parsed.lockKey;
     const attempt = parsed.attempt;
     const normalizedParams: JsonObject = { ...(parsed.params ?? {}) };
+    delete normalizedParams.billingUserId;
+    delete normalizedParams.requesterUserId;
+    delete normalizedParams.sharedUnlockSessionId;
+    delete normalizedParams.modelKeySource;
+    delete normalizedParams.primaryModelKeySource;
+    delete normalizedParams.fastModelKeySource;
     const explicitExperimentAssignment = normalizeExperimentAssignment({
       experiment_id: parsed.experiment_id,
       variant_id: parsed.variant_id,
@@ -251,15 +260,9 @@ export async function POST(req: NextRequest) {
 
     const normalizedTask = typeof task === 'string' && task.trim() ? task.trim() : 'canvas.agent_prompt';
     const trimmedRoom = room.trim();
-    if (provider && !normalizedParams.provider) {
-      normalizedParams.provider = provider;
-    }
-    if (model && !normalizedParams.model) {
-      normalizedParams.model = model;
-    }
-
+    const requesterUserId = await resolveRequestUserId(req);
+    let billingUserId: string | undefined;
     if (BYOK_ENABLED) {
-      const requesterUserId = await resolveRequestUserId(req);
       if (!requesterUserId) {
         return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
       }
@@ -269,19 +272,111 @@ export async function POST(req: NextRequest) {
       }
       try {
         const { ownerUserId } = await assertCanvasMember({ canvasId, requesterUserId });
+        billingUserId = ownerUserId;
         normalizedParams.billingUserId = ownerUserId;
-        const providerToCheck =
-          provider ?? deriveProviderFromModel(model) ?? deriveProviderFromModel(normalizedParams.model) ?? 'openai';
-        const providerKey = await getDecryptedUserModelKey({ userId: ownerUserId, provider: providerToCheck });
-        if (!providerKey) {
-          return NextResponse.json({ error: `BYOK_MISSING_KEY:${providerToCheck}` }, { status: 400 });
-        }
+        normalizedParams.requesterUserId = requesterUserId;
       } catch (error) {
         const code = (error as Error & { code?: string }).code;
         if (code === 'forbidden') {
           return NextResponse.json({ error: 'forbidden' }, { status: 403 });
         }
         throw error;
+      }
+    }
+
+    const resolvedControl: ResolvedModelControl = await resolveModelControl({
+      task: normalizedTask,
+      room: trimmedRoom,
+      userId: requesterUserId ?? undefined,
+      billingUserId,
+      requestModel: model,
+      requestProvider: provider ?? undefined,
+      allowRequestModelOverride: true,
+      includeUserScope: true,
+    }).catch((error): ResolvedModelControl => {
+      logger.warn('model-control resolve failed; using env defaults', {
+        room: trimmedRoom,
+        task: normalizedTask,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return {
+        effective: { models: {}, knobs: {} },
+        sources: [],
+        applyModes: {},
+        fieldSources: {},
+        resolvedAt: new Date().toISOString(),
+        configVersion: 'env-fallback',
+      };
+    });
+    const resolvedCanvasModel = model ?? resolvedControl.effective.models?.canvasSteward;
+    const canvasKnobs = resolvedControl.effective.knobs?.canvas;
+    const canvasConfigOverrides =
+      canvasKnobs
+        ? {
+            ...(canvasKnobs.preset ? { preset: canvasKnobs.preset } : {}),
+            ...(typeof canvasKnobs.ttfbSloMs === 'number' ? { ttfbSloMs: canvasKnobs.ttfbSloMs } : {}),
+            ...(typeof canvasKnobs.transcriptWindowMs === 'number'
+              ? { transcriptWindowMs: canvasKnobs.transcriptWindowMs }
+              : {}),
+            screenshot: {
+              ...(typeof canvasKnobs.screenshotTimeoutMs === 'number'
+                ? { timeoutMs: canvasKnobs.screenshotTimeoutMs }
+                : {}),
+              ...(typeof canvasKnobs.screenshotRetries === 'number'
+                ? { retries: canvasKnobs.screenshotRetries }
+                : {}),
+              ...(typeof canvasKnobs.screenshotRetryDelayMs === 'number'
+                ? { retryDelayMs: canvasKnobs.screenshotRetryDelayMs }
+                : {}),
+            },
+            prompt: {
+              ...(typeof canvasKnobs.promptMaxChars === 'number' ? { maxChars: canvasKnobs.promptMaxChars } : {}),
+            },
+            followups: {
+              ...(typeof canvasKnobs.followupMaxDepth === 'number'
+                ? { maxDepth: canvasKnobs.followupMaxDepth }
+                : {}),
+              ...(typeof canvasKnobs.lowActionThreshold === 'number'
+                ? { lowActionThreshold: canvasKnobs.lowActionThreshold }
+                : {}),
+            },
+          }
+        : null;
+    const resolvedProvider =
+      provider ??
+      deriveProviderFromModel(resolvedCanvasModel) ??
+      deriveProviderFromModel(normalizedParams.model) ??
+      null;
+    if (resolvedProvider && !normalizedParams.provider) {
+      normalizedParams.provider = resolvedProvider;
+    }
+    if (resolvedCanvasModel && !normalizedParams.model) {
+      normalizedParams.model = resolvedCanvasModel;
+    }
+    if (!normalizedParams.configVersion) {
+      normalizedParams.configVersion = resolvedControl.configVersion;
+    }
+    if (canvasConfigOverrides && !normalizedParams.canvasConfigOverrides) {
+      normalizedParams.canvasConfigOverrides = canvasConfigOverrides;
+    }
+    if (BYOK_ENABLED && requesterUserId && billingUserId) {
+      const providerToCheck = resolvedProvider ?? 'openai';
+      const resolvedKey = await resolveProviderKeyWithFallback({
+        req,
+        provider: providerToCheck,
+        userId: requesterUserId,
+        billingUserId,
+        roomScope: trimmedRoom,
+      });
+      if (!resolvedKey) {
+        return NextResponse.json(
+          { error: `BYOK_MISSING_KEY:${providerToCheck}` },
+          { status: 400 },
+        );
+      }
+      normalizedParams.modelKeySource = resolvedKey.source;
+      if (resolvedKey.sharedUnlockSessionId) {
+        normalizedParams.sharedUnlockSessionId = resolvedKey.sharedUnlockSessionId;
       }
     }
 
@@ -393,6 +488,9 @@ export async function POST(req: NextRequest) {
     const metadataForCorrelation =
       attachExperimentAssignmentToMetadata(metadataForCorrelationBase, requestExperimentAssignment) ??
       metadataForCorrelationBase;
+    if (!metadataForCorrelation.configVersion && typeof enrichedParams.configVersion === 'string') {
+      metadataForCorrelation.configVersion = enrichedParams.configVersion;
+    }
     if (canonicalTraceId && (!metadataForCorrelation.traceId || explicitTraceId)) {
       metadataForCorrelation.traceId = canonicalTraceId;
     }
@@ -661,10 +759,15 @@ export async function POST(req: NextRequest) {
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    logger.error('request parse failure', { error: message });
+    logger.error('runCanvas request failed', { error: message });
+    const status = error instanceof SyntaxError ? 400 : 500;
     return NextResponse.json(
-      { error: 'Bad Request', code: 'invalid_request_body', detail: message.slice(0, 240) },
-      { status: 400 },
+      {
+        error: status === 400 ? 'Bad Request' : 'Internal Server Error',
+        code: status === 400 ? 'invalid_request_body' : 'internal_error',
+        ...(status === 400 ? { detail: message.slice(0, 240) } : {}),
+      },
+      { status },
     );
   }
 }

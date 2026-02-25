@@ -55,6 +55,7 @@ import {
 } from '@/lib/agents/shared/orchestration-envelope';
 import { createSwarmOrchestrator } from '@/lib/agents/swarm/orchestrator';
 import { getDecryptedUserModelKey } from '@/lib/agents/shared/user-model-keys';
+import { resolveSharedKeyBySession } from '@/lib/agents/control-plane/shared-keys';
 import {
   getRuntimeScopeResourceKey,
   normalizeRuntimeScope,
@@ -1740,10 +1741,44 @@ async function executeTaskLegacy(taskName: string, params: JsonObject) {
         typeof parsed.billingUserId === 'string' && parsed.billingUserId.trim().length > 0
           ? parsed.billingUserId.trim()
           : null;
-      const cerebrasApiKey =
+      const requesterUserId =
+        typeof (parsed as Record<string, unknown>).requesterUserId === 'string' &&
+        String((parsed as Record<string, unknown>).requesterUserId).trim().length > 0
+          ? String((parsed as Record<string, unknown>).requesterUserId).trim()
+          : null;
+      const sharedUnlockSessionId =
+        typeof (parsed as Record<string, unknown>).sharedUnlockSessionId === 'string' &&
+        String((parsed as Record<string, unknown>).sharedUnlockSessionId).trim().length > 0
+          ? String((parsed as Record<string, unknown>).sharedUnlockSessionId).trim()
+          : null;
+      const byokCerebrasKey =
         canUseFast && billingUserId
           ? await getDecryptedUserModelKey({ userId: billingUserId, provider: 'cerebras' })
           : null;
+      const byokOpenAiKey =
+        billingUserId
+          ? await getDecryptedUserModelKey({ userId: billingUserId, provider: 'openai' })
+          : null;
+      const cerebrasApiKey =
+        byokCerebrasKey ||
+        (canUseFast && requesterUserId && sharedUnlockSessionId
+          ? await resolveSharedKeyBySession({
+              sessionId: sharedUnlockSessionId,
+              userId: requesterUserId,
+              provider: 'cerebras',
+              roomScope: parsed.room,
+            })
+          : null);
+      const openaiApiKey =
+        byokOpenAiKey ||
+        (requesterUserId && sharedUnlockSessionId
+          ? await resolveSharedKeyBySession({
+              sessionId: sharedUnlockSessionId,
+              userId: requesterUserId,
+              provider: 'openai',
+              roomScope: parsed.room,
+            })
+          : null);
       const useFastPath = canUseFast && isFastStewardReady(cerebrasApiKey ?? undefined);
 
       let output: unknown;
@@ -1759,6 +1794,12 @@ async function executeTaskLegacy(taskName: string, params: JsonObject) {
             prompt: stewardPrompt,
             topic: parsed.topic,
             cerebrasApiKey: cerebrasApiKey ?? undefined,
+            model:
+              typeof (parsed as Record<string, unknown>).fastStewardModel === 'string'
+                ? String((parsed as Record<string, unknown>).fastStewardModel)
+                : typeof (parsed as Record<string, unknown>).model === 'string'
+                  ? String((parsed as Record<string, unknown>).model)
+                  : undefined,
           });
           if (
             fastOutput &&
@@ -1784,6 +1825,7 @@ async function executeTaskLegacy(taskName: string, params: JsonObject) {
       }
 
       if (typeof output === 'undefined') {
+        const parsedRecord = parsed as Record<string, unknown>;
         output = await runDebateScorecardSteward({
           room: parsed.room,
           componentId: parsed.componentId,
@@ -1792,6 +1834,19 @@ async function executeTaskLegacy(taskName: string, params: JsonObject) {
           summary: parsed.summary,
           prompt: stewardPrompt,
           topic: parsed.topic,
+          model:
+            typeof parsedRecord.model === 'string' && parsedRecord.model.trim().length > 0
+              ? parsedRecord.model.trim()
+              : undefined,
+          searchModel:
+            typeof parsedRecord.searchModel === 'string' && parsedRecord.searchModel.trim().length > 0
+              ? parsedRecord.searchModel.trim()
+              : undefined,
+          configVersion:
+            typeof parsedRecord.configVersion === 'string' && parsedRecord.configVersion.trim().length > 0
+              ? parsedRecord.configVersion.trim()
+              : undefined,
+          openaiApiKey: openaiApiKey ?? undefined,
         });
       }
 

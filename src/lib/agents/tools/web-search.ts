@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import OpenAI from 'openai';
 import { z } from 'zod';
 import { consumeBudget, isCostCircuitBreakerEnabled } from '@/lib/server/traffic-guards';
+import { getRuntimeModelKey } from '@/lib/agents/shared/model-runtime-context';
 
 export const webSearchArgsSchema = z.object({
   query: z.string().min(4, 'query must be at least 4 characters').max(400),
@@ -18,6 +19,7 @@ export type EvidenceCacheKey = {
   normalizedHint: string;
   queryHash: string;
   model: string;
+  configVersion: string;
   freshnessBucket: string;
   maxResults: number;
   includeAnswer: boolean;
@@ -47,24 +49,39 @@ export type WebSearchResponse = {
     providerSource: 'runtime_selected';
     providerPath: 'primary';
     providerRequestId?: string;
+    configVersion?: string;
   };
 };
 
-let cachedClient: OpenAI | null = null;
+const cachedClients = new Map<string, OpenAI>();
 const evidenceCache = new Map<string, { response: WebSearchResponse; expiresAt: number }>();
+const MAX_CACHED_OPENAI_CLIENTS = Math.max(
+  4,
+  Number.parseInt(process.env.WEB_SEARCH_CLIENT_CACHE_MAX ?? '32', 10) || 32,
+);
 const FACT_CHECK_CACHE_TTL_MS = Math.max(
   1_000,
   Number(process.env.FACT_CHECK_CACHE_TTL_SEC ?? 900) * 1000,
 );
 
-function getClient(): OpenAI {
-  if (cachedClient) return cachedClient;
-  const apiKey = process.env.OPENAI_API_KEY;
+function getClient(explicitApiKey?: string): OpenAI {
+  const apiKey = explicitApiKey?.trim() || getRuntimeModelKey('OPENAI_API_KEY') || process.env.OPENAI_API_KEY;
   if (!apiKey || !apiKey.trim()) {
     throw new Error('OPENAI_API_KEY missing for web search');
   }
-  cachedClient = new OpenAI({ apiKey });
-  return cachedClient;
+  const normalized = apiKey.trim();
+  const cacheKey = crypto.createHash('sha256').update(normalized).digest('hex');
+  const cached = cachedClients.get(cacheKey);
+  if (cached) return cached;
+  const client = new OpenAI({ apiKey: normalized });
+  cachedClients.set(cacheKey, client);
+  if (cachedClients.size > MAX_CACHED_OPENAI_CLIENTS) {
+    const oldest = cachedClients.keys().next().value;
+    if (typeof oldest === 'string') {
+      cachedClients.delete(oldest);
+    }
+  }
+  return client;
 }
 
 function hashId(value: string): string {
@@ -75,7 +92,7 @@ function normalizeHint(value: string): string {
   return value.trim().toLowerCase().replace(/\s+/g, ' ').slice(0, 240);
 }
 
-function buildEvidenceCacheKey(args: WebSearchArgs, model: string): EvidenceCacheKey {
+function buildEvidenceCacheKey(args: WebSearchArgs, model: string, configVersion?: string): EvidenceCacheKey {
   const hintBase = args.normalizedHint || args.query;
   const claimId = (args.claimId || `query:${hashId(args.query)}`).trim();
   const freshnessBucket =
@@ -85,6 +102,7 @@ function buildEvidenceCacheKey(args: WebSearchArgs, model: string): EvidenceCach
     normalizedHint: normalizeHint(hintBase),
     queryHash: hashId(args.query),
     model,
+    configVersion: typeof configVersion === 'string' ? configVersion.trim() : '',
     freshnessBucket,
     maxResults: args.maxResults,
     includeAnswer: args.includeAnswer,
@@ -97,6 +115,7 @@ function stringifyEvidenceCacheKey(key: EvidenceCacheKey): string {
     key.normalizedHint,
     key.queryHash,
     key.model,
+    key.configVersion,
     key.freshnessBucket,
     String(key.maxResults),
     String(key.includeAnswer),
@@ -149,7 +168,16 @@ const tryParseJsonCandidate = (candidate: string): any | null => {
   return null;
 };
 
-export async function performWebSearch(args: WebSearchArgs): Promise<WebSearchResponse> {
+export async function performWebSearch(
+  args: WebSearchArgs,
+  options: {
+    apiKey?: string;
+    model?: string;
+    configVersion?: string;
+    cacheTtlMs?: number;
+    costPerMinuteLimit?: number;
+  } = {},
+): Promise<WebSearchResponse> {
   const parsed = webSearchArgsSchema.parse(args);
   if (process.env.MOCK_WEB_SEARCH === 'true') {
     const hashed = hashId(parsed.query);
@@ -174,13 +202,17 @@ export async function performWebSearch(args: WebSearchArgs): Promise<WebSearchRe
       },
     };
   }
-  const client = getClient();
+  const client = getClient(options.apiKey);
   const model =
+    options.model ||
     process.env.CANVAS_STEWARD_SEARCH_MODEL ||
     process.env.DEBATE_STEWARD_SEARCH_MODEL ||
     'gpt-5-mini';
   if (isCostCircuitBreakerEnabled()) {
-    const searchBudgetPerMinute = Math.max(1, Number(process.env.COST_SEARCH_PER_MINUTE_LIMIT ?? 40));
+    const searchBudgetPerMinute = Math.max(
+      1,
+      Number(options.costPerMinuteLimit ?? process.env.COST_SEARCH_PER_MINUTE_LIMIT ?? 40),
+    );
     const searchBudget = consumeBudget(`web-search:${model}`, 1, searchBudgetPerMinute, 60_000);
     if (!searchBudget.ok) {
       const error = new Error('WEB_SEARCH_BUDGET_EXCEEDED');
@@ -188,7 +220,7 @@ export async function performWebSearch(args: WebSearchArgs): Promise<WebSearchRe
       throw error;
     }
   }
-  const evidenceCacheKey = buildEvidenceCacheKey(parsed, model);
+  const evidenceCacheKey = buildEvidenceCacheKey(parsed, model, options.configVersion);
   const cacheKey = stringifyEvidenceCacheKey(evidenceCacheKey);
   const cached = evidenceCache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) {
@@ -298,9 +330,13 @@ Instructions:
         typeof (response as { id?: unknown }).id === 'string'
           ? (response as { id: string }).id
           : undefined,
+      configVersion: options.configVersion,
     },
   };
-  evidenceCache.set(cacheKey, { response: result, expiresAt: Date.now() + FACT_CHECK_CACHE_TTL_MS });
+  evidenceCache.set(cacheKey, {
+    response: result,
+    expiresAt: Date.now() + Math.max(1_000, Number(options.cacheTtlMs ?? FACT_CHECK_CACHE_TTL_MS)),
+  });
   if (evidenceCache.size > 500) {
     const now = Date.now();
     for (const [key, value] of evidenceCache) {

@@ -1,7 +1,8 @@
 import { getCerebrasClient, getModelForSteward, isFastStewardReady } from '../fast-steward-config';
 import { extractFirstToolCall, parseToolArgumentsResult } from './fast-steward-response';
+import { resolveFastStewardModel } from '@/lib/agents/control-plane/fast-model';
 
-const CEREBRAS_MODEL = getModelForSteward('YOUTUBE_STEWARD_FAST_MODEL');
+const getYouTubeFastModel = () => getModelForSteward('YOUTUBE_STEWARD_FAST_MODEL');
 
 const YOUTUBE_STEWARD_INSTRUCTIONS = `
 You are a fast YouTube assistant that maps user requests to YouTube MCP tool calls.
@@ -58,6 +59,16 @@ type YouTubeAction = {
 
 export async function runYouTubeSteward(params: { instruction: string; context?: any }): Promise<YouTubeAction> {
   const { instruction, context } = params;
+  const room =
+    context && typeof context === 'object' && typeof (context as { room?: unknown }).room === 'string'
+      ? (context as { room: string }).room
+      : undefined;
+  const { model: CEREBRAS_MODEL } = await resolveFastStewardModel({
+    steward: 'youtube',
+    stewardEnvVar: 'YOUTUBE_STEWARD_FAST_MODEL',
+    room,
+    task: 'youtube.fast',
+  }).catch(() => ({ model: getYouTubeFastModel() }));
 
   // The FAST YouTube steward uses Cerebras; if it's not configured we return a best-effort heuristic
   // so the rest of the system can keep running.
