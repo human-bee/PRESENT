@@ -188,6 +188,7 @@ const cacheKeyFor = (input: ResolveModelControlInput): string => {
     billingUserId: input.billingUserId ?? null,
     requestModel: input.requestModel ?? null,
     requestProvider: input.requestProvider ?? null,
+    allowRequestModelOverride: input.allowRequestModelOverride === true,
     includeUserScope: input.includeUserScope !== false,
   });
   return createHash('sha1').update(payload).digest('hex');
@@ -222,7 +223,7 @@ export async function resolveModelControl(
       version: profile.version,
     });
   }
-  if (input.requestModel) {
+  if (input.allowRequestModelOverride === true && input.requestModel) {
     const task = (input.task || '').toLowerCase();
     if (task.startsWith('search.') || task.startsWith('scorecard.fact_') || task.startsWith('scorecard.verify')) {
       effective = deepMerge(effective as Record<string, unknown>, {

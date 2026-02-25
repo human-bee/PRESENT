@@ -129,6 +129,9 @@ async function runGeneralSearch(rawParams: JsonObject): Promise<SearchStewardRes
             roomScope: parsed.room,
           })
         : null;
+    if (BYOK_ENABLED && !byokKey && !sharedKey) {
+      throw new Error('BYOK_MISSING_KEY:openai');
+    }
     const searchResponse = await performWebSearch({
       query,
       maxResults: parsed.maxResults ?? resolvedSearchKnobs?.maxResults ?? 3,

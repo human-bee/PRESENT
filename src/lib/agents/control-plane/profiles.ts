@@ -97,8 +97,14 @@ export async function getModelControlProfilesForResolution(input: {
   const roomScopeId = input.room?.trim() || null;
   const userScopeId = input.userId?.trim() || null;
   const task = input.task?.trim();
-  return ((data || []) as ModelControlProfileRow[]).filter(
-    (row) => {
+  const scopeRank: Record<KnobScope, number> = {
+    global: 0,
+    task: 1,
+    room: 2,
+    user: 3,
+  };
+  return ((data || []) as ModelControlProfileRow[])
+    .filter((row) => {
       if (!taskPrefixMatches(task, normalizePrefix(row.task_prefix))) return false;
       if (row.scope_type === 'global') return row.scope_id === 'global';
       if (row.scope_type === 'room') return Boolean(roomScopeId && row.scope_id === roomScopeId);
@@ -109,8 +115,19 @@ export async function getModelControlProfilesForResolution(input: {
         return taskScopeIdMatches(task, row.scope_id);
       }
       return false;
-    },
-  );
+    })
+    .sort((a, b) => {
+      if (a.priority !== b.priority) return a.priority - b.priority;
+      if (scopeRank[a.scope_type] !== scopeRank[b.scope_type]) {
+        return scopeRank[a.scope_type] - scopeRank[b.scope_type];
+      }
+      const updatedA = Date.parse(a.updated_at);
+      const updatedB = Date.parse(b.updated_at);
+      if (Number.isFinite(updatedA) && Number.isFinite(updatedB) && updatedA !== updatedB) {
+        return updatedA - updatedB;
+      }
+      return a.id.localeCompare(b.id);
+    });
 }
 
 export async function upsertModelControlProfile(params: {

@@ -114,10 +114,6 @@ export async function POST(req: NextRequest) {
       room: trimmedRoom,
       userId: requesterUserId ?? undefined,
       billingUserId: billingUserId ?? undefined,
-      requestModel:
-        typeof (rest as Record<string, unknown>).model === 'string'
-          ? String((rest as Record<string, unknown>).model)
-          : undefined,
       requestProvider: undefined,
       includeUserScope: true,
     }).catch((error) => {
@@ -132,7 +128,6 @@ export async function POST(req: NextRequest) {
       };
     });
     const resolvedSearchModel = resolvedControl.effective.models?.searchModel;
-    const resolvedFastModel = resolvedControl.effective.models?.fastDefault;
     const scorecardFastEligible =
       normalizedTask !== 'scorecard.fact_check' &&
       normalizedTask !== 'scorecard.verify' &&
@@ -169,7 +164,6 @@ export async function POST(req: NextRequest) {
       topic: normalizedTopic,
       configVersion: resolvedControl.configVersion,
       ...(resolvedSearchModel ? { searchModel: resolvedSearchModel } : {}),
-      ...(resolvedFastModel ? { fastStewardModel: resolvedFastModel } : {}),
       ...(requesterUserId ? { requesterUserId } : {}),
       ...(billingUserId ? { billingUserId } : {}),
     } as const);
@@ -243,6 +237,7 @@ export async function POST(req: NextRequest) {
           })
         : null;
       const selectedKey = openAiKey ?? cerebrasKey;
+      const sharedUnlockSessionId = openAiKey?.sharedUnlockSessionId ?? cerebrasKey?.sharedUnlockSessionId;
       if (!selectedKey) {
         return NextResponse.json(
           {
@@ -252,8 +247,8 @@ export async function POST(req: NextRequest) {
         );
       }
       enrichedParams.modelKeySource = selectedKey.source;
-      if (selectedKey.sharedUnlockSessionId) {
-        enrichedParams.sharedUnlockSessionId = selectedKey.sharedUnlockSessionId;
+      if (sharedUnlockSessionId) {
+        enrichedParams.sharedUnlockSessionId = sharedUnlockSessionId;
       }
       if (openAiKey) {
         enrichedParams.primaryModelKeySource = openAiKey.source;

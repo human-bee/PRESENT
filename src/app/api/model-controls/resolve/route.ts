@@ -23,8 +23,8 @@ export async function POST(req: NextRequest) {
   const resolved = await resolveModelControl({
     ...parsed.data,
     userId: user.id,
+    allowRequestModelOverride: true,
     includeUserScope: parsed.data.includeUserScope ?? true,
   });
   return NextResponse.json({ ok: true, resolved });
 }
-

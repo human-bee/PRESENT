@@ -215,6 +215,12 @@ export async function POST(req: NextRequest) {
     const lockKey = parsed.lockKey;
     const attempt = parsed.attempt;
     const normalizedParams: JsonObject = { ...(parsed.params ?? {}) };
+    delete normalizedParams.billingUserId;
+    delete normalizedParams.requesterUserId;
+    delete normalizedParams.sharedUnlockSessionId;
+    delete normalizedParams.modelKeySource;
+    delete normalizedParams.primaryModelKeySource;
+    delete normalizedParams.fastModelKeySource;
     const explicitExperimentAssignment = normalizeExperimentAssignment({
       experiment_id: parsed.experiment_id,
       variant_id: parsed.variant_id,
@@ -284,6 +290,7 @@ export async function POST(req: NextRequest) {
       billingUserId,
       requestModel: model,
       requestProvider: provider ?? undefined,
+      allowRequestModelOverride: true,
       includeUserScope: true,
     }).catch((error) => {
       logger.warn('model-control resolve failed; using env defaults', {

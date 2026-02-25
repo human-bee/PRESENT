@@ -92,6 +92,7 @@ export type ResolveModelControlInput = {
   billingUserId?: string;
   requestModel?: string;
   requestProvider?: ModelProvider;
+  allowRequestModelOverride?: boolean;
   includeUserScope?: boolean;
 };
 
@@ -104,4 +105,3 @@ export type ResolvedModelControl = {
 };
 
 export type SharedKeySource = 'byok' | 'shared';
-

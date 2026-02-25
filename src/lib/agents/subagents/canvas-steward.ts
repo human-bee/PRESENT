@@ -14,6 +14,7 @@ import { getDecryptedUserModelKey, type ModelKeyProvider } from '@/lib/agents/sh
 import { withRuntimeModelKeys } from '@/lib/agents/shared/model-runtime-context';
 import { createLogger } from '@/lib/logging';
 import { resolveSharedKeyBySession } from '@/lib/agents/control-plane/shared-keys';
+import { BYOK_ENABLED } from '@/lib/agents/shared/byok-flags';
 
 const logger = createLogger('agents:subagents:canvas-steward');
 
@@ -327,7 +328,7 @@ export async function runCanvasSteward(args: RunCanvasStewardArgs) {
         metadata,
         configOverrides,
       });
-    if (billingUserId && ['openai', 'anthropic', 'google'].includes(provider)) {
+    if (BYOK_ENABLED && billingUserId && ['openai', 'anthropic', 'google'].includes(provider)) {
       const byokKey = await getDecryptedUserModelKey({
         userId: billingUserId,
         provider,
