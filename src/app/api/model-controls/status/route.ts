@@ -9,11 +9,26 @@ import {
   validateSharedUnlockSession,
 } from '@/lib/agents/control-plane/shared-keys';
 import { requireAgentAdminActionUserId } from '@/lib/agents/admin/auth';
-import type { ModelProvider } from '@/lib/agents/control-plane/types';
+import type { ModelProvider, ResolvedModelControl } from '@/lib/agents/control-plane/types';
 
 export const runtime = 'nodejs';
 
 const PROVIDERS: ModelProvider[] = ['openai', 'anthropic', 'google', 'together', 'cerebras'];
+
+const isMissingRelationError = (error: unknown): boolean => {
+  if (!(error instanceof Error)) return false;
+  const message = error.message.toLowerCase();
+  return message.includes('42p01') || (message.includes('relation') && message.includes('does not exist'));
+};
+
+const fallbackResolvedControl = (): ResolvedModelControl => ({
+  effective: { models: {}, knobs: {} },
+  sources: [],
+  applyModes: {},
+  fieldSources: {},
+  resolvedAt: new Date().toISOString(),
+  configVersion: 'env-fallback',
+});
 
 export async function GET(req: NextRequest) {
   const user = await resolveRequestUser(req);
@@ -28,10 +43,40 @@ export async function GET(req: NextRequest) {
       task: task ?? undefined,
       userId: user.id,
       includeUserScope: true,
+    }).catch((error): ResolvedModelControl => {
+      if (isMissingRelationError(error)) {
+        return fallbackResolvedControl();
+      }
+      throw error;
     }),
-    listUserModelKeyStatus(user.id),
-    listSharedKeyStatus(),
-    getSharedKeyringPolicy(),
+    listUserModelKeyStatus(user.id).catch((error): Awaited<ReturnType<typeof listUserModelKeyStatus>> => {
+      if (isMissingRelationError(error)) {
+        return [];
+      }
+      throw error;
+    }),
+    listSharedKeyStatus().catch((error): Awaited<ReturnType<typeof listSharedKeyStatus>> => {
+      if (isMissingRelationError(error)) {
+        return PROVIDERS.map((provider) => ({
+          provider,
+          configured: false,
+          enabled: false,
+        }));
+      }
+      throw error;
+    }),
+    getSharedKeyringPolicy().catch((error): Awaited<ReturnType<typeof getSharedKeyringPolicy>> => {
+      if (isMissingRelationError(error)) {
+        return {
+          id: 1,
+          password_hash: null,
+          password_salt: null,
+          password_required: false,
+          updated_at: new Date().toISOString(),
+        };
+      }
+      throw error;
+    }),
     requireAgentAdminActionUserId(req),
   ]);
   const token = getUnlockCookieToken(req);
