@@ -209,12 +209,13 @@ export function GuidedControlsPanel({
             key={section.id}
             className="rounded-lg border border-gray-200 p-4"
             open={openSections[section.id] ?? index < 2}
-            onToggle={(event) =>
+            onToggle={(event) => {
+              const isOpen = event.currentTarget.open;
               setOpenSections((current) => ({
                 ...current,
-                [section.id]: event.currentTarget.open,
-              }))
-            }
+                [section.id]: isOpen,
+              }));
+            }}
           >
             <summary className="cursor-pointer select-none text-sm font-semibold text-gray-900">{section.title}</summary>
             <p className="mt-1 text-xs text-gray-600">{section.description}</p>
