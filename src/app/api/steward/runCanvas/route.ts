@@ -34,6 +34,7 @@ import {
 } from '@/lib/agents/shared/runtime-scope';
 import { resolveModelControl } from '@/lib/agents/control-plane/resolver';
 import { resolveProviderKeyWithFallback } from '@/lib/agents/control-plane/key-resolution';
+import type { ResolvedModelControl } from '@/lib/agents/control-plane/types';
 import {
   assignmentToDiagnostics,
   attachExperimentAssignmentToMetadata,
@@ -283,7 +284,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const resolvedControl = await resolveModelControl({
+    const resolvedControl: ResolvedModelControl = await resolveModelControl({
       task: normalizedTask,
       room: trimmedRoom,
       userId: requesterUserId ?? undefined,
@@ -292,7 +293,7 @@ export async function POST(req: NextRequest) {
       requestProvider: provider ?? undefined,
       allowRequestModelOverride: true,
       includeUserScope: true,
-    }).catch((error) => {
+    }).catch((error): ResolvedModelControl => {
       logger.warn('model-control resolve failed; using env defaults', {
         room: trimmedRoom,
         task: normalizedTask,
@@ -300,6 +301,10 @@ export async function POST(req: NextRequest) {
       });
       return {
         effective: { models: {}, knobs: {} },
+        sources: [],
+        applyModes: {},
+        fieldSources: {},
+        resolvedAt: new Date().toISOString(),
         configVersion: 'env-fallback',
       };
     });

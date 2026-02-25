@@ -23,6 +23,7 @@ import {
 } from '@/lib/agents/shared/runtime-scope';
 import { resolveModelControl } from '@/lib/agents/control-plane/resolver';
 import { resolveProviderKeyWithFallback } from '@/lib/agents/control-plane/key-resolution';
+import type { ResolvedModelControl } from '@/lib/agents/control-plane/types';
 
 export const runtime = 'nodejs';
 
@@ -109,14 +110,14 @@ export async function POST(req: NextRequest) {
           ? normalizedIntent
           : 'scorecard.run';
     const normalizedTask = normalizedTaskCandidate.startsWith('scorecard.') ? normalizedTaskCandidate : 'scorecard.run';
-    const resolvedControl = await resolveModelControl({
+    const resolvedControl: ResolvedModelControl = await resolveModelControl({
       task: normalizedTask,
       room: trimmedRoom,
       userId: requesterUserId ?? undefined,
       billingUserId: billingUserId ?? undefined,
       requestProvider: undefined,
       includeUserScope: true,
-    }).catch((error) => {
+    }).catch((error): ResolvedModelControl => {
       logger.warn('model-control resolve failed; using env defaults', {
         room: trimmedRoom,
         task: normalizedTask,
@@ -124,6 +125,10 @@ export async function POST(req: NextRequest) {
       });
       return {
         effective: { models: {}, knobs: {} },
+        sources: [],
+        applyModes: {},
+        fieldSources: {},
+        resolvedAt: new Date().toISOString(),
         configVersion: 'env-fallback',
       };
     });

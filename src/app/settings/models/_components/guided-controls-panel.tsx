@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   filterGuidedSections,
   formatFieldSource,
@@ -127,6 +127,46 @@ export function GuidedControlsPanel({
 }: Props) {
   const [search, setSearch] = useState('');
   const filteredSections = useMemo(() => filterGuidedSections(sections, search), [sections, search]);
+  const [openSections, setOpenSections] = useState<Record<string, boolean>>(() =>
+    Object.fromEntries(sections.map((section, index) => [section.id, index < 2])),
+  );
+  const searchActive = search.trim().length > 0;
+
+  useEffect(() => {
+    setOpenSections((current) => {
+      const next: Record<string, boolean> = {};
+      let changed = false;
+      for (const [index, section] of sections.entries()) {
+        if (Object.prototype.hasOwnProperty.call(current, section.id)) {
+          next[section.id] = current[section.id];
+          continue;
+        }
+        next[section.id] = index < 2;
+        changed = true;
+      }
+      if (Object.keys(current).length !== Object.keys(next).length) {
+        changed = true;
+      }
+      return changed ? next : current;
+    });
+  }, [sections]);
+
+  useEffect(() => {
+    if (!searchActive) {
+      return;
+    }
+    setOpenSections((current) => {
+      let changed = false;
+      const next = { ...current };
+      for (const section of filteredSections) {
+        if (!next[section.id]) {
+          next[section.id] = true;
+          changed = true;
+        }
+      }
+      return changed ? next : current;
+    });
+  }, [filteredSections, searchActive]);
 
   return (
     <section className="rounded-xl border border-gray-200 bg-white p-4">
@@ -165,7 +205,17 @@ export function GuidedControlsPanel({
 
       <div className="mt-4 space-y-4">
         {filteredSections.map((section, index) => (
-          <details key={section.id} className="rounded-lg border border-gray-200 p-4" defaultOpen={index < 2 || search.trim().length > 0}>
+          <details
+            key={section.id}
+            className="rounded-lg border border-gray-200 p-4"
+            open={openSections[section.id] ?? index < 2}
+            onToggle={(event) =>
+              setOpenSections((current) => ({
+                ...current,
+                [section.id]: event.currentTarget.open,
+              }))
+            }
+          >
             <summary className="cursor-pointer select-none text-sm font-semibold text-gray-900">{section.title}</summary>
             <p className="mt-1 text-xs text-gray-600">{section.description}</p>
             <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">

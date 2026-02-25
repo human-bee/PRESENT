@@ -4,6 +4,7 @@ import type { JsonObject } from '@/lib/utils/json-schema';
 import { getDecryptedUserModelKey } from '@/lib/agents/shared/user-model-keys';
 import { resolveSharedKeyBySession } from '@/lib/agents/control-plane/shared-keys';
 import { resolveModelControl } from '@/lib/agents/control-plane/resolver';
+import type { ResolvedModelControl } from '@/lib/agents/control-plane/types';
 import { BYOK_ENABLED } from '@/lib/agents/shared/byok-flags';
 
 const GeneralSearchArgs = z
@@ -104,14 +105,18 @@ async function runGeneralSearch(rawParams: JsonObject): Promise<SearchStewardRes
       rawParams.sharedUnlockSessionId.trim()
         ? rawParams.sharedUnlockSessionId.trim()
         : null;
-    const resolvedControl = await resolveModelControl({
+    const resolvedControl: ResolvedModelControl = await resolveModelControl({
       task: 'search.general',
       room: parsed.room,
       userId: requesterUserId ?? undefined,
       billingUserId: billingUserId ?? undefined,
       includeUserScope: true,
     }).catch(() => ({
-      effective: {} as Record<string, unknown>,
+      effective: { models: {}, knobs: {} },
+      sources: [],
+      applyModes: {},
+      fieldSources: {},
+      resolvedAt: new Date().toISOString(),
       configVersion: 'env-fallback',
     }));
     const resolvedSearchModel = resolvedControl.effective.models?.searchModel;
@@ -155,6 +160,12 @@ async function runGeneralSearch(rawParams: JsonObject): Promise<SearchStewardRes
       showCredibilityFilter: true,
       maxResults: parsed.maxResults ?? resolvedSearchKnobs?.maxResults ?? 3,
     };
+    const trace = searchResponse._trace
+      ? {
+          ...searchResponse._trace,
+          configVersion: resolvedControl.configVersion,
+        }
+      : undefined;
 
     return {
       status: 'ok',
@@ -163,10 +174,7 @@ async function runGeneralSearch(rawParams: JsonObject): Promise<SearchStewardRes
         summary: searchResponse.summary,
         model: searchResponse.model,
         hits: searchResponse.hits,
-        _trace: {
-          ...searchResponse._trace,
-          configVersion: resolvedControl.configVersion,
-        },
+        _trace: trace,
       },
       panel,
       componentId: parsed.componentId,
