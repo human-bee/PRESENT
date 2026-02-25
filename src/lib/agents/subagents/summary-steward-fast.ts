@@ -1,8 +1,9 @@
 import { getCerebrasClient, getModelForSteward, isFastStewardReady } from '../fast-steward-config';
 import { getTranscriptWindow, getContextDocuments, formatContextDocuments } from '@/lib/agents/shared/supabase-context';
 import { extractFirstToolCall, parseToolArgumentsResult } from './fast-steward-response';
+import { resolveFastStewardModel } from '@/lib/agents/control-plane/fast-model';
 
-const CEREBRAS_MODEL = getModelForSteward('SUMMARY_STEWARD_FAST_MODEL');
+const getSummaryFastModel = () => getModelForSteward('SUMMARY_STEWARD_FAST_MODEL');
 
 const SUMMARY_SYSTEM = `
 You are a fast meeting summarizer for a realtime collaborative workspace.
@@ -69,6 +70,12 @@ export async function runSummaryStewardFast(params: {
   contextProfile?: string;
 }): Promise<SummaryResult> {
   const { room, instruction, contextBundle, contextProfile } = params;
+  const { model: CEREBRAS_MODEL } = await resolveFastStewardModel({
+    steward: 'summary',
+    stewardEnvVar: 'SUMMARY_STEWARD_FAST_MODEL',
+    room,
+    task: 'summary.fast',
+  }).catch(() => ({ model: getSummaryFastModel() }));
   const [transcript, contextDocs] = await Promise.all([
     getTranscriptWindow(room, resolveWindowMs(contextProfile)),
     getContextDocuments(room),

@@ -14,7 +14,7 @@ const routerDecisionSchema = z.object({
 export type ManualRouteDecision = z.infer<typeof routerDecisionSchema>;
 
 export function createManualInputRouter() {
-  let routerModelCache: any = null;
+  const routerModelCache = new Map<string, any>();
   const retryAttempts = parseRetryEnvInt(process.env.VOICE_AGENT_ROUTER_RETRY_ATTEMPTS, 3, {
     min: 1,
     max: 6,
@@ -69,19 +69,24 @@ export function createManualInputRouter() {
     return { route: 'none' };
   };
 
-  const getRouterModel = async () => {
-    if (routerModelCache) return routerModelCache;
+  const getRouterModel = async (modelOverride?: string) => {
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) return null;
     const { createAnthropic } = await import('@ai-sdk/anthropic');
-    const modelId = (process.env.VOICE_AGENT_ROUTER_MODEL || 'claude-haiku-4-5').trim();
+    const modelId = (modelOverride || process.env.VOICE_AGENT_ROUTER_MODEL || 'claude-haiku-4-5').trim();
+    const cached = routerModelCache.get(modelId);
+    if (cached) return cached;
     const anthropic = createAnthropic({ apiKey });
-    routerModelCache = anthropic(modelId);
-    return routerModelCache;
+    const model = anthropic(modelId);
+    routerModelCache.set(modelId, model);
+    return model;
   };
 
-  return async (text: string): Promise<ManualRouteDecision | null> => {
-    const model = await getRouterModel();
+  return async (
+    text: string,
+    options: { model?: string } = {},
+  ): Promise<ManualRouteDecision | null> => {
+    const model = await getRouterModel(options.model);
     if (!model) return localHeuristicRoute(text);
 
     const system = [

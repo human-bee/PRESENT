@@ -3,6 +3,7 @@ import { createHash, randomUUID } from 'crypto';
 import { jsonObjectSchema, jsonValueSchema, type JsonObject, type JsonValue } from '@/lib/utils/json-schema';
 import { runCanvasAgent } from '@/lib/agents/canvas-agent/server/runner';
 import type { CanvasFollowupInput } from '@/lib/agents/canvas-agent/server/followup-queue';
+import type { CanvasConfigOverrides } from '@/lib/agents/canvas-agent/server/config';
 import { awaitAck, sendActionsEnvelope } from '@/lib/agents/canvas-agent/server/wire';
 import type { AgentAction } from '@/lib/canvas-agent/contract/types';
 import { parseAction } from '@/lib/canvas-agent/contract/parsers';
@@ -12,6 +13,7 @@ import { deriveRequestCorrelation } from '@/lib/agents/shared/request-correlatio
 import { getDecryptedUserModelKey, type ModelKeyProvider } from '@/lib/agents/shared/user-model-keys';
 import { withRuntimeModelKeys } from '@/lib/agents/shared/model-runtime-context';
 import { createLogger } from '@/lib/logging';
+import { resolveSharedKeyBySession } from '@/lib/agents/control-plane/shared-keys';
 
 const logger = createLogger('agents:subagents:canvas-steward');
 
@@ -121,6 +123,12 @@ const normalizeQuickTextTargetHint = (value: unknown): QuickTextTargetHint | und
 const readJsonObject = (value: unknown): Record<string, unknown> | null => {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   return value as Record<string, unknown>;
+};
+
+const parseCanvasConfigOverrides = (value: unknown): CanvasConfigOverrides | undefined => {
+  const parsed = readJsonObject(value);
+  if (!parsed) return undefined;
+  return parsed as CanvasConfigOverrides;
 };
 
 const deterministicNumberFromHex = (hex: string, min: number, max: number): number => {
@@ -292,9 +300,18 @@ export async function runCanvasSteward(args: RunCanvasStewardArgs) {
       typeof payload.billingUserId === 'string' && payload.billingUserId.trim()
         ? payload.billingUserId.trim()
         : undefined;
+    const requesterUserId =
+      typeof payload.requesterUserId === 'string' && payload.requesterUserId.trim()
+        ? payload.requesterUserId.trim()
+        : undefined;
+    const sharedUnlockSessionId =
+      typeof payload.sharedUnlockSessionId === 'string' && payload.sharedUnlockSessionId.trim()
+        ? payload.sharedUnlockSessionId.trim()
+        : undefined;
     const provider = normalizeProvider(payload.provider) ?? inferProviderFromModel(model) ?? 'openai';
     const initialViewport = parseViewport(payload.bounds);
     const initialFollowup = extractInitialFollowup(payload, message, followupDepth);
+    const configOverrides = parseCanvasConfigOverrides(payload.canvasConfigOverrides);
     const invokeCanvasRunner = async () =>
       runCanvasAgent({
         roomId: room,
@@ -308,12 +325,23 @@ export async function runCanvasSteward(args: RunCanvasStewardArgs) {
         followupDepth,
         initialFollowup,
         metadata,
+        configOverrides,
       });
     if (billingUserId && ['openai', 'anthropic', 'google'].includes(provider)) {
-      const providerKey = await getDecryptedUserModelKey({
+      const byokKey = await getDecryptedUserModelKey({
         userId: billingUserId,
         provider,
       });
+      const sharedKey =
+        !byokKey && sharedUnlockSessionId && requesterUserId
+          ? await resolveSharedKeyBySession({
+              sessionId: sharedUnlockSessionId,
+              userId: requesterUserId,
+              provider,
+              roomScope: room,
+            })
+          : null;
+      const providerKey = byokKey ?? sharedKey;
       if (!providerKey) {
         throw new Error(`BYOK_MISSING_KEY:${provider}`);
       }

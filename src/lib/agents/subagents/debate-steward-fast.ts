@@ -1,4 +1,4 @@
-import { getCerebrasClient, getModelForSteward, isFastStewardReady } from '../fast-steward-config';
+import { getCerebrasClient, getModelForSteward, isFastStewardReady, normalizeFastStewardModel } from '../fast-steward-config';
 import {
   getDebateScorecard,
   commitDebateScorecard,
@@ -7,14 +7,14 @@ import {
 } from '@/lib/agents/shared/supabase-context';
 import { debateScorecardStateSchema, type DebateScorecardState } from '@/lib/agents/debate-scorecard-schema';
 import { extractFirstMessageContent } from './fast-steward-response';
+import { resolveFastStewardModel } from '@/lib/agents/control-plane/fast-model';
 
-const CEREBRAS_MODEL = getModelForSteward('DEBATE_STEWARD_FAST_MODEL');
-const DEBATE_FAST_TRACE = {
+const buildDebateFastTrace = (model: string) => ({
   provider: 'cerebras' as const,
-  model: CEREBRAS_MODEL,
+  model,
   providerSource: 'runtime_selected' as const,
   providerPath: 'fast' as const,
-};
+});
 
 const DEBATE_STEWARD_FAST_INSTRUCTIONS = `
 You are a fast debate scorecard assistant. Given the current state, context documents, and an instruction, update the state.
@@ -159,9 +159,23 @@ export async function runDebateScorecardStewardFast(params: {
   prompt?: string;
   topic?: string;
   cerebrasApiKey?: string;
+  model?: string;
 }) {
-  const { room, componentId, intent, summary, prompt, topic, cerebrasApiKey } = params;
+  const { room, componentId, intent, summary, prompt, topic, cerebrasApiKey, model } = params;
   const start = Date.now();
+  const resolvedDebateModel =
+    typeof model === 'string' && model.trim()
+      ? normalizeFastStewardModel(model)
+      : (
+          await resolveFastStewardModel({
+            steward: 'debate',
+            stewardEnvVar: 'DEBATE_STEWARD_FAST_MODEL',
+            room,
+            task: 'scorecard.fast',
+          }).catch(() => ({ model: getModelForSteward('DEBATE_STEWARD_FAST_MODEL') }))
+        ).model;
+  const cerebrasModel = resolvedDebateModel;
+  const debateFastTrace = buildDebateFastTrace(cerebrasModel);
 
   if (!isFastStewardReady(cerebrasApiKey)) {
     throw new Error('DebateStewardFast requires CEREBRAS_API_KEY');
@@ -191,7 +205,7 @@ export async function runDebateScorecardStewardFast(params: {
   try {
     const client = getCerebrasClient(cerebrasApiKey);
     const response = await client.chat.completions.create({
-      model: CEREBRAS_MODEL,
+      model: cerebrasModel,
       messages,
     });
 
@@ -199,7 +213,7 @@ export async function runDebateScorecardStewardFast(params: {
     const parsedResponse = extractJsonCandidate(rawContent);
     if (!parsedResponse || typeof parsedResponse !== 'object') {
       console.warn('[DebateStewardFast] No JSON update captured');
-      return { status: 'no_change', summary: 'No update needed', _trace: DEBATE_FAST_TRACE };
+      return { status: 'no_change', summary: 'No update needed', _trace: debateFastTrace };
     }
 
     const summaryText =
@@ -231,7 +245,7 @@ export async function runDebateScorecardStewardFast(params: {
       return {
         status: 'error',
         summary: 'Failed to parse updated scorecard state',
-        _trace: DEBATE_FAST_TRACE,
+        _trace: debateFastTrace,
       };
     }
 
@@ -295,7 +309,7 @@ export async function runDebateScorecardStewardFast(params: {
       status: 'ok',
       summary: summaryText,
       version: committed.version,
-      _trace: DEBATE_FAST_TRACE,
+      _trace: debateFastTrace,
     };
 
   } catch (error) {
@@ -303,7 +317,7 @@ export async function runDebateScorecardStewardFast(params: {
     return {
       status: 'error',
       summary: error instanceof Error ? error.message : 'Unknown error',
-      _trace: DEBATE_FAST_TRACE,
+      _trace: debateFastTrace,
     };
   }
 }

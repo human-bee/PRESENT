@@ -66,6 +66,7 @@ import {
   type HarnessModeLevel,
   type LazyLoadPolicyLevel,
 } from '@/lib/agents/shared/experiment-assignment';
+import { resolveModelControl } from '@/lib/agents/control-plane/resolver';
 
 const RATE_LIMIT_HEADER_KEYS = [
   'retry-after',
@@ -301,7 +302,23 @@ export default defineAgent({
       return `pid-${process.pid}`;
     })();
     const allowSensitiveLogging = process.env.NODE_ENV !== 'production';
-    const realtimeConfig = resolveVoiceRealtimeConfig();
+    const voiceControl = await resolveModelControl({
+      task: 'voice.realtime',
+      room: job.room.name,
+      includeUserScope: false,
+    }).catch(() => null);
+    const voiceKnobs = voiceControl?.effective.knobs?.voice;
+    const realtimeConfig = resolveVoiceRealtimeConfig(process.env, {
+      realtimeModel: voiceControl?.effective.models?.voiceRealtime,
+      routerModel: voiceControl?.effective.models?.voiceRouter,
+      sttModel: voiceControl?.effective.models?.voiceStt,
+      transcriptionEnabled: voiceKnobs?.transcriptionEnabled,
+      turnDetection: voiceKnobs?.turnDetection,
+      inputNoiseReduction: voiceKnobs?.inputNoiseReduction,
+      replyTimeoutMs: voiceKnobs?.replyTimeoutMs,
+      interruptTimeoutMs: voiceKnobs?.interruptTimeoutMs,
+      transcriptionReadyTimeoutMs: voiceKnobs?.transcriptionReadyTimeoutMs,
+    });
 
     // Data messages (topic: "transcription") can arrive immediately after the agent joins the room.
     // Attach the listener up-front and buffer until the realtime session is running so we don't drop early turns.
@@ -2934,6 +2951,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
 
     const session = new voice.AgentSession({
       llm: new openaiRealtime.RealtimeModel({
+        model: realtimeConfig.resolvedRealtimeModel,
         inputAudioTranscription,
         ...(inputAudioNoiseReduction !== undefined ? { inputAudioNoiseReduction } : {}),
         ...(turnDetectionOption !== undefined ? { turnDetection: turnDetectionOption } : {}),
@@ -3522,7 +3540,9 @@ Your only output is function calls. Never use plain text unless absolutely neces
 
       if (isManual && (process.env.VOICE_AGENT_ROUTER_ENABLED ?? 'true') !== 'false') {
         try {
-          const routed = await routeManualInput(text);
+          const routed = await routeManualInput(text, {
+            model: realtimeConfig.resolvedRouterModel,
+          });
           if (routed?.route === 'canvas') {
             await sendToolCall('dispatch_to_conductor', {
               task: 'fairy.intent',

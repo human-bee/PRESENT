@@ -23,28 +23,62 @@ import {
   isLocalRuntimeScope,
   resolveRuntimeScopeFromEnv,
 } from '@/lib/agents/shared/runtime-scope';
+import { resolveModelControl } from '@/lib/agents/control-plane/resolver';
 
-const TASK_LEASE_TTL_MS = Number(process.env.TASK_LEASE_TTL_MS ?? 15_000);
-const ROOM_CONCURRENCY = Math.max(1, Number.parseInt(process.env.ROOM_CONCURRENCY ?? '2', 10) || 2);
+type ConductorRuntimeSettings = {
+  roomConcurrency: number;
+  taskLeaseTtlMs: number;
+  taskIdlePollMs: number;
+  taskIdlePollMaxMs: number;
+  taskMaxRetryAttempts: number;
+  taskRetryBaseDelayMs: number;
+  taskRetryMaxDelayMs: number;
+  taskRetryJitterRatio: number;
+};
+
+const clampInt = (value: unknown, fallback: number, min: number, max: number): number => {
+  const parsed =
+    typeof value === 'string' ? Number.parseInt(value, 10) : typeof value === 'number' ? value : Number.NaN;
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.max(min, Math.min(max, Math.floor(parsed)));
+};
+
+const clampFloat = (value: unknown, fallback: number, min: number, max: number): number => {
+  const parsed =
+    typeof value === 'string' ? Number.parseFloat(value) : typeof value === 'number' ? value : Number.NaN;
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.max(min, Math.min(max, parsed));
+};
+
+const DEFAULT_CONDUCTOR_SETTINGS: ConductorRuntimeSettings = {
+  roomConcurrency: Math.max(1, Number.parseInt(process.env.ROOM_CONCURRENCY ?? '2', 10) || 2),
+  taskLeaseTtlMs: clampInt(process.env.TASK_LEASE_TTL_MS, 15_000, 500, 300_000),
+  taskIdlePollMs: clampInt(process.env.TASK_IDLE_POLL_MS, 500, 5, 60_000),
+  taskIdlePollMaxMs: clampInt(process.env.TASK_IDLE_POLL_MAX_MS, 1_000, 10, 120_000),
+  taskMaxRetryAttempts: clampInt(process.env.TASK_MAX_RETRY_ATTEMPTS, 5, 1, 30),
+  taskRetryBaseDelayMs: clampInt(process.env.TASK_RETRY_BASE_DELAY_MS, 1_000, 100, 120_000),
+  taskRetryMaxDelayMs: clampInt(process.env.TASK_RETRY_MAX_DELAY_MS, 15_000, 100, 300_000),
+  taskRetryJitterRatio: clampFloat(process.env.TASK_RETRY_JITTER_RATIO, 0.2, 0, 0.9),
+};
+
+const CONDUCTOR_SETTINGS_REFRESH_MS = clampInt(
+  process.env.MODEL_CONTROL_CONDUCTOR_REFRESH_MS,
+  30_000,
+  5_000,
+  300_000,
+);
+
+let conductorSettings: ConductorRuntimeSettings = {
+  ...DEFAULT_CONDUCTOR_SETTINGS,
+  taskRetryMaxDelayMs: Math.max(
+    DEFAULT_CONDUCTOR_SETTINGS.taskRetryBaseDelayMs,
+    DEFAULT_CONDUCTOR_SETTINGS.taskRetryMaxDelayMs,
+  ),
+};
+let conductorSettingsRefreshAt = 0;
+let conductorSettingsRefreshInFlight: Promise<void> | null = null;
+
 const WORKER_HEARTBEAT_MS = Number(process.env.AGENT_WORKER_HEARTBEAT_MS ?? 5_000);
-const TASK_IDLE_POLL_MS = Number(process.env.TASK_IDLE_POLL_MS ?? 500);
-const TASK_IDLE_POLL_MAX_MS = Number(process.env.TASK_IDLE_POLL_MAX_MS ?? 1_000);
-const TASK_MAX_RETRY_ATTEMPTS = Math.max(
-  1,
-  Number.parseInt(process.env.TASK_MAX_RETRY_ATTEMPTS ?? '5', 10) || 5,
-);
-const TASK_RETRY_BASE_DELAY_MS = Math.max(
-  100,
-  Number.parseInt(process.env.TASK_RETRY_BASE_DELAY_MS ?? '1000', 10) || 1_000,
-);
-const TASK_RETRY_MAX_DELAY_MS = Math.max(
-  TASK_RETRY_BASE_DELAY_MS,
-  Number.parseInt(process.env.TASK_RETRY_MAX_DELAY_MS ?? '15000', 10) || 15_000,
-);
-const TASK_RETRY_JITTER_RATIO = Math.min(
-  0.9,
-  Math.max(0, Number.parseFloat(process.env.TASK_RETRY_JITTER_RATIO ?? '0.2') || 0.2),
-);
 const TASK_SCOPE_MISMATCH_REQUEUE_DELAY_MS = Math.max(
   100,
   Number.parseInt(process.env.TASK_SCOPE_MISMATCH_REQUEUE_DELAY_MS ?? '300', 10) || 300,
@@ -76,13 +110,89 @@ type RoomLaneState = {
 };
 const roomLaneStates = new Map<string, RoomLaneState>();
 
+const conductorSettingsEqual = (
+  a: ConductorRuntimeSettings,
+  b: ConductorRuntimeSettings,
+): boolean =>
+  a.roomConcurrency === b.roomConcurrency &&
+  a.taskLeaseTtlMs === b.taskLeaseTtlMs &&
+  a.taskIdlePollMs === b.taskIdlePollMs &&
+  a.taskIdlePollMaxMs === b.taskIdlePollMaxMs &&
+  a.taskMaxRetryAttempts === b.taskMaxRetryAttempts &&
+  a.taskRetryBaseDelayMs === b.taskRetryBaseDelayMs &&
+  a.taskRetryMaxDelayMs === b.taskRetryMaxDelayMs &&
+  a.taskRetryJitterRatio === b.taskRetryJitterRatio;
+
+const normalizeConductorSettings = (
+  defaults: ConductorRuntimeSettings,
+  knobs: Record<string, unknown> | undefined,
+): ConductorRuntimeSettings => {
+  const next: ConductorRuntimeSettings = {
+    roomConcurrency: clampInt(knobs?.roomConcurrency, defaults.roomConcurrency, 1, 256),
+    taskLeaseTtlMs: clampInt(knobs?.taskLeaseTtlMs, defaults.taskLeaseTtlMs, 500, 300_000),
+    taskIdlePollMs: clampInt(knobs?.taskIdlePollMs, defaults.taskIdlePollMs, 5, 60_000),
+    taskIdlePollMaxMs: clampInt(knobs?.taskIdlePollMaxMs, defaults.taskIdlePollMaxMs, 10, 120_000),
+    taskMaxRetryAttempts: clampInt(knobs?.taskMaxRetryAttempts, defaults.taskMaxRetryAttempts, 1, 30),
+    taskRetryBaseDelayMs: clampInt(knobs?.taskRetryBaseDelayMs, defaults.taskRetryBaseDelayMs, 100, 120_000),
+    taskRetryMaxDelayMs: clampInt(knobs?.taskRetryMaxDelayMs, defaults.taskRetryMaxDelayMs, 100, 300_000),
+    taskRetryJitterRatio: clampFloat(knobs?.taskRetryJitterRatio, defaults.taskRetryJitterRatio, 0, 0.9),
+  };
+  next.taskRetryMaxDelayMs = Math.max(next.taskRetryBaseDelayMs, next.taskRetryMaxDelayMs);
+  return next;
+};
+
+const refreshConductorRuntimeSettings = async (force = false): Promise<void> => {
+  const now = Date.now();
+  if (!force && now < conductorSettingsRefreshAt) {
+    return;
+  }
+  if (conductorSettingsRefreshInFlight) {
+    return conductorSettingsRefreshInFlight;
+  }
+  conductorSettingsRefreshInFlight = (async () => {
+    try {
+      const resolved = await resolveModelControl(
+        {
+          task: 'conductor.worker',
+          includeUserScope: false,
+        },
+        { skipCache: true },
+      );
+      const resolvedKnobs =
+        resolved.effective.knobs?.conductor && typeof resolved.effective.knobs.conductor === 'object'
+          ? (resolved.effective.knobs.conductor as unknown as Record<string, unknown>)
+          : undefined;
+      const next = normalizeConductorSettings(DEFAULT_CONDUCTOR_SETTINGS, resolvedKnobs);
+      if (!conductorSettingsEqual(conductorSettings, next)) {
+        logger.info('updated conductor runtime settings from model control plane', {
+          previous: conductorSettings,
+          next,
+          configVersion: resolved.configVersion,
+        });
+        conductorSettings = next;
+      }
+    } catch (error) {
+      logger.warn('failed to refresh conductor runtime settings', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    } finally {
+      conductorSettingsRefreshAt = Date.now() + CONDUCTOR_SETTINGS_REFRESH_MS;
+      conductorSettingsRefreshInFlight = null;
+    }
+  })();
+  return conductorSettingsRefreshInFlight;
+};
+
 const computeTaskRetryDelayMs = (attempt: number): number => {
   const exponent = Math.max(0, attempt - 1);
-  const base = Math.min(TASK_RETRY_MAX_DELAY_MS, TASK_RETRY_BASE_DELAY_MS * 2 ** exponent);
-  if (TASK_RETRY_JITTER_RATIO <= 0 || base <= 0) {
+  const base = Math.min(
+    conductorSettings.taskRetryMaxDelayMs,
+    conductorSettings.taskRetryBaseDelayMs * 2 ** exponent,
+  );
+  if (conductorSettings.taskRetryJitterRatio <= 0 || base <= 0) {
     return Math.round(base);
   }
-  const jitter = base * TASK_RETRY_JITTER_RATIO;
+  const jitter = base * conductorSettings.taskRetryJitterRatio;
   return Math.max(0, Math.round(base - jitter + Math.random() * jitter * 2));
 };
 
@@ -274,12 +384,12 @@ const verifyTaskContract = (
 };
 
 function createLeaseExtender(taskId: string, leaseToken: string) {
-  const intervalMs = Math.max(1_000, Math.floor(TASK_LEASE_TTL_MS * 0.6));
+  const intervalMs = Math.max(1_000, Math.floor(conductorSettings.taskLeaseTtlMs * 0.6));
   let stopped = false;
 
   const intervalId = setInterval(() => {
     if (stopped) return;
-    void queue.extendLease(taskId, leaseToken, TASK_LEASE_TTL_MS).catch((error) => {
+    void queue.extendLease(taskId, leaseToken, conductorSettings.taskLeaseTtlMs).catch((error) => {
       const message = error instanceof Error ? error.message : String(error);
       logger.warn('failed to extend lease', { taskId, error: message });
     });
@@ -297,7 +407,7 @@ async function acquireRoomSlot(roomKey: string): Promise<() => void> {
     roomLaneStates.set(roomKey, state);
   }
 
-  if (state.active >= ROOM_CONCURRENCY) {
+  if (state.active >= conductorSettings.roomConcurrency) {
     await new Promise<void>((resolve) => {
       state.waiters.push(resolve);
     });
@@ -333,7 +443,7 @@ async function processClaimedTasks(executeTask: ExecuteTaskFn, claimedTasks: Cla
   await Promise.allSettled(
     Object.entries(roomBuckets).map(async ([roomKey, roomTasks]) => {
       const queueList = [...roomTasks];
-      const workers = Array.from({ length: ROOM_CONCURRENCY }).map(async () => {
+      const workers = Array.from({ length: conductorSettings.roomConcurrency }).map(async () => {
         while (queueList.length > 0) {
           const claimed = queueList.shift();
           if (!claimed) break;
@@ -536,7 +646,7 @@ async function processClaimedTasks(executeTask: ExecuteTaskFn, claimedTasks: Cla
           } catch (error) {
             const described = describeUnknownError(error);
             const message = described.message;
-            const shouldRetry = task.attempt < TASK_MAX_RETRY_ATTEMPTS;
+            const shouldRetry = task.attempt < conductorSettings.taskMaxRetryAttempts;
             const retryDelayMs = shouldRetry ? computeTaskRetryDelayMs(task.attempt) : undefined;
             const retryAt = retryDelayMs !== undefined ? new Date(Date.now() + retryDelayMs) : undefined;
             logger.warn('task failed', {
@@ -612,14 +722,13 @@ async function processClaimedTasks(executeTask: ExecuteTaskFn, claimedTasks: Cla
 
 async function workerLoop(executeTask: ExecuteTaskFn) {
   const maxClaimConcurrency = Math.max(1, Number(process.env.TASK_DEFAULT_CONCURRENCY ?? 10));
-  const baseIdlePollMs = Math.max(5, Number.isFinite(TASK_IDLE_POLL_MS) ? Math.floor(TASK_IDLE_POLL_MS) : 500);
-  const maxIdlePollMs = Math.max(
-    baseIdlePollMs,
-    Number.isFinite(TASK_IDLE_POLL_MAX_MS) ? Math.floor(TASK_IDLE_POLL_MAX_MS) : 2_000,
-  );
-  let idlePollMs = baseIdlePollMs;
+  await refreshConductorRuntimeSettings(true);
+  let idlePollMs = Math.max(5, conductorSettings.taskIdlePollMs);
 
   while (true) {
+    await refreshConductorRuntimeSettings();
+    const baseIdlePollMs = Math.max(5, conductorSettings.taskIdlePollMs);
+    const maxIdlePollMs = Math.max(baseIdlePollMs, conductorSettings.taskIdlePollMaxMs);
     const availableCapacity = Math.max(0, maxClaimConcurrency - leasedTaskCount);
     if (availableCapacity < 1) {
       await delay(Math.min(100, baseIdlePollMs));
@@ -629,7 +738,7 @@ async function workerLoop(executeTask: ExecuteTaskFn) {
     const localScopeDirectClaim = workerHandlesLocalScopeDirectClaim
       ? await queue.claimLocalScopeTasks({
           limit: availableCapacity,
-          leaseTtlMs: TASK_LEASE_TTL_MS,
+          leaseTtlMs: conductorSettings.taskLeaseTtlMs,
           runtimeScope: workerRuntimeScope,
         })
       : { leaseToken: null, tasks: [] as AgentTask[] };
@@ -638,7 +747,7 @@ async function workerLoop(executeTask: ExecuteTaskFn) {
       remainingCapacity > 0
         ? await queue.claimTasks({
             limit: remainingCapacity,
-            leaseTtlMs: TASK_LEASE_TTL_MS,
+            leaseTtlMs: conductorSettings.taskLeaseTtlMs,
             resourceLocks: workerClaimResourceLocks,
           })
         : { leaseToken: '', tasks: [] as AgentTask[] };

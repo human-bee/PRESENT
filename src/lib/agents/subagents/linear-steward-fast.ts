@@ -1,8 +1,9 @@
 import { getCerebrasClient, getModelForSteward, isFastStewardReady } from '../fast-steward-config';
 import { getContextDocuments, formatContextDocuments, getTranscriptWindow } from '@/lib/agents/shared/supabase-context';
 import { extractFirstToolCall, parseToolArgumentsResult } from './fast-steward-response';
+import { resolveFastStewardModel } from '@/lib/agents/control-plane/fast-model';
 
-const CEREBRAS_MODEL = getModelForSteward('LINEAR_STEWARD_FAST_MODEL');
+const getLinearFastModel = () => getModelForSteward('LINEAR_STEWARD_FAST_MODEL');
 
 const LINEAR_STEWARD_INSTRUCTIONS = `
 You are a fast, precise assistant for the Linear issue tracking system.
@@ -84,6 +85,12 @@ export async function runLinearStewardFast(params: {
   room?: string; // Room ID to fetch context documents
 }): Promise<LinearAction> {
   const { instruction, context, room } = params;
+  const { model: CEREBRAS_MODEL } = await resolveFastStewardModel({
+    steward: 'linear',
+    stewardEnvVar: 'LINEAR_STEWARD_FAST_MODEL',
+    room,
+    task: 'linear.fast',
+  }).catch(() => ({ model: getLinearFastModel() }));
 
   if (!isFastStewardReady()) {
     return {

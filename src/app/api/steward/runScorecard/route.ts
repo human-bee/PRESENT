@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { ZodError } from 'zod';
 import { BYOK_ENABLED } from '@/lib/agents/shared/byok-flags';
 import { AgentTaskQueue } from '@/lib/agents/shared/queue';
 import { isFastStewardReady } from '@/lib/agents/fast-steward-config';
@@ -6,7 +7,6 @@ import { runDebateScorecardSteward } from '@/lib/agents/debate-judge';
 import { runDebateScorecardStewardFast } from '@/lib/agents/subagents/debate-steward-fast';
 import { assertCanvasMember, parseCanvasIdFromRoom } from '@/lib/agents/shared/canvas-billing';
 import { resolveRequestUserId } from '@/lib/supabase/server/resolve-request-user';
-import { getDecryptedUserModelKey } from '@/lib/agents/shared/user-model-keys';
 import { createLogger } from '@/lib/logging';
 import { parseJsonObject, stewardRunScorecardRequestSchema } from '@/lib/agents/shared/schemas';
 import type { JsonObject, JsonValue } from '@/lib/utils/json-schema';
@@ -21,6 +21,8 @@ import {
   normalizeRuntimeScope,
   resolveRuntimeScopeFromEnv,
 } from '@/lib/agents/shared/runtime-scope';
+import { resolveModelControl } from '@/lib/agents/control-plane/resolver';
+import { resolveProviderKeyWithFallback } from '@/lib/agents/control-plane/key-resolution';
 
 export const runtime = 'nodejs';
 
@@ -65,9 +67,9 @@ export async function POST(req: NextRequest) {
     const trimmedRoom = room.trim();
     const trimmedComponentId = componentId.trim();
 
+    const requesterUserId = await resolveRequestUserId(req);
     let billingUserId: string | null = null;
     if (BYOK_ENABLED) {
-      const requesterUserId = await resolveRequestUserId(req);
       if (!requesterUserId) {
         return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
       }
@@ -107,6 +109,30 @@ export async function POST(req: NextRequest) {
           ? normalizedIntent
           : 'scorecard.run';
     const normalizedTask = normalizedTaskCandidate.startsWith('scorecard.') ? normalizedTaskCandidate : 'scorecard.run';
+    const resolvedControl = await resolveModelControl({
+      task: normalizedTask,
+      room: trimmedRoom,
+      userId: requesterUserId ?? undefined,
+      billingUserId: billingUserId ?? undefined,
+      requestModel:
+        typeof (rest as Record<string, unknown>).model === 'string'
+          ? String((rest as Record<string, unknown>).model)
+          : undefined,
+      requestProvider: undefined,
+      includeUserScope: true,
+    }).catch((error) => {
+      logger.warn('model-control resolve failed; using env defaults', {
+        room: trimmedRoom,
+        task: normalizedTask,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return {
+        effective: { models: {}, knobs: {} },
+        configVersion: 'env-fallback',
+      };
+    });
+    const resolvedSearchModel = resolvedControl.effective.models?.searchModel;
+    const resolvedFastModel = resolvedControl.effective.models?.fastDefault;
     const scorecardFastEligible =
       normalizedTask !== 'scorecard.fact_check' &&
       normalizedTask !== 'scorecard.verify' &&
@@ -122,10 +148,18 @@ export async function POST(req: NextRequest) {
       summary: normalizedSummary,
       intent: normalizedIntent,
       topic: normalizedTopic,
+      configVersion: resolvedControl.configVersion,
     });
 
+    const passthrough = (parseJsonObject(rest) || {}) as Record<string, unknown>;
+    delete passthrough.billingUserId;
+    delete passthrough.requesterUserId;
+    delete passthrough.sharedUnlockSessionId;
+    delete passthrough.modelKeySource;
+    delete passthrough.primaryModelKeySource;
+    delete passthrough.fastModelKeySource;
     const normalizedParams = compactJsonObject({
-      ...(parseJsonObject(rest) || {}),
+      ...passthrough,
       room: trimmedRoom,
       componentId: trimmedComponentId,
       windowMs: resolvedWindow,
@@ -133,6 +167,10 @@ export async function POST(req: NextRequest) {
       prompt: normalizedPrompt,
       intent: normalizedIntent,
       topic: normalizedTopic,
+      configVersion: resolvedControl.configVersion,
+      ...(resolvedSearchModel ? { searchModel: resolvedSearchModel } : {}),
+      ...(resolvedFastModel ? { fastStewardModel: resolvedFastModel } : {}),
+      ...(requesterUserId ? { requesterUserId } : {}),
       ...(billingUserId ? { billingUserId } : {}),
     } as const);
     const orchestrationEnvelope = extractOrchestrationEnvelope(
@@ -187,6 +225,43 @@ export async function POST(req: NextRequest) {
     if (providerParity.providerRequestId) {
       enrichedParams.provider_request_id = providerParity.providerRequestId;
     }
+    if (BYOK_ENABLED && requesterUserId && billingUserId) {
+      const openAiKey = await resolveProviderKeyWithFallback({
+        req,
+        provider: 'openai',
+        userId: requesterUserId,
+        billingUserId,
+        roomScope: trimmedRoom,
+      });
+      const cerebrasKey = scorecardFastEligible
+        ? await resolveProviderKeyWithFallback({
+            req,
+            provider: 'cerebras',
+            userId: requesterUserId,
+            billingUserId,
+            roomScope: trimmedRoom,
+          })
+        : null;
+      const selectedKey = openAiKey ?? cerebrasKey;
+      if (!selectedKey) {
+        return NextResponse.json(
+          {
+            error: `BYOK_MISSING_KEY:${scorecardFastEligible ? 'openai_or_cerebras' : 'openai'}`,
+          },
+          { status: 400 },
+        );
+      }
+      enrichedParams.modelKeySource = selectedKey.source;
+      if (selectedKey.sharedUnlockSessionId) {
+        enrichedParams.sharedUnlockSessionId = selectedKey.sharedUnlockSessionId;
+      }
+      if (openAiKey) {
+        enrichedParams.primaryModelKeySource = openAiKey.source;
+      }
+      if (cerebrasKey) {
+        enrichedParams.fastModelKeySource = cerebrasKey.source;
+      }
+    }
     const runtimeScope =
       normalizeRuntimeScope(enrichedParams.runtimeScope) ?? resolveRuntimeScopeFromEnv();
     if (runtimeScope) {
@@ -230,11 +305,28 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: 'Queue unavailable' }, { status: 503 });
       }
 
-      const cerebrasKey =
-        BYOK_ENABLED && billingUserId
-          ? await getDecryptedUserModelKey({ userId: billingUserId, provider: 'cerebras' })
+      const providerResolution =
+        BYOK_ENABLED && requesterUserId && billingUserId
+          ? await resolveProviderKeyWithFallback({
+              req,
+              provider: 'cerebras',
+              userId: requesterUserId,
+              billingUserId,
+              roomScope: trimmedRoom,
+            })
           : null;
-      const useFast = normalizedTask !== 'scorecard.fact_check' && isFastStewardReady(cerebrasKey ?? undefined);
+      const cerebrasKey = providerResolution?.key ?? null;
+      const openAiResolution =
+        BYOK_ENABLED && requesterUserId && billingUserId
+          ? await resolveProviderKeyWithFallback({
+              req,
+              provider: 'openai',
+              userId: requesterUserId,
+              billingUserId,
+              roomScope: trimmedRoom,
+            })
+          : null;
+      const useFast = scorecardFastEligible && isFastStewardReady(cerebrasKey ?? undefined);
       try {
         if (useFast) {
           await runDebateScorecardStewardFast({
@@ -245,6 +337,10 @@ export async function POST(req: NextRequest) {
             prompt: normalizedPrompt,
             topic: normalizedTopic,
             cerebrasApiKey: cerebrasKey ?? undefined,
+            model:
+              typeof enrichedParams.fastStewardModel === 'string'
+                ? enrichedParams.fastStewardModel
+                : undefined,
           });
         } else {
           await runDebateScorecardSteward({
@@ -255,6 +351,12 @@ export async function POST(req: NextRequest) {
             summary: normalizedSummary,
             prompt: normalizedPrompt,
             topic: normalizedTopic,
+            model: typeof enrichedParams.model === 'string' ? enrichedParams.model : undefined,
+            searchModel:
+              typeof enrichedParams.searchModel === 'string' ? enrichedParams.searchModel : undefined,
+            configVersion:
+              typeof enrichedParams.configVersion === 'string' ? enrichedParams.configVersion : undefined,
+            openaiApiKey: openAiResolution?.key ?? undefined,
           });
         }
         return NextResponse.json({ status: 'executed_fallback' }, { status: 202 });
@@ -264,7 +366,16 @@ export async function POST(req: NextRequest) {
       }
     }
   } catch (error) {
-    logger.error('invalid request', { error: error instanceof Error ? error.message : String(error) });
-    return NextResponse.json({ error: 'Bad Request' }, { status: 400 });
+    const message = error instanceof Error ? error.message : String(error);
+    logger.error('runScorecard request failed', { error: message });
+    const status = error instanceof SyntaxError || error instanceof ZodError ? 400 : 500;
+    return NextResponse.json(
+      {
+        error: status === 400 ? 'Bad Request' : 'Internal Server Error',
+        code: status === 400 ? 'invalid_request_body' : 'internal_error',
+        ...(status === 400 ? { detail: message.slice(0, 240) } : {}),
+      },
+      { status },
+    );
   }
 }

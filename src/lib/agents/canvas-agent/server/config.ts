@@ -96,18 +96,18 @@ export type CanvasAgentConfig = {
   followups: FollowupConfig;
 };
 
-type ConfigOverrides = Partial<Omit<CanvasAgentConfig, 'screenshot' | 'prompt' | 'followups'>> & {
+export type CanvasConfigOverrides = Partial<Omit<CanvasAgentConfig, 'screenshot' | 'prompt' | 'followups'>> & {
   screenshot?: Partial<ScreenshotConfig>;
   prompt?: Partial<PromptConfig>;
   followups?: Partial<FollowupConfig>;
 };
 
-const parseOverrides = (raw?: string): ConfigOverrides => {
+const parseOverrides = (raw?: string): CanvasConfigOverrides => {
   if (!raw) return {};
   try {
     const parsed = JSON.parse(raw);
     if (parsed && typeof parsed === 'object') {
-      return parsed as ConfigOverrides;
+      return parsed as CanvasConfigOverrides;
     }
   } catch {
     console.warn('[CanvasAgent:Config] Failed to parse CANVAS_AGENT_CONFIG JSON; falling back to env defaults');
@@ -130,7 +130,10 @@ const coerceBoolean = (value: string | undefined, fallback: boolean): boolean =>
   return fallback;
 };
 
-export function loadCanvasAgentConfig(env: NodeJS.ProcessEnv = process.env): CanvasAgentConfig {
+export function loadCanvasAgentConfig(
+  env: NodeJS.ProcessEnv = process.env,
+  inlineOverrides: CanvasConfigOverrides = {},
+): CanvasAgentConfig {
   const preset = resolvePreset(env);
   const screenshotMaxEdge = clampScreenshotEdge(env.CANVAS_AGENT_SCREENSHOT_MAX_SIZE);
   const screenshotMinEdge = clampScreenshotEdge(
@@ -190,7 +193,23 @@ export function loadCanvasAgentConfig(env: NodeJS.ProcessEnv = process.env): Can
     },
   };
 
-  const overrides = parseOverrides(env.CANVAS_AGENT_CONFIG);
+  const envOverrides = parseOverrides(env.CANVAS_AGENT_CONFIG);
+  const overrides = {
+    ...envOverrides,
+    ...inlineOverrides,
+    screenshot: {
+      ...(envOverrides.screenshot ?? {}),
+      ...(inlineOverrides.screenshot ?? {}),
+    },
+    prompt: {
+      ...(envOverrides.prompt ?? {}),
+      ...(inlineOverrides.prompt ?? {}),
+    },
+    followups: {
+      ...(envOverrides.followups ?? {}),
+      ...(inlineOverrides.followups ?? {}),
+    },
+  } as CanvasConfigOverrides;
   const merged: CanvasAgentConfig = {
     ...baseConfig,
     ...overrides,

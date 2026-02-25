@@ -15,8 +15,9 @@ import {
   parseCrowdPulseFallbackInstruction,
   type CrowdPulsePatch,
 } from './crowd-pulse-parser';
+import { resolveFastStewardModel } from '@/lib/agents/control-plane/fast-model';
 
-const CEREBRAS_MODEL = getModelForSteward('CROWD_PULSE_STEWARD_FAST_MODEL');
+const getCrowdPulseFastModel = () => getModelForSteward('CROWD_PULSE_STEWARD_FAST_MODEL');
 
 const CROWD_PULSE_SYSTEM = `
 You are a fast crowd pulse steward for a realtime collaborative workspace.
@@ -94,6 +95,12 @@ export async function runCrowdPulseStewardFast(params: {
   contextProfile?: string;
 }): Promise<CrowdPulsePatch> {
   const { room, instruction, contextBundle, contextProfile } = params;
+  const { model: CEREBRAS_MODEL } = await resolveFastStewardModel({
+    steward: 'crowd_pulse',
+    stewardEnvVar: 'CROWD_PULSE_STEWARD_FAST_MODEL',
+    room,
+    task: 'crowd_pulse.fast',
+  }).catch(() => ({ model: getCrowdPulseFastModel() }));
   const [transcript, contextDocs] = await Promise.all([
     getTranscriptWindow(room, resolveWindowMs(contextProfile)),
     getContextDocuments(room),
