@@ -1,7 +1,7 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { createHash, randomUUID } from 'crypto';
 import { createLogger } from '@/lib/logging';
-import { getBooleanFlag, getNumberFlag } from '@/lib/feature-flags';
+import { getNumberFlag } from '@/lib/feature-flags';
 
 type JsonObject = Record<string, unknown>;
 
@@ -65,10 +65,6 @@ export type ToolIoEventInput = ReplayCorrelation &
 
 const logger = createLogger('agents:replay-telemetry');
 
-const replayTelemetryEnabled = getBooleanFlag(
-  process.env.AGENT_REPLAY_TELEMETRY_ENABLED,
-  true,
-);
 const replayTelemetryRetentionDays = Math.max(
   1,
   Math.floor(getNumberFlag(process.env.AGENT_REPLAY_RETENTION_DAYS, 90)),
@@ -167,7 +163,7 @@ const getReplayDb = (): SupabaseClient | null => {
     replayDbConfigMissing = true;
     if (!replayDbConfigWarned) {
       replayDbConfigWarned = true;
-      logger.warn('replay telemetry disabled: missing supabase service-role config');
+      logger.warn('replay telemetry unavailable: missing supabase service-role config');
     }
     return null;
   }
@@ -178,7 +174,6 @@ const getReplayDb = (): SupabaseClient | null => {
 };
 
 const enqueueReplayEntry = (entry: ReplayQueueEntry): boolean => {
-  if (!replayTelemetryEnabled) return false;
   if (!getReplayDb()) return false;
 
   if (replayQueue.length >= replayTelemetryQueueMax) {
@@ -313,8 +308,6 @@ const queueBlobRows = (
 };
 
 export const recordModelIoEvent = (input: ModelIoEventInput): boolean => {
-  if (!replayTelemetryEnabled) return false;
-
   const createdAt = nowIso();
   const expiresAt = expiresAtIso(createdAt);
   const priority = input.priority ?? (input.error ? 'high' : 'normal');
@@ -369,8 +362,6 @@ export const recordModelIoEvent = (input: ModelIoEventInput): boolean => {
 };
 
 export const recordToolIoEvent = (input: ToolIoEventInput): boolean => {
-  if (!replayTelemetryEnabled) return false;
-
   const createdAt = nowIso();
   const expiresAt = expiresAtIso(createdAt);
   const priority = input.priority ?? (input.error ? 'high' : 'normal');
@@ -425,7 +416,6 @@ export const recordToolIoEvent = (input: ToolIoEventInput): boolean => {
 };
 
 export const flushReplayTelemetryNow = async (): Promise<void> => {
-  if (!replayTelemetryEnabled) return;
   if (replayFlushing) return;
 
   const db = getReplayDb();
