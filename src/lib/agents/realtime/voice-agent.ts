@@ -1144,50 +1144,209 @@ Your only output is function calls. Never use plain text unless absolutely neces
       }
     });
 
+    const asRecord = (value: unknown): Record<string, unknown> | null => {
+      if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+      return value as Record<string, unknown>;
+    };
+
+    const readStringCandidate = (...values: unknown[]): string | undefined => {
+      for (const value of values) {
+        if (typeof value !== 'string') continue;
+        const trimmed = value.trim();
+        if (trimmed.length > 0) return trimmed;
+      }
+      return undefined;
+    };
+
+    const resolvePendingReplayContext = (input: {
+      callId?: string;
+      requestId?: string;
+      traceId?: string;
+      intentId?: string;
+    }): { callId?: string; pending?: PendingToolReplay } => {
+      if (input.callId) {
+        const pending = pendingToolReplayByCallId.get(input.callId);
+        if (pending) return { callId: input.callId, pending };
+      }
+      if (input.requestId) {
+        for (const [pendingCallId, pending] of pendingToolReplayByCallId.entries()) {
+          if (pending.requestId && pending.requestId === input.requestId) {
+            return { callId: pendingCallId, pending };
+          }
+        }
+      }
+      if (input.traceId) {
+        for (const [pendingCallId, pending] of pendingToolReplayByCallId.entries()) {
+          if (pending.traceId && pending.traceId === input.traceId) {
+            return { callId: pendingCallId, pending };
+          }
+        }
+      }
+      if (input.intentId) {
+        for (const [pendingCallId, pending] of pendingToolReplayByCallId.entries()) {
+          if (pending.intentId && pending.intentId === input.intentId) {
+            return { callId: pendingCallId, pending };
+          }
+        }
+      }
+      return { callId: input.callId, pending: undefined };
+    };
+
     liveKitBus.on('tool_result', (message: unknown) => {
       try {
         const record = message && typeof message === 'object' ? (message as Record<string, unknown>) : null;
         if (!record) return;
-        const callId = typeof record.id === 'string' && record.id.trim().length > 0 ? record.id.trim() : undefined;
-        const payload = record.payload && typeof record.payload === 'object'
-          ? (record.payload as Record<string, unknown>)
-          : null;
-        const result =
-          (payload?.result && typeof payload.result === 'object'
-            ? (payload.result as Record<string, unknown>)
-            : null) ??
-          (record.result && typeof record.result === 'object'
-            ? (record.result as Record<string, unknown>)
-            : null);
+        const payload = asRecord(record.payload);
+        const payloadContext = asRecord(payload?.context);
+        const payloadResult = asRecord(payload?.result);
+        const recordResult = asRecord(record.result);
+        const result = payloadResult ?? recordResult;
+        const resultContext = asRecord(result?.context);
+        const callIdCandidate = readStringCandidate(
+          record.id,
+          (record as Record<string, unknown>).tool_call_id,
+          (record as Record<string, unknown>).toolCallId,
+          payload?.tool_call_id,
+          payload?.toolCallId,
+          payloadContext?.tool_call_id,
+          payloadContext?.toolCallId,
+          result?.tool_call_id,
+          result?.toolCallId,
+          result?.id,
+          resultContext?.tool_call_id,
+          resultContext?.toolCallId,
+        );
+        const requestIdCandidate = readStringCandidate(
+          payload?.request_id,
+          payload?.requestId,
+          payloadContext?.request_id,
+          payloadContext?.requestId,
+          result?.request_id,
+          result?.requestId,
+          resultContext?.request_id,
+          resultContext?.requestId,
+          record.request_id,
+          (record as Record<string, unknown>).requestId,
+        );
+        const traceIdCandidate = readStringCandidate(
+          payload?.trace_id,
+          payload?.traceId,
+          payloadContext?.trace_id,
+          payloadContext?.traceId,
+          result?.trace_id,
+          result?.traceId,
+          resultContext?.trace_id,
+          resultContext?.traceId,
+          record.trace_id,
+          (record as Record<string, unknown>).traceId,
+        );
+        const intentIdCandidate = readStringCandidate(
+          payload?.intent_id,
+          payload?.intentId,
+          payloadContext?.intent_id,
+          payloadContext?.intentId,
+          result?.intent_id,
+          result?.intentId,
+          resultContext?.intent_id,
+          resultContext?.intentId,
+          record.intent_id,
+          (record as Record<string, unknown>).intentId,
+        );
+        const resolvedReplayContext = resolvePendingReplayContext({
+          callId: callIdCandidate,
+          requestId: requestIdCandidate,
+          traceId: traceIdCandidate,
+          intentId: intentIdCandidate,
+        });
+        const callId = resolvedReplayContext.callId;
+        const replayContext = resolvedReplayContext.pending;
         const statusRaw =
-          (typeof payload?.status === 'string' ? payload.status : undefined) ??
-          (typeof record.status === 'string' ? record.status : undefined) ??
-          (typeof result?.status === 'string' ? result.status : undefined) ??
+          readStringCandidate(payload?.status, result?.status, record.status) ??
           '';
         const status = statusRaw.trim().toUpperCase();
-        const replayContext = callId ? pendingToolReplayByCallId.get(callId) : undefined;
-        const resolvedToolName =
-          (typeof payload?.tool === 'string' ? payload.tool : undefined) ??
-          replayContext?.tool ??
-          (typeof record.tool === 'string' ? record.tool : undefined) ??
-          'unknown_tool';
+        const resolvedToolName = readStringCandidate(
+          payload?.tool,
+          result?.tool,
+          record.tool,
+          replayContext?.tool,
+        ) ?? 'unknown_tool';
+        const requestId = requestIdCandidate ?? replayContext?.requestId;
+        const traceId = traceIdCandidate ?? replayContext?.traceId ?? requestId;
+        const intentId = intentIdCandidate ?? replayContext?.intentId ?? requestId;
+        const provider = readStringCandidate(
+          payload?.provider,
+          payloadContext?.provider,
+          result?.provider,
+          resultContext?.provider,
+          record.provider,
+          replayContext?.provider,
+        );
+        const model = readStringCandidate(
+          payload?.model,
+          payloadContext?.model,
+          result?.model,
+          resultContext?.model,
+          record.model,
+          replayContext?.model,
+        );
+        const providerPath = readStringCandidate(
+          payload?.provider_path,
+          payload?.providerPath,
+          payloadContext?.provider_path,
+          payloadContext?.providerPath,
+          result?.provider_path,
+          result?.providerPath,
+          resultContext?.provider_path,
+          resultContext?.providerPath,
+          (record as Record<string, unknown>).provider_path,
+          (record as Record<string, unknown>).providerPath,
+          replayContext?.providerPath,
+        );
+        const providerSource = readStringCandidate(
+          payload?.provider_source,
+          payload?.providerSource,
+          payloadContext?.provider_source,
+          payloadContext?.providerSource,
+          result?.provider_source,
+          result?.providerSource,
+          resultContext?.provider_source,
+          resultContext?.providerSource,
+          (record as Record<string, unknown>).provider_source,
+          (record as Record<string, unknown>).providerSource,
+          replayContext?.providerSource,
+        );
+        const providerRequestId = readStringCandidate(
+          payload?.provider_request_id,
+          payload?.providerRequestId,
+          payloadContext?.provider_request_id,
+          payloadContext?.providerRequestId,
+          result?.provider_request_id,
+          result?.providerRequestId,
+          resultContext?.provider_request_id,
+          resultContext?.providerRequestId,
+          (record as Record<string, unknown>).provider_request_id,
+          (record as Record<string, unknown>).providerRequestId,
+          replayContext?.providerRequestId,
+        );
         recordVoiceToolEvent({
           eventType: 'tool_result',
           toolName: resolvedToolName,
           toolCallId: callId,
           status: statusRaw || 'tool_result',
-          requestId: replayContext?.requestId,
-          traceId: replayContext?.traceId,
-          intentId: replayContext?.intentId,
-          provider: replayContext?.provider,
-          model: replayContext?.model,
-          providerPath: replayContext?.providerPath,
-          providerSource: replayContext?.providerSource,
-          providerRequestId: replayContext?.providerRequestId,
+          requestId,
+          traceId,
+          intentId,
+          provider,
+          model,
+          providerPath,
+          providerSource,
+          providerRequestId,
           input: replayContext?.input,
           output: result ?? payload ?? record,
           metadata: {
-            source: typeof record.source === 'string' ? record.source : 'tool_result',
+            source:
+              readStringCandidate(record.source, payload?.source, payloadContext?.source) ??
+              'tool_result',
           },
         });
         const terminalStatus =
@@ -1238,36 +1397,163 @@ Your only output is function calls. Never use plain text unless absolutely neces
       try {
         const record = message && typeof message === 'object' ? (message as Record<string, unknown>) : null;
         if (!record) return;
-        const callId = typeof record.id === 'string' && record.id.trim().length > 0 ? record.id.trim() : undefined;
-        const payload = record.payload && typeof record.payload === 'object'
-          ? (record.payload as Record<string, unknown>)
-          : null;
+        const payload = asRecord(record.payload);
+        const payloadContext = asRecord(payload?.context);
+        const payloadError = asRecord(payload?.error);
+        const recordError = asRecord(record.error);
+        const result = asRecord(payload?.result) ?? asRecord(record.result);
+        const resultContext = asRecord(result?.context);
+        const callIdCandidate = readStringCandidate(
+          record.id,
+          (record as Record<string, unknown>).tool_call_id,
+          (record as Record<string, unknown>).toolCallId,
+          payload?.tool_call_id,
+          payload?.toolCallId,
+          payloadContext?.tool_call_id,
+          payloadContext?.toolCallId,
+          result?.tool_call_id,
+          result?.toolCallId,
+          result?.id,
+          resultContext?.tool_call_id,
+          resultContext?.toolCallId,
+        );
+        const requestIdCandidate = readStringCandidate(
+          payload?.request_id,
+          payload?.requestId,
+          payloadContext?.request_id,
+          payloadContext?.requestId,
+          result?.request_id,
+          result?.requestId,
+          resultContext?.request_id,
+          resultContext?.requestId,
+          record.request_id,
+          (record as Record<string, unknown>).requestId,
+        );
+        const traceIdCandidate = readStringCandidate(
+          payload?.trace_id,
+          payload?.traceId,
+          payloadContext?.trace_id,
+          payloadContext?.traceId,
+          result?.trace_id,
+          result?.traceId,
+          resultContext?.trace_id,
+          resultContext?.traceId,
+          record.trace_id,
+          (record as Record<string, unknown>).traceId,
+        );
+        const intentIdCandidate = readStringCandidate(
+          payload?.intent_id,
+          payload?.intentId,
+          payloadContext?.intent_id,
+          payloadContext?.intentId,
+          result?.intent_id,
+          result?.intentId,
+          resultContext?.intent_id,
+          resultContext?.intentId,
+          record.intent_id,
+          (record as Record<string, unknown>).intentId,
+        );
+        const resolvedReplayContext = resolvePendingReplayContext({
+          callId: callIdCandidate,
+          requestId: requestIdCandidate,
+          traceId: traceIdCandidate,
+          intentId: intentIdCandidate,
+        });
+        const callId = resolvedReplayContext.callId;
+        const replayContext = resolvedReplayContext.pending;
         const errorValue = payload?.error ?? record.error;
         const reason =
           typeof errorValue === 'string'
             ? errorValue
-            : errorValue && typeof errorValue === 'object' && typeof (errorValue as any).message === 'string'
-              ? (errorValue as any).message
+            : payloadError && typeof payloadError.message === 'string'
+              ? payloadError.message
+              : recordError && typeof recordError.message === 'string'
+                ? recordError.message
               : 'tool_error';
-        const replayContext = callId ? pendingToolReplayByCallId.get(callId) : undefined;
+        const resolvedToolName = readStringCandidate(
+          payload?.tool,
+          result?.tool,
+          record.tool,
+          replayContext?.tool,
+        ) ?? 'unknown_tool';
+        const requestId = requestIdCandidate ?? replayContext?.requestId;
+        const traceId = traceIdCandidate ?? replayContext?.traceId ?? requestId;
+        const intentId = intentIdCandidate ?? replayContext?.intentId ?? requestId;
+        const provider = readStringCandidate(
+          payload?.provider,
+          payloadContext?.provider,
+          result?.provider,
+          resultContext?.provider,
+          record.provider,
+          replayContext?.provider,
+        );
+        const model = readStringCandidate(
+          payload?.model,
+          payloadContext?.model,
+          result?.model,
+          resultContext?.model,
+          record.model,
+          replayContext?.model,
+        );
+        const providerPath = readStringCandidate(
+          payload?.provider_path,
+          payload?.providerPath,
+          payloadContext?.provider_path,
+          payloadContext?.providerPath,
+          result?.provider_path,
+          result?.providerPath,
+          resultContext?.provider_path,
+          resultContext?.providerPath,
+          (record as Record<string, unknown>).provider_path,
+          (record as Record<string, unknown>).providerPath,
+          replayContext?.providerPath,
+        );
+        const providerSource = readStringCandidate(
+          payload?.provider_source,
+          payload?.providerSource,
+          payloadContext?.provider_source,
+          payloadContext?.providerSource,
+          result?.provider_source,
+          result?.providerSource,
+          resultContext?.provider_source,
+          resultContext?.providerSource,
+          (record as Record<string, unknown>).provider_source,
+          (record as Record<string, unknown>).providerSource,
+          replayContext?.providerSource,
+        );
+        const providerRequestId = readStringCandidate(
+          payload?.provider_request_id,
+          payload?.providerRequestId,
+          payloadContext?.provider_request_id,
+          payloadContext?.providerRequestId,
+          result?.provider_request_id,
+          result?.providerRequestId,
+          resultContext?.provider_request_id,
+          resultContext?.providerRequestId,
+          (record as Record<string, unknown>).provider_request_id,
+          (record as Record<string, unknown>).providerRequestId,
+          replayContext?.providerRequestId,
+        );
         recordVoiceToolEvent({
           eventType: 'tool_error',
-          toolName: replayContext?.tool ?? 'unknown_tool',
+          toolName: resolvedToolName,
           toolCallId: callId,
           status: 'error',
-          requestId: replayContext?.requestId,
-          traceId: replayContext?.traceId,
-          intentId: replayContext?.intentId,
-          provider: replayContext?.provider,
-          model: replayContext?.model,
-          providerPath: replayContext?.providerPath,
-          providerSource: replayContext?.providerSource,
-          providerRequestId: replayContext?.providerRequestId,
+          requestId,
+          traceId,
+          intentId,
+          provider,
+          model,
+          providerPath,
+          providerSource,
+          providerRequestId,
           input: replayContext?.input,
           output: payload ?? record,
           error: String(reason),
           metadata: {
-            source: typeof record.source === 'string' ? record.source : 'tool_error',
+            source:
+              readStringCandidate(record.source, payload?.source, payloadContext?.source) ??
+              'tool_error',
           },
           priority: 'high',
         });

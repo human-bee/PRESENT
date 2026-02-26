@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { recordExternalTelemetryEvent } from '@/lib/agents/shared/replay-telemetry';
+import {
+  flushReplayTelemetryNow,
+  recordExternalTelemetryEvent,
+} from '@/lib/agents/shared/replay-telemetry';
 import { resolveRequestUser } from '@/lib/supabase/server/resolve-request-user';
 
 export const runtime = 'nodejs';
@@ -22,15 +25,15 @@ const readBearer = (req: NextRequest): string | undefined => {
 const isAuthorized = async (req: NextRequest): Promise<boolean> => {
   const token = normalizeOptional(process.env.AGENT_TELEMETRY_INGEST_TOKEN);
   const bearer = readBearer(req);
-  if (token && bearer === token) return true;
+  if (token) {
+    // Hard requirement: when ingest token is configured, require bearer-token auth.
+    return bearer === token;
+  }
 
   const user = await resolveRequestUser(req);
   if (user?.id) return true;
 
-  if (!token) {
-    return process.env.NODE_ENV !== 'production';
-  }
-  return false;
+  return process.env.NODE_ENV !== 'production';
 };
 
 export async function POST(req: NextRequest) {
@@ -70,7 +73,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ status: 'dropped' }, { status: 202 });
     }
 
-    return NextResponse.json({ status: 'ok' });
+    const flushed = await flushReplayTelemetryNow();
+    if (!flushed) {
+      return NextResponse.json({ status: 'queued' }, { status: 202 });
+    }
+    return NextResponse.json({ status: 'ok' }, { status: 200 });
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : String(error) },

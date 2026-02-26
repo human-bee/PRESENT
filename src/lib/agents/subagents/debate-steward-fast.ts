@@ -169,10 +169,24 @@ export async function runDebateScorecardStewardFast(params: {
   topic?: string;
   cerebrasApiKey?: string;
   model?: string;
+  requestId?: string;
+  traceId?: string;
+  intentId?: string;
 }) {
   const { room, componentId, intent, summary, prompt, topic, cerebrasApiKey, model } = params;
   const start = Date.now();
-  const requestId = `${componentId}:${Date.now()}`;
+  const requestId =
+    typeof params.requestId === 'string' && params.requestId.trim().length > 0
+      ? params.requestId.trim()
+      : `${componentId}:${Date.now()}`;
+  const traceId =
+    typeof params.traceId === 'string' && params.traceId.trim().length > 0
+      ? params.traceId.trim()
+      : requestId;
+  const resolvedIntentId =
+    typeof params.intentId === 'string' && params.intentId.trim().length > 0
+      ? params.intentId.trim()
+      : intent ?? requestId;
   const resolvedDebateModel =
     typeof model === 'string' && model.trim()
       ? normalizeFastStewardModel(model)
@@ -219,8 +233,8 @@ export async function runDebateScorecardStewardFast(params: {
     sessionId: `fast-debate-${room}`,
     room,
     requestId,
-    traceId: requestId,
-    intentId: intent ?? requestId,
+    traceId,
+    intentId: resolvedIntentId,
     provider: debateFastTrace.provider,
     model: debateFastTrace.model,
     providerSource: debateFastTrace.providerSource,
@@ -249,8 +263,8 @@ export async function runDebateScorecardStewardFast(params: {
       sessionId: `fast-debate-${room}`,
       room,
       requestId,
-      traceId: requestId,
-      intentId: intent ?? requestId,
+      traceId,
+      intentId: resolvedIntentId,
       provider: debateFastTrace.provider,
       model: debateFastTrace.model,
       providerSource: debateFastTrace.providerSource,
@@ -271,8 +285,8 @@ export async function runDebateScorecardStewardFast(params: {
         sessionId: `fast-debate-${room}`,
         room,
         requestId,
-        traceId: requestId,
-        intentId: intent ?? requestId,
+        traceId,
+        intentId: resolvedIntentId,
         toolName: 'commit_debate_scorecard',
         toolCallId: requestId,
         input: { rawContent },
@@ -315,8 +329,8 @@ export async function runDebateScorecardStewardFast(params: {
         sessionId: `fast-debate-${room}`,
         room,
         requestId,
-        traceId: requestId,
-        intentId: intent ?? requestId,
+        traceId,
+        intentId: resolvedIntentId,
         toolName: 'commit_debate_scorecard',
         toolCallId: requestId,
         input: parsedResponse,
@@ -370,8 +384,8 @@ export async function runDebateScorecardStewardFast(params: {
       sessionId: `fast-debate-${room}`,
       room,
       requestId,
-      traceId: requestId,
-      intentId: intent ?? requestId,
+      traceId,
+      intentId: resolvedIntentId,
       toolName: 'commit_debate_scorecard',
       toolCallId: requestId,
       input: {
@@ -426,8 +440,8 @@ export async function runDebateScorecardStewardFast(params: {
       sessionId: `fast-debate-${room}`,
       room,
       requestId,
-      traceId: requestId,
-      intentId: intent ?? requestId,
+      traceId,
+      intentId: resolvedIntentId,
       provider: debateFastTrace.provider,
       model: debateFastTrace.model,
       providerSource: debateFastTrace.providerSource,

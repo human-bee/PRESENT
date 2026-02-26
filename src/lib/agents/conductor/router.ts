@@ -739,6 +739,7 @@ const dispatchSummaryDocument = async (
   intent: FairyIntent,
   decision: Pick<FairyRouteDecision, 'summary' | 'message'>,
   contextProfile: FairyContextProfile,
+  correlation?: { requestId?: string; traceId?: string; intentId?: string },
   contextBundle?: { parts?: unknown[] } | undefined,
 ) => {
   const bundleText =
@@ -751,6 +752,9 @@ const dispatchSummaryDocument = async (
     instruction,
     contextBundle: bundleText,
     contextProfile,
+    requestId: correlation?.requestId ?? intent.id,
+    traceId: correlation?.traceId ?? intent.id,
+    intentId: correlation?.intentId ?? intent.id,
   });
   const formatted = formatSummaryMarkdown(result);
   const documentId = `${intent.id}-summary`;
@@ -1050,7 +1054,17 @@ async function handleFairyIntent(rawParams: JsonObject) {
     }
 
     if (decisionLike.kind === 'summary') {
-      return dispatchSummaryDocument(intent, { summary, message }, actionProfile, contextBundle);
+      return dispatchSummaryDocument(
+        intent,
+        { summary, message },
+        actionProfile,
+        {
+          requestId: replayRequestId,
+          traceId: replayTraceId,
+          intentId: replayIntentId,
+        },
+        contextBundle,
+      );
     }
 
     if (decisionLike.kind === 'crowd_pulse') {
@@ -1065,6 +1079,9 @@ async function handleFairyIntent(rawParams: JsonObject) {
         instruction: stewardInstruction,
         contextBundle: bundleText,
         contextProfile: actionProfile,
+        requestId: replayRequestId ?? intent.id,
+        traceId: replayTraceId ?? intent.id,
+        intentId: replayIntentId ?? intent.id,
       });
       const normalizedActiveQuestion = normalizeCrowdPulseActiveQuestionInput(
         patch.activeQuestion,
@@ -2000,6 +2017,9 @@ async function executeTaskLegacy(taskName: string, params: JsonObject) {
             prompt: stewardPrompt,
             topic: parsed.topic,
             cerebrasApiKey: cerebrasApiKey ?? undefined,
+            requestId: replayRequestId,
+            traceId: replayTraceId,
+            intentId: replayIntentId,
             model:
               typeof (parsed as Record<string, unknown>).fastStewardModel === 'string'
                 ? String((parsed as Record<string, unknown>).fastStewardModel)

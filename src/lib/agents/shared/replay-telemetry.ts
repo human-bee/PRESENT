@@ -464,11 +464,61 @@ export const recordToolIoEvent = (input: ToolIoEventInput): boolean => {
   });
 };
 
-export const flushReplayTelemetryNow = async (): Promise<void> => {
-  if (replayFlushing) return;
+const upsertReplayRowsWithIsolation = async (
+  db: SupabaseClient,
+  table: ReplayTable,
+  rows: Record<string, unknown>[],
+): Promise<{
+  ok: boolean;
+  isolateDroppedRows: number;
+  isolateFailedRows: Record<string, unknown>[];
+  errorMessage?: string;
+}> => {
+  const config = REPLAY_TABLE_CONFIG[table];
+  const primary = await db.from(table).upsert(rows, {
+    onConflict: config.onConflict,
+    ignoreDuplicates: config.ignoreDuplicates,
+  });
+  if (!primary.error) {
+    return { ok: true, isolateDroppedRows: 0, isolateFailedRows: [] };
+  }
+
+  if (rows.length <= 1) {
+    return {
+      ok: false,
+      isolateDroppedRows: 0,
+      isolateFailedRows: rows,
+      errorMessage: primary.error.message,
+    };
+  }
+
+  const isolateFailedRows: Record<string, unknown>[] = [];
+  let isolateDroppedRows = 0;
+  for (const row of rows) {
+    const single = await db.from(table).upsert([row], {
+      onConflict: config.onConflict,
+      ignoreDuplicates: config.ignoreDuplicates,
+    });
+    if (single.error) {
+      isolateFailedRows.push(row);
+      continue;
+    }
+    isolateDroppedRows += 1;
+  }
+
+  return {
+    ok: isolateFailedRows.length < rows.length,
+    isolateDroppedRows,
+    isolateFailedRows,
+    errorMessage: primary.error.message,
+  };
+};
+
+export const flushReplayTelemetryNow = async (): Promise<boolean> => {
+  if (replayFlushing) return false;
 
   const db = getReplayDb();
-  if (!db) return;
+  if (!db) return false;
 
   replayFlushing = true;
   try {
@@ -490,16 +540,21 @@ export const flushReplayTelemetryNow = async (): Promise<void> => {
       for (const table of replayTables) {
         const rows = grouped[table];
         if (rows.length === 0) continue;
-        const config = REPLAY_TABLE_CONFIG[table];
-        const { error } = await db.from(table).upsert(rows, {
-          onConflict: config.onConflict,
-          ignoreDuplicates: config.ignoreDuplicates,
-        });
-        if (error) {
+        const result = await upsertReplayRowsWithIsolation(db, table, rows);
+        if (result.ok && result.isolateFailedRows.length > 0) {
+          logger.warn('replay telemetry dropped irrecoverable rows during isolate flush', {
+            table,
+            failedRows: result.isolateFailedRows.length,
+            recoveredRows: result.isolateDroppedRows,
+            firstEventId: result.isolateFailedRows[0]?.event_id ?? null,
+          });
+          continue;
+        }
+        if (!result.ok) {
           logger.warn('replay telemetry insert failed', {
             table,
             rows: rows.length,
-            error: error.message,
+            error: result.errorMessage ?? 'unknown',
           });
           failed = true;
           break;
@@ -508,9 +563,10 @@ export const flushReplayTelemetryNow = async (): Promise<void> => {
       if (failed) {
         replayQueue.unshift(...batch);
         scheduleReplayFlush(Math.max(replayTelemetryFlushMs, 250));
-        return;
+        return false;
       }
     }
+    return replayQueue.length === 0;
   } finally {
     replayFlushing = false;
   }

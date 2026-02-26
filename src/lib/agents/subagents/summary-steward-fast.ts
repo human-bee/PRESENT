@@ -77,6 +77,9 @@ export async function runSummaryStewardFast(params: {
   instruction?: string;
   contextBundle?: string;
   contextProfile?: string;
+  requestId?: string;
+  traceId?: string;
+  intentId?: string;
 }): Promise<SummaryResult> {
   const { room, instruction, contextBundle, contextProfile } = params;
   const { model: CEREBRAS_MODEL } = await resolveFastStewardModel({
@@ -85,7 +88,18 @@ export async function runSummaryStewardFast(params: {
     room,
     task: 'summary.fast',
   }).catch(() => ({ model: getSummaryFastModel() }));
-  const requestId = `summary:${room}:${Date.now()}`;
+  const requestId =
+    typeof params.requestId === 'string' && params.requestId.trim().length > 0
+      ? params.requestId.trim()
+      : `summary:${room}:${Date.now()}`;
+  const traceId =
+    typeof params.traceId === 'string' && params.traceId.trim().length > 0
+      ? params.traceId.trim()
+      : requestId;
+  const intentId =
+    typeof params.intentId === 'string' && params.intentId.trim().length > 0
+      ? params.intentId.trim()
+      : requestId;
   const [transcript, contextDocs] = await Promise.all([
     getTranscriptWindow(room, resolveWindowMs(contextProfile)),
     getContextDocuments(room),
@@ -122,8 +136,8 @@ export async function runSummaryStewardFast(params: {
     sessionId: `fast-summary-${room}`,
     room,
     requestId,
-    traceId: requestId,
-    intentId: requestId,
+    traceId,
+    intentId,
     provider: 'cerebras',
     model: CEREBRAS_MODEL,
     providerSource: 'runtime_selected',
@@ -148,8 +162,8 @@ export async function runSummaryStewardFast(params: {
       sessionId: `fast-summary-${room}`,
       room,
       requestId,
-      traceId: requestId,
-      intentId: requestId,
+      traceId,
+      intentId,
       provider: 'cerebras',
       model: CEREBRAS_MODEL,
       providerSource: 'runtime_selected',
@@ -175,8 +189,8 @@ export async function runSummaryStewardFast(params: {
       sessionId: `fast-summary-${room}`,
       room,
       requestId,
-      traceId: requestId,
-      intentId: requestId,
+      traceId,
+      intentId,
       provider: 'cerebras',
       model: CEREBRAS_MODEL,
       providerSource: 'runtime_selected',
@@ -195,8 +209,8 @@ export async function runSummaryStewardFast(params: {
         sessionId: `fast-summary-${room}`,
         room,
         requestId,
-        traceId: requestId,
-        intentId: requestId,
+        traceId,
+        intentId,
         toolName: toolCall.name,
         toolCallId: `${requestId}:commit_summary`,
         provider: 'cerebras',
@@ -216,8 +230,8 @@ export async function runSummaryStewardFast(params: {
           sessionId: `fast-summary-${room}`,
           room,
           requestId,
-          traceId: requestId,
-          intentId: requestId,
+          traceId,
+          intentId,
           toolName: toolCall.name,
           toolCallId: `${requestId}:commit_summary`,
           provider: 'cerebras',
@@ -250,8 +264,8 @@ export async function runSummaryStewardFast(params: {
           sessionId: `fast-summary-${room}`,
           room,
           requestId,
-          traceId: requestId,
-          intentId: requestId,
+          traceId,
+          intentId,
           toolName: toolCall.name,
           toolCallId: `${requestId}:commit_summary`,
           provider: 'cerebras',
@@ -274,8 +288,8 @@ export async function runSummaryStewardFast(params: {
       sessionId: `fast-summary-${room}`,
       room,
       requestId,
-      traceId: requestId,
-      intentId: requestId,
+      traceId,
+      intentId,
       provider: 'cerebras',
       model: CEREBRAS_MODEL,
       providerSource: 'runtime_selected',
