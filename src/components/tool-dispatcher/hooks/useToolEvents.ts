@@ -233,11 +233,107 @@ export function useToolEvents(room: Room | undefined, options: UseToolEventsOpti
     };
   }, [bus, enableLogging, logger]);
 
+  const readNonEmptyString = (value: unknown): string | undefined => {
+    if (typeof value !== 'string') return undefined;
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : undefined;
+  };
+
+  const readCallCorrelation = (call: ToolCall) => {
+    const context =
+      call.payload?.context && typeof call.payload.context === 'object'
+        ? (call.payload.context as Record<string, unknown>)
+        : {};
+    const toolCallId =
+      readNonEmptyString(context.tool_call_id) ??
+      readNonEmptyString(context.toolCallId) ??
+      call.id;
+    const requestId = readNonEmptyString(context.request_id) ?? readNonEmptyString(context.requestId);
+    const traceId =
+      readNonEmptyString(context.trace_id) ??
+      readNonEmptyString(context.traceId) ??
+      requestId;
+    const intentId =
+      readNonEmptyString(context.intent_id) ??
+      readNonEmptyString(context.intentId) ??
+      requestId;
+    const provider = readNonEmptyString(context.provider);
+    const model = readNonEmptyString(context.model);
+    const providerSource =
+      readNonEmptyString(context.provider_source) ??
+      readNonEmptyString(context.providerSource);
+    const providerPath =
+      readNonEmptyString(context.provider_path) ??
+      readNonEmptyString(context.providerPath);
+    const providerRequestId =
+      readNonEmptyString(context.provider_request_id) ??
+      readNonEmptyString(context.providerRequestId);
+
+    return {
+      toolCallId,
+      requestId,
+      traceId,
+      intentId,
+      provider,
+      model,
+      providerSource,
+      providerPath,
+      providerRequestId,
+    };
+  };
+
   const emitRequest = (call: ToolCall) => emit(TOOL_EVENT_TOPICS.request, { id: call.id, tool: call.payload.tool, timestamp: Date.now() });
   const emitStarted = (call: ToolCall) => emit(TOOL_EVENT_TOPICS.started, { id: call.id, tool: call.payload.tool, timestamp: Date.now() });
   const emitUpdate = (call: ToolCall, payload: unknown) => emit(TOOL_EVENT_TOPICS.update, { id: call.id, tool: call.payload.tool, timestamp: Date.now(), payload });
-  const emitDone = (call: ToolCall, result: ToolRunResult) => emit(TOOL_EVENT_TOPICS.done, { id: call.id, tool: call.payload.tool, timestamp: Date.now(), result });
-  const emitError = (call: ToolCall, error: unknown) => emit(TOOL_EVENT_TOPICS.error, { id: call.id, tool: call.payload.tool, timestamp: Date.now(), error });
+  const emitDone = (call: ToolCall, result: ToolRunResult) => {
+    const correlation = readCallCorrelation(call);
+    const status = readNonEmptyString(result?.status) ?? 'done';
+    emit(TOOL_EVENT_TOPICS.done, {
+      id: call.id,
+      type: 'tool_result',
+      tool: call.payload.tool,
+      timestamp: Date.now(),
+      result,
+      payload: {
+        tool: call.payload.tool,
+        tool_call_id: correlation.toolCallId,
+        request_id: correlation.requestId,
+        trace_id: correlation.traceId,
+        intent_id: correlation.intentId,
+        provider: correlation.provider,
+        model: correlation.model,
+        provider_source: correlation.providerSource,
+        provider_path: correlation.providerPath,
+        provider_request_id: correlation.providerRequestId,
+        status,
+        result,
+      },
+    });
+  };
+  const emitError = (call: ToolCall, error: unknown) => {
+    const correlation = readCallCorrelation(call);
+    emit(TOOL_EVENT_TOPICS.error, {
+      id: call.id,
+      type: 'tool_error',
+      tool: call.payload.tool,
+      timestamp: Date.now(),
+      error,
+      payload: {
+        tool: call.payload.tool,
+        tool_call_id: correlation.toolCallId,
+        request_id: correlation.requestId,
+        trace_id: correlation.traceId,
+        intent_id: correlation.intentId,
+        provider: correlation.provider,
+        model: correlation.model,
+        provider_source: correlation.providerSource,
+        provider_path: correlation.providerPath,
+        provider_request_id: correlation.providerRequestId,
+        status: 'error',
+        error,
+      },
+    });
+  };
   const emitEditorAction = (payload: Record<string, unknown>) => emit(TOOL_EVENT_TOPICS.editorAction, payload);
   const emitDecision = (payload: Record<string, unknown>) => emit(TOOL_EVENT_TOPICS.decision, payload);
   const emitStewardTrigger = (payload: StewardTriggerMessage['payload']) =>

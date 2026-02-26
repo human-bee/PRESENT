@@ -11,6 +11,16 @@ export type ToolEvent = {
     context: {
       source: 'voice';
       timestamp: number;
+      tool_call_id: string;
+      request_id: string;
+      trace_id: string;
+      intent_id: string;
+      session_id?: string;
+      provider?: string;
+      model?: string;
+      provider_source?: string;
+      provider_path?: string;
+      provider_request_id?: string;
       fast_route_type?: 'timer' | 'sticky' | 'plain_text';
       idempotency_key?: string;
       participant_id?: string;
@@ -67,7 +77,16 @@ export const buildToolEvent = (
   tool: string,
   params: JsonObject,
   roomId: string,
-  context?: {
+  context: {
+    requestId: string;
+    traceId: string;
+    intentId: string;
+    sessionId?: string;
+    provider?: string;
+    model?: string;
+    providerSource?: string;
+    providerPath?: string;
+    providerRequestId?: string;
     fast_route_type?: 'timer' | 'sticky' | 'plain_text';
     idempotency_key?: string;
     participant_id?: string;
@@ -78,30 +97,44 @@ export const buildToolEvent = (
     assignment_unit?: 'room_session';
     assignment_ts?: string;
   },
-): ToolEvent => ({
-  id: randomUUID(),
-  roomId,
-  type: 'tool_call',
-  payload: {
-    tool,
-    params,
-    context: {
-      source: 'voice',
-      timestamp: Date.now(),
-      ...(context?.fast_route_type ? { fast_route_type: context.fast_route_type } : {}),
-      ...(context?.idempotency_key ? { idempotency_key: context.idempotency_key } : {}),
-      ...(context?.participant_id ? { participant_id: context.participant_id } : {}),
-      ...(context?.experiment_id ? { experiment_id: context.experiment_id } : {}),
-      ...(context?.variant_id ? { variant_id: context.variant_id } : {}),
-      ...(context?.assignment_namespace ? { assignment_namespace: context.assignment_namespace } : {}),
-      ...(context?.factor_levels ? { factor_levels: context.factor_levels } : {}),
-      ...(context?.assignment_unit ? { assignment_unit: context.assignment_unit } : {}),
-      ...(context?.assignment_ts ? { assignment_ts: context.assignment_ts } : {}),
+): ToolEvent => {
+  const id = randomUUID();
+  const timestamp = Date.now();
+  return {
+    id,
+    roomId,
+    type: 'tool_call',
+    payload: {
+      tool,
+      params,
+      context: {
+        source: 'voice',
+        timestamp,
+        tool_call_id: id,
+        request_id: context.requestId,
+        trace_id: context.traceId,
+        intent_id: context.intentId,
+        ...(context.sessionId ? { session_id: context.sessionId } : {}),
+        ...(context.provider ? { provider: context.provider } : {}),
+        ...(context.model ? { model: context.model } : {}),
+        ...(context.providerSource ? { provider_source: context.providerSource } : {}),
+        ...(context.providerPath ? { provider_path: context.providerPath } : {}),
+        ...(context.providerRequestId ? { provider_request_id: context.providerRequestId } : {}),
+        ...(context.fast_route_type ? { fast_route_type: context.fast_route_type } : {}),
+        ...(context.idempotency_key ? { idempotency_key: context.idempotency_key } : {}),
+        ...(context.participant_id ? { participant_id: context.participant_id } : {}),
+        ...(context.experiment_id ? { experiment_id: context.experiment_id } : {}),
+        ...(context.variant_id ? { variant_id: context.variant_id } : {}),
+        ...(context.assignment_namespace ? { assignment_namespace: context.assignment_namespace } : {}),
+        ...(context.factor_levels ? { factor_levels: context.factor_levels } : {}),
+        ...(context.assignment_unit ? { assignment_unit: context.assignment_unit } : {}),
+        ...(context.assignment_ts ? { assignment_ts: context.assignment_ts } : {}),
+      },
     },
-  },
-  timestamp: Date.now(),
-  source: 'voice',
-});
+    timestamp,
+    source: 'voice',
+  };
+};
 
 export const shouldSuppressCanvasDispatch = ({
   dispatches,

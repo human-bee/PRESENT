@@ -24,11 +24,28 @@ const BaseMessageSchema = z
   })
   .passthrough();
 
+const ToolCorrelationSchema = z
+  .object({
+    source: z.string().min(1).optional(),
+    timestamp: z.number().int().optional(),
+    tool_call_id: z.string().min(1).optional(),
+    request_id: z.string().min(1).optional(),
+    trace_id: z.string().min(1).optional(),
+    intent_id: z.string().min(1).optional(),
+    session_id: z.string().min(1).optional(),
+    provider: z.string().min(1).optional(),
+    model: z.string().min(1).optional(),
+    provider_source: z.string().min(1).optional(),
+    provider_path: z.string().min(1).optional(),
+    provider_request_id: z.string().min(1).optional(),
+  })
+  .passthrough();
+
 export const ToolCallPayloadSchema = z
   .object({
     tool: z.string().min(1),
     params: jsonObjectSchema.optional(),
-    context: jsonObjectSchema.optional(),
+    context: ToolCorrelationSchema.optional(),
   })
   .passthrough();
 
@@ -42,6 +59,15 @@ export const ToolResultMessageSchema = BaseMessageSchema.extend({
   payload: z
     .object({
       tool: z.string().min(1).optional(),
+      tool_call_id: z.string().min(1).optional(),
+      request_id: z.string().min(1).optional(),
+      trace_id: z.string().min(1).optional(),
+      intent_id: z.string().min(1).optional(),
+      provider: z.string().min(1).optional(),
+      model: z.string().min(1).optional(),
+      provider_source: z.string().min(1).optional(),
+      provider_path: z.string().min(1).optional(),
+      provider_request_id: z.string().min(1).optional(),
       status: z.string().optional(),
       result: z.unknown().optional(),
       error: z.unknown().optional(),

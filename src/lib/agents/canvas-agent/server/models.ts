@@ -90,8 +90,32 @@ class AiSdkProvider implements StreamingProvider {
     }
 
     const fallback = await this.generateOnce(prompt, options);
-    if (fallback) {
-      yield { type: 'json', data: fallback };
+    if (fallback?.object) {
+      const replayUsage = {
+        usage: fallback.usage ?? null,
+        totalUsage: fallback.totalUsage ?? null,
+        providerMetadata: fallback.providerMetadata ?? null,
+        request: fallback.request ?? null,
+        response: fallback.response ?? null,
+      };
+      if (fallback.object && typeof fallback.object === 'object' && !Array.isArray(fallback.object)) {
+        yield {
+          type: 'json',
+          data: {
+            ...(fallback.object as Record<string, unknown>),
+            __replay: replayUsage,
+          },
+        };
+      } else {
+        yield {
+          type: 'json',
+          data: {
+            actions: [],
+            value: fallback.object,
+            __replay: replayUsage,
+          },
+        };
+      }
     }
   }
 
@@ -122,6 +146,11 @@ class AiSdkProvider implements StreamingProvider {
     return {
       partialObjectStream: streamed.partialObjectStream,
       fullStream: streamed.object.then((object) => ({ object })),
+      usage: Promise.resolve((streamed as any).usage),
+      totalUsage: Promise.resolve((streamed as any).totalUsage),
+      providerMetadata: Promise.resolve((streamed as any).providerMetadata),
+      request: Promise.resolve((streamed as any).request),
+      response: Promise.resolve((streamed as any).response),
     } satisfies StructuredStream;
   }
 
@@ -135,7 +164,17 @@ class AiSdkProvider implements StreamingProvider {
     return modelFn(this.modelId);
   }
 
-  private async generateOnce(prompt: string, options?: { system?: string; tuning?: ModelTuning }) {
+  private async generateOnce(
+    prompt: string,
+    options?: { system?: string; tuning?: ModelTuning },
+  ): Promise<{
+    object: unknown;
+    usage?: unknown;
+    totalUsage?: unknown;
+    providerMetadata?: unknown;
+    request?: unknown;
+    response?: unknown;
+  }> {
     const model = this.resolveModel();
     const common = {
       model,
@@ -149,11 +188,18 @@ class AiSdkProvider implements StreamingProvider {
     if (this.provider !== 'anthropic' && options?.tuning?.topP !== undefined) {
       common.topP = options.tuning.topP;
     }
-    const { object } = await withProviderRetry(
+    const generated = await withProviderRetry(
       () => unsafeGenerateObject(common),
       this.retryOptions(),
     );
-    return object;
+    return {
+      object: generated?.object,
+      usage: (generated as any)?.usage,
+      totalUsage: (generated as any)?.totalUsage,
+      providerMetadata: (generated as any)?.providerMetadata,
+      request: (generated as any)?.request,
+      response: (generated as any)?.response,
+    };
   }
 
   private providerOptionsForCall() {
@@ -236,6 +282,11 @@ class FakeProvider implements StreamingProvider {
     return {
       partialObjectStream: partial(),
       fullStream: Promise.resolve({ object: { actions: [action] } }),
+      usage: Promise.resolve({ inputTokens: 0, outputTokens: 0, totalTokens: 0 }),
+      totalUsage: Promise.resolve({ inputTokens: 0, outputTokens: 0, totalTokens: 0 }),
+      providerMetadata: Promise.resolve({ provider: 'debug/fake' }),
+      request: Promise.resolve(null),
+      response: Promise.resolve(null),
     };
   }
 }

@@ -15,6 +15,8 @@ import {
   recordOrchestrationTiming,
 } from '@/lib/agents/shared/orchestration-metrics';
 import { recordTaskTraceFromParams, recordWorkerHeartbeat } from '@/lib/agents/shared/trace-events';
+import { deriveRequestCorrelation } from '@/lib/agents/shared/request-correlation';
+import { recordToolIoEvent } from '@/lib/agents/shared/replay-telemetry';
 import { deriveProviderParity } from '@/lib/agents/admin/provider-parity';
 import {
   extractRuntimeScopeFromParams,
@@ -458,6 +460,14 @@ async function processClaimedTasks(executeTask: ExecuteTaskFn, claimedTasks: Cla
             status: 'running',
             params: task.params,
           });
+          const taskCorrelation = deriveRequestCorrelation({
+            task: task.task,
+            requestId: task.request_id ?? undefined,
+            params: task.params,
+          });
+          const replayRequestId = taskCorrelation.requestId ?? task.request_id ?? task.id;
+          const replayTraceId = taskCorrelation.traceId ?? task.trace_id ?? replayRequestId;
+          const replayIntentId = taskCorrelation.intentId ?? replayRequestId;
 
           try {
             const taskResourceKeys = normalizeTaskResourceKeys(task.resource_keys);
@@ -503,6 +513,33 @@ async function processClaimedTasks(executeTask: ExecuteTaskFn, claimedTasks: Cla
             activeTaskCount += 1;
             countedActiveTask = true;
             route = classifyTaskRoute(task.task);
+            recordToolIoEvent({
+              source: 'conductor_worker',
+              eventType: 'task_execute',
+              status: 'running',
+              sequence: task.attempt,
+              sessionId: `conductor-${workerId}`,
+              room: task.room,
+              traceId: replayTraceId ?? undefined,
+              requestId: replayRequestId ?? undefined,
+              intentId: replayIntentId ?? undefined,
+              taskId: task.id,
+              toolName: task.task,
+              toolCallId: task.id,
+              provider: executingProviderParity.provider,
+              model: executingProviderParity.model ?? undefined,
+              providerSource: executingProviderParity.providerSource,
+              providerPath: executingProviderParity.providerPath,
+              providerRequestId: executingProviderParity.providerRequestId ?? undefined,
+              input: task.params,
+              metadata: {
+                workerId,
+                workerHost,
+                workerPid,
+                leaseToken,
+                route,
+              },
+            });
             void recordTaskTraceFromParams({
               stage: 'executing',
               status: 'running',
@@ -608,6 +645,52 @@ async function processClaimedTasks(executeTask: ExecuteTaskFn, claimedTasks: Cla
               providerPath: runtimeProviderHint.providerPath,
               providerRequestId: runtimeProviderHint.providerRequestId,
             });
+            recordToolIoEvent({
+              source: 'conductor_worker',
+              eventType: 'task_execute',
+              status: 'succeeded',
+              sequence: task.attempt,
+              sessionId: `conductor-${workerId}`,
+              room: task.room,
+              traceId: replayTraceId ?? undefined,
+              requestId: replayRequestId ?? undefined,
+              intentId: replayIntentId ?? undefined,
+              taskId: task.id,
+              toolName: task.task,
+              toolCallId: task.id,
+              provider: completedProviderParity.provider,
+              model: completedProviderParity.model ?? undefined,
+              providerSource: completedProviderParity.providerSource,
+              providerPath: completedProviderParity.providerPath,
+              providerRequestId: completedProviderParity.providerRequestId ?? undefined,
+              input: task.params,
+              output: result,
+              latencyMs: durationMs,
+              metadata: {
+                workerId,
+                workerHost,
+                workerPid,
+                route,
+                deduped: execution.deduped,
+              },
+            });
+            const completedTracePayload: JsonObject = {
+              workerId,
+              workerHost,
+              workerPid,
+              route,
+              lockKey: lockKey ?? null,
+              deduped: execution.deduped,
+              leaseToken,
+              provider: completedProviderParity.provider,
+              model: completedProviderParity.model,
+              providerSource: completedProviderParity.providerSource,
+              providerPath: completedProviderParity.providerPath,
+              providerRequestId: completedProviderParity.providerRequestId,
+            };
+            if (task.task === 'fairy.intent' && asRecord(result)) {
+              completedTracePayload.result = result as JsonObject;
+            }
             void recordTaskTraceFromParams({
               stage: 'completed',
               status: 'succeeded',
@@ -622,20 +705,7 @@ async function processClaimedTasks(executeTask: ExecuteTaskFn, claimedTasks: Cla
               providerSource: completedProviderParity.providerSource,
               providerPath: completedProviderParity.providerPath,
               providerRequestId: completedProviderParity.providerRequestId ?? undefined,
-              payload: {
-                workerId,
-                workerHost,
-                workerPid,
-                route,
-                lockKey: lockKey ?? null,
-                deduped: execution.deduped,
-                leaseToken,
-                provider: completedProviderParity.provider,
-                model: completedProviderParity.model,
-                providerSource: completedProviderParity.providerSource,
-                providerPath: completedProviderParity.providerPath,
-                providerRequestId: completedProviderParity.providerRequestId,
-              },
+              payload: completedTracePayload,
             });
             logger.info('task completed', { roomKey, taskId: task.id, durationMs });
             logger.debug('orchestration metrics', {
@@ -674,6 +744,37 @@ async function processClaimedTasks(executeTask: ExecuteTaskFn, claimedTasks: Cla
               providerSource: executingProviderParity.providerSource,
               providerPath: executingProviderParity.providerPath,
               providerRequestId: executingProviderParity.providerRequestId ?? undefined,
+            });
+            recordToolIoEvent({
+              source: 'conductor_worker',
+              eventType: 'task_execute',
+              status: shouldRetry ? 'retrying' : 'failed',
+              sequence: task.attempt,
+              sessionId: `conductor-${workerId}`,
+              room: task.room,
+              traceId: replayTraceId ?? undefined,
+              requestId: replayRequestId ?? undefined,
+              intentId: replayIntentId ?? undefined,
+              taskId: task.id,
+              toolName: task.task,
+              toolCallId: task.id,
+              provider: failedProviderParity.provider,
+              model: failedProviderParity.model ?? undefined,
+              providerSource: failedProviderParity.providerSource,
+              providerPath: failedProviderParity.providerPath,
+              providerRequestId: failedProviderParity.providerRequestId ?? undefined,
+              input: task.params,
+              output: { retryAt: retryAt ? retryAt.toISOString() : null },
+              error: message,
+              metadata: {
+                workerId,
+                workerHost,
+                workerPid,
+                route,
+                retryable: shouldRetry,
+                retryAt: retryAt ? retryAt.toISOString() : null,
+              },
+              priority: 'high',
             });
             void recordTaskTraceFromParams({
               stage: 'failed',

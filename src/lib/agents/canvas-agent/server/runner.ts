@@ -40,6 +40,10 @@ import {
 } from './target-id-contract';
 import type { JsonObject } from '@/lib/utils/json-schema';
 import {
+  recordModelIoEvent,
+  recordToolIoEvent,
+} from '@/lib/agents/shared/replay-telemetry';
+import {
   describeRetryError,
   isRetryableProviderError,
   parseRetryEnvInt,
@@ -342,6 +346,142 @@ const mapTodosToTeacherItems = (todos: StoredTodoItem[]) => {
     .filter((item): item is { id: number; text: string; status: 'todo' | 'in-progress' | 'done' } => Boolean(item));
 };
 
+const asObjectRecord = (value: unknown): Record<string, unknown> | null => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  return value as Record<string, unknown>;
+};
+
+const truncateText = (value: unknown, maxChars = 1200): string | null => {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  return trimmed.length > maxChars ? `${trimmed.slice(0, maxChars)}…` : trimmed;
+};
+
+const summarizeToolCatalog = (value: unknown, limit = 16): Array<Record<string, unknown>> => {
+  if (!Array.isArray(value)) return [];
+  return value.slice(0, limit).map((entry, index) => {
+    const record = asObjectRecord(entry);
+    if (!record) {
+      return { index, value: entry };
+    }
+    const params = Array.isArray(record.params)
+      ? record.params.slice(0, 10).map((param) => {
+          const paramRecord = asObjectRecord(param);
+          if (!paramRecord) return param;
+          return {
+            name: paramRecord.name ?? null,
+            type: paramRecord.type ?? null,
+            required: paramRecord.required ?? null,
+            notes: truncateText(paramRecord.notes, 240),
+          };
+        })
+      : [];
+    return {
+      name: record.name ?? null,
+      description: truncateText(record.description, 360),
+      params,
+      example: record.example ?? null,
+    };
+  });
+};
+
+const summarizeFewShotExamples = (value: unknown, limit = 6): Array<Record<string, unknown>> => {
+  if (!Array.isArray(value)) return [];
+  return value.slice(0, limit).map((entry, index) => {
+    const record = asObjectRecord(entry);
+    if (!record) {
+      return { index, value: entry };
+    }
+    return {
+      name: record.name ?? null,
+      task: truncateText(record.task, 240),
+      prompt: truncateText(record.prompt, 240),
+      actionCount: Array.isArray(record.actions) ? record.actions.length : null,
+      keys: Object.keys(record).slice(0, 12),
+    };
+  });
+};
+
+const buildPromptTelemetrySnapshot = (input: {
+  promptLength: number;
+  mode: string;
+  preset: string;
+  contextProfile?: FairyContextProfile | string;
+  parts: Record<string, unknown>;
+}) => {
+  const parts = input.parts;
+  const contextSkills = [
+    'canvas_system_prompt',
+    Array.isArray(parts.toolCatalog) ? 'tool_catalog' : null,
+    parts.toolSchema ? 'tool_schema' : null,
+    parts.styleInstructions ? 'style_instructions' : null,
+    Array.isArray(parts.fewShotExamples) ? 'few_shot_examples' : null,
+    parts.promptBudget ? 'prompt_budgeting' : null,
+    parts.screenshot ? 'screenshot_grounding' : null,
+  ].filter((skill): skill is string => Boolean(skill));
+
+  return {
+    mode: input.mode,
+    preset: input.preset,
+    promptLength: input.promptLength,
+    contextProfile: input.contextProfile ?? null,
+    contextSkills,
+    contextWindow: {
+      transcriptLines: Array.isArray((parts as any).transcript) ? (parts as any).transcript.length : 0,
+      shapeCount: Array.isArray((parts as any).shapes) ? (parts as any).shapes.length : 0,
+      selectedCount: Array.isArray((parts as any).selectedSimpleShapes) ? (parts as any).selectedSimpleShapes.length : 0,
+      blurryCount: Array.isArray((parts as any).blurryShapes) ? (parts as any).blurryShapes.length : 0,
+      peripheralCount: Array.isArray((parts as any).peripheralClusters) ? (parts as any).peripheralClusters.length : 0,
+    },
+    promptBudget: (parts as any).promptBudget ?? null,
+    viewport: (parts as any).viewport ?? null,
+    screenshot:
+      asObjectRecord((parts as any).screenshot)
+        ? {
+            mime: (parts as any).screenshot?.mime ?? null,
+            bytes: (parts as any).screenshot?.bytes ?? null,
+            width: (parts as any).screenshot?.width ?? null,
+            height: (parts as any).screenshot?.height ?? null,
+            bounds: (parts as any).screenshot?.bounds ?? null,
+            requestId: (parts as any).screenshot?.requestId ?? null,
+            receivedAt: (parts as any).screenshot?.receivedAt ?? null,
+          }
+        : null,
+    styleInstructions: truncateText((parts as any).styleInstructions, 2400),
+    fewShotExamples: summarizeFewShotExamples((parts as any).fewShotExamples),
+    toolCatalog: summarizeToolCatalog((parts as any).toolCatalog),
+    toolSchema: (parts as any).toolSchema ?? null,
+  };
+};
+
+const readStructuredTelemetry = async (stream: {
+  usage?: Promise<unknown>;
+  totalUsage?: Promise<unknown>;
+  providerMetadata?: Promise<unknown>;
+  request?: Promise<unknown>;
+  response?: Promise<unknown>;
+}) => {
+  const safeResolve = async (value: Promise<unknown> | undefined): Promise<unknown> => {
+    if (!value) return null;
+    try {
+      return await value;
+    } catch {
+      return null;
+    }
+  };
+  const usage = await safeResolve(stream.totalUsage ?? stream.usage);
+  const providerMetadata = await safeResolve(stream.providerMetadata);
+  const request = await safeResolve(stream.request);
+  const response = await safeResolve(stream.response);
+  return {
+    usage,
+    providerMetadata,
+    request,
+    response,
+  };
+};
+
 type BrandPresetName = keyof typeof BRAND_PRESETS;
 
 const PRESET_SYNONYMS: Record<string, BrandPresetName> = {
@@ -538,6 +678,92 @@ export async function runCanvasAgent(args: RunArgs) {
           ...(requestId ? { requestId } : {}),
         }
       : undefined;
+  let replaySequence = 0;
+  const nextReplaySequence = () => {
+    replaySequence += 1;
+    return replaySequence;
+  };
+  const replayBase = {
+    sessionId: `canvas-agent-${sessionId}`,
+    room: roomId,
+    requestId: correlation?.requestId,
+    traceId: correlation?.traceId,
+    intentId: correlation?.intentId,
+  };
+  const recordCanvasModelEvent = (input: {
+    eventId?: string;
+    eventType: string;
+    status?: string;
+    provider?: string;
+    model?: string;
+    providerPath?: string;
+    providerSource?: string;
+    providerRequestId?: string;
+    systemPrompt?: string;
+    contextPriming?: unknown;
+    payloadIn?: unknown;
+    payloadOut?: unknown;
+    metadata?: JsonObject;
+    error?: string;
+    priority?: 'high' | 'normal';
+  }) => {
+    recordModelIoEvent({
+      eventId: input.eventId,
+      source: 'canvas_runner',
+      eventType: input.eventType,
+      status: input.status,
+      sequence: nextReplaySequence(),
+      sessionId: replayBase.sessionId,
+      room: replayBase.room,
+      requestId: replayBase.requestId,
+      traceId: replayBase.traceId,
+      intentId: replayBase.intentId,
+      provider: input.provider,
+      model: input.model,
+      providerPath: input.providerPath,
+      providerSource: input.providerSource,
+      providerRequestId: input.providerRequestId,
+      systemPrompt: input.systemPrompt,
+      contextPriming: input.contextPriming,
+      input: input.payloadIn,
+      output: input.payloadOut,
+      metadata: input.metadata,
+      error: input.error,
+      priority: input.priority,
+    });
+  };
+  const recordCanvasToolEvent = (input: {
+    eventId?: string;
+    eventType: string;
+    status?: string;
+    toolName: string;
+    toolCallId?: string;
+    payloadIn?: unknown;
+    payloadOut?: unknown;
+    metadata?: JsonObject;
+    error?: string;
+    priority?: 'high' | 'normal';
+  }) => {
+    recordToolIoEvent({
+      eventId: input.eventId,
+      source: 'canvas_runner',
+      eventType: input.eventType,
+      status: input.status,
+      sequence: nextReplaySequence(),
+      sessionId: replayBase.sessionId,
+      room: replayBase.room,
+      requestId: replayBase.requestId,
+      traceId: replayBase.traceId,
+      intentId: replayBase.intentId,
+      toolName: input.toolName,
+      toolCallId: input.toolCallId,
+      input: input.payloadIn,
+      output: input.payloadOut,
+      metadata: input.metadata,
+      error: input.error,
+      priority: input.priority,
+    });
+  };
   const currentFollowupDepth =
     typeof args.followupDepth === 'number' && Number.isFinite(args.followupDepth)
       ? Math.max(0, Math.floor(args.followupDepth))
@@ -564,6 +790,32 @@ export async function runCanvasAgent(args: RunArgs) {
       roomId,
     });
   }
+  recordCanvasModelEvent({
+    eventType: 'session_start',
+    status: 'running',
+    providerPath: cfg.mode === 'present' ? 'primary' : cfg.mode,
+    providerSource: 'runtime_selected',
+    systemPrompt: CANVAS_AGENT_SYSTEM_PROMPT,
+    contextPriming: {
+      mode: cfg.mode,
+      preset: cfg.preset,
+      followupDepth: currentFollowupDepth,
+      hasInitialFollowup: Boolean(initialFollowup),
+      runtimeSkills: [
+        'screenshot_grounding',
+        'tool_catalog_prompting',
+        'structured_streaming_actions',
+        'followup_scheduler',
+      ],
+      metadata: runMetadata ?? null,
+    },
+    payloadIn: {
+      userMessage,
+      requestedModel: model ?? cfg.modelName,
+      initialViewport: args.initialViewport ?? null,
+      contextProfile: args.contextProfile ?? null,
+    },
+  });
   const scheduler = new SessionScheduler({ maxDepth: cfg.followups.maxDepth });
   const durableQueue = cfg.followups.durable ? getDurableFollowupQueue() : null;
   if (cfg.debug) {
@@ -668,6 +920,21 @@ export async function runCanvasAgent(args: RunArgs) {
     metrics.screenshotRequestId = requestId;
     metrics.screenshotTimeoutMs = cfg.screenshot.timeoutMs;
     metrics.screenshotRequestedAt = Date.now();
+    recordCanvasToolEvent({
+      eventType: 'tool_call',
+      status: 'requested',
+      toolName: 'agent:screenshot_request',
+      toolCallId: requestId,
+      payloadIn: {
+        label,
+        attempt,
+        bounds: bounds ?? null,
+        maxEdge,
+      },
+      metadata: {
+        timeoutMs: cfg.screenshot.timeoutMs,
+      },
+    });
     emitTrace('screenshot_requested', {
       detail: {
         label,
@@ -687,6 +954,18 @@ export async function runCanvasAgent(args: RunArgs) {
     } catch (error) {
       metrics.screenshotResult = 'error';
       logMetrics(metrics, cfg, 'screenshot', `${label}:error`);
+      recordCanvasToolEvent({
+        eventType: 'tool_result',
+        status: 'error',
+        toolName: 'agent:screenshot_request',
+        toolCallId: requestId,
+        payloadOut: {
+          label,
+          attempt,
+        },
+        error: error instanceof Error ? error.message : String(error),
+        priority: 'high',
+      });
       emitTrace('screenshot_failed', {
         detail: {
           label,
@@ -717,6 +996,20 @@ export async function runCanvasAgent(args: RunArgs) {
         }
         metrics.screenshotResult = 'received';
         logMetrics(metrics, cfg, 'screenshot', `${label}:received`);
+        recordCanvasToolEvent({
+          eventType: 'tool_result',
+          status: 'received',
+          toolName: 'agent:screenshot_request',
+          toolCallId: requestId,
+          payloadOut: {
+            label,
+            attempt,
+            bytes: maybeScreenshot.image?.bytes ?? null,
+            viewport: maybeScreenshot.viewport ?? null,
+            selection: maybeScreenshot.selection ?? null,
+            rttMs: metrics.screenshotRtt,
+          },
+        });
         emitTrace('screenshot_received', {
           detail: {
             label,
@@ -732,6 +1025,18 @@ export async function runCanvasAgent(args: RunArgs) {
 
     metrics.screenshotResult = 'timeout';
     logMetrics(metrics, cfg, 'screenshot', `${label}:timeout`);
+    recordCanvasToolEvent({
+      eventType: 'tool_result',
+      status: 'timeout',
+      toolName: 'agent:screenshot_request',
+      toolCallId: requestId,
+      payloadOut: {
+        label,
+        attempt,
+      },
+      error: 'timeout',
+      priority: 'high',
+    });
     emitTrace('screenshot_failed', {
       detail: {
         label,
@@ -980,6 +1285,20 @@ export async function runCanvasAgent(args: RunArgs) {
     await sendStatus(roomId, sessionId, 'calling_model');
     const requestedModel = model || cfg.modelName;
     const provider = selectModel(requestedModel);
+    const providerIdentity = (() => {
+      const providerName = typeof provider.name === 'string' ? provider.name.trim() : 'unknown';
+      if (providerName === 'debug/fake') {
+        return { provider: 'debug', model: 'debug/fake' };
+      }
+      const split = providerName.split(':');
+      if (split.length > 1) {
+        return {
+          provider: split[0] || 'unknown',
+          model: split.slice(1).join(':') || providerName,
+        };
+      }
+      return { provider: providerName || 'unknown', model: requestedModel || providerName };
+    })();
     const primaryPresetName = (initialFollowup?.strict ? 'precise' : cfg.preset) as CanvasAgentPreset;
     const tuning = getModelTuning(primaryPresetName);
     if (cfg.debug) {
@@ -999,6 +1318,31 @@ export async function runCanvasAgent(args: RunArgs) {
     const sessionCreatedIds = new Set<string>();
     const droppedUpdateTargetIds = new Set<string>();
     metrics.modelCalledAt = Date.now();
+    const initialPromptSnapshot = buildPromptTelemetrySnapshot({
+      promptLength: prompt.length,
+      mode: 'context_ready',
+      preset: primaryPresetName,
+      contextProfile: args.contextProfile,
+      parts,
+    });
+    recordCanvasModelEvent({
+      eventType: 'model_context_ready',
+      status: 'ready',
+      provider: providerIdentity.provider,
+      model: providerIdentity.model,
+      providerSource: 'runtime_selected',
+      providerPath: 'primary',
+      contextPriming: initialPromptSnapshot,
+      payloadIn: {
+        prompt,
+        promptLength: prompt.length,
+        parts,
+        tuning,
+        preset: primaryPresetName,
+        streamingCapable: typeof provider.streamStructured === 'function',
+      },
+      metadata: requestedModel ? { requestedModel } : {},
+    });
 
     const rememberCreatedIds = (actions: AgentAction[]) => {
       for (const action of actions) {
@@ -1654,6 +1998,21 @@ const normalizeRawAction = (
               verbs: dispatchableActions.slice(0, 8).map((action) => action.name),
             },
           });
+          const envelopeToolCallId = `${sessionId}:${seqNumber}:${partial ? 'partial' : 'final'}`;
+          recordCanvasToolEvent({
+            eventType: 'tool_call',
+            status: 'queued',
+            toolName: 'tldraw_envelope',
+            toolCallId: envelopeToolCallId,
+            payloadIn: {
+              seq: seqNumber,
+              partial,
+              actions: dispatchableActions,
+            },
+            metadata: {
+              source: actionSource,
+            },
+          });
           const firstSend = await sendActionsEnvelope(roomId, sessionId, seqNumber, dispatchableActions, {
             partial,
             correlation,
@@ -1668,6 +2027,18 @@ const normalizeRawAction = (
             metrics.firstAckLatencyMs = Date.now() - metrics.startedAt;
           }
           if (ack) {
+            recordCanvasToolEvent({
+              eventType: 'tool_result',
+              status: 'ack_received',
+              toolName: 'tldraw_envelope',
+              toolCallId: envelopeToolCallId,
+              payloadOut: ack,
+              metadata: {
+                seq: seqNumber,
+                partial,
+                source: actionSource,
+              },
+            });
             emitTrace('ack_received', {
               seq: seqNumber,
               partial,
@@ -1675,6 +2046,20 @@ const normalizeRawAction = (
             });
           }
           if (!ack) {
+            recordCanvasToolEvent({
+              eventType: 'tool_result',
+              status: 'ack_timeout',
+              toolName: 'tldraw_envelope',
+              toolCallId: envelopeToolCallId,
+              payloadOut: null,
+              metadata: {
+                seq: seqNumber,
+                partial,
+                source: actionSource,
+              },
+              error: 'ack_timeout',
+              priority: 'high',
+            });
             emitTrace('ack_timeout', {
               seq: seqNumber,
               partial,
@@ -1700,6 +2085,18 @@ const normalizeRawAction = (
               metrics.firstAckLatencyMs = Date.now() - metrics.startedAt;
             }
             if (retryAck) {
+              recordCanvasToolEvent({
+                eventType: 'tool_result',
+                status: 'ack_received_retry',
+                toolName: 'tldraw_envelope',
+                toolCallId: envelopeToolCallId,
+                payloadOut: retryAck,
+                metadata: {
+                  seq: seqNumber,
+                  partial,
+                  source: actionSource,
+                },
+              });
               emitTrace('ack_received', {
                 seq: seqNumber,
                 partial,
@@ -1707,6 +2104,20 @@ const normalizeRawAction = (
                 detail: { retry: true },
               });
             } else {
+              recordCanvasToolEvent({
+                eventType: 'tool_result',
+                status: 'ack_timeout_retry',
+                toolName: 'tldraw_envelope',
+                toolCallId: envelopeToolCallId,
+                payloadOut: null,
+                metadata: {
+                  seq: seqNumber,
+                  partial,
+                  source: actionSource,
+                },
+                error: 'ack_timeout_retry',
+                priority: 'high',
+              });
               emitTrace('ack_timeout', {
                 seq: seqNumber,
                 partial,
@@ -2041,103 +2452,199 @@ const normalizeRawAction = (
     }
 
     const invokeModel = async () => {
+      const modelCallEventId = randomUUID();
+      const generatedActions: unknown[] = [];
+      let usageSnapshot: unknown = null;
+      let providerMetadataSnapshot: unknown = null;
+      let requestMetadataSnapshot: unknown = null;
+      let responseMetadataSnapshot: unknown = null;
+      const pushGeneratedActions = (actions: unknown[]) => {
+        if (!Array.isArray(actions) || actions.length === 0) return;
+        const roomLeft = Math.max(0, 120 - generatedActions.length);
+        if (roomLeft <= 0) return;
+        generatedActions.push(...actions.slice(0, roomLeft));
+      };
+      const mode = streamingEnabled ? 'structured' : 'fallback-stream';
+      const modelPromptSnapshot = buildPromptTelemetrySnapshot({
+        promptLength: prompt.length,
+        mode,
+        preset: primaryPresetName,
+        contextProfile: args.contextProfile,
+        parts,
+      });
+      recordCanvasModelEvent({
+        eventId: modelCallEventId,
+        eventType: 'model_call',
+        status: 'started',
+        provider: providerIdentity.provider,
+        model: providerIdentity.model,
+        providerSource: 'runtime_selected',
+        providerPath: 'primary',
+        systemPrompt: CANVAS_AGENT_SYSTEM_PROMPT,
+        contextPriming: modelPromptSnapshot,
+        payloadIn: {
+          mode,
+          preset: primaryPresetName,
+          prompt,
+          promptLength: prompt.length,
+          tuning,
+          contextProfile: args.contextProfile ?? null,
+        },
+      });
       emitTrace('model_call', {
         detail: {
           provider: provider.name,
-          mode: streamingEnabled ? 'structured' : 'fallback-stream',
+          mode,
           preset: primaryPresetName,
         },
       });
-      if (streamingEnabled) {
-        const streamStartedAt = Date.now();
-        let firstPartialLogged = false;
-        if (cfg.debug) {
-          try {
-            console.log('[CanvasAgent:ModelCall]', JSON.stringify({
-              sessionId,
-              roomId,
-              provider: provider.name,
-              mode: 'structured',
-            }));
-          } catch {}
-        }
-        const structured = await provider.streamStructured?.(prompt, {
-          system: CANVAS_AGENT_SYSTEM_PROMPT,
-          tuning,
-        });
-        if (!structured && cfg.debug) {
-          try {
-            console.log('[CanvasAgent:ModelCall]', JSON.stringify({
-              sessionId,
-              roomId,
-              provider: provider.name,
-              mode: 'structured',
-              result: 'no-structured-stream',
-            }));
-          } catch {}
-        }
-        if (structured) {
-          let rawProcessed = 0;
-          await handleStructuredStreaming(
-            structured,
-            async (delta) => {
-              if (!Array.isArray(delta) || delta.length === 0) return;
-              if (!firstPartialLogged) {
-                firstPartialLogged = true;
-                if (cfg.debug) {
-                  console.log('[CanvasAgent:FirstPartial]', JSON.stringify({
-                    sessionId,
-                    roomId,
-                    ms: Date.now() - streamStartedAt,
-                  }));
-                }
-              }
-              metrics.chunkCount++;
-              const currentSeq = seq++;
-              await processActions(delta, currentSeq, true, enqueueDetail);
-              rawProcessed += delta.length;
-            },
-            async (finalActions) => {
-              if (!Array.isArray(finalActions) || finalActions.length === 0) return;
-              const pending = finalActions.slice(rawProcessed);
-              rawProcessed = finalActions.length;
-              if (pending.length === 0) return;
-              const currentSeq = seq++;
-              await processActions(pending, currentSeq, false, enqueueDetail);
-            },
-          );
-        }
-        return;
-      }
-      const streamStartedAt = Date.now();
-      let firstPartialLogged = false;
-      if (cfg.debug) {
-        try {
-          console.log('[CanvasAgent:ModelCall]', JSON.stringify({
-            sessionId,
-            roomId,
-            provider: provider.name,
-            mode: 'fallback-stream',
-          }));
-        } catch {}
-      }
-      for await (const chunk of provider.stream(prompt, { system: CANVAS_AGENT_SYSTEM_PROMPT, tuning })) {
-        if (chunk.type !== 'json') continue;
-        const actionsRaw = (chunk.data as any)?.actions;
-        if (!Array.isArray(actionsRaw) || actionsRaw.length === 0) continue;
-        if (!firstPartialLogged) {
-          firstPartialLogged = true;
+      try {
+        if (streamingEnabled) {
+          const streamStartedAt = Date.now();
+          let firstPartialLogged = false;
           if (cfg.debug) {
-            console.log('[CanvasAgent:FirstPartial]', JSON.stringify({
-              sessionId,
-              roomId,
-              ms: Date.now() - streamStartedAt,
-            }));
+            try {
+              console.log('[CanvasAgent:ModelCall]', JSON.stringify({
+                sessionId,
+                roomId,
+                provider: provider.name,
+                mode: 'structured',
+              }));
+            } catch {}
+          }
+          const structured = await provider.streamStructured?.(prompt, {
+            system: CANVAS_AGENT_SYSTEM_PROMPT,
+            tuning,
+          });
+          if (!structured && cfg.debug) {
+            try {
+              console.log('[CanvasAgent:ModelCall]', JSON.stringify({
+                sessionId,
+                roomId,
+                provider: provider.name,
+                mode: 'structured',
+                result: 'no-structured-stream',
+              }));
+            } catch {}
+          }
+          if (structured) {
+            let rawProcessed = 0;
+            await handleStructuredStreaming(
+              structured,
+              async (delta) => {
+                if (!Array.isArray(delta) || delta.length === 0) return;
+                if (!firstPartialLogged) {
+                  firstPartialLogged = true;
+                  if (cfg.debug) {
+                    console.log('[CanvasAgent:FirstPartial]', JSON.stringify({
+                      sessionId,
+                      roomId,
+                      ms: Date.now() - streamStartedAt,
+                    }));
+                  }
+                }
+                pushGeneratedActions(delta);
+                metrics.chunkCount++;
+                const currentSeq = seq++;
+                await processActions(delta, currentSeq, true, enqueueDetail);
+                rawProcessed += delta.length;
+              },
+              async (finalActions) => {
+                if (!Array.isArray(finalActions) || finalActions.length === 0) return;
+                const pending = finalActions.slice(rawProcessed);
+                rawProcessed = finalActions.length;
+                if (pending.length === 0) return;
+                pushGeneratedActions(pending);
+                const currentSeq = seq++;
+                await processActions(pending, currentSeq, false, enqueueDetail);
+              },
+            );
+            const structuredTelemetry = await readStructuredTelemetry(structured);
+            usageSnapshot = structuredTelemetry.usage;
+            providerMetadataSnapshot = structuredTelemetry.providerMetadata;
+            requestMetadataSnapshot = structuredTelemetry.request;
+            responseMetadataSnapshot = structuredTelemetry.response;
+          }
+        } else {
+          const streamStartedAt = Date.now();
+          let firstPartialLogged = false;
+          if (cfg.debug) {
+            try {
+              console.log('[CanvasAgent:ModelCall]', JSON.stringify({
+                sessionId,
+                roomId,
+                provider: provider.name,
+                mode: 'fallback-stream',
+              }));
+            } catch {}
+          }
+          for await (const chunk of provider.stream(prompt, { system: CANVAS_AGENT_SYSTEM_PROMPT, tuning })) {
+            if (chunk.type !== 'json') continue;
+            const replay = asObjectRecord((chunk.data as any)?.__replay);
+            if (replay) {
+              if (usageSnapshot == null) usageSnapshot = replay.usage ?? replay.totalUsage ?? null;
+              if (providerMetadataSnapshot == null) providerMetadataSnapshot = replay.providerMetadata ?? null;
+              if (requestMetadataSnapshot == null) requestMetadataSnapshot = replay.request ?? null;
+              if (responseMetadataSnapshot == null) responseMetadataSnapshot = replay.response ?? null;
+            }
+            const actionsRaw = (chunk.data as any)?.actions;
+            if (!Array.isArray(actionsRaw) || actionsRaw.length === 0) continue;
+            if (!firstPartialLogged) {
+              firstPartialLogged = true;
+              if (cfg.debug) {
+                console.log('[CanvasAgent:FirstPartial]', JSON.stringify({
+                  sessionId,
+                  roomId,
+                  ms: Date.now() - streamStartedAt,
+                }));
+              }
+            }
+            pushGeneratedActions(actionsRaw);
+            metrics.chunkCount++;
+            const currentSeq = seq++;
+            await processActions(actionsRaw, currentSeq, true, enqueueDetail);
           }
         }
-        metrics.chunkCount++;
-        const currentSeq = seq++;
-        await processActions(actionsRaw, currentSeq, true, enqueueDetail);
+        recordCanvasModelEvent({
+          eventId: modelCallEventId,
+          eventType: 'model_call',
+          status: 'completed',
+          provider: providerIdentity.provider,
+          model: providerIdentity.model,
+          providerSource: 'runtime_selected',
+          providerPath: 'primary',
+          payloadOut: {
+            generatedActionCount: generatedActions.length,
+            generatedActions,
+            dispatchedActionCount: metrics.actionCount,
+            mutatingActionCount: metrics.mutatingActionCount,
+            usage: usageSnapshot,
+            providerMetadata: providerMetadataSnapshot,
+            request: requestMetadataSnapshot,
+            response: responseMetadataSnapshot,
+          },
+        });
+      } catch (error) {
+        recordCanvasModelEvent({
+          eventId: modelCallEventId,
+          eventType: 'model_call',
+          status: 'error',
+          provider: providerIdentity.provider,
+          model: providerIdentity.model,
+          providerSource: 'runtime_selected',
+          providerPath: 'primary',
+          payloadIn: {
+            mode,
+            preset: primaryPresetName,
+          },
+          payloadOut: {
+            generatedActionCount: generatedActions.length,
+            generatedActions,
+          },
+          error: error instanceof Error ? error.message : String(error),
+          priority: 'high',
+        });
+        throw error;
       }
     };
 
@@ -2173,6 +2680,25 @@ const normalizeRawAction = (
                   ? describeRetryError(error)
                   : 'structured_output_schema_mismatch',
               },
+            });
+            recordCanvasModelEvent({
+              eventType: 'model_retry',
+              status: 'retrying',
+              provider: providerIdentity.provider,
+              model: providerIdentity.model,
+              providerSource: 'runtime_selected',
+              providerPath: 'primary',
+              payloadIn: {
+                attempt: invokeRetryAttempt,
+                maxAttempts: INVOKE_RETRY_ATTEMPTS,
+                delayMs,
+              },
+              error: retryableProviderFailure
+                ? describeRetryError(error)
+                : error instanceof Error
+                  ? `${error.name}: ${error.message}`
+                  : 'structured_output_schema_mismatch',
+              priority: 'high',
             });
             if (cfg.debug) {
               try {
@@ -2303,6 +2829,15 @@ const normalizeRawAction = (
       }
       const followPrompt = JSON.stringify(followPayload);
       const followProvider = selectModel(model || cfg.modelName);
+      const followProviderIdentity = (() => {
+        const providerName = typeof followProvider.name === 'string' ? followProvider.name.trim() : 'unknown';
+        if (providerName === 'debug/fake') return { provider: 'debug', model: 'debug/fake' };
+        const split = providerName.split(':');
+        if (split.length > 1) {
+          return { provider: split[0] || 'unknown', model: split.slice(1).join(':') || providerName };
+        }
+        return { provider: providerName || 'unknown', model: model || cfg.modelName || providerName };
+      })();
       let followSeq = 0;
       const followEnqueueDetail = makeDetailEnqueuer(
         followMessage,
@@ -2312,6 +2847,36 @@ const normalizeRawAction = (
       const followStreamingEnabled = typeof followProvider.streamStructured === 'function' && process.env.CANVAS_AGENT_STREAMING !== 'false';
       const followPresetName = (followInput.strict ? 'precise' : cfg.preset) as CanvasAgentPreset;
       const followTuning = getModelTuning(followPresetName);
+      const followCallEventId = randomUUID();
+      let followUsageSnapshot: unknown = null;
+      let followProviderMetadataSnapshot: unknown = null;
+      let followRequestMetadataSnapshot: unknown = null;
+      let followResponseMetadataSnapshot: unknown = null;
+      const followPromptSnapshot = buildPromptTelemetrySnapshot({
+        promptLength: followPrompt.length,
+        mode: followStreamingEnabled ? 'structured' : 'fallback-stream',
+        preset: followPresetName,
+        contextProfile: args.contextProfile,
+        parts: followParts as Record<string, unknown>,
+      });
+      recordCanvasModelEvent({
+        eventId: followCallEventId,
+        eventType: 'model_call_followup',
+        status: 'started',
+        provider: followProviderIdentity.provider,
+        model: followProviderIdentity.model,
+        providerSource: 'runtime_selected',
+        providerPath: 'primary',
+        systemPrompt: CANVAS_AGENT_SYSTEM_PROMPT,
+        contextPriming: followPromptSnapshot,
+        payloadIn: {
+          depth: followBaseDepth,
+          mode: followStreamingEnabled ? 'structured' : 'fallback-stream',
+          preset: followPresetName,
+          followPrompt,
+          followInput,
+        },
+      });
       emitTrace('model_call', {
         detail: {
           provider: followProvider.name,
@@ -2348,11 +2913,23 @@ const normalizeRawAction = (
                 await processActions(pending, currentSeq, false, followEnqueueDetail);
               },
             );
+            const structuredTelemetry = await readStructuredTelemetry(structuredFollow);
+            followUsageSnapshot = structuredTelemetry.usage;
+            followProviderMetadataSnapshot = structuredTelemetry.providerMetadata;
+            followRequestMetadataSnapshot = structuredTelemetry.request;
+            followResponseMetadataSnapshot = structuredTelemetry.response;
           }
           return;
         }
         for await (const chunk of followProvider.stream(followPrompt, { system: CANVAS_AGENT_SYSTEM_PROMPT, tuning: followTuning })) {
           if (chunk.type !== 'json') continue;
+          const replay = asObjectRecord((chunk.data as any)?.__replay);
+          if (replay) {
+            if (followUsageSnapshot == null) followUsageSnapshot = replay.usage ?? replay.totalUsage ?? null;
+            if (followProviderMetadataSnapshot == null) followProviderMetadataSnapshot = replay.providerMetadata ?? null;
+            if (followRequestMetadataSnapshot == null) followRequestMetadataSnapshot = replay.request ?? null;
+            if (followResponseMetadataSnapshot == null) followResponseMetadataSnapshot = replay.response ?? null;
+          }
           const actionsRaw = (chunk.data as any)?.actions;
           if (!Array.isArray(actionsRaw) || actionsRaw.length === 0) continue;
           metrics.chunkCount++;
@@ -2365,6 +2942,24 @@ const normalizeRawAction = (
       while (true) {
         try {
           await invokeFollowModel();
+          recordCanvasModelEvent({
+            eventId: followCallEventId,
+            eventType: 'model_call_followup',
+            status: 'completed',
+            provider: followProviderIdentity.provider,
+            model: followProviderIdentity.model,
+            providerSource: 'runtime_selected',
+            providerPath: 'primary',
+            payloadOut: {
+              depth: followBaseDepth,
+              chunks: metrics.chunkCount,
+              actionsDispatched: metrics.actionCount,
+              usage: followUsageSnapshot,
+              providerMetadata: followProviderMetadataSnapshot,
+              request: followRequestMetadataSnapshot,
+              response: followResponseMetadataSnapshot,
+            },
+          });
           break;
         } catch (error) {
           const retryableProviderFailure = isRetryableProviderError(error);
@@ -2385,6 +2980,27 @@ const normalizeRawAction = (
                     ? describeRetryError(error)
                     : 'structured_output_schema_mismatch',
                 },
+              });
+              recordCanvasModelEvent({
+                eventId: followCallEventId,
+                eventType: 'model_retry_followup',
+                status: 'retrying',
+                provider: followProviderIdentity.provider,
+                model: followProviderIdentity.model,
+                providerSource: 'runtime_selected',
+                providerPath: 'primary',
+                payloadIn: {
+                  depth: followBaseDepth,
+                  attempt: followInvokeRetryAttempt,
+                  delayMs,
+                  maxAttempts: FOLLOWUP_INVOKE_RETRY_ATTEMPTS,
+                },
+                error: retryableProviderFailure
+                  ? describeRetryError(error)
+                  : error instanceof Error
+                    ? `${error.name}: ${error.message}`
+                    : 'structured_output_schema_mismatch',
+                priority: 'high',
               });
               if (cfg.debug) {
                 try {
@@ -2407,6 +3023,21 @@ const normalizeRawAction = (
               continue;
             }
           }
+          recordCanvasModelEvent({
+            eventId: followCallEventId,
+            eventType: 'model_call_followup',
+            status: 'error',
+            provider: followProviderIdentity.provider,
+            model: followProviderIdentity.model,
+            providerSource: 'runtime_selected',
+            providerPath: 'primary',
+            payloadIn: {
+              depth: followBaseDepth,
+              attempt: followInvokeRetryAttempt,
+            },
+            error: error instanceof Error ? error.message : String(error),
+            priority: 'high',
+          });
           throw error;
         }
       }
@@ -2453,13 +3084,26 @@ const normalizeRawAction = (
         },
       ];
       const currentSeq = seq++;
+      const fallbackToolCallId = `${sessionId}:${currentSeq}:fallback`;
       let envelopeDispatched = false;
       try {
         emitTrace('actions_dispatched', {
           seq: currentSeq,
           partial: false,
           actionCount: fallback.length,
-          detail: { source: 'fallback', verbs: fallback.map((action) => action.name) },
+            detail: { source: 'fallback', verbs: fallback.map((action) => action.name) },
+        });
+        recordCanvasToolEvent({
+          eventType: 'tool_call',
+          status: 'queued',
+          toolName: 'tldraw_envelope',
+          toolCallId: fallbackToolCallId,
+          payloadIn: {
+            seq: currentSeq,
+            partial: false,
+            actions: fallback,
+            source: 'fallback',
+          },
         });
         const firstSend = await sendActionsEnvelope(roomId, sessionId, currentSeq, fallback, { correlation });
         envelopeDispatched = true;
@@ -2470,6 +3114,14 @@ const normalizeRawAction = (
           expectedHash: firstSend.hash,
         });
         if (ack) {
+          recordCanvasToolEvent({
+            eventType: 'tool_result',
+            status: 'ack_received',
+            toolName: 'tldraw_envelope',
+            toolCallId: fallbackToolCallId,
+            payloadOut: ack,
+            metadata: { source: 'fallback', seq: currentSeq },
+          });
           emitTrace('ack_received', {
             seq: currentSeq,
             partial: false,
@@ -2478,6 +3130,16 @@ const normalizeRawAction = (
           });
         }
         if (!ack) {
+          recordCanvasToolEvent({
+            eventType: 'tool_result',
+            status: 'ack_timeout',
+            toolName: 'tldraw_envelope',
+            toolCallId: fallbackToolCallId,
+            payloadOut: null,
+            metadata: { source: 'fallback', seq: currentSeq },
+            error: 'ack_timeout',
+            priority: 'high',
+          });
           emitTrace('ack_timeout', {
             seq: currentSeq,
             partial: false,
@@ -2498,6 +3160,14 @@ const normalizeRawAction = (
             expectedHash: retrySend.hash,
           });
           if (retryAck) {
+            recordCanvasToolEvent({
+              eventType: 'tool_result',
+              status: 'ack_received_retry',
+              toolName: 'tldraw_envelope',
+              toolCallId: fallbackToolCallId,
+              payloadOut: retryAck,
+              metadata: { source: 'fallback', seq: currentSeq },
+            });
             emitTrace('ack_received', {
               seq: currentSeq,
               partial: false,
@@ -2505,6 +3175,16 @@ const normalizeRawAction = (
               detail: { source: 'fallback', retry: true },
             });
           } else {
+            recordCanvasToolEvent({
+              eventType: 'tool_result',
+              status: 'ack_timeout_retry',
+              toolName: 'tldraw_envelope',
+              toolCallId: fallbackToolCallId,
+              payloadOut: null,
+              metadata: { source: 'fallback', seq: currentSeq },
+              error: 'ack_timeout_retry',
+              priority: 'high',
+            });
             emitTrace('ack_timeout', {
               seq: currentSeq,
               partial: false,
@@ -2514,6 +3194,16 @@ const normalizeRawAction = (
           }
         }
       } catch (error) {
+        recordCanvasToolEvent({
+          eventType: 'tool_result',
+          status: 'error',
+          toolName: 'tldraw_envelope',
+          toolCallId: fallbackToolCallId,
+          payloadOut: null,
+          metadata: { source: 'fallback', seq: currentSeq },
+          error: error instanceof Error ? error.message : String(error),
+          priority: 'high',
+        });
         console.warn('[CanvasAgent] fallback envelope send failed', {
           roomId,
           sessionId,
@@ -2559,6 +3249,19 @@ const normalizeRawAction = (
         retries: metrics.retryCount,
       },
     });
+    recordCanvasModelEvent({
+      eventType: 'session_complete',
+      status: 'completed',
+      providerSource: 'runtime_selected',
+      providerPath: cfg.mode === 'present' ? 'primary' : cfg.mode,
+      payloadOut: {
+        durationMs: metrics.completedAt - metrics.startedAt,
+        actionCount: metrics.actionCount,
+        mutatingActionCount: metrics.mutatingActionCount,
+        followupCount: metrics.followupCount,
+        retries: metrics.retryCount,
+      },
+    });
     if (shadowTeacherPromise) {
       await shadowTeacherPromise;
     }
@@ -2582,6 +3285,19 @@ const normalizeRawAction = (
     });
     metrics.completedAt = Date.now();
     logMetrics(metrics, cfg, 'error', detail);
+    recordCanvasModelEvent({
+      eventType: 'session_error',
+      status: 'error',
+      providerSource: 'runtime_selected',
+      providerPath: cfg.mode === 'present' ? 'primary' : cfg.mode,
+      payloadOut: {
+        durationMs: metrics.completedAt - metrics.startedAt,
+        actionCount: metrics.actionCount,
+        lastDispatchedChunk,
+      },
+      error: detail,
+      priority: 'high',
+    });
     emitTrace('run_error', {
       detail: {
         error: detail,

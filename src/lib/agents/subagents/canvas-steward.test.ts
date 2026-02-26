@@ -143,10 +143,18 @@ describe('canvas.quick_text deterministic placement', () => {
       status: 'queued',
       reason: 'apply_evidence_pending',
       requestId: 'req-timeout',
+      actionCount: 1,
       ack: {
         pending: true,
       },
     });
+    expect((result as any).actions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: 'create_shape',
+        }),
+      ]),
+    );
     expect(sendActionsEnvelopeMock).toHaveBeenCalledTimes(2);
   });
 });
@@ -217,6 +225,12 @@ describe('canvas.quick_shapes deterministic envelope', () => {
       actionCount: 2,
       shapeIds: ['bunny-body', 'forest-tree-1'],
     });
+    expect((result as any).actions).toHaveLength(2);
+    expect((result as any).actions?.[0]).toEqual(
+      expect.objectContaining({
+        name: 'create_shape',
+      }),
+    );
   });
 
   it('returns queued evidence when quick_shapes delivery is not acknowledged', async () => {
@@ -253,6 +267,7 @@ describe('canvas.quick_shapes deterministic envelope', () => {
         pending: true,
       },
     });
+    expect((result as any).actions).toHaveLength(1);
     expect(sendActionsEnvelopeMock).toHaveBeenCalledTimes(2);
   });
 

@@ -63,6 +63,23 @@ const parsePositiveInt = (value: string | undefined, fallback: number): number =
 const QUICK_TEXT_ACK_TIMEOUT_MS = parsePositiveInt(process.env.CANVAS_QUICK_TEXT_ACK_TIMEOUT_MS, 2000);
 const QUICK_TEXT_ACK_RETRIES = parsePositiveInt(process.env.CANVAS_QUICK_TEXT_ACK_RETRIES, 2);
 const QUICK_TEXT_ACK_RETRY_DELAY_MS = parsePositiveInt(process.env.CANVAS_QUICK_TEXT_ACK_RETRY_DELAY_MS, 200);
+const QUICK_SHAPE_ACTION_OPTIONS = {
+  allowedActions: ['create_shape', 'update_shape', 'delete_shape'],
+  canonicalShapeTypes: ['note', 'text', 'rectangle', 'ellipse', 'diamond', 'line', 'arrow', 'draw', 'highlight', 'frame', 'group', 'star', 'cloud'],
+  shapeTypeAliases: {
+    box: 'note',
+    sticky: 'note',
+    sticky_note: 'note',
+    card: 'note',
+    rect: 'rectangle',
+    square: 'rectangle',
+    circle: 'ellipse',
+    oval: 'ellipse',
+    connector: 'arrow',
+    wire: 'line',
+    pen: 'draw',
+  },
+} as const;
 const GRAPH_FALLBACK_PATTERN =
   /\b(graph|plot|equation|function|parabola|line graph|bar chart|axis|axes|coordinate|y\s*=|f\s*\(x\)\s*=)\b/i;
 const GRAPH_EQUATION_PATTERN = /\b(?:y|f\s*\(x\)|x)\s*=\s*([^\n]+)/i;
@@ -404,6 +421,8 @@ export async function runCanvasSteward(args: RunCanvasStewardArgs) {
           requestId: fallbackResult.requestId,
           actionCount: fallbackResult.actionCount,
           shapeIds: fallbackResult.shapeIds,
+          actions: fallbackResult.actions,
+          actionOptions: fallbackResult.actionOptions ?? QUICK_SHAPE_ACTION_OPTIONS,
           degraded: true,
           fallback: 'graph_sketch',
           error: failureMessage.slice(0, 240),
@@ -721,6 +740,13 @@ async function handleQuickTextTask(room: string, payload: JsonObject) {
       shapeId,
       shapeType,
       targetHint,
+      actionCount: actions.length,
+      actions,
+      actionOptions: QUICK_SHAPE_ACTION_OPTIONS,
+      actionEnvelope: {
+        sessionId,
+        seq: 0,
+      },
       reason: 'apply_evidence_pending',
       ack: {
         clientId: null,
@@ -738,6 +764,13 @@ async function handleQuickTextTask(room: string, payload: JsonObject) {
     shapeId,
     shapeType,
     targetHint,
+    actionCount: actions.length,
+    actions,
+    actionOptions: QUICK_SHAPE_ACTION_OPTIONS,
+    actionEnvelope: {
+      sessionId,
+      seq: 0,
+    },
     ack: {
       clientId: (ack as any).clientId ?? null,
       latencyMs:
@@ -899,6 +932,12 @@ async function handleQuickShapesTask(room: string, payload: JsonObject) {
       requestId,
       shapeIds,
       actionCount: actions.length,
+      actions,
+      actionOptions: QUICK_SHAPE_ACTION_OPTIONS,
+      actionEnvelope: {
+        sessionId,
+        seq: 0,
+      },
       reason: 'apply_evidence_pending',
       ack: {
         clientId: null,
@@ -915,6 +954,12 @@ async function handleQuickShapesTask(room: string, payload: JsonObject) {
     requestId,
     shapeIds,
     actionCount: actions.length,
+    actions,
+    actionOptions: QUICK_SHAPE_ACTION_OPTIONS,
+    actionEnvelope: {
+      sessionId,
+      seq: 0,
+    },
     ack: {
       clientId: (ack as any).clientId ?? null,
       latencyMs:

@@ -7,8 +7,17 @@ import {
   extractFirstToolCall,
   parseToolArgumentsResult,
 } from '@/lib/agents/subagents/fast-steward-response';
+import {
+  recordModelIoEvent,
+  recordToolIoEvent,
+} from '@/lib/agents/shared/replay-telemetry';
 import type { FairyIntent } from './intent';
-import { FairyRouteDecisionSchema, type FairyRouteDecision, routerTools } from './router-schema';
+import {
+  buildFairyRouterToolingSnapshot,
+  FairyRouteDecisionSchema,
+  type FairyRouteDecision,
+  routerTools,
+} from './router-schema';
 
 const ROUTER_SYSTEM = [
   'You are a routing assistant for a realtime collaborative smartboard.',
@@ -40,9 +49,53 @@ const ROUTER_SYSTEM = [
 ].join(' ');
 
 const ROUTER_MODEL = getModelForSteward('FAIRY_ROUTER_FAST_MODEL');
+const ROUTER_SKILLS = [
+  'route_selection',
+  'context_profile_selection',
+  'fast_lane_view_dispatch',
+  'bundle_task_planning',
+] as const;
+const ROUTER_TOOLING_SNAPSHOT = buildFairyRouterToolingSnapshot();
+let fairyReplaySequence = 0;
+const nextFairyReplaySequence = () => {
+  fairyReplaySequence += 1;
+  return fairyReplaySequence;
+};
 
 export async function routeFairyIntent(intent: FairyIntent): Promise<FairyRouteDecision> {
+  const replayRequestId = intent.id;
+  const replayTraceId = replayRequestId;
+  const replayIntentId = replayRequestId;
+  const replaySessionId = `fairy-router-${intent.room}`;
+  const metadata = intent.metadata && typeof intent.metadata === 'object' && !Array.isArray(intent.metadata)
+    ? (intent.metadata as Record<string, unknown>)
+    : null;
+
   if (!isFastStewardReady()) {
+    recordModelIoEvent({
+      source: 'fairy_router',
+      eventType: 'model_skipped',
+      status: 'fallback',
+      sequence: nextFairyReplaySequence(),
+      sessionId: replaySessionId,
+      room: intent.room,
+      requestId: replayRequestId,
+      traceId: replayTraceId,
+      intentId: replayIntentId,
+      provider: 'cerebras',
+      model: ROUTER_MODEL,
+      providerSource: 'runtime_selected',
+      providerPath: 'fast',
+      systemPrompt: ROUTER_SYSTEM,
+      contextPriming: {
+        source: intent.source,
+        routingSkills: [...ROUTER_SKILLS],
+        contextProfile: intent.contextProfile,
+        toolingSnapshot: ROUTER_TOOLING_SNAPSHOT,
+      },
+      input: intent,
+      output: { kind: 'canvas', confidence: 0.2, reason: 'fast_steward_not_ready' },
+    });
     return {
       kind: 'canvas',
       confidence: 0.2,
@@ -64,9 +117,6 @@ export async function routeFairyIntent(intent: FairyIntent): Promise<FairyRouteD
   if (intent.contextProfile) {
     contextBits.push(`contextProfile: ${intent.contextProfile}`);
   }
-  const metadata = intent.metadata && typeof intent.metadata === 'object' && !Array.isArray(intent.metadata)
-    ? (intent.metadata as Record<string, unknown>)
-    : null;
   const promptSummary = metadata?.promptSummary as Record<string, unknown> | undefined;
   if (promptSummary) {
     const profile = typeof promptSummary.profile === 'string' ? promptSummary.profile : undefined;
@@ -92,6 +142,22 @@ export async function routeFairyIntent(intent: FairyIntent): Promise<FairyRouteD
     }
   }
 
+  const routerContextPriming = {
+    source: intent.source,
+    contextBits,
+    contextProfile: intent.contextProfile,
+    selectionIds: intent.selectionIds?.length ?? 0,
+    bounds: intent.bounds ?? null,
+    componentId: intent.componentId ?? null,
+    routingSkills: [...ROUTER_SKILLS],
+    toolingSnapshot: ROUTER_TOOLING_SNAPSHOT,
+    metadataHints: {
+      hasPromptSummary: Boolean(promptSummary),
+      hasViewContext: Boolean(viewContext),
+      spectrum: intent.spectrum ?? null,
+    },
+  };
+
   const messages = [
     { role: 'system' as const, content: ROUTER_SYSTEM },
     {
@@ -99,6 +165,24 @@ export async function routeFairyIntent(intent: FairyIntent): Promise<FairyRouteD
       content: `Request: "${intent.message}"\nSource: ${intent.source}\nContext: ${contextBits.join(' | ') || 'none'}\nReturn route_intent.`,
     },
   ];
+  recordModelIoEvent({
+    source: 'fairy_router',
+    eventType: 'model_call',
+    status: 'started',
+    sequence: nextFairyReplaySequence(),
+    sessionId: replaySessionId,
+    room: intent.room,
+    requestId: replayRequestId,
+    traceId: replayTraceId,
+    intentId: replayIntentId,
+    provider: 'cerebras',
+    model: ROUTER_MODEL,
+    providerSource: 'runtime_selected',
+    providerPath: 'fast',
+    systemPrompt: ROUTER_SYSTEM,
+    contextPriming: routerContextPriming,
+    input: messages,
+  });
 
   try {
     const response = await client.chat.completions.create({
@@ -107,9 +191,54 @@ export async function routeFairyIntent(intent: FairyIntent): Promise<FairyRouteD
       tools: routerTools,
       tool_choice: 'auto',
     });
+    recordModelIoEvent({
+      source: 'fairy_router',
+      eventType: 'model_call',
+      status: 'completed',
+      sequence: nextFairyReplaySequence(),
+      sessionId: replaySessionId,
+      room: intent.room,
+      requestId: replayRequestId,
+      traceId: replayTraceId,
+      intentId: replayIntentId,
+      provider: 'cerebras',
+      model: ROUTER_MODEL,
+      providerSource: 'runtime_selected',
+      providerPath: 'fast',
+      providerRequestId: typeof (response as any)?.id === 'string' ? (response as any).id : undefined,
+      contextPriming: routerContextPriming,
+      input: messages,
+      output: response,
+      metadata: {
+        usage: (response as any)?.usage ?? null,
+        model: (response as any)?.model ?? null,
+        finishReason: (response as any)?.choices?.[0]?.finish_reason ?? null,
+      },
+    });
 
     const toolCall = extractFirstToolCall(response);
     if (toolCall?.name === 'route_intent') {
+      recordToolIoEvent({
+        source: 'fairy_router',
+        eventType: 'tool_call',
+        status: 'received',
+        sequence: nextFairyReplaySequence(),
+        sessionId: replaySessionId,
+        room: intent.room,
+        requestId: replayRequestId,
+        traceId: replayTraceId,
+        intentId: replayIntentId,
+        toolName: toolCall.name,
+        toolCallId: `${intent.id}:route_intent`,
+        provider: 'cerebras',
+        model: ROUTER_MODEL,
+        providerSource: 'runtime_selected',
+        providerPath: 'fast',
+        input: {
+          argumentsRaw: toolCall.argumentsRaw,
+          name: toolCall.name,
+        },
+      });
       const parsedArgs = parseToolArgumentsResult(toolCall.argumentsRaw);
       if (!parsedArgs.ok) {
         console.warn('[FairyRouter] failed to parse route_intent arguments', {
@@ -117,20 +246,118 @@ export async function routeFairyIntent(intent: FairyIntent): Promise<FairyRouteD
           rawLength: parsedArgs.raw.length,
           rawPreview: parsedArgs.raw.slice(0, 240),
         });
+        recordToolIoEvent({
+          source: 'fairy_router',
+          eventType: 'tool_call',
+          status: 'error',
+          sequence: nextFairyReplaySequence(),
+          sessionId: replaySessionId,
+          room: intent.room,
+          requestId: replayRequestId,
+          traceId: replayTraceId,
+          intentId: replayIntentId,
+          toolName: toolCall.name,
+          toolCallId: `${intent.id}:route_intent`,
+          provider: 'cerebras',
+          model: ROUTER_MODEL,
+          providerSource: 'runtime_selected',
+          providerPath: 'fast',
+          input: {
+            argumentsRaw: toolCall.argumentsRaw,
+          },
+          error: parsedArgs.error,
+          priority: 'high',
+        });
       }
       const args = parsedArgs.ok ? parsedArgs.args : {};
       const parsed = FairyRouteDecisionSchema.safeParse(args);
       if (parsed.success) {
+        recordToolIoEvent({
+          source: 'fairy_router',
+          eventType: 'tool_call',
+          status: 'completed',
+          sequence: nextFairyReplaySequence(),
+          sessionId: replaySessionId,
+          room: intent.room,
+          requestId: replayRequestId,
+          traceId: replayTraceId,
+          intentId: replayIntentId,
+          toolName: toolCall.name,
+          toolCallId: `${intent.id}:route_intent`,
+          provider: 'cerebras',
+          model: ROUTER_MODEL,
+          providerSource: 'runtime_selected',
+          providerPath: 'fast',
+          input: args,
+          output: parsed.data,
+        });
         return parsed.data;
       }
       console.warn('[FairyRouter] route_intent payload failed schema validation', {
         issues: parsed.error.issues.map((issue) => issue.message),
       });
+      recordToolIoEvent({
+        source: 'fairy_router',
+        eventType: 'tool_call',
+        status: 'error',
+        sequence: nextFairyReplaySequence(),
+        sessionId: replaySessionId,
+        room: intent.room,
+        requestId: replayRequestId,
+        traceId: replayTraceId,
+        intentId: replayIntentId,
+        toolName: toolCall.name,
+        toolCallId: `${intent.id}:route_intent`,
+        provider: 'cerebras',
+        model: ROUTER_MODEL,
+        providerSource: 'runtime_selected',
+        providerPath: 'fast',
+        input: args,
+        error: parsed.error.issues.map((issue) => issue.message).join('; '),
+        priority: 'high',
+      });
     }
   } catch (error) {
     console.warn('[FairyRouter] routing failed, falling back to canvas', error);
+    recordModelIoEvent({
+      source: 'fairy_router',
+      eventType: 'model_call',
+      status: 'error',
+      sequence: nextFairyReplaySequence(),
+      sessionId: replaySessionId,
+      room: intent.room,
+      requestId: replayRequestId,
+      traceId: replayTraceId,
+      intentId: replayIntentId,
+      provider: 'cerebras',
+      model: ROUTER_MODEL,
+      providerSource: 'runtime_selected',
+      providerPath: 'fast',
+      contextPriming: routerContextPriming,
+      input: messages,
+      error: error instanceof Error ? error.message : String(error),
+      priority: 'high',
+    });
   }
 
+  recordModelIoEvent({
+    source: 'fairy_router',
+    eventType: 'model_fallback',
+    status: 'fallback',
+    sequence: nextFairyReplaySequence(),
+    sessionId: replaySessionId,
+    room: intent.room,
+    requestId: replayRequestId,
+    traceId: replayTraceId,
+    intentId: replayIntentId,
+    provider: 'cerebras',
+    model: ROUTER_MODEL,
+    providerSource: 'runtime_selected',
+    providerPath: 'fast',
+    contextPriming: routerContextPriming,
+    input: intent,
+    output: { kind: 'canvas', confidence: 0.2, message: intent.message },
+  });
   return {
     kind: 'canvas',
     confidence: 0.2,

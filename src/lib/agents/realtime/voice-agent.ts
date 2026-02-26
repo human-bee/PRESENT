@@ -20,10 +20,15 @@ import {
   type CapabilityProfile,
   type SystemCapabilities,
 } from '@/lib/agents/capabilities';
+import { deriveRequestCorrelation } from '@/lib/agents/shared/request-correlation';
 import { deriveComponentIntent } from '@/lib/agents/shared/deterministic-ids';
 import type { JsonObject } from '@/lib/utils/json-schema';
 import { ConnectionState, RoomEvent, RemoteTrackPublication, Track } from 'livekit-client';
 import { createLiveKitBus } from '@/lib/livekit/livekit-bus';
+import {
+  recordModelIoEvent,
+  recordToolIoEvent,
+} from '@/lib/agents/shared/replay-telemetry';
 import { createManualInputRouter } from './voice-agent/manual-routing';
 import { VoiceComponentLedger } from './voice-agent/component-ledger';
 import { ScorecardService } from './voice-agent/scorecard-service';
@@ -319,6 +324,122 @@ export default defineAgent({
       interruptTimeoutMs: voiceKnobs?.interruptTimeoutMs,
       transcriptionReadyTimeoutMs: voiceKnobs?.transcriptionReadyTimeoutMs,
     });
+    const voiceSessionId = `voice-${randomUUID()}`;
+    let replaySequence = 0;
+    const nextReplaySequence = () => {
+      replaySequence += 1;
+      return replaySequence;
+    };
+
+    const transcriptionSystemPrompt = [
+      'You are a transcription-only helper.',
+      'Do not respond, do not call tools. Only produce user input transcriptions.',
+    ].join(' ');
+
+    const recordVoiceModelEvent = (input: {
+      eventType: string;
+      status?: string;
+      systemPrompt?: string;
+      contextPriming?: unknown;
+      model?: string;
+      input?: unknown;
+      output?: unknown;
+      metadata?: JsonObject;
+      error?: string;
+      requestId?: string;
+      traceId?: string;
+      intentId?: string;
+      providerPath?: string;
+      providerSource?: string;
+      providerRequestId?: string;
+      priority?: 'high' | 'normal';
+    }) => {
+      const requestId = typeof input.requestId === 'string' && input.requestId.trim().length > 0
+        ? input.requestId.trim()
+        : undefined;
+      const traceId = typeof input.traceId === 'string' && input.traceId.trim().length > 0
+        ? input.traceId.trim()
+        : requestId;
+      const intentId = typeof input.intentId === 'string' && input.intentId.trim().length > 0
+        ? input.intentId.trim()
+        : requestId;
+      recordModelIoEvent({
+        source: 'voice_agent',
+        eventType: input.eventType,
+        status: input.status,
+        sequence: nextReplaySequence(),
+        sessionId: voiceSessionId,
+        room: job.room.name || '',
+        requestId,
+        traceId,
+        intentId,
+        provider: 'openai',
+        model: input.model,
+        providerPath: input.providerPath ?? 'primary',
+        providerSource: input.providerSource ?? 'runtime_selected',
+        providerRequestId: input.providerRequestId,
+        systemPrompt: input.systemPrompt,
+        contextPriming: input.contextPriming,
+        input: input.input,
+        output: input.output,
+        error: input.error,
+        metadata: input.metadata,
+        priority: input.priority,
+      });
+    };
+
+    const recordVoiceToolEvent = (input: {
+      eventType: string;
+      toolName: string;
+      toolCallId?: string;
+      status?: string;
+      requestId?: string;
+      traceId?: string;
+      intentId?: string;
+      input?: unknown;
+      output?: unknown;
+      metadata?: JsonObject;
+      error?: string;
+      provider?: string;
+      model?: string;
+      providerPath?: string;
+      providerSource?: string;
+      providerRequestId?: string;
+      priority?: 'high' | 'normal';
+    }) => {
+      const requestId = typeof input.requestId === 'string' && input.requestId.trim().length > 0
+        ? input.requestId.trim()
+        : undefined;
+      const traceId = typeof input.traceId === 'string' && input.traceId.trim().length > 0
+        ? input.traceId.trim()
+        : requestId;
+      const intentId = typeof input.intentId === 'string' && input.intentId.trim().length > 0
+        ? input.intentId.trim()
+        : requestId;
+      recordToolIoEvent({
+        source: 'voice_agent',
+        eventType: input.eventType,
+        toolName: input.toolName,
+        toolCallId: input.toolCallId,
+        status: input.status,
+        sequence: nextReplaySequence(),
+        sessionId: voiceSessionId,
+        room: job.room.name || '',
+        requestId,
+        traceId,
+        intentId,
+        provider: input.provider,
+        model: input.model,
+        providerPath: input.providerPath,
+        providerSource: input.providerSource,
+        providerRequestId: input.providerRequestId,
+        input: input.input,
+        output: input.output,
+        error: input.error,
+        metadata: input.metadata,
+        priority: input.priority,
+      });
+    };
 
     // Data messages (topic: "transcription") can arrive immediately after the agent joins the room.
     // Attach the listener up-front and buffer until the realtime session is running so we don't drop early turns.
@@ -385,6 +506,40 @@ export default defineAgent({
         serverGenerated: Boolean(message?.serverGenerated),
         receivedAt: Date.now(),
       };
+
+      const transcriptionRequestId = `${participantId || speaker || 'speaker'}:${entry.timestamp || Date.now()}`;
+      const transcriptionModel =
+        process.env.VOICE_AGENT_STT_MODEL?.trim() ||
+        process.env.VOICE_AGENT_INPUT_TRANSCRIPTION_MODEL?.trim() ||
+        process.env.AGENT_STT_MODEL?.trim() ||
+        'gpt-4o-mini-transcribe';
+      recordModelIoEvent({
+        source: message?.serverGenerated ? 'transcription_agent' : 'voice_transcript',
+        eventType: 'transcript_final',
+        status: 'captured',
+        sequence: nextReplaySequence(),
+        sessionId: voiceSessionId,
+        room: job.room.name || '',
+        requestId: transcriptionRequestId,
+        traceId: transcriptionRequestId,
+        intentId: transcriptionRequestId,
+        provider: 'openai',
+        model: transcriptionModel,
+        providerPath: 'primary',
+        providerSource: message?.serverGenerated ? 'runtime_selected' : 'livekit_data',
+        ...(message?.serverGenerated ? { systemPrompt: transcriptionSystemPrompt } : {}),
+        input: {
+          speaker,
+          participantId,
+          participantName,
+          isManual,
+          timestamp: entry.timestamp,
+        },
+        output: {
+          text,
+          isFinal: entry.isFinal,
+        },
+      });
 
       if (!transcriptionProcessingEnabled || !handleBufferedTranscription) {
         transcriptionBuffer.enqueue(entry);
@@ -461,6 +616,49 @@ export default defineAgent({
       inputAudioNumChannels: realtimeConfig.inputAudioNumChannels,
       outputAudioSampleRate: realtimeConfig.outputAudioSampleRate,
       outputAudioNumChannels: realtimeConfig.outputAudioNumChannels,
+    });
+
+    recordModelIoEvent({
+      source: 'voice_agent',
+      eventType: 'runtime_init',
+      status: 'ready',
+      sequence: nextReplaySequence(),
+      sessionId: voiceSessionId,
+      room: job.room.name || '',
+      provider: 'openai',
+      model:
+        process.env.VOICE_AGENT_REALTIME_MODEL?.trim() ||
+        process.env.REALTIME_MODEL?.trim() ||
+        'gpt-realtime',
+      providerPath: 'primary',
+      providerSource: 'runtime_selected',
+      contextPriming: {
+        transcriptionEnabled,
+        multiParticipantTranscriptionEnabled,
+        resolvedSttModel,
+        resolvedTranscriptionLanguage,
+        turnDetectionOption,
+      },
+    });
+    recordModelIoEvent({
+      source: 'transcription_agent',
+      eventType: 'runtime_init',
+      status: transcriptionEnabled || multiParticipantTranscriptionEnabled ? 'ready' : 'disabled',
+      sequence: nextReplaySequence(),
+      sessionId: voiceSessionId,
+      room: job.room.name || '',
+      provider: 'openai',
+      model: resolvedSttModel,
+      providerPath: 'primary',
+      providerSource: 'runtime_selected',
+      ...(transcriptionEnabled || multiParticipantTranscriptionEnabled
+        ? { systemPrompt: transcriptionSystemPrompt }
+        : {}),
+      contextPriming: {
+        transcriptionEnabled,
+        multiParticipantTranscriptionEnabled,
+        language: resolvedTranscriptionLanguage,
+      },
     });
 
     const subscribeToParticipant = (participant?: any) => {
@@ -545,6 +743,23 @@ export default defineAgent({
         maxParticipants: transcriptionMaxParticipants,
         model: resolvedSttModel,
         language: resolvedTranscriptionLanguage,
+      });
+      recordModelIoEvent({
+        source: 'transcription_agent',
+        eventType: 'multi_participant_start',
+        status: 'running',
+        sequence: nextReplaySequence(),
+        sessionId: voiceSessionId,
+        room: job.room.name || '',
+        provider: 'openai',
+        model: resolvedSttModel,
+        providerPath: 'primary',
+        providerSource: 'runtime_selected',
+        systemPrompt: transcriptionSystemPrompt,
+        contextPriming: {
+          maxParticipants: transcriptionMaxParticipants,
+          language: resolvedTranscriptionLanguage,
+        },
       });
     }
 
@@ -929,27 +1144,230 @@ Your only output is function calls. Never use plain text unless absolutely neces
       }
     });
 
+    const asRecord = (value: unknown): Record<string, unknown> | null => {
+      if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+      return value as Record<string, unknown>;
+    };
+
+    const readStringCandidate = (...values: unknown[]): string | undefined => {
+      for (const value of values) {
+        if (typeof value !== 'string') continue;
+        const trimmed = value.trim();
+        if (trimmed.length > 0) return trimmed;
+      }
+      return undefined;
+    };
+
+    const resolvePendingReplayContext = (input: {
+      callId?: string;
+      requestId?: string;
+      traceId?: string;
+      intentId?: string;
+    }): { callId?: string; pending?: PendingToolReplay } => {
+      const findUniqueMatch = (
+        predicate: (pending: PendingToolReplay) => boolean,
+      ): { callId?: string; pending?: PendingToolReplay } => {
+        let matchCallId: string | undefined;
+        let matchPending: PendingToolReplay | undefined;
+        for (const [pendingCallId, pending] of pendingToolReplayByCallId.entries()) {
+          if (!predicate(pending)) continue;
+          if (matchPending) {
+            return { callId: input.callId, pending: undefined };
+          }
+          matchCallId = pendingCallId;
+          matchPending = pending;
+        }
+        return { callId: matchCallId ?? input.callId, pending: matchPending };
+      };
+
+      if (input.callId) {
+        const pending = pendingToolReplayByCallId.get(input.callId);
+        if (pending) return { callId: input.callId, pending };
+      }
+      if (input.requestId) {
+        const requestMatch = findUniqueMatch(
+          (pending) => pending.requestId === input.requestId,
+        );
+        if (requestMatch.pending) return requestMatch;
+      }
+      if (input.traceId) {
+        const traceMatch = findUniqueMatch(
+          (pending) => pending.traceId === input.traceId,
+        );
+        if (traceMatch.pending) return traceMatch;
+      }
+      if (input.intentId) {
+        const intentMatch = findUniqueMatch(
+          (pending) => pending.intentId === input.intentId,
+        );
+        if (intentMatch.pending) return intentMatch;
+      }
+      return { callId: input.callId, pending: undefined };
+    };
+
     liveKitBus.on('tool_result', (message: unknown) => {
       try {
         const record = message && typeof message === 'object' ? (message as Record<string, unknown>) : null;
         if (!record) return;
-        const callId = typeof record.id === 'string' && record.id.trim().length > 0 ? record.id.trim() : undefined;
-        const payload = record.payload && typeof record.payload === 'object'
-          ? (record.payload as Record<string, unknown>)
-          : null;
-        const result =
-          (payload?.result && typeof payload.result === 'object'
-            ? (payload.result as Record<string, unknown>)
-            : null) ??
-          (record.result && typeof record.result === 'object'
-            ? (record.result as Record<string, unknown>)
-            : null);
+        const payload = asRecord(record.payload);
+        const payloadContext = asRecord(payload?.context);
+        const payloadResult = asRecord(payload?.result);
+        const recordResult = asRecord(record.result);
+        const result = payloadResult ?? recordResult;
+        const resultContext = asRecord(result?.context);
+        const callIdCandidate = readStringCandidate(
+          record.id,
+          (record as Record<string, unknown>).tool_call_id,
+          (record as Record<string, unknown>).toolCallId,
+          payload?.tool_call_id,
+          payload?.toolCallId,
+          payloadContext?.tool_call_id,
+          payloadContext?.toolCallId,
+          result?.tool_call_id,
+          result?.toolCallId,
+          result?.id,
+          resultContext?.tool_call_id,
+          resultContext?.toolCallId,
+        );
+        const requestIdCandidate = readStringCandidate(
+          payload?.request_id,
+          payload?.requestId,
+          payloadContext?.request_id,
+          payloadContext?.requestId,
+          result?.request_id,
+          result?.requestId,
+          resultContext?.request_id,
+          resultContext?.requestId,
+          record.request_id,
+          (record as Record<string, unknown>).requestId,
+        );
+        const traceIdCandidate = readStringCandidate(
+          payload?.trace_id,
+          payload?.traceId,
+          payloadContext?.trace_id,
+          payloadContext?.traceId,
+          result?.trace_id,
+          result?.traceId,
+          resultContext?.trace_id,
+          resultContext?.traceId,
+          record.trace_id,
+          (record as Record<string, unknown>).traceId,
+        );
+        const intentIdCandidate = readStringCandidate(
+          payload?.intent_id,
+          payload?.intentId,
+          payloadContext?.intent_id,
+          payloadContext?.intentId,
+          result?.intent_id,
+          result?.intentId,
+          resultContext?.intent_id,
+          resultContext?.intentId,
+          record.intent_id,
+          (record as Record<string, unknown>).intentId,
+        );
+        const resolvedReplayContext = resolvePendingReplayContext({
+          callId: callIdCandidate,
+          requestId: requestIdCandidate,
+          traceId: traceIdCandidate,
+          intentId: intentIdCandidate,
+        });
+        const callId = resolvedReplayContext.callId;
+        const replayContext = resolvedReplayContext.pending;
         const statusRaw =
-          (typeof payload?.status === 'string' ? payload.status : undefined) ??
-          (typeof record.status === 'string' ? record.status : undefined) ??
-          (typeof result?.status === 'string' ? result.status : undefined) ??
+          readStringCandidate(payload?.status, result?.status, record.status) ??
           '';
         const status = statusRaw.trim().toUpperCase();
+        const resolvedToolName = readStringCandidate(
+          payload?.tool,
+          result?.tool,
+          record.tool,
+          replayContext?.tool,
+        ) ?? 'unknown_tool';
+        const requestId = requestIdCandidate ?? replayContext?.requestId;
+        const traceId = traceIdCandidate ?? replayContext?.traceId ?? requestId;
+        const intentId = intentIdCandidate ?? replayContext?.intentId ?? requestId;
+        const provider = readStringCandidate(
+          payload?.provider,
+          payloadContext?.provider,
+          result?.provider,
+          resultContext?.provider,
+          record.provider,
+          replayContext?.provider,
+        );
+        const model = readStringCandidate(
+          payload?.model,
+          payloadContext?.model,
+          result?.model,
+          resultContext?.model,
+          record.model,
+          replayContext?.model,
+        );
+        const providerPath = readStringCandidate(
+          payload?.provider_path,
+          payload?.providerPath,
+          payloadContext?.provider_path,
+          payloadContext?.providerPath,
+          result?.provider_path,
+          result?.providerPath,
+          resultContext?.provider_path,
+          resultContext?.providerPath,
+          (record as Record<string, unknown>).provider_path,
+          (record as Record<string, unknown>).providerPath,
+          replayContext?.providerPath,
+        );
+        const providerSource = readStringCandidate(
+          payload?.provider_source,
+          payload?.providerSource,
+          payloadContext?.provider_source,
+          payloadContext?.providerSource,
+          result?.provider_source,
+          result?.providerSource,
+          resultContext?.provider_source,
+          resultContext?.providerSource,
+          (record as Record<string, unknown>).provider_source,
+          (record as Record<string, unknown>).providerSource,
+          replayContext?.providerSource,
+        );
+        const providerRequestId = readStringCandidate(
+          payload?.provider_request_id,
+          payload?.providerRequestId,
+          payloadContext?.provider_request_id,
+          payloadContext?.providerRequestId,
+          result?.provider_request_id,
+          result?.providerRequestId,
+          resultContext?.provider_request_id,
+          resultContext?.providerRequestId,
+          (record as Record<string, unknown>).provider_request_id,
+          (record as Record<string, unknown>).providerRequestId,
+          replayContext?.providerRequestId,
+        );
+        recordVoiceToolEvent({
+          eventType: 'tool_result',
+          toolName: resolvedToolName,
+          toolCallId: callId,
+          status: statusRaw || 'tool_result',
+          requestId,
+          traceId,
+          intentId,
+          provider,
+          model,
+          providerPath,
+          providerSource,
+          providerRequestId,
+          input: replayContext?.input,
+          output: result ?? payload ?? record,
+          metadata: {
+            source:
+              readStringCandidate(record.source, payload?.source, payloadContext?.source) ??
+              'tool_result',
+          },
+        });
+        const terminalStatus =
+          !status || SUCCESS_TOOL_STATUSES.has(status) || FAILURE_TOOL_STATUSES.has(status);
+        if (callId && terminalStatus) {
+          pendingToolReplayByCallId.delete(callId);
+        }
+
         if (!callId || !pendingMutationDispatches.has(callId)) return;
         const pending = pendingMutationDispatches.get(callId);
         if (!pending) return;
@@ -957,26 +1375,31 @@ Your only output is function calls. Never use plain text unless absolutely neces
         if (pending.tool === 'dispatch_to_conductor') {
           if (status && FAILURE_TOOL_STATUSES.has(status)) {
             markMutationFailed(callId, `dispatch_to_conductor:${status.toLowerCase()}`);
+            pendingToolReplayByCallId.delete(callId);
             return;
           }
           if (status === 'APPLIED' || status === 'COMPLETED') {
             markMutationApplied(callId);
+            pendingToolReplayByCallId.delete(callId);
           }
           return;
         }
 
         if (status && SUCCESS_TOOL_STATUSES.has(status)) {
           markMutationApplied(callId);
+          pendingToolReplayByCallId.delete(callId);
           return;
         }
 
         if (status && FAILURE_TOOL_STATUSES.has(status)) {
           markMutationFailed(callId, `${pending.tool}:${status.toLowerCase()}`);
+          pendingToolReplayByCallId.delete(callId);
           return;
         }
 
         if (!status) {
           markMutationApplied(callId);
+          pendingToolReplayByCallId.delete(callId);
         }
       } catch (error) {
         console.warn('[VoiceAgent] failed to process tool_result for mutation confirmation', error);
@@ -987,17 +1410,169 @@ Your only output is function calls. Never use plain text unless absolutely neces
       try {
         const record = message && typeof message === 'object' ? (message as Record<string, unknown>) : null;
         if (!record) return;
-        const callId = typeof record.id === 'string' && record.id.trim().length > 0 ? record.id.trim() : undefined;
-        const payload = record.payload && typeof record.payload === 'object'
-          ? (record.payload as Record<string, unknown>)
-          : null;
+        const payload = asRecord(record.payload);
+        const payloadContext = asRecord(payload?.context);
+        const payloadError = asRecord(payload?.error);
+        const recordError = asRecord(record.error);
+        const result = asRecord(payload?.result) ?? asRecord(record.result);
+        const resultContext = asRecord(result?.context);
+        const callIdCandidate = readStringCandidate(
+          record.id,
+          (record as Record<string, unknown>).tool_call_id,
+          (record as Record<string, unknown>).toolCallId,
+          payload?.tool_call_id,
+          payload?.toolCallId,
+          payloadContext?.tool_call_id,
+          payloadContext?.toolCallId,
+          result?.tool_call_id,
+          result?.toolCallId,
+          result?.id,
+          resultContext?.tool_call_id,
+          resultContext?.toolCallId,
+        );
+        const requestIdCandidate = readStringCandidate(
+          payload?.request_id,
+          payload?.requestId,
+          payloadContext?.request_id,
+          payloadContext?.requestId,
+          result?.request_id,
+          result?.requestId,
+          resultContext?.request_id,
+          resultContext?.requestId,
+          record.request_id,
+          (record as Record<string, unknown>).requestId,
+        );
+        const traceIdCandidate = readStringCandidate(
+          payload?.trace_id,
+          payload?.traceId,
+          payloadContext?.trace_id,
+          payloadContext?.traceId,
+          result?.trace_id,
+          result?.traceId,
+          resultContext?.trace_id,
+          resultContext?.traceId,
+          record.trace_id,
+          (record as Record<string, unknown>).traceId,
+        );
+        const intentIdCandidate = readStringCandidate(
+          payload?.intent_id,
+          payload?.intentId,
+          payloadContext?.intent_id,
+          payloadContext?.intentId,
+          result?.intent_id,
+          result?.intentId,
+          resultContext?.intent_id,
+          resultContext?.intentId,
+          record.intent_id,
+          (record as Record<string, unknown>).intentId,
+        );
+        const resolvedReplayContext = resolvePendingReplayContext({
+          callId: callIdCandidate,
+          requestId: requestIdCandidate,
+          traceId: traceIdCandidate,
+          intentId: intentIdCandidate,
+        });
+        const callId = resolvedReplayContext.callId;
+        const replayContext = resolvedReplayContext.pending;
         const errorValue = payload?.error ?? record.error;
         const reason =
           typeof errorValue === 'string'
             ? errorValue
-            : errorValue && typeof errorValue === 'object' && typeof (errorValue as any).message === 'string'
-              ? (errorValue as any).message
+            : payloadError && typeof payloadError.message === 'string'
+              ? payloadError.message
+              : recordError && typeof recordError.message === 'string'
+                ? recordError.message
               : 'tool_error';
+        const resolvedToolName = readStringCandidate(
+          payload?.tool,
+          result?.tool,
+          record.tool,
+          replayContext?.tool,
+        ) ?? 'unknown_tool';
+        const requestId = requestIdCandidate ?? replayContext?.requestId;
+        const traceId = traceIdCandidate ?? replayContext?.traceId ?? requestId;
+        const intentId = intentIdCandidate ?? replayContext?.intentId ?? requestId;
+        const provider = readStringCandidate(
+          payload?.provider,
+          payloadContext?.provider,
+          result?.provider,
+          resultContext?.provider,
+          record.provider,
+          replayContext?.provider,
+        );
+        const model = readStringCandidate(
+          payload?.model,
+          payloadContext?.model,
+          result?.model,
+          resultContext?.model,
+          record.model,
+          replayContext?.model,
+        );
+        const providerPath = readStringCandidate(
+          payload?.provider_path,
+          payload?.providerPath,
+          payloadContext?.provider_path,
+          payloadContext?.providerPath,
+          result?.provider_path,
+          result?.providerPath,
+          resultContext?.provider_path,
+          resultContext?.providerPath,
+          (record as Record<string, unknown>).provider_path,
+          (record as Record<string, unknown>).providerPath,
+          replayContext?.providerPath,
+        );
+        const providerSource = readStringCandidate(
+          payload?.provider_source,
+          payload?.providerSource,
+          payloadContext?.provider_source,
+          payloadContext?.providerSource,
+          result?.provider_source,
+          result?.providerSource,
+          resultContext?.provider_source,
+          resultContext?.providerSource,
+          (record as Record<string, unknown>).provider_source,
+          (record as Record<string, unknown>).providerSource,
+          replayContext?.providerSource,
+        );
+        const providerRequestId = readStringCandidate(
+          payload?.provider_request_id,
+          payload?.providerRequestId,
+          payloadContext?.provider_request_id,
+          payloadContext?.providerRequestId,
+          result?.provider_request_id,
+          result?.providerRequestId,
+          resultContext?.provider_request_id,
+          resultContext?.providerRequestId,
+          (record as Record<string, unknown>).provider_request_id,
+          (record as Record<string, unknown>).providerRequestId,
+          replayContext?.providerRequestId,
+        );
+        recordVoiceToolEvent({
+          eventType: 'tool_error',
+          toolName: resolvedToolName,
+          toolCallId: callId,
+          status: 'error',
+          requestId,
+          traceId,
+          intentId,
+          provider,
+          model,
+          providerPath,
+          providerSource,
+          providerRequestId,
+          input: replayContext?.input,
+          output: payload ?? record,
+          error: String(reason),
+          metadata: {
+            source:
+              readStringCandidate(record.source, payload?.source, payloadContext?.source) ??
+              'tool_error',
+          },
+          priority: 'high',
+        });
+        if (callId) {
+          pendingToolReplayByCallId.delete(callId);
+        }
         if (!callId || !pendingMutationDispatches.has(callId)) {
           if (pendingMutationDispatches.size > 0) {
             markMutationFailed(undefined, String(reason));
@@ -1005,6 +1580,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
           return;
         }
         markMutationFailed(callId, String(reason));
+        pendingToolReplayByCallId.delete(callId);
       } catch (error) {
         console.warn('[VoiceAgent] failed to process tool_error for mutation confirmation', error);
       }
@@ -1197,7 +1773,24 @@ Your only output is function calls. Never use plain text unless absolutely neces
       queuedAt: number;
     };
 
+    type PendingToolReplay = {
+      tool: string;
+      task?: string;
+      requestId?: string;
+      traceId?: string;
+      intentId?: string;
+      model?: string;
+      provider?: string;
+      providerPath?: string;
+      providerSource?: string;
+      providerRequestId?: string;
+      queuedAt: number;
+      input: JsonObject;
+      reliable: boolean;
+    };
+
     const pendingMutationDispatches = new Map<string, PendingMutationDispatch>();
+    const pendingToolReplayByCallId = new Map<string, PendingToolReplay>();
     const mutationState = {
       lastDispatchedAt: 0,
       lastAppliedAt: 0,
@@ -1211,6 +1804,11 @@ Your only output is function calls. Never use plain text unless absolutely neces
           pendingMutationDispatches.delete(callId);
           mutationState.lastFailedAt = now;
           mutationState.lastFailureReason = 'timed_out_waiting_for_apply';
+        }
+      }
+      for (const [callId, pending] of pendingToolReplayByCallId.entries()) {
+        if (now - pending.queuedAt > MUTATION_PENDING_TTL_MS) {
+          pendingToolReplayByCallId.delete(callId);
         }
       }
     };
@@ -2094,7 +2692,79 @@ Your only output is function calls. Never use plain text unless absolutely neces
           } as JsonObject,
         };
       }
-      const entry = { event: buildToolEvent(toolName, normalizedParams, roomName, toolEventContext), reliable };
+      const replayTask =
+        toolName === 'dispatch_to_conductor' &&
+          typeof (normalizedParams as any)?.task === 'string' &&
+          (normalizedParams as any).task.trim().length > 0
+          ? String((normalizedParams as any).task).trim()
+          : toolName;
+      const replayParams =
+        toolName === 'dispatch_to_conductor' &&
+          (normalizedParams as any)?.params &&
+          typeof (normalizedParams as any).params === 'object' &&
+          !Array.isArray((normalizedParams as any).params)
+          ? ((normalizedParams as any).params as JsonObject)
+          : normalizedParams;
+      const replayCorrelation = deriveRequestCorrelation({
+        task: replayTask,
+        requestId: (replayParams as any)?.requestId,
+        params: replayParams,
+      });
+      const replayRequestId =
+        replayCorrelation.requestId || `${voiceSessionId}:${replayTask}:${Date.now()}`;
+      const replayTraceId = replayCorrelation.traceId || replayRequestId;
+      const replayIntentId = replayCorrelation.intentId || replayRequestId;
+      const realtimeModelForTool =
+        process.env.VOICE_AGENT_REALTIME_MODEL?.trim() ||
+        process.env.REALTIME_MODEL?.trim() ||
+        'gpt-realtime';
+      const entry = {
+        event: buildToolEvent(toolName, normalizedParams, roomName, {
+          requestId: replayRequestId,
+          traceId: replayTraceId,
+          intentId: replayIntentId,
+          sessionId: voiceSessionId,
+          provider: 'openai',
+          model: realtimeModelForTool,
+          providerSource: 'runtime_selected',
+          providerPath: 'primary',
+          ...(toolEventContext ?? {}),
+        }),
+        reliable,
+      };
+      pendingToolReplayByCallId.set(entry.event.id, {
+        tool: toolName,
+        task: replayTask,
+        requestId: replayRequestId,
+        traceId: replayTraceId,
+        intentId: replayIntentId,
+        model: realtimeModelForTool,
+        provider: 'openai',
+        providerPath: 'primary',
+        providerSource: 'runtime_selected',
+        queuedAt: Date.now(),
+        input: replayParams,
+        reliable,
+      });
+      recordVoiceToolEvent({
+        eventType: 'tool_call_created',
+        toolName: toolName,
+        toolCallId: entry.event.id,
+        status: 'created',
+        requestId: replayRequestId,
+        traceId: replayTraceId,
+        intentId: replayIntentId,
+        input: replayParams,
+        metadata: {
+          room: roomName,
+          reliable,
+          task: replayTask,
+        },
+        provider: 'openai',
+        model: realtimeModelForTool,
+        providerPath: 'primary',
+        providerSource: 'runtime_selected',
+      });
 
       const publishOrQueueToolCall = async () => {
         trackPendingMutation(entry.event);
@@ -2111,22 +2781,85 @@ Your only output is function calls. Never use plain text unless absolutely neces
               void flushPendingToolCalls();
             }, 250);
           }
+          recordVoiceToolEvent({
+            eventType: 'tool_call_buffered',
+            toolName,
+            toolCallId: entry.event.id,
+            status: 'queued',
+            requestId: replayRequestId,
+            traceId: replayTraceId,
+            intentId: replayIntentId,
+            input: replayParams,
+            metadata: { reason: 'local_participant_unavailable', reliable },
+            provider: 'openai',
+            model: realtimeModelForTool,
+            providerPath: 'primary',
+            providerSource: 'runtime_selected',
+          });
           return;
         }
         try {
           const sent = await publishToolCall(entry);
           if (!sent) {
             pendingToolCalls.push(entry);
+            recordVoiceToolEvent({
+              eventType: 'tool_call_publish_deferred',
+              toolName,
+              toolCallId: entry.event.id,
+              status: 'queued',
+              requestId: replayRequestId,
+              traceId: replayTraceId,
+              intentId: replayIntentId,
+              input: replayParams,
+              metadata: { reason: 'publish_returned_false', reliable },
+              provider: 'openai',
+              model: realtimeModelForTool,
+              providerPath: 'primary',
+              providerSource: 'runtime_selected',
+            });
             if (!flushToolCallsHandle) {
               flushToolCallsHandle = setTimeout(() => {
                 flushToolCallsHandle = null;
                 void flushPendingToolCalls();
               }, 250);
             }
+            return;
           }
+          recordVoiceToolEvent({
+            eventType: 'tool_call_published',
+            toolName,
+            toolCallId: entry.event.id,
+            status: 'published',
+            requestId: replayRequestId,
+            traceId: replayTraceId,
+            intentId: replayIntentId,
+            input: replayParams,
+            metadata: { reliable },
+            provider: 'openai',
+            model: realtimeModelForTool,
+            providerPath: 'primary',
+            providerSource: 'runtime_selected',
+          });
         } catch (error) {
           console.error('[VoiceAgent] publishData threw', { tool: toolName, error });
           pendingToolCalls.unshift(entry);
+          recordVoiceToolEvent({
+            eventType: 'tool_call_publish_error',
+            toolName,
+            toolCallId: entry.event.id,
+            status: 'error',
+            requestId: replayRequestId,
+            traceId: replayTraceId,
+            intentId: replayIntentId,
+            input: replayParams,
+            error: error instanceof Error ? error.message : String(error),
+            metadata: { reliable },
+            provider: 'openai',
+            model: realtimeModelForTool,
+            providerPath: 'primary',
+            providerSource: 'runtime_selected',
+            priority: 'high',
+          });
           if (!flushToolCallsHandle) {
             flushToolCallsHandle = setTimeout(() => {
               flushToolCallsHandle = null;
@@ -2151,6 +2884,25 @@ Your only output is function calls. Never use plain text unless absolutely neces
       );
       if (result.deduped) {
         orchestrationMetrics.mutationDeduped += 1;
+        pendingToolReplayByCallId.delete(entry.event.id);
+        recordVoiceToolEvent({
+          eventType: 'tool_call_deduped',
+          toolName,
+          toolCallId: entry.event.id,
+          status: 'deduped',
+          requestId: replayRequestId,
+          traceId: replayTraceId,
+          intentId: replayIntentId,
+          input: replayParams,
+          metadata: {
+            idempotencyKey: orchestration.idempotencyKey,
+            lockKey: orchestration.lockKey,
+          },
+          provider: 'openai',
+          model: realtimeModelForTool,
+          providerPath: 'primary',
+          providerSource: 'runtime_selected',
+        });
         console.debug('[VoiceAgent] dropping duplicate mutation by idempotency key', {
           tool: toolName,
           idempotencyKey: orchestration.idempotencyKey,
@@ -2966,6 +3718,25 @@ Your only output is function calls. Never use plain text unless absolutely neces
       components: (systemCapabilities.components || []).length,
       manifestVersion: systemCapabilities.manifestVersion,
     });
+    const resolvedRealtimeModel =
+      process.env.VOICE_AGENT_REALTIME_MODEL?.trim() ||
+      process.env.REALTIME_MODEL?.trim() ||
+      'gpt-realtime';
+    recordVoiceModelEvent({
+      eventType: 'system_prompt_loaded',
+      status: 'ready',
+      model: resolvedRealtimeModel,
+      systemPrompt: instructions,
+      contextPriming: {
+        capabilityProfile: systemCapabilities.capabilityProfile || configuredCapabilityProfile,
+        tools: systemCapabilities.tools,
+        components: systemCapabilities.components || [],
+        transcriptionEnabled,
+        transcriptionModel: resolvedSttModel,
+        transcriptionLanguage: resolvedTranscriptionLanguage,
+        multiParticipantTranscriptionEnabled,
+      },
+    });
 
     const agent = new voice.Agent({
       instructions,
@@ -3596,6 +4367,39 @@ Your only output is function calls. Never use plain text unless absolutely neces
       for (const fnCall of calls) {
         try {
           const args = JSON.parse(fnCall.args || '{}') as Record<string, unknown>;
+          const fnCorrelation = deriveRequestCorrelation({
+            task: fnCall.name,
+            requestId:
+              (args as any)?.requestId ??
+              ((args as any)?.params && typeof (args as any).params === 'object'
+                ? ((args as any).params as Record<string, unknown>).requestId
+                : undefined),
+            params:
+              (args as any)?.params && typeof (args as any).params === 'object'
+                ? ((args as any).params as JsonObject)
+                : (args as JsonObject),
+          });
+          recordVoiceToolEvent({
+            eventType: 'function_tools_executed',
+            toolName: fnCall.name,
+            toolCallId: typeof fnCall.id === 'string' ? fnCall.id : undefined,
+            status: 'selected',
+            requestId: fnCorrelation.requestId,
+            traceId: fnCorrelation.traceId,
+            intentId: fnCorrelation.intentId,
+            input: args,
+            metadata: {
+              realtimeCallId: fnCall.id,
+              argumentBytes: typeof fnCall.args === 'string' ? fnCall.args.length : 0,
+            },
+            provider: 'openai',
+            model:
+              process.env.VOICE_AGENT_REALTIME_MODEL?.trim() ||
+              process.env.REALTIME_MODEL?.trim() ||
+              'gpt-realtime',
+            providerPath: 'primary',
+            providerSource: 'runtime_selected',
+          });
           if (
             ![
               'create_component',
@@ -3792,6 +4596,22 @@ Your only output is function calls. Never use plain text unless absolutely neces
           });
         } catch (error) {
           console.error('[VoiceAgent] Tool call handling failed', error);
+          recordVoiceToolEvent({
+            eventType: 'function_tools_executed_error',
+            toolName: fnCall?.name || 'unknown',
+            toolCallId: typeof fnCall?.id === 'string' ? fnCall.id : undefined,
+            status: 'error',
+            error: error instanceof Error ? error.message : String(error),
+            output: fnCall,
+            provider: 'openai',
+            model:
+              process.env.VOICE_AGENT_REALTIME_MODEL?.trim() ||
+              process.env.REALTIME_MODEL?.trim() ||
+              'gpt-realtime',
+            providerPath: 'primary',
+            providerSource: 'runtime_selected',
+            priority: 'high',
+          });
         }
       }
     });
@@ -3897,6 +4717,43 @@ Your only output is function calls. Never use plain text unless absolutely neces
             : undefined,
         });
       }
+      const itemRecord = ((event.item ?? {}) as unknown) as Record<string, unknown>;
+      const itemRole = typeof event.item?.role === 'string' ? event.item.role : 'unknown';
+      const itemRequestId =
+        (typeof itemRecord.function_call_id === 'string' && itemRecord.function_call_id.trim()) ||
+        (typeof itemRecord.id === 'string' && itemRecord.id.trim()) ||
+        (typeof itemRecord.item_id === 'string' && itemRecord.item_id.trim()) ||
+        `${voiceSessionId}:item:${Date.now()}`;
+      recordVoiceModelEvent({
+        eventType: 'conversation_item_added',
+        status: itemRole,
+        model:
+          process.env.VOICE_AGENT_REALTIME_MODEL?.trim() ||
+          process.env.REALTIME_MODEL?.trim() ||
+          'gpt-realtime',
+        requestId: itemRequestId,
+        traceId: itemRequestId,
+        intentId: itemRequestId,
+        input:
+          itemRole === 'user'
+            ? {
+                textContent: event.item?.textContent,
+                content: (event.item as any)?.content,
+              }
+            : undefined,
+        output:
+          itemRole === 'assistant'
+            ? {
+                textContent: event.item?.textContent,
+                toolCalls: (event.item as any)?.tool_calls,
+                functionCall: (event.item as any)?.functionCall,
+                content: (event.item as any)?.content,
+              }
+            : itemRecord,
+        metadata: {
+          hasToolCalls: Boolean((event.item as any)?.tool_calls),
+        },
+      });
       if (event.item.role !== 'assistant') return;
       const originalText = event.item.textContent ?? '';
       const text = normalizeAssistantMutationText(originalText);
@@ -3906,6 +4763,17 @@ Your only output is function calls. Never use plain text unless absolutely neces
 
     session.on(voice.AgentSessionEventTypes.Error, (event) => {
       logRealtimeError('session error', event.error);
+      recordVoiceModelEvent({
+        eventType: 'session_error',
+        status: 'error',
+        model:
+          process.env.VOICE_AGENT_REALTIME_MODEL?.trim() ||
+          process.env.REALTIME_MODEL?.trim() ||
+          'gpt-realtime',
+        error: event.error instanceof Error ? event.error.message : String(event.error),
+        output: event,
+        priority: 'high',
+      });
     });
 
     session.on(voice.AgentSessionEventTypes.Close, (event) => {
@@ -3917,6 +4785,18 @@ Your only output is function calls. Never use plain text unless absolutely neces
       if (event.error) {
         logRealtimeError('session close error', event.error as unknown);
       }
+      recordVoiceModelEvent({
+        eventType: 'session_close',
+        status: String(event.reason || 'closed'),
+        model:
+          process.env.VOICE_AGENT_REALTIME_MODEL?.trim() ||
+          process.env.REALTIME_MODEL?.trim() ||
+          'gpt-realtime',
+        output: payload,
+        ...(event.error
+          ? { error: event.error instanceof Error ? event.error.message : String(event.error) }
+          : {}),
+      });
       if (multiParticipantTranscriber) {
         void multiParticipantTranscriber.stop().catch(() => {});
       }
@@ -3994,6 +4874,19 @@ Your only output is function calls. Never use plain text unless absolutely neces
         throw error;
       }
     }
+    recordVoiceModelEvent({
+      eventType: 'session_started',
+      status: 'running',
+      model:
+        process.env.VOICE_AGENT_REALTIME_MODEL?.trim() ||
+        process.env.REALTIME_MODEL?.trim() ||
+        'gpt-realtime',
+      contextPriming: {
+        room: job.room.name || '',
+        transcriptionEnabled: !multiParticipantTranscriptionEnabled && transcriptionEnabled,
+        multiParticipantTranscriptionEnabled,
+      },
+    });
   },
 });
 

@@ -9,6 +9,18 @@ import {
 } from '../tool-publishing';
 
 describe('voice-agent tool publishing helpers', () => {
+  const toolContext = {
+    requestId: 'req-1',
+    traceId: 'trace-1',
+    intentId: 'intent-1',
+    sessionId: 'session-1',
+    provider: 'openai',
+    model: 'gpt-realtime',
+    providerSource: 'voice.agent',
+    providerPath: 'voice',
+    providerRequestId: 'provider-req-1',
+  } as const;
+
   it('builds stable core tool_call envelopes for create/update/dispatch tools', () => {
     const nowSpy = jest.spyOn(Date, 'now').mockReturnValue(1_111);
     try {
@@ -31,14 +43,26 @@ describe('voice-agent tool publishing helpers', () => {
       ];
 
       for (const entry of toolCases) {
-        const event = buildToolEvent(entry.tool, entry.params, 'room-a');
+        const event = buildToolEvent(entry.tool, entry.params, 'room-a', toolContext);
         expect(event).toMatchObject({
           roomId: 'room-a',
           type: 'tool_call',
           payload: {
             tool: entry.tool,
             params: entry.params,
-            context: { source: 'voice', timestamp: 1_111 },
+            context: {
+              source: 'voice',
+              timestamp: 1_111,
+              request_id: 'req-1',
+              trace_id: 'trace-1',
+              intent_id: 'intent-1',
+              session_id: 'session-1',
+              provider: 'openai',
+              model: 'gpt-realtime',
+              provider_source: 'voice.agent',
+              provider_path: 'voice',
+              provider_request_id: 'provider-req-1',
+            },
           },
           timestamp: 1_111,
           source: 'voice',
@@ -46,7 +70,20 @@ describe('voice-agent tool publishing helpers', () => {
         expect(typeof event.id).toBe('string');
         expect(Object.keys(event).sort()).toEqual(['id', 'payload', 'roomId', 'source', 'timestamp', 'type']);
         expect(Object.keys(event.payload).sort()).toEqual(['context', 'params', 'tool']);
-        expect(Object.keys(event.payload.context).sort()).toEqual(['source', 'timestamp']);
+        expect(Object.keys(event.payload.context).sort()).toEqual([
+          'intent_id',
+          'model',
+          'provider',
+          'provider_path',
+          'provider_request_id',
+          'provider_source',
+          'request_id',
+          'session_id',
+          'source',
+          'timestamp',
+          'tool_call_id',
+          'trace_id',
+        ]);
       }
     } finally {
       nowSpy.mockRestore();
@@ -193,8 +230,8 @@ describe('voice-agent tool publishing helpers', () => {
 
   it('flushes queued tool calls and re-queues when publish fails', async () => {
     const queue = [
-      { event: buildToolEvent('create_component', {}, 'room-a'), reliable: true },
-      { event: buildToolEvent('update_component', {}, 'room-a'), reliable: false },
+      { event: buildToolEvent('create_component', {}, 'room-a', toolContext), reliable: true },
+      { event: buildToolEvent('update_component', {}, 'room-a', toolContext), reliable: false },
     ];
 
     let publishCount = 0;
@@ -223,9 +260,14 @@ describe('voice-agent tool publishing helpers', () => {
 
   it('keeps failed entry at the front after partial drain and reports publish errors', async () => {
     const queue = [
-      { event: buildToolEvent('create_component', { messageId: 'ui-1' }, 'room-a'), reliable: true },
+      { event: buildToolEvent('create_component', { messageId: 'ui-1' }, 'room-a', toolContext), reliable: true },
       {
-        event: buildToolEvent('update_component', { componentId: 'ui-1', patch: { text: 'patched' } }, 'room-a'),
+        event: buildToolEvent(
+          'update_component',
+          { componentId: 'ui-1', patch: { text: 'patched' } },
+          'room-a',
+          toolContext,
+        ),
         reliable: false,
       },
       {
@@ -233,6 +275,7 @@ describe('voice-agent tool publishing helpers', () => {
           'dispatch_to_conductor',
           { task: 'canvas.quick_text', params: { room: 'room-a', text: 'next' } },
           'room-a',
+          toolContext,
         ),
         reliable: true,
       },
@@ -266,7 +309,7 @@ describe('voice-agent tool publishing helpers', () => {
   });
 
   it('does not drain queue while disconnected and preserves entries for reconnect', async () => {
-    const queue = [{ event: buildToolEvent('dispatch_to_conductor', {}, 'room-a'), reliable: true }];
+    const queue = [{ event: buildToolEvent('dispatch_to_conductor', {}, 'room-a', toolContext), reliable: true }];
     const publish = jest.fn(async () => true);
 
     const drained = await flushPendingToolCallQueue({

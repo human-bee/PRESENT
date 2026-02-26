@@ -16,8 +16,17 @@ import {
   type CrowdPulsePatch,
 } from './crowd-pulse-parser';
 import { resolveFastStewardModel } from '@/lib/agents/control-plane/fast-model';
+import {
+  recordModelIoEvent,
+  recordToolIoEvent,
+} from '@/lib/agents/shared/replay-telemetry';
 
 const getCrowdPulseFastModel = () => getModelForSteward('CROWD_PULSE_STEWARD_FAST_MODEL');
+let crowdPulseReplaySequence = 0;
+const nextCrowdPulseReplaySequence = () => {
+  crowdPulseReplaySequence += 1;
+  return crowdPulseReplaySequence;
+};
 
 const CROWD_PULSE_SYSTEM = `
 You are a fast crowd pulse steward for a realtime collaborative workspace.
@@ -93,6 +102,9 @@ export async function runCrowdPulseStewardFast(params: {
   instruction?: string;
   contextBundle?: string;
   contextProfile?: string;
+  requestId?: string;
+  traceId?: string;
+  intentId?: string;
 }): Promise<CrowdPulsePatch> {
   const { room, instruction, contextBundle, contextProfile } = params;
   const { model: CEREBRAS_MODEL } = await resolveFastStewardModel({
@@ -101,6 +113,18 @@ export async function runCrowdPulseStewardFast(params: {
     room,
     task: 'crowd_pulse.fast',
   }).catch(() => ({ model: getCrowdPulseFastModel() }));
+  const requestId =
+    typeof params.requestId === 'string' && params.requestId.trim().length > 0
+      ? params.requestId.trim()
+      : `crowd-pulse:${room}:${Date.now()}`;
+  const traceId =
+    typeof params.traceId === 'string' && params.traceId.trim().length > 0
+      ? params.traceId.trim()
+      : requestId;
+  const intentId =
+    typeof params.intentId === 'string' && params.intentId.trim().length > 0
+      ? params.intentId.trim()
+      : requestId;
   const [transcript, contextDocs] = await Promise.all([
     getTranscriptWindow(room, resolveWindowMs(contextProfile)),
     getContextDocuments(room),
@@ -129,9 +153,49 @@ export async function runCrowdPulseStewardFast(params: {
         .join('\n\n'),
     },
   ];
+  recordModelIoEvent({
+    source: 'fast_crowd_pulse_steward',
+    eventType: 'model_call',
+    status: 'started',
+    sequence: nextCrowdPulseReplaySequence(),
+    sessionId: `fast-crowd-pulse-${room}`,
+    room,
+    requestId,
+    traceId,
+    intentId,
+    provider: 'cerebras',
+    model: CEREBRAS_MODEL,
+    providerSource: 'runtime_selected',
+    providerPath: 'fast',
+    systemPrompt: CROWD_PULSE_SYSTEM,
+    input: messages,
+    contextPriming: {
+      contextProfile: contextProfile ?? 'standard',
+      hasContextBundle: Boolean(contextBundle),
+      transcriptLines: transcriptLines.length,
+      contextDocs: contextDocs.length,
+    },
+  });
 
   if (!isFastStewardReady()) {
-    return parseCrowdPulseFallbackInstruction(instruction);
+    const fallback = parseCrowdPulseFallbackInstruction(instruction);
+    recordModelIoEvent({
+      source: 'fast_crowd_pulse_steward',
+      eventType: 'model_call',
+      status: 'fallback',
+      sequence: nextCrowdPulseReplaySequence(),
+      sessionId: `fast-crowd-pulse-${room}`,
+      room,
+      requestId,
+      traceId,
+      intentId,
+      provider: 'cerebras',
+      model: CEREBRAS_MODEL,
+      providerSource: 'runtime_selected',
+      providerPath: 'fast',
+      output: { reason: 'fast_steward_not_ready', fallback },
+    });
+    return fallback;
   }
 
   try {
@@ -142,12 +206,67 @@ export async function runCrowdPulseStewardFast(params: {
       tools: crowdPulseTools,
       tool_choice: 'auto',
     });
+    recordModelIoEvent({
+      source: 'fast_crowd_pulse_steward',
+      eventType: 'model_call',
+      status: 'completed',
+      sequence: nextCrowdPulseReplaySequence(),
+      sessionId: `fast-crowd-pulse-${room}`,
+      room,
+      requestId,
+      traceId,
+      intentId,
+      provider: 'cerebras',
+      model: CEREBRAS_MODEL,
+      providerSource: 'runtime_selected',
+      providerPath: 'fast',
+      input: messages,
+      output: response,
+    });
 
     const toolCall = extractFirstToolCall(response);
     if (toolCall?.name === 'commit_crowd_pulse') {
+      recordToolIoEvent({
+        source: 'fast_crowd_pulse_steward',
+        eventType: 'tool_call',
+        status: 'received',
+        sequence: nextCrowdPulseReplaySequence(),
+        sessionId: `fast-crowd-pulse-${room}`,
+        room,
+        requestId,
+        traceId,
+        intentId,
+        toolName: toolCall.name,
+        toolCallId: `${requestId}:commit_crowd_pulse`,
+        provider: 'cerebras',
+        model: CEREBRAS_MODEL,
+        providerSource: 'runtime_selected',
+        providerPath: 'fast',
+        input: { argumentsRaw: toolCall.argumentsRaw },
+      });
       const argsResult = parseToolArgumentsResult(toolCall.argumentsRaw);
       if (!argsResult.ok) {
         console.warn('[CrowdPulseStewardFast] Invalid tool arguments', { reason: argsResult.error });
+        recordToolIoEvent({
+          source: 'fast_crowd_pulse_steward',
+          eventType: 'tool_call',
+          status: 'error',
+          sequence: nextCrowdPulseReplaySequence(),
+          sessionId: `fast-crowd-pulse-${room}`,
+          room,
+          requestId,
+          traceId,
+          intentId,
+          toolName: toolCall.name,
+          toolCallId: `${requestId}:commit_crowd_pulse`,
+          provider: 'cerebras',
+          model: CEREBRAS_MODEL,
+          providerSource: 'runtime_selected',
+          providerPath: 'fast',
+          input: { argumentsRaw: toolCall.argumentsRaw },
+          error: argsResult.error,
+          priority: 'high',
+        });
         return parseCrowdPulseFallbackInstruction(instruction);
       }
       const args = argsResult.args;
@@ -172,10 +291,48 @@ export async function runCrowdPulseStewardFast(params: {
       if (Array.isArray(args.questions)) patch.questions = args.questions;
       if (Array.isArray(args.scoreboard)) patch.scoreboard = args.scoreboard;
       if (Array.isArray(args.followUps)) patch.followUps = args.followUps;
-      return Object.keys(patch).length > 0 ? patch : parseCrowdPulseFallbackInstruction(instruction);
+      const resolvedPatch = Object.keys(patch).length > 0 ? patch : parseCrowdPulseFallbackInstruction(instruction);
+      recordToolIoEvent({
+        source: 'fast_crowd_pulse_steward',
+        eventType: 'tool_call',
+        status: 'completed',
+        sequence: nextCrowdPulseReplaySequence(),
+        sessionId: `fast-crowd-pulse-${room}`,
+        room,
+        requestId,
+        traceId,
+        intentId,
+        toolName: toolCall.name,
+        toolCallId: `${requestId}:commit_crowd_pulse`,
+        provider: 'cerebras',
+        model: CEREBRAS_MODEL,
+        providerSource: 'runtime_selected',
+        providerPath: 'fast',
+        input: args,
+        output: resolvedPatch,
+      });
+      return resolvedPatch;
     }
   } catch (error) {
     console.error('[CrowdPulseStewardFast] Error:', error);
+    recordModelIoEvent({
+      source: 'fast_crowd_pulse_steward',
+      eventType: 'model_call',
+      status: 'error',
+      sequence: nextCrowdPulseReplaySequence(),
+      sessionId: `fast-crowd-pulse-${room}`,
+      room,
+      requestId,
+      traceId,
+      intentId,
+      provider: 'cerebras',
+      model: CEREBRAS_MODEL,
+      providerSource: 'runtime_selected',
+      providerPath: 'fast',
+      input: messages,
+      error: error instanceof Error ? error.message : String(error),
+      priority: 'high',
+    });
   }
 
   return parseCrowdPulseFallbackInstruction(instruction);

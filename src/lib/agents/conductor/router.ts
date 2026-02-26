@@ -53,6 +53,11 @@ import {
   applyOrchestrationEnvelope,
   extractOrchestrationEnvelope,
 } from '@/lib/agents/shared/orchestration-envelope';
+import { deriveRequestCorrelation } from '@/lib/agents/shared/request-correlation';
+import {
+  recordModelIoEvent,
+  recordToolIoEvent,
+} from '@/lib/agents/shared/replay-telemetry';
 import { createSwarmOrchestrator } from '@/lib/agents/swarm/orchestrator';
 import { getDecryptedUserModelKey } from '@/lib/agents/shared/user-model-keys';
 import { resolveSharedKeyBySession } from '@/lib/agents/control-plane/shared-keys';
@@ -190,6 +195,89 @@ const scorecardAutoFactCheckLedger = new Map<string, number>();
 const scorecardExecutionLocks = new Map<string, Promise<void>>();
 const logger = createLogger('agents:conductor:router');
 let swarmOrchestrator: ReturnType<typeof createSwarmOrchestrator> | null = null;
+let orchestrationReplaySequence = 0;
+const nextOrchestrationReplaySequence = () => {
+  orchestrationReplaySequence += 1;
+  return orchestrationReplaySequence;
+};
+
+const recordOrchestrationModelEvent = (input: {
+  room?: string;
+  requestId?: string;
+  traceId?: string;
+  intentId?: string;
+  eventType: string;
+  status?: string;
+  model?: string;
+  provider?: string;
+  providerPath?: string;
+  providerSource?: string;
+  systemPrompt?: string;
+  contextPriming?: unknown;
+  payloadIn?: unknown;
+  payloadOut?: unknown;
+  metadata?: JsonObject;
+  error?: string;
+  priority?: 'high' | 'normal';
+}) => {
+  recordModelIoEvent({
+    source: 'orchestration_agent',
+    eventType: input.eventType,
+    status: input.status,
+    sequence: nextOrchestrationReplaySequence(),
+    sessionId: input.room ? `orchestration-${input.room}` : 'orchestration-session',
+    room: input.room,
+    requestId: input.requestId,
+    traceId: input.traceId,
+    intentId: input.intentId,
+    provider: input.provider,
+    model: input.model,
+    providerPath: input.providerPath,
+    providerSource: input.providerSource,
+    systemPrompt: input.systemPrompt,
+    contextPriming: input.contextPriming,
+    input: input.payloadIn,
+    output: input.payloadOut,
+    metadata: input.metadata,
+    error: input.error,
+    priority: input.priority,
+  });
+};
+
+const recordOrchestrationToolEvent = (input: {
+  room?: string;
+  requestId?: string;
+  traceId?: string;
+  intentId?: string;
+  eventType: string;
+  status?: string;
+  toolName: string;
+  toolCallId?: string;
+  payloadIn?: unknown;
+  payloadOut?: unknown;
+  metadata?: JsonObject;
+  error?: string;
+  priority?: 'high' | 'normal';
+}) => {
+  recordToolIoEvent({
+    source: 'orchestration_agent',
+    eventType: input.eventType,
+    status: input.status,
+    sequence: nextOrchestrationReplaySequence(),
+    sessionId: input.room ? `orchestration-${input.room}` : 'orchestration-session',
+    room: input.room,
+    requestId: input.requestId,
+    traceId: input.traceId,
+    intentId: input.intentId,
+    toolName: input.toolName,
+    toolCallId: input.toolCallId,
+    input: input.payloadIn,
+    output: input.payloadOut,
+    metadata: input.metadata,
+    error: input.error,
+    priority: input.priority,
+  });
+};
 
 const getSwarmOrchestrator = () => {
   if (!swarmOrchestrator) {
@@ -651,6 +739,7 @@ const dispatchSummaryDocument = async (
   intent: FairyIntent,
   decision: Pick<FairyRouteDecision, 'summary' | 'message'>,
   contextProfile: FairyContextProfile,
+  correlation?: { requestId?: string; traceId?: string; intentId?: string },
   contextBundle?: { parts?: unknown[] } | undefined,
 ) => {
   const bundleText =
@@ -663,6 +752,9 @@ const dispatchSummaryDocument = async (
     instruction,
     contextBundle: bundleText,
     contextProfile,
+    requestId: correlation?.requestId ?? intent.id,
+    traceId: correlation?.traceId ?? intent.id,
+    intentId: correlation?.intentId ?? intent.id,
   });
   const formatted = formatSummaryMarkdown(result);
   const documentId = `${intent.id}-summary`;
@@ -856,7 +948,50 @@ async function ensureWidgetComponent(intent: FairyIntent, componentType: string)
 
 async function handleFairyIntent(rawParams: JsonObject) {
   const intent = buildFairyIntent(rawParams);
+  const incomingRequestId =
+    typeof rawParams.requestId === 'string' && rawParams.requestId.trim().length > 0
+      ? rawParams.requestId
+      : intent.id;
+  const correlation = deriveRequestCorrelation({
+    task: 'fairy.intent',
+    requestId: incomingRequestId,
+    params: {
+      ...rawParams,
+      id: intent.id,
+      requestId: incomingRequestId,
+    },
+  });
+  const replayRequestId = correlation.requestId ?? intent.id;
+  const replayTraceId = correlation.traceId ?? replayRequestId;
+  const replayIntentId = correlation.intentId ?? intent.id;
+  recordOrchestrationModelEvent({
+    room: intent.room,
+    requestId: replayRequestId,
+    traceId: replayTraceId,
+    intentId: replayIntentId,
+    eventType: 'fairy_intent_received',
+    status: 'received',
+    payloadIn: {
+      intent,
+      rawParams,
+    },
+    provider: 'cerebras',
+    model: process.env.FAIRY_ROUTER_FAST_MODEL || process.env.FAST_STEWARD_MODEL || undefined,
+    providerPath: 'fast',
+    providerSource: 'runtime_selected',
+  });
   if (shouldDedupeFairyIntent(intent)) {
+    recordOrchestrationToolEvent({
+      room: intent.room,
+      requestId: replayRequestId,
+      traceId: replayTraceId,
+      intentId: replayIntentId,
+      eventType: 'fairy_intent',
+      status: 'deduped',
+      toolName: 'fairy.intent',
+      toolCallId: intent.id,
+      payloadIn: intent,
+    });
     return { status: 'deduped', intentId: intent.id, room: intent.room };
   }
   const decision = shouldForceCanvasRoute(intent)
@@ -867,6 +1002,20 @@ async function handleFairyIntent(rawParams: JsonObject) {
         contextProfile: normalizeFairyContextProfile(intent.contextProfile) ?? DEFAULT_FAIRY_CONTEXT_PROFILE,
       }
     : await routeFairyIntent(intent);
+  recordOrchestrationModelEvent({
+    room: intent.room,
+    requestId: replayRequestId,
+    traceId: replayTraceId,
+    intentId: replayIntentId,
+    eventType: 'fairy_route_decision',
+    status: 'completed',
+    payloadIn: intent,
+    payloadOut: decision,
+    provider: 'cerebras',
+    model: process.env.FAIRY_ROUTER_FAST_MODEL || process.env.FAST_STEWARD_MODEL || undefined,
+    providerPath: 'fast',
+    providerSource: 'runtime_selected',
+  });
   const contextProfile = resolveIntentContextProfile(intent, decision);
   const mergedMetadata = buildIntentMetadata(intent, decision, contextProfile);
   const contextBundle = extractContextBundle(
@@ -905,7 +1054,17 @@ async function handleFairyIntent(rawParams: JsonObject) {
     }
 
     if (decisionLike.kind === 'summary') {
-      return dispatchSummaryDocument(intent, { summary, message }, actionProfile, contextBundle);
+      return dispatchSummaryDocument(
+        intent,
+        { summary, message },
+        actionProfile,
+        {
+          requestId: replayRequestId,
+          traceId: replayTraceId,
+          intentId: replayIntentId,
+        },
+        contextBundle,
+      );
     }
 
     if (decisionLike.kind === 'crowd_pulse') {
@@ -920,6 +1079,9 @@ async function handleFairyIntent(rawParams: JsonObject) {
         instruction: stewardInstruction,
         contextBundle: bundleText,
         contextProfile: actionProfile,
+        requestId: replayRequestId ?? intent.id,
+        traceId: replayTraceId ?? intent.id,
+        intentId: replayIntentId ?? intent.id,
       });
       const normalizedActiveQuestion = normalizeCrowdPulseActiveQuestionInput(
         patch.activeQuestion,
@@ -1061,9 +1223,33 @@ async function handleFairyIntent(rawParams: JsonObject) {
   }
 
   if (results.length === 1) {
+    recordOrchestrationToolEvent({
+      room: intent.room,
+      requestId: replayRequestId,
+      traceId: replayTraceId,
+      intentId: replayIntentId,
+      eventType: 'fairy_intent',
+      status: 'handled',
+      toolName: 'fairy.intent',
+      toolCallId: intent.id,
+      payloadIn: intent,
+      payloadOut: results[0],
+    });
     return results[0];
   }
 
+  recordOrchestrationToolEvent({
+    room: intent.room,
+    requestId: replayRequestId,
+    traceId: replayTraceId,
+    intentId: replayIntentId,
+    eventType: 'fairy_intent',
+    status: 'handled',
+    toolName: 'fairy.intent',
+    toolCallId: intent.id,
+    payloadIn: intent,
+    payloadOut: { decision, results },
+  });
   return { status: 'handled', intentId: intent.id, decision, results };
 }
 
@@ -1657,6 +1843,28 @@ async function executeTaskLegacy(taskName: string, params: JsonObject) {
       : { ...params, message: resolveIntentText(params) };
     return executeTaskLegacy('fairy.intent', { ...fallbackParams, source: 'system' });
   }
+  const correlation = deriveRequestCorrelation({
+    task: taskName,
+    requestId: (params as Record<string, unknown>)?.requestId,
+    params,
+  });
+  const replayRequestId = correlation.requestId;
+  const replayTraceId = correlation.traceId ?? replayRequestId;
+  const replayIntentId = correlation.intentId ?? replayRequestId;
+  const replayRoom = typeof (params as Record<string, unknown>)?.room === 'string'
+    ? String((params as Record<string, unknown>).room)
+    : undefined;
+  recordOrchestrationToolEvent({
+    room: replayRoom,
+    requestId: replayRequestId,
+    traceId: replayTraceId,
+    intentId: replayIntentId,
+    eventType: 'task_dispatch',
+    status: 'received',
+    toolName: taskName,
+    toolCallId: replayRequestId,
+    payloadIn: params,
+  });
 
   if (taskName === 'conductor.dispatch') {
     const nextTask = typeof params?.task === 'string' ? params.task : 'auto';
@@ -1674,6 +1882,21 @@ async function executeTaskLegacy(taskName: string, params: JsonObject) {
       idempotencyKey: envelope.idempotencyKey,
       lockKey: envelope.lockKey,
       attempt: envelope.attempt,
+    });
+    recordOrchestrationToolEvent({
+      room: typeof enrichedPayload.room === 'string' ? enrichedPayload.room : replayRoom,
+      requestId: replayRequestId,
+      traceId: replayTraceId,
+      intentId: replayIntentId,
+      eventType: 'task_dispatch',
+      status: 'routed',
+      toolName: taskName,
+      toolCallId: replayRequestId,
+      payloadIn: params,
+      payloadOut: {
+        nextTask,
+        envelope,
+      },
     });
     return executeTaskLegacy(nextTask, enrichedPayload);
   }
@@ -1794,6 +2017,9 @@ async function executeTaskLegacy(taskName: string, params: JsonObject) {
             prompt: stewardPrompt,
             topic: parsed.topic,
             cerebrasApiKey: cerebrasApiKey ?? undefined,
+            requestId: replayRequestId,
+            traceId: replayTraceId,
+            intentId: replayIntentId,
             model:
               typeof (parsed as Record<string, unknown>).fastStewardModel === 'string'
                 ? String((parsed as Record<string, unknown>).fastStewardModel)

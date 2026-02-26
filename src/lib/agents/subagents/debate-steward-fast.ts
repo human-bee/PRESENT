@@ -8,6 +8,10 @@ import {
 import { debateScorecardStateSchema, type DebateScorecardState } from '@/lib/agents/debate-scorecard-schema';
 import { extractFirstMessageContent } from './fast-steward-response';
 import { resolveFastStewardModel } from '@/lib/agents/control-plane/fast-model';
+import {
+  recordModelIoEvent,
+  recordToolIoEvent,
+} from '@/lib/agents/shared/replay-telemetry';
 
 const buildDebateFastTrace = (model: string) => ({
   provider: 'cerebras' as const,
@@ -15,6 +19,11 @@ const buildDebateFastTrace = (model: string) => ({
   providerSource: 'runtime_selected' as const,
   providerPath: 'fast' as const,
 });
+let debateReplaySequence = 0;
+const nextDebateReplaySequence = () => {
+  debateReplaySequence += 1;
+  return debateReplaySequence;
+};
 
 const DEBATE_STEWARD_FAST_INSTRUCTIONS = `
 You are a fast debate scorecard assistant. Given the current state, context documents, and an instruction, update the state.
@@ -160,9 +169,24 @@ export async function runDebateScorecardStewardFast(params: {
   topic?: string;
   cerebrasApiKey?: string;
   model?: string;
+  requestId?: string;
+  traceId?: string;
+  intentId?: string;
 }) {
   const { room, componentId, intent, summary, prompt, topic, cerebrasApiKey, model } = params;
   const start = Date.now();
+  const requestId =
+    typeof params.requestId === 'string' && params.requestId.trim().length > 0
+      ? params.requestId.trim()
+      : `${componentId}:${Date.now()}`;
+  const traceId =
+    typeof params.traceId === 'string' && params.traceId.trim().length > 0
+      ? params.traceId.trim()
+      : requestId;
+  const resolvedIntentId =
+    typeof params.intentId === 'string' && params.intentId.trim().length > 0
+      ? params.intentId.trim()
+      : intent ?? requestId;
   const resolvedDebateModel =
     typeof model === 'string' && model.trim()
       ? normalizeFastStewardModel(model)
@@ -174,8 +198,8 @@ export async function runDebateScorecardStewardFast(params: {
             task: 'scorecard.fast',
           }).catch(() => ({ model: getModelForSteward('DEBATE_STEWARD_FAST_MODEL') }))
         ).model;
+  const debateFastTrace = buildDebateFastTrace(resolvedDebateModel);
   const cerebrasModel = resolvedDebateModel;
-  const debateFastTrace = buildDebateFastTrace(cerebrasModel);
 
   if (!isFastStewardReady(cerebrasApiKey)) {
     throw new Error('DebateStewardFast requires CEREBRAS_API_KEY');
@@ -201,6 +225,29 @@ export async function runDebateScorecardStewardFast(params: {
       content: `Current scorecard state (version ${currentVersion}):\n${JSON.stringify(currentState, null, 2)}\n\n${contextSection ? `Context Documents:\n${contextSection}\n\n` : ''}Instruction: "${instruction}"${topicInstruction}\n\nReturn STRICT JSON only with:\n{\n  "summary": string,\n  "state": <complete DebateScorecardState>\n}\n\nNotes:\n- Keep componentId as "${componentId}".\n- Version/lastUpdated will be handled server-side.`,
     },
   ];
+  recordModelIoEvent({
+    source: 'fast_debate_steward',
+    eventType: 'model_call',
+    status: 'started',
+    sequence: nextDebateReplaySequence(),
+    sessionId: `fast-debate-${room}`,
+    room,
+    requestId,
+    traceId,
+    intentId: resolvedIntentId,
+    provider: debateFastTrace.provider,
+    model: debateFastTrace.model,
+    providerSource: debateFastTrace.providerSource,
+    providerPath: debateFastTrace.providerPath,
+    systemPrompt: DEBATE_STEWARD_FAST_INSTRUCTIONS,
+    contextPriming: {
+      componentId,
+      currentVersion,
+      contextDocs: contextDocs.length,
+      topic: topic ?? null,
+    },
+    input: messages,
+  });
 
   try {
     const client = getCerebrasClient(cerebrasApiKey);
@@ -208,11 +255,43 @@ export async function runDebateScorecardStewardFast(params: {
       model: cerebrasModel,
       messages,
     });
+    recordModelIoEvent({
+      source: 'fast_debate_steward',
+      eventType: 'model_call',
+      status: 'completed',
+      sequence: nextDebateReplaySequence(),
+      sessionId: `fast-debate-${room}`,
+      room,
+      requestId,
+      traceId,
+      intentId: resolvedIntentId,
+      provider: debateFastTrace.provider,
+      model: debateFastTrace.model,
+      providerSource: debateFastTrace.providerSource,
+      providerPath: debateFastTrace.providerPath,
+      input: messages,
+      output: response,
+    });
 
     const rawContent = extractFirstMessageContent(response);
     const parsedResponse = extractJsonCandidate(rawContent);
     if (!parsedResponse || typeof parsedResponse !== 'object') {
       console.warn('[DebateStewardFast] No JSON update captured');
+      recordToolIoEvent({
+        source: 'fast_debate_steward',
+        eventType: 'state_commit',
+        status: 'no_change',
+        sequence: nextDebateReplaySequence(),
+        sessionId: `fast-debate-${room}`,
+        room,
+        requestId,
+        traceId,
+        intentId: resolvedIntentId,
+        toolName: 'commit_debate_scorecard',
+        toolCallId: requestId,
+        input: { rawContent },
+        output: { status: 'no_change' },
+      });
       return { status: 'no_change', summary: 'No update needed', _trace: debateFastTrace };
     }
 
@@ -242,6 +321,22 @@ export async function runDebateScorecardStewardFast(params: {
     }
     if (!updatedState) {
       console.error('[DebateStewardFast] Failed to parse updated state JSON');
+      recordToolIoEvent({
+        source: 'fast_debate_steward',
+        eventType: 'state_commit',
+        status: 'error',
+        sequence: nextDebateReplaySequence(),
+        sessionId: `fast-debate-${room}`,
+        room,
+        requestId,
+        traceId,
+        intentId: resolvedIntentId,
+        toolName: 'commit_debate_scorecard',
+        toolCallId: requestId,
+        input: parsedResponse,
+        error: 'Failed to parse updated scorecard state',
+        priority: 'high',
+      });
       return {
         status: 'error',
         summary: 'Failed to parse updated scorecard state',
@@ -281,6 +376,29 @@ export async function runDebateScorecardStewardFast(params: {
       state: updatedState,
       prevVersion: currentVersion,
     });
+    recordToolIoEvent({
+      source: 'fast_debate_steward',
+      eventType: 'state_commit',
+      status: 'completed',
+      sequence: nextDebateReplaySequence(),
+      sessionId: `fast-debate-${room}`,
+      room,
+      requestId,
+      traceId,
+      intentId: resolvedIntentId,
+      toolName: 'commit_debate_scorecard',
+      toolCallId: requestId,
+      input: {
+        componentId,
+        prevVersion: currentVersion,
+      },
+      output: {
+        status: 'ok',
+        summary: summaryText,
+        version: committed.version,
+      },
+      latencyMs: Date.now() - start,
+    });
 
     console.log('[DebateStewardFast] complete', {
       room,
@@ -314,6 +432,24 @@ export async function runDebateScorecardStewardFast(params: {
 
   } catch (error) {
     console.error('[DebateStewardFast] error', { room, componentId, error });
+    recordModelIoEvent({
+      source: 'fast_debate_steward',
+      eventType: 'model_call',
+      status: 'error',
+      sequence: nextDebateReplaySequence(),
+      sessionId: `fast-debate-${room}`,
+      room,
+      requestId,
+      traceId,
+      intentId: resolvedIntentId,
+      provider: debateFastTrace.provider,
+      model: debateFastTrace.model,
+      providerSource: debateFastTrace.providerSource,
+      providerPath: debateFastTrace.providerPath,
+      input: messages,
+      error: error instanceof Error ? error.message : String(error),
+      priority: 'high',
+    });
     return {
       status: 'error',
       summary: error instanceof Error ? error.message : 'Unknown error',

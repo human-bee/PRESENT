@@ -2,8 +2,17 @@ import { getCerebrasClient, getModelForSteward, isFastStewardReady } from '../fa
 import { getTranscriptWindow, getContextDocuments, formatContextDocuments } from '@/lib/agents/shared/supabase-context';
 import { extractFirstToolCall, parseToolArgumentsResult } from './fast-steward-response';
 import { resolveFastStewardModel } from '@/lib/agents/control-plane/fast-model';
+import {
+  recordModelIoEvent,
+  recordToolIoEvent,
+} from '@/lib/agents/shared/replay-telemetry';
 
 const getSummaryFastModel = () => getModelForSteward('SUMMARY_STEWARD_FAST_MODEL');
+let summaryReplaySequence = 0;
+const nextSummaryReplaySequence = () => {
+  summaryReplaySequence += 1;
+  return summaryReplaySequence;
+};
 
 const SUMMARY_SYSTEM = `
 You are a fast meeting summarizer for a realtime collaborative workspace.
@@ -68,6 +77,9 @@ export async function runSummaryStewardFast(params: {
   instruction?: string;
   contextBundle?: string;
   contextProfile?: string;
+  requestId?: string;
+  traceId?: string;
+  intentId?: string;
 }): Promise<SummaryResult> {
   const { room, instruction, contextBundle, contextProfile } = params;
   const { model: CEREBRAS_MODEL } = await resolveFastStewardModel({
@@ -76,6 +88,18 @@ export async function runSummaryStewardFast(params: {
     room,
     task: 'summary.fast',
   }).catch(() => ({ model: getSummaryFastModel() }));
+  const requestId =
+    typeof params.requestId === 'string' && params.requestId.trim().length > 0
+      ? params.requestId.trim()
+      : `summary:${room}:${Date.now()}`;
+  const traceId =
+    typeof params.traceId === 'string' && params.traceId.trim().length > 0
+      ? params.traceId.trim()
+      : requestId;
+  const intentId =
+    typeof params.intentId === 'string' && params.intentId.trim().length > 0
+      ? params.intentId.trim()
+      : requestId;
   const [transcript, contextDocs] = await Promise.all([
     getTranscriptWindow(room, resolveWindowMs(contextProfile)),
     getContextDocuments(room),
@@ -104,9 +128,48 @@ export async function runSummaryStewardFast(params: {
         .join('\n\n'),
     },
   ];
+  recordModelIoEvent({
+    source: 'fast_summary_steward',
+    eventType: 'model_call',
+    status: 'started',
+    sequence: nextSummaryReplaySequence(),
+    sessionId: `fast-summary-${room}`,
+    room,
+    requestId,
+    traceId,
+    intentId,
+    provider: 'cerebras',
+    model: CEREBRAS_MODEL,
+    providerSource: 'runtime_selected',
+    providerPath: 'fast',
+    systemPrompt: SUMMARY_SYSTEM,
+    input: messages,
+    contextPriming: {
+      contextProfile: contextProfile ?? 'standard',
+      hasContextBundle: Boolean(contextBundle),
+      transcriptLines: transcriptLines.length,
+      contextDocs: contextDocs.length,
+    },
+  });
 
   if (!isFastStewardReady()) {
     const fallbackSummary = transcriptLines.slice(0, 800) || 'Summary unavailable.';
+    recordModelIoEvent({
+      source: 'fast_summary_steward',
+      eventType: 'model_call',
+      status: 'fallback',
+      sequence: nextSummaryReplaySequence(),
+      sessionId: `fast-summary-${room}`,
+      room,
+      requestId,
+      traceId,
+      intentId,
+      provider: 'cerebras',
+      model: CEREBRAS_MODEL,
+      providerSource: 'runtime_selected',
+      providerPath: 'fast',
+      output: { summary: fallbackSummary, reason: 'fast_steward_not_ready' },
+    });
     return { summary: fallbackSummary };
   }
 
@@ -118,19 +181,74 @@ export async function runSummaryStewardFast(params: {
       tools: summaryTools,
       tool_choice: 'auto',
     });
+    recordModelIoEvent({
+      source: 'fast_summary_steward',
+      eventType: 'model_call',
+      status: 'completed',
+      sequence: nextSummaryReplaySequence(),
+      sessionId: `fast-summary-${room}`,
+      room,
+      requestId,
+      traceId,
+      intentId,
+      provider: 'cerebras',
+      model: CEREBRAS_MODEL,
+      providerSource: 'runtime_selected',
+      providerPath: 'fast',
+      input: messages,
+      output: response,
+    });
 
     const toolCall = extractFirstToolCall(response);
     if (toolCall?.name === 'commit_summary') {
+      recordToolIoEvent({
+        source: 'fast_summary_steward',
+        eventType: 'tool_call',
+        status: 'received',
+        sequence: nextSummaryReplaySequence(),
+        sessionId: `fast-summary-${room}`,
+        room,
+        requestId,
+        traceId,
+        intentId,
+        toolName: toolCall.name,
+        toolCallId: `${requestId}:commit_summary`,
+        provider: 'cerebras',
+        model: CEREBRAS_MODEL,
+        providerSource: 'runtime_selected',
+        providerPath: 'fast',
+        input: { argumentsRaw: toolCall.argumentsRaw },
+      });
       const argsResult = parseToolArgumentsResult(toolCall.argumentsRaw);
       if (!argsResult.ok) {
         console.warn('[SummaryStewardFast] Invalid tool arguments', { reason: argsResult.error });
+        recordToolIoEvent({
+          source: 'fast_summary_steward',
+          eventType: 'tool_call',
+          status: 'error',
+          sequence: nextSummaryReplaySequence(),
+          sessionId: `fast-summary-${room}`,
+          room,
+          requestId,
+          traceId,
+          intentId,
+          toolName: toolCall.name,
+          toolCallId: `${requestId}:commit_summary`,
+          provider: 'cerebras',
+          model: CEREBRAS_MODEL,
+          providerSource: 'runtime_selected',
+          providerPath: 'fast',
+          error: argsResult.error,
+          input: { argumentsRaw: toolCall.argumentsRaw },
+          priority: 'high',
+        });
         return { summary: transcriptLines.slice(0, 800) || 'Summary unavailable.' };
       }
 
       const args = argsResult.args;
       const summary = typeof args.summary === 'string' ? args.summary.trim() : '';
       if (summary) {
-        return {
+        const result = {
           title: typeof args.title === 'string' ? args.title.trim() : undefined,
           summary,
           highlights: Array.isArray(args.highlights) ? args.highlights : undefined,
@@ -138,10 +256,48 @@ export async function runSummaryStewardFast(params: {
           actionItems: Array.isArray(args.actionItems) ? args.actionItems : undefined,
           tags: Array.isArray(args.tags) ? args.tags : undefined,
         };
+        recordToolIoEvent({
+          source: 'fast_summary_steward',
+          eventType: 'tool_call',
+          status: 'completed',
+          sequence: nextSummaryReplaySequence(),
+          sessionId: `fast-summary-${room}`,
+          room,
+          requestId,
+          traceId,
+          intentId,
+          toolName: toolCall.name,
+          toolCallId: `${requestId}:commit_summary`,
+          provider: 'cerebras',
+          model: CEREBRAS_MODEL,
+          providerSource: 'runtime_selected',
+          providerPath: 'fast',
+          input: args,
+          output: result,
+        });
+        return result;
       }
     }
   } catch (error) {
     console.error('[SummaryStewardFast] Error:', error);
+    recordModelIoEvent({
+      source: 'fast_summary_steward',
+      eventType: 'model_call',
+      status: 'error',
+      sequence: nextSummaryReplaySequence(),
+      sessionId: `fast-summary-${room}`,
+      room,
+      requestId,
+      traceId,
+      intentId,
+      provider: 'cerebras',
+      model: CEREBRAS_MODEL,
+      providerSource: 'runtime_selected',
+      providerPath: 'fast',
+      input: messages,
+      error: error instanceof Error ? error.message : String(error),
+      priority: 'high',
+    });
   }
 
   const fallbackSummary = transcriptLines.slice(0, 800) || 'Summary unavailable.';
