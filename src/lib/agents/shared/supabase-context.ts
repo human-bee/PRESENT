@@ -1,8 +1,10 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { config } from 'dotenv';
 import { join } from 'path';
+import { randomUUID } from 'crypto';
 import { RoomServiceClient, DataPacket_Kind } from 'livekit-server-sdk';
 import type { JsonObject } from '@/lib/utils/json-schema';
+import { deriveRequestCorrelation } from '@/lib/agents/shared/request-correlation';
 import {
   createDefaultScorecardState,
   debateScorecardStateSchema,
@@ -1057,10 +1059,32 @@ export async function broadcastCanvasAction(event: {
   params?: JsonObject;
 }) {
   const { room, tool, params } = event;
-  const action = { tool, params, timestamp: Date.now() };
+  const eventId = randomUUID();
+  const timestamp = Date.now();
+  const correlation = deriveRequestCorrelation({
+    task: typeof params?.task === 'string' ? params.task : tool,
+    requestId: params?.requestId,
+    params: params ?? {},
+  });
+  const requestId = correlation.requestId ?? eventId;
+  const traceId = correlation.traceId ?? requestId;
+  const intentId = correlation.intentId ?? requestId;
+  const action = {
+    tool,
+    params,
+    context: {
+      source: 'canvas-steward',
+      timestamp,
+      tool_call_id: eventId,
+      request_id: requestId,
+      trace_id: traceId,
+      intent_id: intentId,
+    },
+    timestamp,
+  };
 
   const data = new TextEncoder().encode(
-    JSON.stringify({ type: 'tool_call', payload: action, source: 'canvas-steward', timestamp: Date.now() }),
+    JSON.stringify({ id: eventId, type: 'tool_call', payload: action, source: 'canvas-steward', timestamp }),
   );
   await sendLivekitData({ room, data, topic: 'tool_call' });
 }
@@ -1072,10 +1096,51 @@ export async function broadcastToolCall(event: {
   source?: string;
 }) {
   const { room, tool, params, source = 'conductor' } = event;
-  const action = { tool, params, timestamp: Date.now() };
+  const eventId = randomUUID();
+  const timestamp = Date.now();
+  const correlation = deriveRequestCorrelation({
+    task: typeof params?.task === 'string' ? params.task : tool,
+    requestId: params?.requestId,
+    params: params ?? {},
+  });
+  const requestId = correlation.requestId ?? eventId;
+  const traceId = correlation.traceId ?? requestId;
+  const intentId = correlation.intentId ?? requestId;
+  const tracePayload =
+    params?.metadata && typeof params.metadata === 'object' && !Array.isArray(params.metadata)
+      ? (params.metadata as Record<string, unknown>)._trace
+      : null;
+  const traceRecord =
+    tracePayload && typeof tracePayload === 'object' && !Array.isArray(tracePayload)
+      ? (tracePayload as Record<string, unknown>)
+      : null;
+  const action = {
+    tool,
+    params,
+    context: {
+      source,
+      timestamp,
+      tool_call_id: eventId,
+      request_id: requestId,
+      trace_id: traceId,
+      intent_id: intentId,
+      ...(typeof traceRecord?.provider === 'string' ? { provider: traceRecord.provider } : {}),
+      ...(typeof traceRecord?.model === 'string' ? { model: traceRecord.model } : {}),
+      ...(typeof traceRecord?.providerSource === 'string'
+        ? { provider_source: traceRecord.providerSource }
+        : {}),
+      ...(typeof traceRecord?.providerPath === 'string'
+        ? { provider_path: traceRecord.providerPath }
+        : {}),
+      ...(typeof traceRecord?.providerRequestId === 'string'
+        ? { provider_request_id: traceRecord.providerRequestId }
+        : {}),
+    },
+    timestamp,
+  };
 
   const data = new TextEncoder().encode(
-    JSON.stringify({ type: 'tool_call', payload: action, source, timestamp: Date.now() }),
+    JSON.stringify({ id: eventId, type: 'tool_call', payload: action, source, timestamp }),
   );
   await sendLivekitData({ room, data, topic: 'tool_call' });
 }
