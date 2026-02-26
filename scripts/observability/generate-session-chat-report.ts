@@ -1352,7 +1352,10 @@ const run = async () => {
 
   const requestedCanvasId = normalizeUuid(canvasIdArg) ?? runArtifact?.canvasId ?? null;
   const requestedRoom = normalizeId(roomArg) ?? runArtifact?.room ?? null;
-  const requestedSessionId = normalizeId(sessionIdArg);
+  const requestedSessionId = normalizeUuid(sessionIdArg);
+  if (sessionIdArg && !requestedSessionId) {
+    throw new Error(`Invalid --session-id: ${sessionIdArg}`);
+  }
   let reportScope = 'synthetic';
   let session: any = null;
 
@@ -1437,18 +1440,23 @@ const run = async () => {
 
   let transcript: any[] = [];
   let transcriptRelationAvailable = true;
-  try {
-    transcript = await fetchAll(
-      'canvas_session_transcripts',
-      (q) => q.select('*').eq('session_id', session.id).order('ts', { ascending: true }),
-      1000,
-    );
-  } catch (error) {
-    if (isMissingRelationError(error)) {
-      transcriptRelationAvailable = false;
-      warnings.push('Optional table unavailable in this environment: canvas_session_transcripts');
-    } else {
-      throw error;
+  const sessionIdForTranscript = normalizeUuid(session.id);
+  if (!sessionIdForTranscript) {
+    warnings.push('Skipping canvas_session_transcripts lookup: synthetic session id is not a UUID.');
+  } else {
+    try {
+      transcript = await fetchAll(
+        'canvas_session_transcripts',
+        (q) => q.select('*').eq('session_id', sessionIdForTranscript).order('ts', { ascending: true }),
+        1000,
+      );
+    } catch (error) {
+      if (isMissingRelationError(error)) {
+        transcriptRelationAvailable = false;
+        warnings.push('Optional table unavailable in this environment: canvas_session_transcripts');
+      } else {
+        throw error;
+      }
     }
   }
 
