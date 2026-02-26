@@ -312,8 +312,8 @@ const queueBlobRows = (
   };
 };
 
-export const recordModelIoEvent = (input: ModelIoEventInput): void => {
-  if (!replayTelemetryEnabled) return;
+export const recordModelIoEvent = (input: ModelIoEventInput): boolean => {
+  if (!replayTelemetryEnabled) return false;
 
   const createdAt = nowIso();
   const expiresAt = expiresAtIso(createdAt);
@@ -332,7 +332,7 @@ export const recordModelIoEvent = (input: ModelIoEventInput): void => {
 
   const blobIds = queueBlobRows(correlation, eventId, input.input, input.output, priority, input.metadata);
 
-  enqueueReplayEntry({
+  return enqueueReplayEntry({
     table: 'agent_model_io',
     priority,
     row: {
@@ -368,8 +368,8 @@ export const recordModelIoEvent = (input: ModelIoEventInput): void => {
   });
 };
 
-export const recordToolIoEvent = (input: ToolIoEventInput): void => {
-  if (!replayTelemetryEnabled) return;
+export const recordToolIoEvent = (input: ToolIoEventInput): boolean => {
+  if (!replayTelemetryEnabled) return false;
 
   const createdAt = nowIso();
   const expiresAt = expiresAtIso(createdAt);
@@ -388,7 +388,7 @@ export const recordToolIoEvent = (input: ToolIoEventInput): void => {
 
   const blobIds = queueBlobRows(correlation, eventId, input.input, input.output, priority, input.metadata);
 
-  enqueueReplayEntry({
+  return enqueueReplayEntry({
     table: 'agent_tool_io',
     priority,
     row: {
@@ -453,7 +453,14 @@ export const flushReplayTelemetryNow = async (): Promise<void> => {
         Record<string, unknown>[],
       ]>) {
         if (rows.length === 0) continue;
-        const { error } = await db.from(table).insert(rows);
+        const onConflict =
+          table === 'agent_io_blobs'
+            ? 'event_id,kind'
+            : 'event_id';
+        const { error } = await db.from(table).upsert(rows, {
+          onConflict,
+          ignoreDuplicates: true,
+        });
         if (error) {
           logger.warn('replay telemetry insert failed', {
             table,
@@ -484,8 +491,8 @@ export const recordExternalTelemetryEvent = (input: {
   intentId?: string;
   sessionId?: string;
   status?: string;
-}): void => {
-  recordToolIoEvent({
+}): boolean => {
+  return recordToolIoEvent({
     source: 'agent_telemetry_api',
     eventType: input.event,
     toolName: input.event,

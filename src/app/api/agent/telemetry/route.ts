@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { recordExternalTelemetryEvent } from '@/lib/agents/shared/replay-telemetry';
+import { resolveRequestUser } from '@/lib/supabase/server/resolve-request-user';
 
 export const runtime = 'nodejs';
 
@@ -9,44 +10,65 @@ const normalizeOptional = (value: unknown): string | undefined => {
   return trimmed.length > 0 ? trimmed : undefined;
 };
 
-const isAuthorized = (req: NextRequest): boolean => {
-  const token = normalizeOptional(process.env.AGENT_TELEMETRY_INGEST_TOKEN);
-  if (!token) {
-    return process.env.NODE_ENV !== 'production';
-  }
+const readBearer = (req: NextRequest): string | undefined => {
   const authHeader = normalizeOptional(req.headers.get('authorization'));
-  if (!authHeader) return false;
+  if (!authHeader) return undefined;
   const raw = authHeader.toLowerCase().startsWith('bearer ')
     ? authHeader.slice(7).trim()
     : authHeader.trim();
-  return raw === token;
+  return normalizeOptional(raw);
+};
+
+const isAuthorized = async (req: NextRequest): Promise<boolean> => {
+  const token = normalizeOptional(process.env.AGENT_TELEMETRY_INGEST_TOKEN);
+  const bearer = readBearer(req);
+  if (token && bearer === token) return true;
+
+  const user = await resolveRequestUser(req);
+  if (user?.id) return true;
+
+  if (!token) {
+    return process.env.NODE_ENV !== 'production';
+  }
+  return false;
 };
 
 export async function POST(req: NextRequest) {
-  if (!isAuthorized(req)) {
+  if (!(await isAuthorized(req))) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
   try {
     const body = await req.json();
-    const event = normalizeOptional(body?.event) ?? 'unknown';
-    const payload = body?.payload;
-    const metadata =
-      body?.metadata && typeof body.metadata === 'object' && !Array.isArray(body.metadata)
-        ? (body.metadata as Record<string, unknown>)
+    const payload =
+      body?.payload && typeof body.payload === 'object' && !Array.isArray(body.payload)
+        ? (body.payload as Record<string, unknown>)
         : undefined;
+    const readField = (key: string) =>
+      normalizeOptional(body?.[key]) ?? normalizeOptional(payload?.[key]);
+    const event = normalizeOptional(body?.event) ?? 'unknown';
+    const metadata =
+      (body?.metadata && typeof body.metadata === 'object' && !Array.isArray(body.metadata)
+        ? (body.metadata as Record<string, unknown>)
+        : payload?.metadata && typeof payload.metadata === 'object' && !Array.isArray(payload.metadata)
+          ? (payload.metadata as Record<string, unknown>)
+          : undefined);
 
-    recordExternalTelemetryEvent({
+    const accepted = recordExternalTelemetryEvent({
       event,
-      payload,
+      payload: body?.payload,
       metadata,
-      status: normalizeOptional(body?.status),
-      room: normalizeOptional(body?.room),
-      sessionId: normalizeOptional(body?.sessionId),
-      traceId: normalizeOptional(body?.traceId),
-      requestId: normalizeOptional(body?.requestId),
-      intentId: normalizeOptional(body?.intentId),
+      status: readField('status'),
+      room: readField('room'),
+      sessionId: readField('sessionId'),
+      traceId: readField('traceId'),
+      requestId: readField('requestId'),
+      intentId: readField('intentId'),
     });
+
+    if (!accepted) {
+      return NextResponse.json({ status: 'dropped' }, { status: 202 });
+    }
 
     return NextResponse.json({ status: 'ok' });
   } catch (error) {
