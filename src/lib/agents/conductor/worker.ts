@@ -250,6 +250,14 @@ const describeUnknownError = (error: unknown): {
   }
 };
 
+const isDeterministicNonRetryableTaskError = (taskName: string, message: string): boolean => {
+  if (taskName !== 'fairy.intent') {
+    return false;
+  }
+  const normalized = message.toLowerCase();
+  return normalized.includes("_zod");
+};
+
 const deriveRuntimeProviderHint = (
   taskName: string,
   result: unknown,
@@ -716,7 +724,8 @@ async function processClaimedTasks(executeTask: ExecuteTaskFn, claimedTasks: Cla
           } catch (error) {
             const described = describeUnknownError(error);
             const message = described.message;
-            const shouldRetry = task.attempt < conductorSettings.taskMaxRetryAttempts;
+            const nonRetryable = isDeterministicNonRetryableTaskError(task.task, message);
+            const shouldRetry = !nonRetryable && task.attempt < conductorSettings.taskMaxRetryAttempts;
             const retryDelayMs = shouldRetry ? computeTaskRetryDelayMs(task.attempt) : undefined;
             const retryAt = retryDelayMs !== undefined ? new Date(Date.now() + retryDelayMs) : undefined;
             logger.warn('task failed', {
@@ -724,6 +733,7 @@ async function processClaimedTasks(executeTask: ExecuteTaskFn, claimedTasks: Cla
               taskId: task.id,
               task: task.task,
               attempt: task.attempt,
+              nonRetryable,
               retryDelayMs,
               retryAt,
               error: message,
@@ -772,6 +782,7 @@ async function processClaimedTasks(executeTask: ExecuteTaskFn, claimedTasks: Cla
                 workerPid,
                 route,
                 retryable: shouldRetry,
+                nonRetryable,
                 retryAt: retryAt ? retryAt.toISOString() : null,
               },
               priority: 'high',
@@ -798,6 +809,7 @@ async function processClaimedTasks(executeTask: ExecuteTaskFn, claimedTasks: Cla
                 error: message,
                 retryDelayMs: retryDelayMs ?? null,
                 retryAt: retryAt ? retryAt.toISOString() : null,
+                nonRetryable,
                 claimMode,
                 provider: failedProviderParity.provider,
                 model: failedProviderParity.model,

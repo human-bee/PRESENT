@@ -109,6 +109,10 @@ export const stripUndefinedDeep = <T>(value: T): T => {
 
 export const isZodSchemaLike = (value: unknown): value is z.ZodTypeAny => {
   if (!value || typeof value !== 'object') return false;
-  const candidate = value as Partial<z.ZodTypeAny>;
-  return typeof candidate.parse === 'function' && typeof candidate.safeParse === 'function';
+  try {
+    const candidate = value as Partial<z.ZodTypeAny>;
+    return typeof candidate.parse === 'function' && typeof candidate.safeParse === 'function';
+  } catch {
+    return false;
+  }
 };

@@ -88,6 +88,7 @@ interface ConnectRoomParams {
   wsUrl: string;
   token: string;
   audioOnly: boolean;
+  publishLocalMedia: boolean;
   roomName: string;
   mergeState: (patch: Partial<LivekitRoomConnectorState>) => void;
   getState: () => LivekitRoomConnectorState;
@@ -102,6 +103,7 @@ export async function connectRoomWithToken({
   wsUrl,
   token,
   audioOnly,
+  publishLocalMedia,
   roomName,
   mergeState,
   getState,
@@ -151,14 +153,16 @@ export async function connectRoomWithToken({
         throw createAbortError();
       }
 
-      try {
-        if (!audioOnly) {
-          await room.localParticipant.enableCameraAndMicrophone();
-        } else {
-          await room.localParticipant.setMicrophoneEnabled(true);
+      if (publishLocalMedia) {
+        try {
+          if (!audioOnly) {
+            await room.localParticipant.enableCameraAndMicrophone();
+          } else {
+            await room.localParticipant.setMicrophoneEnabled(true);
+          }
+        } catch (mediaError) {
+          console.warn(`⚠️ [LiveKitConnector-${roomName}] Media device error:`, mediaError);
         }
-      } catch (mediaError) {
-        console.warn(`⚠️ [LiveKitConnector-${roomName}] Media device error:`, mediaError);
       }
 
       mergeState({
