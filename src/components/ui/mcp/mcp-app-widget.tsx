@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils';
 import { useComponentRegistration } from '@/lib/component-registry';
 import { waitForMcpReady } from '@/lib/mcp-bridge';
 import { resolveMcpServer, getMcpServerUrl } from '@/lib/mcp-apps/server-utils';
+import { fetchWithSupabaseAuth } from '@/lib/supabase/auth-headers';
 import {
   loadMcpAppResource,
   resolveToolResourceUri,
@@ -24,6 +25,10 @@ type McpAppWidgetState = {
   serverName?: string;
   resourceUri?: string;
   args?: Record<string, unknown>;
+  syncRoom?: string;
+  syncComponentId?: string;
+  syncIntervalMs?: number;
+  syncTimeline?: boolean;
   autoRun?: boolean;
   runId?: string;
   displayMode?: string;
@@ -31,8 +36,36 @@ type McpAppWidgetState = {
   contextKey?: string;
 };
 
+type ScorecardSyncSnapshot = {
+  room: string;
+  componentId: string;
+  timeline: Array<Record<string, unknown>>;
+  topic?: string;
+  round?: string;
+  status?: Record<string, unknown>;
+  version?: number;
+  lastUpdated?: number;
+  syncedAt: number;
+};
+
 const HOST_INFO = { name: 'PRESENT', version: '0.1.0' };
 const DEFAULT_DISPLAY_MODES: McpUiDisplayMode[] = ['inline', 'pip', 'fullscreen'];
+const DEFAULT_SCORECARD_SYNC_INTERVAL_MS = 3000;
+
+const coerceText = (value: unknown): string | undefined => {
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+};
+
+const coerceFiniteNumber = (value: unknown): number | undefined => {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string') {
+    const parsed = Number(value.trim());
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return undefined;
+};
 
 const coerceDisplayMode = (value: unknown): McpUiDisplayMode => {
   if (value === 'fullscreen' || value === 'pip' || value === 'inline') return value;
@@ -53,6 +86,16 @@ const stringifyArgs = (value: unknown) => {
   } catch {
     return '';
   }
+};
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  !!value && typeof value === 'object' && !Array.isArray(value);
+
+const buildTimelineFingerprint = (timeline: Array<Record<string, unknown>>): string => {
+  const last = timeline.length > 0 ? timeline[timeline.length - 1] : undefined;
+  const lastId = last ? coerceText(last.id ?? last.eventId) ?? 'na' : 'na';
+  const lastTimestamp = last ? coerceFiniteNumber(last.timestamp ?? last.ts) ?? -1 : -1;
+  return `${timeline.length}:${lastId}:${lastTimestamp}`;
 };
 
 const normalizeToolResult = (result: unknown, isError = false) => {
@@ -118,6 +161,10 @@ export function McpAppWidget(props: McpAppWidgetProps) {
     serverName: rest.serverName,
     resourceUri: rest.resourceUri,
     args: rest.args,
+    syncRoom: rest.syncRoom,
+    syncComponentId: rest.syncComponentId,
+    syncIntervalMs: rest.syncIntervalMs,
+    syncTimeline: rest.syncTimeline,
     autoRun: rest.autoRun,
     runId: rest.runId,
     displayMode: rest.displayMode,
@@ -135,6 +182,8 @@ export function McpAppWidget(props: McpAppWidgetProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const bridgeRef = useRef<AppBridge | null>(null);
   const lastRunKeyRef = useRef<string>('');
+  const latestScorecardSnapshotRef = useRef<ScorecardSyncSnapshot | null>(null);
+  const lastScorecardSyncSignatureRef = useRef<string>('');
 
   const registryProps = useMemo(
     () => ({
@@ -144,6 +193,10 @@ export function McpAppWidget(props: McpAppWidgetProps) {
       serverName: state.serverName,
       resourceUri: state.resourceUri,
       args: state.args,
+      syncRoom: state.syncRoom,
+      syncComponentId: state.syncComponentId,
+      syncIntervalMs: state.syncIntervalMs,
+      syncTimeline: state.syncTimeline,
       autoRun: state.autoRun,
       runId: state.runId,
       displayMode: state.displayMode,
@@ -161,6 +214,15 @@ export function McpAppWidget(props: McpAppWidgetProps) {
       serverName: typeof patch.serverName === 'string' ? patch.serverName : prev.serverName,
       resourceUri: typeof patch.resourceUri === 'string' ? patch.resourceUri : prev.resourceUri,
       args: typeof patch.args === 'object' && patch.args ? (patch.args as Record<string, unknown>) : prev.args,
+      syncRoom: typeof patch.syncRoom === 'string' ? patch.syncRoom : prev.syncRoom,
+      syncComponentId:
+        typeof patch.syncComponentId === 'string' ? patch.syncComponentId : prev.syncComponentId,
+      syncIntervalMs:
+        typeof patch.syncIntervalMs === 'number' && Number.isFinite(patch.syncIntervalMs)
+          ? patch.syncIntervalMs
+          : prev.syncIntervalMs,
+      syncTimeline:
+        typeof patch.syncTimeline === 'boolean' ? patch.syncTimeline : prev.syncTimeline,
       autoRun: typeof patch.autoRun === 'boolean' ? patch.autoRun : prev.autoRun,
       runId: typeof patch.runId === 'string' ? patch.runId : prev.runId,
       displayMode: typeof patch.displayMode === 'string' ? patch.displayMode : prev.displayMode,
@@ -213,6 +275,240 @@ export function McpAppWidget(props: McpAppWidgetProps) {
     };
   }, [toolDescriptor]);
 
+  const argsSyncRoom = coerceText(state.args?.room);
+  const argsSyncComponentId =
+    coerceText(state.args?.componentId) ?? coerceText(state.args?.scorecardComponentId);
+  const scorecardSync = useMemo(() => {
+    const room = coerceText(state.syncRoom) ?? argsSyncRoom;
+    const componentId = coerceText(state.syncComponentId) ?? argsSyncComponentId;
+    const enabled = coerceBoolean(state.syncTimeline, false);
+    const intervalMs = Math.max(
+      1000,
+      Math.min(
+        30_000,
+        Math.round(
+          coerceFiniteNumber(state.syncIntervalMs) ?? DEFAULT_SCORECARD_SYNC_INTERVAL_MS,
+        ),
+      ),
+    );
+    return { enabled, room, componentId, intervalMs };
+  }, [
+    argsSyncComponentId,
+    argsSyncRoom,
+    state.syncComponentId,
+    state.syncIntervalMs,
+    state.syncRoom,
+    state.syncTimeline,
+  ]);
+
+  const publishScorecardSnapshot = useCallback((snapshot: ScorecardSyncSnapshot) => {
+    latestScorecardSnapshotRef.current = snapshot;
+    const iframeWindow = iframeRef.current?.contentWindow;
+    if (!iframeWindow) return;
+    iframeWindow.postMessage(
+      {
+        type: 'present:scorecard-sync',
+        payload: snapshot,
+      },
+      '*',
+    );
+  }, []);
+
+  useEffect(() => {
+    const iframe = iframeRef.current;
+    if (!iframe) return;
+
+    const handleLoad = () => {
+      if (!scorecardSync.enabled) return;
+      const snapshot = latestScorecardSnapshotRef.current;
+      if (!snapshot) return;
+      if (snapshot.room !== scorecardSync.room || snapshot.componentId !== scorecardSync.componentId) {
+        return;
+      }
+      publishScorecardSnapshot(snapshot);
+    };
+
+    iframe.addEventListener('load', handleLoad);
+    return () => {
+      iframe.removeEventListener('load', handleLoad);
+    };
+  }, [publishScorecardSnapshot, scorecardSync.componentId, scorecardSync.enabled, scorecardSync.room]);
+
+  useEffect(() => {
+    if (scorecardSync.enabled) return;
+    latestScorecardSnapshotRef.current = null;
+    lastScorecardSyncSignatureRef.current = '';
+  }, [scorecardSync.enabled]);
+
+  useEffect(() => {
+    lastScorecardSyncSignatureRef.current = '';
+    latestScorecardSnapshotRef.current = null;
+  }, [scorecardSync.componentId, scorecardSync.room]);
+
+  useEffect(() => {
+    if (!scorecardSync.enabled || !scorecardSync.room || !scorecardSync.componentId) return;
+
+    let cancelled = false;
+    let timer: number | null = null;
+    let inflightController: AbortController | null = null;
+    let consecutiveFailures = 0;
+
+    const poll = async () => {
+      let nextDelayMs = scorecardSync.intervalMs;
+      inflightController = new AbortController();
+      try {
+        const search = new URLSearchParams({
+          room: scorecardSync.room,
+          componentId: scorecardSync.componentId,
+        });
+        const res = await fetchWithSupabaseAuth(`/api/steward/scorecard?${search.toString()}`, {
+          cache: 'no-store',
+          signal: inflightController.signal,
+        });
+        if (cancelled) return;
+        if (!res.ok) {
+          throw new Error(`scorecard_sync_${res.status}`);
+        }
+
+        const payload = (await res.json()) as Record<string, unknown>;
+        if (cancelled) return;
+        if (!payload?.ok || !isRecord(payload.scorecard)) return;
+        const scorecard = payload.scorecard;
+        const rawTimeline = Array.isArray(payload.timeline)
+          ? payload.timeline
+          : Array.isArray(scorecard.timeline)
+            ? scorecard.timeline
+            : [];
+        const timeline = rawTimeline.filter((entry) => isRecord(entry)) as Array<
+          Record<string, unknown>
+        >;
+        const version = coerceFiniteNumber(payload.version ?? scorecard.version);
+        const lastUpdated = coerceFiniteNumber(payload.lastUpdated ?? scorecard.lastUpdated);
+        const timelineFingerprint = buildTimelineFingerprint(timeline);
+        const signature = `${scorecardSync.room}:${scorecardSync.componentId}:${
+          version ?? 'na'
+        }:${timelineFingerprint}`;
+        if (signature === lastScorecardSyncSignatureRef.current) return;
+        lastScorecardSyncSignatureRef.current = signature;
+
+        const snapshot: ScorecardSyncSnapshot = {
+          room: scorecardSync.room,
+          componentId: scorecardSync.componentId,
+          timeline,
+          topic: coerceText(scorecard.topic),
+          round: coerceText(scorecard.round),
+          status: isRecord(scorecard.status) ? scorecard.status : undefined,
+          version,
+          lastUpdated,
+          syncedAt: Date.now(),
+        };
+
+        publishScorecardSnapshot(snapshot);
+
+        setState((prev) => {
+          const prevArgs = isRecord(prev.args) ? prev.args : {};
+          const nextArgs: Record<string, unknown> = {
+            ...prevArgs,
+            room: scorecardSync.room,
+            componentId: scorecardSync.componentId,
+            timeline,
+            timelineTopic: snapshot.topic ?? prevArgs.timelineTopic,
+            timelineRound: snapshot.round ?? prevArgs.timelineRound,
+            timelineVersion:
+              snapshot.version != null ? snapshot.version : prevArgs.timelineVersion,
+            timelineLastUpdated:
+              snapshot.lastUpdated != null
+                ? snapshot.lastUpdated
+                : prevArgs.timelineLastUpdated,
+            timelineSyncedAt: snapshot.syncedAt,
+            timelineStatus: snapshot.status ?? prevArgs.timelineStatus,
+            timelineSyncStatus: 'ok',
+            timelineSyncError: null,
+            timelineSyncRetryMs: scorecardSync.intervalMs,
+          };
+          const nextRunId =
+            snapshot.version != null
+              ? `scorecard-sync:v:${snapshot.version}`
+              : `scorecard-sync:f:${timelineFingerprint}`;
+          if (
+            stringifyArgs(nextArgs) === stringifyArgs(prev.args ?? {}) &&
+            nextRunId === prev.runId
+          ) {
+            return prev;
+          }
+          return {
+            ...prev,
+            args: nextArgs,
+            runId: nextRunId,
+          };
+        });
+        consecutiveFailures = 0;
+      } catch (syncError) {
+        if (
+          cancelled ||
+          (syncError instanceof DOMException && syncError.name === 'AbortError')
+        ) {
+          return;
+        }
+        const errorMessage =
+          syncError instanceof Error ? syncError.message : String(syncError ?? 'unknown_error');
+        consecutiveFailures += 1;
+        nextDelayMs = Math.min(
+          scorecardSync.intervalMs * 2 ** Math.min(consecutiveFailures, 4),
+          30_000,
+        );
+        setState((prev) => {
+          const prevArgs = isRecord(prev.args) ? prev.args : {};
+          if (
+            prevArgs.timelineSyncStatus === 'error' &&
+            prevArgs.timelineSyncError === errorMessage &&
+            prevArgs.timelineSyncRetryMs === nextDelayMs
+          ) {
+            return prev;
+          }
+          return {
+            ...prev,
+            args: {
+              ...prevArgs,
+              timelineSyncStatus: 'error',
+              timelineSyncError: errorMessage,
+              timelineSyncErrorAt: Date.now(),
+              timelineSyncRetryMs: nextDelayMs,
+            },
+          };
+        });
+        if (consecutiveFailures === 1 || consecutiveFailures % 5 === 0) {
+          console.warn('[McpAppWidget] scorecard sync failed', {
+            room: scorecardSync.room,
+            componentId: scorecardSync.componentId,
+            error: errorMessage,
+            retryInMs: nextDelayMs,
+            consecutiveFailures,
+          });
+        }
+      } finally {
+        if (!cancelled) {
+          timer = window.setTimeout(poll, nextDelayMs);
+        }
+      }
+    };
+
+    void poll();
+    return () => {
+      cancelled = true;
+      inflightController?.abort();
+      if (timer != null) {
+        window.clearTimeout(timer);
+      }
+    };
+  }, [
+    publishScorecardSnapshot,
+    scorecardSync.componentId,
+    scorecardSync.enabled,
+    scorecardSync.intervalMs,
+    scorecardSync.room,
+  ]);
+
   useEffect(() => {
     let cancelled = false;
     if (!resolvedResourceUri) return;
@@ -235,6 +531,19 @@ export function McpAppWidget(props: McpAppWidgetProps) {
       cancelled = true;
     };
   }, [resolvedResourceUri, serverUrl, uiMeta.csp]);
+
+  const executeMcpTool = useCallback(
+    async (tool: string, args: Record<string, unknown>) => {
+      if (typeof window !== 'undefined' && (window as any).callMcpTool) {
+        return await (window as any).callMcpTool(tool, args);
+      }
+      if (serverUrl) {
+        return await callMcpMethod(serverUrl, 'tools/call', { name: tool, arguments: args });
+      }
+      throw new Error('mcp_tool_unavailable');
+    },
+    [serverUrl],
+  );
 
   useEffect(() => {
     const iframe = iframeRef.current;
@@ -390,20 +699,16 @@ export function McpAppWidget(props: McpAppWidgetProps) {
       }
       setBridgeReady(false);
     };
-  }, [resourceHtml, serverUrl, state.displayMode, state.title, state.toolName, toolDescriptor, uiMeta.permissions]);
-
-  const executeMcpTool = useCallback(
-    async (tool: string, args: Record<string, unknown>) => {
-      if (typeof window !== 'undefined' && (window as any).callMcpTool) {
-        return await (window as any).callMcpTool(tool, args);
-      }
-      if (serverUrl) {
-        return await callMcpMethod(serverUrl, 'tools/call', { name: tool, arguments: args });
-      }
-      throw new Error('mcp_tool_unavailable');
-    },
-    [serverUrl],
-  );
+  }, [
+    executeMcpTool,
+    resourceHtml,
+    serverUrl,
+    state.displayMode,
+    state.title,
+    state.toolName,
+    toolDescriptor,
+    uiMeta.permissions,
+  ]);
 
   const argsKey = useMemo(() => stringifyArgs(state.args), [state.args]);
   const autoRun = coerceBoolean(state.autoRun, true);

@@ -1,0 +1,348 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>MCP Timeline Proof Trace Report</title>
+    <style>
+      body { margin: 0; padding: 24px; font: 14px/1.45 ui-sans-serif, system-ui, -apple-system, sans-serif; color: #12212b; background: #f2f6f8; }
+      h1 { margin: 0 0 8px; font-size: 24px; }
+      .meta { margin: 0 0 20px; color: #355061; }
+      .card { background: #fff; border: 1px solid #d8e2e8; border-radius: 12px; padding: 16px; margin-bottom: 16px; box-shadow: 0 8px 24px rgba(10, 20, 30, 0.05); }
+      .grid { display: grid; grid-template-columns: 220px 1fr; gap: 8px 16px; }
+      .label { color: #5d7888; font-weight: 600; }
+      pre { margin: 8px 0 0; padding: 10px; background: #0f2029; color: #d8ecf7; border-radius: 8px; overflow: auto; font-size: 12px; }
+      table { width: 100%; border-collapse: collapse; }
+      th, td { border-bottom: 1px solid #e2eaef; padding: 8px; text-align: left; vertical-align: top; }
+      th { background: #f8fbfd; position: sticky; top: 0; z-index: 1; }
+      details summary { cursor: pointer; color: #0f5170; }
+    </style>
+  </head>
+  <body>
+    <h1>MCP Timeline Widget Proof</h1>
+    <p class="meta">Generated at 2026-02-26T09:53:51.856Z</p>
+    <section class="card">
+      <h2>Run Summary</h2>
+      <div class="grid">
+        <div class="label">Base URL</div><div>http://localhost:3000</div>
+        <div class="label">Room</div><div>canvas-dev-52d6acf0-1507-4e30-8d28-ece6e2d63998</div>
+        <div class="label">Scorecard Component</div><div>scorecard-mcp-timeline-proof</div>
+        <div class="label">Widget Component</div><div>mcp-timeline-widget-proof</div>
+        <div class="label">Trace Source</div><div>canvas</div>
+        <div class="label">Task ID</div><div>73fc49e2-c5d6-4e93-bc51-deb830b98d26</div>
+        <div class="label">Task Name</div><div>canvas.agent_prompt</div>
+        <div class="label">Task Status</div><div>succeeded</div>
+        <div class="label">Trace ID</div><div>canvas-proof-trace-1772099590450</div>
+        <div class="label">Trace Events</div><div>9</div>
+        <div class="label">Scorecard Task</div><div>88a461ca-2a9e-4fd3-8410-f13dbf2982ce (succeeded)</div>
+        <div class="label">Scorecard Validation</div><div>ok</div>
+        <div class="label">Canvas Validation</div><div>warning · runCanvas task returned non-fatal warning: LiveKit room not found before timeout: canvas-dev-52d6acf0-1507-4e30-8d28-ece6e2d63998</div>
+        <div class="label">Timeline Sync</div><div>confirmed (1 rows)</div>
+      </div>
+    </section>
+    <section class="card">
+      <h2>runScorecard Response</h2>
+      <pre>{
+  &quot;ok&quot;: true,
+  &quot;status&quot;: 202,
+  &quot;payload&quot;: {
+    &quot;status&quot;: &quot;queued&quot;,
+    &quot;task&quot;: {
+      &quot;id&quot;: &quot;88a461ca-2a9e-4fd3-8410-f13dbf2982ce&quot;,
+      &quot;created_at&quot;: &quot;2026-02-26T09:53:10.241+00:00&quot;,
+      &quot;updated_at&quot;: &quot;2026-02-26T09:53:10.241+00:00&quot;,
+      &quot;room&quot;: &quot;canvas-dev-52d6acf0-1507-4e30-8d28-ece6e2d63998&quot;,
+      &quot;task&quot;: &quot;scorecard.patch&quot;,
+      &quot;params&quot;: {
+        &quot;room&quot;: &quot;canvas-dev-52d6acf0-1507-4e30-8d28-ece6e2d63998&quot;,
+        &quot;topic&quot;: &quot;MCP timeline proof run&quot;,
+        &quot;lockKey&quot;: &quot;widget:scorecard-mcp-timeline-proof&quot;,
+        &quot;summary&quot;: &quot;Apply deterministic scorecard patch for timeline sync proof.&quot;,
+        &quot;metadata&quot;: {
+          &quot;runtimeScope&quot;: &quot;whiteboard-jamie-q02f56az.livekit.cloud&quot;
+        },
+        &quot;provider&quot;: &quot;cerebras&quot;,
+        &quot;componentId&quot;: &quot;scorecard-mcp-timeline-proof&quot;,
+        &quot;claimPatches&quot;: [
+          {
+            &quot;id&quot;: &quot;AFF-1&quot;,
+            &quot;op&quot;: &quot;upsert&quot;,
+            &quot;side&quot;: &quot;AFF&quot;,
+            &quot;quote&quot;: &quot;MCP timeline sync should mirror canonical scorecard updates.&quot;,
+            &quot;impact&quot;: &quot;MAJOR&quot;,
+            &quot;speech&quot;: &quot;1AC&quot;,
+            &quot;status&quot;: &quot;VERIFIED&quot;,
+            &quot;summary&quot;: &quot;Deterministic proof claim inserted by capture script.&quot;,
+            &quot;verdict&quot;: &quot;ACCURATE&quot;
+          }
+        ],
+        &quot;runtimeScope&quot;: &quot;whiteboard-jamie-q02f56az.livekit.cloud&quot;,
+        &quot;configVersion&quot;: &quot;f7703155dac7&quot;,
+        &quot;provider_path&quot;: &quot;fast&quot;,
+        &quot;provider_source&quot;: &quot;runtime_selected&quot;
+      },
+      &quot;status&quot;: &quot;queued&quot;,
+      &quot;priority&quot;: 0,
+      &quot;run_at&quot;: null,
+      &quot;attempt&quot;: 0,
+      &quot;error&quot;: null,
+      &quot;request_id&quot;: &quot;proof-1772099584247&quot;,
+      &quot;dedupe_key&quot;: null,
+      &quot;resource_keys&quot;: [
+        &quot;room:canvas-dev-52d6acf0-1507-4e30-8d28-ece6e2d63998&quot;,
+        &quot;scorecard:scorecard-mcp-timeline-proof&quot;,
+        &quot;runtime-scope:whiteboard-jamie-q02f56az.livekit.cloud&quot;,
+        &quot;lock:widget:scorecard-mcp-timeline-proof&quot;
+      ],
+      &quot;lease_token&quot;: null,
+      &quot;lease_expires_at&quot;: null,
+      &quot;result&quot;: null,
+      &quot;trace_id&quot;: null
+    }
+  }
+}</pre>
+    </section>
+    <section class="card">
+      <h2>runCanvas Response</h2>
+      <pre>{
+  &quot;ok&quot;: true,
+  &quot;status&quot;: 202,
+  &quot;payload&quot;: {
+    &quot;status&quot;: &quot;queued&quot;,
+    &quot;task&quot;: {
+      &quot;id&quot;: &quot;73fc49e2-c5d6-4e93-bc51-deb830b98d26&quot;,
+      &quot;created_at&quot;: &quot;2026-02-26T09:53:24.428+00:00&quot;,
+      &quot;updated_at&quot;: &quot;2026-02-26T09:53:24.428+00:00&quot;,
+      &quot;room&quot;: &quot;canvas-dev-52d6acf0-1507-4e30-8d28-ece6e2d63998&quot;,
+      &quot;task&quot;: &quot;canvas.agent_prompt&quot;,
+      &quot;params&quot;: {
+        &quot;room&quot;: &quot;canvas-dev-52d6acf0-1507-4e30-8d28-ece6e2d63998&quot;,
+        &quot;model&quot;: &quot;claude-haiku-4-5&quot;,
+        &quot;lockKey&quot;: &quot;room:canvas-dev-52d6acf0-1507-4e30-8d28-ece6e2d63998:task:canvas.agent_prompt&quot;,
+        &quot;message&quot;: &quot;Draw one sticky note that says \&quot;MCP timeline sync verified\&quot;.&quot;,
+        &quot;traceId&quot;: &quot;canvas-proof-trace-1772099590450&quot;,
+        &quot;metadata&quot;: {
+          &quot;traceId&quot;: &quot;canvas-proof-trace-1772099590450&quot;,
+          &quot;intentId&quot;: &quot;canvas-proof-1772099590450&quot;,
+          &quot;runtimeScope&quot;: &quot;whiteboard-jamie-q02f56az.livekit.cloud&quot;,
+          &quot;configVersion&quot;: &quot;f7703155dac7&quot;
+        },
+        &quot;provider&quot;: &quot;anthropic&quot;,
+        &quot;requestId&quot;: &quot;canvas-proof-1772099590450&quot;,
+        &quot;runtimeScope&quot;: &quot;whiteboard-jamie-q02f56az.livekit.cloud&quot;,
+        &quot;configVersion&quot;: &quot;f7703155dac7&quot;,
+        &quot;provider_path&quot;: &quot;primary&quot;,
+        &quot;provider_source&quot;: &quot;task_params&quot;
+      },
+      &quot;status&quot;: &quot;queued&quot;,
+      &quot;priority&quot;: 0,
+      &quot;run_at&quot;: null,
+      &quot;attempt&quot;: 0,
+      &quot;error&quot;: null,
+      &quot;request_id&quot;: &quot;canvas-proof-1772099590450&quot;,
+      &quot;dedupe_key&quot;: null,
+      &quot;resource_keys&quot;: [
+        &quot;room:canvas-dev-52d6acf0-1507-4e30-8d28-ece6e2d63998&quot;,
+        &quot;canvas:intent&quot;,
+        &quot;runtime-scope:whiteboard-jamie-q02f56az.livekit.cloud&quot;,
+        &quot;lock:room:canvas-dev-52d6acf0-1507-4e30-8d28-ece6e2d63998:task:canvas.agent_prompt&quot;
+      ],
+      &quot;lease_token&quot;: null,
+      &quot;lease_expires_at&quot;: null,
+      &quot;result&quot;: null,
+      &quot;trace_id&quot;: null
+    },
+    &quot;taskId&quot;: &quot;73fc49e2-c5d6-4e93-bc51-deb830b98d26&quot;,
+    &quot;requestId&quot;: &quot;canvas-proof-1772099590450&quot;,
+    &quot;traceId&quot;: &quot;canvas-proof-trace-1772099590450&quot;,
+    &quot;intentId&quot;: &quot;canvas-proof-1772099590450&quot;
+  }
+}</pre>
+    </section>
+    <section class="card">
+      <h2>Task Row</h2>
+      <pre>{
+  &quot;id&quot;: &quot;73fc49e2-c5d6-4e93-bc51-deb830b98d26&quot;,
+  &quot;room&quot;: &quot;canvas-dev-52d6acf0-1507-4e30-8d28-ece6e2d63998&quot;,
+  &quot;task&quot;: &quot;canvas.agent_prompt&quot;,
+  &quot;status&quot;: &quot;succeeded&quot;,
+  &quot;attempt&quot;: 1,
+  &quot;error&quot;: &quot;LiveKit room not found before timeout: canvas-dev-52d6acf0-1507-4e30-8d28-ece6e2d63998&quot;,
+  &quot;result&quot;: {
+    &quot;room&quot;: &quot;canvas-dev-52d6acf0-1507-4e30-8d28-ece6e2d63998&quot;,
+    &quot;status&quot;: &quot;queued&quot;,
+    &quot;deduped&quot;: false,
+    &quot;lockKey&quot;: &quot;room:canvas-dev-52d6acf0-1507-4e30-8d28-ece6e2d63998:task:canvas.agent_prompt&quot;,
+    &quot;payload&quot;: {
+      &quot;message&quot;: &quot;Draw one sticky note that says \&quot;MCP timeline sync verified\&quot;.&quot;,
+      &quot;metadata&quot;: {
+        &quot;traceId&quot;: &quot;canvas-proof-trace-1772099590450&quot;,
+        &quot;intentId&quot;: &quot;canvas-proof-1772099590450&quot;,
+        &quot;runtimeScope&quot;: &quot;whiteboard-jamie-q02f56az.livekit.cloud&quot;,
+        &quot;configVersion&quot;: &quot;f7703155dac7&quot;
+      },
+      &quot;requestId&quot;: &quot;canvas-proof-1772099590450&quot;
+    },
+    &quot;requestId&quot;: &quot;canvas-proof-1772099590450&quot;,
+    &quot;executionId&quot;: &quot;73fc49e2-c5d6-4e93-bc51-deb830b98d26&quot;,
+    &quot;idempotencyKey&quot;: null
+  },
+  &quot;request_id&quot;: &quot;canvas-proof-1772099590450&quot;,
+  &quot;created_at&quot;: &quot;2026-02-26T09:53:24.428+00:00&quot;,
+  &quot;updated_at&quot;: &quot;2026-02-26T09:53:46.18582+00:00&quot;,
+  &quot;trace_id&quot;: null
+}</pre>
+    </section>
+    <section class="card">
+      <h2>Trace Events</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>created_at</th>
+            <th>stage</th>
+            <th>status</th>
+            <th>task</th>
+            <th>latency_ms</th>
+            <th>payload</th>
+          </tr>
+        </thead>
+        <tbody>
+          
+        <tr>
+          <td>1</td>
+          <td>2026-02-26T09:53:23.755+00:00</td>
+          <td>api_received</td>
+          <td>ok</td>
+          <td>canvas.agent_prompt</td>
+          <td></td>
+          <td><details><summary>payload</summary><pre>{
+  &quot;model&quot;: &quot;claude-haiku-4-5&quot;,
+  &quot;provider&quot;: &quot;anthropic&quot;,
+  &quot;providerPath&quot;: &quot;primary&quot;,
+  &quot;providerSource&quot;: &quot;task_params&quot;,
+  &quot;providerRequestId&quot;: null
+}</pre></details></td>
+        </tr>
+      
+
+        <tr>
+          <td>2</td>
+          <td>2026-02-26T09:53:24.697+00:00</td>
+          <td>queued</td>
+          <td>queued</td>
+          <td>canvas.agent_prompt</td>
+          <td></td>
+          <td><details><summary>payload</summary><pre>{}</pre></details></td>
+        </tr>
+      
+
+        <tr>
+          <td>3</td>
+          <td>2026-02-26T09:53:24.792+00:00</td>
+          <td>executing</td>
+          <td>running</td>
+          <td>canvas.agent_prompt</td>
+          <td></td>
+          <td><details><summary>payload</summary><pre>{
+  &quot;route&quot;: &quot;visual&quot;,
+  &quot;workerId&quot;: &quot;conductor-36-d129063d&quot;,
+  &quot;workerPid&quot;: &quot;36&quot;,
+  &quot;leaseToken&quot;: &quot;99cf3244-bc79-421e-b9eb-b0fedf066544&quot;,
+  &quot;workerHost&quot;: &quot;f8152f2e162b&quot;
+}</pre></details></td>
+        </tr>
+      
+
+        <tr>
+          <td>4</td>
+          <td>2026-02-26T09:53:24.792+00:00</td>
+          <td>claimed</td>
+          <td>running</td>
+          <td>canvas.agent_prompt</td>
+          <td></td>
+          <td><details><summary>payload</summary><pre>{}</pre></details></td>
+        </tr>
+      
+
+        <tr>
+          <td>5</td>
+          <td>2026-02-26T09:53:30.549+00:00</td>
+          <td>failed</td>
+          <td>failed</td>
+          <td>canvas.agent_prompt</td>
+          <td></td>
+          <td><details><summary>payload</summary><pre>{
+  &quot;error&quot;: &quot;LiveKit room not found before timeout: canvas-dev-52d6acf0-1507-4e30-8d28-ece6e2d63998&quot;,
+  &quot;route&quot;: &quot;visual&quot;,
+  &quot;lockKey&quot;: &quot;room:canvas-dev-52d6acf0-1507-4e30-8d28-ece6e2d63998:task:canvas.agent_prompt&quot;,
+  &quot;retryAt&quot;: &quot;2026-02-26T09:53:31.044Z&quot;,
+  &quot;workerId&quot;: &quot;conductor-36-d129063d&quot;,
+  &quot;workerPid&quot;: &quot;36&quot;,
+  &quot;workerHost&quot;: &quot;f8152f2e162b&quot;
+}</pre></details></td>
+        </tr>
+      
+
+        <tr>
+          <td>6</td>
+          <td>2026-02-26T09:53:31.519+00:00</td>
+          <td>claimed</td>
+          <td>running</td>
+          <td>canvas.agent_prompt</td>
+          <td></td>
+          <td><details><summary>payload</summary><pre>{}</pre></details></td>
+        </tr>
+      
+
+        <tr>
+          <td>7</td>
+          <td>2026-02-26T09:53:31.52+00:00</td>
+          <td>executing</td>
+          <td>running</td>
+          <td>canvas.agent_prompt</td>
+          <td></td>
+          <td><details><summary>payload</summary><pre>{
+  &quot;route&quot;: &quot;visual&quot;,
+  &quot;workerId&quot;: &quot;conductor-36-d129063d&quot;,
+  &quot;workerPid&quot;: &quot;36&quot;,
+  &quot;leaseToken&quot;: &quot;3b20aff0-7342-42ba-b82c-21afa14834d3&quot;,
+  &quot;workerHost&quot;: &quot;f8152f2e162b&quot;
+}</pre></details></td>
+        </tr>
+      
+
+        <tr>
+          <td>8</td>
+          <td>2026-02-26T09:53:45.012+00:00</td>
+          <td>queued</td>
+          <td>queued</td>
+          <td>canvas.followup</td>
+          <td></td>
+          <td><details><summary>payload</summary><pre>{}</pre></details></td>
+        </tr>
+      
+
+        <tr>
+          <td>9</td>
+          <td>2026-02-26T09:53:46.324+00:00</td>
+          <td>completed</td>
+          <td>succeeded</td>
+          <td>canvas.agent_prompt</td>
+          <td>14804</td>
+          <td><details><summary>payload</summary><pre>{
+  &quot;route&quot;: &quot;visual&quot;,
+  &quot;deduped&quot;: false,
+  &quot;lockKey&quot;: &quot;room:canvas-dev-52d6acf0-1507-4e30-8d28-ece6e2d63998:task:canvas.agent_prompt&quot;,
+  &quot;workerId&quot;: &quot;conductor-36-d129063d&quot;,
+  &quot;workerPid&quot;: &quot;36&quot;,
+  &quot;leaseToken&quot;: &quot;3b20aff0-7342-42ba-b82c-21afa14834d3&quot;,
+  &quot;workerHost&quot;: &quot;f8152f2e162b&quot;
+}</pre></details></td>
+        </tr>
+      
+        </tbody>
+      </table>
+    </section>
+  </body>
+</html>
