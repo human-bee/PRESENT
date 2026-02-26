@@ -13,6 +13,7 @@ interface UseLkTokenParams {
   displayName: string;
   user: User | null | undefined;
   audioOnly: boolean;
+  publishLocalMedia: boolean;
   ensureIdentity: () => string;
   mergeState: (patch: Partial<LivekitRoomConnectorState>) => void;
   getState: () => LivekitRoomConnectorState;
@@ -33,6 +34,7 @@ export function useLkToken(params: UseLkTokenParams): LivekitTokenApi {
     displayName,
     user,
     audioOnly,
+    publishLocalMedia,
     ensureIdentity,
     mergeState,
     getState,
@@ -149,6 +151,7 @@ export function useLkToken(params: UseLkTokenParams): LivekitTokenApi {
         wsUrl,
         token,
         audioOnly,
+        publishLocalMedia,
         roomName,
         mergeState,
         getState,
@@ -185,6 +188,7 @@ export function useLkToken(params: UseLkTokenParams): LivekitTokenApi {
     roomName,
     wsUrl,
     audioOnly,
+    publishLocalMedia,
     displayName,
     user,
     ensureIdentity,

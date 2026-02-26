@@ -9,6 +9,7 @@ interface UseLkAgentRequestParams {
   connectionState: LivekitRoomConnectorState['connectionState'];
   mergeState: (patch: Partial<LivekitRoomConnectorState>) => void;
   getState: () => LivekitRoomConnectorState;
+  autoRequestEnabled?: boolean;
 }
 
 interface LkAgentRequestApi {
@@ -22,6 +23,7 @@ export function useLkAgentRequest({
   connectionState,
   mergeState,
   getState,
+  autoRequestEnabled = true,
 }: UseLkAgentRequestParams): LkAgentRequestApi {
   const agentAutoTriggerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { requestAgent: rawRequestAgent } = useAgentDispatch(
@@ -48,6 +50,10 @@ export function useLkAgentRequest({
       if (typeof window === 'undefined') {
         return;
       }
+      if (!autoRequestEnabled) {
+        clearAgentAutoTrigger();
+        return;
+      }
 
       const remoteParticipants = Array.from(eventRoom.remoteParticipants.values());
       const nonAgentParticipants = remoteParticipants.filter((participant) => !isAgentParticipant(participant));
@@ -60,7 +66,7 @@ export function useLkAgentRequest({
         }, AGENT_AUTO_TRIGGER_DELAY_MS);
       }
     },
-    [clearAgentAutoTrigger, requestAgent],
+    [autoRequestEnabled, clearAgentAutoTrigger, requestAgent],
   );
 
   useEffect(() => clearAgentAutoTrigger, [clearAgentAutoTrigger]);
