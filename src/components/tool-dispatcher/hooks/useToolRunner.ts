@@ -932,14 +932,14 @@ export function useToolRunner(options: UseToolRunnerOptions): ToolRunnerApi {
             typeof params?.intentId === 'string' && params.intentId.trim().length > 0
               ? params.intentId.trim()
               : requestId;
-          const idempotencyKey =
-            typeof params?.idempotency_key === 'string' && params.idempotency_key.trim().length > 0
-              ? params.idempotency_key.trim()
-              : `quick-${routeType}-${stableQuickHash(`${targetRoom}|${requestId}|${messageText}`)}`;
           const participantId =
             typeof params?.participant_id === 'string' && params.participant_id.trim().length > 0
               ? params.participant_id.trim()
               : undefined;
+          const idempotencyKey =
+            typeof params?.idempotency_key === 'string' && params.idempotency_key.trim().length > 0
+              ? params.idempotency_key.trim()
+              : `quick-${routeType}-${stableQuickHash(`${targetRoom}|${participantId || 'unknown'}|${requestId}|${messageText}`)}`;
           const participantViewport =
             participantId && participantViewportRef.current.has(participantId)
               ? participantViewportRef.current.get(participantId)?.viewport

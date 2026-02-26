@@ -25,6 +25,7 @@ export type VoiceKnobPatch = {
   transcriptionEnabled?: boolean;
   sttModel?: string;
   realtimeModel?: string;
+  realtimeModelStrategy?: 'fixed' | 'adaptive_profile';
   routerModel?: string;
   turnDetection?: 'none' | 'server_vad' | 'semantic_vad';
   inputNoiseReduction?: 'none' | 'near_field' | 'far_field';
@@ -62,6 +63,8 @@ export type ModelControlPatch = {
     canvasSteward?: string;
     voiceRouter?: string;
     voiceRealtime?: string;
+    voiceRealtimePrimary?: string;
+    voiceRealtimeSecondary?: string;
     voiceStt?: string;
     searchModel?: string;
     fastDefault?: string;
