@@ -69,9 +69,24 @@ type RunArtifactContext = {
   endedAt?: string;
   video?: string;
   sourcePath?: string;
+  turns?: any[];
+  sessionCorrelation?: unknown;
 };
 type OptionalReplayTable = 'agent_model_io' | 'agent_tool_io' | 'agent_io_blobs';
 type OptionalReplayTableAvailability = Record<OptionalReplayTable, boolean>;
+type TokenUsage = {
+  inputTokens?: number;
+  outputTokens?: number;
+  totalTokens?: number;
+  reasoningTokens?: number;
+  promptTokens?: number;
+  completionTokens?: number;
+  transcriptTokens?: number;
+  maxTokens?: number;
+  cacheReadTokens?: number;
+  cacheWriteTokens?: number;
+  searchTokens?: number;
+};
 
 const esc = (value: unknown): string =>
   String(value ?? '')
@@ -135,6 +150,138 @@ const compareReplayRows = (a: any, b: any): number => {
   const aId = String(a.event_id ?? a.id ?? '');
   const bId = String(b.event_id ?? b.id ?? '');
   return aId.localeCompare(bId);
+};
+
+const toFiniteNumber = (value: unknown): number | null => {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string' && value.trim().length > 0) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+};
+
+const parseMaybeJson = (value: unknown): unknown => {
+  if (typeof value !== 'string') return value;
+  const trimmed = value.trim();
+  if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) return value;
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    return value;
+  }
+};
+
+const extractTokenUsage = (...sources: unknown[]): TokenUsage | null => {
+  const usage: TokenUsage = {};
+  const seen = new Set<unknown>();
+  const queue: unknown[] = [...sources.map(parseMaybeJson)];
+  let scanned = 0;
+  const maxScans = 5000;
+
+  const set = (key: keyof TokenUsage, value: unknown) => {
+    const n = toFiniteNumber(value);
+    if (n == null) return;
+    if (usage[key] == null) usage[key] = n;
+  };
+
+  while (queue.length > 0 && scanned < maxScans) {
+    const current = queue.shift();
+    scanned += 1;
+    if (current == null) continue;
+    if (typeof current !== 'object') continue;
+    if (seen.has(current)) continue;
+    seen.add(current);
+
+    if (Array.isArray(current)) {
+      for (const item of current) queue.push(item);
+      continue;
+    }
+
+    const obj = current as Record<string, unknown>;
+    set('inputTokens', obj.input_tokens ?? obj.inputTokens);
+    set('outputTokens', obj.output_tokens ?? obj.outputTokens);
+    set('totalTokens', obj.total_tokens ?? obj.totalTokens);
+    set('reasoningTokens', obj.reasoning_tokens ?? obj.reasoningTokens ?? obj.thinking_tokens);
+    set('promptTokens', obj.prompt_tokens ?? obj.promptTokens);
+    set('completionTokens', obj.completion_tokens ?? obj.completionTokens);
+    set('cacheReadTokens', obj.cache_read_input_tokens ?? obj.cacheReadTokens);
+    set('cacheWriteTokens', obj.cache_creation_input_tokens ?? obj.cacheWriteTokens);
+    set('transcriptTokens', obj.transcript_tokens ?? obj.transcriptTokenEstimate);
+    set('maxTokens', obj.max_tokens ?? obj.maxOutputTokens ?? obj.token_budget_max ?? obj.tokenBudgetMax);
+    set('searchTokens', obj.search_tokens ?? obj.searchTokens);
+
+    for (const value of Object.values(obj)) {
+      if (value && typeof value === 'object') queue.push(value);
+      else if (typeof value === 'string') queue.push(parseMaybeJson(value));
+    }
+  }
+
+  return Object.keys(usage).length > 0 ? usage : null;
+};
+
+const formatTokenUsage = (usage: TokenUsage | null): string => {
+  if (!usage) return 'n/a';
+  const bits: string[] = [];
+  if (usage.inputTokens != null) bits.push(`in=${usage.inputTokens}`);
+  if (usage.promptTokens != null) bits.push(`prompt=${usage.promptTokens}`);
+  if (usage.outputTokens != null) bits.push(`out=${usage.outputTokens}`);
+  if (usage.completionTokens != null) bits.push(`completion=${usage.completionTokens}`);
+  if (usage.reasoningTokens != null) bits.push(`think=${usage.reasoningTokens}`);
+  if (usage.totalTokens != null) bits.push(`total=${usage.totalTokens}`);
+  if (usage.transcriptTokens != null) bits.push(`transcript=${usage.transcriptTokens}`);
+  if (usage.cacheReadTokens != null) bits.push(`cache_read=${usage.cacheReadTokens}`);
+  if (usage.cacheWriteTokens != null) bits.push(`cache_write=${usage.cacheWriteTokens}`);
+  if (usage.searchTokens != null) bits.push(`search=${usage.searchTokens}`);
+  if (usage.maxTokens != null) bits.push(`max=${usage.maxTokens}`);
+  return bits.length > 0 ? bits.join(' ') : 'n/a';
+};
+
+const hasMeasuredTokenUsage = (usage: TokenUsage | null): boolean => {
+  if (!usage) return false;
+  return (
+    usage.inputTokens != null ||
+    usage.promptTokens != null ||
+    usage.outputTokens != null ||
+    usage.completionTokens != null ||
+    usage.reasoningTokens != null ||
+    usage.totalTokens != null ||
+    usage.transcriptTokens != null ||
+    usage.cacheReadTokens != null ||
+    usage.cacheWriteTokens != null ||
+    usage.searchTokens != null
+  );
+};
+
+const buildSyntheticTranscriptFromRunArtifact = (artifact: RunArtifactContext | null): any[] => {
+  const turns = Array.isArray(artifact?.turns) ? artifact!.turns : [];
+  if (turns.length === 0) return [];
+  const baseMs = parseIsoMs(artifact?.startedAt) ?? Date.now();
+  const rows: any[] = [];
+  turns.forEach((turn: any, index: number) => {
+    const prompt = normalizeId(turn?.prompt) ?? '';
+    const userMs = baseMs + index * 2000;
+    rows.push({
+      ts: userMs,
+      created_at: new Date(userMs).toISOString(),
+      participant_name: 'Showcase User',
+      participant_id: 'canvas-user.synthetic',
+      manual: true,
+      text: prompt,
+      event_id: `showcase-turn-${index + 1}-user`,
+    });
+    const ackMs = userMs + 1000;
+    rows.push({
+      ts: ackMs,
+      created_at: new Date(ackMs).toISOString(),
+      participant_name: 'Voice Agent',
+      participant_id: 'voice-agent.synthetic',
+      manual: false,
+      text: `delivery: ack=${Boolean(turn?.acked)} delivered=${Boolean(turn?.delivered)} connected=${Boolean(turn?.connected)} attempts=${toFiniteNumber(turn?.attemptsUsed) ?? 'n/a'}`,
+      event_id: `showcase-turn-${index + 1}-delivery`,
+    });
+  });
+  return rows;
 };
 
 const collectCorrelationKeys = (tasks: any[], traces: any[]) => {
@@ -237,6 +384,16 @@ const splitProviderIdentity = (provider: unknown, model: unknown) => {
   return `${providerText}/${modelText}`;
 };
 
+const taskNameOf = (value: any): string => String(value?.task || '').toLowerCase();
+
+const isFairyTaskName = (taskName: string): boolean => taskName === 'fairy.intent';
+
+const isStewardTaskName = (taskName: string): boolean =>
+  taskName.startsWith('canvas.') ||
+  taskName.startsWith('scorecard.') ||
+  taskName.startsWith('flowchart.') ||
+  taskName.startsWith('youtube.');
+
 const isFastRow = (row: any) => {
   const source = String(row?.source || '').toLowerCase();
   const providerPath = String(row?.provider_path || '').toLowerCase();
@@ -246,8 +403,168 @@ const isFastRow = (row: any) => {
   return provider === 'cerebras';
 };
 
+const isFastTraceRow = (row: any) => {
+  const providerPath = String(
+    row?.provider_path ?? row?.providerPath ?? row?.payload?.provider_path ?? row?.payload?.providerPath ?? '',
+  ).toLowerCase();
+  if (providerPath === 'fast') return true;
+  const provider = String(row?.provider ?? row?.payload?.provider ?? '').toLowerCase();
+  if (provider === 'cerebras') return true;
+  const task = String(row?.task || '').toLowerCase();
+  return task.startsWith('fast_');
+};
+
+const isVoiceTranscriptRow = (row: any): boolean => {
+  const participantId = String(row?.participant_id || row?.participantId || '').toLowerCase();
+  const participantName = String(row?.participant_name || row?.participantName || '').toLowerCase();
+  return participantId.includes('voice-agent') || participantName.includes('voice agent');
+};
+
+const isTranscriptionTranscriptRow = (row: any): boolean => {
+  const participantId = String(row?.participant_id || row?.participantId || '').toLowerCase();
+  const participantName = String(row?.participant_name || row?.participantName || '').toLowerCase();
+  return (
+    participantId.includes('transcription') ||
+    participantId.includes('transcriber') ||
+    participantId.includes('stt') ||
+    participantName.includes('transcription') ||
+    participantName.includes('transcriber')
+  );
+};
+
+const compareCreatedAtRows = (a: any, b: any): number => {
+  const aMs = toMs(a.created_at ?? a.ts) ?? 0;
+  const bMs = toMs(b.created_at ?? b.ts) ?? 0;
+  if (aMs !== bMs) return aMs - bMs;
+  const aSeq = toSequence(a.sequence ?? a.attempt ?? a.seq);
+  const bSeq = toSequence(b.sequence ?? b.attempt ?? b.seq);
+  if (aSeq !== bSeq) return aSeq - bSeq;
+  return String(a.id ?? a.event_id ?? '').localeCompare(String(b.id ?? b.event_id ?? ''));
+};
+
+const rowIdentityKey = (row: any): string => {
+  const id = normalizeId(row?.id ?? row?.event_id ?? row?.eventId);
+  if (id) return `id:${id}`;
+  const trace = normalizeId(row?.trace_id ?? row?.traceId) || '';
+  const request = normalizeId(row?.request_id ?? row?.requestId) || '';
+  const task = normalizeId(row?.task_id ?? row?.taskId ?? row?.task) || '';
+  const stage = normalizeId(row?.stage) || '';
+  const ts = toIso(row?.created_at ?? row?.ts);
+  return `fallback:${trace}|${request}|${task}|${stage}|${ts}`;
+};
+
+const mergeRowsByIdentity = (primary: any[], secondary: any[]): any[] => {
+  const map = new Map<string, any>();
+  for (const row of primary) {
+    map.set(rowIdentityKey(row), row);
+  }
+  for (const row of secondary) {
+    const key = rowIdentityKey(row);
+    if (!map.has(key)) {
+      map.set(key, row);
+      continue;
+    }
+    const existing = map.get(key) ?? {};
+    const merged = { ...row, ...existing } as Record<string, unknown>;
+    for (const [field, value] of Object.entries(row)) {
+      const existingValue = (existing as Record<string, unknown>)[field];
+      if (
+        (existingValue == null || (typeof existingValue === 'string' && existingValue.trim().length === 0)) &&
+        !(value == null || (typeof value === 'string' && value.trim().length === 0))
+      ) {
+        merged[field] = value;
+      }
+    }
+    map.set(key, merged);
+  }
+  return Array.from(map.values()).sort(compareCreatedAtRows);
+};
+
+const toKeyToken = (value: string) => value.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+const findFirstNestedField = (sources: unknown[], keys: string[], maxScans = 5000): unknown => {
+  const normalizedKeys = new Set(keys.map(toKeyToken));
+  const queue = [...sources.map(parseMaybeJson)];
+  const seen = new Set<unknown>();
+  let scanned = 0;
+  while (queue.length > 0 && scanned < maxScans) {
+    const current = queue.shift();
+    scanned += 1;
+    if (current == null) continue;
+    if (typeof current !== 'object') continue;
+    if (seen.has(current)) continue;
+    seen.add(current);
+
+    if (Array.isArray(current)) {
+      for (const item of current) queue.push(item);
+      continue;
+    }
+
+    const obj = current as Record<string, unknown>;
+    for (const [key, value] of Object.entries(obj)) {
+      const token = toKeyToken(key);
+      if (
+        normalizedKeys.has(token) &&
+        value != null &&
+        !(
+          typeof value === 'string' &&
+          value.trim().length === 0
+        )
+      ) {
+        return value;
+      }
+      if (typeof value === 'object') queue.push(value);
+      if (typeof value === 'string') queue.push(parseMaybeJson(value));
+    }
+  }
+  return null;
+};
+
+const extractPromptArtifacts = (...sources: unknown[]) => {
+  const parsedSources = sources.map(parseMaybeJson);
+  return {
+    systemPrompt: findFirstNestedField(parsedSources, [
+      'system_prompt',
+      'systemPrompt',
+      'developer_prompt',
+      'developerPrompt',
+      'system_instruction',
+      'systemInstruction',
+    ]),
+    contextPriming: findFirstNestedField(parsedSources, [
+      'context_priming',
+      'contextPriming',
+      'runtime_context',
+      'runtimeContext',
+      'conversation_context',
+      'conversationContext',
+      'priming',
+    ]),
+    instructions: findFirstNestedField(parsedSources, [
+      'instructions',
+      'instruction',
+      'prompt_instructions',
+      'promptInstructions',
+    ]),
+    toolDescriptions: findFirstNestedField(parsedSources, [
+      'tool_descriptions',
+      'toolDescriptions',
+      'tool_catalog',
+      'toolCatalog',
+      'tool_definitions',
+      'toolDefinitions',
+      'tools',
+    ]),
+  };
+};
+
 const renderJsonDetails = (title: string, value: unknown, open = false) => {
   return `<details ${open ? 'open' : ''}><summary>${esc(title)}</summary><pre>${prettyJson(value)}</pre></details>`;
+};
+
+const renderTokenUsageBlock = (usage: TokenUsage | null) => {
+  if (!usage) return '';
+  return renderJsonDetails('Token Usage', usage);
 };
 
 const renderTranscriptTable = (rows: any[]) => {
@@ -313,6 +630,23 @@ const renderModelCards = (rows: any[], blobMap: Map<string, any>) => {
     .map((row) => {
       const inputBlob = row.input_blob_id ? blobMap.get(row.input_blob_id) : null;
       const outputBlob = row.output_blob_id ? blobMap.get(row.output_blob_id) : null;
+      const promptArtifacts = extractPromptArtifacts(
+        row.system_prompt,
+        row.context_priming,
+        row.metadata,
+        row.input_payload,
+        row.output_payload,
+        inputBlob?.payload,
+        outputBlob?.payload,
+      );
+      const usage = extractTokenUsage(
+        row,
+        row.metadata,
+        row.input_payload,
+        row.output_payload,
+        inputBlob?.payload,
+        outputBlob?.payload,
+      );
       return `<details>
 <summary>${esc(toIso(row.created_at))} · ${esc(row.source)} · ${esc(row.event_type)} · ${esc(row.status || '')} · ${esc(
         splitProviderIdentity(row.provider, row.model),
@@ -324,10 +658,14 @@ const renderModelCards = (rows: any[], blobMap: Map<string, any>) => {
   <div><strong>intent_id</strong><br>${esc(row.intent_id || '')}</div>
   <div><strong>provider_path</strong><br>${esc(row.provider_path || '')}</div>
   <div><strong>provider_source</strong><br>${esc(row.provider_source || '')}</div>
+  <div><strong>tokens</strong><br>${esc(formatTokenUsage(usage))}</div>
 </div>
 ${row.error ? `<p class="error"><strong>Error:</strong> ${esc(row.error)}</p>` : ''}
-${renderJsonDetails('System Prompt', row.system_prompt ?? null)}
-${renderJsonDetails('Context Priming', row.context_priming ?? null)}
+${renderTokenUsageBlock(usage)}
+${renderJsonDetails('System Prompt', row.system_prompt ?? promptArtifacts.systemPrompt ?? null)}
+${renderJsonDetails('Context Priming', row.context_priming ?? promptArtifacts.contextPriming ?? null)}
+${renderJsonDetails('Instructions', promptArtifacts.instructions ?? null)}
+${renderJsonDetails('Tool Descriptions', promptArtifacts.toolDescriptions ?? null)}
 ${renderJsonDetails('Model Input (inline)', row.input_payload ?? null)}
 ${renderJsonDetails('Model Output (inline)', row.output_payload ?? null)}
 ${inputBlob ? renderJsonDetails('Model Input (raw blob)', inputBlob.payload) : ''}
@@ -344,6 +682,14 @@ const renderToolCards = (rows: any[], blobMap: Map<string, any>) => {
     .map((row) => {
       const inputBlob = row.input_blob_id ? blobMap.get(row.input_blob_id) : null;
       const outputBlob = row.output_blob_id ? blobMap.get(row.output_blob_id) : null;
+      const usage = extractTokenUsage(
+        row,
+        row.metadata,
+        row.input_payload,
+        row.output_payload,
+        inputBlob?.payload,
+        outputBlob?.payload,
+      );
       return `<details>
 <summary>${esc(toIso(row.created_at))} · ${esc(row.source)} · ${esc(row.tool_name)} · ${esc(row.event_type)} · ${esc(row.status || '')}</summary>
 <div class="kv-grid">
@@ -353,8 +699,10 @@ const renderToolCards = (rows: any[], blobMap: Map<string, any>) => {
   <div><strong>trace_id</strong><br>${esc(row.trace_id || '')}</div>
   <div><strong>intent_id</strong><br>${esc(row.intent_id || '')}</div>
   <div><strong>provider/model</strong><br>${esc(splitProviderIdentity(row.provider, row.model))}</div>
+  <div><strong>tokens</strong><br>${esc(formatTokenUsage(usage))}</div>
 </div>
 ${row.error ? `<p class="error"><strong>Error:</strong> ${esc(row.error)}</p>` : ''}
+${renderTokenUsageBlock(usage)}
 ${renderJsonDetails('Tool Input (inline)', row.input_payload ?? null)}
 ${renderJsonDetails('Tool Output (inline)', row.output_payload ?? null)}
 ${inputBlob ? renderJsonDetails('Tool Input (raw blob)', inputBlob.payload) : ''}
@@ -369,6 +717,8 @@ const renderTraceCards = (events: any[]) => {
   if (events.length === 0) return '<p class="muted">No lifecycle trace rows captured.</p>';
   return events
     .map((trace) => {
+      const usage = extractTokenUsage(trace, trace.payload);
+      const promptArtifacts = extractPromptArtifacts(trace.payload);
       return `<details>
 <summary>${esc(toIso(trace.created_at))} · ${esc(trace.stage)} · ${esc(trace.status || '')} · task=${esc(trace.task || '')}</summary>
 <div class="kv-grid">
@@ -378,7 +728,13 @@ const renderTraceCards = (events: any[]) => {
   <div><strong>task_id</strong><br>${esc(trace.task_id || '')}</div>
   <div><strong>provider/model</strong><br>${esc(splitProviderIdentity(trace.provider, trace.model))}</div>
   <div><strong>provider_path</strong><br>${esc(trace.provider_path || '')}</div>
+  <div><strong>tokens</strong><br>${esc(formatTokenUsage(usage))}</div>
 </div>
+${renderTokenUsageBlock(usage)}
+${promptArtifacts.systemPrompt ? renderJsonDetails('System Prompt (trace payload)', promptArtifacts.systemPrompt) : ''}
+${promptArtifacts.contextPriming ? renderJsonDetails('Context Priming (trace payload)', promptArtifacts.contextPriming) : ''}
+${promptArtifacts.instructions ? renderJsonDetails('Instructions (trace payload)', promptArtifacts.instructions) : ''}
+${promptArtifacts.toolDescriptions ? renderJsonDetails('Tool Descriptions (trace payload)', promptArtifacts.toolDescriptions) : ''}
 ${renderJsonDetails('Trace Payload', trace.payload ?? null)}
 </details>`;
     })
@@ -386,15 +742,296 @@ ${renderJsonDetails('Trace Payload', trace.payload ?? null)}
 };
 
 const renderPriming = (rows: any[], source: string) => {
-  const firstWithPrompt = rows.find((row) => row.source === source && row.system_prompt);
-  const firstWithContext = rows.find((row) => row.source === source && row.context_priming);
-  if (!firstWithPrompt && !firstWithContext) {
+  const sourceRows = rows.filter((row) => row.source === source);
+  let systemPrompt: unknown = null;
+  let contextPriming: unknown = null;
+  let instructions: unknown = null;
+  let toolDescriptions: unknown = null;
+  for (const row of sourceRows) {
+    const artifacts = extractPromptArtifacts(
+      row.system_prompt,
+      row.context_priming,
+      row.metadata,
+      row.input_payload,
+      row.output_payload,
+    );
+    if (systemPrompt == null) systemPrompt = row.system_prompt ?? artifacts.systemPrompt;
+    if (contextPriming == null) contextPriming = row.context_priming ?? artifacts.contextPriming;
+    if (instructions == null) instructions = artifacts.instructions;
+    if (toolDescriptions == null) toolDescriptions = artifacts.toolDescriptions;
+    if (systemPrompt && contextPriming && instructions && toolDescriptions) break;
+  }
+
+  if (!systemPrompt && !contextPriming && !instructions && !toolDescriptions) {
     return '<p class="muted">No persisted priming rows for this source in the selected window.</p>';
   }
   return [
-    firstWithPrompt ? renderJsonDetails(`${source} initial system prompt`, firstWithPrompt.system_prompt) : '',
-    firstWithContext ? renderJsonDetails(`${source} initial context priming`, firstWithContext.context_priming) : '',
+    systemPrompt ? renderJsonDetails(`${source} initial system prompt`, systemPrompt) : '',
+    contextPriming ? renderJsonDetails(`${source} initial context priming`, contextPriming) : '',
+    instructions ? renderJsonDetails(`${source} initial instructions`, instructions) : '',
+    toolDescriptions ? renderJsonDetails(`${source} initial tool descriptions`, toolDescriptions) : '',
   ].join('\n');
+};
+
+const branchKeyFor = (value: any): string => {
+  const requestId = normalizeId(value?.request_id ?? value?.requestId);
+  if (requestId) return `corr:${requestId}`;
+  const traceId = normalizeId(value?.trace_id ?? value?.traceId);
+  if (traceId) return `corr:${traceId}`;
+  const intentId = normalizeId(value?.intent_id ?? value?.intentId);
+  if (intentId) return `corr:${intentId}`;
+  const taskId = normalizeId(value?.task_id ?? value?.taskId);
+  if (taskId) return `corr:${taskId}`;
+  return 'unscoped';
+};
+
+const findActionArrays = (value: unknown, limit = 20): unknown[][] => {
+  const results: unknown[][] = [];
+  const queue: unknown[] = [parseMaybeJson(value)];
+  const seen = new Set<unknown>();
+  const pushParsed = (input: unknown) => {
+    if (typeof input === 'string') {
+      const parsed = parseMaybeJson(input);
+      if (parsed !== input) queue.push(parsed);
+      return;
+    }
+    queue.push(input);
+  };
+  const isLikelyActionObject = (item: unknown): boolean => {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) return false;
+    const obj = item as Record<string, unknown>;
+    if (typeof obj.type !== 'string') return false;
+    return (
+      'id' in obj ||
+      'shapeId' in obj ||
+      'shape' in obj ||
+      'props' in obj ||
+      'patch' in obj ||
+      'changes' in obj ||
+      'op' in obj ||
+      'parentId' in obj ||
+      'index' in obj
+    );
+  };
+  while (queue.length > 0 && results.length < limit) {
+    const current = queue.shift();
+    if (typeof current === 'string') continue;
+    if (!current || typeof current !== 'object') continue;
+    if (seen.has(current)) continue;
+    seen.add(current);
+    if (Array.isArray(current)) {
+      const hasActionObjects = current.some((item) => isLikelyActionObject(item));
+      if (hasActionObjects) results.push(current);
+      for (const item of current) pushParsed(item);
+      continue;
+    }
+    const obj = current as Record<string, unknown>;
+    for (const [key, item] of Object.entries(obj)) {
+      if (key === 'actions' && Array.isArray(item)) {
+        results.push(item);
+      }
+      pushParsed(item);
+    }
+  }
+  return results;
+};
+
+const renderFairyActionLedger = (tasks: any[], traces: any[], runArtifact: RunArtifactContext | null) => {
+  const fairyTasks = tasks.filter((task) => String(task.task || '') === 'fairy.intent');
+  const runArtifactTasks = Array.isArray((runArtifact as any)?.sessionCorrelation?.body?.tasks)
+    ? ((runArtifact as any).sessionCorrelation.body.tasks as any[])
+        .filter((task) => String(task?.task || '') === 'fairy.intent')
+        .map((task) => ({
+          ...task,
+          created_at: task.created_at ?? runArtifact?.startedAt ?? null,
+          _artifact: true,
+        }))
+    : [];
+  const combined = mergeRowsByIdentity(fairyTasks, runArtifactTasks);
+  if (combined.length === 0) return '<p class="muted">No fairy action ledgers captured.</p>';
+
+  return combined
+    .map((task) => {
+      const matches = traces.filter((trace) => {
+        if (String(trace.task || '') !== 'fairy.intent') return false;
+        const sameTask = normalizeId(trace.task_id) && normalizeId(task.id) && normalizeId(trace.task_id) === normalizeId(task.id);
+        const sameReq = normalizeId(trace.request_id) && normalizeId(task.request_id) && normalizeId(trace.request_id) === normalizeId(task.request_id);
+        const sameTrace = normalizeId(trace.trace_id) && normalizeId(task.trace_id) && normalizeId(trace.trace_id) === normalizeId(task.trace_id);
+        return Boolean(sameTask || sameReq || sameTrace);
+      });
+      const actionArrays = [
+        ...findActionArrays(task?.params),
+        ...findActionArrays(task?.result),
+        ...matches.flatMap((trace) => findActionArrays(trace?.payload)),
+      ];
+      const actionCount =
+        toFiniteNumber(task?.result?.actionCount) ??
+        toFiniteNumber(task?.result?.action_count) ??
+        actionArrays.reduce((max, arr) => Math.max(max, arr.length), 0);
+
+      return `<details>
+<summary>${esc(toIso(task.created_at))} · fairy.intent · ${esc(task.status || '')} · actionCount=${esc(actionCount ?? 'n/a')}</summary>
+<div class="kv-grid">
+  <div><strong>request_id</strong><br>${esc(task.request_id || '')}</div>
+  <div><strong>trace_id</strong><br>${esc(task.trace_id || '')}</div>
+  <div><strong>task_id</strong><br>${esc(task.id || '')}</div>
+  <div><strong>shapeIds</strong><br>${esc((task?.result?.shapeIds || task?.result?.shape_ids || []).join?.(', ') || '')}</div>
+</div>
+${renderJsonDetails('Fairy Task Input (raw)', task.params ?? null)}
+${renderJsonDetails('Fairy Task Output (raw)', task.result ?? null)}
+${actionArrays.length > 0 ? renderJsonDetails('Fairy Actions (raw arrays)', actionArrays) : '<p class="muted">No raw action arrays found; showing task/trace payloads only.</p>'}
+${matches.length > 0 ? renderJsonDetails('Matched Fairy Trace Payloads', matches.map((trace) => trace.payload)) : ''}
+</details>`;
+    })
+    .join('\n');
+};
+
+const buildTimelineEvents = (
+  transcript: any[],
+  modelIo: any[],
+  toolIo: any[],
+  tasks: any[],
+  traces: any[],
+  blobMap: Map<string, any>,
+) => {
+  const events: any[] = [];
+
+  for (const row of transcript) {
+    const ts = typeof row.ts === 'number' && Number.isFinite(row.ts) ? row.ts : toMs(row.created_at) ?? 0;
+    events.push({
+      ts,
+      iso: toIso(row.created_at ?? row.ts),
+      kind: 'transcript',
+      branch: branchKeyFor(row),
+      source: row.participant_id || row.participant_name || 'transcript',
+      label: String(row.text || '').slice(0, 180),
+      sequence: toSequence(row.sequence),
+      requestId: normalizeId(row.request_id),
+      traceId: normalizeId(row.trace_id),
+      intentId: normalizeId(row.intent_id),
+      taskId: normalizeId(row.task_id),
+      usage: extractTokenUsage(row),
+      payload: row,
+    });
+  }
+
+  for (const row of modelIo) {
+    const inputBlob = row.input_blob_id ? blobMap.get(row.input_blob_id) : null;
+    const outputBlob = row.output_blob_id ? blobMap.get(row.output_blob_id) : null;
+    events.push({
+      ts: toMs(row.created_at) ?? 0,
+      iso: toIso(row.created_at),
+      kind: 'model_io',
+      branch: branchKeyFor(row),
+      source: row.source || 'model',
+      label: `${row.event_type || 'model_event'} ${row.status || ''}`.trim(),
+      sequence: toSequence(row.sequence),
+      requestId: normalizeId(row.request_id),
+      traceId: normalizeId(row.trace_id),
+      intentId: normalizeId(row.intent_id),
+      taskId: normalizeId(row.task_id),
+      usage: extractTokenUsage(row, row.metadata, row.input_payload, row.output_payload, inputBlob?.payload, outputBlob?.payload),
+      payload: { row, inputBlob: inputBlob?.payload ?? null, outputBlob: outputBlob?.payload ?? null },
+    });
+  }
+
+  for (const row of toolIo) {
+    const inputBlob = row.input_blob_id ? blobMap.get(row.input_blob_id) : null;
+    const outputBlob = row.output_blob_id ? blobMap.get(row.output_blob_id) : null;
+    events.push({
+      ts: toMs(row.created_at) ?? 0,
+      iso: toIso(row.created_at),
+      kind: 'tool_io',
+      branch: branchKeyFor(row),
+      source: row.source || 'tool',
+      label: `${row.tool_name || 'tool'} ${row.event_type || ''} ${row.status || ''}`.trim(),
+      sequence: toSequence(row.sequence),
+      requestId: normalizeId(row.request_id),
+      traceId: normalizeId(row.trace_id),
+      intentId: normalizeId(row.intent_id),
+      taskId: normalizeId(row.task_id),
+      usage: extractTokenUsage(row, row.metadata, row.input_payload, row.output_payload, inputBlob?.payload, outputBlob?.payload),
+      payload: { row, inputBlob: inputBlob?.payload ?? null, outputBlob: outputBlob?.payload ?? null },
+    });
+  }
+
+  for (const row of tasks) {
+    events.push({
+      ts: toMs(row.created_at) ?? 0,
+      iso: toIso(row.created_at),
+      kind: 'task',
+      branch: branchKeyFor(row),
+      source: row.task || 'agent_task',
+      label: `${row.task || 'task'} ${row.status || ''}`.trim(),
+      sequence: toSequence(row.attempt),
+      requestId: normalizeId(row.request_id),
+      traceId: normalizeId(row.trace_id),
+      intentId: normalizeId(row.intent_id),
+      taskId: normalizeId(row.id),
+      usage: extractTokenUsage(row, row.params, row.result),
+      payload: row,
+    });
+  }
+
+  for (const row of traces) {
+    events.push({
+      ts: toMs(row.created_at) ?? 0,
+      iso: toIso(row.created_at),
+      kind: 'trace',
+      branch: branchKeyFor(row),
+      source: row.task || 'trace_event',
+      label: `${row.stage || ''} ${row.status || ''}`.trim(),
+      sequence: toSequence(row.seq),
+      requestId: normalizeId(row.request_id),
+      traceId: normalizeId(row.trace_id),
+      intentId: normalizeId(row.intent_id),
+      taskId: normalizeId(row.task_id),
+      usage: extractTokenUsage(row, row.payload),
+      payload: row,
+    });
+  }
+
+  events.sort((a, b) => {
+    if (a.ts !== b.ts) return a.ts - b.ts;
+    if (a.sequence !== b.sequence) return a.sequence - b.sequence;
+    return String(a.kind).localeCompare(String(b.kind));
+  });
+  return events;
+};
+
+const renderTimelineBranches = (events: any[]) => {
+  if (events.length === 0) return '<p class="muted">No chronological timeline events captured.</p>';
+  const grouped = new Map<string, any[]>();
+  for (const event of events) {
+    if (!grouped.has(event.branch)) grouped.set(event.branch, []);
+    grouped.get(event.branch)!.push(event);
+  }
+
+  return Array.from(grouped.entries())
+    .map(([branch, branchEvents]) => {
+      const eventHtml = branchEvents
+        .map((event) => {
+          return `<details>
+<summary>${esc(event.iso)} · ${esc(event.kind)} · ${esc(event.source)} · ${esc(event.label)}</summary>
+<div class="kv-grid">
+  <div><strong>branch</strong><br>${esc(branch)}</div>
+  <div><strong>request_id</strong><br>${esc(event.requestId || '')}</div>
+  <div><strong>trace_id</strong><br>${esc(event.traceId || '')}</div>
+  <div><strong>intent_id</strong><br>${esc(event.intentId || '')}</div>
+  <div><strong>task_id</strong><br>${esc(event.taskId || '')}</div>
+  <div><strong>tokens</strong><br>${esc(formatTokenUsage(event.usage))}</div>
+</div>
+${renderTokenUsageBlock(event.usage)}
+${renderJsonDetails('Raw Event Payload', event.payload ?? null)}
+</details>`;
+        })
+        .join('\n');
+      return `<details>
+<summary>Branch ${esc(branch)} · events=${branchEvents.length}</summary>
+${eventHtml}
+</details>`;
+    })
+    .join('\n');
 };
 
 const buildHtml = (input: {
@@ -430,12 +1067,34 @@ const buildHtml = (input: {
     reportScope,
   } = input;
 
-  const voiceTranscriptRows = transcript.filter((row) =>
-    String(row.participant_id || '').toLowerCase().includes('voice-agent'),
-  );
-  const transcriptionTranscriptRows = transcript.filter(
-    (row) => !String(row.participant_id || '').toLowerCase().includes('voice-agent'),
-  );
+  const voiceTranscriptRows = transcript.filter((row) => isVoiceTranscriptRow(row));
+  const transcriptionTranscriptRows = transcript.filter((row) => isTranscriptionTranscriptRow(row));
+
+  const fastTraceRows = traces.filter((row) => isFastTraceRow(row));
+  const fairyTraceRows = traces.filter((row) => {
+    if (isFastTraceRow(row)) return false;
+    return isFairyTaskName(taskNameOf(row));
+  });
+  const stewardTraceRows = traces.filter((row) => {
+    if (isFastTraceRow(row)) return false;
+    const taskName = taskNameOf(row);
+    if (isFairyTaskName(taskName)) return false;
+    return isStewardTaskName(taskName);
+  });
+  const orchestrationTraceRows = traces.filter((row) => {
+    const taskName = taskNameOf(row);
+    if (isFastTraceRow(row)) return false;
+    if (isFairyTaskName(taskName)) return false;
+    if (isStewardTaskName(taskName)) return false;
+    return true;
+  });
+
+  const fairyTaskRows = tasks.filter((task) => isFairyTaskName(taskNameOf(task)));
+  const stewardTaskRows = tasks.filter((task) => {
+    const taskName = taskNameOf(task);
+    if (isFairyTaskName(taskName)) return false;
+    return isStewardTaskName(taskName);
+  });
   type ReplaySection = {
     title: string;
     description: string;
@@ -470,7 +1129,7 @@ const buildHtml = (input: {
       primingSources: ['orchestration_agent'],
       modelRows: modelIo.filter((row) => row.source === 'orchestration_agent'),
       toolRows: toolIo.filter((row) => row.source === 'orchestration_agent'),
-      traceRows: traces,
+      traceRows: orchestrationTraceRows,
     },
     {
       title: 'Steward Agent(s) Transcript',
@@ -478,7 +1137,8 @@ const buildHtml = (input: {
       primingSources: ['canvas_runner'],
       modelRows: modelIo.filter((row) => ['canvas_runner', 'canvas_steward'].includes(String(row.source))),
       toolRows: toolIo.filter((row) => ['canvas_runner', 'conductor_worker'].includes(String(row.source))),
-      taskRows: tasks.filter((task) => String(task.task || '').startsWith('canvas.')),
+      taskRows: stewardTaskRows,
+      traceRows: stewardTraceRows,
     },
     {
       title: 'Fairy Agent(s) Transcript',
@@ -488,13 +1148,15 @@ const buildHtml = (input: {
       toolRows: toolIo.filter(
         (row) => row.source === 'fairy_router' || String(row.tool_name || '') === 'fairy.intent',
       ),
-      taskRows: tasks.filter((task) => String(task.task || '') === 'fairy.intent'),
+      taskRows: fairyTaskRows,
+      traceRows: fairyTraceRows,
     },
     {
       title: 'Fast Agent(s) Transcript',
       description: 'Rows tagged as fast-path (<code>provider_path=fast</code> or fast steward source).',
       modelRows: modelIo.filter((row) => isFastRow(row)),
       toolRows: toolIo.filter((row) => isFastRow(row)),
+      traceRows: fastTraceRows,
     },
   ];
 
@@ -517,15 +1179,26 @@ const buildHtml = (input: {
 
   const sectionsHtml = sections.map((section) => renderSection(section)).join('\n');
   const hasReplayRows = modelIo.length > 0 || toolIo.length > 0;
+  const timelineEvents = buildTimelineEvents(transcript, modelIo, toolIo, tasks, traces, blobMap);
+  const timelineHtml = renderTimelineBranches(timelineEvents);
+  const timelineWithTokens = timelineEvents.filter((event) => hasMeasuredTokenUsage(event.usage)).length;
+  const fairyActionLedgerHtml = renderFairyActionLedger(tasks, traces, runArtifact);
 
   const timelineStartIso = toIso(
-    transcript[0]?.created_at || transcript[0]?.ts || traces[0]?.created_at || tasks[0]?.created_at,
+    transcript[0]?.created_at ||
+      transcript[0]?.ts ||
+      traces[0]?.created_at ||
+      tasks[0]?.created_at ||
+      modelIo[0]?.created_at ||
+      toolIo[0]?.created_at,
   );
   const timelineEndIso = toIso(
     transcript[transcript.length - 1]?.created_at ||
       transcript[transcript.length - 1]?.ts ||
       traces[traces.length - 1]?.created_at ||
-      tasks[tasks.length - 1]?.updated_at,
+      tasks[tasks.length - 1]?.updated_at ||
+      modelIo[modelIo.length - 1]?.created_at ||
+      toolIo[toolIo.length - 1]?.created_at,
   );
 
   return `<!doctype html>
@@ -620,18 +1293,31 @@ const buildHtml = (input: {
       <span class="pill">trace events: ${traces.length}</span>
       <span class="pill">model replay rows: ${modelIo.length}</span>
       <span class="pill">tool replay rows: ${toolIo.length}</span>
+      <span class="pill">timeline events: ${timelineEvents.length}</span>
+      <span class="pill">timeline events w/ token usage: ${timelineWithTokens}</span>
       <span class="pill">raw blobs: ${blobMap.size}</span>
       <span class="pill">trace/request/intent/task keys: ${correlationSummary.traceKeys}/${correlationSummary.requestKeys}/${correlationSummary.intentKeys}/${correlationSummary.taskKeys}</span>
       <span class="pill">model rows matched to correlation keys: ${correlationSummary.modelMatched}/${modelIo.length}</span>
       <span class="pill">tool rows matched to correlation keys: ${correlationSummary.toolMatched}/${toolIo.length}</span>
       <span class="pill">model/tool rows missing correlation ids: ${correlationSummary.modelMissingCorrelation}/${correlationSummary.toolMissingCorrelation}</span>
       ${!hasReplayRows ? '<p class="error"><strong>Future sessions only:</strong> this session does not contain durable replay rows in <code>agent_model_io</code>/<code>agent_tool_io</code>.</p>' : ''}
+      ${timelineWithTokens === 0 ? '<p class="error"><strong>Token telemetry missing:</strong> no events in this report include persisted token usage counters.</p>' : ''}
       ${warnings.length > 0 ? `<p class="error"><strong>Warnings:</strong> ${esc(warnings.join(' | '))}</p>` : ''}
     </section>
 
     <section class="section">
       <h2>Transcript</h2>
       ${renderTranscriptTable(transcript)}
+    </section>
+    <section class="section">
+      <h2>Chronological Replay Timeline</h2>
+      <p class="muted">Global chronology grouped into correlation branches; each event includes token usage and raw payload.</p>
+      ${timelineHtml}
+    </section>
+    <section class="section">
+      <h2>Fairy Raw Actions Ledger</h2>
+      <p class="muted">Raw fairy action arrays correlated from <code>agent_tasks</code>/<code>agent_trace_events</code> and smoke result artifacts.</p>
+      ${fairyActionLedgerHtml}
     </section>
     ${sectionsHtml}
   </div>
@@ -655,6 +1341,8 @@ const run = async () => {
       endedAt: toIso(parsed?.endedAt) || undefined,
       video: normalizeId(parsed?.video) ?? undefined,
       sourcePath: resolvedPath,
+      turns: Array.isArray(parsed?.turns) ? parsed.turns : undefined,
+      sessionCorrelation: parsed?.sessionCorrelation,
     };
   }
 
@@ -734,6 +1422,17 @@ const run = async () => {
     throw new Error('Unable to resolve room for report scope.');
   }
 
+  const createdAtMs = Date.parse(String(session.created_at || ''));
+  const updatedAtMs = Date.parse(String(session.updated_at || ''));
+  const runStartMs = parseIsoMs(runArtifact?.startedAt);
+  const runEndMs = parseIsoMs(runArtifact?.endedAt);
+  const baseStartMs =
+    runStartMs ?? (Number.isFinite(createdAtMs) ? createdAtMs : Date.now() - 2 * 60 * 60 * 1000);
+  const baseEndMs =
+    runEndMs ?? (Number.isFinite(updatedAtMs) ? updatedAtMs : Date.now());
+  const roomTranscriptStartMs = Math.min(baseStartMs, baseEndMs) - 20 * 60 * 1000;
+  const roomTranscriptEndMs = Math.max(baseStartMs, baseEndMs) + 20 * 60 * 1000;
+
   const optionalReplayTables = await probeOptionalReplayTables(warnings);
 
   let transcript: any[] = [];
@@ -756,12 +1455,29 @@ const run = async () => {
   if (transcriptRelationAvailable && transcript.length === 0) {
     const byRoom = await fetchAll(
       'canvas_session_transcripts',
-      (q) => q.select('*').eq('room_name', room).order('ts', { ascending: true }),
+      (q) =>
+        q
+          .select('*')
+          .eq('room_name', room)
+          .gte('ts', roomTranscriptStartMs)
+          .lte('ts', roomTranscriptEndMs)
+          .order('ts', { ascending: true }),
       1000,
     );
     transcript = byRoom;
     if (byRoom.length > 0) {
       reportScope = `${reportScope}+room_transcript`;
+    }
+  }
+
+  if (transcript.length === 0) {
+    const syntheticTranscript = buildSyntheticTranscriptFromRunArtifact(runArtifact);
+    if (syntheticTranscript.length > 0) {
+      transcript = syntheticTranscript.sort(compareCreatedAtRows);
+      reportScope = `${reportScope}+artifact_turns_transcript`;
+      warnings.push(
+        'No persisted transcript rows found; transcript section synthesized from smoke result.json turns.',
+      );
     }
   }
 
@@ -772,10 +1488,6 @@ const run = async () => {
     })
     .filter((ts) => Number.isFinite(ts));
 
-  const createdAtMs = Date.parse(String(session.created_at || ''));
-  const updatedAtMs = Date.parse(String(session.updated_at || ''));
-  const runStartMs = parseIsoMs(runArtifact?.startedAt);
-  const runEndMs = parseIsoMs(runArtifact?.endedAt);
   const transcriptMin = transcriptTimes.length > 0 ? Math.min(...transcriptTimes) : Number.NaN;
   const transcriptMax = transcriptTimes.length > 0 ? Math.max(...transcriptTimes) : Number.NaN;
   const cliStartMs = parseIsoMs(windowStartArg);
@@ -795,7 +1507,7 @@ const run = async () => {
     cliEndMs ?? inferredEndMs + 30 * 60 * 1000,
   ).toISOString();
 
-  const [tasks, traces] = await Promise.all([
+  let [tasks, traces] = await Promise.all([
     fetchAll(
       'agent_tasks',
       (q) =>
@@ -804,7 +1516,8 @@ const run = async () => {
           .eq('room', room)
           .gte('created_at', windowStartIso)
           .lte('created_at', windowEndIso)
-          .order('created_at', { ascending: true }),
+          .order('created_at', { ascending: true })
+          .order('id', { ascending: true }),
       1000,
     ),
     fetchAll(
@@ -815,10 +1528,40 @@ const run = async () => {
           .eq('room', room)
           .gte('created_at', windowStartIso)
           .lte('created_at', windowEndIso)
-          .order('created_at', { ascending: true }),
+          .order('created_at', { ascending: true })
+          .order('id', { ascending: true }),
       1000,
     ),
   ]);
+
+  const artifactTasks = Array.isArray((runArtifact as any)?.sessionCorrelation?.body?.tasks)
+    ? ((runArtifact as any).sessionCorrelation.body.tasks as any[])
+    : [];
+  const artifactTraces = Array.isArray((runArtifact as any)?.sessionCorrelation?.body?.traces)
+    ? ((runArtifact as any).sessionCorrelation.body.traces as any[])
+    : [];
+
+  if (artifactTasks.length > 0) {
+    const mergedTasks = mergeRowsByIdentity(tasks, artifactTasks);
+    if (mergedTasks.length > tasks.length) {
+      reportScope = `${reportScope}+artifact_tasks`;
+      warnings.push(
+        `Merged ${mergedTasks.length - tasks.length} task row(s) from smoke sessionCorrelation artifact.`,
+      );
+      tasks = mergedTasks;
+    }
+  }
+
+  if (artifactTraces.length > 0) {
+    const mergedTraces = mergeRowsByIdentity(traces, artifactTraces);
+    if (mergedTraces.length > traces.length) {
+      reportScope = `${reportScope}+artifact_traces`;
+      warnings.push(
+        `Merged ${mergedTraces.length - traces.length} trace row(s) from smoke sessionCorrelation artifact.`,
+      );
+      traces = mergedTraces;
+    }
+  }
 
   const [modelIoRaw, toolIoRaw] = await Promise.all(
     [
@@ -831,7 +1574,8 @@ const run = async () => {
                 .eq('room', room)
                 .gte('created_at', windowStartIso)
                 .lte('created_at', windowEndIso)
-                .order('created_at', { ascending: true }),
+                .order('created_at', { ascending: true })
+                .order('id', { ascending: true }),
             1000,
           )
         : Promise.resolve([]),
@@ -844,7 +1588,8 @@ const run = async () => {
                 .eq('room', room)
                 .gte('created_at', windowStartIso)
                 .lte('created_at', windowEndIso)
-                .order('created_at', { ascending: true }),
+                .order('created_at', { ascending: true })
+                .order('id', { ascending: true }),
             1000,
           )
         : Promise.resolve([]),
