@@ -6,6 +6,7 @@ import { randomUUID } from 'node:crypto';
 import { chromium } from 'playwright';
 import { createClient } from '@supabase/supabase-js';
 import { config as loadDotenv } from 'dotenv';
+import { writeAgentTraceHtml } from './render-agent-trace-html.mjs';
 
 const nowIso = () => new Date().toISOString();
 const readString = (value) => (typeof value === 'string' && value.trim().length > 0 ? value.trim() : null);
@@ -449,6 +450,7 @@ async function run() {
     metrics: null,
     screenshots: [],
     video: null,
+    agentTraceHtml: null,
     notes: [],
   };
 
@@ -613,6 +615,16 @@ async function run() {
         result.video = path.join(outputDir, webm);
         traceLog('video.path.fallback', result.video);
       }
+    }
+    await fs.writeFile(path.join(outputDir, 'result.json'), `${JSON.stringify(result, null, 2)}\n`, 'utf8');
+    try {
+      result.agentTraceHtml = await writeAgentTraceHtml({
+        result,
+        outputDir,
+      });
+    } catch (error) {
+      result.notes.push(`Agent trace HTML write failed: ${error instanceof Error ? error.message : String(error)}`);
+      result.agentTraceHtml = null;
     }
     await fs.writeFile(path.join(outputDir, 'result.json'), `${JSON.stringify(result, null, 2)}\n`, 'utf8');
     traceLog('result.written', path.join(outputDir, 'result.json'));

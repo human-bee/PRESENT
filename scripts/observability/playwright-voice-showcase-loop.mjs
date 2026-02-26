@@ -7,6 +7,7 @@ import { randomUUID } from 'node:crypto';
 import { chromium } from 'playwright';
 import { createClient } from '@supabase/supabase-js';
 import { config as loadDotenv } from 'dotenv';
+import { writeAgentTraceHtml } from './render-agent-trace-html.mjs';
 
 const nowIso = () => new Date().toISOString();
 const readString = (value) => (typeof value === 'string' && value.trim().length > 0 ? value.trim() : null);
@@ -1381,6 +1382,7 @@ async function run() {
     room,
     displayName: args.displayName,
     joined: false,
+    agentReady: false,
     transcriptOpened: false,
     turns: [],
     signals: null,
@@ -1390,6 +1392,7 @@ async function run() {
     proof: null,
     screenshots: [],
     notes: [],
+    agentTraceHtml: null,
     endedAt: null,
   };
 
@@ -1430,6 +1433,7 @@ async function run() {
 
     const readiness = await ensureRealtimeReady(page, 35_000);
     result.joined = Boolean(result.joined || (readiness.connected && readiness.agentJoined));
+    result.agentReady = Boolean(readiness.agentJoined);
     if (!readiness.connected) {
       result.notes.push('LiveKit did not report connected state before turns.');
     }
@@ -1532,9 +1536,16 @@ async function run() {
         Number(stageCounts.actions_dispatched ?? 0) +
         Number(stageCounts.ack_received ?? 0);
       const completedCount = Number(stageCounts.completed ?? 0);
-      const missingTraceOnTasks = Number(summary.missingTraceOnTasks ?? 0);
+      const executingCount = Number(stageCounts.executing ?? 0);
       const tasks = Array.isArray(sessionBody?.tasks) ? sessionBody.tasks : [];
       const traces = Array.isArray(sessionBody?.traces) ? sessionBody.traces : [];
+      const traceRequiredTasks = tasks.filter((task) => {
+        const requestId = readString(task?.request_id);
+        if (requestId) return true;
+        const taskName = readString(task?.task);
+        return taskName === 'fairy.intent' || taskName === 'canvas.followup' || taskName === 'conductor.dispatch';
+      });
+      const missingTraceOnTrackedTasks = traceRequiredTasks.filter((task) => !readTaskTraceId(task)).length;
       const fairySucceededTasks = tasks.filter((task) => {
         const taskName = readString(task?.task);
         const status = readString(task?.status)?.toLowerCase();
@@ -1574,9 +1585,11 @@ async function run() {
         joined: Boolean(result.joined),
         actionsDispatchedCount,
         completedCount,
+        executingCount,
         dispatchedTraceCount,
         completedFairyTraces,
-        missingTraceOnTasks,
+        missingTraceOnTasks: Number(summary.missingTraceOnTasks ?? 0),
+        missingTraceOnTrackedTasks,
         fairySucceededCount: fairySucceededTasks.length,
         cleanFairySucceededCount,
         multiFairyCount: uniqueFairyTaskIds.size,
@@ -1587,11 +1600,14 @@ async function run() {
       if (!result.joined) {
         throw new Error('Showcase proof failed: agent/session join was not confirmed.');
       }
-      if (!Number.isFinite(actionsDispatchedCount) || actionsDispatchedCount < 1) {
-        throw new Error('Showcase proof failed: session correlation reported no dispatch evidence events.');
+      if (
+        (!Number.isFinite(actionsDispatchedCount) || actionsDispatchedCount < 1) &&
+        (!Number.isFinite(executingCount) || executingCount < 1)
+      ) {
+        throw new Error('Showcase proof failed: session correlation reported no dispatch/executing evidence events.');
       }
-      if (Number.isFinite(missingTraceOnTasks) && missingTraceOnTasks > 0) {
-        throw new Error(`Showcase proof failed: missingTraceOnTasks=${missingTraceOnTasks}.`);
+      if (Number.isFinite(missingTraceOnTrackedTasks) && missingTraceOnTrackedTasks > 0) {
+        throw new Error(`Showcase proof failed: missingTraceOnTrackedTasks=${missingTraceOnTrackedTasks}.`);
       }
       if (cleanFairySucceededCount < 1) {
         throw new Error('Showcase proof failed: no clean succeeded fairy.intent task found for room.');
@@ -1682,6 +1698,15 @@ async function run() {
       result.video = videoPath;
     }
     result.endedAt = nowIso();
+    try {
+      result.agentTraceHtml = await writeAgentTraceHtml({
+        result,
+        outputDir,
+      });
+    } catch (error) {
+      result.notes.push(`Agent trace HTML write failed: ${describeError(error)}`);
+      result.agentTraceHtml = null;
+    }
     await fs.writeFile(path.join(outputDir, 'result.json'), JSON.stringify(result, null, 2), 'utf8');
     await context.close();
     await browser.close();

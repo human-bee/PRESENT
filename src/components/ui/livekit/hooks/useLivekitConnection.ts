@@ -20,6 +20,8 @@ export interface UseLivekitConnectionOptions {
   serverUrl?: string;
   audioOnly?: boolean;
   autoConnect?: boolean;
+  publishLocalMedia?: boolean;
+  autoRequestAgent?: boolean;
 }
 
 export interface LivekitConnectionApi {
@@ -85,6 +87,8 @@ export function useLivekitConnection(options: UseLivekitConnectionOptions): Live
     serverUrl,
     audioOnly = false,
     autoConnect = false,
+    publishLocalMedia = true,
+    autoRequestAgent = true,
   } = options;
 
   const { user } = useAuth();
@@ -126,6 +130,7 @@ export function useLivekitConnection(options: UseLivekitConnectionOptions): Live
     connectionState: state.connectionState,
     mergeState,
     getState,
+    autoRequestEnabled: autoRequestAgent,
   });
 
   const { connect, disconnect } = useLkToken({
@@ -135,6 +140,7 @@ export function useLivekitConnection(options: UseLivekitConnectionOptions): Live
     displayName,
     user: user ?? null,
     audioOnly,
+    publishLocalMedia,
     ensureIdentity,
     mergeState,
     getState,
