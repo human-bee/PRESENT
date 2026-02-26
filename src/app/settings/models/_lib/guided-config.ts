@@ -1,7 +1,15 @@
 import type { GuidedField, GuidedSection, ResolvedFieldSource } from './types';
 
 const MODEL_SUGGESTIONS = {
-  openai: ['gpt-realtime', 'gpt-5-mini', 'gpt-4o-mini-transcription', 'whisper-1'],
+  openai: [
+    'gpt-realtime-1.5',
+    'gpt-realtime-mini',
+    'gpt-audio-1.5',
+    'gpt-audio-mini',
+    'gpt-5-mini',
+    'gpt-4o-mini-transcription',
+    'whisper-1',
+  ],
   anthropic: ['claude-haiku-4-5', 'claude-sonnet-4-5'],
   google: ['gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-3-pro-image-preview'],
   cerebras: ['llama3.3-70b', 'gpt-oss-120b', 'qwen3-32b', 'llama3.1-8b'],
@@ -26,6 +34,20 @@ export const GUIDED_SECTIONS: GuidedSection[] = [
         label: 'Voice Realtime Model',
         kind: 'string',
         help: 'Used by realtime voice AgentSession model constructor.',
+        suggestions: MODEL_SUGGESTIONS.openai,
+      },
+      {
+        path: 'models.voiceRealtimePrimary',
+        label: 'Voice Realtime Primary Model',
+        kind: 'string',
+        help: 'Primary voice realtime model (used for full profile in adaptive mode).',
+        suggestions: MODEL_SUGGESTIONS.openai,
+      },
+      {
+        path: 'models.voiceRealtimeSecondary',
+        label: 'Voice Realtime Secondary Model',
+        kind: 'string',
+        help: 'Secondary voice realtime model (used for lite profile in adaptive mode).',
         suggestions: MODEL_SUGGESTIONS.openai,
       },
       {
@@ -205,6 +227,16 @@ export const GUIDED_SECTIONS: GuidedSection[] = [
         help: 'Realtime turn detection mode.',
       },
       {
+        path: 'knobs.voice.realtimeModelStrategy',
+        label: 'Realtime Model Strategy',
+        kind: 'enum',
+        options: [
+          { label: 'Adaptive Profile', value: 'adaptive_profile' },
+          { label: 'Fixed', value: 'fixed' },
+        ],
+        help: 'Choose model by capability profile (`adaptive_profile`) or use fixed realtime model.',
+      },
+      {
         path: 'knobs.voice.inputNoiseReduction',
         label: 'Input Noise Reduction',
         kind: 'enum',
@@ -325,8 +357,11 @@ const RESTART_REQUIRED_PREFIXES = [
 const NEXT_SESSION_PREFIXES = [
   'knobs.conductor.roomConcurrency',
   'models.voiceRealtime',
+  'models.voiceRealtimePrimary',
+  'models.voiceRealtimeSecondary',
   'models.voiceRouter',
   'models.voiceStt',
+  'knobs.voice.realtimeModelStrategy',
 ];
 
 export const ALL_GUIDED_FIELDS = GUIDED_SECTIONS.flatMap((section) => section.fields);

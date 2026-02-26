@@ -21,6 +21,18 @@ const modelRows: Row[] = [
     notes: 'Realtime voice conversation model.',
   },
   {
+    path: 'models.voiceRealtimePrimary',
+    type: 'string',
+    rangeOrOptions: 'provider/model id',
+    notes: 'Primary realtime model (adaptive full-profile target).',
+  },
+  {
+    path: 'models.voiceRealtimeSecondary',
+    type: 'string',
+    rangeOrOptions: 'provider/model id',
+    notes: 'Secondary realtime model (adaptive lite-profile target).',
+  },
+  {
     path: 'models.voiceRouter',
     type: 'string',
     rangeOrOptions: 'provider/model id',
@@ -142,6 +154,12 @@ const knobRows: Row[] = [
     type: 'string',
     rangeOrOptions: 'provider/model id',
     notes: 'Knob alias for realtime model.',
+  },
+  {
+    path: 'knobs.voice.realtimeModelStrategy',
+    type: 'enum',
+    rangeOrOptions: 'fixed | adaptive_profile',
+    notes: 'Realtime model selection strategy.',
   },
   {
     path: 'knobs.voice.routerModel',
@@ -274,8 +292,9 @@ const knobRows: Row[] = [
 const coverageRows = [
   {
     runtime: 'Realtime voice conversation',
-    coverage: 'covered',
-    keys: 'models.voiceRealtime, knobs.voice.*',
+    coverage: 'partial (transport/model env-only)',
+    keys:
+      'models.voiceRealtime, models.voiceRealtimePrimary, models.voiceRealtimeSecondary, knobs.voice.*, VOICE_AGENT_MODEL_TRANSPORT env, VOICE_AGENT_RESPONSES_MODEL env',
   },
   {
     runtime: 'Voice transcription',

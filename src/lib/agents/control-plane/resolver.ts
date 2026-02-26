@@ -27,8 +27,11 @@ const APPLY_MODE_BY_PATH: Array<{ prefix: string; mode: ApplyMode }> = [
   { prefix: 'knobs.conductor.taskRetryJitterRatio', mode: 'restart_required' },
   { prefix: 'knobs.conductor.roomConcurrency', mode: 'next_session' },
   { prefix: 'models.voiceRealtime', mode: 'next_session' },
+  { prefix: 'models.voiceRealtimePrimary', mode: 'next_session' },
+  { prefix: 'models.voiceRealtimeSecondary', mode: 'next_session' },
   { prefix: 'models.voiceRouter', mode: 'next_session' },
   { prefix: 'models.voiceStt', mode: 'next_session' },
+  { prefix: 'knobs.voice.realtimeModelStrategy', mode: 'next_session' },
 ];
 
 const deepMerge = <T extends Record<string, unknown>>(target: T, patch: Record<string, unknown>): T => {
@@ -131,7 +134,10 @@ const envDefaults = (): ModelControlPatch => {
     models: {
       canvasSteward: process.env.CANVAS_STEWARD_MODEL,
       voiceRouter: process.env.VOICE_AGENT_ROUTER_MODEL,
+      // Keep explicit override separate so adaptive primary/secondary selection remains effective by default.
       voiceRealtime: process.env.VOICE_AGENT_REALTIME_MODEL,
+      voiceRealtimePrimary: process.env.VOICE_AGENT_REALTIME_MODEL_PRIMARY || 'gpt-realtime-1.5',
+      voiceRealtimeSecondary: process.env.VOICE_AGENT_REALTIME_MODEL_SECONDARY || 'gpt-realtime-mini',
       voiceStt:
         process.env.VOICE_AGENT_STT_MODEL ||
         process.env.VOICE_AGENT_INPUT_TRANSCRIPTION_MODEL ||
@@ -166,6 +172,11 @@ const envDefaults = (): ModelControlPatch => {
             : process.env.VOICE_AGENT_TRANSCRIPTION_ENABLED === 'false'
               ? false
               : undefined,
+        realtimeModelStrategy:
+          process.env.VOICE_AGENT_REALTIME_MODEL_STRATEGY === 'fixed' ||
+          process.env.VOICE_AGENT_REALTIME_MODEL_STRATEGY === 'adaptive_profile'
+            ? process.env.VOICE_AGENT_REALTIME_MODEL_STRATEGY
+            : 'adaptive_profile',
         turnDetection:
           process.env.VOICE_AGENT_TURN_DETECTION === 'none' ||
           process.env.VOICE_AGENT_TURN_DETECTION === 'server_vad' ||

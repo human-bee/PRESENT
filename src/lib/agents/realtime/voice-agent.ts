@@ -35,6 +35,7 @@ import { ScorecardService } from './voice-agent/scorecard-service';
 import { TranscriptionBuffer, type PendingTranscriptionMessage } from './voice-agent/transcription-buffer';
 import { resolveVoiceRealtimeConfig } from './voice-agent/config';
 import { ActiveResponseRecoveryGuard, TranscriptDedupeGuard, isActiveResponseError } from './voice-agent/runtime-guards';
+import { ResponsesWebSocketTransport, type VoiceTransportTool } from './voice-agent/responses-ws-transport';
 import {
   executeCreateComponent,
   type ComponentRegistryEntry,
@@ -114,6 +115,31 @@ type QuickApplyIntent = {
   plainText?: string;
   allowMultipleTimer?: boolean;
 };
+
+const DEFAULT_RESPONSES_TOOL_PARAMETER_SCHEMA: Record<string, unknown> = {
+  type: 'object',
+  additionalProperties: true,
+};
+
+const toResponsesToolParameters = (schema: unknown): Record<string, unknown> => {
+  try {
+    const jsonSchema = z.toJSONSchema(schema as z.ZodTypeAny);
+    if (jsonSchema && typeof jsonSchema === 'object' && !Array.isArray(jsonSchema)) {
+      return jsonSchema as Record<string, unknown>;
+    }
+  } catch { }
+  return DEFAULT_RESPONSES_TOOL_PARAMETER_SCHEMA;
+};
+
+const buildResponsesToolCatalog = (toolContext: llm.ToolContext): VoiceTransportTool[] =>
+  Object.entries(toolContext).map(([name, tool]) => ({
+    name,
+    description:
+      typeof (tool as { description?: unknown }).description === 'string'
+        ? String((tool as { description?: unknown }).description).trim()
+        : name,
+    parameters: toResponsesToolParameters((tool as { parameters?: unknown }).parameters),
+  }));
 
 const intentClassifier = (text: string): IntentRoute => {
   const normalized = text.toLowerCase();
@@ -307,16 +333,24 @@ export default defineAgent({
       return `pid-${process.pid}`;
     })();
     const allowSensitiveLogging = process.env.NODE_ENV !== 'production';
+    const capabilityProfileHint = resolveCapabilityProfile(
+      process.env.VOICE_AGENT_CAPABILITY_PROFILE || 'full',
+    );
     const voiceControl = await resolveModelControl({
       task: 'voice.realtime',
       room: job.room.name,
       includeUserScope: false,
     }).catch(() => null);
     const voiceKnobs = voiceControl?.effective.knobs?.voice;
+    const voiceModels = voiceControl?.effective.models;
     const realtimeConfig = resolveVoiceRealtimeConfig(process.env, {
-      realtimeModel: voiceControl?.effective.models?.voiceRealtime,
-      routerModel: voiceControl?.effective.models?.voiceRouter,
-      sttModel: voiceControl?.effective.models?.voiceStt,
+      realtimeModel: voiceModels?.voiceRealtime || voiceKnobs?.realtimeModel,
+      realtimeModelPrimary: voiceModels?.voiceRealtimePrimary,
+      realtimeModelSecondary: voiceModels?.voiceRealtimeSecondary,
+      realtimeModelStrategy: voiceKnobs?.realtimeModelStrategy,
+      capabilityProfile: capabilityProfileHint,
+      routerModel: voiceModels?.voiceRouter || voiceKnobs?.routerModel,
+      sttModel: voiceModels?.voiceStt || voiceKnobs?.sttModel,
       transcriptionEnabled: voiceKnobs?.transcriptionEnabled,
       turnDetection: voiceKnobs?.turnDetection,
       inputNoiseReduction: voiceKnobs?.inputNoiseReduction,
@@ -440,6 +474,17 @@ export default defineAgent({
         priority: input.priority,
       });
     };
+
+    console.log('[VoiceAgent] model config resolved', {
+      transportMode: realtimeConfig.resolvedModelTransport,
+      realtimeModel: realtimeConfig.resolvedRealtimeModel,
+      realtimeModelPrimary: realtimeConfig.resolvedRealtimeModelPrimary,
+      realtimeModelSecondary: realtimeConfig.resolvedRealtimeModelSecondary,
+      realtimeModelStrategy: realtimeConfig.realtimeModelStrategy,
+      responsesModel: realtimeConfig.resolvedResponsesModel,
+      capabilityProfileHint,
+      modelControlResolved: Boolean(voiceControl),
+    });
 
     // Data messages (topic: "transcription") can arrive immediately after the agent joins the room.
     // Attach the listener up-front and buffer until the realtime session is running so we don't drop early turns.
@@ -708,6 +753,7 @@ export default defineAgent({
       multiParticipantTranscriber = new MultiParticipantTranscriptionManager({
         room: job.room as any,
         maxParticipants: transcriptionMaxParticipants,
+        realtimeModel: realtimeConfig.resolvedRealtimeModel,
         model: resolvedSttModel,
         language: resolvedTranscriptionLanguage,
         inputAudioNoiseReduction,
@@ -741,6 +787,7 @@ export default defineAgent({
       multiParticipantTranscriber.start();
       console.log('[VoiceAgent] multi-participant transcription enabled', {
         maxParticipants: transcriptionMaxParticipants,
+        realtimeModel: realtimeConfig.resolvedRealtimeModel,
         model: resolvedSttModel,
         language: resolvedTranscriptionLanguage,
       });
@@ -804,9 +851,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
         })
       : null;
 
-    const configuredCapabilityProfileFromEnv = resolveCapabilityProfile(
-      process.env.VOICE_AGENT_CAPABILITY_PROFILE || 'full',
-    );
+    const configuredCapabilityProfileFromEnv = capabilityProfileHint;
     const configuredCapabilityProfile = resolveCapabilityProfile(
       readVoiceFactorLevel<CapabilityProfile>(
         experimentAssignment,
@@ -2213,6 +2258,10 @@ Your only output is function calls. Never use plain text unless absolutely neces
     };
 
     const buildFingerprint = (tool: string, normalizedParams: JsonObject): ToolCallFingerprint => {
+      const topLevelParticipantId =
+        typeof (normalizedParams as any)?.participant_id === 'string'
+          ? (normalizedParams as any).participant_id.trim()
+          : '';
       if (tool === 'canvas_quick_apply') {
         const marker = [
           tool,
@@ -2225,6 +2274,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
           typeof (normalizedParams as any)?.message === 'string'
             ? (normalizedParams as any).message.trim().toLowerCase()
             : '',
+          topLevelParticipantId,
         ].join('|');
         return { key: marker, ts: Date.now() };
       }
@@ -2240,6 +2290,8 @@ Your only output is function calls. Never use plain text unless absolutely neces
         typeof taskParams.componentId === 'string' ? taskParams.componentId.trim() : '',
         typeof taskParams.message === 'string' ? taskParams.message.trim().toLowerCase() : '',
         typeof taskParams.query === 'string' ? taskParams.query.trim().toLowerCase() : '',
+        topLevelParticipantId ||
+          (typeof taskParams.participant_id === 'string' ? taskParams.participant_id.trim() : ''),
       ].join('|');
       return { key: marker, ts: Date.now() };
     };
@@ -2553,6 +2605,33 @@ Your only output is function calls. Never use plain text unless absolutely neces
         });
         return;
       }
+      if (toolName === 'dispatch_to_conductor') {
+        const dispatchParams =
+          normalizedParams && typeof (normalizedParams as any).params === 'object'
+            ? ({ ...((normalizedParams as any).params as Record<string, unknown>) } as JsonObject)
+            : ({} as JsonObject);
+        if (
+          !dispatchParams.participant_id &&
+          typeof lastRequesterParticipantId === 'string' &&
+          lastRequesterParticipantId.trim().length > 0
+        ) {
+          dispatchParams.participant_id = lastRequesterParticipantId.trim();
+        }
+        normalizedParams = {
+          ...normalizedParams,
+          params: dispatchParams,
+        };
+      } else if (toolName === 'canvas_quick_apply') {
+        const quickParams = { ...(normalizedParams as Record<string, unknown>) };
+        if (
+          (typeof quickParams.participant_id !== 'string' || quickParams.participant_id.trim().length === 0) &&
+          typeof lastRequesterParticipantId === 'string' &&
+          lastRequesterParticipantId.trim().length > 0
+        ) {
+          quickParams.participant_id = lastRequesterParticipantId.trim();
+        }
+        normalizedParams = quickParams as JsonObject;
+      }
 
       const fingerprint = buildFingerprint(toolName, normalizedParams);
       const lastSeen = recentToolCallFingerprints.get(fingerprint.key);
@@ -2578,6 +2657,13 @@ Your only output is function calls. Never use plain text unless absolutely neces
           normalizedParams && typeof (normalizedParams as any).params === 'object'
             ? ({ ...((normalizedParams as any).params as Record<string, unknown>) } as JsonObject)
             : ({} as JsonObject);
+        if (
+          !dispatchParams.participant_id &&
+          typeof lastRequesterParticipantId === 'string' &&
+          lastRequesterParticipantId.trim().length > 0
+        ) {
+          dispatchParams.participant_id = lastRequesterParticipantId.trim();
+        }
         const baseParamsForHash: JsonObject = { ...dispatchParams };
         delete (baseParamsForHash as any).executionId;
         delete (baseParamsForHash as any).idempotencyKey;
@@ -2715,9 +2801,11 @@ Your only output is function calls. Never use plain text unless absolutely neces
       const replayTraceId = replayCorrelation.traceId || replayRequestId;
       const replayIntentId = replayCorrelation.intentId || replayRequestId;
       const realtimeModelForTool =
-        process.env.VOICE_AGENT_REALTIME_MODEL?.trim() ||
-        process.env.REALTIME_MODEL?.trim() ||
-        'gpt-realtime';
+        realtimeConfig.resolvedModelTransport === 'responses_ws'
+          ? realtimeConfig.resolvedResponsesModel
+          : realtimeConfig.resolvedRealtimeModel;
+      const realtimeProviderPathForTool =
+        realtimeConfig.resolvedModelTransport === 'responses_ws' ? 'responses_ws' : 'primary';
       const entry = {
         event: buildToolEvent(toolName, normalizedParams, roomName, {
           requestId: replayRequestId,
@@ -2727,7 +2815,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
           provider: 'openai',
           model: realtimeModelForTool,
           providerSource: 'runtime_selected',
-          providerPath: 'primary',
+          providerPath: realtimeProviderPathForTool,
           ...(toolEventContext ?? {}),
         }),
         reliable,
@@ -2740,7 +2828,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
         intentId: replayIntentId,
         model: realtimeModelForTool,
         provider: 'openai',
-        providerPath: 'primary',
+        providerPath: realtimeProviderPathForTool,
         providerSource: 'runtime_selected',
         queuedAt: Date.now(),
         input: replayParams,
@@ -2762,7 +2850,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
         },
         provider: 'openai',
         model: realtimeModelForTool,
-        providerPath: 'primary',
+        providerPath: realtimeProviderPathForTool,
         providerSource: 'runtime_selected',
       });
 
@@ -2793,7 +2881,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
             metadata: { reason: 'local_participant_unavailable', reliable },
             provider: 'openai',
             model: realtimeModelForTool,
-            providerPath: 'primary',
+            providerPath: realtimeProviderPathForTool,
             providerSource: 'runtime_selected',
           });
           return;
@@ -2814,7 +2902,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
               metadata: { reason: 'publish_returned_false', reliable },
               provider: 'openai',
               model: realtimeModelForTool,
-              providerPath: 'primary',
+              providerPath: realtimeProviderPathForTool,
               providerSource: 'runtime_selected',
             });
             if (!flushToolCallsHandle) {
@@ -2837,7 +2925,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
             metadata: { reliable },
             provider: 'openai',
             model: realtimeModelForTool,
-            providerPath: 'primary',
+            providerPath: realtimeProviderPathForTool,
             providerSource: 'runtime_selected',
           });
         } catch (error) {
@@ -2856,7 +2944,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
             metadata: { reliable },
             provider: 'openai',
             model: realtimeModelForTool,
-            providerPath: 'primary',
+            providerPath: realtimeProviderPathForTool,
             providerSource: 'runtime_selected',
             priority: 'high',
           });
@@ -2900,7 +2988,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
           },
           provider: 'openai',
           model: realtimeModelForTool,
-          providerPath: 'primary',
+          providerPath: realtimeProviderPathForTool,
           providerSource: 'runtime_selected',
         });
         console.debug('[VoiceAgent] dropping duplicate mutation by idempotency key', {
@@ -3718,14 +3806,16 @@ Your only output is function calls. Never use plain text unless absolutely neces
       components: (systemCapabilities.components || []).length,
       manifestVersion: systemCapabilities.manifestVersion,
     });
-    const resolvedRealtimeModel =
-      process.env.VOICE_AGENT_REALTIME_MODEL?.trim() ||
-      process.env.REALTIME_MODEL?.trim() ||
-      'gpt-realtime';
+    const resolvedSessionModel =
+      realtimeConfig.resolvedModelTransport === 'responses_ws'
+        ? realtimeConfig.resolvedResponsesModel
+        : realtimeConfig.resolvedRealtimeModel;
+    const resolvedSessionProviderPath =
+      realtimeConfig.resolvedModelTransport === 'responses_ws' ? 'responses_ws' : 'primary';
     recordVoiceModelEvent({
       eventType: 'system_prompt_loaded',
       status: 'ready',
-      model: resolvedRealtimeModel,
+      model: resolvedSessionModel,
       systemPrompt: instructions,
       contextPriming: {
         capabilityProfile: systemCapabilities.capabilityProfile || configuredCapabilityProfile,
@@ -3736,12 +3826,81 @@ Your only output is function calls. Never use plain text unless absolutely neces
         transcriptionLanguage: resolvedTranscriptionLanguage,
         multiParticipantTranscriptionEnabled,
       },
+      providerPath: resolvedSessionProviderPath,
+      providerSource: 'runtime_selected',
     });
 
     const agent = new voice.Agent({
       instructions,
       tools: toolContext,
     });
+
+    const replyTimeoutMs = realtimeConfig.replyTimeoutMs;
+    const interruptTimeoutMs = realtimeConfig.interruptTimeoutMs;
+    const transcriptionReadyTimeoutMs = realtimeConfig.transcriptionReadyTimeoutMs;
+    const responsesToolCatalog = buildResponsesToolCatalog(toolContext);
+
+    const executeResponsesToolCall = async (toolName: string, args: Record<string, unknown>) => {
+      const handler = (toolContext as Record<string, {
+        execute?: (payload: Record<string, unknown>) => Promise<unknown>;
+        parameters?: { safeParse?: (value: unknown) => { success: boolean; data: unknown; error?: unknown } };
+      }>)[toolName];
+      if (!handler || typeof handler.execute !== 'function') {
+        console.warn('[VoiceAgent] responses_ws unknown tool requested', { tool: toolName });
+        return { status: 'ERROR', message: `Unknown tool: ${toolName}` };
+      }
+      if (!handler.parameters || typeof handler.parameters.safeParse !== 'function') {
+        return {
+          status: 'ERROR',
+          message: `Tool ${toolName} is missing runtime validation schema`,
+          tool: toolName,
+        };
+      }
+      const parsedArgs = handler.parameters.safeParse(args);
+      if (!parsedArgs.success || !parsedArgs.data || typeof parsedArgs.data !== 'object' || Array.isArray(parsedArgs.data)) {
+        return {
+          status: 'ERROR',
+          message: `Invalid arguments for tool ${toolName}`,
+          tool: toolName,
+        };
+      }
+      try {
+        return await handler.execute(parsedArgs.data as Record<string, unknown>);
+      } catch (error) {
+        console.error('[VoiceAgent] responses_ws tool execution failed', {
+          tool: toolName,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        return {
+          status: 'ERROR',
+          message: error instanceof Error ? error.message : String(error),
+          tool: toolName,
+        };
+      }
+    };
+
+    const responsesTransport =
+      realtimeConfig.resolvedModelTransport === 'responses_ws'
+        ? (() => {
+            const apiKey = (process.env.OPENAI_API_KEY || '').trim();
+            if (!apiKey) {
+              throw new Error('VOICE_AGENT_MODEL_TRANSPORT=responses_ws requires OPENAI_API_KEY');
+            }
+            const configuredWsTimeout = Number.parseInt(process.env.VOICE_AGENT_RESPONSES_TIMEOUT_MS ?? '', 10);
+            const wsResponseTimeoutMs =
+              Number.isFinite(configuredWsTimeout) && configuredWsTimeout > 0
+                ? configuredWsTimeout
+                : replyTimeoutMs;
+            return new ResponsesWebSocketTransport({
+              apiKey,
+              model: realtimeConfig.resolvedResponsesModel,
+              endpoint: process.env.VOICE_AGENT_RESPONSES_WS_URL,
+              responseTimeoutMs: wsResponseTimeoutMs,
+              store: (process.env.VOICE_AGENT_RESPONSES_STORE ?? 'true') !== 'false',
+            });
+          })()
+        : null;
+    let responsesTransportEnabled = Boolean(responsesTransport);
 
     const session = new voice.AgentSession({
       llm: new openaiRealtime.RealtimeModel({
@@ -3751,10 +3910,6 @@ Your only output is function calls. Never use plain text unless absolutely neces
         ...(turnDetectionOption !== undefined ? { turnDetection: turnDetectionOption } : {}),
       }),
     });
-
-    const replyTimeoutMs = realtimeConfig.replyTimeoutMs;
-    const interruptTimeoutMs = realtimeConfig.interruptTimeoutMs;
-    const transcriptionReadyTimeoutMs = realtimeConfig.transcriptionReadyTimeoutMs;
     const activeResponseRecoveryGuard = new ActiveResponseRecoveryGuard(
       realtimeConfig.activeResponseRecoveryMaxAttempts,
     );
@@ -3800,6 +3955,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
 
     type PendingReply = { options: { userInput?: string }; attempts: number };
     const pendingReplies: PendingReply[] = [];
+    let publishAssistantTranscript: ((text: string) => Promise<void>) | null = null;
     let lastUserPrompt: string | null = null;
     let lastRequesterParticipantId: string | null = null;
     let latestAgentState: voice.AgentState = 'initializing';
@@ -3850,6 +4006,24 @@ Your only output is function calls. Never use plain text unless absolutely neces
             continue;
           }
           try {
+            if (responsesTransport && responsesTransportEnabled) {
+              const wsInput =
+                typeof next.options.userInput === 'string' && next.options.userInput.trim().length > 0
+                  ? next.options.userInput.trim()
+                  : lastUserPrompt ?? undefined;
+              const wsResult = await responsesTransport.runTurn({
+                instructions,
+                userInput: wsInput,
+                tools: responsesToolCatalog,
+                toolChoice: 'required',
+                executeTool: executeResponsesToolCall,
+              });
+              if (wsResult.assistantText.trim().length > 0 && publishAssistantTranscript) {
+                await publishAssistantTranscript(wsResult.assistantText);
+              }
+              activeResponseRecoveryGuard.clear();
+              continue;
+            }
             const speech = session.generateReply({ ...(next.options as any), toolChoice: 'required' }) as any;
             if (speech && typeof speech.waitForPlayout === 'function') {
               const completed = await waitWithTimeout(speech.waitForPlayout(), replyTimeoutMs);
@@ -3875,6 +4049,28 @@ Your only output is function calls. Never use plain text unless absolutely neces
             }
             activeResponseRecoveryGuard.clear();
           } catch (err) {
+            if (responsesTransport && !isActiveResponseError(err)) {
+              const retryAllowed = next.attempts < 1;
+              console.warn('[VoiceAgent] responses_ws turn failed', {
+                attempts: next.attempts,
+                retryAllowed,
+                error: err instanceof Error ? err.message : String(err),
+              });
+              if (retryAllowed) {
+                pendingReplies.unshift({ options: next.options, attempts: next.attempts + 1 });
+                await waitWithTimeout(new Promise((resolve) => setTimeout(resolve, 250)), 300);
+              } else {
+                responsesTransportEnabled = false;
+                pendingReplies.unshift({ options: next.options, attempts: 0 });
+                await publishAgentStatus('responses_transport_error', {
+                  attempts: next.attempts + 1,
+                  fallback: 'realtime',
+                  queuedReplies: pendingReplies.length,
+                  error: err instanceof Error ? err.message : String(err),
+                });
+              }
+              continue;
+            }
             if (isActiveResponseError(err)) {
               const recovery = activeResponseRecoveryGuard.registerAttempt();
               if (recovery.allowed) {
@@ -4701,6 +4897,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
         });
       } catch {}
     };
+    publishAssistantTranscript = publishAgentTranscript;
 
     session.on(voice.AgentSessionEventTypes.ConversationItemAdded, async (event) => {
       if (allowSensitiveLogging) {
@@ -4843,6 +5040,13 @@ Your only output is function calls. Never use plain text unless absolutely neces
       audioSampleRate: realtimeConfig.outputAudioSampleRate,
       audioNumChannels: realtimeConfig.outputAudioNumChannels,
     };
+
+    console.log('[VoiceAgent] transport activation', {
+      mode: realtimeConfig.resolvedModelTransport,
+      realtimeModel: realtimeConfig.resolvedRealtimeModel,
+      responsesModel: realtimeConfig.resolvedResponsesModel,
+      responsesStore: (process.env.VOICE_AGENT_RESPONSES_STORE ?? 'true') !== 'false',
+    });
 
     try {
       await session.start({

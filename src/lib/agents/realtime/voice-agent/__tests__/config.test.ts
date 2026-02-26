@@ -86,4 +86,48 @@ describe('voice-agent realtime config', () => {
     expect(config.transcriptionMaxParticipants).toBe(16);
     expect(config.transcriptDedupeMaxEntries).toBe(16);
   });
+
+  it('defaults to adaptive realtime strategy with primary/secondary models', () => {
+    const config = resolveVoiceRealtimeConfig(
+      envOf({
+        VOICE_AGENT_CAPABILITY_PROFILE: 'full',
+      }),
+    );
+
+    expect(config.realtimeModelStrategy).toBe('adaptive_profile');
+    expect(config.resolvedRealtimeModelPrimary).toBe('gpt-realtime-1.5');
+    expect(config.resolvedRealtimeModelSecondary).toBe('gpt-realtime-mini');
+    expect(config.resolvedRealtimeModel).toBe('gpt-realtime-1.5');
+  });
+
+  it('uses secondary realtime model when adaptive profile hint is lite', () => {
+    const config = resolveVoiceRealtimeConfig(
+      envOf({
+        VOICE_AGENT_CAPABILITY_PROFILE: 'lite',
+        VOICE_AGENT_REALTIME_MODEL_PRIMARY: 'gpt-realtime-1.5',
+        VOICE_AGENT_REALTIME_MODEL_SECONDARY: 'gpt-realtime-mini',
+      }),
+    );
+
+    expect(config.resolvedRealtimeModel).toBe('gpt-realtime-mini');
+  });
+
+  it('keeps explicit realtime override ahead of adaptive strategy', () => {
+    const config = resolveVoiceRealtimeConfig(
+      envOf({
+        VOICE_AGENT_CAPABILITY_PROFILE: 'lite',
+        VOICE_AGENT_REALTIME_MODEL: 'gpt-realtime-1.5',
+        VOICE_AGENT_REALTIME_MODEL_PRIMARY: 'gpt-realtime-mini',
+      }),
+    );
+
+    expect(config.resolvedRealtimeModel).toBe('gpt-realtime-1.5');
+  });
+
+  it('defaults transport to responses_ws with gpt-audio-1.5 responses model', () => {
+    const config = resolveVoiceRealtimeConfig(envOf({}));
+
+    expect(config.resolvedModelTransport).toBe('responses_ws');
+    expect(config.resolvedResponsesModel).toBe('gpt-audio-1.5');
+  });
 });
