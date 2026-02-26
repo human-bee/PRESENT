@@ -721,6 +721,12 @@ async function handleQuickTextTask(room: string, payload: JsonObject) {
       shapeId,
       shapeType,
       targetHint,
+      actionCount: actions.length,
+      actions,
+      actionEnvelope: {
+        sessionId,
+        seq: 0,
+      },
       reason: 'apply_evidence_pending',
       ack: {
         clientId: null,
@@ -738,6 +744,12 @@ async function handleQuickTextTask(room: string, payload: JsonObject) {
     shapeId,
     shapeType,
     targetHint,
+    actionCount: actions.length,
+    actions,
+    actionEnvelope: {
+      sessionId,
+      seq: 0,
+    },
     ack: {
       clientId: (ack as any).clientId ?? null,
       latencyMs:
@@ -899,6 +911,11 @@ async function handleQuickShapesTask(room: string, payload: JsonObject) {
       requestId,
       shapeIds,
       actionCount: actions.length,
+      actions,
+      actionEnvelope: {
+        sessionId,
+        seq: 0,
+      },
       reason: 'apply_evidence_pending',
       ack: {
         clientId: null,
@@ -915,6 +932,11 @@ async function handleQuickShapesTask(room: string, payload: JsonObject) {
     requestId,
     shapeIds,
     actionCount: actions.length,
+    actions,
+    actionEnvelope: {
+      sessionId,
+      seq: 0,
+    },
     ack: {
       clientId: (ack as any).clientId ?? null,
       latencyMs:

@@ -674,6 +674,23 @@ async function processClaimedTasks(executeTask: ExecuteTaskFn, claimedTasks: Cla
                 deduped: execution.deduped,
               },
             });
+            const completedTracePayload: JsonObject = {
+              workerId,
+              workerHost,
+              workerPid,
+              route,
+              lockKey: lockKey ?? null,
+              deduped: execution.deduped,
+              leaseToken,
+              provider: completedProviderParity.provider,
+              model: completedProviderParity.model,
+              providerSource: completedProviderParity.providerSource,
+              providerPath: completedProviderParity.providerPath,
+              providerRequestId: completedProviderParity.providerRequestId,
+            };
+            if (task.task === 'fairy.intent' && asRecord(result)) {
+              completedTracePayload.result = result as JsonObject;
+            }
             void recordTaskTraceFromParams({
               stage: 'completed',
               status: 'succeeded',
@@ -688,20 +705,7 @@ async function processClaimedTasks(executeTask: ExecuteTaskFn, claimedTasks: Cla
               providerSource: completedProviderParity.providerSource,
               providerPath: completedProviderParity.providerPath,
               providerRequestId: completedProviderParity.providerRequestId ?? undefined,
-              payload: {
-                workerId,
-                workerHost,
-                workerPid,
-                route,
-                lockKey: lockKey ?? null,
-                deduped: execution.deduped,
-                leaseToken,
-                provider: completedProviderParity.provider,
-                model: completedProviderParity.model,
-                providerSource: completedProviderParity.providerSource,
-                providerPath: completedProviderParity.providerPath,
-                providerRequestId: completedProviderParity.providerRequestId,
-              },
+              payload: completedTracePayload,
             });
             logger.info('task completed', { roomKey, taskId: task.id, durationMs });
             logger.debug('orchestration metrics', {
