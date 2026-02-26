@@ -12,14 +12,24 @@ const arg = (name: string, fallback?: string) => {
   return process.argv[index + 1] ?? fallback;
 };
 
-const canvasId = arg('--canvas-id');
+const canvasIdArg = arg('--canvas-id');
+const roomArg = arg('--room');
+const sessionIdArg = arg('--session-id');
+const resultJsonArg = arg('--result-json');
+const windowStartArg = arg('--window-start');
+const windowEndArg = arg('--window-end');
 const outDirArg = arg('--out-dir', 'reports');
 const cwd = process.cwd();
 const outDir = path.resolve(cwd, outDirArg || 'reports');
 
-if (!canvasId || !/^[0-9a-f-]{36}$/i.test(canvasId)) {
+const hasCanvas = typeof canvasIdArg === 'string' && /^[0-9a-f-]{36}$/i.test(canvasIdArg);
+const hasRoom = typeof roomArg === 'string' && roomArg.trim().length > 0;
+const hasSessionId = typeof sessionIdArg === 'string' && sessionIdArg.trim().length > 0;
+const hasResultJson = typeof resultJsonArg === 'string' && resultJsonArg.trim().length > 0;
+
+if (!hasCanvas && !hasRoom && !hasSessionId && !hasResultJson) {
   console.error(
-    'Usage: npx tsx scripts/observability/generate-session-chat-report.ts --canvas-id <uuid> [--out-dir reports]',
+    'Usage: npx tsx scripts/observability/generate-session-chat-report.ts (--canvas-id <uuid> | --room <room> | --session-id <id> | --result-json <path>) [--window-start <iso>] [--window-end <iso>] [--out-dir reports]',
   );
   process.exit(1);
 }
@@ -51,6 +61,15 @@ type CorrelationSummary = {
   modelMissingCorrelation: number;
   toolMissingCorrelation: number;
 };
+type RunArtifactContext = {
+  runId?: string;
+  canvasId?: string;
+  room?: string;
+  startedAt?: string;
+  endedAt?: string;
+  video?: string;
+  sourcePath?: string;
+};
 
 const esc = (value: unknown): string =>
   String(value ?? '')
@@ -76,6 +95,21 @@ const normalizeId = (value: unknown): string | null => {
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : null;
 };
+
+const parseIsoMs = (value: unknown): number | null => {
+  if (typeof value !== 'string' || value.trim().length === 0) return null;
+  const ms = Date.parse(value);
+  return Number.isFinite(ms) ? ms : null;
+};
+
+const normalizeUuid = (value: unknown): string | null => {
+  const normalized = normalizeId(value);
+  if (!normalized) return null;
+  return /^[0-9a-f-]{36}$/i.test(normalized) ? normalized : null;
+};
+
+const sanitizeFileStem = (value: string): string =>
+  value.replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/-+/g, '-').replace(/^-+|-+$/g, '');
 
 const toMs = (value: unknown): number | null => {
   const iso = toIso(value);
@@ -369,6 +403,8 @@ const buildHtml = (input: {
   windowEndIso: string;
   correlationSummary: CorrelationSummary;
   warnings: string[];
+  runArtifact: RunArtifactContext | null;
+  reportScope: string;
 }) => {
   const {
     canvasId: canvas,
@@ -383,6 +419,8 @@ const buildHtml = (input: {
     windowEndIso,
     correlationSummary,
     warnings,
+    runArtifact,
+    reportScope,
   } = input;
 
   const voiceTranscript = transcript.filter((row) =>
@@ -508,6 +546,10 @@ const buildHtml = (input: {
       <p class="muted">Canvas: <code>${esc(canvas)}</code></p>
       <p class="muted">Room: <code>${esc(session.room_name)}</code></p>
       <p class="muted">Session ID: <code>${esc(session.id)}</code></p>
+      <p class="muted">Scope: <code>${esc(reportScope)}</code></p>
+      ${runArtifact?.runId ? `<p class="muted">Run ID: <code>${esc(runArtifact.runId)}</code></p>` : ''}
+      ${runArtifact?.video ? `<p class="muted">Video: <code>${esc(runArtifact.video)}</code></p>` : ''}
+      ${runArtifact?.sourcePath ? `<p class="muted">Result JSON: <code>${esc(runArtifact.sourcePath)}</code></p>` : ''}
       <p class="muted">Session timeline: ${esc(timelineStartIso)} → ${esc(timelineEndIso)}</p>
       <p class="muted">Replay query window: ${esc(windowStartIso)} → ${esc(windowEndIso)}</p>
       <span class="pill">transcript rows: ${transcript.length}</span>
@@ -587,27 +629,117 @@ const buildHtml = (input: {
 
 const run = async () => {
   const warnings: string[] = [];
-  const sessionQuery = await supabase
-    .from('canvas_sessions')
-    .select('id,canvas_id,room_name,created_at,updated_at')
-    .eq('canvas_id', canvasId)
-    .order('updated_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  let runArtifact: RunArtifactContext | null = null;
 
-  if (sessionQuery.error) throw sessionQuery.error;
-  if (!sessionQuery.data) {
-    throw new Error(`No canvas_sessions row found for canvas_id=${canvasId}`);
+  if (hasResultJson && resultJsonArg) {
+    const resolvedPath = path.resolve(cwd, resultJsonArg);
+    const raw = await fs.readFile(resolvedPath, 'utf8');
+    const parsed = JSON.parse(raw);
+    runArtifact = {
+      runId: normalizeId(parsed?.runId) ?? undefined,
+      canvasId: normalizeUuid(parsed?.canvasId) ?? undefined,
+      room: normalizeId(parsed?.room) ?? undefined,
+      startedAt: toIso(parsed?.startedAt) || undefined,
+      endedAt: toIso(parsed?.endedAt) || undefined,
+      video: normalizeId(parsed?.video) ?? undefined,
+      sourcePath: resolvedPath,
+    };
   }
 
-  const session = sessionQuery.data;
-  const room = session.room_name;
+  if (canvasIdArg && !normalizeUuid(canvasIdArg)) {
+    throw new Error(`Invalid --canvas-id: ${canvasIdArg}`);
+  }
 
-  const transcript = await fetchAll(
+  const requestedCanvasId = normalizeUuid(canvasIdArg) ?? runArtifact?.canvasId ?? null;
+  const requestedRoom = normalizeId(roomArg) ?? runArtifact?.room ?? null;
+  const requestedSessionId = normalizeId(sessionIdArg);
+  let reportScope = 'synthetic';
+  let session: any = null;
+
+  if (requestedSessionId) {
+    const bySession = await supabase
+      .from('canvas_sessions')
+      .select('id,canvas_id,room_name,created_at,updated_at')
+      .eq('id', requestedSessionId)
+      .maybeSingle();
+    if (bySession.error) throw bySession.error;
+    if (bySession.data) {
+      session = bySession.data;
+      reportScope = 'session_id';
+    }
+  }
+
+  if (!session && requestedCanvasId) {
+    let query = supabase
+      .from('canvas_sessions')
+      .select('id,canvas_id,room_name,created_at,updated_at')
+      .eq('canvas_id', requestedCanvasId);
+    if (requestedRoom) {
+      query = query.eq('room_name', requestedRoom);
+    }
+    const byCanvas = await query.order('updated_at', { ascending: false }).limit(1).maybeSingle();
+    if (byCanvas.error) throw byCanvas.error;
+    if (byCanvas.data) {
+      session = byCanvas.data;
+      reportScope = 'canvas_id';
+    }
+  }
+
+  if (!session && requestedRoom) {
+    const byRoom = await supabase
+      .from('canvas_sessions')
+      .select('id,canvas_id,room_name,created_at,updated_at')
+      .eq('room_name', requestedRoom)
+      .order('updated_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (byRoom.error) throw byRoom.error;
+    if (byRoom.data) {
+      session = byRoom.data;
+      reportScope = requestedCanvasId ? 'room_fallback_for_canvas' : 'room_name';
+    }
+  }
+
+  if (!session) {
+    if (!requestedRoom) {
+      throw new Error(
+        `No canvas_sessions row found for ${requestedCanvasId ? `canvas_id=${requestedCanvasId}` : 'provided selectors'}, and no room was available for synthetic fallback.`,
+      );
+    }
+    warnings.push('No canvas_sessions row found; using synthetic session context based on room and time window.');
+    session = {
+      id: requestedSessionId ?? runArtifact?.runId ?? `synthetic:${requestedRoom}`,
+      canvas_id: requestedCanvasId,
+      room_name: requestedRoom,
+      created_at: runArtifact?.startedAt ?? new Date().toISOString(),
+      updated_at: runArtifact?.endedAt ?? runArtifact?.startedAt ?? new Date().toISOString(),
+    };
+    reportScope = requestedCanvasId ? 'synthetic_canvas+room' : 'synthetic_room';
+  }
+
+  const room = normalizeId(session.room_name) ?? requestedRoom;
+  if (!room) {
+    throw new Error('Unable to resolve room for report scope.');
+  }
+
+  let transcript = await fetchAllOptional(
     'canvas_session_transcripts',
     (q) => q.select('*').eq('session_id', session.id).order('ts', { ascending: true }),
+    warnings,
     1000,
   );
+  if (transcript.length === 0) {
+    const byRoom = await fetchAllOptional(
+      'canvas_session_transcripts',
+      (q) => q.select('*').eq('room_name', room).order('ts', { ascending: true }),
+      warnings,
+      1000,
+    );
+    transcript = byRoom;
+    if (byRoom.length > 0) {
+      reportScope = `${reportScope}+room_transcript`;
+    }
+  }
 
   const transcriptTimes = transcript
     .map((row) => {
@@ -618,21 +750,26 @@ const run = async () => {
 
   const createdAtMs = Date.parse(String(session.created_at || ''));
   const updatedAtMs = Date.parse(String(session.updated_at || ''));
+  const runStartMs = parseIsoMs(runArtifact?.startedAt);
+  const runEndMs = parseIsoMs(runArtifact?.endedAt);
   const transcriptMin = transcriptTimes.length > 0 ? Math.min(...transcriptTimes) : Number.NaN;
   const transcriptMax = transcriptTimes.length > 0 ? Math.max(...transcriptTimes) : Number.NaN;
-  const startMs = Number.isFinite(transcriptMin)
-    ? transcriptMin
-    : Number.isFinite(createdAtMs)
-      ? createdAtMs
-      : Date.now() - 2 * 60 * 60 * 1000;
-  const endBaseMs = Number.isFinite(transcriptMax)
-    ? transcriptMax
-    : Number.isFinite(updatedAtMs)
-      ? updatedAtMs
-      : Date.now();
+  const cliStartMs = parseIsoMs(windowStartArg);
+  const cliEndMs = parseIsoMs(windowEndArg);
 
-  const windowStartIso = new Date(startMs - 5 * 60 * 1000).toISOString();
-  const windowEndIso = new Date(endBaseMs + 30 * 60 * 1000).toISOString();
+  const inferredStartMs = Number.isFinite(transcriptMin)
+    ? transcriptMin
+    : runStartMs ?? (Number.isFinite(createdAtMs) ? createdAtMs : Date.now() - 2 * 60 * 60 * 1000);
+  const inferredEndMs = Number.isFinite(transcriptMax)
+    ? transcriptMax
+    : runEndMs ?? (Number.isFinite(updatedAtMs) ? updatedAtMs : Date.now());
+
+  const windowStartIso = new Date(
+    cliStartMs ?? inferredStartMs - 5 * 60 * 1000,
+  ).toISOString();
+  const windowEndIso = new Date(
+    cliEndMs ?? inferredEndMs + 30 * 60 * 1000,
+  ).toISOString();
 
   const [tasks, traces] = await Promise.all([
     fetchAll(
@@ -719,8 +856,14 @@ const run = async () => {
     }
   }
 
+  const displayCanvasId =
+    normalizeUuid(session.canvas_id) ??
+    requestedCanvasId ??
+    runArtifact?.canvasId ??
+    `room:${room}`;
+
   const html = buildHtml({
-    canvasId,
+    canvasId: displayCanvasId,
     session,
     transcript,
     tasks,
@@ -732,16 +875,24 @@ const run = async () => {
     windowEndIso,
     correlationSummary,
     warnings,
+    runArtifact,
+    reportScope,
   });
 
   await fs.mkdir(outDir, { recursive: true });
-  const stem = `agent-chat-report-${canvasId}`;
+  const stemToken =
+    normalizeUuid(displayCanvasId) ??
+    (runArtifact?.runId ? `run-${sanitizeFileStem(runArtifact.runId)}` : `room-${sanitizeFileStem(room)}`);
+  const stem = `agent-chat-report-${stemToken}`;
   const htmlPath = path.join(outDir, `${stem}.html`);
   const jsonPath = path.join(outDir, `${stem}.json`);
 
   const rawBundle = {
     generatedAt: new Date().toISOString(),
-    canvasId,
+    canvasId: displayCanvasId,
+    reportScope,
+    runArtifact,
+    room,
     session,
     windowStartIso,
     windowEndIso,
@@ -754,6 +905,7 @@ const run = async () => {
       blobCount: blobMap.size,
       correlationSummary,
     },
+    warnings,
     transcript,
     tasks,
     traces,
@@ -767,7 +919,7 @@ const run = async () => {
     fs.writeFile(jsonPath, JSON.stringify(rawBundle, null, 2), 'utf8'),
   ]);
 
-  console.log(JSON.stringify({ htmlPath, jsonPath }, null, 2));
+  console.log(JSON.stringify({ htmlPath, jsonPath, reportScope, room }, null, 2));
 };
 
 run().catch((error) => {
