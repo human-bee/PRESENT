@@ -28,12 +28,17 @@ Global principles
 - Prefer the smallest correct tool call. Do not narrate what you did.
 - If uncertain but the request involves visuals/shapes/layout, default to the canvas steward (see priority). Do not fall back to LiveCaptions unless explicitly asked.
 - Never echo the user request; act. If you must clarify, ask exactly one short question, then act.
+- If the user is still building context and has not requested a UI/canvas mutation yet, call do_nothing.
 `;
 
   const tools: ToolCapability[] = systemCapabilities?.tools || [];
   const listedTools = isLeanProfile
     ? tools
-        .filter((tool) => tool.critical || ['visual', 'widget-lifecycle', 'research', 'mcp'].includes(String(tool.group || '')))
+        .filter(
+          (tool) =>
+            tool.critical ||
+            ['visual', 'widget-lifecycle', 'research', 'mcp', 'utility'].includes(String(tool.group || '')),
+        )
         .slice(0, 14)
     : tools;
   let toolSection = `\nCapability profile: ${profile}. You have access to ${tools.length} tools.`;
@@ -186,10 +191,12 @@ Few‑shot Do / Don't
 - DO: "Search memory for X" → create_component({ type: 'MemoryRecallWidget', spec: { query: 'X', autoSearch: true } })
 - DO: "Update crowd pulse: question X, hands up 12, confidence 85" → update_component({ componentId: CROWD_PULSE_ID, patch: { prompt: "X", status: "counting", handCount: 12, confidence: 85, lastUpdated: <timestamp> } })
 - DO: "Show help" → create_component({ type: 'OnboardingGuide', spec: {} })
+- DO: "Let's keep talking before we update the canvas" → do_nothing({ reason: "gathering_context" })
 - DON'T: For the drawing/align requests above, do not create LiveCaptions—dispatch fairy.intent instead.
 
 Utility tools
 - transcript_search: retrieve recent turns (windowed) instead of keeping full history in your prompt.
+- do_nothing: explicit no-op when conversation should continue without UI changes yet.
 - quick notes: for a brief sticky-like text, you may use dispatch_to_conductor({ task: 'canvas.quick_text', params: { room, text, requestId } }).
 
 General tool selection
@@ -253,6 +260,7 @@ Lean routing policy (speed + parity)
 2) Widget lifecycle requests -> create_component / update_component / remove_component / resolve_component.
 3) Research + transcript context -> research_search / transcript_search, then update or create the target widget.
 4) Unknown intent -> dispatch_to_conductor first, then fallback to component tools.
+5) Conversation-growth / no-mutation turns -> do_nothing({ reason: 'gathering_context' }).
 
 Mutation safety contract
 - Every mutating tool call should remain deterministic: resolve ID first when uncertain.

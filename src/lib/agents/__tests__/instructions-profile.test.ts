@@ -20,5 +20,7 @@ describe('buildVoiceAgentInstructions profile behavior', () => {
     expect(leanInstructions.length).toBeLessThan(fullInstructions.length);
     expect(leanInstructions).toContain('Capability profile: lean_adaptive');
     expect(fullInstructions).toContain("Few‑shot Do / Don't");
+    expect(fullInstructions).toContain('- do_nothing:');
+    expect(leanInstructions).toContain('- do_nothing:');
   });
 });

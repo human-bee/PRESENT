@@ -315,6 +315,12 @@ const ALL_TOOL_CAPABILITIES: ToolCapability[] = [
     critical: true,
   },
   {
+    name: 'do_nothing',
+    description: 'Hold intentionally without mutating UI while gathering more conversation context',
+    group: 'utility',
+    critical: true,
+  },
+  {
     name: 'youtube_search',
     description: 'Search YouTube videos',
     examples: ['search youtube for cats'],
@@ -369,6 +375,7 @@ const LEAN_TOOL_NAMES = new Set<string>([
   'resolve_component',
   'research_search',
   'transcript_search',
+  'do_nothing',
   'create_infographic',
   'youtube_search',
   'mcp_tool',

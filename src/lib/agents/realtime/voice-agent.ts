@@ -2435,6 +2435,29 @@ Your only output is function calls. Never use plain text unless absolutely neces
           }
         },
       }),
+      do_nothing: llm.tool({
+        description:
+          'Intentionally perform no UI mutation while gathering more conversation context before augmenting canvas.',
+        parameters: z.object({
+          reason: z
+            .enum(['greeting_no_action', 'gathering_context', 'awaiting_user_detail', 'no_action_requested'])
+            .nullish(),
+          awaiting: z.string().trim().max(160).nullish(),
+        }),
+        execute: async (args) => {
+          const reason = typeof args.reason === 'string' && args.reason.trim().length > 0 ? args.reason.trim() : undefined;
+          const awaiting =
+            typeof args.awaiting === 'string' && args.awaiting.trim().length > 0
+              ? args.awaiting.trim()
+              : undefined;
+          return {
+            status: 'waiting_for_more_context',
+            effect: 'none',
+            ...(reason ? { reason } : {}),
+            ...(awaiting ? { awaiting } : {}),
+          };
+        },
+      }),
       resolve_component: llm.tool({
         description: 'Resolve an existing componentId using intent, slot, or type hints.',
         parameters: z.object({
@@ -3581,6 +3604,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
               'canvas_quick_apply',
               'dispatch_to_conductor',
               'reserve_component',
+              'do_nothing',
               'resolve_component',
             ].includes(fnCall.name)
           ) {

@@ -64,6 +64,11 @@ describe('capabilities', () => {
     expect(crowdPulse?.lifecycleOps).toEqual(expect.arrayContaining(['create', 'resolve', 'update', 'recover']));
   });
 
+  it('includes do_nothing in lean toolset', () => {
+    const lean = buildCapabilitiesForProfile('lean_adaptive');
+    expect(lean.tools.some((tool) => tool.name === 'do_nothing')).toBe(true);
+  });
+
   it('uses remote lean response when available', async () => {
     const room = new MockRoom((message) => {
       if (message.capabilityProfile === 'lean_adaptive') {
