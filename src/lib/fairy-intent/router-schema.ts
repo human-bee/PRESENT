@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { FAIRY_CONTEXT_PROFILES } from '@/lib/fairy-context/profiles';
 
-const ROUTE_KINDS = [
+export const FAIRY_ROUTE_KINDS = [
   'canvas',
   'scorecard',
   'infographic',
@@ -12,12 +12,15 @@ const ROUTE_KINDS = [
   'bundle',
   'none',
 ] as const;
-const COMPONENT_TYPES = [
+export const FAIRY_COMPONENT_TYPES = [
   'DebateScorecard',
   'InfographicWidget',
   'LinearKanbanBoard',
   'CrowdPulseWidget',
 ] as const;
+
+const ROUTE_KINDS = FAIRY_ROUTE_KINDS;
+const COMPONENT_TYPES = FAIRY_COMPONENT_TYPES;
 
 export const ALLOWED_VIEW_EVENTS = [
   'tldraw:canvas_focus',
@@ -79,7 +82,7 @@ export const FairyRouteDecisionSchema = z
 
 export type FairyRouteDecision = z.infer<typeof FairyRouteDecisionSchema>;
 
-const fastLaneDetailProperties = {
+export const FAIRY_FAST_LANE_DETAIL_PROPERTIES = {
   target: { type: 'string', enum: [...ALLOWED_VIEW_TARGETS] },
   shapeId: { type: 'string' },
   componentId: { type: 'string' },
@@ -124,7 +127,7 @@ export const routerTools = [
                 contextProfile: { type: 'string', enum: [...FAIRY_CONTEXT_PROFILES] },
                 fastLaneDetail: {
                   type: 'object',
-                  properties: fastLaneDetailProperties,
+                  properties: FAIRY_FAST_LANE_DETAIL_PROPERTIES,
                   additionalProperties: true,
                 },
                 summary: { type: 'string' },
@@ -134,7 +137,7 @@ export const routerTools = [
           },
           fastLaneDetail: {
             type: 'object',
-            properties: fastLaneDetailProperties,
+            properties: FAIRY_FAST_LANE_DETAIL_PROPERTIES,
             additionalProperties: true,
           },
           summary: { type: 'string' },
@@ -144,3 +147,13 @@ export const routerTools = [
     },
   },
 ];
+
+export const buildFairyRouterToolingSnapshot = () => ({
+  routeKinds: [...ROUTE_KINDS],
+  componentTypes: [...COMPONENT_TYPES],
+  contextProfiles: [...FAIRY_CONTEXT_PROFILES],
+  allowedViewEvents: [...ALLOWED_VIEW_EVENTS],
+  allowedViewTargets: [...ALLOWED_VIEW_TARGETS],
+  fastLaneDetailProperties: FAIRY_FAST_LANE_DETAIL_PROPERTIES,
+  routeIntentSchema: (routerTools[0] as any)?.function?.parameters ?? null,
+});

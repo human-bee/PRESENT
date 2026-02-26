@@ -205,8 +205,14 @@ const extractTokenUsage = (...sources: unknown[]): TokenUsage | null => {
     set('reasoningTokens', obj.reasoning_tokens ?? obj.reasoningTokens ?? obj.thinking_tokens);
     set('promptTokens', obj.prompt_tokens ?? obj.promptTokens);
     set('completionTokens', obj.completion_tokens ?? obj.completionTokens);
-    set('cacheReadTokens', obj.cache_read_input_tokens ?? obj.cacheReadTokens);
-    set('cacheWriteTokens', obj.cache_creation_input_tokens ?? obj.cacheWriteTokens);
+    set(
+      'cacheReadTokens',
+      obj.cache_read_input_tokens ?? obj.cacheReadTokens ?? obj.cached_input_tokens ?? obj.cachedInputTokens,
+    );
+    set(
+      'cacheWriteTokens',
+      obj.cache_creation_input_tokens ?? obj.cacheWriteTokens ?? obj.cacheCreationInputTokens,
+    );
     set('transcriptTokens', obj.transcript_tokens ?? obj.transcriptTokenEstimate);
     set('maxTokens', obj.max_tokens ?? obj.maxOutputTokens ?? obj.token_budget_max ?? obj.tokenBudgetMax);
     set('searchTokens', obj.search_tokens ?? obj.searchTokens);
@@ -555,6 +561,43 @@ const extractPromptArtifacts = (...sources: unknown[]) => {
       'toolDefinitions',
       'tools',
     ]),
+    toolSchema: findFirstNestedField(parsedSources, [
+      'tool_schema',
+      'toolSchema',
+      'action_schema',
+      'actionSchema',
+      'route_intent_schema',
+      'routeIntentSchema',
+      'json_schema',
+      'jsonSchema',
+    ]),
+    skills: findFirstNestedField(parsedSources, [
+      'skills',
+      'skill_set',
+      'skillSet',
+      'prompt_skills',
+      'promptSkills',
+      'routing_skills',
+      'routingSkills',
+      'context_skills',
+      'contextSkills',
+      'instruction_pack',
+      'instructionPack',
+      'capability_profile',
+      'capabilityProfile',
+    ]),
+    actionOptions: findFirstNestedField(parsedSources, [
+      'action_options',
+      'actionOptions',
+      'shape_options',
+      'shapeOptions',
+      'shape_type_aliases',
+      'shapeTypeAliases',
+      'allowed_actions',
+      'allowedActions',
+      'allowed_view_events',
+      'allowedViewEvents',
+    ]),
   };
 };
 
@@ -666,6 +709,9 @@ ${renderJsonDetails('System Prompt', row.system_prompt ?? promptArtifacts.system
 ${renderJsonDetails('Context Priming', row.context_priming ?? promptArtifacts.contextPriming ?? null)}
 ${renderJsonDetails('Instructions', promptArtifacts.instructions ?? null)}
 ${renderJsonDetails('Tool Descriptions', promptArtifacts.toolDescriptions ?? null)}
+${renderJsonDetails('Tool Schema', promptArtifacts.toolSchema ?? null)}
+${renderJsonDetails('Skills / Capability Profile', promptArtifacts.skills ?? null)}
+${renderJsonDetails('Action / Option Schema', promptArtifacts.actionOptions ?? null)}
 ${renderJsonDetails('Model Input (inline)', row.input_payload ?? null)}
 ${renderJsonDetails('Model Output (inline)', row.output_payload ?? null)}
 ${inputBlob ? renderJsonDetails('Model Input (raw blob)', inputBlob.payload) : ''}
@@ -735,6 +781,9 @@ ${promptArtifacts.systemPrompt ? renderJsonDetails('System Prompt (trace payload
 ${promptArtifacts.contextPriming ? renderJsonDetails('Context Priming (trace payload)', promptArtifacts.contextPriming) : ''}
 ${promptArtifacts.instructions ? renderJsonDetails('Instructions (trace payload)', promptArtifacts.instructions) : ''}
 ${promptArtifacts.toolDescriptions ? renderJsonDetails('Tool Descriptions (trace payload)', promptArtifacts.toolDescriptions) : ''}
+${promptArtifacts.toolSchema ? renderJsonDetails('Tool Schema (trace payload)', promptArtifacts.toolSchema) : ''}
+${promptArtifacts.skills ? renderJsonDetails('Skills / Capability Profile (trace payload)', promptArtifacts.skills) : ''}
+${promptArtifacts.actionOptions ? renderJsonDetails('Action / Option Schema (trace payload)', promptArtifacts.actionOptions) : ''}
 ${renderJsonDetails('Trace Payload', trace.payload ?? null)}
 </details>`;
     })
@@ -747,6 +796,9 @@ const renderPriming = (rows: any[], source: string) => {
   let contextPriming: unknown = null;
   let instructions: unknown = null;
   let toolDescriptions: unknown = null;
+  let toolSchema: unknown = null;
+  let skills: unknown = null;
+  let actionOptions: unknown = null;
   for (const row of sourceRows) {
     const artifacts = extractPromptArtifacts(
       row.system_prompt,
@@ -759,10 +811,13 @@ const renderPriming = (rows: any[], source: string) => {
     if (contextPriming == null) contextPriming = row.context_priming ?? artifacts.contextPriming;
     if (instructions == null) instructions = artifacts.instructions;
     if (toolDescriptions == null) toolDescriptions = artifacts.toolDescriptions;
-    if (systemPrompt && contextPriming && instructions && toolDescriptions) break;
+    if (toolSchema == null) toolSchema = artifacts.toolSchema;
+    if (skills == null) skills = artifacts.skills;
+    if (actionOptions == null) actionOptions = artifacts.actionOptions;
+    if (systemPrompt && contextPriming && instructions && toolDescriptions && toolSchema && skills && actionOptions) break;
   }
 
-  if (!systemPrompt && !contextPriming && !instructions && !toolDescriptions) {
+  if (!systemPrompt && !contextPriming && !instructions && !toolDescriptions && !toolSchema && !skills && !actionOptions) {
     return '<p class="muted">No persisted priming rows for this source in the selected window.</p>';
   }
   return [
@@ -770,6 +825,9 @@ const renderPriming = (rows: any[], source: string) => {
     contextPriming ? renderJsonDetails(`${source} initial context priming`, contextPriming) : '',
     instructions ? renderJsonDetails(`${source} initial instructions`, instructions) : '',
     toolDescriptions ? renderJsonDetails(`${source} initial tool descriptions`, toolDescriptions) : '',
+    toolSchema ? renderJsonDetails(`${source} initial tool schema`, toolSchema) : '',
+    skills ? renderJsonDetails(`${source} initial skills/capabilities`, skills) : '',
+    actionOptions ? renderJsonDetails(`${source} initial action/options schema`, actionOptions) : '',
   ].join('\n');
 };
 
@@ -800,6 +858,9 @@ const findActionArrays = (value: unknown, limit = 20): unknown[][] => {
   const isLikelyActionObject = (item: unknown): boolean => {
     if (!item || typeof item !== 'object' || Array.isArray(item)) return false;
     const obj = item as Record<string, unknown>;
+    if (typeof obj.name === 'string' && ('params' in obj || 'tool' in obj || 'action' in obj)) return true;
+    if (typeof obj.tool === 'string' && ('params' in obj || 'arguments' in obj)) return true;
+    if (typeof obj.action === 'string' && ('params' in obj || 'payload' in obj)) return true;
     if (typeof obj.type !== 'string') return false;
     return (
       'id' in obj ||
@@ -836,8 +897,52 @@ const findActionArrays = (value: unknown, limit = 20): unknown[][] => {
   return results;
 };
 
-const renderFairyActionLedger = (tasks: any[], traces: any[], runArtifact: RunArtifactContext | null) => {
+const correlatesFairyRow = (fairyTask: any, candidate: any): boolean => {
+  const sameTask =
+    normalizeId(candidate?.task_id ?? candidate?.taskId ?? candidate?.id) &&
+    normalizeId(fairyTask?.id) &&
+    normalizeId(candidate?.task_id ?? candidate?.taskId ?? candidate?.id) === normalizeId(fairyTask?.id);
+  const sameReq =
+    normalizeId(candidate?.request_id ?? candidate?.requestId) &&
+    normalizeId(fairyTask?.request_id ?? fairyTask?.requestId) &&
+    normalizeId(candidate?.request_id ?? candidate?.requestId) === normalizeId(fairyTask?.request_id ?? fairyTask?.requestId);
+  const sameTrace =
+    normalizeId(candidate?.trace_id ?? candidate?.traceId) &&
+    normalizeId(fairyTask?.trace_id ?? fairyTask?.traceId) &&
+    normalizeId(candidate?.trace_id ?? candidate?.traceId) === normalizeId(fairyTask?.trace_id ?? fairyTask?.traceId);
+  const sameIntent =
+    normalizeId(candidate?.intent_id ?? candidate?.intentId) &&
+    normalizeId(fairyTask?.intent_id ?? fairyTask?.intentId) &&
+    normalizeId(candidate?.intent_id ?? candidate?.intentId) === normalizeId(fairyTask?.intent_id ?? fairyTask?.intentId);
+  return Boolean(sameTask || sameReq || sameTrace || sameIntent);
+};
+
+const dedupeActionArrays = (arrays: unknown[][]): unknown[][] => {
+  const seen = new Set<string>();
+  const deduped: unknown[][] = [];
+  for (const arr of arrays) {
+    try {
+      const key = JSON.stringify(arr);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      deduped.push(arr);
+    } catch {
+      deduped.push(arr);
+    }
+  }
+  return deduped;
+};
+
+const renderFairyActionLedger = (tasks: any[], traces: any[], toolIo: any[], runArtifact: RunArtifactContext | null) => {
   const fairyTasks = tasks.filter((task) => String(task.task || '') === 'fairy.intent');
+  const downstreamCanvasTasks = tasks.filter((task) => {
+    const taskName = String(task?.task || '');
+    return taskName.startsWith('canvas.') && taskName !== 'canvas.agent_prompt';
+  });
+  const downstreamToolRows = toolIo.filter((row) => {
+    const toolName = String(row?.tool_name || '');
+    return toolName === 'fairy.intent' || toolName.startsWith('canvas.');
+  });
   const runArtifactTasks = Array.isArray((runArtifact as any)?.sessionCorrelation?.body?.tasks)
     ? ((runArtifact as any).sessionCorrelation.body.tasks as any[])
         .filter((task) => String(task?.task || '') === 'fairy.intent')
@@ -852,18 +957,16 @@ const renderFairyActionLedger = (tasks: any[], traces: any[], runArtifact: RunAr
 
   return combined
     .map((task) => {
-      const matches = traces.filter((trace) => {
-        if (String(trace.task || '') !== 'fairy.intent') return false;
-        const sameTask = normalizeId(trace.task_id) && normalizeId(task.id) && normalizeId(trace.task_id) === normalizeId(task.id);
-        const sameReq = normalizeId(trace.request_id) && normalizeId(task.request_id) && normalizeId(trace.request_id) === normalizeId(task.request_id);
-        const sameTrace = normalizeId(trace.trace_id) && normalizeId(task.trace_id) && normalizeId(trace.trace_id) === normalizeId(task.trace_id);
-        return Boolean(sameTask || sameReq || sameTrace);
-      });
-      const actionArrays = [
+      const matches = traces.filter((trace) => String(trace.task || '') === 'fairy.intent' && correlatesFairyRow(task, trace));
+      const relatedCanvasTasks = downstreamCanvasTasks.filter((row) => correlatesFairyRow(task, row));
+      const relatedToolRows = downstreamToolRows.filter((row) => correlatesFairyRow(task, row));
+      const actionArrays = dedupeActionArrays([
         ...findActionArrays(task?.params),
         ...findActionArrays(task?.result),
         ...matches.flatMap((trace) => findActionArrays(trace?.payload)),
-      ];
+        ...relatedCanvasTasks.flatMap((row) => [...findActionArrays(row?.params), ...findActionArrays(row?.result)]),
+        ...relatedToolRows.flatMap((row) => [...findActionArrays(row?.input_payload), ...findActionArrays(row?.output_payload)]),
+      ]);
       const actionCount =
         toFiniteNumber(task?.result?.actionCount) ??
         toFiniteNumber(task?.result?.action_count) ??
@@ -876,11 +979,187 @@ const renderFairyActionLedger = (tasks: any[], traces: any[], runArtifact: RunAr
   <div><strong>trace_id</strong><br>${esc(task.trace_id || '')}</div>
   <div><strong>task_id</strong><br>${esc(task.id || '')}</div>
   <div><strong>shapeIds</strong><br>${esc((task?.result?.shapeIds || task?.result?.shape_ids || []).join?.(', ') || '')}</div>
+  <div><strong>downstream canvas tasks</strong><br>${esc(relatedCanvasTasks.length)}</div>
+  <div><strong>downstream tool rows</strong><br>${esc(relatedToolRows.length)}</div>
 </div>
 ${renderJsonDetails('Fairy Task Input (raw)', task.params ?? null)}
 ${renderJsonDetails('Fairy Task Output (raw)', task.result ?? null)}
-${actionArrays.length > 0 ? renderJsonDetails('Fairy Actions (raw arrays)', actionArrays) : '<p class="muted">No raw action arrays found; showing task/trace payloads only.</p>'}
+${actionArrays.length > 0
+  ? renderJsonDetails('Fairy Actions (raw arrays)', actionArrays)
+  : `<p class="muted">No raw action arrays found for this task (actionCount=${esc(actionCount ?? 'n/a')}); persisted payloads in this session include summary fields only.</p>`}
+${relatedCanvasTasks.length > 0 ? renderJsonDetails('Correlated Canvas Task Rows', relatedCanvasTasks.map((row) => ({ task: row.task, id: row.id, status: row.status, request_id: row.request_id, trace_id: row.trace_id, result: row.result }))) : ''}
+${relatedToolRows.length > 0 ? renderJsonDetails('Correlated Tool Replay Rows', relatedToolRows.map((row) => ({ source: row.source, tool_name: row.tool_name, status: row.status, request_id: row.request_id, trace_id: row.trace_id, output_payload: row.output_payload }))) : ''}
 ${matches.length > 0 ? renderJsonDetails('Matched Fairy Trace Payloads', matches.map((trace) => trace.payload)) : ''}
+</details>`;
+    })
+    .join('\n');
+};
+
+const buildMissionControlSnapshots = (
+  modelIo: any[],
+  traces: any[],
+  tasks: any[],
+  toolIo: any[],
+  blobMap: Map<string, any>,
+) => {
+  const snapshots: any[] = [];
+
+  const pushSnapshot = (snapshot: any) => {
+    const artifacts = snapshot?.artifacts ?? {};
+    const hasArtifacts = Boolean(
+      artifacts.systemPrompt ||
+      artifacts.contextPriming ||
+      artifacts.instructions ||
+      artifacts.toolDescriptions ||
+      artifacts.toolSchema ||
+      artifacts.skills ||
+      artifacts.actionOptions,
+    );
+    if (!hasArtifacts) return;
+    snapshots.push(snapshot);
+  };
+
+  for (const row of modelIo) {
+    const inputBlob = row.input_blob_id ? blobMap.get(row.input_blob_id) : null;
+    const outputBlob = row.output_blob_id ? blobMap.get(row.output_blob_id) : null;
+    const artifacts = extractPromptArtifacts(
+      row.system_prompt,
+      row.context_priming,
+      row.metadata,
+      row.input_payload,
+      row.output_payload,
+      inputBlob?.payload,
+      outputBlob?.payload,
+    );
+    pushSnapshot({
+      ts: toMs(row.created_at) ?? 0,
+      iso: toIso(row.created_at),
+      source: row.source ?? 'model',
+      category: 'model_io',
+      eventType: row.event_type ?? null,
+      status: row.status ?? null,
+      sequence: toSequence(row.sequence),
+      requestId: normalizeId(row.request_id),
+      traceId: normalizeId(row.trace_id),
+      intentId: normalizeId(row.intent_id),
+      taskId: normalizeId(row.task_id),
+      branch: branchKeyFor(row),
+      usage: extractTokenUsage(row, row.metadata, row.input_payload, row.output_payload, inputBlob?.payload, outputBlob?.payload),
+      artifacts,
+      raw: {
+        row,
+        inputBlob: inputBlob?.payload ?? null,
+        outputBlob: outputBlob?.payload ?? null,
+      },
+    });
+  }
+
+  for (const row of traces) {
+    const artifacts = extractPromptArtifacts(row.payload);
+    pushSnapshot({
+      ts: toMs(row.created_at) ?? 0,
+      iso: toIso(row.created_at),
+      source: row.stage ?? 'trace',
+      category: 'trace_event',
+      eventType: row.task ?? null,
+      status: row.status ?? null,
+      sequence: toSequence(row.seq ?? row.sequence),
+      requestId: normalizeId(row.request_id),
+      traceId: normalizeId(row.trace_id),
+      intentId: normalizeId(row.intent_id),
+      taskId: normalizeId(row.task_id),
+      branch: branchKeyFor(row),
+      usage: extractTokenUsage(row, row.payload),
+      artifacts,
+      raw: row.payload ?? row,
+    });
+  }
+
+  for (const row of tasks) {
+    const artifacts = extractPromptArtifacts(row.params, row.result);
+    pushSnapshot({
+      ts: toMs(row.created_at) ?? 0,
+      iso: toIso(row.created_at),
+      source: row.task ?? 'task',
+      category: 'task_row',
+      eventType: row.task ?? null,
+      status: row.status ?? null,
+      sequence: toSequence(row.attempt),
+      requestId: normalizeId(row.request_id),
+      traceId: normalizeId(row.trace_id),
+      intentId: normalizeId(row.intent_id),
+      taskId: normalizeId(row.id),
+      branch: branchKeyFor(row),
+      usage: extractTokenUsage(row, row.params, row.result),
+      artifacts,
+      raw: {
+        params: row.params ?? null,
+        result: row.result ?? null,
+      },
+    });
+  }
+
+  for (const row of toolIo) {
+    const artifacts = extractPromptArtifacts(row.input_payload, row.output_payload, row.metadata);
+    pushSnapshot({
+      ts: toMs(row.created_at) ?? 0,
+      iso: toIso(row.created_at),
+      source: row.source ?? 'tool',
+      category: 'tool_io',
+      eventType: row.tool_name ?? null,
+      status: row.status ?? null,
+      sequence: toSequence(row.sequence),
+      requestId: normalizeId(row.request_id),
+      traceId: normalizeId(row.trace_id),
+      intentId: normalizeId(row.intent_id),
+      taskId: normalizeId(row.task_id),
+      branch: branchKeyFor(row),
+      usage: extractTokenUsage(row, row.input_payload, row.output_payload, row.metadata),
+      artifacts,
+      raw: {
+        input: row.input_payload ?? null,
+        output: row.output_payload ?? null,
+        metadata: row.metadata ?? null,
+      },
+    });
+  }
+
+  snapshots.sort((a, b) => {
+    if (a.ts !== b.ts) return a.ts - b.ts;
+    if (a.sequence !== b.sequence) return a.sequence - b.sequence;
+    return String(a.source ?? '').localeCompare(String(b.source ?? ''));
+  });
+  return snapshots;
+};
+
+const renderMissionControlSnapshots = (snapshots: any[]) => {
+  if (snapshots.length === 0) {
+    return '<p class="muted">No mission-control prompt/tool snapshots captured.</p>';
+  }
+  return snapshots
+    .map((snapshot) => {
+      const artifacts = snapshot.artifacts ?? {};
+      return `<details>
+<summary>${esc(snapshot.iso)} · ${esc(snapshot.source)} · ${esc(snapshot.category)} · ${esc(snapshot.eventType || '')} · ${esc(
+        snapshot.status || '',
+      )}</summary>
+<div class="kv-grid">
+  <div><strong>branch</strong><br>${esc(snapshot.branch || '')}</div>
+  <div><strong>request_id</strong><br>${esc(snapshot.requestId || '')}</div>
+  <div><strong>trace_id</strong><br>${esc(snapshot.traceId || '')}</div>
+  <div><strong>intent_id</strong><br>${esc(snapshot.intentId || '')}</div>
+  <div><strong>task_id</strong><br>${esc(snapshot.taskId || '')}</div>
+  <div><strong>tokens</strong><br>${esc(formatTokenUsage(snapshot.usage))}</div>
+</div>
+${renderTokenUsageBlock(snapshot.usage)}
+${renderJsonDetails('System Prompt', artifacts.systemPrompt ?? null)}
+${renderJsonDetails('Context Priming', artifacts.contextPriming ?? null)}
+${renderJsonDetails('Instructions', artifacts.instructions ?? null)}
+${renderJsonDetails('Tool Descriptions', artifacts.toolDescriptions ?? null)}
+${renderJsonDetails('Tool Schema', artifacts.toolSchema ?? null)}
+${renderJsonDetails('Skills / Capability Profile', artifacts.skills ?? null)}
+${renderJsonDetails('Action / Option Schema', artifacts.actionOptions ?? null)}
+${renderJsonDetails('Snapshot Raw Payload', snapshot.raw ?? null)}
 </details>`;
     })
     .join('\n');
@@ -1182,7 +1461,9 @@ const buildHtml = (input: {
   const timelineEvents = buildTimelineEvents(transcript, modelIo, toolIo, tasks, traces, blobMap);
   const timelineHtml = renderTimelineBranches(timelineEvents);
   const timelineWithTokens = timelineEvents.filter((event) => hasMeasuredTokenUsage(event.usage)).length;
-  const fairyActionLedgerHtml = renderFairyActionLedger(tasks, traces, runArtifact);
+  const fairyActionLedgerHtml = renderFairyActionLedger(tasks, traces, toolIo, runArtifact);
+  const missionControlSnapshots = buildMissionControlSnapshots(modelIo, traces, tasks, toolIo, blobMap);
+  const missionControlHtml = renderMissionControlSnapshots(missionControlSnapshots);
 
   const timelineStartIso = toIso(
     transcript[0]?.created_at ||
@@ -1295,6 +1576,7 @@ const buildHtml = (input: {
       <span class="pill">tool replay rows: ${toolIo.length}</span>
       <span class="pill">timeline events: ${timelineEvents.length}</span>
       <span class="pill">timeline events w/ token usage: ${timelineWithTokens}</span>
+      <span class="pill">mission-control snapshots: ${missionControlSnapshots.length}</span>
       <span class="pill">raw blobs: ${blobMap.size}</span>
       <span class="pill">trace/request/intent/task keys: ${correlationSummary.traceKeys}/${correlationSummary.requestKeys}/${correlationSummary.intentKeys}/${correlationSummary.taskKeys}</span>
       <span class="pill">model rows matched to correlation keys: ${correlationSummary.modelMatched}/${modelIo.length}</span>
@@ -1313,6 +1595,11 @@ const buildHtml = (input: {
       <h2>Chronological Replay Timeline</h2>
       <p class="muted">Global chronology grouped into correlation branches; each event includes token usage and raw payload.</p>
       ${timelineHtml}
+    </section>
+    <section class="section">
+      <h2>Mission Control Prompt + Tool Snapshots</h2>
+      <p class="muted">System prompts, context priming, instruction sets, skills/capability profiles, and tool/action option schemas in chronological order.</p>
+      ${missionControlHtml}
     </section>
     <section class="section">
       <h2>Fairy Raw Actions Ledger</h2>

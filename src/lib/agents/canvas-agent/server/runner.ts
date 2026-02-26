@@ -346,6 +346,142 @@ const mapTodosToTeacherItems = (todos: StoredTodoItem[]) => {
     .filter((item): item is { id: number; text: string; status: 'todo' | 'in-progress' | 'done' } => Boolean(item));
 };
 
+const asObjectRecord = (value: unknown): Record<string, unknown> | null => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  return value as Record<string, unknown>;
+};
+
+const truncateText = (value: unknown, maxChars = 1200): string | null => {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  return trimmed.length > maxChars ? `${trimmed.slice(0, maxChars)}…` : trimmed;
+};
+
+const summarizeToolCatalog = (value: unknown, limit = 16): Array<Record<string, unknown>> => {
+  if (!Array.isArray(value)) return [];
+  return value.slice(0, limit).map((entry, index) => {
+    const record = asObjectRecord(entry);
+    if (!record) {
+      return { index, value: entry };
+    }
+    const params = Array.isArray(record.params)
+      ? record.params.slice(0, 10).map((param) => {
+          const paramRecord = asObjectRecord(param);
+          if (!paramRecord) return param;
+          return {
+            name: paramRecord.name ?? null,
+            type: paramRecord.type ?? null,
+            required: paramRecord.required ?? null,
+            notes: truncateText(paramRecord.notes, 240),
+          };
+        })
+      : [];
+    return {
+      name: record.name ?? null,
+      description: truncateText(record.description, 360),
+      params,
+      example: record.example ?? null,
+    };
+  });
+};
+
+const summarizeFewShotExamples = (value: unknown, limit = 6): Array<Record<string, unknown>> => {
+  if (!Array.isArray(value)) return [];
+  return value.slice(0, limit).map((entry, index) => {
+    const record = asObjectRecord(entry);
+    if (!record) {
+      return { index, value: entry };
+    }
+    return {
+      name: record.name ?? null,
+      task: truncateText(record.task, 240),
+      prompt: truncateText(record.prompt, 240),
+      actionCount: Array.isArray(record.actions) ? record.actions.length : null,
+      keys: Object.keys(record).slice(0, 12),
+    };
+  });
+};
+
+const buildPromptTelemetrySnapshot = (input: {
+  promptLength: number;
+  mode: string;
+  preset: string;
+  contextProfile?: FairyContextProfile | string;
+  parts: Record<string, unknown>;
+}) => {
+  const parts = input.parts;
+  const contextSkills = [
+    'canvas_system_prompt',
+    Array.isArray(parts.toolCatalog) ? 'tool_catalog' : null,
+    parts.toolSchema ? 'tool_schema' : null,
+    parts.styleInstructions ? 'style_instructions' : null,
+    Array.isArray(parts.fewShotExamples) ? 'few_shot_examples' : null,
+    parts.promptBudget ? 'prompt_budgeting' : null,
+    parts.screenshot ? 'screenshot_grounding' : null,
+  ].filter((skill): skill is string => Boolean(skill));
+
+  return {
+    mode: input.mode,
+    preset: input.preset,
+    promptLength: input.promptLength,
+    contextProfile: input.contextProfile ?? null,
+    contextSkills,
+    contextWindow: {
+      transcriptLines: Array.isArray((parts as any).transcript) ? (parts as any).transcript.length : 0,
+      shapeCount: Array.isArray((parts as any).shapes) ? (parts as any).shapes.length : 0,
+      selectedCount: Array.isArray((parts as any).selectedSimpleShapes) ? (parts as any).selectedSimpleShapes.length : 0,
+      blurryCount: Array.isArray((parts as any).blurryShapes) ? (parts as any).blurryShapes.length : 0,
+      peripheralCount: Array.isArray((parts as any).peripheralClusters) ? (parts as any).peripheralClusters.length : 0,
+    },
+    promptBudget: (parts as any).promptBudget ?? null,
+    viewport: (parts as any).viewport ?? null,
+    screenshot:
+      asObjectRecord((parts as any).screenshot)
+        ? {
+            mime: (parts as any).screenshot?.mime ?? null,
+            bytes: (parts as any).screenshot?.bytes ?? null,
+            width: (parts as any).screenshot?.width ?? null,
+            height: (parts as any).screenshot?.height ?? null,
+            bounds: (parts as any).screenshot?.bounds ?? null,
+            requestId: (parts as any).screenshot?.requestId ?? null,
+            receivedAt: (parts as any).screenshot?.receivedAt ?? null,
+          }
+        : null,
+    styleInstructions: truncateText((parts as any).styleInstructions, 2400),
+    fewShotExamples: summarizeFewShotExamples((parts as any).fewShotExamples),
+    toolCatalog: summarizeToolCatalog((parts as any).toolCatalog),
+    toolSchema: (parts as any).toolSchema ?? null,
+  };
+};
+
+const readStructuredTelemetry = async (stream: {
+  usage?: Promise<unknown>;
+  totalUsage?: Promise<unknown>;
+  providerMetadata?: Promise<unknown>;
+  request?: Promise<unknown>;
+  response?: Promise<unknown>;
+}) => {
+  const safeResolve = async (value: Promise<unknown> | undefined): Promise<unknown> => {
+    if (!value) return null;
+    try {
+      return await value;
+    } catch {
+      return null;
+    }
+  };
+  const usage = await safeResolve(stream.totalUsage ?? stream.usage);
+  const providerMetadata = await safeResolve(stream.providerMetadata);
+  const request = await safeResolve(stream.request);
+  const response = await safeResolve(stream.response);
+  return {
+    usage,
+    providerMetadata,
+    request,
+    response,
+  };
+};
+
 type BrandPresetName = keyof typeof BRAND_PRESETS;
 
 const PRESET_SYNONYMS: Record<string, BrandPresetName> = {
@@ -665,6 +801,12 @@ export async function runCanvasAgent(args: RunArgs) {
       preset: cfg.preset,
       followupDepth: currentFollowupDepth,
       hasInitialFollowup: Boolean(initialFollowup),
+      runtimeSkills: [
+        'screenshot_grounding',
+        'tool_catalog_prompting',
+        'structured_streaming_actions',
+        'followup_scheduler',
+      ],
       metadata: runMetadata ?? null,
     },
     payloadIn: {
@@ -1176,6 +1318,13 @@ export async function runCanvasAgent(args: RunArgs) {
     const sessionCreatedIds = new Set<string>();
     const droppedUpdateTargetIds = new Set<string>();
     metrics.modelCalledAt = Date.now();
+    const initialPromptSnapshot = buildPromptTelemetrySnapshot({
+      promptLength: prompt.length,
+      mode: 'context_ready',
+      preset: primaryPresetName,
+      contextProfile: args.contextProfile,
+      parts,
+    });
     recordCanvasModelEvent({
       eventType: 'model_context_ready',
       status: 'ready',
@@ -1183,6 +1332,7 @@ export async function runCanvasAgent(args: RunArgs) {
       model: providerIdentity.model,
       providerSource: 'runtime_selected',
       providerPath: 'primary',
+      contextPriming: initialPromptSnapshot,
       payloadIn: {
         prompt,
         promptLength: prompt.length,
@@ -2304,6 +2454,10 @@ const normalizeRawAction = (
     const invokeModel = async () => {
       const modelCallEventId = randomUUID();
       const generatedActions: unknown[] = [];
+      let usageSnapshot: unknown = null;
+      let providerMetadataSnapshot: unknown = null;
+      let requestMetadataSnapshot: unknown = null;
+      let responseMetadataSnapshot: unknown = null;
       const pushGeneratedActions = (actions: unknown[]) => {
         if (!Array.isArray(actions) || actions.length === 0) return;
         const roomLeft = Math.max(0, 120 - generatedActions.length);
@@ -2311,6 +2465,13 @@ const normalizeRawAction = (
         generatedActions.push(...actions.slice(0, roomLeft));
       };
       const mode = streamingEnabled ? 'structured' : 'fallback-stream';
+      const modelPromptSnapshot = buildPromptTelemetrySnapshot({
+        promptLength: prompt.length,
+        mode,
+        preset: primaryPresetName,
+        contextProfile: args.contextProfile,
+        parts,
+      });
       recordCanvasModelEvent({
         eventId: modelCallEventId,
         eventType: 'model_call',
@@ -2320,6 +2481,7 @@ const normalizeRawAction = (
         providerSource: 'runtime_selected',
         providerPath: 'primary',
         systemPrompt: CANVAS_AGENT_SYSTEM_PROMPT,
+        contextPriming: modelPromptSnapshot,
         payloadIn: {
           mode,
           preset: primaryPresetName,
@@ -2397,6 +2559,11 @@ const normalizeRawAction = (
                 await processActions(pending, currentSeq, false, enqueueDetail);
               },
             );
+            const structuredTelemetry = await readStructuredTelemetry(structured);
+            usageSnapshot = structuredTelemetry.usage;
+            providerMetadataSnapshot = structuredTelemetry.providerMetadata;
+            requestMetadataSnapshot = structuredTelemetry.request;
+            responseMetadataSnapshot = structuredTelemetry.response;
           }
         } else {
           const streamStartedAt = Date.now();
@@ -2413,6 +2580,13 @@ const normalizeRawAction = (
           }
           for await (const chunk of provider.stream(prompt, { system: CANVAS_AGENT_SYSTEM_PROMPT, tuning })) {
             if (chunk.type !== 'json') continue;
+            const replay = asObjectRecord((chunk.data as any)?.__replay);
+            if (replay) {
+              if (usageSnapshot == null) usageSnapshot = replay.usage ?? replay.totalUsage ?? null;
+              if (providerMetadataSnapshot == null) providerMetadataSnapshot = replay.providerMetadata ?? null;
+              if (requestMetadataSnapshot == null) requestMetadataSnapshot = replay.request ?? null;
+              if (responseMetadataSnapshot == null) responseMetadataSnapshot = replay.response ?? null;
+            }
             const actionsRaw = (chunk.data as any)?.actions;
             if (!Array.isArray(actionsRaw) || actionsRaw.length === 0) continue;
             if (!firstPartialLogged) {
@@ -2444,6 +2618,10 @@ const normalizeRawAction = (
             generatedActions,
             dispatchedActionCount: metrics.actionCount,
             mutatingActionCount: metrics.mutatingActionCount,
+            usage: usageSnapshot,
+            providerMetadata: providerMetadataSnapshot,
+            request: requestMetadataSnapshot,
+            response: responseMetadataSnapshot,
           },
         });
       } catch (error) {
@@ -2670,6 +2848,17 @@ const normalizeRawAction = (
       const followPresetName = (followInput.strict ? 'precise' : cfg.preset) as CanvasAgentPreset;
       const followTuning = getModelTuning(followPresetName);
       const followCallEventId = randomUUID();
+      let followUsageSnapshot: unknown = null;
+      let followProviderMetadataSnapshot: unknown = null;
+      let followRequestMetadataSnapshot: unknown = null;
+      let followResponseMetadataSnapshot: unknown = null;
+      const followPromptSnapshot = buildPromptTelemetrySnapshot({
+        promptLength: followPrompt.length,
+        mode: followStreamingEnabled ? 'structured' : 'fallback-stream',
+        preset: followPresetName,
+        contextProfile: args.contextProfile,
+        parts: followParts as Record<string, unknown>,
+      });
       recordCanvasModelEvent({
         eventId: followCallEventId,
         eventType: 'model_call_followup',
@@ -2679,6 +2868,7 @@ const normalizeRawAction = (
         providerSource: 'runtime_selected',
         providerPath: 'primary',
         systemPrompt: CANVAS_AGENT_SYSTEM_PROMPT,
+        contextPriming: followPromptSnapshot,
         payloadIn: {
           depth: followBaseDepth,
           mode: followStreamingEnabled ? 'structured' : 'fallback-stream',
@@ -2723,11 +2913,23 @@ const normalizeRawAction = (
                 await processActions(pending, currentSeq, false, followEnqueueDetail);
               },
             );
+            const structuredTelemetry = await readStructuredTelemetry(structuredFollow);
+            followUsageSnapshot = structuredTelemetry.usage;
+            followProviderMetadataSnapshot = structuredTelemetry.providerMetadata;
+            followRequestMetadataSnapshot = structuredTelemetry.request;
+            followResponseMetadataSnapshot = structuredTelemetry.response;
           }
           return;
         }
         for await (const chunk of followProvider.stream(followPrompt, { system: CANVAS_AGENT_SYSTEM_PROMPT, tuning: followTuning })) {
           if (chunk.type !== 'json') continue;
+          const replay = asObjectRecord((chunk.data as any)?.__replay);
+          if (replay) {
+            if (followUsageSnapshot == null) followUsageSnapshot = replay.usage ?? replay.totalUsage ?? null;
+            if (followProviderMetadataSnapshot == null) followProviderMetadataSnapshot = replay.providerMetadata ?? null;
+            if (followRequestMetadataSnapshot == null) followRequestMetadataSnapshot = replay.request ?? null;
+            if (followResponseMetadataSnapshot == null) followResponseMetadataSnapshot = replay.response ?? null;
+          }
           const actionsRaw = (chunk.data as any)?.actions;
           if (!Array.isArray(actionsRaw) || actionsRaw.length === 0) continue;
           metrics.chunkCount++;
@@ -2752,6 +2954,10 @@ const normalizeRawAction = (
               depth: followBaseDepth,
               chunks: metrics.chunkCount,
               actionsDispatched: metrics.actionCount,
+              usage: followUsageSnapshot,
+              providerMetadata: followProviderMetadataSnapshot,
+              request: followRequestMetadataSnapshot,
+              response: followResponseMetadataSnapshot,
             },
           });
           break;

@@ -3,6 +3,11 @@ import { StructuredActionBuffer } from './structured-buffer';
 export type StructuredStream = {
   partialObjectStream: AsyncIterable<any>;
   fullStream: Promise<{ object: any }>;
+  usage?: Promise<unknown>;
+  totalUsage?: Promise<unknown>;
+  providerMetadata?: Promise<unknown>;
+  request?: Promise<unknown>;
+  response?: Promise<unknown>;
 };
 
 export async function handleStructuredStreaming(

@@ -12,7 +12,12 @@ import {
   recordToolIoEvent,
 } from '@/lib/agents/shared/replay-telemetry';
 import type { FairyIntent } from './intent';
-import { FairyRouteDecisionSchema, type FairyRouteDecision, routerTools } from './router-schema';
+import {
+  buildFairyRouterToolingSnapshot,
+  FairyRouteDecisionSchema,
+  type FairyRouteDecision,
+  routerTools,
+} from './router-schema';
 
 const ROUTER_SYSTEM = [
   'You are a routing assistant for a realtime collaborative smartboard.',
@@ -44,6 +49,13 @@ const ROUTER_SYSTEM = [
 ].join(' ');
 
 const ROUTER_MODEL = getModelForSteward('FAIRY_ROUTER_FAST_MODEL');
+const ROUTER_SKILLS = [
+  'route_selection',
+  'context_profile_selection',
+  'fast_lane_view_dispatch',
+  'bundle_task_planning',
+] as const;
+const ROUTER_TOOLING_SNAPSHOT = buildFairyRouterToolingSnapshot();
 let fairyReplaySequence = 0;
 const nextFairyReplaySequence = () => {
   fairyReplaySequence += 1;
@@ -55,6 +67,9 @@ export async function routeFairyIntent(intent: FairyIntent): Promise<FairyRouteD
   const replayTraceId = replayRequestId;
   const replayIntentId = replayRequestId;
   const replaySessionId = `fairy-router-${intent.room}`;
+  const metadata = intent.metadata && typeof intent.metadata === 'object' && !Array.isArray(intent.metadata)
+    ? (intent.metadata as Record<string, unknown>)
+    : null;
 
   if (!isFastStewardReady()) {
     recordModelIoEvent({
@@ -72,6 +87,12 @@ export async function routeFairyIntent(intent: FairyIntent): Promise<FairyRouteD
       providerSource: 'runtime_selected',
       providerPath: 'fast',
       systemPrompt: ROUTER_SYSTEM,
+      contextPriming: {
+        source: intent.source,
+        routingSkills: [...ROUTER_SKILLS],
+        contextProfile: intent.contextProfile,
+        toolingSnapshot: ROUTER_TOOLING_SNAPSHOT,
+      },
       input: intent,
       output: { kind: 'canvas', confidence: 0.2, reason: 'fast_steward_not_ready' },
     });
@@ -96,9 +117,6 @@ export async function routeFairyIntent(intent: FairyIntent): Promise<FairyRouteD
   if (intent.contextProfile) {
     contextBits.push(`contextProfile: ${intent.contextProfile}`);
   }
-  const metadata = intent.metadata && typeof intent.metadata === 'object' && !Array.isArray(intent.metadata)
-    ? (intent.metadata as Record<string, unknown>)
-    : null;
   const promptSummary = metadata?.promptSummary as Record<string, unknown> | undefined;
   if (promptSummary) {
     const profile = typeof promptSummary.profile === 'string' ? promptSummary.profile : undefined;
@@ -124,6 +142,22 @@ export async function routeFairyIntent(intent: FairyIntent): Promise<FairyRouteD
     }
   }
 
+  const routerContextPriming = {
+    source: intent.source,
+    contextBits,
+    contextProfile: intent.contextProfile,
+    selectionIds: intent.selectionIds?.length ?? 0,
+    bounds: intent.bounds ?? null,
+    componentId: intent.componentId ?? null,
+    routingSkills: [...ROUTER_SKILLS],
+    toolingSnapshot: ROUTER_TOOLING_SNAPSHOT,
+    metadataHints: {
+      hasPromptSummary: Boolean(promptSummary),
+      hasViewContext: Boolean(viewContext),
+      spectrum: intent.spectrum ?? null,
+    },
+  };
+
   const messages = [
     { role: 'system' as const, content: ROUTER_SYSTEM },
     {
@@ -146,14 +180,7 @@ export async function routeFairyIntent(intent: FairyIntent): Promise<FairyRouteD
     providerSource: 'runtime_selected',
     providerPath: 'fast',
     systemPrompt: ROUTER_SYSTEM,
-    contextPriming: {
-      source: intent.source,
-      contextBits,
-      contextProfile: intent.contextProfile,
-      selectionIds: intent.selectionIds?.length ?? 0,
-      bounds: intent.bounds ?? null,
-      componentId: intent.componentId ?? null,
-    },
+    contextPriming: routerContextPriming,
     input: messages,
   });
 
@@ -178,8 +205,15 @@ export async function routeFairyIntent(intent: FairyIntent): Promise<FairyRouteD
       model: ROUTER_MODEL,
       providerSource: 'runtime_selected',
       providerPath: 'fast',
+      providerRequestId: typeof (response as any)?.id === 'string' ? (response as any).id : undefined,
+      contextPriming: routerContextPriming,
       input: messages,
       output: response,
+      metadata: {
+        usage: (response as any)?.usage ?? null,
+        model: (response as any)?.model ?? null,
+        finishReason: (response as any)?.choices?.[0]?.finish_reason ?? null,
+      },
     });
 
     const toolCall = extractFirstToolCall(response);
@@ -299,6 +333,7 @@ export async function routeFairyIntent(intent: FairyIntent): Promise<FairyRouteD
       model: ROUTER_MODEL,
       providerSource: 'runtime_selected',
       providerPath: 'fast',
+      contextPriming: routerContextPriming,
       input: messages,
       error: error instanceof Error ? error.message : String(error),
       priority: 'high',
@@ -319,6 +354,7 @@ export async function routeFairyIntent(intent: FairyIntent): Promise<FairyRouteD
     model: ROUTER_MODEL,
     providerSource: 'runtime_selected',
     providerPath: 'fast',
+    contextPriming: routerContextPriming,
     input: intent,
     output: { kind: 'canvas', confidence: 0.2, message: intent.message },
   });
