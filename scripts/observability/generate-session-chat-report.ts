@@ -70,6 +70,8 @@ type RunArtifactContext = {
   video?: string;
   sourcePath?: string;
 };
+type OptionalReplayTable = 'agent_model_io' | 'agent_tool_io' | 'agent_io_blobs';
+type OptionalReplayTableAvailability = Record<OptionalReplayTable, boolean>;
 
 const esc = (value: unknown): string =>
   String(value ?? '')
@@ -207,21 +209,26 @@ const isMissingRelationError = (error: unknown): boolean => {
   return /does not exist/i.test(message) || /relation .* does not exist/i.test(message);
 };
 
-const fetchAllOptional = async (
-  table: string,
-  queryBuilder: (query: any) => any,
+const probeOptionalReplayTables = async (
   warnings: string[],
-  pageSize = 1000,
-) => {
-  try {
-    return await fetchAll(table, queryBuilder, pageSize);
-  } catch (error) {
-    if (isMissingRelationError(error)) {
-      warnings.push(`Optional table unavailable in this environment: ${table}`);
-      return [];
-    }
-    throw error;
-  }
+): Promise<OptionalReplayTableAvailability> => {
+  const tables: OptionalReplayTable[] = [
+    'agent_model_io',
+    'agent_tool_io',
+    'agent_io_blobs',
+  ];
+  const results = await Promise.all(
+    tables.map(async (table) => {
+      const { error } = await supabase.from(table).select('id').limit(1);
+      if (!error) return [table, true] as const;
+      if (isMissingRelationError(error)) {
+        warnings.push(`Optional table unavailable in this environment: ${table}`);
+        return [table, false] as const;
+      }
+      throw error;
+    }),
+  );
+  return Object.fromEntries(results) as OptionalReplayTableAvailability;
 };
 
 const splitProviderIdentity = (provider: unknown, model: unknown) => {
@@ -423,36 +430,92 @@ const buildHtml = (input: {
     reportScope,
   } = input;
 
-  const voiceTranscript = transcript.filter((row) =>
+  const voiceTranscriptRows = transcript.filter((row) =>
     String(row.participant_id || '').toLowerCase().includes('voice-agent'),
   );
-  const transcriptionTranscript = transcript.filter(
+  const transcriptionTranscriptRows = transcript.filter(
     (row) => !String(row.participant_id || '').toLowerCase().includes('voice-agent'),
   );
+  type ReplaySection = {
+    title: string;
+    description: string;
+    transcriptRows?: any[];
+    primingSources?: string[];
+    modelRows: any[];
+    toolRows: any[];
+    taskRows?: any[];
+    traceRows?: any[];
+  };
 
-  const voiceModelRows = modelIo.filter((row) => row.source === 'voice_agent');
-  const voiceToolRows = toolIo.filter((row) => row.source === 'voice_agent');
+  const sections: ReplaySection[] = [
+    {
+      title: 'Voice Agent Transcript',
+      description: 'Transcript rows + persisted voice model/tool replay.',
+      transcriptRows: voiceTranscriptRows,
+      primingSources: ['voice_agent'],
+      modelRows: modelIo.filter((row) => row.source === 'voice_agent'),
+      toolRows: toolIo.filter((row) => row.source === 'voice_agent'),
+    },
+    {
+      title: 'Transcription Agent Transcript',
+      description: 'Transcript rows + persisted transcription model replay.',
+      transcriptRows: transcriptionTranscriptRows,
+      primingSources: ['transcription_agent'],
+      modelRows: modelIo.filter((row) => row.source === 'transcription_agent'),
+      toolRows: toolIo.filter((row) => row.source === 'transcription_agent'),
+    },
+    {
+      title: 'Orchestration Agent Transcript',
+      description: 'Orchestration model/tool replay plus lifecycle traces.',
+      primingSources: ['orchestration_agent'],
+      modelRows: modelIo.filter((row) => row.source === 'orchestration_agent'),
+      toolRows: toolIo.filter((row) => row.source === 'orchestration_agent'),
+      traceRows: traces,
+    },
+    {
+      title: 'Steward Agent(s) Transcript',
+      description: 'Canvas steward/canvas runner replay + queue task evidence.',
+      primingSources: ['canvas_runner'],
+      modelRows: modelIo.filter((row) => ['canvas_runner', 'canvas_steward'].includes(String(row.source))),
+      toolRows: toolIo.filter((row) => ['canvas_runner', 'conductor_worker'].includes(String(row.source))),
+      taskRows: tasks.filter((task) => String(task.task || '').startsWith('canvas.')),
+    },
+    {
+      title: 'Fairy Agent(s) Transcript',
+      description: 'Fairy router replay and fairy queue tasks.',
+      primingSources: ['fairy_router'],
+      modelRows: modelIo.filter((row) => row.source === 'fairy_router'),
+      toolRows: toolIo.filter(
+        (row) => row.source === 'fairy_router' || String(row.tool_name || '') === 'fairy.intent',
+      ),
+      taskRows: tasks.filter((task) => String(task.task || '') === 'fairy.intent'),
+    },
+    {
+      title: 'Fast Agent(s) Transcript',
+      description: 'Rows tagged as fast-path (<code>provider_path=fast</code> or fast steward source).',
+      modelRows: modelIo.filter((row) => isFastRow(row)),
+      toolRows: toolIo.filter((row) => isFastRow(row)),
+    },
+  ];
 
-  const transcriptionModelRows = modelIo.filter((row) => row.source === 'transcription_agent');
-  const transcriptionToolRows = toolIo.filter((row) => row.source === 'transcription_agent');
+  const renderSection = (section: ReplaySection) => {
+    const primingBlocks = (section.primingSources || [])
+      .map((source) => renderPriming(modelIo, source))
+      .join('\n');
 
-  const orchestrationModelRows = modelIo.filter((row) => row.source === 'orchestration_agent');
-  const orchestrationToolRows = toolIo.filter((row) => row.source === 'orchestration_agent');
+    return `<section class="section">
+      <h2>${section.title}</h2>
+      <p class="muted">${section.description}</p>
+      ${section.transcriptRows ? renderTranscriptTable(section.transcriptRows) : ''}
+      ${primingBlocks}
+      ${renderModelCards(section.modelRows, blobMap)}
+      ${renderToolCards(section.toolRows, blobMap)}
+      ${section.traceRows ? renderTraceCards(section.traceRows) : ''}
+      ${section.taskRows ? renderTaskCards(section.taskRows) : ''}
+    </section>`;
+  };
 
-  const stewardModelRows = modelIo.filter((row) => ['canvas_runner', 'canvas_steward'].includes(String(row.source)));
-  const stewardToolRows = toolIo.filter((row) => ['canvas_runner', 'conductor_worker'].includes(String(row.source)));
-
-  const fairyModelRows = modelIo.filter((row) => row.source === 'fairy_router');
-  const fairyToolRows = toolIo.filter(
-    (row) => row.source === 'fairy_router' || String(row.tool_name || '') === 'fairy.intent',
-  );
-
-  const fastModelRows = modelIo.filter((row) => isFastRow(row));
-  const fastToolRows = toolIo.filter((row) => isFastRow(row));
-
-  const stewardTasks = tasks.filter((task) => String(task.task || '').startsWith('canvas.'));
-  const fairyTasks = tasks.filter((task) => String(task.task || '') === 'fairy.intent');
-
+  const sectionsHtml = sections.map((section) => renderSection(section)).join('\n');
   const hasReplayRows = modelIo.length > 0 || toolIo.length > 0;
 
   const timelineStartIso = toIso(
@@ -570,58 +633,7 @@ const buildHtml = (input: {
       <h2>Transcript</h2>
       ${renderTranscriptTable(transcript)}
     </section>
-
-    <section class="section">
-      <h2>Voice Agent Transcript</h2>
-      <p class="muted">Transcript rows + persisted voice model/tool replay.</p>
-      ${renderTranscriptTable(voiceTranscript)}
-      ${renderPriming(modelIo, 'voice_agent')}
-      ${renderModelCards(voiceModelRows, blobMap)}
-      ${renderToolCards(voiceToolRows, blobMap)}
-    </section>
-
-    <section class="section">
-      <h2>Transcription Agent Transcript</h2>
-      <p class="muted">Transcript rows + persisted transcription model replay.</p>
-      ${renderTranscriptTable(transcriptionTranscript)}
-      ${renderPriming(modelIo, 'transcription_agent')}
-      ${renderModelCards(transcriptionModelRows, blobMap)}
-      ${renderToolCards(transcriptionToolRows, blobMap)}
-    </section>
-
-    <section class="section">
-      <h2>Orchestration Agent Transcript</h2>
-      <p class="muted">Orchestration model/tool replay plus lifecycle traces.</p>
-      ${renderPriming(modelIo, 'orchestration_agent')}
-      ${renderModelCards(orchestrationModelRows, blobMap)}
-      ${renderToolCards(orchestrationToolRows, blobMap)}
-      ${renderTraceCards(traces)}
-    </section>
-
-    <section class="section">
-      <h2>Steward Agent(s) Transcript</h2>
-      <p class="muted">Canvas steward/canvas runner replay + queue task evidence.</p>
-      ${renderPriming(modelIo, 'canvas_runner')}
-      ${renderModelCards(stewardModelRows, blobMap)}
-      ${renderToolCards(stewardToolRows, blobMap)}
-      ${renderTaskCards(stewardTasks)}
-    </section>
-
-    <section class="section">
-      <h2>Fairy Agent(s) Transcript</h2>
-      <p class="muted">Fairy router replay and fairy queue tasks.</p>
-      ${renderPriming(modelIo, 'fairy_router')}
-      ${renderModelCards(fairyModelRows, blobMap)}
-      ${renderToolCards(fairyToolRows, blobMap)}
-      ${renderTaskCards(fairyTasks)}
-    </section>
-
-    <section class="section">
-      <h2>Fast Agent(s) Transcript</h2>
-      <p class="muted">Rows tagged as fast-path (<code>provider_path=fast</code> or fast steward source).</p>
-      ${renderModelCards(fastModelRows, blobMap)}
-      ${renderToolCards(fastToolRows, blobMap)}
-    </section>
+    ${sectionsHtml}
   </div>
 </body>
 </html>`;
@@ -722,17 +734,29 @@ const run = async () => {
     throw new Error('Unable to resolve room for report scope.');
   }
 
-  let transcript = await fetchAllOptional(
-    'canvas_session_transcripts',
-    (q) => q.select('*').eq('session_id', session.id).order('ts', { ascending: true }),
-    warnings,
-    1000,
-  );
-  if (transcript.length === 0) {
-    const byRoom = await fetchAllOptional(
+  const optionalReplayTables = await probeOptionalReplayTables(warnings);
+
+  let transcript: any[] = [];
+  let transcriptRelationAvailable = true;
+  try {
+    transcript = await fetchAll(
+      'canvas_session_transcripts',
+      (q) => q.select('*').eq('session_id', session.id).order('ts', { ascending: true }),
+      1000,
+    );
+  } catch (error) {
+    if (isMissingRelationError(error)) {
+      transcriptRelationAvailable = false;
+      warnings.push('Optional table unavailable in this environment: canvas_session_transcripts');
+    } else {
+      throw error;
+    }
+  }
+
+  if (transcriptRelationAvailable && transcript.length === 0) {
+    const byRoom = await fetchAll(
       'canvas_session_transcripts',
       (q) => q.select('*').eq('room_name', room).order('ts', { ascending: true }),
-      warnings,
       1000,
     );
     transcript = byRoom;
@@ -796,32 +820,36 @@ const run = async () => {
     ),
   ]);
 
-  const [modelIoRaw, toolIoRaw] = await Promise.all([
-    fetchAllOptional(
-      'agent_model_io',
-      (q) =>
-        q
-          .select('*')
-          .eq('room', room)
-          .gte('created_at', windowStartIso)
-          .lte('created_at', windowEndIso)
-          .order('created_at', { ascending: true }),
-      warnings,
-      1000,
-    ),
-    fetchAllOptional(
-      'agent_tool_io',
-      (q) =>
-        q
-          .select('*')
-          .eq('room', room)
-          .gte('created_at', windowStartIso)
-          .lte('created_at', windowEndIso)
-          .order('created_at', { ascending: true }),
-      warnings,
-      1000,
-    ),
-  ]);
+  const [modelIoRaw, toolIoRaw] = await Promise.all(
+    [
+      optionalReplayTables.agent_model_io
+        ? fetchAll(
+            'agent_model_io',
+            (q) =>
+              q
+                .select('*')
+                .eq('room', room)
+                .gte('created_at', windowStartIso)
+                .lte('created_at', windowEndIso)
+                .order('created_at', { ascending: true }),
+            1000,
+          )
+        : Promise.resolve([]),
+      optionalReplayTables.agent_tool_io
+        ? fetchAll(
+            'agent_tool_io',
+            (q) =>
+              q
+                .select('*')
+                .eq('room', room)
+                .gte('created_at', windowStartIso)
+                .lte('created_at', windowEndIso)
+                .order('created_at', { ascending: true }),
+            1000,
+          )
+        : Promise.resolve([]),
+    ] as const,
+  );
 
   const modelIo = [...modelIoRaw].sort(compareReplayRows);
   const toolIo = [...toolIoRaw].sort(compareReplayRows);
@@ -846,14 +874,8 @@ const run = async () => {
   ];
 
   let blobMap = new Map<string, any>();
-  try {
+  if (optionalReplayTables.agent_io_blobs) {
     blobMap = await fetchBlobMap(blobIds);
-  } catch (error) {
-    if (isMissingRelationError(error)) {
-      warnings.push('Optional table unavailable in this environment: agent_io_blobs');
-    } else {
-      throw error;
-    }
   }
 
   const displayCanvasId =

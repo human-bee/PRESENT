@@ -7,8 +7,25 @@ type JsonObject = Record<string, unknown>;
 
 type ReplayPriority = 'high' | 'normal';
 
+const REPLAY_TABLE_CONFIG = {
+  agent_io_blobs: {
+    onConflict: 'event_id,kind',
+    ignoreDuplicates: true,
+  },
+  agent_model_io: {
+    onConflict: 'event_id',
+    ignoreDuplicates: true,
+  },
+  agent_tool_io: {
+    onConflict: 'event_id',
+    ignoreDuplicates: true,
+  },
+} as const;
+
+type ReplayTable = keyof typeof REPLAY_TABLE_CONFIG;
+
 type ReplayQueueEntry = {
-  table: 'agent_io_blobs' | 'agent_model_io' | 'agent_tool_io';
+  table: ReplayTable;
   row: Record<string, unknown>;
   priority: ReplayPriority;
 };
@@ -31,14 +48,12 @@ type ReplayProvider = {
   providerRequestId?: string;
 };
 
-export type ModelIoEventInput = ReplayCorrelation &
+type ReplayEventInputBase = ReplayCorrelation &
   ReplayProvider & {
     eventId?: string;
     source: string;
     eventType: string;
     status?: string;
-    systemPrompt?: string;
-    contextPriming?: unknown;
     input?: unknown;
     output?: unknown;
     error?: string;
@@ -47,21 +62,24 @@ export type ModelIoEventInput = ReplayCorrelation &
     priority?: ReplayPriority;
   };
 
-export type ToolIoEventInput = ReplayCorrelation &
-  ReplayProvider & {
-    eventId?: string;
-    source: string;
-    eventType: string;
-    status?: string;
-    toolName: string;
-    toolCallId?: string;
-    input?: unknown;
-    output?: unknown;
-    error?: string;
-    metadata?: JsonObject;
-    latencyMs?: number;
-    priority?: ReplayPriority;
-  };
+export type ModelIoEventInput = ReplayEventInputBase & {
+  systemPrompt?: string;
+  contextPriming?: unknown;
+};
+
+export type ToolIoEventInput = ReplayEventInputBase & {
+  toolName: string;
+  toolCallId?: string;
+};
+
+type ReplayEventContext = {
+  createdAt: string;
+  expiresAt: string;
+  priority: ReplayPriority;
+  eventId: string;
+  correlation: ReplayCorrelation;
+  blobIds: { inputBlobId: string | null; outputBlobId: string | null };
+};
 
 const logger = createLogger('agents:replay-telemetry');
 
@@ -307,7 +325,7 @@ const queueBlobRows = (
   };
 };
 
-export const recordModelIoEvent = (input: ModelIoEventInput): boolean => {
+const buildReplayEventContext = (input: ReplayEventInputBase): ReplayEventContext => {
   const createdAt = nowIso();
   const expiresAt = expiresAtIso(createdAt);
   const priority = input.priority ?? (input.error ? 'high' : 'normal');
@@ -323,95 +341,94 @@ export const recordModelIoEvent = (input: ModelIoEventInput): boolean => {
     sequence: input.sequence,
   };
 
-  const blobIds = queueBlobRows(correlation, eventId, input.input, input.output, priority, input.metadata);
-
-  return enqueueReplayEntry({
-    table: 'agent_model_io',
+  const blobIds = queueBlobRows(
+    correlation,
+    eventId,
+    input.input,
+    input.output,
     priority,
-    row: {
-      id: randomUUID(),
-      event_id: eventId,
-      sequence: normalizeInteger(input.sequence) ?? 0,
-      created_at: createdAt,
-      expires_at: expiresAt,
-      session_id: normalizeText(input.sessionId),
-      room: normalizeText(input.room),
-      trace_id: normalizeText(input.traceId),
-      request_id: normalizeText(input.requestId),
-      intent_id: normalizeText(input.intentId),
-      task_id: normalizeText(input.taskId),
-      source: input.source,
-      event_type: input.eventType,
-      status: normalizeText(input.status),
-      provider: normalizeText(input.provider),
-      model: normalizeText(input.model),
-      provider_source: normalizeText(input.providerSource),
-      provider_path: normalizeText(input.providerPath),
-      provider_request_id: normalizeText(input.providerRequestId),
-      system_prompt: normalizeText(input.systemPrompt),
-      context_priming: buildInlinePayload(input.contextPriming),
-      input_payload: buildInlinePayload(input.input),
-      output_payload: buildInlinePayload(input.output),
-      metadata: buildInlinePayload(input.metadata),
-      error: normalizeText(input.error),
-      latency_ms: normalizeInteger(input.latencyMs),
-      input_blob_id: blobIds.inputBlobId,
-      output_blob_id: blobIds.outputBlobId,
-    },
+    input.metadata,
+  );
+
+  return {
+    createdAt,
+    expiresAt,
+    priority,
+    eventId,
+    correlation,
+    blobIds,
+  };
+};
+
+const buildReplayCommonRow = (
+  input: ReplayEventInputBase,
+  ctx: ReplayEventContext,
+): Record<string, unknown> => {
+  return {
+    id: randomUUID(),
+    event_id: ctx.eventId,
+    sequence: normalizeInteger(input.sequence) ?? 0,
+    created_at: ctx.createdAt,
+    expires_at: ctx.expiresAt,
+    session_id: normalizeText(input.sessionId),
+    room: normalizeText(input.room),
+    trace_id: normalizeText(input.traceId),
+    request_id: normalizeText(input.requestId),
+    intent_id: normalizeText(input.intentId),
+    task_id: normalizeText(input.taskId),
+    source: input.source,
+    event_type: input.eventType,
+    status: normalizeText(input.status),
+    provider: normalizeText(input.provider),
+    model: normalizeText(input.model),
+    provider_source: normalizeText(input.providerSource),
+    provider_path: normalizeText(input.providerPath),
+    provider_request_id: normalizeText(input.providerRequestId),
+    input_payload: buildInlinePayload(input.input),
+    output_payload: buildInlinePayload(input.output),
+    metadata: buildInlinePayload(input.metadata),
+    error: normalizeText(input.error),
+    latency_ms: normalizeInteger(input.latencyMs),
+    input_blob_id: ctx.blobIds.inputBlobId,
+    output_blob_id: ctx.blobIds.outputBlobId,
+  };
+};
+
+const enqueueReplayEvent = <TInput extends ReplayEventInputBase>(params: {
+  table: ReplayTable;
+  input: TInput;
+  buildRow: (input: TInput, ctx: ReplayEventContext) => Record<string, unknown>;
+}): boolean => {
+  const ctx = buildReplayEventContext(params.input);
+  const row = params.buildRow(params.input, ctx);
+  return enqueueReplayEntry({
+    table: params.table,
+    priority: ctx.priority,
+    row,
+  });
+};
+
+export const recordModelIoEvent = (input: ModelIoEventInput): boolean => {
+  return enqueueReplayEvent({
+    table: 'agent_model_io',
+    input,
+    buildRow: (modelInput, ctx) => ({
+      ...buildReplayCommonRow(modelInput, ctx),
+      system_prompt: normalizeText(modelInput.systemPrompt),
+      context_priming: buildInlinePayload(modelInput.contextPriming),
+    }),
   });
 };
 
 export const recordToolIoEvent = (input: ToolIoEventInput): boolean => {
-  const createdAt = nowIso();
-  const expiresAt = expiresAtIso(createdAt);
-  const priority = input.priority ?? (input.error ? 'high' : 'normal');
-  const eventIdBase = normalizeText(input.eventId);
-  const eventId = eventIdBase ? `${eventIdBase}:${randomUUID()}` : randomUUID();
-  const correlation: ReplayCorrelation = {
-    sessionId: input.sessionId,
-    room: input.room,
-    traceId: input.traceId,
-    requestId: input.requestId,
-    intentId: input.intentId,
-    taskId: input.taskId,
-    sequence: input.sequence,
-  };
-
-  const blobIds = queueBlobRows(correlation, eventId, input.input, input.output, priority, input.metadata);
-
-  return enqueueReplayEntry({
+  return enqueueReplayEvent({
     table: 'agent_tool_io',
-    priority,
-    row: {
-      id: randomUUID(),
-      event_id: eventId,
-      sequence: normalizeInteger(input.sequence) ?? 0,
-      created_at: createdAt,
-      expires_at: expiresAt,
-      session_id: normalizeText(input.sessionId),
-      room: normalizeText(input.room),
-      trace_id: normalizeText(input.traceId),
-      request_id: normalizeText(input.requestId),
-      intent_id: normalizeText(input.intentId),
-      task_id: normalizeText(input.taskId),
-      source: input.source,
-      event_type: input.eventType,
-      status: normalizeText(input.status),
-      tool_name: input.toolName,
-      tool_call_id: normalizeText(input.toolCallId),
-      provider: normalizeText(input.provider),
-      model: normalizeText(input.model),
-      provider_source: normalizeText(input.providerSource),
-      provider_path: normalizeText(input.providerPath),
-      provider_request_id: normalizeText(input.providerRequestId),
-      input_payload: buildInlinePayload(input.input),
-      output_payload: buildInlinePayload(input.output),
-      metadata: buildInlinePayload(input.metadata),
-      error: normalizeText(input.error),
-      latency_ms: normalizeInteger(input.latencyMs),
-      input_blob_id: blobIds.inputBlobId,
-      output_blob_id: blobIds.outputBlobId,
-    },
+    input,
+    buildRow: (toolInput, ctx) => ({
+      ...buildReplayCommonRow(toolInput, ctx),
+      tool_name: toolInput.toolName,
+      tool_call_id: normalizeText(toolInput.toolCallId),
+    }),
   });
 };
 
@@ -423,33 +440,28 @@ export const flushReplayTelemetryNow = async (): Promise<void> => {
 
   replayFlushing = true;
   try {
+    const replayTables = Object.keys(REPLAY_TABLE_CONFIG) as ReplayTable[];
     while (replayQueue.length > 0) {
       const batch = replayQueue.splice(0, replayTelemetryBatchSize);
-      const grouped = batch.reduce(
-        (acc, entry) => {
-          acc[entry.table].push(entry.row);
+      const grouped = replayTables.reduce(
+        (acc, table) => {
+          acc[table] = [];
           return acc;
         },
-        {
-          agent_io_blobs: [] as Record<string, unknown>[],
-          agent_model_io: [] as Record<string, unknown>[],
-          agent_tool_io: [] as Record<string, unknown>[],
-        },
+        {} as Record<ReplayTable, Record<string, unknown>[]>,
       );
+      for (const entry of batch) {
+        grouped[entry.table].push(entry.row);
+      }
 
       let failed = false;
-      for (const [table, rows] of Object.entries(grouped) as Array<[
-        'agent_io_blobs' | 'agent_model_io' | 'agent_tool_io',
-        Record<string, unknown>[],
-      ]>) {
+      for (const table of replayTables) {
+        const rows = grouped[table];
         if (rows.length === 0) continue;
-        const onConflict =
-          table === 'agent_io_blobs'
-            ? 'event_id,kind'
-            : 'event_id';
+        const config = REPLAY_TABLE_CONFIG[table];
         const { error } = await db.from(table).upsert(rows, {
-          onConflict,
-          ignoreDuplicates: true,
+          onConflict: config.onConflict,
+          ignoreDuplicates: config.ignoreDuplicates,
         });
         if (error) {
           logger.warn('replay telemetry insert failed', {
