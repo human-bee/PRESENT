@@ -172,6 +172,33 @@ const expiresAtIso = (createdAtIso: string): string => {
   return new Date(base + replayTelemetryRetentionDays * 24 * 60 * 60 * 1000).toISOString();
 };
 
+const scheduleReplayFlush = (delayMs = replayTelemetryFlushMs) => {
+  if (replayFlushHandle) return;
+  replayFlushHandle = setTimeout(() => {
+    replayFlushHandle = null;
+    void flushReplayTelemetryNow();
+  }, Math.max(10, delayMs));
+};
+
+const dropQueuedRows = (predicate: (entry: ReplayQueueEntry) => boolean): number => {
+  let dropped = 0;
+  for (let index = replayQueue.length - 1; index >= 0; index -= 1) {
+    if (!predicate(replayQueue[index])) continue;
+    replayQueue.splice(index, 1);
+    dropped += 1;
+  }
+  return dropped;
+};
+
+const composeReplayEventId = (input: ReplayEventInputBase, fallback: string): string => {
+  const eventIdBase = normalizeText(input.eventId);
+  if (!eventIdBase) return fallback;
+  const eventType = normalizeText(input.eventType) ?? 'event';
+  const status = normalizeText(input.status) ?? 'unknown';
+  const sequence = normalizeInteger(input.sequence) ?? 0;
+  return `${eventIdBase}:${eventType}:${status}:${sequence}`;
+};
+
 const getReplayDb = (): SupabaseClient | null => {
   if (replayDbConfigMissing) return null;
   if (replayDb) return replayDb;
@@ -229,12 +256,7 @@ const enqueueReplayEntry = (entry: ReplayQueueEntry): boolean => {
     return true;
   }
 
-  if (!replayFlushHandle) {
-    replayFlushHandle = setTimeout(() => {
-      replayFlushHandle = null;
-      void flushReplayTelemetryNow();
-    }, replayTelemetryFlushMs);
-  }
+  scheduleReplayFlush();
   return true;
 };
 
@@ -329,8 +351,7 @@ const buildReplayEventContext = (input: ReplayEventInputBase): ReplayEventContex
   const createdAt = nowIso();
   const expiresAt = expiresAtIso(createdAt);
   const priority = input.priority ?? (input.error ? 'high' : 'normal');
-  const eventIdBase = normalizeText(input.eventId);
-  const eventId = eventIdBase ? `${eventIdBase}:${randomUUID()}` : randomUUID();
+  const eventId = composeReplayEventId(input, randomUUID());
   const correlation: ReplayCorrelation = {
     sessionId: input.sessionId,
     room: input.room,
@@ -401,11 +422,22 @@ const enqueueReplayEvent = <TInput extends ReplayEventInputBase>(params: {
 }): boolean => {
   const ctx = buildReplayEventContext(params.input);
   const row = params.buildRow(params.input, ctx);
-  return enqueueReplayEntry({
+  const parentQueued = enqueueReplayEntry({
     table: params.table,
     priority: ctx.priority,
     row,
   });
+  if (parentQueued) return true;
+  const droppedBlobQueueRows = dropQueuedRows(
+    (entry) => entry.table === 'agent_io_blobs' && entry.row.event_id === ctx.eventId,
+  );
+  if (droppedBlobQueueRows > 0) {
+    logger.warn('replay telemetry dropped orphaned blob queue rows after parent enqueue failure', {
+      eventId: ctx.eventId,
+      droppedBlobQueueRows,
+    });
+  }
+  return false;
 };
 
 export const recordModelIoEvent = (input: ModelIoEventInput): boolean => {
@@ -475,6 +507,7 @@ export const flushReplayTelemetryNow = async (): Promise<void> => {
       }
       if (failed) {
         replayQueue.unshift(...batch);
+        scheduleReplayFlush(Math.max(replayTelemetryFlushMs, 250));
         return;
       }
     }
