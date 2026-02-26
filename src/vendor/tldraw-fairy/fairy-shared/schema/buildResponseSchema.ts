@@ -23,9 +23,13 @@ const FALLBACK_RESPONSE_SCHEMA = {
 
 const isZodSchemaLike = (value: unknown): value is z.ZodTypeAny => {
 	if (!value || typeof value !== 'object') return false
-	const candidate = value as Partial<z.ZodTypeAny>
-	const hasInternals = typeof (candidate as { _def?: unknown })._def === 'object'
-	return hasInternals && typeof candidate.parse === 'function' && typeof candidate.safeParse === 'function'
+	try {
+		const candidate = value as Partial<z.ZodTypeAny>
+		const hasInternals = typeof (candidate as { _def?: unknown })._def === 'object'
+		return hasInternals && typeof candidate.parse === 'function' && typeof candidate.safeParse === 'function'
+	} catch {
+		return false
+	}
 }
 
 const asSchemaTuple = (

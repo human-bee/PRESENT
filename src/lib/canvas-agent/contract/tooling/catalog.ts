@@ -12,19 +12,31 @@ const ACTION_NAME_TUPLE = ACTION_NAMES as [string, ...string[]];
 
 const isZodSchemaLike = (value: unknown): value is z.ZodTypeAny => {
   if (!value || typeof value !== 'object') return false;
-  const candidate = value as Record<string, unknown>;
-  return typeof candidate.safeParse === 'function';
+  try {
+    const candidate = value as Record<string, unknown>;
+    return typeof candidate.safeParse === 'function';
+  } catch {
+    return false;
+  }
 };
 
-const actionSchemas = ACTION_NAME_TUPLE.map((actionName) =>
-  z.object({
+const readActionParamSchema = (actionName: string): z.ZodTypeAny | null => {
+  try {
+    const schema = actionParamSchemas[actionName];
+    return isZodSchemaLike(schema) ? schema : null;
+  } catch {
+    return null;
+  }
+};
+
+const actionSchemas = ACTION_NAME_TUPLE.map((actionName) => {
+  const paramsSchema = readActionParamSchema(actionName);
+  return z.object({
     id: z.union([z.string(), z.number()]).optional(),
     name: z.literal(actionName),
-    params: isZodSchemaLike(actionParamSchemas[actionName])
-      ? actionParamSchemas[actionName]
-      : z.record(z.string(), z.unknown()),
-  }),
-) as unknown as [z.ZodTypeAny, ...z.ZodTypeAny[]];
+    params: paramsSchema ?? z.record(z.string(), z.unknown()),
+  });
+}) as unknown as [z.ZodTypeAny, ...z.ZodTypeAny[]];
 
 const ActionUnionSchema = z.union(actionSchemas);
 

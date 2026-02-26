@@ -49,4 +49,28 @@ describe('buildResponseSchema (fairy-shared)', () => {
       mutableSchemas.shift();
     }
   });
+
+  it('ignores schema instances whose parse getter throws _zod errors', () => {
+    const malformedSchema: Record<string, unknown> = {
+      _def: { typeName: 'ZodObject' },
+      shape: { _type: { value: 'message' } },
+    };
+    Object.defineProperty(malformedSchema, 'parse', {
+      get() {
+        throw new Error("Cannot read properties of undefined (reading '_zod')");
+      },
+    });
+    Object.defineProperty(malformedSchema, 'safeParse', {
+      get() {
+        throw new Error("Cannot read properties of undefined (reading '_zod')");
+      },
+    });
+    const mutableSchemas = AGENT_ACTION_SCHEMAS as unknown as unknown[];
+    mutableSchemas.unshift(malformedSchema);
+    try {
+      expect(() => buildResponseSchema(['message'])).not.toThrow();
+    } finally {
+      mutableSchemas.shift();
+    }
+  });
 });
