@@ -1164,30 +1164,43 @@ Your only output is function calls. Never use plain text unless absolutely neces
       traceId?: string;
       intentId?: string;
     }): { callId?: string; pending?: PendingToolReplay } => {
+      const findUniqueMatch = (
+        predicate: (pending: PendingToolReplay) => boolean,
+      ): { callId?: string; pending?: PendingToolReplay } => {
+        let matchCallId: string | undefined;
+        let matchPending: PendingToolReplay | undefined;
+        for (const [pendingCallId, pending] of pendingToolReplayByCallId.entries()) {
+          if (!predicate(pending)) continue;
+          if (matchPending) {
+            return { callId: input.callId, pending: undefined };
+          }
+          matchCallId = pendingCallId;
+          matchPending = pending;
+        }
+        return { callId: matchCallId ?? input.callId, pending: matchPending };
+      };
+
       if (input.callId) {
         const pending = pendingToolReplayByCallId.get(input.callId);
         if (pending) return { callId: input.callId, pending };
       }
       if (input.requestId) {
-        for (const [pendingCallId, pending] of pendingToolReplayByCallId.entries()) {
-          if (pending.requestId && pending.requestId === input.requestId) {
-            return { callId: pendingCallId, pending };
-          }
-        }
+        const requestMatch = findUniqueMatch(
+          (pending) => pending.requestId === input.requestId,
+        );
+        if (requestMatch.pending) return requestMatch;
       }
       if (input.traceId) {
-        for (const [pendingCallId, pending] of pendingToolReplayByCallId.entries()) {
-          if (pending.traceId && pending.traceId === input.traceId) {
-            return { callId: pendingCallId, pending };
-          }
-        }
+        const traceMatch = findUniqueMatch(
+          (pending) => pending.traceId === input.traceId,
+        );
+        if (traceMatch.pending) return traceMatch;
       }
       if (input.intentId) {
-        for (const [pendingCallId, pending] of pendingToolReplayByCallId.entries()) {
-          if (pending.intentId && pending.intentId === input.intentId) {
-            return { callId: pendingCallId, pending };
-          }
-        }
+        const intentMatch = findUniqueMatch(
+          (pending) => pending.intentId === input.intentId,
+        );
+        if (intentMatch.pending) return intentMatch;
       }
       return { callId: input.callId, pending: undefined };
     };

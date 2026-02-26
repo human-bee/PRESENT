@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import {
+  type ReplayFlushStatus,
   flushReplayTelemetryNow,
   recordExternalTelemetryEvent,
 } from '@/lib/agents/shared/replay-telemetry';
@@ -25,15 +26,37 @@ const readBearer = (req: NextRequest): string | undefined => {
 const isAuthorized = async (req: NextRequest): Promise<boolean> => {
   const token = normalizeOptional(process.env.AGENT_TELEMETRY_INGEST_TOKEN);
   const bearer = readBearer(req);
+  if (token && bearer === token) return true;
+  if (token && bearer && bearer !== token) return false;
   if (token) {
-    // Hard requirement: when ingest token is configured, require bearer-token auth.
-    return bearer === token;
+    const hasCookieHeader = normalizeOptional(req.headers.get('cookie'));
+    if (!hasCookieHeader) return false;
   }
 
   const user = await resolveRequestUser(req);
   if (user?.id) return true;
 
+  if (token) return false;
+
   return process.env.NODE_ENV !== 'production';
+};
+
+const flushWithTimeout = async (timeoutMs: number): Promise<ReplayFlushStatus | 'timeout'> => {
+  const resolvedTimeoutMs = Number.isFinite(timeoutMs) ? timeoutMs : 250;
+  const boundedTimeoutMs = Math.max(50, Math.floor(resolvedTimeoutMs));
+  let timeoutHandle: ReturnType<typeof setTimeout> | null = null;
+  try {
+    return await Promise.race([
+      flushReplayTelemetryNow(),
+      new Promise<'timeout'>((resolve) => {
+        timeoutHandle = setTimeout(() => resolve('timeout'), boundedTimeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timeoutHandle) {
+      clearTimeout(timeoutHandle);
+    }
+  }
 };
 
 export async function POST(req: NextRequest) {
@@ -73,11 +96,19 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ status: 'dropped' }, { status: 202 });
     }
 
-    const flushed = await flushReplayTelemetryNow();
-    if (!flushed) {
+    const flushStatus = await flushWithTimeout(
+      Number(process.env.AGENT_TELEMETRY_FLUSH_TIMEOUT_MS ?? 250),
+    );
+    if (flushStatus === 'flushed') {
+      return NextResponse.json({ status: 'ok' }, { status: 200 });
+    }
+    if (flushStatus === 'dropped') {
+      return NextResponse.json({ status: 'accepted_with_loss_warning' }, { status: 202 });
+    }
+    if (flushStatus === 'timeout' || flushStatus === 'queued') {
       return NextResponse.json({ status: 'queued' }, { status: 202 });
     }
-    return NextResponse.json({ status: 'ok' }, { status: 200 });
+    return NextResponse.json({ status: 'queued' }, { status: 202 });
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : String(error) },

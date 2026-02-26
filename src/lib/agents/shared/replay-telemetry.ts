@@ -30,6 +30,8 @@ type ReplayQueueEntry = {
   priority: ReplayPriority;
 };
 
+export type ReplayFlushStatus = 'flushed' | 'queued' | 'dropped';
+
 type ReplayCorrelation = {
   sessionId?: string;
   room?: string;
@@ -514,13 +516,14 @@ const upsertReplayRowsWithIsolation = async (
   };
 };
 
-export const flushReplayTelemetryNow = async (): Promise<boolean> => {
-  if (replayFlushing) return false;
+export const flushReplayTelemetryNow = async (): Promise<ReplayFlushStatus> => {
+  if (replayFlushing) return 'queued';
 
   const db = getReplayDb();
-  if (!db) return false;
+  if (!db) return 'queued';
 
   replayFlushing = true;
+  let hadIrrecoverableDrops = false;
   try {
     const replayTables = Object.keys(REPLAY_TABLE_CONFIG) as ReplayTable[];
     while (replayQueue.length > 0) {
@@ -542,6 +545,7 @@ export const flushReplayTelemetryNow = async (): Promise<boolean> => {
         if (rows.length === 0) continue;
         const result = await upsertReplayRowsWithIsolation(db, table, rows);
         if (result.ok && result.isolateFailedRows.length > 0) {
+          hadIrrecoverableDrops = true;
           logger.warn('replay telemetry dropped irrecoverable rows during isolate flush', {
             table,
             failedRows: result.isolateFailedRows.length,
@@ -563,10 +567,12 @@ export const flushReplayTelemetryNow = async (): Promise<boolean> => {
       if (failed) {
         replayQueue.unshift(...batch);
         scheduleReplayFlush(Math.max(replayTelemetryFlushMs, 250));
-        return false;
+        return 'queued';
       }
     }
-    return replayQueue.length === 0;
+    if (replayQueue.length > 0) return 'queued';
+    if (hadIrrecoverableDrops) return 'dropped';
+    return 'flushed';
   } finally {
     replayFlushing = false;
   }
