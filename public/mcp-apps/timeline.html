@@ -1,0 +1,299 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>PRESENT Timeline MCP Widget</title>
+    <style>
+      :root {
+        --bg: #0e1a1f;
+        --bg-soft: #172832;
+        --ink: #e6f2f7;
+        --muted: #97b0bc;
+        --line: #214152;
+        --accent: #22c1a7;
+        --event-argument: #66c2ff;
+        --event-rebuttal: #d4a5ff;
+        --event-fact: #73e39f;
+        --event-score: #ffd166;
+        --event-mod: #a7b6c2;
+        --event-achievement: #ff9db8;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        color: var(--ink);
+        font-family: "Manrope", "Avenir Next", "Segoe UI", sans-serif;
+        background:
+          radial-gradient(1200px 360px at 10% -15%, rgba(34, 193, 167, 0.22), transparent 60%),
+          radial-gradient(1000px 340px at 85% 0%, rgba(102, 194, 255, 0.2), transparent 58%),
+          linear-gradient(180deg, var(--bg) 0%, #0a1217 100%);
+      }
+      main {
+        width: min(980px, 100%);
+        margin: 0 auto;
+        padding: 20px 18px 24px;
+      }
+      .shell {
+        border: 1px solid var(--line);
+        border-radius: 20px;
+        background: linear-gradient(180deg, rgba(23, 40, 50, 0.85), rgba(14, 24, 30, 0.9));
+        box-shadow: 0 24px 48px rgba(5, 10, 13, 0.45);
+        overflow: hidden;
+      }
+      .head {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 10px;
+        padding: 18px 18px 14px;
+        border-bottom: 1px solid var(--line);
+      }
+      .label {
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--muted);
+        font-size: 11px;
+        font-weight: 700;
+      }
+      h1 {
+        margin: 8px 0 2px;
+        font-size: clamp(22px, 4vw, 30px);
+        line-height: 1.1;
+      }
+      .sub {
+        color: var(--muted);
+        font-size: 13px;
+      }
+      .stats {
+        display: grid;
+        gap: 6px;
+        justify-items: end;
+        text-align: right;
+      }
+      .pill {
+        border: 1px solid rgba(34, 193, 167, 0.55);
+        color: var(--accent);
+        background: rgba(34, 193, 167, 0.12);
+        border-radius: 999px;
+        padding: 4px 10px;
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+      }
+      .events {
+        padding: 12px 18px 18px;
+        max-height: calc(100vh - 210px);
+        overflow: auto;
+      }
+      .row {
+        display: grid;
+        grid-template-columns: 112px 1fr;
+        gap: 14px;
+        padding: 12px 0;
+        border-bottom: 1px dashed rgba(151, 176, 188, 0.24);
+      }
+      .row:last-child {
+        border-bottom: none;
+      }
+      .stamp {
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 600;
+      }
+      .event-type {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 12px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        font-weight: 700;
+        color: var(--muted);
+      }
+      .dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+      }
+      .text {
+        margin-top: 8px;
+        line-height: 1.45;
+        font-size: 14px;
+        color: var(--ink);
+      }
+      .empty {
+        padding: 40px 24px;
+        text-align: center;
+        color: var(--muted);
+        font-size: 14px;
+      }
+      .foot {
+        padding: 10px 18px 14px;
+        border-top: 1px solid var(--line);
+        color: var(--muted);
+        font-size: 11px;
+      }
+      @media (max-width: 740px) {
+        .head {
+          grid-template-columns: 1fr;
+        }
+        .stats {
+          justify-items: start;
+          text-align: left;
+        }
+        .row {
+          grid-template-columns: 1fr;
+          gap: 8px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <section class="shell">
+        <header class="head">
+          <div>
+            <div class="label">Canonical Debate Timeline</div>
+            <h1 id="topic">Waiting for scorecard sync…</h1>
+            <div class="sub" id="meta">Listening for host snapshots.</div>
+          </div>
+          <div class="stats">
+            <div class="pill" id="version">v--</div>
+            <div class="sub" id="updated">Not synced yet</div>
+          </div>
+        </header>
+        <div class="events" id="events">
+          <div class="empty" id="empty">
+            Timeline events stream in from `/api/steward/scorecard` through the host widget.
+          </div>
+        </div>
+        <footer class="foot" id="foot">Room: -- · Component: --</footer>
+      </section>
+    </main>
+    <script>
+      const COLORS = {
+        argument: 'var(--event-argument)',
+        rebuttal: 'var(--event-rebuttal)',
+        fact_check: 'var(--event-fact)',
+        score_change: 'var(--event-score)',
+        moderation: 'var(--event-mod)',
+        achievement: 'var(--event-achievement)',
+      };
+
+      const topicEl = document.getElementById('topic');
+      const metaEl = document.getElementById('meta');
+      const versionEl = document.getElementById('version');
+      const updatedEl = document.getElementById('updated');
+      const eventsEl = document.getElementById('events');
+      const footEl = document.getElementById('foot');
+      const emptyEl = document.getElementById('empty');
+
+      const fmtTime = (value) => {
+        const ms = Number(value);
+        if (!Number.isFinite(ms)) return '--:--';
+        const d = new Date(ms);
+        if (Number.isNaN(d.getTime())) return '--:--';
+        return new Intl.DateTimeFormat(undefined, {
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+        }).format(d);
+      };
+
+      const fmtDateTime = (value) => {
+        const ms = Number(value);
+        if (!Number.isFinite(ms)) return 'Not synced yet';
+        const d = new Date(ms);
+        if (Number.isNaN(d.getTime())) return 'Not synced yet';
+        return new Intl.DateTimeFormat(undefined, {
+          month: 'short',
+          day: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+        }).format(d);
+      };
+
+      const renderEvents = (timeline) => {
+        const rows = Array.isArray(timeline) ? timeline : [];
+        eventsEl.querySelectorAll('.row').forEach((node) => node.remove());
+        if (!rows.length) {
+          if (emptyEl) emptyEl.style.display = 'block';
+          return;
+        }
+        if (emptyEl) emptyEl.style.display = 'none';
+        rows
+          .slice()
+          .sort((a, b) => Number(a.timestamp || 0) - Number(b.timestamp || 0))
+          .forEach((entry) => {
+            const row = document.createElement('article');
+            row.className = 'row';
+            const type = typeof entry.type === 'string' ? entry.type : 'argument';
+            const color = COLORS[type] || 'var(--muted)';
+            const label = type.replace('_', ' ');
+
+            const stamp = document.createElement('div');
+            stamp.className = 'stamp';
+            stamp.textContent = fmtTime(entry.timestamp);
+
+            const body = document.createElement('div');
+            const eventType = document.createElement('div');
+            eventType.className = 'event-type';
+            const dot = document.createElement('span');
+            dot.className = 'dot';
+            dot.style.background = color;
+            const labelText = document.createTextNode(label);
+            eventType.appendChild(dot);
+            eventType.appendChild(labelText);
+
+            const text = document.createElement('div');
+            text.className = 'text';
+            text.textContent = String(entry.text || 'No summary provided.');
+
+            body.appendChild(eventType);
+            body.appendChild(text);
+            row.appendChild(stamp);
+            row.appendChild(body);
+            eventsEl.appendChild(row);
+          });
+      };
+
+      const render = (snapshot) => {
+        const topic = typeof snapshot.topic === 'string' && snapshot.topic.trim()
+          ? snapshot.topic.trim()
+          : 'Live Debate';
+        const round = typeof snapshot.round === 'string' && snapshot.round.trim()
+          ? snapshot.round.trim()
+          : 'Current round';
+        topicEl.textContent = topic;
+        metaEl.textContent = `${round} · ${Array.isArray(snapshot.timeline) ? snapshot.timeline.length : 0} events`;
+        versionEl.textContent = typeof snapshot.version === 'number' ? `v${snapshot.version}` : 'v--';
+        updatedEl.textContent = `Updated ${fmtDateTime(snapshot.lastUpdated || snapshot.syncedAt)}`;
+        footEl.textContent = `Room: ${snapshot.room || '--'} · Component: ${snapshot.componentId || '--'}`;
+        renderEvents(snapshot.timeline);
+      };
+
+      const isObject = (value) => value && typeof value === 'object' && !Array.isArray(value);
+
+      const isValidSnapshot = (snapshot) =>
+        isObject(snapshot) &&
+        typeof snapshot.room === 'string' &&
+        snapshot.room.trim().length > 0 &&
+        typeof snapshot.componentId === 'string' &&
+        snapshot.componentId.trim().length > 0 &&
+        Array.isArray(snapshot.timeline);
+
+      window.addEventListener('message', (event) => {
+        if (event.source !== window.parent) return;
+        const data = event?.data;
+        if (!isObject(data) || data.type !== 'present:scorecard-sync') return;
+        const snapshot = data.payload || {};
+        if (!isValidSnapshot(snapshot)) return;
+        render(snapshot);
+      });
+    </script>
+  </body>
+</html>

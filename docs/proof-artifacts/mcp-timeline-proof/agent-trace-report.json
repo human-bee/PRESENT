@@ -1,0 +1,316 @@
+{
+  "generatedAt": "2026-02-26T09:53:51.856Z",
+  "baseUrl": "http://localhost:3000",
+  "room": "canvas-dev-52d6acf0-1507-4e30-8d28-ece6e2d63998",
+  "scorecardComponentId": "scorecard-mcp-timeline-proof",
+  "widgetComponentId": "mcp-timeline-widget-proof",
+  "runResponse": {
+    "ok": true,
+    "status": 202,
+    "payload": {
+      "status": "queued",
+      "task": {
+        "id": "88a461ca-2a9e-4fd3-8410-f13dbf2982ce",
+        "created_at": "2026-02-26T09:53:10.241+00:00",
+        "updated_at": "2026-02-26T09:53:10.241+00:00",
+        "room": "canvas-dev-52d6acf0-1507-4e30-8d28-ece6e2d63998",
+        "task": "scorecard.patch",
+        "params": {
+          "room": "canvas-dev-52d6acf0-1507-4e30-8d28-ece6e2d63998",
+          "topic": "MCP timeline proof run",
+          "lockKey": "widget:scorecard-mcp-timeline-proof",
+          "summary": "Apply deterministic scorecard patch for timeline sync proof.",
+          "metadata": {
+            "runtimeScope": "whiteboard-jamie-q02f56az.livekit.cloud"
+          },
+          "provider": "cerebras",
+          "componentId": "scorecard-mcp-timeline-proof",
+          "claimPatches": [
+            {
+              "id": "AFF-1",
+              "op": "upsert",
+              "side": "AFF",
+              "quote": "MCP timeline sync should mirror canonical scorecard updates.",
+              "impact": "MAJOR",
+              "speech": "1AC",
+              "status": "VERIFIED",
+              "summary": "Deterministic proof claim inserted by capture script.",
+              "verdict": "ACCURATE"
+            }
+          ],
+          "runtimeScope": "whiteboard-jamie-q02f56az.livekit.cloud",
+          "configVersion": "f7703155dac7",
+          "provider_path": "fast",
+          "provider_source": "runtime_selected"
+        },
+        "status": "queued",
+        "priority": 0,
+        "run_at": null,
+        "attempt": 0,
+        "error": null,
+        "request_id": "proof-1772099584247",
+        "dedupe_key": null,
+        "resource_keys": [
+          "room:canvas-dev-52d6acf0-1507-4e30-8d28-ece6e2d63998",
+          "scorecard:scorecard-mcp-timeline-proof",
+          "runtime-scope:whiteboard-jamie-q02f56az.livekit.cloud",
+          "lock:widget:scorecard-mcp-timeline-proof"
+        ],
+        "lease_token": null,
+        "lease_expires_at": null,
+        "result": null,
+        "trace_id": null
+      }
+    }
+  },
+  "canvasRunResponse": {
+    "ok": true,
+    "status": 202,
+    "payload": {
+      "status": "queued",
+      "task": {
+        "id": "73fc49e2-c5d6-4e93-bc51-deb830b98d26",
+        "created_at": "2026-02-26T09:53:24.428+00:00",
+        "updated_at": "2026-02-26T09:53:24.428+00:00",
+        "room": "canvas-dev-52d6acf0-1507-4e30-8d28-ece6e2d63998",
+        "task": "canvas.agent_prompt",
+        "params": {
+          "room": "canvas-dev-52d6acf0-1507-4e30-8d28-ece6e2d63998",
+          "model": "claude-haiku-4-5",
+          "lockKey": "room:canvas-dev-52d6acf0-1507-4e30-8d28-ece6e2d63998:task:canvas.agent_prompt",
+          "message": "Draw one sticky note that says \"MCP timeline sync verified\".",
+          "traceId": "canvas-proof-trace-1772099590450",
+          "metadata": {
+            "traceId": "canvas-proof-trace-1772099590450",
+            "intentId": "canvas-proof-1772099590450",
+            "runtimeScope": "whiteboard-jamie-q02f56az.livekit.cloud",
+            "configVersion": "f7703155dac7"
+          },
+          "provider": "anthropic",
+          "requestId": "canvas-proof-1772099590450",
+          "runtimeScope": "whiteboard-jamie-q02f56az.livekit.cloud",
+          "configVersion": "f7703155dac7",
+          "provider_path": "primary",
+          "provider_source": "task_params"
+        },
+        "status": "queued",
+        "priority": 0,
+        "run_at": null,
+        "attempt": 0,
+        "error": null,
+        "request_id": "canvas-proof-1772099590450",
+        "dedupe_key": null,
+        "resource_keys": [
+          "room:canvas-dev-52d6acf0-1507-4e30-8d28-ece6e2d63998",
+          "canvas:intent",
+          "runtime-scope:whiteboard-jamie-q02f56az.livekit.cloud",
+          "lock:room:canvas-dev-52d6acf0-1507-4e30-8d28-ece6e2d63998:task:canvas.agent_prompt"
+        ],
+        "lease_token": null,
+        "lease_expires_at": null,
+        "result": null,
+        "trace_id": null
+      },
+      "taskId": "73fc49e2-c5d6-4e93-bc51-deb830b98d26",
+      "requestId": "canvas-proof-1772099590450",
+      "traceId": "canvas-proof-trace-1772099590450",
+      "intentId": "canvas-proof-1772099590450"
+    }
+  },
+  "scorecardTask": {
+    "id": "88a461ca-2a9e-4fd3-8410-f13dbf2982ce",
+    "room": "canvas-dev-52d6acf0-1507-4e30-8d28-ece6e2d63998",
+    "task": "scorecard.patch",
+    "status": "succeeded",
+    "attempt": 0,
+    "error": null,
+    "result": {
+      "output": {
+        "status": "error",
+        "summary": "404 Model llama-3.3-70b does not exist or you do not have access to it."
+      },
+      "status": "completed"
+    },
+    "request_id": "proof-1772099584247",
+    "created_at": "2026-02-26T09:53:10.241+00:00",
+    "updated_at": "2026-02-26T09:53:18.018087+00:00",
+    "trace_id": null
+  },
+  "scorecardTaskValidation": {
+    "status": "ok"
+  },
+  "canvasTaskValidation": {
+    "status": "warning",
+    "message": "runCanvas task returned non-fatal warning: LiveKit room not found before timeout: canvas-dev-52d6acf0-1507-4e30-8d28-ece6e2d63998"
+  },
+  "syncConfirmed": true,
+  "syncedRowCount": 1,
+  "traceTaskSource": "canvas",
+  "task": {
+    "id": "73fc49e2-c5d6-4e93-bc51-deb830b98d26",
+    "room": "canvas-dev-52d6acf0-1507-4e30-8d28-ece6e2d63998",
+    "task": "canvas.agent_prompt",
+    "status": "succeeded",
+    "attempt": 1,
+    "error": "LiveKit room not found before timeout: canvas-dev-52d6acf0-1507-4e30-8d28-ece6e2d63998",
+    "result": {
+      "room": "canvas-dev-52d6acf0-1507-4e30-8d28-ece6e2d63998",
+      "status": "queued",
+      "deduped": false,
+      "lockKey": "room:canvas-dev-52d6acf0-1507-4e30-8d28-ece6e2d63998:task:canvas.agent_prompt",
+      "payload": {
+        "message": "Draw one sticky note that says \"MCP timeline sync verified\".",
+        "metadata": {
+          "traceId": "canvas-proof-trace-1772099590450",
+          "intentId": "canvas-proof-1772099590450",
+          "runtimeScope": "whiteboard-jamie-q02f56az.livekit.cloud",
+          "configVersion": "f7703155dac7"
+        },
+        "requestId": "canvas-proof-1772099590450"
+      },
+      "requestId": "canvas-proof-1772099590450",
+      "executionId": "73fc49e2-c5d6-4e93-bc51-deb830b98d26",
+      "idempotencyKey": null
+    },
+    "request_id": "canvas-proof-1772099590450",
+    "created_at": "2026-02-26T09:53:24.428+00:00",
+    "updated_at": "2026-02-26T09:53:46.18582+00:00",
+    "trace_id": null
+  },
+  "traceId": "canvas-proof-trace-1772099590450",
+  "traceEvents": [
+    {
+      "id": "2a031ed8-273b-4c94-957a-dc3d914860c6",
+      "trace_id": "canvas-proof-trace-1772099590450",
+      "task_id": null,
+      "task": "canvas.agent_prompt",
+      "stage": "api_received",
+      "status": "ok",
+      "latency_ms": null,
+      "created_at": "2026-02-26T09:53:23.755+00:00",
+      "payload": {
+        "model": "claude-haiku-4-5",
+        "provider": "anthropic",
+        "providerPath": "primary",
+        "providerSource": "task_params",
+        "providerRequestId": null
+      }
+    },
+    {
+      "id": "83d4beb8-164b-4165-b888-d242985b0dc8",
+      "trace_id": "canvas-proof-trace-1772099590450",
+      "task_id": "73fc49e2-c5d6-4e93-bc51-deb830b98d26",
+      "task": "canvas.agent_prompt",
+      "stage": "queued",
+      "status": "queued",
+      "latency_ms": null,
+      "created_at": "2026-02-26T09:53:24.697+00:00",
+      "payload": null
+    },
+    {
+      "id": "d9bfad31-153c-4cf1-9031-5c2b24bbadfa",
+      "trace_id": "canvas-proof-trace-1772099590450",
+      "task_id": "73fc49e2-c5d6-4e93-bc51-deb830b98d26",
+      "task": "canvas.agent_prompt",
+      "stage": "executing",
+      "status": "running",
+      "latency_ms": null,
+      "created_at": "2026-02-26T09:53:24.792+00:00",
+      "payload": {
+        "route": "visual",
+        "workerId": "conductor-36-d129063d",
+        "workerPid": "36",
+        "leaseToken": "99cf3244-bc79-421e-b9eb-b0fedf066544",
+        "workerHost": "f8152f2e162b"
+      }
+    },
+    {
+      "id": "44cdbe6a-a8e3-4349-a8aa-5eeabe3cc4c0",
+      "trace_id": "canvas-proof-trace-1772099590450",
+      "task_id": "73fc49e2-c5d6-4e93-bc51-deb830b98d26",
+      "task": "canvas.agent_prompt",
+      "stage": "claimed",
+      "status": "running",
+      "latency_ms": null,
+      "created_at": "2026-02-26T09:53:24.792+00:00",
+      "payload": null
+    },
+    {
+      "id": "e107ff99-d02b-4096-af1d-47e02a1403e8",
+      "trace_id": "canvas-proof-trace-1772099590450",
+      "task_id": "73fc49e2-c5d6-4e93-bc51-deb830b98d26",
+      "task": "canvas.agent_prompt",
+      "stage": "failed",
+      "status": "failed",
+      "latency_ms": null,
+      "created_at": "2026-02-26T09:53:30.549+00:00",
+      "payload": {
+        "error": "LiveKit room not found before timeout: canvas-dev-52d6acf0-1507-4e30-8d28-ece6e2d63998",
+        "route": "visual",
+        "lockKey": "room:canvas-dev-52d6acf0-1507-4e30-8d28-ece6e2d63998:task:canvas.agent_prompt",
+        "retryAt": "2026-02-26T09:53:31.044Z",
+        "workerId": "conductor-36-d129063d",
+        "workerPid": "36",
+        "workerHost": "f8152f2e162b"
+      }
+    },
+    {
+      "id": "559c5d8a-2a56-4321-8c88-e86c20069cb0",
+      "trace_id": "canvas-proof-trace-1772099590450",
+      "task_id": "73fc49e2-c5d6-4e93-bc51-deb830b98d26",
+      "task": "canvas.agent_prompt",
+      "stage": "claimed",
+      "status": "running",
+      "latency_ms": null,
+      "created_at": "2026-02-26T09:53:31.519+00:00",
+      "payload": null
+    },
+    {
+      "id": "74e87126-84d5-4439-97b6-edc2a48f70d7",
+      "trace_id": "canvas-proof-trace-1772099590450",
+      "task_id": "73fc49e2-c5d6-4e93-bc51-deb830b98d26",
+      "task": "canvas.agent_prompt",
+      "stage": "executing",
+      "status": "running",
+      "latency_ms": null,
+      "created_at": "2026-02-26T09:53:31.52+00:00",
+      "payload": {
+        "route": "visual",
+        "workerId": "conductor-36-d129063d",
+        "workerPid": "36",
+        "leaseToken": "3b20aff0-7342-42ba-b82c-21afa14834d3",
+        "workerHost": "f8152f2e162b"
+      }
+    },
+    {
+      "id": "39c688d0-515d-443c-a013-5d326a0b096c",
+      "trace_id": "canvas-proof-trace-1772099590450",
+      "task_id": "cdea9759-6bf6-4ffe-81ce-8a1a091d1936",
+      "task": "canvas.followup",
+      "stage": "queued",
+      "status": "queued",
+      "latency_ms": null,
+      "created_at": "2026-02-26T09:53:45.012+00:00",
+      "payload": null
+    },
+    {
+      "id": "5d7008ae-3a74-4e3d-98c5-f855bca7d59c",
+      "trace_id": "canvas-proof-trace-1772099590450",
+      "task_id": "73fc49e2-c5d6-4e93-bc51-deb830b98d26",
+      "task": "canvas.agent_prompt",
+      "stage": "completed",
+      "status": "succeeded",
+      "latency_ms": 14804,
+      "created_at": "2026-02-26T09:53:46.324+00:00",
+      "payload": {
+        "route": "visual",
+        "deduped": false,
+        "lockKey": "room:canvas-dev-52d6acf0-1507-4e30-8d28-ece6e2d63998:task:canvas.agent_prompt",
+        "workerId": "conductor-36-d129063d",
+        "workerPid": "36",
+        "leaseToken": "3b20aff0-7342-42ba-b82c-21afa14834d3",
+        "workerHost": "f8152f2e162b"
+      }
+    }
+  ]
+}
