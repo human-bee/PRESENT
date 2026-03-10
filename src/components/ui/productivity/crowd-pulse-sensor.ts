@@ -85,6 +85,7 @@ const stopSharedSensor = (nextStatus?: {
   detail: string;
 }) => {
   sharedSensor.startToken += 1;
+  sharedSensor.startPromise = null;
   sharedSensor.running = false;
   clearTimers();
 
@@ -195,7 +196,8 @@ const startSharedSensor = async () => {
 
   const startupToken = sharedSensor.startToken + 1;
   sharedSensor.startToken = startupToken;
-  const startupPromise = (async () => {
+  let startupPromise!: Promise<void>;
+  startupPromise = (async () => {
     notifyStatus('loading', 'Camera starting...');
     let startupStream: MediaStream | null = null;
     let startupVideo: HTMLVideoElement | null = null;
