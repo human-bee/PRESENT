@@ -62,6 +62,8 @@ export type VoiceRealtimeConfigOverrides = {
   transcriptionReadyTimeoutMs?: number;
 };
 
+export const DEFAULT_VOICE_REALTIME_MODEL = 'gpt-realtime-1.5';
+
 const ROOM_AUDIO_SAMPLE_RATE = 24_000;
 const ROOM_AUDIO_NUM_CHANNELS = 1;
 
@@ -212,7 +214,9 @@ export const resolveVoiceRealtimeConfig = (
   overrides: VoiceRealtimeConfigOverrides = {},
 ): VoiceRealtimeConfig => {
   const resolvedRealtimeModel =
-    overrides.realtimeModel?.trim() || env.VOICE_AGENT_REALTIME_MODEL?.trim() || 'gpt-realtime';
+    overrides.realtimeModel?.trim() ||
+    env.VOICE_AGENT_REALTIME_MODEL?.trim() ||
+    DEFAULT_VOICE_REALTIME_MODEL;
   const resolvedRouterModel =
     overrides.routerModel?.trim() || env.VOICE_AGENT_ROUTER_MODEL?.trim() || 'claude-haiku-4-5';
   const envInputTranscriptionModel = env.VOICE_AGENT_INPUT_TRANSCRIPTION_MODEL?.trim();

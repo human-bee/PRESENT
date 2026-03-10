@@ -26,6 +26,7 @@ const APPLY_MODE_BY_PATH: Array<{ prefix: string; mode: ApplyMode }> = [
   { prefix: 'knobs.conductor.taskRetryMaxDelayMs', mode: 'restart_required' },
   { prefix: 'knobs.conductor.taskRetryJitterRatio', mode: 'restart_required' },
   { prefix: 'knobs.conductor.roomConcurrency', mode: 'next_session' },
+  { prefix: 'knobs.voice', mode: 'next_session' },
   { prefix: 'models.voiceRealtime', mode: 'next_session' },
   { prefix: 'models.voiceRouter', mode: 'next_session' },
   { prefix: 'models.voiceStt', mode: 'next_session' },
