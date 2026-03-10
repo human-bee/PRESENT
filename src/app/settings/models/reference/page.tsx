@@ -129,13 +129,13 @@ const knobRows: Row[] = [
     path: 'knobs.voice.transcriptionEnabled',
     type: 'boolean',
     rangeOrOptions: 'true | false',
-    notes: 'Enable/disable voice transcription.',
+    notes: 'Enable/disable voice transcription. Evaluated when the next voice session starts.',
   },
   {
     path: 'knobs.voice.sttModel',
     type: 'string',
     rangeOrOptions: 'provider/model id',
-    notes: 'Knob alias for STT model.',
+    notes: 'Knob alias for STT model. Applies on next voice session, not mid-session.',
   },
   {
     path: 'knobs.voice.realtimeModel',
