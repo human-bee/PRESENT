@@ -46,8 +46,24 @@ jest.mock('@tldraw/tldraw', () => {
 });
 
 jest.mock('@tldraw/sync', () => ({
+  useSync: () => ({ store: null, status: 'disconnected' }),
   useSyncDemo: () => ({ store: null, status: 'disconnected' }),
-  RemoteTLStoreWithStatus: {} as any,
+  RemoteTLStoreWithStatus: {},
+}));
+
+jest.mock('tldraw', () => ({
+  AssetRecordType: {
+    createId: (id: string) => `asset:${id}`,
+  },
+  MediaHelpers: {
+    isAnimatedImageType: () => false,
+    isVectorImageType: () => false,
+  },
+  defaultBindingUtils: [],
+  defaultShapeUtils: [],
+  getHashForString: (value: string) => `hash:${value}`,
+  uniqueId: () => 'asset-123',
+  useShallowObjectIdentity: <T,>(value: T) => value,
 }));
 
 // --- Mocks ---

@@ -22,7 +22,11 @@ const PORT = Number(process.env.PORT || process.env.TLDRAW_SYNC_PORT || 3100);
 async function buildServer() {
   const app = fastify();
   await app.register(websocketPlugin);
-  await app.register(cors, { origin: '*' });
+  await app.register(cors, {
+    origin: '*',
+    methods: ['GET', 'POST', 'PUT', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+  });
 
   app.get('/connect/:roomId', { websocket: true }, async (socket, request) => {
     const { roomId } = request.params as { roomId: string };
@@ -44,20 +48,23 @@ async function buildServer() {
 
   app.addContentTypeParser('*', (_, __, done) => done(null));
 
-  app.put('/uploads/:id', async (request, reply) => {
+  const handleUpload = async (request: any, reply: any) => {
     const { id } = request.params as { id: string };
     await storeAsset(id, request.raw);
     reply.send({ ok: true });
-  });
+  };
+
+  app.put('/uploads/:id', handleUpload);
+  app.post('/uploads/:id', handleUpload);
 
   app.get('/uploads/:id', async (request, reply) => {
     const { id } = request.params as { id: string };
-    const data = await loadAsset(id);
-    if (!data) {
+    const asset = await loadAsset(id);
+    if (!asset) {
       reply.code(404).send({ ok: false, error: 'Asset not found' });
       return;
     }
-    reply.header('Content-Type', 'application/octet-stream').send(data);
+    reply.header('Content-Type', asset.contentType).send(asset.data);
   });
 
   app.post('/admin/reset-room/:roomId', async (request, reply) => {

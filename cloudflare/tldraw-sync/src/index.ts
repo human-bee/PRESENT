@@ -24,7 +24,7 @@ function checkAdminAuth(request: Request, env: Env): boolean {
 }
 
 async function handleUploads(request: Request, env: Env, id: string): Promise<Response> {
-  if (request.method === 'PUT') {
+  if (request.method === 'PUT' || request.method === 'POST') {
     const data = await request.arrayBuffer();
     await env.TLDRAW_UPLOADS.put(id, data, {
       httpMetadata: { contentType: request.headers.get('content-type') || 'application/octet-stream' },
@@ -94,4 +94,3 @@ export default {
 };
 
 export { TldrawRoomDurableObject };
-
