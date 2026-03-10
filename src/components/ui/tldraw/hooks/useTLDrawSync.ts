@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useSync, type RemoteTLStoreWithStatus } from '@tldraw/sync';
 import type { customShapeUtil } from '../tldraw-canvas';
 import { createLogger } from '@/lib/utils';
@@ -10,9 +10,9 @@ import {
   defaultShapeUtils,
   getHashForString,
   type TLAsset,
+  type TLBookmarkAsset,
   type TLAssetStore,
   uniqueId,
-  useShallowObjectIdentity,
 } from 'tldraw';
 
 const DEFAULT_SYNC_HOST = 'https://demo.tldraw.xyz';
@@ -30,6 +30,34 @@ type SyncHookGlobal = typeof globalThis & {
   __LOGGED_TLDRAW_SYNC_HOST__?: boolean;
   __WARNED_PRESENT_TLDRAW_DEMO_HOST__?: boolean;
 };
+
+function shallowEqualObjects(
+  left: Record<string, unknown>,
+  right: Record<string, unknown>,
+): boolean {
+  if (left === right) return true;
+
+  const leftKeys = Object.keys(left);
+  const rightKeys = Object.keys(right);
+
+  if (leftKeys.length !== rightKeys.length) return false;
+
+  for (const key of leftKeys) {
+    if (left[key] !== right[key]) return false;
+  }
+
+  return true;
+}
+
+function useStableShallowObjectIdentity<T extends Record<string, unknown>>(value: T): T {
+  const ref = useRef(value);
+
+  if (!shallowEqualObjects(ref.current, value)) {
+    ref.current = value;
+  }
+
+  return ref.current;
+}
 
 export function normalizeHost(rawHost?: string | null) {
   if (!rawHost) return null;
@@ -164,7 +192,7 @@ export function createSyncAssetStore(host: string): TLAssetStore {
   };
 }
 
-function createBlankBookmarkAsset(url: string): TLAsset {
+function createBlankBookmarkAsset(url: string): TLBookmarkAsset {
   const urlHash = getHashForString(url);
   return {
     id: AssetRecordType.createId(urlHash),
@@ -181,7 +209,7 @@ function createBlankBookmarkAsset(url: string): TLAsset {
   };
 }
 
-export async function createBookmarkAsset(host: string, url: string): Promise<TLAsset> {
+export async function createBookmarkAsset(host: string, url: string): Promise<TLBookmarkAsset> {
   try {
     const fetchUrl = new URL(`${host}/bookmarks/unfurl`);
     fetchUrl.searchParams.set('url', url);
@@ -206,7 +234,7 @@ export async function createBookmarkAsset(host: string, url: string): Promise<TL
         favicon: meta?.favicon ?? '',
         title: meta?.title ?? '',
       },
-    };
+    } satisfies TLBookmarkAsset;
   } catch {
     return createBlankBookmarkAsset(url);
   }
@@ -236,7 +264,7 @@ export function useTLDrawSync(
     }),
     [resolvedShapeUtils],
   );
-  const stableSyncOptions = useShallowObjectIdentity(syncOptions);
+  const stableSyncOptions = useStableShallowObjectIdentity(syncOptions);
 
   const registerExternalAssetHandler = useCallback(
     (editor: {
@@ -258,6 +286,9 @@ export function useTLDrawSync(
     assets: assetStore,
     onMount: registerExternalAssetHandler,
     ...stableSyncOptions,
+  } as Parameters<typeof useSync>[0] & {
+    roomId: string;
+    onMount: typeof registerExternalAssetHandler;
   });
 
   useEffect(() => {
