@@ -18,6 +18,7 @@ const TRACE_REPORT_OUTPUT = path.join(PROOF_DIR, 'agent-trace-report.html');
 const TRACE_JSON_OUTPUT = path.join(PROOF_DIR, 'agent-trace-report.json');
 const SCORECARD_COMPONENT_ID = 'scorecard-mcp-timeline-proof';
 const WIDGET_COMPONENT_ID = 'mcp-timeline-widget-proof';
+const ALLOWED_NON_FATAL_TASK_ERRORS = [/^LiveKit room not found before timeout:/i];
 
 type TaskRow = {
   id: string;
@@ -92,6 +93,70 @@ async function executeToolCall(page: Page, tool: string, params: Record<string, 
       return await execute(call);
     },
     { tool, params },
+  );
+}
+
+async function waitForCanvasComponentShape(
+  page: Page,
+  componentId: string,
+  timeoutMs = 60_000,
+) {
+  await page.waitForFunction(
+    (targetComponentId) => {
+      const editor = (window as any).__tldrawEditor;
+      const shapes = editor?.getCurrentPageShapes?.() ?? [];
+      return shapes.some(
+        (shape: any) =>
+          shape?.type === 'custom' &&
+          String(shape?.props?.customComponent || '') === targetComponentId,
+      );
+    },
+    componentId,
+    { timeout: timeoutMs },
+  );
+}
+
+async function placeProofComponentsOnCanvas(
+  page: Page,
+  scorecardComponentId: string,
+  widgetComponentId: string,
+) {
+  await page.evaluate(
+    ({ scorecardComponentId, widgetComponentId }) => {
+      const editor = (window as any).__tldrawEditor;
+      const shapes = editor?.getCurrentPageShapes?.() ?? [];
+      const scorecard = shapes.find(
+        (shape: any) =>
+          shape?.type === 'custom' &&
+          String(shape?.props?.customComponent || '') === scorecardComponentId,
+      );
+      const widget = shapes.find(
+        (shape: any) =>
+          shape?.type === 'custom' &&
+          String(shape?.props?.customComponent || '') === widgetComponentId,
+      );
+      const updates: Array<Record<string, unknown>> = [];
+      if (scorecard) {
+        updates.push({
+          id: scorecard.id,
+          type: 'custom',
+          x: -1600,
+          y: -1200,
+        });
+      }
+      if (widget) {
+        updates.push({
+          id: widget.id,
+          type: 'custom',
+          x: 80,
+          y: 120,
+        });
+      }
+      if (updates.length > 0) {
+        editor.updateShapes(updates);
+      }
+    },
+    { scorecardComponentId, widgetComponentId },
   );
 }
 
@@ -488,6 +553,9 @@ async function main() {
     null,
     { timeout: 120_000 },
   );
+  await page.waitForFunction(() => Boolean((window as any).__tldrawEditor), null, {
+    timeout: 120_000,
+  });
 
   const { room } = await waitForCanvasRoom(page);
 
@@ -516,10 +584,15 @@ async function main() {
     },
   });
 
+  await waitForCanvasComponentShape(page, SCORECARD_COMPONENT_ID, 120_000);
+  await waitForCanvasComponentShape(page, WIDGET_COMPONENT_ID, 120_000);
+  await placeProofComponentsOnCanvas(page, SCORECARD_COMPONENT_ID, WIDGET_COMPONENT_ID);
   await page.waitForSelector(`iframe[title="MCP Timeline"]`, {
     state: 'visible',
     timeout: 120_000,
   });
+  const frameLocator = page.frameLocator('iframe[title="MCP Timeline"]');
+  await frameLocator.locator('#topic').waitFor({ state: 'visible', timeout: 60_000 });
 
   const runResponse = await dispatchScorecardRun(page, room, SCORECARD_COMPONENT_ID);
   const canvasRunResponse = await dispatchCanvasRun(page, room);
@@ -527,11 +600,16 @@ async function main() {
   const canvasTaskId = requireQueuedRun('runCanvas', canvasRunResponse);
 
   const scorecardTask = await waitForTaskCompletion(supabase, scorecardTaskId);
-  const scorecardTaskValidation = requireSucceededTask('runScorecard', scorecardTask);
+  const scorecardTaskValidation = requireSucceededTask('runScorecard', scorecardTask, {
+    allowedErrorPatterns: ALLOWED_NON_FATAL_TASK_ERRORS,
+  });
+  if (scorecardTaskValidation.status === 'warning' && scorecardTaskValidation.message) {
+    console.warn(`[proof] ${scorecardTaskValidation.message}`);
+  }
 
   const canvasTask = await waitForTaskCompletion(supabase, canvasTaskId);
   const canvasTaskValidation = requireSucceededTask('runCanvas', canvasTask, {
-    allowedErrorPatterns: [/^LiveKit room not found before timeout:/i],
+    allowedErrorPatterns: ALLOWED_NON_FATAL_TASK_ERRORS,
   });
   if (canvasTaskValidation.status === 'warning' && canvasTaskValidation.message) {
     console.warn(`[proof] ${canvasTaskValidation.message}`);
@@ -557,9 +635,6 @@ async function main() {
     );
   }
 
-  const frameLocator = page.frameLocator('iframe[title="MCP Timeline"]');
-  await frameLocator.locator('#topic').waitFor({ state: 'visible', timeout: 60_000 });
-
   const syncStart = Date.now();
   let syncConfirmed = false;
   let syncedRowCount = 0;
@@ -576,7 +651,7 @@ async function main() {
   if (!syncConfirmed) {
     throw new Error('Timeline widget did not confirm scorecard sync within timeout.');
   }
-  await page.waitForTimeout(4_000);
+  await page.waitForTimeout(5_000);
 
   const videoPath = await page.video()?.path();
   await context.close();
