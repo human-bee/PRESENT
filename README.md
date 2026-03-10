@@ -52,11 +52,15 @@ npm install
   ANTHROPIC_API_KEY=           # optional, enables Claude models for the canvas steward
   NEXT_PUBLIC_SUPABASE_URL=
   NEXT_PUBLIC_SUPABASE_ANON_KEY=
-  # Optional: voice realtime tuning
+  # Optional: voice realtime model + tuning
+  VOICE_AGENT_REALTIME_MODEL=gpt-realtime-1.5
+  VOICE_AGENT_ROUTER_MODEL=claude-haiku-4-5
   VOICE_AGENT_TRANSCRIPTION_ENABLED=true
   VOICE_AGENT_INPUT_TRANSCRIPTION_MODEL=gpt-4o-mini-transcribe
   VOICE_AGENT_MIC_PROFILE=noisy_room
   ```
+
+  `VOICE_AGENT_REALTIME_MODEL` is the supported env override for the voice conversation runtime. The older `REALTIME_MODEL` env is not part of the voice rollout contract here and should not be used for model cutovers or verification.
 
   # Optional canvas steward controls (the legacy browser TLDraw agent is archived and disabled by default):
 

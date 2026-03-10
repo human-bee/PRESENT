@@ -1,4 +1,4 @@
-import { resolveVoiceRealtimeConfig } from '../config';
+import { DEFAULT_VOICE_REALTIME_MODEL, resolveVoiceRealtimeConfig } from '../config';
 
 const envOf = (patch: Record<string, string | undefined>): NodeJS.ProcessEnv =>
   ({
@@ -6,6 +6,39 @@ const envOf = (patch: Record<string, string | undefined>): NodeJS.ProcessEnv =>
   }) as NodeJS.ProcessEnv;
 
 describe('voice-agent realtime config', () => {
+  it('defaults the voice conversation model to explicit gpt-realtime-1.5', () => {
+    const config = resolveVoiceRealtimeConfig(envOf({}));
+
+    expect(config.resolvedRealtimeModel).toBe(DEFAULT_VOICE_REALTIME_MODEL);
+  });
+
+  it('prefers explicit voice realtime overrides and ignores legacy REALTIME_MODEL', () => {
+    const fromLegacyOnly = resolveVoiceRealtimeConfig(
+      envOf({
+        REALTIME_MODEL: 'gpt-realtime',
+      }),
+    );
+    expect(fromLegacyOnly.resolvedRealtimeModel).toBe(DEFAULT_VOICE_REALTIME_MODEL);
+
+    const fromVoiceEnv = resolveVoiceRealtimeConfig(
+      envOf({
+        REALTIME_MODEL: 'gpt-realtime',
+        VOICE_AGENT_REALTIME_MODEL: 'gpt-realtime-1.5',
+      }),
+    );
+    expect(fromVoiceEnv.resolvedRealtimeModel).toBe('gpt-realtime-1.5');
+
+    const fromOverride = resolveVoiceRealtimeConfig(
+      envOf({
+        VOICE_AGENT_REALTIME_MODEL: 'gpt-realtime',
+      }),
+      {
+        realtimeModel: 'gpt-realtime-1.5',
+      },
+    );
+    expect(fromOverride.resolvedRealtimeModel).toBe('gpt-realtime-1.5');
+  });
+
   it('uses transcription defaults from AGENT_STT_* when voice-specific vars are absent', () => {
     const config = resolveVoiceRealtimeConfig(
       envOf({

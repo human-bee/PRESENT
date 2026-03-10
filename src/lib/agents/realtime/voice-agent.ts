@@ -34,6 +34,7 @@ import { VoiceComponentLedger } from './voice-agent/component-ledger';
 import { ScorecardService } from './voice-agent/scorecard-service';
 import { TranscriptionBuffer, type PendingTranscriptionMessage } from './voice-agent/transcription-buffer';
 import { resolveVoiceRealtimeConfig } from './voice-agent/config';
+import { createVoiceRuntimeModelIdentity } from './voice-agent/runtime-model';
 import { ActiveResponseRecoveryGuard, TranscriptDedupeGuard, isActiveResponseError } from './voice-agent/runtime-guards';
 import {
   executeCreateComponent,
@@ -324,6 +325,8 @@ export default defineAgent({
       interruptTimeoutMs: voiceKnobs?.interruptTimeoutMs,
       transcriptionReadyTimeoutMs: voiceKnobs?.transcriptionReadyTimeoutMs,
     });
+    const voiceRuntimeModel = createVoiceRuntimeModelIdentity(realtimeConfig);
+    const resolvedRealtimeModel = voiceRuntimeModel.model;
     const voiceSessionId = `voice-${randomUUID()}`;
     let replaySequence = 0;
     const nextReplaySequence = () => {
@@ -625,13 +628,7 @@ export default defineAgent({
       sequence: nextReplaySequence(),
       sessionId: voiceSessionId,
       room: job.room.name || '',
-      provider: 'openai',
-      model:
-        process.env.VOICE_AGENT_REALTIME_MODEL?.trim() ||
-        process.env.REALTIME_MODEL?.trim() ||
-        'gpt-realtime',
-      providerPath: 'primary',
-      providerSource: 'runtime_selected',
+      ...voiceRuntimeModel,
       contextPriming: {
         transcriptionEnabled,
         multiParticipantTranscriptionEnabled,
@@ -2714,20 +2711,13 @@ Your only output is function calls. Never use plain text unless absolutely neces
         replayCorrelation.requestId || `${voiceSessionId}:${replayTask}:${Date.now()}`;
       const replayTraceId = replayCorrelation.traceId || replayRequestId;
       const replayIntentId = replayCorrelation.intentId || replayRequestId;
-      const realtimeModelForTool =
-        process.env.VOICE_AGENT_REALTIME_MODEL?.trim() ||
-        process.env.REALTIME_MODEL?.trim() ||
-        'gpt-realtime';
       const entry = {
         event: buildToolEvent(toolName, normalizedParams, roomName, {
           requestId: replayRequestId,
           traceId: replayTraceId,
           intentId: replayIntentId,
           sessionId: voiceSessionId,
-          provider: 'openai',
-          model: realtimeModelForTool,
-          providerSource: 'runtime_selected',
-          providerPath: 'primary',
+          ...voiceRuntimeModel,
           ...(toolEventContext ?? {}),
         }),
         reliable,
@@ -2738,10 +2728,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
         requestId: replayRequestId,
         traceId: replayTraceId,
         intentId: replayIntentId,
-        model: realtimeModelForTool,
-        provider: 'openai',
-        providerPath: 'primary',
-        providerSource: 'runtime_selected',
+        ...voiceRuntimeModel,
         queuedAt: Date.now(),
         input: replayParams,
         reliable,
@@ -2760,10 +2747,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
           reliable,
           task: replayTask,
         },
-        provider: 'openai',
-        model: realtimeModelForTool,
-        providerPath: 'primary',
-        providerSource: 'runtime_selected',
+        ...voiceRuntimeModel,
       });
 
       const publishOrQueueToolCall = async () => {
@@ -2791,10 +2775,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
             intentId: replayIntentId,
             input: replayParams,
             metadata: { reason: 'local_participant_unavailable', reliable },
-            provider: 'openai',
-            model: realtimeModelForTool,
-            providerPath: 'primary',
-            providerSource: 'runtime_selected',
+            ...voiceRuntimeModel,
           });
           return;
         }
@@ -2812,10 +2793,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
               intentId: replayIntentId,
               input: replayParams,
               metadata: { reason: 'publish_returned_false', reliable },
-              provider: 'openai',
-              model: realtimeModelForTool,
-              providerPath: 'primary',
-              providerSource: 'runtime_selected',
+              ...voiceRuntimeModel,
             });
             if (!flushToolCallsHandle) {
               flushToolCallsHandle = setTimeout(() => {
@@ -2835,10 +2813,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
             intentId: replayIntentId,
             input: replayParams,
             metadata: { reliable },
-            provider: 'openai',
-            model: realtimeModelForTool,
-            providerPath: 'primary',
-            providerSource: 'runtime_selected',
+            ...voiceRuntimeModel,
           });
         } catch (error) {
           console.error('[VoiceAgent] publishData threw', { tool: toolName, error });
@@ -2854,10 +2829,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
             input: replayParams,
             error: error instanceof Error ? error.message : String(error),
             metadata: { reliable },
-            provider: 'openai',
-            model: realtimeModelForTool,
-            providerPath: 'primary',
-            providerSource: 'runtime_selected',
+            ...voiceRuntimeModel,
             priority: 'high',
           });
           if (!flushToolCallsHandle) {
@@ -2898,10 +2870,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
             idempotencyKey: orchestration.idempotencyKey,
             lockKey: orchestration.lockKey,
           },
-          provider: 'openai',
-          model: realtimeModelForTool,
-          providerPath: 'primary',
-          providerSource: 'runtime_selected',
+          ...voiceRuntimeModel,
         });
         console.debug('[VoiceAgent] dropping duplicate mutation by idempotency key', {
           tool: toolName,
@@ -3718,14 +3687,10 @@ Your only output is function calls. Never use plain text unless absolutely neces
       components: (systemCapabilities.components || []).length,
       manifestVersion: systemCapabilities.manifestVersion,
     });
-    const resolvedRealtimeModel =
-      process.env.VOICE_AGENT_REALTIME_MODEL?.trim() ||
-      process.env.REALTIME_MODEL?.trim() ||
-      'gpt-realtime';
     recordVoiceModelEvent({
       eventType: 'system_prompt_loaded',
       status: 'ready',
-      model: resolvedRealtimeModel,
+      model: voiceRuntimeModel.model,
       systemPrompt: instructions,
       contextPriming: {
         capabilityProfile: systemCapabilities.capabilityProfile || configuredCapabilityProfile,
@@ -4392,13 +4357,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
               realtimeCallId: fnCall.id,
               argumentBytes: typeof fnCall.args === 'string' ? fnCall.args.length : 0,
             },
-            provider: 'openai',
-            model:
-              process.env.VOICE_AGENT_REALTIME_MODEL?.trim() ||
-              process.env.REALTIME_MODEL?.trim() ||
-              'gpt-realtime',
-            providerPath: 'primary',
-            providerSource: 'runtime_selected',
+            ...voiceRuntimeModel,
           });
           if (
             ![
@@ -4603,13 +4562,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
             status: 'error',
             error: error instanceof Error ? error.message : String(error),
             output: fnCall,
-            provider: 'openai',
-            model:
-              process.env.VOICE_AGENT_REALTIME_MODEL?.trim() ||
-              process.env.REALTIME_MODEL?.trim() ||
-              'gpt-realtime',
-            providerPath: 'primary',
-            providerSource: 'runtime_selected',
+            ...voiceRuntimeModel,
             priority: 'high',
           });
         }
@@ -4727,10 +4680,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
       recordVoiceModelEvent({
         eventType: 'conversation_item_added',
         status: itemRole,
-        model:
-          process.env.VOICE_AGENT_REALTIME_MODEL?.trim() ||
-          process.env.REALTIME_MODEL?.trim() ||
-          'gpt-realtime',
+        model: voiceRuntimeModel.model,
         requestId: itemRequestId,
         traceId: itemRequestId,
         intentId: itemRequestId,
@@ -4766,10 +4716,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
       recordVoiceModelEvent({
         eventType: 'session_error',
         status: 'error',
-        model:
-          process.env.VOICE_AGENT_REALTIME_MODEL?.trim() ||
-          process.env.REALTIME_MODEL?.trim() ||
-          'gpt-realtime',
+        model: voiceRuntimeModel.model,
         error: event.error instanceof Error ? event.error.message : String(event.error),
         output: event,
         priority: 'high',
@@ -4788,10 +4735,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
       recordVoiceModelEvent({
         eventType: 'session_close',
         status: String(event.reason || 'closed'),
-        model:
-          process.env.VOICE_AGENT_REALTIME_MODEL?.trim() ||
-          process.env.REALTIME_MODEL?.trim() ||
-          'gpt-realtime',
+        model: voiceRuntimeModel.model,
         output: payload,
         ...(event.error
           ? { error: event.error instanceof Error ? event.error.message : String(event.error) }
@@ -4877,10 +4821,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
     recordVoiceModelEvent({
       eventType: 'session_started',
       status: 'running',
-      model:
-        process.env.VOICE_AGENT_REALTIME_MODEL?.trim() ||
-        process.env.REALTIME_MODEL?.trim() ||
-        'gpt-realtime',
+      model: voiceRuntimeModel.model,
       contextPriming: {
         room: job.room.name || '',
         transcriptionEnabled: !multiParticipantTranscriptionEnabled && transcriptionEnabled,
