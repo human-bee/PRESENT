@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDebateScorecard } from '@/lib/agents/shared/supabase-context';
+import { getTimelineDocument } from '@/lib/agents/shared/supabase-context';
 import { DEV_BYPASS_ENABLED } from '@/lib/agents/shared/byok-flags';
 import { assertCanvasMember, parseCanvasIdFromRoom } from '@/lib/agents/shared/canvas-billing';
 import { resolveRequestUserId } from '@/lib/supabase/server/resolve-request-user';
@@ -53,32 +53,32 @@ export async function GET(req: NextRequest) {
       }
       if (/canvas not found/i.test(message)) {
         return NextResponse.json({ error: 'canvas not found' }, { status: 404 });
-      } else {
-        return NextResponse.json({ error: 'membership check failed' }, { status: 500 });
       }
+      return NextResponse.json({ error: 'membership check failed' }, { status: 500 });
     }
   }
 
   try {
-    const scorecard = await getDebateScorecard(room, componentId);
-    const timeline = Array.isArray(scorecard.state?.timeline) ? scorecard.state.timeline : [];
+    const timeline = await getTimelineDocument(room, componentId, { strict: true });
     return NextResponse.json({
       ok: true,
       room,
       componentId,
-      scorecard: scorecard.state,
-      timeline,
-      version: scorecard.version,
-      lastUpdated: scorecard.lastUpdated,
+      document: timeline.document,
+      version: timeline.version,
+      lastUpdated: timeline.lastUpdated,
       diagnostics: {
         membership,
       },
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    if (process.env.NODE_ENV !== 'production') {
-      return NextResponse.json({ error: message || 'scorecard read failed' }, { status: 500 });
+    if (message === 'TIMELINE_NOT_FOUND') {
+      return NextResponse.json({ error: 'timeline not found' }, { status: 404 });
     }
-    return NextResponse.json({ error: 'scorecard read failed' }, { status: 500 });
+    if (process.env.NODE_ENV !== 'production') {
+      return NextResponse.json({ error: message || 'timeline read failed' }, { status: 500 });
+    }
+    return NextResponse.json({ error: 'timeline read failed' }, { status: 500 });
   }
 }

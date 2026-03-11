@@ -25,10 +25,10 @@ type McpAppWidgetState = {
   serverName?: string;
   resourceUri?: string;
   args?: Record<string, unknown>;
+  syncSource?: 'timeline';
   syncRoom?: string;
   syncComponentId?: string;
   syncIntervalMs?: number;
-  syncTimeline?: boolean;
   autoRun?: boolean;
   runId?: string;
   displayMode?: string;
@@ -36,13 +36,10 @@ type McpAppWidgetState = {
   contextKey?: string;
 };
 
-type ScorecardSyncSnapshot = {
+type TimelineSyncSnapshot = {
   room: string;
   componentId: string;
-  timeline: Array<Record<string, unknown>>;
-  topic?: string;
-  round?: string;
-  status?: Record<string, unknown>;
+  document: Record<string, unknown>;
   version?: number;
   lastUpdated?: number;
   syncedAt: number;
@@ -50,7 +47,7 @@ type ScorecardSyncSnapshot = {
 
 const HOST_INFO = { name: 'PRESENT', version: '0.1.0' };
 const DEFAULT_DISPLAY_MODES: McpUiDisplayMode[] = ['inline', 'pip', 'fullscreen'];
-const DEFAULT_SCORECARD_SYNC_INTERVAL_MS = 3000;
+const DEFAULT_TIMELINE_SYNC_INTERVAL_MS = 3000;
 
 const coerceText = (value: unknown): string | undefined => {
   if (typeof value !== 'string') return undefined;
@@ -91,11 +88,13 @@ const stringifyArgs = (value: unknown) => {
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   !!value && typeof value === 'object' && !Array.isArray(value);
 
-const buildTimelineFingerprint = (timeline: Array<Record<string, unknown>>): string => {
-  const last = timeline.length > 0 ? timeline[timeline.length - 1] : undefined;
-  const lastId = last ? coerceText(last.id ?? last.eventId) ?? 'na' : 'na';
-  const lastTimestamp = last ? coerceFiniteNumber(last.timestamp ?? last.ts) ?? -1 : -1;
-  return `${timeline.length}:${lastId}:${lastTimestamp}`;
+const buildTimelineFingerprint = (document: Record<string, unknown>): string => {
+  const lanes = Array.isArray(document.lanes) ? document.lanes.length : 0;
+  const items = Array.isArray(document.items) ? document.items.length : 0;
+  const dependencies = Array.isArray(document.dependencies) ? document.dependencies.length : 0;
+  const events = Array.isArray(document.events) ? document.events.length : 0;
+  const lastUpdated = coerceFiniteNumber(document.lastUpdated) ?? -1;
+  return `${lanes}:${items}:${dependencies}:${events}:${lastUpdated}`;
 };
 
 const normalizeToolResult = (result: unknown, isError = false) => {
@@ -161,10 +160,10 @@ export function McpAppWidget(props: McpAppWidgetProps) {
     serverName: rest.serverName,
     resourceUri: rest.resourceUri,
     args: rest.args,
+    syncSource: rest.syncSource,
     syncRoom: rest.syncRoom,
     syncComponentId: rest.syncComponentId,
     syncIntervalMs: rest.syncIntervalMs,
-    syncTimeline: rest.syncTimeline,
     autoRun: rest.autoRun,
     runId: rest.runId,
     displayMode: rest.displayMode,
@@ -182,8 +181,8 @@ export function McpAppWidget(props: McpAppWidgetProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const bridgeRef = useRef<AppBridge | null>(null);
   const lastRunKeyRef = useRef<string>('');
-  const latestScorecardSnapshotRef = useRef<ScorecardSyncSnapshot | null>(null);
-  const lastScorecardSyncSignatureRef = useRef<string>('');
+  const latestTimelineSnapshotRef = useRef<TimelineSyncSnapshot | null>(null);
+  const lastTimelineSyncSignatureRef = useRef<string>('');
 
   const registryProps = useMemo(
     () => ({
@@ -193,10 +192,10 @@ export function McpAppWidget(props: McpAppWidgetProps) {
       serverName: state.serverName,
       resourceUri: state.resourceUri,
       args: state.args,
+      syncSource: state.syncSource,
       syncRoom: state.syncRoom,
       syncComponentId: state.syncComponentId,
       syncIntervalMs: state.syncIntervalMs,
-      syncTimeline: state.syncTimeline,
       autoRun: state.autoRun,
       runId: state.runId,
       displayMode: state.displayMode,
@@ -214,6 +213,7 @@ export function McpAppWidget(props: McpAppWidgetProps) {
       serverName: typeof patch.serverName === 'string' ? patch.serverName : prev.serverName,
       resourceUri: typeof patch.resourceUri === 'string' ? patch.resourceUri : prev.resourceUri,
       args: typeof patch.args === 'object' && patch.args ? (patch.args as Record<string, unknown>) : prev.args,
+      syncSource: patch.syncSource === 'timeline' ? 'timeline' : prev.syncSource,
       syncRoom: typeof patch.syncRoom === 'string' ? patch.syncRoom : prev.syncRoom,
       syncComponentId:
         typeof patch.syncComponentId === 'string' ? patch.syncComponentId : prev.syncComponentId,
@@ -221,8 +221,6 @@ export function McpAppWidget(props: McpAppWidgetProps) {
         typeof patch.syncIntervalMs === 'number' && Number.isFinite(patch.syncIntervalMs)
           ? patch.syncIntervalMs
           : prev.syncIntervalMs,
-      syncTimeline:
-        typeof patch.syncTimeline === 'boolean' ? patch.syncTimeline : prev.syncTimeline,
       autoRun: typeof patch.autoRun === 'boolean' ? patch.autoRun : prev.autoRun,
       runId: typeof patch.runId === 'string' ? patch.runId : prev.runId,
       displayMode: typeof patch.displayMode === 'string' ? patch.displayMode : prev.displayMode,
@@ -276,18 +274,18 @@ export function McpAppWidget(props: McpAppWidgetProps) {
   }, [toolDescriptor]);
 
   const argsSyncRoom = coerceText(state.args?.room);
-  const argsSyncComponentId =
-    coerceText(state.args?.componentId) ?? coerceText(state.args?.scorecardComponentId);
-  const scorecardSync = useMemo(() => {
+  const argsSyncComponentId = coerceText(state.args?.componentId);
+  const argsSyncRefreshKey = coerceText(state.args?.timelineRefreshKey);
+  const timelineSync = useMemo(() => {
     const room = coerceText(state.syncRoom) ?? argsSyncRoom;
     const componentId = coerceText(state.syncComponentId) ?? argsSyncComponentId;
-    const enabled = coerceBoolean(state.syncTimeline, false);
+    const enabled = state.syncSource === 'timeline';
     const intervalMs = Math.max(
       1000,
       Math.min(
         30_000,
         Math.round(
-          coerceFiniteNumber(state.syncIntervalMs) ?? DEFAULT_SCORECARD_SYNC_INTERVAL_MS,
+          coerceFiniteNumber(state.syncIntervalMs) ?? DEFAULT_TIMELINE_SYNC_INTERVAL_MS,
         ),
       ),
     );
@@ -298,16 +296,16 @@ export function McpAppWidget(props: McpAppWidgetProps) {
     state.syncComponentId,
     state.syncIntervalMs,
     state.syncRoom,
-    state.syncTimeline,
+    state.syncSource,
   ]);
 
-  const publishScorecardSnapshot = useCallback((snapshot: ScorecardSyncSnapshot) => {
-    latestScorecardSnapshotRef.current = snapshot;
+  const publishTimelineSnapshot = useCallback((snapshot: TimelineSyncSnapshot) => {
+    latestTimelineSnapshotRef.current = snapshot;
     const iframeWindow = iframeRef.current?.contentWindow;
     if (!iframeWindow) return;
     iframeWindow.postMessage(
       {
-        type: 'present:scorecard-sync',
+        type: 'present:timeline-sync',
         payload: snapshot,
       },
       '*',
@@ -319,34 +317,34 @@ export function McpAppWidget(props: McpAppWidgetProps) {
     if (!iframe) return;
 
     const handleLoad = () => {
-      if (!scorecardSync.enabled) return;
-      const snapshot = latestScorecardSnapshotRef.current;
+      if (!timelineSync.enabled) return;
+      const snapshot = latestTimelineSnapshotRef.current;
       if (!snapshot) return;
-      if (snapshot.room !== scorecardSync.room || snapshot.componentId !== scorecardSync.componentId) {
+      if (snapshot.room !== timelineSync.room || snapshot.componentId !== timelineSync.componentId) {
         return;
       }
-      publishScorecardSnapshot(snapshot);
+      publishTimelineSnapshot(snapshot);
     };
 
     iframe.addEventListener('load', handleLoad);
     return () => {
       iframe.removeEventListener('load', handleLoad);
     };
-  }, [publishScorecardSnapshot, scorecardSync.componentId, scorecardSync.enabled, scorecardSync.room]);
+  }, [publishTimelineSnapshot, timelineSync.componentId, timelineSync.enabled, timelineSync.room]);
 
   useEffect(() => {
-    if (scorecardSync.enabled) return;
-    latestScorecardSnapshotRef.current = null;
-    lastScorecardSyncSignatureRef.current = '';
-  }, [scorecardSync.enabled]);
+    if (timelineSync.enabled) return;
+    latestTimelineSnapshotRef.current = null;
+    lastTimelineSyncSignatureRef.current = '';
+  }, [timelineSync.enabled]);
 
   useEffect(() => {
-    lastScorecardSyncSignatureRef.current = '';
-    latestScorecardSnapshotRef.current = null;
-  }, [scorecardSync.componentId, scorecardSync.room]);
+    lastTimelineSyncSignatureRef.current = '';
+    latestTimelineSnapshotRef.current = null;
+  }, [timelineSync.componentId, timelineSync.room]);
 
   useEffect(() => {
-    if (!scorecardSync.enabled || !scorecardSync.room || !scorecardSync.componentId) return;
+    if (!timelineSync.enabled || !timelineSync.room || !timelineSync.componentId) return;
 
     let cancelled = false;
     let timer: number | null = null;
@@ -354,92 +352,82 @@ export function McpAppWidget(props: McpAppWidgetProps) {
     let consecutiveFailures = 0;
 
     const poll = async () => {
-      let nextDelayMs = scorecardSync.intervalMs;
+      let nextDelayMs = timelineSync.intervalMs;
       inflightController = new AbortController();
       try {
         const search = new URLSearchParams({
-          room: scorecardSync.room,
-          componentId: scorecardSync.componentId,
+          room: timelineSync.room,
+          componentId: timelineSync.componentId,
         });
-        const res = await fetchWithSupabaseAuth(`/api/steward/scorecard?${search.toString()}`, {
+        const res = await fetchWithSupabaseAuth(`/api/steward/timeline?${search.toString()}`, {
           cache: 'no-store',
           signal: inflightController.signal,
         });
         if (cancelled) return;
         if (!res.ok) {
-          throw new Error(`scorecard_sync_${res.status}`);
+          throw new Error(`timeline_sync_${res.status}`);
         }
 
         const payload = (await res.json()) as Record<string, unknown>;
         if (cancelled) return;
-        if (!payload?.ok || !isRecord(payload.scorecard)) return;
-        const scorecard = payload.scorecard;
-        const rawTimeline = Array.isArray(payload.timeline)
-          ? payload.timeline
-          : Array.isArray(scorecard.timeline)
-            ? scorecard.timeline
-            : [];
-        const timeline = rawTimeline.filter((entry) => isRecord(entry)) as Array<
-          Record<string, unknown>
-        >;
-        const version = coerceFiniteNumber(payload.version ?? scorecard.version);
-        const lastUpdated = coerceFiniteNumber(payload.lastUpdated ?? scorecard.lastUpdated);
-        const timelineFingerprint = buildTimelineFingerprint(timeline);
-        const signature = `${scorecardSync.room}:${scorecardSync.componentId}:${
-          version ?? 'na'
-        }:${timelineFingerprint}`;
-        if (signature === lastScorecardSyncSignatureRef.current) return;
-        lastScorecardSyncSignatureRef.current = signature;
+        if (!payload?.ok || !isRecord(payload.document)) return;
+        const document = payload.document;
+        const version = coerceFiniteNumber(payload.version ?? document.version);
+        const lastUpdated = coerceFiniteNumber(payload.lastUpdated ?? document.lastUpdated);
+        const timelineFingerprint = buildTimelineFingerprint(document);
+        const signature = `${timelineSync.room}:${timelineSync.componentId}:${version ?? 'na'}:${timelineFingerprint}`;
+        if (signature === lastTimelineSyncSignatureRef.current) return;
+        lastTimelineSyncSignatureRef.current = signature;
 
-        const snapshot: ScorecardSyncSnapshot = {
-          room: scorecardSync.room,
-          componentId: scorecardSync.componentId,
-          timeline,
-          topic: coerceText(scorecard.topic),
-          round: coerceText(scorecard.round),
-          status: isRecord(scorecard.status) ? scorecard.status : undefined,
+        const snapshot: TimelineSyncSnapshot = {
+          room: timelineSync.room,
+          componentId: timelineSync.componentId,
+          document,
           version,
           lastUpdated,
           syncedAt: Date.now(),
         };
 
-        publishScorecardSnapshot(snapshot);
+        publishTimelineSnapshot(snapshot);
 
         setState((prev) => {
           const prevArgs = isRecord(prev.args) ? prev.args : {};
+          const nextSyncStatus =
+            isRecord(document.sync) && typeof document.sync.status === 'string'
+              ? document.sync.status
+              : 'live';
           const nextArgs: Record<string, unknown> = {
             ...prevArgs,
-            room: scorecardSync.room,
-            componentId: scorecardSync.componentId,
-            timeline,
-            timelineTopic: snapshot.topic ?? prevArgs.timelineTopic,
-            timelineRound: snapshot.round ?? prevArgs.timelineRound,
-            timelineVersion:
-              snapshot.version != null ? snapshot.version : prevArgs.timelineVersion,
+            room: timelineSync.room,
+            componentId: timelineSync.componentId,
+            timelineTitle: coerceText(document.title) ?? prevArgs.timelineTitle,
+            timelineSubtitle: coerceText(document.subtitle) ?? prevArgs.timelineSubtitle,
+            timelineVersion: snapshot.version != null ? snapshot.version : prevArgs.timelineVersion,
             timelineLastUpdated:
-              snapshot.lastUpdated != null
-                ? snapshot.lastUpdated
-                : prevArgs.timelineLastUpdated,
+              snapshot.lastUpdated != null ? snapshot.lastUpdated : prevArgs.timelineLastUpdated,
             timelineSyncedAt: snapshot.syncedAt,
-            timelineStatus: snapshot.status ?? prevArgs.timelineStatus,
-            timelineSyncStatus: 'ok',
+            timelineSyncState:
+              isRecord(document.sync) && typeof document.sync.status === 'string'
+                ? document.sync.status
+                : prevArgs.timelineSyncState,
+            timelinePendingExportCount:
+              isRecord(document.sync) && Array.isArray(document.sync.pendingExports)
+                ? document.sync.pendingExports.length
+                : prevArgs.timelinePendingExportCount,
+            timelineExportStages:
+              isRecord(document.sync) && Array.isArray(document.sync.pendingExports)
+                ? document.sync.pendingExports
+                : prevArgs.timelineExportStages,
+            timelineSyncStatus: nextSyncStatus,
             timelineSyncError: null,
-            timelineSyncRetryMs: scorecardSync.intervalMs,
+            timelineSyncRetryMs: timelineSync.intervalMs,
           };
-          const nextRunId =
-            snapshot.version != null
-              ? `scorecard-sync:v:${snapshot.version}`
-              : `scorecard-sync:f:${timelineFingerprint}`;
-          if (
-            stringifyArgs(nextArgs) === stringifyArgs(prev.args ?? {}) &&
-            nextRunId === prev.runId
-          ) {
+          if (stringifyArgs(nextArgs) === stringifyArgs(prev.args ?? {})) {
             return prev;
           }
           return {
             ...prev,
             args: nextArgs,
-            runId: nextRunId,
           };
         });
         consecutiveFailures = 0;
@@ -454,9 +442,31 @@ export function McpAppWidget(props: McpAppWidgetProps) {
           syncError instanceof Error ? syncError.message : String(syncError ?? 'unknown_error');
         consecutiveFailures += 1;
         nextDelayMs = Math.min(
-          scorecardSync.intervalMs * 2 ** Math.min(consecutiveFailures, 4),
+          timelineSync.intervalMs * 2 ** Math.min(consecutiveFailures, 4),
           30_000,
         );
+        const latestSnapshot = latestTimelineSnapshotRef.current;
+        if (
+          latestSnapshot &&
+          latestSnapshot.room === timelineSync.room &&
+          latestSnapshot.componentId === timelineSync.componentId
+        ) {
+          const latestDocument = isRecord(latestSnapshot.document) ? latestSnapshot.document : {};
+          const nextDocument = {
+            ...latestDocument,
+            sync: {
+              ...(isRecord(latestDocument.sync) ? latestDocument.sync : {}),
+              status: 'error',
+              lastError: errorMessage,
+              retryMs: nextDelayMs,
+            },
+          };
+          publishTimelineSnapshot({
+            ...latestSnapshot,
+            document: nextDocument,
+            syncedAt: Date.now(),
+          });
+        }
         setState((prev) => {
           const prevArgs = isRecord(prev.args) ? prev.args : {};
           if (
@@ -478,9 +488,9 @@ export function McpAppWidget(props: McpAppWidgetProps) {
           };
         });
         if (consecutiveFailures === 1 || consecutiveFailures % 5 === 0) {
-          console.warn('[McpAppWidget] scorecard sync failed', {
-            room: scorecardSync.room,
-            componentId: scorecardSync.componentId,
+          console.warn('[McpAppWidget] timeline sync failed', {
+            room: timelineSync.room,
+            componentId: timelineSync.componentId,
             error: errorMessage,
             retryInMs: nextDelayMs,
             consecutiveFailures,
@@ -502,11 +512,12 @@ export function McpAppWidget(props: McpAppWidgetProps) {
       }
     };
   }, [
-    publishScorecardSnapshot,
-    scorecardSync.componentId,
-    scorecardSync.enabled,
-    scorecardSync.intervalMs,
-    scorecardSync.room,
+    argsSyncRefreshKey,
+    publishTimelineSnapshot,
+    timelineSync.componentId,
+    timelineSync.enabled,
+    timelineSync.intervalMs,
+    timelineSync.room,
   ]);
 
   useEffect(() => {
@@ -712,6 +723,16 @@ export function McpAppWidget(props: McpAppWidgetProps) {
 
   const argsKey = useMemo(() => stringifyArgs(state.args), [state.args]);
   const autoRun = coerceBoolean(state.autoRun, true);
+  const timelineShellStatus = useMemo(() => {
+    const explicitSyncError = coerceText(state.args?.timelineSyncError);
+    if (explicitSyncError) return 'Sync error';
+    const explicitSyncStatus =
+      coerceText(state.args?.timelineSyncStatus) ?? coerceText(state.args?.timelineSyncState);
+    if (explicitSyncStatus) {
+      return `Sync ${explicitSyncStatus.replace(/_/g, ' ')}`;
+    }
+    return 'Sync idle';
+  }, [state.args]);
 
   useEffect(() => {
     if (!bridgeReady) return;
@@ -752,7 +773,13 @@ export function McpAppWidget(props: McpAppWidgetProps) {
       <div className="flex items-center justify-between border-b border-white/10 px-4 py-2 text-xs text-white/70">
         <span className="font-semibold text-white/80">{title}</span>
         <span className="uppercase tracking-wide">
-          {status === 'loading' ? 'Loading' : status === 'error' ? 'Error' : 'Ready'}
+          {status === 'loading'
+            ? 'Loading'
+            : status === 'error'
+              ? 'Error'
+              : timelineSync.enabled
+                ? timelineShellStatus
+                : 'Ready'}
         </span>
       </div>
       {status === 'error' ? (

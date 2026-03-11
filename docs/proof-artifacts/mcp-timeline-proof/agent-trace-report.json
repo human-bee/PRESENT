@@ -1,317 +1,321 @@
 {
-  "generatedAt": "2026-03-10T07:47:06.064Z",
+  "generatedAt": "2026-03-11T09:43:02.250Z",
   "baseUrl": "http://localhost:3000",
-  "room": "canvas-dev-9cb0ce17-8db2-4c3c-8d3f-7d9af221be67",
-  "scorecardComponentId": "scorecard-mcp-timeline-proof",
-  "widgetComponentId": "mcp-timeline-widget-proof",
-  "runResponse": {
+  "room": "canvas-dev-d6e240d5-6e29-4c0c-bf54-be6abc0cea10",
+  "timelineComponentId": "mcp-timeline-widget-proof",
+  "timelineRunResponse": {
     "ok": true,
     "status": 202,
     "payload": {
       "status": "queued",
       "task": {
-        "id": "8fd2c17b-dab3-485b-8b94-242816a0dcd1",
-        "created_at": "2026-03-10T07:46:35.729+00:00",
-        "updated_at": "2026-03-10T07:46:35.729+00:00",
-        "room": "canvas-dev-9cb0ce17-8db2-4c3c-8d3f-7d9af221be67",
-        "task": "scorecard.patch",
+        "id": "3973a6df-d6e9-469c-b5a1-7e9743a79b1d",
+        "created_at": "2026-03-11T09:42:50.357+00:00",
+        "updated_at": "2026-03-11T09:42:50.357+00:00",
+        "room": "canvas-dev-d6e240d5-6e29-4c0c-bf54-be6abc0cea10",
+        "task": "timeline.patch",
         "params": {
-          "room": "canvas-dev-9cb0ce17-8db2-4c3c-8d3f-7d9af221be67",
-          "topic": "MCP timeline proof run",
-          "lockKey": "widget:scorecard-mcp-timeline-proof",
-          "summary": "Apply deterministic scorecard patch for timeline sync proof.",
-          "metadata": {
-            "runtimeScope": "whiteboard-jamie-q02f56az.livekit.cloud"
-          },
-          "provider": "cerebras",
-          "componentId": "scorecard-mcp-timeline-proof",
-          "searchModel": "gpt-5-mini",
-          "claimPatches": [
+          "ops": [
             {
-              "id": "AFF-1",
-              "op": "upsert",
-              "side": "AFF",
-              "quote": "MCP timeline sync should mirror canonical scorecard updates.",
-              "impact": "MAJOR",
-              "speech": "1AC",
-              "status": "VERIFIED",
-              "summary": "Deterministic proof claim inserted by capture script.",
-              "verdict": "ACCURATE"
+              "type": "set_meta",
+              "title": "Platform Launch Timeline",
+              "subtitle": "Multi-team roadmap for live planning, sprint flow, and blockers.",
+              "horizonLabel": "Q2 launch sprint window"
+            },
+            {
+              "lane": {
+                "id": "lane-product",
+                "kind": "team",
+                "name": "Product",
+                "color": "#7bb7ff",
+                "order": 0
+              },
+              "type": "upsert_lane"
+            },
+            {
+              "lane": {
+                "id": "lane-engineering",
+                "kind": "team",
+                "name": "Engineering",
+                "color": "#74c69d",
+                "order": 1
+              },
+              "type": "upsert_lane"
+            },
+            {
+              "lane": {
+                "id": "lane-go-to-market",
+                "kind": "team",
+                "name": "Go To Market",
+                "color": "#e9b25f",
+                "order": 2
+              },
+              "type": "upsert_lane"
+            },
+            {
+              "item": {
+                "id": "item-brief",
+                "tags": [
+                  "brief",
+                  "launch"
+                ],
+                "type": "milestone",
+                "notes": "Needs final approval before kickoff packets go out.",
+                "owner": "Product",
+                "title": "Finalize launch brief",
+                "laneId": "lane-product",
+                "status": "in_progress",
+                "summary": "Lock positioning, feature set, and launch narrative with design and GTM.",
+                "dueLabel": "Apr 8",
+                "blockedBy": [],
+                "createdAt": 1773222167474,
+                "updatedAt": 1773222167474,
+                "sprintLabel": "Sprint 14"
+              },
+              "type": "upsert_item"
+            },
+            {
+              "item": {
+                "id": "item-realtime",
+                "tags": [
+                  "realtime",
+                  "ingest"
+                ],
+                "type": "task",
+                "notes": "At risk until retry semantics are proven under rapid updates.",
+                "owner": "Platform",
+                "title": "Ship realtime webhook ingest",
+                "laneId": "lane-engineering",
+                "status": "at_risk",
+                "summary": "Normalize webhook, form, and tool updates into canonical timeline ops.",
+                "dueLabel": "Apr 10",
+                "blockedBy": [
+                  "item-brief"
+                ],
+                "createdAt": 1773222167474,
+                "updatedAt": 1773222167474,
+                "sprintLabel": "Sprint 14"
+              },
+              "type": "upsert_item"
+            },
+            {
+              "item": {
+                "id": "item-sales-kit",
+                "tags": [
+                  "enablement"
+                ],
+                "type": "handoff",
+                "notes": "Starts once the launch brief is locked.",
+                "owner": "GTM",
+                "title": "Prep sales enablement kit",
+                "laneId": "lane-go-to-market",
+                "status": "planned",
+                "summary": "Build launch talk track, FAQ, and internal demo reel.",
+                "dueLabel": "Apr 15",
+                "blockedBy": [
+                  "item-brief"
+                ],
+                "createdAt": 1773222167474,
+                "updatedAt": 1773222167474,
+                "startLabel": "Apr 9"
+              },
+              "type": "upsert_item"
+            },
+            {
+              "item": {
+                "id": "item-auth-blocker",
+                "tags": [
+                  "blocker",
+                  "auth"
+                ],
+                "type": "blocker",
+                "notes": "Needs environment parity before the launch walkthrough can rehearse cleanly.",
+                "owner": "Infra",
+                "title": "Resolve auth callback blocker",
+                "laneId": "lane-engineering",
+                "status": "blocked",
+                "summary": "Local callback mismatch is blocking stable staging verification.",
+                "blockedBy": [],
+                "createdAt": 1773222167474,
+                "updatedAt": 1773222167474,
+                "sprintLabel": "Sprint 14"
+              },
+              "type": "upsert_item"
+            },
+            {
+              "type": "set_dependency",
+              "dependency": {
+                "id": "dep-brief-realtime",
+                "kind": "depends_on",
+                "label": "Schema and scope locked",
+                "toItemId": "item-realtime",
+                "fromItemId": "item-brief"
+              }
+            },
+            {
+              "type": "stage_export",
+              "exportStage": {
+                "id": "export-linear",
+                "status": "queued",
+                "target": "linear",
+                "summary": "Linear export staged for roadmap review.",
+                "queuedAt": 1773222167474,
+                "updatedAt": 1773222167474
+              }
             }
           ],
-          "runtimeScope": "whiteboard-jamie-q02f56az.livekit.cloud",
-          "configVersion": "74aba2730c70",
-          "provider_path": "fast",
-          "provider_source": "runtime_selected"
-        },
-        "status": "queued",
-        "priority": 0,
-        "run_at": null,
-        "attempt": 0,
-        "error": null,
-        "request_id": "proof-1773128795499",
-        "dedupe_key": null,
-        "resource_keys": [
-          "room:canvas-dev-9cb0ce17-8db2-4c3c-8d3f-7d9af221be67",
-          "scorecard:scorecard-mcp-timeline-proof",
-          "runtime-scope:whiteboard-jamie-q02f56az.livekit.cloud",
-          "lock:widget:scorecard-mcp-timeline-proof"
-        ],
-        "lease_token": null,
-        "lease_expires_at": null,
-        "result": null,
-        "trace_id": null
-      }
-    }
-  },
-  "canvasRunResponse": {
-    "ok": true,
-    "status": 202,
-    "payload": {
-      "status": "queued",
-      "task": {
-        "id": "77742ccd-1665-443f-9f8e-a78142abe443",
-        "created_at": "2026-03-10T07:46:36.018+00:00",
-        "updated_at": "2026-03-10T07:46:36.018+00:00",
-        "room": "canvas-dev-9cb0ce17-8db2-4c3c-8d3f-7d9af221be67",
-        "task": "canvas.agent_prompt",
-        "params": {
-          "room": "canvas-dev-9cb0ce17-8db2-4c3c-8d3f-7d9af221be67",
-          "model": "claude-haiku-4-5",
-          "lockKey": "room:canvas-dev-9cb0ce17-8db2-4c3c-8d3f-7d9af221be67:task:canvas.agent_prompt",
-          "message": "Draw one sticky note that says \"MCP timeline sync verified\".",
-          "traceId": "canvas-proof-trace-1773128795894",
+          "room": "canvas-dev-d6e240d5-6e29-4c0c-bf54-be6abc0cea10",
+          "task": "timeline.patch",
+          "source": "tool",
+          "lockKey": "widget:mcp-timeline-widget-proof",
+          "summary": "Seed deterministic timeline proof snapshot.",
+          "traceId": "timeline-proof-trace-1773222167474",
+          "intentId": "timeline-proof-intent-1773222167474",
           "metadata": {
-            "traceId": "canvas-proof-trace-1773128795894",
-            "intentId": "canvas-proof-1773128795894",
-            "runtimeScope": "whiteboard-jamie-q02f56az.livekit.cloud",
-            "configVersion": "74aba2730c70"
+            "runtimeScope": "local"
           },
-          "provider": "anthropic",
-          "requestId": "canvas-proof-1773128795894",
-          "runtimeScope": "whiteboard-jamie-q02f56az.livekit.cloud",
-          "configVersion": "74aba2730c70",
-          "provider_path": "primary",
-          "provider_source": "task_params"
+          "requestId": "timeline-proof-1773222167474",
+          "componentId": "mcp-timeline-widget-proof",
+          "runtimeScope": "local"
         },
-        "status": "queued",
+        "status": "running",
         "priority": 0,
         "run_at": null,
         "attempt": 0,
         "error": null,
-        "request_id": "canvas-proof-1773128795894",
+        "request_id": "timeline-proof-1773222167474",
         "dedupe_key": null,
         "resource_keys": [
-          "room:canvas-dev-9cb0ce17-8db2-4c3c-8d3f-7d9af221be67",
-          "canvas:intent",
-          "runtime-scope:whiteboard-jamie-q02f56az.livekit.cloud",
-          "lock:room:canvas-dev-9cb0ce17-8db2-4c3c-8d3f-7d9af221be67:task:canvas.agent_prompt"
+          "room:canvas-dev-d6e240d5-6e29-4c0c-bf54-be6abc0cea10",
+          "timeline:mcp-timeline-widget-proof",
+          "runtime-scope:local",
+          "lock:widget:mcp-timeline-widget-proof",
+          "skip-host:f8152f2e162b",
+          "queue-mode:local-scope-direct-claim"
         ],
         "lease_token": null,
         "lease_expires_at": null,
         "result": null,
         "trace_id": null
       },
-      "taskId": "77742ccd-1665-443f-9f8e-a78142abe443",
-      "requestId": "canvas-proof-1773128795894",
-      "traceId": "canvas-proof-trace-1773128795894",
-      "intentId": "canvas-proof-1773128795894"
+      "taskId": "3973a6df-d6e9-469c-b5a1-7e9743a79b1d",
+      "requestId": "timeline-proof-1773222167474",
+      "traceId": "timeline-proof-trace-1773222167474",
+      "intentId": "timeline-proof-intent-1773222167474"
     }
   },
-  "scorecardTask": {
-    "id": "8fd2c17b-dab3-485b-8b94-242816a0dcd1",
-    "room": "canvas-dev-9cb0ce17-8db2-4c3c-8d3f-7d9af221be67",
-    "task": "scorecard.patch",
+  "timelineTask": {
+    "id": "3973a6df-d6e9-469c-b5a1-7e9743a79b1d",
+    "room": "canvas-dev-d6e240d5-6e29-4c0c-bf54-be6abc0cea10",
+    "task": "timeline.patch",
     "status": "succeeded",
     "attempt": 0,
     "error": null,
     "result": {
       "output": {
-        "status": "error",
-        "summary": "404 Model llama-3.3-70b does not exist or you do not have access to it."
+        "status": "ok",
+        "summary": "Seed deterministic timeline proof snapshot.",
+        "version": 1
       },
-      "status": "completed"
-    },
-    "request_id": "proof-1773128795499",
-    "created_at": "2026-03-10T07:46:35.729+00:00",
-    "updated_at": "2026-03-10T07:46:44.373489+00:00",
-    "trace_id": null
-  },
-  "scorecardTaskValidation": {
-    "status": "ok"
-  },
-  "canvasTaskValidation": {
-    "status": "warning",
-    "message": "runCanvas task returned non-fatal warning: LiveKit room not found before timeout: canvas-dev-9cb0ce17-8db2-4c3c-8d3f-7d9af221be67"
-  },
-  "syncConfirmed": true,
-  "syncedRowCount": 1,
-  "traceTaskSource": "canvas",
-  "task": {
-    "id": "77742ccd-1665-443f-9f8e-a78142abe443",
-    "room": "canvas-dev-9cb0ce17-8db2-4c3c-8d3f-7d9af221be67",
-    "task": "canvas.agent_prompt",
-    "status": "succeeded",
-    "attempt": 1,
-    "error": "LiveKit room not found before timeout: canvas-dev-9cb0ce17-8db2-4c3c-8d3f-7d9af221be67",
-    "result": {
-      "room": "canvas-dev-9cb0ce17-8db2-4c3c-8d3f-7d9af221be67",
-      "status": "queued",
+      "status": "completed",
       "deduped": false,
-      "lockKey": "room:canvas-dev-9cb0ce17-8db2-4c3c-8d3f-7d9af221be67:task:canvas.agent_prompt",
-      "payload": {
-        "message": "Draw one sticky note that says \"MCP timeline sync verified\".",
-        "metadata": {
-          "traceId": "canvas-proof-trace-1773128795894",
-          "intentId": "canvas-proof-1773128795894",
-          "runtimeScope": "whiteboard-jamie-q02f56az.livekit.cloud",
-          "configVersion": "74aba2730c70"
-        },
-        "requestId": "canvas-proof-1773128795894"
-      },
-      "requestId": "canvas-proof-1773128795894",
-      "executionId": "77742ccd-1665-443f-9f8e-a78142abe443",
+      "lockKey": "widget:mcp-timeline-widget-proof",
+      "executionId": "3973a6df-d6e9-469c-b5a1-7e9743a79b1d",
       "idempotencyKey": null
     },
-    "request_id": "canvas-proof-1773128795894",
-    "created_at": "2026-03-10T07:46:36.018+00:00",
-    "updated_at": "2026-03-10T07:47:00.102387+00:00",
+    "request_id": "timeline-proof-1773222167474",
+    "created_at": "2026-03-11T09:42:50.357+00:00",
+    "updated_at": "2026-03-11T09:42:58.079784+00:00",
     "trace_id": null
   },
-  "traceId": "canvas-proof-trace-1773128795894",
+  "timelineValidation": {
+    "status": "ok"
+  },
+  "syncConfirmed": true,
+  "syncedLaneCount": 3,
+  "syncedItemCount": 4,
+  "syncedDependencyCount": 2,
+  "syncChipText": "Sync staged",
+  "exportChipText": "Export linear queued",
+  "detailExpanded": true,
+  "traceTaskSource": "timeline",
+  "traceId": "timeline-proof-trace-1773222167474",
   "traceEvents": [
     {
-      "id": "dc1b8e51-e36f-4a71-9fd5-d95892b93556",
-      "trace_id": "canvas-proof-trace-1773128795894",
-      "task_id": null,
-      "task": "canvas.agent_prompt",
-      "stage": "api_received",
-      "status": "ok",
+      "id": "923d2d08-76cd-47c4-93f6-b28c49345847",
+      "trace_id": "timeline-proof-trace-1773222167474",
+      "task_id": "3973a6df-d6e9-469c-b5a1-7e9743a79b1d",
+      "task": "timeline.patch",
+      "stage": "queued",
+      "status": "running",
       "latency_ms": null,
-      "created_at": "2026-03-10T07:46:35.963+00:00",
+      "created_at": "2026-03-11T09:42:50.732+00:00",
       "payload": {
-        "model": "claude-haiku-4-5",
-        "provider": "anthropic",
-        "providerPath": "primary",
-        "providerSource": "task_params",
+        "queueMode": "local_scope_direct_claim",
+        "runtimeScope": "local"
+      }
+    },
+    {
+      "id": "b07337eb-17f1-4d0d-a52f-4f799463b9a1",
+      "trace_id": "timeline-proof-trace-1773222167474",
+      "task_id": "3973a6df-d6e9-469c-b5a1-7e9743a79b1d",
+      "task": "timeline.patch",
+      "stage": "claimed",
+      "status": "running",
+      "latency_ms": null,
+      "created_at": "2026-03-11T09:42:51.865+00:00",
+      "payload": {
+        "claimMode": "local_scope_direct_claim",
+        "runtimeScope": "local"
+      }
+    },
+    {
+      "id": "ffee4581-0f19-48eb-9a76-94e937518c51",
+      "trace_id": "timeline-proof-trace-1773222167474",
+      "task_id": "3973a6df-d6e9-469c-b5a1-7e9743a79b1d",
+      "task": "timeline.patch",
+      "stage": "executing",
+      "status": "running",
+      "latency_ms": null,
+      "created_at": "2026-03-11T09:42:51.867+00:00",
+      "payload": {
+        "model": null,
+        "route": "other",
+        "provider": "unknown",
+        "workerId": "conductor-62904-69d89f5e",
+        "workerPid": "62904",
+        "leaseToken": "c08e978a-eb87-44e4-82c8-0b58b51e9547",
+        "workerHost": "Bens-MBP",
+        "providerPath": "unknown",
+        "providerSource": "unknown",
         "providerRequestId": null
       }
     },
     {
-      "id": "eed3c19d-95dc-4716-9d93-904421c3b1be",
-      "trace_id": "canvas-proof-trace-1773128795894",
-      "task_id": "77742ccd-1665-443f-9f8e-a78142abe443",
-      "task": "canvas.agent_prompt",
-      "stage": "queued",
-      "status": "queued",
-      "latency_ms": null,
-      "created_at": "2026-03-10T07:46:36.251+00:00",
-      "payload": null
-    },
-    {
-      "id": "fa829af0-13e1-4a3e-bf76-727ef3263fd5",
-      "trace_id": "canvas-proof-trace-1773128795894",
-      "task_id": "77742ccd-1665-443f-9f8e-a78142abe443",
-      "task": "canvas.agent_prompt",
-      "stage": "executing",
-      "status": "running",
-      "latency_ms": null,
-      "created_at": "2026-03-10T07:46:36.481+00:00",
-      "payload": {
-        "route": "visual",
-        "workerId": "conductor-36-d129063d",
-        "workerPid": "36",
-        "leaseToken": "dd98ed97-ed5d-4ebf-b008-725ecabb44f0",
-        "workerHost": "f8152f2e162b"
-      }
-    },
-    {
-      "id": "2719f561-0818-4071-9a65-d33d7181d2f3",
-      "trace_id": "canvas-proof-trace-1773128795894",
-      "task_id": "77742ccd-1665-443f-9f8e-a78142abe443",
-      "task": "canvas.agent_prompt",
-      "stage": "claimed",
-      "status": "running",
-      "latency_ms": null,
-      "created_at": "2026-03-10T07:46:36.481+00:00",
-      "payload": null
-    },
-    {
-      "id": "5b4ef6c5-0381-46f2-9e81-0db1db314291",
-      "trace_id": "canvas-proof-trace-1773128795894",
-      "task_id": "77742ccd-1665-443f-9f8e-a78142abe443",
-      "task": "canvas.agent_prompt",
-      "stage": "failed",
-      "status": "failed",
-      "latency_ms": null,
-      "created_at": "2026-03-10T07:46:42.33+00:00",
-      "payload": {
-        "error": "LiveKit room not found before timeout: canvas-dev-9cb0ce17-8db2-4c3c-8d3f-7d9af221be67",
-        "route": "visual",
-        "lockKey": "room:canvas-dev-9cb0ce17-8db2-4c3c-8d3f-7d9af221be67:task:canvas.agent_prompt",
-        "retryAt": "2026-03-10T07:46:42.900Z",
-        "workerId": "conductor-36-d129063d",
-        "workerPid": "36",
-        "workerHost": "f8152f2e162b"
-      }
-    },
-    {
-      "id": "c0da519a-bae4-4722-8340-5069fec62194",
-      "trace_id": "canvas-proof-trace-1773128795894",
-      "task_id": "77742ccd-1665-443f-9f8e-a78142abe443",
-      "task": "canvas.agent_prompt",
-      "stage": "executing",
-      "status": "running",
-      "latency_ms": null,
-      "created_at": "2026-03-10T07:46:43.26+00:00",
-      "payload": {
-        "route": "visual",
-        "workerId": "conductor-36-d129063d",
-        "workerPid": "36",
-        "leaseToken": "cff5398f-5ef6-489d-9f39-563afe63806e",
-        "workerHost": "f8152f2e162b"
-      }
-    },
-    {
-      "id": "24067e0c-6cc7-4bae-95ab-6feba199f2f3",
-      "trace_id": "canvas-proof-trace-1773128795894",
-      "task_id": "77742ccd-1665-443f-9f8e-a78142abe443",
-      "task": "canvas.agent_prompt",
-      "stage": "claimed",
-      "status": "running",
-      "latency_ms": null,
-      "created_at": "2026-03-10T07:46:43.26+00:00",
-      "payload": null
-    },
-    {
-      "id": "b0ef4d92-ac0b-47d0-9495-d2dd86e62450",
-      "trace_id": "canvas-proof-trace-1773128795894",
-      "task_id": "7db7a5ec-ba8c-4f28-aac0-5a3721359e2d",
-      "task": "canvas.followup",
-      "stage": "queued",
-      "status": "queued",
-      "latency_ms": null,
-      "created_at": "2026-03-10T07:46:58.588+00:00",
-      "payload": null
-    },
-    {
-      "id": "186eb7a7-6f2f-4308-86d9-633aabaa22a2",
-      "trace_id": "canvas-proof-trace-1773128795894",
-      "task_id": "77742ccd-1665-443f-9f8e-a78142abe443",
-      "task": "canvas.agent_prompt",
+      "id": "b72e16ff-bf1d-4233-bc21-fcd58b242e3d",
+      "trace_id": "timeline-proof-trace-1773222167474",
+      "task_id": "3973a6df-d6e9-469c-b5a1-7e9743a79b1d",
+      "task": "timeline.patch",
       "stage": "completed",
       "status": "succeeded",
-      "latency_ms": 16943,
-      "created_at": "2026-03-10T07:47:00.203+00:00",
+      "latency_ms": 6220,
+      "created_at": "2026-03-11T09:42:58.088+00:00",
       "payload": {
-        "route": "visual",
+        "model": null,
+        "route": "other",
         "deduped": false,
-        "lockKey": "room:canvas-dev-9cb0ce17-8db2-4c3c-8d3f-7d9af221be67:task:canvas.agent_prompt",
-        "workerId": "conductor-36-d129063d",
-        "workerPid": "36",
-        "leaseToken": "cff5398f-5ef6-489d-9f39-563afe63806e",
-        "workerHost": "f8152f2e162b"
+        "lockKey": "widget:mcp-timeline-widget-proof",
+        "provider": "unknown",
+        "workerId": "conductor-62904-69d89f5e",
+        "workerPid": "62904",
+        "leaseToken": "c08e978a-eb87-44e4-82c8-0b58b51e9547",
+        "workerHost": "Bens-MBP",
+        "providerPath": "unknown",
+        "providerSource": "unknown",
+        "providerRequestId": null
       }
     }
-  ]
+  ],
+  "screenshot": "/Users/bsteinher/.codex/worktrees/d3c3/PRESENT/docs/proof-artifacts/mcp-timeline-proof/timeline-widget-proof.png",
+  "video": "/Users/bsteinher/.codex/worktrees/d3c3/PRESENT/docs/proof-artifacts/mcp-timeline-proof/mcp-timeline-widget-demo.webm"
 }

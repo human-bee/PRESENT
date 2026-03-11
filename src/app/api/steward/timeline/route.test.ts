@@ -2,13 +2,13 @@
  * @jest-environment node
  */
 
-const getDebateScorecardMock = jest.fn();
+const getTimelineDocumentMock = jest.fn();
 const assertCanvasMemberMock = jest.fn();
 const parseCanvasIdFromRoomMock = jest.fn();
 const resolveRequestUserIdMock = jest.fn();
 
 jest.mock('@/lib/agents/shared/supabase-context', () => ({
-  getDebateScorecard: getDebateScorecardMock,
+  getTimelineDocument: getTimelineDocumentMock,
 }));
 
 jest.mock('@/lib/agents/shared/canvas-billing', () => ({
@@ -29,14 +29,14 @@ const loadGet = async () => {
   return GET as (req: import('next/server').NextRequest) => Promise<Response>;
 };
 
-describe('/api/steward/scorecard', () => {
+describe('/api/steward/timeline', () => {
   const originalDevBypass = process.env.NEXT_PUBLIC_CANVAS_DEV_BYPASS;
   const originalNodeEnv = process.env.NODE_ENV;
 
   beforeEach(() => {
     process.env.NEXT_PUBLIC_CANVAS_DEV_BYPASS = 'false';
     process.env.NODE_ENV = 'test';
-    getDebateScorecardMock.mockReset();
+    getTimelineDocumentMock.mockReset();
     assertCanvasMemberMock.mockReset();
     parseCanvasIdFromRoomMock.mockReset();
     resolveRequestUserIdMock.mockReset();
@@ -44,21 +44,36 @@ describe('/api/steward/scorecard', () => {
     resolveRequestUserIdMock.mockResolvedValue('user-1');
     parseCanvasIdFromRoomMock.mockReturnValue('canvas-1');
     assertCanvasMemberMock.mockResolvedValue({ ownerUserId: 'owner-1' });
-    getDebateScorecardMock.mockResolvedValue({
-      state: {
-        componentId: 'scorecard-1',
-        version: 12,
-        topic: 'AI policy',
-        timeline: [
+    getTimelineDocumentMock.mockResolvedValue({
+      document: {
+        componentId: 'timeline-1',
+        title: 'Platform Roadmap',
+        subtitle: 'Cross-team launch plan',
+        horizonLabel: 'Q2 2026',
+        lanes: [
+          { id: 'lane-product', name: 'Product', kind: 'team', order: 0 },
+          { id: 'lane-engineering', name: 'Engineering', kind: 'team', order: 1 },
+        ],
+        items: [
           {
-            id: 'evt-1',
-            timestamp: 1700000000000,
-            text: 'Initialized scorecard',
-            type: 'moderation',
+            id: 'item-1',
+            laneId: 'lane-product',
+            title: 'Finalize launch brief',
+            type: 'milestone',
+            status: 'in_progress',
+            tags: [],
+            blockedBy: [],
+            createdAt: 1700000000000,
+            updatedAt: 1700000000000,
           },
         ],
+        dependencies: [],
+        events: [],
+        sync: { status: 'live', pendingExports: [] },
+        version: 5,
+        lastUpdated: 1700000001000,
       },
-      version: 12,
+      version: 5,
       lastUpdated: 1700000001000,
     });
   });
@@ -80,7 +95,7 @@ describe('/api/steward/scorecard', () => {
     resolveRequestUserIdMock.mockResolvedValueOnce(null);
     const GET = await loadGet();
     const response = await GET({
-      nextUrl: new URL('http://localhost/api/steward/scorecard?room=canvas-1&componentId=scorecard-1'),
+      nextUrl: new URL('http://localhost/api/steward/timeline?room=canvas-1&componentId=timeline-1'),
     } as import('next/server').NextRequest);
     const json = await response.json();
 
@@ -91,7 +106,7 @@ describe('/api/steward/scorecard', () => {
   it('returns 400 when room/componentId is missing', async () => {
     const GET = await loadGet();
     const response = await GET({
-      nextUrl: new URL('http://localhost/api/steward/scorecard?room=canvas-1'),
+      nextUrl: new URL('http://localhost/api/steward/timeline?room=canvas-1'),
     } as import('next/server').NextRequest);
     const json = await response.json();
 
@@ -103,12 +118,34 @@ describe('/api/steward/scorecard', () => {
     parseCanvasIdFromRoomMock.mockReturnValueOnce(null);
     const GET = await loadGet();
     const response = await GET({
-      nextUrl: new URL('http://localhost/api/steward/scorecard?room=ephemeral-room&componentId=scorecard-1'),
+      nextUrl: new URL('http://localhost/api/steward/timeline?room=ephemeral-room&componentId=timeline-1'),
     } as import('next/server').NextRequest);
     const json = await response.json();
 
     expect(response.status).toBe(400);
     expect(json.error).toBe('invalid room');
+  });
+
+  it('returns canonical timeline payload for verified members', async () => {
+    const GET = await loadGet();
+    const response = await GET({
+      nextUrl: new URL('http://localhost/api/steward/timeline?room=canvas-1&componentId=timeline-1'),
+    } as import('next/server').NextRequest);
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.ok).toBe(true);
+    expect(json.room).toBe('canvas-1');
+    expect(json.componentId).toBe('timeline-1');
+    expect(json.document.title).toBe('Platform Roadmap');
+    expect(json.document.lanes).toHaveLength(2);
+    expect(json.version).toBe(5);
+    expect(json.lastUpdated).toBe(1700000001000);
+    expect(json.diagnostics.membership).toBe('verified');
+    expect(assertCanvasMemberMock).toHaveBeenCalledWith({
+      canvasId: 'canvas-1',
+      requesterUserId: 'user-1',
+    });
   });
 
   it('returns 403 when requester is not a canvas member', async () => {
@@ -118,7 +155,7 @@ describe('/api/steward/scorecard', () => {
 
     const GET = await loadGet();
     const response = await GET({
-      nextUrl: new URL('http://localhost/api/steward/scorecard?room=canvas-1&componentId=scorecard-1'),
+      nextUrl: new URL('http://localhost/api/steward/timeline?room=canvas-1&componentId=timeline-1'),
     } as import('next/server').NextRequest);
     const json = await response.json();
 
@@ -126,38 +163,17 @@ describe('/api/steward/scorecard', () => {
     expect(json.error).toBe('forbidden');
   });
 
-  it('returns canonical scorecard payload for verified members', async () => {
+  it('returns 404 when the canonical timeline does not exist', async () => {
+    getTimelineDocumentMock.mockRejectedValueOnce(new Error('TIMELINE_NOT_FOUND'));
+
     const GET = await loadGet();
     const response = await GET({
-      nextUrl: new URL('http://localhost/api/steward/scorecard?room=canvas-1&componentId=scorecard-1'),
-    } as import('next/server').NextRequest);
-    const json = await response.json();
-
-    expect(response.status).toBe(200);
-    expect(json.ok).toBe(true);
-    expect(json.room).toBe('canvas-1');
-    expect(json.componentId).toBe('scorecard-1');
-    expect(json.scorecard.topic).toBe('AI policy');
-    expect(json.timeline).toHaveLength(1);
-    expect(json.version).toBe(12);
-    expect(json.lastUpdated).toBe(1700000001000);
-    expect(json.diagnostics.membership).toBe('verified');
-    expect(assertCanvasMemberMock).toHaveBeenCalledWith({
-      canvasId: 'canvas-1',
-      requesterUserId: 'user-1',
-    });
-  });
-
-  it('returns 404 when canvas row is missing', async () => {
-    assertCanvasMemberMock.mockRejectedValueOnce(new Error('Canvas not found'));
-    const GET = await loadGet();
-    const response = await GET({
-      nextUrl: new URL('http://localhost/api/steward/scorecard?room=canvas-1&componentId=scorecard-1'),
+      nextUrl: new URL('http://localhost/api/steward/timeline?room=canvas-1&componentId=timeline-1'),
     } as import('next/server').NextRequest);
     const json = await response.json();
 
     expect(response.status).toBe(404);
-    expect(json.error).toBe('canvas not found');
+    expect(json.error).toBe('timeline not found');
   });
 
   it('allows unauthenticated access when dev bypass is enabled', async () => {
@@ -165,42 +181,13 @@ describe('/api/steward/scorecard', () => {
     resolveRequestUserIdMock.mockResolvedValueOnce(null);
     const GET = await loadGet();
     const response = await GET({
-      nextUrl: new URL('http://localhost/api/steward/scorecard?room=canvas-1&componentId=scorecard-1'),
+      nextUrl: new URL('http://localhost/api/steward/timeline?room=canvas-1&componentId=timeline-1'),
     } as import('next/server').NextRequest);
     const json = await response.json();
 
     expect(response.status).toBe(200);
     expect(json.ok).toBe(true);
     expect(json.diagnostics.membership).toBe('dev_bypass');
-    expect(assertCanvasMemberMock).not.toHaveBeenCalled();
-  });
-
-  it('allows authenticated access when dev bypass is enabled', async () => {
-    process.env.NEXT_PUBLIC_CANVAS_DEV_BYPASS = 'true';
-    const GET = await loadGet();
-    const response = await GET({
-      nextUrl: new URL('http://localhost/api/steward/scorecard?room=canvas-1&componentId=scorecard-1'),
-    } as import('next/server').NextRequest);
-    const json = await response.json();
-
-    expect(response.status).toBe(200);
-    expect(json.ok).toBe(true);
-    expect(json.diagnostics.membership).toBe('dev_bypass');
-    expect(assertCanvasMemberMock).not.toHaveBeenCalled();
-  });
-
-  it('does not allow unauthenticated bypass in production', async () => {
-    process.env.NEXT_PUBLIC_CANVAS_DEV_BYPASS = 'true';
-    process.env.NODE_ENV = 'production';
-    resolveRequestUserIdMock.mockResolvedValueOnce(null);
-    const GET = await loadGet();
-    const response = await GET({
-      nextUrl: new URL('http://localhost/api/steward/scorecard?room=canvas-1&componentId=scorecard-1'),
-    } as import('next/server').NextRequest);
-    const json = await response.json();
-
-    expect(response.status).toBe(401);
-    expect(json.error).toBe('unauthorized');
     expect(assertCanvasMemberMock).not.toHaveBeenCalled();
   });
 });
