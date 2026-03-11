@@ -156,6 +156,45 @@ describe('ResetWorkspaceShell', () => {
             dualClient: true,
           },
         }}
+        initialAgentPack={{
+          generatedAt: new Date().toISOString(),
+          workspaceSessionId: 'ws_123',
+          workspacePath: '/tmp/present-reset',
+          mcpServer: {
+            name: 'present-mcp',
+            transport: 'stdio',
+            command: 'npm',
+            args: ['run', 'present:mcp'],
+            cwd: process.cwd(),
+            env: {
+              PRESENT_RESET_WORKSPACE_SESSION_ID: 'ws_123',
+            },
+          },
+          commands: {
+            openWorkspace: {
+              command: 'npm',
+              args: ['run', 'fairy:cli', '--', 'reset', 'open', '--workspacePath', '/tmp/present-reset'],
+              cwd: process.cwd(),
+            },
+            inspectWorkspace: {
+              command: 'npm',
+              args: ['run', 'fairy:cli', '--', 'reset', 'status', '--workspaceSessionId', 'ws_123'],
+              cwd: process.cwd(),
+            },
+            startTurn: {
+              command: 'npm',
+              args: ['run', 'fairy:cli', '--', 'reset', 'turn', '--workspaceSessionId', 'ws_123', '--prompt', '<prompt>'],
+              cwd: process.cwd(),
+            },
+            printManifest: {
+              command: 'npm',
+              args: ['run', 'fairy:cli', '--', 'reset', 'manifest', '--workspaceSessionId', 'ws_123'],
+              cwd: process.cwd(),
+            },
+          },
+          recommendedClients: ['OpenClaw', 'Codex desktop'],
+          notes: ['ChatGPT auth remains local-companion only.'],
+        }}
         initialWorkspace={{
           id: 'ws_123',
           workspacePath: '/tmp/present-reset',
@@ -197,6 +236,7 @@ describe('ResetWorkspaceShell', () => {
     expect(await screen.findByRole('button', { name: /Queue Canvas Task/i })).toBeTruthy();
     expect(await screen.findByRole('button', { name: /Create Patch Artifact/i })).toBeTruthy();
     expect(await screen.findByText(/Recent Sessions/i)).toBeTruthy();
+    expect(await screen.findByText(/OpenClaw \+ MCP Pack/i)).toBeTruthy();
     expect((await screen.findAllByText('package.json')).length).toBeGreaterThan(0);
   });
 });

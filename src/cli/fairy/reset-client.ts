@@ -161,6 +161,12 @@ export async function searchResetTrace(
   return requestResetJson(options, `/api/reset/traces${query ? `?${query}` : ''}`);
 }
 
-export async function getResetManifest(options: ClientOptions) {
-  return requestResetJson(options, '/api/reset/runtime-manifest');
+export async function getResetManifest(
+  options: ClientOptions,
+  input: { workspaceSessionId?: string } = {},
+) {
+  const search = new URLSearchParams();
+  if (input.workspaceSessionId) search.set('workspaceSessionId', input.workspaceSessionId);
+  const query = search.toString();
+  return requestResetJson(options, `/api/reset/runtime-manifest${query ? `?${query}` : ''}`);
 }

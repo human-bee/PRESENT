@@ -1,3 +1,4 @@
+export * from './agent-interop';
 export * from './approvals';
 export * from './artifacts';
 export * from './executor-leases';

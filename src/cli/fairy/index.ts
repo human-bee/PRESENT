@@ -670,7 +670,13 @@ async function handleReset(state: FairyCliState, parsed: ParsedArgs, cwd: string
   }
 
   if (action === 'manifest') {
-    const response = await getResetManifest({ baseUrl, token });
+    const response = await getResetManifest({ baseUrl, token }, { workspaceSessionId });
+    printResult({ ok: response.response.ok, status: response.response.status, data: response.body }, asJson);
+    return response.response.ok ? FAIRY_CLI_EXIT_CODES.APPLIED : FAIRY_CLI_EXIT_CODES.FAILED;
+  }
+
+  if (action === 'interop') {
+    const response = await getResetManifest({ baseUrl, token }, { workspaceSessionId });
     printResult({ ok: response.response.ok, status: response.response.status, data: response.body }, asJson);
     return response.response.ok ? FAIRY_CLI_EXIT_CODES.APPLIED : FAIRY_CLI_EXIT_CODES.FAILED;
   }
@@ -969,7 +975,7 @@ fairy <group> <action> [options]
 
 Groups:
   sessions create|use|list|inspect|send
-  reset open|status|files|read|write|patch|apply|turn|task|trace|manifest
+  reset open|status|files|read|write|patch|apply|turn|task|trace|manifest|interop
   tools list|call
   subagents spawn|list|wait|cancel
   trace open|timeline|correlate

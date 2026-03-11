@@ -529,6 +529,13 @@
   gap: 10px;
 }
 
+.reset-command-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+
 .reset-list--horizontal {
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
 }
@@ -605,6 +612,23 @@
 
 .dark .reset-list-card__footer span {
   color: rgba(246, 237, 228, 0.56);
+}
+
+.reset-command-block {
+  margin: 12px 0 0;
+  padding: 14px;
+  min-height: 88px;
+  overflow: auto;
+  border-radius: 18px;
+  border: 1px solid rgba(24, 20, 17, 0.1);
+  background: #11141b;
+  color: #f5ede4;
+  font: 500 12px/1.55 'SFMono-Regular', 'Menlo', ui-monospace, monospace;
+  white-space: pre-wrap;
+}
+
+.dark .reset-command-block {
+  border-color: rgba(255, 255, 255, 0.08);
 }
 
 .reset-empty {
