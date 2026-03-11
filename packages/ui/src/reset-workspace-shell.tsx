@@ -162,6 +162,7 @@ export function ResetWorkspaceShell({
     () => activeDocument?.path.split('/').filter(Boolean) ?? [],
     [activeDocument],
   );
+  const legacyCanvasUrl = '/canvas?legacy=1&embed=1';
 
   const refreshWorkspaceState = useEffectEvent(async (workspaceSessionId: string, activeQuery?: string) => {
     const snapshot = await requestJson<WorkspaceSnapshotResponse>(
@@ -654,7 +655,19 @@ export function ResetWorkspaceShell({
               <div className="reset-panel__eyebrow">Canvas / Widget Rail</div>
               <h2>Server-Owned Preview</h2>
             </div>
-            <div className="reset-panel__microcopy">Widgets and file diffs are both artifact-backed now, so the shell can review and apply changes without escaping the reset ledger.</div>
+            <div className="reset-panel__microcopy">Widgets, diffs, and the archived canvas runtime are all bridged back into the reset shell so `/` stays the product entry point.</div>
+          </div>
+          <div className="reset-frame-shell">
+            <div className="reset-panel__header">
+              <div>
+                <div className="reset-frame-title">Canvas Bridge</div>
+                <strong>Archived TLDraw + LiveKit runtime</strong>
+              </div>
+              <a href="/canvas?legacy=1" className="reset-button reset-button--ghost">
+                Open Legacy Canvas
+              </a>
+            </div>
+            <iframe title="Legacy canvas bridge" className="reset-legacy-frame" src={legacyCanvasUrl} loading="lazy" />
           </div>
           <div className="reset-widget-form">
             <input

@@ -14,7 +14,7 @@
     "typecheck:app": "tsc --noEmit -p tsconfig.quality-app.json",
     "typecheck:agent": "tsc --noEmit -p tsconfig.quality-agent.json",
     "typecheck:reset": "tsc --noEmit -p tsconfig.reset.json",
-    "typecheck": "npm run typecheck:app && npm run typecheck:agent",
+    "typecheck": "npm run typecheck:app && npm run typecheck:agent && npm run typecheck:reset",
     "biome:check": "biome check .",
     "format": "biome format --write .",
     "init": "npx custom init",
