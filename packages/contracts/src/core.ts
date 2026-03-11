@@ -173,6 +173,20 @@ export const runtimeManifestSchema = z.object({
   }),
 });
 
+export const workspaceFileEntrySchema = z.object({
+  path: z.string().min(1),
+  name: z.string().min(1),
+  kind: z.enum(['file', 'directory']),
+  size: z.number().int().nonnegative().nullable(),
+  updatedAt: isoDateTimeSchema.nullable(),
+  language: z.string().nullable(),
+});
+
+export const workspaceFileDocumentSchema = workspaceFileEntrySchema.extend({
+  kind: z.literal('file'),
+  content: z.string(),
+});
+
 export type WorkspaceSession = z.infer<typeof workspaceSessionSchema>;
 export type ExecutorSession = z.infer<typeof executorSessionSchema>;
 export type TaskRun = z.infer<typeof taskRunSchema>;
@@ -181,3 +195,5 @@ export type ApprovalRequest = z.infer<typeof approvalRequestSchema>;
 export type PresenceMember = z.infer<typeof presenceMemberSchema>;
 export type ModelProfile = z.infer<typeof modelProfileSchema>;
 export type RuntimeManifest = z.infer<typeof runtimeManifestSchema>;
+export type WorkspaceFileEntry = z.infer<typeof workspaceFileEntrySchema>;
+export type WorkspaceFileDocument = z.infer<typeof workspaceFileDocumentSchema>;

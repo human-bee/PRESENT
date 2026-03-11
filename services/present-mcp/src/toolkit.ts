@@ -4,6 +4,7 @@ import {
   buildRuntimeManifest,
   createApprovalRequest,
   createArtifact,
+  createWorkspacePatchArtifact,
   getArtifact,
   listApprovalRequests,
   listArtifacts,
@@ -11,8 +12,10 @@ import {
   listPresenceMembers,
   listTaskRuns,
   listTraceEvents,
+  listWorkspaceFiles,
   listWorkspaceSessions,
   openWorkspaceSession,
+  readWorkspaceFile,
   resolveApprovalRequest,
   resolveKernelModelProfiles,
   searchTraceEvents,
@@ -31,6 +34,68 @@ export const presentMcpTools = {
     },
     async run(input: { workspacePath: string; branch?: string; title?: string }) {
       return { workspace: openWorkspaceSession(input) };
+    },
+  },
+  workspaceFiles: {
+    name: 'workspace.files',
+    description: 'List files in a PRESENT reset workspace directory.',
+    schema: {
+      workspaceSessionId: z.string().min(1),
+      directoryPath: z.string().optional(),
+      limit: z.number().int().positive().max(500).optional(),
+    },
+    async run(input: { workspaceSessionId: string; directoryPath?: string; limit?: number }) {
+      return {
+        files: listWorkspaceFiles({
+          workspaceSessionId: input.workspaceSessionId,
+          directoryPath: input.directoryPath,
+          limit: input.limit,
+        }),
+      };
+    },
+  },
+  workspaceReadFile: {
+    name: 'workspace.readFile',
+    description: 'Read a file from a PRESENT reset workspace.',
+    schema: {
+      workspaceSessionId: z.string().min(1),
+      filePath: z.string().min(1),
+    },
+    async run(input: { workspaceSessionId: string; filePath: string }) {
+      return {
+        document: readWorkspaceFile({
+          workspaceSessionId: input.workspaceSessionId,
+          filePath: input.filePath,
+        }),
+      };
+    },
+  },
+  workspaceCreatePatch: {
+    name: 'workspace.createPatch',
+    description: 'Create a server-owned file patch artifact from edited file content.',
+    schema: {
+      workspaceSessionId: z.string().min(1),
+      filePath: z.string().min(1),
+      nextContent: z.string(),
+      traceId: z.string().optional(),
+      title: z.string().optional(),
+    },
+    async run(input: {
+      workspaceSessionId: string;
+      filePath: string;
+      nextContent: string;
+      traceId?: string;
+      title?: string;
+    }) {
+      return {
+        artifact: createWorkspacePatchArtifact({
+          workspaceSessionId: input.workspaceSessionId,
+          filePath: input.filePath,
+          nextContent: input.nextContent,
+          traceId: input.traceId,
+          title: input.title,
+        }),
+      };
     },
   },
   taskEnqueue: {
@@ -201,6 +266,8 @@ export const presentMcpTools = {
 
 export async function listPresentMcpResources() {
   const modelProfiles = await resolveKernelModelProfiles();
+  const artifacts = listArtifacts();
+  const latestPatchArtifact = artifacts.find((artifact) => artifact.kind === 'file_patch') ?? null;
 
   return [
     {
@@ -231,7 +298,27 @@ export async function listPresentMcpResources() {
       uri: 'present://artifacts/state',
       name: 'artifact.state',
       mimeType: 'application/json',
-      text: JSON.stringify(listArtifacts(), null, 2),
+      text: JSON.stringify(artifacts, null, 2),
+    },
+    {
+      uri: 'present://workspace/files',
+      name: 'workspace.files',
+      mimeType: 'application/json',
+      text: JSON.stringify(
+        listWorkspaceSessions().map((workspace) => ({
+          workspaceSessionId: workspace.id,
+          workspacePath: workspace.workspacePath,
+          files: listWorkspaceFiles({ workspaceSessionId: workspace.id, limit: 120 }),
+        })),
+        null,
+        2,
+      ),
+    },
+    {
+      uri: 'present://artifact/diff',
+      name: 'artifact.diff',
+      mimeType: latestPatchArtifact?.mimeType ?? 'text/plain',
+      text: latestPatchArtifact?.content ?? '',
     },
     {
       uri: 'present://approvals/state',

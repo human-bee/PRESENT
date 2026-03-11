@@ -31,6 +31,30 @@
       "@/*": [
         "./src/*"
       ],
+      "@present/contracts": [
+        "./packages/contracts/src/index.ts"
+      ],
+      "@present/contracts/*": [
+        "./packages/contracts/src/*"
+      ],
+      "@present/kernel": [
+        "./services/kernel/src/index.ts"
+      ],
+      "@present/kernel/*": [
+        "./services/kernel/src/*"
+      ],
+      "@present/codex-adapter": [
+        "./services/codex-adapter/src/index.ts"
+      ],
+      "@present/codex-adapter/*": [
+        "./services/codex-adapter/src/*"
+      ],
+      "@present/ui": [
+        "./packages/ui/src/index.ts"
+      ],
+      "@present/ui/*": [
+        "./packages/ui/src/*"
+      ],
       "@custom-ai/react": [
         "./src/lib/shims/custom-react.ts"
       ],
@@ -58,6 +82,10 @@
     "next-env.d.ts",
     "src/**/*.ts",
     "src/**/*.tsx",
+    "packages/**/*.ts",
+    "packages/**/*.tsx",
+    "services/**/*.ts",
+    "services/**/*.tsx",
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts"
   ],

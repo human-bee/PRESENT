@@ -20,6 +20,8 @@
     "src/app/api/reset/model-profiles/route.ts",
     "src/app/api/reset/workspaces/route.ts",
     "src/app/api/reset/workspaces/[workspaceSessionId]/state/route.ts",
+    "src/app/api/reset/workspaces/[workspaceSessionId]/files/route.ts",
+    "src/app/api/reset/workspaces/[workspaceSessionId]/file/route.ts",
     "src/app/api/reset/executors/route.ts",
     "src/app/api/reset/executors/register/route.ts",
     "src/app/api/reset/executors/heartbeat/route.ts",

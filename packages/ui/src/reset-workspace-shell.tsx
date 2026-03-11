@@ -9,6 +9,8 @@ import type {
   PresenceMember,
   RuntimeManifest,
   TaskRun,
+  WorkspaceFileDocument,
+  WorkspaceFileEntry,
   WorkspaceSession,
 } from '@present/contracts';
 import { ArtifactPreviewFrame } from './artifact-preview-frame';
@@ -106,6 +108,14 @@ type WorkspaceSnapshotResponse = {
   manifest: RuntimeManifest;
 };
 
+type WorkspaceFilesResponse = {
+  files: WorkspaceFileEntry[];
+};
+
+type WorkspaceFileResponse = {
+  document: WorkspaceFileDocument;
+};
+
 export function ResetWorkspaceShell({
   initialManifest,
   initialWorkspace,
@@ -132,6 +142,9 @@ export function ResetWorkspaceShell({
   const [widgetTitle, setWidgetTitle] = useState('Reset Brief');
   const [widgetHtml, setWidgetHtml] = useState(defaultWidgetHtml('Reset Brief'));
   const [traceQuery, setTraceQuery] = useState('');
+  const [directoryPath, setDirectoryPath] = useState('');
+  const [workspaceFiles, setWorkspaceFiles] = useState<WorkspaceFileEntry[]>([]);
+  const [activeDocument, setActiveDocument] = useState<WorkspaceFileDocument | null>(null);
   const [activeTaskId, setActiveTaskId] = useState<string | null>(initialTasks[0]?.id ?? null);
   const [isBusy, setIsBusy] = useState(false);
   const deferredTraceQuery = useDeferredValue(traceQuery);
@@ -140,6 +153,14 @@ export function ResetWorkspaceShell({
   const latestWidgetArtifact = useMemo(
     () => artifacts.find((artifact) => artifact.kind === 'widget_bundle') ?? null,
     [artifacts],
+  );
+  const latestPatchArtifact = useMemo(
+    () => artifacts.find((artifact) => artifact.kind === 'file_patch') ?? null,
+    [artifacts],
+  );
+  const activeFileBreadcrumbs = useMemo(
+    () => activeDocument?.path.split('/').filter(Boolean) ?? [],
+    [activeDocument],
   );
 
   const refreshWorkspaceState = useEffectEvent(async (workspaceSessionId: string, activeQuery?: string) => {
@@ -161,9 +182,54 @@ export function ResetWorkspaceShell({
     setActiveTaskId((current) => current ?? snapshot.tasks[0]?.id ?? null);
   });
 
+  const loadWorkspaceFiles = useEffectEvent(async (workspaceSessionId: string, nextDirectoryPath = '') => {
+    const search = new URLSearchParams();
+    if (nextDirectoryPath) {
+      search.set('directoryPath', nextDirectoryPath);
+    }
+    const query = search.toString();
+    const payload = await requestJson<WorkspaceFilesResponse>(
+      `/api/reset/workspaces/${encodeURIComponent(workspaceSessionId)}/files${query ? `?${query}` : ''}`,
+    );
+    setWorkspaceFiles(payload.files);
+    setDirectoryPath(nextDirectoryPath);
+  });
+
+  const openWorkspaceFile = useEffectEvent(async (workspaceSessionId: string, filePath: string) => {
+    const search = new URLSearchParams({ filePath });
+    const payload = await requestJson<WorkspaceFileResponse>(
+      `/api/reset/workspaces/${encodeURIComponent(workspaceSessionId)}/file?${search.toString()}`,
+    );
+    setActiveDocument(payload.document);
+    setCodeDraft(payload.document.content);
+  });
+
+  const loadDefaultWorkspaceFile = useEffectEvent(async (workspaceSessionId: string) => {
+    const preferredPaths = [
+      'packages/ui/src/reset-workspace-shell.tsx',
+      'src/app/page.tsx',
+      'services/kernel/src/workspace-files.ts',
+      'package.json',
+    ];
+
+    for (const filePath of preferredPaths) {
+      try {
+        await openWorkspaceFile(workspaceSessionId, filePath);
+        return;
+      } catch {
+        // Try the next candidate.
+      }
+    }
+  });
+
   useEffect(() => {
     void refreshWorkspaceState(workspace.id, deferredTraceQuery);
   }, [deferredTraceQuery, refreshWorkspaceState, workspace.id]);
+
+  useEffect(() => {
+    void loadWorkspaceFiles(workspace.id, '');
+    void loadDefaultWorkspaceFile(workspace.id);
+  }, [loadDefaultWorkspaceFile, loadWorkspaceFiles, workspace.id]);
 
   useEffect(() => {
     const currentTaskId = activeTaskId ?? tasks[0]?.id ?? null;
@@ -238,6 +304,8 @@ export function ResetWorkspaceShell({
         setWorkspace(result.workspace);
       });
       await refreshWorkspaceState(result.workspace.id, deferredTraceQuery);
+      await loadWorkspaceFiles(result.workspace.id, '');
+      await loadDefaultWorkspaceFile(result.workspace.id);
     });
   };
 
@@ -360,6 +428,58 @@ export function ResetWorkspaceShell({
         method: 'POST',
       });
       await refreshWorkspaceState(workspace.id, deferredTraceQuery);
+      if (activeDocument) {
+        await openWorkspaceFile(workspace.id, activeDocument.path);
+      }
+    });
+  };
+
+  const saveActiveFile = async () => {
+    if (!activeDocument) return;
+    await runAction(async () => {
+      const payload = await requestJson<WorkspaceFileResponse>(
+        `/api/reset/workspaces/${encodeURIComponent(workspace.id)}/file`,
+        {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            filePath: activeDocument.path,
+            content: codeDraft,
+          }),
+        },
+      );
+      setActiveDocument(payload.document);
+      setCodeDraft(payload.document.content);
+      await loadWorkspaceFiles(workspace.id, directoryPath);
+      await refreshWorkspaceState(workspace.id, deferredTraceQuery);
+    });
+  };
+
+  const createPatchArtifact = async () => {
+    if (!activeDocument) return;
+    const traceId =
+      tasks[0]?.traceId ??
+      approvals[0]?.traceId ??
+      String(traceEvents[0]?.['traceId'] ?? 'trace_pending');
+
+    await runAction(async () => {
+      await requestJson(`/api/reset/workspaces/${encodeURIComponent(workspace.id)}/files`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          filePath: activeDocument.path,
+          nextContent: codeDraft,
+          traceId,
+          title: `Patch ${activeDocument.path}`,
+        }),
+      });
+      await refreshWorkspaceState(workspace.id, deferredTraceQuery);
+    });
+  };
+
+  const navigateDirectory = async (nextDirectoryPath: string) => {
+    await runAction(async () => {
+      await loadWorkspaceFiles(workspace.id, nextDirectoryPath);
     });
   };
 
@@ -449,15 +569,83 @@ export function ResetWorkspaceShell({
               <h2>Workspace Pad</h2>
             </div>
             <div className="reset-panel__microcopy">
-              Reset turns now stream into the task ledger. Monaco + Yjs are still pending, but this surface is no longer a pure placeholder.
+              The reset shell now reads the real workspace, stages patch artifacts, and can write directly for local iteration.
             </div>
           </div>
-          <textarea
-            className="reset-code-editor"
-            value={codeDraft}
-            onChange={(event) => setCodeDraft(event.target.value)}
-            spellCheck={false}
-          />
+          <div className="reset-editor-layout">
+            <aside className="reset-file-browser">
+              <div className="reset-file-browser__header">
+                <div className="reset-frame-title">Directory</div>
+                <strong>{directoryPath || '.'}</strong>
+              </div>
+              <div className="reset-inline-actions">
+                <button type="button" onClick={() => navigateDirectory('')} className="reset-button reset-button--ghost" disabled={isBusy}>
+                  Root
+                </button>
+                <button
+                  type="button"
+                  onClick={() => navigateDirectory(directoryPath.split('/').slice(0, -1).join('/'))}
+                  className="reset-button reset-button--ghost"
+                  disabled={isBusy || !directoryPath}
+                >
+                  Up
+                </button>
+              </div>
+              <div className="reset-file-list">
+                {workspaceFiles.length === 0 ? <div className="reset-empty">No files loaded.</div> : null}
+                {workspaceFiles.map((entry) => (
+                  <button
+                    type="button"
+                    key={entry.path}
+                    className={`reset-file-entry${activeDocument?.path === entry.path ? ' reset-file-entry--active' : ''}`}
+                    onClick={() =>
+                      entry.kind === 'directory'
+                        ? void navigateDirectory(entry.path)
+                        : void openWorkspaceFile(workspace.id, entry.path)
+                    }
+                  >
+                    <span>{entry.kind === 'directory' ? 'DIR' : entry.language ?? 'FILE'}</span>
+                    <strong>{entry.name}</strong>
+                  </button>
+                ))}
+              </div>
+            </aside>
+            <div className="reset-editor-pane">
+              <div className="reset-editor-pane__header">
+                <div>
+                  <div className="reset-frame-title">Active File</div>
+                  <strong>{activeDocument?.path ?? 'Select a file'}</strong>
+                  {activeFileBreadcrumbs.length > 0 ? (
+                    <p>{activeFileBreadcrumbs.join(' / ')}</p>
+                  ) : (
+                    <p>Browse the workspace tree and load a real file into the editor.</p>
+                  )}
+                </div>
+                <div className="reset-inline-actions">
+                  <button
+                    type="button"
+                    onClick={() => (activeDocument ? void openWorkspaceFile(workspace.id, activeDocument.path) : undefined)}
+                    className="reset-button reset-button--ghost"
+                    disabled={isBusy || !activeDocument}
+                  >
+                    Reload
+                  </button>
+                  <button type="button" onClick={saveActiveFile} className="reset-button reset-button--secondary" disabled={isBusy || !activeDocument}>
+                    Save File
+                  </button>
+                  <button type="button" onClick={createPatchArtifact} className="reset-button" disabled={isBusy || !activeDocument}>
+                    Create Patch Artifact
+                  </button>
+                </div>
+              </div>
+              <textarea
+                className="reset-code-editor"
+                value={codeDraft}
+                onChange={(event) => setCodeDraft(event.target.value)}
+                spellCheck={false}
+              />
+            </div>
+          </div>
         </article>
 
         <article className="reset-panel reset-panel--canvas">
@@ -466,7 +654,7 @@ export function ResetWorkspaceShell({
               <div className="reset-panel__eyebrow">Canvas / Widget Rail</div>
               <h2>Server-Owned Preview</h2>
             </div>
-            <div className="reset-panel__microcopy">Widgets are authored as artifacts, then rendered through a sandboxed iframe surface.</div>
+            <div className="reset-panel__microcopy">Widgets and file diffs are both artifact-backed now, so the shell can review and apply changes without escaping the reset ledger.</div>
           </div>
           <div className="reset-widget-form">
             <input
@@ -498,6 +686,21 @@ export function ResetWorkspaceShell({
             title={latestWidgetArtifact?.title ?? widgetTitle}
             html={latestWidgetArtifact?.content || widgetHtml}
           />
+          <div className="reset-frame-shell">
+            <div className="reset-frame-title">Latest Patch Artifact</div>
+            {latestPatchArtifact ? (
+              <>
+                <pre className="reset-diff-view">{latestPatchArtifact.content}</pre>
+                <div className="reset-inline-actions">
+                  <button type="button" onClick={() => applyPatchArtifact(latestPatchArtifact.id)} className="reset-button reset-button--ghost" disabled={isBusy}>
+                    Apply Latest Patch
+                  </button>
+                </div>
+              </>
+            ) : (
+              <div className="reset-empty">No patch artifacts yet.</div>
+            )}
+          </div>
         </article>
 
         <aside className="reset-sidebar">
@@ -645,24 +848,21 @@ export function ResetWorkspaceShell({
                 <p>{executor.state}</p>
               </article>
             ))}
-            {artifacts
-              .filter((artifact) => artifact.kind === 'file_patch')
-              .slice(0, 2)
-              .map((artifact) => (
-                <article className="reset-list-card" key={artifact.id}>
-                  <div className="reset-list-card__eyebrow">file_patch</div>
-                  <strong>{artifact.title}</strong>
-                  <p>{artifact.metadata['status'] ? String(artifact.metadata['status']) : artifact.mimeType}</p>
-                  <button
-                    type="button"
-                    onClick={() => applyPatchArtifact(artifact.id)}
-                    className="reset-button reset-button--ghost"
-                    disabled={isBusy}
-                  >
-                    Apply Patch
-                  </button>
-                </article>
-              ))}
+            {artifacts.filter((artifact) => artifact.kind === 'file_patch').slice(0, 2).map((artifact) => (
+              <article className="reset-list-card" key={artifact.id}>
+                <div className="reset-list-card__eyebrow">file_patch</div>
+                <strong>{artifact.title}</strong>
+                <p>{artifact.metadata['filePath'] ? String(artifact.metadata['filePath']) : artifact.mimeType}</p>
+                <button
+                  type="button"
+                  onClick={() => applyPatchArtifact(artifact.id)}
+                  className="reset-button reset-button--ghost"
+                  disabled={isBusy}
+                >
+                  Apply Patch
+                </button>
+              </article>
+            ))}
           </div>
         </article>
       </section>

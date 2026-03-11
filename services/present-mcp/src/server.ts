@@ -28,6 +28,8 @@ registerResource('workspace.state', 'present://workspaces/state');
 registerResource('executor.state', 'present://executors/state');
 registerResource('task.state', 'present://tasks/state');
 registerResource('artifact.state', 'present://artifacts/state');
+registerResource('workspace.files', 'present://workspace/files');
+registerResource('artifact.diff', 'present://artifact/diff');
 registerResource('approval.state', 'present://approvals/state');
 registerResource('presence.state', 'present://presence/state');
 registerResource('trace.state', 'present://traces/state');
@@ -57,6 +59,46 @@ server.tool(
   },
   async (input) => ({
     content: [{ type: 'text', text: JSON.stringify(await presentMcpTools.taskEnqueue.run(input), null, 2) }],
+  }),
+);
+
+server.tool(
+  presentMcpTools.workspaceFiles.name,
+  presentMcpTools.workspaceFiles.description,
+  {
+    workspaceSessionId: z.string(),
+    directoryPath: z.string().optional(),
+    limit: z.number().int().positive().max(500).optional(),
+  },
+  async (input) => ({
+    content: [{ type: 'text', text: JSON.stringify(await presentMcpTools.workspaceFiles.run(input), null, 2) }],
+  }),
+);
+
+server.tool(
+  presentMcpTools.workspaceReadFile.name,
+  presentMcpTools.workspaceReadFile.description,
+  {
+    workspaceSessionId: z.string(),
+    filePath: z.string(),
+  },
+  async (input) => ({
+    content: [{ type: 'text', text: JSON.stringify(await presentMcpTools.workspaceReadFile.run(input), null, 2) }],
+  }),
+);
+
+server.tool(
+  presentMcpTools.workspaceCreatePatch.name,
+  presentMcpTools.workspaceCreatePatch.description,
+  {
+    workspaceSessionId: z.string(),
+    filePath: z.string(),
+    nextContent: z.string(),
+    traceId: z.string().optional(),
+    title: z.string().optional(),
+  },
+  async (input) => ({
+    content: [{ type: 'text', text: JSON.stringify(await presentMcpTools.workspaceCreatePatch.run(input), null, 2) }],
   }),
 );
 
