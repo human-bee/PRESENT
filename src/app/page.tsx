@@ -3,27 +3,42 @@ import {
   buildRuntimeManifest,
   createArtifact,
   ensureResetKernelHydrated,
+  getWorkspaceSession,
   listExecutorSessions,
   listApprovalRequests,
   listArtifacts,
   listPresenceMembers,
   listTaskRuns,
   listTraceEvents,
+  listWorkspaceSessions,
   openWorkspaceSession,
   resolveKernelModelProfiles,
 } from '@present/kernel';
 
-export default async function Home() {
-  await ensureResetKernelHydrated();
+export const dynamic = 'force-dynamic';
 
-  const workspace = openWorkspaceSession({
-    workspacePath: process.cwd(),
-    branch: 'codex/reset',
-    title: 'PRESENT Reset Workspace',
-    metadata: {
-      shell: 'root',
-    },
-  });
+export default async function Home({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  await ensureResetKernelHydrated();
+  const params = await searchParams;
+  const requestedWorkspaceSessionId =
+    typeof params.workspace === 'string' && params.workspace.trim() ? params.workspace.trim() : null;
+  const existingWorkspaces = listWorkspaceSessions();
+
+  const workspace =
+    (requestedWorkspaceSessionId ? getWorkspaceSession(requestedWorkspaceSessionId) : null) ??
+    existingWorkspaces[0] ??
+    openWorkspaceSession({
+      workspacePath: process.cwd(),
+      branch: 'codex/reset',
+      title: 'PRESENT Reset Workspace',
+      metadata: {
+        shell: 'root',
+      },
+    });
 
   const artifacts = listArtifacts(workspace.id);
   if (!artifacts.some((artifact) => artifact.kind === 'widget_bundle')) {
@@ -45,6 +60,7 @@ export default async function Home() {
     <ResetWorkspaceShell
       initialManifest={manifest}
       initialWorkspace={workspace}
+      initialWorkspaces={listWorkspaceSessions().slice(0, 6)}
       initialExecutors={listExecutorSessions(workspace.id)}
       initialTasks={listTaskRuns(workspace.id)}
       initialArtifacts={listArtifacts(workspace.id)}
