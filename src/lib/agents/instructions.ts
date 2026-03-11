@@ -14,7 +14,8 @@ export function buildVoiceAgentInstructions(
 ): string {
   const profile = options.profile || systemCapabilities?.capabilityProfile || 'full';
   const isLeanProfile = profile === 'lean_adaptive';
-  const instructionPack = options.instructionPack === 'capability_explicit' ? 'capability_explicit' : 'baseline';
+  const instructionPack =
+    options.instructionPack === 'capability_explicit' ? 'capability_explicit' : 'baseline';
 
   const base = `
 You are the custom Voice Agent (Agent #1) in a real‑time meeting/canvas system. You listen, interpret, and act by dispatching tool calls that shape the UI. You never speak audio—your output is always tool calls (not narration).
@@ -37,12 +38,16 @@ Global principles
         .filter(
           (tool) =>
             tool.critical ||
-            ['visual', 'widget-lifecycle', 'research', 'mcp', 'utility'].includes(String(tool.group || '')),
+            ['visual', 'widget-lifecycle', 'research', 'mcp', 'utility'].includes(
+              String(tool.group || ''),
+            ),
         )
         .slice(0, 14)
     : tools;
   let toolSection = `\nCapability profile: ${profile}. You have access to ${tools.length} tools.`;
-  toolSection += isLeanProfile ? '\nUse the smallest matching critical tool first:' : '\nTool reference:';
+  toolSection += isLeanProfile
+    ? '\nUse the smallest matching critical tool first:'
+    : '\nTool reference:';
   for (const t of tools) {
     if (!listedTools.some((tool) => tool.name === t.name)) continue;
     toolSection += `\n- ${t.name}: ${t.description}`;
@@ -57,9 +62,12 @@ Global principles
     toolSection += `\n- Additional tools are available on-demand via capability refresh.`;
   }
 
-  const components: ComponentCapability[] = systemCapabilities?.components || componentsFallback || [];
+  const components: ComponentCapability[] =
+    systemCapabilities?.components || componentsFallback || [];
   const listedComponents = isLeanProfile
-    ? components.filter((component) => component.tier === 'tier1' || component.critical).slice(0, 16)
+    ? components
+        .filter((component) => component.tier === 'tier1' || component.critical)
+        .slice(0, 16)
     : components;
   let componentSection = `\n\ncustom UI components available (${components.length}):`;
   for (const c of listedComponents) {
@@ -69,7 +77,8 @@ Global principles
     }
   }
   if (isLeanProfile && components.length > listedComponents.length) {
-    componentSection += '\n- Additional components are available on-demand via capability refresh/fallback.';
+    componentSection +=
+      '\n- Additional components are available on-demand via capability refresh/fallback.';
   }
 
   const capabilityExplicitSection = `
@@ -133,6 +142,7 @@ PRODUCTIVITY:
   → create_component({ type: 'DiceWidget', spec: {} })
 - CardWidget: "create card widget", "add playing cards", "flip cards"
   → create_component({ type: 'CardWidget', spec: {} })
+  → Supports up to 6 dice/cards, versus layouts, numeric ranks, and no-suit mode via update_component patch fields.
 - DocumentEditor: "create document", "add doc", "new document editor"
   → create_component({ type: 'DocumentEditor', spec: {} })
 
