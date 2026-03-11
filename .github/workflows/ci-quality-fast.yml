@@ -34,11 +34,17 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      - name: Reset Typecheck
+        run: npm run typecheck:reset
+
       - name: Build
         run: npm run build
 
       - name: Unit and Integration Tests
         run: npm test -- --runInBand
+
+      - name: Reset Test Suite
+        run: npm run test:reset
 
       - name: Factorial Analysis (Soft Gate)
         run: node scripts/observability/analyze-factorial.mjs

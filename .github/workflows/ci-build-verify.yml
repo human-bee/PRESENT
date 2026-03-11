@@ -29,5 +29,11 @@ jobs:
       - name: Install Dependencies
         run: npm ci
 
+      - name: Reset Typecheck
+        run: npm run typecheck:reset
+
+      - name: Reset Test Suite
+        run: npm run test:reset
+
       - name: Build
         run: npm run build
