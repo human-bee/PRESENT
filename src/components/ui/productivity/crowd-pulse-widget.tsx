@@ -15,13 +15,13 @@ import {
   type CrowdPulseWidgetProps,
 } from './crowd-pulse-schema';
 import {
-  computeCrowdMetrics,
-  type HandLandmark,
-} from './crowd-pulse-hand-utils';
+  getCrowdPulseSensorStream,
+  subscribeCrowdPulseSensor,
+  type CrowdPulseSensorStatus,
+} from './crowd-pulse-sensor';
 import { WidgetFrame } from './widget-frame';
 
 const STEWARD_METRICS_HOLD_MS = 120_000;
-const SENSOR_DETECT_INTERVAL_MS = 240;
 const SENSOR_EMIT_INTERVAL_MS = 300;
 
 const normalizeStatus = (value: unknown): CrowdPulseState['status'] | undefined => {
@@ -108,15 +108,13 @@ export default function CrowdPulseWidget(props: CrowdPulseWidgetProps) {
     className,
   }));
 
-  const [sensorStatus, setSensorStatus] = useState<'idle' | 'loading' | 'ready' | 'blocked' | 'error' | 'unsupported'>('idle');
+  const [sensorStatus, setSensorStatus] = useState<CrowdPulseSensorStatus>('idle');
   const [sensorDetail, setSensorDetail] = useState<string>('');
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  const animationRef = useRef<number | null>(null);
-  const streamRef = useRef<MediaStream | null>(null);
-  const lastDetectRef = useRef<number>(0);
   const lastEmitRef = useRef<number>(0);
   const peakRef = useRef<number>(state.peakCount ?? 0);
   const stewardMetricsHoldUntilRef = useRef<number>(0);
+  const sensorUnsubscribeRef = useRef<(() => void) | null>(null);
 
   const applyPatch = useCallback((patch: Record<string, unknown>) => {
     setState((prev) => {
@@ -223,161 +221,97 @@ export default function CrowdPulseWidget(props: CrowdPulseWidgetProps) {
 
   useEffect(() => {
     if (!state.sensorEnabled) {
+      if (sensorUnsubscribeRef.current) {
+        sensorUnsubscribeRef.current();
+        sensorUnsubscribeRef.current = null;
+      }
       setSensorStatus('idle');
       setSensorDetail('Camera paused');
-      if (animationRef.current) {
-        cancelAnimationFrame(animationRef.current);
-        animationRef.current = null;
+      if (videoRef.current) {
+        videoRef.current.srcObject = null;
       }
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach((track) => track.stop());
-        streamRef.current = null;
-      }
-      return;
-    }
-
-    if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
-      setSensorStatus('unsupported');
-      setSensorDetail('Camera unavailable');
       return;
     }
 
     let mounted = true;
-    let handLandmarker: any = null;
-    let lastVideoTime = -1;
+    lastEmitRef.current = 0;
 
-    const initSensor = async () => {
-      try {
-        setSensorStatus('loading');
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            width: { ideal: 1280 },
-            height: { ideal: 720 },
-            facingMode: 'user',
-          },
-          audio: false,
-        });
+    if (sensorUnsubscribeRef.current) {
+      sensorUnsubscribeRef.current();
+      sensorUnsubscribeRef.current = null;
+    }
+
+    sensorUnsubscribeRef.current = subscribeCrowdPulseSensor(
+      (sample) => {
         if (!mounted) return;
-        streamRef.current = stream;
-
-        let video = videoRef.current;
-        if (!video) {
-          video = document.createElement('video');
-          video.playsInline = true;
-          video.muted = true;
-          video.autoplay = true;
-          videoRef.current = video;
+        if (sample.timestamp - lastEmitRef.current < SENSOR_EMIT_INTERVAL_MS) {
+          return;
         }
-        video.srcObject = stream;
-        await video.play();
-
-        const visionModule = await import('@mediapipe/tasks-vision');
-        const fileset = await visionModule.FilesetResolver.forVisionTasks(
-          'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.12/wasm',
-        );
-        handLandmarker = await visionModule.HandLandmarker.createFromOptions(fileset, {
-          baseOptions: {
-            modelAssetPath:
-              'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task',
-          },
-          runningMode: 'VIDEO',
-          numHands: 2,
-        });
-
-        if (!mounted) return;
-        setSensorStatus('ready');
-        setSensorDetail('Camera live');
-
-        const loop = () => {
-          if (!mounted || !video || !handLandmarker) return;
-          const now = performance.now();
-          if (now - lastDetectRef.current < SENSOR_DETECT_INTERVAL_MS) {
-            animationRef.current = requestAnimationFrame(loop);
-            return;
-          }
-          lastDetectRef.current = now;
-
-          if (video.currentTime === lastVideoTime) {
-            animationRef.current = requestAnimationFrame(loop);
-            return;
-          }
-          lastVideoTime = video.currentTime;
-
-          let result: any;
-          try {
-            result = handLandmarker.detectForVideo(video, now);
-          } catch (err) {
-            setSensorStatus('error');
-            setSensorDetail(err instanceof Error ? err.message : 'Sensor error');
-            return;
-          }
-
-          const landmarks = Array.isArray(result?.landmarks) ? (result.landmarks as HandLandmark[][]) : [];
-          const handedness = Array.isArray(result?.handednesses)
-            ? result.handednesses
-            : Array.isArray(result?.handedness)
-              ? result.handedness
-              : undefined;
-
-          const metrics = computeCrowdMetrics(landmarks, handedness);
-          if (metrics.handCount > peakRef.current) peakRef.current = metrics.handCount;
-
-          if (now - lastEmitRef.current > SENSOR_EMIT_INTERVAL_MS) {
-            if (Date.now() < stewardMetricsHoldUntilRef.current) {
-              animationRef.current = requestAnimationFrame(loop);
-              return;
-            }
-            lastEmitRef.current = now;
-            setState((prev) => {
-              const next: CrowdPulseState = { ...prev };
-              next.handCount = metrics.handCount;
-              next.peakCount = Math.max(prev.peakCount, peakRef.current);
-              next.confidence = metrics.confidence;
-              next.noiseLevel = metrics.noiseLevel;
-              next.lastUpdated = Date.now();
-              next.version = (prev.version ?? 0) + 1;
-              if (prev.status === 'idle' && metrics.handCount > 0) {
-                next.status = 'counting';
-              }
-              return next;
-            });
-          }
-
-          animationRef.current = requestAnimationFrame(loop);
-        };
-
-        animationRef.current = requestAnimationFrame(loop);
-      } catch (err) {
-        if (!mounted) return;
-        if (err && typeof err === 'object' && 'name' in err && (err as any).name === 'NotAllowedError') {
-          setSensorStatus('blocked');
-          setSensorDetail('Camera blocked');
-        } else {
-          setSensorStatus('error');
-          setSensorDetail(err instanceof Error ? err.message : 'Sensor error');
+        if (Date.now() < stewardMetricsHoldUntilRef.current) {
+          return;
         }
-      }
-    };
+        lastEmitRef.current = sample.timestamp;
+        if (sample.handCount > peakRef.current) {
+          peakRef.current = sample.handCount;
+        }
 
-    initSensor();
+        setState((prev) => {
+          const next: CrowdPulseState = { ...prev };
+          next.handCount = sample.handCount;
+          next.peakCount = Math.max(prev.peakCount, peakRef.current);
+          next.confidence = sample.confidence;
+          next.noiseLevel = sample.noiseLevel;
+          next.lastUpdated = sample.timestamp;
+          next.version = (prev.version ?? 0) + 1;
+          if (prev.status === 'idle' && sample.handCount > 0) {
+            next.status = 'counting';
+          }
+          return next;
+        });
+      },
+      (status, detail) => {
+        if (!mounted) return;
+        setSensorStatus(status);
+        setSensorDetail(detail);
+        const stream = getCrowdPulseSensorStream();
+        if (status === 'ready' && stream && videoRef.current) {
+          if (videoRef.current.srcObject !== stream) {
+            videoRef.current.srcObject = stream;
+          }
+          void videoRef.current.play().catch(() => {});
+          return;
+        }
+        if (status !== 'ready' && videoRef.current) {
+          videoRef.current.srcObject = null;
+        }
+      },
+    );
 
     return () => {
       mounted = false;
-      if (animationRef.current) {
-        cancelAnimationFrame(animationRef.current);
-        animationRef.current = null;
+      if (sensorUnsubscribeRef.current) {
+        sensorUnsubscribeRef.current();
+        sensorUnsubscribeRef.current = null;
       }
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach((track) => track.stop());
-        streamRef.current = null;
-      }
-      if (handLandmarker?.close) {
-        try {
-          handLandmarker.close();
-        } catch { }
+      if (videoRef.current) {
+        videoRef.current.srcObject = null;
       }
     };
   }, [state.sensorEnabled]);
+
+  useEffect(() => {
+    if (!state.showPreview || sensorStatus !== 'ready' || !videoRef.current) {
+      return;
+    }
+    const stream = getCrowdPulseSensorStream();
+    if (!stream) {
+      return;
+    }
+    if (videoRef.current.srcObject !== stream) {
+      videoRef.current.srcObject = stream;
+    }
+    void videoRef.current.play().catch(() => {});
+  }, [sensorStatus, state.showPreview]);
 
   const updatedLabel = state.lastUpdated
     ? new Date(state.lastUpdated).toLocaleTimeString()
