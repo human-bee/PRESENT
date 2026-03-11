@@ -1,7 +1,7 @@
 import type { GuidedField, GuidedSection, ResolvedFieldSource } from './types';
 
 const MODEL_SUGGESTIONS = {
-  openai: ['gpt-realtime-1.5', 'gpt-realtime', 'gpt-5-mini', 'gpt-4o-mini-transcription', 'whisper-1'],
+  openai: ['gpt-realtime-1.5', 'gpt-realtime', 'gpt-5-mini', 'gpt-4o-mini-transcribe', 'whisper-1'],
   anthropic: ['claude-haiku-4-5', 'claude-sonnet-4-5'],
   google: ['gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-3-pro-image-preview'],
   cerebras: ['llama3.3-70b', 'gpt-oss-120b', 'qwen3-32b', 'llama3.1-8b'],

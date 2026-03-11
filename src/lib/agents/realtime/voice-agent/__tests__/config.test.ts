@@ -55,6 +55,21 @@ describe('voice-agent realtime config', () => {
     expect(config.resolvedSttModel).toBe('gpt-4o-mini-transcribe');
   });
 
+  it('normalizes deprecated transcription aliases from env to realtime-compatible ids', () => {
+    const config = resolveVoiceRealtimeConfig(
+      envOf({
+        VOICE_AGENT_INPUT_TRANSCRIPTION_MODEL: 'gpt-4o-mini-transcription',
+        VOICE_AGENT_TRANSCRIPTION_ENABLED: 'true',
+      }),
+    );
+
+    expect(config.inputAudioTranscription).toEqual({
+      model: 'gpt-4o-mini-transcribe',
+      language: 'en',
+    });
+    expect(config.resolvedSttModel).toBe('gpt-4o-mini-transcribe');
+  });
+
   it('parses server_vad tuning and disables create_response by default when mode is explicit', () => {
     const config = resolveVoiceRealtimeConfig(
       envOf({
@@ -104,6 +119,18 @@ describe('voice-agent realtime config', () => {
       moduleId: 'bvc',
       options: { mode: 'aggressive' },
     });
+  });
+
+  it('disables room noise cancellation by default for local livekit endpoints', () => {
+    const config = resolveVoiceRealtimeConfig(
+      envOf({
+        LIVEKIT_URL: 'ws://127.0.0.1:7880',
+        VOICE_AGENT_INPUT_TRANSCRIPTION_MODEL: 'gpt-4o-mini-transcribe',
+        VOICE_AGENT_TRANSCRIPTION_ENABLED: 'true',
+      }),
+    );
+
+    expect(config.roomNoiseCancellation).toBeUndefined();
   });
 
   it('clamps participant and dedupe limits to safe ranges', () => {

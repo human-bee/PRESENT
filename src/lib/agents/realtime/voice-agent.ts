@@ -7,10 +7,14 @@ import { z } from 'zod';
 
 try {
   config({ path: join(process.cwd(), '.env.local') });
-} catch { }
+} catch {}
 import { realtime as openaiRealtime } from '@livekit/agents-plugin-openai';
 import { MultiParticipantTranscriptionManager } from './multi-participant-transcription';
-import { appendTranscriptCache, getTranscriptWindow, listCanvasComponents } from '@/lib/agents/shared/supabase-context';
+import {
+  appendTranscriptCache,
+  getTranscriptWindow,
+  listCanvasComponents,
+} from '@/lib/agents/shared/supabase-context';
 import { MutationArbiter } from '@/lib/agents/shared/mutation-arbiter';
 import { buildVoiceAgentInstructions, type VoiceInstructionPack } from '@/lib/agents/instructions';
 import {
@@ -26,16 +30,27 @@ import type { JsonObject } from '@/lib/utils/json-schema';
 import { ConnectionState, RoomEvent, RemoteTrackPublication, Track } from 'livekit-client';
 import { createLiveKitBus } from '@/lib/livekit/livekit-bus';
 import {
-  recordModelIoEvent,
-  recordToolIoEvent,
-} from '@/lib/agents/shared/replay-telemetry';
+  parseVoiceControlMessage,
+  resolveVoiceTurnModeForParticipant,
+  shouldSuppressAutomaticTurn,
+  type VoiceTurnMode,
+} from '@/lib/livekit/voice-control';
+import { recordModelIoEvent, recordToolIoEvent } from '@/lib/agents/shared/replay-telemetry';
 import { createManualInputRouter } from './voice-agent/manual-routing';
 import { VoiceComponentLedger } from './voice-agent/component-ledger';
 import { ScorecardService } from './voice-agent/scorecard-service';
-import { TranscriptionBuffer, type PendingTranscriptionMessage } from './voice-agent/transcription-buffer';
+import {
+  TranscriptionBuffer,
+  type PendingTranscriptionMessage,
+} from './voice-agent/transcription-buffer';
 import { resolveVoiceRealtimeConfig } from './voice-agent/config';
 import { createVoiceRuntimeModelIdentity } from './voice-agent/runtime-model';
-import { ActiveResponseRecoveryGuard, TranscriptDedupeGuard, isActiveResponseError } from './voice-agent/runtime-guards';
+import {
+  ActiveResponseRecoveryGuard,
+  TranscriptDedupeGuard,
+  isActiveResponseError,
+} from './voice-agent/runtime-guards';
+import { normalizeOpenAiTranscriptionModel } from '@/lib/openai/transcription-model';
 import {
   executeCreateComponent,
   type ComponentRegistryEntry,
@@ -91,9 +106,11 @@ const readHeaderValue = (headers: unknown, key: string): string | undefined => {
       const lower = (headers as Headers).get(key.toLowerCase());
       return lower && String(lower).trim() ? String(lower) : undefined;
     }
-  } catch { }
+  } catch {}
   if (typeof headers === 'object' && headers !== null) {
-    const candidate = (headers as Record<string, unknown>)[key] ?? (headers as Record<string, unknown>)[key.toLowerCase()];
+    const candidate =
+      (headers as Record<string, unknown>)[key] ??
+      (headers as Record<string, unknown>)[key.toLowerCase()];
     if (typeof candidate === 'string' && candidate.trim()) return candidate;
     if (typeof candidate === 'number') return candidate.toString();
     if (Array.isArray(candidate) && candidate.length > 0) {
@@ -125,7 +142,9 @@ const intentClassifier = (text: string): IntentRoute => {
   ) {
     return 'visual';
   }
-  if (/(livekit|captions|participant|screen share|screenshare|subtitle|transcribe)/i.test(normalized)) {
+  if (
+    /(livekit|captions|participant|screen share|screenshare|subtitle|transcribe)/i.test(normalized)
+  ) {
     return 'livekit';
   }
   if (/(mcp|tool call|server tool|connector app)/i.test(normalized)) {
@@ -165,14 +184,21 @@ const extractInlineQuotedText = (input: string): string | undefined => {
   }
   const afterColon = normalized.match(/:\s*(.+)$/);
   if (!afterColon?.[1]) return undefined;
-  const candidate = afterColon[1].trim().replace(/[.?!]+$/, '').trim();
+  const candidate = afterColon[1]
+    .trim()
+    .replace(/[.?!]+$/, '')
+    .trim();
   return candidate.length > 0 ? candidate : undefined;
 };
 
 const classifyQuickApplyIntent = (message: string): QuickApplyIntent | null => {
   const trimmed = message.trim();
   if (!trimmed) return null;
-  if (QUICK_DRAW_GUARD_PATTERN.test(trimmed) && !QUICK_TIMER_PATTERN.test(trimmed) && !QUICK_STICKY_PATTERN.test(trimmed)) {
+  if (
+    QUICK_DRAW_GUARD_PATTERN.test(trimmed) &&
+    !QUICK_TIMER_PATTERN.test(trimmed) &&
+    !QUICK_STICKY_PATTERN.test(trimmed)
+  ) {
     return null;
   }
 
@@ -237,11 +263,17 @@ const logRealtimeError = (context: string, error: unknown) => {
       }
     }
   }
-  const status = (error as { status?: number; statusCode?: number })?.status ?? (error as { statusCode?: number })?.statusCode;
+  const status =
+    (error as { status?: number; statusCode?: number })?.status ??
+    (error as { statusCode?: number })?.statusCode;
   if (typeof status !== 'undefined') payload.status = status;
-  const code = (error as { code?: string | number; errorCode?: string | number })?.code ?? (error as { errorCode?: string | number })?.errorCode;
+  const code =
+    (error as { code?: string | number; errorCode?: string | number })?.code ??
+    (error as { errorCode?: string | number })?.errorCode;
   if (typeof code !== 'undefined') payload.code = code;
-  const responseData = (error as { response?: { data?: Record<string, unknown>; headers?: unknown } })?.response?.data ?? (error as { data?: Record<string, unknown> })?.data;
+  const responseData =
+    (error as { response?: { data?: Record<string, unknown>; headers?: unknown } })?.response
+      ?.data ?? (error as { data?: Record<string, unknown> })?.data;
   if (responseData && typeof responseData === 'object') {
     const detailPayload: Record<string, unknown> = {};
     const detailMessage = (responseData as { message?: string }).message;
@@ -254,7 +286,9 @@ const logRealtimeError = (context: string, error: unknown) => {
       payload.detail = detailPayload;
     }
   }
-  const headers = (error as { response?: { headers?: unknown } })?.response?.headers ?? (error as { headers?: unknown })?.headers;
+  const headers =
+    (error as { response?: { headers?: unknown } })?.response?.headers ??
+    (error as { headers?: unknown })?.headers;
   const rateLimit = extractRateLimitHeaders(headers);
   if (rateLimit) {
     payload.rateLimit = rateLimit;
@@ -357,15 +391,18 @@ export default defineAgent({
       providerRequestId?: string;
       priority?: 'high' | 'normal';
     }) => {
-      const requestId = typeof input.requestId === 'string' && input.requestId.trim().length > 0
-        ? input.requestId.trim()
-        : undefined;
-      const traceId = typeof input.traceId === 'string' && input.traceId.trim().length > 0
-        ? input.traceId.trim()
-        : requestId;
-      const intentId = typeof input.intentId === 'string' && input.intentId.trim().length > 0
-        ? input.intentId.trim()
-        : requestId;
+      const requestId =
+        typeof input.requestId === 'string' && input.requestId.trim().length > 0
+          ? input.requestId.trim()
+          : undefined;
+      const traceId =
+        typeof input.traceId === 'string' && input.traceId.trim().length > 0
+          ? input.traceId.trim()
+          : requestId;
+      const intentId =
+        typeof input.intentId === 'string' && input.intentId.trim().length > 0
+          ? input.intentId.trim()
+          : requestId;
       recordModelIoEvent({
         source: 'voice_agent',
         eventType: input.eventType,
@@ -410,15 +447,18 @@ export default defineAgent({
       providerRequestId?: string;
       priority?: 'high' | 'normal';
     }) => {
-      const requestId = typeof input.requestId === 'string' && input.requestId.trim().length > 0
-        ? input.requestId.trim()
-        : undefined;
-      const traceId = typeof input.traceId === 'string' && input.traceId.trim().length > 0
-        ? input.traceId.trim()
-        : requestId;
-      const intentId = typeof input.intentId === 'string' && input.intentId.trim().length > 0
-        ? input.intentId.trim()
-        : requestId;
+      const requestId =
+        typeof input.requestId === 'string' && input.requestId.trim().length > 0
+          ? input.requestId.trim()
+          : undefined;
+      const traceId =
+        typeof input.traceId === 'string' && input.traceId.trim().length > 0
+          ? input.traceId.trim()
+          : requestId;
+      const intentId =
+        typeof input.intentId === 'string' && input.intentId.trim().length > 0
+          ? input.intentId.trim()
+          : requestId;
       recordToolIoEvent({
         source: 'voice_agent',
         eventType: input.eventType,
@@ -451,13 +491,78 @@ export default defineAgent({
     let handleBufferedTranscription:
       | ((message: PendingTranscriptionMessage) => Promise<void>)
       | null = null;
+    const voiceTurnModesByParticipant = new Map<string, VoiceTurnMode>();
+
+    const normalizeVoiceParticipantId = (participantId?: string | null): string | null => {
+      if (typeof participantId !== 'string') return null;
+      const trimmed = participantId.trim();
+      return trimmed.length > 0 ? trimmed : null;
+    };
+
+    const isAgentParticipant = (
+      participant?: {
+        kind?: unknown;
+        identity?: unknown;
+        metadata?: unknown;
+      } | null,
+    ): boolean => {
+      if (!participant) return false;
+      const identity = String(participant.identity || '').toLowerCase();
+      const metadata = String(participant.metadata || '').toLowerCase();
+      return (
+        identity.includes('voice-agent') ||
+        identity === 'voiceagent' ||
+        identity.startsWith('agent-') ||
+        metadata.includes('voice-agent') ||
+        metadata.includes('voiceagent') ||
+        metadata.includes('type":"agent')
+      );
+    };
+
+    const getFallbackVoiceTurnParticipantIds = (): string[] => {
+      const ids: string[] = [];
+      job.room.remoteParticipants.forEach((participant) => {
+        if (isAgentParticipant(participant as any)) return;
+        const participantId = normalizeVoiceParticipantId(participant.identity);
+        if (participantId) {
+          ids.push(participantId);
+        }
+      });
+      return ids;
+    };
+
+    const resolveParticipantVoiceTurnMode = (
+      participantId?: string | null,
+      options?: { conservativeFallback?: boolean },
+    ): VoiceTurnMode => {
+      const fallbackParticipantIds =
+        participantId && participantId !== 'user' ? [] : getFallbackVoiceTurnParticipantIds();
+
+      const resolved = resolveVoiceTurnModeForParticipant(voiceTurnModesByParticipant, {
+        participantId,
+        fallbackParticipantIds,
+      });
+
+      if (
+        resolved === 'auto' &&
+        options?.conservativeFallback &&
+        fallbackParticipantIds.length > 1 &&
+        fallbackParticipantIds.some(
+          (fallbackParticipantId) =>
+            voiceTurnModesByParticipant.get(fallbackParticipantId) === 'manual',
+        )
+      ) {
+        return 'manual';
+      }
+
+      return resolved;
+    };
 
     const drainPendingTranscriptions = async () => {
       if (!transcriptionProcessingEnabled || !handleBufferedTranscription) return;
       transcriptionBuffer.setEnabled(true);
-      await transcriptionBuffer.drain(
-        handleBufferedTranscription,
-        (error) => logRealtimeError('failed to handle buffered transcription', error),
+      await transcriptionBuffer.drain(handleBufferedTranscription, (error) =>
+        logRealtimeError('failed to handle buffered transcription', error),
       );
     };
 
@@ -511,11 +616,12 @@ export default defineAgent({
       };
 
       const transcriptionRequestId = `${participantId || speaker || 'speaker'}:${entry.timestamp || Date.now()}`;
-      const transcriptionModel =
+      const transcriptionModel = normalizeOpenAiTranscriptionModel(
         process.env.VOICE_AGENT_STT_MODEL?.trim() ||
-        process.env.VOICE_AGENT_INPUT_TRANSCRIPTION_MODEL?.trim() ||
-        process.env.AGENT_STT_MODEL?.trim() ||
-        'gpt-4o-mini-transcribe';
+          process.env.VOICE_AGENT_INPUT_TRANSCRIPTION_MODEL?.trim() ||
+          process.env.AGENT_STT_MODEL?.trim() ||
+          'gpt-4o-mini-transcribe',
+      );
       recordModelIoEvent({
         source: message?.serverGenerated ? 'transcription_agent' : 'voice_transcript',
         eventType: 'transcript_final',
@@ -550,12 +656,11 @@ export default defineAgent({
       }
 
       void handleBufferedTranscription(entry)
-        .then(() => { })
+        .then(() => {})
         .catch((error) => logRealtimeError('failed to handle transcription', error));
     };
 
     job.room.on(RoomEvent.DataReceived, (payload, participant, _, topic) => {
-      if (topic !== 'transcription') return;
       let message: any;
       try {
         message = JSON.parse(new TextDecoder().decode(payload));
@@ -563,6 +668,40 @@ export default defineAgent({
         logRealtimeError('failed to parse data payload', error);
         return;
       }
+
+      if (topic === 'voice_control') {
+        const control = parseVoiceControlMessage(message);
+        if (!control) return;
+        const controlledParticipantId =
+          normalizeVoiceParticipantId(participant?.identity) ||
+          normalizeVoiceParticipantId(control.participantId);
+        if (!controlledParticipantId) {
+          console.warn('[VoiceAgent] ignored voice turn mode update without participant identity');
+          return;
+        }
+        if (control.mode === 'auto') {
+          voiceTurnModesByParticipant.delete(controlledParticipantId);
+        } else {
+          voiceTurnModesByParticipant.set(controlledParticipantId, control.mode);
+        }
+        console.log('[VoiceAgent] voice turn mode updated', {
+          mode: control.mode,
+          participantId: allowSensitiveLogging
+            ? controlledParticipantId
+            : controlledParticipantId
+              ? '[redacted]'
+              : undefined,
+          roomId:
+            typeof control.roomId === 'string' && allowSensitiveLogging
+              ? control.roomId
+              : control.roomId
+                ? '[redacted]'
+                : undefined,
+        });
+        return;
+      }
+
+      if (topic !== 'transcription') return;
 
       const text = typeof message?.text === 'string' ? message.text.trim() : '';
       const isReplay = Boolean(message?.replay);
@@ -575,8 +714,12 @@ export default defineAgent({
             : typeof message?.final === 'boolean'
               ? message.final
               : true;
-      const participantId = typeof message?.participantId === 'string' ? message.participantId : participant?.identity;
-      const speaker = typeof message?.speaker === 'string' ? message.speaker : participant?.name || participant?.identity;
+      const participantId =
+        typeof message?.participantId === 'string' ? message.participantId : participant?.identity;
+      const speaker =
+        typeof message?.speaker === 'string'
+          ? message.speaker
+          : participant?.name || participant?.identity;
       const eventId = typeof message?.event_id === 'string' ? message.event_id : undefined;
 
       if (!text || isReplay) return;
@@ -697,8 +840,18 @@ export default defineAgent({
     };
 
     job.room.remoteParticipants.forEach((participant) => subscribeToParticipant(participant));
-    job.room.on(RoomEvent.ParticipantConnected, (participant) => subscribeToParticipant(participant as any));
-    job.room.on(RoomEvent.TrackPublished, (_publication, participant) => subscribeToParticipant(participant as any));
+    job.room.on(RoomEvent.ParticipantConnected, (participant) =>
+      subscribeToParticipant(participant as any),
+    );
+    job.room.on(RoomEvent.ParticipantDisconnected, (participant) => {
+      const participantId = normalizeVoiceParticipantId((participant as any)?.identity);
+      if (participantId) {
+        voiceTurnModesByParticipant.delete(participantId);
+      }
+    });
+    job.room.on(RoomEvent.TrackPublished, (_publication, participant) =>
+      subscribeToParticipant(participant as any),
+    );
 
     let multiParticipantTranscriber: MultiParticipantTranscriptionManager | null = null;
     if (multiParticipantTranscriptionEnabled) {
@@ -718,7 +871,7 @@ export default defineAgent({
                 topic: 'transcription',
               },
             );
-          } catch { }
+          } catch {}
 
           // Feed the orchestrator directly (the voice agent does not receive its own data packets).
           ingestTranscription({
@@ -783,14 +936,21 @@ Your only output is function calls. Never use plain text unless absolutely neces
     };
 
     const voiceExperimentEnabled = (() => {
-      const raw = process.env.VOICE_FACTORIAL_EXPERIMENT_ENABLED ?? process.env.VOICE_AGENT_EXPERIMENT_ENABLED;
+      const raw =
+        process.env.VOICE_FACTORIAL_EXPERIMENT_ENABLED ??
+        process.env.VOICE_AGENT_EXPERIMENT_ENABLED;
       if (typeof raw !== 'string') return false;
       const normalized = raw.trim().toLowerCase();
-      return normalized === '1' || normalized === 'true' || normalized === 'yes' || normalized === 'on';
+      return (
+        normalized === '1' || normalized === 'true' || normalized === 'yes' || normalized === 'on'
+      );
     })();
     const assignmentNamespace =
-      (process.env.VOICE_FACTORIAL_EXPERIMENT_NAMESPACE || process.env.VOICE_AGENT_EXPERIMENT_NAMESPACE || '').trim() ||
-      getDefaultAssignmentNamespace();
+      (
+        process.env.VOICE_FACTORIAL_EXPERIMENT_NAMESPACE ||
+        process.env.VOICE_AGENT_EXPERIMENT_NAMESPACE ||
+        ''
+      ).trim() || getDefaultAssignmentNamespace();
     const sessionAssignmentTs = new Date().toISOString();
     const experimentAssignment: ExperimentAssignment | null = voiceExperimentEnabled
       ? assignVoiceFactorialVariant({
@@ -838,7 +998,10 @@ Your only output is function calls. Never use plain text unless absolutely neces
       if (!Number.isFinite(parsed) || parsed <= 500) return 15000;
       return Math.max(500, Math.min(120000, Math.floor(parsed)));
     })();
-    const capabilityCache = new Map<string, { fetchedAt: number; capabilities: SystemCapabilities }>();
+    const capabilityCache = new Map<
+      string,
+      { fetchedAt: number; capabilities: SystemCapabilities }
+    >();
     const orchestrationMetrics = {
       routeCounts: new Map<IntentRoute, number>(),
       capabilityCacheHits: 0,
@@ -866,12 +1029,17 @@ Your only output is function calls. Never use plain text unless absolutely neces
       }
     };
 
-    const getCapabilitiesCached = async (profile: CapabilityProfile): Promise<SystemCapabilities> => {
+    const getCapabilitiesCached = async (
+      profile: CapabilityProfile,
+    ): Promise<SystemCapabilities> => {
       const room = resolveRoomName() || `session:${workerId}`;
       const key = `${room}::${profile}::${lazyLoadPolicy}::${experimentAssignment?.variant_id ?? 'control'}`;
       const now = Date.now();
       const cached = capabilityCache.get(key);
-      if (cached && (lazyLoadPolicy === 'locked_session' || now - cached.fetchedAt < capabilityCacheTtlMs)) {
+      if (
+        cached &&
+        (lazyLoadPolicy === 'locked_session' || now - cached.fetchedAt < capabilityCacheTtlMs)
+      ) {
         orchestrationMetrics.capabilityCacheHits += 1;
         return cached.capabilities;
       }
@@ -895,7 +1063,8 @@ Your only output is function calls. Never use plain text unless absolutely neces
     let lastResearchPanelId: string | null = null;
     let activeScorecard: { componentId: string; intentId: string; topic: string } | null = null;
     const getLastComponentForType = (type: string) => componentLedger.getLastComponentForType(type);
-    const setLastComponentForType = (type: string, messageId: string) => componentLedger.setLastComponentForType(type, messageId);
+    const setLastComponentForType = (type: string, messageId: string) =>
+      componentLedger.setLastComponentForType(type, messageId);
     const clearLastComponentForType = (type: string, expectedMessageId?: string) =>
       componentLedger.clearLastComponentForType(type, expectedMessageId);
 
@@ -905,7 +1074,6 @@ Your only output is function calls. Never use plain text unless absolutely neces
       if (!trimmed) return;
       lastResearchPanelId = trimmed;
     };
-
 
     const buildResearchPlaceholderSpec = (query: string): JsonObject => {
       const trimmed = query.trim();
@@ -998,15 +1166,26 @@ Your only output is function calls. Never use plain text unless absolutely neces
           total: snapshot.length,
         });
         if (snapshot.length === 0) return;
-        const restored: Array<{ componentId: string; componentType: string; lastUpdated?: number | null; intentId?: string | null; state?: JsonObject | null; props: JsonObject }> = [];
+        const restored: Array<{
+          componentId: string;
+          componentType: string;
+          lastUpdated?: number | null;
+          intentId?: string | null;
+          state?: JsonObject | null;
+          props: JsonObject;
+        }> = [];
         for (const entry of snapshot) {
           if (!entry?.componentId) continue;
           if (componentRegistry.has(entry.componentId)) continue;
           const componentType = entry.componentType?.trim() || 'unknown';
           if (!componentType || componentType === 'unknown') continue;
-          const safeProps = entry.props && typeof entry.props === 'object' ? (entry.props as JsonObject) : {};
-          const safeState = entry.state && typeof entry.state === 'object' ? (entry.state as JsonObject) : null;
-          const intentId = entry.intentId?.trim() || (typeof safeProps.intentId === 'string' ? (safeProps.intentId as string) : undefined);
+          const safeProps =
+            entry.props && typeof entry.props === 'object' ? (entry.props as JsonObject) : {};
+          const safeState =
+            entry.state && typeof entry.state === 'object' ? (entry.state as JsonObject) : null;
+          const intentId =
+            entry.intentId?.trim() ||
+            (typeof safeProps.intentId === 'string' ? (safeProps.intentId as string) : undefined);
           componentRegistry.set(entry.componentId, {
             type: componentType,
             createdAt: entry.lastUpdated ?? Date.now(),
@@ -1016,7 +1195,12 @@ Your only output is function calls. Never use plain text unless absolutely neces
             room: roomName,
           });
           if (intentId) {
-            registerLedgerEntry({ intentId, messageId: entry.componentId, componentType, state: 'updated' });
+            registerLedgerEntry({
+              intentId,
+              messageId: entry.componentId,
+              componentType,
+              state: 'updated',
+            });
           }
           setLastComponentForType(componentType, entry.componentId);
           restored.push(entry);
@@ -1028,13 +1212,15 @@ Your only output is function calls. Never use plain text unless absolutely neces
         if (existingScorecard) {
           const state = existingScorecard.state || existingScorecard.props;
           const topic =
-            (state && typeof state.topic === 'string' && state.topic.trim())
+            state && typeof state.topic === 'string' && state.topic.trim()
               ? state.topic.trim()
-              : (typeof existingScorecard.props?.topic === 'string' && existingScorecard.props.topic.trim())
+              : typeof existingScorecard.props?.topic === 'string' &&
+                  existingScorecard.props.topic.trim()
                 ? (existingScorecard.props.topic as string).trim()
                 : 'Live Debate';
           const resolvedIntentId =
-            existingScorecard.intentId?.trim() || `debate-scorecard-${existingScorecard.componentId}`;
+            existingScorecard.intentId?.trim() ||
+            `debate-scorecard-${existingScorecard.componentId}`;
           activeScorecard = {
             componentId: existingScorecard.componentId,
             intentId: resolvedIntentId,
@@ -1089,8 +1275,10 @@ Your only output is function calls. Never use plain text unless absolutely neces
           typeof entry.componentType === 'string' && entry.componentType.trim()
             ? entry.componentType.trim()
             : 'unknown';
-        const props = entry.props && typeof entry.props === 'object' ? (entry.props as JsonObject) : {};
-        const state = entry.state && typeof entry.state === 'object' ? (entry.state as JsonObject) : props;
+        const props =
+          entry.props && typeof entry.props === 'object' ? (entry.props as JsonObject) : {};
+        const state =
+          entry.state && typeof entry.state === 'object' ? (entry.state as JsonObject) : props;
         const intentId =
           typeof entry.intentId === 'string' && entry.intentId.trim().length > 0
             ? entry.intentId.trim()
@@ -1114,9 +1302,9 @@ Your only output is function calls. Never use plain text unless absolutely neces
         }
         if (componentType === 'DebateScorecard') {
           const topicCandidate =
-            (state?.topic && typeof state.topic === 'string' && state.topic.trim())
+            state?.topic && typeof state.topic === 'string' && state.topic.trim()
               ? state.topic.trim()
-              : (props?.topic && typeof props.topic === 'string' && props.topic.trim())
+              : props?.topic && typeof props.topic === 'string' && props.topic.trim()
                 ? (props.topic as string).trim()
                 : 'Live Debate';
           const resolvedIntentId = intentId ?? `debate-scorecard-${componentId}`;
@@ -1182,21 +1370,15 @@ Your only output is function calls. Never use plain text unless absolutely neces
         if (pending) return { callId: input.callId, pending };
       }
       if (input.requestId) {
-        const requestMatch = findUniqueMatch(
-          (pending) => pending.requestId === input.requestId,
-        );
+        const requestMatch = findUniqueMatch((pending) => pending.requestId === input.requestId);
         if (requestMatch.pending) return requestMatch;
       }
       if (input.traceId) {
-        const traceMatch = findUniqueMatch(
-          (pending) => pending.traceId === input.traceId,
-        );
+        const traceMatch = findUniqueMatch((pending) => pending.traceId === input.traceId);
         if (traceMatch.pending) return traceMatch;
       }
       if (input.intentId) {
-        const intentMatch = findUniqueMatch(
-          (pending) => pending.intentId === input.intentId,
-        );
+        const intentMatch = findUniqueMatch((pending) => pending.intentId === input.intentId);
         if (intentMatch.pending) return intentMatch;
       }
       return { callId: input.callId, pending: undefined };
@@ -1204,7 +1386,8 @@ Your only output is function calls. Never use plain text unless absolutely neces
 
     liveKitBus.on('tool_result', (message: unknown) => {
       try {
-        const record = message && typeof message === 'object' ? (message as Record<string, unknown>) : null;
+        const record =
+          message && typeof message === 'object' ? (message as Record<string, unknown>) : null;
         if (!record) return;
         const payload = asRecord(record.payload);
         const payloadContext = asRecord(payload?.context);
@@ -1270,16 +1453,11 @@ Your only output is function calls. Never use plain text unless absolutely neces
         });
         const callId = resolvedReplayContext.callId;
         const replayContext = resolvedReplayContext.pending;
-        const statusRaw =
-          readStringCandidate(payload?.status, result?.status, record.status) ??
-          '';
+        const statusRaw = readStringCandidate(payload?.status, result?.status, record.status) ?? '';
         const status = statusRaw.trim().toUpperCase();
-        const resolvedToolName = readStringCandidate(
-          payload?.tool,
-          result?.tool,
-          record.tool,
-          replayContext?.tool,
-        ) ?? 'unknown_tool';
+        const resolvedToolName =
+          readStringCandidate(payload?.tool, result?.tool, record.tool, replayContext?.tool) ??
+          'unknown_tool';
         const requestId = requestIdCandidate ?? replayContext?.requestId;
         const traceId = traceIdCandidate ?? replayContext?.traceId ?? requestId;
         const intentId = intentIdCandidate ?? replayContext?.intentId ?? requestId;
@@ -1405,7 +1583,8 @@ Your only output is function calls. Never use plain text unless absolutely neces
 
     liveKitBus.on('tool_error', (message: unknown) => {
       try {
-        const record = message && typeof message === 'object' ? (message as Record<string, unknown>) : null;
+        const record =
+          message && typeof message === 'object' ? (message as Record<string, unknown>) : null;
         if (!record) return;
         const payload = asRecord(record.payload);
         const payloadContext = asRecord(payload?.context);
@@ -1479,13 +1658,10 @@ Your only output is function calls. Never use plain text unless absolutely neces
               ? payloadError.message
               : recordError && typeof recordError.message === 'string'
                 ? recordError.message
-              : 'tool_error';
-        const resolvedToolName = readStringCandidate(
-          payload?.tool,
-          result?.tool,
-          record.tool,
-          replayContext?.tool,
-        ) ?? 'unknown_tool';
+                : 'tool_error';
+        const resolvedToolName =
+          readStringCandidate(payload?.tool, result?.tool, record.tool, replayContext?.tool) ??
+          'unknown_tool';
         const requestId = requestIdCandidate ?? replayContext?.requestId;
         const traceId = traceIdCandidate ?? replayContext?.traceId ?? requestId;
         const intentId = intentIdCandidate ?? replayContext?.intentId ?? requestId;
@@ -1646,8 +1822,10 @@ Your only output is function calls. Never use plain text unless absolutely neces
     };
 
     const getLastCreatedComponentId = () => componentLedger.getLastCreatedComponentId();
-    const setLastCreatedComponentId = (messageId: string | null) => componentLedger.setLastCreatedComponentId(messageId);
-    const getRecentCreateFingerprint = (type: string) => componentLedger.getRecentCreateFingerprint(type);
+    const setLastCreatedComponentId = (messageId: string | null) =>
+      componentLedger.setLastCreatedComponentId(messageId);
+    const getRecentCreateFingerprint = (type: string) =>
+      componentLedger.getRecentCreateFingerprint(type);
     const setRecentCreateFingerprint = (
       type: string,
       fingerprint: {
@@ -1853,7 +2031,8 @@ Your only output is function calls. Never use plain text unless absolutely neces
       if (!likelyMutationAck) {
         return text;
       }
-      const dispatchRecently = now - mutationState.lastDispatchedAt <= MUTATION_CONFIRMATION_WINDOW_MS;
+      const dispatchRecently =
+        now - mutationState.lastDispatchedAt <= MUTATION_CONFIRMATION_WINDOW_MS;
       const appliedRecently = now - mutationState.lastAppliedAt <= MUTATION_CONFIRMATION_WINDOW_MS;
       const failedRecently = now - mutationState.lastFailedAt <= MUTATION_CONFIRMATION_WINDOW_MS;
       const hasRecentMutationContext =
@@ -1876,7 +2055,10 @@ Your only output is function calls. Never use plain text unless absolutely neces
         return `I could not apply that change yet${reason}. Please retry or use /canvas as a direct fallback.`;
       }
 
-      if (!appliedRecently || (dispatchRecently && mutationState.lastAppliedAt < mutationState.lastDispatchedAt)) {
+      if (
+        !appliedRecently ||
+        (dispatchRecently && mutationState.lastAppliedAt < mutationState.lastDispatchedAt)
+      ) {
         return 'Request received. It is still in progress; I will confirm when apply is complete.';
       }
       return text;
@@ -1908,7 +2090,8 @@ Your only output is function calls. Never use plain text unless absolutely neces
 
     const getMutationLockKey = (tool: string, params: JsonObject): string => {
       const directComponentId =
-        typeof (params as any)?.componentId === 'string' && (params as any).componentId.trim().length > 0
+        typeof (params as any)?.componentId === 'string' &&
+        (params as any).componentId.trim().length > 0
           ? (params as any).componentId.trim()
           : '';
       if (directComponentId) {
@@ -1916,7 +2099,8 @@ Your only output is function calls. Never use plain text unless absolutely neces
       }
       if (tool === 'create_component') {
         const messageId =
-          typeof (params as any)?.messageId === 'string' && (params as any).messageId.trim().length > 0
+          typeof (params as any)?.messageId === 'string' &&
+          (params as any).messageId.trim().length > 0
             ? (params as any).messageId.trim()
             : '';
         if (messageId) {
@@ -1934,7 +2118,8 @@ Your only output is function calls. Never use plain text unless absolutely neces
             ? (params as any).task.trim()
             : 'unknown';
         const dispatchId =
-          typeof (params as any)?.params?.id === 'string' && (params as any).params.id.trim().length > 0
+          typeof (params as any)?.params?.id === 'string' &&
+          (params as any).params.id.trim().length > 0
             ? (params as any).params.id.trim()
             : '';
         if (dispatchId) {
@@ -1944,14 +2129,16 @@ Your only output is function calls. Never use plain text unless absolutely neces
       }
       if (tool === 'canvas_quick_apply') {
         const quickKey =
-          typeof (params as any)?.idempotency_key === 'string' && (params as any).idempotency_key.trim().length > 0
+          typeof (params as any)?.idempotency_key === 'string' &&
+          (params as any).idempotency_key.trim().length > 0
             ? (params as any).idempotency_key.trim()
             : '';
         if (quickKey) {
           return `quick:${quickKey}`;
         }
         const routeType =
-          typeof (params as any)?.fast_route_type === 'string' && (params as any).fast_route_type.trim().length > 0
+          typeof (params as any)?.fast_route_type === 'string' &&
+          (params as any).fast_route_type.trim().length > 0
             ? (params as any).fast_route_type.trim()
             : 'unknown';
         return `quick:${routeType}`;
@@ -1964,13 +2151,13 @@ Your only output is function calls. Never use plain text unless absolutely neces
       const room = roomKey() || `session:${workerId}`;
       const explicitIdempotencyKey =
         (tool === 'canvas_quick_apply' &&
-          typeof (params as any)?.idempotency_key === 'string' &&
-          (params as any).idempotency_key.trim().length > 0
+        typeof (params as any)?.idempotency_key === 'string' &&
+        (params as any).idempotency_key.trim().length > 0
           ? (params as any).idempotency_key.trim()
           : undefined) ||
         (tool === 'dispatch_to_conductor' &&
-          typeof (params as any)?.params?.idempotencyKey === 'string' &&
-          (params as any).params.idempotencyKey.trim().length > 0
+        typeof (params as any)?.params?.idempotencyKey === 'string' &&
+        (params as any).params.idempotencyKey.trim().length > 0
           ? (params as any).params.idempotencyKey.trim()
           : undefined);
       const computedIdempotencyKey = createHash('sha1')
@@ -2079,7 +2266,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
 
         const fallbackSeconds =
           typeof existing?.props?.configuredDuration === 'number' &&
-            Number.isFinite(existing.props.configuredDuration)
+          Number.isFinite(existing.props.configuredDuration)
             ? (existing.props.configuredDuration as number)
             : 300;
 
@@ -2114,8 +2301,14 @@ Your only output is function calls. Never use plain text unless absolutely neces
     };
 
     const recentCanvasDispatches = new Map<string, { ts: number; requestId?: string }>();
-    const TOOL_DEDUPE_WINDOW_MS = Math.max(250, Number(process.env.VOICE_AGENT_TOOL_DEDUPE_WINDOW_MS ?? 1_500));
-    const EVENT_BUDGET_PER_SEC = Math.max(2, Number(process.env.VOICE_AGENT_EVENT_BUDGET_PER_SEC ?? 24));
+    const TOOL_DEDUPE_WINDOW_MS = Math.max(
+      250,
+      Number(process.env.VOICE_AGENT_TOOL_DEDUPE_WINDOW_MS ?? 1_500),
+    );
+    const EVENT_BUDGET_PER_SEC = Math.max(
+      2,
+      Number(process.env.VOICE_AGENT_EVENT_BUDGET_PER_SEC ?? 24),
+    );
     const recentToolCallFingerprints = new Map<string, number>();
     const roomEventBudget = new Map<string, { windowStart: number; events: number }>();
 
@@ -2156,7 +2349,10 @@ Your only output is function calls. Never use plain text unless absolutely neces
       'flowchart',
     ];
 
-    const evaluateDispatchIntent = (task: string, taskParams: Record<string, unknown>): IntentGateDecision => {
+    const evaluateDispatchIntent = (
+      task: string,
+      taskParams: Record<string, unknown>,
+    ): IntentGateDecision => {
       if (
         (process.env.VOICE_AGENT_ALLOW_INTERNAL_BYPASS ?? 'false') === 'true' &&
         taskParams.__internalBypass === true
@@ -2172,7 +2368,8 @@ Your only output is function calls. Never use plain text unless absolutely neces
       }
 
       if (task === 'fairy.intent' || task === 'canvas.agent_prompt' || task === 'auto') {
-        const message = typeof taskParams.message === 'string' ? taskParams.message.trim().toLowerCase() : '';
+        const message =
+          typeof taskParams.message === 'string' ? taskParams.message.trim().toLowerCase() : '';
         if (!message || message.length < 2) {
           return { allow: false, confidence: 0.12, reason: 'canvas intent too short' };
         }
@@ -2180,15 +2377,23 @@ Your only output is function calls. Never use plain text unless absolutely neces
           (count, keyword) => (message.includes(keyword) ? count + 1 : count),
           0,
         );
-        const confidence = Math.min(0.98, 0.2 + keywordHits * 0.16 + Math.min(message.length / 200, 0.2));
+        const confidence = Math.min(
+          0.98,
+          0.2 + keywordHits * 0.16 + Math.min(message.length / 200, 0.2),
+        );
         if (keywordHits === 0 && message.length < 8) {
           return { allow: false, confidence, reason: 'canvas intent ambiguous' };
         }
         return { allow: true, confidence, reason: 'canvas intent accepted' };
       }
 
-      if (task === 'scorecard.fact_check' || task === 'scorecard.verify' || task === 'scorecard.refute') {
-        const hasClaimId = typeof taskParams.claimId === 'string' && taskParams.claimId.trim().length > 0;
+      if (
+        task === 'scorecard.fact_check' ||
+        task === 'scorecard.verify' ||
+        task === 'scorecard.refute'
+      ) {
+        const hasClaimId =
+          typeof taskParams.claimId === 'string' && taskParams.claimId.trim().length > 0;
         const hasClaimIds =
           Array.isArray(taskParams.claimIds) &&
           (taskParams.claimIds as unknown[]).some(
@@ -2225,7 +2430,8 @@ Your only output is function calls. Never use plain text unless absolutely neces
         ].join('|');
         return { key: marker, ts: Date.now() };
       }
-      const task = typeof (normalizedParams as any)?.task === 'string' ? (normalizedParams as any).task : '';
+      const task =
+        typeof (normalizedParams as any)?.task === 'string' ? (normalizedParams as any).task : '';
       const taskParams =
         (normalizedParams as any)?.params && typeof (normalizedParams as any).params === 'object'
           ? ((normalizedParams as any).params as Record<string, unknown>)
@@ -2253,7 +2459,11 @@ Your only output is function calls. Never use plain text unless absolutely neces
       return { ok: existing.events <= EVENT_BUDGET_PER_SEC, state: existing };
     };
 
-    const sendToolCall = async (tool: string, params: JsonObject, options: { reliable?: boolean } = {}) => {
+    const sendToolCall = async (
+      tool: string,
+      params: JsonObject,
+      options: { reliable?: boolean } = {},
+    ) => {
       ensureToolCallListeners();
       let toolName = tool;
       let normalizedParams = normalizeOutgoingParams(toolName, params);
@@ -2313,7 +2523,8 @@ Your only output is function calls. Never use plain text unless absolutely neces
             message: quickMessage,
             source: 'voice',
             ...(metadataWithExperiment ? { metadata: metadataWithExperiment } : {}),
-            ...(typeof quickParams.participant_id === 'string' && quickParams.participant_id.trim().length > 0
+            ...(typeof quickParams.participant_id === 'string' &&
+            quickParams.participant_id.trim().length > 0
               ? { participant_id: quickParams.participant_id.trim() }
               : {}),
             ...(Array.isArray(quickParams.selectionIds) && quickParams.selectionIds.length > 0
@@ -2351,11 +2562,16 @@ Your only output is function calls. Never use plain text unless absolutely neces
               ? canvasParams.room.trim()
               : roomKey();
           if (!targetRoomName) {
-            console.warn('[VoiceAgent] dropped dispatch_to_conductor due to missing room identity', { task });
+            console.warn(
+              '[VoiceAgent] dropped dispatch_to_conductor due to missing room identity',
+              { task },
+            );
             return;
           }
-          const message = typeof canvasParams.message === 'string' ? canvasParams.message.trim() : '';
-          const requestId = typeof canvasParams.requestId === 'string' ? canvasParams.requestId.trim() : undefined;
+          const message =
+            typeof canvasParams.message === 'string' ? canvasParams.message.trim() : '';
+          const requestId =
+            typeof canvasParams.requestId === 'string' ? canvasParams.requestId.trim() : undefined;
           const intentIdFromParams =
             typeof canvasParams.id === 'string' && canvasParams.id.trim().length > 0
               ? canvasParams.id.trim()
@@ -2403,7 +2619,11 @@ Your only output is function calls. Never use plain text unless absolutely neces
               : undefined) ||
             lastRequesterParticipantId ||
             undefined;
-          if (participantId && metadataSafeWithExperiment && !metadataSafeWithExperiment.participant_id) {
+          if (
+            participantId &&
+            metadataSafeWithExperiment &&
+            !metadataSafeWithExperiment.participant_id
+          ) {
             metadataSafeWithExperiment.participant_id = participantId;
           }
 
@@ -2472,7 +2692,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
           }
 
           const fastLaneMessage =
-            typeof ((normalizedParams as any)?.params?.message) === 'string'
+            typeof (normalizedParams as any)?.params?.message === 'string'
               ? String((normalizedParams as any).params.message).trim()
               : message;
           const quickIntent = classifyQuickApplyIntent(fastLaneMessage);
@@ -2490,7 +2710,8 @@ Your only output is function calls. Never use plain text unless absolutely neces
                 : '') ||
               quickRequestId;
             const explicitQuickIdempotency =
-              typeof canvasParams.idempotency_key === 'string' && canvasParams.idempotency_key.trim().length > 0
+              typeof canvasParams.idempotency_key === 'string' &&
+              canvasParams.idempotency_key.trim().length > 0
                 ? canvasParams.idempotency_key.trim()
                 : '';
             const quickIdempotencyKey =
@@ -2537,7 +2758,9 @@ Your only output is function calls. Never use plain text unless absolutely neces
 
       const roomName = roomKey();
       if (!roomName) {
-        console.warn('[VoiceAgent] dropped tool_call due to missing room identity', { tool: toolName });
+        console.warn('[VoiceAgent] dropped tool_call due to missing room identity', {
+          tool: toolName,
+        });
         return;
       }
       const budget = consumeRoomEventBudget(roomName);
@@ -2586,21 +2809,28 @@ Your only output is function calls. Never use plain text unless absolutely neces
             task: (normalizedParams as any)?.task,
             params: baseParamsForHash,
           })}`;
-          dispatchParams.idempotencyKey = createHash('sha1').update(dispatchHashBase).digest('hex').slice(0, 20);
+          dispatchParams.idempotencyKey = createHash('sha1')
+            .update(dispatchHashBase)
+            .digest('hex')
+            .slice(0, 20);
         }
         if (!dispatchParams.executionId) {
           dispatchParams.executionId = randomUUID();
         }
         if (!dispatchParams.lockKey) {
           const dispatchComponentId =
-            typeof dispatchParams.componentId === 'string' && dispatchParams.componentId.trim().length > 0
+            typeof dispatchParams.componentId === 'string' &&
+            dispatchParams.componentId.trim().length > 0
               ? dispatchParams.componentId.trim()
               : '';
           const dispatchTask =
-            typeof (normalizedParams as any)?.task === 'string' && (normalizedParams as any).task.trim().length > 0
+            typeof (normalizedParams as any)?.task === 'string' &&
+            (normalizedParams as any).task.trim().length > 0
               ? (normalizedParams as any).task.trim()
               : 'unknown';
-          dispatchParams.lockKey = dispatchComponentId ? `component:${dispatchComponentId}` : `task:${dispatchTask}`;
+          dispatchParams.lockKey = dispatchComponentId
+            ? `component:${dispatchComponentId}`
+            : `task:${dispatchTask}`;
         }
         if (typeof dispatchParams.attempt !== 'number') {
           dispatchParams.attempt = 1;
@@ -2625,16 +2855,23 @@ Your only output is function calls. Never use plain text unless absolutely neces
             ? (quickParams.fast_route_type.trim() as FastRouteType)
             : undefined;
         const participantId =
-          typeof quickParams.participant_id === 'string' && quickParams.participant_id.trim().length > 0
+          typeof quickParams.participant_id === 'string' &&
+          quickParams.participant_id.trim().length > 0
             ? quickParams.participant_id.trim()
             : undefined;
-        if (typeof quickParams.requestId !== 'string' || quickParams.requestId.trim().length === 0) {
+        if (
+          typeof quickParams.requestId !== 'string' ||
+          quickParams.requestId.trim().length === 0
+        ) {
           quickParams.requestId = randomUUID();
         }
         if (typeof quickParams.intentId !== 'string' || quickParams.intentId.trim().length === 0) {
           quickParams.intentId = String(quickParams.requestId);
         }
-        if (typeof quickParams.idempotency_key !== 'string' || quickParams.idempotency_key.trim().length === 0) {
+        if (
+          typeof quickParams.idempotency_key !== 'string' ||
+          quickParams.idempotency_key.trim().length === 0
+        ) {
           const fallbackMessage =
             typeof quickParams.message === 'string' ? quickParams.message.trim() : 'quick-apply';
           const computedQuickKey = buildQuickApplyIdempotencyKey(
@@ -2691,15 +2928,15 @@ Your only output is function calls. Never use plain text unless absolutely neces
       }
       const replayTask =
         toolName === 'dispatch_to_conductor' &&
-          typeof (normalizedParams as any)?.task === 'string' &&
-          (normalizedParams as any).task.trim().length > 0
+        typeof (normalizedParams as any)?.task === 'string' &&
+        (normalizedParams as any).task.trim().length > 0
           ? String((normalizedParams as any).task).trim()
           : toolName;
       const replayParams =
         toolName === 'dispatch_to_conductor' &&
-          (normalizedParams as any)?.params &&
-          typeof (normalizedParams as any).params === 'object' &&
-          !Array.isArray((normalizedParams as any).params)
+        (normalizedParams as any)?.params &&
+        typeof (normalizedParams as any).params === 'object' &&
+        !Array.isArray((normalizedParams as any).params)
           ? ((normalizedParams as any).params as JsonObject)
           : normalizedParams;
       const replayCorrelation = deriveRequestCorrelation({
@@ -2944,7 +3181,8 @@ Your only output is function calls. Never use plain text unless absolutely neces
           }),
       }),
       create_infographic: llm.tool({
-        description: 'Create (or reuse) an Infographic widget and trigger generation from current conversation context.',
+        description:
+          'Create (or reuse) an Infographic widget and trigger generation from current conversation context.',
         parameters: z
           .object({
             useGrounding: z.boolean().nullish(),
@@ -2994,7 +3232,10 @@ Your only output is function calls. Never use plain text unless absolutely neces
               ? ({ ...args.props } as Record<string, unknown>)
               : {};
           const mergedProps = { ...normalizedSpec, ...initialProps };
-          const slot = typeof args.slot === 'string' && args.slot.trim().length > 0 ? args.slot.trim() : undefined;
+          const slot =
+            typeof args.slot === 'string' && args.slot.trim().length > 0
+              ? args.slot.trim()
+              : undefined;
 
           const fingerprintPayload = Object.keys(mergedProps)
             .sort()
@@ -3141,7 +3382,10 @@ Your only output is function calls. Never use plain text unless absolutely neces
                 timestamp: entry.timestamp ?? Date.now(),
               }));
             const summary = hits
-              .map((hit) => `${new Date(hit.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} ${hit.speaker}: ${hit.text}`)
+              .map(
+                (hit) =>
+                  `${new Date(hit.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} ${hit.speaker}: ${hit.text}`,
+              )
               .join(' | ');
             return {
               status: 'queued',
@@ -3161,12 +3405,20 @@ Your only output is function calls. Never use plain text unless absolutely neces
           'Intentionally perform no UI mutation while gathering more conversation context before augmenting canvas.',
         parameters: z.object({
           reason: z
-            .enum(['greeting_no_action', 'gathering_context', 'awaiting_user_detail', 'no_action_requested'])
+            .enum([
+              'greeting_no_action',
+              'gathering_context',
+              'awaiting_user_detail',
+              'no_action_requested',
+            ])
             .nullish(),
           awaiting: z.string().trim().max(160).nullish(),
         }),
         execute: async (args) => {
-          const reason = typeof args.reason === 'string' && args.reason.trim().length > 0 ? args.reason.trim() : undefined;
+          const reason =
+            typeof args.reason === 'string' && args.reason.trim().length > 0
+              ? args.reason.trim()
+              : undefined;
           const awaiting =
             typeof args.awaiting === 'string' && args.awaiting.trim().length > 0
               ? args.awaiting.trim()
@@ -3198,15 +3450,15 @@ Your only output is function calls. Never use plain text unless absolutely neces
           const intentId =
             typeof args.intentId === 'string' && args.intentId.trim().length > 0
               ? args.intentId.trim()
-              : existing?.intentId ?? findLedgerEntryByMessage(resolvedId)?.intentId;
+              : (existing?.intentId ?? findLedgerEntryByMessage(resolvedId)?.intentId);
           const slot =
             typeof args.slot === 'string' && args.slot.trim().length > 0
               ? args.slot.trim()
-              : existing?.slot ?? findLedgerEntryByMessage(resolvedId)?.slot;
+              : (existing?.slot ?? findLedgerEntryByMessage(resolvedId)?.slot);
           const componentType =
             typeof args.type === 'string' && args.type.trim().length > 0
               ? args.type.trim()
-              : existing?.type ?? 'unknown';
+              : (existing?.type ?? 'unknown');
 
           if (intentId) {
             registerLedgerEntry({
@@ -3233,11 +3485,16 @@ Your only output is function calls. Never use plain text unless absolutely neces
         },
       }),
       update_component: llm.tool({
-        description: 'Update an existing component. REQUIRED: patch object with properties to update (e.g., { isRunning: false } for timer, { instruction: "..." } for complex widgets).',
+        description:
+          'Update an existing component. REQUIRED: patch object with properties to update (e.g., { isRunning: false } for timer, { instruction: "..." } for complex widgets).',
         parameters: z.object({
           componentId: z.string().nullish(),
           type: z.string().nullish(),
-          patch: z.union([z.string(), z.record(z.string(), z.any())]).describe('REQUIRED: Object with properties to update. For timers: { isRunning, configuredDuration, timeLeft, reset, addSeconds }. For complex widgets: { instruction: "user request" }'),
+          patch: z
+            .union([z.string(), z.record(z.string(), z.any())])
+            .describe(
+              'REQUIRED: Object with properties to update. For timers: { isRunning, configuredDuration, timeLeft, reset, addSeconds }. For complex widgets: { instruction: "user request" }',
+            ),
           intentId: z.string().nullish(),
           slot: z.string().nullish(),
         }),
@@ -3260,11 +3517,17 @@ Your only output is function calls. Never use plain text unless absolutely neces
           }
 
           if (!resolvedId) {
-            console.warn('[VoiceAgent] update_component missing componentId and no recent component found', args);
+            console.warn(
+              '[VoiceAgent] update_component missing componentId and no recent component found',
+              args,
+            );
             return { status: 'ERROR', message: 'Missing componentId for update_component' };
           }
 
-          const slot = typeof args.slot === 'string' && args.slot.trim().length > 0 ? args.slot.trim() : undefined;
+          const slot =
+            typeof args.slot === 'string' && args.slot.trim().length > 0
+              ? args.slot.trim()
+              : undefined;
           const rawPatch = coerceComponentPatch(args.patch);
           const existing = getComponentEntry(resolvedId);
           const intentId =
@@ -3275,7 +3538,8 @@ Your only output is function calls. Never use plain text unless absolutely neces
             args.intentId = intentId;
           }
           const fallbackSeconds =
-            typeof existing?.props?.configuredDuration === 'number' && Number.isFinite(existing.props.configuredDuration)
+            typeof existing?.props?.configuredDuration === 'number' &&
+            Number.isFinite(existing.props.configuredDuration)
               ? (existing.props.configuredDuration as number)
               : 300;
           const patch = normalizeComponentPatch(rawPatch, fallbackSeconds);
@@ -3290,7 +3554,10 @@ Your only output is function calls. Never use plain text unless absolutely neces
           }
 
           if (!resolvedId) {
-            console.warn('[VoiceAgent] update_component missing componentId after resolution', args);
+            console.warn(
+              '[VoiceAgent] update_component missing componentId after resolution',
+              args,
+            );
             return { status: 'ERROR', message: 'Missing componentId for update_component' };
           }
 
@@ -3319,16 +3586,20 @@ Your only output is function calls. Never use plain text unless absolutely neces
               Array.isArray(patchPlayersRaw) && patchPlayersRaw.length > 0
                 ? patchPlayersRaw
                     .map((player: any) => {
-                      const side = player?.side === 'AFF' || player?.side === 'NEG' ? player.side : null;
+                      const side =
+                        player?.side === 'AFF' || player?.side === 'NEG' ? player.side : null;
                       const label = typeof player?.label === 'string' ? player.label.trim() : '';
                       if (!side || !label) return null;
-                      const avatarUrl = typeof player?.avatarUrl === 'string' ? player.avatarUrl.trim() : undefined;
+                      const avatarUrl =
+                        typeof player?.avatarUrl === 'string' ? player.avatarUrl.trim() : undefined;
                       return { side, label, ...(avatarUrl ? { avatarUrl } : {}) };
                     })
                     .filter(Boolean)
                 : undefined;
             const patchInstruction =
-              typeof (patch as any)?.instruction === 'string' ? String((patch as any).instruction).trim() : '';
+              typeof (patch as any)?.instruction === 'string'
+                ? String((patch as any).instruction).trim()
+                : '';
             const wantsMetaOnly =
               patchInstruction.length === 0 &&
               ((typeof patchTopic === 'string' && patchTopic.trim().length > 0) ||
@@ -3374,7 +3645,9 @@ Your only output is function calls. Never use plain text unless absolutely neces
           if (intentId) {
             const componentTypeHint =
               existingAfter?.type ||
-              (typeof args.type === 'string' && args.type.trim().length > 0 ? args.type.trim() : 'unknown');
+              (typeof args.type === 'string' && args.type.trim().length > 0
+                ? args.type.trim()
+                : 'unknown');
             registerLedgerEntry({
               intentId,
               messageId: resolvedId,
@@ -3403,7 +3676,8 @@ Your only output is function calls. Never use plain text unless absolutely neces
               ? args.componentId.trim()
               : '';
 
-          const typeHint = typeof args.type === 'string' && args.type.trim().length > 0 ? args.type.trim() : '';
+          const typeHint =
+            typeof args.type === 'string' && args.type.trim().length > 0 ? args.type.trim() : '';
           if (!resolvedId && typeHint) {
             const byType = getLastComponentForType(typeHint);
             if (byType) resolvedId = byType;
@@ -3415,11 +3689,17 @@ Your only output is function calls. Never use plain text unless absolutely neces
           }
 
           if (!resolvedId) {
-            console.warn('[VoiceAgent] remove_component missing componentId and no resolvable target', args);
+            console.warn(
+              '[VoiceAgent] remove_component missing componentId and no resolvable target',
+              args,
+            );
             return { status: 'ERROR', message: 'Missing componentId for remove_component' };
           }
 
-          const slot = typeof args.slot === 'string' && args.slot.trim().length > 0 ? args.slot.trim() : undefined;
+          const slot =
+            typeof args.slot === 'string' && args.slot.trim().length > 0
+              ? args.slot.trim()
+              : undefined;
           const existing = getComponentEntry(resolvedId);
           const intentId =
             typeof args.intentId === 'string' && args.intentId.trim().length > 0
@@ -3464,7 +3744,10 @@ Your only output is function calls. Never use plain text unless absolutely neces
           metadata: z.record(z.string(), z.any()).nullish(),
         }),
         execute: async (args) => {
-          const roomName = typeof args.room === 'string' && args.room.trim().length > 0 ? args.room.trim() : job.room.name || '';
+          const roomName =
+            typeof args.room === 'string' && args.room.trim().length > 0
+              ? args.room.trim()
+              : job.room.name || '';
           if (!roomName) {
             return { status: 'ERROR', message: 'canvas_quick_apply requires room context' };
           }
@@ -3529,7 +3812,8 @@ Your only output is function calls. Never use plain text unless absolutely neces
         },
       }),
       dispatch_to_conductor: llm.tool({
-        description: 'Ask the conductor to run a steward for complex tasks like flowcharts or canvas drawing.',
+        description:
+          'Ask the conductor to run a steward for complex tasks like flowcharts or canvas drawing.',
         parameters: z.object({ task: z.string(), params: toolParameters }),
         execute: async (args) => {
           const roomName = job.room.name || '';
@@ -3634,9 +3918,12 @@ Your only output is function calls. Never use plain text unless absolutely neces
           }
 
           if (!enrichedParams.componentId && args.task === 'scorecard.run') {
-            console.warn('[VoiceAgent] dispatch_to_conductor missing componentId for scorecard task', {
-              params,
-            });
+            console.warn(
+              '[VoiceAgent] dispatch_to_conductor missing componentId for scorecard task',
+              {
+                params,
+              },
+            );
           }
 
           await sendToolCall('dispatch_to_conductor', {
@@ -3649,10 +3936,12 @@ Your only output is function calls. Never use plain text unless absolutely neces
     };
 
     // Build instructions and instantiate Agent + Session for Realtime
-    const systemCapabilities = await getCapabilitiesCached(configuredCapabilityProfile).catch(() => ({
-      ...defaultCapabilities,
-      fallbackReason: 'error' as const,
-    }));
+    const systemCapabilities = await getCapabilitiesCached(configuredCapabilityProfile).catch(
+      () => ({
+        ...defaultCapabilities,
+        fallbackReason: 'error' as const,
+      }),
+    );
     if (systemCapabilities.fallbackReason) {
       console.warn('[VoiceAgent] capability query fallback engaged', {
         configuredCapabilityProfile,
@@ -3674,15 +3963,14 @@ Your only output is function calls. Never use plain text unless absolutely neces
       lazyLoadPolicy,
       instructionPack,
       harnessMode,
-      experimentAssignment:
-        experimentAssignment
-          ? {
-              experimentId: experimentAssignment.experiment_id,
-              variantId: experimentAssignment.variant_id,
-              assignmentNamespace: experimentAssignment.assignment_namespace,
-              factorLevels: experimentAssignment.factor_levels,
-            }
-          : null,
+      experimentAssignment: experimentAssignment
+        ? {
+            experimentId: experimentAssignment.experiment_id,
+            variantId: experimentAssignment.variant_id,
+            assignmentNamespace: experimentAssignment.assignment_namespace,
+            factorLevels: experimentAssignment.factor_levels,
+          }
+        : null,
       tools: systemCapabilities.tools.length,
       components: (systemCapabilities.components || []).length,
       manifestVersion: systemCapabilities.manifestVersion,
@@ -3727,7 +4015,10 @@ Your only output is function calls. Never use plain text unless absolutely neces
       realtimeConfig.transcriptDedupeWindowMs,
       realtimeConfig.transcriptDedupeMaxEntries,
     );
-    const waitWithTimeout = async <T>(promise: Promise<T>, timeoutMs: number): Promise<{ ok: boolean; value?: T }> => {
+    const waitWithTimeout = async <T>(
+      promise: Promise<T>,
+      timeoutMs: number,
+    ): Promise<{ ok: boolean; value?: T }> => {
       let timeoutHandle: NodeJS.Timeout | null = null;
       const timeoutPromise = new Promise<{ ok: boolean }>((resolve) => {
         timeoutHandle = setTimeout(() => resolve({ ok: false }), timeoutMs);
@@ -3737,7 +4028,9 @@ Your only output is function calls. Never use plain text unless absolutely neces
         timeoutPromise,
       ]);
       if (timeoutHandle) clearTimeout(timeoutHandle);
-      return result.ok ? { ok: true, value: (result as { ok: true; value: T }).value } : { ok: false };
+      return result.ok
+        ? { ok: true, value: (result as { ok: true; value: T }).value }
+        : { ok: false };
     };
     const publishAgentStatus = async (state: string, detail: Record<string, unknown>) => {
       try {
@@ -3782,7 +4075,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
       try {
         const interruptFuture = session.interrupt();
         await waitWithTimeout(interruptFuture.await, interruptTimeoutMs);
-      } catch { }
+      } catch {}
       recoveringActiveResponse = false;
       // Allow any queued replies to resume after recovery.
       if (!isGeneratingReply && pendingReplies.length > 0) {
@@ -3815,18 +4108,23 @@ Your only output is function calls. Never use plain text unless absolutely neces
             continue;
           }
           try {
-            const speech = session.generateReply({ ...(next.options as any), toolChoice: 'required' }) as any;
+            const speech = session.generateReply({
+              ...(next.options as any),
+              toolChoice: 'required',
+            }) as any;
             if (speech && typeof speech.waitForPlayout === 'function') {
               const completed = await waitWithTimeout(speech.waitForPlayout(), replyTimeoutMs);
               if (!completed.ok) {
                 console.warn('[VoiceAgent] generateReply timed out; interrupting session', {
                   timeoutMs: replyTimeoutMs,
                   attempts: next.attempts,
-                  userInput: next.options.userInput ? next.options.userInput.slice(0, 120) : undefined,
+                  userInput: next.options.userInput
+                    ? next.options.userInput.slice(0, 120)
+                    : undefined,
                 });
                 try {
                   speech.interrupt?.(true);
-                } catch { }
+                } catch {}
                 await interruptRealtimeSession('reply_timeout');
 
                 if (next.attempts < 1) {
@@ -3846,17 +4144,24 @@ Your only output is function calls. Never use plain text unless absolutely neces
                 pendingReplies.unshift({ options: next.options, attempts: next.attempts + 1 });
                 await interruptRealtimeSession('active_response_error', err);
               } else {
-                console.warn('[VoiceAgent] dropping reply after repeated active response conflicts', {
-                  attempts: recovery.attempts,
-                  maxAttempts: recovery.maxAttempts,
-                  userInput: next.options.userInput ? next.options.userInput.slice(0, 120) : undefined,
-                });
+                console.warn(
+                  '[VoiceAgent] dropping reply after repeated active response conflicts',
+                  {
+                    attempts: recovery.attempts,
+                    maxAttempts: recovery.maxAttempts,
+                    userInput: next.options.userInput
+                      ? next.options.userInput.slice(0, 120)
+                      : undefined,
+                  },
+                );
                 await publishAgentStatus('active_response_recovery_dropped', {
                   reason: 'max_recovery_attempts_exceeded',
                   attempts: recovery.attempts,
                   maxAttempts: recovery.maxAttempts,
                   queuedReplies: pendingReplies.length,
-                  userInput: next.options.userInput ? next.options.userInput.slice(0, 120) : undefined,
+                  userInput: next.options.userInput
+                    ? next.options.userInput.slice(0, 120)
+                    : undefined,
                 });
               }
               continue;
@@ -3887,24 +4192,16 @@ Your only output is function calls. Never use plain text unless absolutely neces
 
       const tasks: Array<Promise<unknown>> = [];
       if (route === 'research') {
-        tasks.push(
-          getTranscriptWindow(roomName, 90_000).catch(() => null),
-        );
+        tasks.push(getTranscriptWindow(roomName, 90_000).catch(() => null));
       }
       if (route === 'widget-lifecycle' || route === 'research' || route === 'mcp') {
-        tasks.push(
-          listCanvasComponents(roomName).catch(() => null),
-        );
+        tasks.push(listCanvasComponents(roomName).catch(() => null));
       }
       if (route === 'livekit') {
-        tasks.push(
-          Promise.resolve(listRemoteParticipantLabels()).catch(() => null),
-        );
+        tasks.push(Promise.resolve(listRemoteParticipantLabels()).catch(() => null));
       }
       if (route === 'visual') {
-        tasks.push(
-          Promise.resolve(intentClassifier(text)).catch(() => null),
-        );
+        tasks.push(Promise.resolve(intentClassifier(text)).catch(() => null));
       }
 
       if (tasks.length === 0) return;
@@ -3961,10 +4258,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
       bumpTurn();
 
       const speakerLabel =
-        participantName?.trim() ||
-        speaker?.trim() ||
-        participantId?.trim() ||
-        'user';
+        participantName?.trim() || speaker?.trim() || participantId?.trim() || 'user';
       const attributedInput =
         speakerLabel && speakerLabel !== 'user' ? `${speakerLabel}: ${text}` : text;
       console.log(
@@ -3974,11 +4268,22 @@ Your only output is function calls. Never use plain text unless absolutely neces
       try {
         appendTranscriptCache(job.room.name || 'unknown', {
           participantId: participantId || speakerLabel,
-          participantName: participantName || (speakerLabel !== participantId ? speakerLabel : undefined),
+          participantName:
+            participantName || (speakerLabel !== participantId ? speakerLabel : undefined),
           text,
           timestamp: typeof timestamp === 'number' ? timestamp : Date.now(),
         });
-      } catch { }
+      } catch {}
+
+      const participantVoiceTurnMode = resolveParticipantVoiceTurnMode(participantId);
+      if (shouldSuppressAutomaticTurn(participantVoiceTurnMode, Boolean(isManual))) {
+        console.log('[VoiceAgent] manual turn mode suppressing automatic reply', {
+          participantId: allowSensitiveLogging ? participantId : '[redacted]',
+          speaker: allowSensitiveLogging ? speakerLabel : '[redacted]',
+          mode: participantVoiceTurnMode,
+        });
+        return;
+      }
 
       const trimmed = text.trim();
       const lower = trimmed.toLowerCase();
@@ -4030,271 +4335,284 @@ Your only output is function calls. Never use plain text unless absolutely neces
           return;
         }
 
-      const looksLikeTimerUpdate =
-        lower.includes('timer') &&
-        (lower.includes('pause') ||
-          lower.includes('stop') ||
-          lower.includes('resume') ||
-          lower.includes('reset') ||
-          /\bset\s+timer\b/.test(lower));
-      if (looksLikeTimerUpdate) {
-        await sendToolCall('canvas_quick_apply', {
-          room,
-          fast_route_type: 'timer',
-          message: trimmed,
-          requestId: randomUUID(),
-          participant_id:
-            typeof participantId === 'string' && participantId.trim().length > 0
-              ? participantId.trim()
-              : undefined,
-        } as JsonObject);
-        return;
-      }
-
-      const looksLikeLinearKanbanCommand =
-        (lower.startsWith('create') || lower.startsWith('add') || lower.startsWith('open')) &&
-        lower.includes('linear') &&
-        lower.includes('kanban');
-      if (looksLikeLinearKanbanCommand) {
-        await (toolContext as any).create_component.execute({ type: 'LinearKanbanBoard' });
-        return;
-      }
-
-      const crowdPulseMentioned = /\bcrowd\s*pulse\b/.test(lower);
-      const crowdPulseMutation =
-        crowdPulseMentioned &&
-        /\b(question|prompt|hand|hands|count|status|q&a|qa|follow[-\s]?up)\b/.test(lower);
-      const crowdPulseCreate =
-        crowdPulseMentioned &&
-        (lower.startsWith('create') || lower.startsWith('start') || lower.startsWith('open'));
-      if (crowdPulseMutation || crowdPulseCreate) {
-        const patch = parseCrowdPulseFallbackInstruction(trimmed);
-        const inferredTitle = (() => {
-          const titleMatch =
-            trimmed.match(/title(?:d)?(?:\s*(?:to|is|:))?\s*["“]?([^"”\n]+)["”]?/i) ??
-            trimmed.match(/crowd\s*pulse\s*(?:for|on)\s*["“]?([^"”\n]+)["”]?/i);
-          if (!titleMatch?.[1]) return undefined;
-          const next = titleMatch[1].trim();
-          return next.length > 0 ? next.slice(0, 140) : undefined;
-        })();
-        let crowdPulseId =
-          resolveComponentId({ type: 'CrowdPulseWidget', allowLast: true }) || getLastComponentForType('CrowdPulseWidget');
-        if (!crowdPulseId && crowdPulseCreate) {
-          const created = await (toolContext as any).create_component.execute({
-            type: 'CrowdPulseWidget',
-            ...(inferredTitle ? { spec: { title: inferredTitle } } : {}),
-          });
-          crowdPulseId =
-            (created && typeof created === 'object' && typeof (created as any).messageId === 'string'
-              ? (created as any).messageId
-              : undefined) ??
-            (created && typeof created === 'object' && typeof (created as any).componentId === 'string'
-              ? (created as any).componentId
-              : undefined) ??
-            resolveComponentId({ type: 'CrowdPulseWidget', allowLast: true }) ??
-            getLastComponentForType('CrowdPulseWidget');
-        }
-        const hasCrowdPulsePatch = Object.keys(patch).length > 0;
-        if (crowdPulseId && hasCrowdPulsePatch) {
-          const normalizedPatch: Record<string, unknown> = { ...patch };
-          const normalizedQuestion = normalizeCrowdPulseActiveQuestionInput(
-            (patch as Record<string, unknown>).activeQuestion,
-            trimmed,
-          );
-          if (typeof normalizedQuestion === 'string') {
-            normalizedPatch.activeQuestion = normalizedQuestion;
-          } else {
-            delete normalizedPatch.activeQuestion;
-          }
-          await (toolContext as any).update_component.execute({
-            componentId: crowdPulseId,
-            patch: normalizedPatch,
-          });
-          return;
-        }
-        if (crowdPulseCreate) {
-          if (!crowdPulseId) {
-            await (toolContext as any).create_component.execute({ type: 'CrowdPulseWidget' });
-          }
-          // Pure create/open commands should stop here so they do not spill into
-          // unrelated downstream heuristics (scorecard/research/fallback).
-          return;
-        }
-      }
-
-      const looksLikeScorecardCommand =
-        (lower.startsWith('start') || lower.startsWith('create') || lower.startsWith('open')) &&
-        lower.includes('debate') &&
-        (lower.includes('scorecard') || lower.includes('analysis'));
-      if (looksLikeScorecardCommand) {
-        const topic = inferScorecardTopicFromText(trimmed) ?? undefined;
-        await (toolContext as any).create_component.execute({
-          type: 'DebateScorecard',
-          ...(topic ? { spec: { topic } } : {}),
-        });
-        return;
-      }
-
-      const looksLikeInfographicCommand =
-        lower.includes('infographic') && (lower.startsWith('generate') || lower.startsWith('create'));
-      if (looksLikeInfographicCommand) {
-        await (toolContext as any).create_infographic.execute({});
-        return;
-      }
-
-      const looksLikeCanvasDrawCommand =
-        /\b(draw|sketch|illustrate|diagram|roadmap|sticky(?:\s+note)?|shape|arrow|rectangle|circle|ellipse|line|text box|callout)\b/.test(lower) &&
-        !/\b(scorecard|debate|crowd\s*pulse|research|timer|kanban|infographic)\b/.test(lower);
-      if (looksLikeCanvasDrawCommand) {
-        await sendToolCall('dispatch_to_conductor', {
-          task: 'fairy.intent',
-          params: {
-            id: randomUUID(),
+        const looksLikeTimerUpdate =
+          lower.includes('timer') &&
+          (lower.includes('pause') ||
+            lower.includes('stop') ||
+            lower.includes('resume') ||
+            lower.includes('reset') ||
+            /\bset\s+timer\b/.test(lower));
+        if (looksLikeTimerUpdate) {
+          await sendToolCall('canvas_quick_apply', {
             room,
+            fast_route_type: 'timer',
             message: trimmed,
-            source: 'voice',
-          },
-        });
-        return;
-      }
-
-      const debateLinePrefixes = [
-        'affirmative:',
-        'negative:',
-        'affirmative rebuttal:',
-        'negative rebuttal:',
-        'judge:',
-      ];
-      const ensureManualScorecardTarget = async () => {
-        if (activeScorecard?.componentId) {
-          return activeScorecard;
-        }
-        try {
-          const ensured = await scorecardService.ensure(inferScorecardTopicFromText(trimmed), trimmed);
-          return ensured;
-        } catch (error) {
-          console.warn('[VoiceAgent] failed to ensure scorecard for manual mutation', {
-            prompt: trimmed,
-            error: error instanceof Error ? error.message : String(error),
-          });
-          return null;
-        }
-      };
-      const looksLikeDebateLine = debateLinePrefixes.some((prefix) => lower.startsWith(prefix));
-      if (looksLikeDebateLine) {
-        const target = await ensureManualScorecardTarget();
-        if (!target?.componentId) {
+            requestId: randomUUID(),
+            participant_id:
+              typeof participantId === 'string' && participantId.trim().length > 0
+                ? participantId.trim()
+                : undefined,
+          } as JsonObject);
           return;
         }
-        const claimPatch = parseManualScorecardClaimPatch(trimmed);
-        if (claimPatch) {
-          await (toolContext as any).dispatch_to_conductor.execute({
-            task: 'scorecard.patch',
+
+        const looksLikeLinearKanbanCommand =
+          (lower.startsWith('create') || lower.startsWith('add') || lower.startsWith('open')) &&
+          lower.includes('linear') &&
+          lower.includes('kanban');
+        if (looksLikeLinearKanbanCommand) {
+          await (toolContext as any).create_component.execute({ type: 'LinearKanbanBoard' });
+          return;
+        }
+
+        const crowdPulseMentioned = /\bcrowd\s*pulse\b/.test(lower);
+        const crowdPulseMutation =
+          crowdPulseMentioned &&
+          /\b(question|prompt|hand|hands|count|status|q&a|qa|follow[-\s]?up)\b/.test(lower);
+        const crowdPulseCreate =
+          crowdPulseMentioned &&
+          (lower.startsWith('create') || lower.startsWith('start') || lower.startsWith('open'));
+        if (crowdPulseMutation || crowdPulseCreate) {
+          const patch = parseCrowdPulseFallbackInstruction(trimmed);
+          const inferredTitle = (() => {
+            const titleMatch =
+              trimmed.match(/title(?:d)?(?:\s*(?:to|is|:))?\s*["“]?([^"”\n]+)["”]?/i) ??
+              trimmed.match(/crowd\s*pulse\s*(?:for|on)\s*["“]?([^"”\n]+)["”]?/i);
+            if (!titleMatch?.[1]) return undefined;
+            const next = titleMatch[1].trim();
+            return next.length > 0 ? next.slice(0, 140) : undefined;
+          })();
+          let crowdPulseId =
+            resolveComponentId({ type: 'CrowdPulseWidget', allowLast: true }) ||
+            getLastComponentForType('CrowdPulseWidget');
+          if (!crowdPulseId && crowdPulseCreate) {
+            const created = await (toolContext as any).create_component.execute({
+              type: 'CrowdPulseWidget',
+              ...(inferredTitle ? { spec: { title: inferredTitle } } : {}),
+            });
+            crowdPulseId =
+              (created &&
+              typeof created === 'object' &&
+              typeof (created as any).messageId === 'string'
+                ? (created as any).messageId
+                : undefined) ??
+              (created &&
+              typeof created === 'object' &&
+              typeof (created as any).componentId === 'string'
+                ? (created as any).componentId
+                : undefined) ??
+              resolveComponentId({ type: 'CrowdPulseWidget', allowLast: true }) ??
+              getLastComponentForType('CrowdPulseWidget');
+          }
+          const hasCrowdPulsePatch = Object.keys(patch).length > 0;
+          if (crowdPulseId && hasCrowdPulsePatch) {
+            const normalizedPatch: Record<string, unknown> = { ...patch };
+            const normalizedQuestion = normalizeCrowdPulseActiveQuestionInput(
+              (patch as Record<string, unknown>).activeQuestion,
+              trimmed,
+            );
+            if (typeof normalizedQuestion === 'string') {
+              normalizedPatch.activeQuestion = normalizedQuestion;
+            } else {
+              delete normalizedPatch.activeQuestion;
+            }
+            await (toolContext as any).update_component.execute({
+              componentId: crowdPulseId,
+              patch: normalizedPatch,
+            });
+            return;
+          }
+          if (crowdPulseCreate) {
+            if (!crowdPulseId) {
+              await (toolContext as any).create_component.execute({ type: 'CrowdPulseWidget' });
+            }
+            // Pure create/open commands should stop here so they do not spill into
+            // unrelated downstream heuristics (scorecard/research/fallback).
+            return;
+          }
+        }
+
+        const looksLikeScorecardCommand =
+          (lower.startsWith('start') || lower.startsWith('create') || lower.startsWith('open')) &&
+          lower.includes('debate') &&
+          (lower.includes('scorecard') || lower.includes('analysis'));
+        if (looksLikeScorecardCommand) {
+          const topic = inferScorecardTopicFromText(trimmed) ?? undefined;
+          await (toolContext as any).create_component.execute({
+            type: 'DebateScorecard',
+            ...(topic ? { spec: { topic } } : {}),
+          });
+          return;
+        }
+
+        const looksLikeInfographicCommand =
+          lower.includes('infographic') &&
+          (lower.startsWith('generate') || lower.startsWith('create'));
+        if (looksLikeInfographicCommand) {
+          await (toolContext as any).create_infographic.execute({});
+          return;
+        }
+
+        const looksLikeCanvasDrawCommand =
+          /\b(draw|sketch|illustrate|diagram|roadmap|sticky(?:\s+note)?|shape|arrow|rectangle|circle|ellipse|line|text box|callout)\b/.test(
+            lower,
+          ) &&
+          !/\b(scorecard|debate|crowd\s*pulse|research|timer|kanban|infographic)\b/.test(lower);
+        if (looksLikeCanvasDrawCommand) {
+          await sendToolCall('dispatch_to_conductor', {
+            task: 'fairy.intent',
             params: {
-              componentId: target.componentId,
-              topic: target.topic,
-              claimPatches: [
-                {
-                  op: 'upsert',
-                  side: claimPatch.side,
-                  speech: claimPatch.speech,
-                  quote: claimPatch.quote,
-                  summary: claimPatch.summary,
-                },
-              ],
+              id: randomUUID(),
+              room,
+              message: trimmed,
+              source: 'voice',
             },
           });
           return;
         }
-        await (toolContext as any).dispatch_to_conductor.execute({
-          task: 'scorecard.run',
-          params: {
-            componentId: target.componentId,
-            prompt: trimmed,
-            topic: target.topic,
-          },
-        });
-        return;
-      }
 
-      const looksLikeFactCheckCommand =
-        lower.includes('fact-check') ||
-        lower.includes('fact check') ||
-        lower.startsWith('factcheck') ||
-        lower.includes('add sources') ||
-        lower.includes('verify the') ||
-        lower.includes('verify this');
-      if (looksLikeFactCheckCommand) {
-        const target = await ensureManualScorecardTarget();
-        if (!target?.componentId) {
-          return;
-        }
-        await (toolContext as any).dispatch_to_conductor.execute({
-          task: 'scorecard.fact_check',
-          params: {
-            componentId: target.componentId,
-            summary: trimmed.slice(0, 240),
-            topic: target.topic,
-          },
-        });
-        return;
-      }
-
-      const looksLikeScorecardMutation =
-        /\b(scorecard|claim|rebuttal|counterclaim|counter\s+claim|affirmative|negative|judge|verdict|argument)\b/.test(lower) &&
-        !looksLikeFactCheckCommand;
-      if (looksLikeScorecardMutation) {
-        const target = await ensureManualScorecardTarget();
-        if (!target?.componentId) {
-          return;
-        }
-        const claimPatch = parseManualScorecardClaimPatch(trimmed);
-        if (claimPatch) {
+        const debateLinePrefixes = [
+          'affirmative:',
+          'negative:',
+          'affirmative rebuttal:',
+          'negative rebuttal:',
+          'judge:',
+        ];
+        const ensureManualScorecardTarget = async () => {
+          if (activeScorecard?.componentId) {
+            return activeScorecard;
+          }
+          try {
+            const ensured = await scorecardService.ensure(
+              inferScorecardTopicFromText(trimmed),
+              trimmed,
+            );
+            return ensured;
+          } catch (error) {
+            console.warn('[VoiceAgent] failed to ensure scorecard for manual mutation', {
+              prompt: trimmed,
+              error: error instanceof Error ? error.message : String(error),
+            });
+            return null;
+          }
+        };
+        const looksLikeDebateLine = debateLinePrefixes.some((prefix) => lower.startsWith(prefix));
+        if (looksLikeDebateLine) {
+          const target = await ensureManualScorecardTarget();
+          if (!target?.componentId) {
+            return;
+          }
+          const claimPatch = parseManualScorecardClaimPatch(trimmed);
+          if (claimPatch) {
+            await (toolContext as any).dispatch_to_conductor.execute({
+              task: 'scorecard.patch',
+              params: {
+                componentId: target.componentId,
+                topic: target.topic,
+                claimPatches: [
+                  {
+                    op: 'upsert',
+                    side: claimPatch.side,
+                    speech: claimPatch.speech,
+                    quote: claimPatch.quote,
+                    summary: claimPatch.summary,
+                  },
+                ],
+              },
+            });
+            return;
+          }
           await (toolContext as any).dispatch_to_conductor.execute({
-            task: 'scorecard.patch',
+            task: 'scorecard.run',
             params: {
               componentId: target.componentId,
+              prompt: trimmed,
               topic: target.topic,
-              claimPatches: [
-                {
-                  op: 'upsert',
-                  side: claimPatch.side,
-                  speech: claimPatch.speech,
-                  quote: claimPatch.quote,
-                  summary: claimPatch.summary,
-                },
-              ],
             },
           });
           return;
         }
-        await (toolContext as any).dispatch_to_conductor.execute({
-          task: 'scorecard.run',
-          params: {
-            componentId: target.componentId,
-            prompt: trimmed,
-            topic: target.topic,
-          },
-        });
-        return;
-      }
 
-      const looksLikeResearchCommand =
-        /\b(background research|do\s+(?:a\s+little\s+)?research|research this|find sources|look up|search the web)\b/.test(lower);
-      if (looksLikeResearchCommand) {
-        const inferredTopic = inferScorecardTopicFromText(trimmed);
-        const query = inferredTopic || activeScorecard?.topic || trimmed;
-        await sendToolCall('dispatch_to_conductor', {
-          task: 'search.run',
-          params: {
-            room,
-            query,
-            ...(activeScorecard?.topic ? { topic: activeScorecard.topic } : {}),
-          },
-        });
-        return;
-      }
+        const looksLikeFactCheckCommand =
+          lower.includes('fact-check') ||
+          lower.includes('fact check') ||
+          lower.startsWith('factcheck') ||
+          lower.includes('add sources') ||
+          lower.includes('verify the') ||
+          lower.includes('verify this');
+        if (looksLikeFactCheckCommand) {
+          const target = await ensureManualScorecardTarget();
+          if (!target?.componentId) {
+            return;
+          }
+          await (toolContext as any).dispatch_to_conductor.execute({
+            task: 'scorecard.fact_check',
+            params: {
+              componentId: target.componentId,
+              summary: trimmed.slice(0, 240),
+              topic: target.topic,
+            },
+          });
+          return;
+        }
 
+        const looksLikeScorecardMutation =
+          /\b(scorecard|claim|rebuttal|counterclaim|counter\s+claim|affirmative|negative|judge|verdict|argument)\b/.test(
+            lower,
+          ) && !looksLikeFactCheckCommand;
+        if (looksLikeScorecardMutation) {
+          const target = await ensureManualScorecardTarget();
+          if (!target?.componentId) {
+            return;
+          }
+          const claimPatch = parseManualScorecardClaimPatch(trimmed);
+          if (claimPatch) {
+            await (toolContext as any).dispatch_to_conductor.execute({
+              task: 'scorecard.patch',
+              params: {
+                componentId: target.componentId,
+                topic: target.topic,
+                claimPatches: [
+                  {
+                    op: 'upsert',
+                    side: claimPatch.side,
+                    speech: claimPatch.speech,
+                    quote: claimPatch.quote,
+                    summary: claimPatch.summary,
+                  },
+                ],
+              },
+            });
+            return;
+          }
+          await (toolContext as any).dispatch_to_conductor.execute({
+            task: 'scorecard.run',
+            params: {
+              componentId: target.componentId,
+              prompt: trimmed,
+              topic: target.topic,
+            },
+          });
+          return;
+        }
+
+        const looksLikeResearchCommand =
+          /\b(background research|do\s+(?:a\s+little\s+)?research|research this|find sources|look up|search the web)\b/.test(
+            lower,
+          );
+        if (looksLikeResearchCommand) {
+          const inferredTopic = inferScorecardTopicFromText(trimmed);
+          const query = inferredTopic || activeScorecard?.topic || trimmed;
+          await sendToolCall('dispatch_to_conductor', {
+            task: 'search.run',
+            params: {
+              room,
+              query,
+              ...(activeScorecard?.topic ? { topic: activeScorecard.topic } : {}),
+            },
+          });
+          return;
+        }
       }
 
       if (isManual && (process.env.VOICE_AGENT_ROUTER_ENABLED ?? 'true') !== 'false') {
@@ -4381,7 +4699,10 @@ Your only output is function calls. Never use plain text unless absolutely neces
               delete args.props;
             }
             const componentType = typeof args.type === 'string' ? args.type.trim() : '';
-            const slot = typeof args.slot === 'string' && args.slot.trim().length > 0 ? args.slot.trim() : undefined;
+            const slot =
+              typeof args.slot === 'string' && args.slot.trim().length > 0
+                ? args.slot.trim()
+                : undefined;
             const mergedSpec =
               args.spec && typeof args.spec === 'object'
                 ? (args.spec as Record<string, unknown>)
@@ -4454,14 +4775,17 @@ Your only output is function calls. Never use plain text unless absolutely neces
             const rawPatch = coerceComponentPatch(args.patch);
             const existingFT = getComponentEntry(resolvedId);
             const fallbackSeconds =
-              typeof existingFT?.props?.configuredDuration === 'number' && Number.isFinite(existingFT.props.configuredDuration)
+              typeof existingFT?.props?.configuredDuration === 'number' &&
+              Number.isFinite(existingFT.props.configuredDuration)
                 ? (existingFT.props.configuredDuration as number)
                 : 300;
             args.patch = normalizeComponentPatch(rawPatch, fallbackSeconds);
             const existingAfterFT = getComponentEntry(resolvedId);
             const componentTypeAfterUpdate =
               existingAfterFT?.type ||
-              (typeof args.type === 'string' && args.type.trim().length > 0 ? args.type.trim() : '');
+              (typeof args.type === 'string' && args.type.trim().length > 0
+                ? args.type.trim()
+                : '');
             if (componentTypeAfterUpdate === 'ResearchPanel') {
               rememberResearchPanel(resolvedId);
             }
@@ -4479,7 +4803,10 @@ Your only output is function calls. Never use plain text unless absolutely neces
                 intentId: args.intentId.trim(),
                 messageId: resolvedId,
                 componentType: componentTypeAfterUpdate || 'unknown',
-                slot: typeof args.slot === 'string' && args.slot.trim().length > 0 ? args.slot.trim() : existingAfterFT?.slot,
+                slot:
+                  typeof args.slot === 'string' && args.slot.trim().length > 0
+                    ? args.slot.trim()
+                    : existingAfterFT?.slot,
                 state: existingAfterFT ? 'updated' : 'reserved',
               });
             }
@@ -4496,7 +4823,9 @@ Your only output is function calls. Never use plain text unless absolutely neces
             const existingFT = getComponentEntry(resolvedId);
             const componentType =
               existingFT?.type ||
-              (typeof args.type === 'string' && args.type.trim().length > 0 ? args.type.trim() : '');
+              (typeof args.type === 'string' && args.type.trim().length > 0
+                ? args.type.trim()
+                : '');
 
             pruneRemovedComponentState(resolvedId, componentType);
           }
@@ -4504,7 +4833,10 @@ Your only output is function calls. Never use plain text unless absolutely neces
             const componentType = typeof args.type === 'string' ? args.type.trim() : '';
             const intentId = typeof args.intentId === 'string' ? args.intentId.trim() : '';
             const messageId = typeof args.messageId === 'string' ? args.messageId.trim() : '';
-            const slot = typeof args.slot === 'string' && args.slot.trim().length > 0 ? args.slot.trim() : undefined;
+            const slot =
+              typeof args.slot === 'string' && args.slot.trim().length > 0
+                ? args.slot.trim()
+                : undefined;
             if (componentType && messageId) {
               setLastComponentForType(componentType, messageId);
               setLastCreatedComponentId(messageId);
@@ -4537,7 +4869,10 @@ Your only output is function calls. Never use plain text unless absolutely neces
               }
             }
             const intentId = typeof args.intentId === 'string' ? args.intentId.trim() : '';
-            const slot = typeof args.slot === 'string' && args.slot.trim().length > 0 ? args.slot.trim() : undefined;
+            const slot =
+              typeof args.slot === 'string' && args.slot.trim().length > 0
+                ? args.slot.trim()
+                : undefined;
             if (intentId && resolvedId && componentType) {
               registerLedgerEntry({
                 intentId,
@@ -4585,10 +4920,13 @@ Your only output is function calls. Never use plain text unless absolutely neces
           manual: false,
           server_generated: true,
         };
-        await job.room.localParticipant?.publishData(new TextEncoder().encode(JSON.stringify(payload)), {
-          reliable: event.isFinal,
-          topic: 'transcription',
-        });
+        await job.room.localParticipant?.publishData(
+          new TextEncoder().encode(JSON.stringify(payload)),
+          {
+            reliable: event.isFinal,
+            topic: 'transcription',
+          },
+        );
         if (event.isFinal) {
           try {
             appendTranscriptCache(job.room.name || 'unknown', {
@@ -4598,7 +4936,20 @@ Your only output is function calls. Never use plain text unless absolutely neces
               timestamp: now,
               manual: false,
             });
-          } catch { }
+          } catch {}
+
+          const participantVoiceTurnMode = resolveParticipantVoiceTurnMode(undefined, {
+            conservativeFallback: true,
+          });
+          if (shouldSuppressAutomaticTurn(participantVoiceTurnMode, false)) {
+            console.log(
+              '[VoiceAgent] manual turn mode suppressing auto reply from realtime transcript',
+              {
+                mode: participantVoiceTurnMode,
+              },
+            );
+            return;
+          }
 
           // New user turn begins on a final transcript
           bumpTurn();
@@ -4640,10 +4991,13 @@ Your only output is function calls. Never use plain text unless absolutely neces
         manual: false,
         server_generated: true,
       };
-      await job.room.localParticipant?.publishData(new TextEncoder().encode(JSON.stringify(payload)), {
-        reliable: true,
-        topic: 'transcription',
-      });
+      await job.room.localParticipant?.publishData(
+        new TextEncoder().encode(JSON.stringify(payload)),
+        {
+          reliable: true,
+          topic: 'transcription',
+        },
+      );
       try {
         appendTranscriptCache(job.room.name || 'unknown', {
           participantId: 'voice-agent',
@@ -4670,7 +5024,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
             : undefined,
         });
       }
-      const itemRecord = ((event.item ?? {}) as unknown) as Record<string, unknown>;
+      const itemRecord = (event.item ?? {}) as unknown as Record<string, unknown>;
       const itemRole = typeof event.item?.role === 'string' ? event.item.role : 'unknown';
       const itemRequestId =
         (typeof itemRecord.function_call_id === 'string' && itemRecord.function_call_id.trim()) ||
@@ -4837,11 +5191,7 @@ if (import.meta.url.startsWith('file:') && process.argv[1].endsWith('voice-agent
   }
   const coercePositiveInt = (value: unknown, fallback: number) => {
     const parsed =
-      typeof value === 'string'
-        ? Number(value)
-        : typeof value === 'number'
-          ? value
-          : Number.NaN;
+      typeof value === 'string' ? Number(value) : typeof value === 'number' ? value : Number.NaN;
     if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
     return Math.floor(parsed);
   };
