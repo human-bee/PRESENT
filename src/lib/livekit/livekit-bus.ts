@@ -180,6 +180,7 @@ function createLiveKitBusInstance(room: Room | null | undefined) {
   };
 
   const shouldWaitForAgent = (topic: string, payload: unknown): boolean => {
+    if (topic === 'voice_control') return true;
     if (topic !== 'transcription') return false;
     if (!payload || typeof payload !== 'object') return false;
     const record = payload as Record<string, unknown>;
@@ -246,10 +247,13 @@ function createLiveKitBusInstance(room: Room | null | undefined) {
       };
 
       try {
-        const result = room.localParticipant?.publishData(encodeUtf8(JSON.stringify(chunkPayload)), {
-          reliable: true,
-          topic,
-        });
+        const result = room.localParticipant?.publishData(
+          encodeUtf8(JSON.stringify(chunkPayload)),
+          {
+            reliable: true,
+            topic,
+          },
+        );
         if (!result) {
           logger.warn('Failed to send chunk: local participant unavailable', {
             topic,
@@ -297,8 +301,7 @@ function createLiveKitBusInstance(room: Room | null | undefined) {
       pendingQueue.push(...retained);
 
       if (pendingQueue.length > 0) {
-        const shouldRetrySoon =
-          agentReady || pendingQueue.some((entry) => !entry.requiresAgent);
+        const shouldRetrySoon = agentReady || pendingQueue.some((entry) => !entry.requiresAgent);
         if (shouldRetrySoon) {
           scheduleFlushRetry();
         }

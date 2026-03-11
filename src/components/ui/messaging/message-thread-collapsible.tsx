@@ -4,7 +4,7 @@ import type { messageVariants } from '@/components/ui/messaging/message';
 import { ThreadDropdown } from '@/components/ui/messaging/thread-dropdown';
 import { ScrollableMessageContainer } from '@/components/ui/messaging/scrollable-message-container';
 import { cn } from '@/lib/utils';
-import { FileText } from 'lucide-react';
+import { FileText, Mic, MicOff, Waves } from 'lucide-react';
 import * as React from 'react';
 import { type VariantProps } from 'class-variance-authority';
 import { Button } from '@/components/ui/shared/button';
@@ -17,9 +17,15 @@ import { supabase } from '@/lib/supabase';
 import { fetchWithSupabaseAuth } from '@/lib/supabase/auth-headers';
 import { CanvasLiveKitContext } from '../livekit/livekit-room-connector';
 import { useAuth } from '@/hooks/use-auth';
-import { useAllTranscripts, useTranscriptStore, type Transcript as StoreTranscript } from '@/lib/stores/transcript-store';
+import {
+  useAllTranscripts,
+  useTranscriptStore,
+  type Transcript as StoreTranscript,
+} from '@/lib/stores/transcript-store';
 import { buildLivekitTokenHeaders } from '@/components/ui/livekit/hooks/utils/lk-token';
 import { resolveEdgeIngressUrl } from '@/lib/edge-ingress';
+import { createVoiceControlMessage, type VoiceTurnMode } from '@/lib/livekit/voice-control';
+import { createAudioCommandRecorder } from './audio-command-recorder';
 
 /**
  * Props for the MessageThreadCollapsible component
@@ -55,6 +61,8 @@ export interface MessageThreadCollapsibleProps extends React.HTMLAttributes<HTML
 }
 
 const SUPPORTED_SLASH_COMMANDS = new Set(['canvas']);
+const TURN_MODE_STORAGE_PREFIX = 'present:voice-turn-mode:';
+const MIN_COMMAND_DURATION_MS = 250;
 
 type ParsedSlashCommand = {
   command: string;
@@ -144,30 +152,34 @@ export const MessageThreadCollapsible = React.forwardRef<
       },
     ]);
   }, []);
-  
+
   // Get transcripts from centralized store
   const storeTranscripts = useAllTranscripts();
   const { batchAddTranscripts, clearTranscripts: storeClearTranscripts } = useTranscriptStore();
-  
+
   // Merge store transcripts with local system calls for display
   const transcriptions = React.useMemo(() => {
-    const speechTranscripts = storeTranscripts.map((t): {
-      id: string;
-      speaker: string;
-      text: string;
-      timestamp: number;
-      isFinal: boolean;
-      source: 'agent' | 'user' | 'system';
-      type?: 'speech' | 'system_call';
-    } => ({
-      id: t.id,
-      speaker: t.speaker,
-      text: t.text,
-      timestamp: t.timestamp,
-      isFinal: t.isFinal,
-      source: t.source || (t.speaker === 'voice-agent' ? 'agent' : 'user'),
-      type: 'speech',
-    }));
+    const speechTranscripts = storeTranscripts.map(
+      (
+        t,
+      ): {
+        id: string;
+        speaker: string;
+        text: string;
+        timestamp: number;
+        isFinal: boolean;
+        source: 'agent' | 'user' | 'system';
+        type?: 'speech' | 'system_call';
+      } => ({
+        id: t.id,
+        speaker: t.speaker,
+        text: t.text,
+        timestamp: t.timestamp,
+        isFinal: t.isFinal,
+        source: t.source || (t.speaker === 'voice-agent' ? 'agent' : 'user'),
+        type: 'speech',
+      }),
+    );
     const merged = [...speechTranscripts, ...systemCalls];
     merged.sort((a, b) => a.timestamp - b.timestamp);
     return merged;
@@ -204,7 +216,9 @@ export const MessageThreadCollapsible = React.forwardRef<
       for (const shape of shapes as any[]) {
         if (!shape || shape.type !== 'custom') continue;
         const messageId =
-          typeof shape?.props?.customComponent === 'string' ? shape.props.customComponent.trim() : '';
+          typeof shape?.props?.customComponent === 'string'
+            ? shape.props.customComponent.trim()
+            : '';
         if (!messageId) continue;
         const componentType =
           typeof shape?.props?.name === 'string' && shape.props.name.trim().length > 0
@@ -245,6 +259,19 @@ export const MessageThreadCollapsible = React.forwardRef<
   const [typedMessage, setTypedMessage] = React.useState<string>('');
   const [isSending, setIsSending] = React.useState<boolean>(false);
   const [connBusy, setConnBusy] = React.useState<boolean>(false);
+  const [voiceTurnMode, setVoiceTurnMode] = React.useState<VoiceTurnMode>('auto');
+  const [voiceTurnModeLoaded, setVoiceTurnModeLoaded] = React.useState<boolean>(false);
+  const [recordState, setRecordState] = React.useState<
+    'idle' | 'arming' | 'recording' | 'transcribing' | 'error'
+  >('idle');
+  const [recordStatus, setRecordStatus] = React.useState<string | null>(null);
+  const recordStateRef = React.useRef<'idle' | 'arming' | 'recording' | 'transcribing' | 'error'>(
+    'idle',
+  );
+  const recorderRef = React.useRef(createAudioCommandRecorder());
+  const recordButtonHeldRef = React.useRef(false);
+  const pendingRecordReleaseRef = React.useRef<'send' | 'cancel' | null>(null);
+  const lastRoomMicEnabledRef = React.useRef(true);
   const slashCommand = React.useMemo(() => parseSlashCommand(typedMessage), [typedMessage]);
   const isRecognizedSlashCommand = Boolean(
     slashCommand && SUPPORTED_SLASH_COMMANDS.has(slashCommand.command),
@@ -263,6 +290,42 @@ export const MessageThreadCollapsible = React.forwardRef<
     return /@canvas-agent/gi.test(typedMessage);
   }, [isRecognizedSlashCommand, typedMessage]);
   const slashCommandBodyMissing = Boolean(isRecognizedSlashCommand && !slashHasBody);
+  const isManualTurnMode = voiceTurnMode === 'manual';
+  const isRecordBusy =
+    recordState === 'arming' || recordState === 'recording' || recordState === 'transcribing';
+  const voiceTurnModeRoomKey =
+    livekitCtx?.roomName || room?.name || effectiveContextKey || 'canvas';
+
+  React.useEffect(() => {
+    if (typeof window === 'undefined') return;
+    setVoiceTurnModeLoaded(false);
+    try {
+      const stored = window.localStorage.getItem(
+        `${TURN_MODE_STORAGE_PREFIX}${voiceTurnModeRoomKey}`,
+      );
+      setVoiceTurnMode(stored === 'manual' ? 'manual' : 'auto');
+    } catch {
+      setVoiceTurnMode('auto');
+    } finally {
+      setVoiceTurnModeLoaded(true);
+    }
+  }, [voiceTurnModeRoomKey]);
+
+  React.useEffect(() => {
+    if (typeof window === 'undefined' || !voiceTurnModeLoaded) return;
+    try {
+      window.localStorage.setItem(
+        `${TURN_MODE_STORAGE_PREFIX}${voiceTurnModeRoomKey}`,
+        voiceTurnMode,
+      );
+    } catch {
+      // ignore storage failures
+    }
+  }, [voiceTurnMode, voiceTurnModeLoaded, voiceTurnModeRoomKey]);
+
+  React.useEffect(() => {
+    recordStateRef.current = recordState;
+  }, [recordState]);
 
   React.useEffect(() => {
     refreshCanvasComponents();
@@ -356,8 +419,7 @@ export const MessageThreadCollapsible = React.forwardRef<
   };
 
   // Minimal connect/disconnect helpers (replaces canvas LivekitRoomConnector UI)
-  const wsUrl =
-    process.env.NEXT_PUBLIC_LIVEKIT_URL || process.env.NEXT_PUBLIC_LK_SERVER_URL || '';
+  const wsUrl = process.env.NEXT_PUBLIC_LIVEKIT_URL || process.env.NEXT_PUBLIC_LK_SERVER_URL || '';
 
   const connectRoom = React.useCallback(async () => {
     const guardContext = {
@@ -406,10 +468,13 @@ export const MessageThreadCollapsible = React.forwardRef<
       const tokenUrl = new URL(tokenEndpoint, base);
       tokenUrl.searchParams.set('roomName', livekitCtx.roomName);
       tokenUrl.searchParams.set('identity', identity!);
-      
+
       // Update name parameter to prioritize stored display name
       const storedDisplayName = window.localStorage.getItem('present:display_name');
-      tokenUrl.searchParams.set('name', storedDisplayName || user?.user_metadata?.full_name || 'Canvas User');
+      tokenUrl.searchParams.set(
+        'name',
+        storedDisplayName || user?.user_metadata?.full_name || 'Canvas User',
+      );
 
       let data: any | null = null;
       try {
@@ -438,8 +503,10 @@ export const MessageThreadCollapsible = React.forwardRef<
       try {
         console.log('[LiveKit] Connected, enabling camera and microphone');
         await room.localParticipant.setCameraEnabled(true);
-      } catch { }
-      try { await room.localParticipant.setMicrophoneEnabled(true); } catch { }
+      } catch {}
+      try {
+        await room.localParticipant.setMicrophoneEnabled(true);
+      } catch {}
     } finally {
       setConnBusy(false);
     }
@@ -447,7 +514,61 @@ export const MessageThreadCollapsible = React.forwardRef<
 
   const disconnectRoom = React.useCallback(async () => {
     if (!room) return;
-    try { await room.disconnect(); } catch { }
+    try {
+      await room.disconnect();
+    } catch {}
+  }, [room]);
+
+  const publishVoiceTurnMode = React.useCallback(
+    async (mode: VoiceTurnMode) => {
+      if (!room || room.state !== 'connected') return;
+      try {
+        const payload = createVoiceControlMessage({
+          mode,
+          participantId: room.localParticipant?.identity ?? undefined,
+          roomId: livekitCtx?.roomName || room.name || undefined,
+        });
+        const busWithDelivery = bus as typeof bus & {
+          sendWithResult?: (
+            topic: string,
+            payload: unknown,
+          ) => Promise<{
+            status: 'sent' | 'queued' | 'failed';
+          }>;
+        };
+        if (typeof busWithDelivery.sendWithResult === 'function') {
+          const delivery = await busWithDelivery.sendWithResult('voice_control', payload);
+          if (delivery.status === 'failed') {
+            throw new Error('voice turn mode delivery failed');
+          }
+        } else {
+          bus.send('voice_control', payload);
+        }
+      } catch (error) {
+        console.warn('[Transcript] Failed to publish voice turn mode', {
+          mode,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    },
+    [bus, livekitCtx?.roomName, room],
+  );
+
+  React.useEffect(() => {
+    if (!voiceTurnModeLoaded || !room || room.state !== 'connected') return;
+    void publishVoiceTurnMode(voiceTurnMode);
+  }, [agentPresent, publishVoiceTurnMode, room, room?.state, voiceTurnMode, voiceTurnModeLoaded]);
+
+  const restoreRoomMic = React.useCallback(async () => {
+    if (!room || room.state !== 'connected') return;
+    try {
+      if (room.localParticipant?.isMicrophoneEnabled === lastRoomMicEnabledRef.current) {
+        return;
+      }
+      await room.localParticipant?.setMicrophoneEnabled(lastRoomMicEnabledRef.current);
+    } catch {
+      // ignore mic restore failures
+    }
   }, [room]);
 
   const sendCanvasAgentPrompt = React.useCallback(
@@ -474,7 +595,7 @@ export const MessageThreadCollapsible = React.forwardRef<
             timestamp: Date.now(),
           };
         }
-      } catch { }
+      } catch {}
       const res = await fetchWithSupabaseAuth('/api/steward/runCanvas', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -510,11 +631,273 @@ export const MessageThreadCollapsible = React.forwardRef<
     [sendCanvasAgentPrompt],
   );
 
+  const dispatchManualTranscript = React.useCallback(
+    async (text: string) => {
+      const trimmed = text.trim();
+      if (!trimmed) {
+        throw new Error('Manual transcript is empty');
+      }
+
+      const speaker =
+        user?.user_metadata?.full_name ||
+        user?.user_metadata?.name ||
+        user?.email ||
+        room?.localParticipant?.identity ||
+        'Canvas-User';
+      const participantId = room?.localParticipant?.identity || user?.id || speaker || 'unknown';
+      const eventId =
+        typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+          ? crypto.randomUUID()
+          : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      const payload = {
+        type: 'live_transcription',
+        event_id: eventId,
+        text: trimmed,
+        speaker,
+        participantId,
+        participantName: speaker,
+        timestamp: Date.now(),
+        is_final: true,
+        manual: true,
+      } satisfies LiveTranscriptionPayload;
+
+      const busWithDelivery = bus as typeof bus & {
+        sendWithResult?: (
+          topic: string,
+          payload: unknown,
+        ) => Promise<{
+          status: 'sent' | 'queued' | 'failed';
+          reason?: string;
+          queueLength?: number;
+        }>;
+      };
+
+      if (typeof busWithDelivery.sendWithResult === 'function') {
+        const delivery = await busWithDelivery.sendWithResult('transcription', payload);
+        if (delivery.status === 'failed') {
+          throw new Error(`Delivery failed${delivery.reason ? `: ${delivery.reason}` : ''}`);
+        }
+        if (delivery.status === 'queued') {
+          const queueHint =
+            typeof delivery.queueLength === 'number'
+              ? ` Queue depth: ${delivery.queueLength}.`
+              : '';
+          if (delivery.reason === 'agent_not_joined') {
+            appendSystemCall(
+              `Agent is not joined yet. Your message is queued until the agent joins.${queueHint}`,
+              'voice-agent',
+            );
+            if (livekitCtx?.roomName || room?.name) {
+              window.dispatchEvent(
+                new CustomEvent('livekit:request-agent', {
+                  detail: {
+                    roomName: livekitCtx?.roomName || room?.name,
+                  },
+                }),
+              );
+            }
+          } else {
+            appendSystemCall(
+              `Room is reconnecting. Your message is queued and will send automatically.${queueHint}`,
+              'voice-agent',
+            );
+          }
+        }
+      } else {
+        bus.send('transcription', payload);
+      }
+
+      try {
+        window.dispatchEvent(
+          new CustomEvent('livekit:transcription-replay', {
+            detail: {
+              event_id: payload.event_id,
+              speaker,
+              text: trimmed,
+              timestamp: payload.timestamp,
+            },
+          }),
+        );
+      } catch {}
+
+      try {
+        window.dispatchEvent(
+          new CustomEvent('custom:transcription-local', {
+            detail: payload,
+          }),
+        );
+      } catch {}
+
+      return payload;
+    },
+    [appendSystemCall, bus, livekitCtx?.roomName, room, user],
+  );
+
+  const transcribeRecordedCommand = React.useCallback(
+    async (audioBase64: string, sampleRate: number) => {
+      const speaker =
+        user?.user_metadata?.full_name ||
+        user?.user_metadata?.name ||
+        user?.email ||
+        room?.localParticipant?.identity ||
+        'Canvas-User';
+      const response = await fetchWithSupabaseAuth('/api/transcribe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          audio: audioBase64,
+          sampleRate,
+          speaker,
+        }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        const message =
+          typeof data?.error === 'string' && data.error.trim()
+            ? data.error.trim()
+            : `Transcription failed (${response.status})`;
+        throw new Error(message);
+      }
+      const transcript = typeof data?.transcription === 'string' ? data.transcription.trim() : '';
+      if (!transcript) {
+        throw new Error('Transcription returned no text');
+      }
+      return transcript;
+    },
+    [room, user],
+  );
+
+  const settleRecordedCommand = React.useCallback(
+    async (action: 'send' | 'cancel') => {
+      pendingRecordReleaseRef.current = null;
+      if (action === 'cancel') {
+        await recorderRef.current.cancel().catch(() => {});
+        await restoreRoomMic();
+        recordStateRef.current = 'idle';
+        setRecordState('idle');
+        setRecordStatus('Command capture canceled.');
+        return;
+      }
+
+      recordStateRef.current = 'transcribing';
+      setRecordState('transcribing');
+      setRecordStatus('Transcribing command…');
+      try {
+        const audio = await recorderRef.current.stop();
+        await restoreRoomMic();
+        if (!audio || audio.durationMs < MIN_COMMAND_DURATION_MS) {
+          recordStateRef.current = 'idle';
+          setRecordState('idle');
+          setRecordStatus('Hold a little longer to send a command.');
+          return;
+        }
+        const transcript = await transcribeRecordedCommand(audio.audioBase64, audio.sampleRate);
+        await dispatchManualTranscript(transcript);
+        recordStateRef.current = 'idle';
+        setRecordState('idle');
+        setRecordStatus(`Sent command: "${transcript}"`);
+      } catch (error) {
+        await restoreRoomMic();
+        recordStateRef.current = 'error';
+        setRecordState('error');
+        setRecordStatus(error instanceof Error ? error.message : 'Command transcription failed');
+      }
+    },
+    [dispatchManualTranscript, restoreRoomMic, transcribeRecordedCommand],
+  );
+
+  const beginRecordCommand = React.useCallback(async () => {
+    if (!isManualTurnMode || !room || room.state !== 'connected' || isRecordBusy || isSending) {
+      return;
+    }
+    recordButtonHeldRef.current = true;
+    pendingRecordReleaseRef.current = null;
+    recordStateRef.current = 'arming';
+    setRecordState('arming');
+    setRecordStatus('Preparing command capture…');
+    try {
+      lastRoomMicEnabledRef.current = room.localParticipant?.isMicrophoneEnabled ?? true;
+      try {
+        if (lastRoomMicEnabledRef.current) {
+          await room.localParticipant?.setMicrophoneEnabled(false);
+        }
+      } catch {
+        // keep going; local recorder can still work even if room mic mute fails
+      }
+      const started = await recorderRef.current.start();
+      if (!started) {
+        if (recordStateRef.current === 'arming') {
+          await restoreRoomMic();
+          recordStateRef.current = 'idle';
+          setRecordState('idle');
+          setRecordStatus('Command capture canceled.');
+        }
+        return;
+      }
+      if (pendingRecordReleaseRef.current) {
+        await settleRecordedCommand(pendingRecordReleaseRef.current);
+        return;
+      }
+      if (!recordButtonHeldRef.current || recordStateRef.current !== 'arming') {
+        await recorderRef.current.cancel().catch(() => {});
+        await restoreRoomMic();
+        recordStateRef.current = 'idle';
+        setRecordState('idle');
+        setRecordStatus('Command capture canceled.');
+        return;
+      }
+      recordStateRef.current = 'recording';
+      setRecordState('recording');
+      setRecordStatus('Recording command… release to send.');
+    } catch (error) {
+      await recorderRef.current.cancel().catch(() => {});
+      await restoreRoomMic();
+      recordStateRef.current = 'error';
+      setRecordState('error');
+      setRecordStatus(error instanceof Error ? error.message : 'Command recording failed');
+    }
+  }, [isManualTurnMode, isRecordBusy, isSending, restoreRoomMic, room, settleRecordedCommand]);
+
+  const finishRecordCommand = React.useCallback(
+    async (cancelled = false) => {
+      const activeState = recordStateRef.current;
+      recordButtonHeldRef.current = false;
+      if (activeState !== 'arming' && activeState !== 'recording') {
+        return;
+      }
+      if (activeState === 'arming') {
+        pendingRecordReleaseRef.current = cancelled ? 'cancel' : 'send';
+        setRecordStatus(cancelled ? 'Canceling command capture…' : 'Finishing command capture…');
+        return;
+      }
+      await settleRecordedCommand(cancelled ? 'cancel' : 'send');
+    },
+    [settleRecordedCommand],
+  );
+
+  React.useEffect(() => {
+    return () => {
+      recordButtonHeldRef.current = false;
+      pendingRecordReleaseRef.current = 'cancel';
+      const shouldRestoreMic = recordStateRef.current !== 'idle';
+      void recorderRef.current
+        .cancel()
+        .catch(() => {})
+        .finally(() => {
+          if (shouldRestoreMic) {
+            void restoreRoomMic();
+          }
+        });
+    };
+  }, [restoreRoomMic]);
+
   // Track agent presence from store transcripts
   React.useEffect(() => {
-    const hasAgent = storeTranscripts.some(t => t.speaker === 'voice-agent');
+    const hasAgent = storeTranscripts.some((t) => t.speaker === 'voice-agent');
     if (hasAgent) {
-      try { setAgentPresent(true); } catch { }
+      try {
+        setAgentPresent(true);
+      } catch {}
     }
   }, [storeTranscripts, setAgentPresent]);
 
@@ -569,38 +952,42 @@ export const MessageThreadCollapsible = React.forwardRef<
     const handleStatus = (event: Event) => {
       const detail = (event as CustomEvent).detail as any;
       if (!detail) return;
-      setAgentEvents((prev) => [
-        {
-          ts: Date.now(),
-          kind: 'status' as const,
-          sessionId: detail.sessionId,
-          status: typeof detail.state === 'string' ? detail.state : undefined,
-          traceId: typeof detail.traceId === 'string' ? detail.traceId : undefined,
-          intentId: typeof detail.intentId === 'string' ? detail.intentId : undefined,
-          requestId: typeof detail.requestId === 'string' ? detail.requestId : undefined,
-          raw: detail,
-        },
-        ...prev,
-      ].slice(0, 50));
+      setAgentEvents((prev) =>
+        [
+          {
+            ts: Date.now(),
+            kind: 'status' as const,
+            sessionId: detail.sessionId,
+            status: typeof detail.state === 'string' ? detail.state : undefined,
+            traceId: typeof detail.traceId === 'string' ? detail.traceId : undefined,
+            intentId: typeof detail.intentId === 'string' ? detail.intentId : undefined,
+            requestId: typeof detail.requestId === 'string' ? detail.requestId : undefined,
+            raw: detail,
+          },
+          ...prev,
+        ].slice(0, 50),
+      );
     };
     const handleTrace = (event: Event) => {
       const detail = (event as CustomEvent).detail as any;
       if (!detail) return;
-      setAgentEvents((prev) => [
-        {
-          ts: Date.now(),
-          kind: 'trace' as const,
-          sessionId: detail.sessionId,
-          seq: typeof detail.seq === 'number' ? detail.seq : undefined,
-          actionCount: typeof detail.actionCount === 'number' ? detail.actionCount : undefined,
-          traceStep: typeof detail.step === 'string' ? detail.step : undefined,
-          traceId: typeof detail.traceId === 'string' ? detail.traceId : undefined,
-          intentId: typeof detail.intentId === 'string' ? detail.intentId : undefined,
-          requestId: typeof detail.requestId === 'string' ? detail.requestId : undefined,
-          raw: detail,
-        },
-        ...prev,
-      ].slice(0, 50));
+      setAgentEvents((prev) =>
+        [
+          {
+            ts: Date.now(),
+            kind: 'trace' as const,
+            sessionId: detail.sessionId,
+            seq: typeof detail.seq === 'number' ? detail.seq : undefined,
+            actionCount: typeof detail.actionCount === 'number' ? detail.actionCount : undefined,
+            traceStep: typeof detail.step === 'string' ? detail.step : undefined,
+            traceId: typeof detail.traceId === 'string' ? detail.traceId : undefined,
+            intentId: typeof detail.intentId === 'string' ? detail.intentId : undefined,
+            requestId: typeof detail.requestId === 'string' ? detail.requestId : undefined,
+            raw: detail,
+          },
+          ...prev,
+        ].slice(0, 50),
+      );
     };
     window.addEventListener('present:agent_actions', handleActions as EventListener);
     window.addEventListener('present:agent_status', handleStatus as EventListener);
@@ -646,7 +1033,8 @@ export const MessageThreadCollapsible = React.forwardRef<
       const detail = event.detail as {
         messageId?: string;
       };
-      const messageId = typeof detail?.messageId === 'string' ? detail.messageId : 'unknown-component';
+      const messageId =
+        typeof detail?.messageId === 'string' ? detail.messageId : 'unknown-component';
       const systemCall = {
         id: `system-${Date.now()}-${Math.random()}`,
         speaker: 'voice-agent',
@@ -704,7 +1092,7 @@ export const MessageThreadCollapsible = React.forwardRef<
             window.history.replaceState({}, '', url.toString());
             try {
               localStorage.setItem('present:lastCanvasId', data.id);
-            } catch { }
+            } catch {}
             // Trigger a lightweight refresh for transcript hook by dispatching an event
             window.dispatchEvent(new Event('present:canvas-id-changed'));
           } else {
@@ -730,14 +1118,14 @@ export const MessageThreadCollapsible = React.forwardRef<
                 window.history.replaceState({}, '', url.toString());
                 try {
                   localStorage.setItem('present:lastCanvasId', canvas.id);
-                } catch { }
+                } catch {}
                 window.dispatchEvent(new Event('present:canvas-id-changed'));
               }
             }
           }
-        } catch { }
+        } catch {}
       })();
-    } catch { }
+    } catch {}
   }, []);
 
   // Conversations and suggestions removed; this panel focuses on Transcript only
@@ -879,11 +1267,17 @@ export const MessageThreadCollapsible = React.forwardRef<
                                   {new Date(e.ts).toLocaleTimeString('en-US', { hour12: false })}
                                 </span>
                                 <span className="flex items-center gap-2">
-                                  {e.kind && <span className="uppercase tracking-wide text-[10px]">{e.kind}</span>}
+                                  {e.kind && (
+                                    <span className="uppercase tracking-wide text-[10px]">
+                                      {e.kind}
+                                    </span>
+                                  )}
                                   {e.status && <span>{e.status}</span>}
                                   {e.traceStep && <span>{e.traceStep}</span>}
                                   {typeof e.seq === 'number' && <span>seq {e.seq}</span>}
-                                  {e.actionCount !== undefined && <span>{e.actionCount} actions</span>}
+                                  {e.actionCount !== undefined && (
+                                    <span>{e.actionCount} actions</span>
+                                  )}
                                 </span>
                               </summary>
                               {e.firstAction && (
@@ -933,11 +1327,12 @@ export const MessageThreadCollapsible = React.forwardRef<
                         </div>
                         <div className="bg-surface rounded-lg border border-default overflow-hidden">
                           {renderComponentPreview(entry)}
-                          {typeof entry.updatedAt === 'number' && Number.isFinite(entry.updatedAt) && (
-                            <div className="px-3 pb-3 text-[10px] text-muted-foreground">
-                              Updated {formatTime(entry.updatedAt)}
-                            </div>
-                          )}
+                          {typeof entry.updatedAt === 'number' &&
+                            Number.isFinite(entry.updatedAt) && (
+                              <div className="px-3 pb-3 text-[10px] text-muted-foreground">
+                                Updated {formatTime(entry.updatedAt)}
+                              </div>
+                            )}
                         </div>
                       </div>
                     ))}
@@ -978,195 +1373,191 @@ export const MessageThreadCollapsible = React.forwardRef<
             {(() => {
               const isRoomConnected = room?.state === 'connected';
               const trimmedMessage = typedMessage.trim();
-              const inputDisabled = isSending;
+              const inputDisabled = isSending || isRecordBusy;
               const sendDisabled =
                 isSending ||
+                isRecordBusy ||
                 !trimmedMessage ||
-                (isRecognizedSlashCommand ? slashCommandBodyMissing : !isRoomConnected && !mentionMatchesCanvasAgent);
+                (isRecognizedSlashCommand
+                  ? slashCommandBodyMissing
+                  : !isRoomConnected && !mentionMatchesCanvasAgent);
               return (
-                <form
-                  data-debug-source="messaging-message-form"
-                  onSubmit={async (event) => {
-                    event.preventDefault();
-                    const trimmed = typedMessage.trim();
-                    if (!trimmed || isSending) return;
-                    const parsedCommand = parseSlashCommand(trimmed);
-                    const slashActive = Boolean(
-                      parsedCommand && SUPPORTED_SLASH_COMMANDS.has(parsedCommand.command),
-                    );
-                    const mentionActive = Boolean(!slashActive && mentionMatchesCanvasAgent);
-                    if (slashActive && !parsedCommand?.body) {
-                      try {
-                        console.warn('[Transcript] Slash command requires a message body', parsedCommand);
-                      } catch { }
-                      return;
-                    }
-                    setIsSending(true);
-
-                    const speaker =
-                      user?.user_metadata?.full_name ||
-                      user?.user_metadata?.name ||
-                      user?.email ||
-                      room?.localParticipant?.identity ||
-                      'Canvas-User';
-                    const participantId =
-                      room?.localParticipant?.identity || user?.id || speaker || 'unknown';
-                    const eventId =
-                      typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
-                        ? crypto.randomUUID()
-                        : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-
-                    const mentionBody = mentionActive
-                      ? trimmed.replace(/@canvas-agent/gi, '').trim() || trimmed
-                      : trimmed;
-                    const textForDispatch = slashActive && parsedCommand ? parsedCommand.body : mentionBody;
-
-                    const payload = {
-                      type: 'live_transcription',
-                      event_id: eventId,
-                      text: textForDispatch,
-                      speaker,
-                      participantId,
-                      participantName: speaker,
-                      timestamp: Date.now(),
-                      is_final: true,
-                      manual: true,
-                    } satisfies LiveTranscriptionPayload;
-
-                    let completed = false;
-
-                    try {
-                      if (slashActive && parsedCommand) {
-                        await runSlashCommand(parsedCommand.command, parsedCommand.body);
-                      } else if (mentionActive) {
-                        await sendCanvasAgentPrompt(textForDispatch);
-                      } else {
-                        const busWithDelivery = bus as typeof bus & {
-                          sendWithResult?: (topic: string, payload: unknown) => Promise<{
-                            status: 'sent' | 'queued' | 'failed';
-                            reason?: string;
-                            queueLength?: number;
-                          }>;
-                        };
-                        if (typeof busWithDelivery.sendWithResult === 'function') {
-                          const delivery = await busWithDelivery.sendWithResult('transcription', payload);
-                          if (delivery.status === 'failed') {
-                            throw new Error(
-                              `Delivery failed${delivery.reason ? `: ${delivery.reason}` : ''}`,
-                            );
-                          }
-                          if (delivery.status === 'queued') {
-                            const queueHint =
-                              typeof delivery.queueLength === 'number'
-                                ? ` Queue depth: ${delivery.queueLength}.`
-                                : '';
-                            if (delivery.reason === 'agent_not_joined') {
-                              appendSystemCall(
-                                `Agent is not joined yet. Your message is queued until the agent joins.${queueHint}`,
-                                'voice-agent',
-                              );
-                              if (livekitCtx?.roomName || room?.name) {
-                                window.dispatchEvent(
-                                  new CustomEvent('livekit:request-agent', {
-                                    detail: {
-                                      roomName: livekitCtx?.roomName || room?.name,
-                                    },
-                                  }),
-                                );
-                              }
-                            } else {
-                              appendSystemCall(
-                                `Room is reconnecting. Your message is queued and will send automatically.${queueHint}`,
-                                'voice-agent',
-                              );
-                            }
-                          }
-                        } else {
-                          bus.send('transcription', payload);
+                <div className="space-y-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={isManualTurnMode ? 'default' : 'outline'}
+                      onClick={async () => {
+                        const nextMode: VoiceTurnMode = isManualTurnMode ? 'auto' : 'manual';
+                        setVoiceTurnMode(nextMode);
+                        setRecordStatus(
+                          nextMode === 'manual'
+                            ? 'Manual turn mode enabled. Passive speech will keep transcribing, but the voice agent will only act on explicit commands.'
+                            : 'Automatic voice-agent turns restored.',
+                        );
+                        await publishVoiceTurnMode(nextMode);
+                      }}
+                    >
+                      <Waves className="h-4 w-4" />
+                      {isManualTurnMode ? 'Manual Turns On' : 'Manual Turns Off'}
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={recordState === 'recording' ? 'destructive' : 'outline'}
+                      disabled={
+                        !isManualTurnMode ||
+                        !isRoomConnected ||
+                        isSending ||
+                        recordState === 'transcribing'
+                      }
+                      onPointerDown={async (event) => {
+                        try {
+                          event.currentTarget.setPointerCapture(event.pointerId);
+                        } catch {
+                          // ignore pointer-capture failures
                         }
-                      }
+                        await beginRecordCommand();
+                      }}
+                      onPointerUp={async (event) => {
+                        try {
+                          event.currentTarget.releasePointerCapture(event.pointerId);
+                        } catch {
+                          // ignore pointer-release failures
+                        }
+                        await finishRecordCommand(false);
+                      }}
+                      onPointerCancel={async () => {
+                        await finishRecordCommand(true);
+                      }}
+                    >
+                      {recordState === 'recording' ? (
+                        <MicOff className="h-4 w-4" />
+                      ) : (
+                        <Mic className="h-4 w-4" />
+                      )}
+                      {recordState === 'arming'
+                        ? 'Preparing…'
+                        : recordState === 'recording'
+                          ? 'Release to Send'
+                          : recordState === 'transcribing'
+                            ? 'Transcribing…'
+                            : 'Hold to Record'}
+                    </Button>
+                  </div>
 
-                      try {
-                        window.dispatchEvent(
-                          new CustomEvent('livekit:transcription-replay', {
-                            detail: {
-                              speaker,
-                              text: textForDispatch,
-                              timestamp: Date.now(),
-                            },
-                          }),
-                        );
-                      } catch { }
+                  {recordStatus ? (
+                    <div
+                      className={cn(
+                        'rounded-lg border px-3 py-2 text-xs',
+                        recordState === 'error'
+                          ? 'border-danger/40 bg-danger/10 text-danger'
+                          : 'border-default bg-surface-secondary text-muted-foreground',
+                      )}
+                    >
+                      {recordStatus}
+                    </div>
+                  ) : null}
 
-                      try {
-                        window.dispatchEvent(
-                          new CustomEvent('custom:transcription-local', {
-                            detail: payload,
-                          }),
-                        );
-                      } catch { }
-
-                      completed = true;
-                    } catch (error) {
-                      console.error('[Transcript] Failed to send agent prompt', error);
-                      const errorMessage =
-                        error instanceof Error && error.message.trim().length > 0
-                          ? error.message
-                          : 'Unknown error';
-                      appendSystemCall(
-                        `Could not deliver your message to the voice agent (${errorMessage}). Use /canvas as a direct fallback.`,
-                        'voice-agent',
+                  <form
+                    data-debug-source="messaging-message-form"
+                    onSubmit={async (event) => {
+                      event.preventDefault();
+                      const trimmed = typedMessage.trim();
+                      if (!trimmed || isSending || isRecordBusy) return;
+                      const parsedCommand = parseSlashCommand(trimmed);
+                      const slashActive = Boolean(
+                        parsedCommand && SUPPORTED_SLASH_COMMANDS.has(parsedCommand.command),
                       );
-                    } finally {
-                      if (completed) {
-                        setTypedMessage('');
-                        setTimeout(() => {
-                          if (transcriptContainerRef.current) {
-                            transcriptContainerRef.current.scrollTop =
-                              transcriptContainerRef.current.scrollHeight;
-                          }
-                        }, 10);
+                      const mentionActive = Boolean(!slashActive && mentionMatchesCanvasAgent);
+                      if (slashActive && !parsedCommand?.body) {
+                        try {
+                          console.warn(
+                            '[Transcript] Slash command requires a message body',
+                            parsedCommand,
+                          );
+                        } catch {}
+                        return;
                       }
-                      setIsSending(false);
-                    }
-                  }}
-                  className="flex items-center gap-2"
-                >
-                  <input
-                    type="text"
-                    value={typedMessage}
-                    onChange={(e) => setTypedMessage(e.target.value)}
-                    placeholder={
-                      isRecognizedSlashCommand
-                        ? 'Dispatching directly to the Canvas steward…'
-                        : room?.state === 'connected'
-                          ? 'Type a message for the agent…'
-                          : 'Connecting to LiveKit…'
-                    }
-                    className="flex-1 px-3 py-2 rounded-lg border border-default bg-surface text-primary outline-none focus-visible:ring-2 focus-visible:ring-[var(--present-accent-ring)]"
-                    aria-label="Type a message for the agent"
-                    disabled={inputDisabled}
-                  />
-                  <Button
-                    type="submit"
-                    disabled={sendDisabled}
-                    size="sm"
-                    loading={isSending}
+                      setIsSending(true);
+
+                      let completed = false;
+
+                      try {
+                        const mentionBody = mentionActive
+                          ? trimmed.replace(/@canvas-agent/gi, '').trim() || trimmed
+                          : trimmed;
+                        const textForDispatch =
+                          slashActive && parsedCommand ? parsedCommand.body : mentionBody;
+                        if (slashActive && parsedCommand) {
+                          await runSlashCommand(parsedCommand.command, parsedCommand.body);
+                        } else if (mentionActive) {
+                          await sendCanvasAgentPrompt(textForDispatch);
+                        } else {
+                          await dispatchManualTranscript(textForDispatch);
+                        }
+                        completed = true;
+                      } catch (error) {
+                        console.error('[Transcript] Failed to send agent prompt', error);
+                        const errorMessage =
+                          error instanceof Error && error.message.trim().length > 0
+                            ? error.message
+                            : 'Unknown error';
+                        appendSystemCall(
+                          `Could not deliver your message to the voice agent (${errorMessage}). Use /canvas as a direct fallback.`,
+                          'voice-agent',
+                        );
+                      } finally {
+                        if (completed) {
+                          setTypedMessage('');
+                          setTimeout(() => {
+                            if (transcriptContainerRef.current) {
+                              transcriptContainerRef.current.scrollTop =
+                                transcriptContainerRef.current.scrollHeight;
+                            }
+                          }, 10);
+                        }
+                        setIsSending(false);
+                      }
+                    }}
+                    className="flex items-center gap-2"
                   >
-                    Send
-                  </Button>
-                </form>
+                    <input
+                      type="text"
+                      value={typedMessage}
+                      onChange={(e) => setTypedMessage(e.target.value)}
+                      placeholder={
+                        isRecognizedSlashCommand
+                          ? 'Dispatching directly to the Canvas steward…'
+                          : isManualTurnMode && isRoomConnected
+                            ? 'Manual turns are on. Type a command or hold Record…'
+                            : room?.state === 'connected'
+                              ? 'Type a message for the agent…'
+                              : 'Connecting to LiveKit…'
+                      }
+                      className="flex-1 px-3 py-2 rounded-lg border border-default bg-surface text-primary outline-none focus-visible:ring-2 focus-visible:ring-[var(--present-accent-ring)]"
+                      aria-label="Type a message for the agent"
+                      disabled={inputDisabled}
+                    />
+                    <Button type="submit" disabled={sendDisabled} size="sm" loading={isSending}>
+                      Send
+                    </Button>
+                  </form>
+                </div>
               );
             })()}
             <div className="text-[11px] text-muted-foreground mt-1 flex items-center gap-2 flex-wrap">
               <span>
                 {isRecognizedSlashCommand
                   ? 'Slash command active — prompt dispatches directly to the Canvas steward.'
-                  : mentionMatchesCanvasAgent
-                    ? '“@canvas-agent” detected — prompt dispatches directly to the Canvas steward.'
-                    : agentPresent
-                      ? 'Sends as “you” over LiveKit to the voice agent.'
-                      : 'Agent not joined'}
+                  : isManualTurnMode
+                    ? 'Manual turns active — passive speech still transcribes, but only typed or recorded commands will trigger the voice agent.'
+                    : mentionMatchesCanvasAgent
+                      ? '“@canvas-agent” detected — prompt dispatches directly to the Canvas steward.'
+                      : agentPresent
+                        ? 'Sends as “you” over LiveKit to the voice agent.'
+                        : 'Agent not joined'}
               </span>
               {!agentPresent && !isRecognizedSlashCommand && (
                 <button
@@ -1191,7 +1582,9 @@ export const MessageThreadCollapsible = React.forwardRef<
                 </button>
               )}
               {!isRecognizedSlashCommand && (
-                <span className="opacity-80">Use `/canvas …` to message the Canvas steward directly.</span>
+                <span className="opacity-80">
+                  Use `/canvas …` to message the Canvas steward directly.
+                </span>
               )}
             </div>
           </div>
@@ -1210,7 +1603,13 @@ export const MessageThreadCollapsible = React.forwardRef<
                         : 'bg-border',
                   )}
                 />
-                <span className="truncate">{room?.state === 'connected' ? 'Connected' : room?.state === 'connecting' ? 'Connecting…' : 'Disconnected'}</span>
+                <span className="truncate">
+                  {room?.state === 'connected'
+                    ? 'Connected'
+                    : room?.state === 'connecting'
+                      ? 'Connecting…'
+                      : 'Disconnected'}
+                </span>
                 {livekitCtx?.roomName && (
                   <span className="font-mono truncate max-w-[140px]">{livekitCtx.roomName}</span>
                 )}
@@ -1230,7 +1629,7 @@ export const MessageThreadCollapsible = React.forwardRef<
                       const id = new URL(window.location.href).searchParams.get('id');
                       const link = `${window.location.origin}/canvas${id ? `?id=${encodeURIComponent(id)}` : ''}`;
                       navigator.clipboard.writeText(link);
-                    } catch { }
+                    } catch {}
                   }}
                   variant="outline"
                   size="sm"

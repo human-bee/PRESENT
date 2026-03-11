@@ -9,6 +9,7 @@ import {
   consumeWindowedLimit,
   isCostCircuitBreakerEnabled,
 } from '@/lib/server/traffic-guards';
+import { normalizeOpenAiTranscriptionModel } from '@/lib/openai/transcription-model';
 export const runtime = 'nodejs';
 
 const maxBodyBytes = Math.max(64_000, Number(process.env.TRANSCRIBE_MAX_BODY_BYTES ?? 3_000_000));
@@ -21,6 +22,18 @@ const transcribeBudgetPerMinute = Math.max(
 const REQUIRE_TRANSCRIBE_AUTH =
   (process.env.TRANSCRIBE_REQUIRE_AUTH ??
     (process.env.NODE_ENV === 'production' ? 'true' : 'false')) === 'true';
+
+const resolveTranscribeModel = (requestedModel?: unknown): string => {
+  return normalizeOpenAiTranscriptionModel(
+    typeof requestedModel === 'string' && requestedModel.trim()
+      ? requestedModel.trim()
+      : process.env.VOICE_AGENT_STT_MODEL?.trim() ||
+          process.env.VOICE_AGENT_INPUT_TRANSCRIPTION_MODEL?.trim() ||
+          process.env.AGENT_STT_MODEL?.trim() ||
+          'whisper-1',
+    'whisper-1',
+  );
+};
 
 const getTestUserId = (): string | null => {
   if (process.env.NODE_ENV !== 'test') return null;
@@ -76,6 +89,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const audio = typeof body?.audio === 'string' ? body.audio : '';
     const speaker = typeof body?.speaker === 'string' ? body.speaker : undefined;
+    const model = resolveTranscribeModel(body?.model);
     const sampleRate =
       typeof body?.sampleRate === 'number' && Number.isFinite(body.sampleRate)
         ? Math.max(8_000, Math.min(96_000, Math.floor(body.sampleRate)))
@@ -135,7 +149,7 @@ export async function POST(req: NextRequest) {
     const wavBytes = new Uint8Array(wavBuffer);
     const audioBlob = new Blob([wavBytes], { type: 'audio/wav' });
     formData.append('file', audioBlob, 'audio.wav');
-    formData.append('model', 'whisper-1');
+    formData.append('model', model);
     formData.append('language', 'en');
 
     const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {

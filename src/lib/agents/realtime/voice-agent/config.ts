@@ -1,4 +1,8 @@
 import type { NoiseCancellationOptions } from '@livekit/rtc-node';
+import {
+  DEFAULT_OPENAI_TRANSCRIPTION_MODEL,
+  normalizeOpenAiTranscriptionModel,
+} from '@/lib/openai/transcription-model';
 
 export type MicProfile = 'near_field' | 'far_field' | 'noisy_room';
 
@@ -117,6 +121,23 @@ const parseMicProfile = (value?: string | null): MicProfile => {
   return 'noisy_room';
 };
 
+const shouldDefaultRoomNoiseCancellation = (livekitUrl?: string | null): boolean => {
+  const trimmed = livekitUrl?.trim();
+  if (!trimmed) return true;
+  try {
+    const parsed = new URL(trimmed);
+    const host = parsed.hostname.toLowerCase();
+    if (host === 'localhost' || host === '127.0.0.1' || host === '0.0.0.0') {
+      return false;
+    }
+  } catch {
+    if (/localhost|127\.0\.0\.1|0\.0\.0\.0/.test(trimmed)) {
+      return false;
+    }
+  }
+  return true;
+};
+
 const resolveNoiseReduction = ({
   explicitValue,
   micProfile,
@@ -199,7 +220,11 @@ const resolveTurnDetection = ({
 const resolveRoomNoiseCancellation = (
   env: NodeJS.ProcessEnv,
 ): NoiseCancellationOptions | undefined => {
-  const enabled = parseBoolean(env.VOICE_AGENT_ROOM_NOISE_CANCELLATION_ENABLED) ?? true;
+  const enabled =
+    parseBoolean(env.VOICE_AGENT_ROOM_NOISE_CANCELLATION_ENABLED) ??
+    shouldDefaultRoomNoiseCancellation(
+      env.LIVEKIT_URL || env.NEXT_PUBLIC_LIVEKIT_URL || env.NEXT_PUBLIC_LK_SERVER_URL,
+    );
   if (!enabled) return undefined;
 
   const moduleId = (env.VOICE_AGENT_ROOM_NOISE_CANCELLATION_MODULE_ID || 'bvc').trim();
@@ -225,9 +250,17 @@ export const resolveVoiceRealtimeConfig = (
   const envTranscriptionLanguage = env.VOICE_AGENT_TRANSCRIPTION_LANGUAGE?.trim();
   const fallbackTranscriptionLanguage = env.AGENT_STT_LANGUAGE?.trim();
   const resolvedInputTranscriptionModel =
-    envInputTranscriptionModel || fallbackInputTranscriptionModel || undefined;
+    envInputTranscriptionModel || fallbackInputTranscriptionModel
+      ? normalizeOpenAiTranscriptionModel(
+          envInputTranscriptionModel || fallbackInputTranscriptionModel,
+          DEFAULT_OPENAI_TRANSCRIPTION_MODEL,
+        )
+      : undefined;
   const resolvedSttModel =
-    overrides.sttModel?.trim() || envSttModel || resolvedInputTranscriptionModel || 'gpt-4o-mini-transcribe';
+    normalizeOpenAiTranscriptionModel(
+      overrides.sttModel?.trim() || envSttModel || resolvedInputTranscriptionModel,
+      DEFAULT_OPENAI_TRANSCRIPTION_MODEL,
+    );
   const transcriptionEnabledFlag = parseBoolean(env.VOICE_AGENT_TRANSCRIPTION_ENABLED);
   const multiParticipantTranscriptionEnabled =
     parseBoolean(env.VOICE_AGENT_MULTI_PARTICIPANT_TRANSCRIPTION) ?? false;
