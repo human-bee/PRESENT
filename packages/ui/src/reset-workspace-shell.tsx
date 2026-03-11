@@ -1,5 +1,6 @@
 'use client';
 
+import { useRouter } from 'next/navigation';
 import { startTransition, useEffect, useEffectEvent, useMemo, useRef, useState, useDeferredValue } from 'react';
 import type {
   ApprovalRequest,
@@ -88,6 +89,7 @@ async function requestJson<T>(url: string, init?: RequestInit) {
 type ResetWorkspaceShellProps = {
   initialManifest: RuntimeManifest;
   initialWorkspace: WorkspaceSession;
+  initialWorkspaces: WorkspaceSession[];
   initialExecutors: ExecutorSession[];
   initialTasks: TaskRun[];
   initialArtifacts: Artifact[];
@@ -117,9 +119,14 @@ type WorkspaceFileResponse = {
   document: WorkspaceFileDocument;
 };
 
+type WorkspaceCatalogResponse = {
+  workspaces: WorkspaceSession[];
+};
+
 export function ResetWorkspaceShell({
   initialManifest,
   initialWorkspace,
+  initialWorkspaces,
   initialExecutors,
   initialTasks,
   initialArtifacts,
@@ -128,7 +135,9 @@ export function ResetWorkspaceShell({
   initialModelProfiles,
   initialTraceEvents,
 }: ResetWorkspaceShellProps) {
+  const router = useRouter();
   const [workspace, setWorkspace] = useState(initialWorkspace);
+  const [recentWorkspaces, setRecentWorkspaces] = useState(initialWorkspaces);
   const [executors, setExecutors] = useState(initialExecutors);
   const [tasks, setTasks] = useState(initialTasks);
   const [artifacts, setArtifacts] = useState(initialArtifacts);
@@ -208,6 +217,31 @@ export function ResetWorkspaceShell({
     setPresence(snapshot.presence);
     setTraceEvents(traces);
     setActiveTaskId((current) => current ?? snapshot.tasks[0]?.id ?? null);
+  });
+
+  const refreshWorkspaceCatalog = useEffectEvent(async () => {
+    const payload = await requestJson<WorkspaceCatalogResponse>('/api/reset/workspaces');
+    setRecentWorkspaces(payload.workspaces.slice(0, 6));
+  });
+
+  const replaceWorkspaceUrl = useEffectEvent((workspaceSessionId: string) => {
+    const nextUrl = new URL(window.location.href);
+    nextUrl.searchParams.set('workspace', workspaceSessionId);
+    router.replace(`${nextUrl.pathname}?${nextUrl.searchParams.toString()}`, { scroll: false });
+  });
+
+  const activateWorkspace = useEffectEvent(async (nextWorkspace: WorkspaceSession) => {
+    startTransition(() => {
+      setWorkspace(nextWorkspace);
+      setWorkspacePathInput(nextWorkspace.workspacePath);
+      setActiveTaskId(null);
+      setTraceEvents([]);
+    });
+    replaceWorkspaceUrl(nextWorkspace.id);
+    await refreshWorkspaceState(nextWorkspace.id, deferredTraceQuery);
+    await loadWorkspaceFiles(nextWorkspace.id, '');
+    await loadDefaultWorkspaceFile(nextWorkspace.id);
+    await refreshWorkspaceCatalog();
   });
 
   const loadWorkspaceFiles = useEffectEvent(async (workspaceSessionId: string, nextDirectoryPath = '') => {
@@ -310,6 +344,10 @@ export function ResetWorkspaceShell({
     void loadWorkspaceFiles(workspace.id, '');
     void loadDefaultWorkspaceFile(workspace.id);
   }, [loadDefaultWorkspaceFile, loadWorkspaceFiles, workspace.id]);
+
+  useEffect(() => {
+    setWorkspacePathInput(workspace.workspacePath);
+  }, [workspace.workspacePath]);
 
   useEffect(() => {
     if (!localIdentity) return;
@@ -489,12 +527,22 @@ export function ResetWorkspaceShell({
           title: 'PRESENT Reset Workspace',
         }),
       });
-      startTransition(() => {
-        setWorkspace(result.workspace);
+      await activateWorkspace(result.workspace);
+    });
+  };
+
+  const resumeWorkspace = async (workspaceSession: WorkspaceSession) => {
+    await runAction(async () => {
+      const result = await requestJson<{ workspace: WorkspaceSession }>('/api/reset/workspaces', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          workspacePath: workspaceSession.workspacePath,
+          branch: workspaceSession.branch,
+          title: workspaceSession.title,
+        }),
       });
-      await refreshWorkspaceState(result.workspace.id, deferredTraceQuery);
-      await loadWorkspaceFiles(result.workspace.id, '');
-      await loadDefaultWorkspaceFile(result.workspace.id);
+      await activateWorkspace(result.workspace);
     });
   };
 
@@ -721,6 +769,29 @@ export function ResetWorkspaceShell({
               <span>Status</span>
               <strong>{workspace.state}</strong>
             </div>
+          </div>
+          <div className="reset-section-heading">Recent Sessions</div>
+          <div className="reset-list">
+            {recentWorkspaces.map((recentWorkspace) => (
+              <article key={recentWorkspace.id} className="reset-list-card">
+                <div className="reset-list-card__eyebrow">
+                  {recentWorkspace.id === workspace.id ? 'Current Session' : 'Recovered Session'}
+                </div>
+                <strong>{recentWorkspace.title}</strong>
+                <p className="reset-list-card__path">{recentWorkspace.workspacePath}</p>
+                <div className="reset-list-card__footer">
+                  <span>{recentWorkspace.branch}</span>
+                  <button
+                    type="button"
+                    onClick={() => void resumeWorkspace(recentWorkspace)}
+                    className="reset-button reset-button--ghost"
+                    disabled={isBusy || recentWorkspace.id === workspace.id}
+                  >
+                    {recentWorkspace.id === workspace.id ? 'Active' : 'Resume'}
+                  </button>
+                </div>
+              </article>
+            ))}
           </div>
         </article>
 

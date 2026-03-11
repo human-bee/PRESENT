@@ -8,6 +8,7 @@ test.describe('reset workspace shell', () => {
     await expect(page.locator('body')).toContainText('Queue Canvas Task');
     await expect(page.locator('body')).toContainText('Create Patch Artifact');
     await expect(page.locator('body')).toContainText('Executors + Presence');
+    await expect(page.locator('body')).toContainText('Recent Sessions');
     await expect(page.locator('body')).toContainText('Legacy canvas bridge hidden');
   });
 

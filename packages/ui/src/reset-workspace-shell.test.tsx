@@ -1,6 +1,12 @@
 import { render, screen } from '@testing-library/react';
 import { ResetWorkspaceShell } from './reset-workspace-shell';
 
+jest.mock('next/navigation', () => ({
+  useRouter: () => ({
+    replace: jest.fn(),
+  }),
+}));
+
 class MockEventSource {
   close() {}
   addEventListener() {}
@@ -162,6 +168,20 @@ describe('ResetWorkspaceShell', () => {
           updatedAt: new Date().toISOString(),
           metadata: {},
         }}
+        initialWorkspaces={[
+          {
+            id: 'ws_123',
+            workspacePath: '/tmp/present-reset',
+            branch: 'codex/reset',
+            title: 'Reset Workspace',
+            state: 'active',
+            ownerUserId: null,
+            activeExecutorSessionId: null,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            metadata: {},
+          },
+        ]}
         initialExecutors={[]}
         initialTasks={[]}
         initialArtifacts={[]}
@@ -176,6 +196,7 @@ describe('ResetWorkspaceShell', () => {
     expect(await screen.findByRole('button', { name: /Start Codex Turn/i })).toBeTruthy();
     expect(await screen.findByRole('button', { name: /Queue Canvas Task/i })).toBeTruthy();
     expect(await screen.findByRole('button', { name: /Create Patch Artifact/i })).toBeTruthy();
+    expect(await screen.findByText(/Recent Sessions/i)).toBeTruthy();
     expect((await screen.findAllByText('package.json')).length).toBeGreaterThan(0);
   });
 });
