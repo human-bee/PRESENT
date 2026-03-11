@@ -63,6 +63,8 @@ export interface MessageThreadCollapsibleProps extends React.HTMLAttributes<HTML
 const SUPPORTED_SLASH_COMMANDS = new Set(['canvas']);
 const TURN_MODE_STORAGE_PREFIX = 'present:voice-turn-mode:';
 const MIN_COMMAND_DURATION_MS = 250;
+const RECORD_HOTKEY_KEY = 'r';
+const RECORD_HOTKEY_LABEL = 'Shift+R';
 
 type ParsedSlashCommand = {
   command: string;
@@ -75,6 +77,17 @@ type CanvasComponentEntry = {
   state: Record<string, unknown>;
   title: string;
   updatedAt?: number;
+};
+
+const isEditableTarget = (target: EventTarget | null): boolean => {
+  if (!(target instanceof HTMLElement)) return false;
+  const tagName = target.tagName.toLowerCase();
+  return (
+    target.isContentEditable ||
+    tagName === 'input' ||
+    tagName === 'textarea' ||
+    tagName === 'select'
+  );
 };
 
 const parseSlashCommand = (input: string): ParsedSlashCommand | null => {
@@ -271,6 +284,7 @@ export const MessageThreadCollapsible = React.forwardRef<
   const recorderRef = React.useRef(createAudioCommandRecorder());
   const recordButtonHeldRef = React.useRef(false);
   const pendingRecordReleaseRef = React.useRef<'send' | 'cancel' | null>(null);
+  const recordHotkeyHeldRef = React.useRef(false);
   const lastRoomMicEnabledRef = React.useRef(true);
   const slashCommand = React.useMemo(() => parseSlashCommand(typedMessage), [typedMessage]);
   const isRecognizedSlashCommand = Boolean(
@@ -878,6 +892,7 @@ export const MessageThreadCollapsible = React.forwardRef<
   React.useEffect(() => {
     return () => {
       recordButtonHeldRef.current = false;
+      recordHotkeyHeldRef.current = false;
       pendingRecordReleaseRef.current = 'cancel';
       const shouldRestoreMic = recordStateRef.current !== 'idle';
       void recorderRef.current
@@ -890,6 +905,59 @@ export const MessageThreadCollapsible = React.forwardRef<
         });
     };
   }, [restoreRoomMic]);
+
+  React.useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (
+        !isManualTurnMode ||
+        room?.state !== 'connected' ||
+        isSending ||
+        recordStateRef.current === 'transcribing' ||
+        recordHotkeyHeldRef.current ||
+        event.repeat ||
+        isEditableTarget(event.target)
+      ) {
+        return;
+      }
+
+      if (
+        event.key.toLowerCase() !== RECORD_HOTKEY_KEY ||
+        !event.shiftKey ||
+        event.metaKey ||
+        event.ctrlKey ||
+        event.altKey
+      ) {
+        return;
+      }
+
+      event.preventDefault();
+      recordHotkeyHeldRef.current = true;
+      void beginRecordCommand();
+    };
+
+    const handleKeyUp = (event: KeyboardEvent) => {
+      if (!recordHotkeyHeldRef.current) return;
+      if (event.key.toLowerCase() !== RECORD_HOTKEY_KEY) return;
+      recordHotkeyHeldRef.current = false;
+      event.preventDefault();
+      void finishRecordCommand(false);
+    };
+
+    const handleWindowBlur = () => {
+      if (!recordHotkeyHeldRef.current) return;
+      recordHotkeyHeldRef.current = false;
+      void finishRecordCommand(true);
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    window.addEventListener('blur', handleWindowBlur);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+      window.removeEventListener('blur', handleWindowBlur);
+    };
+  }, [beginRecordCommand, finishRecordCommand, isManualTurnMode, isSending, room?.state]);
 
   // Track agent presence from store transcripts
   React.useEffect(() => {
@@ -1445,6 +1513,13 @@ export const MessageThreadCollapsible = React.forwardRef<
                             ? 'Transcribing…'
                             : 'Hold to Record'}
                     </Button>
+                    {isManualTurnMode ? (
+                      <div className="text-xs text-muted-foreground">
+                        Hold{' '}
+                        <span className="font-medium text-foreground">{RECORD_HOTKEY_LABEL}</span>{' '}
+                        to record
+                      </div>
+                    ) : null}
                   </div>
 
                   {recordStatus ? (
