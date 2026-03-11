@@ -35,5 +35,11 @@ jobs:
       - name: Reset Test Suite
         run: npm run test:reset
 
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Reset Browser Smoke
+        run: npm run test:reset:e2e
+
       - name: Build
         run: npm run build
