@@ -3,6 +3,23 @@ import os from 'node:os';
 import path from 'node:path';
 import { runCli } from './index';
 
+const openResetWorkspaceMock = jest.fn();
+const getResetManifestMock = jest.fn();
+
+jest.mock('./reset-client', () => ({
+  applyResetPatchArtifact: jest.fn(),
+  createResetPatchArtifact: jest.fn(),
+  getResetManifest: (...args: unknown[]) => getResetManifestMock(...args),
+  getResetTask: jest.fn(),
+  getResetWorkspaceState: jest.fn(),
+  listResetWorkspaceFiles: jest.fn(),
+  openResetWorkspace: (...args: unknown[]) => openResetWorkspaceMock(...args),
+  readResetWorkspaceFile: jest.fn(),
+  searchResetTrace: jest.fn(),
+  startResetTurn: jest.fn(),
+  writeResetWorkspaceFile: jest.fn(),
+}));
+
 describe('fairy CLI', () => {
   let tmpDir: string;
   let stdoutSpy: jest.SpyInstance;
@@ -12,6 +29,8 @@ describe('fairy CLI', () => {
     tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'fairy-cli-test-'));
     stdoutSpy = jest.spyOn(process.stdout, 'write').mockImplementation(() => true);
     stderrSpy = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    openResetWorkspaceMock.mockReset();
+    getResetManifestMock.mockReset();
   });
 
   afterEach(async () => {
@@ -62,5 +81,30 @@ describe('fairy CLI', () => {
     const payload = stdoutJson();
     expect(payload.profile).toBe('template24');
     expect(payload?.actionCatalog?.count).toBe(24);
+  });
+
+  it('opens and persists a reset workspace session', async () => {
+    openResetWorkspaceMock.mockResolvedValue({
+      response: { ok: true, status: 201 },
+      body: {
+        workspace: {
+          id: 'ws_123',
+          workspacePath: '/tmp/present-reset',
+          title: 'Reset Workspace',
+        },
+      },
+    });
+
+    const code = await runCli(
+      ['reset', 'open', '--workspacePath', '/tmp/present-reset', '--baseUrl', 'http://127.0.0.1:3000', '--json'],
+      tmpDir,
+    );
+
+    expect(code).toBe(0);
+    const raw = await fs.readFile(path.join(tmpDir, '.fairy-cli', 'state.json'), 'utf8');
+    const parsed = JSON.parse(raw);
+    expect(parsed.sessions[0].mode).toBe('reset_workspace');
+    expect(parsed.sessions[0].workspaceSessionId).toBe('ws_123');
+    expect(parsed.sessions[0].workspacePath).toBe('/tmp/present-reset');
   });
 });
