@@ -25,7 +25,7 @@ export function useAuth() {
   }, []);
 
   const signInWithGoogle = async () => {
-    const next = '/canvas';
+    const next = '/';
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
@@ -49,7 +49,7 @@ export function useAuth() {
   };
 
   const signUpWithEmail = async (email: string, password: string, fullName?: string) => {
-    const next = '/canvas';
+    const next = '/';
     const { error } = await supabase.auth.signUp({
       email,
       password,

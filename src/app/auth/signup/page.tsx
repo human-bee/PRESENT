@@ -24,7 +24,7 @@ export default function SignUp() {
 
     try {
       await signUpWithEmail(email, password, name);
-      router.push('/canvas');
+      router.push('/');
     } catch (error: any) {
       setError(error.message || 'Something went wrong');
     } finally {

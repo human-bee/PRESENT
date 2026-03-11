@@ -36,12 +36,12 @@ export function CanvasShareZone() {
     <div className="flex items-center gap-2">
       {/* My Canvases Link */}
       <Link
-        href="/canvases"
+        href="/"
         className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-700 bg-white/90 backdrop-blur-sm rounded-md hover:bg-gray-100 transition-colors"
-        title="My Canvases"
+        title="Mission Control"
       >
         <FolderOpen className="w-4 h-4" />
-        My Canvases
+        Mission Control
       </Link>
 
       {/* User Info */}
