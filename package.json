@@ -21,6 +21,7 @@
     "icons:ios": "node scripts/generate-ios-icons.js",
     "test": "jest",
     "test:reset": "jest --runInBand --runTestsByPath services/kernel/src/index.test.ts services/kernel/src/persistence.test.ts services/kernel/src/workspace-files.test.ts services/present-mcp/src/toolkit.test.ts services/codex-adapter/src/turns.test.ts 'src/app/api/reset/workspaces/[workspaceSessionId]/state/route.test.ts' 'src/app/api/reset/workspaces/[workspaceSessionId]/files/route.test.ts' 'src/app/api/reset/workspaces/[workspaceSessionId]/file/route.test.ts' src/app/api/reset/presence/route.test.ts src/app/api/reset/turns/route.test.ts packages/ui/src/reset-workspace-shell.test.tsx",
+    "test:reset:e2e": "playwright test --config playwright.reset.config.ts",
     "test:watch": "jest --watch",
     "dev:reset": "npm run dev",
     "test:agent": "npm run dev",

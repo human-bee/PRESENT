@@ -35,9 +35,16 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   await hydrateResetKernel();
-  const payload = await request.json();
-  if (payload?.displayName) {
-    const presenceMember = upsertPresenceSchema.parse(payload);
+  const payload =
+    typeof request.text === 'function'
+      ? (() => request.text().then((rawBody) => (rawBody.trim() ? JSON.parse(rawBody) : null)))()
+      : request.json();
+  const parsedPayload = await payload;
+  if (!parsedPayload) {
+    return NextResponse.json({ ignored: true }, { status: 202 });
+  }
+  if (parsedPayload?.displayName) {
+    const presenceMember = upsertPresenceSchema.parse(parsedPayload);
     const response = NextResponse.json({
       presenceMember: upsertPresenceMember({
         ...presenceMember,
@@ -52,7 +59,7 @@ export async function POST(request: NextRequest) {
     return response;
   }
 
-  const stateUpdate = updateStateSchema.parse(payload);
+  const stateUpdate = updateStateSchema.parse(parsedPayload);
   const presenceMember = setPresenceMemberState(
     stateUpdate.workspaceSessionId,
     stateUpdate.identity,
