@@ -8,7 +8,9 @@ const assertCanvasMemberMock = jest.fn();
 const parseCanvasIdFromRoomMock = jest.fn();
 const getTimelineDocumentMock = jest.fn();
 const commitTimelineDocumentMock = jest.fn();
+const broadcastToolCallMock = jest.fn();
 const runTimelineStewardFastMock = jest.fn();
+const resolveTimelineTurnMock = jest.fn();
 
 let byokEnabled = false;
 
@@ -39,10 +41,15 @@ jest.mock('@/lib/agents/shared/canvas-billing', () => ({
 jest.mock('@/lib/agents/shared/supabase-context', () => ({
   getTimelineDocument: getTimelineDocumentMock,
   commitTimelineDocument: commitTimelineDocumentMock,
+  broadcastToolCall: broadcastToolCallMock,
 }));
 
 jest.mock('@/lib/agents/subagents/timeline-steward-fast', () => ({
   runTimelineStewardFast: runTimelineStewardFastMock,
+}));
+
+jest.mock('@/lib/agents/subagents/timeline-turn-resolver', () => ({
+  resolveTimelineTurn: resolveTimelineTurnMock,
 }));
 
 const loadPost = async (options?: { queueFallback?: boolean; byok?: boolean }) => {
@@ -73,7 +80,9 @@ describe('/api/steward/runTimeline', () => {
     parseCanvasIdFromRoomMock.mockReset();
     getTimelineDocumentMock.mockReset();
     commitTimelineDocumentMock.mockReset();
+    broadcastToolCallMock.mockReset();
     runTimelineStewardFastMock.mockReset();
+    resolveTimelineTurnMock.mockReset();
 
     enqueueTaskMock.mockResolvedValue({ id: 'task-timeline-1' });
     resolveRequestUserIdMock.mockResolvedValue('user-1');
@@ -116,6 +125,11 @@ describe('/api/steward/runTimeline', () => {
     runTimelineStewardFastMock.mockResolvedValue({
       summary: 'Timeline updated',
       ops: [],
+    });
+    resolveTimelineTurnMock.mockResolvedValue({
+      mode: 'patch',
+      summary: 'Timeline turn resolved',
+      ops: [{ type: 'set_meta', title: 'Launch Roadmap' }],
     });
   });
 
@@ -219,6 +233,46 @@ describe('/api/steward/runTimeline', () => {
       'demo-room',
       'timeline-1',
       expect.objectContaining({
+        componentType: 'McpAppWidget',
+      }),
+    );
+  });
+
+  it('executes timeline.turn fallback through the compact resolver when queue fallback is enabled', async () => {
+    enqueueTaskMock.mockRejectedValueOnce(new Error('queue down'));
+    const POST = await loadPost({ queueFallback: true, byok: false });
+    const request = new Request('http://localhost/api/steward/runTimeline', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        room: 'demo-room',
+        componentId: 'timeline-1',
+        task: 'timeline.turn',
+        instruction: 'mark ship realtime webhook ingest blocked',
+        source: 'voice',
+      }),
+    });
+
+    const response = await POST(toNextRequest(request));
+    const json = await response.json();
+
+    expect(response.status).toBe(202);
+    expect(json.status).toBe('executed_fallback');
+    expect(resolveTimelineTurnMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        instruction: 'mark ship realtime webhook ingest blocked',
+      }),
+    );
+    expect(runTimelineStewardFastMock).not.toHaveBeenCalled();
+    expect(commitTimelineDocumentMock).toHaveBeenCalledWith(
+      'demo-room',
+      'timeline-1',
+      expect.objectContaining({
+        ops: expect.arrayContaining([
+          expect.objectContaining({ type: 'set_sync_state' }),
+          expect.objectContaining({ type: 'set_meta', title: 'Launch Roadmap' }),
+          expect.objectContaining({ type: 'append_event' }),
+        ]),
         componentType: 'McpAppWidget',
       }),
     );

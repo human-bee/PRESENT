@@ -68,7 +68,7 @@ export const stewardRunTimelineRequestSchema = z
   .object({
     room: z.string().min(1),
     componentId: z.string().min(1),
-    task: z.string().optional(),
+    task: z.enum(['timeline.run', 'timeline.patch', 'timeline.turn']).optional(),
     instruction: z.string().optional(),
     prompt: z.string().optional(),
     summary: z.string().optional(),

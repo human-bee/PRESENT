@@ -19,9 +19,13 @@ import {
   normalizeRuntimeScope,
   resolveRuntimeScopeFromEnv,
 } from '@/lib/agents/shared/runtime-scope';
-import { commitTimelineDocument, getTimelineDocument } from '@/lib/agents/shared/supabase-context';
-import { runTimelineStewardFast } from '@/lib/agents/subagents/timeline-steward-fast';
-import { timelineSourceEnum, type TimelineOp } from '@/lib/agents/timeline-schema';
+import { timelineSourceEnum } from '@/lib/agents/timeline-schema';
+import {
+  runTimelinePatchTask,
+  runTimelineRunTask,
+  runTimelineTurnTask,
+  TimelineTaskArgs,
+} from '@/lib/agents/timeline-task-runner';
 
 export const runtime = 'nodejs';
 
@@ -251,40 +255,20 @@ export async function POST(req: NextRequest) {
       }
 
       try {
-        if (normalizedTask === 'timeline.patch' && Array.isArray(ops) && ops.length > 0) {
-          await commitTimelineDocument(trimmedRoom, trimmedComponentId, {
-            ops: ops as TimelineOp[],
-            componentType: 'McpAppWidget',
-          });
-        } else {
-          const current = await getTimelineDocument(trimmedRoom, trimmedComponentId);
-          const result = await runTimelineStewardFast({
-            room: trimmedRoom,
-            componentId: trimmedComponentId,
-            instruction: normalizedInstruction,
-            source: normalizedSource,
-            document: current.document,
-            title: typeof enrichedParams.title === 'string' ? enrichedParams.title : undefined,
-            subtitle: typeof enrichedParams.subtitle === 'string' ? enrichedParams.subtitle : undefined,
-            horizonLabel:
-              typeof enrichedParams.horizonLabel === 'string' ? enrichedParams.horizonLabel : undefined,
-            requestId: canonicalRequestId,
-            traceId: canonicalTraceId,
-            intentId: canonicalIntentId,
-            idempotencyKey: effectiveIdempotencyKey,
-          });
-          await commitTimelineDocument(trimmedRoom, trimmedComponentId, {
-            ops: result.ops,
-            prevVersion: current.version,
-            componentType: 'McpAppWidget',
-          });
-        }
+        const parsedFallback = TimelineTaskArgs.parse(enrichedParams);
+        const output =
+          normalizedTask === 'timeline.patch'
+            ? await runTimelinePatchTask(parsedFallback)
+            : normalizedTask === 'timeline.turn'
+              ? await runTimelineTurnTask(parsedFallback)
+              : await runTimelineRunTask(parsedFallback);
         return NextResponse.json(
           {
             status: 'executed_fallback',
             requestId: canonicalRequestId,
             traceId: canonicalTraceId,
             intentId: canonicalIntentId,
+            output,
           },
           { status: 202 },
         );

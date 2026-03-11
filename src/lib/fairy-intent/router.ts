@@ -64,6 +64,36 @@ const nextFairyReplaySequence = () => {
   return fairyReplaySequence;
 };
 
+const inferFallbackRoute = (intent: FairyIntent): FairyRouteDecision => {
+  const message = intent.message.trim();
+  const lowered = message.toLowerCase();
+
+  if (/\b(scorecard|debate|fact check|fact-check|verify|refute|claim)\b/i.test(lowered)) {
+    return {
+      kind: 'scorecard',
+      confidence: 0.35,
+      message,
+      contextProfile: intent.contextProfile,
+    };
+  }
+
+  if (/\b(timeline|roadmap|sprint|milestone|dependency|dependencies|blocked by|depends on|blocker|handoff|delivery plan|launch plan)\b/i.test(lowered)) {
+    return {
+      kind: 'timeline',
+      confidence: 0.45,
+      message,
+      contextProfile: intent.contextProfile,
+    };
+  }
+
+  return {
+    kind: 'canvas',
+    confidence: 0.2,
+    message,
+    contextProfile: intent.contextProfile,
+  };
+};
+
 export async function routeFairyIntent(intent: FairyIntent): Promise<FairyRouteDecision> {
   const replayRequestId = intent.id;
   const replayTraceId = replayRequestId;
@@ -320,7 +350,7 @@ export async function routeFairyIntent(intent: FairyIntent): Promise<FairyRouteD
       });
     }
   } catch (error) {
-    console.warn('[FairyRouter] routing failed, falling back to canvas', error);
+    console.warn('[FairyRouter] routing failed, applying deterministic fallback route', error);
     recordModelIoEvent({
       source: 'fairy_router',
       eventType: 'model_call',
@@ -341,6 +371,7 @@ export async function routeFairyIntent(intent: FairyIntent): Promise<FairyRouteD
       priority: 'high',
     });
   }
+  const fallback = inferFallbackRoute(intent);
 
   recordModelIoEvent({
     source: 'fairy_router',
@@ -358,11 +389,7 @@ export async function routeFairyIntent(intent: FairyIntent): Promise<FairyRouteD
     providerPath: 'fast',
     contextPriming: routerContextPriming,
     input: intent,
-    output: { kind: 'canvas', confidence: 0.2, message: intent.message },
+    output: fallback,
   });
-  return {
-    kind: 'canvas',
-    confidence: 0.2,
-    message: intent.message,
-  };
+  return fallback;
 }

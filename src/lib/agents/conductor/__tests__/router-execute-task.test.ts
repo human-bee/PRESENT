@@ -81,6 +81,15 @@ jest.mock('@/lib/agents/subagents/timeline-steward-fast', () => ({
   })),
 }));
 
+jest.mock('@/lib/agents/subagents/timeline-turn-resolver', () => ({
+  resolveTimelineTurn: jest.fn(async () => ({
+    mode: 'plan',
+    summary: 'Timeline updated',
+    ops: [],
+    fallbackContextBundle: 'Turn Resolution Fallback',
+  })),
+}));
+
 jest.mock('@/lib/agents/fast-steward-config', () => ({
   isFastStewardReady: jest.fn(() => true),
   getModelForSteward: jest.fn(() => 'debug/fake'),
@@ -336,6 +345,7 @@ describe('conductor router executeTask', () => {
     const { flags } = await import('@/lib/feature-flags');
     const { broadcastToolCall } = await import('@/lib/agents/shared/supabase-context');
     const { runTimelineStewardFast } = await import('@/lib/agents/subagents/timeline-steward-fast');
+    const { resolveTimelineTurn } = await import('@/lib/agents/subagents/timeline-turn-resolver');
 
     flags.swarmOrchestrationEnabled = false;
     mockRouteFairyIntent.mockResolvedValueOnce({
@@ -369,6 +379,44 @@ describe('conductor router executeTask', () => {
       expect.objectContaining({
         room: 'canvas-room-timeline',
         componentId: 'timeline-widget-intent-timeline',
+      }),
+    );
+    expect(resolveTimelineTurn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        instruction: 'Build a launch roadmap across product, engineering, and GTM.',
+        document: expect.any(Object),
+      }),
+    );
+  });
+
+  it('falls back to the timeline lane when the fairy router throws on timeline speech', async () => {
+    const { flags } = await import('@/lib/feature-flags');
+    const { broadcastToolCall } = await import('@/lib/agents/shared/supabase-context');
+    const { resolveTimelineTurn } = await import('@/lib/agents/subagents/timeline-turn-resolver');
+
+    flags.swarmOrchestrationEnabled = false;
+    mockRouteFairyIntent.mockRejectedValueOnce(new Error('Cannot read properties of undefined (reading _zod)'));
+    const { executeTask } = await import('@/lib/agents/conductor/router');
+
+    await executeTask('conductor.dispatch', {
+      task: 'fairy.intent',
+      params: {
+        id: 'intent-timeline-fallback',
+        room: 'canvas-room-timeline',
+        message: 'finish hero master and legal supers depends on talent rights clearance',
+        source: 'voice',
+      },
+    });
+
+    expect(broadcastToolCall).toHaveBeenCalledWith(
+      expect.objectContaining({
+        room: 'canvas-room-timeline',
+        tool: 'create_component',
+      }),
+    );
+    expect(resolveTimelineTurn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        instruction: 'finish hero master and legal supers depends on talent rights clearance',
       }),
     );
   });

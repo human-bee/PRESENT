@@ -18,7 +18,7 @@ const TRACE_REPORT_OUTPUT = path.join(PROOF_DIR, 'agent-trace-report.html');
 const TRACE_JSON_OUTPUT = path.join(PROOF_DIR, 'agent-trace-report.json');
 const SCREENSHOT_OUTPUT = path.join(PROOF_DIR, 'timeline-widget-proof.png');
 const TIMELINE_COMPONENT_ID = 'mcp-timeline-widget-proof';
-const TIMELINE_TITLE = 'Launch Timeline';
+const TIMELINE_TITLE = 'Super Bowl Ad Sprint';
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const ensureDir = (dir: string) => fs.mkdirSync(dir, { recursive: true });
@@ -63,6 +63,9 @@ type TimelineProofSync = {
   syncChipText: string;
   exportChipText: string;
   detailExpanded: boolean;
+  blockerRendered: boolean;
+  blockedStatusRendered: boolean;
+  dependencyRendered: boolean;
 };
 
 const escapeHtml = (input: unknown) =>
@@ -213,36 +216,44 @@ async function dispatchTimelineRun(
           ops: [
             {
               type: 'set_meta',
-              title: 'Platform Launch Timeline',
-              subtitle: 'Multi-team roadmap for live planning, sprint flow, and blockers.',
-              horizonLabel: 'Q2 launch sprint window',
+              title: 'Super Bowl Ad Sprint',
+              subtitle: 'Two-week delivery plan for the hero spot and parallel social campaign.',
+              horizonLabel: 'Jan 29 - Feb 11 sprint window',
             },
             {
               type: 'upsert_lane',
-              lane: { id: 'lane-product', name: 'Product', kind: 'team', order: 0, color: '#7bb7ff' },
+              lane: { id: 'lane-creative', name: 'Creative', kind: 'team', order: 0, color: '#7bb7ff' },
             },
             {
               type: 'upsert_lane',
-              lane: { id: 'lane-engineering', name: 'Engineering', kind: 'team', order: 1, color: '#74c69d' },
+              lane: { id: 'lane-production', name: 'Production', kind: 'team', order: 1, color: '#74c69d' },
             },
             {
               type: 'upsert_lane',
-              lane: { id: 'lane-go-to-market', name: 'Go To Market', kind: 'team', order: 2, color: '#e9b25f' },
+              lane: { id: 'lane-post', name: 'Post', kind: 'team', order: 2, color: '#c792ea' },
+            },
+            {
+              type: 'upsert_lane',
+              lane: { id: 'lane-media', name: 'Media', kind: 'team', order: 3, color: '#e9b25f' },
+            },
+            {
+              type: 'upsert_lane',
+              lane: { id: 'lane-social', name: 'Social', kind: 'team', order: 4, color: '#ff8b6b' },
             },
             {
               type: 'upsert_item',
               item: {
-                id: 'item-brief',
-                laneId: 'lane-product',
-                title: 'Finalize launch brief',
+                id: 'item-script',
+                laneId: 'lane-creative',
+                title: 'Lock 60s spot script',
                 type: 'milestone',
                 status: 'in_progress',
-                owner: 'Product',
-                summary: 'Lock positioning, feature set, and launch narrative with design and GTM.',
-                notes: 'Needs final approval before kickoff packets go out.',
-                sprintLabel: 'Sprint 14',
-                dueLabel: 'Apr 8',
-                tags: ['brief', 'launch'],
+                owner: 'Creative Director',
+                summary: 'Finalize script, supers, and CTA for the hero broadcast spot.',
+                notes: 'Final client approval gates the full shoot plan.',
+                sprintLabel: 'Week 1',
+                dueLabel: 'Jan 30',
+                tags: ['broadcast', 'creative'],
                 blockedBy: [],
                 createdAt: now,
                 updatedAt: now,
@@ -251,18 +262,18 @@ async function dispatchTimelineRun(
             {
               type: 'upsert_item',
               item: {
-                id: 'item-realtime',
-                laneId: 'lane-engineering',
-                title: 'Ship realtime webhook ingest',
+                id: 'item-shoot',
+                laneId: 'lane-production',
+                title: 'Shoot hero spot and social selects',
                 type: 'task',
-                status: 'at_risk',
-                owner: 'Platform',
-                summary: 'Normalize webhook, form, and tool updates into canonical timeline ops.',
-                notes: 'At risk until retry semantics are proven under rapid updates.',
-                sprintLabel: 'Sprint 14',
-                dueLabel: 'Apr 10',
-                tags: ['realtime', 'ingest'],
-                blockedBy: ['item-brief'],
+                status: 'in_progress',
+                owner: 'Production Lead',
+                summary: 'Capture the hero broadcast spot plus social-first cutdowns and stills in one shoot block.',
+                notes: 'Requires approved script and call sheet lock by EOD Jan 30.',
+                sprintLabel: 'Week 1',
+                dueLabel: 'Feb 1',
+                tags: ['production', 'shoot'],
+                blockedBy: ['item-script'],
                 createdAt: now,
                 updatedAt: now,
               },
@@ -270,18 +281,37 @@ async function dispatchTimelineRun(
             {
               type: 'upsert_item',
               item: {
-                id: 'item-sales-kit',
-                laneId: 'lane-go-to-market',
-                title: 'Prep sales enablement kit',
+                id: 'item-master',
+                laneId: 'lane-post',
+                title: 'Finish hero master and legal supers',
+                type: 'milestone',
+                status: 'at_risk',
+                owner: 'Post Supervisor',
+                summary: 'Turn around the hero master, supers, and final legal text for network delivery.',
+                notes: 'Blocked if finishing notes or rights clearance slip past Feb 6.',
+                sprintLabel: 'Week 2',
+                dueLabel: 'Feb 6',
+                tags: ['post', 'master'],
+                blockedBy: ['item-shoot'],
+                createdAt: now,
+                updatedAt: now,
+              },
+            },
+            {
+              type: 'upsert_item',
+              item: {
+                id: 'item-broadcast',
+                laneId: 'lane-media',
+                title: 'Traffic national broadcast delivery',
                 type: 'handoff',
                 status: 'planned',
-                owner: 'GTM',
-                summary: 'Build launch talk track, FAQ, and internal demo reel.',
-                notes: 'Starts once the launch brief is locked.',
-                startLabel: 'Apr 9',
-                dueLabel: 'Apr 15',
-                tags: ['enablement'],
-                blockedBy: ['item-brief'],
+                owner: 'Media Ops',
+                summary: 'Submit network delivery package, clock numbers, and placement instructions for game week.',
+                notes: 'Must clear QA and legal before the broadcaster cutoff.',
+                startLabel: 'Feb 7',
+                dueLabel: 'Feb 8',
+                tags: ['broadcast', 'delivery'],
+                blockedBy: ['item-master'],
                 createdAt: now,
                 updatedAt: now,
               },
@@ -289,17 +319,37 @@ async function dispatchTimelineRun(
             {
               type: 'upsert_item',
               item: {
-                id: 'item-auth-blocker',
-                laneId: 'lane-engineering',
-                title: 'Resolve auth callback blocker',
-                type: 'blocker',
-                status: 'blocked',
-                owner: 'Infra',
-                summary: 'Local callback mismatch is blocking stable staging verification.',
-                notes: 'Needs environment parity before the launch walkthrough can rehearse cleanly.',
-                sprintLabel: 'Sprint 14',
-                tags: ['blocker', 'auth'],
-                blockedBy: [],
+                id: 'item-paid-social',
+                laneId: 'lane-social',
+                title: 'Cut six paid social variants',
+                type: 'task',
+                status: 'planned',
+                owner: 'Social Lead',
+                summary: 'Version six- and fifteen-second cutdowns plus caption-safe overlays for paid social.',
+                notes: 'Runs in parallel with the broadcast finish once selects are approved.',
+                sprintLabel: 'Week 2',
+                dueLabel: 'Feb 7',
+                tags: ['social', 'paid'],
+                blockedBy: ['item-shoot'],
+                createdAt: now,
+                updatedAt: now,
+              },
+            },
+            {
+              type: 'upsert_item',
+              item: {
+                id: 'item-organic',
+                laneId: 'lane-social',
+                title: 'Launch game-week organic teaser sequence',
+                type: 'sprint',
+                status: 'planned',
+                owner: 'Community Lead',
+                summary: 'Sequence teaser, BTS, and countdown posts around the paid launch cadence.',
+                notes: 'Starts once paid variants and hero master timing are locked.',
+                startLabel: 'Feb 8',
+                dueLabel: 'Feb 11',
+                tags: ['social', 'organic'],
+                blockedBy: ['item-paid-social', 'item-master'],
                 createdAt: now,
                 updatedAt: now,
               },
@@ -307,11 +357,51 @@ async function dispatchTimelineRun(
             {
               type: 'set_dependency',
               dependency: {
-                id: 'dep-brief-realtime',
-                fromItemId: 'item-brief',
-                toItemId: 'item-realtime',
+                id: 'dep-script-shoot',
+                fromItemId: 'item-script',
+                toItemId: 'item-shoot',
                 kind: 'depends_on',
-                label: 'Schema and scope locked',
+                label: 'Script approved',
+              },
+            },
+            {
+              type: 'set_dependency',
+              dependency: {
+                id: 'dep-shoot-master',
+                fromItemId: 'item-shoot',
+                toItemId: 'item-master',
+                kind: 'depends_on',
+                label: 'Selects delivered',
+              },
+            },
+            {
+              type: 'set_dependency',
+              dependency: {
+                id: 'dep-master-broadcast',
+                fromItemId: 'item-master',
+                toItemId: 'item-broadcast',
+                kind: 'depends_on',
+                label: 'Final master approved',
+              },
+            },
+            {
+              type: 'set_dependency',
+              dependency: {
+                id: 'dep-shoot-social',
+                fromItemId: 'item-shoot',
+                toItemId: 'item-paid-social',
+                kind: 'depends_on',
+                label: 'Social selects approved',
+              },
+            },
+            {
+              type: 'set_dependency',
+              dependency: {
+                id: 'dep-paid-organic',
+                fromItemId: 'item-paid-social',
+                toItemId: 'item-organic',
+                kind: 'handoff',
+                label: 'Parallel campaign handoff',
               },
             },
             {
@@ -341,6 +431,98 @@ async function dispatchTimelineRun(
       };
     },
     { room, componentId },
+  );
+}
+
+async function dispatchFairyTimelineTurn(
+  page: Page,
+  room: string,
+  componentId: string,
+  instruction: string,
+): Promise<Record<string, unknown>> {
+  return page.evaluate(
+    async ({ room, componentId, instruction }) => {
+      const now = Date.now();
+      const requestId = `timeline-turn-proof-${now}`;
+      const traceId = `timeline-turn-proof-trace-${now}`;
+      const intentId = `timeline-turn-proof-intent-${now}`;
+      const response = await fetch('/api/steward/runCanvas', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          room,
+          task: 'fairy.intent',
+          runtimeScope: 'local',
+          requestId,
+          traceId,
+          intentId,
+          params: {
+            id: intentId,
+            message: instruction,
+            source: 'voice',
+            contextProfile: 'standard',
+            componentId,
+          },
+        }),
+      });
+      let payload = {};
+      try {
+        payload = await response.json();
+      } catch {
+        payload = {};
+      }
+      return {
+        ok: response.ok,
+        status: response.status,
+        payload,
+      };
+    },
+    { room, componentId, instruction },
+  );
+}
+
+async function dispatchDirectTimelineTurn(
+  page: Page,
+  room: string,
+  componentId: string,
+  instruction: string,
+  summary: string,
+): Promise<Record<string, unknown>> {
+  return page.evaluate(
+    async ({ room, componentId, instruction, summary }) => {
+      const now = Date.now();
+      const requestId = `timeline-turn-proof-${now}`;
+      const traceId = `timeline-turn-proof-trace-${now}`;
+      const intentId = `timeline-turn-proof-intent-${now}`;
+      const response = await fetch('/api/steward/runTimeline', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          room,
+          componentId,
+          task: 'timeline.turn',
+          source: 'voice',
+          runtimeScope: 'local',
+          requestId,
+          traceId,
+          intentId,
+          instruction,
+          summary,
+        }),
+      });
+      let payload = {};
+      try {
+        payload = await response.json();
+      } catch {
+        payload = {};
+      }
+      return {
+        ok: response.ok,
+        status: response.status,
+        payload,
+      };
+    },
+    { room, componentId, instruction, summary },
   );
 }
 
@@ -378,6 +560,19 @@ function requireSucceededTask(label: string, task: TaskRow | null): TaskValidati
   return {
     status: 'warning',
     message: `${label} task succeeded with non-fatal warning: ${errorText}`,
+  };
+}
+
+function validateCompletedTask(label: string, task: TaskRow | null): TaskValidation {
+  if (!task) {
+    return { status: 'warning', message: `${label} task missing` };
+  }
+  if (task.status === 'succeeded') {
+    return requireSucceededTask(label, task);
+  }
+  return {
+    status: 'warning',
+    message: `${label} task ended with status=${task.status ?? 'missing'}${task.error ? ` error=${task.error}` : ''}`,
   };
 }
 
@@ -496,6 +691,24 @@ async function waitForTimelineRender(frameLocator: FrameLocator): Promise<Timeli
     const syncChipText = ((await frameLocator.locator('[data-testid="timeline-sync-chip"]').textContent()) || '').trim();
     const exportChipText = ((await frameLocator.locator('[data-testid="timeline-export-chip"]').textContent()) || '').trim();
     const bodyText = (((await frameLocator.locator('body').textContent()) || '').toLowerCase());
+    const blockerCard = frameLocator
+      .locator('[data-testid="timeline-item"]')
+      .filter({ hasText: 'Talent Rights Clearance' })
+      .first();
+    const heroCard = frameLocator
+      .locator('[data-testid="timeline-item"]')
+      .filter({ hasText: 'Finish Hero Master And Legal Supers' })
+      .first();
+    const blockerRendered = (await blockerCard.count()) > 0;
+    const heroCardText = blockerRendered || (await heroCard.count()) > 0
+      ? (((await heroCard.textContent()) || '').toLowerCase())
+      : '';
+    const blockedStatusRendered = heroCardText.includes('blocked');
+    const dependencyRendered =
+      (await heroCard
+        .locator('[data-testid="timeline-dependency"]')
+        .filter({ hasText: 'Talent Rights Clearance' })
+        .count()) > 0;
 
     const noLegacyCopy =
       !bodyText.includes('scorecard') &&
@@ -508,12 +721,19 @@ async function waitForTimelineRender(frameLocator: FrameLocator): Promise<Timeli
       dependencyCount >= 1 &&
       syncChipText.length > 0 &&
       exportChipText.toLowerCase() === expectedExportChip &&
+      blockerRendered &&
+      blockedStatusRendered &&
+      dependencyRendered &&
       noLegacyCopy;
 
     if (ready) {
       const firstCard = frameLocator.locator('[data-testid="timeline-item"]').first();
       if ((await firstCard.count()) > 0) {
-        await firstCard.locator('[data-testid="timeline-detail-toggle"]').click();
+        await firstCard.evaluate((node) => {
+          if (node instanceof HTMLElement) {
+            node.setAttribute('open', 'true');
+          }
+        });
         await firstCard.locator('[data-testid="timeline-detail"]').waitFor({ state: 'visible', timeout: 5000 });
         detailExpanded = true;
       }
@@ -525,6 +745,9 @@ async function waitForTimelineRender(frameLocator: FrameLocator): Promise<Timeli
         syncChipText,
         exportChipText,
         detailExpanded,
+        blockerRendered,
+        blockedStatusRendered,
+        dependencyRendered,
       };
     }
     await sleep(1000);
@@ -694,26 +917,108 @@ async function main() {
   const frameLocator = page.frameLocator(`iframe[title="${TIMELINE_TITLE}"]`);
   await frameLocator.locator('[data-testid="timeline-title"]').waitFor({ state: 'visible', timeout: 60_000 });
 
-  logStep('dispatching timeline patch task');
+  logStep('dispatching timeline patch seed task');
   const timelineRunResponse = await dispatchTimelineRun(page, room, TIMELINE_COMPONENT_ID);
   const timelineTaskId = requireQueuedRun('runTimeline', timelineRunResponse);
   const timelineTask = await waitForTaskCompletion(supabase, timelineTaskId);
   const timelineValidation = requireSucceededTask('runTimeline', timelineTask);
-  logStep(`timeline task completed: ${timelineTask.id}`);
+  logStep(`timeline seed task completed: ${timelineTask.id}`);
 
-  let traceId = await resolveTraceId(supabase, timelineTask);
+  const timelineTurnSpecs = [
+    {
+      ingress: 'timeline.turn' as const,
+      instruction: 'add blocker talent rights clearance to creative lane',
+      summary: 'Deterministic follow-up: add a blocker for talent rights clearance.',
+    },
+    {
+      ingress: 'timeline.turn' as const,
+      instruction: 'finish hero master and legal supers depends on talent rights clearance',
+      summary: 'Deterministic follow-up: connect rights clearance to the hero master dependency chain.',
+    },
+    {
+      ingress: 'timeline.turn' as const,
+      instruction: 'mark finish hero master and legal supers blocked',
+      summary: 'Deterministic follow-up: mark the hero master blocked until rights are cleared.',
+    },
+  ] as const;
+  let voiceIngressResult: {
+    response: Record<string, unknown>;
+    task: TaskRow | null;
+    validation: TaskValidation;
+  } | null = null;
+  try {
+    logStep('dispatching fairy.intent voice ingress probe: rename timeline to Super Bowl Ad Sprint');
+    const response = await dispatchFairyTimelineTurn(page, room, TIMELINE_COMPONENT_ID, 'rename timeline to Super Bowl Ad Sprint');
+    const taskId = requireQueuedRun('fairy.intent', response);
+    const task = await waitForTaskCompletion(supabase, taskId, 45_000);
+    const validation = validateCompletedTask('fairy.intent', task);
+    if (validation.status === 'warning') {
+      logStep(`voice ingress warning: ${validation.message}`);
+    } else {
+      logStep(`voice ingress task completed: ${task.id}`);
+    }
+    voiceIngressResult = { response, task, validation };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    logStep(`voice ingress warning: ${message}`);
+    voiceIngressResult = {
+      response: { ok: false, status: 0, payload: { error: message } },
+      task: null,
+      validation: { status: 'warning', message },
+    };
+  }
+  const timelineTurnResults: Array<{
+    response: Record<string, unknown>;
+    task: TaskRow;
+    validation: TaskValidation;
+  }> = [];
+  for (const spec of timelineTurnSpecs) {
+    logStep(`dispatching ${spec.ingress} follow-up task: ${spec.instruction}`);
+    const response =
+      spec.ingress === 'fairy.intent'
+        ? await dispatchFairyTimelineTurn(page, room, TIMELINE_COMPONENT_ID, spec.instruction)
+        : await dispatchDirectTimelineTurn(page, room, TIMELINE_COMPONENT_ID, spec.instruction, spec.summary);
+    const taskId = requireQueuedRun(spec.ingress, response);
+    const task = await waitForTaskCompletion(supabase, taskId);
+    const validation = requireSucceededTask(spec.ingress, task);
+    timelineTurnResults.push({ response, task, validation });
+    logStep(`timeline turn task completed: ${task.id}`);
+  }
+
+  const traceIds = [
+    await resolveTraceId(supabase, timelineTask),
+    ...(voiceIngressResult?.task ? [await resolveTraceId(supabase, voiceIngressResult.task)] : []),
+    ...(
+      await Promise.all(
+        timelineTurnResults.map(async (entry) => resolveTraceId(supabase, entry.task)),
+      )
+    ),
+  ].filter((value): value is string => typeof value === 'string' && value.trim().length > 0);
+  let traceId = traceIds.at(-1) ?? null;
   let traceEvents: TraceEventRow[] = [];
-  if (traceId) {
-    traceEvents = await loadTraceEvents(supabase, traceId);
-  } else {
-    traceEvents = await loadTaskScopedEvents(supabase, timelineTask.id);
+  for (const candidate of traceIds) {
+    const events = await loadTraceEvents(supabase, candidate);
+    if (events.length > 0) {
+      traceEvents.push(...events);
+      traceId = candidate;
+    }
+  }
+  if (traceEvents.length === 0) {
+    const scopedSeed = await loadTaskScopedEvents(supabase, timelineTask.id);
+    const scopedVoice = voiceIngressResult?.task
+      ? [await loadTaskScopedEvents(supabase, voiceIngressResult.task.id)]
+      : [];
+    const scopedTurns = await Promise.all(
+      timelineTurnResults.map(async (entry) => loadTaskScopedEvents(supabase, entry.task.id)),
+    );
+    traceEvents = [scopedSeed, ...scopedVoice, ...scopedTurns].flat();
     if (traceEvents.length > 0) {
-      traceId = `task:${timelineTask.id}`;
+      traceId = `task:${timelineTurnResults.at(-1)?.task.id ?? timelineTask.id}`;
     }
   }
   if (!traceId || traceEvents.length === 0) {
     throw new Error(
-      `Trace evidence missing for timeline task ${timelineTask.id} (traceId=${String(traceId)}, events=${traceEvents.length})`,
+      `Trace evidence missing for timeline tasks ${timelineTask.id} and ${timelineTurnResults.map((entry) => entry.task.id).join(', ')} (traceId=${String(traceId)}, events=${traceEvents.length})`,
     );
   }
 
@@ -742,6 +1047,8 @@ async function main() {
     timelineRunResponse,
     timelineTask,
     timelineValidation,
+    voiceIngressResult,
+    timelineTurnResults,
     syncConfirmed: sync.confirmed,
     syncedLaneCount: sync.laneCount,
     syncedItemCount: sync.itemCount,
@@ -749,6 +1056,9 @@ async function main() {
     syncChipText: sync.syncChipText,
     exportChipText: sync.exportChipText,
     detailExpanded: sync.detailExpanded,
+    blockerRendered: sync.blockerRendered,
+    blockedStatusRendered: sync.blockedStatusRendered,
+    dependencyRendered: sync.dependencyRendered,
     traceTaskSource: 'timeline' as const,
     traceId,
     traceEvents,

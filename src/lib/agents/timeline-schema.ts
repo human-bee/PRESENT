@@ -106,6 +106,7 @@ export const timelineDocumentSchema = z.object({
 export type TimelineDocument = z.infer<typeof timelineDocumentSchema>;
 export type TimelineLane = z.infer<typeof timelineLaneSchema>;
 export type TimelineItem = z.infer<typeof timelineItemSchema>;
+export type TimelineItemStatus = z.infer<typeof timelineItemStatusEnum>;
 export type TimelineDependency = z.infer<typeof timelineDependencySchema>;
 export type TimelineSourceEvent = z.infer<typeof timelineSourceEventSchema>;
 export type TimelineExportStage = z.infer<typeof timelineExportStageSchema>;

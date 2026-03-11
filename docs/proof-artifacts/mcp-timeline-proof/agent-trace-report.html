@@ -20,23 +20,23 @@
   </head>
   <body>
     <h1>MCP Timeline Widget Proof</h1>
-    <p class="meta">Generated at 2026-03-11T09:43:02.250Z</p>
+    <p class="meta">Generated at 2026-03-11T23:28:13.767Z</p>
     <section class="card">
       <h2>Run Summary</h2>
       <div class="grid">
-        <div class="label">Base URL</div><div>http://localhost:3000</div>
-        <div class="label">Room</div><div>canvas-dev-d6e240d5-6e29-4c0c-bf54-be6abc0cea10</div>
+        <div class="label">Base URL</div><div>http://localhost:3010</div>
+        <div class="label">Room</div><div>canvas-dev-a5adef30-e105-42a0-89fe-4bb5b1e3971c</div>
         <div class="label">Timeline Component</div><div>mcp-timeline-widget-proof</div>
         <div class="label">Trace Source</div><div>timeline</div>
-        <div class="label">Timeline Task</div><div>3973a6df-d6e9-469c-b5a1-7e9743a79b1d (succeeded)</div>
+        <div class="label">Timeline Task</div><div>0fae0d07-34b8-4d22-8616-e2982c3fef58 (succeeded)</div>
         <div class="label">Timeline Validation</div><div>ok</div>
-        <div class="label">Trace ID</div><div>timeline-proof-trace-1773222167474</div>
-        <div class="label">Trace Events</div><div>4</div>
+        <div class="label">Trace ID</div><div>timeline-turn-proof-trace-1773271688649</div>
+        <div class="label">Trace Events</div><div>22</div>
         <div class="label">Sync Confirmed</div><div>yes</div>
-        <div class="label">Lane Count</div><div>3</div>
-        <div class="label">Item Count</div><div>4</div>
-        <div class="label">Dependency Count</div><div>2</div>
-        <div class="label">Sync Chip</div><div>Sync staged</div>
+        <div class="label">Lane Count</div><div>8</div>
+        <div class="label">Item Count</div><div>7</div>
+        <div class="label">Dependency Count</div><div>7</div>
+        <div class="label">Sync Chip</div><div>Sync live</div>
         <div class="label">Export Chip</div><div>Export linear queued</div>
         <div class="label">Detail Expanded</div><div>yes</div>
       </div>
@@ -49,24 +49,24 @@
   &quot;payload&quot;: {
     &quot;status&quot;: &quot;queued&quot;,
     &quot;task&quot;: {
-      &quot;id&quot;: &quot;3973a6df-d6e9-469c-b5a1-7e9743a79b1d&quot;,
-      &quot;created_at&quot;: &quot;2026-03-11T09:42:50.357+00:00&quot;,
-      &quot;updated_at&quot;: &quot;2026-03-11T09:42:50.357+00:00&quot;,
-      &quot;room&quot;: &quot;canvas-dev-d6e240d5-6e29-4c0c-bf54-be6abc0cea10&quot;,
+      &quot;id&quot;: &quot;0fae0d07-34b8-4d22-8616-e2982c3fef58&quot;,
+      &quot;created_at&quot;: &quot;2026-03-11T23:27:34.825+00:00&quot;,
+      &quot;updated_at&quot;: &quot;2026-03-11T23:27:34.825+00:00&quot;,
+      &quot;room&quot;: &quot;canvas-dev-a5adef30-e105-42a0-89fe-4bb5b1e3971c&quot;,
       &quot;task&quot;: &quot;timeline.patch&quot;,
       &quot;params&quot;: {
         &quot;ops&quot;: [
           {
             &quot;type&quot;: &quot;set_meta&quot;,
-            &quot;title&quot;: &quot;Platform Launch Timeline&quot;,
-            &quot;subtitle&quot;: &quot;Multi-team roadmap for live planning, sprint flow, and blockers.&quot;,
-            &quot;horizonLabel&quot;: &quot;Q2 launch sprint window&quot;
+            &quot;title&quot;: &quot;Super Bowl Ad Sprint&quot;,
+            &quot;subtitle&quot;: &quot;Two-week delivery plan for the hero spot and parallel social campaign.&quot;,
+            &quot;horizonLabel&quot;: &quot;Jan 29 - Feb 11 sprint window&quot;
           },
           {
             &quot;lane&quot;: {
-              &quot;id&quot;: &quot;lane-product&quot;,
+              &quot;id&quot;: &quot;lane-creative&quot;,
               &quot;kind&quot;: &quot;team&quot;,
-              &quot;name&quot;: &quot;Product&quot;,
+              &quot;name&quot;: &quot;Creative&quot;,
               &quot;color&quot;: &quot;#7bb7ff&quot;,
               &quot;order&quot;: 0
             },
@@ -74,9 +74,9 @@
           },
           {
             &quot;lane&quot;: {
-              &quot;id&quot;: &quot;lane-engineering&quot;,
+              &quot;id&quot;: &quot;lane-production&quot;,
               &quot;kind&quot;: &quot;team&quot;,
-              &quot;name&quot;: &quot;Engineering&quot;,
+              &quot;name&quot;: &quot;Production&quot;,
               &quot;color&quot;: &quot;#74c69d&quot;,
               &quot;order&quot;: 1
             },
@@ -84,112 +84,225 @@
           },
           {
             &quot;lane&quot;: {
-              &quot;id&quot;: &quot;lane-go-to-market&quot;,
+              &quot;id&quot;: &quot;lane-post&quot;,
               &quot;kind&quot;: &quot;team&quot;,
-              &quot;name&quot;: &quot;Go To Market&quot;,
-              &quot;color&quot;: &quot;#e9b25f&quot;,
+              &quot;name&quot;: &quot;Post&quot;,
+              &quot;color&quot;: &quot;#c792ea&quot;,
               &quot;order&quot;: 2
             },
             &quot;type&quot;: &quot;upsert_lane&quot;
           },
           {
+            &quot;lane&quot;: {
+              &quot;id&quot;: &quot;lane-media&quot;,
+              &quot;kind&quot;: &quot;team&quot;,
+              &quot;name&quot;: &quot;Media&quot;,
+              &quot;color&quot;: &quot;#e9b25f&quot;,
+              &quot;order&quot;: 3
+            },
+            &quot;type&quot;: &quot;upsert_lane&quot;
+          },
+          {
+            &quot;lane&quot;: {
+              &quot;id&quot;: &quot;lane-social&quot;,
+              &quot;kind&quot;: &quot;team&quot;,
+              &quot;name&quot;: &quot;Social&quot;,
+              &quot;color&quot;: &quot;#ff8b6b&quot;,
+              &quot;order&quot;: 4
+            },
+            &quot;type&quot;: &quot;upsert_lane&quot;
+          },
+          {
             &quot;item&quot;: {
-              &quot;id&quot;: &quot;item-brief&quot;,
+              &quot;id&quot;: &quot;item-script&quot;,
               &quot;tags&quot;: [
-                &quot;brief&quot;,
-                &quot;launch&quot;
+                &quot;broadcast&quot;,
+                &quot;creative&quot;
               ],
               &quot;type&quot;: &quot;milestone&quot;,
-              &quot;notes&quot;: &quot;Needs final approval before kickoff packets go out.&quot;,
-              &quot;owner&quot;: &quot;Product&quot;,
-              &quot;title&quot;: &quot;Finalize launch brief&quot;,
-              &quot;laneId&quot;: &quot;lane-product&quot;,
+              &quot;notes&quot;: &quot;Final client approval gates the full shoot plan.&quot;,
+              &quot;owner&quot;: &quot;Creative Director&quot;,
+              &quot;title&quot;: &quot;Lock 60s spot script&quot;,
+              &quot;laneId&quot;: &quot;lane-creative&quot;,
               &quot;status&quot;: &quot;in_progress&quot;,
-              &quot;summary&quot;: &quot;Lock positioning, feature set, and launch narrative with design and GTM.&quot;,
-              &quot;dueLabel&quot;: &quot;Apr 8&quot;,
+              &quot;summary&quot;: &quot;Finalize script, supers, and CTA for the hero broadcast spot.&quot;,
+              &quot;dueLabel&quot;: &quot;Jan 30&quot;,
               &quot;blockedBy&quot;: [],
-              &quot;createdAt&quot;: 1773222167474,
-              &quot;updatedAt&quot;: 1773222167474,
-              &quot;sprintLabel&quot;: &quot;Sprint 14&quot;
+              &quot;createdAt&quot;: 1773271654815,
+              &quot;updatedAt&quot;: 1773271654815,
+              &quot;sprintLabel&quot;: &quot;Week 1&quot;
             },
             &quot;type&quot;: &quot;upsert_item&quot;
           },
           {
             &quot;item&quot;: {
-              &quot;id&quot;: &quot;item-realtime&quot;,
+              &quot;id&quot;: &quot;item-shoot&quot;,
               &quot;tags&quot;: [
-                &quot;realtime&quot;,
-                &quot;ingest&quot;
+                &quot;production&quot;,
+                &quot;shoot&quot;
               ],
               &quot;type&quot;: &quot;task&quot;,
-              &quot;notes&quot;: &quot;At risk until retry semantics are proven under rapid updates.&quot;,
-              &quot;owner&quot;: &quot;Platform&quot;,
-              &quot;title&quot;: &quot;Ship realtime webhook ingest&quot;,
-              &quot;laneId&quot;: &quot;lane-engineering&quot;,
-              &quot;status&quot;: &quot;at_risk&quot;,
-              &quot;summary&quot;: &quot;Normalize webhook, form, and tool updates into canonical timeline ops.&quot;,
-              &quot;dueLabel&quot;: &quot;Apr 10&quot;,
+              &quot;notes&quot;: &quot;Requires approved script and call sheet lock by EOD Jan 30.&quot;,
+              &quot;owner&quot;: &quot;Production Lead&quot;,
+              &quot;title&quot;: &quot;Shoot hero spot and social selects&quot;,
+              &quot;laneId&quot;: &quot;lane-production&quot;,
+              &quot;status&quot;: &quot;in_progress&quot;,
+              &quot;summary&quot;: &quot;Capture the hero broadcast spot plus social-first cutdowns and stills in one shoot block.&quot;,
+              &quot;dueLabel&quot;: &quot;Feb 1&quot;,
               &quot;blockedBy&quot;: [
-                &quot;item-brief&quot;
+                &quot;item-script&quot;
               ],
-              &quot;createdAt&quot;: 1773222167474,
-              &quot;updatedAt&quot;: 1773222167474,
-              &quot;sprintLabel&quot;: &quot;Sprint 14&quot;
+              &quot;createdAt&quot;: 1773271654815,
+              &quot;updatedAt&quot;: 1773271654815,
+              &quot;sprintLabel&quot;: &quot;Week 1&quot;
             },
             &quot;type&quot;: &quot;upsert_item&quot;
           },
           {
             &quot;item&quot;: {
-              &quot;id&quot;: &quot;item-sales-kit&quot;,
+              &quot;id&quot;: &quot;item-master&quot;,
               &quot;tags&quot;: [
-                &quot;enablement&quot;
+                &quot;post&quot;,
+                &quot;master&quot;
+              ],
+              &quot;type&quot;: &quot;milestone&quot;,
+              &quot;notes&quot;: &quot;Blocked if finishing notes or rights clearance slip past Feb 6.&quot;,
+              &quot;owner&quot;: &quot;Post Supervisor&quot;,
+              &quot;title&quot;: &quot;Finish hero master and legal supers&quot;,
+              &quot;laneId&quot;: &quot;lane-post&quot;,
+              &quot;status&quot;: &quot;at_risk&quot;,
+              &quot;summary&quot;: &quot;Turn around the hero master, supers, and final legal text for network delivery.&quot;,
+              &quot;dueLabel&quot;: &quot;Feb 6&quot;,
+              &quot;blockedBy&quot;: [
+                &quot;item-shoot&quot;
+              ],
+              &quot;createdAt&quot;: 1773271654815,
+              &quot;updatedAt&quot;: 1773271654815,
+              &quot;sprintLabel&quot;: &quot;Week 2&quot;
+            },
+            &quot;type&quot;: &quot;upsert_item&quot;
+          },
+          {
+            &quot;item&quot;: {
+              &quot;id&quot;: &quot;item-broadcast&quot;,
+              &quot;tags&quot;: [
+                &quot;broadcast&quot;,
+                &quot;delivery&quot;
               ],
               &quot;type&quot;: &quot;handoff&quot;,
-              &quot;notes&quot;: &quot;Starts once the launch brief is locked.&quot;,
-              &quot;owner&quot;: &quot;GTM&quot;,
-              &quot;title&quot;: &quot;Prep sales enablement kit&quot;,
-              &quot;laneId&quot;: &quot;lane-go-to-market&quot;,
+              &quot;notes&quot;: &quot;Must clear QA and legal before the broadcaster cutoff.&quot;,
+              &quot;owner&quot;: &quot;Media Ops&quot;,
+              &quot;title&quot;: &quot;Traffic national broadcast delivery&quot;,
+              &quot;laneId&quot;: &quot;lane-media&quot;,
               &quot;status&quot;: &quot;planned&quot;,
-              &quot;summary&quot;: &quot;Build launch talk track, FAQ, and internal demo reel.&quot;,
-              &quot;dueLabel&quot;: &quot;Apr 15&quot;,
+              &quot;summary&quot;: &quot;Submit network delivery package, clock numbers, and placement instructions for game week.&quot;,
+              &quot;dueLabel&quot;: &quot;Feb 8&quot;,
               &quot;blockedBy&quot;: [
-                &quot;item-brief&quot;
+                &quot;item-master&quot;
               ],
-              &quot;createdAt&quot;: 1773222167474,
-              &quot;updatedAt&quot;: 1773222167474,
-              &quot;startLabel&quot;: &quot;Apr 9&quot;
+              &quot;createdAt&quot;: 1773271654815,
+              &quot;updatedAt&quot;: 1773271654815,
+              &quot;startLabel&quot;: &quot;Feb 7&quot;
             },
             &quot;type&quot;: &quot;upsert_item&quot;
           },
           {
             &quot;item&quot;: {
-              &quot;id&quot;: &quot;item-auth-blocker&quot;,
+              &quot;id&quot;: &quot;item-paid-social&quot;,
               &quot;tags&quot;: [
-                &quot;blocker&quot;,
-                &quot;auth&quot;
+                &quot;social&quot;,
+                &quot;paid&quot;
               ],
-              &quot;type&quot;: &quot;blocker&quot;,
-              &quot;notes&quot;: &quot;Needs environment parity before the launch walkthrough can rehearse cleanly.&quot;,
-              &quot;owner&quot;: &quot;Infra&quot;,
-              &quot;title&quot;: &quot;Resolve auth callback blocker&quot;,
-              &quot;laneId&quot;: &quot;lane-engineering&quot;,
-              &quot;status&quot;: &quot;blocked&quot;,
-              &quot;summary&quot;: &quot;Local callback mismatch is blocking stable staging verification.&quot;,
-              &quot;blockedBy&quot;: [],
-              &quot;createdAt&quot;: 1773222167474,
-              &quot;updatedAt&quot;: 1773222167474,
-              &quot;sprintLabel&quot;: &quot;Sprint 14&quot;
+              &quot;type&quot;: &quot;task&quot;,
+              &quot;notes&quot;: &quot;Runs in parallel with the broadcast finish once selects are approved.&quot;,
+              &quot;owner&quot;: &quot;Social Lead&quot;,
+              &quot;title&quot;: &quot;Cut six paid social variants&quot;,
+              &quot;laneId&quot;: &quot;lane-social&quot;,
+              &quot;status&quot;: &quot;planned&quot;,
+              &quot;summary&quot;: &quot;Version six- and fifteen-second cutdowns plus caption-safe overlays for paid social.&quot;,
+              &quot;dueLabel&quot;: &quot;Feb 7&quot;,
+              &quot;blockedBy&quot;: [
+                &quot;item-shoot&quot;
+              ],
+              &quot;createdAt&quot;: 1773271654815,
+              &quot;updatedAt&quot;: 1773271654815,
+              &quot;sprintLabel&quot;: &quot;Week 2&quot;
+            },
+            &quot;type&quot;: &quot;upsert_item&quot;
+          },
+          {
+            &quot;item&quot;: {
+              &quot;id&quot;: &quot;item-organic&quot;,
+              &quot;tags&quot;: [
+                &quot;social&quot;,
+                &quot;organic&quot;
+              ],
+              &quot;type&quot;: &quot;sprint&quot;,
+              &quot;notes&quot;: &quot;Starts once paid variants and hero master timing are locked.&quot;,
+              &quot;owner&quot;: &quot;Community Lead&quot;,
+              &quot;title&quot;: &quot;Launch game-week organic teaser sequence&quot;,
+              &quot;laneId&quot;: &quot;lane-social&quot;,
+              &quot;status&quot;: &quot;planned&quot;,
+              &quot;summary&quot;: &quot;Sequence teaser, BTS, and countdown posts around the paid launch cadence.&quot;,
+              &quot;dueLabel&quot;: &quot;Feb 11&quot;,
+              &quot;blockedBy&quot;: [
+                &quot;item-paid-social&quot;,
+                &quot;item-master&quot;
+              ],
+              &quot;createdAt&quot;: 1773271654815,
+              &quot;updatedAt&quot;: 1773271654815,
+              &quot;startLabel&quot;: &quot;Feb 8&quot;
             },
             &quot;type&quot;: &quot;upsert_item&quot;
           },
           {
             &quot;type&quot;: &quot;set_dependency&quot;,
             &quot;dependency&quot;: {
-              &quot;id&quot;: &quot;dep-brief-realtime&quot;,
+              &quot;id&quot;: &quot;dep-script-shoot&quot;,
               &quot;kind&quot;: &quot;depends_on&quot;,
-              &quot;label&quot;: &quot;Schema and scope locked&quot;,
-              &quot;toItemId&quot;: &quot;item-realtime&quot;,
-              &quot;fromItemId&quot;: &quot;item-brief&quot;
+              &quot;label&quot;: &quot;Script approved&quot;,
+              &quot;toItemId&quot;: &quot;item-shoot&quot;,
+              &quot;fromItemId&quot;: &quot;item-script&quot;
+            }
+          },
+          {
+            &quot;type&quot;: &quot;set_dependency&quot;,
+            &quot;dependency&quot;: {
+              &quot;id&quot;: &quot;dep-shoot-master&quot;,
+              &quot;kind&quot;: &quot;depends_on&quot;,
+              &quot;label&quot;: &quot;Selects delivered&quot;,
+              &quot;toItemId&quot;: &quot;item-master&quot;,
+              &quot;fromItemId&quot;: &quot;item-shoot&quot;
+            }
+          },
+          {
+            &quot;type&quot;: &quot;set_dependency&quot;,
+            &quot;dependency&quot;: {
+              &quot;id&quot;: &quot;dep-master-broadcast&quot;,
+              &quot;kind&quot;: &quot;depends_on&quot;,
+              &quot;label&quot;: &quot;Final master approved&quot;,
+              &quot;toItemId&quot;: &quot;item-broadcast&quot;,
+              &quot;fromItemId&quot;: &quot;item-master&quot;
+            }
+          },
+          {
+            &quot;type&quot;: &quot;set_dependency&quot;,
+            &quot;dependency&quot;: {
+              &quot;id&quot;: &quot;dep-shoot-social&quot;,
+              &quot;kind&quot;: &quot;depends_on&quot;,
+              &quot;label&quot;: &quot;Social selects approved&quot;,
+              &quot;toItemId&quot;: &quot;item-paid-social&quot;,
+              &quot;fromItemId&quot;: &quot;item-shoot&quot;
+            }
+          },
+          {
+            &quot;type&quot;: &quot;set_dependency&quot;,
+            &quot;dependency&quot;: {
+              &quot;id&quot;: &quot;dep-paid-organic&quot;,
+              &quot;kind&quot;: &quot;handoff&quot;,
+              &quot;label&quot;: &quot;Parallel campaign handoff&quot;,
+              &quot;toItemId&quot;: &quot;item-organic&quot;,
+              &quot;fromItemId&quot;: &quot;item-paid-social&quot;
             }
           },
           {
@@ -199,34 +312,35 @@
               &quot;status&quot;: &quot;queued&quot;,
               &quot;target&quot;: &quot;linear&quot;,
               &quot;summary&quot;: &quot;Linear export staged for roadmap review.&quot;,
-              &quot;queuedAt&quot;: 1773222167474,
-              &quot;updatedAt&quot;: 1773222167474
+              &quot;queuedAt&quot;: 1773271654815,
+              &quot;updatedAt&quot;: 1773271654815
             }
           }
         ],
-        &quot;room&quot;: &quot;canvas-dev-d6e240d5-6e29-4c0c-bf54-be6abc0cea10&quot;,
+        &quot;room&quot;: &quot;canvas-dev-a5adef30-e105-42a0-89fe-4bb5b1e3971c&quot;,
         &quot;task&quot;: &quot;timeline.patch&quot;,
         &quot;source&quot;: &quot;tool&quot;,
         &quot;lockKey&quot;: &quot;widget:mcp-timeline-widget-proof&quot;,
         &quot;summary&quot;: &quot;Seed deterministic timeline proof snapshot.&quot;,
-        &quot;traceId&quot;: &quot;timeline-proof-trace-1773222167474&quot;,
-        &quot;intentId&quot;: &quot;timeline-proof-intent-1773222167474&quot;,
+        &quot;traceId&quot;: &quot;timeline-proof-trace-1773271654815&quot;,
+        &quot;intentId&quot;: &quot;timeline-proof-intent-1773271654815&quot;,
         &quot;metadata&quot;: {
           &quot;runtimeScope&quot;: &quot;local&quot;
         },
-        &quot;requestId&quot;: &quot;timeline-proof-1773222167474&quot;,
+        &quot;requestId&quot;: &quot;timeline-proof-1773271654815&quot;,
         &quot;componentId&quot;: &quot;mcp-timeline-widget-proof&quot;,
-        &quot;runtimeScope&quot;: &quot;local&quot;
+        &quot;runtimeScope&quot;: &quot;local&quot;,
+        &quot;idempotencyKey&quot;: &quot;timeline-proof-1773271654815&quot;
       },
       &quot;status&quot;: &quot;running&quot;,
       &quot;priority&quot;: 0,
       &quot;run_at&quot;: null,
       &quot;attempt&quot;: 0,
       &quot;error&quot;: null,
-      &quot;request_id&quot;: &quot;timeline-proof-1773222167474&quot;,
-      &quot;dedupe_key&quot;: null,
+      &quot;request_id&quot;: &quot;timeline-proof-1773271654815&quot;,
+      &quot;dedupe_key&quot;: &quot;timeline-proof-1773271654815&quot;,
       &quot;resource_keys&quot;: [
-        &quot;room:canvas-dev-d6e240d5-6e29-4c0c-bf54-be6abc0cea10&quot;,
+        &quot;room:canvas-dev-a5adef30-e105-42a0-89fe-4bb5b1e3971c&quot;,
         &quot;timeline:mcp-timeline-widget-proof&quot;,
         &quot;runtime-scope:local&quot;,
         &quot;lock:widget:mcp-timeline-widget-proof&quot;,
@@ -238,18 +352,18 @@
       &quot;result&quot;: null,
       &quot;trace_id&quot;: null
     },
-    &quot;taskId&quot;: &quot;3973a6df-d6e9-469c-b5a1-7e9743a79b1d&quot;,
-    &quot;requestId&quot;: &quot;timeline-proof-1773222167474&quot;,
-    &quot;traceId&quot;: &quot;timeline-proof-trace-1773222167474&quot;,
-    &quot;intentId&quot;: &quot;timeline-proof-intent-1773222167474&quot;
+    &quot;taskId&quot;: &quot;0fae0d07-34b8-4d22-8616-e2982c3fef58&quot;,
+    &quot;requestId&quot;: &quot;timeline-proof-1773271654815&quot;,
+    &quot;traceId&quot;: &quot;timeline-proof-trace-1773271654815&quot;,
+    &quot;intentId&quot;: &quot;timeline-proof-intent-1773271654815&quot;
   }
 }</pre>
     </section>
     <section class="card">
       <h2>Timeline Task Row</h2>
       <pre>{
-  &quot;id&quot;: &quot;3973a6df-d6e9-469c-b5a1-7e9743a79b1d&quot;,
-  &quot;room&quot;: &quot;canvas-dev-d6e240d5-6e29-4c0c-bf54-be6abc0cea10&quot;,
+  &quot;id&quot;: &quot;0fae0d07-34b8-4d22-8616-e2982c3fef58&quot;,
+  &quot;room&quot;: &quot;canvas-dev-a5adef30-e105-42a0-89fe-4bb5b1e3971c&quot;,
   &quot;task&quot;: &quot;timeline.patch&quot;,
   &quot;status&quot;: &quot;succeeded&quot;,
   &quot;attempt&quot;: 0,
@@ -263,12 +377,12 @@
     &quot;status&quot;: &quot;completed&quot;,
     &quot;deduped&quot;: false,
     &quot;lockKey&quot;: &quot;widget:mcp-timeline-widget-proof&quot;,
-    &quot;executionId&quot;: &quot;3973a6df-d6e9-469c-b5a1-7e9743a79b1d&quot;,
-    &quot;idempotencyKey&quot;: null
+    &quot;executionId&quot;: &quot;0fae0d07-34b8-4d22-8616-e2982c3fef58&quot;,
+    &quot;idempotencyKey&quot;: &quot;timeline-proof-1773271654815&quot;
   },
-  &quot;request_id&quot;: &quot;timeline-proof-1773222167474&quot;,
-  &quot;created_at&quot;: &quot;2026-03-11T09:42:50.357+00:00&quot;,
-  &quot;updated_at&quot;: &quot;2026-03-11T09:42:58.079784+00:00&quot;,
+  &quot;request_id&quot;: &quot;timeline-proof-1773271654815&quot;,
+  &quot;created_at&quot;: &quot;2026-03-11T23:27:34.825+00:00&quot;,
+  &quot;updated_at&quot;: &quot;2026-03-11T23:27:42.373691+00:00&quot;,
   &quot;trace_id&quot;: null
 }</pre>
     </section>
@@ -290,7 +404,7 @@
           
         <tr>
           <td>1</td>
-          <td>2026-03-11T09:42:50.732+00:00</td>
+          <td>2026-03-11T23:27:35.094+00:00</td>
           <td>queued</td>
           <td>running</td>
           <td>timeline.patch</td>
@@ -304,7 +418,7 @@
 
         <tr>
           <td>2</td>
-          <td>2026-03-11T09:42:51.865+00:00</td>
+          <td>2026-03-11T23:27:35.918+00:00</td>
           <td>claimed</td>
           <td>running</td>
           <td>timeline.patch</td>
@@ -318,7 +432,7 @@
 
         <tr>
           <td>3</td>
-          <td>2026-03-11T09:42:51.867+00:00</td>
+          <td>2026-03-11T23:27:35.919+00:00</td>
           <td>executing</td>
           <td>running</td>
           <td>timeline.patch</td>
@@ -327,10 +441,10 @@
   &quot;model&quot;: null,
   &quot;route&quot;: &quot;other&quot;,
   &quot;provider&quot;: &quot;unknown&quot;,
-  &quot;workerId&quot;: &quot;conductor-62904-69d89f5e&quot;,
-  &quot;workerPid&quot;: &quot;62904&quot;,
-  &quot;leaseToken&quot;: &quot;c08e978a-eb87-44e4-82c8-0b58b51e9547&quot;,
-  &quot;workerHost&quot;: &quot;Bens-MBP&quot;,
+  &quot;workerId&quot;: &quot;conductor-78047-7c256fb4&quot;,
+  &quot;workerPid&quot;: &quot;78047&quot;,
+  &quot;leaseToken&quot;: &quot;12472fda-ddaa-4f02-8cef-847b40b0cee5&quot;,
+  &quot;workerHost&quot;: &quot;Bens-MacBook-Pro.local&quot;,
   &quot;providerPath&quot;: &quot;unknown&quot;,
   &quot;providerSource&quot;: &quot;unknown&quot;,
   &quot;providerRequestId&quot;: null
@@ -340,21 +454,329 @@
 
         <tr>
           <td>4</td>
-          <td>2026-03-11T09:42:58.088+00:00</td>
+          <td>2026-03-11T23:27:42.398+00:00</td>
           <td>completed</td>
           <td>succeeded</td>
           <td>timeline.patch</td>
-          <td>6220</td>
+          <td>6479</td>
           <td><details><summary>payload</summary><pre>{
   &quot;model&quot;: null,
   &quot;route&quot;: &quot;other&quot;,
   &quot;deduped&quot;: false,
   &quot;lockKey&quot;: &quot;widget:mcp-timeline-widget-proof&quot;,
   &quot;provider&quot;: &quot;unknown&quot;,
-  &quot;workerId&quot;: &quot;conductor-62904-69d89f5e&quot;,
-  &quot;workerPid&quot;: &quot;62904&quot;,
-  &quot;leaseToken&quot;: &quot;c08e978a-eb87-44e4-82c8-0b58b51e9547&quot;,
-  &quot;workerHost&quot;: &quot;Bens-MBP&quot;,
+  &quot;workerId&quot;: &quot;conductor-78047-7c256fb4&quot;,
+  &quot;workerPid&quot;: &quot;78047&quot;,
+  &quot;leaseToken&quot;: &quot;12472fda-ddaa-4f02-8cef-847b40b0cee5&quot;,
+  &quot;workerHost&quot;: &quot;Bens-MacBook-Pro.local&quot;,
+  &quot;providerPath&quot;: &quot;unknown&quot;,
+  &quot;providerSource&quot;: &quot;unknown&quot;,
+  &quot;providerRequestId&quot;: null
+}</pre></details></td>
+        </tr>
+      
+
+        <tr>
+          <td>5</td>
+          <td>2026-03-11T23:27:43.542+00:00</td>
+          <td>api_received</td>
+          <td>ok</td>
+          <td>fairy.intent</td>
+          <td></td>
+          <td><details><summary>payload</summary><pre>{
+  &quot;model&quot;: &quot;claude-haiku-4-5&quot;,
+  &quot;provider&quot;: &quot;anthropic&quot;,
+  &quot;providerPath&quot;: &quot;primary&quot;,
+  &quot;providerSource&quot;: &quot;task_params&quot;,
+  &quot;providerRequestId&quot;: null
+}</pre></details></td>
+        </tr>
+      
+
+        <tr>
+          <td>6</td>
+          <td>2026-03-11T23:27:43.782+00:00</td>
+          <td>queued</td>
+          <td>queued</td>
+          <td>fairy.intent</td>
+          <td></td>
+          <td><details><summary>payload</summary><pre>{}</pre></details></td>
+        </tr>
+      
+
+        <tr>
+          <td>7</td>
+          <td>2026-03-11T23:27:44.31+00:00</td>
+          <td>claimed</td>
+          <td>running</td>
+          <td>fairy.intent</td>
+          <td></td>
+          <td><details><summary>payload</summary><pre>{}</pre></details></td>
+        </tr>
+      
+
+        <tr>
+          <td>8</td>
+          <td>2026-03-11T23:27:44.311+00:00</td>
+          <td>executing</td>
+          <td>running</td>
+          <td>fairy.intent</td>
+          <td></td>
+          <td><details><summary>payload</summary><pre>{
+  &quot;route&quot;: &quot;visual&quot;,
+  &quot;workerId&quot;: &quot;conductor-36-98c8350c&quot;,
+  &quot;workerPid&quot;: &quot;36&quot;,
+  &quot;leaseToken&quot;: &quot;d9ea447b-6d31-4bbd-9ad9-d39df97ad670&quot;,
+  &quot;workerHost&quot;: &quot;f8152f2e162b&quot;
+}</pre></details></td>
+        </tr>
+      
+
+        <tr>
+          <td>9</td>
+          <td>2026-03-11T23:28:03.675+00:00</td>
+          <td>queued</td>
+          <td>queued</td>
+          <td>canvas.followup</td>
+          <td></td>
+          <td><details><summary>payload</summary><pre>{}</pre></details></td>
+        </tr>
+      
+
+        <tr>
+          <td>10</td>
+          <td>2026-03-11T23:28:05.087+00:00</td>
+          <td>completed</td>
+          <td>succeeded</td>
+          <td>fairy.intent</td>
+          <td>20775</td>
+          <td><details><summary>payload</summary><pre>{
+  &quot;route&quot;: &quot;visual&quot;,
+  &quot;deduped&quot;: false,
+  &quot;lockKey&quot;: &quot;widget:mcp-timeline-widget-proof&quot;,
+  &quot;workerId&quot;: &quot;conductor-36-98c8350c&quot;,
+  &quot;workerPid&quot;: &quot;36&quot;,
+  &quot;leaseToken&quot;: &quot;d9ea447b-6d31-4bbd-9ad9-d39df97ad670&quot;,
+  &quot;workerHost&quot;: &quot;f8152f2e162b&quot;
+}</pre></details></td>
+        </tr>
+      
+
+        <tr>
+          <td>11</td>
+          <td>2026-03-11T23:28:05.491+00:00</td>
+          <td>queued</td>
+          <td>running</td>
+          <td>timeline.turn</td>
+          <td></td>
+          <td><details><summary>payload</summary><pre>{
+  &quot;queueMode&quot;: &quot;local_scope_direct_claim&quot;,
+  &quot;runtimeScope&quot;: &quot;local&quot;
+}</pre></details></td>
+        </tr>
+      
+
+        <tr>
+          <td>12</td>
+          <td>2026-03-11T23:28:05.728+00:00</td>
+          <td>claimed</td>
+          <td>running</td>
+          <td>timeline.turn</td>
+          <td></td>
+          <td><details><summary>payload</summary><pre>{
+  &quot;claimMode&quot;: &quot;local_scope_direct_claim&quot;,
+  &quot;runtimeScope&quot;: &quot;local&quot;
+}</pre></details></td>
+        </tr>
+      
+
+        <tr>
+          <td>13</td>
+          <td>2026-03-11T23:28:05.729+00:00</td>
+          <td>executing</td>
+          <td>running</td>
+          <td>timeline.turn</td>
+          <td></td>
+          <td><details><summary>payload</summary><pre>{
+  &quot;model&quot;: null,
+  &quot;route&quot;: &quot;other&quot;,
+  &quot;provider&quot;: &quot;unknown&quot;,
+  &quot;workerId&quot;: &quot;conductor-78047-7c256fb4&quot;,
+  &quot;workerPid&quot;: &quot;78047&quot;,
+  &quot;leaseToken&quot;: &quot;893d0db7-55c9-45e0-ad36-fd2eaad0ae70&quot;,
+  &quot;workerHost&quot;: &quot;Bens-MacBook-Pro.local&quot;,
+  &quot;providerPath&quot;: &quot;unknown&quot;,
+  &quot;providerSource&quot;: &quot;unknown&quot;,
+  &quot;providerRequestId&quot;: null
+}</pre></details></td>
+        </tr>
+      
+
+        <tr>
+          <td>14</td>
+          <td>2026-03-11T23:28:06.529+00:00</td>
+          <td>completed</td>
+          <td>succeeded</td>
+          <td>timeline.turn</td>
+          <td>799</td>
+          <td><details><summary>payload</summary><pre>{
+  &quot;model&quot;: null,
+  &quot;route&quot;: &quot;other&quot;,
+  &quot;deduped&quot;: false,
+  &quot;lockKey&quot;: &quot;widget:mcp-timeline-widget-proof&quot;,
+  &quot;provider&quot;: &quot;unknown&quot;,
+  &quot;workerId&quot;: &quot;conductor-78047-7c256fb4&quot;,
+  &quot;workerPid&quot;: &quot;78047&quot;,
+  &quot;leaseToken&quot;: &quot;893d0db7-55c9-45e0-ad36-fd2eaad0ae70&quot;,
+  &quot;workerHost&quot;: &quot;Bens-MacBook-Pro.local&quot;,
+  &quot;providerPath&quot;: &quot;unknown&quot;,
+  &quot;providerSource&quot;: &quot;unknown&quot;,
+  &quot;providerRequestId&quot;: null
+}</pre></details></td>
+        </tr>
+      
+
+        <tr>
+          <td>15</td>
+          <td>2026-03-11T23:28:07.185+00:00</td>
+          <td>queued</td>
+          <td>running</td>
+          <td>timeline.turn</td>
+          <td></td>
+          <td><details><summary>payload</summary><pre>{
+  &quot;queueMode&quot;: &quot;local_scope_direct_claim&quot;,
+  &quot;runtimeScope&quot;: &quot;local&quot;
+}</pre></details></td>
+        </tr>
+      
+
+        <tr>
+          <td>16</td>
+          <td>2026-03-11T23:28:07.371+00:00</td>
+          <td>executing</td>
+          <td>running</td>
+          <td>timeline.turn</td>
+          <td></td>
+          <td><details><summary>payload</summary><pre>{
+  &quot;model&quot;: null,
+  &quot;route&quot;: &quot;other&quot;,
+  &quot;provider&quot;: &quot;unknown&quot;,
+  &quot;workerId&quot;: &quot;conductor-78047-7c256fb4&quot;,
+  &quot;workerPid&quot;: &quot;78047&quot;,
+  &quot;leaseToken&quot;: &quot;131b2186-70f9-4e79-9307-68c3fd55ca3d&quot;,
+  &quot;workerHost&quot;: &quot;Bens-MacBook-Pro.local&quot;,
+  &quot;providerPath&quot;: &quot;unknown&quot;,
+  &quot;providerSource&quot;: &quot;unknown&quot;,
+  &quot;providerRequestId&quot;: null
+}</pre></details></td>
+        </tr>
+      
+
+        <tr>
+          <td>17</td>
+          <td>2026-03-11T23:28:07.371+00:00</td>
+          <td>claimed</td>
+          <td>running</td>
+          <td>timeline.turn</td>
+          <td></td>
+          <td><details><summary>payload</summary><pre>{
+  &quot;claimMode&quot;: &quot;local_scope_direct_claim&quot;,
+  &quot;runtimeScope&quot;: &quot;local&quot;
+}</pre></details></td>
+        </tr>
+      
+
+        <tr>
+          <td>18</td>
+          <td>2026-03-11T23:28:08.214+00:00</td>
+          <td>completed</td>
+          <td>succeeded</td>
+          <td>timeline.turn</td>
+          <td>843</td>
+          <td><details><summary>payload</summary><pre>{
+  &quot;model&quot;: null,
+  &quot;route&quot;: &quot;other&quot;,
+  &quot;deduped&quot;: false,
+  &quot;lockKey&quot;: &quot;widget:mcp-timeline-widget-proof&quot;,
+  &quot;provider&quot;: &quot;unknown&quot;,
+  &quot;workerId&quot;: &quot;conductor-78047-7c256fb4&quot;,
+  &quot;workerPid&quot;: &quot;78047&quot;,
+  &quot;leaseToken&quot;: &quot;131b2186-70f9-4e79-9307-68c3fd55ca3d&quot;,
+  &quot;workerHost&quot;: &quot;Bens-MacBook-Pro.local&quot;,
+  &quot;providerPath&quot;: &quot;unknown&quot;,
+  &quot;providerSource&quot;: &quot;unknown&quot;,
+  &quot;providerRequestId&quot;: null
+}</pre></details></td>
+        </tr>
+      
+
+        <tr>
+          <td>19</td>
+          <td>2026-03-11T23:28:08.881+00:00</td>
+          <td>queued</td>
+          <td>running</td>
+          <td>timeline.turn</td>
+          <td></td>
+          <td><details><summary>payload</summary><pre>{
+  &quot;queueMode&quot;: &quot;local_scope_direct_claim&quot;,
+  &quot;runtimeScope&quot;: &quot;local&quot;
+}</pre></details></td>
+        </tr>
+      
+
+        <tr>
+          <td>20</td>
+          <td>2026-03-11T23:28:09.031+00:00</td>
+          <td>executing</td>
+          <td>running</td>
+          <td>timeline.turn</td>
+          <td></td>
+          <td><details><summary>payload</summary><pre>{
+  &quot;model&quot;: null,
+  &quot;route&quot;: &quot;other&quot;,
+  &quot;provider&quot;: &quot;unknown&quot;,
+  &quot;workerId&quot;: &quot;conductor-78047-7c256fb4&quot;,
+  &quot;workerPid&quot;: &quot;78047&quot;,
+  &quot;leaseToken&quot;: &quot;9173c225-e03e-48ce-b94d-8b7619948d4c&quot;,
+  &quot;workerHost&quot;: &quot;Bens-MacBook-Pro.local&quot;,
+  &quot;providerPath&quot;: &quot;unknown&quot;,
+  &quot;providerSource&quot;: &quot;unknown&quot;,
+  &quot;providerRequestId&quot;: null
+}</pre></details></td>
+        </tr>
+      
+
+        <tr>
+          <td>21</td>
+          <td>2026-03-11T23:28:09.031+00:00</td>
+          <td>claimed</td>
+          <td>running</td>
+          <td>timeline.turn</td>
+          <td></td>
+          <td><details><summary>payload</summary><pre>{
+  &quot;claimMode&quot;: &quot;local_scope_direct_claim&quot;,
+  &quot;runtimeScope&quot;: &quot;local&quot;
+}</pre></details></td>
+        </tr>
+      
+
+        <tr>
+          <td>22</td>
+          <td>2026-03-11T23:28:09.642+00:00</td>
+          <td>completed</td>
+          <td>succeeded</td>
+          <td>timeline.turn</td>
+          <td>611</td>
+          <td><details><summary>payload</summary><pre>{
+  &quot;model&quot;: null,
+  &quot;route&quot;: &quot;other&quot;,
+  &quot;deduped&quot;: false,
+  &quot;lockKey&quot;: &quot;widget:mcp-timeline-widget-proof&quot;,
+  &quot;provider&quot;: &quot;unknown&quot;,
+  &quot;workerId&quot;: &quot;conductor-78047-7c256fb4&quot;,
+  &quot;workerPid&quot;: &quot;78047&quot;,
+  &quot;leaseToken&quot;: &quot;9173c225-e03e-48ce-b94d-8b7619948d4c&quot;,
+  &quot;workerHost&quot;: &quot;Bens-MacBook-Pro.local&quot;,
   &quot;providerPath&quot;: &quot;unknown&quot;,
   &quot;providerSource&quot;: &quot;unknown&quot;,
   &quot;providerRequestId&quot;: null
