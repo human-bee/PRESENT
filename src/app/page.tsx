@@ -1,5 +1,6 @@
 import { ResetWorkspaceShell } from '@present/ui';
 import {
+  buildAgentInteropPack,
   buildRuntimeManifest,
   createArtifact,
   ensureResetKernelHydrated,
@@ -59,6 +60,7 @@ export default async function Home({
   return (
     <ResetWorkspaceShell
       initialManifest={manifest}
+      initialAgentPack={buildAgentInteropPack(workspace)}
       initialWorkspace={workspace}
       initialWorkspaces={listWorkspaceSessions().slice(0, 6)}
       initialExecutors={listExecutorSessions(workspace.id)}

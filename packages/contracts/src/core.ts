@@ -173,6 +173,34 @@ export const runtimeManifestSchema = z.object({
   }),
 });
 
+export const commandInvocationSchema = z.object({
+  command: z.string().min(1),
+  args: z.array(z.string().min(1)).default([]),
+  cwd: z.string().min(1),
+});
+
+export const agentInteropPackSchema = z.object({
+  generatedAt: isoDateTimeSchema,
+  workspaceSessionId: z.string().min(1).nullable(),
+  workspacePath: z.string().min(1).nullable(),
+  mcpServer: z.object({
+    name: z.string().min(1),
+    transport: z.enum(['stdio', 'http']),
+    command: z.string().min(1),
+    args: z.array(z.string().min(1)).default([]),
+    cwd: z.string().min(1),
+    env: z.record(z.string(), z.string()).default({}),
+  }),
+  commands: z.object({
+    openWorkspace: commandInvocationSchema,
+    inspectWorkspace: commandInvocationSchema,
+    startTurn: commandInvocationSchema,
+    printManifest: commandInvocationSchema,
+  }),
+  recommendedClients: z.array(z.string().min(1)).default([]),
+  notes: z.array(z.string().min(1)).default([]),
+});
+
 export const workspaceFileEntrySchema = z.object({
   path: z.string().min(1),
   name: z.string().min(1),
@@ -195,5 +223,6 @@ export type ApprovalRequest = z.infer<typeof approvalRequestSchema>;
 export type PresenceMember = z.infer<typeof presenceMemberSchema>;
 export type ModelProfile = z.infer<typeof modelProfileSchema>;
 export type RuntimeManifest = z.infer<typeof runtimeManifestSchema>;
+export type AgentInteropPack = z.infer<typeof agentInteropPackSchema>;
 export type WorkspaceFileEntry = z.infer<typeof workspaceFileEntrySchema>;
 export type WorkspaceFileDocument = z.infer<typeof workspaceFileDocumentSchema>;

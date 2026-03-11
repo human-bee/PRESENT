@@ -63,6 +63,7 @@ describe('present MCP toolkit', () => {
     expect(resources.map((resource) => resource.uri)).toEqual(
       expect.arrayContaining([
         'present://runtime/manifest',
+        'present://runtime/interop',
         'present://workspace/files',
         'present://artifact/diff',
         'present://executors/state',

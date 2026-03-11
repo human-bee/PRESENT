@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import {
   applyArtifactPatch,
+  buildAgentInteropPack,
   buildRuntimeManifest,
   createApprovalRequest,
   createArtifact,
@@ -267,6 +268,7 @@ export const presentMcpTools = {
 export async function listPresentMcpResources() {
   const modelProfiles = await resolveKernelModelProfiles();
   const artifacts = listArtifacts();
+  const workspace = listWorkspaceSessions()[0] ?? null;
   const latestPatchArtifact = artifacts.find((artifact) => artifact.kind === 'file_patch') ?? null;
 
   return [
@@ -275,6 +277,12 @@ export async function listPresentMcpResources() {
       name: 'runtime.manifest',
       mimeType: 'application/json',
       text: JSON.stringify(buildRuntimeManifest(), null, 2),
+    },
+    {
+      uri: 'present://runtime/interop',
+      name: 'runtime.interop',
+      mimeType: 'application/json',
+      text: JSON.stringify(buildAgentInteropPack(workspace), null, 2),
     },
     {
       uri: 'present://workspaces/state',

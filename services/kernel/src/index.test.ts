@@ -1,5 +1,6 @@
 import path from 'node:path';
 import {
+  buildAgentInteropPack,
   buildRuntimeManifest,
   completeTaskRun,
   createApprovalRequest,
@@ -91,5 +92,20 @@ describe('reset kernel', () => {
     expect(persisted).toHaveLength(1);
     expect(persisted[0]?.status).toBe('succeeded');
     expect(persisted[0]?.result?.['finalResponse']).toBe('done');
+  });
+
+  it('builds a BYO-agent interop pack for external clients', () => {
+    const workspace = openWorkspaceSession({
+      workspacePath: `/tmp/present-reset-interop-${Date.now()}`,
+      title: 'Interop Test',
+      branch: 'codex/reset',
+    });
+
+    const pack = buildAgentInteropPack(workspace);
+
+    expect(pack.workspaceSessionId).toBe(workspace.id);
+    expect(pack.mcpServer.name).toBe('present-mcp');
+    expect(pack.recommendedClients).toContain('OpenClaw');
+    expect(pack.commands.startTurn.args).toContain('--prompt');
   });
 });

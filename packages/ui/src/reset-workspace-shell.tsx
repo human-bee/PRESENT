@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { startTransition, useEffect, useEffectEvent, useMemo, useRef, useState, useDeferredValue } from 'react';
 import type {
   ApprovalRequest,
+  AgentInteropPack,
   Artifact,
   ExecutorSession,
   ModelProfile,
@@ -88,6 +89,7 @@ async function requestJson<T>(url: string, init?: RequestInit) {
 
 type ResetWorkspaceShellProps = {
   initialManifest: RuntimeManifest;
+  initialAgentPack: AgentInteropPack;
   initialWorkspace: WorkspaceSession;
   initialWorkspaces: WorkspaceSession[];
   initialExecutors: ExecutorSession[];
@@ -123,8 +125,14 @@ type WorkspaceCatalogResponse = {
   workspaces: WorkspaceSession[];
 };
 
+type RuntimeManifestResponse = {
+  manifest: RuntimeManifest;
+  agentPack: AgentInteropPack;
+};
+
 export function ResetWorkspaceShell({
   initialManifest,
+  initialAgentPack,
   initialWorkspace,
   initialWorkspaces,
   initialExecutors,
@@ -136,6 +144,7 @@ export function ResetWorkspaceShell({
   initialTraceEvents,
 }: ResetWorkspaceShellProps) {
   const router = useRouter();
+  const [agentPack, setAgentPack] = useState(initialAgentPack);
   const [workspace, setWorkspace] = useState(initialWorkspace);
   const [recentWorkspaces, setRecentWorkspaces] = useState(initialWorkspaces);
   const [executors, setExecutors] = useState(initialExecutors);
@@ -199,6 +208,8 @@ export function ResetWorkspaceShell({
     [activeDocument],
   );
   const legacyCanvasUrl = '/canvas?legacy=1&embed=1';
+  const formatCommand = (command: AgentInteropPack['commands'][keyof AgentInteropPack['commands']]) =>
+    [command.command, ...command.args].join(' ');
 
   const refreshWorkspaceState = useEffectEvent(async (workspaceSessionId: string, activeQuery?: string) => {
     const snapshot = await requestJson<WorkspaceSnapshotResponse>(
@@ -224,6 +235,12 @@ export function ResetWorkspaceShell({
     setRecentWorkspaces(payload.workspaces.slice(0, 6));
   });
 
+  const refreshAgentPack = useEffectEvent(async (workspaceSessionId: string) => {
+    const search = new URLSearchParams({ workspaceSessionId });
+    const payload = await requestJson<RuntimeManifestResponse>(`/api/reset/runtime-manifest?${search.toString()}`);
+    setAgentPack(payload.agentPack);
+  });
+
   const replaceWorkspaceUrl = useEffectEvent((workspaceSessionId: string) => {
     const nextUrl = new URL(window.location.href);
     nextUrl.searchParams.set('workspace', workspaceSessionId);
@@ -242,6 +259,7 @@ export function ResetWorkspaceShell({
     await loadWorkspaceFiles(nextWorkspace.id, '');
     await loadDefaultWorkspaceFile(nextWorkspace.id);
     await refreshWorkspaceCatalog();
+    await refreshAgentPack(nextWorkspace.id);
   });
 
   const loadWorkspaceFiles = useEffectEvent(async (workspaceSessionId: string, nextDirectoryPath = '') => {
@@ -1105,6 +1123,47 @@ export function ResetWorkspaceShell({
                 <p>{profile.label}</p>
               </article>
             ))}
+          </div>
+        </article>
+
+        <article className="reset-panel">
+          <div className="reset-panel__header">
+            <div>
+              <div className="reset-panel__eyebrow">BYO Agent</div>
+              <h2>OpenClaw + MCP Pack</h2>
+            </div>
+            <div className="reset-panel__microcopy">
+              Machine-readable entry points for external agents and local operator tooling.
+            </div>
+          </div>
+          <div className="reset-list">
+            <article className="reset-list-card">
+              <div className="reset-list-card__eyebrow">Recommended Clients</div>
+              <strong>{agentPack.recommendedClients.join(' / ')}</strong>
+              <p>{agentPack.notes[0] ?? 'Use the local companion for subscription-backed Codex auth.'}</p>
+            </article>
+          </div>
+          <div className="reset-command-grid">
+            <article className="reset-list-card">
+              <div className="reset-list-card__eyebrow">MCP Server</div>
+              <strong>{agentPack.mcpServer.name}</strong>
+              <pre className="reset-command-block">{`${agentPack.mcpServer.command} ${agentPack.mcpServer.args.join(' ')}`}</pre>
+            </article>
+            <article className="reset-list-card">
+              <div className="reset-list-card__eyebrow">Reset Open</div>
+              <strong>CLI workspace attach</strong>
+              <pre className="reset-command-block">{formatCommand(agentPack.commands.openWorkspace)}</pre>
+            </article>
+            <article className="reset-list-card">
+              <div className="reset-list-card__eyebrow">Reset Turn</div>
+              <strong>Prompt through the kernel</strong>
+              <pre className="reset-command-block">{formatCommand(agentPack.commands.startTurn)}</pre>
+            </article>
+            <article className="reset-list-card">
+              <div className="reset-list-card__eyebrow">Manifest</div>
+              <strong>Inspect runtime + interop</strong>
+              <pre className="reset-command-block">{formatCommand(agentPack.commands.printManifest)}</pre>
+            </article>
           </div>
         </article>
 

@@ -1,4 +1,5 @@
 import {
+  agentInteropPackSchema,
   artifactSchema,
   runtimeManifestSchema,
   workspaceSessionSchema,
@@ -57,5 +58,49 @@ describe('reset contracts', () => {
     });
 
     expect(artifact.workspaceSessionId).toBe(workspace.id);
+  });
+
+  it('accepts BYO-agent interop packs', () => {
+    const pack = agentInteropPackSchema.parse({
+      generatedAt: new Date().toISOString(),
+      workspaceSessionId: 'ws_123',
+      workspacePath: '/tmp/present-reset',
+      mcpServer: {
+        name: 'present-mcp',
+        transport: 'stdio',
+        command: 'npm',
+        args: ['run', 'present:mcp'],
+        cwd: '/tmp/present-reset',
+        env: {
+          PRESENT_RESET_WORKSPACE_SESSION_ID: 'ws_123',
+        },
+      },
+      commands: {
+        openWorkspace: {
+          command: 'npm',
+          args: ['run', 'fairy:cli', '--', 'reset', 'open', '--workspacePath', '/tmp/present-reset'],
+          cwd: '/tmp/present-reset',
+        },
+        inspectWorkspace: {
+          command: 'npm',
+          args: ['run', 'fairy:cli', '--', 'reset', 'status', '--workspaceSessionId', 'ws_123'],
+          cwd: '/tmp/present-reset',
+        },
+        startTurn: {
+          command: 'npm',
+          args: ['run', 'fairy:cli', '--', 'reset', 'turn', '--workspaceSessionId', 'ws_123', '--prompt', '<prompt>'],
+          cwd: '/tmp/present-reset',
+        },
+        printManifest: {
+          command: 'npm',
+          args: ['run', 'fairy:cli', '--', 'reset', 'manifest', '--workspaceSessionId', 'ws_123'],
+          cwd: '/tmp/present-reset',
+        },
+      },
+      recommendedClients: ['OpenClaw', 'Codex desktop'],
+      notes: ['ChatGPT auth remains local-companion only.'],
+    });
+
+    expect(pack.recommendedClients).toContain('OpenClaw');
   });
 });
