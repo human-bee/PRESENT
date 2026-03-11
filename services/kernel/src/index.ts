@@ -11,3 +11,4 @@ export * from './tasks';
 export * from './traces';
 export * from './workspace-sessions';
 export * from './workspace-state';
+export * from './workspace-files';
