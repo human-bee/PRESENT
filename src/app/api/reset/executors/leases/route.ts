@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { claimExecutorLease, releaseExecutorLease } from '@present/kernel';
+import { flushResetKernelWrites, hydrateResetKernel } from '../../_lib/persistence';
 
 export const runtime = 'nodejs';
 
@@ -12,16 +13,21 @@ const leaseSchema = z.object({
 });
 
 export async function POST(request: NextRequest) {
+  await hydrateResetKernel();
   const payload = leaseSchema.parse(await request.json());
   if (payload.action === 'release') {
-    return NextResponse.json(releaseExecutorLease(payload.workspaceSessionId, payload.identity));
+    const response = NextResponse.json(releaseExecutorLease(payload.workspaceSessionId, payload.identity));
+    await flushResetKernelWrites();
+    return response;
   }
 
-  return NextResponse.json(
+  const response = NextResponse.json(
     claimExecutorLease({
       workspaceSessionId: payload.workspaceSessionId,
       identity: payload.identity,
       leaseTtlMs: payload.leaseTtlMs,
     }),
   );
+  await flushResetKernelWrites();
+  return response;
 }

@@ -38,4 +38,6 @@ This branch introduces the reset-era platform skeleton without deleting the lega
 - The old canvas runtime still exists, but `/canvas`, `/canvases`, `/mcp-config`, and `/showcase/ui` now default to archive or bridge behavior instead of serving as primary product entries.
 - The root product surface now uses the reset-era kernel instead of redirecting into those older paths.
 - The reset shell now operates on real workspace files, can generate/apply patch artifacts, and embeds the archived legacy canvas through an iframe bridge so `/` remains the main entry point.
+- The reset shell now publishes operator presence into reset contracts, mirrors draft edits across local tabs, and waits for reset persistence flushes before API mutations return.
+- The reset kernel still keeps a local JSON hot cache for synchronous service calls, but it now hydrates from the reset Supabase tables when configured and mirrors writes back out so the new schema can become the durable backing store without reintroducing legacy room semantics.
 - The new shell is still smaller than the target product, but it now runs against a persisted reset kernel, workspace snapshot routes, a real Codex turn/event seam, and a reset-native BYO-agent CLI/MCP surface.

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { readWorkspaceFile, writeWorkspaceFile } from '@present/kernel';
+import { flushResetKernelWrites, hydrateResetKernel } from '../../../_lib/persistence';
 
 export const runtime = 'nodejs';
 
@@ -14,6 +15,7 @@ export async function GET(
   context: { params: Promise<{ workspaceSessionId: string }> },
 ) {
   try {
+    await hydrateResetKernel();
     const { workspaceSessionId } = await context.params;
     const filePath = new URL(request.url).searchParams.get('filePath');
     if (!filePath) {
@@ -34,6 +36,7 @@ export async function PUT(
   context: { params: Promise<{ workspaceSessionId: string }> },
 ) {
   try {
+    await hydrateResetKernel();
     const { workspaceSessionId } = await context.params;
     const payload = writeWorkspaceFileSchema.parse(await request.json());
     const document = writeWorkspaceFile({
@@ -41,6 +44,7 @@ export async function PUT(
       filePath: payload.filePath,
       content: payload.content,
     });
+    await flushResetKernelWrites();
     return NextResponse.json({ document });
   } catch (error) {
     return NextResponse.json(
