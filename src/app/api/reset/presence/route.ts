@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { listPresenceMembers, setPresenceMemberState, upsertPresenceMember } from '@present/kernel';
+import { jsonObjectSchema } from '@present/contracts';
 
 export const runtime = 'nodejs';
 
@@ -16,6 +17,7 @@ const upsertPresenceSchema = z.object({
       screen: z.boolean().optional(),
     })
     .optional(),
+  metadata: jsonObjectSchema.optional(),
 });
 
 const updateStateSchema = z.object({
