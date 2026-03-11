@@ -48,6 +48,34 @@ describe('ResetWorkspaceShell', () => {
         } as Response;
       }
 
+      if (url.includes('/api/reset/presence')) {
+        return {
+          ok: true,
+          json: async () => ({
+            presenceMember: {
+              id: 'presence_123',
+              workspaceSessionId: 'ws_123',
+              identity: 'operator-test',
+              displayName: 'Mission TEST',
+              state: 'connected',
+              media: {
+                audio: false,
+                video: false,
+                screen: false,
+              },
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+              metadata: {
+                activeFilePath: 'package.json',
+                editorMode: 'reset_shell',
+                draftSyncEnabled: false,
+              },
+            },
+          }),
+          text: async () => '',
+        } as Response;
+      }
+
       return {
         ok: true,
         json: async () => ({

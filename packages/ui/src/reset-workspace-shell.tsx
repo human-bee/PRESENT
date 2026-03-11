@@ -145,10 +145,18 @@ export function ResetWorkspaceShell({
   const [directoryPath, setDirectoryPath] = useState('');
   const [workspaceFiles, setWorkspaceFiles] = useState<WorkspaceFileEntry[]>([]);
   const [activeDocument, setActiveDocument] = useState<WorkspaceFileDocument | null>(null);
+  const [localIdentity, setLocalIdentity] = useState('');
+  const [localPresenceLabel, setLocalPresenceLabel] = useState('Mission Control');
+  const [draftSyncPeer, setDraftSyncPeer] = useState<string | null>(null);
+  const [draftSyncEnabled, setDraftSyncEnabled] = useState(false);
   const [activeTaskId, setActiveTaskId] = useState<string | null>(initialTasks[0]?.id ?? null);
   const [isBusy, setIsBusy] = useState(false);
   const deferredTraceQuery = useDeferredValue(traceQuery);
   const eventSourceRef = useRef<EventSource | null>(null);
+  const liveDraftChannelRef = useRef<BroadcastChannel | null>(null);
+  const localIdentityRef = useRef('');
+  const localDisplayNameRef = useRef('Mission Control');
+  const pendingRemoteDraftRef = useRef<string | null>(null);
 
   const latestWidgetArtifact = useMemo(
     () => artifacts.find((artifact) => artifact.kind === 'widget_bundle') ?? null,
@@ -223,14 +231,171 @@ export function ResetWorkspaceShell({
     }
   });
 
+  const syncPresence = useEffectEvent(
+    async (state: PresenceMember['state'], media?: Partial<PresenceMember['media']>) => {
+      if (!localIdentityRef.current) return;
+      const payload = await requestJson<{ presenceMember: PresenceMember }>('/api/reset/presence', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          workspaceSessionId: workspace.id,
+          identity: localIdentityRef.current,
+          displayName: localDisplayNameRef.current,
+          state,
+          media: {
+            audio: media?.audio ?? false,
+            video: media?.video ?? false,
+            screen: media?.screen ?? false,
+          },
+          metadata: {
+            activeFilePath: activeDocument?.path ?? null,
+            editorMode: 'reset_shell',
+            draftSyncEnabled,
+          },
+        }),
+      });
+
+      setPresence((previous) =>
+        [payload.presenceMember, ...previous.filter((member) => member.id !== payload.presenceMember.id)].sort(
+          (left, right) => right.updatedAt.localeCompare(left.updatedAt),
+        ),
+      );
+    },
+  );
+
   useEffect(() => {
     void refreshWorkspaceState(workspace.id, deferredTraceQuery);
   }, [deferredTraceQuery, refreshWorkspaceState, workspace.id]);
 
   useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const storedIdentity = window.sessionStorage.getItem('present:reset:identity');
+    const identity = storedIdentity ?? `operator-${Math.random().toString(36).slice(2, 10)}`;
+    const storedName = window.sessionStorage.getItem('present:reset:name');
+    const displayName = storedName ?? `Mission ${identity.slice(-4).toUpperCase()}`;
+
+    window.sessionStorage.setItem('present:reset:identity', identity);
+    window.sessionStorage.setItem('present:reset:name', displayName);
+    localIdentityRef.current = identity;
+    localDisplayNameRef.current = displayName;
+    setLocalIdentity(identity);
+    setLocalPresenceLabel(displayName);
+  }, []);
+
+  useEffect(() => {
     void loadWorkspaceFiles(workspace.id, '');
     void loadDefaultWorkspaceFile(workspace.id);
   }, [loadDefaultWorkspaceFile, loadWorkspaceFiles, workspace.id]);
+
+  useEffect(() => {
+    if (!localIdentity) return;
+
+    void syncPresence('connected');
+
+    const visibilityHandler = () => {
+      void syncPresence(document.hidden ? 'away' : 'connected');
+    };
+    const heartbeat = window.setInterval(() => {
+      void syncPresence(document.hidden ? 'idle' : 'connected');
+      void refreshWorkspaceState(workspace.id, deferredTraceQuery);
+    }, 15000);
+    const cleanup = () => {
+      void requestJson('/api/reset/presence', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          workspaceSessionId: workspace.id,
+          identity: localIdentityRef.current,
+          state: 'offline',
+        }),
+      }).catch(() => {
+        // Best effort cleanup only.
+      });
+    };
+
+    window.addEventListener('visibilitychange', visibilityHandler);
+    window.addEventListener('pagehide', cleanup);
+
+    return () => {
+      window.clearInterval(heartbeat);
+      window.removeEventListener('visibilitychange', visibilityHandler);
+      window.removeEventListener('pagehide', cleanup);
+      cleanup();
+    };
+  }, [deferredTraceQuery, localIdentity, refreshWorkspaceState, syncPresence, workspace.id]);
+
+  useEffect(() => {
+    if (!activeDocument?.path || typeof window === 'undefined' || typeof BroadcastChannel === 'undefined') {
+      setDraftSyncEnabled(false);
+      setDraftSyncPeer(null);
+      liveDraftChannelRef.current?.close();
+      liveDraftChannelRef.current = null;
+      return;
+    }
+
+    const channel = new BroadcastChannel(`present-reset-draft:${workspace.id}:${activeDocument.path}`);
+    liveDraftChannelRef.current?.close();
+    liveDraftChannelRef.current = channel;
+    setDraftSyncEnabled(true);
+    setDraftSyncPeer(null);
+
+    channel.onmessage = (event) => {
+      const payload = event.data as {
+        sourceId?: string;
+        displayName?: string;
+        content?: string;
+      };
+      if (!payload || payload.sourceId === localIdentityRef.current || typeof payload.content !== 'string') {
+        return;
+      }
+      pendingRemoteDraftRef.current = payload.content;
+      setDraftSyncPeer(payload.displayName ?? 'Another editor');
+      setCodeDraft(payload.content);
+    };
+
+    channel.postMessage({
+      type: 'hello',
+      sourceId: localIdentityRef.current,
+      displayName: localDisplayNameRef.current,
+      content: codeDraft,
+    });
+    void syncPresence(document.hidden ? 'idle' : 'connected');
+
+    return () => {
+      channel.close();
+      if (liveDraftChannelRef.current === channel) {
+        liveDraftChannelRef.current = null;
+      }
+      setDraftSyncEnabled(false);
+      setDraftSyncPeer(null);
+    };
+  }, [activeDocument?.path, syncPresence, workspace.id]);
+
+  useEffect(() => {
+    if (!activeDocument?.path || !draftSyncEnabled || !liveDraftChannelRef.current) return;
+
+    if (pendingRemoteDraftRef.current === codeDraft) {
+      pendingRemoteDraftRef.current = null;
+      return;
+    }
+
+    const timeout = window.setTimeout(() => {
+      liveDraftChannelRef.current?.postMessage({
+        type: 'draft',
+        sourceId: localIdentityRef.current,
+        displayName: localDisplayNameRef.current,
+        content: codeDraft,
+      });
+    }, 90);
+
+    return () => window.clearTimeout(timeout);
+  }, [activeDocument?.path, codeDraft, draftSyncEnabled]);
+
+  useEffect(() => {
+    if (!localIdentity) return;
+    void syncPresence(document.hidden ? 'idle' : 'connected');
+  }, [activeDocument?.path, draftSyncEnabled, localIdentity, syncPresence]);
 
   useEffect(() => {
     const currentTaskId = activeTaskId ?? tasks[0]?.id ?? null;
@@ -621,6 +786,13 @@ export function ResetWorkspaceShell({
                   ) : (
                     <p>Browse the workspace tree and load a real file into the editor.</p>
                   )}
+                  <p>
+                    {draftSyncEnabled
+                      ? draftSyncPeer
+                        ? `Live draft bridge active with ${draftSyncPeer}.`
+                        : `Live draft bridge active as ${localPresenceLabel}.`
+                      : 'Live draft bridge offline.'}
+                  </p>
                 </div>
                 <div className="reset-inline-actions">
                   <button
@@ -854,6 +1026,13 @@ export function ResetWorkspaceShell({
             </div>
           </div>
           <div className="reset-list">
+            {presence.slice(0, 4).map((member) => (
+              <article className="reset-list-card" key={member.id}>
+                <div className="reset-list-card__eyebrow">{member.state}</div>
+                <strong>{member.displayName}</strong>
+                <p>{member.metadata['activeFilePath'] ? String(member.metadata['activeFilePath']) : 'No active file'}</p>
+              </article>
+            ))}
             {executors.slice(0, 3).map((executor) => (
               <article className="reset-list-card" key={executor.id}>
                 <div className="reset-list-card__eyebrow">{executor.kind}</div>
