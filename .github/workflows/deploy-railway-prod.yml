@@ -5,6 +5,9 @@ on:
     branches: [main]
     paths:
       - 'src/lib/agents/**'
+      - 'src/app/api/reset/**'
+      - 'packages/**'
+      - 'services/**'
       - 'scripts/start-service.sh'
       - 'railway.toml'
       - 'Dockerfile'
@@ -55,6 +58,9 @@ jobs:
             agents:
               - 'src/lib/agents/**'
             shared:
+              - 'src/app/api/reset/**'
+              - 'packages/**'
+              - 'services/**'
               - 'scripts/start-service.sh'
               - 'railway.toml'
               - 'Dockerfile'

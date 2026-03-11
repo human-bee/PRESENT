@@ -1,0 +1,38 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "incremental": false
+  },
+  "include": [],
+  "exclude": [
+    "src/**/*.test.ts",
+    "src/**/*.test.tsx",
+    "tests/**/*"
+  ],
+  "files": [
+    "packages/contracts/src/index.ts",
+    "services/kernel/src/index.ts",
+    "services/codex-adapter/src/index.ts",
+    "packages/ui/src/index.ts",
+    "src/app/page.tsx",
+    "src/app/api/reset/runtime-manifest/route.ts",
+    "src/app/api/reset/model-profiles/route.ts",
+    "src/app/api/reset/workspaces/route.ts",
+    "src/app/api/reset/workspaces/[workspaceSessionId]/state/route.ts",
+    "src/app/api/reset/executors/route.ts",
+    "src/app/api/reset/executors/register/route.ts",
+    "src/app/api/reset/executors/heartbeat/route.ts",
+    "src/app/api/reset/executors/leases/route.ts",
+    "src/app/api/reset/presence/route.ts",
+    "src/app/api/reset/turns/route.ts",
+    "src/app/api/reset/tasks/route.ts",
+    "src/app/api/reset/tasks/[taskId]/route.ts",
+    "src/app/api/reset/tasks/[taskId]/events/route.ts",
+    "src/app/api/reset/artifacts/route.ts",
+    "src/app/api/reset/artifacts/[artifactId]/route.ts",
+    "src/app/api/reset/artifacts/[artifactId]/apply/route.ts",
+    "src/app/api/reset/approvals/route.ts",
+    "src/app/api/reset/traces/route.ts"
+  ]
+}
