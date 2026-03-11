@@ -1,6 +1,5 @@
 import {
   buildAllowedCardPool,
-  CARD_SUITS,
   parseCardRuntimeState,
   parseDiceRuntimeState,
   reduceCardRuntimeState,
@@ -14,16 +13,16 @@ describe('game widget utils', () => {
 
   it('clamps dice config and values into valid ranges', () => {
     const state = parseDiceRuntimeState({
-      diceCount: 5,
+      diceCount: 8,
+      diceSides: [1, 500, 12, 0, 7, 200, 4],
       dieOneSides: 1,
       dieTwoSides: 500,
-      values: [0, 999, 3],
+      values: [0, 999, 3, 4, 8, 1, 2],
     });
 
-    expect(state.diceCount).toBe(2);
-    expect(state.dieOneSides).toBe(2);
-    expect(state.dieTwoSides).toBe(100);
-    expect(state.values).toEqual([1, 100]);
+    expect(state.diceCount).toBe(6);
+    expect(state.diceSides).toEqual([2, 100, 12, 2, 7, 100]);
+    expect(state.values).toEqual([1, 100, 3, 2, 7, 1]);
   });
 
   it('emits a fresh dice roll id on repeated rolls', () => {
@@ -47,10 +46,10 @@ describe('game widget utils', () => {
   });
 
   it('builds a unique card pool inside the allowed subset', () => {
-    const pool = buildAllowedCardPool(1, 3, ['hearts', 'spades']);
+    const pool = buildAllowedCardPool(1, 3, ['hearts', 'spades'], 'custom');
 
     expect(pool).toHaveLength(6);
-    expect(pool.every((card) => ['hearts', 'spades'].includes(card.suit))).toBe(true);
+    expect(pool.every((card) => ['hearts', 'spades'].includes(card.suit ?? ''))).toBe(true);
     expect(pool[0]?.rankValue).toBe(1);
     expect(pool.at(-1)?.rankValue).toBe(3);
   });
@@ -69,6 +68,7 @@ describe('game widget utils', () => {
         drawCount: 3,
         rankMin: 1,
         rankMax: 1,
+        suitMode: 'custom',
         allowedSuits: ['hearts', 'spades'],
       }),
       { flip: true },
@@ -80,11 +80,34 @@ describe('game widget utils', () => {
     expect(state.validationMessage).toContain('Only 2 cards available');
   });
 
-  it('normalizes empty suit selections back to the full deck', () => {
+  it('supports an explicit no-suit deck mode', () => {
     const state = parseCardRuntimeState({
+      suitMode: 'none',
       allowedSuits: [],
     });
 
-    expect(state.allowedSuits).toEqual([...CARD_SUITS]);
+    expect(state.suitMode).toBe('none');
+    expect(state.allowedSuits).toEqual([]);
+  });
+
+  it('supports versus card layouts with numeric ranks', () => {
+    const state = reduceCardRuntimeState(
+      parseCardRuntimeState({
+        drawCount: 6,
+        layoutMode: 'versus',
+        rankMin: 1,
+        rankMax: 10,
+        rankStyle: 'numeric',
+        suitMode: 'none',
+      }),
+      { flip: true },
+      250,
+      () => 0.4,
+    );
+
+    expect(state.layoutMode).toBe('versus');
+    expect(state.rankStyle).toBe('numeric');
+    expect(state.cards).toHaveLength(6);
+    expect(state.cards.every((card) => card.suit === null)).toBe(true);
   });
 });

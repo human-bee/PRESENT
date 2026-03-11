@@ -5,18 +5,34 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 const GAME_WIDGET_STYLE_ID = 'present-game-widget-motion';
 const GAME_WIDGET_STYLE_TEXT = `
 @keyframes present-dice-bounce {
-  0% { transform: rotate(0deg) translateY(0px) scale(1); }
-  20% { transform: rotate(-8deg) translateY(-8px) scale(1.03); }
-  50% { transform: rotate(10deg) translateY(6px) scale(0.98); }
-  80% { transform: rotate(-4deg) translateY(-2px) scale(1.01); }
-  100% { transform: rotate(0deg) translateY(0px) scale(1); }
+  0% { transform: rotateX(0deg) rotateY(0deg) rotateZ(0deg) translateY(0px) scale3d(1, 1, 1); }
+  18% { transform: rotateX(18deg) rotateY(-26deg) rotateZ(-10deg) translateY(-18px) scale3d(1.02, 1.02, 1.02); }
+  38% { transform: rotateX(-28deg) rotateY(42deg) rotateZ(16deg) translateY(8px) scale3d(0.98, 0.98, 0.98); }
+  62% { transform: rotateX(24deg) rotateY(-44deg) rotateZ(-12deg) translateY(-10px) scale3d(1.03, 1.03, 1.03); }
+  82% { transform: rotateX(-12deg) rotateY(18deg) rotateZ(6deg) translateY(4px) scale3d(0.99, 0.99, 0.99); }
+  100% { transform: rotateX(0deg) rotateY(0deg) rotateZ(0deg) translateY(0px) scale3d(1, 1, 1); }
+}
+
+@keyframes present-dice-shadow {
+  0% { transform: scaleX(1) scaleY(1); opacity: 0.28; }
+  22% { transform: scaleX(0.82) scaleY(0.8); opacity: 0.16; }
+  58% { transform: scaleX(1.14) scaleY(1.08); opacity: 0.3; }
+  100% { transform: scaleX(1) scaleY(1); opacity: 0.24; }
 }
 
 @keyframes present-card-flip {
-  0% { transform: rotateY(0deg) translateY(0px); }
-  20% { transform: rotateY(75deg) translateY(-6px); }
-  50% { transform: rotateY(180deg) translateY(4px); }
-  100% { transform: rotateY(360deg) translateY(0px); }
+  0% { transform: rotateY(0deg) rotateZ(0deg) translateY(0px); }
+  20% { transform: rotateY(88deg) rotateZ(-4deg) translateY(-14px); }
+  48% { transform: rotateY(180deg) rotateZ(3deg) translateY(6px); }
+  76% { transform: rotateY(292deg) rotateZ(-2deg) translateY(-8px); }
+  100% { transform: rotateY(360deg) rotateZ(0deg) translateY(0px); }
+}
+
+@keyframes present-card-shadow {
+  0% { transform: scale(1); opacity: 0.2; }
+  30% { transform: scale(0.88); opacity: 0.1; }
+  66% { transform: scale(1.08); opacity: 0.24; }
+  100% { transform: scale(1); opacity: 0.18; }
 }
 `;
 
@@ -34,7 +50,7 @@ type SharedRuntimeOptions<T extends Record<string, unknown>> = {
   isEqual?: (left: T, right: T) => boolean;
 };
 
-const defaultIsEqual = <T extends Record<string, unknown>,>(left: T, right: T) => {
+const defaultIsEqual = <T extends Record<string, unknown>>(left: T, right: T) => {
   try {
     return JSON.stringify(left) === JSON.stringify(right);
   } catch {
