@@ -14,6 +14,7 @@ import type {
   WorkspaceSession,
 } from '@present/contracts';
 import { ArtifactPreviewFrame } from './artifact-preview-frame';
+import { ResetRoomPanel } from './reset-room-panel';
 
 const initialDraft = `// Codex-native workspace draft
 // This shell is backed by reset-era kernel contracts.
@@ -150,6 +151,24 @@ export function ResetWorkspaceShell({
   const [draftSyncPeer, setDraftSyncPeer] = useState<string | null>(null);
   const [draftSyncEnabled, setDraftSyncEnabled] = useState(false);
   const [activeTaskId, setActiveTaskId] = useState<string | null>(initialTasks[0]?.id ?? null);
+  const [legacyCanvasVisible, setLegacyCanvasVisible] = useState(false);
+  const [roomTelemetry, setRoomTelemetry] = useState<{
+    roomName: string | null;
+    connectionState: string;
+    participantCount: number;
+    agentStatus: string;
+    media: PresenceMember['media'];
+  }>({
+    roomName: null,
+    connectionState: 'disconnected',
+    participantCount: 0,
+    agentStatus: 'not-requested',
+    media: {
+      audio: false,
+      video: false,
+      screen: false,
+    },
+  });
   const [isBusy, setIsBusy] = useState(false);
   const deferredTraceQuery = useDeferredValue(traceQuery);
   const eventSourceRef = useRef<EventSource | null>(null);
@@ -243,14 +262,18 @@ export function ResetWorkspaceShell({
           displayName: localDisplayNameRef.current,
           state,
           media: {
-            audio: media?.audio ?? false,
-            video: media?.video ?? false,
-            screen: media?.screen ?? false,
+            audio: media?.audio ?? roomTelemetry.media.audio,
+            video: media?.video ?? roomTelemetry.media.video,
+            screen: media?.screen ?? roomTelemetry.media.screen,
           },
           metadata: {
             activeFilePath: activeDocument?.path ?? null,
             editorMode: 'reset_shell',
             draftSyncEnabled,
+            roomName: roomTelemetry.roomName,
+            roomConnectionState: roomTelemetry.connectionState,
+            roomParticipantCount: roomTelemetry.participantCount,
+            roomAgentStatus: roomTelemetry.agentStatus,
           },
         }),
       });
@@ -323,7 +346,7 @@ export function ResetWorkspaceShell({
       window.removeEventListener('pagehide', cleanup);
       cleanup();
     };
-  }, [deferredTraceQuery, localIdentity, refreshWorkspaceState, syncPresence, workspace.id]);
+  }, [deferredTraceQuery, localIdentity, refreshWorkspaceState, roomTelemetry, syncPresence, workspace.id]);
 
   useEffect(() => {
     if (!activeDocument?.path || typeof window === 'undefined' || typeof BroadcastChannel === 'undefined') {
@@ -832,14 +855,28 @@ export function ResetWorkspaceShell({
           <div className="reset-frame-shell">
             <div className="reset-panel__header">
               <div>
-                <div className="reset-frame-title">Canvas Bridge</div>
-                <strong>Archived TLDraw + LiveKit runtime</strong>
+                  <div className="reset-frame-title">Legacy Bridge</div>
+                  <strong>Archived TLDraw + old room runtime</strong>
+                  <p>Kept as an optional archive lane while the reset shell absorbs collaboration features directly.</p>
+                </div>
+                <div className="reset-inline-actions">
+                  <button
+                    type="button"
+                    onClick={() => setLegacyCanvasVisible((current) => !current)}
+                    className="reset-button reset-button--ghost"
+                  >
+                    {legacyCanvasVisible ? 'Hide Legacy Bridge' : 'Show Legacy Bridge'}
+                  </button>
+                  <a href="/canvas?legacy=1" className="reset-button reset-button--ghost">
+                    Open Legacy Canvas
+                  </a>
+                </div>
               </div>
-              <a href="/canvas?legacy=1" className="reset-button reset-button--ghost">
-                Open Legacy Canvas
-              </a>
-            </div>
-            <iframe title="Legacy canvas bridge" className="reset-legacy-frame" src={legacyCanvasUrl} loading="lazy" />
+            {legacyCanvasVisible ? (
+              <iframe title="Legacy canvas bridge" className="reset-legacy-frame" src={legacyCanvasUrl} loading="lazy" />
+            ) : (
+              <div className="reset-empty">Legacy canvas bridge hidden. Open it only when you need the archived TLDraw runtime.</div>
+            )}
           </div>
           <div className="reset-widget-form">
             <input
@@ -1025,12 +1062,31 @@ export function ResetWorkspaceShell({
               <strong>{initialManifest.collaboration.dualClient ? 'web + desktop' : 'single'}</strong>
             </div>
           </div>
+          <ResetRoomPanel
+            workspaceSessionId={workspace.id}
+            operatorLabel={localPresenceLabel}
+            onTelemetryChange={(telemetry) => {
+              setRoomTelemetry({
+                roomName: telemetry.roomName,
+                connectionState: telemetry.connectionState,
+                participantCount: telemetry.participantCount,
+                agentStatus: telemetry.agentStatus,
+                media: telemetry.media,
+              });
+            }}
+          />
           <div className="reset-list">
             {presence.slice(0, 4).map((member) => (
               <article className="reset-list-card" key={member.id}>
                 <div className="reset-list-card__eyebrow">{member.state}</div>
                 <strong>{member.displayName}</strong>
-                <p>{member.metadata['activeFilePath'] ? String(member.metadata['activeFilePath']) : 'No active file'}</p>
+                <p>
+                  {member.metadata['activeFilePath']
+                    ? String(member.metadata['activeFilePath'])
+                    : member.metadata['roomName']
+                      ? `Room ${String(member.metadata['roomName'])}`
+                      : 'No active file'}
+                </p>
               </article>
             ))}
             {executors.slice(0, 3).map((executor) => (

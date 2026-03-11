@@ -191,10 +191,7 @@ export function useLivekitConnection(options: UseLivekitConnectionOptions): Live
       return;
     }
 
-    const id = providedRoomName.startsWith('canvas-')
-      ? providedRoomName.substring('canvas-'.length)
-      : providedRoomName;
-    const link = `${window.location.origin}/canvas?id=${encodeURIComponent(id)}`;
+    const link = `${window.location.origin}/?room=${encodeURIComponent(providedRoomName)}`;
 
     try {
       await navigator.clipboard.writeText(link);
