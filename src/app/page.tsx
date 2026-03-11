@@ -2,6 +2,7 @@ import { ResetWorkspaceShell } from '@present/ui';
 import {
   buildRuntimeManifest,
   createArtifact,
+  ensureResetKernelHydrated,
   listExecutorSessions,
   listApprovalRequests,
   listArtifacts,
@@ -13,6 +14,8 @@ import {
 } from '@present/kernel';
 
 export default async function Home() {
+  await ensureResetKernelHydrated();
+
   const workspace = openWorkspaceSession({
     workspacePath: process.cwd(),
     branch: 'codex/reset',

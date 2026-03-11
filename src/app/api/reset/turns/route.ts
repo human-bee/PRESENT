@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { getTaskRun } from '@present/kernel';
 import { startCodexTurn } from '@present/codex-adapter';
+import { flushResetKernelWrites, hydrateResetKernel } from '../_lib/persistence';
 
 export const runtime = 'nodejs';
 
@@ -19,6 +20,7 @@ const startTurnSchema = z.object({
 });
 
 export async function GET(request: Request) {
+  await hydrateResetKernel();
   const taskRunId = new URL(request.url).searchParams.get('taskRunId');
   if (!taskRunId) {
     return NextResponse.json({ error: 'taskRunId is required' }, { status: 400 });
@@ -32,8 +34,10 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
+    await hydrateResetKernel();
     const payload = startTurnSchema.parse(await request.json());
     const taskRun = await startCodexTurn(payload);
+    await flushResetKernelWrites();
     return NextResponse.json({ taskRun }, { status: 202 });
   } catch (error) {
     return NextResponse.json(

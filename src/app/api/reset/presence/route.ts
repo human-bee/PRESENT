@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { listPresenceMembers, setPresenceMemberState, upsertPresenceMember } from '@present/kernel';
 import { jsonObjectSchema } from '@present/contracts';
+import { flushResetKernelWrites, hydrateResetKernel } from '../_lib/persistence';
 
 export const runtime = 'nodejs';
 
@@ -27,15 +28,17 @@ const updateStateSchema = z.object({
 });
 
 export async function GET(request: NextRequest) {
+  await hydrateResetKernel();
   const workspaceSessionId = request.nextUrl.searchParams.get('workspaceSessionId') ?? undefined;
   return NextResponse.json({ presence: listPresenceMembers(workspaceSessionId) });
 }
 
 export async function POST(request: NextRequest) {
+  await hydrateResetKernel();
   const payload = await request.json();
   if (payload?.displayName) {
     const presenceMember = upsertPresenceSchema.parse(payload);
-    return NextResponse.json({
+    const response = NextResponse.json({
       presenceMember: upsertPresenceMember({
         ...presenceMember,
         media: {
@@ -45,6 +48,8 @@ export async function POST(request: NextRequest) {
         },
       }),
     });
+    await flushResetKernelWrites();
+    return response;
   }
 
   const stateUpdate = updateStateSchema.parse(payload);
@@ -56,5 +61,6 @@ export async function POST(request: NextRequest) {
   if (!presenceMember) {
     return NextResponse.json({ error: 'Presence member not found' }, { status: 404 });
   }
+  await flushResetKernelWrites();
   return NextResponse.json({ presenceMember });
 }

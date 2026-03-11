@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { registerExecutorSession } from '@present/kernel';
+import { flushResetKernelWrites, hydrateResetKernel } from '../../_lib/persistence';
 
 export const runtime = 'nodejs';
 
@@ -27,7 +28,9 @@ const registerSchema = z.object({
 });
 
 export async function POST(request: NextRequest) {
+  await hydrateResetKernel();
   const payload = registerSchema.parse(await request.json());
   const executorSession = registerExecutorSession(payload);
+  await flushResetKernelWrites();
   return NextResponse.json({ executorSession }, { status: 201 });
 }

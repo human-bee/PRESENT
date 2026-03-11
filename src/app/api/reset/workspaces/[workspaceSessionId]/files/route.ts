@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { createWorkspacePatchArtifact, listWorkspaceFiles } from '@present/kernel';
+import { flushResetKernelWrites, hydrateResetKernel } from '../../../_lib/persistence';
 
 export const runtime = 'nodejs';
 
@@ -16,6 +17,7 @@ export async function GET(
   context: { params: Promise<{ workspaceSessionId: string }> },
 ) {
   try {
+    await hydrateResetKernel();
     const { workspaceSessionId } = await context.params;
     const url = new URL(request.url);
     const directoryPath = url.searchParams.get('directoryPath');
@@ -39,6 +41,7 @@ export async function POST(
   context: { params: Promise<{ workspaceSessionId: string }> },
 ) {
   try {
+    await hydrateResetKernel();
     const { workspaceSessionId } = await context.params;
     const payload = createPatchArtifactSchema.parse(await request.json());
     const artifact = createWorkspacePatchArtifact({
@@ -48,6 +51,7 @@ export async function POST(
       traceId: payload.traceId,
       title: payload.title,
     });
+    await flushResetKernelWrites();
     return NextResponse.json({ artifact }, { status: 201 });
   } catch (error) {
     return NextResponse.json(
