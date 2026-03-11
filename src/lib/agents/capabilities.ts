@@ -181,6 +181,16 @@ const ALL_COMPONENT_CAPABILITIES: ComponentCapability[] = [
     examples: ['create crowd pulse widget', 'track hand count', 'show crowd q&a'],
   },
   {
+    name: 'DiceWidget',
+    description: 'Interactive dice roller with shared replay',
+    examples: ['create dice widget', 'roll the dice', 'make the first die 20 sided'],
+  },
+  {
+    name: 'CardWidget',
+    description: 'Interactive playing-card flip widget with shared replay',
+    examples: ['create card widget', 'flip three cards', 'flip hearts only from ace through ten'],
+  },
+  {
     name: 'McpAppWidget',
     description: 'MCP App iframe host',
     examples: ['open MCP app', 'show MCP widget'],

@@ -11,6 +11,8 @@ import MeetingSummaryWidget, { meetingSummaryWidgetSchema } from '@/components/u
 import MemoryRecallWidget, { memoryRecallWidgetSchema } from '@/components/ui/productivity/memory-recall-widget';
 import CrowdPulseWidget from '@/components/ui/productivity/crowd-pulse-widget';
 import { crowdPulseWidgetSchema } from '@/components/ui/productivity/crowd-pulse-schema';
+import DiceWidget, { diceWidgetSchema } from '@/components/ui/productivity/dice-widget';
+import CardWidget, { cardWidgetSchema } from '@/components/ui/productivity/card-widget';
 import McpAppWidget, { mcpAppWidgetSchema } from '@/components/ui/mcp/mcp-app-widget';
 import {
   LivekitParticipantTile,
@@ -219,6 +221,24 @@ const baseComponents: RegistryComponentEntry[] = [
     group: 'widget-lifecycle',
     lifecycleOps: TIER1_LIFECYCLE_OPS,
     critical: true,
+  },
+  {
+    name: 'DiceWidget',
+    description:
+      'Interactive tabletop dice roller with synchronized rolls across the live canvas.',
+    component: DiceWidget,
+    propsSchema: extendedSchema(diceWidgetSchema),
+    tier: 'tier2',
+    group: 'widget-lifecycle',
+  },
+  {
+    name: 'CardWidget',
+    description:
+      'Interactive playing-card flip widget with synchronized reveals across the live canvas.',
+    component: CardWidget,
+    propsSchema: extendedSchema(cardWidgetSchema),
+    tier: 'tier2',
+    group: 'widget-lifecycle',
   },
   {
     name: 'McpAppWidget',

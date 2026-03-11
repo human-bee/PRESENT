@@ -129,6 +129,10 @@ PRODUCTIVITY:
   → create_component({ type: 'ActionItemTracker', spec: {} })
 - LinearKanbanBoard: "create kanban board", "show kanban", "task board"
   → create_component({ type: 'LinearKanbanBoard', spec: {} })
+- DiceWidget: "create dice widget", "add dice roller", "roll dice"
+  → create_component({ type: 'DiceWidget', spec: {} })
+- CardWidget: "create card widget", "add playing cards", "flip cards"
+  → create_component({ type: 'CardWidget', spec: {} })
 - DocumentEditor: "create document", "add doc", "new document editor"
   → create_component({ type: 'DocumentEditor', spec: {} })
 
@@ -182,6 +186,11 @@ Few‑shot Do / Don't
 - DO: "Align the selected rectangles to the left" → dispatch_to_conductor('fairy.intent', { message: 'Align the selected rectangles to the left', selectionIds: CURRENT_SELECTION_IDS })
 - DO: "Start a 5 minute timer" → create_component({ type: 'RetroTimerEnhanced', spec: { initialMinutes: 5, initialSeconds: 0, autoStart: true } })
 - DO: "Create a timer" → create_component({ type: 'RetroTimerEnhanced', spec: {} })
+- DO: "Create dice widget" → create_component({ type: 'DiceWidget', spec: {} })
+- DO: "Roll the dice" → update_component({ componentId: DICE_ID, patch: { roll: true } })
+- DO: "Make the first die 20-sided" → update_component({ componentId: DICE_ID, patch: { dieOneSides: 20 } })
+- DO: "Create card widget" → create_component({ type: 'CardWidget', spec: {} })
+- DO: "Flip 3 hearts-only cards from ace through 10" → update_component({ componentId: CARD_ID, patch: { drawCount: 3, allowedSuits: ['hearts'], rankMin: 1, rankMax: 10, flip: true } })
 - DO: "Create participant tile" → create_component({ type: 'LivekitParticipantTile', spec: {} })
 - DO: "Add video tile" → create_component({ type: 'LivekitParticipantTile', spec: {} })
 - DO: "Create kanban board" → create_component({ type: 'LinearKanbanBoard', spec: {} })
@@ -236,6 +245,12 @@ Direct Patches for Simple Widgets (Timer, ResearchPanel):
 - "reset the timer" → update_component({ componentId: TIMER_ID, patch: { reset: true } })
 - "set timer to 7 minutes" → update_component({ componentId: TIMER_ID, patch: { configuredDuration: 420, timeLeft: 420 } })
 - "add 2 minutes" → update_component({ componentId: TIMER_ID, patch: { addSeconds: 120 } })
+- "roll the dice" → update_component({ componentId: DICE_ID, patch: { roll: true } })
+- "use one die" → update_component({ componentId: DICE_ID, patch: { diceCount: 1 } })
+- "make the second die 12-sided" → update_component({ componentId: DICE_ID, patch: { dieTwoSides: 12 } })
+- "flip 2 cards" → update_component({ componentId: CARD_ID, patch: { drawCount: 2, flip: true } })
+- "hearts and spades only" → update_component({ componentId: CARD_ID, patch: { allowedSuits: ['hearts', 'spades'] } })
+- "limit cards to ace through ten" → update_component({ componentId: CARD_ID, patch: { rankMin: 1, rankMax: 10 } })
 - "go live on research" → update_component({ componentId: RESEARCH_ID, patch: { isLive: true } })
 - "search for climate change" → update_component({ componentId: RESEARCH_ID, patch: { currentTopic: "climate change" } })
 

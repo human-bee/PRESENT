@@ -62,6 +62,8 @@ export const WIDGET_LIFECYCLE_MANIFEST: Record<string, WidgetLifecycleMetadata> 
     ActionItemTracker: { tier: 'tier1', group: 'productivity', critical: true },
     LinearKanbanBoard: { tier: 'tier1', group: 'productivity', critical: true },
     CrowdPulseWidget: { tier: 'tier1', group: 'productivity', critical: true },
+    DiceWidget: { tier: 'tier1', group: 'productivity', critical: true },
+    CardWidget: { tier: 'tier1', group: 'productivity', critical: true },
 
     // Research (Tier 1)
     ResearchPanel: { tier: 'tier1', group: 'research', critical: true },
