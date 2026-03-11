@@ -531,14 +531,32 @@ export default defineAgent({
       return ids;
     };
 
-    const resolveParticipantVoiceTurnMode = (participantId?: string | null): VoiceTurnMode =>
-      resolveVoiceTurnModeForParticipant(voiceTurnModesByParticipant, {
+    const resolveParticipantVoiceTurnMode = (
+      participantId?: string | null,
+      options?: { conservativeFallback?: boolean },
+    ): VoiceTurnMode => {
+      const fallbackParticipantIds =
+        participantId && participantId !== 'user' ? [] : getFallbackVoiceTurnParticipantIds();
+
+      const resolved = resolveVoiceTurnModeForParticipant(voiceTurnModesByParticipant, {
         participantId,
-        fallbackParticipantIds:
-          participantId && participantId !== 'user'
-            ? undefined
-            : getFallbackVoiceTurnParticipantIds(),
+        fallbackParticipantIds,
       });
+
+      if (
+        resolved === 'auto' &&
+        options?.conservativeFallback &&
+        fallbackParticipantIds.length > 1 &&
+        fallbackParticipantIds.some(
+          (fallbackParticipantId) =>
+            voiceTurnModesByParticipant.get(fallbackParticipantId) === 'manual',
+        )
+      ) {
+        return 'manual';
+      }
+
+      return resolved;
+    };
 
     const drainPendingTranscriptions = async () => {
       if (!transcriptionProcessingEnabled || !handleBufferedTranscription) return;
@@ -4920,7 +4938,9 @@ Your only output is function calls. Never use plain text unless absolutely neces
             });
           } catch {}
 
-          const participantVoiceTurnMode = resolveParticipantVoiceTurnMode('user');
+          const participantVoiceTurnMode = resolveParticipantVoiceTurnMode(undefined, {
+            conservativeFallback: true,
+          });
           if (shouldSuppressAutomaticTurn(participantVoiceTurnMode, false)) {
             console.log(
               '[VoiceAgent] manual turn mode suppressing auto reply from realtime transcript',

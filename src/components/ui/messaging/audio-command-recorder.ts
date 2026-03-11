@@ -14,9 +14,12 @@ type RecorderInternals = {
   startedAt: number;
   inputSampleRate: number;
   generation: number;
+  totalSamples: number;
+  maxSamples: number;
 };
 
 const TARGET_SAMPLE_RATE = 16_000;
+const MAX_RECORDING_DURATION_MS = 15_000;
 
 function mergeChunks(chunks: Float32Array[]): Float32Array {
   const totalLength = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
@@ -135,6 +138,8 @@ export function createAudioCommandRecorder(targetSampleRate = TARGET_SAMPLE_RATE
     startedAt: 0,
     inputSampleRate: targetSampleRate,
     generation: 0,
+    totalSamples: 0,
+    maxSamples: targetSampleRate,
   };
 
   const cleanup = async () => {
@@ -197,10 +202,24 @@ export function createAudioCommandRecorder(targetSampleRate = TARGET_SAMPLE_RATE
       state.chunks = [];
       state.startedAt = Date.now();
       state.inputSampleRate = audioContext.sampleRate;
+      state.totalSamples = 0;
+      state.maxSamples = Math.max(
+        1,
+        Math.round((audioContext.sampleRate * MAX_RECORDING_DURATION_MS) / 1000),
+      );
 
       processor.onaudioprocess = (event) => {
+        const remainingSamples = state.maxSamples - state.totalSamples;
+        if (remainingSamples <= 0) {
+          return;
+        }
         const channel = event.inputBuffer.getChannelData(0);
-        state.chunks.push(new Float32Array(channel));
+        const nextChunk =
+          channel.length > remainingSamples
+            ? new Float32Array(channel.slice(0, remainingSamples))
+            : new Float32Array(channel);
+        state.chunks.push(nextChunk);
+        state.totalSamples += nextChunk.length;
       };
 
       source.connect(processor);
@@ -217,6 +236,7 @@ export function createAudioCommandRecorder(targetSampleRate = TARGET_SAMPLE_RATE
       await cleanup();
       state.chunks = [];
       state.startedAt = 0;
+      state.totalSamples = 0;
 
       if (!capturedChunks.length) {
         return null;
@@ -235,6 +255,7 @@ export function createAudioCommandRecorder(targetSampleRate = TARGET_SAMPLE_RATE
       state.generation += 1;
       state.chunks = [];
       state.startedAt = 0;
+      state.totalSamples = 0;
       await cleanup();
     },
   };

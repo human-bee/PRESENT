@@ -686,11 +686,14 @@ export const MessageThreadCollapsible = React.forwardRef<
         }>;
       };
 
+      let deliveryStatus: 'sent' | 'queued' = 'sent';
+
       if (typeof busWithDelivery.sendWithResult === 'function') {
         const delivery = await busWithDelivery.sendWithResult('transcription', payload);
         if (delivery.status === 'failed') {
           throw new Error(`Delivery failed${delivery.reason ? `: ${delivery.reason}` : ''}`);
         }
+        deliveryStatus = delivery.status;
         if (delivery.status === 'queued') {
           const queueHint =
             typeof delivery.queueLength === 'number'
@@ -721,28 +724,33 @@ export const MessageThreadCollapsible = React.forwardRef<
         bus.send('transcription', payload);
       }
 
-      try {
-        window.dispatchEvent(
-          new CustomEvent('livekit:transcription-replay', {
-            detail: {
-              event_id: payload.event_id,
-              speaker,
-              text: trimmed,
-              timestamp: payload.timestamp,
-            },
-          }),
-        );
-      } catch {}
+      if (deliveryStatus === 'sent') {
+        try {
+          window.dispatchEvent(
+            new CustomEvent('livekit:transcription-replay', {
+              detail: {
+                event_id: payload.event_id,
+                speaker,
+                text: trimmed,
+                timestamp: payload.timestamp,
+              },
+            }),
+          );
+        } catch {}
 
-      try {
-        window.dispatchEvent(
-          new CustomEvent('custom:transcription-local', {
-            detail: payload,
-          }),
-        );
-      } catch {}
+        try {
+          window.dispatchEvent(
+            new CustomEvent('custom:transcription-local', {
+              detail: payload,
+            }),
+          );
+        } catch {}
+      }
 
-      return payload;
+      return {
+        payload,
+        deliveryStatus,
+      };
     },
     [appendSystemCall, bus, livekitCtx?.roomName, room, user],
   );
@@ -806,10 +814,14 @@ export const MessageThreadCollapsible = React.forwardRef<
           return;
         }
         const transcript = await transcribeRecordedCommand(audio.audioBase64, audio.sampleRate);
-        await dispatchManualTranscript(transcript);
+        const dispatchResult = await dispatchManualTranscript(transcript);
         recordStateRef.current = 'idle';
         setRecordState('idle');
-        setRecordStatus(`Sent command: "${transcript}"`);
+        setRecordStatus(
+          dispatchResult.deliveryStatus === 'queued'
+            ? `Queued command: "${transcript}"`
+            : `Sent command: "${transcript}"`,
+        );
       } catch (error) {
         await restoreRoomMic();
         recordStateRef.current = 'error';
@@ -909,6 +921,7 @@ export const MessageThreadCollapsible = React.forwardRef<
   React.useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (
+        isOpen === false ||
         !isManualTurnMode ||
         room?.state !== 'connected' ||
         isSending ||
@@ -957,7 +970,7 @@ export const MessageThreadCollapsible = React.forwardRef<
       window.removeEventListener('keyup', handleKeyUp);
       window.removeEventListener('blur', handleWindowBlur);
     };
-  }, [beginRecordCommand, finishRecordCommand, isManualTurnMode, isSending, room?.state]);
+  }, [beginRecordCommand, finishRecordCommand, isManualTurnMode, isOpen, isSending, room?.state]);
 
   // Track agent presence from store transcripts
   React.useEffect(() => {
