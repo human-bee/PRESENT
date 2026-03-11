@@ -9,6 +9,9 @@ export interface PromotableItem {
     width?: number; // Optional dimensions
     height?: number;
     title?: string; // For bookmarks/embeds
+    x?: number; // Optional canvas placement
+    y?: number;
+    sourceComponentId?: string; // Widget/component that originated this promotable item
   };
   label: string; // Human-readable description (e.g., "Generated Chart", "Source Link")
 }

@@ -79,6 +79,7 @@ export const WIDGET_LIFECYCLE_MANIFEST: Record<string, WidgetLifecycleMetadata> 
     YoutubeEmbed: { tier: 'tier2', group: 'media', critical: false },
     YoutubeSearchEnhanced: { tier: 'tier2', group: 'media', critical: false },
     WeatherForecast: { tier: 'tier2', group: 'other', critical: false },
+    AIImageGenerator: { tier: 'tier2', group: 'media', critical: false },
     RetroTimer: { tier: 'tier2', group: 'productivity', critical: false },
     DocumentEditor: { tier: 'tier2', group: 'documents', critical: false },
     LiveCaptions: { tier: 'tier2', group: 'integration', critical: false },
@@ -101,4 +102,3 @@ export const getWidgetLifecycleMetadata = (
 
 export const isTier1Widget = (componentName: string | null | undefined): boolean =>
   getWidgetLifecycleMetadata(componentName)?.tier === 'tier1';
-
