@@ -595,6 +595,19 @@
   border-color: rgba(255, 255, 255, 0.08);
 }
 
+.reset-legacy-frame {
+  width: 100%;
+  min-height: 360px;
+  border: 1px solid rgba(24, 20, 17, 0.1);
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.38);
+}
+
+.dark .reset-legacy-frame {
+  border-color: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+}
+
 .reset-pill--approved {
   color: #116c41;
 }
@@ -602,6 +615,98 @@
 .reset-pill--rejected,
 .reset-pill--expired {
   color: #8a3622;
+}
+
+.legacy-archive {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 32px;
+  background:
+    radial-gradient(circle at top left, rgba(246, 165, 102, 0.16), transparent 28%),
+    linear-gradient(180deg, #f5eee5 0%, #ebe3d8 48%, #dfd4c7 100%);
+}
+
+.legacy-archive__panel {
+  width: min(100%, 760px);
+  padding: 32px;
+  border-radius: 32px;
+  border: 1px solid rgba(24, 20, 17, 0.08);
+  background: rgba(255, 255, 255, 0.7);
+  box-shadow: 0 24px 90px rgba(101, 76, 52, 0.12);
+}
+
+.legacy-archive__eyebrow {
+  font: 600 11px/1.2 'SFMono-Regular', 'Menlo', ui-monospace, monospace;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  color: #a95b23;
+}
+
+.legacy-archive__panel h1 {
+  margin: 14px 0 12px;
+  font-family: 'Iowan Old Style', 'Palatino Linotype', 'Book Antiqua', serif;
+  font-size: clamp(34px, 6vw, 54px);
+  line-height: 0.98;
+}
+
+.legacy-archive__panel p {
+  margin: 0 0 14px;
+  max-width: 62ch;
+  color: rgba(24, 20, 17, 0.74);
+  line-height: 1.6;
+}
+
+.legacy-archive__detail {
+  font-size: 14px;
+}
+
+.legacy-archive__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.legacy-archive__button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  padding: 12px 18px;
+  background: #17171b;
+  color: #f5ece3;
+  font-weight: 600;
+}
+
+.legacy-archive__button--secondary {
+  background: transparent;
+  color: inherit;
+  border: 1px solid rgba(24, 20, 17, 0.12);
+}
+
+.legacy-canvas-shell__banner {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding: 12px 18px;
+  background: rgba(246, 165, 102, 0.18);
+  border-bottom: 1px solid rgba(169, 91, 35, 0.16);
+  backdrop-filter: blur(12px);
+}
+
+.legacy-canvas-shell__banner span {
+  font: 600 10px/1.2 'SFMono-Regular', 'Menlo', ui-monospace, monospace;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #a95b23;
+}
+
+.legacy-canvas-shell__banner strong {
+  font-size: 13px;
 }
 
 @media (max-width: 1200px) {
@@ -623,6 +728,10 @@
     padding: 18px;
   }
 
+  .legacy-archive {
+    padding: 18px;
+  }
+
   .reset-hero,
   .reset-topline,
   .reset-bottom-grid,
@@ -637,6 +746,10 @@
 
   .reset-inline-form,
   .reset-inline-actions {
+    flex-direction: column;
+  }
+
+  .legacy-archive__actions {
     flex-direction: column;
   }
 }
