@@ -26,6 +26,12 @@ import type { JsonObject } from '@/lib/utils/json-schema';
 import { ConnectionState, RoomEvent, RemoteTrackPublication, Track } from 'livekit-client';
 import { createLiveKitBus } from '@/lib/livekit/livekit-bus';
 import {
+  parseVoiceControlMessage,
+  resolveVoiceTurnModeForParticipant,
+  shouldSuppressAutomaticTurn,
+  type VoiceTurnMode,
+} from '@/lib/livekit/voice-control';
+import {
   recordModelIoEvent,
   recordToolIoEvent,
 } from '@/lib/agents/shared/replay-telemetry';
@@ -4036,6 +4042,7 @@ Your only output is function calls. Never use plain text unless absolutely neces
     let publishAssistantTranscript: ((text: string) => Promise<void>) | null = null;
     let lastUserPrompt: string | null = null;
     let lastRequesterParticipantId: string | null = null;
+    const voiceTurnModesByParticipant = new Map<string, VoiceTurnMode>();
     let latestAgentState: voice.AgentState = 'initializing';
     let recoveringActiveResponse = false;
     const lastPrewarmAtByRoute = new Map<IntentRoute, number>();
@@ -4220,6 +4227,17 @@ Your only output is function calls. Never use plain text unless absolutely neces
       await Promise.allSettled(tasks);
     };
 
+    liveKitBus.on('voice_control', (message: unknown) => {
+      const control = parseVoiceControlMessage(message);
+      if (!control?.participantId) return;
+      voiceTurnModesByParticipant.set(control.participantId, control.mode);
+      console.log('[VoiceAgent] voice turn mode updated', {
+        participantId: allowSensitiveLogging ? control.participantId : '[redacted]',
+        mode: control.mode,
+        roomId: control.roomId ?? job.room.name ?? null,
+      });
+    });
+
     handleBufferedTranscription = async ({
       eventId,
       text,
@@ -4274,6 +4292,19 @@ Your only output is function calls. Never use plain text unless absolutely neces
         speaker?.trim() ||
         participantId?.trim() ||
         'user';
+      const resolvedTurnMode = resolveVoiceTurnModeForParticipant(voiceTurnModesByParticipant, {
+        participantId,
+        fallbackParticipantIds: [participantId, speaker],
+      });
+      if (shouldSuppressAutomaticTurn(resolvedTurnMode, Boolean(isManual))) {
+        console.log('[VoiceAgent] suppressed automatic turn for manual-mode participant', {
+          participantId: allowSensitiveLogging ? participantId : '[redacted]',
+          speaker: allowSensitiveLogging ? speaker : '[redacted]',
+          isManual,
+          resolvedTurnMode,
+        });
+        return;
+      }
       const attributedInput =
         speakerLabel && speakerLabel !== 'user' ? `${speakerLabel}: ${text}` : text;
       console.log(
