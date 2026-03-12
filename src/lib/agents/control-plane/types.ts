@@ -1,4 +1,4 @@
-export const MODEL_PROVIDERS = ['openai', 'anthropic', 'google', 'together', 'cerebras'] as const;
+export const MODEL_PROVIDERS = ['openai', 'anthropic', 'google', 'together', 'cerebras', 'fal', 'xai'] as const;
 export type ModelProvider = (typeof MODEL_PROVIDERS)[number];
 
 export const KNOB_SCOPES = ['global', 'room', 'user', 'task'] as const;

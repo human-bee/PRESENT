@@ -246,6 +246,11 @@ const ALL_COMPONENT_CAPABILITIES: ComponentCapability[] = [
     description: 'AI-powered infographic generator',
     examples: ['create infographic', 'generate infographic', 'visualize conversation'],
   },
+  {
+    name: 'AIImageGenerator',
+    description: 'Prompt-driven image generator that can drop images onto the canvas',
+    examples: ['create image generator', 'make an image widget', 'generate an image on the canvas'],
+  },
 
   // Utility
   {

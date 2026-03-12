@@ -4,6 +4,8 @@ export type AgentProvider =
   | 'google'
   | 'cerebras'
   | 'together'
+  | 'fal'
+  | 'xai'
   | 'debug'
   | 'unknown';
 

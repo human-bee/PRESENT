@@ -13,6 +13,9 @@ const clampDimension = (value: unknown, fallback: number, min = 48): number => {
   return fallback;
 };
 
+const isFiniteNumber = (value: unknown): value is number =>
+  typeof value === 'number' && Number.isFinite(value);
+
 const isValidUrl = (value: unknown): value is string => {
   if (typeof value !== 'string' || !value.trim()) return false;
   try {
@@ -23,11 +26,70 @@ const isValidUrl = (value: unknown): value is string => {
   }
 };
 
+const normalizeImageMimeType = (value: unknown): string =>
+  typeof value === 'string' && value.startsWith('image/') ? value : 'image/png';
+
+const mimeTypeToExtension = (mimeType: string): string => {
+  switch (mimeType) {
+    case 'image/jpeg':
+      return 'jpg';
+    case 'image/webp':
+      return 'webp';
+    case 'image/gif':
+      return 'gif';
+    default:
+      return 'png';
+  }
+};
+
 const getViewportOrigin = (editor: Editor, w: number, h: number) => {
   const viewport = editor.getViewportPageBounds();
   const x = viewport ? viewport.midX - w / 2 : 0;
   const y = viewport ? viewport.midY - h / 2 : 0;
   return { x, y };
+};
+
+const getSourceComponentOrigin = (editor: Editor, item: PromotableItem) => {
+  const sourceComponentId = item.data?.sourceComponentId;
+  if (typeof sourceComponentId !== 'string' || !sourceComponentId.trim()) {
+    return null;
+  }
+
+  const sourceShape = (editor.getCurrentPageShapes?.() as
+    | Array<{ id: string; type?: string; props?: Record<string, unknown> }>
+    | undefined)?.find(
+    (shape) =>
+      shape?.type === 'custom' &&
+      String(shape?.props?.customComponent || '') === sourceComponentId,
+  );
+  if (!sourceShape?.id) {
+    return null;
+  }
+
+  const bounds = editor.getShapePageBounds?.(
+    sourceShape.id as Parameters<Editor['getShapePageBounds']>[0],
+  );
+  if (!bounds) {
+    return null;
+  }
+
+  return {
+    x: bounds.x + bounds.w + 48,
+    y: bounds.y,
+  };
+};
+
+const getInsertOrigin = (editor: Editor, item: PromotableItem, w: number, h: number) => {
+  if (isFiniteNumber(item.data?.x) && isFiniteNumber(item.data?.y)) {
+    return { x: item.data.x, y: item.data.y };
+  }
+
+  const sourceOrigin = getSourceComponentOrigin(editor, item);
+  if (sourceOrigin) {
+    return sourceOrigin;
+  }
+
+  return getViewportOrigin(editor, w, h);
 };
 
 const createImageShape = (editor: Editor, item: PromotableItem) => {
@@ -38,7 +100,8 @@ const createImageShape = (editor: Editor, item: PromotableItem) => {
   }
   const width = clampDimension(item.data?.width, 640, 16);
   const height = clampDimension(item.data?.height, Math.round(width * 0.66), 16);
-  const { x, y } = getViewportOrigin(editor, width, height);
+  const { x, y } = getInsertOrigin(editor, item, width, height);
+  const mimeType = normalizeImageMimeType(item.data?.mimeType);
 
   const assetId = AssetRecordType.createId();
   const asset = {
@@ -48,15 +111,15 @@ const createImageShape = (editor: Editor, item: PromotableItem) => {
     props: {
       w: width,
       h: height,
-      name: `${item.label || 'image'}.png`,
+      name: `${item.label || 'image'}.${mimeTypeToExtension(mimeType)}`,
       src: url,
       isAnimated: false,
-      mimeType: 'image/png',
+      mimeType,
     },
     meta: {},
   };
 
-  editor.createAssets([asset as any]);
+  editor.createAssets([asset]);
   editor.createShape({
     id: createShapeId(),
     type: 'image' as const,
@@ -67,7 +130,7 @@ const createImageShape = (editor: Editor, item: PromotableItem) => {
       h: height,
       assetId,
     },
-  } as any);
+  });
 };
 
 const createTextShape = (editor: Editor, item: PromotableItem) => {
@@ -78,7 +141,7 @@ const createTextShape = (editor: Editor, item: PromotableItem) => {
   }
   const width = clampDimension(item.data?.width, Math.max(320, Math.min(640, text.length * 10)), 64);
   const height = clampDimension(item.data?.height, 80, 32);
-  const { x, y } = getViewportOrigin(editor, width, height);
+  const { x, y } = getInsertOrigin(editor, item, width, height);
 
   editor.createShape({
     id: createShapeId(),
@@ -95,7 +158,7 @@ const createTextShape = (editor: Editor, item: PromotableItem) => {
       scale: 1,
       autoSize: true,
     },
-  } as any);
+  });
 };
 
 const createBookmarkShape = (editor: Editor, item: PromotableItem) => {
@@ -106,7 +169,7 @@ const createBookmarkShape = (editor: Editor, item: PromotableItem) => {
   }
   const width = clampDimension(item.data?.width, 420, 120);
   const height = clampDimension(item.data?.height, 240, 120);
-  const { x, y } = getViewportOrigin(editor, width, height);
+  const { x, y } = getInsertOrigin(editor, item, width, height);
 
   const assetId = AssetRecordType.createId();
   const asset = {
@@ -123,7 +186,7 @@ const createBookmarkShape = (editor: Editor, item: PromotableItem) => {
     meta: {},
   };
 
-  editor.createAssets([asset as any]);
+  editor.createAssets([asset]);
   editor.createShape({
     id: createShapeId(),
     type: 'bookmark' as const,
@@ -135,7 +198,7 @@ const createBookmarkShape = (editor: Editor, item: PromotableItem) => {
       assetId,
       url,
     },
-  } as any);
+  });
 };
 
 const detectEmbedDefaults = (url: string) => {
@@ -160,7 +223,7 @@ const createEmbedShape = (editor: Editor, item: PromotableItem) => {
   const defaults = detectEmbedDefaults(url);
   const width = clampDimension(item.data?.width, defaults.w, 160);
   const height = clampDimension(item.data?.height, defaults.h, 120);
-  const { x, y } = getViewportOrigin(editor, width, height);
+  const { x, y } = getInsertOrigin(editor, item, width, height);
 
   editor.createShape({
     id: createShapeId(),
@@ -172,7 +235,7 @@ const createEmbedShape = (editor: Editor, item: PromotableItem) => {
       h: height,
       url,
     },
-  } as any);
+  });
 };
 
 const promoteItemToCanvas = (editor: Editor, item: PromotableItem) => {
@@ -201,8 +264,10 @@ export function attachPromotionBridge({ editor }: PromotionBridgeOptions) {
     '__present_promote_content_handler',
     'tldraw:promote_content',
     (event) => {
-      const detail = (event as CustomEvent).detail as any;
-      const item = (detail?.item ?? detail) as PromotableItem | undefined;
+      const detail = (event as CustomEvent<Record<string, unknown> | PromotableItem>).detail;
+      const item = (
+        detail && typeof detail === 'object' && 'item' in detail ? detail.item : detail
+      ) as PromotableItem | undefined;
       if (!item) {
         console.warn('[PromotionBridge] Received promote event without item payload');
         return;

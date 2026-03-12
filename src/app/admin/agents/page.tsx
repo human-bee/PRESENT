@@ -31,6 +31,8 @@ const PROVIDER_FILTER_OPTIONS: Array<{ value: AgentProvider; label: string }> = 
   { value: 'google', label: 'Google' },
   { value: 'cerebras', label: 'Cerebras' },
   { value: 'together', label: 'Together' },
+  { value: 'fal', label: 'fal' },
+  { value: 'xai', label: 'xAI' },
   { value: 'debug', label: 'Debug' },
   { value: 'unknown', label: 'Unknown' },
 ];

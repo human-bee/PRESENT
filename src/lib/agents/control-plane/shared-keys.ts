@@ -4,7 +4,7 @@ import type { NextRequest } from 'next/server';
 import { getAdminSupabaseClient } from '@/lib/agents/admin/supabase-admin';
 import { consumeWindowedLimit } from '@/lib/server/traffic-guards';
 import { decryptSecret, encryptSecret, last4 as toLast4 } from '@/lib/agents/shared/secret-crypto';
-import type { ModelProvider } from './types';
+import { MODEL_PROVIDERS, type ModelProvider } from './types';
 
 const UNLOCK_COOKIE_NAME = 'present_model_unlock';
 const UNLOCK_IDLE_MS = 20 * 60_000;
@@ -151,7 +151,7 @@ export async function listSharedKeyStatus(): Promise<Array<{ provider: ModelProv
   }
   const rows = (data || []) as Array<{ provider: ModelProvider; last4: string; enabled: boolean; updated_at: string }>;
   const byProvider = new Map(rows.map((row) => [row.provider, row]));
-  return (['openai', 'anthropic', 'google', 'together', 'cerebras'] as const).map((provider) => {
+  return MODEL_PROVIDERS.map((provider) => {
     const hit = byProvider.get(provider);
     if (!hit) return { provider, configured: false, enabled: false };
     return {

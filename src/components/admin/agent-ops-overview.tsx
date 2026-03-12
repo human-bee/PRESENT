@@ -16,6 +16,8 @@ const PROVIDER_LABELS: Record<string, string> = {
   google: 'Google',
   cerebras: 'Cerebras',
   together: 'Together',
+  fal: 'fal',
+  xai: 'xAI',
   debug: 'Debug',
   unknown: 'Unknown',
 };
@@ -48,11 +50,11 @@ export function AgentOpsOverview({ overview }: { overview: AgentOverviewResponse
     return order.indexOf(left) - order.indexOf(right);
   });
   const providerMixEntries = Object.entries(overview.providerMix || {}).sort(([left], [right]) => {
-    const order = ['openai', 'anthropic', 'google', 'cerebras', 'together', 'debug', 'unknown'];
+    const order = ['openai', 'anthropic', 'google', 'cerebras', 'together', 'fal', 'xai', 'debug', 'unknown'];
     return order.indexOf(left) - order.indexOf(right);
   });
   const providerFailureEntries = Object.entries(overview.providerFailures || {}).sort(([left], [right]) => {
-    const order = ['openai', 'anthropic', 'google', 'cerebras', 'together', 'debug', 'unknown'];
+    const order = ['openai', 'anthropic', 'google', 'cerebras', 'together', 'fal', 'xai', 'debug', 'unknown'];
     return order.indexOf(left) - order.indexOf(right);
   });
 

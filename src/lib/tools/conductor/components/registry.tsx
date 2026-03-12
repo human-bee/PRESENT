@@ -24,6 +24,9 @@ import {
   LivekitScreenShareTile,
   livekitScreenShareTileSchema,
 } from '@/components/ui/livekit/livekit-screenshare-tile';
+import AIImageGenerator, {
+  aiImageGeneratorSchema,
+} from '@/components/ui/ai/ai-image-generator';
 
 import LiveCaptions, { liveCaptionsSchema } from '@/components/LiveCaptions';
 import LinearKanbanBoard, { linearKanbanSchema } from '@/components/ui/productivity/linear-kanban-board';
@@ -249,14 +252,13 @@ const baseComponents: RegistryComponentEntry[] = [
     component: LivekitScreenShareTile,
     propsSchema: extendedSchema(livekitScreenShareTileSchema),
   },
-  // Commented out for Node.js compatibility in agent worker
-  // {
-  //   name: "AIImageGenerator",
-  //   description:
-  //     "A real-time AI image generator that creates images from text prompts using Together AI's FLUX model. Features include multiple art styles (pop art, minimal, cyberpunk, etc.), generation history, canvas integration, download capability, iterative mode for consistency, and speech-to-text integration for voice-driven image generation. Perfect for creative projects, visual brainstorming, concept art generation, and real-time visual content creation. Automatically debounces prompt changes and provides visual feedback during generation. Can be controlled via microphone for hands-free operation.",
-  //   component: AIImageGenerator,
-  //   propsSchema: aiImageGeneratorSchema,
-  // },
+  {
+    name: 'AIImageGenerator',
+    description:
+      'A focused canvas-native image generator. Compose a prompt, generate an image, and drop the result onto the TLDraw canvas as its own image shape. Supports style presets, optional speech-to-text prompting, consistent-seed rerolls, and voice-agent friendly updates/promotions.',
+    component: AIImageGenerator,
+    propsSchema: extendedSchema(aiImageGeneratorSchema),
+  },
   {
     name: 'LiveCaptions',
     description:

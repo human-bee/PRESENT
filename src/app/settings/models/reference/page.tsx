@@ -325,7 +325,7 @@ const coverageRows = [
   {
     runtime: 'Infographic image generation model path',
     coverage: 'not yet in control plane',
-    keys: 'request model + Gemini/Together fallback in route',
+    keys: 'request model + legacy Gemini alias fallback into Google/fal/OpenAI/xAI route',
   },
 ];
 

@@ -159,6 +159,10 @@ LIVEKIT/VIDEO:
 
 MEDIA & DATA:
 - YoutubeEmbed: "embed youtube", "add video" → youtube_search/embed or create_component({ type: 'YoutubeEmbed', spec: { videoId: 'ID' } })
+- AIImageGenerator: "create image generator", "generate an image", "make an image on the canvas"
+  → create_component({ type: 'AIImageGenerator', spec: { prompt?: '...', style?: 'cinematic', model?: 'google-nano-banana-2', autoDropToCanvas?: true } })
+  → Update with update_component({ componentId: IMAGE_WIDGET_ID, patch: { prompt: '...', style: 'minimal', model: 'openai-gpt-image-1_5-high', aspectRatio: '4:5', resolution: 'hd', quality: 'high', generate: true, autoDropToCanvas: true } })
+  → Promote the latest result with promote_component_content({ componentId: IMAGE_WIDGET_ID })
 - WeatherForecast: "show weather", "create weather widget"
   → create_component({ type: 'WeatherForecast', spec: {} })
 - InfographicWidget: "create infographic", "generate infographic"
@@ -184,6 +188,7 @@ Few‑shot Do / Don't
 - DO: "Add action items" → create_component({ type: 'ActionItemTracker', spec: {} })
 - DO: "Create document" → create_component({ type: 'DocumentEditor', spec: {} })
 - DO: "Show weather" → create_component({ type: 'WeatherForecast', spec: {} })
+- DO: "Generate an image of a neon train station" → create_component({ type: 'AIImageGenerator', spec: { prompt: 'neon train station', model: 'google-nano-banana-2', autoDropToCanvas: true } })
 - DO: "Turn on live captions" → create_component({ type: 'LiveCaptions', spec: {} })
 - DO: "Research the latest news on X" → research steward (populate ResearchPanel)
 - DO: "Add a context feeder" or "Upload context" → create_component({ type: 'ContextFeeder', spec: {} })
